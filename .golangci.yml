@@ -1,0 +1,79 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - depguard   # servis sınırları (ADR-0003)
+    - gosec
+    - bodyclose
+    - noctx
+    - errorlint
+    - unconvert
+    - copyloopvar
+    - usestdlibvars
+    - gocritic
+  settings:
+    depguard:
+      rules:
+        # Ortak altyapı hiçbir servise bağımlı olamaz.
+        platform:
+          files: ["**/internal/platform/**"]
+          deny:
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/gateway
+              desc: platform servis paketlerini import edemez
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/identity
+              desc: platform servis paketlerini import edemez
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/core
+              desc: platform servis paketlerini import edemez
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/chat
+              desc: platform servis paketlerini import edemez
+        # Her servis yalnızca kendi internal paketini ve platform'u kullanır;
+        # diğer servislere gen/ altındaki gRPC client'larıyla erişir.
+        gateway:
+          files: ["**/internal/gateway/**", "**/cmd/gateway/**"]
+          deny:
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/identity
+              desc: diğer servislere gen/ altındaki gRPC client'larıyla erişilir
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/core
+              desc: diğer servislere gen/ altındaki gRPC client'larıyla erişilir
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/chat
+              desc: diğer servislere gen/ altındaki gRPC client'larıyla erişilir
+        identity:
+          files: ["**/internal/identity/**", "**/cmd/identity/**"]
+          deny:
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/gateway
+              desc: diğer servislere gen/ altındaki gRPC client'larıyla erişilir
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/core
+              desc: diğer servislere gen/ altındaki gRPC client'larıyla erişilir
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/chat
+              desc: diğer servislere gen/ altındaki gRPC client'larıyla erişilir
+        core:
+          files: ["**/internal/core/**", "**/cmd/core/**"]
+          deny:
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/gateway
+              desc: diğer servislere gen/ altındaki gRPC client'larıyla erişilir
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/identity
+              desc: diğer servislere gen/ altındaki gRPC client'larıyla erişilir
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/chat
+              desc: diğer servislere gen/ altındaki gRPC client'larıyla erişilir
+        chat:
+          files: ["**/internal/chat/**", "**/cmd/chat/**"]
+          deny:
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/gateway
+              desc: diğer servislere gen/ altındaki gRPC client'larıyla erişilir
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/identity
+              desc: diğer servislere gen/ altındaki gRPC client'larıyla erişilir
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/core
+              desc: diğer servislere gen/ altındaki gRPC client'larıyla erişilir
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [gosec, noctx]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

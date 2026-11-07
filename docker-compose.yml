@@ -1,0 +1,41 @@
+# Yerel geliştirme ortamı (ADR-0006). Yalnızca gateway dışarı açılır.
+#   docker compose up --build
+#   curl http://localhost:8080/v1/status
+
+x-service: &service
+  environment: &env
+    TAYFAM_ENV: local
+    LOG_LEVEL: debug
+  restart: unless-stopped
+
+services:
+  gateway:
+    <<: *service
+    build:
+      context: .
+      args: { SERVICE: gateway }
+    environment:
+      <<: *env
+      IDENTITY_OPS_URL: http://identity:8081
+      CORE_OPS_URL: http://core:8081
+      CHAT_OPS_URL: http://chat:8081
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  identity:
+    <<: *service
+    build:
+      context: .
+      args: { SERVICE: identity }
+
+  core:
+    <<: *service
+    build:
+      context: .
+      args: { SERVICE: core }
+
+  chat:
+    <<: *service
+    build:
+      context: .
+      args: { SERVICE: chat }
