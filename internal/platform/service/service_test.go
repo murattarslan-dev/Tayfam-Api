@@ -11,6 +11,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/grpcx"
 )
 
 // syncBuffer is a bytes.Buffer safe for the logger and the test to share.
@@ -143,5 +147,51 @@ func TestRunFailsOnPortConflict(t *testing.T) {
 		}, nil)
 	if err == nil || !strings.Contains(err.Error(), "dinleyemiyor") {
 		t.Fatalf("expected port conflict error, got %v", err)
+	}
+}
+
+func TestRunServesGRPCHealthAndDrains(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan map[string]string, 1)
+	done := make(chan error, 1)
+
+	env := map[string]string{"OPS_ADDR": "127.0.0.1:0", "GRPC_ADDR": "127.0.0.1:0"}
+	go func() {
+		done <- Run(ctx, "deneme", lookup(env), io.Discard, func(rt *Runtime) error {
+			rt.AddGRPCServer("grpc", rt.Config.String("GRPC_ADDR", ""), rt.NewGRPCServer())
+			return nil
+		}, started)
+	}()
+
+	var addrs map[string]string
+	select {
+	case addrs = <-started:
+	case err := <-done:
+		t.Fatalf("Run returned early: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("servers did not start")
+	}
+
+	conn, err := grpcx.NewClient(addrs["grpc"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	callCtx, callCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer callCancel()
+	resp, err := healthpb.NewHealthClient(conn).Check(callCtx, &healthpb.HealthCheckRequest{})
+	if err != nil || resp.GetStatus() != healthpb.HealthCheckResponse_SERVING {
+		t.Fatalf("expected SERVING, got %v %v", resp.GetStatus(), err)
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run returned error on clean shutdown: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not stop")
 	}
 }

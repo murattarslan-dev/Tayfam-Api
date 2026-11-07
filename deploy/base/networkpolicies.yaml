@@ -73,9 +73,10 @@ spec:
             matchExpressions:
               - { key: app.kubernetes.io/name, operator: In, values: [identity, core, chat] }
       ports:
-        - { protocol: TCP, port: 8081 }
+        - { protocol: TCP, port: 9090 }
 ---
-# İç servisler: yalnızca gateway'den gelen istekler.
+# İç servisler: yalnızca gateway'den gelen gRPC istekleri. Ops portu (8081)
+# hiçbir pod'a açık değildir; kubelet probe'ları node'dan gelir.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -90,4 +91,4 @@ spec:
         - podSelector:
             matchLabels: { app.kubernetes.io/name: gateway }
       ports:
-        - { protocol: TCP, port: 8081 }
+        - { protocol: TCP, port: 9090 }
