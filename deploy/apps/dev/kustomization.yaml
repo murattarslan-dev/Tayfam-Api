@@ -9,6 +9,9 @@ namespace: tayfam-dev
 resources:
   - namespace.yaml
   - ../../base
+  # SOPS ile şifreli; Flux uygularken cluster'daki age anahtarıyla çözer
+  # (deploy/clusters/home, docs/runbooks/sops.md).
+  - secrets/identity-signing-key.sops.yaml
 
 configMapGenerator:
   - name: tayfam-env
@@ -16,6 +19,8 @@ configMapGenerator:
       - TAYFAM_ENV=dev
       - LOG_LEVEL=debug
       - SHUTDOWN_DRAIN_DELAY=5s
+      - AUTH_ISSUER=tayfam-identity
+      - AUTH_AUDIENCE=tayfam-api
 
 images:
   - name: ghcr.io/murattarslan-dev/tayfam-gateway

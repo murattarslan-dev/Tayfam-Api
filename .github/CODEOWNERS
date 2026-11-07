@@ -27,3 +27,7 @@
 /.github/                               @murattarslan-dev
 /CLAUDE.md                              @murattarslan-dev
 /docs/adr/                              @murattarslan-dev
+
+# SOPS alıcıları (secret'ları kimin çözebileceği) ve anahtar üretimi
+/.sops.yaml @murattarslan-dev
+/scripts/new-signing-key.sh @murattarslan-dev

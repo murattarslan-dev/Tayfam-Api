@@ -40,7 +40,7 @@ dev: build
 
 ## up / down: Docker Compose ile yerel ortam
 up:
-	docker compose up --build
+	AUTH_SIGNING_KEY="local:$$(head -c 32 /dev/urandom | base64 -w0)" docker compose up --build
 
 down:
 	docker compose down

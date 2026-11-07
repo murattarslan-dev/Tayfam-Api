@@ -17,10 +17,15 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 export TAYFAM_ENV=local
+export AUTH_ISSUER=tayfam-identity AUTH_AUDIENCE=tayfam-api
+# Yerel çalıştırmada her seferinde yeni bir imzalama anahtarı üretilir; diske
+# yazılmaz, yalnızca identity sürecine verilir.
+signing_key="local:$(head -c 32 /dev/urandom | base64 -w0)"
 
-OPS_ADDR=127.0.0.1:8091 GRPC_ADDR=127.0.0.1:9091 ./bin/identity & pids+=($!)
-OPS_ADDR=127.0.0.1:8092 GRPC_ADDR=127.0.0.1:9092 ./bin/core & pids+=($!)
-OPS_ADDR=127.0.0.1:8093 GRPC_ADDR=127.0.0.1:9093 ./bin/chat & pids+=($!)
+AUTH_SIGNING_KEY=$signing_key OPS_ADDR=127.0.0.1:8091 GRPC_ADDR=127.0.0.1:9091 ./bin/identity & pids+=($!)
+unset signing_key
+IDENTITY_GRPC_ADDR=127.0.0.1:9091 OPS_ADDR=127.0.0.1:8092 GRPC_ADDR=127.0.0.1:9092 ./bin/core & pids+=($!)
+IDENTITY_GRPC_ADDR=127.0.0.1:9091 OPS_ADDR=127.0.0.1:8093 GRPC_ADDR=127.0.0.1:9093 ./bin/chat & pids+=($!)
 
 OPS_ADDR=127.0.0.1:8081 HTTP_ADDR=127.0.0.1:8080 \
 IDENTITY_GRPC_ADDR=127.0.0.1:9091 \
