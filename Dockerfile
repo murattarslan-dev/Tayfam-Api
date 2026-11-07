@@ -3,7 +3,7 @@
 # Tüm servisler için tek Dockerfile; servis SERVICE argümanıyla seçilir:
 #   docker build --build-arg SERVICE=gateway -t tayfam-gateway .
 
-FROM golang:1.24-alpine AS build
+FROM golang:1.25-alpine AS build
 ARG SERVICE
 ARG VERSION=dev
 WORKDIR /src
