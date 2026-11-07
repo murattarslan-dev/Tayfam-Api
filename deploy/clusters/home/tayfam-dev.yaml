@@ -12,6 +12,15 @@ spec:
   url: oci://ghcr.io/murattarslan-dev/tayfam-deploy
   ref:
     tag: dev
+  # Yalnızca bu reponun CI iş akışının main dalında attığı cosign imzası
+  # kabul edilir (ADR-0011). İmzasız veya başka yerden imzalanmış artifact
+  # uygulanmaz. Image'lar artifact içinde digest ile sabitlendiği için onlar da
+  # bu imzayla dolaylı olarak doğrulanmış olur.
+  verify:
+    provider: cosign
+    matchOIDCIdentity:
+      - issuer: "^https://token\\.actions\\.githubusercontent\\.com$"
+        subject: "^https://github\\.com/murattarslan-dev/Tayfam-Api/\\.github/workflows/ci\\.yml@refs/heads/main$"
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
