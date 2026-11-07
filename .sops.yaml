@@ -1,0 +1,9 @@
+# SOPS kuralları (ADR-0006). Yalnızca deploy/ altındaki *.sops.yaml dosyaları
+# şifrelenir ve yalnızca Secret değerleri (data, stringData) şifrelenir; isim
+# ve tür okunabilir kalır. Alıcı, platform sahibinin age açık anahtarıdır;
+# özel anahtar yalnızca onun bilgisayarında ve cluster'da (flux-system/sops-age)
+# bulunur.
+creation_rules:
+  - path_regex: ^deploy/apps/[^/]+/secrets/.*\.sops\.yaml$
+    encrypted_regex: ^(data|stringData)$
+    age: AGE_PUBLIC_KEY_BEKLENIYOR

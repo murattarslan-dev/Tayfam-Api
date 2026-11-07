@@ -27,6 +27,11 @@ spec:
           env:
             - { name: OPS_ADDR, value: ":8081" }
             - { name: GRPC_ADDR, value: ":9090" }
+            # Ortama özel secret (deploy/apps/<ortam>/secrets, SOPS ile şifreli).
+            # Yalnızca identity okur; diğer servisler açık anahtarı gRPC'den alır.
+            - name: AUTH_SIGNING_KEY
+              valueFrom:
+                secretKeyRef: { name: identity-signing-key, key: AUTH_SIGNING_KEY }
           ports:
             - { name: grpc, containerPort: 9090 }
             - { name: ops, containerPort: 8081 }

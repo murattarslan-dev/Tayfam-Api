@@ -105,10 +105,16 @@ başka bir node'a kod ve manifest değişmeden taşınabilmeli.
   cluster'da çözer.
 - age özel anahtarı yalnızca cluster'da ve Murat'ın bilgisayarında bulunur.
   Her cluster'ın kendi anahtarı vardır.
-- SOPS, ilk uygulama secret'ı (identity'nin OAuth ayarları) ile birlikte
-  kurulur. O zamana kadar tek secret olan Cloudflare Tunnel token'ı cluster'da
-  elle oluşturulur ve Flux tarafından yönetilmez
-  (`docs/runbooks/ev-cluster-kurulumu.md`).
+- SOPS, ilk uygulama secret'ı olan identity'nin token imzalama anahtarıyla
+  kuruldu (2026-11-07). Şifreli dosyalar `deploy/apps/<ortam>/secrets/*.sops.yaml`
+  altındadır; yalnızca `data`/`stringData` değerleri şifrelenir. Flux bunları
+  OCI artifact'ı uygularken cluster içinde çözer; CI hiçbir secret'ı açık
+  haliyle görmez. Kurulum ve rotasyon: `docs/runbooks/sops.md`.
+- Gizli değerler ekranda veya diskte açık halde bulunmadan üretilir ve
+  doğrudan sops'a verilir (`scripts/new-signing-key.sh`).
+- Cloudflare Tunnel token'ı şimdilik cluster'da elle oluşturulmuş secret
+  olarak kalır (`docs/runbooks/ev-cluster-kurulumu.md`); token rotasyonu
+  sırasında SOPS'a taşınır (ADR-0011 sertleştirme listesi, madde 13).
 
 ### Ortam ayrımı
 

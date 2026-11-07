@@ -37,3 +37,10 @@ spec:
   path: ./apps/dev
   prune: true
   wait: true
+  # Artifact'taki *.sops.yaml dosyaları burada, cluster içinde çözülür. age
+  # özel anahtarı yalnızca bu secret'ta ve platform sahibinin bilgisayarında
+  # bulunur; CI hiçbir secret'ı açık haliyle görmez (ADR-0006).
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age

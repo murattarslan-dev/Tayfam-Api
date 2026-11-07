@@ -1,11 +1,13 @@
 # Yerel geliştirme ortamı (ADR-0006). Yalnızca gateway dışarı açılır.
-#   docker compose up --build
+#   make up        # her seferinde yeni bir imzalama anahtarı üretir
 #   curl http://localhost:8080/v1/status
 
 x-service: &service
   environment: &env
     TAYFAM_ENV: local
     LOG_LEVEL: debug
+    AUTH_ISSUER: tayfam-identity
+    AUTH_AUDIENCE: tayfam-api
   restart: unless-stopped
 
 services:
@@ -27,15 +29,24 @@ services:
     build:
       context: .
       args: { SERVICE: identity }
+    environment:
+      <<: *env
+      AUTH_SIGNING_KEY: ${AUTH_SIGNING_KEY:?make up ile başlatın; anahtarı o üretir}
 
   core:
     <<: *service
     build:
       context: .
       args: { SERVICE: core }
+    environment:
+      <<: *env
+      IDENTITY_GRPC_ADDR: identity:9090
 
   chat:
     <<: *service
     build:
       context: .
       args: { SERVICE: chat }
+    environment:
+      <<: *env
+      IDENTITY_GRPC_ADDR: identity:9090

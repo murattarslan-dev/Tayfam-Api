@@ -84,8 +84,20 @@ run_inside "4) cloudflared'in içinden:" cloudflared \
   KAPALI "tcp://core:9090" \
   KAPALI "tcp://chat:9090"
 
+run_inside "5) core'un içinden (yalnızca identity'ye, açık anahtar için):" core \
+  ACIK   "tcp://identity:9090" \
+  KAPALI "tcp://chat:9090" \
+  KAPALI "http://gateway:8080/v1/status" \
+  KAPALI "http://example.com"
+
+run_inside "6) identity'nin içinden (hiçbir yere):" identity \
+  KAPALI "tcp://core:9090" \
+  KAPALI "tcp://chat:9090" \
+  KAPALI "http://gateway:8080/v1/status" \
+  KAPALI "http://example.com"
+
 echo "Test container'ları temizleniyor..."
-kubectl -n "$NS" rollout restart deployment gateway cloudflared > /dev/null
+kubectl -n "$NS" rollout restart deployment gateway cloudflared core identity > /dev/null
 
 if [ "$failed" -ne 0 ]; then
   echo "SONUÇ: NetworkPolicy testi BAŞARISIZ" >&2
