@@ -14,3 +14,4 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | [0004](0004-kimlik-dogrulama-ve-yetkilendirme.md) | Kimlik doğrulama ve yetkilendirme | Kabul edildi |
 | [0005](0005-gercek-zamanli-iletisim-ve-chat.md) | Gerçek zamanlı iletişim ve chat | Kabul edildi |
 | [0006](0006-dagitim-ve-ortamlar.md) | Dağıtım ve ortamlar | Kabul edildi |
+| [0007](0007-dosyalar-ve-medya.md) | Dosyalar ve medya | Kabul edildi |
