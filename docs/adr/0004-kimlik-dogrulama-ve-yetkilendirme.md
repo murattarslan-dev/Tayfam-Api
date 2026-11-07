@@ -161,7 +161,8 @@ Ek kurallar:
 - identity bir sağlayıcı doğrulama katmanı, oturum tablosu ve anahtar yönetimi
   içerir.
 - Web istemcisi ile API'nin aynı site altında olması gerekir (örneğin
-  `app.tayfam.app` ve `api.tayfam.app`); `SameSite` çerezleri buna dayanır.
+  web istemcisi `tayfam.app`, API `api.tayfam.app`); `SameSite` çerezleri
+  buna dayanır. gateway, web istemcisinin adresine CORS ile izin verir.
 - Erişim token'ı iptal edilemez; oturum iptal edildiğinde veya kullanıcı
   banlandığında en fazla 15 dakika daha geçerli kalabilir. Açık WebSocket
   bağlantıları ise hemen kapatılır (ADR-0005).

@@ -1,4 +1,5 @@
 version: 2
+# Güncellemeler ekosistem başına tek PR'da toplanır.
 updates:
   - package-ecosystem: gomod
     directory: /
@@ -7,7 +8,7 @@ updates:
     commit-message:
       prefix: chore
     groups:
-      go-deps:
+      go:
         patterns: ["*"]
 
   - package-ecosystem: github-actions
@@ -16,6 +17,9 @@ updates:
       interval: weekly
     commit-message:
       prefix: chore
+    groups:
+      actions:
+        patterns: ["*"]
 
   - package-ecosystem: docker
     directory: /
@@ -23,3 +27,6 @@ updates:
       interval: weekly
     commit-message:
       prefix: chore
+    groups:
+      docker:
+        patterns: ["*"]
