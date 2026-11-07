@@ -7,18 +7,30 @@
 
 ## Bağlam
 
-Kullanıcılar etkinliklere, ilanlara ve tayfa profillerine fotoğraf ekleyecek.
-Dosyalar Cloudflare R2'de saklanır. Fotoğraflar çoğunlukla telefondan,
-bazen zayıf mobil bağlantıyla yüklenir ve konum bilgisi (EXIF GPS)
-içerebilir. Tayfa içerikleri üyelere özeldir; ancak paylaşılan linklerin
-önizlemesi (link preview) için bazı görsellerin herkese açık olması gerekir.
+MVP'de dosyalar profil fotoğrafı, av fotoğrafı, kapak görselleri ve KVKK veri
+dışa aktarma dosyalarıdır; ilan fotoğrafları, etkinlik albümü ve sohbette
+fotoğraf Faz 2'dedir (Notion özellik haritası). Dosyalar Cloudflare R2'de
+saklanır; R2'nin yurt dışında olması Notion'daki planda bilinçli bir tercih
+olarak kabul edilmiştir. Fotoğraflar çoğunlukla telefondan, bazen zayıf mobil
+bağlantıyla yüklenir ve konum bilgisi (EXIF GPS) içerebilir; gizli bir balık
+merasının fotoğraftan sızmaması gerekir.
+
+Notion'daki planda "dosyalar herkese açık bucket'ta durmaz" ilkesi vardı. Bu
+ADR ile ilkeye tek bir istisna getirilir: paylaşılan linklerin önizlemesi
+(link preview) için açıkça işaretlenen kapak görselleri herkese açık olabilir.
 
 ## Karar
 
 ### Sahiplik
 
-- Medya kayıtlarının ve işlenmesinin sahibi **core**'dur (`media` domain
-  paketi). Diğer servisler medyaya ID ile referans verir.
+- Medya kayıtlarının (veri modelindeki `uploads` tablosu) ve işlenmesinin
+  sahibi **core**'dur (`media` domain paketi). Diğer servisler medyaya ID ile
+  referans verir.
+- `uploads.purpose` değerleri: `avatar`, `catch_photo`, `cover`,
+  `data_export`; Faz 2'de `event_photo` ve `listing_photo` eklenir. Kapak
+  görselleri için veri modeline gereken alanlar ADR-0009'dadır.
+- Veri dışa aktarma dosyaları da private bucket'ta, şifrelenmiş zip olarak
+  tutulur ve 7 gün sonra silinir (ADR-0008).
 
 ### Bucket'lar
 

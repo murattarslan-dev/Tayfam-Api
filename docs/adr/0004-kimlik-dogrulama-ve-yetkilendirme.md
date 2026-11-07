@@ -2,8 +2,11 @@
 
 - **Durum:** Kabul edildi
 - **Tarih:** 2026-11-07
+- **Revizyon:** 2026-11-07, Notion'daki proje planı ve veri modeli v13 ile
+  hizalandı: platform admin tasarımı ADR-0008'e taşındı, rol hiyerarşisi,
+  rate limit ve token yeniden kullanım ayrıntıları eklendi.
 - **Karar veren:** Murat Tarslan
-- **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md)
+- **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0008](0008-kvkk-ve-platform-yonetimi.md)
 
 ## Bağlam
 
@@ -30,7 +33,7 @@ gateway karşılar.
 
 Ek kurallar:
 
-- Hesaplar `users` ve `user_identities (provider, subject)` tablolarıyla
+- Hesaplar `users` ve `auth_identities (provider, subject)` tablolarıyla
   modellenir; bir kullanıcıya ileride birden fazla sağlayıcı bağlanabilir.
 - Aynı e-postaya sahip farklı sağlayıcı hesapları **otomatik birleştirilmez**.
   Hesap bağlama, oturum açmış kullanıcının açıkça yaptığı bir işlem olacak.
@@ -54,7 +57,10 @@ Ek kurallar:
 - **Her kullanımda yenilenir** (rotation): eski token geçersiz olur, yenisi
   verilir.
 - Zaten kullanılmış bir refresh token tekrar gelirse token çalınmış kabul
-  edilir ve **o oturumun tamamı iptal edilir**.
+  edilir ve **o oturumun tamamı iptal edilir** (`revoked_reason =
+  'token_reuse'`). Kontrol ve yenileme tek transaction'da `SELECT … FOR UPDATE`
+  ile yapılır. Aynı anda gelen meşru çift istekler için birkaç saniyelik
+  tolerans penceresi uygulanır.
 - Oturum 90 gün kullanılmazsa sona erer. Uygulama düzenli kullanıldıkça
   kullanıcıdan tekrar giriş istenmez.
 
@@ -108,18 +114,36 @@ Ek kurallar:
   açıkça tanımlanmamışsa işlem reddedilir.
 - Rol-işlem eşleşmesi kodda tek bir izin tablosunda tanımlanır ve testlerle
   korunur.
-- chat, kanal erişimi için core'a üyelik ve rol bilgisini sorar (ADR-0002).
-- **Platform admin** yetkisi identity'de kullanıcı üzerinde bir bayraktır.
-  Token'da taşınmaz; `/admin` altındaki her istekte gateway bu yetkiyi
-  identity'ye canlı olarak sorar. Bu yetki API üzerinden verilemez, yalnızca
-  sunucuda çalıştırılan bir komutla atanır.
+- **Tayfa kapsamı:** Tayfaya ait her sorgu `tayfa_id` ve üyelik kontrolüyle
+  çalışır (IDOR'a karşı). Tayfada kapalı olan bir modülün (`tayfa_modules`)
+  uçları isteği reddeder.
+- **Rol hiyerarşisi:** admin (3) › moderatör (2) › üye (1). Bir kişi yalnızca
+  kendinden düşük roldeki üyeyi susturabilir, banlayabilir, çıkarabilir veya
+  rolünü değiştirebilir; kimse kendinden yüksek rol atayamaz. Kural uygulama
+  katmanında uygulanır ve `memberships` trigger'ıyla veritabanında da
+  doğrulanır (işlemi yapan kişi transaction'da `SET LOCAL app.actor_id` ile
+  iletilir). Son yönetici koruması da aynı trigger'dadır.
+- chat, kanal erişimi ve birebir mesaj izni için core'a sorar (ADR-0002,
+  ADR-0009).
+- **Platform admin** ayrı bir kimlik doğrulama katmanıyla korunur ve normal
+  uygulama token'ı ile erişilemez. Ayrıntılar
+  [ADR-0008](0008-kvkk-ve-platform-yonetimi.md)'dedir.
+- **Platform yaptırımları:** Platform genelinde askıya alınan veya banlanan
+  kullanıcının tüm oturumları kapatılır ve yeni giriş yapamaz; kontrol
+  identity'de giriş ve token yenileme sırasında yapılır.
 
 ### Kötüye kullanıma karşı
 
-- gateway, giriş ve token yenileme uçlarında IP ve kullanıcı bazlı rate limit
-  uygular.
-- Giriş, token yenileme, oturum iptali ve admin işlemleri denetim kaydına
-  (audit log) yazılır.
+- Rate limit gateway'de, bellek içi token bucket ile uygulanır. Tek gateway
+  kopyası olduğu için bu yeterlidir; yeniden başlatmada sayaçların sıfırlanması
+  kabul edilmiştir. Gün bazlı limitler (DM isteği, arkadaşlık isteği gibi)
+  veritabanından sayılır ve ilgili serviste uygulanır.
+- Gerçek istemci IP'si `CF-Connecting-IP` başlığından okunur. Bu başlığa
+  yalnızca cloudflared'den gelen isteklerde güvenilir.
+- Mobil operatörlerin CGNAT kullanması nedeniyle IP bazlı limitler yalnızca
+  düşük hacimli işlemlerde (giriş, tayfa açma) kullanılır; diğer limitler
+  kullanıcı bazlıdır.
+- Giriş, token yenileme ve oturum iptali denetim kaydına (audit log) yazılır.
 
 ## Gerekçe
 
@@ -138,9 +162,9 @@ Ek kurallar:
   içerir.
 - Web istemcisi ile API'nin aynı site altında olması gerekir (örneğin
   `app.tayfam.app` ve `api.tayfam.app`); `SameSite` çerezleri buna dayanır.
-- Erişim token'ı iptal edilemez; oturum iptal edildiğinde en fazla 15 dakika
-  daha geçerli kalabilir. Admin işlemleri canlı kontrol edildiği için bu
-  durumdan etkilenmez.
+- Erişim token'ı iptal edilemez; oturum iptal edildiğinde veya kullanıcı
+  banlandığında en fazla 15 dakika daha geçerli kalabilir. Açık WebSocket
+  bağlantıları ise hemen kapatılır (ADR-0005).
 
 ## Değerlendirilen alternatifler
 

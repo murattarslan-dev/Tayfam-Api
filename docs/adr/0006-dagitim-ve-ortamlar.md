@@ -41,15 +41,21 @@ başka bir node'a kod ve manifest değişmeden taşınabilmeli.
 - Cluster içinde çalışan **cloudflared**, Cloudflare Tunnel üzerinden gelen
   trafiği yalnızca gateway servisine iletir. Makinede SSH dışında açık port
   yoktur; ev bağlantısında modemde port açılmaz.
-- Alan adları: `api.tayfam.app` (prod), `api.dev.tayfam.app` (dev).
+- Alan adları: `api.tayfam.app` (prod), `api.dev.tayfam.app` (dev). Platform
+  yönetim paneli `admin.tayfam.app` üzerindendir (ADR-0008).
 - dev alan adı Cloudflare Access ile korunur; yalnızca Murat ve test
   cihazları erişebilir.
+- Flutter web istemcisi Cloudflare Pages'te barındırılır (`app.tayfam.app`);
+  bu cluster'ın kapsamı dışındadır.
 
 ### Postgres
 
 - **CloudNativePG** operatörü kullanılır. Her ortamda tek instance'lı bir
   Postgres cluster'ı vardır; içinde servis başına veritabanı ve kullanıcı
   bulunur (ADR-0002).
+- Postgres image'ı **PostGIS** içerir (konum sorguları, veri modeli v13).
+  Veritabanları **ICU `tr-TR`** yerel ayarıyla oluşturulur; Türkçe büyük/küçük
+  harf dönüşümleri ("İ" ↔ "i", "I" ↔ "ı") doğru çalışır.
 - Yedekler Barman Cloud ile Cloudflare R2'ye alınır: sürekli WAL arşivi ve
   günlük tam yedek, 30 gün saklama. Her ortamın yedek bucket'ı ayrıdır.
 - Geri yükleme en az bir kez dev ortamında denenir ve adımları runbook'a

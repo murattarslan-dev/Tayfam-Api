@@ -15,3 +15,11 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | [0005](0005-gercek-zamanli-iletisim-ve-chat.md) | Gerçek zamanlı iletişim ve chat | Kabul edildi |
 | [0006](0006-dagitim-ve-ortamlar.md) | Dağıtım ve ortamlar | Kabul edildi |
 | [0007](0007-dosyalar-ve-medya.md) | Dosyalar ve medya | Kabul edildi |
+| [0008](0008-kvkk-ve-platform-yonetimi.md) | KVKK ve platform yönetimi | Kabul edildi |
+| [0009](0009-veri-modelinin-servislere-dagilimi.md) | Veri modelinin servislere dağılımı | Kabul edildi |
+| [0010](0010-repo-kurallari-ve-is-akisi.md) | Repo kuralları ve geliştirme iş akışı | Kabul edildi |
+
+Ürün kararları (kavram modeli, özellikler, veri modeli, KVKK metni, platform
+yönetim paneli) Notion'daki "Tayfam — Proje Planı" sayfasındadır. ADR'ler bu
+kararları mimariye taşır; bir ADR Notion'daki bir kararı değiştiriyorsa bunu
+açıkça belirtir.

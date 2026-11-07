@@ -20,9 +20,9 @@ belirlenmelidir.
 | Servis | Sorumluluk | Dışa açık mı? |
 |--------|------------|---------------|
 | **gateway** | Tek giriş noktası. REST API, erişim token'ı doğrulama, rate limit, istekleri iç servislere yönlendirme. WebSocket bağlantısını kimlik doğrulamasından sonra chat'e aktarır. | Evet (tek açık servis) |
-| **identity** | Google/Apple ile giriş, kullanıcı hesapları, oturumlar ve refresh token'lar, token imzalama. | Hayır |
-| **core** | Tayfalar (gruplar), üyelikler ve roller, etkinlikler, ilanlar, soru-cevap. | Hayır |
-| **chat** | Kanallar, mesajlar, gerçek zamanlı iletim, E2E DM için açık anahtarlar. | Hayır |
+| **identity** | Google/Apple ile giriş, kullanıcı hesapları, oturumlar ve refresh token'lar, token imzalama, KVKK talepleri, platform admin ve yaptırımlar. | Hayır |
+| **core** | Tayfalar (gruplar), üyelikler ve roller, duyurular, etkinlikler, soru-cevap, anketler, arkadaşlık ve engelleme, medya, şikâyetler; Faz 2'de ilanlar. | Hayır |
+| **chat** | Kanallar, mesajlar, gerçek zamanlı iletim, E2E DM için açık anahtarlar, bildirimler. | Hayır |
 
 core içindeki alanlar birbirine sıkı bağlı olduğu için şimdilik ayrılmaz. core'un
 içi yine domain paketlerine bölünür ve ileride ayrılabilecek şekilde yazılır.
@@ -36,6 +36,9 @@ içi yine domain paketlerine bölünür ve ileride ayrılabilecek şekilde yazı
   verisine yalnızca o servisin gRPC API'si üzerinden erişilir.
 - Kullanıcıların sahibi identity'dir. Diğer servisler kullanıcıyı yalnızca
   `user_id` (UUID) ile referanslar; veritabanları arasında foreign key yoktur.
+  Veri modeli v13'teki tabloların servislere dağılımı ve servisler arası
+  foreign key davranışlarının yerine geçen olaylar
+  [ADR-0009](0009-veri-modelinin-servislere-dagilimi.md)'dadır.
 - Kimlikler UUIDv7'dir. Böylece zamana göre sıralanabilir ve servisler
   birbirine sormadan ID üretebilir.
 
@@ -45,13 +48,17 @@ içi yine domain paketlerine bölünür ve ileride ayrılabilecek şekilde yazı
 - **chat → core:** senkron gRPC (örneğin "bu kullanıcı bu tayfanın üyesi mi,
   rolü ne?"). chat bu yanıtı kısa süreli önbellekte tutabilir.
 - **Yan etkiler** (core → chat, identity → core/chat) **outbox deseni** ile
-  taşınır:
-  1. Servis, kendi işlemiyle **aynı transaction içinde** `outbox` tablosuna bir
-     olay kaydı yazar (örneğin `group.deleted`).
-  2. Aynı servisteki bir arka plan işçisi (relay), bekleyen kayıtları okur ve
-     hedef servisin ilgili gRPC metodunu çağırır.
-  3. Başarılı çağrıdan sonra kayıt işlendi olarak işaretlenir. Hata olursa
-     artan bekleme süresiyle tekrar denenir.
+  taşınır. Outbox olarak Notion veri modeli v10'daki `domain_events` ve
+  `event_consumers` tabloları kullanılır; her servisin kendi veritabanında bu
+  iki tablo bulunur:
+  1. Servis, kendi işlemiyle **aynı transaction içinde** `domain_events`'e bir
+     olay kaydı yazar (örneğin `tayfa.deleted`). Kayda kişisel içerik (mesaj
+     metni, konum) yazılmaz; yalnızca kimlikler ve sınıflandırma bilgisi.
+  2. Aynı servisteki bir arka plan işçisi (relay), olayları UUIDv7 sırasıyla
+     okur ve hedef servisin ilgili gRPC metodunu çağırır. Her hedef ayrı bir
+     tüketicidir ve kaldığı yeri `event_consumers`'ta tutar.
+  3. Başarılı çağrıdan sonra tüketicinin konumu ilerletilir. Hata olursa artan
+     bekleme süresiyle tekrar denenir.
   4. Hedef metodlar **idempotent** olmalıdır: aynı olay iki kez gelirse sonuç
      değişmez. Bunun için her olayın benzersiz bir ID'si bulunur.
 - Döngüsel senkron çağrı yasaktır. Bir istek zinciri aynı servise geri

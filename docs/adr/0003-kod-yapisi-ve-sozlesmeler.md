@@ -42,8 +42,11 @@ Her `internal/<servis>/` altında:
   çalışır.
 - `store/`: sqlc ile üretilen sorgular ve repository'ler.
 
-core'da `app/` ve `store/` ayrıca domain paketlerine bölünür: `groups`,
-`events`, `listings`, `qa`.
+core'da `app/` ve `store/` ayrıca domain paketlerine bölünür: `tayfa`
+(tayfa, üyelik, davet, modüller), `announcements`, `events`, `qa`, `polls`,
+`social` (arkadaşlık, engelleme), `media`, `moderation` (şikâyet, denetim
+kaydı). Faz 2 modülleri (ilanlar, turnuva, abonelik) kendi paketleriyle
+eklenir. Tabloların servislere dağılımı [ADR-0009](0009-veri-modelinin-servislere-dagilimi.md)'dadır.
 
 ### Bağımlılık kuralları
 
