@@ -45,7 +45,7 @@ ele alır.
 - Sosyal: `friendships`, `user_blocks`
 - Geçmiş: `user_activity_records`
 - Dosyalar: `uploads`
-- Denetim: `reports` (`involves_minor`, kategori), `audit_logs`
+- Denetim: `reports` (`priority`, kategori), `audit_logs`
 - Moderasyon (ADR-0012): `moderation_terms` (kelime listesi), `moderation_flags`,
   `legal_holds`
 - Abonelik (Faz 2): `plans`, `tayfa_subscriptions`, `payment_events`

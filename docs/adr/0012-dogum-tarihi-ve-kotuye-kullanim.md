@@ -4,8 +4,8 @@
 - **Tarih:** 2026-11-07
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0008](0008-kvkk-ve-platform-yonetimi.md), [ADR-0009](0009-veri-modelinin-servislere-dagilimi.md), [ADR-0011](0011-guvenlik-ilkesi-ihlal-varsayimi.md)
-- **Kaynak:** Notion: Proje Planı (Kullanıcı Akışı), "Kötüye Kullanım ve Genç
-  Kullanıcı Güvenliği (taslak)"
+- **Kaynak:** Notion: Veri Modeli v14 ("Doğum Tarihi ve Şikâyet Önceliği"),
+  "Kötüye Kullanım ve Genç Kullanıcı Güvenliği (taslak)"
 
 ## Bağlam
 
@@ -36,7 +36,18 @@ tutulmalıdır.
 
 - Doğum tarihi **yalnızca identity'nin veritabanında** tutulur ve uygulama
   seviyesinde şifrelenir (AES-256-GCM, anahtar secret'tan; kanal mesajlarından
-  ayrı bir anahtar). Şifreli kayıt anahtar sürümünü taşır.
+  ayrı bir anahtar). Şifreli kayıt anahtar sürümünü taşır. Şifreleme
+  `users.id`'yi ek doğrulanmış veri (AAD) olarak kullanır; bir satırın şifreli
+  değeri başka bir satıra kopyalanırsa çözülmez.
+- **Notion v14'ten sapma:** v14'teki `birth_date date` kolonu
+  `birth_date_enc bytea` olur. Veritabanı şifreli değeri okuyamadığı için
+  v14'teki 16 yaş trigger'ı ve `birth_date >= '1900-01-01'` CHECK'i
+  uygulanamaz; bu kontroller yalnızca Go'da (`app` katmanı, tablo testleriyle)
+  yapılır. Veritabanında yalnızca "aktif hesapta `birth_date_enc` NULL
+  olamaz" CHECK'i kalır. Veritabanı yedeği veya bir SQL enjeksiyonu doğum
+  tarihlerini açık metin olarak sızdırmasın diye bu takas bilinçli olarak
+  yapılır.
+- Yaş saklanmaz, her ihtiyaçta Europe/Istanbul tarihine göre hesaplanır (v14).
 - Diğer servislere doğum tarihi **hiçbir zaman** gönderilmez. Gerektiğinde
   yalnızca **türetilmiş bilgi** verilir:
   - `IsMinor(user_ids)`: 18 yaşından küçük mü? (evet/hayır)
@@ -49,24 +60,29 @@ tutulmalıdır.
 
 ### Kayıt akışı
 
-1. Google/Apple ile ilk girişte hesap **kayıt bekliyor** durumunda açılır.
-   Bu durumdaki token yalnızca kayıt tamamlama uçlarına erişebilir
-   (ADR-0004'teki onay ekranıyla aynı desen).
+1. Google/Apple ile ilk girişte hesap **kayıt bekliyor** durumunda açılır
+   (`birth_date_enc` NULL). Bu durumdaki token yalnızca kayıt tamamlama
+   uçlarına erişebilir (ADR-0004'teki onay ekranıyla aynı desen).
 2. Kullanıcı doğum tarihini girer; aydınlatma metni ve kullanım koşulları
    onaylanır.
-3. 16 yaşından küçükse kayıt tamamlanmaz ve hesap, kişisel veri tutulmadan
-   **hemen silinir**. Reddedilen bir başvurunun doğum tarihi veya kimliği
-   saklanmaz.
+3. Doğum tarihi 16 yaşından küçük bir kullanıcıyı gösteriyorsa hesap
+   aktifleşmez (v14). Girilen tarih değiştirilemediği için aynı Google/Apple
+   kimliğiyle farklı bir tarih denenemez.
 4. Doğum tarihi beyana dayanır ve doğrulanmaz; yanlış beyan bilinçli kabul
-   edilen bir risktir. Kayıttan sonra değiştirilmesi destek talebiyle olur
-   (kendi başına 16 yaş sınırını aşmayı denemeyi zorlaştırmak için).
+   edilen bir risktir. Kullanıcı doğum tarihini uygulamadan değiştiremez;
+   düzeltme talebi platform paneline düşer ve gerekçesiyle
+   `platform_audit_logs`'a yazılır (v14).
 
 ### Görünürlük
 
-- Ayar iki boyutludur ve identity'de tutulur:
-  - **Ayrıntı:** `full` (yaş ve doğum tarihi), `birthday` (yalnızca gün/ay),
-    `none`
-  - **Kitle:** `friends` (varsayılan) veya `tayfa` (ortak tayfa üyeleri)
+- Ayar iki boyutludur ve identity'de tutulur (v14):
+  - `birth_date_visibility`: `hidden`, `birthday` (varsayılan; yalnızca gün
+    ve ay), `full` (yaş ve doğum tarihi)
+  - `birth_date_audience`: `friends` (varsayılan), `tayfa` (ortak tayfa
+    üyeleri), `public`; `hidden` iken etkisizdir
+- Yanıt alanları baştan izleyiciye göre üretilir; tam nesne üretilip sonra
+  filtrelenmez. Kullanıcının kendisi her zaman tam tarihi görür. Yaş ve 18 yaş
+  altı bilgisi tayfa yöneticilerine ve moderatörlerine gösterilmez.
 - Görünürlük kararını **identity** verir. Arkadaşlık ve ortak tayfa bilgisi
   core'dadır (ADR-0009); identity bunu core'a sorar. Bu, core → identity
   (`IsMinor`) ile birlikte iki yönlü bir senkron bağımlılık yaratır; ADR-0002
@@ -76,19 +92,28 @@ tutulmalıdır.
 
 ### Doğum günü hatırlatmaları
 
-- identity günlük bir işle, o gün doğum günü olan ve ayrıntı seviyesi `none`
+- identity günlük bir işle, o gün doğum günü olan ve görünürlüğü `hidden`
   olmayan kullanıcılar için `user.birthday` olayı yayınlar. Olay yalnızca
-  `user_id`, ayrıntı seviyesi ve kitleyi taşır; tarih taşımaz.
+  `user_id` ve kitleyi taşır; tarih ve yaş taşımaz.
 - core, kitleye göre alıcıları (arkadaşlar veya ortak tayfa üyeleri) belirler
-  ve chat'e bildirim isteği gönderir (ADR-0005).
+  ve `friend_birthday` türünde bildirim isteği yayınlar; chat bildirimi
+  yazar ve gönderir (ADR-0005). `public` kitlesi hatırlatma için arkadaşlar
+  olarak ele alınır; herkese bildirim gönderilmez.
 
 ### Şikâyetlerde yaş önceliği
 
-- core bir şikâyet oluştururken şikâyet eden ve şikâyet edilen kullanıcılar
-  için identity'ye `IsMinor` sorar ve sonucu şikâyete `involves_minor`
-  olarak yazar. Yaş veya doğum tarihi şikâyette tutulmaz.
-- `involves_minor` veya "çocuk/genç güvenliği" kategorisindeki şikâyetler
-  kuyrukta en öne geçer ve platform sahibine anında bildirilir.
+- core bir şikâyet oluştururken şikâyet eden ve hedef kullanıcı (hedef
+  içerikse içeriğin yazarı) için identity'ye `IsMinor` sorar. Biri 18
+  yaşından küçükse `reports.priority = minor_involved` ve
+  `minor_involved_at` yazılır (v14). Değer oluşturma anında hesaplanır ve
+  sonradan değişmez. Yaş veya doğum tarihi şikâyette ve olay payload'ında
+  tutulmaz.
+- identity'ye ulaşılamazsa şikâyet yine oluşturulur ve **güvenli tarafta
+  kalınarak** `minor_involved` olarak işaretlenir; bir şikâyet, kimlik
+  servisinin kesintisi yüzünden önceliğini kaybetmez.
+- `minor_involved` veya "çocuk/genç güvenliği" kategorisindeki şikâyetler
+  kuyrukta en öne geçer, platform sahibine anında bildirilir ve 7 günlük
+  otomatik yükselmeyi beklemeden platforma düşer.
 
 ### Kötüye kullanım tespiti (içerik okumadan)
 
@@ -147,14 +172,14 @@ tutulmalıdır.
 
 ## Sonuçlar
 
-- identity: doğum tarihi, görünürlük ayarı, kayıt bekliyor durumu, `IsMinor`
-  ve doğum günü görünürlüğü metodları, günlük doğum günü işi. ADR-0008'deki
-  `age_confirmed_at` kaldırılır.
-- core: `reports.involves_minor` ve şikâyet kategorisi, `moderation` paketi
+- identity: şifreli doğum tarihi, görünürlük ayarları, kayıt bekliyor
+  durumu, `IsMinor` metodu, günlük doğum günü işi. `age_confirmed_at`
+  kaldırılır.
+- core: `reports.priority` ve şikâyet kategorisi, `moderation` paketi
   (kelime listesi, sinyaller, `moderation_flags`), yasal bekletme.
 - chat: kanal mesajlarında yasal bekletme, mesaj isteği sayımlarının core'a
   iletilmesi.
-- Notion'daki veri modeli bu ADR'ye göre güncellenir.
+- Notion'daki veri modeli v14'e `birth_date_enc` sapması işlenir.
 - Aydınlatma metni doğum tarihinin işlenmesi ve saklanmasıyla güncellenmiştir
   (Notion).
 
