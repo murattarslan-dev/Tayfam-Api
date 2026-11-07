@@ -2,8 +2,11 @@
 
 - **Durum:** Kabul edildi
 - **Tarih:** 2026-11-07
-- **Revizyon:** 2026-11-07, dal koruması ve ayrı PR kimliği askıya alındı;
-  kurallar şimdilik uzlaşı olarak uygulanır (bkz. "Ön koşullar").
+- **Revizyon:** 2026-11-07:
+  - Dal koruması ve ayrı PR kimliği askıya alındı.
+  - Repolar public oldu ve MIT lisansıyla yayınlanır. `main`, onay zorunluluğu
+    olmayan bir kural setiyle korunur; ayrı PR kimliğine gerek kalmadı (bkz.
+    "Dal koruması").
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0003](0003-kod-yapisi-ve-sozlesmeler.md), [ADR-0006](0006-dagitim-ve-ortamlar.md)
 - **Kaynak:** Notion: Proje Planı, "Geliştirme İş Akışı" bölümü
@@ -22,7 +25,22 @@ kod aşamasından itibaren geçerli olan kuralları belirler.
 
 ### Repolar ve belgeler
 
-- API ve istemci ayrı private repolardadır: `Tayfam-Api` ve istemci reposu.
+- API ve istemci ayrı **public** repolardadır: `Tayfam-Api` ve istemci reposu.
+  Kod MIT lisanslıdır: isteyen kendi sunucusunda ücretsiz çalıştırabilir. Gelir
+  modeli kodun değil, Tayfam'ın işlettiği sunucunun kullanımıdır. "Tayfam" adı
+  ve logosu lisans kapsamında değildir.
+- Public repo nedeniyle:
+  - Repoya ve geçmişine hiçbir gizli bilgi girmez; GitHub secret scanning ve
+    push protection açıktır. SOPS ile şifrelenmiş secret'lar repoda durabilir,
+    age özel anahtarı asla.
+  - Güvenlik, adreslerin veya yapılandırmanın gizli olmasına dayanmaz
+    (örneğin `admin.tayfam.app` ADR'lerde yazılıdır; korumayı Cloudflare
+    Access ve admin token'ı sağlar).
+  - Güvenlik açıkları `SECURITY.md`'deki yolla, herkese açık issue yerine özel
+    olarak bildirilir.
+  - CI yalnızca `pull_request` olayıyla çalışır; fork'tan gelen PR'lar yazma
+    yetkisi ve secret'lara erişim almaz. `pull_request_target` ve self-hosted
+    runner kullanılmaz.
 - Her repoda:
   - `ARCHITECTURE.md`: sisteme genel bakış ve ADR'lere bağlantılar.
   - `docs/adr/`: gerekçeli karar kayıtları. Kararı değiştiren her PR yeni bir
@@ -88,32 +106,27 @@ Bağımlılık güncellemeleri Dependabot ile haftalık PR olarak gelir.
   silindikten sonra hiçbir serviste kişisel kayıt kalmaması, ADR-0009).
 - Bir hata düzeltmesi, hatayı yeniden üreten bir testle gelir.
 
-### Ön koşullar ve şimdiki durum
+### Dal koruması
 
-Kuralların GitHub tarafından zorlanması iki şey gerektirir:
+`main` bir GitHub kural setiyle (ruleset) korunur:
 
-1. **Dal koruması:** GitHub, private repolarda dal korumasını yalnızca ücretli
-   planlarda (Pro, Team, Enterprise) sunar.
-2. **Ayrı bir PR kimliği:** GitHub'da PR'ı açan kişi kendi PR'ını onaylayamaz;
-   dal koruması ve CODEOWNERS onayı açıkken PR'lar ayrı bir kimlikle (GitHub App
-   veya bot hesabı) açılmalıdır.
+- Silme ve force push yasaktır.
+- Değişiklik yalnızca PR ile girer; birleştirme yöntemi squash'tır.
+- Zorunlu CI kontrolleri geçmeden birleştirme yapılamaz.
+- **Onay zorunluluğu yoktur.** Tek geliştiricili bu projede PR'ı açan ile
+  birleştiren aynı hesap olabilir; ayrı bir bot veya GitHub App kimliği
+  gerekmez.
+- Kural setinde istisna (bypass) tanınmaz.
 
-**Şimdilik ikisi de askıya alınmıştır.** Dal koruması yokken onay zorunlu
-olmadığı için PR'lar platform sahibinin hesabıyla açılabilir. Bu dönemde
-kurallar uzlaşı olarak uygulanır:
+Kural seti dışarıdan gelenlere karşı değil, ajanlara ve hatalara karşıdır:
+yetki verilmemiş biri zaten push yapamaz, ancak alt oturumlar platform
+sahibinin hesabıyla çalışır.
 
-- PR'lar CI tamamen geçmeden birleştirilmez.
-- `main`'e doğrudan push yapılmaz.
-- Rutin PR'ları mimari oturumu inceler ve birleştirir.
-- Hassas alanlara dokunan PR'larda mimari oturumu inceleme yorumunu yazar ve
-  platform sahibine haber verir; **birleştirmeyi yalnızca platform sahibi
-  yapar.** Mimari oturumu, platform sahibinin hesabını kullanıyor olsa da bu
-  PR'ları birleştirmez.
-- `CODEOWNERS` dosyası yine yazılır; hassas alanların listesi olarak hem
-  incelemede hem ileride dal koruması açıldığında kullanılır.
-
-Projede gerçek kullanıcılar olmaya başladığında veya alt oturum sayısı
-arttığında dal koruması ve ayrı PR kimliği yeniden değerlendirilir.
+Onay zorunlu olmadığı için `CODEOWNERS` GitHub tarafından zorlanmaz; hassas
+alanların listesi olarak incelemede kullanılır. Hassas alanlara dokunan PR'larda
+mimari oturumu inceleme yorumunu yazar ve platform sahibine haber verir;
+**birleştirmeyi yalnızca platform sahibi yapar.** Mimari oturumu, platform
+sahibinin hesabını kullanıyor olsa da bu PR'ları birleştirmez.
 
 ### Sürümleme
 
@@ -132,15 +145,19 @@ arttığında dal koruması ve ayrı PR kimliği yeniden değerlendirilir.
 
 - Kod aşamasının ilk işi: `CLAUDE.md`, `ARCHITECTURE.md`, `CODEOWNERS`, PR ve
   issue şablonları ve CI iş akışı.
-- Dal koruması olmadığı için kurallara uyum GitHub'a değil, `CLAUDE.md`'ye ve
-  incelemeye dayanır; alt oturumlara verilen talimatlar bu kuralları açıkça
+- Hassas alan kuralı GitHub tarafından zorlanmadığı için `CLAUDE.md`'ye ve
+  incelemeye dayanır; alt oturumlara verilen talimatlar bu kuralı açıkça
   içermelidir.
 
 ## Değerlendirilen alternatifler
 
 - **Tüm PR'ları platform sahibinin onaylaması:** En güvenli, ama rutin
   değişikliklerde darboğaz yaratır.
-- **Repoyu public yapmak:** Dal koruması ücretsiz olur, ama kod ve altyapı
-  yapılandırması herkese açılır.
+- **Private repo ve GitHub Pro:** Kod gizli kalır, ama dal koruması için
+  ücretli plan gerekir; projenin açık kaynak hedefiyle de örtüşmez.
+- **AGPL veya ticari kullanıma kapalı bir lisans:** Kapalı ticari kopyaları
+  caydırır, ama platform sahibi kodun serbestçe kullanılmasını tercih etti.
+- **Onay zorunlu kural seti ve bot kimliği:** CODEOWNERS'ı GitHub'a zorlatır,
+  ama tek geliştirici için ek kimlik yönetimi getirir.
 - **Doğrudan `main`'e çalışmaya devam etmek:** Hızlı, ama alt oturumların
   paralel çalıştığı bir düzende inceleme ve CI kapısını ortadan kaldırır.

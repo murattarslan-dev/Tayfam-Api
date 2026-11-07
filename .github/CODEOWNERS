@@ -1,0 +1,29 @@
+# Hassas alanlar (ADR-0010). Bu yollara dokunan PR'ları yalnızca platform
+# sahibi birleştirir. main'in kural setinde onay zorunluluğu olmadığı için bu
+# dosya GitHub tarafından zorlanmaz; inceleme ve iş akışı bu listeye göre yapılır.
+
+# Kimlik doğrulama
+/internal/identity/                     @murattarslan-dev
+/proto/tayfam/identity/                 @murattarslan-dev
+/internal/platform/auth/                @murattarslan-dev
+
+# Yetki kontrolleri
+/internal/core/app/tayfa/               @murattarslan-dev
+/internal/core/app/authz/               @murattarslan-dev
+
+# E2E ve DM arşivi
+/internal/chat/app/dm/                  @murattarslan-dev
+/internal/chat/app/keys/                @murattarslan-dev
+
+# Platform yönetim paneli
+/internal/gateway/admin/                @murattarslan-dev
+/proto/tayfam/*/v1/admin.proto          @murattarslan-dev
+
+# Tüm migration'lar
+/db/*/migrations/                       @murattarslan-dev
+
+# Dağıtım, güvenlik ve süreç yapılandırması
+/deploy/                                @murattarslan-dev
+/.github/                               @murattarslan-dev
+/CLAUDE.md                              @murattarslan-dev
+/docs/adr/                              @murattarslan-dev
