@@ -88,9 +88,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # main'de henüz sözleşme yoksa karşılaştırılacak bir şey de yoktur; ilk
+      # proto main'e girdikten sonra breaking kontrolü kendiliğinden açılır.
+      - name: main'de sözleşme var mı
+        id: base
+        run: |
+          git fetch --quiet --depth=1 origin main
+          if git cat-file -e origin/main:buf.yaml 2>/dev/null; then
+            echo "has_proto=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_proto=false" >> "$GITHUB_OUTPUT"
+          fi
       # lint, biçim ve main'e göre geriye uyumluluk (breaking) kontrolü
       - uses: bufbuild/buf-action@37ac33d8960807670a6e9719080e885197b09cc6 # v1.7.0
         with:
+          breaking: ${{ steps.base.outputs.has_proto == 'true' && github.event_name == 'pull_request' }}
           breaking_against: https://github.com/${{ github.repository }}.git#branch=main
           push: false
           # Sonuçlar iş çıktısında; PR yorumu için yazma izni verilmez.
