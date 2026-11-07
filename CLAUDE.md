@@ -20,6 +20,21 @@ backend'idir.
 - Ürün kararları ve veri modeli (v13): Notion'daki "Tayfam — Proje Planı".
   Veri modelinin servislere dağılımı ADR-0009'dadır.
 
+## Güvenlik ilkesi
+
+Hedef: sisteme sızmak olabildiğince zor olmalı; **sızılsa bile verilebilecek
+hasar en aza inmeli** ([ADR-0011](docs/adr/0011-guvenlik-ilkesi-ihlal-varsayimi.md)).
+Yazdığın her şeyi bir saldırganın gözüyle düşün:
+
+- **İhlal varsay.** Diğer katmanların aşılmış olabileceğini varsay. "Gateway'den
+  geçti", "içeriden geliyor", "istemci zaten kontrol ediyor" gerekçe değildir.
+- **En az yetki.** Kod, kullanıcı, token ve CI işi yalnızca gerekene erişsin;
+  yetkiyi geniş verip sonra daraltmayı planlama.
+- **Hasarı sınırla.** "Bu bileşen ele geçirilirse neye ulaşır?" sorusunun
+  cevabı dar olmalı. Cevap genişse tasarımı değiştir ve PR'da yaz.
+- **Tutmadığın veri çalınamaz.** Gerekmeyen veriyi saklama, loglama, döndürme.
+- **Doğrula.** Kimliği, imzayı, girdiyi her katmanda yeniden doğrula.
+
 ## Kesin kurallar
 
 Bunların ihlali PR'ın reddedilmesi için yeterlidir.
@@ -47,6 +62,12 @@ Bunların ihlali PR'ın reddedilmesi için yeterlidir.
 7. **Sözleşme önce gelir.** REST değişikliği önce `api/openapi/gateway.yaml`'a,
    gRPC değişikliği önce `proto/`'ya yazılır; sonra kod üretilir
    (`make generate`) ve üretilen kod commit edilir (ADR-0003).
+8. **İç servisler kimliği kendileri doğrular.** gateway'in ilettiği kullanıcı
+   kimliğine güvenilmez; her servis JWT imzasını kendisi doğrular (ADR-0011).
+9. **Bağımlılıklar sabitlenir.** GitHub Actions commit SHA'sıyla, container
+   image'ları sürüm etiketiyle (tercihen digest) sabitlenir; `latest`, `main`
+   gibi kayan referanslar kullanılmaz. Mevcut CI'daki etiketle sabitlenmiş
+   Actions, ADR-0011 sertleştirme listesindeki 3. maddeyle düzeltilir.
 
 ## Klasör yapısı
 

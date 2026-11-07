@@ -90,13 +90,19 @@ Ek kurallar:
 
 ### Doğrulama ve kimliğin servislere iletilmesi
 
+> Bu bölüm [ADR-0011](0011-guvenlik-ilkesi-ihlal-varsayimi.md) ile güncellendi.
+
 - gateway, erişim token'ını identity'ye sormadan, önbelleğindeki açık
   anahtarlarla kendisi doğrular.
-- Doğrulanan `user_id` ve `session_id`, gRPC metadata ile iç servislere iletilir.
-  Servisler arası zincirleme çağrılarda (chat → core) bu bilgi aynen aktarılır.
-- İç servisler bu metadata'ya güvenir; bu yüzden iç servislere yalnızca izin
-  verilen servislerden erişilebilmelidir. Bu, Kubernetes NetworkPolicy ile
-  sağlanır. Servisler arası mTLS dağıtım ADR'sinde değerlendirilecek.
+- gateway kullanıcının erişim token'ını gRPC metadata ile **olduğu gibi** iç
+  servislere iletir. Her iç servis imzayı identity'nin açık anahtarlarıyla
+  **kendisi doğrular**; gateway'in söylediğine güvenmez. Servisler arası
+  zincirleme çağrılarda (chat → core) aynı token taşınır.
+- Kullanıcısız arka plan çağrıları (outbox relay) ayrı, kısa ömürlü servis
+  token'larıyla yapılır.
+- Ek katman olarak iç servislere yalnızca izin verilen servislerden
+  erişilebilir (NetworkPolicy). Servisler arası mTLS ileride yeniden
+  değerlendirilir.
 
 ### WebSocket kimlik doğrulaması
 

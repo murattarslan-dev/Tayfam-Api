@@ -22,20 +22,39 @@ memory=4GB
 processors=4
 swap=2GB
 vmIdleTimeout=-1
+
+[experimental]
+autoMemoryReclaim=gradual
 ```
 
-**Ubuntu'da** systemd'yi aç (k3s servis olarak çalışır):
+**Ubuntu'da** systemd'yi aç (k3s servis olarak çalışır) ve WSL'i Windows'tan
+yalıt (ADR-0011): `C:` sürücüsü bağlanmaz, Linux tarafından Windows
+programları çalıştırılamaz. Böylece cluster'dan kaçan bir saldırgan Windows
+dosyalarına ulaşamaz.
 
 ```bash
-sudo tee /etc/wsl.conf > /dev/null <<'EOF'
+sudo tee /etc/wsl.conf > /dev/null <<WSLCONF
 [boot]
 systemd=true
 
 [user]
-default=KULLANICI_ADIN
-EOF
-sudo sed -i "s/KULLANICI_ADIN/$USER/" /etc/wsl.conf
+default=$USER
+
+[automount]
+enabled=false
+mountFsTab=false
+
+[interop]
+enabled=false
+appendWindowsPath=false
+WSLCONF
+cat /etc/wsl.conf
 ```
+
+Bu ayardan sonra Ubuntu'dan `/mnt/c` ve `cmd.exe`, `explorer.exe` gibi
+Windows programları kullanılamaz. Windows'tan WSL'e erişim (`wsl.exe`,
+`\\wsl$`) çalışmaya devam eder; Windows tarafının güvenliği (güncellemeler,
+disk şifreleme) bu yüzden önemlidir.
 
 **PowerShell'de** `wsl --shutdown`, ardından Ubuntu'yu tekrar aç ve kontrol et:
 
@@ -43,6 +62,7 @@ sudo sed -i "s/KULLANICI_ADIN/$USER/" /etc/wsl.conf
 systemctl is-system-running   # running veya degraded
 free -h                        # ~4 GB
 nproc                          # 4
+ls /mnt/c 2>&1                 # "No such file": yalıtım çalışıyor
 ```
 
 ## 2. k3s
@@ -123,3 +143,24 @@ Tunnel token'ı bir şifredir; sohbetlere, issue'lara veya repoya yazılmaz.
 kubectl -n tayfam-dev logs deploy/cloudflared --tail=10   # Registered tunnel connection ... protocol=http2
 curl -s https://api-dev.tayfam.app/v1/status
 ```
+
+## Bilgisayar donduktan veya elektrik kesildikten sonra
+
+Ani kapanmada containerd'nin diske yazdığı image katmanları bozulabilir.
+Belirti: pod'lar `CrashLoopBackOff`, logda `exec format error`.
+
+Tek tek image silmek, bozuk katmanlar önbellekte kaldığı için yetmeyebilir.
+containerd'nin image deposunu sıfırlamak güvenlidir; cluster durumu
+(namespace'ler, secret'lar, Flux) ayrı tutulur ve silinmez, image'lar yeniden
+indirilir:
+
+```bash
+sudo systemctl stop k3s
+sudo /usr/local/bin/k3s-killall.sh
+sudo rm -rf /var/lib/rancher/k3s/agent/containerd
+sudo systemctl start k3s
+kubectl get pods -A -w
+```
+
+Dosya sistemi kontrolü: `sudo dmesg | grep -iE "ext4|error"`. `recovery
+complete` satırı ext4'ün günlüğünü onardığını gösterir.
