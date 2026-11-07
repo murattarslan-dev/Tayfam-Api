@@ -2,6 +2,8 @@
 
 - **Durum:** Kabul edildi
 - **Tarih:** 2026-11-07
+- **Revizyon:** 2026-11-07, DM geçmişi cihazlarda değil, sunucuda şifreli
+  arşivde tutulacak şekilde değiştirildi (uygulamaya geçmeden önce).
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md)
 
@@ -69,15 +71,50 @@ sorumlulukların tamamı chat servisindedir.
 - Sunucu, şifreleme protokolünden bağımsız tasarlanır. Protokol (cihaz başına
   basit anahtar çiftleri veya Signal protokolü) istemci tarafı ADR'sinde
   seçilir.
-- Sunucu yalnızca şunları saklar:
-  - Kullanıcının **cihazları** ve her cihazın açık anahtar materyali.
-  - Her mesaj için, alıcı ve gönderenin diğer cihazlarına ayrı ayrı şifrelenmiş
-    **zarflar** (envelope).
-- Sunucu mesaj içeriğini hiçbir koşulda göremez ve çözemez.
-- Zarf, hedef cihaz teslim aldığını bildirince silinir. Teslim edilemeyen
-  zarflar 30 gün sonra silinir. DM geçmişi yalnızca cihazlarda yaşar; yeni bir
-  cihaz eski mesajları göremez.
-- Bir kullanıcının anahtarları değiştiğinde karşı tarafa bildirim gider;
+- Sunucu mesaj içeriğini hiçbir koşulda göremez ve çözemez. İstemcinin yerel
+  veritabanı yalnızca önbellektir; DM geçmişinin kaynağı sunucudaki şifreli
+  arşivdir.
+
+**İki katman: canlı zarflar ve geçmiş arşivi**
+
+1. **Zarflar (canlı iletim):** Her cihazın kendi anahtar çifti vardır. Gönderen
+   cihaz mesajı alıcının ve kendi kullanıcısının **tüm kayıtlı cihazları** için
+   ayrı ayrı şifreler. Zarf, hedef cihaz teslim aldığını bildirince silinir;
+   teslim edilemeyen zarflar 30 gün sonra silinir. Böylece kayıtlı her cihaz,
+   eşleştirilmiş olsun olmasın, yeni mesajları alır.
+2. **Geçmiş arşivi:** Her kullanıcının yalnızca kendi cihazlarının bildiği
+   simetrik bir **geçmiş anahtarı** vardır. Kullanıcının eşleştirilmiş cihazları,
+   gönderdikleri ve aldıkları her mesajı bu anahtarla şifreleyip kullanıcının
+   kendi arşivine yazar. Sunucu arşivi saklar ama çözemez. Arşiv, kullanıcı
+   silene veya hesap silinene kadar tutulur.
+
+Her kullanıcının arşivi kendine aittir: gönderen ve alıcı aynı mesajı kendi
+arşivlerine kendi anahtarlarıyla yazar.
+
+**Yeni cihaz ve geçmiş senkronizasyonu**
+
+- Yeni cihaz girişte kendi anahtar çiftini üretir ve kaydolur; bu andan itibaren
+  yeni mesajları zarflarla alır. **QR okutmak zorunlu değildir.**
+- Kullanıcının başka eşleştirilmiş cihazı varsa, yeni cihazda bir banner
+  gösterilir: "Eski mesajlarını görmek için diğer cihazından QR'ı okut."
+- QR'ı yeni cihaz gösterir; eşleştirilmiş cihaz okutur. QR, yeni cihazın açık
+  anahtarını ve tek kullanımlık bir doğrulama kodunu içerir. Eşleştirilmiş cihaz
+  geçmiş anahtarını yeni cihazın açık anahtarıyla şifreleyip sunucu üzerinden
+  iletir. Bundan sonra yeni cihaz arşivi indirebilir ve arşive yazabilir.
+- Eşleştirilmemiş cihaz arşive yazamaz; aldığı mesajlar eşleştirilmiş cihazlar
+  tarafından arşive eklenir.
+- Kullanıcının hiç eşleştirilmiş cihazı kalmamışsa (tüm cihazlar kaybolmuş veya
+  kapatılmış), yeni cihaz yeni bir geçmiş anahtarı üretir. Eski arşiv
+  okunamaz hale gelir; kullanıcıya bu açıkça bildirilir. İleride bir kurtarma
+  kodu ile bu durum çözülebilir.
+
+**Anahtar yenileme**
+
+- Bir cihaz kaldırıldığında veya kaybolduğunda geçmiş anahtarı yenilenir: yeni
+  kayıtlar yeni anahtarla şifrelenir, yeni anahtar kalan eşleştirilmiş cihazlara
+  dağıtılır. Anahtarlar sürüm numarası taşır; eski kayıtlar eski sürümle
+  okunmaya devam eder.
+- Bir kullanıcının cihaz anahtarları değiştiğinde karşı tarafa bildirim gider;
   bunun arayüzde nasıl gösterileceği istemci ADR'sinde belirlenir.
 
 ### Diğer canlı olaylar
@@ -102,14 +139,19 @@ sorumlulukların tamamı chat servisindedir.
 - Biletin chat'te olması gateway'i durumsuz bırakır.
 - Postgres LISTEN/NOTIFY, birkaç kopyaya kadar ek bileşen olmadan ölçeklenmeyi
   sağlar.
-- DM zarflarının teslimden sonra silinmesi, sunucuda tutulan kişisel veriyi
-  en aza indirir.
+- Canlı zarflar ile geçmiş arşivinin ayrılması, eşleştirme yapılmamış bir
+  cihazın da yeni mesajları almasını; eşleştirilmiş cihazların ise web dahil
+  aynı DM kutusunu görmesini sağlar. Kullanıcıdan şifre veya PIN istenmez.
 
 ## Sonuçlar
 
 - chat servisi bağlantı yönetimi, bilet, kanal mesajları, DM zarfları, cihaz
   anahtarları ve push bildirimlerini içerir; servislerin en karmaşığıdır.
-- Kullanıcılar DM geçmişini yeni bir cihaza taşıyamaz.
+- DM şifreleme mantığının büyük kısmı istemcidedir (zarf üretimi, arşivleme,
+  QR eşleştirme, anahtar yenileme). Sunucu tarafı cihaz kaydı, zarf kutusu,
+  arşiv ve eşleştirme mesajlarının iletimi ile sınırlıdır.
+- Tüm cihazlarını kaybeden kullanıcı, kurtarma kodu eklenene kadar DM geçmişini
+  kaybeder.
 - Firebase projesi ve APNs anahtarı gerekir.
 
 ## Değerlendirilen alternatifler
@@ -119,6 +161,14 @@ sorumlulukların tamamı chat servisindedir.
   durumları getirir.
 - **`gorilla/websocket`:** Yaygın ve olgun, ama `coder/websocket` context
   desteği ve daha sade API'si nedeniyle tercih edildi.
-- **DM'leri sunucuda şifreli olarak kalıcı saklamak:** Cihazlar arası geçmiş
-  sağlar, ama anahtar yedekleme gibi karmaşık sorunlar getirir ve sunucuda veri
-  biriktirir.
+- **DM geçmişini yalnızca cihazlarda tutmak (Signal modeli):** En basit ve en
+  gizli seçenek, ama yeni cihaz boş başlar ve web istemcisinde tarayıcı verisi
+  silinince geçmiş kaybolur.
+- **E2E olmadan, sunucu anahtarıyla şifreleme:** Her cihazda anında tutarlı
+  kutu sağlar, ama sunucu mesajları okuyabilir; uçtan uca şifreleme sözü
+  karşılanmaz.
+- **Geçmişi zorunlu QR eşleştirmesine bağlamak:** Daha basit durum yönetimi,
+  ama yeni cihaz eklemeyi gereksiz yere zorlaştırır.
+- **Geçmiş anahtarını PIN veya parola ile korumak:** Eşleştirme gerektirmez,
+  ama kullanıcıya ek adım getirir ve düşük entropili PIN'ler özel donanım
+  koruması olmadan kaba kuvvete açıktır.
