@@ -2,6 +2,8 @@
 
 - **Durum:** Kabul edildi
 - **Tarih:** 2026-11-07
+- **Revizyon:** 2026-11-07, dal koruması ve ayrı PR kimliği askıya alındı;
+  kurallar şimdilik uzlaşı olarak uygulanır (bkz. "Ön koşullar").
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0003](0003-kod-yapisi-ve-sozlesmeler.md), [ADR-0006](0006-dagitim-ve-ortamlar.md)
 - **Kaynak:** Notion: Proje Planı, "Geliştirme İş Akışı" bölümü
@@ -86,21 +88,32 @@ Bağımlılık güncellemeleri Dependabot ile haftalık PR olarak gelir.
   silindikten sonra hiçbir serviste kişisel kayıt kalmaması, ADR-0009).
 - Bir hata düzeltmesi, hatayı yeniden üreten bir testle gelir.
 
-### Ön koşullar
+### Ön koşullar ve şimdiki durum
 
-Bu kuralların uygulanabilmesi için iki şey gerekir:
+Kuralların GitHub tarafından zorlanması iki şey gerektirir:
 
 1. **Dal koruması:** GitHub, private repolarda dal korumasını yalnızca ücretli
-   planlarda (Pro, Team, Enterprise) sunar. Repo private kalacaksa hesabın
-   GitHub Pro'ya geçmesi gerekir.
-2. **Ayrı bir PR kimliği:** GitHub'da PR'ı açan kişi kendi PR'ını onaylayamaz.
-   Alt oturumlar PR'ları platform sahibinin hesabıyla açarsa, hassas
-   alanlardaki CODEOWNERS onayı verilemez. Bu yüzden PR'lar ayrı bir kimlikle
-   (bir GitHub App veya bot hesabı) açılır; platform sahibi onaylayan taraf
-   olur.
+   planlarda (Pro, Team, Enterprise) sunar.
+2. **Ayrı bir PR kimliği:** GitHub'da PR'ı açan kişi kendi PR'ını onaylayamaz;
+   dal koruması ve CODEOWNERS onayı açıkken PR'lar ayrı bir kimlikle (GitHub App
+   veya bot hesabı) açılmalıdır.
 
-Ön koşullar sağlanana kadar kurallar CI ve PR şablonu ile uygulanır; dal
-koruması ön koşullar sağlanınca açılır.
+**Şimdilik ikisi de askıya alınmıştır.** Dal koruması yokken onay zorunlu
+olmadığı için PR'lar platform sahibinin hesabıyla açılabilir. Bu dönemde
+kurallar uzlaşı olarak uygulanır:
+
+- PR'lar CI tamamen geçmeden birleştirilmez.
+- `main`'e doğrudan push yapılmaz.
+- Rutin PR'ları mimari oturumu inceler ve birleştirir.
+- Hassas alanlara dokunan PR'larda mimari oturumu inceleme yorumunu yazar ve
+  platform sahibine haber verir; **birleştirmeyi yalnızca platform sahibi
+  yapar.** Mimari oturumu, platform sahibinin hesabını kullanıyor olsa da bu
+  PR'ları birleştirmez.
+- `CODEOWNERS` dosyası yine yazılır; hassas alanların listesi olarak hem
+  incelemede hem ileride dal koruması açıldığında kullanılır.
+
+Projede gerçek kullanıcılar olmaya başladığında veya alt oturum sayısı
+arttığında dal koruması ve ayrı PR kimliği yeniden değerlendirilir.
 
 ### Sürümleme
 
@@ -119,7 +132,9 @@ koruması ön koşullar sağlanınca açılır.
 
 - Kod aşamasının ilk işi: `CLAUDE.md`, `ARCHITECTURE.md`, `CODEOWNERS`, PR ve
   issue şablonları ve CI iş akışı.
-- GitHub Pro ve PR kimliği kararları platform sahibine aittir.
+- Dal koruması olmadığı için kurallara uyum GitHub'a değil, `CLAUDE.md`'ye ve
+  incelemeye dayanır; alt oturumlara verilen talimatlar bu kuralları açıkça
+  içermelidir.
 
 ## Değerlendirilen alternatifler
 
