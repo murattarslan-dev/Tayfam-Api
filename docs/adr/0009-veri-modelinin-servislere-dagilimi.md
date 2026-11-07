@@ -27,7 +27,8 @@ ele alır.
 
 **identity** (kimlik, oturum, KVKK ve platform yönetimi)
 
-- `users`, `auth_identities`, `devices`, `sessions`, `refresh_tokens`
+- `users` (şifreli doğum tarihi ve görünürlük ayarı dahil, ADR-0012),
+  `auth_identities`, `devices`, `sessions`, `refresh_tokens`
 - `consent_records`, `data_export_requests`
 - `platform_admins`, `platform_audit_logs`, `platform_sanctions`
 
@@ -44,7 +45,9 @@ ele alır.
 - Sosyal: `friendships`, `user_blocks`
 - Geçmiş: `user_activity_records`
 - Dosyalar: `uploads`
-- Denetim: `reports`, `audit_logs`
+- Denetim: `reports` (`priority`, kategori), `audit_logs`
+- Moderasyon (ADR-0012): `moderation_terms` (kelime listesi), `moderation_flags`,
+  `legal_holds`
 - Abonelik (Faz 2): `plans`, `tayfa_subscriptions`, `payment_events`
 
 **chat** (mesajlaşma, E2E anahtarları, bildirimler)
@@ -109,6 +112,8 @@ Tüm tüketici metodları idempotenttir (ADR-0002).
 | chat → core | `CheckDirectMessage(sender_id, recipient_id)` | Notion v7 kuralları: ortak aktif tayfa, arkadaşlık, engelleme, ortak etkinlik geçmişi. Sonuç: yazamaz, istek, aktif |
 | chat → core | `ListActiveMemberIDs(tayfa_id)` | Canlı olay ve bildirim dağıtımı |
 | identity → core, chat | `ExportUserData(user_id)` | KVKK veri dışa aktarma (ADR-0008) |
+| core → identity | `IsMinor(user_ids)` | Şikâyet önceliği; yalnızca evet/hayır döner (ADR-0012) |
+| identity → core | `GetRelationship(viewer_id, subject_id)` | Doğum günü görünürlüğü için arkadaşlık / ortak tayfa (ADR-0012) |
 | gateway → hepsi | Uygulama ve panel uçları | ADR-0002, ADR-0008 |
 
 Sosyal ilişkiler (arkadaşlık, engelleme) core'dadır; böylece birebir mesaj izni

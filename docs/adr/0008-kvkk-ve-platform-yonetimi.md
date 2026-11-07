@@ -56,8 +56,10 @@ sorumlusu gerçek kişi olarak Murat Tarslan'dır.
 - Yeni sürüm yayınlanınca kullanıcı bir sonraki girişte onay ekranı görür.
   Güncel sürümü onaylamamış kullanıcının token'ı yalnızca onay uçlarına
   erişebilir.
-- Kayıtta "16 yaşından büyüğüm" beyanı alınır (`age_confirmed_at`). Doğum
-  tarihi saklanmaz. Beyan olmadan hesap aktifleşmez.
+- Kayıtta doğum tarihi zorunludur; 16 yaşından küçükler kayıt olamaz. Doğum
+  tarihi yalnızca identity'de, şifreli tutulur ve diğer servislere
+  gönderilmez ([ADR-0012](0012-dogum-tarihi-ve-kotuye-kullanim.md); bu madde
+  önceki "16 yaş beyanı, doğum tarihi saklanmaz" kararının yerini alır).
 
 ### Saklama süreleri
 
@@ -67,7 +69,8 @@ Notion'daki tablolar geçerlidir; her servis kendi verisinin saklama işini
 | Veri | Süre | Servis |
 |------|------|--------|
 | Soft delete edilen içerik | 30 gün, sonra kalıcı silme | core, chat |
-| Silinen hesabın `users` satırı | 30 gün | identity |
+| Silinen hesabın `users` satırı | 30 gün (doğum tarihi hesap silinince hemen temizlenir) | identity |
+| Yasal bekletmedeki içerik (ADR-0012) | Bekletme kaldırılana kadar; üst sınır hukukçuyla | core, chat |
 | `audit_logs`, çözülmüş şikâyetler | 1 yıl | core |
 | `platform_audit_logs` | 1 yıl | identity |
 | Bildirimler | 90 gün | chat |
