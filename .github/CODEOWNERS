@@ -1,6 +1,6 @@
 # Hassas alanlar (ADR-0010). Bu yollara dokunan PR'ları yalnızca platform
-# sahibi birleştirir. Dal koruması şimdilik kapalı olduğu için bu dosya
-# GitHub tarafından zorlanmaz; inceleme ve iş akışı bu listeye göre yapılır.
+# sahibi birleştirir. main'in kural setinde onay zorunluluğu olmadığı için bu
+# dosya GitHub tarafından zorlanmaz; inceleme ve iş akışı bu listeye göre yapılır.
 
 # Kimlik doğrulama
 /internal/identity/                     @murattarslan-dev

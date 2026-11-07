@@ -7,6 +7,10 @@ açıklamasında açıkça belirt**; sessizce sapma.
 
 ## Proje
 
+Repo public'tir ve MIT lisanslıdır. Yazdığın her şeyin herkes tarafından
+okunacağını varsay: koda, testlere, commit mesajlarına ve PR açıklamalarına
+gerçek kullanıcı verisi, secret veya iç adres/şifre girmez.
+
 Tayfam; kulüplerin ve arkadaş gruplarının (tayfaların) etkinlik, duyuru,
 soru-cevap ve sohbet ihtiyaçlarını tek uygulamada karşılar. Bu repo Go
 backend'idir.
@@ -108,8 +112,8 @@ docs/runbooks/              işletim adımları
 - Commit mesajları Conventional Commits biçimindedir (`feat:`, `fix:`,
   `docs:`, `refactor:`, `test:`, `chore:`).
 - PR şablonundaki her başlık doldurulur.
-- **`main`'e doğrudan push yapılmaz.** Dal koruması şimdilik kapalıdır; bu kural
-  uzlaşıyla uygulanır (ADR-0010).
+- **`main`'e doğrudan push yapılmaz.** `main` bir kural setiyle korunur
+  (ADR-0010).
 - **CI geçmeden hiçbir PR birleştirilmez.**
 - **Hassas alanlar** (`.github/CODEOWNERS`'taki yollar) değiştiren PR'ları
   yalnızca platform sahibi birleştirir. Bu PR'ları açarken açıklamaya

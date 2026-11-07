@@ -49,3 +49,9 @@ Her servis ops portunda `GET /livez` ve `GET /readyz` sunar.
 | `OPS_ADDR` | `:8081` | Probe sunucusunun adresi |
 | `SHUTDOWN_DRAIN_DELAY` | `0s` | Kapanışta trafiğin boşalması için bekleme |
 | `SHUTDOWN_TIMEOUT` | `15s` | Açık isteklerin tamamlanması için süre |
+
+## Lisans ve güvenlik
+
+Kod [MIT](LICENSE) lisanslıdır; kendi sunucunda ücretsiz çalıştırabilirsin.
+"Tayfam" adı ve logosu lisans kapsamında değildir. Güvenlik açıklarını
+herkese açık issue yerine [SECURITY.md](SECURITY.md)'deki yolla bildir.
