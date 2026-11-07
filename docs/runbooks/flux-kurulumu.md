@@ -86,3 +86,27 @@ flux reconcile kustomization tayfam-dev
 | Pod'lar oluşmuyor, namespace olaylarında "violates PodSecurity" | Manifestte `restricted` profiline uymayan bir ayar var |
 | Servisler `Running` ama `/v1/status` bir servisi `unavailable` gösteriyor | NetworkPolicy: `deploy/base/networkpolicies.yaml` |
 | Kustomization `wait` zaman aşımı | `kubectl -n tayfam-dev get events --sort-by=.lastTimestamp` |
+
+## İmza doğrulaması (ADR-0011)
+
+CI, `main`'deki her commit'te image'ları ve manifest artifact'ını cosign ile
+imzalar; artifact içindeki image'lar digest ile sabitlenir. `OCIRepository`
+yalnızca bu reponun `ci.yml` iş akışının `main` dalında attığı imzayı kabul
+eder.
+
+`deploy/clusters/home` cluster'a elle uygulandığı için, bu tanımlar
+değiştiğinde yeniden uygulanmaları gerekir:
+
+```bash
+cd ~/tayfam-api && git pull
+kubectl apply -k deploy/clusters/home
+flux reconcile source oci tayfam-deploy
+flux get sources oci   # MESSAGE: "stored artifact ... verified" benzeri
+```
+
+İmza doğrulanamazsa Flux yeni artifact'ı uygulamaz ve cluster son doğrulanmış
+haliyle çalışmaya devam eder. Sebebi:
+
+```bash
+kubectl -n flux-system describe ocirepository tayfam-deploy | tail -20
+```
