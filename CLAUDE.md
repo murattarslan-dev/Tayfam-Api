@@ -17,8 +17,33 @@ backend'idir.
 
 - Mimari özet: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 - Kararlar ve gerekçeleri: [`docs/adr/`](docs/adr/README.md)
-- Ürün kararları ve veri modeli (v13): Notion'daki "Tayfam — Proje Planı".
+- Ürün kararları ve veri modeli (v14): Notion'daki "Tayfam — Proje Planı".
   Veri modelinin servislere dağılımı ADR-0009'dadır.
+
+## Kararlar ve Notion
+
+Ürün kararlarının kaynağı Notion'daki **"Tayfam — Proje Planı"** sayfası ve alt
+sayfalarıdır (veri modeli, özellik haritası, KVKK aydınlatma metni, platform
+yönetim paneli, topluluk kuralları, kötüye kullanım ve genç kullanıcı
+güvenliği). Mimari kararların kaynağı `docs/adr/`'dir.
+
+- **Karar almadan önce oku.** Bir özellik tasarlamadan, tablo veya alan
+  eklemeden, bir kuralı yorumlamadan ya da seçenek önermeden önce Notion'daki
+  ilgili sayfayı ve ilgili ADR'leri oku (Notion MCP bağlantısıyla). Notion'da
+  zaten verilmiş bir kararı yeniden tasarlama.
+- **Çelişkiyi sakla değil, söyle.** Notion ile ADR veya kod çelişiyorsa ya da
+  Notion'daki karardan sapmak gerekiyorsa bunu açıkça belirt ve platform
+  sahibine sor. Sapma kabul edilirse hem ADR'ye hem Notion'daki ilgili sayfaya
+  yazılır (örnek: ADR-0012'deki şifreli doğum tarihi, veri modeli v14'te not
+  olarak duruyor).
+- **Yeni kararı yaz.** Platform sahibiyle birlikte yeni bir karar alınırsa
+  aynı oturumda Notion'daki ilgili sayfaya işlenir (ürün kararı) ve gerekiyorsa
+  ADR eklenir veya güncellenir (mimari karar). Notion'daki proje planının yol
+  haritası tamamlanan işlerle güncel tutulur.
+- **Erişim yoksa varsayma.** Notion'a ulaşılamıyorsa bunu söyle; Notion'da ne
+  yazdığını tahmin ederek ilerleme.
+- Notion'a gerçek kullanıcı verisi, secret veya iç adres/parola yazılmaz;
+  repoyla aynı kural geçerlidir.
 
 ## Güvenlik ilkesi
 
@@ -57,13 +82,23 @@ Bunların ihlali PR'ın reddedilmesi için yeterlidir.
    `tayfa_id` ve üyelik kontrolüyle çalışır (IDOR'a karşı). İzinler core'daki
    tek izin tablosundan okunur; varsayılan cevap "hayır"dır (ADR-0004).
 6. **Gizli bilgi repoya girmez.** Anahtarlar, token'lar ve parolalar ortam
-   değişkeninden okunur; `deploy/` altında yalnızca SOPS ile şifrelenmiş
-   halleri bulunur (ADR-0006).
+   değişkeninden okunur; `deploy/apps/<ortam>/secrets/` altında yalnızca SOPS
+   ile şifrelenmiş halleri bulunur (ADR-0006). Gizli değerler platform
+   sahibinin bilgisayarında üretilip doğrudan sops'a verilir; açık halleri
+   diske, terminale, sohbete veya log'a yazılmaz (`docs/runbooks/sops.md`).
+   age özel anahtarı GitHub'a (Actions secret dahil) hiçbir zaman eklenmez.
 7. **Sözleşme önce gelir.** REST değişikliği önce `api/openapi/gateway.yaml`'a,
    gRPC değişikliği önce `proto/`'ya yazılır; sonra kod üretilir
-   (`make generate`) ve üretilen kod commit edilir (ADR-0003).
+   (`make generate`) ve üretilen kod commit edilir (ADR-0003). buf eklentileri
+   `go.mod`'daki `tool` direktifleriyle sabittir; CI `gen/`'in güncel olduğunu
+   ve proto'nun geriye uyumlu kaldığını (`buf breaking`) kontrol eder.
 8. **İç servisler kimliği kendileri doğrular.** gateway'in ilettiği kullanıcı
    kimliğine güvenilmez; her servis JWT imzasını kendisi doğrular (ADR-0011).
+   gRPC sunucuları `auth.Guard` ile kurulur ve her metod varsayılan olarak
+   geçerli token ister. Token istemeyen (açık) bir metod eklemek hassas alan
+   değişikliğidir; PR'da gerekçelendirilir ve testle sabitlenir. Doğrulanmış
+   kullanıcı `auth.CallerFrom(ctx)` ile okunur; zincirleme çağrılarda token
+   `auth.ForwardToken` ile olduğu gibi iletilir.
 9. **Bağımlılıklar sabitlenir.** GitHub Actions commit SHA'sıyla, container
    image'ları sürüm etiketiyle (tercihen digest) sabitlenir; `latest`, `main`
    gibi kayan referanslar kullanılmaz. Mevcut CI'daki etiketle sabitlenmiş
@@ -136,18 +171,32 @@ docs/runbooks/              işletim adımları
 - **`main`'e doğrudan push yapılmaz.** `main` bir kural setiyle korunur
   (ADR-0010).
 - **CI geçmeden hiçbir PR birleştirilmez.**
+- **Platform sahibinin işi en aza indirilir.** Cluster komutları, panel
+  ayarları ve hesap işlemleri gibi yalnızca platform sahibinin yapabileceği
+  işler, yapılabilecek her şey önceden hazırlandıktan sonra tek bir listede,
+  kopyalanıp çalıştırılabilir halde istenir. Aynı şey iki kez istenmez;
+  cevabı alınmış bir adım tekrar sorulmaz.
 - **Hassas alanlar** (`.github/CODEOWNERS`'taki yollar) değiştiren PR'ları
   yalnızca platform sahibi birleştirir. Bu PR'ları açarken açıklamaya
   "Hassas alan" etiketini ve hangi alana dokunduğunu yaz.
+- **Pilot öncesi esneme (süreli, ADR-0010):** İlk gerçek kullanıcı verisine
+  kadar mimari oturumu hassas alanların çoğunu birleştirebilir: CI tamamen
+  yeşil olmalı, içerik platform sahibiyle sohbette konuşulmuş olmalı ve PR
+  açıklamasında "Sohbette onaylandı" notu bulunmalıdır. `.github/`,
+  `deploy/clusters/`, `.sops.yaml`, `scripts/new-signing-key.sh` ve
+  `CLAUDE.md` her zaman yalnızca platform sahibine kalır. Pilottan önce bu
+  madde kaldırılır.
 - Mimari bir kararı değiştiren PR, yeni bir ADR ekler.
 
 ## Komutlar
 
 ```sh
+make generate   # proto/ değişince gen/ altındaki kodu üretir (buf gerekir)
 make build      # tüm servisleri derler
 make test       # go test -race ./...
 make lint       # golangci-lint
 make check      # build + test + lint (PR açmadan önce)
 make run SERVICE=gateway   # bir servisi yerelde çalıştırır
-make up         # docker compose ile yerel ortam
+make up         # docker compose ile yerel ortam (geçici imzalama anahtarıyla)
+make dev        # dört servisi Docker olmadan yerelde çalıştırır
 ```

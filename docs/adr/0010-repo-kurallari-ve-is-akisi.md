@@ -7,6 +7,8 @@
   - Repolar public oldu ve MIT lisansıyla yayınlanır. `main`, onay zorunluluğu
     olmayan bir kural setiyle korunur; ayrı PR kimliğine gerek kalmadı (bkz.
     "Dal koruması").
+- **Revizyon:** 2026-11-07 (2): Pilot öncesine kadar süreli esneme; hassas
+  alanların çoğunu mimari oturumu birleştirebilir (bkz. "Pilot öncesi esneme").
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0003](0003-kod-yapisi-ve-sozlesmeler.md), [ADR-0006](0006-dagitim-ve-ortamlar.md)
 - **Kaynak:** Notion: Proje Planı, "Geliştirme İş Akışı" bölümü
@@ -127,6 +129,35 @@ alanların listesi olarak incelemede kullanılır. Hassas alanlara dokunan PR'la
 mimari oturumu inceleme yorumunu yazar ve platform sahibine haber verir;
 **birleştirmeyi yalnızca platform sahibi yapar.** Mimari oturumu, platform
 sahibinin hesabını kullanıyor olsa da bu PR'ları birleştirmez.
+
+### Pilot öncesi esneme (süreli)
+
+> **Geçerlilik:** 2026-11-07'den ilk gerçek kullanıcı verisine (pilot veya
+> prod ortamının açılması) kadar. Pilottan önce bu bölüm kaldırılır ve yukarıdaki
+> kural tam olarak geri gelir; bu adım pilot hazırlık listesindedir.
+
+Henüz gerçek kullanıcı verisi yoktur ve `main` yalnızca ev cluster'ındaki dev
+ortamına dağıtılır; bir hatanın verebileceği zarar sınırlıdır. Bu dönemde
+platform sahibinin her PR'ı birleştirmesi işi gereksiz yavaşlattığı için:
+
+- **Mimari oturumu birleştirebilir:** `docs/adr/`, `internal/identity/`,
+  `internal/core/app/tayfa/`, `internal/core/app/authz/`, `internal/chat/app/`,
+  `internal/platform/auth/`, `proto/`, `db/*/migrations/`, `deploy/base/`,
+  `deploy/apps/`. Şartlar: CI'ın tamamı yeşil, değişikliğin içeriği platform
+  sahibiyle sohbette konuşulmuş ve PR açıklamasında "Sohbette onaylandı"
+  notu ile hangi kararın uygulandığı yazılı. Platform sahibi bu PR'ları
+  istediği zaman sonradan inceler.
+- **Yalnızca platform sahibi birleştirir** (güven zincirinin kökü; buradaki
+  bir hata diğer bütün korumaları geçersiz kılar):
+  - `.github/` (CI iş akışları, imzalama, `CODEOWNERS`)
+  - `deploy/clusters/` (Flux'ın hangi kaynağa ve imzaya güvendiği, çözme ayarı)
+  - `.sops.yaml` (secret'ları kimin çözebileceği) ve
+    `scripts/new-signing-key.sh`
+  - `CLAUDE.md` (kesin kurallar ve güvenlik ilkesi)
+- Bir PR iki gruba birden dokunuyorsa platform sahibi birleştirir; mümkünse
+  ikiye bölünür.
+- Bu esneme kendi kendini genişletemez: bu bölümü veya listeleri değiştiren
+  PR `CLAUDE.md`'ye de dokunacağı için platform sahibine kalır.
 
 ### Sürümleme
 
