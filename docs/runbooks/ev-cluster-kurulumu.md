@@ -72,7 +72,7 @@ Traefik ve servicelb kapalı; dış trafik Cloudflare Tunnel'dan gelir.
 ```bash
 cd ~
 sudo apt update && sudo apt -y upgrade
-curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --disable traefik --disable servicelb --write-kubeconfig-mode 600" sh -
+curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --disable traefik --disable servicelb --write-kubeconfig-mode 600 --secrets-encryption" sh -
 
 mkdir -p ~/.kube
 sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
@@ -84,6 +84,29 @@ source ~/.bashrc
 kubectl get nodes -o wide   # Ready
 kubectl get pods -A         # Running / Completed
 ```
+
+### Secret'ların diskte şifrelenmesi (ADR-0011)
+
+Yeni kurulumda yukarıdaki `--secrets-encryption` bayrağı yeterlidir. Var olan
+bir kurulumda bayrak, kurulum betiği **aynı sürümle** yeniden çalıştırılarak
+eklenir (`/etc/rancher/k3s/config.yaml`'a yazmak bu kurulumda etkili olmadı):
+
+```bash
+k3s --version   # sürümü not et, örn. v1.37.2+k3s1
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.37.2+k3s1" INSTALL_K3S_EXEC="server --disable traefik --disable servicelb --write-kubeconfig-mode 600 --secrets-encryption" sh -
+sudo k3s secrets-encrypt status   # Encryption Status: Enabled
+```
+
+Daha önce oluşturulmuş secret'lar şifresiz kalır; hepsini yeniden yazdır
+(`k3s secrets-encrypt reencrypt` "incorrect stage: start" hatası verir, bu
+yöntem her durumda çalışır):
+
+```bash
+kubectl get secrets -A -o json | kubectl replace -f -
+```
+
+Şifreleme öncesi düz metin kopyalar veritabanı dosyasında bir süre kalabilir;
+tam temizlik için secret'ları (örneğin tunnel token'ı) yenile.
 
 ## 3. WSL'in açılışta başlaması
 
