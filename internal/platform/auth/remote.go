@@ -19,7 +19,7 @@ const (
 	// staleGrace is how long expired keys are still used while identity is
 	// unreachable. Kept short so a key removed after a leak stops being
 	// trusted soon even during an outage (ADR-0011).
-	staleGrace = 10 * time.Minute
+	staleGrace   = 10 * time.Minute
 	fetchTimeout = 3 * time.Second
 )
 
