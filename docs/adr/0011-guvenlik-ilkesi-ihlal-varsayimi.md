@@ -64,7 +64,7 @@ bunlardan birini bilerek zayıflatıyorsa gerekçesini yazar.
 | # | Önlem | Durum |
 |---|-------|-------|
 | 1 | WSL izolasyonu: `C:` sürücüsünün bağlanması ve Windows programlarını çalıştırma kapalı | Tamamlandı (2026-11-07) |
-| 2 | GitHub ve Cloudflare hesaplarında 2FA, mümkünse passkey veya güvenlik anahtarı | GitHub tamamlandı; Cloudflare platform sahibinde |
+| 2 | GitHub ve Cloudflare hesaplarında 2FA, mümkünse passkey veya güvenlik anahtarı | Tamamlandı (2026-11-07) |
 | 3 | GitHub Actions'ların commit SHA'sına sabitlenmesi | Tamamlandı (PR #11) |
 | 4 | Image'ların ve manifest artifact'ının cosign ile imzalanması, Flux'ta imza doğrulaması; artifact'ta image'lar digest ile | Tamamlandı (PR #11) |
 | 5 | NetworkPolicy'lerin uygulandığını doğrulayan test (yasaklı bağlantının reddedildiği): `scripts/netpol-test.sh` | Tamamlandı (2026-11-07) |
@@ -79,8 +79,8 @@ bunlardan birini bilerek zayıflatıyorsa gerekçesini yazar.
 | 14 | k3s secret şifreleme sağlayıcısının AES-CBC'den secretbox'a geçirilmesi | Değerlendirilecek |
 
 1–6 numaralı önlemler, ilk gerçek kullanıcı verisinin gireceği identity iş
-paketlerinden **önce** tamamlanır. 2026-11-07 itibarıyla açık kalan: 2
-(Cloudflare 2FA).
+paketlerinden **önce** tamamlanır. 2026-11-07 itibarıyla 1–6 numaralı önlemlerin
+hepsi tamamlanmıştır.
 
 ## Gerekçe
 
