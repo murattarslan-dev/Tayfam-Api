@@ -17,7 +17,7 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -32,7 +32,7 @@ jobs:
     name: Lint (servis sınırları ve gosec dahil)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -47,7 +47,7 @@ jobs:
       contents: read
       pull-requests: read # gitleaks, PR'daki commit'leri listelemek için
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/setup-go@v5
@@ -66,7 +66,7 @@ jobs:
     name: Sözleşmeler (proto)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # proto/ henüz yokken bu adım atlanır; ilk .proto dosyasıyla devreye girer.
       - if: ${{ hashFiles('proto/**/*.proto') != '' }}
         uses: bufbuild/buf-action@v1
@@ -86,7 +86,7 @@ jobs:
       matrix:
         service: [gateway, identity, core, chat]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v3
       - name: GHCR girişi
         if: github.event_name == 'push'
