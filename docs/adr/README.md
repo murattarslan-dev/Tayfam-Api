@@ -9,3 +9,4 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | No | Başlık | Durum |
 |----|--------|-------|
 | [0001](0001-mikroservis-mimarisi.md) | Kubernetes üzerinde gRPC ile konuşan mikroservisler | Kabul edildi |
+| [0002](0002-servis-sinirlari-ve-veri-sahipligi.md) | Servis sınırları ve veri sahipliği | Kabul edildi |
