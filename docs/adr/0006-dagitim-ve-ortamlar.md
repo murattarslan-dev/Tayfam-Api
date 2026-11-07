@@ -2,6 +2,10 @@
 
 - **Durum:** Kabul edildi
 - **Tarih:** 2026-11-07
+- **Revizyon:** 2026-11-07, kurulum sırasında öğrenilenlerle güncellendi: ev
+  sunucusu Hyper-V VM yerine WSL2 (4 GB), alan adları tek seviye
+  (`api-dev.tayfam.app`), cloudflared HTTP/2 kullanır, web istemcisi
+  `tayfam.app`'tedir, ev cluster'ının gözlem verileri Grafana Cloud'a gider.
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0001](0001-mikroservis-mimarisi.md), [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md)
 
@@ -18,10 +22,13 @@ başka bir node'a kod ve manifest değişmeden taşınabilmeli.
 
 | Aşama | Nerede | Ne çalışır |
 |-------|--------|-----------|
-| **1. Ev** | Murat'ın bilgisayarında Hyper-V üzerinde bir Ubuntu VM | `dev` ortamı. Gerekirse küçük bir pilot için `prod`. |
-| **2. VPS** | Türkiye lokasyonlu, KVM tabanlı bir VPS | `prod`. `dev` evdeki VM'de kalır. |
+| **1. Ev** | Murat'ın Windows bilgisayarında WSL2 (Ubuntu 22.04, 4 vCPU, 4 GB) | `dev` ortamı. Gerekirse küçük bir pilot için `prod`. |
+| **2. VPS** | Türkiye lokasyonlu, KVM tabanlı bir VPS | `prod`. `dev` evdeki WSL'de kalır. |
 
 - Her makine ayrı, tek node'lu bir **k3s** cluster'ıdır.
+- Ev kurulumunda WSL'de systemd açıktır, k3s servis olarak çalışır. WSL'in
+  Windows'a girişte açılması ve açık kalması bir Görev Zamanlayıcı göreviyle
+  sağlanır (`docs/runbooks/ev-cluster-kurulumu.md`).
 - 2. aşamaya geçmek için yeni node'a k3s ve Flux kurulup aynı repoya
   bağlanır; Postgres yedekten geri yüklenir.
 - Gerçek kullanıcı verisi taşıyan `prod`, 2. aşamadan itibaren yalnızca VPS'te
@@ -29,8 +36,8 @@ başka bir node'a kod ve manifest değişmeden taşınabilmeli.
 
 ### Cluster
 
-- k3s, varsayılan ingress (Traefik) kapalı olarak kurulur; dış trafik
-  Cloudflare Tunnel ile gelir.
+- k3s, varsayılan ingress (Traefik) ve yük dengeleyici (servicelb) kapalı
+  olarak kurulur; dış trafik Cloudflare Tunnel ile gelir.
 - Her ortam kendi namespace'indedir: `tayfam-dev`, `tayfam-prod`. Altyapı
   bileşenleri kendi namespace'lerindedir (`flux-system`, `cnpg-system`,
   `observability`).
@@ -41,12 +48,17 @@ başka bir node'a kod ve manifest değişmeden taşınabilmeli.
 - Cluster içinde çalışan **cloudflared**, Cloudflare Tunnel üzerinden gelen
   trafiği yalnızca gateway servisine iletir. Makinede SSH dışında açık port
   yoktur; ev bağlantısında modemde port açılmaz.
-- Alan adları: `api.tayfam.app` (prod), `api.dev.tayfam.app` (dev). Platform
+- Alan adları: `api.tayfam.app` (prod), `api-dev.tayfam.app` (dev). Platform
   yönetim paneli `admin.tayfam.app` üzerindendir (ADR-0008).
-- dev alan adı Cloudflare Access ile korunur; yalnızca Murat ve test
-  cihazları erişebilir.
-- Flutter web istemcisi Cloudflare Pages'te barındırılır (`app.tayfam.app`);
-  bu cluster'ın kapsamı dışındadır.
+- **Alt alan adları tek seviyelidir** (`api-dev`, `cdn-dev`; `api.dev` değil).
+  Cloudflare'in ücretsiz sertifikası yalnızca `*.tayfam.app`'i kapsar; iki
+  seviyeli adlar HTTPS ile çalışmaz.
+- cloudflared **HTTP/2** protokolüyle bağlanır (`--protocol http2`). Ev
+  ağında QUIC (UDP 7844) engellidir; VPS'te de aynı ayar kullanılır.
+- dev alan adı, gateway kurulduktan sonra Cloudflare Access ile korunur;
+  yalnızca Murat ve test cihazları erişebilir.
+- Flutter web istemcisi Cloudflare Pages'te, `tayfam.app` adresinde
+  barındırılır; bu cluster'ın kapsamı dışındadır.
 
 ### Postgres
 
@@ -96,7 +108,7 @@ Ortamlar hiçbir kaynağı paylaşmaz:
 | Google / Apple OAuth client'ları | ayrı | ayrı |
 | Firebase projesi (push) | ayrı | ayrı |
 | Token imzalama anahtarları | ayrı | ayrı |
-| Alan adı | `api.dev.tayfam.app` | `api.tayfam.app` |
+| Alan adı | `api-dev.tayfam.app` | `api.tayfam.app` |
 
 ### Ağ güvenliği
 
@@ -129,7 +141,7 @@ Ortamlar hiçbir kaynağı paylaşmaz:
 
 ## Gerekçe
 
-- Ev VM'i ile başlamak, öğrenme aşamasında maliyeti sıfıra yakın tutar.
+- Ev bilgisayarıyla başlamak, öğrenme aşamasında maliyeti sıfıra yakın tutar.
 - k3s, Flux ve Tunnel birlikte, kurulumu makineden bağımsız hale getirir:
   taşıma, yeni bir node'u aynı repoya bağlamaktan ibarettir.
 - dev'in 2. aşamada evde kalması, VPS'te yalnızca prod çalışmasını sağlar;
@@ -139,8 +151,13 @@ Ortamlar hiçbir kaynağı paylaşmaz:
 
 ## Sonuçlar
 
-- Ev VM'i dev ortamı için 4 vCPU, 8 GB sabit bellek ve 60 GB disk ayrılarak
-  kurulur. Dinamik bellek kapalı olmalıdır.
+- Ev cluster'ına WSL ayarıyla (`.wslconfig`) 4 vCPU ve 4 GB bellek ayrılır.
+  Bu bellek k3s, Postgres, Flux, cloudflared ve dört servise yeter; gözlem
+  stack'i sığmaz, bu yüzden ev cluster'ının metrik, log ve trace'leri Grafana
+  Cloud'un ücretsiz katmanına gönderilir. VPS'te gözlem stack'i cluster içinde
+  çalışabilir.
+- WSL, Windows oturumu açıkken çalışır; bilgisayar kapalıyken veya oturum
+  kapalıyken dev ortamı erişilemez.
 - Elektrik veya internet kesintisinde dev ortamı erişilemez olur; bu kabul
   edilmiştir.
 - Kurulum, yedekten geri yükleme ve VPS'e geçiş adımları `docs/runbooks/`
@@ -150,6 +167,9 @@ Ortamlar hiçbir kaynağı paylaşmaz:
 
 ## Değerlendirilen alternatifler
 
+- **Hyper-V üzerinde ayrı bir VM:** Windows'tan daha bağımsız ve kendiliğinden
+  açılabilir, ama Windows Pro gerektirir ve daha fazla kaynak ister; WSL
+  yeterli bulundu.
 - **Hemen VPS kiralamak:** Daha güvenilir, ama gerçek kullanıcı yokken gereksiz
   maliyet.
 - **Tek cluster'da dev ve prod (VPS'te):** Tek makine yönetilir, ama daha fazla

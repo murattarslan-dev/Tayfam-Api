@@ -39,7 +39,7 @@ Her ortam için iki bucket vardır:
 | Bucket | İçerik | Erişim |
 |--------|--------|--------|
 | `tayfam-<ortam>-private` | `incoming/` (ham yüklemeler), `media/` (işlenmiş dosyalar) | Yalnızca imzalı linklerle |
-| `tayfam-<ortam>-public` | Herkese açık işaretlenmiş görsellerin kopyaları | `cdn.tayfam.app` (dev: `cdn.dev.tayfam.app`) üzerinden, Cloudflare önbelleği ile |
+| `tayfam-<ortam>-public` | Herkese açık işaretlenmiş görsellerin kopyaları | `cdn.tayfam.app` (dev: `cdn-dev.tayfam.app`) üzerinden, Cloudflare önbelleği ile |
 
 ### Yükleme akışı
 
