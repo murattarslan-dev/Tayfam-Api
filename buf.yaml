@@ -1,0 +1,10 @@
+# İç gRPC sözleşmeleri (ADR-0003). Kod üretimi: make generate
+version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE
