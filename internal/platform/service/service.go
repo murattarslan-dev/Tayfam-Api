@@ -27,7 +27,10 @@ import (
 	"syscall"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/config"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/grpcx"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/health"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/httpx"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/logx"
@@ -42,26 +45,77 @@ type Runtime struct {
 	Health *health.Health
 
 	servers []*namedServer
+	onStart []func()
+	onDrain []func()
 }
 
+// namedServer is any server the runtime starts and stops: HTTP or gRPC.
 type namedServer struct {
-	name string
-	srv  *http.Server
-	ln   net.Listener
+	name     string
+	addr     string
+	serve    func(net.Listener) error
+	shutdown func(context.Context) error
+	ln       net.Listener
 }
 
 // AddHTTPServer registers an HTTP server that starts after setup and stops on shutdown.
 // The handler is wrapped with request ID, panic recovery and access logging.
 func (rt *Runtime) AddHTTPServer(name, addr string, h http.Handler) {
 	h = httpx.Chain(h, httpx.RequestID(), httpx.AccessLog(rt.Log), httpx.Recover(rt.Log))
-	rt.servers = append(rt.servers, &namedServer{name: name, srv: newHTTPServer(addr, h, rt.Log)})
+	rt.addHTTP(name, addr, h)
 }
 
 // addOpsServer registers the probe server. Probes run every few seconds, so
 // they are not access-logged.
 func (rt *Runtime) addOpsServer(addr string, h http.Handler) {
-	h = httpx.Chain(h, httpx.RequestID(), httpx.Recover(rt.Log))
-	rt.servers = append(rt.servers, &namedServer{name: "ops", srv: newHTTPServer(addr, h, rt.Log)})
+	rt.addHTTP("ops", addr, httpx.Chain(h, httpx.RequestID(), httpx.Recover(rt.Log)))
+}
+
+func (rt *Runtime) addHTTP(name, addr string, h http.Handler) {
+	srv := newHTTPServer(addr, h, rt.Log)
+	rt.servers = append(rt.servers, &namedServer{
+		name:  name,
+		addr:  addr,
+		serve: srv.Serve,
+		shutdown: func(ctx context.Context) error {
+			return srv.Shutdown(ctx)
+		},
+	})
+}
+
+// NewGRPCServer returns a gRPC server configured with the shared interceptors
+// (grpcx.NewServer). Register services on it, then pass it to AddGRPCServer.
+func (rt *Runtime) NewGRPCServer(opts ...grpc.ServerOption) *grpc.Server {
+	return grpcx.NewServer(rt.Log, opts...)
+}
+
+// AddGRPCServer registers a gRPC server. The standard health service is
+// registered on it: SERVING once all servers listen, NOT_SERVING while
+// draining. Shutdown waits for in-flight calls up to the shutdown timeout.
+func (rt *Runtime) AddGRPCServer(name, addr string, srv *grpc.Server) {
+	h := grpcx.RegisterHealth(srv)
+	rt.onStart = append(rt.onStart, h.SetServing)
+	rt.onDrain = append(rt.onDrain, h.SetDraining)
+	rt.servers = append(rt.servers, &namedServer{
+		name:  name,
+		addr:  addr,
+		serve: srv.Serve,
+		shutdown: func(ctx context.Context) error {
+			done := make(chan struct{})
+			go func() {
+				srv.GracefulStop()
+				close(done)
+			}()
+			select {
+			case <-done:
+				return nil
+			case <-ctx.Done():
+				srv.Stop()
+				<-done
+				return ctx.Err()
+			}
+		},
+	})
 }
 
 func newHTTPServer(addr string, h http.Handler, log *slog.Logger) *http.Server {
@@ -122,10 +176,10 @@ func Run(ctx context.Context, name string, lookup func(string) (string, bool), o
 	// Bind every listener before serving so a port conflict fails startup cleanly.
 	var lc net.ListenConfig
 	for _, s := range rt.servers {
-		ln, err := lc.Listen(ctx, "tcp", s.srv.Addr)
+		ln, err := lc.Listen(ctx, "tcp", s.addr)
 		if err != nil {
 			closeListeners(rt.servers)
-			return fmt.Errorf("%s sunucusu %s adresini dinleyemiyor: %w", s.name, s.srv.Addr, err)
+			return fmt.Errorf("%s sunucusu %s adresini dinleyemiyor: %w", s.name, s.addr, err)
 		}
 		s.ln = ln
 	}
@@ -138,10 +192,13 @@ func Run(ctx context.Context, name string, lookup func(string) (string, bool), o
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := s.srv.Serve(s.ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if err := s.serve(s.ln); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, grpc.ErrServerStopped) {
 				errCh <- fmt.Errorf("%s sunucusu durdu: %w", s.name, err)
 			}
 		}()
+	}
+	for _, f := range rt.onStart {
+		f()
 	}
 	log.Info("servis başladı", slog.Any("adresler", addrs))
 	if started != nil {
@@ -158,13 +215,16 @@ func Run(ctx context.Context, name string, lookup func(string) (string, bool), o
 
 	// Fail readiness first so traffic drains, then stop the servers.
 	rt.Health.SetDraining()
+	for _, f := range rt.onDrain {
+		f()
+	}
 	if drainDelay > 0 && runErr == nil {
 		time.Sleep(drainDelay)
 	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	for _, s := range rt.servers {
-		if err := s.srv.Shutdown(shutdownCtx); err != nil {
+		if err := s.shutdown(shutdownCtx); err != nil {
 			runErr = errors.Join(runErr, fmt.Errorf("%s sunucusu kapatılamadı: %w", s.name, err))
 		}
 	}

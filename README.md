@@ -31,14 +31,16 @@ make check   # derleme + testler (race) + lint
 
 ## Servisler
 
-| Servis | Dış adres | Ops (probe) |
-|--------|-----------|-------------|
-| gateway | `:8080` | `:8081` |
-| identity | — | `:8081` |
-| core | — | `:8081` |
-| chat | — | `:8081` |
+| Servis | Dış adres | gRPC (iç) | Ops (probe) |
+|--------|-----------|-----------|-------------|
+| gateway | `:8080` | — | `:8081` |
+| identity | — | `:9090` | `:8081` |
+| core | — | `:9090` | `:8081` |
+| chat | — | `:9090` | `:8081` |
 
-Her servis ops portunda `GET /livez` ve `GET /readyz` sunar.
+Her servis ops portunda `GET /livez` ve `GET /readyz` sunar; bu port yalnızca
+Kubernetes probe'ları içindir. İç servisler gRPC portunda standart
+`grpc.health.v1.Health` servisini sunar; gateway `/v1/status`'ü bununla üretir.
 
 ## Ortak ortam değişkenleri
 

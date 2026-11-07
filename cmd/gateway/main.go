@@ -2,12 +2,9 @@
 package main
 
 import (
-	"net/http"
-	"time"
-
 	"github.com/murattarslan-dev/tayfam-api/internal/gateway/transport/rest"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/buildinfo"
-	"github.com/murattarslan-dev/tayfam-api/internal/platform/health"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/grpcx"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/service"
 )
 
@@ -18,13 +15,22 @@ func main() {
 func setup(rt *service.Runtime) error {
 	httpAddr := rt.Config.String("HTTP_ADDR", ":8080")
 
-	// Until the internal gRPC APIs exist, upstream availability is read from
-	// each service's ops /readyz endpoint.
-	client := &http.Client{Timeout: 3 * time.Second}
-	upstreams := []rest.Upstream{
-		{Name: "identity", Check: health.HTTPCheck(client, rt.Config.Required("IDENTITY_OPS_URL")+"/readyz")},
-		{Name: "core", Check: health.HTTPCheck(client, rt.Config.Required("CORE_OPS_URL")+"/readyz")},
-		{Name: "chat", Check: health.HTTPCheck(client, rt.Config.Required("CHAT_OPS_URL")+"/readyz")},
+	targets := []struct{ name, env string }{
+		{"identity", "IDENTITY_GRPC_ADDR"},
+		{"core", "CORE_GRPC_ADDR"},
+		{"chat", "CHAT_GRPC_ADDR"},
+	}
+	upstreams := make([]rest.Upstream, 0, len(targets))
+	for _, t := range targets {
+		addr := rt.Config.Required(t.env)
+		if addr == "" {
+			continue // the missing value is reported by the config check
+		}
+		conn, err := grpcx.NewClient(addr)
+		if err != nil {
+			return err
+		}
+		upstreams = append(upstreams, rest.Upstream{Name: t.name, Check: grpcx.HealthCheck(conn)})
 	}
 
 	rt.AddHTTPServer("http", httpAddr, rest.NewRouter(rest.Deps{

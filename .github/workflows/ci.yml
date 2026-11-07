@@ -26,6 +26,15 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
+      - name: Bağımlılıklar güncel (go.mod, go.sum)
+        run: |
+          go mod tidy
+          if ! git diff --exit-code -- go.mod go.sum; then
+            echo "::error::go.mod veya go.sum güncel değil; 'go mod tidy' çalıştırıp commit et."
+            echo "----- beklenen go.mod -----"; cat go.mod
+            echo "----- beklenen go.sum -----"; cat go.sum
+            exit 1
+          fi
       - name: Biçim
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
       - name: go vet

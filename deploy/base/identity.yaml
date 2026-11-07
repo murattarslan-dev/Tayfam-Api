@@ -26,7 +26,9 @@ spec:
             - configMapRef: { name: tayfam-env }
           env:
             - { name: OPS_ADDR, value: ":8081" }
+            - { name: GRPC_ADDR, value: ":9090" }
           ports:
+            - { name: grpc, containerPort: 9090 }
             - { name: ops, containerPort: 8081 }
           livenessProbe:
             httpGet: { path: /livez, port: ops }
@@ -42,7 +44,8 @@ spec:
             readOnlyRootFilesystem: true
             capabilities: { drop: ["ALL"] }
 ---
-# gRPC portu, servisin gRPC API'si eklendiğinde buraya eklenir.
+# Yalnızca gRPC portu servis üzerinden açılır; ops portu (8081) sadece
+# kubelet probe'ları içindir ve servis üzerinden yayınlanmaz.
 apiVersion: v1
 kind: Service
 metadata:
@@ -51,4 +54,4 @@ metadata:
 spec:
   selector: { app.kubernetes.io/name: identity }
   ports:
-    - { name: ops, port: 8081, targetPort: ops }
+    - { name: grpc, port: 9090, targetPort: grpc, appProtocol: grpc }

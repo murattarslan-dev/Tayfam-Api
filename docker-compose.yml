@@ -16,9 +16,9 @@ services:
       args: { SERVICE: gateway }
     environment:
       <<: *env
-      IDENTITY_OPS_URL: http://identity:8081
-      CORE_OPS_URL: http://core:8081
-      CHAT_OPS_URL: http://chat:8081
+      IDENTITY_GRPC_ADDR: identity:9090
+      CORE_GRPC_ADDR: core:9090
+      CHAT_GRPC_ADDR: chat:9090
     ports:
       - "127.0.0.1:8080:8080"
 
