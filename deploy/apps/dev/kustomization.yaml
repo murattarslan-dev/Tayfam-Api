@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# dev ortamı (ev cluster'ı). Image etiketlerini CI, main'e giren her commit'te
+# commit SHA'sı ile değiştirip sonucu OCI artifact olarak yayınlar
+# (.github/workflows/ci.yml, "deploy-dev" işi). Buradaki etiketler elle
+# uygulama (kubectl apply -k) için başlangıç değeridir.
+namespace: tayfam-dev
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+configMapGenerator:
+  - name: tayfam-env
+    literals:
+      - TAYFAM_ENV=dev
+      - LOG_LEVEL=debug
+      - SHUTDOWN_DRAIN_DELAY=5s
+
+images:
+  - name: ghcr.io/murattarslan-dev/tayfam-gateway
+    newTag: fc15be968201cd5bc708978c9990c07d23e7c9c0
+  - name: ghcr.io/murattarslan-dev/tayfam-identity
+    newTag: fc15be968201cd5bc708978c9990c07d23e7c9c0
+  - name: ghcr.io/murattarslan-dev/tayfam-core
+    newTag: fc15be968201cd5bc708978c9990c07d23e7c9c0
+  - name: ghcr.io/murattarslan-dev/tayfam-chat
+    newTag: fc15be968201cd5bc708978c9990c07d23e7c9c0

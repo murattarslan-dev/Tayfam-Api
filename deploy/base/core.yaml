@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core
+  labels: { app.kubernetes.io/name: core, app.kubernetes.io/part-of: tayfam }
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels: { app.kubernetes.io/name: core }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: core, app.kubernetes.io/part-of: tayfam }
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: core
+          image: ghcr.io/murattarslan-dev/tayfam-core
+          envFrom:
+            - configMapRef: { name: tayfam-env }
+          env:
+            - { name: OPS_ADDR, value: ":8081" }
+          ports:
+            - { name: ops, containerPort: 8081 }
+          livenessProbe:
+            httpGet: { path: /livez, port: ops }
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /readyz, port: ops }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 64Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+---
+# gRPC portu, servisin gRPC API'si eklendiğinde buraya eklenir.
+apiVersion: v1
+kind: Service
+metadata:
+  name: core
+  labels: { app.kubernetes.io/name: core, app.kubernetes.io/part-of: tayfam }
+spec:
+  selector: { app.kubernetes.io/name: core }
+  ports:
+    - { name: ops, port: 8081, targetPort: ops }

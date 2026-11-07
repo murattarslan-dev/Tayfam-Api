@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Ev cluster'ının Flux tanımları. `flux install` sonrasında bir kez
+# `kubectl apply -k deploy/clusters/home` ile uygulanır
+# (docs/runbooks/flux-kurulumu.md).
+resources:
+  - tayfam-dev.yaml
