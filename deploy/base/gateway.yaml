@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  labels: { app.kubernetes.io/name: gateway, app.kubernetes.io/part-of: tayfam }
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels: { app.kubernetes.io/name: gateway }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: gateway, app.kubernetes.io/part-of: tayfam }
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: gateway
+          image: ghcr.io/murattarslan-dev/tayfam-gateway
+          envFrom:
+            - configMapRef: { name: tayfam-env }
+          env:
+            - { name: HTTP_ADDR, value: ":8080" }
+            - { name: OPS_ADDR, value: ":8081" }
+            - { name: IDENTITY_OPS_URL, value: "http://identity:8081" }
+            - { name: CORE_OPS_URL, value: "http://core:8081" }
+            - { name: CHAT_OPS_URL, value: "http://chat:8081" }
+          ports:
+            - { name: http, containerPort: 8080 }
+            - { name: ops, containerPort: 8081 }
+          livenessProbe:
+            httpGet: { path: /livez, port: ops }
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /readyz, port: ops }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 64Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  labels: { app.kubernetes.io/name: gateway, app.kubernetes.io/part-of: tayfam }
+spec:
+  selector: { app.kubernetes.io/name: gateway }
+  ports:
+    - { name: http, port: 8080, targetPort: http }

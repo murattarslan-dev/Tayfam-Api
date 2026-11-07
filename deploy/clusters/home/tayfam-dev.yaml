@@ -1,0 +1,30 @@
+# dev ortamının kaynağı: CI'ın main'deki her commit'ten sonra GHCR'a
+# yayınladığı manifest artifact'ı (oci://…/tayfam-deploy:dev). Flux bu etiketi
+# izler ve değiştiğinde cluster'ı günceller. Cluster'a erişim yetkisi CI'da
+# değil, yalnızca burada, cluster içindedir (ADR-0006).
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: tayfam-deploy
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: oci://ghcr.io/murattarslan-dev/tayfam-deploy
+  ref:
+    tag: dev
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: tayfam-dev
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 3m
+  sourceRef:
+    kind: OCIRepository
+    name: tayfam-deploy
+  path: ./apps/dev
+  prune: true
+  wait: true

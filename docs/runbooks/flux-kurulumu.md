@@ -1,0 +1,88 @@
+# Flux kurulumu (ev cluster'ı)
+
+Ev cluster'ının `main`'deki her değişikliği kendiliğinden almasını sağlar
+(ADR-0006). Önce [ev cluster'ı kurulumu](ev-cluster-kurulumu.md) tamamlanmış ve
+`cloudflared-token` secret'ı oluşturulmuş olmalı.
+
+## Nasıl çalışır
+
+```
+main'e commit ──► CI: image'lar (tayfam-<servis>:<sha>)
+                  CI: deploy/ → oci://ghcr.io/murattarslan-dev/tayfam-deploy:<sha>, "dev" etiketi
+                                      │
+ev cluster'ı: Flux OCIRepository ─────┘ (dakikada bir "dev" etiketine bakar)
+              Flux Kustomization ──► deploy/apps/dev'i uygular
+```
+
+CI cluster'a hiç bağlanmaz; cluster kaynağı kendisi çeker.
+
+## 1. Flux CLI
+
+Ubuntu'da:
+
+```bash
+curl -s https://fluxcd.io/install.sh | sudo bash
+flux --version
+flux check --pre
+```
+
+## 2. Flux bileşenleri
+
+Bellek için yalnızca gereken iki bileşen kurulur:
+
+```bash
+flux install --components=source-controller,kustomize-controller
+kubectl -n flux-system get pods   # iki pod Running
+```
+
+## 3. Elle kurulmuş cloudflared'i kaldır
+
+İlk kurulumda cloudflared elle çalıştırıldıysa, Flux'ın kendi manifestini
+uygulayabilmesi için silinir (seçici etiketleri farklı ve değiştirilemez).
+Tunnel bir iki dakika kesilir. Secret silinmez.
+
+```bash
+kubectl -n tayfam-dev delete deployment cloudflared --ignore-not-found
+```
+
+## 4. Flux tanımlarını uygula
+
+```bash
+git clone https://github.com/murattarslan-dev/Tayfam-Api.git ~/tayfam-api
+kubectl apply -k ~/tayfam-api/deploy/clusters/home
+```
+
+## 5. Artifact paketini public yap (bir kez)
+
+CI'ın `main` üzerindeki ilk "Dev dağıtımı" işi `tayfam-deploy` paketini GHCR'da
+oluşturur. Yeni paketler private başlar; Flux şifresiz çekebilsin diye
+**GitHub → Packages → tayfam-deploy → Package settings → Change visibility →
+Public**. İçinde yalnızca repodaki `deploy/` dizini vardır.
+
+## 6. Doğrulama
+
+```bash
+flux get sources oci
+flux get kustomizations
+kubectl -n tayfam-dev get pods
+curl -s https://api-dev.tayfam.app/v1/status
+```
+
+`/v1/status` dört servisi de `ok` göstermelidir.
+
+Değişikliği beklemeden hemen çekmek için:
+
+```bash
+flux reconcile source oci tayfam-deploy
+flux reconcile kustomization tayfam-dev
+```
+
+## Sorun giderme
+
+| Belirti | Bakılacak yer |
+|---------|---------------|
+| `OCIRepository` hazır değil, `unauthorized` | `tayfam-deploy` paketi hâlâ private (adım 5) |
+| Pod'lar `CreateContainerConfigError` | `kubectl -n tayfam-dev describe pod …`; `cloudflared-token` secret'ı var mı? |
+| Pod'lar oluşmuyor, namespace olaylarında "violates PodSecurity" | Manifestte `restricted` profiline uymayan bir ayar var |
+| Servisler `Running` ama `/v1/status` bir servisi `unavailable` gösteriyor | NetworkPolicy: `deploy/base/networkpolicies.yaml` |
+| Kustomization `wait` zaman aşımı | `kubectl -n tayfam-dev get events --sort-by=.lastTimestamp` |

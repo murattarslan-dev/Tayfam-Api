@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Ortamdan bağımsız uygulama manifestleri. Namespace, image etiketleri ve
+# ortam değişkenleri overlay'lerde (deploy/apps/<ortam>) belirlenir.
+resources:
+  - gateway.yaml
+  - identity.yaml
+  - core.yaml
+  - chat.yaml
+  - cloudflared.yaml
+  - networkpolicies.yaml

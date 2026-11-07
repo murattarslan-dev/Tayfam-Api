@@ -75,20 +75,29 @@ başka bir node'a kod ve manifest değişmeden taşınabilmeli.
 
 ### Image'lar ve dağıtım
 
-- GitHub Actions her servis için container image'ı derler ve private
-  **GHCR**'a gönderir. Image'lar commit SHA'sı ile etiketlenir.
-- Manifestler `deploy/` altında **Kustomize** ile tutulur: ortak `base` ve
-  ortama özel `overlays/dev`, `overlays/prod`. Cluster tanımları
+- GitHub Actions her servis için container image'ı derler ve **GHCR**'a
+  gönderir. Image'lar commit SHA'sı ile etiketlenir ve public'tir (repo public,
+  image'larda gizli bilgi yoktur).
+- Manifestler `deploy/` altında **Kustomize** ile tutulur: ortak `base`,
+  ortama özel `apps/dev` ve `apps/prod`. Cluster'ların Flux tanımları
   `deploy/clusters/<cluster>/` altındadır.
-- **Flux** her cluster'da çalışır ve repoyu kendisi çeker. GitHub'da cluster
+- **Flux** her cluster'da çalışır ve kaynağı kendisi çeker. GitHub'da cluster
   erişim anahtarı tutulmaz.
-- **dev:** `main`'e giren her değişiklik, Flux image otomasyonu ile otomatik
-  olarak dağıtılır.
-- **prod:** Yalnızca `vX.Y.Z` formatındaki git etiketleri dağıtılır. Sürüm
-  çıkarmak bilinçli bir adımdır.
+- **dev (revizyon 2026-11-07):** Flux'ın image otomasyonu etiket değişikliğini
+  git'e commit'leyerek çalışır; `main` kural setiyle korunduğu (ADR-0010) ve
+  istisna tanınmadığı için bu yol kapalıdır. Bunun yerine CI, `main`'e giren
+  her commit'ten sonra `deploy/` dizinini o commit'in image etiketleriyle
+  **OCI artifact** olarak GHCR'a yayınlar (`tayfam-deploy:<sha>`) ve `dev`
+  olarak etiketler. Ev cluster'ındaki Flux `OCIRepository` ile bu etiketi
+  izler. CI yine cluster'a erişmez; yalnızca registry'ye yazar.
+- **prod:** Yalnızca `vX.Y.Z` formatındaki git etiketleri dağıtılır; aynı
+  artifact akışı `prod` etiketiyle kullanılır. Sürüm çıkarmak bilinçli bir
+  adımdır.
 - Migration'lar, her servisin pod'unda servis binary'sinin `migrate` alt
   komutunu çalıştıran bir init container ile uygulanır (ADR-0003). goose aynı
   anda yalnızca bir migration'ın çalışmasını kilitle garanti eder.
+- Ev cluster'ında belleği korumak için Flux yalnızca `source-controller` ve
+  `kustomize-controller` bileşenleriyle kurulur.
 
 ### Gizli bilgiler
 
@@ -96,6 +105,10 @@ başka bir node'a kod ve manifest değişmeden taşınabilmeli.
   cluster'da çözer.
 - age özel anahtarı yalnızca cluster'da ve Murat'ın bilgisayarında bulunur.
   Her cluster'ın kendi anahtarı vardır.
+- SOPS, ilk uygulama secret'ı (identity'nin OAuth ayarları) ile birlikte
+  kurulur. O zamana kadar tek secret olan Cloudflare Tunnel token'ı cluster'da
+  elle oluşturulur ve Flux tarafından yönetilmez
+  (`docs/runbooks/ev-cluster-kurulumu.md`).
 
 ### Ortam ayrımı
 
