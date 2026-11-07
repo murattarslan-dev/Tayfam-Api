@@ -63,21 +63,24 @@ bunlardan birini bilerek zayıflatıyorsa gerekçesini yazar.
 
 | # | Önlem | Durum |
 |---|-------|-------|
-| 1 | WSL izolasyonu: `C:` sürücüsünün bağlanması ve Windows programlarını çalıştırma kapalı | Uygulanıyor |
-| 2 | GitHub ve Cloudflare hesaplarında 2FA, mümkünse passkey veya güvenlik anahtarı | Platform sahibi |
-| 3 | GitHub Actions'ların commit SHA'sına sabitlenmesi | İş paketi |
-| 4 | Image'ların ve manifest artifact'ının cosign ile imzalanması, Flux'ta imza doğrulaması | İş paketi |
-| 5 | NetworkPolicy'lerin uygulandığını doğrulayan test (yasaklı bağlantının reddedildiği) | İş paketi |
-| 6 | k3s'te secret'ların diskte şifrelenmesi (`secrets-encryption`), ardından tunnel token'ının yenilenmesi | İş paketi |
+| 1 | WSL izolasyonu: `C:` sürücüsünün bağlanması ve Windows programlarını çalıştırma kapalı | Tamamlandı (2026-11-07) |
+| 2 | GitHub ve Cloudflare hesaplarında 2FA, mümkünse passkey veya güvenlik anahtarı | GitHub tamamlandı; Cloudflare platform sahibinde |
+| 3 | GitHub Actions'ların commit SHA'sına sabitlenmesi | Tamamlandı (PR #11) |
+| 4 | Image'ların ve manifest artifact'ının cosign ile imzalanması, Flux'ta imza doğrulaması; artifact'ta image'lar digest ile | Tamamlandı (PR #11) |
+| 5 | NetworkPolicy'lerin uygulandığını doğrulayan test (yasaklı bağlantının reddedildiği): `scripts/netpol-test.sh` | Tamamlandı (2026-11-07) |
+| 6 | k3s'te secret'ların diskte şifrelenmesi (`secrets-encryption`) | Tamamlandı (2026-11-07) |
 | 7 | Servislerin JWT'yi kendilerinin doğrulaması (yukarıda) | identity ile |
 | 8 | Postgres'te servis başına en az yetkili kullanıcı (sahiplik ve şema değişikliği yalnızca migration kullanıcısında) | identity ile |
 | 9 | Tayfa kapsamını veritabanında da zorlayan Row Level Security | Değerlendirilecek (core ile) |
 | 10 | Şüpheli olaylar için bildirim (token yeniden kullanımı, admin girişi) | Gözlem işiyle |
 | 11 | R2 erişim anahtarlarının bucket ve işlem bazında ayrılması (yedek yazan anahtar dosyaları okuyamaz) | CloudNativePG ile |
 | 12 | Ev bilgisayarında disk şifrelemesi (BitLocker / cihaz şifrelemesi) | Platform sahibi |
+| 13 | Tunnel token'ının yenilenmesi (şifreleme öncesi düz metin kopyaların veritabanı dosyasında kalmış olabilmesine karşı) | Açık |
+| 14 | k3s secret şifreleme sağlayıcısının AES-CBC'den secretbox'a geçirilmesi | Değerlendirilecek |
 
 1–6 numaralı önlemler, ilk gerçek kullanıcı verisinin gireceği identity iş
-paketlerinden **önce** tamamlanır.
+paketlerinden **önce** tamamlanır. 2026-11-07 itibarıyla açık kalan: 2
+(Cloudflare 2FA).
 
 ## Gerekçe
 

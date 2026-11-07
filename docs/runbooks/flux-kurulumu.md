@@ -110,3 +110,20 @@ haliyle çalışmaya devam eder. Sebebi:
 ```bash
 kubectl -n flux-system describe ocirepository tayfam-deploy | tail -20
 ```
+
+## NetworkPolicy testi (ADR-0011, madde 5)
+
+Kuralların yalnızca yazılı değil, gerçekten uygulandığını doğrular. Yeni bir
+NetworkPolicy eklendiğinde, k3s güncellendiğinde veya yeni bir cluster
+kurulduğunda çalıştırılır:
+
+```bash
+cd ~/tayfam-api && git pull
+./scripts/netpol-test.sh
+```
+
+Dört senaryo denenir: başka bir namespace'ten erişim, sahte etiketle erişim,
+gateway'in içinden ve cloudflared'in içinden. Her satırın beklenen sonucu
+bellidir; tek bir sapma betiği hatayla bitirir. Son adımda gateway ve
+cloudflared yeniden başlatılır (test container'larını temizlemek için), bu
+sırada `api-dev` birkaç saniye kesilebilir.
