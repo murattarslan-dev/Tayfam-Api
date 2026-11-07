@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package tayfam.identity.v1;
+
+import "google/protobuf/duration.proto";
+
+// KeyService serves the public keys that verify access tokens. identity owns
+// the signing keys; every other service fetches the public halves and
+// verifies tokens itself (ADR-0004, ADR-0011).
+//
+// The service only ever returns public keys. Private keys never leave
+// identity and are never sent over gRPC.
+service KeyService {
+  // ListPublicKeys returns every key that may still verify a live token: the
+  // active key and retired keys whose tokens have not yet expired. It is
+  // callable without a user token so that services can bootstrap.
+  rpc ListPublicKeys(ListPublicKeysRequest) returns (ListPublicKeysResponse);
+}
+
+message ListPublicKeysRequest {}
+
+message ListPublicKeysResponse {
+  repeated PublicKey keys = 1;
+  // How long callers may cache this response before fetching it again.
+  google.protobuf.Duration cache_ttl = 2;
+}
+
+message PublicKey {
+  // Key ID, matched against the "kid" header of a token.
+  string kid = 1;
+  KeyAlgorithm algorithm = 2;
+  // Raw public key bytes; 32 bytes for Ed25519.
+  bytes public_key = 3;
+}
+
+enum KeyAlgorithm {
+  KEY_ALGORITHM_UNSPECIFIED = 0;
+  KEY_ALGORITHM_ED25519 = 1;
+}

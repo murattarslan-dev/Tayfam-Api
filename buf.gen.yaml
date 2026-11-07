@@ -1,0 +1,17 @@
+# Eklentiler go.mod'daki tool direktifleriyle sabitlenir; uzak eklenti
+# (BSR) kullanılmaz, üretim ağ erişimi olmadan da aynı sonucu verir.
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/murattarslan-dev/tayfam-api/gen
+plugins:
+  - local: ["go", "tool", "protoc-gen-go"]
+    out: gen
+    opt: paths=source_relative
+  - local: ["go", "tool", "protoc-gen-go-grpc"]
+    out: gen
+    opt: paths=source_relative
+inputs:
+  - directory: proto

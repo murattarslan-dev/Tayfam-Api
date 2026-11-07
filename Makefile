@@ -2,7 +2,7 @@ SERVICES := gateway identity core chat
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS  := -s -w -X github.com/murattarslan-dev/tayfam-api/internal/platform/buildinfo.Version=$(VERSION)
 
-.PHONY: build test lint check run dev up down clean
+.PHONY: build test lint check generate run dev up down clean
 
 ## build: tüm servisleri bin/ altına derler
 build:
@@ -18,6 +18,14 @@ test:
 ## lint: golangci-lint (servis sınırları dahil)
 lint:
 	golangci-lint run ./...
+
+## generate: proto/ değişince gen/ altındaki kodu yeniden üretir (ADR-0003)
+## Eklenti sürümleri go.mod'daki tool direktifleriyle sabittir; buf ayrıca kurulur.
+generate:
+	buf lint
+	buf format -d --exit-code
+	rm -rf gen
+	buf generate
 
 ## check: PR açmadan önce çalıştır
 check: build test lint
