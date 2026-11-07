@@ -179,6 +179,13 @@ docs/runbooks/              işletim adımları
 - **Hassas alanlar** (`.github/CODEOWNERS`'taki yollar) değiştiren PR'ları
   yalnızca platform sahibi birleştirir. Bu PR'ları açarken açıklamaya
   "Hassas alan" etiketini ve hangi alana dokunduğunu yaz.
+- **Pilot öncesi esneme (süreli, ADR-0010):** İlk gerçek kullanıcı verisine
+  kadar mimari oturumu hassas alanların çoğunu birleştirebilir: CI tamamen
+  yeşil olmalı, içerik platform sahibiyle sohbette konuşulmuş olmalı ve PR
+  açıklamasında "Sohbette onaylandı" notu bulunmalıdır. `.github/`,
+  `deploy/clusters/`, `.sops.yaml`, `scripts/new-signing-key.sh` ve
+  `CLAUDE.md` her zaman yalnızca platform sahibine kalır. Pilottan önce bu
+  madde kaldırılır.
 - Mimari bir kararı değiştiren PR, yeni bir ADR ekler.
 
 ## Komutlar
