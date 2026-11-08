@@ -69,14 +69,19 @@ bunlardan birini bilerek zayıflatıyorsa gerekçesini yazar.
 | 4 | Image'ların ve manifest artifact'ının cosign ile imzalanması, Flux'ta imza doğrulaması; artifact'ta image'lar digest ile | Tamamlandı (PR #11) |
 | 5 | NetworkPolicy'lerin uygulandığını doğrulayan test (yasaklı bağlantının reddedildiği): `scripts/netpol-test.sh` | Tamamlandı (2026-11-07) |
 | 6 | k3s'te secret'ların diskte şifrelenmesi (`secrets-encryption`) | Tamamlandı (2026-11-07) |
-| 7 | Servislerin JWT'yi kendilerinin doğrulaması (yukarıda) | identity ile |
-| 8 | Postgres'te servis başına en az yetkili kullanıcı (sahiplik ve şema değişikliği yalnızca migration kullanıcısında) | identity ile |
+| 7 | Servislerin JWT'yi kendilerinin doğrulaması (yukarıda) | Tamamlandı (PR #16); kayıt bekleyen token yalnızca identity'de geçer (PR #21) |
+| 8 | Postgres'te servis başına en az yetkili kullanıcı (sahiplik ve şema değişikliği yalnızca migration kullanıcısında) | Kısmen: servis başına kullanıcı, veritabanı, pg_hba ve PUBLIC yetkilerinin kaldırılması (PR #19); migration kullanıcısının uygulama kullanıcısından ayrılması açık |
 | 9 | Tayfa kapsamını veritabanında da zorlayan Row Level Security | Değerlendirilecek (core ile) |
 | 10 | Şüpheli olaylar için bildirim (token yeniden kullanımı, admin girişi) | Gözlem işiyle |
 | 11 | R2 erişim anahtarlarının bucket ve işlem bazında ayrılması (yedek yazan anahtar dosyaları okuyamaz) | CloudNativePG ile |
 | 12 | Ev bilgisayarında disk şifrelemesi (BitLocker / cihaz şifrelemesi) | Platform sahibi |
 | 13 | Tunnel token'ının yenilenmesi (şifreleme öncesi düz metin kopyaların veritabanı dosyasında kalmış olabilmesine karşı) | Açık |
 | 14 | k3s secret şifreleme sağlayıcısının AES-CBC'den secretbox'a geçirilmesi | Değerlendirilecek |
+| 15 | Girişte sunucunun ürettiği tek kullanımlık nonce (şu an istemci üretiyor, ADR-0004) | Açık |
+| 16 | Postgres bağlantısında sunucu sertifikasının doğrulanması (`verify-full`); CloudNativePG CA'sının özel anahtarı olmadan dağıtılması | Açık (şu an `require`: şifreli ama doğrulamasız) |
+| 17 | `cnpg-system` namespace'i için NetworkPolicy (webhook girişi, API server çıkışı) | Açık |
+| 18 | Güvenlik denetim kaydı: giriş, yenileme, oturum iptali (ADR-0004); şimdilik yalnızca log | Açık |
+| 19 | Platform yaptırımlarının giriş ve yenilemede kontrolü (`platform_sanctions`) | Yönetim paneliyle |
 
 1–6 numaralı önlemler, ilk gerçek kullanıcı verisinin gireceği identity iş
 paketlerinden **önce** tamamlanır. 2026-11-07 itibarıyla açık kalan: 2
