@@ -24,6 +24,11 @@ type Deps struct {
 	Upstreams []Upstream
 	// CheckTimeout bounds each upstream check in /v1/status.
 	CheckTimeout time.Duration
+	// Auth enables sign-in and registration routes when its clients are set.
+	Auth AuthDeps
+	// AllowedOrigins are the web origins allowed to call the API with
+	// credentials (CORS), such as https://tayfam.app.
+	AllowedOrigins []string
 }
 
 // NewRouter returns the public API handler.
@@ -33,8 +38,11 @@ func NewRouter(d Deps) http.Handler {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/status", statusHandler(d))
+	if d.Auth.Auth != nil && d.Auth.Registration != nil {
+		registerAuth(mux, d.Auth)
+	}
 	mux.HandleFunc("/", httpx.NotFound)
-	return mux
+	return httpx.Chain(mux, cors(d.AllowedOrigins), requireClientHeader)
 }
 
 // StatusResponse is the body of GET /v1/status.

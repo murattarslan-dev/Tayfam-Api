@@ -31,6 +31,7 @@ OPS_ADDR=127.0.0.1:8081 HTTP_ADDR=127.0.0.1:8080 \
 IDENTITY_GRPC_ADDR=127.0.0.1:9091 \
 CORE_GRPC_ADDR=127.0.0.1:9092 \
 CHAT_GRPC_ADDR=127.0.0.1:9093 \
+COOKIE_SECURE=false CORS_ALLOWED_ORIGINS=http://localhost:3000 \
   ./bin/gateway & pids+=($!)
 
 echo "Servisler çalışıyor. Deneyin: curl http://localhost:8080/v1/status"

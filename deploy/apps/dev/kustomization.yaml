@@ -21,6 +21,10 @@ configMapGenerator:
       - SHUTDOWN_DRAIN_DELAY=5s
       - AUTH_ISSUER=tayfam-identity
       - AUTH_AUDIENCE=tayfam-api
+      # gateway: istekler yalnızca cloudflared'den gelir (NetworkPolicy), bu
+      # yüzden Cloudflare'in istemci IP başlığına güvenilir.
+      - TRUST_CF_CONNECTING_IP=true
+      - CORS_ALLOWED_ORIGINS=https://tayfam.app
 
 images:
   - name: ghcr.io/murattarslan-dev/tayfam-gateway
