@@ -1076,8 +1076,9 @@ func TestInviteUse(t *testing.T) {
 		}
 		return n
 	}
-	if use(hash) != 1 || use(hash) != 1 || use(hash) != 0 {
-		t.Fatal("kullanım sınırı uygulanmadı")
+	// max_uses = 2: iki kullanım sayılır, üçüncüsü reddedilir.
+	if got := []int64{use(hash), use(hash), use(hash)}; got[0] != 1 || got[1] != 1 || got[2] != 0 {
+		t.Fatalf("kullanım sınırı uygulanmadı: %v", got)
 	}
 
 	_, expiredHash := newInvite(0, time.Now().Add(time.Second))
