@@ -93,8 +93,9 @@ run_inside "5) core'un içinden (identity'ye açık anahtar için, Postgres'e):"
   KAPALI "http://gateway:8080/v1/status" \
   KAPALI "http://example.com"
 
-run_inside "6) identity'nin içinden (yalnızca Postgres'e):" identity \
+run_inside "6) identity'nin içinden (Postgres'e ve internete yalnızca 443):" identity \
   ACIK   "tcp://tayfam-pg-rw:5432" \
+  ACIK   "tcp://www.googleapis.com:443" \
   KAPALI "tcp://core:9090" \
   KAPALI "tcp://chat:9090" \
   KAPALI "http://gateway:8080/v1/status" \

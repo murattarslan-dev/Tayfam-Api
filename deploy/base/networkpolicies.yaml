@@ -173,3 +173,22 @@ spec:
             matchLabels: { cnpg.io/cluster: tayfam-pg }
       ports:
         - { protocol: TCP, port: 5432 }
+---
+# identity → internet 443: Google'ın (ileride Apple'ın) ID token imzalama
+# anahtarları (ADR-0004, ADR-0006). Cluster içi ve özel adresler hariç;
+# identity'den başka servislere bu kuralla çıkılamaz.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: identity-egress-internet
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: identity }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, 127.0.0.0/8]
+      ports:
+        - { protocol: TCP, port: 443 }

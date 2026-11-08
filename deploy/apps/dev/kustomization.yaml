@@ -15,6 +15,7 @@ resources:
   - secrets/identity-db.sops.yaml
   - secrets/core-db.sops.yaml
   - secrets/chat-db.sops.yaml
+  - secrets/identity-birthdate-key.sops.yaml
 
 configMapGenerator:
   - name: tayfam-env
@@ -28,6 +29,12 @@ configMapGenerator:
       # yüzden Cloudflare'in istemci IP başlığına güvenilir.
       - TRUST_CF_CONNECTING_IP=true
       - CORS_ALLOWED_ORIGINS=https://tayfam.app
+      # identity: Google OAuth client ID'leri (gizli değildir). Web client
+      # ID'si mobilde de "server client ID" olarak kullanılır.
+      - GOOGLE_CLIENT_IDS=GOOGLE_WEB_CLIENT_ID_BEKLENIYOR
+      # Kayıtta onaylanan belgelerin sürümleri; metin değişince artar.
+      - CONSENT_PRIVACY_NOTICE_VERSION=2026-11-08
+      - CONSENT_TERMS_VERSION=2026-11-08
 
 images:
   - name: ghcr.io/murattarslan-dev/tayfam-gateway

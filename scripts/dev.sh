@@ -22,8 +22,16 @@ export AUTH_ISSUER=tayfam-identity AUTH_AUDIENCE=tayfam-api
 # yazılmaz, yalnızca identity sürecine verilir.
 signing_key="local:$(head -c 32 /dev/urandom | base64 -w0)"
 
-AUTH_SIGNING_KEY=$signing_key OPS_ADDR=127.0.0.1:8091 GRPC_ADDR=127.0.0.1:9091 ./bin/identity & pids+=($!)
-unset signing_key
+# identity veritabanı: make test-db ile açılan yerel Postgres (docker compose).
+export DB_HOST=${DB_HOST:-127.0.0.1} DB_PORT=${DB_PORT:-5432} DB_NAME=${DB_NAME:-identity} \
+  DB_USER=${DB_USER:-postgres} DB_PASSWORD=${DB_PASSWORD:-yerel} DB_SSLMODE=${DB_SSLMODE:-disable}
+export GOOGLE_CLIENT_IDS=${GOOGLE_CLIENT_IDS:-yerel-gelistirme.apps.googleusercontent.com}
+export CONSENT_PRIVACY_NOTICE_VERSION=2026-11-08 CONSENT_TERMS_VERSION=2026-11-08
+birthdate_key="1:$(head -c 32 /dev/urandom | base64 -w0)"
+./bin/identity migrate
+AUTH_SIGNING_KEY=$signing_key IDENTITY_BIRTHDATE_KEYS=$birthdate_key \
+  OPS_ADDR=127.0.0.1:8091 GRPC_ADDR=127.0.0.1:9091 ./bin/identity & pids+=($!)
+unset signing_key birthdate_key
 IDENTITY_GRPC_ADDR=127.0.0.1:9091 OPS_ADDR=127.0.0.1:8092 GRPC_ADDR=127.0.0.1:9092 ./bin/core & pids+=($!)
 IDENTITY_GRPC_ADDR=127.0.0.1:9091 OPS_ADDR=127.0.0.1:8093 GRPC_ADDR=127.0.0.1:9093 ./bin/chat & pids+=($!)
 
