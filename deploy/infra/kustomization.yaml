@@ -1,0 +1,6 @@
+# Cluster çapında altyapı: ortamlardan (apps/<ortam>) önce kurulur. Flux'ta
+# ayrı bir Kustomization'dır (deploy/clusters/home/infra.yaml).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - cnpg

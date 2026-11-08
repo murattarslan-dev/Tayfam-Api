@@ -35,6 +35,9 @@ spec:
     kind: OCIRepository
     name: tayfam-deploy
   path: ./apps/dev
+  # Postgres cluster'ı CloudNativePG CRD'lerine ihtiyaç duyar.
+  dependsOn:
+    - name: infra
   prune: true
   wait: true
   # Artifact'taki *.sops.yaml dosyaları burada, cluster içinde çözülür. age

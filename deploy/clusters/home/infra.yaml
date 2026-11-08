@@ -1,0 +1,20 @@
+# Cluster çapında altyapı (CloudNativePG operatörü ve CRD'leri). Kaynağı ve
+# imza doğrulaması uygulamalarla aynıdır: tayfam-deploy OCI artifact'ı.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infra
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 5m
+  sourceRef:
+    kind: OCIRepository
+    name: tayfam-deploy
+  path: ./infra
+  # CRD'ler silinirse onlara bağlı bütün veritabanları da silinir. Bir dosya
+  # yanlışlıkla kaldırıldığında Flux altyapıyı otomatik silmesin; kaldırma
+  # elle ve bilerek yapılır.
+  prune: false
+  wait: true

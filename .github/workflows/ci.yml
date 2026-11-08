@@ -178,6 +178,7 @@ jobs:
       - name: Kustomize derlemesi
         run: |
           kubectl kustomize deploy/apps/dev > /dev/null
+          kubectl kustomize deploy/infra > /dev/null
           kubectl kustomize deploy/clusters/home > /dev/null
 
   # main'deki her commit'ten sonra dev manifestlerini, o commit'in image'larına

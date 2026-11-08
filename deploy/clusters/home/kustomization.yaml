@@ -4,4 +4,5 @@ kind: Kustomization
 # `kubectl apply -k deploy/clusters/home` ile uygulanır
 # (docs/runbooks/flux-kurulumu.md).
 resources:
+  - infra.yaml
   - tayfam-dev.yaml
