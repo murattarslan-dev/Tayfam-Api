@@ -156,7 +156,10 @@ docs/runbooks/              işletim adımları
 ## Test beklentileri
 
 - Her PR testleriyle gelir. `app` katmanı birim testleriyle, `store` katmanı
-  gerçek Postgres'e karşı (testcontainers) test edilir.
+  gerçek Postgres'e karşı test edilir: `internal/platform/db/dbtest` her test
+  için geçici bir veritabanı açar. Sunucu `TEST_DATABASE_URL` ile verilir;
+  yerelde `make test-db`, CI'da Postgres service container'ı. CI'da
+  `REQUIRE_TEST_DATABASE` ayarlı olduğu için bu testler atlanamaz.
 - İzin tablosu her rol ve işlem için tabloya dayalı testlerle korunur.
 - Hata düzeltmesi, hatayı yeniden üreten bir testle gelir.
 - `go test -race ./...` yerelde geçmeden PR açılmaz.
