@@ -15,3 +15,17 @@ sql:
         overrides:
           - db_type: uuid
             go_type: github.com/jackc/pgx/v5/pgtype.UUID
+  - engine: postgresql
+    schema: db/core/migrations
+    queries: db/core/queries
+    gen:
+      go:
+        package: store
+        out: internal/core/store
+        sql_package: pgx/v5
+        emit_methods_with_db_argument: false
+        emit_interface: true
+        emit_empty_slices: true
+        overrides:
+          - db_type: uuid
+            go_type: github.com/jackc/pgx/v5/pgtype.UUID
