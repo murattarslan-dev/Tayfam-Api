@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -44,6 +45,9 @@ func runMigrations(name string, migrations fs.FS) error {
 	if err := cfg.Err(); err != nil {
 		return fmt.Errorf("yapılandırma hatalı:\n%w", err)
 	}
-	log.InfoContext(ctx, "migration başlıyor", "target", dbCfg.String())
+	// Yalnızca adres ve veritabanı adı; bağlantı ayarlarının tamamı (parola
+	// dahil) log'a hiçbir biçimde verilmez (CLAUDE.md kural 3).
+	log.InfoContext(ctx, "migration başlıyor",
+		slog.String("host", dbCfg.Host), slog.String("database", dbCfg.Name))
 	return db.Migrate(ctx, log, dbCfg.URL(), migrations)
 }
