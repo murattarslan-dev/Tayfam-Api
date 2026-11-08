@@ -2,7 +2,7 @@ SERVICES := gateway identity core chat
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS  := -s -w -X github.com/murattarslan-dev/tayfam-api/internal/platform/buildinfo.Version=$(VERSION)
 
-.PHONY: build test lint check generate run dev up down clean
+.PHONY: build test lint check generate test-db run dev up down clean
 
 ## build: tüm servisleri bin/ altına derler
 build:
@@ -15,17 +15,25 @@ build:
 test:
 	go test -race -count=1 ./...
 
+## test-db: store testleri için yerel Postgres'i başlatır (docker compose)
+## Ardından: TEST_DATABASE_URL=postgres://postgres:yerel@127.0.0.1:5432/postgres?sslmode=disable make test
+test-db:
+	docker compose up -d postgres
+
 ## lint: golangci-lint (servis sınırları dahil)
 lint:
 	golangci-lint run ./...
 
 ## generate: proto/ değişince gen/ altındaki kodu yeniden üretir (ADR-0003)
-## Eklenti sürümleri go.mod'daki tool direktifleriyle sabittir; buf ayrıca kurulur.
+## Eklenti sürümleri go.mod'daki tool direktifleriyle sabittir; buf ve sqlc
+## (v1.31.1) ayrıca kurulur.
 generate:
 	buf lint
 	buf format -d --exit-code
 	rm -rf gen
 	buf generate
+	sqlc vet
+	sqlc generate
 
 ## check: PR açmadan önce çalıştır
 check: build test lint
