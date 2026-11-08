@@ -51,8 +51,6 @@ type AuthDeps struct {
 	Auth         AuthClient
 	Registration RegistrationClient
 	Log          *slog.Logger
-	// SecureCookies is false only for local development over plain HTTP.
-	SecureCookies bool
 	// TrustCFConnectingIP uses Cloudflare's client IP header for rate
 	// limits. Only gateway behind cloudflared may set it; NetworkPolicy lets
 	// nothing else reach gateway (ADR-0004, ADR-0006).
@@ -258,14 +256,16 @@ func (h authHandlers) writeSession(w http.ResponseWriter, web bool, t *identityv
 func (h authHandlers) cookie(name, value, path string, ttl time.Duration) *http.Cookie {
 	return &http.Cookie{
 		Name: name, Value: value, Path: path,
-		MaxAge:   max(int(ttl.Seconds()), 1),
-		HttpOnly: true, Secure: h.d.SecureCookies, SameSite: http.SameSiteLaxMode,
+		MaxAge: max(int(ttl.Seconds()), 1),
+		// Secure is always on: browsers accept Secure cookies on
+		// http://localhost too, so local development needs no exception.
+		HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode,
 	}
 }
 
 func (h authHandlers) clearCookies(w http.ResponseWriter) {
 	for _, c := range []struct{ name, path string }{{accessCookie, "/"}, {refreshCookie, refreshPath}} {
-		http.SetCookie(w, &http.Cookie{Name: c.name, Value: "", Path: c.path, MaxAge: -1, HttpOnly: true, Secure: h.d.SecureCookies, SameSite: http.SameSiteLaxMode})
+		http.SetCookie(w, &http.Cookie{Name: c.name, Value: "", Path: c.path, MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
 	}
 }
 

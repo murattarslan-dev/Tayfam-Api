@@ -86,8 +86,8 @@ func newTestRouterBurst(f *fakeIdentity, burst int) http.Handler {
 		Version: "test",
 		Auth: AuthDeps{
 			Auth: f, Registration: f, Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
-			SecureCookies: true, TrustCFConnectingIP: true,
-			SignInLimit: ratelimit.New(60, burst), RefreshLimit: ratelimit.New(60, burst),
+			TrustCFConnectingIP: true,
+			SignInLimit:         ratelimit.New(60, burst), RefreshLimit: ratelimit.New(60, burst),
 			Now: func() time.Time { return t0 },
 		},
 		AllowedOrigins: []string{"https://tayfam.app"},
@@ -202,7 +202,7 @@ func TestBadBodies(t *testing.T) {
 			t.Errorf("%s: kod %d", name, w.Code)
 		}
 	}
-	r := httptest.NewRequest("POST", "/v1/auth/sign-in", strings.NewReader(signInBodyFor("android")))
+	r := httptest.NewRequest(http.MethodPost, "/v1/auth/sign-in", strings.NewReader(signInBodyFor("android")))
 	r.Header.Set(clientHeader, "android")
 	r.Header.Set("Content-Type", "text/plain")
 	w := httptest.NewRecorder()
@@ -252,7 +252,7 @@ func TestRefreshMobileAndWeb(t *testing.T) {
 	if w.Code != 200 || f.gotRefresh != "MOBIL" {
 		t.Fatalf("mobil: %d %q", w.Code, f.gotRefresh)
 	}
-	r := httptest.NewRequest("POST", "/v1/auth/refresh", nil)
+	r := httptest.NewRequest(http.MethodPost, "/v1/auth/refresh", nil)
 	r.Header.Set(clientHeader, "web")
 	r.AddCookie(&http.Cookie{Name: refreshCookie, Value: "WEBRT"})
 	rec := httptest.NewRecorder()
@@ -264,7 +264,7 @@ func TestRefreshMobileAndWeb(t *testing.T) {
 	// Geçersiz refresh'te web çerezleri silinir.
 	f.err = identityErr(codes.Unauthenticated, "ERROR_REASON_INVALID_REFRESH")
 	rec = httptest.NewRecorder()
-	r = httptest.NewRequest("POST", "/v1/auth/refresh", nil)
+	r = httptest.NewRequest(http.MethodPost, "/v1/auth/refresh", nil)
 	r.Header.Set(clientHeader, "web")
 	r.AddCookie(&http.Cookie{Name: refreshCookie, Value: "WEBRT"})
 	h.ServeHTTP(rec, r)
@@ -288,7 +288,7 @@ func TestTokenForwarding(t *testing.T) {
 	if w := do(h, "GET", "/v1/registration/requirements", "", nil); w.Code != 401 {
 		t.Fatalf("token'sız: %d", w.Code)
 	}
-	r := httptest.NewRequest("POST", "/v1/auth/sign-out", nil)
+	r := httptest.NewRequest(http.MethodPost, "/v1/auth/sign-out", nil)
 	r.Header.Set(clientHeader, "web")
 	r.AddCookie(&http.Cookie{Name: accessCookie, Value: "COOKIETOKEN"})
 	rec := httptest.NewRecorder()

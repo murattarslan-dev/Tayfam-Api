@@ -44,9 +44,6 @@ func setup(rt *service.Runtime) error {
 	// Web origins allowed to call the API with cookies (CORS), comma
 	// separated. Local development adds its own origin through the env.
 	origins := splitList(rt.Config.String("CORS_ALLOWED_ORIGINS", "https://tayfam.app"))
-	// Secure cookies need HTTPS; only local development over plain HTTP
-	// turns this off.
-	secureCookies := rt.Config.OneOf("COOKIE_SECURE", "true", "true", "false") == "true"
 	// Cloudflare's client IP header is trusted only behind cloudflared.
 	trustCF := rt.Config.OneOf("TRUST_CF_CONNECTING_IP", "false", "true", "false") == "true"
 	if err := rt.Config.Err(); err != nil {
@@ -63,7 +60,6 @@ func setup(rt *service.Runtime) error {
 			Auth:                identityv1.NewAuthServiceClient(conn),
 			Registration:        identityv1.NewRegistrationServiceClient(conn),
 			Log:                 rt.Log,
-			SecureCookies:       secureCookies,
 			TrustCFConnectingIP: trustCF,
 			// ADR-0004: IP limits only on low-volume actions (CGNAT).
 			SignInLimit:  ratelimit.New(10, 5),
