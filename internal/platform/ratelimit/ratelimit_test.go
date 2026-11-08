@@ -41,3 +41,25 @@ func TestSweepAndCap(t *testing.T) {
 		t.Fatal("dolan kovalar temizlenmedi")
 	}
 }
+
+func TestPerWindow(t *testing.T) {
+	l := NewPer(10, time.Hour)
+	now := time.Unix(0, 0)
+	l.now = func() time.Time { return now }
+	for i := range 10 {
+		if !l.Allow("u") {
+			t.Fatalf("deneme %d reddedildi", i)
+		}
+	}
+	if l.Allow("u") {
+		t.Fatal("saatte 10'dan fazlasına izin verildi")
+	}
+	now = now.Add(5 * time.Minute)
+	if l.Allow("u") {
+		t.Fatal("6 dakikada bir dolmalı")
+	}
+	now = now.Add(time.Minute)
+	if !l.Allow("u") || l.Allow("u") {
+		t.Fatal("6 dakika sonra tek deneme açılmalı")
+	}
+}

@@ -30,3 +30,30 @@ FROM invites
 WHERE tayfa_id = @tayfa_id
 ORDER BY created_at DESC
 LIMIT @page_size;
+
+-- name: GetInvite :one
+SELECT id, tayfa_id, created_by, expires_at, max_uses, use_count, revoked_at, created_at
+FROM invites
+WHERE tayfa_id = @tayfa_id AND id = @id;
+
+-- Davet önizlemesi: kilitlemeden okur, link kullanılmaz. Silinmiş tayfanın
+-- daveti bulunmaz.
+-- name: GetInviteByHash :one
+SELECT i.id, i.tayfa_id, i.created_by, i.expires_at, i.max_uses, i.use_count,
+       i.revoked_at, t.name, t.status, t.suspended_at, t.deletion_requested_at
+FROM invites i
+JOIN tayfas t ON t.id = i.tayfa_id
+WHERE i.token_hash = @token_hash AND t.deleted_at IS NULL;
+
+-- Geçerli davetler (iptal edilmemiş, süresi dolmamış, tükenmemiş), yeniden
+-- eskiye. created_by verilirse yalnızca o kişinin açtıkları.
+-- name: ListLiveInvites :many
+SELECT id, created_by, expires_at, max_uses, use_count, revoked_at, created_at
+FROM invites
+WHERE tayfa_id = @tayfa_id
+  AND revoked_at IS NULL
+  AND expires_at > now()
+  AND (max_uses IS NULL OR use_count < max_uses)
+  AND (sqlc.narg(created_by)::uuid IS NULL OR created_by = sqlc.narg(created_by)::uuid)
+ORDER BY created_at DESC, id DESC
+LIMIT 100;
