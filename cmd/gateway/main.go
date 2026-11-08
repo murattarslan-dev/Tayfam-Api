@@ -3,9 +3,11 @@ package main
 
 import (
 	"strings"
+	"time"
 
 	"google.golang.org/grpc"
 
+	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/gateway/transport/rest"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/buildinfo"
@@ -64,6 +66,27 @@ func setup(rt *service.Runtime) error {
 			// ADR-0004: IP limits only on low-volume actions (CGNAT).
 			SignInLimit:  ratelimit.New(10, 5),
 			RefreshLimit: ratelimit.New(60, 20),
+		}
+	}
+	if conn := conns["core"]; conn != nil {
+		// gateway checks the user's token before calling core, with
+		// identity's public keys; core checks it again itself (ADR-0011).
+		v, err := rt.IdentityVerifier()
+		if err != nil {
+			return err
+		}
+		deps.Core = rest.CoreDeps{
+			Tayfas:              corev1.NewTayfaServiceClient(conn),
+			Members:             corev1.NewMembershipServiceClient(conn),
+			Verifier:            v,
+			Log:                 rt.Log,
+			TrustCFConnectingIP: trustCF,
+			// ADR-0004: opening a tayfa is low volume, one per IP per hour.
+			CreateTayfaLimit: ratelimit.Every(time.Hour, 1),
+			// Code guessing; core also limits attempts per user. Kept loose
+			// enough for many users behind one CGNAT address.
+			JoinCodeLimit: ratelimit.New(20, 10),
+			InviteLimit:   ratelimit.New(60, 20),
 		}
 	}
 	rt.AddHTTPServer("http", httpAddr, rest.NewRouter(deps))
