@@ -139,3 +139,10 @@ func withToken(ctx context.Context) context.Context {
 	}
 	return WithToken(ctx, c.token)
 }
+
+// WithCallerForTest returns ctx carrying c as the verified caller, as Guard
+// would set it. Only tests may use it; production code gets callers from
+// Guard after the token is verified.
+func WithCallerForTest(ctx context.Context, c Claims) context.Context {
+	return context.WithValue(ctx, callerKey{}, caller{claims: c})
+}

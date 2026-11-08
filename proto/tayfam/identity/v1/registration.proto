@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package tayfam.identity.v1;
+
+// RegistrationService completes a new user's registration: birth date,
+// consents and display name (ADR-0008, ADR-0012). Both methods need the
+// caller's access token; a registration-only token (aud=tayfam-registration)
+// is enough. Errors use the ErrorReason values in auth.proto.
+service RegistrationService {
+  // GetRequirements returns the document versions to show and accept.
+  rpc GetRequirements(GetRequirementsRequest) returns (GetRequirementsResponse);
+  // CompleteRegistration finishes registration for the caller. Afterwards
+  // the client refreshes its tokens to get a full access token. A birth date
+  // under the age limit refuses the account for good (ERROR_REASON_AGE_BLOCKED)
+  // and ends its sessions.
+  rpc CompleteRegistration(CompleteRegistrationRequest) returns (CompleteRegistrationResponse);
+}
+
+message GetRequirementsRequest {}
+
+message GetRequirementsResponse {
+  string privacy_notice_version = 1;
+  string terms_version = 2;
+  int32 minimum_age = 3;
+}
+
+message CompleteRegistrationRequest {
+  // YYYY-MM-DD. Stored encrypted; never logged (ADR-0012).
+  string birth_date = 1;
+  // Optional; replaces the name from the sign-in provider. 1–40 characters.
+  string display_name = 2;
+  string accepted_privacy_notice_version = 3;
+  string accepted_terms_version = 4;
+}
+
+message CompleteRegistrationResponse {}

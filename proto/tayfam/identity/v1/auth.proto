@@ -43,6 +43,13 @@ enum ErrorReason {
   // The same refresh token was used twice at once; retry is pointless, the
   // other request got the new token.
   ERROR_REASON_REFRESH_CONFLICT = 5;
+  // Registration (RegistrationService).
+  ERROR_REASON_INVALID_BIRTH_DATE = 6;
+  // The accepted document versions are not the current ones; fetch
+  // requirements again and show the new texts.
+  ERROR_REASON_CONSENT_OUTDATED = 7;
+  ERROR_REASON_ALREADY_REGISTERED = 8;
+  ERROR_REASON_INVALID_DISPLAY_NAME = 9;
 }
 
 message SignInRequest {

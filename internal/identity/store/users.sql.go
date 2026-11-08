@@ -28,6 +28,16 @@ func (q *Queries) BlockRegistrationForAge(ctx context.Context, id pgtype.UUID) (
 	return result.RowsAffected(), nil
 }
 
+const clearIdentityEmails = `-- name: ClearIdentityEmails :exec
+UPDATE auth_identities SET email = NULL WHERE user_id = $1
+`
+
+// Yaş nedeniyle reddedilen hesapta e-posta tutulmaz (veri azaltma).
+func (q *Queries) ClearIdentityEmails(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearIdentityEmails, userID)
+	return err
+}
+
 const completeRegistration = `-- name: CompleteRegistration :execrows
 UPDATE users
 SET birth_date_enc = $1, registered_at = now()
@@ -110,4 +120,36 @@ func (q *Queries) GetUser(ctx context.Context, id pgtype.UUID) (GetUserRow, erro
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const setDisplayName = `-- name: SetDisplayName :exec
+UPDATE users SET display_name = $1 WHERE id = $2 AND deleted_at IS NULL
+`
+
+type SetDisplayNameParams struct {
+	DisplayName pgtype.Text
+	ID          pgtype.UUID
+}
+
+func (q *Queries) SetDisplayName(ctx context.Context, arg SetDisplayNameParams) error {
+	_, err := q.db.Exec(ctx, setDisplayName, arg.DisplayName, arg.ID)
+	return err
+}
+
+const setRefCode = `-- name: SetRefCode :execrows
+UPDATE users SET ref_code = $1, ref_code_rotated_at = now()
+WHERE id = $2 AND ref_code IS NULL
+`
+
+type SetRefCodeParams struct {
+	RefCode pgtype.Text
+	ID      pgtype.UUID
+}
+
+func (q *Queries) SetRefCode(ctx context.Context, arg SetRefCodeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRefCode, arg.RefCode, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
