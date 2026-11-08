@@ -12,6 +12,8 @@ import (
 
 type Querier interface {
 	BlockRegistrationForAge(ctx context.Context, id pgtype.UUID) (int64, error)
+	// Yaş nedeniyle reddedilen hesapta e-posta tutulmaz (veri azaltma).
+	ClearIdentityEmails(ctx context.Context, userID pgtype.UUID) error
 	// Kayıt bir kez tamamlanır; yaş nedeniyle reddedilmiş veya silinmiş hesapta
 	// tamamlanamaz. Etkilenen satır sayısı 0 ise kayıt zaten yapılmış ya da
 	// engellenmiştir.
@@ -27,12 +29,17 @@ type Querier interface {
 	GetActiveSession(ctx context.Context, id pgtype.UUID) (GetActiveSessionRow, error)
 	GetAuthIdentity(ctx context.Context, arg GetAuthIdentityParams) (GetAuthIdentityRow, error)
 	GetUser(ctx context.Context, id pgtype.UUID) (GetUserRow, error)
+	HasActiveConsent(ctx context.Context, arg HasActiveConsentParams) (bool, error)
 	// Yenilemede token ve oturumu birlikte kilitler; aynı token'la eşzamanlı iki
 	// yenileme isteğinden yalnızca biri ilerler, diğeri yeniden kullanım sayılır.
 	LockRefreshToken(ctx context.Context, tokenHash []byte) (LockRefreshTokenRow, error)
 	MarkRefreshTokenUsed(ctx context.Context, id pgtype.UUID) (int64, error)
+	// Aynı sürüm ikinci kez onaylanırsa yeni kayıt açılmaz.
+	RecordConsent(ctx context.Context, arg RecordConsentParams) error
 	RevokeSession(ctx context.Context, arg RevokeSessionParams) (int64, error)
 	RevokeUserSessions(ctx context.Context, arg RevokeUserSessionsParams) (int64, error)
+	SetDisplayName(ctx context.Context, arg SetDisplayNameParams) error
+	SetRefCode(ctx context.Context, arg SetRefCodeParams) (int64, error)
 	TouchAuthIdentity(ctx context.Context, arg TouchAuthIdentityParams) error
 	TouchDevice(ctx context.Context, id pgtype.UUID) error
 }

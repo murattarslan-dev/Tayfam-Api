@@ -27,3 +27,14 @@ WHERE id = @id
   AND registered_at IS NULL
   AND age_blocked_at IS NULL
   AND deleted_at IS NULL;
+
+-- name: SetRefCode :execrows
+UPDATE users SET ref_code = @ref_code, ref_code_rotated_at = now()
+WHERE id = @id AND ref_code IS NULL;
+
+-- name: SetDisplayName :exec
+UPDATE users SET display_name = @display_name WHERE id = @id AND deleted_at IS NULL;
+
+-- Yaş nedeniyle reddedilen hesapta e-posta tutulmaz (veri azaltma).
+-- name: ClearIdentityEmails :exec
+UPDATE auth_identities SET email = NULL WHERE user_id = @user_id;

@@ -130,6 +130,9 @@ func (s *AuthServer) mapError(ctx context.Context, err error) error {
 // says nothing about which check failed.
 func fail(code codes.Code, reason identityv1.ErrorReason) error {
 	st := status.New(code, "istek reddedildi")
+	if reason == identityv1.ErrorReason_ERROR_REASON_UNSPECIFIED {
+		return st.Err()
+	}
 	if withInfo, err := st.WithDetails(&errdetails.ErrorInfo{Reason: reason.String(), Domain: errorDomain}); err == nil {
 		st = withInfo
 	}

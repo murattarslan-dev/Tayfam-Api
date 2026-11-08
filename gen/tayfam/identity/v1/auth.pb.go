@@ -138,6 +138,13 @@ const (
 	// The same refresh token was used twice at once; retry is pointless, the
 	// other request got the new token.
 	ErrorReason_ERROR_REASON_REFRESH_CONFLICT ErrorReason = 5
+	// Registration (RegistrationService).
+	ErrorReason_ERROR_REASON_INVALID_BIRTH_DATE ErrorReason = 6
+	// The accepted document versions are not the current ones; fetch
+	// requirements again and show the new texts.
+	ErrorReason_ERROR_REASON_CONSENT_OUTDATED     ErrorReason = 7
+	ErrorReason_ERROR_REASON_ALREADY_REGISTERED   ErrorReason = 8
+	ErrorReason_ERROR_REASON_INVALID_DISPLAY_NAME ErrorReason = 9
 )
 
 // Enum value maps for ErrorReason.
@@ -149,6 +156,10 @@ var (
 		3: "ERROR_REASON_AGE_BLOCKED",
 		4: "ERROR_REASON_INVALID_REFRESH",
 		5: "ERROR_REASON_REFRESH_CONFLICT",
+		6: "ERROR_REASON_INVALID_BIRTH_DATE",
+		7: "ERROR_REASON_CONSENT_OUTDATED",
+		8: "ERROR_REASON_ALREADY_REGISTERED",
+		9: "ERROR_REASON_INVALID_DISPLAY_NAME",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":          0,
@@ -157,6 +168,10 @@ var (
 		"ERROR_REASON_AGE_BLOCKED":          3,
 		"ERROR_REASON_INVALID_REFRESH":      4,
 		"ERROR_REASON_REFRESH_CONFLICT":     5,
+		"ERROR_REASON_INVALID_BIRTH_DATE":   6,
+		"ERROR_REASON_CONSENT_OUTDATED":     7,
+		"ERROR_REASON_ALREADY_REGISTERED":   8,
+		"ERROR_REASON_INVALID_DISPLAY_NAME": 9,
 	}
 )
 
@@ -591,14 +606,18 @@ const file_tayfam_identity_v1_auth_proto_rawDesc = "" +
 	"\x14PLATFORM_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10PLATFORM_ANDROID\x10\x01\x12\x10\n" +
 	"\fPLATFORM_IOS\x10\x02\x12\x10\n" +
-	"\fPLATFORM_WEB\x10\x03*\xdb\x01\n" +
+	"\fPLATFORM_WEB\x10\x03*\xef\x02\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12$\n" +
 	" ERROR_REASON_INVALID_CREDENTIALS\x10\x01\x12%\n" +
 	"!ERROR_REASON_UNSUPPORTED_PROVIDER\x10\x02\x12\x1c\n" +
 	"\x18ERROR_REASON_AGE_BLOCKED\x10\x03\x12 \n" +
 	"\x1cERROR_REASON_INVALID_REFRESH\x10\x04\x12!\n" +
-	"\x1dERROR_REASON_REFRESH_CONFLICT\x10\x052\x86\x02\n" +
+	"\x1dERROR_REASON_REFRESH_CONFLICT\x10\x05\x12#\n" +
+	"\x1fERROR_REASON_INVALID_BIRTH_DATE\x10\x06\x12!\n" +
+	"\x1dERROR_REASON_CONSENT_OUTDATED\x10\a\x12#\n" +
+	"\x1fERROR_REASON_ALREADY_REGISTERED\x10\b\x12%\n" +
+	"!ERROR_REASON_INVALID_DISPLAY_NAME\x10\t2\x86\x02\n" +
 	"\vAuthService\x12O\n" +
 	"\x06SignIn\x12!.tayfam.identity.v1.SignInRequest\x1a\".tayfam.identity.v1.SignInResponse\x12R\n" +
 	"\aRefresh\x12\".tayfam.identity.v1.RefreshRequest\x1a#.tayfam.identity.v1.RefreshResponse\x12R\n" +

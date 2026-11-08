@@ -18,6 +18,15 @@ type AuthIdentity struct {
 	LastUsedAt pgtype.Timestamptz
 }
 
+type ConsentRecord struct {
+	ID              pgtype.UUID
+	UserID          pgtype.UUID
+	DocumentType    string
+	DocumentVersion string
+	AcceptedAt      pgtype.Timestamptz
+	WithdrawnAt     pgtype.Timestamptz
+}
+
 type Device struct {
 	ID         pgtype.UUID
 	UserID     pgtype.UUID
