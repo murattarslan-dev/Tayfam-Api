@@ -17,7 +17,9 @@ type Querier interface {
 	// Başvuru onayı.
 	ApproveMembership(ctx context.Context, arg ApproveMembershipParams) (int64, error)
 	BanMembership(ctx context.Context, arg BanMembershipParams) (int64, error)
+	CancelTayfaDeletion(ctx context.Context, id pgtype.UUID) (int64, error)
 	CountActiveMembers(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
+	CountActiveMembersForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]CountActiveMembersForTayfasRow, error)
 	// Kullanıcı başına günlük tayfa açma sınırı. Silinen tayfalar da sayılır;
 	// açıp silerek sınır aşılamaz.
 	CountTayfasCreatedSince(ctx context.Context, arg CountTayfasCreatedSinceParams) (int64, error)
@@ -41,14 +43,23 @@ type Querier interface {
 	GetTayfa(ctx context.Context, id pgtype.UUID) (GetTayfaRow, error)
 	// Tekrar gönderilen oluşturma isteği aynı tayfayı döndürür.
 	GetTayfaByClientRequest(ctx context.Context, arg GetTayfaByClientRequestParams) (pgtype.UUID, error)
+	GetTayfaByClientRequestID(ctx context.Context, arg GetTayfaByClientRequestIDParams) (GetTayfaByClientRequestIDRow, error)
 	GetTayfaByJoinCode(ctx context.Context, joinCode string) (GetTayfaByJoinCodeRow, error)
+	// Yazan işlemler tayfa satırını kilitleyerek okur; memberships trigger'ı da
+	// aynı satırı kilitlediği için üyelik değişiklikleriyle sırayla çalışır.
+	GetTayfaForUpdate(ctx context.Context, id pgtype.UUID) (GetTayfaForUpdateRow, error)
 	// Davet geçerliyse kullanımı sayar; 0 satır: süresi dolmuş, iptal ya da
 	// tükenmiş.
 	IncrementInviteUse(ctx context.Context, id pgtype.UUID) (int64, error)
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error)
+	ListInterestsForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListInterestsForTayfasRow, error)
 	ListInvites(ctx context.Context, arg ListInvitesParams) ([]ListInvitesRow, error)
 	// Duruma göre üyeler; kullanıcı ID'sine göre sayfalanır.
 	ListMemberships(ctx context.Context, arg ListMembershipsParams) ([]ListMembershipsRow, error)
+	ListModulesForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListModulesForTayfasRow, error)
+	// "Tayfalarım": kullanıcının aktif üyelikleri ve bekleyen başvuruları, en
+	// yeni üyelik kaydı önce; (created_at, tayfa_id) ile sayfalanır.
+	ListMyTayfas(ctx context.Context, arg ListMyTayfasParams) ([]ListMyTayfasRow, error)
 	ListTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) ([]string, error)
 	ListTayfaModules(ctx context.Context, tayfaID pgtype.UUID) ([]ListTayfaModulesRow, error)
 	// Kullanıcının aktif üye olduğu tayfalar; tayfa ID'sine göre sayfalanır.
@@ -57,7 +68,11 @@ type Querier interface {
 	// transaction'da kontrol edilir, eşzamanlı son kullanımdan yalnızca biri
 	// ilerler.
 	LockInviteByHash(ctx context.Context, tokenHash []byte) (LockInviteByHashRow, error)
+	// Aynı kullanıcının eşzamanlı oluşturma istekleri sırayla işlenir; günlük
+	// sınır iki istekte birden aşılamaz. Kilit transaction bitince bırakılır.
+	LockTayfaCreation(ctx context.Context, lockKey string) error
 	MuteMembership(ctx context.Context, arg MuteMembershipParams) (int64, error)
+	RequestTayfaDeletion(ctx context.Context, arg RequestTayfaDeletionParams) (int64, error)
 	RevokeInvite(ctx context.Context, arg RevokeInviteParams) (int64, error)
 	// İşlemi yapan kullanıcıyı transaction'a bildirir; memberships trigger'ı rol
 	// hiyerarşisini buna göre doğrular (ADR-0004). Yalnızca transaction içinde
@@ -67,8 +82,10 @@ type Querier interface {
 	// Kullanıcısız arka plan işi. Trigger'ın tanıdığı tek değer
 	// 'account_deletion'dır; başka bir değer işlemi hata ile durdurur.
 	SetSystemJob(ctx context.Context, job string) error
+	SetTayfaJoinCode(ctx context.Context, arg SetTayfaJoinCodeParams) (int64, error)
 	SetTayfaModule(ctx context.Context, arg SetTayfaModuleParams) error
 	UnmuteMembership(ctx context.Context, arg UnmuteMembershipParams) (int64, error)
+	UpdateTayfaSettings(ctx context.Context, arg UpdateTayfaSettingsParams) (int64, error)
 }
 
 var _ Querier = (*Queries)(nil)

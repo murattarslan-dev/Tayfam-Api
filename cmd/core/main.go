@@ -9,6 +9,9 @@ import (
 	"context"
 
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
+	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
+	grpcapi "github.com/murattarslan-dev/tayfam-api/internal/core/transport/grpc"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/service"
@@ -40,9 +43,15 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	// Servise özel metodlar (store havuzu dahil) sonraki iş paketlerinde bu
-	// sunucuya kaydedilir.
+	tayfas, err := tayfa.New(tayfa.Config{Pool: pool, Log: rt.Log})
+	if err != nil {
+		return err
+	}
+
+	// Guard'a açık metod verilmez: her metod kullanıcının erişim token'ını
+	// ister (ADR-0011).
 	srv := rt.NewGRPCServer(auth.NewGuard(v).ServerOptions()...)
+	corev1.RegisterTayfaServiceServer(srv, grpcapi.NewTayfaServer(tayfas, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
 	return nil
 }
