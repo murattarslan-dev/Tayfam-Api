@@ -131,12 +131,13 @@ service MembershipService {
   // Errors: as ApproveMember.
   rpc RejectMember(RejectMemberRequest) returns (RejectMemberResponse);
 
-  // ChangeRole changes an ACTIVE member's role. Admin only (permission
-  // table). The target's current role must be lower than the caller's and
+  // ChangeRole changes an ACTIVE member's role. On another member: admin
+  // only (permission table). The target's current role must be lower than the caller's and
   // the new role must not be higher than the caller's role (veri modeli
   // v14), so an admin can promote a moderator or member to ADMIN but cannot
-  // change another admin. A caller may also lower their own role (target =
-  // caller), unless they are the last active admin.
+  // change another admin. A moderator or admin may lower their own role
+  // (target = caller), unless they are the last active admin; this is
+  // allowed while muted.
   //
   // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
   // ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY,

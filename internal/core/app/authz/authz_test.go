@@ -106,8 +106,8 @@ var expected = []struct {
 	// InviteList
 	{admin, InviteList, true},
 	{moderator, InviteList, true},
-	{member, InviteList, false},
-	{mutedMember, InviteList, false},
+	{member, InviteList, true},
+	{mutedMember, InviteList, true},
 	{mutedModerator, InviteList, true},
 	{pending, InviteList, false},
 	{invited, InviteList, false},
@@ -223,6 +223,16 @@ var expected = []struct {
 	{invited, AuditView, false},
 	{banned, AuditView, false},
 	{nonMember, AuditView, false},
+	// RoleStepDown
+	{admin, RoleStepDown, true},
+	{moderator, RoleStepDown, true},
+	{member, RoleStepDown, false},
+	{mutedMember, RoleStepDown, false},
+	{mutedModerator, RoleStepDown, true},
+	{pending, RoleStepDown, false},
+	{invited, RoleStepDown, false},
+	{banned, RoleStepDown, false},
+	{nonMember, RoleStepDown, false},
 }
 
 func TestAllowedMatrix(t *testing.T) {
@@ -333,6 +343,7 @@ func TestMutedAdmin(t *testing.T) {
 		MemberList:        true,
 		MemberListPending: true,
 		AuditView:         true,
+		RoleStepDown:      true,
 	}
 	for a := Action(1); a < actionEnd; a++ {
 		if got := Allowed(m, a, now); got != want[a] {
