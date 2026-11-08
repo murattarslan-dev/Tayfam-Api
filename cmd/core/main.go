@@ -7,15 +7,22 @@ package main
 
 import (
 	"context"
+	"time"
 
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 	grpcapi "github.com/murattarslan-dev/tayfam-api/internal/core/transport/grpc"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/ratelimit"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/service"
 )
+
+// joinCodeAttemptsPerHour limits JoinByCode per user against code guessing
+// (issue #32). In memory; core runs one replica.
+const joinCodeAttemptsPerHour = 10
 
 func main() {
 	service.MainWithMigrations("core", coredb.Migrations(), setup)
@@ -47,11 +54,19 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
+	memberships, err := membership.New(membership.Config{
+		Pool:        pool,
+		JoinLimiter: ratelimit.NewPer(joinCodeAttemptsPerHour, time.Hour),
+	})
+	if err != nil {
+		return err
+	}
 
 	// Guard'a açık metod verilmez: her metod kullanıcının erişim token'ını
 	// ister (ADR-0011).
 	srv := rt.NewGRPCServer(auth.NewGuard(v).ServerOptions()...)
 	corev1.RegisterTayfaServiceServer(srv, grpcapi.NewTayfaServer(tayfas, rt.Log))
+	corev1.RegisterMembershipServiceServer(srv, grpcapi.NewMembershipServer(memberships, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
 	return nil
 }
