@@ -1,0 +1,20 @@
+# CloudNativePG operatörü (ADR-0006). Sürümün resmi manifesti olduğu gibi
+# repoya alınır; böylece CI'ın imzaladığı artifact'ın parçası olur ve Flux
+# onu da imzayla doğrular. Kaynak ve checksum:
+#   https://github.com/cloudnative-pg/cloudnative-pg/releases/download/v1.30.1/cnpg-1.30.1.yaml
+#   sha256 37237f145d8138256ea25ae830f87759255665ff08f8d552fdd8224a5ec032fb
+# Yükseltme: yeni sürüm dosyası eklenir, eskisi silinir, bu yorum güncellenir.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - cnpg-1.30.1.yaml
+patches:
+  # Operatör pod'u zaten PSS restricted'a uyuyor; namespace bunu zorunlu kılar.
+  - target: { kind: Namespace, name: cnpg-system }
+    patch: |
+      - op: add
+        path: /metadata/labels/pod-security.kubernetes.io~1enforce
+        value: restricted
+      - op: add
+        path: /metadata/labels/pod-security.kubernetes.io~1enforce-version
+        value: latest

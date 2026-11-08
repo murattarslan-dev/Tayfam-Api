@@ -31,3 +31,7 @@
 # SOPS alıcıları (secret'ları kimin çözebileceği) ve anahtar üretimi
 /.sops.yaml @murattarslan-dev
 /scripts/new-signing-key.sh @murattarslan-dev
+/scripts/new-db-secrets.sh @murattarslan-dev
+
+# Cluster çapında altyapı (operatörler, CRD'ler)
+/deploy/infra/ @murattarslan-dev
