@@ -235,10 +235,12 @@ func CanActOn(actor, target Role) bool {
 }
 
 // CanAssign reports whether actor may give another member newRole. Nobody can
-// assign their own role or a higher one, so an admin can make moderators and
-// members but not other admins.
+// assign a role higher than their own (veri modeli v14, "Rol hiyerarşisi"), so
+// an admin can make another admin; that is how a tayfa gets a second admin
+// before the first one steps down. The target's current role is checked
+// separately with CanActOn: an admin still cannot change another admin.
 func CanAssign(actor, newRole Role) bool {
-	return actor.Valid() && newRole.Valid() && newRole < actor
+	return actor.Valid() && newRole.Valid() && newRole <= actor
 }
 
 // CanDemoteSelf reports whether a member whose role is current may change

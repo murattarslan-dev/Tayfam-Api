@@ -371,15 +371,15 @@ func TestCanAssign(t *testing.T) {
 		actor, newRole Role
 		want           bool
 	}{
-		{Admin, Admin, false},
+		{Admin, Admin, true},
 		{Admin, Moderator, true},
 		{Admin, Member, true},
 		{Moderator, Admin, false},
-		{Moderator, Moderator, false},
+		{Moderator, Moderator, true},
 		{Moderator, Member, true},
 		{Member, Admin, false},
 		{Member, Moderator, false},
-		{Member, Member, false},
+		{Member, Member, true},
 		{Admin, 0, false},
 		{4, Admin, false},
 	}
