@@ -20,6 +20,8 @@ type Querier interface {
 	CancelTayfaDeletion(ctx context.Context, id pgtype.UUID) (int64, error)
 	CountActiveMembers(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
 	CountActiveMembersForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]CountActiveMembersForTayfasRow, error)
+	// Son yönetici kontrolü; çağıran tayfa satırını kilitlemiş olmalıdır.
+	CountOtherActiveAdmins(ctx context.Context, arg CountOtherActiveAdminsParams) (int64, error)
 	// Kullanıcı başına günlük tayfa açma sınırı. Silinen tayfalar da sayılır;
 	// açıp silerek sınır aşılamaz.
 	CountTayfasCreatedSince(ctx context.Context, arg CountTayfasCreatedSinceParams) (int64, error)
@@ -39,6 +41,10 @@ type Querier interface {
 	// Ayrılma, çıkarma, başvuru reddi, ban kaldırma.
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (int64, error)
 	DeleteTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) error
+	GetInvite(ctx context.Context, arg GetInviteParams) (GetInviteRow, error)
+	// Davet önizlemesi: kilitlemeden okur, link kullanılmaz. Silinmiş tayfanın
+	// daveti bulunmaz.
+	GetInviteByHash(ctx context.Context, tokenHash []byte) (GetInviteByHashRow, error)
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
 	GetTayfa(ctx context.Context, id pgtype.UUID) (GetTayfaRow, error)
 	// Tekrar gönderilen oluşturma isteği aynı tayfayı döndürür.
@@ -54,12 +60,23 @@ type Querier interface {
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error)
 	ListInterestsForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListInterestsForTayfasRow, error)
 	ListInvites(ctx context.Context, arg ListInvitesParams) ([]ListInvitesRow, error)
+	// Geçerli davetler (iptal edilmemiş, süresi dolmamış, tükenmemiş), yeniden
+	// eskiye. created_by verilirse yalnızca o kişinin açtıkları.
+	ListLiveInvites(ctx context.Context, arg ListLiveInvitesParams) ([]ListLiveInvitesRow, error)
+	// Üye listesi: önce rol (yönetici başta), sonra katılım zamanı, sonra
+	// kullanıcı ID'si. Katılmadan banlanan kişinin katılım zamanı yoktur; onun
+	// yerine başvuru zamanı kullanılır. Sayfa imleci (after_rank, after_time,
+	// after_user_id); ilk sayfa için after_rank = 4.
+	ListMembersPage(ctx context.Context, arg ListMembersPageParams) ([]ListMembersPageRow, error)
 	// Duruma göre üyeler; kullanıcı ID'sine göre sayfalanır.
 	ListMemberships(ctx context.Context, arg ListMembershipsParams) ([]ListMembershipsRow, error)
 	ListModulesForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListModulesForTayfasRow, error)
 	// "Tayfalarım": kullanıcının aktif üyelikleri ve bekleyen başvuruları, en
 	// yeni üyelik kaydı önce; (created_at, tayfa_id) ile sayfalanır.
 	ListMyTayfas(ctx context.Context, arg ListMyTayfasParams) ([]ListMyTayfasRow, error)
+	// Bekleyen başvurular, eskiden yeniye; kimin davetiyle geldiği: doğrudan
+	// davet eden ya da davet linkini açan.
+	ListPendingPage(ctx context.Context, arg ListPendingPageParams) ([]ListPendingPageRow, error)
 	ListTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) ([]string, error)
 	ListTayfaModules(ctx context.Context, tayfaID pgtype.UUID) ([]ListTayfaModulesRow, error)
 	// Kullanıcının aktif üye olduğu tayfalar; tayfa ID'sine göre sayfalanır.

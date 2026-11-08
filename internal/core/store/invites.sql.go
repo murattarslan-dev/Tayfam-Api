@@ -37,6 +37,87 @@ func (q *Queries) CreateInvite(ctx context.Context, arg CreateInviteParams) erro
 	return err
 }
 
+const getInvite = `-- name: GetInvite :one
+SELECT id, tayfa_id, created_by, expires_at, max_uses, use_count, revoked_at, created_at
+FROM invites
+WHERE tayfa_id = $1 AND id = $2
+`
+
+type GetInviteParams struct {
+	TayfaID pgtype.UUID
+	ID      pgtype.UUID
+}
+
+type GetInviteRow struct {
+	ID        pgtype.UUID
+	TayfaID   pgtype.UUID
+	CreatedBy pgtype.UUID
+	ExpiresAt pgtype.Timestamptz
+	MaxUses   pgtype.Int4
+	UseCount  int32
+	RevokedAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetInvite(ctx context.Context, arg GetInviteParams) (GetInviteRow, error) {
+	row := q.db.QueryRow(ctx, getInvite, arg.TayfaID, arg.ID)
+	var i GetInviteRow
+	err := row.Scan(
+		&i.ID,
+		&i.TayfaID,
+		&i.CreatedBy,
+		&i.ExpiresAt,
+		&i.MaxUses,
+		&i.UseCount,
+		&i.RevokedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getInviteByHash = `-- name: GetInviteByHash :one
+SELECT i.id, i.tayfa_id, i.created_by, i.expires_at, i.max_uses, i.use_count,
+       i.revoked_at, t.name, t.status, t.suspended_at, t.deletion_requested_at
+FROM invites i
+JOIN tayfas t ON t.id = i.tayfa_id
+WHERE i.token_hash = $1 AND t.deleted_at IS NULL
+`
+
+type GetInviteByHashRow struct {
+	ID                  pgtype.UUID
+	TayfaID             pgtype.UUID
+	CreatedBy           pgtype.UUID
+	ExpiresAt           pgtype.Timestamptz
+	MaxUses             pgtype.Int4
+	UseCount            int32
+	RevokedAt           pgtype.Timestamptz
+	Name                string
+	Status              string
+	SuspendedAt         pgtype.Timestamptz
+	DeletionRequestedAt pgtype.Timestamptz
+}
+
+// Davet önizlemesi: kilitlemeden okur, link kullanılmaz. Silinmiş tayfanın
+// daveti bulunmaz.
+func (q *Queries) GetInviteByHash(ctx context.Context, tokenHash []byte) (GetInviteByHashRow, error) {
+	row := q.db.QueryRow(ctx, getInviteByHash, tokenHash)
+	var i GetInviteByHashRow
+	err := row.Scan(
+		&i.ID,
+		&i.TayfaID,
+		&i.CreatedBy,
+		&i.ExpiresAt,
+		&i.MaxUses,
+		&i.UseCount,
+		&i.RevokedAt,
+		&i.Name,
+		&i.Status,
+		&i.SuspendedAt,
+		&i.DeletionRequestedAt,
+	)
+	return i, err
+}
+
 const incrementInviteUse = `-- name: IncrementInviteUse :execrows
 UPDATE invites SET use_count = use_count + 1
 WHERE id = $1
@@ -87,6 +168,63 @@ func (q *Queries) ListInvites(ctx context.Context, arg ListInvitesParams) ([]Lis
 	items := []ListInvitesRow{}
 	for rows.Next() {
 		var i ListInvitesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedBy,
+			&i.ExpiresAt,
+			&i.MaxUses,
+			&i.UseCount,
+			&i.RevokedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLiveInvites = `-- name: ListLiveInvites :many
+SELECT id, created_by, expires_at, max_uses, use_count, revoked_at, created_at
+FROM invites
+WHERE tayfa_id = $1
+  AND revoked_at IS NULL
+  AND expires_at > now()
+  AND (max_uses IS NULL OR use_count < max_uses)
+  AND ($2::uuid IS NULL OR created_by = $2::uuid)
+ORDER BY created_at DESC, id DESC
+LIMIT 100
+`
+
+type ListLiveInvitesParams struct {
+	TayfaID   pgtype.UUID
+	CreatedBy pgtype.UUID
+}
+
+type ListLiveInvitesRow struct {
+	ID        pgtype.UUID
+	CreatedBy pgtype.UUID
+	ExpiresAt pgtype.Timestamptz
+	MaxUses   pgtype.Int4
+	UseCount  int32
+	RevokedAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+}
+
+// Geçerli davetler (iptal edilmemiş, süresi dolmamış, tükenmemiş), yeniden
+// eskiye. created_by verilirse yalnızca o kişinin açtıkları.
+func (q *Queries) ListLiveInvites(ctx context.Context, arg ListLiveInvitesParams) ([]ListLiveInvitesRow, error) {
+	rows, err := q.db.Query(ctx, listLiveInvites, arg.TayfaID, arg.CreatedBy)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLiveInvitesRow{}
+	for rows.Next() {
+		var i ListLiveInvitesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.CreatedBy,

@@ -1,6 +1,6 @@
 // Package ratelimit is an in-memory token bucket keyed by a string such as
-// a client IP (ADR-0004). One gateway replica runs, so memory is enough;
-// counters reset on restart, which is accepted.
+// a client IP or a user ID (ADR-0004). Each service runs one replica, so
+// memory is enough; counters reset on restart, which is accepted.
 package ratelimit
 
 import (
@@ -29,6 +29,15 @@ type bucket struct {
 func New(perMinute, burst int) *Limiter {
 	return &Limiter{
 		rate: float64(perMinute) / 60, burst: float64(burst), now: time.Now,
+		buckets: map[string]*bucket{}, maxKeys: 100_000,
+	}
+}
+
+// NewPer returns a limiter allowing n events per window: a burst of n,
+// refilled evenly over the window (for example 10 per hour).
+func NewPer(n int, window time.Duration) *Limiter {
+	return &Limiter{
+		rate: float64(n) / window.Seconds(), burst: float64(n), now: time.Now,
 		buckets: map[string]*bucket{}, maxKeys: 100_000,
 	}
 }

@@ -57,3 +57,39 @@ WHERE tayfa_id = @tayfa_id AND user_id = @user_id AND muted_until IS NOT NULL;
 -- Ayrılma, çıkarma, başvuru reddi, ban kaldırma.
 -- name: DeleteMembership :execrows
 DELETE FROM memberships WHERE tayfa_id = @tayfa_id AND user_id = @user_id;
+
+-- Son yönetici kontrolü; çağıran tayfa satırını kilitlemiş olmalıdır.
+-- name: CountOtherActiveAdmins :one
+SELECT count(*) FROM memberships
+WHERE tayfa_id = @tayfa_id AND user_id <> @user_id
+  AND status = 'active' AND role = 'admin';
+
+-- Üye listesi: önce rol (yönetici başta), sonra katılım zamanı, sonra
+-- kullanıcı ID'si. Katılmadan banlanan kişinin katılım zamanı yoktur; onun
+-- yerine başvuru zamanı kullanılır. Sayfa imleci (after_rank, after_time,
+-- after_user_id); ilk sayfa için after_rank = 4.
+-- name: ListMembersPage :many
+SELECT m.user_id, m.role, m.status, m.muted_until, m.joined_at,
+       COALESCE(m.joined_at, m.created_at)::timestamptz AS sort_time
+FROM memberships m
+WHERE m.tayfa_id = @tayfa_id
+  AND m.status = @status
+  AND (role_rank(m.role) < @after_rank::int
+       OR (role_rank(m.role) = @after_rank::int
+           AND (COALESCE(m.joined_at, m.created_at), m.user_id) > (@after_time::timestamptz, @after_user_id::uuid)))
+ORDER BY role_rank(m.role) DESC, COALESCE(m.joined_at, m.created_at), m.user_id
+LIMIT @page_size;
+
+-- Bekleyen başvurular, eskiden yeniye; kimin davetiyle geldiği: doğrudan
+-- davet eden ya da davet linkini açan.
+-- name: ListPendingPage :many
+SELECT m.user_id, m.role, m.joined_via, m.invite_id,
+       COALESCE(m.invited_by_user_id, i.created_by)::uuid AS inviter_user_id,
+       m.created_at
+FROM memberships m
+LEFT JOIN invites i ON i.tayfa_id = m.tayfa_id AND i.id = m.invite_id
+WHERE m.tayfa_id = @tayfa_id
+  AND m.status = 'pending'
+  AND (m.created_at, m.user_id) > (@after_time::timestamptz, @after_user_id::uuid)
+ORDER BY m.created_at, m.user_id
+LIMIT @page_size;

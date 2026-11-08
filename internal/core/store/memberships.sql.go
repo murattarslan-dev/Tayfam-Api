@@ -81,6 +81,25 @@ func (q *Queries) CountActiveMembers(ctx context.Context, tayfaID pgtype.UUID) (
 	return count, err
 }
 
+const countOtherActiveAdmins = `-- name: CountOtherActiveAdmins :one
+SELECT count(*) FROM memberships
+WHERE tayfa_id = $1 AND user_id <> $2
+  AND status = 'active' AND role = 'admin'
+`
+
+type CountOtherActiveAdminsParams struct {
+	TayfaID pgtype.UUID
+	UserID  pgtype.UUID
+}
+
+// Son yönetici kontrolü; çağıran tayfa satırını kilitlemiş olmalıdır.
+func (q *Queries) CountOtherActiveAdmins(ctx context.Context, arg CountOtherActiveAdminsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOtherActiveAdmins, arg.TayfaID, arg.UserID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createMembership = `-- name: CreateMembership :exec
 
 INSERT INTO memberships (tayfa_id, user_id, role, status, joined_via, invite_id, invited_by_user_id, joined_at)
@@ -179,6 +198,75 @@ func (q *Queries) GetMembership(ctx context.Context, arg GetMembershipParams) (G
 	return i, err
 }
 
+const listMembersPage = `-- name: ListMembersPage :many
+SELECT m.user_id, m.role, m.status, m.muted_until, m.joined_at,
+       COALESCE(m.joined_at, m.created_at)::timestamptz AS sort_time
+FROM memberships m
+WHERE m.tayfa_id = $1
+  AND m.status = $2
+  AND (role_rank(m.role) < $3::int
+       OR (role_rank(m.role) = $3::int
+           AND (COALESCE(m.joined_at, m.created_at), m.user_id) > ($4::timestamptz, $5::uuid)))
+ORDER BY role_rank(m.role) DESC, COALESCE(m.joined_at, m.created_at), m.user_id
+LIMIT $6
+`
+
+type ListMembersPageParams struct {
+	TayfaID     pgtype.UUID
+	Status      string
+	AfterRank   int32
+	AfterTime   pgtype.Timestamptz
+	AfterUserID pgtype.UUID
+	PageSize    int32
+}
+
+type ListMembersPageRow struct {
+	UserID     pgtype.UUID
+	Role       string
+	Status     string
+	MutedUntil pgtype.Timestamptz
+	JoinedAt   pgtype.Timestamptz
+	SortTime   pgtype.Timestamptz
+}
+
+// Üye listesi: önce rol (yönetici başta), sonra katılım zamanı, sonra
+// kullanıcı ID'si. Katılmadan banlanan kişinin katılım zamanı yoktur; onun
+// yerine başvuru zamanı kullanılır. Sayfa imleci (after_rank, after_time,
+// after_user_id); ilk sayfa için after_rank = 4.
+func (q *Queries) ListMembersPage(ctx context.Context, arg ListMembersPageParams) ([]ListMembersPageRow, error) {
+	rows, err := q.db.Query(ctx, listMembersPage,
+		arg.TayfaID,
+		arg.Status,
+		arg.AfterRank,
+		arg.AfterTime,
+		arg.AfterUserID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMembersPageRow{}
+	for rows.Next() {
+		var i ListMembersPageRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Role,
+			&i.Status,
+			&i.MutedUntil,
+			&i.JoinedAt,
+			&i.SortTime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMemberships = `-- name: ListMemberships :many
 SELECT m.user_id, m.role, m.status, m.joined_via, m.invite_id,
        m.invited_by_user_id, i.created_by AS invite_created_by,
@@ -237,6 +325,69 @@ func (q *Queries) ListMemberships(ctx context.Context, arg ListMembershipsParams
 			&i.InviteCreatedBy,
 			&i.MutedUntil,
 			&i.JoinedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingPage = `-- name: ListPendingPage :many
+SELECT m.user_id, m.role, m.joined_via, m.invite_id,
+       COALESCE(m.invited_by_user_id, i.created_by)::uuid AS inviter_user_id,
+       m.created_at
+FROM memberships m
+LEFT JOIN invites i ON i.tayfa_id = m.tayfa_id AND i.id = m.invite_id
+WHERE m.tayfa_id = $1
+  AND m.status = 'pending'
+  AND (m.created_at, m.user_id) > ($2::timestamptz, $3::uuid)
+ORDER BY m.created_at, m.user_id
+LIMIT $4
+`
+
+type ListPendingPageParams struct {
+	TayfaID     pgtype.UUID
+	AfterTime   pgtype.Timestamptz
+	AfterUserID pgtype.UUID
+	PageSize    int32
+}
+
+type ListPendingPageRow struct {
+	UserID        pgtype.UUID
+	Role          string
+	JoinedVia     string
+	InviteID      pgtype.UUID
+	InviterUserID pgtype.UUID
+	CreatedAt     pgtype.Timestamptz
+}
+
+// Bekleyen başvurular, eskiden yeniye; kimin davetiyle geldiği: doğrudan
+// davet eden ya da davet linkini açan.
+func (q *Queries) ListPendingPage(ctx context.Context, arg ListPendingPageParams) ([]ListPendingPageRow, error) {
+	rows, err := q.db.Query(ctx, listPendingPage,
+		arg.TayfaID,
+		arg.AfterTime,
+		arg.AfterUserID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPendingPageRow{}
+	for rows.Next() {
+		var i ListPendingPageRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Role,
+			&i.JoinedVia,
+			&i.InviteID,
+			&i.InviterUserID,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
