@@ -62,6 +62,9 @@ spec:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { memory: 768Mi }
 ---
+# Veritabanları template1'den oluşturulur; initdb onu zaten ICU tr-TR ile
+# kurduğu için yerel ayar aynıdır. (template alanı burada yazılmaz: kustomize'ın
+# image dönüştürücüsü spec.template'i pod şablonu sanıp hata veriyor.)
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
 metadata:
@@ -71,7 +74,6 @@ spec:
   name: core
   owner: core
   ensure: present
-  template: template0
   encoding: UTF8
   localeProvider: icu
   icuLocale: tr-TR
@@ -89,7 +91,6 @@ spec:
   name: chat
   owner: chat
   ensure: present
-  template: template0
   encoding: UTF8
   localeProvider: icu
   icuLocale: tr-TR
