@@ -68,6 +68,27 @@ services:
     environment:
       <<: *env
       IDENTITY_GRPC_ADDR: identity:9090
+      DB_HOST: postgres
+      DB_NAME: core
+      DB_USER: postgres
+      DB_PASSWORD: yerel
+      DB_SSLMODE: disable
+    depends_on:
+      core-migrate: { condition: service_completed_successfully }
+
+  core-migrate:
+    build:
+      context: .
+      args: { SERVICE: core }
+    command: ["migrate"]
+    environment:
+      DB_HOST: postgres
+      DB_NAME: core
+      DB_USER: postgres
+      DB_PASSWORD: yerel
+      DB_SSLMODE: disable
+    depends_on:
+      postgres: { condition: service_healthy }
 
   chat:
     <<: *service
@@ -80,7 +101,8 @@ services:
 
   # Yerel geliştirme ve store testleri için Postgres. Cluster'daki CNPG
   # image'ı tek başına başlatılamaz; aynı ana ve ara sürümdeki resmi image
-  # kullanılır (PostGIS core'a geçince eklenir). Yalnızca bu makineden erişilir.
+  # kullanılır (PostGIS core'a geçince eklenir). identity ve core veritabanları
+  # ilk açılışta oluşur. Yalnızca bu makineden erişilir.
   #   make test-db
   #   TEST_DATABASE_URL=postgres://postgres:yerel@127.0.0.1:5432/postgres?sslmode=disable make test
   # Parola yalnızca yerel, atılabilir bir veritabanı içindir.
@@ -92,6 +114,8 @@ services:
       POSTGRES_INITDB_ARGS: "--locale-provider=icu --icu-locale=tr-TR --locale=C.UTF-8"
     ports:
       - "127.0.0.1:5432:5432"
+    volumes:
+      - ./scripts/postgres-init.sql:/docker-entrypoint-initdb.d/core.sql:ro
     tmpfs:
       - /var/lib/postgresql
     healthcheck:
