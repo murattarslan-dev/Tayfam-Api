@@ -12,6 +12,9 @@ resources:
   # SOPS ile şifreli; Flux uygularken cluster'daki age anahtarıyla çözer
   # (deploy/clusters/home, docs/runbooks/sops.md).
   - secrets/identity-signing-key.sops.yaml
+  - secrets/identity-db.sops.yaml
+  - secrets/core-db.sops.yaml
+  - secrets/chat-db.sops.yaml
 
 configMapGenerator:
   - name: tayfam-env

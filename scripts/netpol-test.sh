@@ -76,21 +76,25 @@ run_inside "3) gateway'in içinden:" gateway \
   ACIK   "tcp://identity:9090" \
   ACIK   "tcp://core:9090" \
   ACIK   "tcp://chat:9090" \
+  KAPALI "tcp://tayfam-pg-rw:5432" \
   KAPALI "http://example.com"
 
 run_inside "4) cloudflared'in içinden:" cloudflared \
   ACIK   "http://gateway:8080/v1/status" \
   KAPALI "tcp://identity:9090" \
   KAPALI "tcp://core:9090" \
-  KAPALI "tcp://chat:9090"
+  KAPALI "tcp://chat:9090" \
+  KAPALI "tcp://tayfam-pg-rw:5432"
 
-run_inside "5) core'un içinden (yalnızca identity'ye, açık anahtar için):" core \
+run_inside "5) core'un içinden (identity'ye açık anahtar için, Postgres'e):" core \
   ACIK   "tcp://identity:9090" \
+  ACIK   "tcp://tayfam-pg-rw:5432" \
   KAPALI "tcp://chat:9090" \
   KAPALI "http://gateway:8080/v1/status" \
   KAPALI "http://example.com"
 
-run_inside "6) identity'nin içinden (hiçbir yere):" identity \
+run_inside "6) identity'nin içinden (yalnızca Postgres'e):" identity \
+  ACIK   "tcp://tayfam-pg-rw:5432" \
   KAPALI "tcp://core:9090" \
   KAPALI "tcp://chat:9090" \
   KAPALI "http://gateway:8080/v1/status" \
