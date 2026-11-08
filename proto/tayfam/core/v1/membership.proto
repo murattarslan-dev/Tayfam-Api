@@ -1,0 +1,438 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+// MembershipService handles joining a tayfa (join code, invite link), invite
+// links, join requests and moderation of members (ADR-0004, data model v14
+// "Tayfaya davet", "Rol hiyerarşisi").
+//
+// Every method needs the caller's access token; there are no open methods.
+// The caller is always the verified token subject (auth.CallerFrom); no
+// request field can act on behalf of another user. Errors carry a
+// google.rpc.ErrorInfo detail with domain "core.tayfam.app" and a reason
+// from ErrorReason (errors.proto).
+//
+// Common rules for methods that take a tayfa_id:
+//   - tayfa_id is a UUID string; anything else is ERROR_REASON_VALIDATION.
+//   - A caller who is not an active member gets ERROR_REASON_TAYFA_NOT_FOUND,
+//     the same as for an unknown tayfa (the tayfa's existence never leaks).
+//     LeaveTayfa and GetMembership are the only exceptions, noted on them.
+//   - An active member whose role is too low gets
+//     ERROR_REASON_PERMISSION_DENIED (permission table, ADR-0004); a muted
+//     member gets ERROR_REASON_MUTED for actions denied to muted members.
+//   - Actions on another member also obey the role hierarchy: the target's
+//     role must be lower than the caller's (ERROR_REASON_ROLE_HIERARCHY).
+//     The memberships trigger checks the same rule again in the database.
+//   - Changes to a read-only tayfa (suspended, archived, waiting for
+//     deletion) fail with ERROR_REASON_TAYFA_READ_ONLY.
+//   - user_id fields are UUID strings (ERROR_REASON_VALIDATION otherwise). A
+//     target user without a matching membership gets
+//     ERROR_REASON_MEMBER_NOT_FOUND.
+//
+// Paging: page_size 0 means 50; values above 100 are treated as 100;
+// negative values are ERROR_REASON_VALIDATION. page_token is opaque, only
+// valid for the same method and request fields; a bad token is
+// ERROR_REASON_VALIDATION. An empty next_page_token means the last page.
+service MembershipService {
+  // JoinByCode joins the tayfa that owns the join code. Any signed-in user
+  // may call it. The resulting membership is ACTIVE when the tayfa's
+  // join_policy is OPEN and PENDING when it is APPROVAL.
+  //
+  // Errors: ERROR_REASON_INVALID_JOIN_CODE (malformed, unknown, rotated,
+  // deleted or read-only tayfa, or the caller is banned there; all the same
+  // on purpose), ERROR_REASON_RATE_LIMITED (per-user attempt limit),
+  // ERROR_REASON_ALREADY_MEMBER, ERROR_REASON_ALREADY_PENDING.
+  rpc JoinByCode(JoinByCodeRequest) returns (JoinByCodeResponse);
+
+  // CreateInviteLink creates an invite link for the tayfa. Allowed for
+  // active members the permission table allows (data model v14: every
+  // active member; not muted or banned members). The token is returned only
+  // here, once; core stores only its SHA-256 hash and can never show it
+  // again.
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY,
+  // ERROR_REASON_VALIDATION.
+  rpc CreateInviteLink(CreateInviteLinkRequest) returns (CreateInviteLinkResponse);
+
+  // ListInviteLinks lists the tayfa's live invite links (not revoked, not
+  // expired, not exhausted), newest first, at most 100. Callers allowed to
+  // revoke any link (admin) see every live link of the tayfa; other active
+  // members the permission table allows see only links they created.
+  // Tokens are never returned.
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED.
+  rpc ListInviteLinks(ListInviteLinksRequest) returns (ListInviteLinksResponse);
+
+  // RevokeInviteLink revokes an invite link at once. A member may revoke
+  // links they created; callers allowed to revoke any link (admin) may
+  // revoke every link of the tayfa. Revoking an already revoked link
+  // succeeds and changes nothing. Allowed on a read-only tayfa (it only
+  // narrows access).
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_INVITE_NOT_FOUND (unknown ID, another tayfa's link, or
+  // another member's link the caller may not revoke).
+  rpc RevokeInviteLink(RevokeInviteLinkRequest) returns (RevokeInviteLinkResponse);
+
+  // PreviewInvite returns the narrow view of the tayfa behind an invite
+  // token, so the client can ask "join X?". Any signed-in user may call it.
+  // It does not use up the link. It returns only the fields of
+  // PreviewInviteResponse, never the full Tayfa.
+  //
+  // Errors: ERROR_REASON_INVITE_INVALID, ERROR_REASON_INVITE_EXPIRED,
+  // ERROR_REASON_INVITE_REVOKED, ERROR_REASON_INVITE_EXHAUSTED,
+  // ERROR_REASON_BANNED, ERROR_REASON_VALIDATION.
+  rpc PreviewInvite(PreviewInviteRequest) returns (PreviewInviteResponse);
+
+  // JoinByInvite joins the tayfa behind an invite token. Any signed-in user
+  // may call it. The link's use_count grows by one only when a membership
+  // is created; the check and the increment happen in one transaction, so
+  // a link with max_uses N admits at most N users.
+  //
+  // The resulting status follows data model v14 "Tayfaya davet": ACTIVE if
+  // join_policy is OPEN, or if the link's creator is, at the time of
+  // joining, an active moderator or admin of the tayfa; PENDING otherwise.
+  //
+  // Errors: as PreviewInvite, plus ERROR_REASON_ALREADY_MEMBER and
+  // ERROR_REASON_ALREADY_PENDING.
+  rpc JoinByInvite(JoinByInviteRequest) returns (JoinByInviteResponse);
+
+  // ListMembers lists the tayfa's members with the given status. Any active
+  // member may list ACTIVE members; only roles the permission table allows
+  // to ban (moderator and admin) may list BANNED members. Order: role
+  // (admin first), then join_time, then user_id.
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_VALIDATION (status other than ACTIVE or BANNED; use
+  // ListPending for join requests).
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
+
+  // ListPending lists join requests, oldest first, with where each request
+  // came from. Moderator and admin (permission table).
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_VALIDATION.
+  rpc ListPending(ListPendingRequest) returns (ListPendingResponse);
+
+  // ApproveMember makes a PENDING membership ACTIVE. Moderator and admin.
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY,
+  // ERROR_REASON_MEMBER_NOT_FOUND (the user has no pending request).
+  rpc ApproveMember(ApproveMemberRequest) returns (ApproveMemberResponse);
+
+  // RejectMember deletes a PENDING membership; the user may ask again
+  // later. Moderator and admin.
+  //
+  // Errors: as ApproveMember.
+  rpc RejectMember(RejectMemberRequest) returns (RejectMemberResponse);
+
+  // ChangeRole changes an ACTIVE member's role. Admin only (permission
+  // table). The target's current role must be lower than the caller's and
+  // the new role must not be higher than the caller's role (veri modeli
+  // v14), so an admin can promote a moderator or member to ADMIN but cannot
+  // change another admin. A caller may also lower their own role (target =
+  // caller), unless they are the last active admin.
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY,
+  // ERROR_REASON_MEMBER_NOT_FOUND, ERROR_REASON_ROLE_HIERARCHY,
+  // ERROR_REASON_LAST_ADMIN, ERROR_REASON_VALIDATION (new_role unspecified
+  // or equal to the current role).
+  rpc ChangeRole(ChangeRoleRequest) returns (ChangeRoleResponse);
+
+  // MuteMember mutes an ACTIVE member until the given time: they keep
+  // reading but cannot write (messages, answers, questions, polls, invites).
+  // Moderator and admin, on lower roles only. Muting again replaces the
+  // end time.
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY,
+  // ERROR_REASON_MEMBER_NOT_FOUND, ERROR_REASON_ROLE_HIERARCHY,
+  // ERROR_REASON_VALIDATION (expire_time not in the allowed range).
+  rpc MuteMember(MuteMemberRequest) returns (MuteMemberResponse);
+
+  // UnmuteMember ends a mute at once. Moderator and admin, on lower roles
+  // only. Unmuting a member who is not muted succeeds and changes nothing.
+  //
+  // Errors: as MuteMember, without the expire_time check.
+  rpc UnmuteMember(UnmuteMemberRequest) returns (UnmuteMemberResponse);
+
+  // BanMember bans an ACTIVE or PENDING member. The membership row is kept
+  // with status BANNED so the user cannot join again by code or invite.
+  // Moderator and admin, on lower roles only (a pending user counts as
+  // MEMBER).
+  //
+  // Errors: as UnmuteMember.
+  rpc BanMember(BanMemberRequest) returns (BanMemberResponse);
+
+  // RemoveMember removes an ACTIVE member; they may join again later.
+  // Moderator and admin, on lower roles only.
+  //
+  // Errors: as BanMember.
+  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
+
+  // LeaveTayfa ends the caller's own ACTIVE membership, or withdraws the
+  // caller's own PENDING request. Allowed on a read-only tayfa. A BANNED
+  // membership cannot be left (that would erase the ban); for it, and for
+  // no membership, the answer is ERROR_REASON_TAYFA_NOT_FOUND.
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_LAST_ADMIN.
+  rpc LeaveTayfa(LeaveTayfaRequest) returns (LeaveTayfaResponse);
+
+  // GetMembership returns the caller's own membership in the tayfa, in any
+  // status, for chat's channel access checks (ADR-0009; chat forwards the
+  // user's token with auth.ForwardToken). user_id must equal the caller;
+  // asking about another user is ERROR_REASON_PERMISSION_DENIED. No
+  // membership, or an unknown or deleted tayfa, is
+  // ERROR_REASON_TAYFA_NOT_FOUND.
+  rpc GetMembership(GetMembershipRequest) returns (GetMembershipResponse);
+}
+
+// Role in a tayfa. The numbers are the hierarchy ranks (ADR-0004): a higher
+// number outranks a lower one.
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_MEMBER = 1;
+  ROLE_MODERATOR = 2;
+  ROLE_ADMIN = 3;
+}
+
+enum MembershipStatus {
+  MEMBERSHIP_STATUS_UNSPECIFIED = 0;
+  // Directly invited by a friend; not a member until accepted. Not produced
+  // by any method of this version.
+  MEMBERSHIP_STATUS_INVITED = 1;
+  // Asked to join; waits for a moderator or admin.
+  MEMBERSHIP_STATUS_PENDING = 2;
+  MEMBERSHIP_STATUS_ACTIVE = 3;
+  MEMBERSHIP_STATUS_BANNED = 4;
+}
+
+// Membership is one user's membership in one tayfa.
+message Membership {
+  string tayfa_id = 1;
+  string user_id = 2;
+  Role role = 3;
+  MembershipStatus status = 4;
+  // When the membership became ACTIVE; unset otherwise.
+  google.protobuf.Timestamp join_time = 5;
+  // End of the current mute; unset when not muted. Filled only when the
+  // caller is the member themself or a moderator or admin of the tayfa;
+  // other members never see who is muted.
+  google.protobuf.Timestamp mute_expire_time = 6;
+}
+
+// PendingMember is a join request as moderators see it.
+message PendingMember {
+  // Status is always MEMBERSHIP_STATUS_PENDING.
+  Membership membership = 1;
+  // When the user asked to join.
+  google.protobuf.Timestamp request_time = 2;
+  JoinSource source = 3;
+  // Who invited the user: the direct inviter, or the creator of the invite
+  // link. Empty for code joins, or if that user's account was deleted.
+  string inviter_user_id = 4;
+  // The invite link used; empty unless source is JOIN_SOURCE_INVITE_LINK
+  // or the link has since been deleted.
+  string invite_id = 5;
+}
+
+// How a user came to the tayfa (memberships.joined_via).
+enum JoinSource {
+  JOIN_SOURCE_UNSPECIFIED = 0;
+  JOIN_SOURCE_CREATOR = 1;
+  JOIN_SOURCE_INVITE_LINK = 2;
+  JOIN_SOURCE_DIRECT_INVITE = 3;
+  JOIN_SOURCE_CODE = 4;
+  JOIN_SOURCE_DISCOVER = 5;
+}
+
+// InviteLink describes an invite link. It never holds the token or its hash.
+message InviteLink {
+  string invite_id = 1;
+  string tayfa_id = 2;
+  string created_by_user_id = 3;
+  google.protobuf.Timestamp create_time = 4;
+  google.protobuf.Timestamp expire_time = 5;
+  int32 max_uses = 6;
+  int32 use_count = 7;
+  // Unset unless revoked.
+  google.protobuf.Timestamp revoke_time = 8;
+}
+
+message JoinByCodeRequest {
+  // The tayfa's join code. Case-insensitive; the server upper-cases it and
+  // then requires 8 characters from [2-9A-HJ-NP-Z]. Never logged.
+  string code = 1;
+}
+
+message JoinByCodeResponse {
+  // The caller's new membership: ACTIVE or PENDING.
+  Membership membership = 1;
+}
+
+message CreateInviteLinkRequest {
+  string tayfa_id = 1;
+  // How long the link stays valid. Required; from 1 hour to 30 days.
+  google.protobuf.Duration ttl = 2;
+  // How many users may join with the link. Required; from 1 to 100.
+  int32 max_uses = 3;
+}
+
+message CreateInviteLinkResponse {
+  InviteLink invite = 1;
+  // The secret part of the link: 32 random bytes (crypto/rand), base64url
+  // without padding (43 characters). Returned only here, once. Never
+  // logged, stored in clear or put in audit logs or events.
+  string token = 2;
+}
+
+message ListInviteLinksRequest {
+  string tayfa_id = 1;
+}
+
+message ListInviteLinksResponse {
+  repeated InviteLink invites = 1;
+}
+
+message RevokeInviteLinkRequest {
+  string tayfa_id = 1;
+  string invite_id = 2;
+}
+
+message RevokeInviteLinkResponse {}
+
+message PreviewInviteRequest {
+  // Invite token from the link. Never logged.
+  string token = 1;
+}
+
+// PreviewInviteResponse is the narrow view of a tayfa that an invite link
+// reveals to anyone holding it. Do not add fields from Tayfa here without a
+// review: whoever has the link (including someone it leaked to) sees them.
+message PreviewInviteResponse {
+  string tayfa_id = 1;
+  string name = 2;
+  // Number of ACTIVE members.
+  int32 member_count = 3;
+  // True when the caller is already an ACTIVE member or has a PENDING
+  // request in this tayfa.
+  bool already_member = 4;
+}
+
+message JoinByInviteRequest {
+  // Invite token from the link. Never logged.
+  string token = 1;
+}
+
+message JoinByInviteResponse {
+  // The caller's new membership: ACTIVE or PENDING.
+  Membership membership = 1;
+}
+
+message ListMembersRequest {
+  string tayfa_id = 1;
+  // MEMBERSHIP_STATUS_ACTIVE (also when unspecified) or
+  // MEMBERSHIP_STATUS_BANNED.
+  MembershipStatus status = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListMembersResponse {
+  repeated Membership members = 1;
+  string next_page_token = 2;
+}
+
+message ListPendingRequest {
+  string tayfa_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListPendingResponse {
+  repeated PendingMember pending = 1;
+  string next_page_token = 2;
+}
+
+message ApproveMemberRequest {
+  string tayfa_id = 1;
+  string user_id = 2;
+}
+
+message ApproveMemberResponse {
+  Membership membership = 1;
+}
+
+message RejectMemberRequest {
+  string tayfa_id = 1;
+  string user_id = 2;
+}
+
+message RejectMemberResponse {}
+
+message ChangeRoleRequest {
+  string tayfa_id = 1;
+  string user_id = 2;
+  Role new_role = 3;
+}
+
+message ChangeRoleResponse {
+  Membership membership = 1;
+}
+
+message MuteMemberRequest {
+  string tayfa_id = 1;
+  string user_id = 2;
+  // When the mute ends. Required; after now and at most 30 days ahead.
+  google.protobuf.Timestamp expire_time = 3;
+}
+
+message MuteMemberResponse {
+  Membership membership = 1;
+}
+
+message UnmuteMemberRequest {
+  string tayfa_id = 1;
+  string user_id = 2;
+}
+
+message UnmuteMemberResponse {
+  Membership membership = 1;
+}
+
+message BanMemberRequest {
+  string tayfa_id = 1;
+  string user_id = 2;
+}
+
+message BanMemberResponse {}
+
+message RemoveMemberRequest {
+  string tayfa_id = 1;
+  string user_id = 2;
+}
+
+message RemoveMemberResponse {}
+
+message LeaveTayfaRequest {
+  string tayfa_id = 1;
+}
+
+message LeaveTayfaResponse {}
+
+message GetMembershipRequest {
+  string tayfa_id = 1;
+  // Must equal the caller's user ID.
+  string user_id = 2;
+}
+
+message GetMembershipResponse {
+  // The caller's membership in any status. mute_expire_time is filled.
+  Membership membership = 1;
+}
