@@ -119,3 +119,76 @@ spec:
             matchLabels: { app.kubernetes.io/name: identity }
       ports:
         - { protocol: TCP, port: 9090 }
+---
+# Postgres (CloudNativePG instance ve initdb pod'ları): yalnızca kendi
+# veritabanına bağlanan üç servisten 5432 ve operatörden durum portu (8000).
+# Hangi kullanıcının hangi veritabanına girebileceğini pg_hba ayrıca sınırlar.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres
+spec:
+  podSelector:
+    matchLabels: { cnpg.io/cluster: tayfam-pg }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - { key: app.kubernetes.io/name, operator: In, values: [identity, core, chat] }
+      ports:
+        - { protocol: TCP, port: 5432 }
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: cnpg-system }
+          podSelector:
+            matchLabels: { app.kubernetes.io/name: cloudnative-pg }
+      ports:
+        - { protocol: TCP, port: 8000 }
+  # Instance yöneticisi durumunu Kubernetes API'sine yazar. Servis adresi
+  # (10.43.0.1:443, k3s varsayılanı) ve DNAT sonrası API server portu (6443).
+  # İnternete başka çıkış yok; yedekler için R2 çıkışı yedekleme PR'ında eklenir.
+  egress:
+    - to:
+        - ipBlock: { cidr: 10.43.0.1/32 }
+      ports:
+        - { protocol: TCP, port: 443 }
+    - ports:
+        - { protocol: TCP, port: 6443 }
+---
+# Servisler → Postgres. Ayrı kullanıcılar ve pg_hba, her servisi kendi
+# veritabanıyla sınırlar (ADR-0002).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-clients
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app.kubernetes.io/name, operator: In, values: [identity, core, chat] }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { cnpg.io/cluster: tayfam-pg }
+      ports:
+        - { protocol: TCP, port: 5432 }
+---
+# identity → internet 443: Google'ın (ileride Apple'ın) ID token imzalama
+# anahtarları (ADR-0004, ADR-0006). Cluster içi ve özel adresler hariç;
+# identity'den başka servislere bu kuralla çıkılamaz.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: identity-egress-internet
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: identity }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, 127.0.0.0/8]
+      ports:
+        - { protocol: TCP, port: 443 }

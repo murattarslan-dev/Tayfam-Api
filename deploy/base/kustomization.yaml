@@ -9,3 +9,4 @@ resources:
   - chat.yaml
   - cloudflared.yaml
   - networkpolicies.yaml
+  - postgres.yaml

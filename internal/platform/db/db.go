@@ -49,8 +49,8 @@ func LoadConfig(c *config.Loader) Config {
 	}
 }
 
-// URL returns the connection string. The password is escaped and never
-// logged; String() hides it.
+// URL returns the connection string, password included. It is passed only
+// to the driver and never logged.
 func (c Config) URL() string {
 	u := url.URL{
 		Scheme: "postgres",
@@ -63,11 +63,6 @@ func (c Config) URL() string {
 	q.Set("connect_timeout", "5")
 	u.RawQuery = q.Encode()
 	return u.String()
-}
-
-// String describes the target without the password.
-func (c Config) String() string {
-	return fmt.Sprintf("%s@%s:%d/%s", c.User, c.Host, c.Port, c.Name)
 }
 
 // Open returns a connection pool. Every session has a statement timeout so a

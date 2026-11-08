@@ -19,6 +19,31 @@ spec:
         runAsUser: 65532
         runAsGroup: 65532
         seccompProfile: { type: RuntimeDefault }
+      # Migration'lar servis binary'sinin "migrate" alt komutuyla, servis
+      # başlamadan önce çalışır; advisory lock aynı anda tek migration'ı
+      # garanti eder (ADR-0006).
+      initContainers:
+        - name: migrate
+          image: ghcr.io/murattarslan-dev/tayfam-identity
+          args: ["migrate"]
+          envFrom:
+            - configMapRef: { name: tayfam-env }
+          env:
+            - { name: DB_HOST, value: tayfam-pg-rw }
+            - { name: DB_NAME, value: identity }
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: { name: identity-db, key: username }
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: identity-db, key: password }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
       containers:
         - name: identity
           image: ghcr.io/murattarslan-dev/tayfam-identity
@@ -32,6 +57,17 @@ spec:
             - name: AUTH_SIGNING_KEY
               valueFrom:
                 secretKeyRef: { name: identity-signing-key, key: AUTH_SIGNING_KEY }
+            - name: IDENTITY_BIRTHDATE_KEYS
+              valueFrom:
+                secretKeyRef: { name: identity-birthdate-key, key: IDENTITY_BIRTHDATE_KEYS }
+            - { name: DB_HOST, value: tayfam-pg-rw }
+            - { name: DB_NAME, value: identity }
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: { name: identity-db, key: username }
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: identity-db, key: password }
           ports:
             - { name: grpc, containerPort: 9090 }
             - { name: ops, containerPort: 8081 }
@@ -42,8 +78,8 @@ spec:
             httpGet: { path: /readyz, port: ops }
             periodSeconds: 5
           resources:
-            requests: { cpu: 10m, memory: 16Mi }
-            limits: { memory: 64Mi }
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

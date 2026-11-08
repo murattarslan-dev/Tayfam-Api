@@ -34,6 +34,31 @@ services:
     environment:
       <<: *env
       AUTH_SIGNING_KEY: ${AUTH_SIGNING_KEY:?make up ile başlatın; anahtarı o üretir}
+      IDENTITY_BIRTHDATE_KEYS: ${IDENTITY_BIRTHDATE_KEYS:?make up ile başlatın; anahtarı o üretir}
+      DB_HOST: postgres
+      DB_NAME: identity
+      DB_USER: postgres
+      DB_PASSWORD: yerel
+      DB_SSLMODE: disable
+      GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-yerel-gelistirme.apps.googleusercontent.com}
+      CONSENT_PRIVACY_NOTICE_VERSION: "2026-11-08"
+      CONSENT_TERMS_VERSION: "2026-11-08"
+    depends_on:
+      identity-migrate: { condition: service_completed_successfully }
+
+  identity-migrate:
+    build:
+      context: .
+      args: { SERVICE: identity }
+    command: ["migrate"]
+    environment:
+      DB_HOST: postgres
+      DB_NAME: identity
+      DB_USER: postgres
+      DB_PASSWORD: yerel
+      DB_SSLMODE: disable
+    depends_on:
+      postgres: { condition: service_healthy }
 
   core:
     <<: *service
@@ -63,8 +88,13 @@ services:
     image: postgres:18.6-trixie
     environment:
       POSTGRES_PASSWORD: yerel
+      POSTGRES_DB: identity
       POSTGRES_INITDB_ARGS: "--locale-provider=icu --icu-locale=tr-TR --locale=C.UTF-8"
     ports:
       - "127.0.0.1:5432:5432"
     tmpfs:
       - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 2s
+      retries: 30
