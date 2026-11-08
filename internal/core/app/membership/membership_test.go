@@ -568,8 +568,8 @@ func TestRoleHierarchy(t *testing.T) {
 		wantErr(t, name, err, apperr.ErrRoleHierarchy)
 	}
 	for name, err := range map[string]error{
-		"üye susturamaz":             second(e.svc.MuteMember(ctx, member, tf.id, member2, soon)),
-		"üye banlayamaz":             e.svc.BanMember(ctx, member, tf.id, member2),
+		"üye susturamaz":        second(e.svc.MuteMember(ctx, member, tf.id, member2, soon)),
+		"üye banlayamaz":        e.svc.BanMember(ctx, member, tf.id, member2),
 		"moderatör rol veremez": second(e.svc.ChangeRole(ctx, mod, tf.id, member, authz.Moderator)),
 	} {
 		wantErr(t, name, err, apperr.ErrPermissionDenied)
