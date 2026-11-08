@@ -1,0 +1,257 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/membership.proto";
+
+// TayfaService creates tayfas and manages their settings, modules, join
+// code and deletion (ADR-0004, ADR-0009, data model v14 "Tayfa",
+// "Tayfa yönetimi"). Only gateway calls it, with the user's access token.
+//
+// Every method needs the caller's access token; there are no open methods.
+// Errors carry a google.rpc.ErrorInfo detail with domain "core.tayfam.app"
+// and a reason from ErrorReason (errors.proto). The common rules for
+// tayfa_id, membership checks, permissions and read-only tayfas are the
+// same as in MembershipService (membership.proto):
+//   - A caller who is not an ACTIVE member gets
+//     ERROR_REASON_TAYFA_NOT_FOUND, the same as for an unknown tayfa.
+//   - An active member whose role is too low gets
+//     ERROR_REASON_PERMISSION_DENIED.
+//   - Changes to a read-only tayfa fail with ERROR_REASON_TAYFA_READ_ONLY.
+service TayfaService {
+  // CreateTayfa creates a tayfa with the caller as its only member, an
+  // ACTIVE admin (JOIN_SOURCE_CREATOR). Any signed-in user may call it, at
+  // most once per 24 hours (per-IP limit is in gateway). Every module
+  // starts enabled. A repeat with the same client_request_id by the same
+  // caller returns the tayfa created the first time and creates nothing.
+  //
+  // Errors: ERROR_REASON_VALIDATION, ERROR_REASON_TAYFA_CREATE_LIMIT.
+  rpc CreateTayfa(CreateTayfaRequest) returns (CreateTayfaResponse);
+
+  // GetTayfa returns a tayfa to its ACTIVE members; anyone else gets
+  // ERROR_REASON_TAYFA_NOT_FOUND. Works on read-only tayfas.
+  rpc GetTayfa(GetTayfaRequest) returns (GetTayfaResponse);
+
+  // ListMyTayfas lists the caller's ACTIVE memberships and PENDING join
+  // requests, most recent first. Invited and banned memberships are not
+  // listed. A pending entry has no Tayfa, only the tayfa's ID and name.
+  //
+  // Errors: ERROR_REASON_VALIDATION (page size or token).
+  rpc ListMyTayfas(ListMyTayfasRequest) returns (ListMyTayfasResponse);
+
+  // UpdateTayfa changes the fields named in update_mask. Admin only.
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY,
+  // ERROR_REASON_VALIDATION.
+  rpc UpdateTayfa(UpdateTayfaRequest) returns (UpdateTayfaResponse);
+
+  // SetModule turns one module on or off. Endpoints of a disabled module
+  // refuse requests. Setting the current value succeeds and changes
+  // nothing. Admin only.
+  //
+  // Errors: as UpdateTayfa.
+  rpc SetModule(SetModuleRequest) returns (SetModuleResponse);
+
+  // RotateJoinCode replaces the join code with a new random one; the old
+  // code stops working at once. Admin only.
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY.
+  rpc RotateJoinCode(RotateJoinCodeRequest) returns (RotateJoinCodeResponse);
+
+  // RequestDeletion schedules the tayfa for deletion 72 hours from now. The
+  // tayfa is read-only until then; a background job soft-deletes it when
+  // the time comes. Admin only.
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY (suspended or
+  // archived), ERROR_REASON_DELETION_ALREADY_REQUESTED.
+  rpc RequestDeletion(RequestDeletionRequest) returns (RequestDeletionResponse);
+
+  // CancelDeletion cancels a pending deletion. Any admin may cancel, not
+  // only the one who asked. Allowed while the tayfa is read-only because of
+  // the pending deletion.
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED, ERROR_REASON_DELETION_NOT_REQUESTED.
+  rpc CancelDeletion(CancelDeletionRequest) returns (CancelDeletionResponse);
+}
+
+enum JoinPolicy {
+  JOIN_POLICY_UNSPECIFIED = 0;
+  // New members wait for a moderator or admin. The default.
+  JOIN_POLICY_APPROVAL = 1;
+  // New members become active at once.
+  JOIN_POLICY_OPEN = 2;
+}
+
+// Event types; a tayfa's interests use the same values as events.type.
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  EVENT_TYPE_CONVOY = 1;
+  EVENT_TYPE_CAMP = 2;
+  EVENT_TYPE_HIKE = 3;
+  EVENT_TYPE_FISHING = 4;
+  EVENT_TYPE_GAMING = 5;
+  EVENT_TYPE_SPORTS = 6;
+  EVENT_TYPE_GENERAL = 7;
+}
+
+// Modules a tayfa can turn on or off (tayfa_modules).
+enum Module {
+  MODULE_UNSPECIFIED = 0;
+  MODULE_ANNOUNCEMENTS = 1;
+  MODULE_EVENTS = 2;
+  MODULE_QA = 3;
+  MODULE_POLLS = 4;
+}
+
+// Lifecycle of an inactive tayfa (tayfas.status).
+enum TayfaStatus {
+  TAYFA_STATUS_UNSPECIFIED = 0;
+  TAYFA_STATUS_ACTIVE = 1;
+  // Inactive; archived after 7 more days without activity.
+  TAYFA_STATUS_WARNED = 2;
+  // Archived; read-only.
+  TAYFA_STATUS_ARCHIVED = 3;
+}
+
+message ModuleState {
+  Module module = 1;
+  bool enabled = 2;
+}
+
+// Tayfa is the full view of a tayfa. Only its ACTIVE members ever receive
+// it; the invite preview uses its own narrow message (PreviewInviteResponse).
+message Tayfa {
+  string id = 1;
+  // 3–50 characters.
+  string name = 2;
+  // Up to 500 characters; may be empty.
+  string description = 3;
+  // Distinct values, in EventType order.
+  repeated EventType interests = 4;
+  JoinPolicy join_policy = 5;
+  // One entry per Module value, in Module order.
+  repeated ModuleState modules = 6;
+  TayfaStatus status = 7;
+  // Set while the platform has suspended the tayfa (read-only). The reason
+  // is never returned here.
+  google.protobuf.Timestamp suspend_time = 8;
+  // Set while a deletion is pending: when the tayfa will be deleted.
+  google.protobuf.Timestamp deletion_time = 9;
+  // Number of ACTIVE members.
+  int32 member_count = 10;
+  // Filled only for callers allowed to rotate the join code (admin); empty
+  // for everyone else. Never logged.
+  string join_code = 11;
+  google.protobuf.Timestamp create_time = 12;
+  google.protobuf.Timestamp update_time = 13;
+}
+
+message CreateTayfaRequest {
+  // 3–50 characters after trimming surrounding spaces.
+  string name = 1;
+  // Up to 500 characters; may be empty.
+  string description = 2;
+  // 0–7 distinct values; UNSPECIFIED or a repeated value is
+  // ERROR_REASON_VALIDATION.
+  repeated EventType interests = 3;
+  // UNSPECIFIED means JOIN_POLICY_APPROVAL.
+  JoinPolicy join_policy = 4;
+  // Required. A UUID the client generates once per create attempt and
+  // reuses on retry (offline write protection).
+  string client_request_id = 5;
+}
+
+message CreateTayfaResponse {
+  Tayfa tayfa = 1;
+}
+
+message GetTayfaRequest {
+  string tayfa_id = 1;
+}
+
+message GetTayfaResponse {
+  Tayfa tayfa = 1;
+  // The caller's role in this tayfa, so the client can show the right
+  // actions. The server checks permissions again on every call.
+  Role caller_role = 2;
+}
+
+message ListMyTayfasRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListMyTayfasResponse {
+  repeated MyTayfa tayfas = 1;
+  string next_page_token = 2;
+}
+
+// MyTayfa is one entry of the caller's tayfa list.
+message MyTayfa {
+  string tayfa_id = 1;
+  // Always set, also for pending requests.
+  string name = 2;
+  Role role = 3;
+  // MEMBERSHIP_STATUS_ACTIVE or MEMBERSHIP_STATUS_PENDING.
+  MembershipStatus status = 4;
+  // Set only when status is MEMBERSHIP_STATUS_ACTIVE.
+  Tayfa tayfa = 5;
+}
+
+message UpdateTayfaRequest {
+  string tayfa_id = 1;
+  // Same rules as CreateTayfaRequest.name.
+  string name = 2;
+  // Same rules as CreateTayfaRequest.description.
+  string description = 3;
+  // Replaces all interests. Same rules as CreateTayfaRequest.interests.
+  repeated EventType interests = 4;
+  // Must not be UNSPECIFIED when named in update_mask.
+  JoinPolicy join_policy = 5;
+  // Required, non-empty. Allowed paths: "name", "description", "interests",
+  // "join_policy". Any other path is ERROR_REASON_VALIDATION.
+  google.protobuf.FieldMask update_mask = 6;
+}
+
+message UpdateTayfaResponse {
+  Tayfa tayfa = 1;
+}
+
+message SetModuleRequest {
+  string tayfa_id = 1;
+  // Must not be UNSPECIFIED.
+  Module module = 2;
+  bool enabled = 3;
+}
+
+message SetModuleResponse {}
+
+message RotateJoinCodeRequest {
+  string tayfa_id = 1;
+}
+
+message RotateJoinCodeResponse {
+  // 8 characters from [2-9A-HJ-NP-Z], made with crypto/rand. Never logged.
+  string join_code = 1;
+}
+
+message RequestDeletionRequest {
+  string tayfa_id = 1;
+}
+
+message RequestDeletionResponse {
+  // When the tayfa will be deleted (now + 72 hours).
+  google.protobuf.Timestamp deletion_time = 1;
+}
+
+message CancelDeletionRequest {
+  string tayfa_id = 1;
+}
+
+message CancelDeletionResponse {}
