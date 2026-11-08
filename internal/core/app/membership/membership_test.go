@@ -77,7 +77,7 @@ var errValidation = errors.New("doğrulama hatası")
 
 func wantErr(t *testing.T, what string, err, want error) {
 	t.Helper()
-	if want == errValidation {
+	if errors.Is(want, errValidation) {
 		wantInvalid(t, what, err)
 		return
 	}
