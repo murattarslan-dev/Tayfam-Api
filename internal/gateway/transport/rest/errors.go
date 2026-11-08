@@ -1,0 +1,104 @@
+package rest
+
+import (
+	"log/slog"
+	"net"
+	"net/http"
+	"strings"
+
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/httpx"
+)
+
+type problem struct {
+	status int
+	code   string
+}
+
+// problemsByDomain maps each service's ErrorInfo reasons to problem types.
+// A reason is only trusted together with its service's domain, so one
+// service cannot produce another's problems.
+var problemsByDomain = map[string]map[string]problem{
+	"identity.tayfam.app": {
+		"ERROR_REASON_INVALID_CREDENTIALS":  {http.StatusUnauthorized, "invalid-credentials"},
+		"ERROR_REASON_UNSUPPORTED_PROVIDER": {http.StatusBadRequest, "unsupported-provider"},
+		"ERROR_REASON_AGE_BLOCKED":          {http.StatusForbidden, "age-blocked"},
+		"ERROR_REASON_INVALID_REFRESH":      {http.StatusUnauthorized, "invalid-refresh"},
+		"ERROR_REASON_REFRESH_CONFLICT":     {http.StatusConflict, "refresh-conflict"},
+		"ERROR_REASON_INVALID_BIRTH_DATE":   {http.StatusBadRequest, "invalid-birth-date"},
+		"ERROR_REASON_CONSENT_OUTDATED":     {http.StatusConflict, "consent-outdated"},
+		"ERROR_REASON_ALREADY_REGISTERED":   {http.StatusConflict, "already-registered"},
+		"ERROR_REASON_INVALID_DISPLAY_NAME": {http.StatusBadRequest, "invalid-display-name"},
+	},
+	// proto/tayfam/core/v1/errors.proto
+	"core.tayfam.app": {
+		"ERROR_REASON_VALIDATION":                 {http.StatusBadRequest, "invalid-request"},
+		"ERROR_REASON_TAYFA_NOT_FOUND":            {http.StatusNotFound, "tayfa-not-found"},
+		"ERROR_REASON_PERMISSION_DENIED":          {http.StatusForbidden, "permission-denied"},
+		"ERROR_REASON_MUTED":                      {http.StatusForbidden, "muted"},
+		"ERROR_REASON_TAYFA_READ_ONLY":            {http.StatusConflict, "tayfa-read-only"},
+		"ERROR_REASON_TAYFA_CREATE_LIMIT":         {http.StatusTooManyRequests, "tayfa-create-limit"},
+		"ERROR_REASON_RATE_LIMITED":               {http.StatusTooManyRequests, "rate-limited"},
+		"ERROR_REASON_INVALID_JOIN_CODE":          {http.StatusNotFound, "invalid-join-code"},
+		"ERROR_REASON_INVITE_INVALID":             {http.StatusNotFound, "invite-invalid"},
+		"ERROR_REASON_INVITE_EXPIRED":             {http.StatusGone, "invite-expired"},
+		"ERROR_REASON_INVITE_REVOKED":             {http.StatusGone, "invite-revoked"},
+		"ERROR_REASON_INVITE_EXHAUSTED":           {http.StatusGone, "invite-exhausted"},
+		"ERROR_REASON_INVITE_NOT_FOUND":           {http.StatusNotFound, "invite-not-found"},
+		"ERROR_REASON_ALREADY_MEMBER":             {http.StatusConflict, "already-member"},
+		"ERROR_REASON_ALREADY_PENDING":            {http.StatusConflict, "already-pending"},
+		"ERROR_REASON_BANNED":                     {http.StatusForbidden, "banned"},
+		"ERROR_REASON_MEMBER_NOT_FOUND":           {http.StatusNotFound, "member-not-found"},
+		"ERROR_REASON_ROLE_HIERARCHY":             {http.StatusForbidden, "role-hierarchy"},
+		"ERROR_REASON_LAST_ADMIN":                 {http.StatusConflict, "last-admin"},
+		"ERROR_REASON_DELETION_ALREADY_REQUESTED": {http.StatusConflict, "deletion-already-requested"},
+		"ERROR_REASON_DELETION_NOT_REQUESTED":     {http.StatusConflict, "deletion-not-requested"},
+	},
+}
+
+// writeUpstreamError turns a gRPC error from service (identity, core) into
+// a problem response without passing on any internal detail: only a known
+// ErrorInfo reason from that service's own domain, or the bare status code,
+// decides the answer.
+func writeUpstreamError(w http.ResponseWriter, r *http.Request, log *slog.Logger, service string, err error) {
+	st := status.Convert(err)
+	domain := service + ".tayfam.app"
+	for _, d := range st.Details() {
+		if info, ok := d.(*errdetails.ErrorInfo); ok && info.GetDomain() == domain {
+			if p, ok := problemsByDomain[domain][info.GetReason()]; ok {
+				httpx.WriteProblem(w, r, p.status, p.code, http.StatusText(p.status), "")
+				return
+			}
+		}
+	}
+	switch st.Code() {
+	case codes.Unauthenticated:
+		httpx.WriteProblem(w, r, http.StatusUnauthorized, "unauthenticated", "Unauthorized", "")
+	case codes.InvalidArgument:
+		httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-request", "Bad Request", "")
+	// Unimplemented: the service is older than gateway during a rollout.
+	case codes.Unavailable, codes.DeadlineExceeded, codes.Unimplemented:
+		httpx.WriteProblem(w, r, http.StatusServiceUnavailable, "unavailable", "Service Unavailable", "")
+	default:
+		log.ErrorContext(r.Context(), "servis çağrısı başarısız", slog.String("service", service), slog.String("code", st.Code().String()))
+		httpx.WriteProblem(w, r, http.StatusInternalServerError, "internal", "Internal Server Error", "")
+	}
+}
+
+// clientIP returns Cloudflare's client IP when trusted, else the peer
+// address. Used only as a rate limit key, never logged.
+func clientIP(r *http.Request, trustCF bool) string {
+	if trustCF {
+		if ip := net.ParseIP(strings.TrimSpace(r.Header.Get("CF-Connecting-IP"))); ip != nil {
+			return ip.String()
+		}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}

@@ -7,12 +7,10 @@ import (
 	"io"
 	"log/slog"
 	"mime"
-	"net"
 	"net/http"
 	"strings"
 	"time"
 
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -269,61 +267,12 @@ func (h authHandlers) clearCookies(w http.ResponseWriter) {
 	}
 }
 
-// problemForReason maps identity's ErrorInfo reasons to problem types.
-var problemForReason = map[string]struct {
-	status int
-	code   string
-}{
-	"ERROR_REASON_INVALID_CREDENTIALS":  {http.StatusUnauthorized, "invalid-credentials"},
-	"ERROR_REASON_UNSUPPORTED_PROVIDER": {http.StatusBadRequest, "unsupported-provider"},
-	"ERROR_REASON_AGE_BLOCKED":          {http.StatusForbidden, "age-blocked"},
-	"ERROR_REASON_INVALID_REFRESH":      {http.StatusUnauthorized, "invalid-refresh"},
-	"ERROR_REASON_REFRESH_CONFLICT":     {http.StatusConflict, "refresh-conflict"},
-	"ERROR_REASON_INVALID_BIRTH_DATE":   {http.StatusBadRequest, "invalid-birth-date"},
-	"ERROR_REASON_CONSENT_OUTDATED":     {http.StatusConflict, "consent-outdated"},
-	"ERROR_REASON_ALREADY_REGISTERED":   {http.StatusConflict, "already-registered"},
-	"ERROR_REASON_INVALID_DISPLAY_NAME": {http.StatusBadRequest, "invalid-display-name"},
-}
-
-// upstreamError turns a gRPC error from identity into a problem response
-// without passing on any internal detail.
 func (h authHandlers) upstreamError(w http.ResponseWriter, r *http.Request, err error) {
-	st := status.Convert(err)
-	for _, d := range st.Details() {
-		if info, ok := d.(*errdetails.ErrorInfo); ok && info.GetDomain() == "identity.tayfam.app" {
-			if p, ok := problemForReason[info.GetReason()]; ok {
-				httpx.WriteProblem(w, r, p.status, p.code, http.StatusText(p.status), "")
-				return
-			}
-		}
-	}
-	switch st.Code() {
-	case codes.Unauthenticated:
-		httpx.WriteProblem(w, r, http.StatusUnauthorized, "unauthenticated", "Unauthorized", "")
-	case codes.InvalidArgument:
-		httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-request", "Bad Request", "")
-	// Unimplemented: identity is older than gateway during a rollout.
-	case codes.Unavailable, codes.DeadlineExceeded, codes.Unimplemented:
-		httpx.WriteProblem(w, r, http.StatusServiceUnavailable, "unavailable", "Service Unavailable", "")
-	default:
-		h.d.Log.ErrorContext(r.Context(), "identity çağrısı başarısız", slog.String("code", st.Code().String()))
-		httpx.WriteProblem(w, r, http.StatusInternalServerError, "internal", "Internal Server Error", "")
-	}
+	writeUpstreamError(w, r, h.d.Log, "identity", err)
 }
 
-// clientIP returns Cloudflare's client IP when trusted, else the peer
-// address. Used only as a rate limit key, never logged.
 func (h authHandlers) clientIP(r *http.Request) string {
-	if h.d.TrustCFConnectingIP {
-		if ip := net.ParseIP(strings.TrimSpace(r.Header.Get("CF-Connecting-IP"))); ip != nil {
-			return ip.String()
-		}
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
+	return clientIP(r, h.d.TrustCFConnectingIP)
 }
 
 // bearer returns the access token from the Authorization header or, for

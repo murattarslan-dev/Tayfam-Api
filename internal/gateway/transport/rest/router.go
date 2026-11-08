@@ -26,6 +26,9 @@ type Deps struct {
 	CheckTimeout time.Duration
 	// Auth enables sign-in and registration routes when its clients are set.
 	Auth AuthDeps
+	// Core enables the tayfa and membership routes when its clients and
+	// verifier are set.
+	Core CoreDeps
 	// AllowedOrigins are the web origins allowed to call the API with
 	// credentials (CORS), such as https://tayfam.app.
 	AllowedOrigins []string
@@ -40,6 +43,9 @@ func NewRouter(d Deps) http.Handler {
 	mux.HandleFunc("GET /v1/status", statusHandler(d))
 	if d.Auth.Auth != nil && d.Auth.Registration != nil {
 		registerAuth(mux, d.Auth)
+	}
+	if d.Core.Tayfas != nil && d.Core.Members != nil && d.Core.Verifier != nil {
+		registerCore(mux, d.Core)
 	}
 	mux.HandleFunc("/", httpx.NotFound)
 	return httpx.Chain(mux, cors(d.AllowedOrigins), requireClientHeader)

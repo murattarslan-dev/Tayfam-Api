@@ -26,6 +26,23 @@ func TestBurstAndRefill(t *testing.T) {
 	}
 }
 
+func TestEvery(t *testing.T) {
+	l := Every(time.Hour, 1)
+	now := time.Unix(0, 0)
+	l.now = func() time.Time { return now }
+	if !l.Allow("ip") || l.Allow("ip") {
+		t.Fatal("saatte bir olmalı")
+	}
+	now = now.Add(59 * time.Minute)
+	if l.Allow("ip") {
+		t.Fatal("bir saat dolmadan izin verildi")
+	}
+	now = now.Add(2 * time.Minute)
+	if !l.Allow("ip") {
+		t.Fatal("bir saat sonra izin verilmedi")
+	}
+}
+
 func TestSweepAndCap(t *testing.T) {
 	l := New(60, 1)
 	now := time.Unix(0, 0)

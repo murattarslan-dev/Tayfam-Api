@@ -27,8 +27,18 @@ type bucket struct {
 
 // New returns a limiter allowing burst events, refilled at perMinute.
 func New(perMinute, burst int) *Limiter {
+	return newLimiter(float64(perMinute)/60, burst)
+}
+
+// Every returns a limiter allowing burst events, refilled by one event per
+// interval. It covers rates below one per minute, such as one per hour.
+func Every(interval time.Duration, burst int) *Limiter {
+	return newLimiter(1/interval.Seconds(), burst)
+}
+
+func newLimiter(perSecond float64, burst int) *Limiter {
 	return &Limiter{
-		rate: float64(perMinute) / 60, burst: float64(burst), now: time.Now,
+		rate: perSecond, burst: float64(burst), now: time.Now,
 		buckets: map[string]*bucket{}, maxKeys: 100_000,
 	}
 }

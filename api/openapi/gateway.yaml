@@ -19,6 +19,21 @@ info:
     **Hatalar:** RFC 9457 `application/problem+json`. `type` alanı makine
     tarafından okunur: `https://tayfam.app/problems/<kod>`. `title` ve
     `detail` kullanıcıya gösterilmez; istemci kodu çeviri dosyasında arar.
+
+    **Sayfalama:** Liste uçları `page_size` (0–100; 0 = 50) ve `page_token`
+    alır. `next_page_token` opaktır: istemci onu çözmez, yalnızca aynı uca
+    aynı parametrelerle geri gönderir. Alan yoksa son sayfadır.
+
+    **Tayfa kapsamı:** Etkin üyesi olmadığınız bir tayfa, var olmayan bir
+    tayfa ile aynı cevabı alır (`tayfa-not-found`); tayfanın varlığı sızmaz.
+
+    **Gizli değerler URL'de taşınmaz:** Katılım kodu ve davet token'ı yalnızca
+    istek gövdesinde gönderilir; erişim log'larına, tarayıcı geçmişine ve
+    `Referer` başlığına düşmez. Davet önizlemesi bu yüzden POST'tur.
+
+    **Bilinmeyen değerler:** Yanıtlardaki enum alanlarına ileride yeni değer
+    eklenebilir; gateway'in tanımadığı bir değer `unknown` olarak döner.
+    İstemci tanımadığı değeri yok sayar.
 servers:
   - url: https://api-dev.tayfam.app
     description: dev (ev cluster'ı)
@@ -136,6 +151,566 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
 
+  # --- Tayfalar (core TayfaService) ---
+
+  /v1/tayfas:
+    get:
+      operationId: listMyTayfas
+      summary: Etkin üyelikleriniz ve bekleyen katılım istekleriniz
+      description: |
+        En yeniden eskiye. Bekleyen bir istekte yalnızca `tayfa_id` ve `name`
+        dolu gelir; `tayfa` alanı yalnızca etkin üyelikte vardır.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Tayfalar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MyTayfaList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createTayfa
+      summary: Yeni tayfa açar; açan kişi tek yöneticisidir
+      description: |
+        Kullanıcı başına 24 saatte 1 (`tayfa-create-limit`, core) ve IP başına
+        saatte 1 (`rate-limited`, gateway). Aynı `client_request_id` ile
+        tekrar gönderim ilk açılan tayfayı döndürür ve yeni tayfa açmaz;
+        aynı IP'den aynı `client_request_id` ile yapılan tekrar IP sınırına
+        takılmaz. Bütün modüller açık başlar.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TayfaCreateRequest" }
+      responses:
+        "201":
+          description: Tayfa açıldı (ya da tekrar gönderimde ilk açılan)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tayfa" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: getTayfa
+      summary: Tayfanın tam görünümü ve sizin rolünüz
+      description: |
+        Yalnızca etkin üyelere. `caller_role` istemcinin doğru işlemleri
+        göstermesi içindir; sunucu her istekte yetkiyi yeniden kontrol eder.
+      responses:
+        "200":
+          description: Tayfa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TayfaView" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: updateTayfa
+      summary: Tayfa ayarlarını değiştirir (yönetici)
+      description: |
+        Yalnızca gövdede bulunan alanlar değişir; en az bir alan gerekir.
+        `interests` gönderilirse ilgi alanlarının tamamını değiştirir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TayfaUpdateRequest" }
+      responses:
+        "200":
+          description: Güncel tayfa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tayfa" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/modules/{module}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - name: module
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/Module" }
+    put:
+      operationId: setTayfaModule
+      summary: Bir modülü açar ya da kapatır (yönetici)
+      description: Mevcut değeri tekrar vermek başarılıdır ve bir şey değiştirmez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModuleUpdate" }
+      responses:
+        "204": { description: Modül ayarlandı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/join-code:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    post:
+      operationId: rotateJoinCode
+      summary: Katılım kodunu yeniler (yönetici); eski kod hemen geçersiz olur
+      description: |
+        Mevcut kod `GET /v1/tayfas/{tayfa_id}` yanıtında yalnızca yöneticiye
+        döner.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Yeni kod
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JoinCode" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/deletion:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    post:
+      operationId: requestTayfaDeletion
+      summary: Tayfayı 72 saat sonra silinmek üzere işaretler (yönetici)
+      description: Silinene kadar tayfa salt okunurdur; herhangi bir yönetici iptal edebilir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "202":
+          description: Silme planlandı
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Deletion" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: cancelTayfaDeletion
+      summary: Bekleyen silmeyi iptal eder (yönetici)
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Silme iptal edildi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  # --- Üyelik (core MembershipService) ---
+
+  /v1/tayfas/{tayfa_id}/membership:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    delete:
+      operationId: leaveTayfa
+      summary: Tayfadan ayrılır ya da bekleyen katılım isteğini geri çeker
+      description: |
+        Salt okunur tayfada da çalışır. Son yönetici ayrılamaz
+        (`last-admin`). Banlanmış üyelik bırakılamaz (`tayfa-not-found`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Ayrıldınız }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/members:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listMembers
+      summary: Üyeleri listeler
+      description: |
+        `status=active` (varsayılan) her etkin üyeye açıktır; `status=banned`
+        yalnızca moderatör ve yöneticiye. Sıra: rol (yönetici önce), katılma
+        zamanı. Katılım istekleri için `/join-requests`.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [active, banned], default: active }
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Üyeler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/members/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/UserID"
+    patch:
+      operationId: changeMemberRole
+      summary: Etkin bir üyenin rolünü değiştirir (yönetici)
+      description: |
+        Hedefin rolü sizinkinden düşük olmalı, yeni rol sizinkinden yüksek
+        olamaz (`role-hierarchy`). Kendi rolünüzü düşürebilirsiniz; son
+        yönetici düşüremez (`last-admin`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RoleUpdate" }
+      responses:
+        "200":
+          description: Güncel üyelik
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Membership" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: removeMember
+      summary: Etkin bir üyeyi tayfadan çıkarır (moderatör, yönetici)
+      description: Çıkarılan kişi daha sonra tekrar katılabilir. Kendiniz için `/membership`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Üye çıkarıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/members/{user_id}/mute:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/UserID"
+    put:
+      operationId: muteMember
+      summary: Üyeyi belirli bir zamana kadar susturur (moderatör, yönetici)
+      description: Tekrar susturmak bitiş zamanını değiştirir. En fazla 30 gün.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MuteRequest" }
+      responses:
+        "200":
+          description: Güncel üyelik
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Membership" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: unmuteMember
+      summary: Susturmayı hemen bitirir (moderatör, yönetici)
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Güncel üyelik
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Membership" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/members/{user_id}/ban:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/UserID"
+    put:
+      operationId: banMember
+      summary: Etkin ya da bekleyen bir üyeyi banlar (moderatör, yönetici)
+      description: Banlanan kişi kodla ya da davetle tekrar katılamaz.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Üye banlandı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/join-requests:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listJoinRequests
+      summary: Bekleyen katılım istekleri, eskiden yeniye (moderatör, yönetici)
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: İstekler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JoinRequestList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/join-requests/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/UserID"
+    delete:
+      operationId: rejectJoinRequest
+      summary: Katılım isteğini reddeder (moderatör, yönetici)
+      description: Kişi daha sonra tekrar isteyebilir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: İstek reddedildi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/join-requests/{user_id}/approval:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/UserID"
+    post:
+      operationId: approveJoinRequest
+      summary: Katılım isteğini onaylar; üyelik etkin olur (moderatör, yönetici)
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Etkin üyelik
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Membership" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/invites:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listInvites
+      summary: Geçerli davet linkleri, yeniden eskiye (en fazla 100)
+      description: |
+        Yönetici tayfanın bütün linklerini, diğer üyeler yalnızca kendi
+        açtıklarını görür. Token hiçbir zaman dönmez.
+      responses:
+        "200":
+          description: Davetler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InviteList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createInvite
+      summary: Davet linki açar
+      description: |
+        `token` yalnızca bu yanıtta, bir kez döner; sunucu onu bir daha
+        gösteremez. İstemci linki `https://tayfam.app/davet#<token>` gibi
+        token'ı fragment'ta taşıyan bir biçimde paylaşır (fragment sunucuya
+        ve `Referer`'a gitmez) ve gövdeyle `/v1/invite-previews`,
+        `/v1/invite-joins` uçlarına gönderir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InviteCreateRequest" }
+      responses:
+        "201":
+          description: Davet açıldı
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatedInvite" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/invites/{invite_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - name: invite_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      operationId: revokeInvite
+      summary: Davet linkini hemen geçersiz kılar
+      description: |
+        Kendi açtığınız linki, yöneticiyseniz tayfanın her linkini. Zaten
+        iptal edilmiş bir link için de başarılıdır. Salt okunur tayfada da
+        çalışır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Davet iptal edildi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfa-joins:
+    post:
+      operationId: joinByCode
+      summary: Katılım koduyla tayfaya katılır
+      description: |
+        Tayfa açık katılımlıysa üyelik hemen etkin olur, onaylıysa bekler.
+        Bozuk, bilinmeyen, yenilenmiş kod ve banlı olduğunuz tayfa aynı
+        cevabı alır (`invalid-join-code`). IP başına (gateway) ve kullanıcı
+        başına (core) deneme sınırı vardır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JoinByCodeRequest" }
+      responses:
+        "201":
+          description: Üyelik (etkin ya da bekleyen)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Membership" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/invite-previews:
+    post:
+      operationId: previewInvite
+      summary: Davet linkinin tayfasının dar görünümü ("X'e katıl?")
+      description: |
+        Linki tüketmez. Token URL'de değil gövdede taşındığı için POST'tur;
+        bir şey değiştirmez. IP başına sınır vardır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InviteTokenRequest" }
+      responses:
+        "200":
+          description: Önizleme
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvitePreview" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "410": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/invite-joins:
+    post:
+      operationId: joinByInvite
+      summary: Davet linkiyle tayfaya katılır
+      description: |
+        Tayfa açık katılımlıysa ya da linki açan kişi şu an moderatör veya
+        yöneticiyse üyelik hemen etkin olur; değilse bekler. IP başına sınır
+        vardır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InviteTokenRequest" }
+      responses:
+        "201":
+          description: Üyelik (etkin ya da bekleyen)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Membership" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "410": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
 components:
   securitySchemes:
     bearer: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -148,15 +723,74 @@ components:
       required: true
       description: CSRF koruması; durum değiştiren her istekte zorunlu.
       schema: { type: string, enum: [android, ios, web] }
+    TayfaID:
+      name: tayfa_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UserID:
+      name: user_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PageSize:
+      name: page_size
+      in: query
+      required: false
+      schema: { type: integer, minimum: 0, maximum: 100, default: 0 }
+    PageToken:
+      name: page_token
+      in: query
+      required: false
+      description: Önceki yanıtın `next_page_token` değeri; opak.
+      schema: { type: string, maxLength: 1024 }
 
   responses:
     Problem:
       description: |
-        Hata. `type` kodları: invalid-request, missing-client-header,
-        unauthenticated, invalid-credentials, unsupported-provider,
-        age-blocked, invalid-refresh, refresh-conflict, invalid-birth-date,
-        consent-outdated, already-registered, invalid-display-name,
-        rate-limited, unavailable, internal.
+        Hata. `type` değeri `https://tayfam.app/problems/<kod>` biçimindedir;
+        kodların tam listesi `x-problem-types` altındadır.
+      x-problem-types:
+        # Genel
+        - invalid-request
+        - missing-client-header
+        - unauthenticated
+        - not-found
+        - rate-limited
+        - unavailable
+        - internal
+        # identity
+        - invalid-credentials
+        - unsupported-provider
+        - age-blocked
+        - invalid-refresh
+        - refresh-conflict
+        - invalid-birth-date
+        - consent-outdated
+        - already-registered
+        - invalid-display-name
+        # core: tayfa ve yetki
+        - tayfa-not-found
+        - permission-denied
+        - muted
+        - tayfa-read-only
+        - tayfa-create-limit
+        - deletion-already-requested
+        - deletion-not-requested
+        # core: katılım ve davet
+        - invalid-join-code
+        - invite-invalid
+        - invite-expired
+        - invite-revoked
+        - invite-exhausted
+        - invite-not-found
+        - already-member
+        - already-pending
+        - banned
+        # core: üye yönetimi
+        - member-not-found
+        - role-hierarchy
+        - last-admin
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
@@ -236,6 +870,288 @@ components:
         display_name: { type: string, minLength: 1, maxLength: 40 }
         accepted_privacy_notice_version: { type: string, maxLength: 32 }
         accepted_terms_version: { type: string, maxLength: 32 }
+
+    # --- core ---
+
+    EventType:
+      type: string
+      description: Tayfanın ilgi alanları etkinlik türleriyle aynı değerleri kullanır.
+      enum: [convoy, camp, hike, fishing, gaming, sports, general]
+    JoinPolicy:
+      type: string
+      description: "`approval`: yeni üyeler onay bekler. `open`: hemen etkin olur."
+      enum: [approval, open]
+    Module:
+      type: string
+      enum: [announcements, events, qa, polls]
+    Role:
+      type: string
+      enum: [member, moderator, admin]
+
+    TayfaCreateRequest:
+      type: object
+      required: [name, client_request_id]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 50
+          description: Baştaki ve sondaki boşluklar atıldıktan sonra 3–50 karakter.
+        description: { type: string, maxLength: 500 }
+        interests:
+          type: array
+          maxItems: 7
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/EventType" }
+        join_policy:
+          allOf: [{ $ref: "#/components/schemas/JoinPolicy" }]
+          default: approval
+        client_request_id:
+          type: string
+          format: uuid
+          description: İstemcinin her açma denemesi için bir kez ürettiği, tekrar gönderimde aynen kullandığı UUID.
+
+    TayfaUpdateRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 3, maxLength: 50 }
+        description: { type: string, maxLength: 500 }
+        interests:
+          type: array
+          maxItems: 7
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/EventType" }
+        join_policy: { $ref: "#/components/schemas/JoinPolicy" }
+
+    Tayfa:
+      type: object
+      required: [id, name, description, interests, join_policy, modules, status, member_count, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        interests:
+          type: array
+          items: { $ref: "#/components/schemas/EventType" }
+        join_policy: { $ref: "#/components/schemas/JoinPolicy" }
+        modules:
+          type: object
+          description: Her modülün açık olup olmadığı.
+          properties:
+            announcements: { type: boolean }
+            events: { type: boolean }
+            qa: { type: boolean }
+            polls: { type: boolean }
+        status:
+          type: string
+          description: "`warned`: hareketsiz, 7 gün sonra arşivlenir. `archived`: salt okunur."
+          enum: [active, warned, archived]
+        suspended_at:
+          type: string
+          format: date-time
+          description: Platform tayfayı askıya aldıysa (salt okunur). Sebep dönmez.
+        deletion_at:
+          type: string
+          format: date-time
+          description: Silme bekliyorsa tayfanın silineceği zaman (salt okunur).
+        member_count: { type: integer }
+        join_code:
+          type: string
+          description: Yalnızca yöneticiye döner.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    TayfaView:
+      type: object
+      required: [tayfa, caller_role]
+      properties:
+        tayfa: { $ref: "#/components/schemas/Tayfa" }
+        caller_role: { $ref: "#/components/schemas/Role" }
+
+    MyTayfa:
+      type: object
+      required: [tayfa_id, name, role, status]
+      properties:
+        tayfa_id: { type: string, format: uuid }
+        name: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        status: { type: string, enum: [active, pending] }
+        tayfa:
+          allOf: [{ $ref: "#/components/schemas/Tayfa" }]
+          description: Yalnızca etkin üyelikte.
+
+    MyTayfaList:
+      type: object
+      required: [tayfas]
+      properties:
+        tayfas:
+          type: array
+          items: { $ref: "#/components/schemas/MyTayfa" }
+        next_page_token: { type: string }
+
+    ModuleUpdate:
+      type: object
+      required: [enabled]
+      additionalProperties: false
+      properties:
+        enabled: { type: boolean }
+
+    JoinCode:
+      type: object
+      required: [join_code]
+      properties:
+        join_code:
+          type: string
+          description: 8 karakter, `[2-9A-HJ-NP-Z]`.
+
+    Deletion:
+      type: object
+      required: [deletion_at]
+      properties:
+        deletion_at: { type: string, format: date-time }
+
+    Membership:
+      type: object
+      required: [tayfa_id, user_id, role, status]
+      properties:
+        tayfa_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        role: { $ref: "#/components/schemas/Role" }
+        status: { type: string, enum: [invited, pending, active, banned] }
+        joined_at:
+          type: string
+          format: date-time
+          description: Üyelik etkin olduğunda.
+        muted_until:
+          type: string
+          format: date-time
+          description: Susturma bitişi; yalnızca üyenin kendisine, moderatöre ve yöneticiye döner.
+
+    MemberList:
+      type: object
+      required: [members]
+      properties:
+        members:
+          type: array
+          items: { $ref: "#/components/schemas/Membership" }
+        next_page_token: { type: string }
+
+    RoleUpdate:
+      type: object
+      required: [role]
+      additionalProperties: false
+      properties:
+        role: { $ref: "#/components/schemas/Role" }
+
+    MuteRequest:
+      type: object
+      required: [muted_until]
+      additionalProperties: false
+      properties:
+        muted_until:
+          type: string
+          format: date-time
+          description: Şimdiden sonra, en fazla 30 gün ileri.
+
+    JoinRequest:
+      type: object
+      required: [user_id, requested_at, source]
+      properties:
+        user_id: { type: string, format: uuid }
+        requested_at: { type: string, format: date-time }
+        source: { type: string, enum: [invite_link, direct_invite, code, discover] }
+        inviter_user_id:
+          type: string
+          format: uuid
+          description: Davet eden ya da linki açan kişi; kodla katılımda yok.
+        invite_id:
+          type: string
+          format: uuid
+          description: Kullanılan davet linki; yalnızca `source=invite_link`.
+
+    JoinRequestList:
+      type: object
+      required: [join_requests]
+      properties:
+        join_requests:
+          type: array
+          items: { $ref: "#/components/schemas/JoinRequest" }
+        next_page_token: { type: string }
+
+    InviteCreateRequest:
+      type: object
+      required: [ttl_seconds, max_uses]
+      additionalProperties: false
+      properties:
+        ttl_seconds:
+          type: integer
+          minimum: 3600
+          maximum: 2592000
+          description: Linkin geçerlilik süresi; 1 saat ile 30 gün arası.
+        max_uses: { type: integer, minimum: 1, maximum: 100 }
+
+    Invite:
+      type: object
+      required: [id, tayfa_id, created_by_user_id, created_at, expires_at, max_uses, use_count]
+      description: Davet linki. Token ya da özeti hiçbir zaman dönmez.
+      properties:
+        id: { type: string, format: uuid }
+        tayfa_id: { type: string, format: uuid }
+        created_by_user_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        max_uses: { type: integer }
+        use_count: { type: integer }
+        revoked_at: { type: string, format: date-time }
+
+    CreatedInvite:
+      type: object
+      required: [invite, token]
+      properties:
+        invite: { $ref: "#/components/schemas/Invite" }
+        token:
+          type: string
+          description: Linkin gizli kısmı (43 karakter base64url). Yalnızca burada, bir kez döner.
+
+    InviteList:
+      type: object
+      required: [invites]
+      properties:
+        invites:
+          type: array
+          items: { $ref: "#/components/schemas/Invite" }
+
+    JoinByCodeRequest:
+      type: object
+      required: [code]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          maxLength: 32
+          description: Katılım kodu; büyük/küçük harf duyarsız.
+
+    InviteTokenRequest:
+      type: object
+      required: [token]
+      additionalProperties: false
+      properties:
+        token: { type: string, maxLength: 64 }
+
+    InvitePreview:
+      type: object
+      required: [tayfa_id, name, member_count, already_member]
+      description: Linki bilen herkesin görebileceği dar görünüm.
+      properties:
+        tayfa_id: { type: string, format: uuid }
+        name: { type: string }
+        member_count: { type: integer }
+        already_member:
+          type: boolean
+          description: Zaten etkin üyeyseniz ya da bekleyen isteğiniz varsa.
 
 security:
   - bearer: []
