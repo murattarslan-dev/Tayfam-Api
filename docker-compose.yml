@@ -50,3 +50,19 @@ services:
     environment:
       <<: *env
       IDENTITY_GRPC_ADDR: identity:9090
+
+  # Yerel geliştirme ve store testleri için Postgres. Cluster'daki CNPG
+  # image'ı tek başına başlatılamaz; aynı ana ve ara sürümdeki resmi image
+  # kullanılır (PostGIS core'a geçince eklenir). Yalnızca bu makineden erişilir.
+  #   make test-db
+  #   TEST_DATABASE_URL=postgres://postgres:yerel@127.0.0.1:5432/postgres?sslmode=disable make test
+  # Parola yalnızca yerel, atılabilir bir veritabanı içindir.
+  postgres:
+    image: postgres:18.6-trixie
+    environment:
+      POSTGRES_PASSWORD: yerel
+      POSTGRES_INITDB_ARGS: "--locale-provider=icu --icu-locale=tr-TR --locale=C.UTF-8"
+    ports:
+      - "127.0.0.1:5432:5432"
+    tmpfs:
+      - /var/lib/postgresql

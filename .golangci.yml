@@ -22,6 +22,12 @@ linters:
         platform:
           files: ["**/internal/platform/**"]
           deny:
+            - pkg: github.com/murattarslan-dev/tayfam-api/db/identity
+              desc: platform servislerin migration paketlerini import edemez
+            - pkg: github.com/murattarslan-dev/tayfam-api/db/core
+              desc: platform servislerin migration paketlerini import edemez
+            - pkg: github.com/murattarslan-dev/tayfam-api/db/chat
+              desc: platform servislerin migration paketlerini import edemez
             - pkg: github.com/murattarslan-dev/tayfam-api/internal/gateway
               desc: platform servis paketlerini import edemez
             - pkg: github.com/murattarslan-dev/tayfam-api/internal/identity
@@ -35,6 +41,12 @@ linters:
         gateway:
           files: ["**/internal/gateway/**", "**/cmd/gateway/**"]
           deny:
+            - pkg: github.com/murattarslan-dev/tayfam-api/db/identity
+              desc: her servis yalnızca kendi veritabanına bağlanır (kural 2)
+            - pkg: github.com/murattarslan-dev/tayfam-api/db/core
+              desc: her servis yalnızca kendi veritabanına bağlanır (kural 2)
+            - pkg: github.com/murattarslan-dev/tayfam-api/db/chat
+              desc: her servis yalnızca kendi veritabanına bağlanır (kural 2)
             - pkg: github.com/murattarslan-dev/tayfam-api/internal/identity
               desc: diğer servislere gen/ altındaki gRPC client'larıyla erişilir
             - pkg: github.com/murattarslan-dev/tayfam-api/internal/core
@@ -44,6 +56,10 @@ linters:
         identity:
           files: ["**/internal/identity/**", "**/cmd/identity/**"]
           deny:
+            - pkg: github.com/murattarslan-dev/tayfam-api/db/core
+              desc: her servis yalnızca kendi veritabanına bağlanır (kural 2)
+            - pkg: github.com/murattarslan-dev/tayfam-api/db/chat
+              desc: her servis yalnızca kendi veritabanına bağlanır (kural 2)
             - pkg: github.com/murattarslan-dev/tayfam-api/internal/gateway
               desc: diğer servislere gen/ altındaki gRPC client'larıyla erişilir
             - pkg: github.com/murattarslan-dev/tayfam-api/internal/core
@@ -53,6 +69,10 @@ linters:
         core:
           files: ["**/internal/core/**", "**/cmd/core/**"]
           deny:
+            - pkg: github.com/murattarslan-dev/tayfam-api/db/identity
+              desc: her servis yalnızca kendi veritabanına bağlanır (kural 2)
+            - pkg: github.com/murattarslan-dev/tayfam-api/db/chat
+              desc: her servis yalnızca kendi veritabanına bağlanır (kural 2)
             - pkg: github.com/murattarslan-dev/tayfam-api/internal/gateway
               desc: diğer servislere gen/ altındaki gRPC client'larıyla erişilir
             - pkg: github.com/murattarslan-dev/tayfam-api/internal/identity
@@ -62,6 +82,10 @@ linters:
         chat:
           files: ["**/internal/chat/**", "**/cmd/chat/**"]
           deny:
+            - pkg: github.com/murattarslan-dev/tayfam-api/db/identity
+              desc: her servis yalnızca kendi veritabanına bağlanır (kural 2)
+            - pkg: github.com/murattarslan-dev/tayfam-api/db/core
+              desc: her servis yalnızca kendi veritabanına bağlanır (kural 2)
             - pkg: github.com/murattarslan-dev/tayfam-api/internal/gateway
               desc: diğer servislere gen/ altındaki gRPC client'larıyla erişilir
             - pkg: github.com/murattarslan-dev/tayfam-api/internal/identity

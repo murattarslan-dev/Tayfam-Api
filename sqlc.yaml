@@ -1,0 +1,17 @@
+# SQL elle yazılır, Go kodu sqlc ile üretilir (CLAUDE.md). Üretim: make generate
+version: "2"
+sql:
+  - engine: postgresql
+    schema: db/identity/migrations
+    queries: db/identity/queries
+    gen:
+      go:
+        package: store
+        out: internal/identity/store
+        sql_package: pgx/v5
+        emit_methods_with_db_argument: false
+        emit_interface: true
+        emit_empty_slices: true
+        overrides:
+          - db_type: uuid
+            go_type: github.com/jackc/pgx/v5/pgtype.UUID
