@@ -237,3 +237,29 @@ func FuzzVerify(f *testing.F) {
 		}
 	})
 }
+
+func TestVerifierAlsoAccept(t *testing.T) {
+	key := testKey(t, "k1")
+	keys := StaticKeys{"k1": key.Public().Key}
+	issue := func(aud string) string {
+		s, _ := NewSigner(SignerConfig{Key: key, Issuer: testIssuer, Audience: aud, TTL: time.Minute, Now: func() time.Time { return t0 }})
+		tok, _, _ := s.Issue(testUser, testSession)
+		return tok
+	}
+	strict, _ := NewVerifier(VerifierConfig{Keys: keys, Issuer: testIssuer, Audience: "tayfam-api", Now: func() time.Time { return t0 }})
+	both, _ := NewVerifier(VerifierConfig{Keys: keys, Issuer: testIssuer, Audience: "tayfam-api", AlsoAccept: []string{"tayfam-registration"}, Now: func() time.Time { return t0 }})
+	reg := issue("tayfam-registration")
+	if _, err := strict.Verify(context.Background(), reg); !errors.Is(err, ErrInvalidToken) {
+		t.Fatal("kayıt token'ı yalnızca API kabul eden doğrulayıcıdan geçti")
+	}
+	c, err := both.Verify(context.Background(), reg)
+	if err != nil || c.Audience != "tayfam-registration" {
+		t.Fatalf("AlsoAccept: %+v %v", c, err)
+	}
+	if _, err := both.Verify(context.Background(), issue("tayfam-admin")); !errors.Is(err, ErrInvalidToken) {
+		t.Fatal("listede olmayan audience kabul edildi")
+	}
+	if _, err := NewVerifier(VerifierConfig{Keys: keys, Issuer: testIssuer, Audience: "a", AlsoAccept: []string{""}}); err == nil {
+		t.Fatal("boş audience kabul edildi")
+	}
+}

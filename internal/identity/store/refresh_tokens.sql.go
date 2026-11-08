@@ -27,6 +27,23 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 	return err
 }
 
+const extendSession = `-- name: ExtendSession :exec
+UPDATE sessions SET last_refreshed_at = now(), expires_at = $1
+WHERE id = $2 AND revoked_at IS NULL
+`
+
+type ExtendSessionParams struct {
+	ExpiresAt pgtype.Timestamptz
+	ID        pgtype.UUID
+}
+
+// Oturum 90 gün kullanılmazsa sona erer (ADR-0004); her yenilemede süre
+// yeniden başlar.
+func (q *Queries) ExtendSession(ctx context.Context, arg ExtendSessionParams) error {
+	_, err := q.db.Exec(ctx, extendSession, arg.ExpiresAt, arg.ID)
+	return err
+}
+
 const lockRefreshToken = `-- name: LockRefreshToken :one
 SELECT rt.id, rt.session_id, rt.used_at,
        s.user_id, s.device_id, s.expires_at, s.revoked_at
@@ -74,13 +91,4 @@ func (q *Queries) MarkRefreshTokenUsed(ctx context.Context, id pgtype.UUID) (int
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const touchSession = `-- name: TouchSession :exec
-UPDATE sessions SET last_refreshed_at = now() WHERE id = $1
-`
-
-func (q *Queries) TouchSession(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, touchSession, id)
-	return err
 }

@@ -50,3 +50,16 @@ func (u ID) PG() pgtype.UUID { return pgtype.UUID{Bytes: u, Valid: true} }
 
 // FromPG converts a pgx UUID; ok is false for NULL.
 func FromPG(p pgtype.UUID) (ID, bool) { return ID(p.Bytes), p.Valid }
+
+// Parse reads the canonical 36-character form.
+func Parse(s string) (ID, bool) {
+	var u ID
+	if len(s) != 36 || s[8] != '-' || s[13] != '-' || s[18] != '-' || s[23] != '-' {
+		return u, false
+	}
+	hexs := s[0:8] + s[9:13] + s[14:18] + s[19:23] + s[24:]
+	if _, err := hex.Decode(u[:], []byte(hexs)); err != nil {
+		return ID{}, false
+	}
+	return u, true
+}

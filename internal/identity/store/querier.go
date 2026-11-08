@@ -21,6 +21,9 @@ type Querier interface {
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) error
+	// Oturum 90 gün kullanılmazsa sona erer (ADR-0004); her yenilemede süre
+	// yeniden başlar.
+	ExtendSession(ctx context.Context, arg ExtendSessionParams) error
 	GetActiveSession(ctx context.Context, id pgtype.UUID) (GetActiveSessionRow, error)
 	GetAuthIdentity(ctx context.Context, arg GetAuthIdentityParams) (GetAuthIdentityRow, error)
 	GetUser(ctx context.Context, id pgtype.UUID) (GetUserRow, error)
@@ -32,7 +35,6 @@ type Querier interface {
 	RevokeUserSessions(ctx context.Context, arg RevokeUserSessionsParams) (int64, error)
 	TouchAuthIdentity(ctx context.Context, arg TouchAuthIdentityParams) error
 	TouchDevice(ctx context.Context, id pgtype.UUID) error
-	TouchSession(ctx context.Context, id pgtype.UUID) error
 }
 
 var _ Querier = (*Queries)(nil)

@@ -42,13 +42,19 @@ type VerifierConfig struct {
 	Keys     KeySource
 	Issuer   string
 	Audience string
-	Now      func() time.Time // optional, for tests
+	// AlsoAccept lists further audiences this verifier accepts. Only identity
+	// uses it, to let users who have not finished registration reach the
+	// registration methods (ADR-0012). Claims.Audience tells which one
+	// matched; handlers that need a registered user check it.
+	AlsoAccept []string
+	Now        func() time.Time // optional, for tests
 }
 
 // Verifier checks access tokens. Every service has its own and never trusts
 // another service's verdict (ADR-0011).
 type Verifier struct {
-	cfg VerifierConfig
+	cfg       VerifierConfig
+	audiences map[string]bool
 }
 
 // NewVerifier validates cfg and returns a Verifier.
@@ -59,7 +65,14 @@ func NewVerifier(cfg VerifierConfig) (*Verifier, error) {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	return &Verifier{cfg: cfg}, nil
+	aud := map[string]bool{cfg.Audience: true}
+	for _, a := range cfg.AlsoAccept {
+		if a == "" {
+			return nil, errors.New("boş audience")
+		}
+		aud[a] = true
+	}
+	return &Verifier{cfg: cfg, audiences: aud}, nil
 }
 
 // Verify checks token's structure, signature and claims, in that order, and
@@ -88,7 +101,7 @@ func (v *Verifier) Verify(ctx context.Context, token string) (Claims, error) {
 	switch {
 	case c.Iss != v.cfg.Issuer:
 		return Claims{}, fmt.Errorf("%w: issuer", ErrInvalidToken)
-	case c.Aud != v.cfg.Audience:
+	case !v.audiences[c.Aud]:
 		return Claims{}, fmt.Errorf("%w: audience", ErrInvalidToken)
 	case !validID(c.Sub) || !validID(c.Sid):
 		return Claims{}, fmt.Errorf("%w: kimlik", ErrInvalidToken)
