@@ -159,11 +159,11 @@ type MembershipServiceClient interface {
 	// Errors: as ApproveMember.
 	RejectMember(ctx context.Context, in *RejectMemberRequest, opts ...grpc.CallOption) (*RejectMemberResponse, error)
 	// ChangeRole changes an ACTIVE member's role. Admin only (permission
-	// table). The target's role must be lower than the caller's and the new
-	// role must be lower than the caller's role, so an admin can set MEMBER
-	// or MODERATOR on lower members. The single exception: an admin may lower
-	// their own role (target = caller), unless they are the last active
-	// admin.
+	// table). The target's current role must be lower than the caller's and
+	// the new role must not be higher than the caller's role (veri modeli
+	// v14), so an admin can promote a moderator or member to ADMIN but cannot
+	// change another admin. A caller may also lower their own role (target =
+	// caller), unless they are the last active admin.
 	//
 	// Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
 	// ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY,
@@ -513,11 +513,11 @@ type MembershipServiceServer interface {
 	// Errors: as ApproveMember.
 	RejectMember(context.Context, *RejectMemberRequest) (*RejectMemberResponse, error)
 	// ChangeRole changes an ACTIVE member's role. Admin only (permission
-	// table). The target's role must be lower than the caller's and the new
-	// role must be lower than the caller's role, so an admin can set MEMBER
-	// or MODERATOR on lower members. The single exception: an admin may lower
-	// their own role (target = caller), unless they are the last active
-	// admin.
+	// table). The target's current role must be lower than the caller's and
+	// the new role must not be higher than the caller's role (veri modeli
+	// v14), so an admin can promote a moderator or member to ADMIN but cannot
+	// change another admin. A caller may also lower their own role (target =
+	// caller), unless they are the last active admin.
 	//
 	// Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
 	// ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY,
