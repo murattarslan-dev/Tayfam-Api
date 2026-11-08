@@ -1,0 +1,96 @@
+# Ortamın Postgres cluster'ı (ADR-0002, ADR-0006). Tek instance; içinde servis
+# başına ayrı veritabanı ve ayrı kullanıcı. Her servis yalnızca kendi
+# kullanıcısının parolasını bilir (deploy/apps/<ortam>/secrets/<servis>-db).
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: tayfam-pg
+spec:
+  instances: 1
+  # PostgreSQL 18 + PostGIS 3.7, digest ile sabit. Kaynak: cloudnative-pg/
+  # postgis-containers, image-catalogs/postgis-standard-trixie.yaml.
+  imageName: ghcr.io/cloudnative-pg/postgis:18.6-3.7.0-202611030856-standard-trixie@sha256:adb255e84c710de32b5c04fefdfe549336ced2775d7060a3a1973561f18cc7de
+  # Postgres süper kullanıcısının ağ üzerinden parolası yok; yönetim yalnızca
+  # pod içinden (kubectl cnpg psql) yapılır.
+  enableSuperuserAccess: false
+  bootstrap:
+    initdb:
+      database: identity
+      owner: identity
+      secret: { name: identity-db }
+      encoding: UTF8
+      localeProvider: icu
+      icuLocale: tr-TR
+      locale: C.UTF-8
+      dataChecksums: true
+  managed:
+    roles:
+      - name: core
+        ensure: present
+        login: true
+        connectionLimit: 20
+        passwordSecret: { name: core-db }
+      - name: chat
+        ensure: present
+        login: true
+        connectionLimit: 20
+        passwordSecret: { name: chat-db }
+  postgresql:
+    parameters:
+      # 4 GB'lık ev makinesine göre (ADR-0006); prod'da büyütülür.
+      shared_buffers: 128MB
+      effective_cache_size: 384MB
+      work_mem: 4MB
+      maintenance_work_mem: 32MB
+      max_connections: "60"
+      password_encryption: scram-sha-256
+      # Sorgu metni (ve içindeki kişisel veri) log'a girmez (ADR-0008).
+      log_statement: none
+      log_min_duration_statement: "-1"
+      log_min_error_statement: panic
+    pg_hba:
+      # Şifresiz bağlantı reddedilir; uygulama kullanıcıları yalnızca TLS ve
+      # SCRAM ile, yalnızca kendi veritabanlarına bağlanır.
+      - hostnossl all all all reject
+      - hostssl identity identity all scram-sha-256
+      - hostssl core core all scram-sha-256
+      - hostssl chat chat all scram-sha-256
+      - host all all all reject
+  storage:
+    size: 5Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 768Mi }
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: tayfam-pg-core
+spec:
+  cluster: { name: tayfam-pg }
+  name: core
+  owner: core
+  ensure: present
+  template: template0
+  encoding: UTF8
+  localeProvider: icu
+  icuLocale: tr-TR
+  locale: C.UTF-8
+  # Konum sorguları (veri modeli v14) yalnızca core'da.
+  extensions:
+    - { name: postgis, ensure: present }
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: tayfam-pg-chat
+spec:
+  cluster: { name: tayfam-pg }
+  name: chat
+  owner: chat
+  ensure: present
+  template: template0
+  encoding: UTF8
+  localeProvider: icu
+  icuLocale: tr-TR
+  locale: C.UTF-8
