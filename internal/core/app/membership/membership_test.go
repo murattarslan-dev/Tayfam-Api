@@ -451,8 +451,10 @@ func TestListAndRevokeInviteScope(t *testing.T) {
 	if err != nil || len(own) != 1 || own[0].ID != modInv.ID {
 		t.Fatalf("moderatörün listesi = %+v %v", own, err)
 	}
-	_, err = e.svc.ListInviteLinks(ctx, member, tf.id)
-	wantErr(t, "üye listesi", err, apperr.ErrPermissionDenied)
+	mine, err := e.svc.ListInviteLinks(ctx, member, tf.id)
+	if err != nil || len(mine) != 1 || mine[0].ID != memInv.ID {
+		t.Fatalf("üyenin kendi listesi = %+v %v", mine, err)
+	}
 
 	// Başkasının linki görünmez; yönetici hepsini iptal eder.
 	wantErr(t, "moderatör yöneticinin linki", e.svc.RevokeInviteLink(ctx, mod2, tf.id, adminInv.ID), apperr.ErrInviteNotFound)
@@ -568,10 +570,16 @@ func TestRoleHierarchy(t *testing.T) {
 	for name, err := range map[string]error{
 		"üye susturamaz":             second(e.svc.MuteMember(ctx, member, tf.id, member2, soon)),
 		"üye banlayamaz":             e.svc.BanMember(ctx, member, tf.id, member2),
-		"moderatör rol veremez":      second(e.svc.ChangeRole(ctx, mod, tf.id, member, authz.Moderator)),
-		"moderatör rolünü bırakamaz": second(e.svc.ChangeRole(ctx, mod, tf.id, mod, authz.Member)),
+		"moderatör rol veremez": second(e.svc.ChangeRole(ctx, mod, tf.id, member, authz.Moderator)),
 	} {
 		wantErr(t, name, err, apperr.ErrPermissionDenied)
+	}
+	// Moderatör kendi rolünü bırakabilir; yükseltemez.
+	stepper := e.seed(t, tf.id, authz.Moderator, authz.StatusActive)
+	_, err0 := e.svc.ChangeRole(ctx, stepper, tf.id, stepper, authz.Admin)
+	wantErr(t, "moderatör kendini yükseltemez", err0, apperr.ErrRoleHierarchy)
+	if m, err := e.svc.ChangeRole(ctx, stepper, tf.id, stepper, authz.Member); err != nil || m.Role != authz.Member {
+		t.Fatalf("moderatörün rolü bırakması: %+v %v", m, err)
 	}
 	_, err := e.svc.ChangeRole(ctx, tf.admin, tf.id, member, 0)
 	wantInvalid(t, "geçersiz rol", err)
@@ -650,7 +658,7 @@ func TestLastAdmin(t *testing.T) {
 		t.Fatalf("rol bırakma: %+v %v", m, err)
 	}
 	_, err = e.svc.ChangeRole(ctx, tf.admin, tf.id, tf.admin, authz.Admin)
-	wantErr(t, "moderatör kendini yükseltemez", err, apperr.ErrPermissionDenied)
+	wantErr(t, "moderatör kendini yükseltemez", err, apperr.ErrRoleHierarchy)
 	must(t, e.svc.LeaveTayfa(ctx, tf.admin, tf.id))
 	wantErr(t, "yeni son yönetici", e.svc.LeaveTayfa(ctx, member, tf.id), apperr.ErrLastAdmin)
 }

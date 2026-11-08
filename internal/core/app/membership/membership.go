@@ -659,8 +659,14 @@ func (s *Service) ChangeRole(ctx context.Context, caller, tayfa, target id.ID, n
 	if !newRole.Valid() {
 		return Member{}, apperr.Validation("new_role")
 	}
+	// Lowering one's own role is its own permission: a moderator may step
+	// down even though only admins change other members' roles.
+	action := authz.MemberChangeRole
+	if target == caller {
+		action = authz.RoleStepDown
+	}
 	var out Member
-	err := s.moderate(ctx, caller, tayfa, target, authz.MemberChangeRole, func(q *store.Queries, tm store.GetMembershipRow, actorRole authz.Role) error {
+	err := s.moderate(ctx, caller, tayfa, target, action, func(q *store.Queries, tm store.GetMembershipRow, actorRole authz.Role) error {
 		if tm.Status != string(authz.StatusActive) {
 			return apperr.ErrMemberNotFound
 		}

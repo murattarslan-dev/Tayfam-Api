@@ -127,6 +127,7 @@ const (
 	MemberBan
 	MemberRemove
 	AuditView
+	RoleStepDown
 
 	actionEnd // sentinel; keep last
 )
@@ -152,6 +153,7 @@ var actionNames = [...]string{
 	MemberBan:            "member.ban",
 	MemberRemove:         "member.remove",
 	AuditView:            "audit.view",
+	RoleStepDown:         "role.step_down",
 	actionEnd:            "",
 }
 
@@ -173,9 +175,12 @@ var permissions = map[Action]Role{
 	InviteCreate:    Member,
 	InviteRevokeOwn: Member,
 	MemberList:      Member,
+	// Members see their own links; callers allowed InviteRevokeAny see all.
+	InviteList: Member,
 
 	// Moderation: moderator and above.
-	InviteList:        Moderator,
+	// Lowering one's own role; members have nothing to step down to.
+	RoleStepDown:      Moderator,
 	MemberListPending: Moderator,
 	MemberApprove:     Moderator,
 	MemberReject:      Moderator,
@@ -205,6 +210,8 @@ var allowedWhileMuted = map[Action]bool{
 	MemberList:        true,
 	MemberListPending: true,
 	AuditView:         true,
+	// Stepping down only narrows the caller's own access.
+	RoleStepDown: true,
 }
 
 // Allowed reports whether a user with membership m may perform a at now. Only
