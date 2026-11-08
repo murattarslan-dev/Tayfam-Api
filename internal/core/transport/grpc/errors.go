@@ -1,0 +1,147 @@
+// Package grpc is core's gRPC transport: it converts requests and responses
+// and maps app errors to gRPC statuses. It holds no business logic.
+package grpc
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
+)
+
+// errorDomain is the ErrorInfo domain of core's errors (errors.proto).
+const errorDomain = "core.tayfam.app"
+
+// Fixed status messages: they never echo request values or internal detail.
+const (
+	msgRejected        = "istek reddedildi"
+	msgInternal        = "iç hata"
+	msgUnauthenticated = "kimlik doğrulanamadı"
+)
+
+// reasonFor returns the fixed code and reason of an app error
+// (errors.proto); ok is false for any other error.
+func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) {
+	switch {
+	case errors.Is(err, apperr.ErrTayfaNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_TAYFA_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrPermissionDenied):
+		return codes.PermissionDenied, corev1.ErrorReason_ERROR_REASON_PERMISSION_DENIED, true
+	case errors.Is(err, apperr.ErrMuted):
+		return codes.PermissionDenied, corev1.ErrorReason_ERROR_REASON_MUTED, true
+	case errors.Is(err, apperr.ErrTayfaReadOnly):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_TAYFA_READ_ONLY, true
+	case errors.Is(err, apperr.ErrTayfaCreateLimit):
+		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_TAYFA_CREATE_LIMIT, true
+	case errors.Is(err, apperr.ErrRateLimited):
+		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_RATE_LIMITED, true
+	case errors.Is(err, apperr.ErrInvalidJoinCode):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_INVALID_JOIN_CODE, true
+	case errors.Is(err, apperr.ErrInviteInvalid):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_INVITE_INVALID, true
+	case errors.Is(err, apperr.ErrInviteExpired):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_INVITE_EXPIRED, true
+	case errors.Is(err, apperr.ErrInviteRevoked):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_INVITE_REVOKED, true
+	case errors.Is(err, apperr.ErrInviteExhausted):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_INVITE_EXHAUSTED, true
+	case errors.Is(err, apperr.ErrInviteNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_INVITE_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrAlreadyMember):
+		return codes.AlreadyExists, corev1.ErrorReason_ERROR_REASON_ALREADY_MEMBER, true
+	case errors.Is(err, apperr.ErrAlreadyPending):
+		return codes.AlreadyExists, corev1.ErrorReason_ERROR_REASON_ALREADY_PENDING, true
+	case errors.Is(err, apperr.ErrBanned):
+		return codes.PermissionDenied, corev1.ErrorReason_ERROR_REASON_BANNED, true
+	case errors.Is(err, apperr.ErrMemberNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_MEMBER_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrRoleHierarchy):
+		return codes.PermissionDenied, corev1.ErrorReason_ERROR_REASON_ROLE_HIERARCHY, true
+	case errors.Is(err, apperr.ErrLastAdmin):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LAST_ADMIN, true
+	case errors.Is(err, apperr.ErrDeletionAlreadyRequested):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DELETION_ALREADY_REQUESTED, true
+	case errors.Is(err, apperr.ErrDeletionNotRequested):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DELETION_NOT_REQUESTED, true
+	}
+	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
+}
+
+// errorStatus converts an app error to the status the client sees. Errors
+// it does not know are logged and become a bare Internal status.
+//
+// The memberships trigger is the second line of defence (ADR-0004): when it
+// refuses a change the app layer let through, TF002 becomes ROLE_HIERARCHY
+// and TF003 LAST_ADMIN. TF001 (no actor) and TF004 (audit log changed) are
+// programming errors and stay internal.
+func errorStatus(ctx context.Context, log *slog.Logger, err error) error {
+	var v *apperr.ValidationError
+	if errors.As(err, &v) {
+		return reasonStatus(codes.InvalidArgument, corev1.ErrorReason_ERROR_REASON_VALIDATION, map[string]string{"field": v.Field})
+	}
+	if code, reason, ok := reasonFor(err); ok {
+		return reasonStatus(code, reason, nil)
+	}
+	switch store.SQLState(err) {
+	case store.CodeRoleHierarchy:
+		log.WarnContext(ctx, "üyelik trigger'ı değişikliği reddetti", slog.String("code", store.CodeRoleHierarchy))
+		return reasonStatus(codes.PermissionDenied, corev1.ErrorReason_ERROR_REASON_ROLE_HIERARCHY, nil)
+	case store.CodeLastAdmin:
+		return reasonStatus(codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LAST_ADMIN, nil)
+	}
+	switch {
+	case errors.Is(err, context.Canceled):
+		return status.Error(codes.Canceled, msgRejected)
+	case errors.Is(err, context.DeadlineExceeded):
+		return status.Error(codes.DeadlineExceeded, msgRejected)
+	}
+	log.ErrorContext(ctx, "istek başarısız", slog.Any("err", err))
+	return status.Error(codes.Internal, msgInternal)
+}
+
+// reasonStatus builds a status with a google.rpc.ErrorInfo detail.
+func reasonStatus(code codes.Code, reason corev1.ErrorReason, meta map[string]string) error {
+	st := status.New(code, msgRejected)
+	if withInfo, err := st.WithDetails(&errdetails.ErrorInfo{Reason: reason.String(), Domain: errorDomain, Metadata: meta}); err == nil {
+		st = withInfo
+	}
+	return st.Err()
+}
+
+// validation is the status for a request field that failed validation in
+// transport (malformed ID, unknown enum value).
+func validation(field string) error {
+	return reasonStatus(codes.InvalidArgument, corev1.ErrorReason_ERROR_REASON_VALIDATION, map[string]string{"field": field})
+}
+
+// callerID returns the verified caller (auth.Guard). Requests never name
+// the acting user.
+func callerID(ctx context.Context) (id.ID, error) {
+	c, ok := auth.CallerFrom(ctx)
+	if !ok {
+		return id.ID{}, status.Error(codes.Unauthenticated, msgUnauthenticated)
+	}
+	u, ok := id.Parse(c.Subject)
+	if !ok {
+		return id.ID{}, status.Error(codes.Unauthenticated, msgUnauthenticated)
+	}
+	return u, nil
+}
+
+// tayfaID parses a request's tayfa_id.
+func tayfaID(s string) (id.ID, error) {
+	t, ok := id.Parse(s)
+	if !ok {
+		return id.ID{}, validation("tayfa_id")
+	}
+	return t, nil
+}

@@ -27,6 +27,52 @@ func (q *Queries) AddTayfaInterest(ctx context.Context, arg AddTayfaInterestPara
 	return err
 }
 
+const cancelTayfaDeletion = `-- name: CancelTayfaDeletion :execrows
+UPDATE tayfas
+SET deletion_requested_at = NULL, deletion_requested_by = NULL,
+    deletion_scheduled_for = NULL
+WHERE id = $1 AND deleted_at IS NULL AND deletion_requested_at IS NOT NULL
+`
+
+func (q *Queries) CancelTayfaDeletion(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelTayfaDeletion, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const countActiveMembersForTayfas = `-- name: CountActiveMembersForTayfas :many
+SELECT tayfa_id, count(*) AS member_count FROM memberships
+WHERE tayfa_id = ANY($1::uuid[]) AND status = 'active'
+GROUP BY tayfa_id
+`
+
+type CountActiveMembersForTayfasRow struct {
+	TayfaID     pgtype.UUID
+	MemberCount int64
+}
+
+func (q *Queries) CountActiveMembersForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]CountActiveMembersForTayfasRow, error) {
+	rows, err := q.db.Query(ctx, countActiveMembersForTayfas, tayfaIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountActiveMembersForTayfasRow{}
+	for rows.Next() {
+		var i CountActiveMembersForTayfasRow
+		if err := rows.Scan(&i.TayfaID, &i.MemberCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countTayfasCreatedSince = `-- name: CountTayfasCreatedSince :one
 SELECT count(*) FROM tayfas
 WHERE created_by = $1 AND created_at > $2
@@ -158,6 +204,28 @@ func (q *Queries) GetTayfaByClientRequest(ctx context.Context, arg GetTayfaByCli
 	return id, err
 }
 
+const getTayfaByClientRequestID = `-- name: GetTayfaByClientRequestID :one
+SELECT id, deleted_at FROM tayfas
+WHERE created_by = $1 AND client_request_id = $2
+`
+
+type GetTayfaByClientRequestIDParams struct {
+	CreatedBy       pgtype.UUID
+	ClientRequestID pgtype.UUID
+}
+
+type GetTayfaByClientRequestIDRow struct {
+	ID        pgtype.UUID
+	DeletedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetTayfaByClientRequestID(ctx context.Context, arg GetTayfaByClientRequestIDParams) (GetTayfaByClientRequestIDRow, error) {
+	row := q.db.QueryRow(ctx, getTayfaByClientRequestID, arg.CreatedBy, arg.ClientRequestID)
+	var i GetTayfaByClientRequestIDRow
+	err := row.Scan(&i.ID, &i.DeletedAt)
+	return i, err
+}
+
 const getTayfaByJoinCode = `-- name: GetTayfaByJoinCode :one
 SELECT id, join_policy, status, suspended_at
 FROM tayfas
@@ -181,6 +249,206 @@ func (q *Queries) GetTayfaByJoinCode(ctx context.Context, joinCode string) (GetT
 		&i.SuspendedAt,
 	)
 	return i, err
+}
+
+const getTayfaForUpdate = `-- name: GetTayfaForUpdate :one
+SELECT id, name, name_normalized, description, join_code, status, visibility,
+       join_policy, city, district, created_by, last_activity_at, suspended_at,
+       deletion_requested_at, deletion_scheduled_for, created_at, updated_at
+FROM tayfas
+WHERE id = $1 AND deleted_at IS NULL
+FOR NO KEY UPDATE
+`
+
+type GetTayfaForUpdateRow struct {
+	ID                   pgtype.UUID
+	Name                 string
+	NameNormalized       string
+	Description          pgtype.Text
+	JoinCode             string
+	Status               string
+	Visibility           string
+	JoinPolicy           string
+	City                 pgtype.Text
+	District             pgtype.Text
+	CreatedBy            pgtype.UUID
+	LastActivityAt       pgtype.Timestamptz
+	SuspendedAt          pgtype.Timestamptz
+	DeletionRequestedAt  pgtype.Timestamptz
+	DeletionScheduledFor pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+// Yazan işlemler tayfa satırını kilitleyerek okur; memberships trigger'ı da
+// aynı satırı kilitlediği için üyelik değişiklikleriyle sırayla çalışır.
+func (q *Queries) GetTayfaForUpdate(ctx context.Context, id pgtype.UUID) (GetTayfaForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getTayfaForUpdate, id)
+	var i GetTayfaForUpdateRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.NameNormalized,
+		&i.Description,
+		&i.JoinCode,
+		&i.Status,
+		&i.Visibility,
+		&i.JoinPolicy,
+		&i.City,
+		&i.District,
+		&i.CreatedBy,
+		&i.LastActivityAt,
+		&i.SuspendedAt,
+		&i.DeletionRequestedAt,
+		&i.DeletionScheduledFor,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listInterestsForTayfas = `-- name: ListInterestsForTayfas :many
+SELECT tayfa_id, event_type FROM tayfa_interests
+WHERE tayfa_id = ANY($1::uuid[])
+`
+
+type ListInterestsForTayfasRow struct {
+	TayfaID   pgtype.UUID
+	EventType string
+}
+
+func (q *Queries) ListInterestsForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListInterestsForTayfasRow, error) {
+	rows, err := q.db.Query(ctx, listInterestsForTayfas, tayfaIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListInterestsForTayfasRow{}
+	for rows.Next() {
+		var i ListInterestsForTayfasRow
+		if err := rows.Scan(&i.TayfaID, &i.EventType); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listModulesForTayfas = `-- name: ListModulesForTayfas :many
+SELECT tayfa_id, module, enabled FROM tayfa_modules
+WHERE tayfa_id = ANY($1::uuid[])
+`
+
+type ListModulesForTayfasRow struct {
+	TayfaID pgtype.UUID
+	Module  string
+	Enabled bool
+}
+
+func (q *Queries) ListModulesForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListModulesForTayfasRow, error) {
+	rows, err := q.db.Query(ctx, listModulesForTayfas, tayfaIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListModulesForTayfasRow{}
+	for rows.Next() {
+		var i ListModulesForTayfasRow
+		if err := rows.Scan(&i.TayfaID, &i.Module, &i.Enabled); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMyTayfas = `-- name: ListMyTayfas :many
+SELECT t.id, t.name, t.name_normalized, t.description, t.join_code, t.status,
+       t.join_policy, t.suspended_at, t.deletion_scheduled_for, t.created_at,
+       t.updated_at, m.role, m.status AS membership_status, m.muted_until,
+       m.created_at AS membership_created_at
+FROM memberships m
+JOIN tayfas t ON t.id = m.tayfa_id
+WHERE m.user_id = $1
+  AND m.status IN ('active', 'pending')
+  AND t.deleted_at IS NULL
+  AND (m.created_at, m.tayfa_id) < ($2::timestamptz, $3::uuid)
+ORDER BY m.created_at DESC, m.tayfa_id DESC
+LIMIT $4
+`
+
+type ListMyTayfasParams struct {
+	UserID          pgtype.UUID
+	BeforeCreatedAt pgtype.Timestamptz
+	BeforeTayfaID   pgtype.UUID
+	PageSize        int32
+}
+
+type ListMyTayfasRow struct {
+	ID                   pgtype.UUID
+	Name                 string
+	NameNormalized       string
+	Description          pgtype.Text
+	JoinCode             string
+	Status               string
+	JoinPolicy           string
+	SuspendedAt          pgtype.Timestamptz
+	DeletionScheduledFor pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	Role                 string
+	MembershipStatus     string
+	MutedUntil           pgtype.Timestamptz
+	MembershipCreatedAt  pgtype.Timestamptz
+}
+
+// "Tayfalarım": kullanıcının aktif üyelikleri ve bekleyen başvuruları, en
+// yeni üyelik kaydı önce; (created_at, tayfa_id) ile sayfalanır.
+func (q *Queries) ListMyTayfas(ctx context.Context, arg ListMyTayfasParams) ([]ListMyTayfasRow, error) {
+	rows, err := q.db.Query(ctx, listMyTayfas,
+		arg.UserID,
+		arg.BeforeCreatedAt,
+		arg.BeforeTayfaID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMyTayfasRow{}
+	for rows.Next() {
+		var i ListMyTayfasRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.NameNormalized,
+			&i.Description,
+			&i.JoinCode,
+			&i.Status,
+			&i.JoinPolicy,
+			&i.SuspendedAt,
+			&i.DeletionScheduledFor,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Role,
+			&i.MembershipStatus,
+			&i.MutedUntil,
+			&i.MembershipCreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listTayfaInterests = `-- name: ListTayfaInterests :many
@@ -298,6 +566,62 @@ func (q *Queries) ListUserActiveTayfas(ctx context.Context, arg ListUserActiveTa
 	return items, nil
 }
 
+const lockTayfaCreation = `-- name: LockTayfaCreation :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
+`
+
+// Aynı kullanıcının eşzamanlı oluşturma istekleri sırayla işlenir; günlük
+// sınır iki istekte birden aşılamaz. Kilit transaction bitince bırakılır.
+func (q *Queries) LockTayfaCreation(ctx context.Context, lockKey string) error {
+	_, err := q.db.Exec(ctx, lockTayfaCreation, lockKey)
+	return err
+}
+
+const requestTayfaDeletion = `-- name: RequestTayfaDeletion :execrows
+UPDATE tayfas
+SET deletion_requested_at = $1, deletion_requested_by = $2,
+    deletion_scheduled_for = $3
+WHERE id = $4 AND deleted_at IS NULL AND deletion_requested_at IS NULL
+`
+
+type RequestTayfaDeletionParams struct {
+	RequestedAt  pgtype.Timestamptz
+	RequestedBy  pgtype.UUID
+	ScheduledFor pgtype.Timestamptz
+	ID           pgtype.UUID
+}
+
+func (q *Queries) RequestTayfaDeletion(ctx context.Context, arg RequestTayfaDeletionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, requestTayfaDeletion,
+		arg.RequestedAt,
+		arg.RequestedBy,
+		arg.ScheduledFor,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setTayfaJoinCode = `-- name: SetTayfaJoinCode :execrows
+UPDATE tayfas SET join_code = $1
+WHERE id = $2 AND deleted_at IS NULL
+`
+
+type SetTayfaJoinCodeParams struct {
+	JoinCode string
+	ID       pgtype.UUID
+}
+
+func (q *Queries) SetTayfaJoinCode(ctx context.Context, arg SetTayfaJoinCodeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setTayfaJoinCode, arg.JoinCode, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setTayfaModule = `-- name: SetTayfaModule :exec
 INSERT INTO tayfa_modules (tayfa_id, module, enabled)
 VALUES ($1, $2, $3)
@@ -313,4 +637,33 @@ type SetTayfaModuleParams struct {
 func (q *Queries) SetTayfaModule(ctx context.Context, arg SetTayfaModuleParams) error {
 	_, err := q.db.Exec(ctx, setTayfaModule, arg.TayfaID, arg.Module, arg.Enabled)
 	return err
+}
+
+const updateTayfaSettings = `-- name: UpdateTayfaSettings :execrows
+UPDATE tayfas
+SET name = $1, name_normalized = $2,
+    description = $3, join_policy = $4
+WHERE id = $5 AND deleted_at IS NULL
+`
+
+type UpdateTayfaSettingsParams struct {
+	Name           string
+	NameNormalized string
+	Description    pgtype.Text
+	JoinPolicy     string
+	ID             pgtype.UUID
+}
+
+func (q *Queries) UpdateTayfaSettings(ctx context.Context, arg UpdateTayfaSettingsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateTayfaSettings,
+		arg.Name,
+		arg.NameNormalized,
+		arg.Description,
+		arg.JoinPolicy,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
