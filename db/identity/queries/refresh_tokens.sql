@@ -16,5 +16,8 @@ FOR UPDATE OF rt, s;
 UPDATE refresh_tokens SET used_at = now()
 WHERE id = @id AND used_at IS NULL;
 
--- name: TouchSession :exec
-UPDATE sessions SET last_refreshed_at = now() WHERE id = @id;
+-- Oturum 90 gün kullanılmazsa sona erer (ADR-0004); her yenilemede süre
+-- yeniden başlar.
+-- name: ExtendSession :exec
+UPDATE sessions SET last_refreshed_at = now(), expires_at = @expires_at
+WHERE id = @id AND revoked_at IS NULL;

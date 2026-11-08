@@ -45,3 +45,16 @@ func TestPGRoundTrip(t *testing.T) {
 		t.Fatal("pgtype dönüşümü bozuk")
 	}
 }
+
+func TestParse(t *testing.T) {
+	u := New()
+	got, ok := Parse(u.String())
+	if !ok || got != u {
+		t.Fatal("String/Parse turu bozuk")
+	}
+	for _, s := range []string{"", "x", u.String()[:35], u.String() + "0", "zzzzzzzz-zzzz-7zzz-8zzz-zzzzzzzzzzzz", "0190a1b2c3d47e5f8a9b0c1d2e3f4a5b0000"} {
+		if _, ok := Parse(s); ok {
+			t.Errorf("Parse(%q) kabul edildi", s)
+		}
+	}
+}

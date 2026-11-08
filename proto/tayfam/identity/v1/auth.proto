@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package tayfam.identity.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// AuthService signs users in with a provider ID token, rotates refresh
+// tokens and ends sessions (ADR-0004). Only gateway calls it.
+//
+// SignIn and Refresh are callable without an access token: they are how a
+// client gets one. Errors carry a google.rpc.ErrorInfo detail whose reason
+// is one of the ERROR_REASON_* names below, domain "identity.tayfam.app".
+service AuthService {
+  rpc SignIn(SignInRequest) returns (SignInResponse);
+  rpc Refresh(RefreshRequest) returns (RefreshResponse);
+  // SignOut ends the caller's session (from the access token).
+  rpc SignOut(SignOutRequest) returns (SignOutResponse);
+}
+
+enum Provider {
+  PROVIDER_UNSPECIFIED = 0;
+  PROVIDER_GOOGLE = 1;
+  PROVIDER_APPLE = 2;
+}
+
+enum Platform {
+  PLATFORM_UNSPECIFIED = 0;
+  PLATFORM_ANDROID = 1;
+  PLATFORM_IOS = 2;
+  PLATFORM_WEB = 3;
+}
+
+// Reasons in google.rpc.ErrorInfo; listed here so clients share one source.
+enum ErrorReason {
+  ERROR_REASON_UNSPECIFIED = 0;
+  // The provider token, nonce or platform was not accepted.
+  ERROR_REASON_INVALID_CREDENTIALS = 1;
+  ERROR_REASON_UNSUPPORTED_PROVIDER = 2;
+  // Registration was refused because of the age limit (ADR-0012).
+  ERROR_REASON_AGE_BLOCKED = 3;
+  // The refresh token is unknown, used, expired or its session ended.
+  ERROR_REASON_INVALID_REFRESH = 4;
+  // The same refresh token was used twice at once; retry is pointless, the
+  // other request got the new token.
+  ERROR_REASON_REFRESH_CONFLICT = 5;
+}
+
+message SignInRequest {
+  Provider provider = 1;
+  // ID token from the provider SDK. Never logged.
+  string id_token = 2;
+  // Nonce the client passed to the provider SDK (ADR-0004).
+  string nonce = 3;
+  Platform platform = 4;
+}
+
+message SignInResponse {
+  Tokens tokens = 1;
+}
+
+message RefreshRequest {
+  // Never logged.
+  string refresh_token = 1;
+}
+
+message RefreshResponse {
+  Tokens tokens = 1;
+}
+
+message SignOutRequest {}
+
+message SignOutResponse {}
+
+message Tokens {
+  string user_id = 1;
+  string session_id = 2;
+  string access_token = 3;
+  google.protobuf.Timestamp access_expire_time = 4;
+  string refresh_token = 5;
+  google.protobuf.Timestamp refresh_expire_time = 6;
+  // True until registration (birth date, consents) is complete. The access
+  // token then only reaches registration methods (ADR-0012).
+  bool registration_pending = 7;
+}

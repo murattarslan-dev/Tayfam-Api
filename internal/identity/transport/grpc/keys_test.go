@@ -40,8 +40,16 @@ func TestListPublicKeysReturnsOnlyPublicHalves(t *testing.T) {
 	}
 }
 
-func TestOnlyKeyListingIsPublic(t *testing.T) {
-	if len(PublicMethods) != 1 || PublicMethods[0] != identityv1.KeyService_ListPublicKeys_FullMethodName {
+func TestPublicMethodsAreFixed(t *testing.T) {
+	want := []string{
+		identityv1.KeyService_ListPublicKeys_FullMethodName,
+		identityv1.AuthService_SignIn_FullMethodName,
+		identityv1.AuthService_Refresh_FullMethodName,
+	}
+	if !slices.Equal(PublicMethods, want) {
 		t.Fatalf("açık metodlar değişti: %v; her ekleme güvenlik incelemesi gerektirir", PublicMethods)
+	}
+	if slices.Contains(PublicMethods, identityv1.AuthService_SignOut_FullMethodName) {
+		t.Fatal("SignOut token istemeli")
 	}
 }
