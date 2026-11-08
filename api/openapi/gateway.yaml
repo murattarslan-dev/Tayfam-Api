@@ -1,0 +1,242 @@
+# Tayfam dış REST sözleşmesi (ADR-0003). Önce burası değişir, sonra kod.
+openapi: 3.1.0
+info:
+  title: Tayfam API
+  version: 0.1.0
+  description: |
+    gateway'in dışa açık uçları. İç servisler yalnızca gRPC konuşur.
+
+    **Kimlik:** Mobil istemciler erişim token'ını `Authorization: Bearer`
+    başlığıyla gönderir. Web istemcisinin token'ları JavaScript'in
+    erişemeyeceği çerezlerdedir (ADR-0004): `tayfam_at` (erişim) ve yolu
+    `/v1/auth/refresh` ile sınırlı `tayfam_rt` (refresh).
+
+    **CSRF:** Durum değiştiren her istek (POST, PUT, PATCH, DELETE)
+    `X-Tayfam-Client` başlığını taşır; değeri istemcinin adıdır (`android`,
+    `ios`, `web`). Tarayıcılar bu başlığı başka bir siteden gelen formlara
+    ekleyemez.
+
+    **Hatalar:** RFC 9457 `application/problem+json`. `type` alanı makine
+    tarafından okunur: `https://tayfam.app/problems/<kod>`. `title` ve
+    `detail` kullanıcıya gösterilmez; istemci kodu çeviri dosyasında arar.
+servers:
+  - url: https://api-dev.tayfam.app
+    description: dev (ev cluster'ı)
+
+paths:
+  /v1/status:
+    get:
+      operationId: getStatus
+      summary: Servislerin erişilebilirliği
+      security: []
+      responses:
+        "200":
+          description: Durum
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Status" }
+
+  /v1/auth/sign-in:
+    post:
+      operationId: signIn
+      summary: Google (ileride Apple) ID token'ı ile giriş
+      description: |
+        Kullanıcı yoksa oluşturulur ve kayıt bekler (`registration_pending`).
+        Bu durumdaki erişim token'ı yalnızca `/v1/registration` uçlarına
+        geçer (ADR-0012). `platform` `web` ise token'lar gövdede değil
+        çerezlerde döner.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SignInRequest" }
+      responses:
+        "200":
+          description: Oturum açıldı
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/auth/refresh:
+    post:
+      operationId: refresh
+      summary: Refresh token ile yeni token çifti
+      description: |
+        Refresh token her kullanımda yenilenir; eski token geçersiz olur.
+        Kullanılmış bir token tekrar gelirse oturum tamamen kapanır.
+        Mobil istemci token'ı gövdede, web istemcisi `tayfam_rt` çerezinde
+        gönderir.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
+      responses:
+        "200":
+          description: Yeni token'lar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+
+  /v1/auth/sign-out:
+    post:
+      operationId: signOut
+      summary: Bu cihazdaki oturumu kapatır
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Oturum kapandı; web çerezleri silindi }
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /v1/registration/requirements:
+    get:
+      operationId: getRegistrationRequirements
+      summary: Onaylanacak belge sürümleri ve yaş sınırı
+      responses:
+        "200":
+          description: Gereksinimler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegistrationRequirements" }
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /v1/registration:
+    post:
+      operationId: completeRegistration
+      summary: Kaydı tamamlar (doğum tarihi, onaylar, ad)
+      description: |
+        Başarılı olunca istemci `/v1/auth/refresh` çağırır ve tam erişim
+        token'ı alır. Yaş sınırının altındaki bir doğum tarihi hesabı kalıcı
+        olarak kapatır (`age-blocked`) ve oturumları sonlandırır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegistrationRequest" }
+      responses:
+        "204": { description: Kayıt tamamlandı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+    cookie: { type: apiKey, in: cookie, name: tayfam_at }
+
+  parameters:
+    ClientHeader:
+      name: X-Tayfam-Client
+      in: header
+      required: true
+      description: CSRF koruması; durum değiştiren her istekte zorunlu.
+      schema: { type: string, enum: [android, ios, web] }
+
+  responses:
+    Problem:
+      description: |
+        Hata. `type` kodları: invalid-request, missing-client-header,
+        unauthenticated, invalid-credentials, unsupported-provider,
+        age-blocked, invalid-refresh, refresh-conflict, invalid-birth-date,
+        consent-outdated, already-registered, invalid-display-name,
+        rate-limited, unavailable, internal.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        request_id: { type: string }
+
+    Status:
+      type: object
+      required: [status, version, services, checked_at]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        version: { type: string }
+        services:
+          type: object
+          additionalProperties: { type: string, enum: [ok, unavailable] }
+        checked_at: { type: string, format: date-time }
+
+    SignInRequest:
+      type: object
+      required: [provider, id_token, nonce, platform]
+      additionalProperties: false
+      properties:
+        provider: { type: string, enum: [google] }
+        id_token: { type: string, maxLength: 8192 }
+        nonce: { type: string, minLength: 16, maxLength: 256 }
+        platform: { type: string, enum: [android, ios, web] }
+
+    RefreshRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        refresh_token:
+          type: string
+          maxLength: 64
+          description: Mobil istemciler için; web çerezi kullanır.
+
+    Session:
+      type: object
+      required: [user_id, session_id, access_expires_at, refresh_expires_at, registration_pending]
+      properties:
+        user_id: { type: string, format: uuid }
+        session_id: { type: string, format: uuid }
+        access_token:
+          type: string
+          description: Yalnızca mobil; web'de çerezdedir.
+        access_expires_at: { type: string, format: date-time }
+        refresh_token:
+          type: string
+          description: Yalnızca mobil; web'de çerezdedir.
+        refresh_expires_at: { type: string, format: date-time }
+        registration_pending: { type: boolean }
+
+    RegistrationRequirements:
+      type: object
+      required: [privacy_notice_version, terms_version, minimum_age]
+      properties:
+        privacy_notice_version: { type: string }
+        terms_version: { type: string }
+        minimum_age: { type: integer }
+
+    RegistrationRequest:
+      type: object
+      required: [birth_date, accepted_privacy_notice_version, accepted_terms_version]
+      additionalProperties: false
+      properties:
+        birth_date: { type: string, format: date }
+        display_name: { type: string, minLength: 1, maxLength: 40 }
+        accepted_privacy_notice_version: { type: string, maxLength: 32 }
+        accepted_terms_version: { type: string, maxLength: 32 }
+
+security:
+  - bearer: []
+  - cookie: []

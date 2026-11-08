@@ -1,0 +1,43 @@
+package ratelimit
+
+import (
+	"testing"
+	"time"
+)
+
+func TestBurstAndRefill(t *testing.T) {
+	l := New(60, 3) // 1/s, 3 at once
+	now := time.Unix(0, 0)
+	l.now = func() time.Time { return now }
+	for i := range 3 {
+		if !l.Allow("ip") {
+			t.Fatalf("istek %d reddedildi", i)
+		}
+	}
+	if l.Allow("ip") {
+		t.Fatal("kova boşken izin verildi")
+	}
+	if !l.Allow("baska-ip") {
+		t.Fatal("anahtarlar birbirini etkiliyor")
+	}
+	now = now.Add(time.Second)
+	if !l.Allow("ip") || l.Allow("ip") {
+		t.Fatal("saniyede bir dolmalı")
+	}
+}
+
+func TestSweepAndCap(t *testing.T) {
+	l := New(60, 1)
+	now := time.Unix(0, 0)
+	l.now = func() time.Time { return now }
+	l.maxKeys = 2
+	l.Allow("a")
+	l.Allow("b")
+	if l.Allow("c") {
+		t.Fatal("anahtar sınırı aşıldı")
+	}
+	now = now.Add(2 * time.Minute)
+	if !l.Allow("c") {
+		t.Fatal("dolan kovalar temizlenmedi")
+	}
+}
