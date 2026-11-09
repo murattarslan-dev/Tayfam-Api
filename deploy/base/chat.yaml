@@ -58,6 +58,9 @@ spec:
             - { name: OPS_ADDR, value: ":8081" }
             - { name: GRPC_ADDR, value: ":9090" }
             - { name: IDENTITY_GRPC_ADDR, value: "identity:9090" }
+            # Sessize almada üyelik kontrolü: core GetMembership, kullanıcının
+            # kendi token'ıyla (ADR-0009). Servis token'ı gerekmez.
+            - { name: CORE_GRPC_ADDR, value: "core:9090" }
             # Servis token'ı doğrulaması (ADR-0013): identity'nin ve core'un
             # outbox relay'leri olay servislerini servis token'ıyla çağırır.
             # İzinli çağıranlar bu namespace'teki ServiceAccount'lardır.

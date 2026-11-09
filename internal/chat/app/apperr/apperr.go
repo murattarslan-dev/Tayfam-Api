@@ -7,6 +7,20 @@
 // The messages are for logs only; callers see the ErrorReason.
 package apperr
 
+import "errors"
+
+// NotificationService errors.
+var (
+	// ErrNotificationNotFound: no such notification of the caller. Another
+	// user's notification is indistinguishable from a missing one.
+	ErrNotificationNotFound = errors.New("bildirim bulunamadı")
+	// ErrTayfaNotFound: core says the caller is not an active member of the
+	// tayfa (or it does not exist).
+	ErrTayfaNotFound = errors.New("tayfa bulunamadı")
+	// ErrUnavailable: core could not answer; the caller may retry.
+	ErrUnavailable = errors.New("core yanıt vermedi")
+)
+
 // ValidationError reports a request field that failed validation. Field is
 // the request field name as written in the proto; the rejected value is
 // never kept.

@@ -20,4 +20,13 @@ enum ErrorReason {
   // range, unknown enum value, bad page token). ErrorInfo metadata "field"
   // holds the request field name; the rejected value is never included.
   ERROR_REASON_VALIDATION = 1;
+
+  // NOT_FOUND. No such notification of the caller. Another user's
+  // notification is indistinguishable from a missing one.
+  ERROR_REASON_NOTIFICATION_NOT_FOUND = 2;
+
+  // NOT_FOUND. The tayfa does not exist or the caller is not an active
+  // member of it (core's answer). These cases are indistinguishable on
+  // purpose.
+  ERROR_REASON_TAYFA_NOT_FOUND = 3;
 }
