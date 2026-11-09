@@ -2079,6 +2079,128 @@ paths:
         "429": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  /v1/notifications:
+    get:
+      operationId: listNotifications
+      summary: Bildirimlerinizi listeler (uygulama içi, en yeni önce)
+      description: |
+        Yalnızca kendi bildirimleriniz. Bildirim içerik metni taşımaz:
+        tür, tayfa, işlemi yapan ve hedefin kimliği vardır; istemci içeriği
+        ilgili uçtan (duyuru, etkinlik, cevap…) çeker. Yalnızca etkin
+        üyesi olduğunuz tayfaların bildirimleri üretilir; kendi yaptığınız
+        işlem için bildirim gelmez. Sessize aldığınız tayfanın bildirimleri
+        de listede görünür. Bildirimler 90 gün saklanır.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Bildirimler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/notifications/unread-count:
+    get:
+      operationId: getUnreadNotificationCount
+      summary: Okunmamış bildirim sayısı (en fazla 1000)
+      responses:
+        "200":
+          description: Okunmamış sayısı
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UnreadNotificationCount" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/notifications/read-all:
+    post:
+      operationId: markAllNotificationsRead
+      summary: Tüm bildirimlerinizi okundu işaretler
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Okundu }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/notifications/{notification_id}/read:
+    parameters:
+      - $ref: "#/components/parameters/NotificationID"
+    put:
+      operationId: markNotificationRead
+      summary: Bir bildirimi okundu işaretler
+      description: |
+        Tekrar çağrılırsa ilk okunma zamanı korunur. Başka bir kullanıcının
+        bildirimi, olmayan bir bildirimle aynı cevabı alır
+        (`notification-not-found`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Okundu }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/notification-preferences:
+    get:
+      operationId: listNotificationPreferences
+      summary: Bildirim tercihleriniz (sessize alınanlar)
+      description: Tercihi olmayan tayfa için seviye `all`'dur.
+      responses:
+        "200":
+          description: Tercihler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationPreferenceList" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/notification-preferences/tayfas/{tayfa_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    put:
+      operationId: setTayfaNotificationPreference
+      summary: Bir tayfayı sessize alır ya da seviyesini değiştirir
+      description: |
+        Etkin üyesi olduğunuz tayfa için (`tayfa-not-found`). `mentions` ya da
+        `none` isteğe bağlı olarak `mute_until`'e kadar sürer (en fazla bir
+        yıl), sonra tayfa `all`'a döner. `all` ile `mute_until` verilemez;
+        `all` tercihi kaldırır. Sessize alma bildirimleri listeden gizlemez;
+        anlık bildirim (push) gönderiminde kullanılır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NotificationPreferenceRequest" }
+      responses:
+        "200":
+          description: Tercih
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationPreference" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: resetTayfaNotificationPreference
+      summary: Tayfanın bildirim tercihini varsayılana (`all`) döndürür
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Varsayılana döndü }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
 components:
   securitySchemes:
     bearer: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -2138,6 +2260,11 @@ components:
       schema: { type: string, format: uuid }
     TagID:
       name: tag_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    NotificationID:
+      name: notification_id
       in: path
       required: true
       schema: { type: string, format: uuid }
@@ -2230,6 +2357,8 @@ components:
         - poll-not-found
         - poll-closed
         - poll-anonymous
+        # chat: bildirimler (#64)
+        - notification-not-found
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
@@ -3340,6 +3469,103 @@ components:
       properties:
         series: { $ref: "#/components/schemas/EventSeries" }
         cancelled_count: { type: integer, description: İptal edilen yaklaşan etkinlik sayısı. }
+
+    Notification:
+      type: object
+      description: |
+        Bildirim yalnızca kimlik taşır; başlık, gövde, yer, isim yoktur.
+        İstemci `target_type` ve `target_id` ile içeriği ilgili uçtan çeker.
+      required: [id, type, target_type, target_id, read, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        type:
+          type: string
+          description: |
+            `event_created` (yeni etkinlik), `event_updated` ve
+            `event_cancelled` (katıldığınız etkinlik değişti/iptal edildi),
+            `rsvp_promoted` (bekleme listesinden katılımcılara geçtiniz),
+            `announcement`, `answer_received` (sorunuza cevap),
+            `join_request` (yönetici/moderatörlere başvuru),
+            `join_approved` (başvurunuz onaylandı),
+            `tayfa_deletion_requested` (yönetici/moderatörlere silme talebi),
+            `tayfa_warned` (hareketsiz tayfa 7 gün içinde arşivlenecek;
+            `warning_reason` var), `tayfa_archived`, `hike_overdue`
+            (yürüyüşçü zamanında dönmedi; `subject_user_id` yürüyüşçüdür,
+            sessize alma bu bildirimi engellemez). Tanınmayan değer `unknown`.
+          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, hike_overdue, unknown]
+        tayfa_id:
+          type: string
+          format: uuid
+          description: Bildirim bir tayfayla ilgili değilse yoktur.
+        actor_id:
+          type: string
+          format: uuid
+          description: İşlemi yapan; sistem ya da silinmiş hesapsa yoktur.
+        target_type:
+          type: string
+          description: |
+            `membership` için `target_id` başvuran kullanıcının kimliğidir.
+          enum: [tayfa, membership, announcement, event, answer, unknown]
+        target_id: { type: string, format: uuid }
+        question_id:
+          type: string
+          format: uuid
+          description: Yalnızca `answer_received`; cevaplanan soru.
+        subject_user_id:
+          type: string
+          format: uuid
+          description: Yalnızca `hike_overdue`; dönmeyen yürüyüşçü.
+        warning_reason:
+          type: string
+          description: Yalnızca `tayfa_warned`.
+          enum: [inactive, few_members, unknown]
+        read: { type: boolean }
+        created_at: { type: string, format: date-time }
+    NotificationList:
+      type: object
+      required: [notifications]
+      properties:
+        notifications:
+          type: array
+          items: { $ref: "#/components/schemas/Notification" }
+        next_page_token: { type: string }
+    UnreadNotificationCount:
+      type: object
+      required: [unread_count]
+      properties:
+        unread_count: { type: integer, minimum: 0, maximum: 1000 }
+    NotificationPreference:
+      type: object
+      required: [scope_type, scope_id, level, updated_at]
+      properties:
+        scope_type:
+          type: string
+          description: Şimdilik yalnızca `tayfa`; kanal ve konuşma sonra gelir.
+          enum: [tayfa, channel, dm_conversation, unknown]
+        scope_id: { type: string, format: uuid }
+        level: { type: string, enum: [all, mentions, none, unknown] }
+        mute_until:
+          type: string
+          format: date-time
+          description: Yoksa süresiz.
+        updated_at: { type: string, format: date-time }
+    NotificationPreferenceList:
+      type: object
+      required: [preferences]
+      properties:
+        preferences:
+          type: array
+          items: { $ref: "#/components/schemas/NotificationPreference" }
+    NotificationPreferenceRequest:
+      type: object
+      required: [level]
+      additionalProperties: false
+      properties:
+        level: { type: string, enum: [all, mentions, none] }
+        mute_until:
+          type: string
+          format: date-time
+          description: Yalnızca `mentions` ya da `none` ile; en fazla bir yıl sonrası.
 
 security:
   - bearer: []
