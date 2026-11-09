@@ -221,7 +221,11 @@ func TestCreateAndGet(t *testing.T) {
 		v := e.create(t, tf, admin, in)
 		got, err := e.svc.Get(ctx, admin, tf, v.ID)
 		must(t, err)
-		if want := typ; got.Details.typ() != want && !(typ == TypeGeneral && got.Details.typ() == "") {
+		want := typ
+		if typ == TypeGeneral {
+			want = "" // general events have no detail row
+		}
+		if got.Details.typ() != want {
 			t.Errorf("%s: detay %+v", typ, got.Details)
 		}
 	}
