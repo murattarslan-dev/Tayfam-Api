@@ -59,7 +59,10 @@ var (
 	ErrUnsupportedProvider = errors.New("desteklenmeyen giriş sağlayıcısı")
 	ErrInvalidCredentials  = errors.New("kimlik doğrulanamadı")
 	ErrAgeBlocked          = errors.New("hesap yaş sınırı nedeniyle açılamadı")
-	ErrInvalidRefresh      = errors.New("geçersiz veya süresi dolmuş oturum")
+	// ErrSanctioned: the account is under an active platform suspension or
+	// ban (ADR-0004 "Platform yaptırımları", issue #104).
+	ErrSanctioned     = errors.New("hesap platform yaptırımı altında")
+	ErrInvalidRefresh = errors.New("geçersiz veya süresi dolmuş oturum")
 	// ErrRefreshConflict is a concurrent duplicate refresh within reuseGrace.
 	// The client should use the token it got from the other request.
 	ErrRefreshConflict = errors.New("aynı token ile eşzamanlı yenileme")
@@ -219,6 +222,9 @@ func (s *Service) signInTx(ctx context.Context, ident oidc.Identity, platform st
 		if user.AgeBlockedAt.Valid {
 			return ErrAgeBlocked
 		}
+		if err := checkSanction(ctx, q, userID); err != nil {
+			return err
+		}
 
 		deviceID := id.New()
 		if err := q.CreateDevice(ctx, store.CreateDeviceParams{ID: deviceID.PG(), UserID: userID.PG(), Platform: platform}); err != nil {
@@ -291,6 +297,10 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (Tokens, err
 		}
 		if err != nil {
 			return fmt.Errorf("kullanıcı: %w", err)
+		}
+		uid, _ := id.FromPG(row.UserID)
+		if err := checkSanction(ctx, q, uid); err != nil {
+			return err
 		}
 		expires := now.Add(sessionTTL)
 		if err := q.ExtendSession(ctx, store.ExtendSessionParams{ID: row.SessionID, ExpiresAt: ts(expires)}); err != nil {
@@ -482,6 +492,20 @@ func (s *Service) checkCaller(ctx context.Context, q *store.Queries, c Caller) e
 		return fmt.Errorf("oturum: %w", err)
 	}
 	return nil
+}
+
+// checkSanction refuses an account under an active platform sanction. Its
+// sessions were ended when the sanction started; this keeps it from opening
+// or refreshing one while it lasts.
+func checkSanction(ctx context.Context, q *store.Queries, user id.ID) error {
+	_, err := q.GetActiveSanctionType(ctx, user.PG())
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("yaptırım: %w", err)
+	}
+	return ErrSanctioned
 }
 
 var b64 = base64.RawURLEncoding

@@ -149,11 +149,11 @@ func TestIdentityGuardSeparatesTokens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g, err := auth.NewGuard(v, PublicMethods...).WithServices(auth.ServicePolicy{Services: []string{MinorServiceName}})
+	g, err := auth.NewGuard(v, PublicMethods...).WithServices(auth.ServicePolicy{Services: []string{MinorServiceName, PlatformAuditServiceName}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	g, err = g.WithAdmin(auth.AdminPolicy{Verifier: av, Services: []string{AdminAuthServiceName}})
+	g, err = g.WithAdmin(auth.AdminPolicy{Verifier: av, Services: []string{AdminAuthServiceName, AdminUserServiceName}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,6 +184,8 @@ func TestIdentityGuardSeparatesTokens(t *testing.T) {
 	srv := grpc.NewServer(g.ServerOptions()...)
 	identityv1.RegisterAuthServiceServer(srv, NewAuthServer(&fakeSessions{}, discard()))
 	identityv1.RegisterAdminAuthServiceServer(srv, NewAdminAuthServer(&fakeAdmins{user: user}, discard()))
+	identityv1.RegisterAdminUserServiceServer(srv, NewAdminUserServer(&fakeUsers{}, discard()))
+	identityv1.RegisterPlatformAuditServiceServer(srv, NewPlatformAuditServer(&fakeAudits{}, discard()))
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
 	conn, err := grpc.NewClient("passthrough:///bufnet",
@@ -198,6 +200,16 @@ func TestIdentityGuardSeparatesTokens(t *testing.T) {
 
 	userMethod := func(ctx context.Context) error {
 		_, err := authc.SignOut(ctx, &identityv1.SignOutRequest{})
+		return err
+	}
+	usersc := identityv1.NewAdminUserServiceClient(conn)
+	userAdminMethod := func(ctx context.Context) error {
+		_, err := usersc.GetUser(ctx, &identityv1.GetUserRequest{UserId: user.String()})
+		return err
+	}
+	auditc := identityv1.NewPlatformAuditServiceClient(conn)
+	auditMethod := func(ctx context.Context) error {
+		_, err := auditc.RecordPlatformAudit(ctx, &identityv1.RecordPlatformAuditRequest{})
 		return err
 	}
 	adminMethod := func(ctx context.Context) error {
@@ -216,6 +228,10 @@ func TestIdentityGuardSeparatesTokens(t *testing.T) {
 		{"panel metodu: uygulama token'ı", adminMethod, appTok, codes.Unauthenticated},
 		{"panel metodu: kayıt token'ı", adminMethod, regTok, codes.Unauthenticated},
 		{"panel metodu: token yok", adminMethod, "", codes.Unauthenticated},
+		{"kullanıcı yönetimi: admin token'ı", userAdminMethod, adminTok, codes.OK},
+		{"kullanıcı yönetimi: uygulama token'ı", userAdminMethod, appTok, codes.Unauthenticated},
+		{"denetim servisi: admin token'ı", auditMethod, adminTok, codes.Unauthenticated},
+		{"denetim servisi: uygulama token'ı", auditMethod, appTok, codes.Unauthenticated},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()

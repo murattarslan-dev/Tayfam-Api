@@ -232,13 +232,22 @@ func get(ctx context.Context, q *store.Queries, c auth.AdminClaims) (Admin, erro
 	return Admin{UserID: user, DisplayName: row.DisplayName.String, SessionID: sid, AuthTime: c.AuthTime, ExpiresAt: c.ExpiresAt}, nil
 }
 
+// Action is the work of a destructive panel action. Do runs first, in the
+// transaction; it may fill in e (target, metadata). Events, if set, runs
+// after the audit entry is written: outbox events must be the last writes
+// of a transaction (outbox.Write).
+type Action struct {
+	Do     func(ctx context.Context, q *store.Queries, e *Entry) error
+	Events func(ctx context.Context, tx pgx.Tx) error
+}
+
 // Destructive runs a destructive panel action (ban, tayfa deletion, plan
 // change, ...): in one transaction it checks that the caller is still an
 // administrator, that the provider sign-in is at most 5 minutes old and
-// that a reason is given, runs do, and writes the audit entry. If do fails,
-// nothing is written. Stage 2's identity actions use it; the reason and
-// recency checks are CheckDestructive.
-func (s *Service) Destructive(ctx context.Context, c auth.AdminClaims, e Entry, do func(ctx context.Context, q *store.Queries) error) error {
+// that a reason is given, runs the action, writes the audit entry and then
+// the action's events. If any step fails, nothing is written. The reason
+// and recency checks are CheckDestructive.
+func (s *Service) Destructive(ctx context.Context, c auth.AdminClaims, e Entry, a Action) error {
 	if err := CheckDestructive(c, e.Reason, s.cfg.Now()); err != nil {
 		return err
 	}
@@ -248,14 +257,22 @@ func (s *Service) Destructive(ctx context.Context, c auth.AdminClaims, e Entry, 
 		if err != nil {
 			return err
 		}
-		if err := do(ctx, q); err != nil {
-			return err
+		if a.Do != nil {
+			if err := a.Do(ctx, q, &e); err != nil {
+				return err
+			}
 		}
 		if e.Metadata == nil {
 			e.Metadata = map[string]string{}
 		}
 		e.Metadata["admin_session_id"] = admin.SessionID.String()
-		return Record(ctx, q, admin.UserID, e)
+		if err := Record(ctx, q, admin.UserID, e); err != nil {
+			return err
+		}
+		if a.Events != nil {
+			return a.Events(ctx, tx)
+		}
+		return nil
 	})
 }
 
@@ -303,8 +320,20 @@ const maxMetadataBytes = 4096
 // transaction of the action itself so the action and its record commit
 // together.
 func Record(ctx context.Context, q *store.Queries, actor id.ID, e Entry) error {
+	params, err := auditParams(actor, e)
+	if err != nil {
+		return err
+	}
+	if err := q.InsertPlatformAuditLog(ctx, params); err != nil {
+		return fmt.Errorf("platform denetim kaydı: %w", err)
+	}
+	return nil
+}
+
+func auditParams(actor id.ID, e Entry) (store.InsertPlatformAuditLogParams, error) {
+	var zero store.InsertPlatformAuditLogParams
 	if !actionPattern.MatchString(e.Action) || !ValidReason(e.Reason) {
-		return ErrInvalidAudit
+		return zero, ErrInvalidAudit
 	}
 	params := store.InsertPlatformAuditLogParams{
 		ID: id.New().PG(), ActorID: actor.PG(), Action: e.Action, Reason: e.Reason, Metadata: []byte("{}"),
@@ -315,16 +344,52 @@ func Record(ctx context.Context, q *store.Queries, actor id.ID, e Entry) error {
 		params.TargetType = pgtype.Text{String: e.TargetType, Valid: true}
 		params.TargetID = e.TargetID.PG()
 	default:
-		return ErrInvalidAudit
+		return zero, ErrInvalidAudit
 	}
 	if len(e.Metadata) > 0 {
 		b, err := json.Marshal(e.Metadata)
 		if err != nil || len(b) > maxMetadataBytes {
-			return ErrInvalidAudit
+			return zero, ErrInvalidAudit
 		}
 		params.Metadata = b
 	}
-	if err := q.InsertPlatformAuditLog(ctx, params); err != nil {
+	return params, nil
+}
+
+// CoreEntry is a platform audit entry of an action core carried out
+// (PlatformAuditService, issue #104). core writes the action and the entry
+// in one transaction to its outbox; the relay delivers it at least once.
+type CoreEntry struct {
+	EventID    id.ID // core's outbox event ID; the entry's ID
+	OccurredAt time.Time
+	Actor      id.ID
+	Entry
+	AdminSession id.ID
+}
+
+// RecordFromCore writes e unless an entry with its ID exists. It does not
+// check that the actor is still an administrator: core checked that before
+// the action, and the record of an action that happened must not be lost.
+func (s *Service) RecordFromCore(ctx context.Context, e CoreEntry) error {
+	if e.EventID == (id.ID{}) || e.Actor == (id.ID{}) || e.OccurredAt.IsZero() {
+		return ErrInvalidAudit
+	}
+	if e.Metadata == nil {
+		e.Metadata = map[string]string{}
+	}
+	if e.AdminSession != (id.ID{}) {
+		e.Metadata["admin_session_id"] = e.AdminSession.String()
+	}
+	params, err := auditParams(e.Actor, e.Entry)
+	if err != nil {
+		return err
+	}
+	params.ID = e.EventID.PG()
+	if _, err := s.q.InsertPlatformAuditLogOnce(ctx, store.InsertPlatformAuditLogOnceParams{
+		ID: params.ID, ActorID: params.ActorID, Action: params.Action, TargetType: params.TargetType,
+		TargetID: params.TargetID, Reason: params.Reason, Metadata: params.Metadata,
+		CreatedAt: pgtype.Timestamptz{Time: e.OccurredAt.UTC(), Valid: true},
+	}); err != nil {
 		return fmt.Errorf("platform denetim kaydı: %w", err)
 	}
 	return nil
