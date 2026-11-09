@@ -6,6 +6,8 @@
 //   - The permission table (authz) decides the rest: a role that is too low
 //     gets apperr.ErrPermissionDenied, a muted member apperr.ErrMuted.
 //   - Changes to a read-only tayfa get apperr.ErrTayfaReadOnly.
+//   - Methods of a module the tayfa turned off get apperr.ErrModuleDisabled
+//     (RequireModule).
 //
 // The tayfa ID and the user always come from the caller (the verified token
 // and the request path), and every query is scoped by both (IDOR).
@@ -100,6 +102,28 @@ func Authorize(m authz.Membership, a authz.Action, now time.Time) error {
 		return apperr.ErrMuted
 	}
 	return apperr.ErrPermissionDenied
+}
+
+// Module names (tayfa_modules.module, the tayfa_modules_module CHECK).
+const (
+	ModuleAnnouncements = "announcements"
+	ModuleEvents        = "events"
+	ModuleQA            = "qa"
+	ModulePolls         = "polls"
+)
+
+// RequireModule returns apperr.ErrModuleDisabled unless module is enabled
+// in tayfa. A module without a row counts as disabled (default "no"). Every
+// method of a module calls it after Load, reads included.
+func RequireModule(ctx context.Context, q *store.Queries, tayfa id.ID, module string) error {
+	on, err := q.IsTayfaModuleEnabled(ctx, store.IsTayfaModuleEnabledParams{TayfaID: tayfa.PG(), Module: module})
+	if err != nil {
+		return fmt.Errorf("modül: %w", err)
+	}
+	if !on {
+		return apperr.ErrModuleDisabled
+	}
+	return nil
 }
 
 // Suspended reports whether the platform has suspended the tayfa.

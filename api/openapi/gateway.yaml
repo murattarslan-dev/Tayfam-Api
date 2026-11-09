@@ -624,6 +624,187 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  /v1/tayfas/{tayfa_id}/announcements:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listAnnouncements
+      summary: Duyuruları listeler
+      description: |
+        Her etkin üyeye açıktır (susturulmuş üye de okur). Sıra: sabitlenenler
+        önce, sonra yeniden eskiye. Tayfanın duyuru modülü kapalıysa
+        `module-disabled`.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Duyurular
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnnouncementList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createAnnouncement
+      summary: Duyuru yayınlar (moderatör, yönetici)
+      description: |
+        Aynı `client_request_id` ile tekrar gönderilen istek yeni duyuru
+        açmaz, ilk duyuruyu döndürür.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnnouncementCreateRequest" }
+      responses:
+        "201":
+          description: Yayınlanan duyuru
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Announcement" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/announcements/{announcement_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/AnnouncementID"
+    get:
+      operationId: getAnnouncement
+      summary: Tek bir duyuru
+      responses:
+        "200":
+          description: Duyuru
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Announcement" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: updateAnnouncement
+      summary: Duyuruyu düzenler (moderatör, yönetici)
+      description: |
+        Kendi duyurunuzu, ya da yazarın şu anki rolü sizinkinden düşükse
+        başkasınınkini (`role-hierarchy`). Gövdede bulunan alanlar değişir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnnouncementUpdateRequest" }
+      responses:
+        "200":
+          description: Güncel duyuru
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Announcement" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteAnnouncement
+      summary: Duyuruyu siler (moderatör, yönetici)
+      description: |
+        Kendi duyurunuzu silerseniz başlık ve gövde hemen boşaltılır, geri
+        alınamaz. Başkasınınkini (hiyerarşi düzenlemedeki gibi) silmek onu
+        gizler; yönetici 30 gün içinde geri alabilir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Duyuru silindi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/announcements/{announcement_id}/pin:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/AnnouncementID"
+    put:
+      operationId: pinAnnouncement
+      summary: Duyuruyu sabitler (moderatör, yönetici)
+      description: Herhangi bir yazarın duyurusu sabitlenebilir. Zaten sabitse değişmez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Güncel duyuru
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Announcement" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: unpinAnnouncement
+      summary: Duyurunun sabitlemesini kaldırır (moderatör, yönetici)
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Güncel duyuru
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Announcement" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/announcements/{announcement_id}/restoration:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/AnnouncementID"
+    post:
+      operationId: restoreAnnouncement
+      summary: Gizlenen duyuruyu geri alır (yönetici)
+      description: |
+        Moderatör ya da yöneticinin sildiği duyuru 30 gün içinde geri
+        alınabilir; yazarın şu anki rolü sizinkinden düşük olmalıdır. Yazarın
+        kendi sildiği ya da süresi geçen duyuru `announcement-not-found`
+        alır. Görünen bir duyuru için de başarılıdır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Geri alınan duyuru
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Announcement" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /v1/tayfa-joins:
     post:
       operationId: joinByCode
@@ -733,6 +914,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    AnnouncementID:
+      name: announcement_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     PageSize:
       name: page_size
       in: query
@@ -791,6 +977,9 @@ components:
         - member-not-found
         - role-hierarchy
         - last-admin
+        # core: modüller ve duyurular
+        - module-disabled
+        - announcement-not-found
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
@@ -1156,3 +1345,58 @@ components:
 security:
   - bearer: []
   - cookie: []
+
+    Announcement:
+      type: object
+      required: [id, tayfa_id, title, body, pinned, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        tayfa_id: { type: string, format: uuid }
+        author_user_id:
+          type: string
+          format: uuid
+          description: Yazarın hesabı silindiyse yoktur ("Silinmiş kullanıcı").
+        title: { type: string }
+        body: { type: string }
+        pinned: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at:
+          type: string
+          format: date-time
+          description: Her düzenleme, sabitleme ve geri almada değişir.
+
+    AnnouncementList:
+      type: object
+      required: [announcements]
+      properties:
+        announcements:
+          type: array
+          items: { $ref: "#/components/schemas/Announcement" }
+        next_page_token: { type: string }
+
+    AnnouncementCreateRequest:
+      type: object
+      required: [title, client_request_id]
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: Baştaki ve sondaki boşluklar atıldıktan sonra 1–120 karakter, tek satır.
+        body:
+          type: string
+          maxLength: 5000
+          description: En fazla 5000 karakter; satır sonu olabilir.
+        client_request_id:
+          type: string
+          format: uuid
+          description: İstemcinin her yayınlama denemesi için bir kez ürettiği, tekrar gönderimde aynen kullandığı UUID.
+
+    AnnouncementUpdateRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title: { type: string, minLength: 1, maxLength: 120 }
+        body: { type: string, maxLength: 5000 }

@@ -181,6 +181,7 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"invites.created_by":             `SELECT count(*) FROM invites WHERE created_by = $1`,
 		"audit_logs.actor_id":            `SELECT count(*) FROM audit_logs WHERE actor_id = $1`,
 		"domain_events.actor_id":         `SELECT count(*) FROM domain_events WHERE actor_id = $1`,
+		"announcements":                  `SELECT count(*) FROM announcements WHERE $1 IN (author_id, deleted_by)`,
 		"user_profiles (kişisel)":        `SELECT count(*) FROM user_profiles WHERE user_id = $1 AND (display_name IS NOT NULL OR avatar_upload_id IS NOT NULL OR deleted_at IS NULL)`,
 	} {
 		if n := e.count(t, sql, u.PG()); n != 0 {
@@ -232,6 +233,11 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 	e.seed(t, `INSERT INTO invites (id, tayfa_id, token_hash, created_by, expires_at) VALUES ($1, $2, sha256('x'::bytea), $3, now() + interval '1 day')`, id.New().PG(), t2.PG(), u.PG())
 	e.seed(t, `INSERT INTO audit_logs (id, tayfa_id, actor_id, action) VALUES ($1, $2, $3, 'member.muted')`, id.New().PG(), t2.PG(), u.PG())
 	e.seed(t, `INSERT INTO domain_events (id, type, actor_id, tayfa_id) VALUES ($1, 'membership.changed', $2, $3)`, id.New().PG(), u.PG(), t2.PG())
+	// u's announcement stays with an empty author; one u hid keeps its
+	// content and loses deleted_by.
+	ownAnn, hiddenAnn := id.New(), id.New()
+	e.seed(t, `INSERT INTO announcements (id, tayfa_id, author_id, title, client_request_id) VALUES ($1, $2, $3, 'Duyuru', $4)`, ownAnn.PG(), t2.PG(), u.PG(), id.New().PG())
+	e.seed(t, `INSERT INTO announcements (id, tayfa_id, author_id, title, client_request_id, deleted_at, deleted_by) VALUES ($1, $2, $3, 'Gizlenen', $4, now(), $5)`, hiddenAnn.PG(), t2.PG(), other.PG(), id.New().PG(), u.PG())
 
 	// T3: u's pending application. T4: u is the only member left.
 	t3 := e.tayfa(t, other)
@@ -245,6 +251,9 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 
 	if refs := e.userRefs(t, u); len(refs) != 0 {
 		t.Fatalf("core'da kullanıcıya ait kayıt kaldı: %v", refs)
+	}
+	if n := e.count(t, `SELECT count(*) FROM announcements WHERE (id = $1 AND author_id IS NULL AND title = 'Duyuru') OR (id = $2 AND author_id = $3 AND deleted_at IS NOT NULL AND deleted_by IS NULL)`, ownAnn.PG(), hiddenAnn.PG(), other.PG()); n != 2 {
+		t.Fatalf("duyurular = %d", n)
 	}
 	if got := e.role(t, t1, modOld); got != "active/admin" {
 		t.Fatalf("halef = %s", got)

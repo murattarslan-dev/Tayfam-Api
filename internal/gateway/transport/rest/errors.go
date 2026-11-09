@@ -56,6 +56,8 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_LAST_ADMIN":                 {http.StatusConflict, "last-admin"},
 		"ERROR_REASON_DELETION_ALREADY_REQUESTED": {http.StatusConflict, "deletion-already-requested"},
 		"ERROR_REASON_DELETION_NOT_REQUESTED":     {http.StatusConflict, "deletion-not-requested"},
+		"ERROR_REASON_MODULE_DISABLED":            {http.StatusConflict, "module-disabled"},
+		"ERROR_REASON_ANNOUNCEMENT_NOT_FOUND":     {http.StatusNotFound, "announcement-not-found"},
 	},
 }
 

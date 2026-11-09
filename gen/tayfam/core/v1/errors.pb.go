@@ -96,7 +96,8 @@ const (
 	ErrorReason_ERROR_REASON_MEMBER_NOT_FOUND ErrorReason = 17
 	// PERMISSION_DENIED. The role hierarchy forbids the action: the target's
 	// role is not lower than the caller's, or the new role is not lower than
-	// the caller's (ADR-0004).
+	// the caller's (ADR-0004). For content (announcements) the target is the
+	// author's current role in the tayfa.
 	ErrorReason_ERROR_REASON_ROLE_HIERARCHY ErrorReason = 18
 	// FAILED_PRECONDITION. The change would leave the tayfa without an active
 	// admin.
@@ -106,6 +107,15 @@ const (
 	ErrorReason_ERROR_REASON_DELETION_ALREADY_REQUESTED ErrorReason = 20
 	// FAILED_PRECONDITION. CancelDeletion on a tayfa with no pending deletion.
 	ErrorReason_ERROR_REASON_DELETION_NOT_REQUESTED ErrorReason = 21
+	// FAILED_PRECONDITION. The tayfa has turned off the module this method
+	// belongs to (Module, SetModule). Every method of the module refuses,
+	// reads included. Checked after membership: non-members still get
+	// ERROR_REASON_TAYFA_NOT_FOUND.
+	ErrorReason_ERROR_REASON_MODULE_DISABLED ErrorReason = 22
+	// NOT_FOUND. AnnouncementService: no announcement with this ID in this
+	// tayfa that the method can work on (unknown, in another tayfa, deleted,
+	// or no longer restorable).
+	ErrorReason_ERROR_REASON_ANNOUNCEMENT_NOT_FOUND ErrorReason = 23
 )
 
 // Enum value maps for ErrorReason.
@@ -133,6 +143,8 @@ var (
 		19: "ERROR_REASON_LAST_ADMIN",
 		20: "ERROR_REASON_DELETION_ALREADY_REQUESTED",
 		21: "ERROR_REASON_DELETION_NOT_REQUESTED",
+		22: "ERROR_REASON_MODULE_DISABLED",
+		23: "ERROR_REASON_ANNOUNCEMENT_NOT_FOUND",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                0,
@@ -157,6 +169,8 @@ var (
 		"ERROR_REASON_LAST_ADMIN":                 19,
 		"ERROR_REASON_DELETION_ALREADY_REQUESTED": 20,
 		"ERROR_REASON_DELETION_NOT_REQUESTED":     21,
+		"ERROR_REASON_MODULE_DISABLED":            22,
+		"ERROR_REASON_ANNOUNCEMENT_NOT_FOUND":     23,
 	}
 )
 
@@ -191,7 +205,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xec\x05\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xb7\x06\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -215,7 +229,9 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\x1bERROR_REASON_ROLE_HIERARCHY\x10\x12\x12\x1b\n" +
 	"\x17ERROR_REASON_LAST_ADMIN\x10\x13\x12+\n" +
 	"'ERROR_REASON_DELETION_ALREADY_REQUESTED\x10\x14\x12'\n" +
-	"#ERROR_REASON_DELETION_NOT_REQUESTED\x10\x15B\xbd\x01\n" +
+	"#ERROR_REASON_DELETION_NOT_REQUESTED\x10\x15\x12 \n" +
+	"\x1cERROR_REASON_MODULE_DISABLED\x10\x16\x12'\n" +
+	"#ERROR_REASON_ANNOUNCEMENT_NOT_FOUND\x10\x17B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

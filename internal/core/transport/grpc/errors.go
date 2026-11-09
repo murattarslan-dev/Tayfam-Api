@@ -72,6 +72,10 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DELETION_ALREADY_REQUESTED, true
 	case errors.Is(err, apperr.ErrDeletionNotRequested):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DELETION_NOT_REQUESTED, true
+	case errors.Is(err, apperr.ErrModuleDisabled):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_MODULE_DISABLED, true
+	case errors.Is(err, apperr.ErrAnnouncementNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_ANNOUNCEMENT_NOT_FOUND, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

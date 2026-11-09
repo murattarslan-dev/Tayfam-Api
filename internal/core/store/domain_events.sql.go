@@ -11,32 +11,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createDomainEvent = `-- name: CreateDomainEvent :exec
-INSERT INTO domain_events (id, type, actor_id, tayfa_id, subject_type, subject_id, payload)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+const setDomainEventTayfa = `-- name: SetDomainEventTayfa :execrows
+UPDATE domain_events SET tayfa_id = $1 WHERE id = $2 AND tayfa_id IS NULL
 `
 
-type CreateDomainEventParams struct {
-	ID          pgtype.UUID
-	Type        string
-	ActorID     pgtype.UUID
-	TayfaID     pgtype.UUID
-	SubjectType pgtype.Text
-	SubjectID   pgtype.UUID
-	Payload     []byte
+type SetDomainEventTayfaParams struct {
+	TayfaID pgtype.UUID
+	ID      pgtype.UUID
 }
 
-// Outbox: iş verisiyle aynı transaction'da yazılır (ADR-0002). payload'a
-// kişisel içerik yazılmaz.
-func (q *Queries) CreateDomainEvent(ctx context.Context, arg CreateDomainEventParams) error {
-	_, err := q.db.Exec(ctx, createDomainEvent,
-		arg.ID,
-		arg.Type,
-		arg.ActorID,
-		arg.TayfaID,
-		arg.SubjectType,
-		arg.SubjectID,
-		arg.Payload,
-	)
-	return err
+// Outbox (ADR-0002): olaylar iş verisiyle aynı transaction'da
+// internal/platform/outbox.Write ile yazılır (sıralama kilidi, outbox paket
+// belgesi). payload'a kişisel içerik yazılmaz. outbox ortak kolonları yazar;
+// core'a özgü tayfa_id kolonu aynı transaction'da hemen ardından doldurulur.
+func (q *Queries) SetDomainEventTayfa(ctx context.Context, arg SetDomainEventTayfaParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setDomainEventTayfa, arg.TayfaID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

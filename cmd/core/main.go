@@ -11,6 +11,7 @@ import (
 
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/announcement"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/userevents"
@@ -62,6 +63,10 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
+	announcements, err := announcement.New(announcement.Config{Pool: pool})
+	if err != nil {
+		return err
+	}
 
 	userEvents, err := userevents.New(userevents.Config{Pool: pool, Log: rt.Log})
 	if err != nil {
@@ -92,6 +97,7 @@ func setup(rt *service.Runtime) error {
 	corev1.RegisterTayfaServiceServer(srv, grpcapi.NewTayfaServer(tayfas, rt.Log))
 	corev1.RegisterMembershipServiceServer(srv, grpcapi.NewMembershipServer(memberships, rt.Log))
 	corev1.RegisterUserEventServiceServer(srv, grpcapi.NewUserEventServer(userEvents, rt.Log))
+	corev1.RegisterAnnouncementServiceServer(srv, grpcapi.NewAnnouncementServer(announcements, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
 	return nil
 }

@@ -65,6 +65,8 @@ type TokenVerifier interface {
 type CoreDeps struct {
 	Tayfas  TayfaClient
 	Members MembershipClient
+	// Announcements enables the announcement routes when set.
+	Announcements AnnouncementClient
 	// Verifier checks the user's token before anything reaches core. core
 	// checks it again itself (ADR-0011); this only keeps junk out early.
 	Verifier TokenVerifier
@@ -125,6 +127,9 @@ func registerCore(mux *http.ServeMux, d CoreDeps) {
 	mux.HandleFunc("POST /v1/tayfa-joins", a(h.joinByCode))
 	mux.HandleFunc("POST /v1/invite-previews", a(h.previewInvite))
 	mux.HandleFunc("POST /v1/invite-joins", a(h.joinByInvite))
+	if d.Announcements != nil {
+		registerAnnouncements(mux, h)
+	}
 }
 
 // coreHandler gets a context that carries the user's verified token for

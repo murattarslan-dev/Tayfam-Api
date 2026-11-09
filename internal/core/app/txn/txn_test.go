@@ -80,3 +80,61 @@ func TestAuditAndEvent(t *testing.T) {
 		t.Fatalf("olay = %q %v %v", payload, subject, err)
 	}
 }
+
+// TestEventUsesOutbox: events go through outbox.Write (ordered IDs) and keep
+// core's tayfa_id; outside a transaction nothing is written.
+func TestEventUsesOutbox(t *testing.T) {
+	pool := dbtest.New(t, coredb.Migrations())
+	ctx := context.Background()
+	actor, tayfa := id.New(), id.New()
+
+	if err := Event(ctx, store.New(pool), "tayfa.updated", tayfa, actor, Target{}, nil); err == nil {
+		t.Fatal("transaction dışında olay yazıldı")
+	}
+
+	for range 3 {
+		if err := WithActor(ctx, pool, actor, func(_ pgx.Tx, q *store.Queries) error {
+			return Event(ctx, q, "tayfa.updated", tayfa, actor, Target{Type: "tayfa", ID: tayfa}, nil)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// System-wide events without a tayfa keep tayfa_id NULL.
+	if err := WithActor(ctx, pool, actor, func(_ pgx.Tx, q *store.Queries) error {
+		return Event(ctx, q, "tayfa.purged", id.ID{}, actor, Target{}, nil)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := pool.Query(ctx, "SELECT id::text, tayfa_id::text, payload::text FROM domain_events ORDER BY occurred_at, id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var prev string
+	n := 0
+	for rows.Next() {
+		var eid, payload string
+		var tid *string
+		if err := rows.Scan(&eid, &tid, &payload); err != nil {
+			t.Fatal(err)
+		}
+		if eid <= prev {
+			t.Fatalf("olay kimlikleri sıralı değil: %s <= %s", eid, prev)
+		}
+		prev = eid
+		n++
+		if payload != "{}" {
+			t.Fatalf("payload = %s", payload)
+		}
+		if n <= 3 && (tid == nil || *tid != tayfa.String()) {
+			t.Fatalf("tayfa_id = %v", tid)
+		}
+		if n == 4 && tid != nil {
+			t.Fatalf("tayfasız olayda tayfa_id = %v", *tid)
+		}
+	}
+	if n != 4 {
+		t.Fatalf("%d olay", n)
+	}
+}

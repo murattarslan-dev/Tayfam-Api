@@ -17,6 +17,9 @@ var (
 	ErrPermissionDenied = errors.New("yetki yok")
 	ErrMuted            = errors.New("üye susturulmuş")
 	ErrTayfaReadOnly    = errors.New("tayfa salt okunur")
+	// ErrModuleDisabled: the tayfa has turned off the module the method
+	// belongs to (tayfa_modules). Reads are refused too.
+	ErrModuleDisabled = errors.New("modül kapalı")
 )
 
 // TayfaService errors.
@@ -41,6 +44,13 @@ var (
 	ErrMemberNotFound  = errors.New("üye bulunamadı")
 	ErrRoleHierarchy   = errors.New("rol hiyerarşisi izin vermiyor")
 	ErrLastAdmin       = errors.New("son yönetici")
+)
+
+// AnnouncementService errors.
+var (
+	// ErrAnnouncementNotFound: no announcement with this ID in this tayfa
+	// that the method can work on (unknown, deleted, or past restoring).
+	ErrAnnouncementNotFound = errors.New("duyuru bulunamadı")
 )
 
 // ValidationError reports a request field that failed validation. Field is

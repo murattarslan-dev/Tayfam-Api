@@ -128,3 +128,10 @@ WHERE tayfa_id = ANY(@tayfa_ids::uuid[]);
 SELECT tayfa_id, count(*) AS member_count FROM memberships
 WHERE tayfa_id = ANY(@tayfa_ids::uuid[]) AND status = 'active'
 GROUP BY tayfa_id;
+
+-- Kapalı ya da kaydı olmayan modül kapalı sayılır (varsayılan "hayır").
+-- name: IsTayfaModuleEnabled :one
+SELECT EXISTS (
+  SELECT 1 FROM tayfa_modules
+  WHERE tayfa_id = @tayfa_id AND module = @module AND enabled
+)::boolean AS enabled;

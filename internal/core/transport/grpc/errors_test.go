@@ -69,6 +69,8 @@ func TestErrorStatus(t *testing.T) {
 		{apperr.ErrLastAdmin, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LAST_ADMIN},
 		{apperr.ErrDeletionAlreadyRequested, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DELETION_ALREADY_REQUESTED},
 		{apperr.ErrDeletionNotRequested, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DELETION_NOT_REQUESTED},
+		{apperr.ErrModuleDisabled, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_MODULE_DISABLED},
+		{apperr.ErrAnnouncementNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_ANNOUNCEMENT_NOT_FOUND},
 		// Wrapped errors keep their reason.
 		{fmt.Errorf("katman: %w", apperr.ErrTayfaNotFound), codes.NotFound, corev1.ErrorReason_ERROR_REASON_TAYFA_NOT_FOUND},
 		// The memberships trigger, second line of defence.

@@ -290,12 +290,18 @@ func bearer(r *http.Request) (token string, web bool) {
 // decode reads a small JSON body strictly: right content type, size limit,
 // no unknown fields, nothing after the object.
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
+	return decodeLimit(w, r, v, maxBodyBytes)
+}
+
+// decodeLimit is decode with a body limit of limit bytes, for the few
+// requests that carry long text.
+func decodeLimit(w http.ResponseWriter, r *http.Request, v any, limit int64) bool {
 	mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mt != "application/json" {
 		httpx.WriteProblem(w, r, http.StatusUnsupportedMediaType, "invalid-request", "Unsupported Media Type", "")
 		return false
 	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
 		httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-request", "Bad Request", "")

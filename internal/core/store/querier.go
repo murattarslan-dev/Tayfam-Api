@@ -18,6 +18,9 @@ type Querier interface {
 	ApproveMembership(ctx context.Context, arg ApproveMembershipParams) (int64, error)
 	BanMembership(ctx context.Context, arg BanMembershipParams) (int64, error)
 	CancelTayfaDeletion(ctx context.Context, id pgtype.UUID) (int64, error)
+	// Duyurular kalır, yazar "Silinmiş kullanıcı" olur (v14 "İlişkiler ve
+	// Silme Davranışı").
+	ClearAnnouncementUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearAuditActor(ctx context.Context, userID pgtype.UUID) error
 	ClearEventActor(ctx context.Context, userID pgtype.UUID) error
 	ClearInviteCreator(ctx context.Context, userID pgtype.UUID) error
@@ -30,24 +33,33 @@ type Querier interface {
 	// Kullanıcı başına günlük tayfa açma sınırı. Silinen tayfalar da sayılır;
 	// açıp silerek sınır aşılamaz.
 	CountTayfasCreatedSince(ctx context.Context, arg CountTayfasCreatedSinceParams) (int64, error)
+	// Duyurular (issue #48). Her sorgu tayfa_id ile sınırlıdır (IDOR); üyelik
+	// ve izin kontrolü app katmanındadır (access, authz).
+	CreateAnnouncement(ctx context.Context, arg CreateAnnouncementParams) error
 	// Denetim kaydı yalnızca eklenir. metadata'ya kişisel veri ya da token
 	// yazılmaz.
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error
-	// Outbox: iş verisiyle aynı transaction'da yazılır (ADR-0002). payload'a
-	// kişisel içerik yazılmaz.
-	CreateDomainEvent(ctx context.Context, arg CreateDomainEventParams) error
 	CreateInvite(ctx context.Context, arg CreateInviteParams) error
 	// Üyelik değişiklikleri transaction içinde SetActor ya da SetSystemJob'dan
 	// sonra yapılır; aksi halde trigger reddeder.
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) error
+	// Sistemin olayları txn.Event (internal/platform/outbox.Write) ile, işlemi
+	// yapan olmadan yazılır.
 	CreateSystemAuditLog(ctx context.Context, arg CreateSystemAuditLogParams) error
-	CreateSystemDomainEvent(ctx context.Context, arg CreateSystemDomainEventParams) error
 	// Tayfa, kurucu üyelik, modüller ve ilgi alanları tek transaction'da
 	// yazılır; birleştirmeyi app katmanı yapar.
 	CreateTayfa(ctx context.Context, arg CreateTayfaParams) error
 	// Ayrılma, çıkarma, başvuru reddi, ban kaldırma.
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (int64, error)
 	DeleteTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) error
+	// Yazarın kendi silmesi: başlık ve gövde hemen boşaltılır, geri alınamaz
+	// (v14 "Silinen içeriği geri alma").
+	EraseAnnouncement(ctx context.Context, arg EraseAnnouncementParams) (int64, error)
+	GetAnnouncement(ctx context.Context, arg GetAnnouncementParams) (GetAnnouncementRow, error)
+	// Tekrar gönderilen yayınlama isteği aynı duyuruyu döndürür.
+	GetAnnouncementByClientRequest(ctx context.Context, arg GetAnnouncementByClientRequestParams) (GetAnnouncementByClientRequestRow, error)
+	// Yazma işlemleri satırı kilitleyerek okur; silinmiş satır da döner.
+	GetAnnouncementForUpdate(ctx context.Context, arg GetAnnouncementForUpdateParams) (GetAnnouncementForUpdateRow, error)
 	GetInvite(ctx context.Context, arg GetInviteParams) (GetInviteRow, error)
 	// Davet önizlemesi: kilitlemeden okur, link kullanılmaz. Silinmiş tayfanın
 	// daveti bulunmaz.
@@ -62,9 +74,16 @@ type Querier interface {
 	// aynı satırı kilitlediği için üyelik değişiklikleriyle sırayla çalışır.
 	GetTayfaForUpdate(ctx context.Context, id pgtype.UUID) (GetTayfaForUpdateRow, error)
 	GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUserProfileRow, error)
+	// Moderatör/yönetici silmesi: içerik gizlenir, geri alınabilir.
+	HideAnnouncement(ctx context.Context, arg HideAnnouncementParams) (int64, error)
 	// Davet geçerliyse kullanımı sayar; 0 satır: süresi dolmuş, iptal ya da
 	// tükenmiş.
 	IncrementInviteUse(ctx context.Context, id pgtype.UUID) (int64, error)
+	// Kapalı ya da kaydı olmayan modül kapalı sayılır (varsayılan "hayır").
+	IsTayfaModuleEnabled(ctx context.Context, arg IsTayfaModuleEnabledParams) (bool, error)
+	// Sabitlenenler önce, yeniden eskiye. Sayfa, önceki sayfanın son satırından
+	// sonra başlar (pinned, created_at, id azalan).
+	ListAnnouncementsPage(ctx context.Context, arg ListAnnouncementsPageParams) ([]ListAnnouncementsPageRow, error)
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error)
 	ListInterestsForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListInterestsForTayfasRow, error)
 	ListInvites(ctx context.Context, arg ListInvitesParams) ([]ListInvitesRow, error)
@@ -109,6 +128,7 @@ type Querier interface {
 	// eski moderatör, yoksa en eski üye.
 	PickAdminSuccessor(ctx context.Context, arg PickAdminSuccessorParams) (pgtype.UUID, error)
 	RequestTayfaDeletion(ctx context.Context, arg RequestTayfaDeletionParams) (int64, error)
+	RestoreAnnouncement(ctx context.Context, arg RestoreAnnouncementParams) (int64, error)
 	RevokeInvite(ctx context.Context, arg RevokeInviteParams) (int64, error)
 	// Kimse kalmayan tayfa sistem tarafından silme beklemesine alınır; talep
 	// eden kişi yoktur.
@@ -117,6 +137,12 @@ type Querier interface {
 	// hiyerarşisini buna göre doğrular (ADR-0004). Yalnızca transaction içinde
 	// anlamlıdır: değer transaction bitince silinir (set_config is_local = true).
 	SetActor(ctx context.Context, actorID string) error
+	SetAnnouncementPinned(ctx context.Context, arg SetAnnouncementPinnedParams) (int64, error)
+	// Outbox (ADR-0002): olaylar iş verisiyle aynı transaction'da
+	// internal/platform/outbox.Write ile yazılır (sıralama kilidi, outbox paket
+	// belgesi). payload'a kişisel içerik yazılmaz. outbox ortak kolonları yazar;
+	// core'a özgü tayfa_id kolonu aynı transaction'da hemen ardından doldurulur.
+	SetDomainEventTayfa(ctx context.Context, arg SetDomainEventTayfaParams) (int64, error)
 	SetMembershipRole(ctx context.Context, arg SetMembershipRoleParams) (int64, error)
 	// Kullanıcısız arka plan işi. Trigger'ın tanıdığı tek değer
 	// 'account_deletion'dır; başka bir değer işlemi hata ile durdurur.
@@ -127,6 +153,7 @@ type Querier interface {
 	// Tekrar uygulanınca sonuç değişmez.
 	TombstoneUserProfile(ctx context.Context, arg TombstoneUserProfileParams) error
 	UnmuteMembership(ctx context.Context, arg UnmuteMembershipParams) (int64, error)
+	UpdateAnnouncementContent(ctx context.Context, arg UpdateAnnouncementContentParams) (int64, error)
 	UpdateTayfaSettings(ctx context.Context, arg UpdateTayfaSettingsParams) (int64, error)
 	// Profil kopyası (ADR-0009). Yalnızca UserEventService yazar.
 	// Daha yeni bir olay uygulanmışsa ya da profil silinmişse değişmez; etkilenen
