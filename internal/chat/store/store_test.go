@@ -38,7 +38,8 @@ func TestUserProfileUpsertIsOrderedAndIdempotent(t *testing.T) {
 	_, q := setup(t)
 	ctx := context.Background()
 	user := id.New()
-	older, newer := id.New(), id.New()
+	older := id.New()
+	newer := id.After(older)
 
 	upsert := func(name string, ev id.ID) int64 {
 		t.Helper()
@@ -73,7 +74,9 @@ func TestUserProfileTombstoneCannotBeRevived(t *testing.T) {
 	_, q := setup(t)
 	ctx := context.Background()
 	user := id.New()
-	first, deleted, late := id.New(), id.New(), id.New()
+	first := id.New()
+	deleted := id.After(first)
+	late := id.After(deleted)
 
 	if _, err := q.UpsertUserProfile(ctx, UpsertUserProfileParams{UserID: user.PG(), DisplayName: text("Ad"), SourceEventID: first.PG()}); err != nil {
 		t.Fatal(err)
