@@ -8,6 +8,38 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Channel struct {
+	ID              pgtype.UUID
+	TayfaID         pgtype.UUID
+	Name            string
+	NameNormalized  string
+	Visibility      string
+	SlowModeSeconds int32
+	CreatedBy       pgtype.UUID
+	ArchivedAt      pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+type ChannelMessage struct {
+	ID              pgtype.UUID
+	ChannelID       pgtype.UUID
+	AuthorID        pgtype.UUID
+	BodyEncrypted   []byte
+	KeyVersion      pgtype.Int2
+	ClientRequestID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	DeletedBy       pgtype.UUID
+}
+
+type ChannelRead struct {
+	ChannelID         pgtype.UUID
+	UserID            pgtype.UUID
+	LastReadMessageID pgtype.UUID
+	UpdatedAt         pgtype.Timestamptz
+}
+
 type DomainEvent struct {
 	ID          pgtype.UUID
 	Type        string
