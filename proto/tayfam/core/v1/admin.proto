@@ -1,0 +1,251 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/membership.proto";
+import "tayfam/core/v1/report.proto";
+import "tayfam/core/v1/tayfa.proto";
+
+// AdminService is the platform administration panel's view of core
+// (ADR-0008, issue #104 stage 2; Notion "Platform Yönetim Paneli").
+//
+// Authentication: every method accepts only an admin token (typ
+// admin+jwt, aud tayfam-admin; auth.Guard admin path). App and service
+// tokens are UNAUTHENTICATED. Before anything else core asks identity,
+// with the same admin token, whether the caller is still a platform
+// administrator (AdminAuthService.GetAdmin); if not, UNAUTHENTICATED.
+//
+// What the panel never sees, here or anywhere: direct message content
+// (except the reporter's own evidence_text of a DM report), who voted for
+// what in a poll, any location (meeting points, catch coordinates, check-in
+// positions), and the content of a tayfa (announcements, events, questions,
+// answers, polls, catches) except the one reported item. Tayfa metadata
+// (name, description, counts, staff, state) is visible, also for private
+// tayfas (Notion "Kötüye Kullanım ve Genç Kullanıcı Güvenliği"). There is
+// no way to act as a user.
+//
+// Changes need a reason (10–1000 characters; ERROR_REASON_REASON_REQUIRED)
+// and a Google sign-in in the last 5 minutes
+// (ERROR_REASON_REAUTHENTICATION_REQUIRED). Each change and its platform
+// audit entry are written in one transaction; the entry reaches identity's
+// platform_audit_logs through core's outbox (PlatformAuditService).
+service AdminService {
+  // SearchTayfas lists tayfas whose name contains the query (case- and
+  // Turkish-insensitive), newest first; deleted ones included. At most 50.
+  rpc SearchTayfas(SearchTayfasRequest) returns (SearchTayfasResponse);
+  // GetTayfa returns a tayfa's metadata, its admins and moderators.
+  rpc GetTayfa(AdminServiceGetTayfaRequest) returns (AdminServiceGetTayfaResponse);
+  // ListTayfaMembers lists a tayfa's memberships and roles (at most 500).
+  rpc ListTayfaMembers(ListTayfaMembersRequest) returns (ListTayfaMembersResponse);
+  // ListUserTayfas lists the tayfas a user is an active member of.
+  rpc ListUserTayfas(ListUserTayfasRequest) returns (ListUserTayfasResponse);
+
+  // SuspendTayfa makes the tayfa read-only; its admins and moderators get
+  // a notification and see the reason in the tayfa's details;
+  // tayfa.suspended goes to chat.
+  rpc SuspendTayfa(SuspendTayfaRequest) returns (SuspendTayfaResponse);
+  // UnsuspendTayfa lifts the suspension.
+  rpc UnsuspendTayfa(UnsuspendTayfaRequest) returns (UnsuspendTayfaResponse);
+  // DeleteTayfa soft deletes the tayfa at once (no 72-hour wait) and sends
+  // tayfa.deleted; it is purged 30 days later like any deleted tayfa.
+  rpc DeleteTayfa(AdminServiceDeleteTayfaRequest) returns (AdminServiceDeleteTayfaResponse);
+  // SetMemberRole changes an active member's role: making someone admin of
+  // a tayfa left without an active admin, or correcting roles after abuse.
+  // The last-admin rule still holds (ERROR_REASON_LAST_ADMIN).
+  rpc SetMemberRole(SetMemberRoleRequest) returns (SetMemberRoleResponse);
+
+  // ListPlatformReports is the platform's queue: reports escalated to the
+  // platform, open first; within them minor_involved and child_safety
+  // first, then oldest first.
+  rpc ListPlatformReports(ListPlatformReportsRequest) returns (ListPlatformReportsResponse);
+  // GetReportedItem returns the reported item only, and records the viewing
+  // in the platform audit log.
+  rpc GetReportedItem(GetReportedItemRequest) returns (GetReportedItemResponse);
+  // DecideReport records the platform's decision on an escalated report.
+  rpc DecideReport(DecideReportRequest) returns (DecideReportResponse);
+}
+
+message AdminTayfaSummary {
+  string tayfa_id = 1;
+  string name = 2;
+  TayfaStatus status = 3;
+  bool listed = 4;
+  int32 member_count = 5;
+  google.protobuf.Timestamp create_time = 6;
+  // Set while suspended by the platform.
+  google.protobuf.Timestamp suspend_time = 7;
+  // Set once deleted.
+  google.protobuf.Timestamp delete_time = 8;
+  // Set while a deletion requested by the tayfa's admins is pending.
+  google.protobuf.Timestamp deletion_scheduled_time = 9;
+}
+
+message SearchTayfasRequest {
+  // 0–50 characters; empty lists the newest.
+  string query = 1;
+}
+
+message SearchTayfasResponse {
+  repeated AdminTayfaSummary tayfas = 1;
+}
+
+message AdminServiceGetTayfaRequest {
+  string tayfa_id = 1;
+}
+
+message AdminMember {
+  string user_id = 1;
+  // Empty for a deleted account.
+  string display_name = 2;
+  Role role = 3;
+  MembershipStatus status = 4;
+  google.protobuf.Timestamp join_time = 5;
+}
+
+message AdminServiceGetTayfaResponse {
+  AdminTayfaSummary tayfa = 1;
+  string description = 2;
+  string city = 3;
+  string district = 4;
+  string suspend_reason = 5;
+  // Active admins and moderators.
+  repeated AdminMember staff = 6;
+  // Open reports about this tayfa that reached the platform.
+  int32 open_platform_reports = 7;
+}
+
+message ListTayfaMembersRequest {
+  string tayfa_id = 1;
+}
+
+message ListTayfaMembersResponse {
+  repeated AdminMember members = 1;
+}
+
+message ListUserTayfasRequest {
+  string user_id = 1;
+}
+
+message ListUserTayfasResponse {
+  message Entry {
+    AdminTayfaSummary tayfa = 1;
+    Role role = 2;
+  }
+  repeated Entry tayfas = 1;
+}
+
+message SuspendTayfaRequest {
+  string tayfa_id = 1;
+  // 10–500 characters (stored with the tayfa).
+  string reason = 2;
+}
+
+message SuspendTayfaResponse {}
+
+message UnsuspendTayfaRequest {
+  string tayfa_id = 1;
+  string reason = 2;
+}
+
+message UnsuspendTayfaResponse {}
+
+message AdminServiceDeleteTayfaRequest {
+  string tayfa_id = 1;
+  string reason = 2;
+}
+
+message AdminServiceDeleteTayfaResponse {}
+
+message SetMemberRoleRequest {
+  string tayfa_id = 1;
+  string user_id = 2;
+  Role role = 3;
+  string reason = 4;
+}
+
+message SetMemberRoleResponse {}
+
+message ListPlatformReportsRequest {
+  // false: open on the platform only.
+  bool include_resolved = 1;
+}
+
+enum PlatformDecision {
+  PLATFORM_DECISION_UNSPECIFIED = 0;
+  // The reported content is soft deleted (not for users, tayfas and
+  // direct messages).
+  PLATFORM_DECISION_CONTENT_REMOVED = 1;
+  // The reported user is warned (recorded; no automatic notice yet).
+  PLATFORM_DECISION_WARNED = 2;
+  // The report's tayfa is suspended (as SuspendTayfa).
+  PLATFORM_DECISION_TAYFA_SUSPENDED = 3;
+  // The reported user is banned. The ban itself is identity's
+  // AdminUserService.SanctionUser, called first by the panel; this records
+  // the decision on the report.
+  PLATFORM_DECISION_USER_BANNED = 4;
+  PLATFORM_DECISION_DISMISSED = 5;
+}
+
+message PlatformReport {
+  string report_id = 1;
+  // Empty for a direct message report.
+  string tayfa_id = 2;
+  ReportTargetType target_type = 3;
+  string target_id = 4;
+  // The reported person; empty if the account was deleted.
+  string subject_user_id = 5;
+  // The reporter; empty if the account was deleted. The platform sees it,
+  // tayfa staff never do.
+  string reporter_id = 6;
+  ReportReason reason = 7;
+  string description = 8;
+  ReportPriority priority = 9;
+  google.protobuf.Timestamp create_time = 10;
+  google.protobuf.Timestamp escalate_time = 11;
+  bool resolved_on_platform = 12;
+  PlatformDecision decision = 13;
+  google.protobuf.Timestamp decide_time = 14;
+}
+
+message ListPlatformReportsResponse {
+  repeated PlatformReport reports = 1;
+}
+
+message GetReportedItemRequest {
+  string report_id = 1;
+}
+
+// ReportedItem is the reported thing alone: no other content of the tayfa,
+// no poll votes, no locations.
+message ReportedItem {
+  ReportTargetType target_type = 1;
+  string target_id = 2;
+  // Author or owner; empty if unknown or deleted.
+  string author_id = 3;
+  // Title of an announcement, event or question; a poll's question; a
+  // catch's species; the tayfa's or user's name.
+  string title = 4;
+  // Body of an announcement, question or answer; an event's or tayfa's
+  // description; a DM report's evidence_text (the reporter's own copy).
+  string body = 5;
+  // A poll's options (no counts, no voters).
+  repeated string options = 6;
+  google.protobuf.Timestamp create_time = 7;
+  // Set if the item is already deleted.
+  google.protobuf.Timestamp delete_time = 8;
+}
+
+message GetReportedItemResponse {
+  PlatformReport report = 1;
+  // Unset when the item no longer exists.
+  ReportedItem item = 2;
+}
+
+message DecideReportRequest {
+  string report_id = 1;
+  PlatformDecision decision = 2;
+  string reason = 3;
+}
+
+message DecideReportResponse {}

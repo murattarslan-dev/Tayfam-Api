@@ -11,7 +11,8 @@
 //     a few seconds for that member (issue #81; ADR-0009 "Üyelik
 //     değişiklikleri"). Only the user ID goes, not the kind of change.
 //   - tayfa.warned, tayfa.archived, tayfa.reactivated, tayfa.deleted,
-//     tayfa.deletion_requested, tayfa.deletion_cancelled: the tayfa's
+//     tayfa.deletion_requested, tayfa.deletion_cancelled, tayfa.suspended,
+//     tayfa.unsuspended (platform panel, issue #104): the tayfa's
 //     read-only state may have changed (ADR-0009 "Tayfa askı ve arşiv");
 //     chat drops the permissions it keeps for the tayfa. They reach chat as
 //     one kind, tayfa_status_changed.
@@ -52,12 +53,16 @@ const (
 	TypeTayfaDeleted           = "tayfa.deleted"
 	TypeTayfaDeletionRequested = "tayfa.deletion_requested"
 	TypeTayfaDeletionCancelled = "tayfa.deletion_cancelled"
+	// Platform suspension (issue #104, package admin).
+	TypeTayfaSuspended   = "tayfa.suspended"
+	TypeTayfaUnsuspended = "tayfa.unsuspended"
 )
 
 // statusTypes change whether the tayfa is writable.
 var statusTypes = map[string]bool{
 	TypeTayfaWarned: true, TypeTayfaArchived: true, TypeTayfaReactivated: true, TypeTayfaDeleted: true,
 	TypeTayfaDeletionRequested: true, TypeTayfaDeletionCancelled: true,
+	TypeTayfaSuspended: true, TypeTayfaUnsuspended: true,
 }
 
 // Types returns the explicit list of events delivered to chat.
@@ -66,6 +71,7 @@ func Types() []string {
 		notify.EventType, TypeTayfaPurged, TypeMembershipChanged,
 		TypeTayfaWarned, TypeTayfaArchived, TypeTayfaReactivated, TypeTayfaDeleted,
 		TypeTayfaDeletionRequested, TypeTayfaDeletionCancelled,
+		TypeTayfaSuspended, TypeTayfaUnsuspended,
 	}
 }
 
@@ -113,6 +119,8 @@ var types = map[string]chatv1.NotificationType{
 	notify.TypeTayfaDeletionRequested: chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_DELETION_REQUESTED,
 	notify.TypeTayfaWarned:            chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_WARNED,
 	notify.TypeTayfaArchived:          chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_ARCHIVED,
+	notify.TypeTayfaSuspended:         chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_SUSPENDED,
+	notify.TypeTayfaUnsuspended:       chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_UNSUSPENDED,
 	notify.TypeHikeOverdue:            chatv1.NotificationType_NOTIFICATION_TYPE_HIKE_OVERDUE,
 	notify.TypeFriendRequest:          chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_REQUEST,
 	notify.TypeFriendAccepted:         chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_ACCEPTED,

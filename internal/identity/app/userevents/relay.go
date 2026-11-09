@@ -24,7 +24,7 @@ const deliverTimeout = 10 * time.Second
 func CoreConsumer(client corev1.UserEventServiceClient) outbox.Consumer {
 	return outbox.Consumer{
 		Name:  "core",
-		Types: []string{TypeProfileUpdated, TypeDeleted},
+		Types: []string{TypeProfileUpdated, TypeDeleted, TypeBanned, TypeUnbanned},
 		Deliver: func(ctx context.Context, e outbox.Event) error {
 			req, err := coreRequest(e)
 			if err != nil {
@@ -74,6 +74,10 @@ func coreRequest(e outbox.Event) (*corev1.ApplyUserEventRequest, error) {
 		}}
 	case TypeDeleted:
 		req.Event = &corev1.ApplyUserEventRequest_Deleted{Deleted: &corev1.UserDeleted{}}
+	case TypeBanned:
+		req.Event = &corev1.ApplyUserEventRequest_Banned{Banned: &corev1.UserBanned{}}
+	case TypeUnbanned:
+		req.Event = &corev1.ApplyUserEventRequest_Unbanned{Unbanned: &corev1.UserUnbanned{}}
 	default:
 		return nil, fmt.Errorf("bilinmeyen olay türü %q", e.Type)
 	}

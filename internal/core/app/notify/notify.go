@@ -51,6 +51,8 @@ const (
 	TypeTayfaDeletionRequested = "tayfa_deletion_requested"
 	TypeTayfaWarned            = "tayfa_warned"
 	TypeTayfaArchived          = "tayfa_archived"
+	TypeTayfaSuspended         = "tayfa_suspended"
+	TypeTayfaUnsuspended       = "tayfa_unsuspended"
 	TypeHikeOverdue            = "hike_overdue"
 	// Social notifications (issue #71); each has one recipient. The two
 	// friend types are not about a tayfa (Request.Tayfa is zero).

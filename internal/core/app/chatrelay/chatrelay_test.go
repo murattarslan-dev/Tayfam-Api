@@ -7,6 +7,7 @@ import (
 	"time"
 
 	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/outbox"
 )
@@ -28,6 +29,8 @@ func TestTypesAreExplicit(t *testing.T) {
 		"notification.requested", "tayfa.purged", "membership.changed",
 		"tayfa.warned", "tayfa.archived", "tayfa.reactivated", "tayfa.deleted",
 		"tayfa.deletion_requested", "tayfa.deletion_cancelled",
+		// Platform suspension (issue #104).
+		"tayfa.suspended", "tayfa.unsuspended",
 	}
 	if got := Types(); !slices.Equal(got, want) {
 		t.Fatalf("Types = %v", got)
@@ -157,5 +160,29 @@ func TestMembershipAndStatusEvents(t *testing.T) {
 	// Without a tayfa the event cannot be applied.
 	if _, err := Request(ev(t, "tayfa.deletion_cancelled", actor, nil)); err == nil {
 		t.Fatal("tayfasız durum olayı kabul edildi")
+	}
+}
+
+// TestSuspensionReachesChat: the platform's suspension events reach chat as
+// tayfa_status_changed, and their notifications as the new types.
+func TestSuspensionReachesChat(t *testing.T) {
+	tf := id.New()
+	for _, typ := range []string{TypeTayfaSuspended, TypeTayfaUnsuspended} {
+		req, err := Request(ev(t, typ, id.ID{}, map[string]any{"tayfa_id": tf.String()}))
+		if err != nil || req.GetTayfaStatusChanged() == nil || req.GetTayfaId() != tf.String() {
+			t.Fatalf("%s: %v %v", typ, req, err)
+		}
+	}
+	for typ, want := range map[string]chatv1.NotificationType{
+		notify.TypeTayfaSuspended:   chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_SUSPENDED,
+		notify.TypeTayfaUnsuspended: chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_UNSUSPENDED,
+	} {
+		req, err := Request(ev(t, notify.EventType, id.ID{}, map[string]any{
+			"tayfa_id": tf.String(), "type": typ, "target_type": notify.TargetTayfa, "target_id": tf.String(),
+			"recipient_ids": []string{id.New().String()},
+		}))
+		if err != nil || req.GetNotificationRequested().GetType() != want {
+			t.Fatalf("%s: %v %v", typ, req, err)
+		}
 	}
 }

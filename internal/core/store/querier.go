@@ -21,8 +21,53 @@ type Querier interface {
 	AddQuestionTag(ctx context.Context, arg AddQuestionTagParams) error
 	AddTayfaInterest(ctx context.Context, arg AddTayfaInterestParams) error
 	AdjustAnswerVoteCount(ctx context.Context, arg AdjustAnswerVoteCountParams) (int64, error)
+	// Platform kararı. Tayfada henüz açıksa şikâyet de çözülür (çözen tayfa
+	// yetkilisi değil: handled_by boş kalır).
+	AdminDecideReport(ctx context.Context, arg AdminDecideReportParams) (int64, error)
+	// İçeriği kaldırma: soft delete, silen platform yöneticisi.
+	AdminDeleteAnnouncement(ctx context.Context, arg AdminDeleteAnnouncementParams) (int64, error)
+	AdminDeleteAnswer(ctx context.Context, arg AdminDeleteAnswerParams) (int64, error)
+	AdminDeleteCatch(ctx context.Context, arg AdminDeleteCatchParams) (int64, error)
+	AdminDeleteEvent(ctx context.Context, arg AdminDeleteEventParams) (int64, error)
+	AdminDeletePoll(ctx context.Context, arg AdminDeletePollParams) (int64, error)
+	AdminDeleteQuestion(ctx context.Context, arg AdminDeleteQuestionParams) (int64, error)
+	// 72 saat beklemeden soft delete; 30 gün sonra mevcut iş kalıcı siler.
+	AdminDeleteTayfa(ctx context.Context, arg AdminDeleteTayfaParams) (int64, error)
+	// Şikâyet edilen öğe, yalnızca o öğe. Konum ve oy alanları seçilmez.
+	AdminGetAnnouncement(ctx context.Context, arg AdminGetAnnouncementParams) (AdminGetAnnouncementRow, error)
+	AdminGetAnswer(ctx context.Context, arg AdminGetAnswerParams) (AdminGetAnswerRow, error)
+	AdminGetCatch(ctx context.Context, arg AdminGetCatchParams) (AdminGetCatchRow, error)
+	AdminGetEvent(ctx context.Context, arg AdminGetEventParams) (AdminGetEventRow, error)
+	AdminGetPlatformReport(ctx context.Context, id pgtype.UUID) (AdminGetPlatformReportRow, error)
+	AdminGetPoll(ctx context.Context, arg AdminGetPollParams) (AdminGetPollRow, error)
+	AdminGetPollOptions(ctx context.Context, pollID pgtype.UUID) ([]string, error)
+	AdminGetProfileName(ctx context.Context, userID pgtype.UUID) (pgtype.Text, error)
+	AdminGetQuestion(ctx context.Context, arg AdminGetQuestionParams) (AdminGetQuestionRow, error)
+	AdminGetTayfa(ctx context.Context, id pgtype.UUID) (AdminGetTayfaRow, error)
+	// Platform kuyruğu: açıklar önce, içlerinde minor_involved ve child_safety
+	// önce, sonra yükselme sırasıyla.
+	AdminListPlatformReports(ctx context.Context, includeResolved bool) ([]AdminListPlatformReportsRow, error)
+	AdminListTayfaMembers(ctx context.Context, arg AdminListTayfaMembersParams) ([]AdminListTayfaMembersRow, error)
+	AdminListUserTayfas(ctx context.Context, userID pgtype.UUID) ([]AdminListUserTayfasRow, error)
+	AdminLockPlatformReport(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
+	AdminLockTayfa(ctx context.Context, id pgtype.UUID) (AdminLockTayfaRow, error)
+	AdminMemberRole(ctx context.Context, arg AdminMemberRoleParams) (AdminMemberRoleRow, error)
+	// Platform yönetim paneli (issue #104 2. aşama, ADR-0008). Yalnızca
+	// internal/core/app/admin kullanır; her çağrıdan önce admin token'ı ve
+	// identity'nin yöneticilik onayı denetlenir. Panelin göremedikleri burada
+	// seçilmez: konum (buluşma noktası, av koordinatı), anket oyları, tayfa
+	// içeriği (yalnızca şikâyet edilen öğe tek tek okunur).
+	AdminSearchTayfas(ctx context.Context, pattern string) ([]AdminSearchTayfasRow, error)
+	// Yalnızca aktif üyenin rolü (00014 'platform_admin' sistem işi).
+	AdminSetMemberRole(ctx context.Context, arg AdminSetMemberRoleParams) (int64, error)
+	AdminSuspendTayfa(ctx context.Context, arg AdminSuspendTayfaParams) (int64, error)
+	AdminTayfaStaffIDs(ctx context.Context, tayfaID pgtype.UUID) ([]pgtype.UUID, error)
+	AdminUnsuspendTayfa(ctx context.Context, id pgtype.UUID) (int64, error)
 	// generated_until yalnızca ileri gider.
 	AdvanceEventSeries(ctx context.Context, arg AdvanceEventSeriesParams) error
+	// Platform banı (identity'nin user.banned / user.unbanned olayları). Eski
+	// olay yenisini ezmez; aynı olay ikinci kez uygulanınca değişmez.
+	ApplyUserBan(ctx context.Context, arg ApplyUserBanParams) (int64, error)
 	// Başvuru onayı.
 	ApproveMembership(ctx context.Context, arg ApproveMembershipParams) (int64, error)
 	// Uyarıdan sonra @warned_before'a kadar aktivite olmayan tayfa arşivlenir
@@ -176,6 +221,7 @@ type Querier interface {
 	// oy sayıları aynı transaction'da düşer. Bir kişinin bir cevapta en fazla
 	// bir oyu olduğu için her cevap en fazla bir azalır.
 	DeleteUserAnswerVotes(ctx context.Context, userID pgtype.UUID) error
+	DeleteUserBan(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserBlocks(ctx context.Context, userID pgtype.UUID) error
 	// Av kayıtları konum içerebilir; kişiyle birlikte silinir.
 	DeleteUserCatches(ctx context.Context, userID pgtype.UUID) error
@@ -248,7 +294,8 @@ type Querier interface {
 	// Davet önizlemesi: kilitlemeden okur, link kullanılmaz. Silinmiş tayfanın
 	// daveti bulunmaz.
 	GetInviteByHash(ctx context.Context, tokenHash []byte) (GetInviteByHashRow, error)
-	// Profil kopyası olan, silinmemiş kullanıcı.
+	// Profil kopyası olan, silinmemiş ve platform banı olmayan kullanıcı
+	// (banlı kullanıcının profili gizlenir, silinmez; issue #104).
 	GetLiveUserProfile(ctx context.Context, userID pgtype.UUID) (GetLiveUserProfileRow, error)
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
 	GetPoll(ctx context.Context, arg GetPollParams) (GetPollRow, error)

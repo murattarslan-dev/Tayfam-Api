@@ -152,10 +152,12 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	policy := auth.ServicePolicy{Verifier: si.Verifier, Services: []string{grpcapi.MinorServiceName}}
+	policy := auth.ServicePolicy{Verifier: si.Verifier, Services: []string{grpcapi.MinorServiceName, grpcapi.PlatformAuditServiceName}}
 	if si.Verifier != nil {
 		policy.Callers = map[string][]auth.ServiceAccount{
 			identityv1.MinorService_IsMinor_FullMethodName: {si.Account("tayfam-core")},
+			// core'un panel işlemlerinin denetim kaydı (issue #104).
+			identityv1.PlatformAuditService_RecordPlatformAudit_FullMethodName: {si.Account("tayfam-core")},
 		}
 	}
 	guard, err := auth.NewGuard(v, grpcapi.PublicMethods...).WithServices(policy)
@@ -178,7 +180,7 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	guard, err = guard.WithAdmin(auth.AdminPolicy{Verifier: adminVerifier, Services: []string{grpcapi.AdminAuthServiceName}})
+	guard, err = guard.WithAdmin(auth.AdminPolicy{Verifier: adminVerifier, Services: []string{grpcapi.AdminAuthServiceName, grpcapi.AdminUserServiceName}})
 	if err != nil {
 		return err
 	}
@@ -186,6 +188,8 @@ func setup(rt *service.Runtime) error {
 	identityv1.RegisterMinorServiceServer(srv, grpcapi.NewMinorServer(minors, rt.Log))
 	identityv1.RegisterKeyServiceServer(srv, grpcapi.NewKeyServer(ring))
 	identityv1.RegisterAdminAuthServiceServer(srv, grpcapi.NewAdminAuthServer(admins, rt.Log))
+	identityv1.RegisterAdminUserServiceServer(srv, grpcapi.NewAdminUserServer(admins, rt.Log))
+	identityv1.RegisterPlatformAuditServiceServer(srv, grpcapi.NewPlatformAuditServer(admins, rt.Log))
 	identityv1.RegisterAuthServiceServer(srv, grpcapi.NewAuthServer(sessions, rt.Log))
 	identityv1.RegisterRegistrationServiceServer(srv, grpcapi.NewRegistrationServer(reg, rt.Log))
 	// Hesap ayarları, oturumlar, yeniden onay ve hesap silme yalnızca tam

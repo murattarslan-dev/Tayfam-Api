@@ -11,6 +11,96 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createSanction = `-- name: CreateSanction :one
+INSERT INTO platform_sanctions (id, user_id, type, reason, starts_at, ends_at, created_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, user_id, type, reason, starts_at, ends_at
+`
+
+type CreateSanctionParams struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	Type      string
+	Reason    string
+	StartsAt  pgtype.Timestamptz
+	EndsAt    pgtype.Timestamptz
+	CreatedBy pgtype.UUID
+}
+
+type CreateSanctionRow struct {
+	ID       pgtype.UUID
+	UserID   pgtype.UUID
+	Type     string
+	Reason   string
+	StartsAt pgtype.Timestamptz
+	EndsAt   pgtype.Timestamptz
+}
+
+func (q *Queries) CreateSanction(ctx context.Context, arg CreateSanctionParams) (CreateSanctionRow, error) {
+	row := q.db.QueryRow(ctx, createSanction,
+		arg.ID,
+		arg.UserID,
+		arg.Type,
+		arg.Reason,
+		arg.StartsAt,
+		arg.EndsAt,
+		arg.CreatedBy,
+	)
+	var i CreateSanctionRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Type,
+		&i.Reason,
+		&i.StartsAt,
+		&i.EndsAt,
+	)
+	return i, err
+}
+
+const getActiveSanctionType = `-- name: GetActiveSanctionType :one
+SELECT type FROM platform_sanctions
+WHERE user_id = $1 AND lifted_at IS NULL AND (ends_at IS NULL OR ends_at > now())
+`
+
+// Etkin yaptırım: kaldırılmamış ve (ban ya da bitişi gelmemiş askı).
+func (q *Queries) GetActiveSanctionType(ctx context.Context, userID pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getActiveSanctionType, userID)
+	var type_ string
+	err := row.Scan(&type_)
+	return type_, err
+}
+
+const getOpenSanction = `-- name: GetOpenSanction :one
+SELECT id, user_id, type, reason, starts_at, ends_at
+FROM platform_sanctions
+WHERE user_id = $1 AND lifted_at IS NULL
+`
+
+type GetOpenSanctionRow struct {
+	ID       pgtype.UUID
+	UserID   pgtype.UUID
+	Type     string
+	Reason   string
+	StartsAt pgtype.Timestamptz
+	EndsAt   pgtype.Timestamptz
+}
+
+// Kullanıcının kaldırılmamış yaptırımı (süresi dolmuş askı dahil).
+func (q *Queries) GetOpenSanction(ctx context.Context, userID pgtype.UUID) (GetOpenSanctionRow, error) {
+	row := q.db.QueryRow(ctx, getOpenSanction, userID)
+	var i GetOpenSanctionRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Type,
+		&i.Reason,
+		&i.StartsAt,
+		&i.EndsAt,
+	)
+	return i, err
+}
+
 const getPlatformAdmin = `-- name: GetPlatformAdmin :one
 SELECT u.id, u.display_name
 FROM platform_admins pa
@@ -66,6 +156,39 @@ func (q *Queries) GetPlatformAdminByIdentity(ctx context.Context, arg GetPlatfor
 	return i, err
 }
 
+const getUserForAdmin = `-- name: GetUserForAdmin :one
+SELECT u.id, u.display_name, u.ref_code, u.registered_at, u.deleted_at, u.created_at,
+       (SELECT count(*) FROM sessions s
+        WHERE s.user_id = u.id AND s.revoked_at IS NULL AND s.expires_at > now())::int AS active_sessions
+FROM users u
+WHERE u.id = $1
+`
+
+type GetUserForAdminRow struct {
+	ID             pgtype.UUID
+	DisplayName    pgtype.Text
+	RefCode        pgtype.Text
+	RegisteredAt   pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	ActiveSessions int32
+}
+
+func (q *Queries) GetUserForAdmin(ctx context.Context, userID pgtype.UUID) (GetUserForAdminRow, error) {
+	row := q.db.QueryRow(ctx, getUserForAdmin, userID)
+	var i GetUserForAdminRow
+	err := row.Scan(
+		&i.ID,
+		&i.DisplayName,
+		&i.RefCode,
+		&i.RegisteredAt,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.ActiveSessions,
+	)
+	return i, err
+}
+
 const insertPlatformAuditLog = `-- name: InsertPlatformAuditLog :exec
 INSERT INTO platform_audit_logs (id, actor_id, action, target_type, target_id, reason, metadata)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -93,4 +216,230 @@ func (q *Queries) InsertPlatformAuditLog(ctx context.Context, arg InsertPlatform
 		arg.Metadata,
 	)
 	return err
+}
+
+const insertPlatformAuditLogOnce = `-- name: InsertPlatformAuditLogOnce :execrows
+INSERT INTO platform_audit_logs (id, actor_id, action, target_type, target_id, reason, metadata, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (id) DO NOTHING
+`
+
+type InsertPlatformAuditLogOnceParams struct {
+	ID         pgtype.UUID
+	ActorID    pgtype.UUID
+	Action     string
+	TargetType pgtype.Text
+	TargetID   pgtype.UUID
+	Reason     string
+	Metadata   []byte
+	CreatedAt  pgtype.Timestamptz
+}
+
+// core'un panel işlemlerinin denetim kaydı (PlatformAuditService). Kimlik
+// core'un olay kimliğidir; aynı olay ikinci kez gelirse bir şey değişmez.
+func (q *Queries) InsertPlatformAuditLogOnce(ctx context.Context, arg InsertPlatformAuditLogOnceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertPlatformAuditLogOnce,
+		arg.ID,
+		arg.ActorID,
+		arg.Action,
+		arg.TargetType,
+		arg.TargetID,
+		arg.Reason,
+		arg.Metadata,
+		arg.CreatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const liftSanction = `-- name: LiftSanction :execrows
+UPDATE platform_sanctions SET lifted_at = $1, lifted_by = $2
+WHERE id = $3 AND lifted_at IS NULL
+`
+
+type LiftSanctionParams struct {
+	LiftedAt pgtype.Timestamptz
+	LiftedBy pgtype.UUID
+	ID       pgtype.UUID
+}
+
+func (q *Queries) LiftSanction(ctx context.Context, arg LiftSanctionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, liftSanction, arg.LiftedAt, arg.LiftedBy, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const listActiveSanctionTypes = `-- name: ListActiveSanctionTypes :many
+SELECT user_id, type FROM platform_sanctions
+WHERE user_id = ANY($1::uuid[]) AND lifted_at IS NULL AND (ends_at IS NULL OR ends_at > now())
+`
+
+type ListActiveSanctionTypesRow struct {
+	UserID pgtype.UUID
+	Type   string
+}
+
+func (q *Queries) ListActiveSanctionTypes(ctx context.Context, userIds []pgtype.UUID) ([]ListActiveSanctionTypesRow, error) {
+	rows, err := q.db.Query(ctx, listActiveSanctionTypes, userIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActiveSanctionTypesRow{}
+	for rows.Next() {
+		var i ListActiveSanctionTypesRow
+		if err := rows.Scan(&i.UserID, &i.Type); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockUserForAdmin = `-- name: LockUserForAdmin :one
+SELECT id FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
+`
+
+// Kullanıcıyı kilitler (yaptırım ve oturum kapatma aynı kullanıcıda sırayla
+// işlenir).
+func (q *Queries) LockUserForAdmin(ctx context.Context, userID pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockUserForAdmin, userID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const searchUsersByEmail = `-- name: SearchUsersByEmail :many
+SELECT DISTINCT u.id, u.display_name, u.ref_code, u.registered_at, u.deleted_at
+FROM auth_identities ai
+JOIN users u ON u.id = ai.user_id
+WHERE lower(ai.email) = lower($1::text)
+LIMIT 20
+`
+
+type SearchUsersByEmailRow struct {
+	ID           pgtype.UUID
+	DisplayName  pgtype.Text
+	RefCode      pgtype.Text
+	RegisteredAt pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) SearchUsersByEmail(ctx context.Context, email string) ([]SearchUsersByEmailRow, error) {
+	rows, err := q.db.Query(ctx, searchUsersByEmail, email)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchUsersByEmailRow{}
+	for rows.Next() {
+		var i SearchUsersByEmailRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.RefCode,
+			&i.RegisteredAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchUsersByName = `-- name: SearchUsersByName :many
+
+SELECT u.id, u.display_name, u.ref_code, u.registered_at, u.deleted_at
+FROM users u
+WHERE lower(u.display_name) LIKE '%' || $1::text || '%' ESCAPE '\'
+ORDER BY u.created_at DESC, u.id
+LIMIT 20
+`
+
+type SearchUsersByNameRow struct {
+	ID           pgtype.UUID
+	DisplayName  pgtype.Text
+	RefCode      pgtype.Text
+	RegisteredAt pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+}
+
+// Panel kullanıcı araması (issue #104). En fazla 20 sonuç; doğum tarihi,
+// e-posta ve oturum ayrıntısı dönmez.
+func (q *Queries) SearchUsersByName(ctx context.Context, pattern string) ([]SearchUsersByNameRow, error) {
+	rows, err := q.db.Query(ctx, searchUsersByName, pattern)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchUsersByNameRow{}
+	for rows.Next() {
+		var i SearchUsersByNameRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.RefCode,
+			&i.RegisteredAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchUsersByRefCode = `-- name: SearchUsersByRefCode :many
+SELECT u.id, u.display_name, u.ref_code, u.registered_at, u.deleted_at
+FROM users u
+WHERE u.ref_code = $1
+LIMIT 20
+`
+
+type SearchUsersByRefCodeRow struct {
+	ID           pgtype.UUID
+	DisplayName  pgtype.Text
+	RefCode      pgtype.Text
+	RegisteredAt pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) SearchUsersByRefCode(ctx context.Context, refCode pgtype.Text) ([]SearchUsersByRefCodeRow, error) {
+	rows, err := q.db.Query(ctx, searchUsersByRefCode, refCode)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchUsersByRefCodeRow{}
+	for rows.Next() {
+		var i SearchUsersByRefCodeRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.RefCode,
+			&i.RegisteredAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

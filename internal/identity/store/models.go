@@ -68,6 +68,19 @@ type PlatformAuditLog struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type PlatformSanction struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	Type      string
+	Reason    string
+	StartsAt  pgtype.Timestamptz
+	EndsAt    pgtype.Timestamptz
+	CreatedBy pgtype.UUID
+	LiftedAt  pgtype.Timestamptz
+	LiftedBy  pgtype.UUID
+	CreatedAt pgtype.Timestamptz
+}
+
 type RefCodeLookup struct {
 	ID         pgtype.UUID
 	UserID     pgtype.UUID

@@ -37,6 +37,12 @@ var problemsByDomain = map[string]map[string]problem{
 		// Account management (issue #75).
 		"ERROR_REASON_REAUTHENTICATION_REQUIRED": {http.StatusForbidden, "reauthentication-required"},
 		"ERROR_REASON_SESSION_NOT_FOUND":         {http.StatusNotFound, "session-not-found"},
+		// Platform sanction (issue #104).
+		"ERROR_REASON_ACCOUNT_SANCTIONED": {http.StatusForbidden, "account-sanctioned"},
+		"ERROR_REASON_REASON_REQUIRED":    {http.StatusBadRequest, "reason-required"},
+		"ERROR_REASON_USER_NOT_FOUND":     {http.StatusNotFound, "user-not-found"},
+		"ERROR_REASON_SANCTION_CONFLICT":  {http.StatusConflict, "sanction-conflict"},
+		"ERROR_REASON_VALIDATION":         {http.StatusBadRequest, "invalid-request"},
 	},
 	// proto/tayfam/core/v1/errors.proto
 	"core.tayfam.app": {
@@ -101,6 +107,11 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_REPORT_LIMIT":                {http.StatusTooManyRequests, "report-limit"},
 		"ERROR_REASON_REPORT_ALREADY_RESOLVED":     {http.StatusConflict, "report-already-resolved"},
 		"ERROR_REASON_REPORT_ACTION_MISSING":       {http.StatusConflict, "report-action-missing"},
+		// Platform panel (AdminService, issue #104).
+		"ERROR_REASON_REAUTHENTICATION_REQUIRED": {http.StatusForbidden, "reauthentication-required"},
+		"ERROR_REASON_REASON_REQUIRED":           {http.StatusBadRequest, "reason-required"},
+		"ERROR_REASON_DECISION_NOT_APPLICABLE":   {http.StatusConflict, "decision-not-applicable"},
+		"ERROR_REASON_TAYFA_STATE_CONFLICT":      {http.StatusConflict, "tayfa-state-conflict"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

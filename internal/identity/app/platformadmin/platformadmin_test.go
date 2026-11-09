@@ -225,7 +225,7 @@ func TestDestructive(t *testing.T) {
 	target := id.New()
 	entry := Entry{Action: "user.ban", TargetType: "user", TargetID: target, Reason: "Tekrarlanan taciz şikâyetleri"}
 	ran := 0
-	do := func(context.Context, *store.Queries) error { ran++; return nil }
+	do := Action{Do: func(context.Context, *store.Queries, *Entry) error { ran++; return nil }}
 	before := e.auditCount(t)
 
 	// No reason, or a too short one: refused before anything runs.
@@ -237,7 +237,7 @@ func TestDestructive(t *testing.T) {
 		}
 	}
 	// The action fails: nothing is written.
-	if err := e.svc.Destructive(ctx, c, entry, func(context.Context, *store.Queries) error { return errors.New("olmadı") }); err == nil {
+	if err := e.svc.Destructive(ctx, c, entry, Action{Do: func(context.Context, *store.Queries, *Entry) error { return errors.New("olmadı") }}); err == nil {
 		t.Fatal("başarısız işlem hata vermedi")
 	}
 	if err := e.svc.Destructive(ctx, c, entry, do); err != nil {

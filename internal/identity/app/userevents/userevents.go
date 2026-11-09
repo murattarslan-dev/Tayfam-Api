@@ -26,7 +26,11 @@ const (
 	TypeDeleted        = "user.deleted"
 	TypeSessionRevoked = "session.revoked"
 	TypeSanctioned     = "user.sanctioned"
-	subjectUser        = "user"
+	// TypeBanned and TypeUnbanned go to core, which hides and shows the
+	// user's content (issue #104).
+	TypeBanned   = "user.banned"
+	TypeUnbanned = "user.unbanned"
+	subjectUser  = "user"
 )
 
 // Profile is the public profile carried by user.profile_updated: what other
@@ -104,14 +108,32 @@ func SessionsRevoked(ctx context.Context, tx pgx.Tx, user id.ID, sessions ...id.
 
 // Sanctioned records that a platform sanction (suspension or ban) ended
 // every session of user (ADR-0004 "Platform yaptırımları"). The payload is
-// empty: which sanction, and why, stays in identity. Nothing calls it yet;
-// the platform panel's sanction flow will, in the transaction that ends the
-// sessions.
+// empty: which sanction, and why, stays in identity. The platform panel's
+// sanction flow (package platformadmin) calls it in the transaction that
+// ends the sessions.
 func Sanctioned(ctx context.Context, tx pgx.Tx, user id.ID) error {
 	if _, err := outbox.Write(ctx, tx, outbox.NewEvent{
 		Type: TypeSanctioned, SubjectType: subjectUser, SubjectID: user,
 	}); err != nil {
 		return fmt.Errorf("yaptırım olayı: %w", err)
+	}
+	return nil
+}
+
+// Banned records that the platform banned user; Unbanned that the ban was
+// lifted. Only core receives them. The payload is empty.
+func Banned(ctx context.Context, tx pgx.Tx, user id.ID) error {
+	return writeEmpty(ctx, tx, TypeBanned, user)
+}
+
+// Unbanned: see Banned.
+func Unbanned(ctx context.Context, tx pgx.Tx, user id.ID) error {
+	return writeEmpty(ctx, tx, TypeUnbanned, user)
+}
+
+func writeEmpty(ctx context.Context, tx pgx.Tx, typ string, user id.ID) error {
+	if _, err := outbox.Write(ctx, tx, outbox.NewEvent{Type: typ, SubjectType: subjectUser, SubjectID: user}); err != nil {
+		return fmt.Errorf("%s olayı: %w", typ, err)
 	}
 	return nil
 }

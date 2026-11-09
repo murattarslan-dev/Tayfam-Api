@@ -161,6 +161,20 @@ var (
 	// ErrReportActionMissing: the resolution names an action that was not
 	// taken.
 	ErrReportActionMissing = errors.New("çözümdeki işlem yapılmamış")
+
+	// Platform panel (issue #104).
+	// ErrNotPlatformAdmin: identity says the admin token's user is no
+	// longer a platform administrator.
+	ErrNotPlatformAdmin = errors.New("platform yöneticisi değil")
+	// ErrReauthenticationRequired: the Google sign-in behind the admin
+	// token is older than 5 minutes.
+	ErrReauthenticationRequired = errors.New("yeniden giriş gerekli")
+	// ErrReasonRequired: a panel change without a valid reason.
+	ErrReasonRequired = errors.New("gerekçe zorunlu")
+	// ErrDecisionNotApplicable: the decision does not fit the report.
+	ErrDecisionNotApplicable = errors.New("karar bu şikâyete uygulanamaz")
+	// ErrTayfaStateConflict: the tayfa is already in the requested state.
+	ErrTayfaStateConflict = errors.New("tayfa zaten bu durumda")
 )
 
 // ValidationError reports a request field that failed validation. Field is

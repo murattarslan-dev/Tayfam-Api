@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc/metadata"
 )
 
 func newAdminPair(t testing.TB, key SigningKey, now time.Time) (*AdminSigner, *AdminVerifier) {
@@ -193,5 +195,23 @@ func TestRequireRecentAuth(t *testing.T) {
 	}
 	if (AdminClaims{}).RequireRecentAuth(t0) == nil {
 		t.Fatal("auth_time'sız claims kabul edildi")
+	}
+}
+
+// TestForwardAdminToken: an admin method calling on (core asking identity
+// GetAdmin) forwards the admin token unchanged; a user caller's token wins
+// if both were present, and nothing is added without a caller.
+func TestForwardAdminToken(t *testing.T) {
+	ctx := WithAdminTokenForTest(context.Background(), AdminClaims{Subject: testUser}, "admin-tok")
+	md, _ := metadata.FromOutgoingContext(withToken(ctx))
+	if v := md.Get(authHeader); len(v) != 1 || v[0] != bearerPrefix+"admin-tok" {
+		t.Fatalf("iletilen = %v", v)
+	}
+	if _, ok := metadata.FromOutgoingContext(withToken(context.Background())); ok {
+		t.Fatal("çağıransız istekte token eklendi")
+	}
+	c, ok := AdminCallerFrom(ctx)
+	if !ok || c.Subject != testUser {
+		t.Fatalf("çağıran = %+v", c)
 	}
 }

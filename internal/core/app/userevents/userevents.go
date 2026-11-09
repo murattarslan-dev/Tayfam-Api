@@ -47,10 +47,22 @@ type Event struct {
 	ID         id.ID // identity's outbox event ID (UUIDv7)
 	User       id.ID
 	OccurredAt time.Time
-	// Exactly one of the two.
+	// Exactly one of the three.
 	Profile *Profile
 	Deleted bool
+	Ban     Ban
 }
+
+// Ban is a platform ban change (identity's user.banned / user.unbanned,
+// issue #104).
+type Ban int
+
+// Ban values.
+const (
+	BanNone Ban = iota
+	BanBanned
+	BanLifted
+)
 
 // Profile is the public profile carried by user.profile_updated.
 type Profile struct {
@@ -100,12 +112,32 @@ func (s *Service) Apply(ctx context.Context, e Event) error {
 		return apperr.Validation("user_id")
 	}
 	switch {
-	case e.Profile != nil && !e.Deleted:
+	case e.Profile != nil && !e.Deleted && e.Ban == BanNone:
 		return s.applyProfile(ctx, e)
-	case e.Profile == nil && e.Deleted:
+	case e.Profile == nil && e.Deleted && e.Ban == BanNone:
 		return s.applyDeleted(ctx, e)
+	case e.Profile == nil && !e.Deleted && (e.Ban == BanBanned || e.Ban == BanLifted):
+		return s.applyBan(ctx, e)
 	}
 	return apperr.Validation("event")
+}
+
+// applyBan records a platform ban or its lifting. A banned user's profile
+// is hidden from other users; nothing is deleted (Notion "Platform Yönetim
+// Paneli → Kurallar": hidden for the appeal). An older event applied after
+// a newer one changes nothing.
+func (s *Service) applyBan(ctx context.Context, e Event) error {
+	at := pgtype.Timestamptz{}
+	if e.Ban == BanBanned {
+		at = pgtype.Timestamptz{Time: e.OccurredAt.UTC(), Valid: true}
+		if e.OccurredAt.IsZero() {
+			at.Time = time.Now().UTC()
+		}
+	}
+	if _, err := store.New(s.cfg.Pool).ApplyUserBan(ctx, store.ApplyUserBanParams{UserID: e.User.PG(), BannedAt: at, EventID: e.ID.PG()}); err != nil {
+		return fmt.Errorf("platform banı: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) applyProfile(ctx context.Context, e Event) error {
@@ -179,6 +211,9 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 		q := store.New(tx)
 		if err := q.SetSystemJob(ctx, systemJob); err != nil {
 			return fmt.Errorf("sistem işi: %w", err)
+		}
+		if err := q.DeleteUserBan(ctx, e.User.PG()); err != nil {
+			return fmt.Errorf("platform banı: %w", err)
 		}
 		ms, err := q.ListMembershipsOfUser(ctx, e.User.PG())
 		if err != nil {

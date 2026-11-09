@@ -62,6 +62,13 @@ enum NotificationType {
   // actor, no content. At most one unread per conversation: further
   // messages add none until the conversation is read.
   NOTIFICATION_TYPE_DM_MESSAGE = 18;
+  // The platform suspended the tayfa: it is read-only until the suspension
+  // is lifted; for admins and moderators (target: TAYFA; issue #104). The
+  // reason is shown to them in the tayfa's details, not in the notification.
+  NOTIFICATION_TYPE_TAYFA_SUSPENDED = 19;
+  // The platform lifted the tayfa's suspension; for admins and moderators
+  // (target: TAYFA).
+  NOTIFICATION_TYPE_TAYFA_UNSUSPENDED = 20;
 }
 
 enum NotificationTargetType {

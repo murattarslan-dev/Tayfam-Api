@@ -111,6 +111,8 @@ func (s *AuthServer) mapError(ctx context.Context, err error) error {
 		return fail(codes.Unauthenticated, identityv1.ErrorReason_ERROR_REASON_INVALID_CREDENTIALS)
 	case errors.Is(err, session.ErrUnsupportedProvider):
 		return fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_UNSUPPORTED_PROVIDER)
+	case errors.Is(err, session.ErrSanctioned):
+		return fail(codes.PermissionDenied, identityv1.ErrorReason_ERROR_REASON_ACCOUNT_SANCTIONED)
 	case errors.Is(err, session.ErrAgeBlocked):
 		return fail(codes.PermissionDenied, identityv1.ErrorReason_ERROR_REASON_AGE_BLOCKED)
 	case errors.Is(err, session.ErrInvalidRefresh):

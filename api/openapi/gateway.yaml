@@ -59,7 +59,8 @@ paths:
         Kullanıcı yoksa oluşturulur ve kayıt bekler (`registration_pending`).
         Bu durumdaki erişim token'ı yalnızca `/v1/registration` uçlarına
         geçer (ADR-0012). `platform` `web` ise token'lar gövdede değil
-        çerezlerde döner.
+        çerezlerde döner. Platform genelinde askıdaki veya banlı hesap
+        `account-sanctioned` (403) alır; token yenileme de aynı cevabı verir.
       security: []
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
@@ -3693,6 +3694,12 @@ components:
         - invalid-credentials
         - unsupported-provider
         - age-blocked
+        - account-sanctioned
+        # Platform paneli (issue #104; panel sözleşmesi api/openapi/admin.yaml)
+        - reason-required
+        - sanction-conflict
+        - decision-not-applicable
+        - tayfa-state-conflict
         - invalid-refresh
         - refresh-conflict
         - invalid-birth-date
@@ -4976,7 +4983,7 @@ components:
             `join_approved` (başvurunuz onaylandı),
             `tayfa_deletion_requested` (yönetici/moderatörlere silme talebi),
             `tayfa_warned` (hareketsiz tayfa 7 gün içinde arşivlenecek;
-            `warning_reason` var), `tayfa_archived`, `hike_overdue`
+            `warning_reason` var), `tayfa_archived`, `tayfa_suspended` ve `tayfa_unsuspended` (platform askısı; gerekçe tayfa ayrıntısında), `hike_overdue`
             (yürüyüşçü zamanında dönmedi; `subject_user_id` yürüyüşçüdür,
             sessize alma bu bildirimi engellemez), `friend_request` (size
             arkadaşlık isteği; `target_id` isteyen kişi), `friend_accepted`
@@ -4991,7 +4998,7 @@ components:
             "yeni" bilgisi taşır: hedef `dm_conversation`, `actor_id` ve
             `tayfa_id` yoktur, içerik de gönderen de yazılmaz; okunmamış
             mesaj sayısını `unread_count` taşır. Tanınmayan değer `unknown`.
-          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, unknown]
+          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, tayfa_suspended, tayfa_unsuspended, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, unknown]
         tayfa_id:
           type: string
           format: uuid

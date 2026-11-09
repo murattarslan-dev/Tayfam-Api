@@ -36,6 +36,8 @@ const (
 	TypeTayfaDeletionRequested = "tayfa_deletion_requested"
 	TypeTayfaWarned            = "tayfa_warned"
 	TypeTayfaArchived          = "tayfa_archived"
+	TypeTayfaSuspended         = "tayfa_suspended"
+	TypeTayfaUnsuspended       = "tayfa_unsuspended"
 	// TypeHikeOverdue cannot be muted (v14): push will send it whatever the
 	// preference.
 	TypeHikeOverdue = "hike_overdue"
@@ -89,7 +91,8 @@ func targetOf(typ string) (string, bool) {
 		return TargetMembership, true
 	case TypeReportResolved:
 		return TargetReport, true
-	case TypeJoinApproved, TypeTayfaDeletionRequested, TypeTayfaWarned, TypeTayfaArchived, TypeTayfaInvitation:
+	case TypeJoinApproved, TypeTayfaDeletionRequested, TypeTayfaWarned, TypeTayfaArchived, TypeTayfaInvitation,
+		TypeTayfaSuspended, TypeTayfaUnsuspended:
 		return TargetTayfa, true
 	case TypeFriendRequest, TypeFriendAccepted:
 		return TargetUser, true

@@ -152,6 +152,14 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_REPORT_ALREADY_RESOLVED, true
 	case errors.Is(err, apperr.ErrReportActionMissing):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_REPORT_ACTION_MISSING, true
+	case errors.Is(err, apperr.ErrReauthenticationRequired):
+		return codes.PermissionDenied, corev1.ErrorReason_ERROR_REASON_REAUTHENTICATION_REQUIRED, true
+	case errors.Is(err, apperr.ErrReasonRequired):
+		return codes.InvalidArgument, corev1.ErrorReason_ERROR_REASON_REASON_REQUIRED, true
+	case errors.Is(err, apperr.ErrDecisionNotApplicable):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DECISION_NOT_APPLICABLE, true
+	case errors.Is(err, apperr.ErrTayfaStateConflict):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_TAYFA_STATE_CONFLICT, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }
@@ -179,6 +187,8 @@ func errorStatus(ctx context.Context, log *slog.Logger, err error) error {
 		return reasonStatus(codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LAST_ADMIN, nil)
 	}
 	switch {
+	case errors.Is(err, apperr.ErrNotPlatformAdmin):
+		return status.Error(codes.Unauthenticated, msgUnauthenticated)
 	case errors.Is(err, apperr.ErrUnavailable):
 		return status.Error(codes.Unavailable, msgRejected)
 	case errors.Is(err, context.Canceled):

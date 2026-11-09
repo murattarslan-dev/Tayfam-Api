@@ -76,6 +76,8 @@ var notificationTypeNames = map[chatv1.NotificationType]string{
 	chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_DELETION_REQUESTED: "tayfa_deletion_requested",
 	chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_WARNED:             "tayfa_warned",
 	chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_ARCHIVED:           "tayfa_archived",
+	chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_SUSPENDED:          "tayfa_suspended",
+	chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_UNSUSPENDED:        "tayfa_unsuspended",
 	chatv1.NotificationType_NOTIFICATION_TYPE_HIKE_OVERDUE:             "hike_overdue",
 	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_REQUEST:           "friend_request",
 	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_ACCEPTED:          "friend_accepted",

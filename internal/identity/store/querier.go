@@ -24,6 +24,7 @@ type Querier interface {
 	CreateAuthIdentity(ctx context.Context, arg CreateAuthIdentityParams) error
 	CreateDevice(ctx context.Context, arg CreateDeviceParams) error
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
+	CreateSanction(ctx context.Context, arg CreateSanctionParams) (CreateSanctionRow, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) error
 	// Sayılmayacak kadar eski denemeler aynı kişinin bir sonraki aramasında
@@ -48,12 +49,16 @@ type Querier interface {
 	// Kodla bulunan kişinin yalnızca kimliği, adı ve avatarı döner; kayıtlı ve
 	// silinmemiş hesaplar. Tayfaları, geçmişi ve arkadaşları buradan çıkmaz.
 	FindUserByRefCode(ctx context.Context, refCode pgtype.Text) (FindUserByRefCodeRow, error)
+	// Etkin yaptırım: kaldırılmamış ve (ban ya da bitişi gelmemiş askı).
+	GetActiveSanctionType(ctx context.Context, userID pgtype.UUID) (string, error)
 	GetActiveSession(ctx context.Context, id pgtype.UUID) (GetActiveSessionRow, error)
 	GetAuthIdentity(ctx context.Context, arg GetAuthIdentityParams) (GetAuthIdentityRow, error)
 	// Çağıranın oturumu: açık, süresi dolmamış ve token'daki kullanıcıya ait.
 	// created_at, hesap silmede yeniden kimlik doğrulama için girişin
 	// (sağlayıcı token'ının doğrulandığı an) zamanıdır; yenileme onu değiştirmez.
 	GetCallerSession(ctx context.Context, arg GetCallerSessionParams) (GetCallerSessionRow, error)
+	// Kullanıcının kaldırılmamış yaptırımı (süresi dolmuş askı dahil).
+	GetOpenSanction(ctx context.Context, userID pgtype.UUID) (GetOpenSanctionRow, error)
 	// Admin token'ı taşıyan her istekte: kullanıcı hâlâ yönetici mi? Satır
 	// silinince bütün admin token'ları bir sonraki istekte geçersiz olur.
 	GetPlatformAdmin(ctx context.Context, userID pgtype.UUID) (GetPlatformAdminRow, error)
@@ -65,9 +70,15 @@ type Querier interface {
 	// yönetici sayılmaz.
 	GetPlatformAdminByIdentity(ctx context.Context, arg GetPlatformAdminByIdentityParams) (GetPlatformAdminByIdentityRow, error)
 	GetUser(ctx context.Context, id pgtype.UUID) (GetUserRow, error)
+	GetUserForAdmin(ctx context.Context, userID pgtype.UUID) (GetUserForAdminRow, error)
 	HasActiveConsent(ctx context.Context, arg HasActiveConsentParams) (bool, error)
 	// Yalnızca ekleme (00006 trigger'ı).
 	InsertPlatformAuditLog(ctx context.Context, arg InsertPlatformAuditLogParams) error
+	// core'un panel işlemlerinin denetim kaydı (PlatformAuditService). Kimlik
+	// core'un olay kimliğidir; aynı olay ikinci kez gelirse bir şey değişmez.
+	InsertPlatformAuditLogOnce(ctx context.Context, arg InsertPlatformAuditLogOnceParams) (int64, error)
+	LiftSanction(ctx context.Context, arg LiftSanctionParams) (int64, error)
+	ListActiveSanctionTypes(ctx context.Context, userIds []pgtype.UUID) ([]ListActiveSanctionTypesRow, error)
 	// 18 yaş altı sorgusu (ADR-0012, issue #76). Yalnızca kaydı tamamlanmış ve
 	// silinmemiş hesapların şifreli doğum tarihi okunur; cevap yalnızca
 	// evet/hayır olarak servisten çıkar.
@@ -85,6 +96,9 @@ type Querier interface {
 	// Arama sınırı için aramayı yapan kişinin satırını kilitler: aynı kişinin
 	// eşzamanlı aramaları sırayla sayılır. Yalnızca kayıtlı ve silinmemiş hesap.
 	LockRegisteredUser(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
+	// Kullanıcıyı kilitler (yaptırım ve oturum kapatma aynı kullanıcıda sırayla
+	// işlenir).
+	LockUserForAdmin(ctx context.Context, userID pgtype.UUID) (pgtype.UUID, error)
 	MarkRefreshTokenUsed(ctx context.Context, id pgtype.UUID) (int64, error)
 	// 30 gün önce silinmiş hesaplar kalıcı silinir. consent_records'un
 	// foreign key'i yoktur ve dokunulmaz (00002, hukukçu kararı bekleniyor).
@@ -121,6 +135,11 @@ type Querier interface {
 	// Kodu yeniler; eski kod aynı anda geçersiz olur (eski link çalışmaz).
 	// Yalnızca kodu olan, kayıtlı ve silinmemiş hesapta çalışır.
 	RotateRefCode(ctx context.Context, arg RotateRefCodeParams) (int64, error)
+	SearchUsersByEmail(ctx context.Context, email string) ([]SearchUsersByEmailRow, error)
+	// Panel kullanıcı araması (issue #104). En fazla 20 sonuç; doğum tarihi,
+	// e-posta ve oturum ayrıntısı dönmez.
+	SearchUsersByName(ctx context.Context, pattern string) ([]SearchUsersByNameRow, error)
+	SearchUsersByRefCode(ctx context.Context, refCode pgtype.Text) ([]SearchUsersByRefCodeRow, error)
 	// Katılım geçmişinin kime görüneceği (v14 "Profil görünürlüğü").
 	SetActivityVisibility(ctx context.Context, arg SetActivityVisibilityParams) (int64, error)
 	SetDisplayName(ctx context.Context, arg SetDisplayNameParams) error

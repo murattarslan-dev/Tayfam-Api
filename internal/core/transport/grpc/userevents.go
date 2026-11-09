@@ -72,6 +72,10 @@ func (s *UserEventServer) ApplyUserEvent(ctx context.Context, req *corev1.ApplyU
 		e.Profile = p
 	case *corev1.ApplyUserEventRequest_Deleted:
 		e.Deleted = true
+	case *corev1.ApplyUserEventRequest_Banned:
+		e.Ban = userevents.BanBanned
+	case *corev1.ApplyUserEventRequest_Unbanned:
+		e.Ban = userevents.BanLifted
 	default:
 		return nil, validation("event")
 	}

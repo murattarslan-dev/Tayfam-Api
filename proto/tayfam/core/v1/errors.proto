@@ -237,4 +237,17 @@ enum ErrorReason {
   // CONTENT_REMOVED while the content is still visible, MEMBER_SANCTIONED
   // while the reported member is neither muted nor banned.
   ERROR_REASON_REPORT_ACTION_MISSING = 104;
+  // Platform panel (AdminService, issue #104).
+  // PERMISSION_DENIED. A change needs a Google sign-in in the last 5
+  // minutes; sign in to the panel again.
+  ERROR_REASON_REAUTHENTICATION_REQUIRED = 110;
+  // INVALID_ARGUMENT. A change without a reason of 10–1000 characters.
+  ERROR_REASON_REASON_REQUIRED = 111;
+  // FAILED_PRECONDITION. The decision does not fit the report (content
+  // removal of a user, tayfa or direct message; tayfa suspension of a DM
+  // report) or the report is not escalated to the platform.
+  ERROR_REASON_DECISION_NOT_APPLICABLE = 112;
+  // FAILED_PRECONDITION. The tayfa is already in the requested state
+  // (suspended, not suspended, deleted).
+  ERROR_REASON_TAYFA_STATE_CONFLICT = 113;
 }

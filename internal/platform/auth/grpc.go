@@ -48,8 +48,13 @@ func ServiceCallerFrom(ctx context.Context) (ServiceClaims, bool) {
 // platform administrator is checked by identity on every call; the token
 // alone only says who signed in to the panel.
 func AdminCallerFrom(ctx context.Context) (AdminClaims, bool) {
-	c, ok := ctx.Value(adminCallerKey{}).(AdminClaims)
-	return c, ok
+	c, ok := ctx.Value(adminCallerKey{}).(adminCaller)
+	return c.claims, ok
+}
+
+type adminCaller struct {
+	claims AdminClaims
+	token  string
 }
 
 // Guard enforces authentication on a gRPC server. Every method requires a
@@ -276,7 +281,7 @@ func (g *Guard) authenticateAdmin(ctx context.Context, token string) (context.Co
 	case err != nil:
 		return nil, status.Error(codes.Unavailable, "kimlik doğrulama şu anda yapılamıyor")
 	}
-	return context.WithValue(ctx, adminCallerKey{}, claims), nil
+	return context.WithValue(ctx, adminCallerKey{}, adminCaller{claims: claims, token: token}), nil
 }
 
 func bearerToken(ctx context.Context) (string, bool) {
@@ -302,8 +307,9 @@ type wrappedStream struct {
 func (w *wrappedStream) Context() context.Context { return w.ctx }
 
 // ForwardToken returns client options that pass the current caller's access
-// token on to the next service unchanged, so it can verify the token itself
-// (ADR-0004). Calls made outside a verified request carry no token.
+// token (or, on an admin method, admin token) on to the next service
+// unchanged, so it can verify the token itself (ADR-0004). Calls made
+// outside a verified request carry no token.
 func ForwardToken() []grpc.DialOption {
 	return []grpc.DialOption{
 		grpc.WithChainUnaryInterceptor(func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
@@ -322,14 +328,18 @@ func WithToken(ctx context.Context, token string) context.Context {
 }
 
 func withToken(ctx context.Context) context.Context {
-	c, ok := ctx.Value(callerKey{}).(caller)
-	if !ok {
-		return ctx
-	}
 	if md, ok := metadata.FromOutgoingContext(ctx); ok && len(md.Get(authHeader)) > 0 {
 		return ctx
 	}
-	return WithToken(ctx, c.token)
+	if c, ok := ctx.Value(callerKey{}).(caller); ok {
+		return WithToken(ctx, c.token)
+	}
+	// An admin method calling on (core asking identity whether the caller is
+	// still a platform administrator) passes the admin token unchanged.
+	if c, ok := ctx.Value(adminCallerKey{}).(adminCaller); ok && c.token != "" {
+		return WithToken(ctx, c.token)
+	}
+	return ctx
 }
 
 // WithCallerForTest returns ctx carrying c as the verified caller, as Guard
@@ -343,7 +353,13 @@ func WithCallerForTest(ctx context.Context, c Claims) context.Context {
 // administrator, as Guard would set it on an admin method. Only tests may
 // use it.
 func WithAdminCallerForTest(ctx context.Context, c AdminClaims) context.Context {
-	return context.WithValue(ctx, adminCallerKey{}, c)
+	return context.WithValue(ctx, adminCallerKey{}, adminCaller{claims: c})
+}
+
+// WithAdminTokenForTest is WithAdminCallerForTest that also keeps the raw
+// admin token, so ForwardToken passes it on. Only tests may use it.
+func WithAdminTokenForTest(ctx context.Context, c AdminClaims, token string) context.Context {
+	return context.WithValue(ctx, adminCallerKey{}, adminCaller{claims: c, token: token})
 }
 
 // WithServiceCallerForTest returns ctx carrying c as the verified calling
