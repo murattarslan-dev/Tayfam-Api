@@ -2,9 +2,13 @@ syntax = "proto3";
 
 package tayfam.identity.v1;
 
+import "google/protobuf/timestamp.proto";
+import "tayfam/identity/v1/auth.proto";
+
 // AccountService holds the caller's own account settings that identity owns:
 // the referral code and who sees the attendance history (data model v14
-// "Arkadaşlık ve Davet (v11)", "Profil görünürlüğü"; issue #71).
+// "Arkadaşlık ve Davet (v11)", "Profil görünürlüğü"; issue #71), sessions,
+// consents to new text versions and account deletion (issue #75).
 //
 // Every method needs a full access token: a registration-only token
 // (aud=tayfam-registration) is refused with UNAUTHENTICATED. The caller
@@ -25,6 +29,34 @@ service AccountService {
   // SetActivityVisibility changes who sees the caller's attendance history.
   // core gets the new setting with the profile copy (user.profile_updated).
   rpc SetActivityVisibility(SetActivityVisibilityRequest) returns (SetActivityVisibilityResponse);
+
+  // ListSessions returns the caller's open sessions, one per signed-in
+  // device. No IP address and no token is returned. The session methods
+  // refuse a token whose own session is ended (UNAUTHENTICATED), even before
+  // the token expires.
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+  // RevokeSession ends one of the caller's sessions; its refresh token stops
+  // working at once. An unknown session, an ended one or another user's is
+  // ERROR_REASON_SESSION_NOT_FOUND.
+  rpc RevokeSession(RevokeSessionRequest) returns (RevokeSessionResponse);
+  // RevokeOtherSessions ends every session of the caller but the current one.
+  rpc RevokeOtherSessions(RevokeOtherSessionsRequest) returns (RevokeOtherSessionsResponse);
+
+  // GetConsents returns the current text versions and whether the caller
+  // must accept them (Tokens.consent_required).
+  rpc GetConsents(GetConsentsRequest) returns (GetConsentsResponse);
+  // AcceptConsents records that the caller accepted the current versions.
+  // Versions that are not the current ones are
+  // ERROR_REASON_CONSENT_OUTDATED.
+  rpc AcceptConsents(AcceptConsentsRequest) returns (AcceptConsentsResponse);
+
+  // DeleteAccount deletes the caller's account (KVKK). The caller must have
+  // signed in with the provider in the last 10 minutes: both the access
+  // token and its session must be that recent, otherwise
+  // ERROR_REASON_REAUTHENTICATION_REQUIRED. Personal data is cleared at once,
+  // every session ends and core and chat are told (user.deleted). Signing in
+  // with the same provider account later opens a new account.
+  rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse);
 }
 
 // ActivityVisibility is who sees the user's attendance history.
@@ -72,3 +104,52 @@ message SetActivityVisibilityRequest {
 message SetActivityVisibilityResponse {
   ActivityVisibility activity_visibility = 1;
 }
+
+message ListSessionsRequest {}
+
+message Session {
+  string session_id = 1;
+  Platform platform = 2;
+  google.protobuf.Timestamp create_time = 3;
+  // Last token refresh of the session.
+  google.protobuf.Timestamp last_seen_time = 4;
+  // The session of the access token of this request.
+  bool current = 5;
+}
+
+message ListSessionsResponse {
+  // Most recently used first; at most 100.
+  repeated Session sessions = 1;
+}
+
+message RevokeSessionRequest {
+  string session_id = 1;
+}
+
+message RevokeSessionResponse {}
+
+message RevokeOtherSessionsRequest {}
+
+message RevokeOtherSessionsResponse {
+  int32 revoked_count = 1;
+}
+
+message GetConsentsRequest {}
+
+message GetConsentsResponse {
+  string privacy_notice_version = 1;
+  string terms_version = 2;
+  bool consent_required = 3;
+}
+
+message AcceptConsentsRequest {
+  // The versions the client showed; they must be the current ones.
+  string privacy_notice_version = 1;
+  string terms_version = 2;
+}
+
+message AcceptConsentsResponse {}
+
+message DeleteAccountRequest {}
+
+message DeleteAccountResponse {}

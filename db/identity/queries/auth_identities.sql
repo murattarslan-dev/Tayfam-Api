@@ -11,3 +11,8 @@ VALUES (@id, @user_id, @provider, @subject, @email);
 UPDATE auth_identities
 SET last_used_at = now(), email = @email
 WHERE id = @id;
+
+-- Hesap silmede giriş kimlikleri hemen silinir; aynı Google/Apple hesabıyla
+-- sonraki giriş yeni bir hesap açar (veri modeli v14).
+-- name: DeleteUserAuthIdentities :exec
+DELETE FROM auth_identities WHERE user_id = @user_id;

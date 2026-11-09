@@ -84,3 +84,27 @@ WHERE u.id = @id AND u.referred_at IS NULL AND u.id <> @referrer_id
 -- name: SetActivityVisibility :execrows
 UPDATE users SET activity_visibility = @activity_visibility
 WHERE id = @id AND registered_at IS NOT NULL AND deleted_at IS NULL;
+
+-- Hesap silme (issue #75; v14 "Hesap silme", "İlişkiler ve Silme
+-- Davranışı"). Kilit, aynı hesabın eşzamanlı silme isteklerini sıraya koyar.
+-- name: LockLiveUser :one
+SELECT id, registered_at FROM users
+WHERE id = @id AND deleted_at IS NULL
+FOR UPDATE;
+
+-- Kişisel veriler hemen temizlenir; satır 30 gün sonra saklama işiyle
+-- kalıcı silinir. referred_at kalır (users_referral_once yeniden referans
+-- yazılmasını engeller).
+-- name: SoftDeleteUser :execrows
+UPDATE users
+SET deleted_at = now(),
+    display_name = NULL,
+    avatar_upload_id = NULL,
+    birth_date_enc = NULL,
+    ref_code = NULL,
+    ref_code_rotated_at = NULL,
+    referred_by_user_id = NULL
+WHERE id = @id AND deleted_at IS NULL;
+
+-- name: DeleteUserRefCodeLookups :exec
+DELETE FROM ref_code_lookups WHERE user_id = @user_id;

@@ -72,6 +72,7 @@ func setup(t *testing.T) *env {
 		Verifiers:    map[string]oidc.Verifier{"google": fakeGoogle{}},
 		API:          signer(AudienceAPI),
 		Registration: signer(AudienceRegistration),
+		Documents:    testDocs,
 		Now:          clock,
 	})
 	if err != nil {

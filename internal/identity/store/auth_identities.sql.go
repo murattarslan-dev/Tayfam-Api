@@ -35,6 +35,17 @@ func (q *Queries) CreateAuthIdentity(ctx context.Context, arg CreateAuthIdentity
 	return err
 }
 
+const deleteUserAuthIdentities = `-- name: DeleteUserAuthIdentities :exec
+DELETE FROM auth_identities WHERE user_id = $1
+`
+
+// Hesap silmede giriş kimlikleri hemen silinir; aynı Google/Apple hesabıyla
+// sonraki giriş yeni bir hesap açar (veri modeli v14).
+func (q *Queries) DeleteUserAuthIdentities(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserAuthIdentities, userID)
+	return err
+}
+
 const getAuthIdentity = `-- name: GetAuthIdentity :one
 SELECT id, user_id, provider, subject, email
 FROM auth_identities

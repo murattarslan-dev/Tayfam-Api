@@ -20,9 +20,12 @@ import (
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/account"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/birthdate"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/consent"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/deletion"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/oidc"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/registration"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/retention"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/session"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/userevents"
 	grpcapi "github.com/murattarslan-dev/tayfam-api/internal/identity/transport/grpc"
@@ -99,6 +102,7 @@ func setup(rt *service.Runtime) error {
 		Verifiers:    map[string]oidc.Verifier{"google": google},
 		API:          apiSigner,
 		Registration: regSigner,
+		Documents:    docs,
 	})
 	if err != nil {
 		return err
@@ -108,6 +112,18 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 	accounts, err := account.New(account.Config{Pool: pool})
+	if err != nil {
+		return err
+	}
+	consents, err := consent.NewService(pool, docs)
+	if err != nil {
+		return err
+	}
+	deleter, err := deletion.New(deletion.Config{Pool: pool, Log: rt.Log})
+	if err != nil {
+		return err
+	}
+	retain, err := retention.New(retention.Config{Pool: pool, Log: rt.Log})
 	if err != nil {
 		return err
 	}
@@ -126,10 +142,18 @@ func setup(rt *service.Runtime) error {
 	identityv1.RegisterKeyServiceServer(srv, grpcapi.NewKeyServer(ring))
 	identityv1.RegisterAuthServiceServer(srv, grpcapi.NewAuthServer(sessions, rt.Log))
 	identityv1.RegisterRegistrationServiceServer(srv, grpcapi.NewRegistrationServer(reg, rt.Log))
-	// Hesap ayarları yalnızca tam erişim token'ıyla (aud=AUTH_AUDIENCE);
-	// kayıt bekleyen hesabın token'ı reddedilir.
-	identityv1.RegisterAccountServiceServer(srv, grpcapi.NewAccountServer(accounts, audience, rt.Log))
+	// Hesap ayarları, oturumlar, yeniden onay ve hesap silme yalnızca tam
+	// erişim token'ıyla (aud=AUTH_AUDIENCE); kayıt bekleyen hesabın token'ı
+	// reddedilir.
+	identityv1.RegisterAccountServiceServer(srv, grpcapi.NewAccountServer(grpcapi.AccountDeps{
+		Accounts: accounts, Sessions: sessions, Consents: consents, Deletion: deleter,
+		APIAudience: audience, Log: rt.Log,
+	}))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
+	// Saklama süreleri (refresh token 30 gün, oturum ve cihaz 90 gün,
+	// silinmiş hesap 30 gün; issue #75). Birden fazla pod'da çalışabilir:
+	// her DELETE koşulunu yeniden denetler.
+	rt.AddWorker("retention", retain.Run)
 	return addRelay(rt, pool)
 }
 

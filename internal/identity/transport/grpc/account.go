@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -22,6 +23,17 @@ type Accounts interface {
 	SetActivityVisibility(ctx context.Context, caller id.ID, v account.Visibility) (account.Visibility, error)
 }
 
+// AccountDeps wires an AccountServer.
+type AccountDeps struct {
+	Accounts Accounts
+	Sessions SessionManager
+	Consents Consents
+	Deletion Deleter
+	// APIAudience is the audience of full access tokens (AUTH_AUDIENCE).
+	APIAudience string
+	Log         *slog.Logger
+}
+
 // AccountServer implements identityv1.AccountServiceServer. identity's
 // verifier also accepts registration-only tokens (for RegistrationService);
 // every method here checks that the caller's token is a full access token
@@ -29,14 +41,19 @@ type Accounts interface {
 type AccountServer struct {
 	identityv1.UnimplementedAccountServiceServer
 	app         Accounts
+	sessions    SessionManager
+	consents    Consents
+	deletion    Deleter
 	apiAudience string
 	log         *slog.Logger
 }
 
-// NewAccountServer returns an AccountServer. apiAudience is the audience of
-// full access tokens (AUTH_AUDIENCE).
-func NewAccountServer(app Accounts, apiAudience string, log *slog.Logger) *AccountServer {
-	return &AccountServer{app: app, apiAudience: apiAudience, log: log}
+// NewAccountServer returns an AccountServer.
+func NewAccountServer(d AccountDeps) *AccountServer {
+	return &AccountServer{
+		app: d.Accounts, sessions: d.Sessions, consents: d.Consents, deletion: d.Deletion,
+		apiAudience: d.APIAudience, log: d.Log,
+	}
 }
 
 var visibilityToPB = map[account.Visibility]identityv1.ActivityVisibility{
@@ -120,15 +137,28 @@ func (s *AccountServer) SetActivityVisibility(ctx context.Context, req *identity
 
 // caller returns the verified user of a full access token.
 func (s *AccountServer) caller(ctx context.Context) (id.ID, error) {
+	t, err := s.token(ctx)
+	return t.user, err
+}
+
+// verified is a full access token's user, session and issue time.
+type verified struct {
+	user, session id.ID
+	issuedAt      time.Time
+}
+
+// token returns the verified claims of a full access token.
+func (s *AccountServer) token(ctx context.Context) (verified, error) {
 	c, ok := auth.CallerFrom(ctx)
 	if !ok || s.apiAudience == "" || c.Audience != s.apiAudience {
-		return id.ID{}, status.Error(codes.Unauthenticated, "kimlik doğrulanamadı")
+		return verified{}, status.Error(codes.Unauthenticated, "kimlik doğrulanamadı")
 	}
-	u, ok := id.Parse(c.Subject)
-	if !ok {
-		return id.ID{}, status.Error(codes.Unauthenticated, "kimlik doğrulanamadı")
+	u, okU := id.Parse(c.Subject)
+	sid, okS := id.Parse(c.SessionID)
+	if !okU || !okS {
+		return verified{}, status.Error(codes.Unauthenticated, "kimlik doğrulanamadı")
 	}
-	return u, nil
+	return verified{user: u, session: sid, issuedAt: c.IssuedAt}, nil
 }
 
 func (s *AccountServer) mapError(ctx context.Context, err error) error {
