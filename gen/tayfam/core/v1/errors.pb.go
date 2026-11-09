@@ -157,6 +157,20 @@ const (
 	ErrorReason_ERROR_REASON_EVENT_SERIES_NOT_FOUND ErrorReason = 50
 	// FAILED_PRECONDITION. The series was ended; it no longer changes.
 	ErrorReason_ERROR_REASON_EVENT_SERIES_ENDED ErrorReason = 51
+	// NOT_FOUND. No visible question with this ID in this tayfa that the
+	// method can work on (unknown, in another tayfa, deleted, or no longer
+	// restorable).
+	ErrorReason_ERROR_REASON_QUESTION_NOT_FOUND ErrorReason = 60
+	// NOT_FOUND. The same for answers. An answer of a deleted question is not
+	// found either.
+	ErrorReason_ERROR_REASON_ANSWER_NOT_FOUND ErrorReason = 61
+	// NOT_FOUND. No tag with this ID in this tayfa.
+	ErrorReason_ERROR_REASON_TAG_NOT_FOUND ErrorReason = 62
+	// FAILED_PRECONDITION. SetAnswerVote on the caller's own answer.
+	ErrorReason_ERROR_REASON_OWN_ANSWER_VOTE ErrorReason = 63
+	// RESOURCE_EXHAUSTED. The question names a new tag, but the tayfa already
+	// has 200 tags; a moderator can remove unused ones.
+	ErrorReason_ERROR_REASON_TAG_LIMIT ErrorReason = 64
 )
 
 // Enum value maps for ErrorReason.
@@ -201,6 +215,11 @@ var (
 		45: "ERROR_REASON_NOT_ATTENDED",
 		50: "ERROR_REASON_EVENT_SERIES_NOT_FOUND",
 		51: "ERROR_REASON_EVENT_SERIES_ENDED",
+		60: "ERROR_REASON_QUESTION_NOT_FOUND",
+		61: "ERROR_REASON_ANSWER_NOT_FOUND",
+		62: "ERROR_REASON_TAG_NOT_FOUND",
+		63: "ERROR_REASON_OWN_ANSWER_VOTE",
+		64: "ERROR_REASON_TAG_LIMIT",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                 0,
@@ -242,6 +261,11 @@ var (
 		"ERROR_REASON_NOT_ATTENDED":                45,
 		"ERROR_REASON_EVENT_SERIES_NOT_FOUND":      50,
 		"ERROR_REASON_EVENT_SERIES_ENDED":          51,
+		"ERROR_REASON_QUESTION_NOT_FOUND":          60,
+		"ERROR_REASON_ANSWER_NOT_FOUND":            61,
+		"ERROR_REASON_TAG_NOT_FOUND":               62,
+		"ERROR_REASON_OWN_ANSWER_VOTE":             63,
+		"ERROR_REASON_TAG_LIMIT":                   64,
 	}
 )
 
@@ -276,8 +300,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xcd\n" +
-	"\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xf3\v\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -318,7 +341,12 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\x1dERROR_REASON_HIKE_NOT_STARTED\x10,\x12\x1d\n" +
 	"\x19ERROR_REASON_NOT_ATTENDED\x10-\x12'\n" +
 	"#ERROR_REASON_EVENT_SERIES_NOT_FOUND\x102\x12#\n" +
-	"\x1fERROR_REASON_EVENT_SERIES_ENDED\x103B\xbd\x01\n" +
+	"\x1fERROR_REASON_EVENT_SERIES_ENDED\x103\x12#\n" +
+	"\x1fERROR_REASON_QUESTION_NOT_FOUND\x10<\x12!\n" +
+	"\x1dERROR_REASON_ANSWER_NOT_FOUND\x10=\x12\x1e\n" +
+	"\x1aERROR_REASON_TAG_NOT_FOUND\x10>\x12 \n" +
+	"\x1cERROR_REASON_OWN_ANSWER_VOTE\x10?\x12\x1a\n" +
+	"\x16ERROR_REASON_TAG_LIMIT\x10@B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

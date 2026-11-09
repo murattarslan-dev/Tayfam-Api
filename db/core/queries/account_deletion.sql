@@ -131,3 +131,29 @@ DELETE FROM fishing_catches WHERE user_id = @user_id;
 
 -- name: ClearCatchDeleter :exec
 UPDATE fishing_catches SET deleted_by = NULL WHERE deleted_by = @user_id;
+
+-- Sorular ve cevaplar kalır, yazar "Silinmiş kullanıcı" olur (v14
+-- "İlişkiler ve Silme Davranışı").
+-- name: ClearQuestionUserFields :exec
+UPDATE questions
+SET author_id  = NULLIF(author_id, @user_id),
+    deleted_by = NULLIF(deleted_by, @user_id)
+WHERE @user_id IN (author_id, deleted_by);
+
+-- name: ClearAnswerUserFields :exec
+UPDATE answers
+SET author_id  = NULLIF(author_id, @user_id),
+    deleted_by = NULLIF(deleted_by, @user_id)
+WHERE @user_id IN (author_id, deleted_by);
+
+-- Kişinin faydalı oyları silinir (kullanıcı → answer_votes CASCADE) ve
+-- oy sayıları aynı transaction'da düşer. Bir kişinin bir cevapta en fazla
+-- bir oyu olduğu için her cevap en fazla bir azalır.
+-- name: DeleteUserAnswerVotes :exec
+WITH gone AS (
+  DELETE FROM answer_votes WHERE user_id = @user_id RETURNING answer_id
+)
+UPDATE answers a
+SET vote_count = a.vote_count - 1
+FROM gone
+WHERE a.id = gone.answer_id;

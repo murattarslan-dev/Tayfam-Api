@@ -13,7 +13,12 @@ import (
 type Querier interface {
 	// Doğrudan davetin kabulü; status active ya da pending.
 	AcceptInvitation(ctx context.Context, arg AcceptInvitationParams) (int64, error)
+	// Oy ve sayaç aynı transaction'da: oy eklendiyse sayaç artar. Aynı kişinin
+	// ikinci oyu PK'ye takılır, sayaç değişmez.
+	AddAnswerVote(ctx context.Context, arg AddAnswerVoteParams) (int64, error)
+	AddQuestionTag(ctx context.Context, arg AddQuestionTagParams) error
 	AddTayfaInterest(ctx context.Context, arg AddTayfaInterestParams) error
+	AdjustAnswerVoteCount(ctx context.Context, arg AdjustAnswerVoteCountParams) (int64, error)
 	// generated_until yalnızca ileri gider.
 	AdvanceEventSeries(ctx context.Context, arg AdvanceEventSeriesParams) error
 	// Başvuru onayı.
@@ -26,6 +31,7 @@ type Querier interface {
 	// Duyurular kalır, yazar "Silinmiş kullanıcı" olur (v14 "İlişkiler ve
 	// Silme Davranışı").
 	ClearAnnouncementUserFields(ctx context.Context, userID pgtype.UUID) error
+	ClearAnswerUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearAuditActor(ctx context.Context, userID pgtype.UUID) error
 	// Malzeme listede kalır; üstlenen ve ekleyen boşalır.
 	ClearCampItemUserFields(ctx context.Context, userID pgtype.UUID) error
@@ -38,6 +44,10 @@ type Querier interface {
 	ClearEventUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearInviteCreator(ctx context.Context, userID pgtype.UUID) error
 	ClearMembershipUserFields(ctx context.Context, userID pgtype.UUID) error
+	ClearQuestionTags(ctx context.Context, arg ClearQuestionTagsParams) error
+	// Sorular ve cevaplar kalır, yazar "Silinmiş kullanıcı" olur (v14
+	// "İlişkiler ve Silme Davranışı").
+	ClearQuestionUserFields(ctx context.Context, userID pgtype.UUID) error
 	// Başkasının yoklamasını işaretleyen kişi boşalır; kişinin kendi katılım
 	// kayıtları silinir (kullanıcı → event_rsvps CASCADE).
 	ClearRsvpMarker(ctx context.Context, userID pgtype.UUID) error
@@ -55,6 +65,8 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// Katılım
 	CountRsvpsForEvents(ctx context.Context, eventIds []pgtype.UUID) ([]CountRsvpsForEventsRow, error)
+	// Etiketler.
+	CountTags(ctx context.Context, tayfaID pgtype.UUID) (int32, error)
 	// Kullanıcı başına günlük tayfa açma sınırı. Silinen tayfalar da sayılır;
 	// açıp silerek sınır aşılamaz.
 	CountTayfasCreatedSince(ctx context.Context, arg CountTayfasCreatedSinceParams) (int64, error)
@@ -62,6 +74,8 @@ type Querier interface {
 	// Duyurular (issue #48). Her sorgu tayfa_id ile sınırlıdır (IDOR); üyelik
 	// ve izin kontrolü app katmanındadır (access, authz).
 	CreateAnnouncement(ctx context.Context, arg CreateAnnouncementParams) error
+	// Cevaplar.
+	CreateAnswer(ctx context.Context, arg CreateAnswerParams) error
 	// Denetim kaydı yalnızca eklenir. metadata'ya kişisel veri ya da token
 	// yazılmaz.
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error
@@ -78,25 +92,36 @@ type Querier interface {
 	// Üyelik değişiklikleri transaction içinde SetActor ya da SetSystemJob'dan
 	// sonra yapılır; aksi halde trigger reddeder.
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) error
+	// Soru-cevap (issue #59). Her sorgu tayfa_id ile sınırlıdır (IDOR); üyelik
+	// ve izin kontrolü app katmanındadır (access, authz).
+	CreateQuestion(ctx context.Context, arg CreateQuestionParams) error
 	// Üretilen örnek. Aynı seride aynı başlangıç zamanı zaten varsa hiçbir şey
 	// yazılmaz (events_series_starts_at_key); iki pod aynı örneği üretemez.
 	CreateSeriesEvent(ctx context.Context, arg CreateSeriesEventParams) (int64, error)
 	// Sistemin olayları txn.Event (internal/platform/outbox.Write) ile, işlemi
 	// yapan olmadan yazılır.
 	CreateSystemAuditLog(ctx context.Context, arg CreateSystemAuditLogParams) error
+	CreateTag(ctx context.Context, arg CreateTagParams) error
 	// Tayfa, kurucu üyelik, modüller ve ilgi alanları tek transaction'da
 	// yazılır; birleştirmeyi app katmanı yapar.
 	CreateTayfa(ctx context.Context, arg CreateTayfaParams) error
 	DeleteActivityRecord(ctx context.Context, arg DeleteActivityRecordParams) (int64, error)
+	DeleteAnswerVotes(ctx context.Context, answerID pgtype.UUID) error
 	DeleteCampItem(ctx context.Context, arg DeleteCampItemParams) (int64, error)
 	DeleteCatch(ctx context.Context, arg DeleteCatchParams) (int64, error)
 	DeleteConvoyVehicle(ctx context.Context, arg DeleteConvoyVehicleParams) (int64, error)
 	// Ayrılma, çıkarma, başvuru reddi, ban kaldırma.
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (int64, error)
+	// Etiket silinince bağları CASCADE ile gider; sorular kalır.
+	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
 	DeleteTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) error
 	// Kalıcı katılım geçmişi kişiye aittir: hesapla birlikte silinir (v14
 	// "Kalıcı katılım geçmişi", user_id → CASCADE).
 	DeleteUserActivityRecords(ctx context.Context, userID pgtype.UUID) error
+	// Kişinin faydalı oyları silinir (kullanıcı → answer_votes CASCADE) ve
+	// oy sayıları aynı transaction'da düşer. Bir kişinin bir cevapta en fazla
+	// bir oyu olduğu için her cevap en fazla bir azalır.
+	DeleteUserAnswerVotes(ctx context.Context, userID pgtype.UUID) error
 	// Av kayıtları konum içerebilir; kişiyle birlikte silinir.
 	DeleteUserCatches(ctx context.Context, userID pgtype.UUID) error
 	// "Geliyorum"dan vazgeçen kişinin aracı (ve plakası) kalmaz.
@@ -109,11 +134,20 @@ type Querier interface {
 	// Yazarın kendi silmesi: başlık ve gövde hemen boşaltılır, geri alınamaz
 	// (v14 "Silinen içeriği geri alma").
 	EraseAnnouncement(ctx context.Context, arg EraseAnnouncementParams) (int64, error)
+	// Yazarın kendi silmesi: metin boşaltılır, oyları silinir (ayrı sorgu).
+	EraseAnswer(ctx context.Context, arg EraseAnswerParams) (int64, error)
+	// Yazarın kendi silmesi: başlık ve gövde hemen boşaltılır, geri alınamaz
+	// (v14 "Silinen içeriği geri alma"). Etiket bağları ayrıca silinir.
+	EraseQuestion(ctx context.Context, arg EraseQuestionParams) (int64, error)
 	GetAnnouncement(ctx context.Context, arg GetAnnouncementParams) (GetAnnouncementRow, error)
 	// Tekrar gönderilen yayınlama isteği aynı duyuruyu döndürür.
 	GetAnnouncementByClientRequest(ctx context.Context, arg GetAnnouncementByClientRequestParams) (GetAnnouncementByClientRequestRow, error)
 	// Yazma işlemleri satırı kilitleyerek okur; silinmiş satır da döner.
 	GetAnnouncementForUpdate(ctx context.Context, arg GetAnnouncementForUpdateParams) (GetAnnouncementForUpdateRow, error)
+	// Görünen sorunun görünen cevabı; voted, çağıranın oyu.
+	GetAnswer(ctx context.Context, arg GetAnswerParams) (GetAnswerRow, error)
+	GetAnswerByClientRequest(ctx context.Context, arg GetAnswerByClientRequestParams) (GetAnswerByClientRequestRow, error)
+	GetAnswerForUpdate(ctx context.Context, arg GetAnswerForUpdateParams) (GetAnswerForUpdateRow, error)
 	GetCatch(ctx context.Context, arg GetCatchParams) (GetCatchRow, error)
 	// ---------------------------------------------------------------------------
 	// Av günlüğü
@@ -144,6 +178,11 @@ type Querier interface {
 	// daveti bulunmaz.
 	GetInviteByHash(ctx context.Context, tokenHash []byte) (GetInviteByHashRow, error)
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
+	GetQuestion(ctx context.Context, arg GetQuestionParams) (GetQuestionRow, error)
+	// Tekrar gönderilen soru isteği aynı soruyu döndürür.
+	GetQuestionByClientRequest(ctx context.Context, arg GetQuestionByClientRequestParams) (GetQuestionByClientRequestRow, error)
+	// Yazma işlemleri satırı kilitleyerek okur; silinmiş satır da döner.
+	GetQuestionForUpdate(ctx context.Context, arg GetQuestionForUpdateParams) (GetQuestionForUpdateRow, error)
 	GetRsvp(ctx context.Context, arg GetRsvpParams) (GetRsvpRow, error)
 	// Katılım doğrulama, organizatör düzeltmesi, yürüyüş yoklaması, kalıcı
 	// katılım geçmişi ve av günlüğü (issue #50). Etkinlik her zaman önce tayfa
@@ -151,6 +190,8 @@ type Querier interface {
 	// etkinliğin kimliğiyle çalışır. Check-in'de gönderilen konum hiçbir
 	// sorguya parametre olarak girmez.
 	GetRsvpForCheckIn(ctx context.Context, arg GetRsvpForCheckInParams) (GetRsvpForCheckInRow, error)
+	GetTag(ctx context.Context, arg GetTagParams) (GetTagRow, error)
+	GetTagsByNormalized(ctx context.Context, arg GetTagsByNormalizedParams) ([]GetTagsByNormalizedRow, error)
 	GetTayfa(ctx context.Context, id pgtype.UUID) (GetTayfaRow, error)
 	// Tekrar gönderilen oluşturma isteği aynı tayfayı döndürür.
 	GetTayfaByClientRequest(ctx context.Context, arg GetTayfaByClientRequestParams) (pgtype.UUID, error)
@@ -162,6 +203,9 @@ type Querier interface {
 	GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUserProfileRow, error)
 	// Moderatör/yönetici silmesi: içerik gizlenir, geri alınabilir.
 	HideAnnouncement(ctx context.Context, arg HideAnnouncementParams) (int64, error)
+	HideAnswer(ctx context.Context, arg HideAnswerParams) (int64, error)
+	// Moderatör/yönetici silmesi: içerik gizlenir, geri alınabilir.
+	HideQuestion(ctx context.Context, arg HideQuestionParams) (int64, error)
 	// Davet geçerliyse kullanımı sayar; 0 satır: süresi dolmuş, iptal ya da
 	// tükenmiş.
 	IncrementInviteUse(ctx context.Context, id pgtype.UUID) (int64, error)
@@ -176,6 +220,8 @@ type Querier interface {
 	// Sabitlenenler önce, yeniden eskiye. Sayfa, önceki sayfanın son satırından
 	// sonra başlar (pinned, created_at, id azalan).
 	ListAnnouncementsPage(ctx context.Context, arg ListAnnouncementsPageParams) ([]ListAnnouncementsPageRow, error)
+	// Faydalı oyu çoktan aza, eşitlikte eskiden yeniye (id artan, UUIDv7).
+	ListAnswersPage(ctx context.Context, arg ListAnswersPageParams) ([]ListAnswersPageRow, error)
 	// (updated_at, user_id) ile sayfalanır; bekleme listesinde bu sıra
 	// terfi sırasıdır.
 	ListAttendees(ctx context.Context, arg ListAttendeesParams) ([]ListAttendeesRow, error)
@@ -214,9 +260,14 @@ type Querier interface {
 	// Bekleyen başvurular, eskiden yeniye; kimin davetiyle geldiği: doğrudan
 	// davet eden ya da davet linkini açan.
 	ListPendingPage(ctx context.Context, arg ListPendingPageParams) ([]ListPendingPageRow, error)
+	ListQuestionTags(ctx context.Context, arg ListQuestionTagsParams) ([]ListQuestionTagsRow, error)
+	// Yeniden eskiye. İsteğe bağlı etiket filtresi. Sayfa, önceki sayfanın son
+	// satırından sonra başlar (created_at, id azalan).
+	ListQuestionsPage(ctx context.Context, arg ListQuestionsPageParams) ([]ListQuestionsPageRow, error)
 	// Serinin henüz başlamamış, iptal edilmemiş ve tek başına düzenlenmemiş
 	// örnekleri; seri güncellemesi bunları değiştirir.
 	ListSeriesUpcomingEvents(ctx context.Context, arg ListSeriesUpcomingEventsParams) ([]pgtype.UUID, error)
+	ListTags(ctx context.Context, tayfaID pgtype.UUID) ([]ListTagsRow, error)
 	ListTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) ([]string, error)
 	ListTayfaModules(ctx context.Context, tayfaID pgtype.UUID) ([]ListTayfaModulesRow, error)
 	// Bitmemiş etkinlikler, başlangıç zamanına göre; (starts_at, id) ile
@@ -248,13 +299,20 @@ type Querier interface {
 	// eski moderatör, yoksa en eski üye.
 	PickAdminSuccessor(ctx context.Context, arg PickAdminSuccessorParams) (pgtype.UUID, error)
 	PromoteRsvp(ctx context.Context, arg PromoteRsvpParams) (int64, error)
+	RemoveAnswerVote(ctx context.Context, arg RemoveAnswerVoteParams) (int64, error)
 	RequestTayfaDeletion(ctx context.Context, arg RequestTayfaDeletionParams) (int64, error)
 	RestoreAnnouncement(ctx context.Context, arg RestoreAnnouncementParams) (int64, error)
+	RestoreAnswer(ctx context.Context, arg RestoreAnswerParams) (int64, error)
+	RestoreQuestion(ctx context.Context, arg RestoreQuestionParams) (int64, error)
 	ReturnHikeCheckin(ctx context.Context, arg ReturnHikeCheckinParams) (int64, error)
 	RevokeInvite(ctx context.Context, arg RevokeInviteParams) (int64, error)
 	// Kimse kalmayan tayfa sistem tarafından silme beklemesine alınır; talep
 	// eden kişi yoktur.
 	ScheduleTayfaDeletionBySystem(ctx context.Context, arg ScheduleTayfaDeletionBySystemParams) (int64, error)
+	// Türkçe tam metin arama. Sorgu metni tr_lower ile, belgelerle aynı
+	// tabloya göre küçültülür; websearch_to_tsquery her girdiyi kabul eder.
+	// Sıra: ilgi azalan, eşitlikte yeniden eskiye.
+	SearchQuestionsPage(ctx context.Context, arg SearchQuestionsPageParams) ([]SearchQuestionsPageRow, error)
 	// İşlemi yapan kullanıcıyı transaction'a bildirir; memberships trigger'ı rol
 	// hiyerarşisini buna göre doğrular (ADR-0004). Yalnızca transaction içinde
 	// anlamlıdır: değer transaction bitince silinir (set_config is_local = true).
@@ -298,8 +356,10 @@ type Querier interface {
 	TouchTayfaActivity(ctx context.Context, arg TouchTayfaActivityParams) (int64, error)
 	UnmuteMembership(ctx context.Context, arg UnmuteMembershipParams) (int64, error)
 	UpdateAnnouncementContent(ctx context.Context, arg UpdateAnnouncementContentParams) (int64, error)
+	UpdateAnswerBody(ctx context.Context, arg UpdateAnswerBodyParams) (int64, error)
 	// Seri örneği elle düzenlenince seri güncellemeleri ona dokunmaz.
 	UpdateEvent(ctx context.Context, arg UpdateEventParams) (int64, error)
+	UpdateQuestionContent(ctx context.Context, arg UpdateQuestionContentParams) (int64, error)
 	// Seri güncellemesi: UpdateEvent gibi, ama series_override'a dokunmaz.
 	UpdateSeriesEvent(ctx context.Context, arg UpdateSeriesEventParams) (int64, error)
 	UpdateTayfaSettings(ctx context.Context, arg UpdateTayfaSettingsParams) (int64, error)

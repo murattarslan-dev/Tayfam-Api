@@ -106,6 +106,16 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_EVENT_SERIES_NOT_FOUND, true
 	case errors.Is(err, apperr.ErrEventSeriesEnded):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_SERIES_ENDED, true
+	case errors.Is(err, apperr.ErrQuestionNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_QUESTION_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrAnswerNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_ANSWER_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrTagNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_TAG_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrOwnAnswerVote):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_OWN_ANSWER_VOTE, true
+	case errors.Is(err, apperr.ErrTagLimit):
+		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_TAG_LIMIT, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

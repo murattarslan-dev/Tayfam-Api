@@ -25,6 +25,18 @@ func (q *Queries) ClearAnnouncementUserFields(ctx context.Context, userID pgtype
 	return err
 }
 
+const clearAnswerUserFields = `-- name: ClearAnswerUserFields :exec
+UPDATE answers
+SET author_id  = NULLIF(author_id, $1),
+    deleted_by = NULLIF(deleted_by, $1)
+WHERE $1 IN (author_id, deleted_by)
+`
+
+func (q *Queries) ClearAnswerUserFields(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearAnswerUserFields, userID)
+	return err
+}
+
 const clearAuditActor = `-- name: ClearAuditActor :exec
 UPDATE audit_logs SET actor_id = NULL WHERE actor_id = $1
 `
@@ -112,6 +124,20 @@ func (q *Queries) ClearMembershipUserFields(ctx context.Context, userID pgtype.U
 	return err
 }
 
+const clearQuestionUserFields = `-- name: ClearQuestionUserFields :exec
+UPDATE questions
+SET author_id  = NULLIF(author_id, $1),
+    deleted_by = NULLIF(deleted_by, $1)
+WHERE $1 IN (author_id, deleted_by)
+`
+
+// Sorular ve cevaplar kalır, yazar "Silinmiş kullanıcı" olur (v14
+// "İlişkiler ve Silme Davranışı").
+func (q *Queries) ClearQuestionUserFields(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearQuestionUserFields, userID)
+	return err
+}
+
 const clearRsvpMarker = `-- name: ClearRsvpMarker :exec
 UPDATE event_rsvps SET attendance_marked_by = NULL WHERE attendance_marked_by = $1
 `
@@ -173,6 +199,24 @@ DELETE FROM user_activity_records WHERE user_id = $1
 // "Kalıcı katılım geçmişi", user_id → CASCADE).
 func (q *Queries) DeleteUserActivityRecords(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserActivityRecords, userID)
+	return err
+}
+
+const deleteUserAnswerVotes = `-- name: DeleteUserAnswerVotes :exec
+WITH gone AS (
+  DELETE FROM answer_votes WHERE user_id = $1 RETURNING answer_id
+)
+UPDATE answers a
+SET vote_count = a.vote_count - 1
+FROM gone
+WHERE a.id = gone.answer_id
+`
+
+// Kişinin faydalı oyları silinir (kullanıcı → answer_votes CASCADE) ve
+// oy sayıları aynı transaction'da düşer. Bir kişinin bir cevapta en fazla
+// bir oyu olduğu için her cevap en fazla bir azalır.
+func (q *Queries) DeleteUserAnswerVotes(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserAnswerVotes, userID)
 	return err
 }
 

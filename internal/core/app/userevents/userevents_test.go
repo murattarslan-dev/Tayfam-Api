@@ -190,6 +190,9 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"event_hike_checkins.user_id":    `SELECT count(*) FROM event_hike_checkins WHERE user_id = $1`,
 		"fishing_catches":                `SELECT count(*) FROM fishing_catches WHERE $1 IN (user_id, deleted_by)`,
 		"user_activity_records.user_id":  `SELECT count(*) FROM user_activity_records WHERE user_id = $1`,
+		"questions":                      `SELECT count(*) FROM questions WHERE $1 IN (author_id, deleted_by)`,
+		"answers":                        `SELECT count(*) FROM answers WHERE $1 IN (author_id, deleted_by)`,
+		"answer_votes.user_id":           `SELECT count(*) FROM answer_votes WHERE user_id = $1`,
 		"user_profiles (kişisel)":        `SELECT count(*) FROM user_profiles WHERE user_id = $1 AND (display_name IS NOT NULL OR avatar_upload_id IS NOT NULL OR deleted_at IS NULL)`,
 	} {
 		if n := e.count(t, sql, u.PG()); n != 0 {
@@ -247,6 +250,15 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 	e.seed(t, `INSERT INTO announcements (id, tayfa_id, author_id, title, client_request_id) VALUES ($1, $2, $3, 'Duyuru', $4)`, ownAnn.PG(), t2.PG(), u.PG(), id.New().PG())
 	e.seed(t, `INSERT INTO announcements (id, tayfa_id, author_id, title, client_request_id, deleted_at, deleted_by) VALUES ($1, $2, $3, 'Gizlenen', $4, now(), $5)`, hiddenAnn.PG(), t2.PG(), other.PG(), id.New().PG(), u.PG())
 
+	// u's question and answer stay with an empty author; u's votes go and
+	// the counts drop; a vote by someone else on u's answer stays.
+	ownQ, otherQ, ownA, otherA := id.New(), id.New(), id.New(), id.New()
+	e.seed(t, `INSERT INTO questions (id, tayfa_id, author_id, title, client_request_id) VALUES ($1, $3, $4, 'Kamp ocağı önerisi?', $5), ($2, $3, $6, 'Hangi çadırı alalım?', $7)`,
+		ownQ.PG(), otherQ.PG(), t2.PG(), u.PG(), id.New().PG(), other.PG(), id.New().PG())
+	e.seed(t, `INSERT INTO answers (id, question_id, tayfa_id, author_id, body, vote_count, client_request_id, deleted_at, deleted_by) VALUES ($1, $3, $4, $5, 'Benim cevabım', 1, $6, NULL, NULL), ($2, $3, $4, $7, 'Gizlenen cevap', 1, $8, now(), $5)`,
+		ownA.PG(), otherA.PG(), otherQ.PG(), t2.PG(), u.PG(), id.New().PG(), other.PG(), id.New().PG())
+	e.seed(t, `INSERT INTO answer_votes (answer_id, user_id) VALUES ($1, $2), ($3, $4)`, ownA.PG(), other.PG(), otherA.PG(), u.PG())
+
 	// u's events stay with an empty organizer; u's RSVPs and vehicle (plate)
 	// go; camp items stay without u.
 	ownEvent, otherEvent, campEvent := id.New(), id.New(), id.New()
@@ -281,6 +293,15 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 	}
 	if n := e.count(t, `SELECT count(*) FROM announcements WHERE (id = $1 AND author_id IS NULL AND title = 'Duyuru') OR (id = $2 AND author_id = $3 AND deleted_at IS NOT NULL AND deleted_by IS NULL)`, ownAnn.PG(), hiddenAnn.PG(), other.PG()); n != 2 {
 		t.Fatalf("duyurular = %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM questions WHERE (id = $1 AND author_id IS NULL AND title <> '') OR (id = $2 AND author_id = $3)`, ownQ.PG(), otherQ.PG(), other.PG()); n != 2 {
+		t.Fatalf("sorular = %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM answers WHERE (id = $1 AND author_id IS NULL AND vote_count = 1) OR (id = $2 AND deleted_by IS NULL AND deleted_at IS NOT NULL AND vote_count = 0)`, ownA.PG(), otherA.PG()); n != 2 {
+		t.Fatalf("cevaplar = %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM answers a WHERE a.vote_count <> (SELECT count(*) FROM answer_votes v WHERE v.answer_id = a.id)`); n != 0 {
+		t.Fatalf("oy sayısı tutarsız: %d", n)
 	}
 	if n := e.count(t, `SELECT count(*) FROM events WHERE id IN ($1, $2, $3)`, ownEvent.PG(), otherEvent.PG(), campEvent.PG()); n != 3 {
 		t.Fatalf("etkinlikler silindi: %d", n)

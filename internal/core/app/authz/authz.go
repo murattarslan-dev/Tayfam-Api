@@ -160,6 +160,25 @@ const (
 	// EventCatchDeleteAny removes anyone's.
 	EventCatchAdd
 	EventCatchDeleteAny
+	// Q&A (issue #59). The qa module switch is checked by the caller.
+	// QuestionCreate also opens new tags. The Own actions are for the
+	// author (the caller checks that the content is theirs); the Any
+	// actions also need CanActOnContent against the author's current role.
+	QuestionCreate
+	QuestionEditOwn
+	QuestionEditAny
+	QuestionDeleteOwn
+	QuestionDeleteAny
+	QuestionRestore
+	AnswerCreate
+	AnswerEditOwn
+	AnswerEditAny
+	AnswerDeleteOwn
+	AnswerDeleteAny
+	AnswerRestore
+	// AnswerVote adds and takes back one's own helpful vote.
+	AnswerVote
+	TagDelete
 
 	actionEnd // sentinel; keep last
 )
@@ -204,6 +223,20 @@ var actionNames = [...]string{
 	EventAttendanceAny:   "event.attendance_any",
 	EventCatchAdd:        "event.catch_add",
 	EventCatchDeleteAny:  "event.catch_delete_any",
+	QuestionCreate:       "question.create",
+	QuestionEditOwn:      "question.edit_own",
+	QuestionEditAny:      "question.edit_any",
+	QuestionDeleteOwn:    "question.delete_own",
+	QuestionDeleteAny:    "question.delete_any",
+	QuestionRestore:      "question.restore",
+	AnswerCreate:         "answer.create",
+	AnswerEditOwn:        "answer.edit_own",
+	AnswerEditAny:        "answer.edit_any",
+	AnswerDeleteOwn:      "answer.delete_own",
+	AnswerDeleteAny:      "answer.delete_any",
+	AnswerRestore:        "answer.restore",
+	AnswerVote:           "answer.vote",
+	TagDelete:            "tag.delete",
 	actionEnd:            "",
 }
 
@@ -240,6 +273,15 @@ var permissions = map[Action]Role{
 	EventCheckIn:       Member,
 	EventAttendanceOwn: Member,
 	EventCatchAdd:      Member,
+	// Q&A (issue #59): every active member asks, answers, votes, opens tags
+	// while asking, and edits and deletes their own questions and answers.
+	QuestionCreate:    Member,
+	QuestionEditOwn:   Member,
+	QuestionDeleteOwn: Member,
+	AnswerCreate:      Member,
+	AnswerEditOwn:     Member,
+	AnswerDeleteOwn:   Member,
+	AnswerVote:        Member,
 
 	// Moderation: moderator and above.
 	// Lowering one's own role; members have nothing to step down to.
@@ -267,6 +309,13 @@ var permissions = map[Action]Role{
 	// and removing anyone's fishing catch.
 	EventAttendanceAny:  Moderator,
 	EventCatchDeleteAny: Moderator,
+	// Q&A: someone else's question or answer (with CanActOnContent), and
+	// removing a tag from the tayfa.
+	QuestionEditAny:   Moderator,
+	QuestionDeleteAny: Moderator,
+	AnswerEditAny:     Moderator,
+	AnswerDeleteAny:   Moderator,
+	TagDelete:         Moderator,
 
 	// Tayfa management: admin only.
 	TayfaUpdateSettings:  Admin,
@@ -280,6 +329,8 @@ var permissions = map[Action]Role{
 	// Undoing a moderator's or admin's deletion (v14 "Silinen içeriği geri
 	// alma").
 	AnnouncementRestore: Admin,
+	QuestionRestore:     Admin,
+	AnswerRestore:       Admin,
 }
 
 // allowedWhileMuted lists the actions a muted member may still perform: reads,
@@ -302,6 +353,11 @@ var allowedWhileMuted = map[Action]bool{
 	// member who attends keeps their history, and a hike return (a safety
 	// signal) must never be refused.
 	EventCheckIn: true,
+	// Deleting one's own question or answer publishes nothing and removes
+	// one's own words at once (v14 "Silinen içeriği geri alma"); a mute
+	// does not keep a member's text in the tayfa against their will.
+	QuestionDeleteOwn: true,
+	AnswerDeleteOwn:   true,
 }
 
 // Settings are the tayfa settings that change the permission table. The zero

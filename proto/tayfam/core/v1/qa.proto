@@ -1,0 +1,336 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+
+// QAService is a tayfa's questions and answers: helpful votes, tags and
+// Turkish full-text search; there is no "accepted answer" (data model v14
+// "Soru-Cevap", "Silinen içeriği geri alma", "Çevrimdışı yazma"; issue
+// #59). Only gateway calls it, with the user's access token.
+//
+// Every method needs the caller's access token; there are no open methods.
+// Errors carry a google.rpc.ErrorInfo detail with domain "core.tayfam.app"
+// and a reason from ErrorReason (errors.proto). The common rules of
+// MembershipService (membership.proto) apply, in this order:
+//   - tayfa_id, question_id, answer_id and tag_id are UUID strings;
+//     anything else is ERROR_REASON_VALIDATION.
+//   - A caller who is not an ACTIVE member gets
+//     ERROR_REASON_TAYFA_NOT_FOUND, the same as for an unknown tayfa.
+//   - While the tayfa has the qa module turned off, every method, reads
+//     included, fails with ERROR_REASON_MODULE_DISABLED.
+//   - The permission table (ADR-0004) decides the rest:
+//     ERROR_REASON_PERMISSION_DENIED for a role that is too low,
+//     ERROR_REASON_MUTED for a muted member's writes.
+//   - Writes to a read-only tayfa fail with ERROR_REASON_TAYFA_READ_ONLY.
+//   - A question, answer or tag that is not visible in this tayfa gets
+//     ERROR_REASON_QUESTION_NOT_FOUND, ERROR_REASON_ANSWER_NOT_FOUND or
+//     ERROR_REASON_TAG_NOT_FOUND. The answers of a deleted question are not
+//     found either.
+//
+// Who may do what:
+//   - Every active member reads, also while muted.
+//   - Every active member who is not muted asks, answers, votes and opens
+//     new tags while asking; and edits and deletes their own questions and
+//     answers. Deleting one's own question or answer also works while
+//     muted.
+//   - Moderators and admins edit and delete someone else's question or
+//     answer, above the author's current role (ERROR_REASON_ROLE_HIERARCHY;
+//     an author who is no longer an active member has no role), and remove
+//     tags.
+//   - Only admins restore.
+//
+// Deleting: the author's own deletion empties the text at once and cannot
+// be undone. Deleting someone else's question or answer hides it; an admin
+// can restore it for 30 days.
+//
+// Audit records and events never hold titles, bodies, tag names or search
+// queries, and the search query is never logged.
+//
+// Paging: page_size 0 means 20; values above 100 are treated as 100;
+// negative values are ERROR_REASON_VALIDATION. page_token is opaque and only
+// valid for the same tayfa and the same request (question, query, tag); a
+// bad token is ERROR_REASON_VALIDATION. An empty next_page_token means the
+// last page.
+service QAService {
+  // CreateQuestion asks a question. Tags are given by name: an existing tag
+  // of the tayfa is matched with Turkish case folding ("ÇADIR" is "Çadır"),
+  // a new one is created. A repeat with the same client_request_id by the
+  // same caller returns the first question and creates nothing.
+  //
+  // Errors: the common ones, ERROR_REASON_VALIDATION,
+  // ERROR_REASON_TAG_LIMIT.
+  rpc CreateQuestion(CreateQuestionRequest) returns (CreateQuestionResponse);
+
+  // GetQuestion returns one visible question. Works on read-only tayfas.
+  rpc GetQuestion(GetQuestionRequest) returns (GetQuestionResponse);
+
+  // ListQuestions lists visible questions, newest first. With query, only
+  // questions whose title or body match it (Turkish full-text search,
+  // İ/ı aware), most relevant first. With tag_id, only questions with that
+  // tag. Works on read-only tayfas.
+  //
+  // Errors: the common ones, ERROR_REASON_VALIDATION,
+  // ERROR_REASON_TAG_NOT_FOUND.
+  rpc ListQuestions(ListQuestionsRequest) returns (ListQuestionsResponse);
+
+  // UpdateQuestion changes the fields named in update_mask. "tags" replaces
+  // the question's tags. Setting the current values succeeds and records
+  // nothing.
+  //
+  // Errors: the common ones, ERROR_REASON_ROLE_HIERARCHY,
+  // ERROR_REASON_VALIDATION, ERROR_REASON_TAG_LIMIT.
+  rpc UpdateQuestion(UpdateQuestionRequest) returns (UpdateQuestionResponse);
+
+  // DeleteQuestion deletes a question; its answers are no longer visible
+  // with it. Errors: the common ones, ERROR_REASON_ROLE_HIERARCHY.
+  rpc DeleteQuestion(DeleteQuestionRequest) returns (DeleteQuestionResponse);
+
+  // RestoreQuestion undoes a hiding deletion within 30 days. A question
+  // erased by its author, or deleted more than 30 days ago, gets
+  // ERROR_REASON_QUESTION_NOT_FOUND. Restoring a visible question succeeds
+  // and changes nothing.
+  //
+  // Errors: the common ones, ERROR_REASON_ROLE_HIERARCHY.
+  rpc RestoreQuestion(RestoreQuestionRequest) returns (RestoreQuestionResponse);
+
+  // CreateAnswer answers a visible question. A repeat with the same
+  // client_request_id by the same caller returns the first answer.
+  //
+  // Errors: the common ones, ERROR_REASON_VALIDATION,
+  // ERROR_REASON_QUESTION_NOT_FOUND.
+  rpc CreateAnswer(CreateAnswerRequest) returns (CreateAnswerResponse);
+
+  // ListAnswers lists the visible answers of a visible question: most
+  // helpful votes first, then oldest first. Works on read-only tayfas.
+  //
+  // Errors: the common ones, ERROR_REASON_VALIDATION,
+  // ERROR_REASON_QUESTION_NOT_FOUND.
+  rpc ListAnswers(ListAnswersRequest) returns (ListAnswersResponse);
+
+  // UpdateAnswer replaces an answer's body. Setting the current body
+  // succeeds and records nothing.
+  //
+  // Errors: the common ones, ERROR_REASON_ROLE_HIERARCHY,
+  // ERROR_REASON_VALIDATION.
+  rpc UpdateAnswer(UpdateAnswerRequest) returns (UpdateAnswerResponse);
+
+  // DeleteAnswer deletes an answer. The author's own deletion also removes
+  // its votes. Errors: the common ones, ERROR_REASON_ROLE_HIERARCHY.
+  rpc DeleteAnswer(DeleteAnswerRequest) returns (DeleteAnswerResponse);
+
+  // RestoreAnswer undoes a hiding deletion within 30 days, as
+  // RestoreQuestion. An answer of a deleted question is not found.
+  rpc RestoreAnswer(RestoreAnswerRequest) returns (RestoreAnswerResponse);
+
+  // SetAnswerVote gives (voted = true) or takes back (false) the caller's
+  // helpful vote: one per person and answer. Setting the current value
+  // succeeds and changes nothing.
+  //
+  // Errors: the common ones, ERROR_REASON_OWN_ANSWER_VOTE.
+  rpc SetAnswerVote(SetAnswerVoteRequest) returns (SetAnswerVoteResponse);
+
+  // ListTags lists all tags of the tayfa (at most 200) by name, with the
+  // number of visible questions that carry each. Works on read-only tayfas.
+  rpc ListTags(ListTagsRequest) returns (ListTagsResponse);
+
+  // DeleteTag removes a tag from the tayfa and from every question.
+  // Moderators and admins. Errors: the common ones,
+  // ERROR_REASON_TAG_NOT_FOUND.
+  rpc DeleteTag(DeleteTagRequest) returns (DeleteTagResponse);
+}
+
+message Tag {
+  string id = 1;
+  // 1–30 characters as first written.
+  string name = 2;
+  // Only in ListTags: visible questions with this tag.
+  int32 question_count = 3;
+}
+
+message Question {
+  string id = 1;
+  string tayfa_id = 2;
+  // Empty when the author's account was deleted.
+  string author_user_id = 3;
+  // 10–150 characters, one line.
+  string title = 4;
+  // Up to 10000 characters; may be empty.
+  string body = 5;
+  // By name.
+  repeated Tag tags = 6;
+  // Visible answers.
+  int32 answer_count = 7;
+  google.protobuf.Timestamp create_time = 8;
+  // Changes on every edit and restore.
+  google.protobuf.Timestamp update_time = 9;
+}
+
+message Answer {
+  string id = 1;
+  string question_id = 2;
+  string tayfa_id = 3;
+  // Empty when the author's account was deleted.
+  string author_user_id = 4;
+  // 1–10000 characters.
+  string body = 5;
+  // Helpful votes.
+  int32 vote_count = 6;
+  // Whether the caller gave this answer a helpful vote.
+  bool voted = 7;
+  google.protobuf.Timestamp create_time = 8;
+  // Changes on every edit and restore; votes do not change it.
+  google.protobuf.Timestamp update_time = 9;
+}
+
+message CreateQuestionRequest {
+  string tayfa_id = 1;
+  // 10–150 characters after trimming surrounding spaces; no line breaks or
+  // control characters.
+  string title = 2;
+  // Up to 10000 characters after trimming; line breaks and tabs allowed.
+  string body = 3;
+  // Up to 5 tag names, each 1–30 characters after trimming and joining
+  // inner spaces, one line. Names that fold to the same tag count once.
+  repeated string tags = 4;
+  // Required. A UUID the client generates once per attempt and reuses on
+  // retry (offline write protection).
+  string client_request_id = 5;
+}
+
+message CreateQuestionResponse {
+  Question question = 1;
+}
+
+message GetQuestionRequest {
+  string tayfa_id = 1;
+  string question_id = 2;
+}
+
+message GetQuestionResponse {
+  Question question = 1;
+}
+
+message ListQuestionsRequest {
+  string tayfa_id = 1;
+  // Optional search text, up to 100 characters. Empty lists all.
+  string query = 2;
+  // Optional tag filter.
+  string tag_id = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+}
+
+message ListQuestionsResponse {
+  repeated Question questions = 1;
+  string next_page_token = 2;
+}
+
+message UpdateQuestionRequest {
+  string tayfa_id = 1;
+  string question_id = 2;
+  // Same rules as CreateQuestionRequest.
+  string title = 3;
+  string body = 4;
+  repeated string tags = 5;
+  // Required, non-empty. Allowed paths: "title", "body", "tags".
+  google.protobuf.FieldMask update_mask = 6;
+}
+
+message UpdateQuestionResponse {
+  Question question = 1;
+}
+
+message DeleteQuestionRequest {
+  string tayfa_id = 1;
+  string question_id = 2;
+}
+
+message DeleteQuestionResponse {}
+
+message RestoreQuestionRequest {
+  string tayfa_id = 1;
+  string question_id = 2;
+}
+
+message RestoreQuestionResponse {
+  Question question = 1;
+}
+
+message CreateAnswerRequest {
+  string tayfa_id = 1;
+  string question_id = 2;
+  // 1–10000 characters after trimming; line breaks and tabs allowed.
+  string body = 3;
+  // Required; as CreateQuestionRequest.client_request_id.
+  string client_request_id = 4;
+}
+
+message CreateAnswerResponse {
+  Answer answer = 1;
+}
+
+message ListAnswersRequest {
+  string tayfa_id = 1;
+  string question_id = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListAnswersResponse {
+  repeated Answer answers = 1;
+  string next_page_token = 2;
+}
+
+message UpdateAnswerRequest {
+  string tayfa_id = 1;
+  string answer_id = 2;
+  // Same rules as CreateAnswerRequest.body.
+  string body = 3;
+}
+
+message UpdateAnswerResponse {
+  Answer answer = 1;
+}
+
+message DeleteAnswerRequest {
+  string tayfa_id = 1;
+  string answer_id = 2;
+}
+
+message DeleteAnswerResponse {}
+
+message RestoreAnswerRequest {
+  string tayfa_id = 1;
+  string answer_id = 2;
+}
+
+message RestoreAnswerResponse {
+  Answer answer = 1;
+}
+
+message SetAnswerVoteRequest {
+  string tayfa_id = 1;
+  string answer_id = 2;
+  bool voted = 3;
+}
+
+message SetAnswerVoteResponse {
+  Answer answer = 1;
+}
+
+message ListTagsRequest {
+  string tayfa_id = 1;
+}
+
+message ListTagsResponse {
+  repeated Tag tags = 1;
+}
+
+message DeleteTagRequest {
+  string tayfa_id = 1;
+  string tag_id = 2;
+}
+
+message DeleteTagResponse {}
