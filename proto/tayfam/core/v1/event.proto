@@ -1,0 +1,496 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/tayfa.proto";
+
+// EventService manages a tayfa's events: creating, editing and cancelling
+// them, RSVPs with a waitlist, camp item lists and convoy vehicles (issue
+// #49; data model v14 "Duyuru ve Etkinlik", "Türe özel tablolar",
+// "Etkinlik iptali", "Online etkinlik", "Konvoy aracı"). Only gateway calls
+// it, with the user's access token.
+//
+// Every method needs the caller's access token; there are no open methods.
+// Errors carry a google.rpc.ErrorInfo detail with domain "core.tayfam.app"
+// and a reason from ErrorReason (errors.proto). The common rules:
+//   - A caller who is not an ACTIVE member of the tayfa gets
+//     ERROR_REASON_TAYFA_NOT_FOUND, the same as for an unknown tayfa.
+//   - When the tayfa's events module is off (TayfaService.SetModule) every
+//     method, reads included, fails with ERROR_REASON_MODULE_DISABLED.
+//   - An event ID that does not exist in this tayfa, or a deleted event,
+//     gives ERROR_REASON_EVENT_NOT_FOUND. Events are always looked up by
+//     tayfa_id and event_id together.
+//   - The permission table (ADR-0004) decides who may do what:
+//     ERROR_REASON_PERMISSION_DENIED or ERROR_REASON_MUTED otherwise.
+//       read events and attendees: every active member (also when muted)
+//       create: moderators and admins; every active member when
+//         Tayfa.members_can_create_events is true
+//       edit, cancel, manage camp items and other people's vehicles: the
+//         organizer (the event's creator) for their own event, moderators
+//         and admins for every event
+//       RSVP, add or remove one's own convoy vehicle: every active member
+//   - Changes to a read-only tayfa fail with ERROR_REASON_TAYFA_READ_ONLY.
+//   - Changes to a cancelled event fail with ERROR_REASON_EVENT_CANCELLED,
+//     and to an event that has ended with ERROR_REASON_EVENT_ENDED.
+//
+// Locations: coordinates are WGS 84 degrees. They are never logged, and
+// never written to audit records or events (ADR-0008).
+//
+// Paging: page_size 0 means 50; values above 100 are treated as 100;
+// negative values are ERROR_REASON_VALIDATION. page_token is opaque, only
+// valid for the same method and request fields; a bad token is
+// ERROR_REASON_VALIDATION. An empty next_page_token means the last page.
+service EventService {
+  // CreateEvent creates an event with the caller as organizer. A repeat
+  // with the same client_request_id by the same caller returns the event
+  // created the first time and creates nothing.
+  //
+  // Errors: common, ERROR_REASON_VALIDATION.
+  rpc CreateEvent(CreateEventRequest) returns (CreateEventResponse);
+
+  // UpdateEvent changes the fields named in update_mask. Raising the
+  // capacity (or removing it) moves the oldest waitlisted RSVPs to GOING in
+  // the same transaction; lowering it below the current GOING count moves
+  // nobody back.
+  //
+  // Errors: common, ERROR_REASON_VALIDATION.
+  rpc UpdateEvent(UpdateEventRequest) returns (UpdateEventResponse);
+
+  // CancelEvent cancels a scheduled event. The event is not deleted: its
+  // members still see it, with the cancellation time and reason. RSVPs
+  // cannot change afterwards.
+  //
+  // Errors: common, ERROR_REASON_VALIDATION (reason).
+  rpc CancelEvent(CancelEventRequest) returns (CancelEventResponse);
+
+  // GetEvent returns one event with its type details.
+  rpc GetEvent(GetEventRequest) returns (GetEventResponse);
+
+  // ListUpcomingEvents lists the tayfa's events that have not ended yet,
+  // cancelled ones included, by start time. Type details are not filled;
+  // use GetEvent.
+  rpc ListUpcomingEvents(ListUpcomingEventsRequest) returns (ListUpcomingEventsResponse);
+
+  // SetRsvp sets the caller's answer. GOING on a full event becomes
+  // WAITLIST. When a GOING answer changes, the oldest WAITLIST answer
+  // becomes GOING in the same transaction. Setting the current answer
+  // changes nothing; GOING while on the waitlist keeps the place in line.
+  //
+  // Errors: common, ERROR_REASON_VALIDATION (status).
+  rpc SetRsvp(SetRsvpRequest) returns (SetRsvpResponse);
+
+  // ListAttendees lists the answers with one status, oldest first (for
+  // WAITLIST: the order in line).
+  rpc ListAttendees(ListAttendeesRequest) returns (ListAttendeesResponse);
+
+  // AddCampItem adds an item to a camp event's list (at most 200).
+  //
+  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+  // ERROR_REASON_EVENT_LIMIT, ERROR_REASON_VALIDATION.
+  rpc AddCampItem(AddCampItemRequest) returns (AddCampItemResponse);
+
+  // RemoveCampItem removes an item from a camp event's list.
+  //
+  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+  // ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+  rpc RemoveCampItem(RemoveCampItemRequest) returns (RemoveCampItemResponse);
+
+  // AddConvoyVehicle sets the caller's vehicle on a convoy event; it
+  // replaces the caller's previous vehicle there. The caller must have
+  // answered GOING.
+  //
+  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+  // ERROR_REASON_EVENT_NOT_GOING, ERROR_REASON_VALIDATION.
+  rpc AddConvoyVehicle(AddConvoyVehicleRequest) returns (AddConvoyVehicleResponse);
+
+  // RemoveConvoyVehicle removes a vehicle: one's own, or any vehicle for the
+  // organizer, moderators and admins.
+  //
+  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+  // ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+  rpc RemoveConvoyVehicle(RemoveConvoyVehicleRequest) returns (RemoveConvoyVehicleResponse);
+}
+
+enum EventMode {
+  EVENT_MODE_UNSPECIFIED = 0;
+  EVENT_MODE_IN_PERSON = 1;
+  EVENT_MODE_ONLINE = 2;
+}
+
+enum EventStatus {
+  EVENT_STATUS_UNSPECIFIED = 0;
+  EVENT_STATUS_SCHEDULED = 1;
+  EVENT_STATUS_CANCELLED = 2;
+}
+
+enum RsvpStatus {
+  // No answer.
+  RSVP_STATUS_UNSPECIFIED = 0;
+  RSVP_STATUS_GOING = 1;
+  RSVP_STATUS_MAYBE = 2;
+  RSVP_STATUS_NOT_GOING = 3;
+  // Asked for GOING while the event was full; set by the server only.
+  RSVP_STATUS_WAITLIST = 4;
+}
+
+// Who sees a fishing event's meeting point (the spot).
+enum SpotVisibility {
+  // On create: SPOT_VISIBILITY_TAYFA.
+  SPOT_VISIBILITY_UNSPECIFIED = 0;
+  // Every active member.
+  SPOT_VISIBILITY_TAYFA = 1;
+  // Only the organizer, moderators, admins and members who answered GOING
+  // or MAYBE. Everyone else gets the event without meeting_point and
+  // meeting_point_name.
+  SPOT_VISIBILITY_PARTICIPANTS = 2;
+}
+
+enum GamingPlatform {
+  GAMING_PLATFORM_UNSPECIFIED = 0;
+  GAMING_PLATFORM_PC = 1;
+  GAMING_PLATFORM_PLAYSTATION = 2;
+  GAMING_PLATFORM_XBOX = 3;
+  GAMING_PLATFORM_SWITCH = 4;
+  GAMING_PLATFORM_MOBILE = 5;
+  GAMING_PLATFORM_OTHER = 6;
+}
+
+enum Sport {
+  SPORT_UNSPECIFIED = 0;
+  SPORT_FOOTBALL = 1;
+  SPORT_TABLE_FOOTBALL = 2;
+  SPORT_BASKETBALL = 3;
+  SPORT_VOLLEYBALL = 4;
+  SPORT_TENNIS = 5;
+  SPORT_TABLE_TENNIS = 6;
+  SPORT_OTHER = 7;
+}
+
+// LatLng is a point in WGS 84 degrees: lat -90..90, lng -180..180, both
+// finite.
+message LatLng {
+  double lat = 1;
+  double lng = 2;
+}
+
+message ConvoyDetails {
+  // Empty, or 2–500 points.
+  repeated LatLng route = 1;
+  // Output only, GetEvent only.
+  repeated ConvoyVehicle vehicles = 2;
+}
+
+message ConvoyVehicle {
+  string id = 1;
+  string user_id = 2;
+  // 1–40 characters.
+  string make = 3;
+  // Up to 40 characters; may be empty.
+  string model = 4;
+  // 0, or 1900 to next year.
+  int32 model_year = 5;
+  // Up to 30 characters; may be empty.
+  string color = 6;
+  // Optional, personal data. Letters A–Z, digits and single spaces, 2–16
+  // characters; stored upper case. Returned only to the event's
+  // participants (GOING) and its organizer; empty for everyone else. Never
+  // logged.
+  string plate = 7;
+}
+
+message CampDetails {
+  // Up to 120 characters; may be empty.
+  string site_name = 1;
+  optional bool has_water = 2;
+  optional bool has_toilet = 3;
+  // Up to 1000 characters; may be empty.
+  string notes = 4;
+  // Output only, GetEvent only. Changed with AddCampItem and
+  // RemoveCampItem.
+  repeated CampItem items = 5;
+}
+
+message CampItem {
+  string id = 1;
+  // 1–60 characters.
+  string name = 2;
+  // 1–999.
+  int32 quantity = 3;
+  // Optional: who brings it; an active member of the tayfa.
+  string assigned_user_id = 4;
+}
+
+message HikeDetails {
+  // 0 (not given) or 1–5.
+  int32 difficulty = 1;
+  // 0 (not given) or up to 1000, two decimals.
+  double distance_km = 2;
+  // 0 (not given) or up to 9000.
+  int32 elevation_m = 3;
+  // Optional; after the start time.
+  google.protobuf.Timestamp expected_return_time = 4;
+  // 1–1440 minutes; 0 means the default of 30.
+  int32 return_grace_minutes = 5;
+}
+
+message FishingDetails {
+  SpotVisibility spot_visibility = 1;
+}
+
+message GamingDetails {
+  // 1–60 characters.
+  string game = 1;
+  // Must not be UNSPECIFIED.
+  GamingPlatform platform = 2;
+}
+
+message SportsDetails {
+  // Must not be UNSPECIFIED.
+  Sport sport = 1;
+  // Up to 120 characters; may be empty.
+  string venue_name = 2;
+}
+
+// Event is an event as an active member of its tayfa sees it.
+message Event {
+  string id = 1;
+  string tayfa_id = 2;
+  EventType type = 3;
+  EventMode mode = 4;
+  string title = 5;
+  string description = 6;
+  google.protobuf.Timestamp start_time = 7;
+  google.protobuf.Timestamp end_time = 8;
+  // In-person events (see SpotVisibility for fishing events).
+  string meeting_point_name = 9;
+  LatLng meeting_point = 10;
+  string city = 11;
+  string district = 12;
+  // Online events. Returned only to active members, like everything here.
+  string online_url = 13;
+  // 0: no limit.
+  int32 capacity = 14;
+  EventStatus status = 15;
+  google.protobuf.Timestamp cancel_time = 16;
+  string cancel_reason = 17;
+  bool discoverable = 18;
+  // The organizer; empty if their account was deleted.
+  string created_by = 19;
+  google.protobuf.Timestamp create_time = 20;
+  google.protobuf.Timestamp update_time = 21;
+  int32 going_count = 22;
+  int32 maybe_count = 23;
+  int32 waitlist_count = 24;
+  // The caller's answer; UNSPECIFIED if none.
+  RsvpStatus caller_rsvp = 25;
+  // Whether the caller may edit and cancel this event, so the client can
+  // show the right actions. The server checks again on every call.
+  bool caller_can_manage = 26;
+  // Set by GetEvent for every type except GENERAL; never by
+  // ListUpcomingEvents.
+  oneof details {
+    ConvoyDetails convoy = 30;
+    CampDetails camp = 31;
+    HikeDetails hike = 32;
+    FishingDetails fishing = 33;
+    GamingDetails gaming = 34;
+    SportsDetails sports = 35;
+  }
+}
+
+message CreateEventRequest {
+  string tayfa_id = 1;
+  // Must not be UNSPECIFIED.
+  EventType type = 2;
+  // Must not be UNSPECIFIED.
+  EventMode mode = 3;
+  // 1–120 characters after trimming surrounding spaces.
+  string title = 4;
+  // Up to 5000 characters; may be empty.
+  string description = 5;
+  // Required; in the future and at most two years ahead.
+  google.protobuf.Timestamp start_time = 6;
+  // Required; after start_time, at most 30 days later.
+  google.protobuf.Timestamp end_time = 7;
+  // In person: optional, up to 120 characters. Online: must be empty.
+  string meeting_point_name = 8;
+  // In person: required. Online: must be unset.
+  LatLng meeting_point = 9;
+  // In person: required, 1–50 characters. Online: must be empty.
+  string city = 10;
+  // In person: required, 1–50 characters. Online: must be empty.
+  string district = 11;
+  // Online: required, https:// only, up to 2048 characters. In person: must
+  // be empty.
+  string online_url = 12;
+  // 0: no limit; otherwise 1–10000.
+  int32 capacity = 13;
+  bool discoverable = 14;
+  // Must match type; may be unset for every type except GAMING and SPORTS,
+  // which need theirs. Must be unset for GENERAL. Output-only fields
+  // (vehicles, items) are ignored.
+  oneof details {
+    ConvoyDetails convoy = 20;
+    CampDetails camp = 21;
+    HikeDetails hike = 22;
+    FishingDetails fishing = 23;
+    GamingDetails gaming = 24;
+    SportsDetails sports = 25;
+  }
+  // Required. A UUID the client generates once per create attempt and
+  // reuses on retry.
+  string client_request_id = 15;
+}
+
+message CreateEventResponse {
+  Event event = 1;
+}
+
+message UpdateEventRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  // Same rules as CreateEventRequest. The type cannot change.
+  string title = 3;
+  string description = 4;
+  google.protobuf.Timestamp start_time = 5;
+  google.protobuf.Timestamp end_time = 6;
+  EventMode mode = 7;
+  string meeting_point_name = 8;
+  LatLng meeting_point = 9;
+  string city = 10;
+  string district = 11;
+  string online_url = 12;
+  int32 capacity = 13;
+  bool discoverable = 14;
+  oneof details {
+    ConvoyDetails convoy = 20;
+    CampDetails camp = 21;
+    HikeDetails hike = 22;
+    FishingDetails fishing = 23;
+    GamingDetails gaming = 24;
+    SportsDetails sports = 25;
+  }
+  // Required, non-empty. Allowed paths: "title", "description", "time"
+  // (start_time and end_time together), "location" (mode,
+  // meeting_point_name, meeting_point, city, district and online_url
+  // together), "capacity", "discoverable", "details" (replaces the type
+  // details; vehicles and camp items stay). Any other path is
+  // ERROR_REASON_VALIDATION.
+  google.protobuf.FieldMask update_mask = 15;
+}
+
+message UpdateEventResponse {
+  Event event = 1;
+}
+
+message CancelEventRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  // Up to 500 characters; may be empty.
+  string reason = 3;
+}
+
+message CancelEventResponse {
+  Event event = 1;
+}
+
+message GetEventRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+}
+
+message GetEventResponse {
+  Event event = 1;
+}
+
+message ListUpcomingEventsRequest {
+  string tayfa_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListUpcomingEventsResponse {
+  repeated Event events = 1;
+  string next_page_token = 2;
+}
+
+message SetRsvpRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  // GOING, MAYBE or NOT_GOING.
+  RsvpStatus status = 3;
+}
+
+message SetRsvpResponse {
+  // The caller's answer as stored: WAITLIST when GOING did not fit.
+  RsvpStatus status = 1;
+}
+
+message ListAttendeesRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  // UNSPECIFIED means GOING.
+  RsvpStatus status = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+}
+
+message Attendee {
+  string user_id = 1;
+  RsvpStatus status = 2;
+  // When the answer last changed.
+  google.protobuf.Timestamp update_time = 3;
+}
+
+message ListAttendeesResponse {
+  repeated Attendee attendees = 1;
+  string next_page_token = 2;
+}
+
+message AddCampItemRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  // 1–60 characters.
+  string name = 3;
+  // 0 means 1; otherwise 1–999.
+  int32 quantity = 4;
+  // Optional; must be an active member of the tayfa.
+  string assigned_user_id = 5;
+}
+
+message AddCampItemResponse {
+  CampItem item = 1;
+}
+
+message RemoveCampItemRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  string item_id = 3;
+}
+
+message RemoveCampItemResponse {}
+
+message AddConvoyVehicleRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  // See ConvoyVehicle.
+  string make = 3;
+  string model = 4;
+  int32 model_year = 5;
+  string color = 6;
+  string plate = 7;
+}
+
+message AddConvoyVehicleResponse {
+  ConvoyVehicle vehicle = 1;
+}
+
+message RemoveConvoyVehicleRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  string vehicle_id = 3;
+}
+
+message RemoveConvoyVehicleResponse {}

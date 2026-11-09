@@ -76,6 +76,20 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_MODULE_DISABLED, true
 	case errors.Is(err, apperr.ErrAnnouncementNotFound):
 		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_ANNOUNCEMENT_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrEventNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_EVENT_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrEventCancelled):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_CANCELLED, true
+	case errors.Is(err, apperr.ErrEventEnded):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_ENDED, true
+	case errors.Is(err, apperr.ErrEventNotGoing):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_NOT_GOING, true
+	case errors.Is(err, apperr.ErrEventItemNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_EVENT_ITEM_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrEventLimit):
+		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_EVENT_LIMIT, true
+	case errors.Is(err, apperr.ErrEventTypeMismatch):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_TYPE_MISMATCH, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

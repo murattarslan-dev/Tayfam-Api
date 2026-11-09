@@ -71,6 +71,13 @@ func TestErrorStatus(t *testing.T) {
 		{apperr.ErrDeletionNotRequested, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DELETION_NOT_REQUESTED},
 		{apperr.ErrModuleDisabled, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_MODULE_DISABLED},
 		{apperr.ErrAnnouncementNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_ANNOUNCEMENT_NOT_FOUND},
+		{apperr.ErrEventNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_EVENT_NOT_FOUND},
+		{apperr.ErrEventCancelled, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_CANCELLED},
+		{apperr.ErrEventEnded, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_ENDED},
+		{apperr.ErrEventNotGoing, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_NOT_GOING},
+		{apperr.ErrEventItemNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_EVENT_ITEM_NOT_FOUND},
+		{apperr.ErrEventLimit, codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_EVENT_LIMIT},
+		{apperr.ErrEventTypeMismatch, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_TYPE_MISMATCH},
 		// Wrapped errors keep their reason.
 		{fmt.Errorf("katman: %w", apperr.ErrTayfaNotFound), codes.NotFound, corev1.ErrorReason_ERROR_REASON_TAYFA_NOT_FOUND},
 		// The memberships trigger, second line of defence.

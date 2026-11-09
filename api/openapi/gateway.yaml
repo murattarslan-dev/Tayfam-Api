@@ -980,6 +980,14 @@ components:
         # core: modüller ve duyurular
         - module-disabled
         - announcement-not-found
+        # core: etkinlikler (REST uçları #52)
+        - event-not-found
+        - event-cancelled
+        - event-ended
+        - event-not-going
+        - event-item-not-found
+        - event-limit
+        - event-type-mismatch
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
