@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/birthdate"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/consent"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/refcode"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/userevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/store"
@@ -38,13 +39,8 @@ var (
 	ErrUnknownUser        = errors.New("kullanıcı bulunamadı")
 )
 
-// Documents are the current versions of the texts a user must accept, such
-// as "2026-11-08". They come from configuration and change when a text is
-// republished.
-type Documents struct {
-	PrivacyNotice string
-	Terms         string
-}
+// Documents are the current versions of the texts a user must accept.
+type Documents = consent.Documents
 
 // Config wires a Service.
 type Config struct {
@@ -63,7 +59,7 @@ type Service struct {
 
 // New returns a Service.
 func New(cfg Config) (*Service, error) {
-	if cfg.Pool == nil || cfg.Log == nil || cfg.Cipher == nil || cfg.Documents.PrivacyNotice == "" || cfg.Documents.Terms == "" {
+	if cfg.Pool == nil || cfg.Log == nil || cfg.Cipher == nil || !cfg.Documents.Valid() {
 		return nil, errors.New("registration: eksik yapılandırma")
 	}
 	if cfg.Now == nil {
@@ -105,7 +101,7 @@ func (s *Service) Complete(ctx context.Context, user id.ID, in Input) error {
 	if err != nil {
 		return ErrInvalidBirthDate
 	}
-	if in.PrivacyNoticeVersion != s.cfg.Documents.PrivacyNotice || in.TermsVersion != s.cfg.Documents.Terms {
+	if !s.cfg.Documents.Matches(in.PrivacyNoticeVersion, in.TermsVersion) {
 		return ErrConsentOutdated
 	}
 	name, err := cleanDisplayName(in.DisplayName)
@@ -143,13 +139,8 @@ func (s *Service) Complete(ctx context.Context, user id.ID, in Input) error {
 		if n != 1 {
 			return ErrAlreadyRegistered
 		}
-		for _, doc := range []struct{ typ, version string }{
-			{"privacy_notice", in.PrivacyNoticeVersion},
-			{"terms", in.TermsVersion},
-		} {
-			if err := q.RecordConsent(ctx, store.RecordConsentParams{ID: id.New().PG(), UserID: user.PG(), DocumentType: doc.typ, DocumentVersion: doc.version}); err != nil {
-				return fmt.Errorf("onay kaydı: %w", err)
-			}
+		if err := consent.Record(ctx, q, user, s.cfg.Documents); err != nil {
+			return err
 		}
 		if name != "" {
 			if err := q.SetDisplayName(ctx, store.SetDisplayNameParams{ID: user.PG(), DisplayName: pgtype.Text{String: name, Valid: true}}); err != nil {

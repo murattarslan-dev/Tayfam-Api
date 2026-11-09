@@ -58,6 +58,124 @@ func (q *Queries) GetActiveSession(ctx context.Context, id pgtype.UUID) (GetActi
 	return i, err
 }
 
+const getCallerSession = `-- name: GetCallerSession :one
+SELECT id, created_at
+FROM sessions
+WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL AND expires_at > $3
+`
+
+type GetCallerSessionParams struct {
+	ID     pgtype.UUID
+	UserID pgtype.UUID
+	Now    pgtype.Timestamptz
+}
+
+type GetCallerSessionRow struct {
+	ID        pgtype.UUID
+	CreatedAt pgtype.Timestamptz
+}
+
+// Çağıranın oturumu: açık, süresi dolmamış ve token'daki kullanıcıya ait.
+// created_at, hesap silmede yeniden kimlik doğrulama için girişin
+// (sağlayıcı token'ının doğrulandığı an) zamanıdır; yenileme onu değiştirmez.
+func (q *Queries) GetCallerSession(ctx context.Context, arg GetCallerSessionParams) (GetCallerSessionRow, error) {
+	row := q.db.QueryRow(ctx, getCallerSession, arg.ID, arg.UserID, arg.Now)
+	var i GetCallerSessionRow
+	err := row.Scan(&i.ID, &i.CreatedAt)
+	return i, err
+}
+
+const listUserSessions = `-- name: ListUserSessions :many
+
+SELECT s.id, s.created_at, s.last_refreshed_at, d.platform
+FROM sessions s
+JOIN devices d ON d.id = s.device_id
+WHERE s.user_id = $1 AND s.revoked_at IS NULL AND s.expires_at > $2
+ORDER BY s.last_refreshed_at DESC, s.id DESC
+LIMIT 100
+`
+
+type ListUserSessionsParams struct {
+	UserID pgtype.UUID
+	Now    pgtype.Timestamptz
+}
+
+type ListUserSessionsRow struct {
+	ID              pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	LastRefreshedAt pgtype.Timestamptz
+	Platform        string
+}
+
+// Hesap yönetimi (issue #75).
+// Kullanıcının kendi açık oturumları, cihaz platformuyla. IP ve token
+// dönmez. Son görülme oturumun son yenilenme zamanıdır.
+func (q *Queries) ListUserSessions(ctx context.Context, arg ListUserSessionsParams) ([]ListUserSessionsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessions, arg.UserID, arg.Now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUserSessionsRow{}
+	for rows.Next() {
+		var i ListUserSessionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.LastRefreshedAt,
+			&i.Platform,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokeOtherSessions = `-- name: RevokeOtherSessions :execrows
+UPDATE sessions
+SET revoked_at = now(), revoked_reason = 'user_signout_remote'
+WHERE user_id = $1 AND id <> $2 AND revoked_at IS NULL
+`
+
+type RevokeOtherSessionsParams struct {
+	UserID pgtype.UUID
+	KeepID pgtype.UUID
+}
+
+func (q *Queries) RevokeOtherSessions(ctx context.Context, arg RevokeOtherSessionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeOtherSessions, arg.UserID, arg.KeepID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const revokeOwnSession = `-- name: RevokeOwnSession :execrows
+UPDATE sessions
+SET revoked_at = now(), revoked_reason = $1
+WHERE id = $2 AND user_id = $3 AND revoked_at IS NULL
+`
+
+type RevokeOwnSessionParams struct {
+	Reason pgtype.Text
+	ID     pgtype.UUID
+	UserID pgtype.UUID
+}
+
+// Oturum yalnızca sahibi tarafından kapatılır: user_id koşulu başka
+// kullanıcının oturumunu kapatmayı (IDOR) engeller.
+func (q *Queries) RevokeOwnSession(ctx context.Context, arg RevokeOwnSessionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeOwnSession, arg.Reason, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const revokeSession = `-- name: RevokeSession :execrows
 UPDATE sessions
 SET revoked_at = now(), revoked_reason = $1

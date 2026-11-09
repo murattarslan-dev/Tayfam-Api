@@ -27,6 +27,21 @@ func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) erro
 	return err
 }
 
+const deleteUserDevices = `-- name: DeleteUserDevices :execrows
+DELETE FROM devices WHERE user_id = $1
+`
+
+// Hesap silmede cihazlar hemen silinir; oturumlar ve refresh token'lar
+// ON DELETE CASCADE ile gider (veri modeli v14 "İlişkiler ve Silme
+// Davranışı").
+func (q *Queries) DeleteUserDevices(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUserDevices, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const touchDevice = `-- name: TouchDevice :exec
 UPDATE devices SET last_seen_at = now() WHERE id = $1
 `

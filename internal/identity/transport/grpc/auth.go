@@ -148,5 +148,6 @@ func tokens(t session.Tokens) *identityv1.Tokens {
 		RefreshToken:        t.RefreshToken,
 		RefreshExpireTime:   timestamppb.New(t.RefreshExpiresAt),
 		RegistrationPending: t.RegistrationPending,
+		ConsentRequired:     t.ConsentRequired,
 	}
 }

@@ -45,7 +45,7 @@ func (f *fakeAccounts) SetActivityVisibility(_ context.Context, c id.ID, v accou
 }
 
 func newAccountServer(f *fakeAccounts) *AccountServer {
-	return NewAccountServer(f, testAudience, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return NewAccountServer(AccountDeps{Accounts: f, APIAudience: testAudience, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 }
 
 func fullCtx(u id.ID) context.Context {

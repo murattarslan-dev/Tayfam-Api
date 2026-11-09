@@ -56,6 +56,14 @@ enum ErrorReason {
   // NOT_FOUND. No registered user has this referral code: it is malformed,
   // unknown, or was replaced by a new one.
   ERROR_REASON_REFERRAL_CODE_NOT_FOUND = 11;
+  // Account management (AccountService, issue #75).
+  // PERMISSION_DENIED. Deleting the account needs a sign-in with the
+  // provider in the last 10 minutes; sign in again and retry with the new
+  // access token. A refreshed token is not enough.
+  ERROR_REASON_REAUTHENTICATION_REQUIRED = 12;
+  // NOT_FOUND. The caller has no open session with this ID; another
+  // user's session gives the same answer.
+  ERROR_REASON_SESSION_NOT_FOUND = 13;
 }
 
 message SignInRequest {
@@ -94,4 +102,8 @@ message Tokens {
   // True until registration (birth date, consents) is complete. The access
   // token then only reaches registration methods (ADR-0012).
   bool registration_pending = 7;
+  // True when the user is registered but has not accepted the current
+  // version of the privacy notice or terms (data model v14 "Onay kaydı").
+  // The client shows the new texts and calls AccountService.AcceptConsents.
+  bool consent_required = 8;
 }

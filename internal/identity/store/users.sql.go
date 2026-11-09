@@ -112,6 +112,15 @@ func (q *Queries) DeleteOldRefCodeLookups(ctx context.Context, arg DeleteOldRefC
 	return err
 }
 
+const deleteUserRefCodeLookups = `-- name: DeleteUserRefCodeLookups :exec
+DELETE FROM ref_code_lookups WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserRefCodeLookups(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserRefCodeLookups, userID)
+	return err
+}
+
 const findUserByRefCode = `-- name: FindUserByRefCode :one
 SELECT id, display_name, avatar_upload_id
 FROM users
@@ -173,6 +182,26 @@ func (q *Queries) GetUser(ctx context.Context, id pgtype.UUID) (GetUserRow, erro
 		&i.AgeBlockedAt,
 		&i.CreatedAt,
 	)
+	return i, err
+}
+
+const lockLiveUser = `-- name: LockLiveUser :one
+SELECT id, registered_at FROM users
+WHERE id = $1 AND deleted_at IS NULL
+FOR UPDATE
+`
+
+type LockLiveUserRow struct {
+	ID           pgtype.UUID
+	RegisteredAt pgtype.Timestamptz
+}
+
+// Hesap silme (issue #75; v14 "Hesap silme", "İlişkiler ve Silme
+// Davranışı"). Kilit, aynı hesabın eşzamanlı silme isteklerini sıraya koyar.
+func (q *Queries) LockLiveUser(ctx context.Context, id pgtype.UUID) (LockLiveUserRow, error) {
+	row := q.db.QueryRow(ctx, lockLiveUser, id)
+	var i LockLiveUserRow
+	err := row.Scan(&i.ID, &i.RegisteredAt)
 	return i, err
 }
 
@@ -294,6 +323,29 @@ type SetReferrerParams struct {
 // korur). Referans veren kayıtlı ve silinmemiş olmalıdır.
 func (q *Queries) SetReferrer(ctx context.Context, arg SetReferrerParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setReferrer, arg.ReferrerID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const softDeleteUser = `-- name: SoftDeleteUser :execrows
+UPDATE users
+SET deleted_at = now(),
+    display_name = NULL,
+    avatar_upload_id = NULL,
+    birth_date_enc = NULL,
+    ref_code = NULL,
+    ref_code_rotated_at = NULL,
+    referred_by_user_id = NULL
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+// Kişisel veriler hemen temizlenir; satır 30 gün sonra saklama işiyle
+// kalıcı silinir. referred_at kalır (users_referral_once yeniden referans
+// yazılmasını engeller).
+func (q *Queries) SoftDeleteUser(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteUser, id)
 	if err != nil {
 		return 0, err
 	}

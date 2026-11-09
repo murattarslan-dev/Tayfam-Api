@@ -29,11 +29,19 @@ type Querier interface {
 	// Sayılmayacak kadar eski denemeler aynı kişinin bir sonraki aramasında
 	// silinir; tablo kendi kendini küçük tutar.
 	DeleteOldRefCodeLookups(ctx context.Context, arg DeleteOldRefCodeLookupsParams) error
+	// Hesap silmede giriş kimlikleri hemen silinir; aynı Google/Apple hesabıyla
+	// sonraki giriş yeni bir hesap açar (veri modeli v14).
+	DeleteUserAuthIdentities(ctx context.Context, userID pgtype.UUID) error
+	// Hesap silmede cihazlar hemen silinir; oturumlar ve refresh token'lar
+	// ON DELETE CASCADE ile gider (veri modeli v14 "İlişkiler ve Silme
+	// Davranışı").
+	DeleteUserDevices(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// Olaylar internal/platform/outbox.Write ile yazılır (sıralama kilidi). Bu
 	// dosyada yalnızca hesap silmede gereken temizlik var.
 	// Silinen kullanıcının henüz silinmemiş profil olayları görünen adını
 	// taşır; hesap silinince outbox'ta kalmazlar (veri azaltma, ADR-0011).
 	DeleteUserProfileEvents(ctx context.Context, userID pgtype.UUID) error
+	DeleteUserRefCodeLookups(ctx context.Context, userID pgtype.UUID) error
 	// Oturum 90 gün kullanılmazsa sona erer (ADR-0004); her yenilemede süre
 	// yeniden başlar.
 	ExtendSession(ctx context.Context, arg ExtendSessionParams) error
@@ -42,8 +50,19 @@ type Querier interface {
 	FindUserByRefCode(ctx context.Context, refCode pgtype.Text) (FindUserByRefCodeRow, error)
 	GetActiveSession(ctx context.Context, id pgtype.UUID) (GetActiveSessionRow, error)
 	GetAuthIdentity(ctx context.Context, arg GetAuthIdentityParams) (GetAuthIdentityRow, error)
+	// Çağıranın oturumu: açık, süresi dolmamış ve token'daki kullanıcıya ait.
+	// created_at, hesap silmede yeniden kimlik doğrulama için girişin
+	// (sağlayıcı token'ının doğrulandığı an) zamanıdır; yenileme onu değiştirmez.
+	GetCallerSession(ctx context.Context, arg GetCallerSessionParams) (GetCallerSessionRow, error)
 	GetUser(ctx context.Context, id pgtype.UUID) (GetUserRow, error)
 	HasActiveConsent(ctx context.Context, arg HasActiveConsentParams) (bool, error)
+	// Hesap yönetimi (issue #75).
+	// Kullanıcının kendi açık oturumları, cihaz platformuyla. IP ve token
+	// dönmez. Son görülme oturumun son yenilenme zamanıdır.
+	ListUserSessions(ctx context.Context, arg ListUserSessionsParams) ([]ListUserSessionsRow, error)
+	// Hesap silme (issue #75; v14 "Hesap silme", "İlişkiler ve Silme
+	// Davranışı"). Kilit, aynı hesabın eşzamanlı silme isteklerini sıraya koyar.
+	LockLiveUser(ctx context.Context, id pgtype.UUID) (LockLiveUserRow, error)
 	// Yenilemede token ve oturumu birlikte kilitler; aynı token'la eşzamanlı iki
 	// yenileme isteğinden yalnızca biri ilerler, diğeri yeniden kullanım sayılır.
 	LockRefreshToken(ctx context.Context, tokenHash []byte) (LockRefreshTokenRow, error)
@@ -51,9 +70,28 @@ type Querier interface {
 	// eşzamanlı aramaları sırayla sayılır. Yalnızca kayıtlı ve silinmemiş hesap.
 	LockRegisteredUser(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
 	MarkRefreshTokenUsed(ctx context.Context, id pgtype.UUID) (int64, error)
+	// 30 gün önce silinmiş hesaplar kalıcı silinir. consent_records'un
+	// foreign key'i yoktur ve dokunulmaz (00002, hukukçu kararı bekleniyor).
+	PurgeDeletedUsers(ctx context.Context, arg PurgeDeletedUsersParams) (int64, error)
+	// 90 gündür görünmeyen cihazlar (oturumları CASCADE ile).
+	PurgeDevices(ctx context.Context, arg PurgeDevicesParams) (int64, error)
+	// Saklama işleri (issue #75; v14 "Saklama süreleri"). Her sorgu en fazla
+	// @batch satır siler; iş, silinecek satır kalmayana kadar tekrar çağırır.
+	// Koşullar silmede yeniden değerlendirilir, birden fazla pod aynı satırı
+	// iki kez silmez (ikinci DELETE etkisizdir).
+	// Kullanılmış ya da oturumu bitmiş (süresi dolmuş veya iptal edilmiş)
+	// refresh token'lar 30 gün sonra.
+	PurgeRefreshTokens(ctx context.Context, arg PurgeRefreshTokensParams) (int64, error)
+	// 90 gündür kullanılmayan ya da 90 gün önce kapatılmış oturumlar
+	// (refresh token'ları CASCADE ile).
+	PurgeSessions(ctx context.Context, arg PurgeSessionsParams) (int64, error)
 	// Aynı sürüm ikinci kez onaylanırsa yeni kayıt açılmaz.
 	RecordConsent(ctx context.Context, arg RecordConsentParams) error
 	RecordRefCodeLookup(ctx context.Context, arg RecordRefCodeLookupParams) error
+	RevokeOtherSessions(ctx context.Context, arg RevokeOtherSessionsParams) (int64, error)
+	// Oturum yalnızca sahibi tarafından kapatılır: user_id koşulu başka
+	// kullanıcının oturumunu kapatmayı (IDOR) engeller.
+	RevokeOwnSession(ctx context.Context, arg RevokeOwnSessionParams) (int64, error)
 	RevokeSession(ctx context.Context, arg RevokeSessionParams) (int64, error)
 	RevokeUserSessions(ctx context.Context, arg RevokeUserSessionsParams) (int64, error)
 	// Referans kodu (veri modeli v14 "Arkadaşlık ve Davet (v11)", issue #71).
@@ -67,6 +105,10 @@ type Querier interface {
 	// Referans kayıtta bir kez yazılır (trigger users_referral_once da
 	// korur). Referans veren kayıtlı ve silinmemiş olmalıdır.
 	SetReferrer(ctx context.Context, arg SetReferrerParams) (int64, error)
+	// Kişisel veriler hemen temizlenir; satır 30 gün sonra saklama işiyle
+	// kalıcı silinir. referred_at kalır (users_referral_once yeniden referans
+	// yazılmasını engeller).
+	SoftDeleteUser(ctx context.Context, id pgtype.UUID) (int64, error)
 	TouchAuthIdentity(ctx context.Context, arg TouchAuthIdentityParams) error
 	TouchDevice(ctx context.Context, id pgtype.UUID) error
 }

@@ -1,5 +1,6 @@
 // Package session signs users in with a provider ID token, rotates refresh
-// tokens and ends sessions (ADR-0004).
+// tokens and ends sessions (ADR-0004). Users list their own sessions and end
+// one or all others from another device (issue #75).
 //
 // A session is one device's sign-in and one refresh token family. Refresh
 // tokens are 256-bit random values; only their SHA-256 hashes are stored.
@@ -22,6 +23,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/consent"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/oidc"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
@@ -57,6 +59,21 @@ var (
 	// The client should use the token it got from the other request.
 	ErrRefreshConflict = errors.New("aynı token ile eşzamanlı yenileme")
 	ErrUnavailable     = errors.New("kimlik doğrulama şu anda yapılamıyor")
+	// ErrCallerSession: the caller's own session (from the access token) is
+	// ended, expired or not the caller's. The access token outlives its
+	// session by up to 15 minutes (ADR-0004); session management refuses it.
+	ErrCallerSession = errors.New("oturum kapalı")
+	// ErrSessionNotFound: no open session of the caller has this ID. Another
+	// user's session gives the same answer.
+	ErrSessionNotFound = errors.New("oturum bulunamadı")
+)
+
+// Reasons written to sessions.revoked_reason by this package.
+const (
+	reasonLogout      = "logout"
+	reasonRemote      = "user_signout_remote"
+	reasonTokenReuse  = "token_reuse"
+	reasonAccountGone = "account_deleted"
 )
 
 // Platforms a device can be.
@@ -71,6 +88,10 @@ type Tokens struct {
 	RefreshToken        string
 	RefreshExpiresAt    time.Time
 	RegistrationPending bool
+	// ConsentRequired: the user is registered but has not accepted the
+	// current version of the privacy notice or terms. The client shows the
+	// new texts and calls AccountService.AcceptConsents (v14 "Onay kaydı").
+	ConsentRequired bool
 }
 
 // Config wires a Service.
@@ -82,7 +103,10 @@ type Config struct {
 	// use identity's signing key.
 	API          *auth.Signer
 	Registration *auth.Signer
-	Now          func() time.Time
+	// Documents are the current text versions; a registered user who has
+	// not accepted them gets Tokens.ConsentRequired.
+	Documents consent.Documents
+	Now       func() time.Time
 }
 
 // Service implements sign-in, refresh and sign-out.
@@ -93,7 +117,7 @@ type Service struct {
 
 // New returns a Service.
 func New(cfg Config) (*Service, error) {
-	if cfg.Pool == nil || cfg.Log == nil || cfg.API == nil || cfg.Registration == nil || len(cfg.Verifiers) == 0 {
+	if cfg.Pool == nil || cfg.Log == nil || cfg.API == nil || cfg.Registration == nil || len(cfg.Verifiers) == 0 || !cfg.Documents.Valid() {
 		return nil, errors.New("session: eksik yapılandırma")
 	}
 	if cfg.Now == nil {
@@ -204,7 +228,7 @@ func (s *Service) signInTx(ctx context.Context, ident oidc.Identity, platform st
 		if err := q.CreateRefreshToken(ctx, store.CreateRefreshTokenParams{ID: id.New().PG(), SessionID: sessionID.PG(), TokenHash: hash}); err != nil {
 			return fmt.Errorf("refresh token: %w", err)
 		}
-		t, err = s.issue(userID, sessionID, user.RegisteredAt.Valid, refresh, expires)
+		t, err = s.issue(ctx, q, userID, sessionID, user.RegisteredAt.Valid, refresh, expires)
 		return err
 	})
 	return t, err
@@ -240,7 +264,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (Tokens, err
 			}
 			// A used token came back: someone else holds a copy. End the
 			// session for both; the real user signs in again (ADR-0004).
-			if _, err := q.RevokeSession(ctx, store.RevokeSessionParams{ID: row.SessionID, Reason: text("token_reuse")}); err != nil {
+			if _, err := q.RevokeSession(ctx, store.RevokeSessionParams{ID: row.SessionID, Reason: text(reasonTokenReuse)}); err != nil {
 				return fmt.Errorf("oturum iptali: %w", err)
 			}
 			revoked = sessionID
@@ -252,7 +276,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (Tokens, err
 		}
 		user, err := q.GetUser(ctx, row.UserID)
 		if errors.Is(err, pgx.ErrNoRows) {
-			if _, err := q.RevokeSession(ctx, store.RevokeSessionParams{ID: row.SessionID, Reason: text("account_deleted")}); err != nil {
+			if _, err := q.RevokeSession(ctx, store.RevokeSessionParams{ID: row.SessionID, Reason: text(reasonAccountGone)}); err != nil {
 				return fmt.Errorf("oturum iptali: %w", err)
 			}
 			return nil
@@ -268,8 +292,13 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (Tokens, err
 		if err := q.CreateRefreshToken(ctx, store.CreateRefreshTokenParams{ID: id.New().PG(), SessionID: row.SessionID, TokenHash: newHash}); err != nil {
 			return fmt.Errorf("refresh token: %w", err)
 		}
+		// The device is seen: the 90-day device retention counts from here
+		// (v14 "Saklama süreleri").
+		if err := q.TouchDevice(ctx, row.DeviceID); err != nil {
+			return fmt.Errorf("cihaz: %w", err)
+		}
 		userID, _ := id.FromPG(row.UserID)
-		t, err = s.issue(userID, sessionID, user.RegisteredAt.Valid, refresh, expires)
+		t, err = s.issue(ctx, q, userID, sessionID, user.RegisteredAt.Valid, refresh, expires)
 		return err
 	})
 	if revoked != (id.ID{}) {
@@ -288,17 +317,22 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (Tokens, err
 
 // SignOut ends a session. Ending an already ended session is not an error.
 func (s *Service) SignOut(ctx context.Context, sessionID id.ID) error {
-	if _, err := s.q.RevokeSession(ctx, store.RevokeSessionParams{ID: sessionID.PG(), Reason: text("logout")}); err != nil {
+	if _, err := s.q.RevokeSession(ctx, store.RevokeSessionParams{ID: sessionID.PG(), Reason: text(reasonLogout)}); err != nil {
 		return fmt.Errorf("oturum kapatma: %w", err)
 	}
 	s.cfg.Log.InfoContext(ctx, "oturum kapatıldı", slog.String("session_id", sessionID.String()))
 	return nil
 }
 
-func (s *Service) issue(user, session id.ID, registered bool, refresh string, refreshExpires time.Time) (Tokens, error) {
+func (s *Service) issue(ctx context.Context, q *store.Queries, user, session id.ID, registered bool, refresh string, refreshExpires time.Time) (Tokens, error) {
 	signer := s.cfg.Registration
+	var consentRequired bool
 	if registered {
 		signer = s.cfg.API
+		var err error
+		if consentRequired, err = consent.Required(ctx, q, user, s.cfg.Documents); err != nil {
+			return Tokens{}, err
+		}
 	}
 	access, exp, err := signer.Issue(user.String(), session.String())
 	if err != nil {
@@ -309,7 +343,119 @@ func (s *Service) issue(user, session id.ID, registered bool, refresh string, re
 		AccessToken: access, AccessExpiresAt: exp,
 		RefreshToken: refresh, RefreshExpiresAt: refreshExpires,
 		RegistrationPending: !registered,
+		ConsentRequired:     consentRequired,
 	}, nil
+}
+
+// Caller is the verified user and session of an access token.
+type Caller struct {
+	User    id.ID
+	Session id.ID
+}
+
+// Info is one of the caller's open sessions. It has no IP address and no
+// token.
+type Info struct {
+	ID        id.ID
+	Platform  string // android, ios or web
+	CreatedAt time.Time
+	// LastSeenAt is the last refresh; a session is used at least every 15
+	// minutes while the app is open.
+	LastSeenAt time.Time
+	Current    bool // the session of the caller's access token
+}
+
+// List returns the caller's open sessions, most recently used first.
+func (s *Service) List(ctx context.Context, c Caller) ([]Info, error) {
+	if err := s.checkCaller(ctx, s.q, c); err != nil {
+		return nil, err
+	}
+	rows, err := s.q.ListUserSessions(ctx, store.ListUserSessionsParams{UserID: c.User.PG(), Now: ts(s.cfg.Now())})
+	if err != nil {
+		return nil, fmt.Errorf("oturumlar: %w", err)
+	}
+	out := make([]Info, 0, len(rows))
+	for _, r := range rows {
+		sid := id.ID(r.ID.Bytes)
+		out = append(out, Info{
+			ID: sid, Platform: r.Platform,
+			CreatedAt: r.CreatedAt.Time.UTC(), LastSeenAt: r.LastRefreshedAt.Time.UTC(),
+			Current: sid == c.Session,
+		})
+	}
+	return out, nil
+}
+
+// Revoke ends one of the caller's sessions. Ending the caller's own
+// session is a sign-out. A session of another user, an unknown or an
+// already ended one is ErrSessionNotFound: the answer does not tell them
+// apart.
+func (s *Service) Revoke(ctx context.Context, c Caller, target id.ID) error {
+	reason := reasonRemote
+	if target == c.Session {
+		reason = reasonLogout
+	}
+	err := pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		if err := s.checkCaller(ctx, q, c); err != nil {
+			return err
+		}
+		n, err := q.RevokeOwnSession(ctx, store.RevokeOwnSessionParams{ID: target.PG(), UserID: c.User.PG(), Reason: text(reason)})
+		if err != nil {
+			return fmt.Errorf("oturum kapatma: %w", err)
+		}
+		if n != 1 {
+			return ErrSessionNotFound
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	s.cfg.Log.InfoContext(ctx, "oturum kapatıldı",
+		slog.String("user_id", c.User.String()),
+		slog.String("session_id", target.String()),
+		slog.String("reason", reason))
+	return nil
+}
+
+// RevokeOthers ends every session of the caller except the current one and
+// returns how many it ended.
+func (s *Service) RevokeOthers(ctx context.Context, c Caller) (int, error) {
+	var n int64
+	err := pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		if err := s.checkCaller(ctx, q, c); err != nil {
+			return err
+		}
+		var err error
+		if n, err = q.RevokeOtherSessions(ctx, store.RevokeOtherSessionsParams{UserID: c.User.PG(), KeepID: c.Session.PG()}); err != nil {
+			return fmt.Errorf("oturum kapatma: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	s.cfg.Log.InfoContext(ctx, "diğer oturumlar kapatıldı",
+		slog.String("user_id", c.User.String()),
+		slog.String("session_id", c.Session.String()),
+		slog.Int64("count", n))
+	return int(n), nil
+}
+
+// checkCaller makes sure the caller's own session is still open. A token
+// of an ended session (signed out, ended remotely, account deleted) cannot
+// manage sessions even while it has not expired.
+func (s *Service) checkCaller(ctx context.Context, q *store.Queries, c Caller) error {
+	_, err := q.GetCallerSession(ctx, store.GetCallerSessionParams{ID: c.Session.PG(), UserID: c.User.PG(), Now: ts(s.cfg.Now())})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrCallerSession
+	}
+	if err != nil {
+		return fmt.Errorf("oturum: %w", err)
+	}
+	return nil
 }
 
 var b64 = base64.RawURLEncoding

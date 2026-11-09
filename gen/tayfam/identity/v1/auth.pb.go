@@ -151,6 +151,14 @@ const (
 	// NOT_FOUND. No registered user has this referral code: it is malformed,
 	// unknown, or was replaced by a new one.
 	ErrorReason_ERROR_REASON_REFERRAL_CODE_NOT_FOUND ErrorReason = 11
+	// Account management (AccountService, issue #75).
+	// PERMISSION_DENIED. Deleting the account needs a sign-in with the
+	// provider in the last 10 minutes; sign in again and retry with the new
+	// access token. A refreshed token is not enough.
+	ErrorReason_ERROR_REASON_REAUTHENTICATION_REQUIRED ErrorReason = 12
+	// NOT_FOUND. The caller has no open session with this ID; another
+	// user's session gives the same answer.
+	ErrorReason_ERROR_REASON_SESSION_NOT_FOUND ErrorReason = 13
 )
 
 // Enum value maps for ErrorReason.
@@ -168,20 +176,24 @@ var (
 		9:  "ERROR_REASON_INVALID_DISPLAY_NAME",
 		10: "ERROR_REASON_RATE_LIMITED",
 		11: "ERROR_REASON_REFERRAL_CODE_NOT_FOUND",
+		12: "ERROR_REASON_REAUTHENTICATION_REQUIRED",
+		13: "ERROR_REASON_SESSION_NOT_FOUND",
 	}
 	ErrorReason_value = map[string]int32{
-		"ERROR_REASON_UNSPECIFIED":             0,
-		"ERROR_REASON_INVALID_CREDENTIALS":     1,
-		"ERROR_REASON_UNSUPPORTED_PROVIDER":    2,
-		"ERROR_REASON_AGE_BLOCKED":             3,
-		"ERROR_REASON_INVALID_REFRESH":         4,
-		"ERROR_REASON_REFRESH_CONFLICT":        5,
-		"ERROR_REASON_INVALID_BIRTH_DATE":      6,
-		"ERROR_REASON_CONSENT_OUTDATED":        7,
-		"ERROR_REASON_ALREADY_REGISTERED":      8,
-		"ERROR_REASON_INVALID_DISPLAY_NAME":    9,
-		"ERROR_REASON_RATE_LIMITED":            10,
-		"ERROR_REASON_REFERRAL_CODE_NOT_FOUND": 11,
+		"ERROR_REASON_UNSPECIFIED":               0,
+		"ERROR_REASON_INVALID_CREDENTIALS":       1,
+		"ERROR_REASON_UNSUPPORTED_PROVIDER":      2,
+		"ERROR_REASON_AGE_BLOCKED":               3,
+		"ERROR_REASON_INVALID_REFRESH":           4,
+		"ERROR_REASON_REFRESH_CONFLICT":          5,
+		"ERROR_REASON_INVALID_BIRTH_DATE":        6,
+		"ERROR_REASON_CONSENT_OUTDATED":          7,
+		"ERROR_REASON_ALREADY_REGISTERED":        8,
+		"ERROR_REASON_INVALID_DISPLAY_NAME":      9,
+		"ERROR_REASON_RATE_LIMITED":              10,
+		"ERROR_REASON_REFERRAL_CODE_NOT_FOUND":   11,
+		"ERROR_REASON_REAUTHENTICATION_REQUIRED": 12,
+		"ERROR_REASON_SESSION_NOT_FOUND":         13,
 	}
 )
 
@@ -498,8 +510,12 @@ type Tokens struct {
 	// True until registration (birth date, consents) is complete. The access
 	// token then only reaches registration methods (ADR-0012).
 	RegistrationPending bool `protobuf:"varint,7,opt,name=registration_pending,json=registrationPending,proto3" json:"registration_pending,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// True when the user is registered but has not accepted the current
+	// version of the privacy notice or terms (data model v14 "Onay kaydı").
+	// The client shows the new texts and calls AccountService.AcceptConsents.
+	ConsentRequired bool `protobuf:"varint,8,opt,name=consent_required,json=consentRequired,proto3" json:"consent_required,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Tokens) Reset() {
@@ -581,6 +597,13 @@ func (x *Tokens) GetRegistrationPending() bool {
 	return false
 }
 
+func (x *Tokens) GetConsentRequired() bool {
+	if x != nil {
+		return x.ConsentRequired
+	}
+	return false
+}
+
 var File_tayfam_identity_v1_auth_proto protoreflect.FileDescriptor
 
 const file_tayfam_identity_v1_auth_proto_rawDesc = "" +
@@ -598,7 +621,7 @@ const file_tayfam_identity_v1_auth_proto_rawDesc = "" +
 	"\x0fRefreshResponse\x122\n" +
 	"\x06tokens\x18\x01 \x01(\v2\x1a.tayfam.identity.v1.TokensR\x06tokens\"\x10\n" +
 	"\x0eSignOutRequest\"\x11\n" +
-	"\x0fSignOutResponse\"\xd1\x02\n" +
+	"\x0fSignOutResponse\"\xfc\x02\n" +
 	"\x06Tokens\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1d\n" +
 	"\n" +
@@ -607,7 +630,8 @@ const file_tayfam_identity_v1_auth_proto_rawDesc = "" +
 	"\x12access_expire_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x10accessExpireTime\x12#\n" +
 	"\rrefresh_token\x18\x05 \x01(\tR\frefreshToken\x12J\n" +
 	"\x13refresh_expire_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x11refreshExpireTime\x121\n" +
-	"\x14registration_pending\x18\a \x01(\bR\x13registrationPending*M\n" +
+	"\x14registration_pending\x18\a \x01(\bR\x13registrationPending\x12)\n" +
+	"\x10consent_required\x18\b \x01(\bR\x0fconsentRequired*M\n" +
 	"\bProvider\x12\x18\n" +
 	"\x14PROVIDER_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fPROVIDER_GOOGLE\x10\x01\x12\x12\n" +
@@ -616,7 +640,7 @@ const file_tayfam_identity_v1_auth_proto_rawDesc = "" +
 	"\x14PLATFORM_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10PLATFORM_ANDROID\x10\x01\x12\x10\n" +
 	"\fPLATFORM_IOS\x10\x02\x12\x10\n" +
-	"\fPLATFORM_WEB\x10\x03*\xb8\x03\n" +
+	"\fPLATFORM_WEB\x10\x03*\x88\x04\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12$\n" +
 	" ERROR_REASON_INVALID_CREDENTIALS\x10\x01\x12%\n" +
@@ -630,7 +654,9 @@ const file_tayfam_identity_v1_auth_proto_rawDesc = "" +
 	"!ERROR_REASON_INVALID_DISPLAY_NAME\x10\t\x12\x1d\n" +
 	"\x19ERROR_REASON_RATE_LIMITED\x10\n" +
 	"\x12(\n" +
-	"$ERROR_REASON_REFERRAL_CODE_NOT_FOUND\x10\v2\x86\x02\n" +
+	"$ERROR_REASON_REFERRAL_CODE_NOT_FOUND\x10\v\x12*\n" +
+	"&ERROR_REASON_REAUTHENTICATION_REQUIRED\x10\f\x12\"\n" +
+	"\x1eERROR_REASON_SESSION_NOT_FOUND\x10\r2\x86\x02\n" +
 	"\vAuthService\x12O\n" +
 	"\x06SignIn\x12!.tayfam.identity.v1.SignInRequest\x1a\".tayfam.identity.v1.SignInResponse\x12R\n" +
 	"\aRefresh\x12\".tayfam.identity.v1.RefreshRequest\x1a#.tayfam.identity.v1.RefreshResponse\x12R\n" +

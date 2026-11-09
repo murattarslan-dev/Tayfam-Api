@@ -23,6 +23,12 @@ const (
 	AccountService_RotateReferralCode_FullMethodName     = "/tayfam.identity.v1.AccountService/RotateReferralCode"
 	AccountService_FindUserByReferralCode_FullMethodName = "/tayfam.identity.v1.AccountService/FindUserByReferralCode"
 	AccountService_SetActivityVisibility_FullMethodName  = "/tayfam.identity.v1.AccountService/SetActivityVisibility"
+	AccountService_ListSessions_FullMethodName           = "/tayfam.identity.v1.AccountService/ListSessions"
+	AccountService_RevokeSession_FullMethodName          = "/tayfam.identity.v1.AccountService/RevokeSession"
+	AccountService_RevokeOtherSessions_FullMethodName    = "/tayfam.identity.v1.AccountService/RevokeOtherSessions"
+	AccountService_GetConsents_FullMethodName            = "/tayfam.identity.v1.AccountService/GetConsents"
+	AccountService_AcceptConsents_FullMethodName         = "/tayfam.identity.v1.AccountService/AcceptConsents"
+	AccountService_DeleteAccount_FullMethodName          = "/tayfam.identity.v1.AccountService/DeleteAccount"
 )
 
 // AccountServiceClient is the client API for AccountService service.
@@ -31,7 +37,8 @@ const (
 //
 // AccountService holds the caller's own account settings that identity owns:
 // the referral code and who sees the attendance history (data model v14
-// "Arkadaşlık ve Davet (v11)", "Profil görünürlüğü"; issue #71).
+// "Arkadaşlık ve Davet (v11)", "Profil görünürlüğü"; issue #71), sessions,
+// consents to new text versions and account deletion (issue #75).
 //
 // Every method needs a full access token: a registration-only token
 // (aud=tayfam-registration) is refused with UNAUTHENTICATED. The caller
@@ -52,6 +59,31 @@ type AccountServiceClient interface {
 	// SetActivityVisibility changes who sees the caller's attendance history.
 	// core gets the new setting with the profile copy (user.profile_updated).
 	SetActivityVisibility(ctx context.Context, in *SetActivityVisibilityRequest, opts ...grpc.CallOption) (*SetActivityVisibilityResponse, error)
+	// ListSessions returns the caller's open sessions, one per signed-in
+	// device. No IP address and no token is returned. The session methods
+	// refuse a token whose own session is ended (UNAUTHENTICATED), even before
+	// the token expires.
+	ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error)
+	// RevokeSession ends one of the caller's sessions; its refresh token stops
+	// working at once. An unknown session, an ended one or another user's is
+	// ERROR_REASON_SESSION_NOT_FOUND.
+	RevokeSession(ctx context.Context, in *RevokeSessionRequest, opts ...grpc.CallOption) (*RevokeSessionResponse, error)
+	// RevokeOtherSessions ends every session of the caller but the current one.
+	RevokeOtherSessions(ctx context.Context, in *RevokeOtherSessionsRequest, opts ...grpc.CallOption) (*RevokeOtherSessionsResponse, error)
+	// GetConsents returns the current text versions and whether the caller
+	// must accept them (Tokens.consent_required).
+	GetConsents(ctx context.Context, in *GetConsentsRequest, opts ...grpc.CallOption) (*GetConsentsResponse, error)
+	// AcceptConsents records that the caller accepted the current versions.
+	// Versions that are not the current ones are
+	// ERROR_REASON_CONSENT_OUTDATED.
+	AcceptConsents(ctx context.Context, in *AcceptConsentsRequest, opts ...grpc.CallOption) (*AcceptConsentsResponse, error)
+	// DeleteAccount deletes the caller's account (KVKK). The caller must have
+	// signed in with the provider in the last 10 minutes: both the access
+	// token and its session must be that recent, otherwise
+	// ERROR_REASON_REAUTHENTICATION_REQUIRED. Personal data is cleared at once,
+	// every session ends and core and chat are told (user.deleted). Signing in
+	// with the same provider account later opens a new account.
+	DeleteAccount(ctx context.Context, in *DeleteAccountRequest, opts ...grpc.CallOption) (*DeleteAccountResponse, error)
 }
 
 type accountServiceClient struct {
@@ -102,13 +134,74 @@ func (c *accountServiceClient) SetActivityVisibility(ctx context.Context, in *Se
 	return out, nil
 }
 
+func (c *accountServiceClient) ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSessionsResponse)
+	err := c.cc.Invoke(ctx, AccountService_ListSessions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *accountServiceClient) RevokeSession(ctx context.Context, in *RevokeSessionRequest, opts ...grpc.CallOption) (*RevokeSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeSessionResponse)
+	err := c.cc.Invoke(ctx, AccountService_RevokeSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *accountServiceClient) RevokeOtherSessions(ctx context.Context, in *RevokeOtherSessionsRequest, opts ...grpc.CallOption) (*RevokeOtherSessionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeOtherSessionsResponse)
+	err := c.cc.Invoke(ctx, AccountService_RevokeOtherSessions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *accountServiceClient) GetConsents(ctx context.Context, in *GetConsentsRequest, opts ...grpc.CallOption) (*GetConsentsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetConsentsResponse)
+	err := c.cc.Invoke(ctx, AccountService_GetConsents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *accountServiceClient) AcceptConsents(ctx context.Context, in *AcceptConsentsRequest, opts ...grpc.CallOption) (*AcceptConsentsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AcceptConsentsResponse)
+	err := c.cc.Invoke(ctx, AccountService_AcceptConsents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *accountServiceClient) DeleteAccount(ctx context.Context, in *DeleteAccountRequest, opts ...grpc.CallOption) (*DeleteAccountResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteAccountResponse)
+	err := c.cc.Invoke(ctx, AccountService_DeleteAccount_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AccountServiceServer is the server API for AccountService service.
 // All implementations must embed UnimplementedAccountServiceServer
 // for forward compatibility.
 //
 // AccountService holds the caller's own account settings that identity owns:
 // the referral code and who sees the attendance history (data model v14
-// "Arkadaşlık ve Davet (v11)", "Profil görünürlüğü"; issue #71).
+// "Arkadaşlık ve Davet (v11)", "Profil görünürlüğü"; issue #71), sessions,
+// consents to new text versions and account deletion (issue #75).
 //
 // Every method needs a full access token: a registration-only token
 // (aud=tayfam-registration) is refused with UNAUTHENTICATED. The caller
@@ -129,6 +222,31 @@ type AccountServiceServer interface {
 	// SetActivityVisibility changes who sees the caller's attendance history.
 	// core gets the new setting with the profile copy (user.profile_updated).
 	SetActivityVisibility(context.Context, *SetActivityVisibilityRequest) (*SetActivityVisibilityResponse, error)
+	// ListSessions returns the caller's open sessions, one per signed-in
+	// device. No IP address and no token is returned. The session methods
+	// refuse a token whose own session is ended (UNAUTHENTICATED), even before
+	// the token expires.
+	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
+	// RevokeSession ends one of the caller's sessions; its refresh token stops
+	// working at once. An unknown session, an ended one or another user's is
+	// ERROR_REASON_SESSION_NOT_FOUND.
+	RevokeSession(context.Context, *RevokeSessionRequest) (*RevokeSessionResponse, error)
+	// RevokeOtherSessions ends every session of the caller but the current one.
+	RevokeOtherSessions(context.Context, *RevokeOtherSessionsRequest) (*RevokeOtherSessionsResponse, error)
+	// GetConsents returns the current text versions and whether the caller
+	// must accept them (Tokens.consent_required).
+	GetConsents(context.Context, *GetConsentsRequest) (*GetConsentsResponse, error)
+	// AcceptConsents records that the caller accepted the current versions.
+	// Versions that are not the current ones are
+	// ERROR_REASON_CONSENT_OUTDATED.
+	AcceptConsents(context.Context, *AcceptConsentsRequest) (*AcceptConsentsResponse, error)
+	// DeleteAccount deletes the caller's account (KVKK). The caller must have
+	// signed in with the provider in the last 10 minutes: both the access
+	// token and its session must be that recent, otherwise
+	// ERROR_REASON_REAUTHENTICATION_REQUIRED. Personal data is cleared at once,
+	// every session ends and core and chat are told (user.deleted). Signing in
+	// with the same provider account later opens a new account.
+	DeleteAccount(context.Context, *DeleteAccountRequest) (*DeleteAccountResponse, error)
 	mustEmbedUnimplementedAccountServiceServer()
 }
 
@@ -150,6 +268,24 @@ func (UnimplementedAccountServiceServer) FindUserByReferralCode(context.Context,
 }
 func (UnimplementedAccountServiceServer) SetActivityVisibility(context.Context, *SetActivityVisibilityRequest) (*SetActivityVisibilityResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetActivityVisibility not implemented")
+}
+func (UnimplementedAccountServiceServer) ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSessions not implemented")
+}
+func (UnimplementedAccountServiceServer) RevokeSession(context.Context, *RevokeSessionRequest) (*RevokeSessionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeSession not implemented")
+}
+func (UnimplementedAccountServiceServer) RevokeOtherSessions(context.Context, *RevokeOtherSessionsRequest) (*RevokeOtherSessionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeOtherSessions not implemented")
+}
+func (UnimplementedAccountServiceServer) GetConsents(context.Context, *GetConsentsRequest) (*GetConsentsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetConsents not implemented")
+}
+func (UnimplementedAccountServiceServer) AcceptConsents(context.Context, *AcceptConsentsRequest) (*AcceptConsentsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AcceptConsents not implemented")
+}
+func (UnimplementedAccountServiceServer) DeleteAccount(context.Context, *DeleteAccountRequest) (*DeleteAccountResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteAccount not implemented")
 }
 func (UnimplementedAccountServiceServer) mustEmbedUnimplementedAccountServiceServer() {}
 func (UnimplementedAccountServiceServer) testEmbeddedByValue()                        {}
@@ -244,6 +380,114 @@ func _AccountService_SetActivityVisibility_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AccountService_ListSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSessionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AccountServiceServer).ListSessions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AccountService_ListSessions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AccountServiceServer).ListSessions(ctx, req.(*ListSessionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AccountService_RevokeSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AccountServiceServer).RevokeSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AccountService_RevokeSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AccountServiceServer).RevokeSession(ctx, req.(*RevokeSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AccountService_RevokeOtherSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeOtherSessionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AccountServiceServer).RevokeOtherSessions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AccountService_RevokeOtherSessions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AccountServiceServer).RevokeOtherSessions(ctx, req.(*RevokeOtherSessionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AccountService_GetConsents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetConsentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AccountServiceServer).GetConsents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AccountService_GetConsents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AccountServiceServer).GetConsents(ctx, req.(*GetConsentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AccountService_AcceptConsents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AcceptConsentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AccountServiceServer).AcceptConsents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AccountService_AcceptConsents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AccountServiceServer).AcceptConsents(ctx, req.(*AcceptConsentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AccountService_DeleteAccount_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteAccountRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AccountServiceServer).DeleteAccount(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AccountService_DeleteAccount_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AccountServiceServer).DeleteAccount(ctx, req.(*DeleteAccountRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AccountService_ServiceDesc is the grpc.ServiceDesc for AccountService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -266,6 +510,30 @@ var AccountService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetActivityVisibility",
 			Handler:    _AccountService_SetActivityVisibility_Handler,
+		},
+		{
+			MethodName: "ListSessions",
+			Handler:    _AccountService_ListSessions_Handler,
+		},
+		{
+			MethodName: "RevokeSession",
+			Handler:    _AccountService_RevokeSession_Handler,
+		},
+		{
+			MethodName: "RevokeOtherSessions",
+			Handler:    _AccountService_RevokeOtherSessions_Handler,
+		},
+		{
+			MethodName: "GetConsents",
+			Handler:    _AccountService_GetConsents_Handler,
+		},
+		{
+			MethodName: "AcceptConsents",
+			Handler:    _AccountService_AcceptConsents_Handler,
+		},
+		{
+			MethodName: "DeleteAccount",
+			Handler:    _AccountService_DeleteAccount_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
