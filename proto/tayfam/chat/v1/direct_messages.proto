@@ -1,0 +1,206 @@
+syntax = "proto3";
+
+package tayfam.chat.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// DirectMessageService runs one-to-one conversations, plain version (issue
+// #95; ADR-0005 "Direkt mesajlar", "Sonuçlar": plain direct messages first,
+// end-to-end encryption as the module's last step; data model v14 "Mesaj
+// İsteği Modeli (v7)", "Okunma bilgisi"). Real-time delivery is the
+// WebSocket (ADR-0014); sending there goes through the same function.
+//
+// Authentication: the caller's access token (ADR-0004, ADR-0011). Service
+// tokens are refused. Requests never name the acting user.
+//
+// Common rules for every method:
+//   - A conversation is between two users; a user sees only conversations
+//     they are a party of. Anyone else's conversation, and a request the
+//     caller declined, is ERROR_REASON_CONVERSATION_NOT_FOUND.
+//   - Who may write to whom is core's decision
+//     (DirectMessageService.CheckDirectMessage with the caller's own token),
+//     asked for every message: a block in either direction, no shared live
+//     tayfa and no friendship refuse (ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED;
+//     which of them is never said); friends and users with shared event
+//     history write freely; everyone else opens a message request.
+//   - Message bodies are stored encrypted (AES-256-GCM, server key, the same
+//     as channel messages) until end-to-end encryption arrives. They never
+//     appear in logs, events, notifications or error messages.
+//   - UNAVAILABLE without ErrorInfo when core cannot answer, and when chat
+//     runs without its message key (only possible outside prod).
+//   - IDs are UUID strings (ERROR_REASON_VALIDATION otherwise).
+//
+// Paging as in ChannelService: page_size 0 means 50; values above 100 are
+// treated as 100; negative values are ERROR_REASON_VALIDATION. page_token is
+// opaque; a bad token is ERROR_REASON_VALIDATION. An empty next_page_token
+// means the last page.
+service DirectMessageService {
+  // SendDirectMessage writes to recipient_user_id, opening the conversation
+  // with the first message. Sending again with the same client_request_id
+  // returns the first message.
+  //
+  // Message requests (v7): when core answers "request", the conversation
+  // opens as a request and the sender may send only that one message until
+  // the recipient answers (ERROR_REASON_MESSAGE_REQUEST_PENDING after it;
+  // also after a decline, which the sender is never told). The recipient
+  // accepts by replying or with AcceptMessageRequest. A sender opens at most
+  // daily_request_limit requests in 24 hours (5 for new members of the
+  // shared tayfa, else 20; ERROR_REASON_MESSAGE_REQUEST_LIMIT); declined
+  // requests still count.
+  //
+  // Errors: ERROR_REASON_VALIDATION (recipient_user_id, the caller; body
+  // 1–4000 characters, not only white space, no control characters other
+  // than tab and line breaks; client_request_id; a client_request_id used
+  // for another conversation), ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED,
+  // ERROR_REASON_MESSAGE_REQUEST_PENDING, ERROR_REASON_MESSAGE_REQUEST_LIMIT.
+  rpc SendDirectMessage(SendDirectMessageRequest) returns (SendDirectMessageResponse);
+
+  // ListConversations lists the caller's conversations, the latest message
+  // first, with the caller's unread count.
+  rpc ListConversations(ListConversationsRequest) returns (ListConversationsResponse);
+
+  // GetConversation returns one conversation.
+  rpc GetConversation(GetConversationRequest) returns (GetConversationResponse);
+
+  // ListDirectMessages returns a page of a conversation's messages: without
+  // after_message_id the newest first, page_token continuing towards older
+  // ones; with it the newer ones oldest first (catching up after a
+  // reconnect, ADR-0005). Deleted messages stay in place without a body.
+  rpc ListDirectMessages(ListDirectMessagesRequest) returns (ListDirectMessagesResponse);
+
+  // DeleteDirectMessage deletes one of the caller's own messages: the body
+  // is erased at once and cannot be restored. Others' messages, and unknown
+  // ones, are ERROR_REASON_MESSAGE_NOT_FOUND. Deleting again changes
+  // nothing. Messages cannot be edited.
+  rpc DeleteDirectMessage(DeleteDirectMessageRequest) returns (DeleteDirectMessageResponse);
+
+  // MarkConversationRead moves the caller's read marker to message_id (a
+  // message of the conversation; ERROR_REASON_MESSAGE_NOT_FOUND otherwise).
+  // The marker only moves forward. The other party sees it in active
+  // conversations only (a requester does not learn that the request was
+  // read).
+  rpc MarkConversationRead(MarkConversationReadRequest) returns (MarkConversationReadResponse);
+
+  // AcceptMessageRequest accepts a request the caller received; the
+  // conversation becomes active. Accepting an active conversation changes
+  // nothing. ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND when the caller has no
+  // such request waiting (for example their own request).
+  rpc AcceptMessageRequest(AcceptMessageRequestRequest) returns (AcceptMessageRequestResponse);
+
+  // DeclineMessageRequest declines a request the caller received. The
+  // sender is not told, cannot write again and still sees the request as
+  // sent; for the caller the conversation disappears. Writing to the sender
+  // later reopens it as active. ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND
+  // otherwise.
+  rpc DeclineMessageRequest(DeclineMessageRequestRequest) returns (DeclineMessageRequestResponse);
+}
+
+// ConversationStatus is the conversation as the caller sees it.
+enum ConversationStatus {
+  CONVERSATION_STATUS_UNSPECIFIED = 0;
+  // Both write freely.
+  CONVERSATION_STATUS_ACTIVE = 1;
+  // The caller sent a request that is not answered yet (or was declined:
+  // the sender is never told).
+  CONVERSATION_STATUS_REQUEST_SENT = 2;
+  // The caller received a request: reply or accept, or decline.
+  CONVERSATION_STATUS_REQUEST_RECEIVED = 3;
+}
+
+message Conversation {
+  string id = 1;
+  // The other party; empty when their account was deleted ("Silinmiş
+  // kullanıcı"; nobody can write to them).
+  string other_user_id = 2;
+  ConversationStatus status = 3;
+  // The caller's unread messages from the other party (at most 100; the
+  // client shows 100 as "99+").
+  int32 unread_count = 4;
+  // The caller's read marker; empty if none.
+  string last_read_message_id = 5;
+  // The other party's read marker, only in active conversations.
+  string peer_last_read_message_id = 6;
+  google.protobuf.Timestamp last_message_time = 7;
+  google.protobuf.Timestamp create_time = 8;
+}
+
+message DirectMessage {
+  string id = 1;
+  string conversation_id = 2;
+  // Empty when the sender's account was deleted.
+  string sender_user_id = 3;
+  // Empty for a deleted message ("Bu mesaj silindi").
+  string body = 4;
+  bool deleted = 5;
+  google.protobuf.Timestamp create_time = 6;
+}
+
+message SendDirectMessageRequest {
+  string recipient_user_id = 1;
+  string body = 2;
+  string client_request_id = 3;
+}
+
+message SendDirectMessageResponse {
+  DirectMessage message = 1;
+  Conversation conversation = 2;
+}
+
+message ListConversationsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListConversationsResponse {
+  repeated Conversation conversations = 1;
+  string next_page_token = 2;
+}
+
+message GetConversationRequest {
+  string conversation_id = 1;
+}
+
+message GetConversationResponse {
+  Conversation conversation = 1;
+}
+
+message ListDirectMessagesRequest {
+  string conversation_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+  // Optional: return the messages newer than this one, oldest first.
+  string after_message_id = 4;
+}
+
+message ListDirectMessagesResponse {
+  repeated DirectMessage messages = 1;
+  string next_page_token = 2;
+}
+
+message DeleteDirectMessageRequest {
+  string conversation_id = 1;
+  string message_id = 2;
+}
+
+message DeleteDirectMessageResponse {}
+
+message MarkConversationReadRequest {
+  string conversation_id = 1;
+  string message_id = 2;
+}
+
+message MarkConversationReadResponse {}
+
+message AcceptMessageRequestRequest {
+  string conversation_id = 1;
+}
+
+message AcceptMessageRequestResponse {
+  Conversation conversation = 1;
+}
+
+message DeclineMessageRequestRequest {
+  string conversation_id = 1;
+}
+
+message DeclineMessageRequestResponse {}

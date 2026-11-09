@@ -370,6 +370,60 @@ func (q *Queries) GetConversationRead(ctx context.Context, arg GetConversationRe
 	return i, err
 }
 
+const getConversationView = `-- name: GetConversationView :one
+SELECT c.id, c.user_low_id, c.user_high_id, c.status, c.requested_by, c.accepted_at, c.last_message_at, c.created_at,
+       r.last_read_message_id, p.last_read_message_id AS peer_last_read_message_id,
+       (SELECT count(*) FROM (
+          SELECT 1 FROM dm_messages m
+          WHERE m.conversation_id = c.id AND m.deleted_at IS NULL
+            AND m.sender_id IS DISTINCT FROM $1::uuid
+            AND (r.last_read_message_id IS NULL OR m.id > r.last_read_message_id)
+          LIMIT 100) u)::int AS unread
+FROM dm_conversations c
+LEFT JOIN dm_conversation_reads r ON r.conversation_id = c.id AND r.user_id = $1::uuid
+LEFT JOIN dm_conversation_reads p ON p.conversation_id = c.id AND p.user_id <> $1::uuid
+WHERE c.id = $2 AND (c.user_low_id = $1::uuid OR c.user_high_id = $1::uuid)
+`
+
+type GetConversationViewParams struct {
+	UserID pgtype.UUID
+	ID     pgtype.UUID
+}
+
+type GetConversationViewRow struct {
+	ID                    pgtype.UUID
+	UserLowID             pgtype.UUID
+	UserHighID            pgtype.UUID
+	Status                string
+	RequestedBy           pgtype.UUID
+	AcceptedAt            pgtype.Timestamptz
+	LastMessageAt         pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	LastReadMessageID     pgtype.UUID
+	PeerLastReadMessageID pgtype.UUID
+	Unread                int32
+}
+
+// Tek konuşma, listedeki sütunlarla (kişi taraf değilse boş).
+func (q *Queries) GetConversationView(ctx context.Context, arg GetConversationViewParams) (GetConversationViewRow, error) {
+	row := q.db.QueryRow(ctx, getConversationView, arg.UserID, arg.ID)
+	var i GetConversationViewRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserLowID,
+		&i.UserHighID,
+		&i.Status,
+		&i.RequestedBy,
+		&i.AcceptedAt,
+		&i.LastMessageAt,
+		&i.CreatedAt,
+		&i.LastReadMessageID,
+		&i.PeerLastReadMessageID,
+		&i.Unread,
+	)
+	return i, err
+}
+
 const getDirectMessage = `-- name: GetDirectMessage :one
 SELECT id, conversation_id, sender_id, body_encrypted, key_version, created_at, deleted_at
 FROM dm_messages

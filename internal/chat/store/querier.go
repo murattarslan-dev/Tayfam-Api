@@ -83,6 +83,8 @@ type Querier interface {
 	GetConversationForUser(ctx context.Context, arg GetConversationForUserParams) (GetConversationForUserRow, error)
 	// Karşı tarafın okunma işareti (okundu bilgisi, v14 "Okunma bilgisi").
 	GetConversationRead(ctx context.Context, arg GetConversationReadParams) (GetConversationReadRow, error)
+	// Tek konuşma, listedeki sütunlarla (kişi taraf değilse boş).
+	GetConversationView(ctx context.Context, arg GetConversationViewParams) (GetConversationViewRow, error)
 	GetDirectMessage(ctx context.Context, arg GetDirectMessageParams) (GetDirectMessageRow, error)
 	// Mesajlar.
 	GetDirectMessageByRequest(ctx context.Context, arg GetDirectMessageByRequestParams) (GetDirectMessageByRequestRow, error)

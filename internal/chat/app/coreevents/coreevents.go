@@ -124,6 +124,10 @@ func (s *Service) Apply(ctx context.Context, e Event) error {
 		if err := r.Validate(); err != nil {
 			return err
 		}
+		// Direct message notices are chat's own; core never asks for them.
+		if notification.IsDirect(r.Type) {
+			return apperr.Validation("notification_requested.type")
+		}
 		if err := pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
 			return notification.Store(ctx, store.New(tx), r)
 		}); err != nil {

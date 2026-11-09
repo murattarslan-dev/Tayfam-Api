@@ -146,3 +146,25 @@ func TestLoadRequiresKeyInProd(t *testing.T) {
 		t.Fatal("bozuk anahtar kabul edildi")
 	}
 }
+
+// Direct message bodies are bound to their message, their conversation and
+// their table: a channel ciphertext does not open as a direct message, nor
+// the other way round.
+func TestDirectBindsMessageConversationAndTable(t *testing.T) {
+	c := Ephemeral()
+	msg, conv := id.New(), id.New()
+	s := c.EncryptDirect(msg, conv, "merhaba")
+	if got, err := c.DecryptDirect(msg, conv, s); err != nil || got != "merhaba" {
+		t.Fatalf("çözüm = %q, %v", got, err)
+	}
+	for name, open := range map[string]func() (string, error){
+		"başka mesaj":   func() (string, error) { return c.DecryptDirect(id.New(), conv, s) },
+		"başka konuşma": func() (string, error) { return c.DecryptDirect(msg, id.New(), s) },
+		"kanal olarak":  func() (string, error) { return c.Decrypt(msg, conv, s) },
+		"kanaldan":      func() (string, error) { return c.DecryptDirect(msg, conv, c.Encrypt(msg, conv, "merhaba")) },
+	} {
+		if _, err := open(); err != ErrDecrypt {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}

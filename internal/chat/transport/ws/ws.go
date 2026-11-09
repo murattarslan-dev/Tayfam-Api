@@ -40,6 +40,7 @@ import (
 
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/channel"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/dm"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/realtime"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/httpx"
@@ -99,6 +100,7 @@ type Live interface {
 	Subscribe(ctx context.Context, m *realtime.Member, tayfa, ch id.ID) error
 	Unsubscribe(m *realtime.Member, tayfa, ch id.ID) bool
 	Send(ctx context.Context, m *realtime.Member, tayfa, ch id.ID, in channel.SendInput) (channel.Message, error)
+	SendDirect(ctx context.Context, m *realtime.Member, in dm.SendInput) (dm.Message, dm.Conversation, error)
 }
 
 // Config wires a Handler.
@@ -435,6 +437,26 @@ type sendData struct {
 	ClientRequestID string `json:"client_request_id"`
 }
 
+type dmSendData struct {
+	RecipientUserID string `json:"recipient_user_id"`
+	Body            string `json:"body"`
+	ClientRequestID string `json:"client_request_id"`
+}
+
+// dmSentData answers dm.send: the message and the conversation's status as
+// the sender sees it.
+type dmSentData struct {
+	realtime.DMData
+	Status string `json:"conversation_status"`
+}
+
+// dmStatuses are the conversation statuses in frames (the REST names).
+var dmStatuses = map[dm.Status]string{
+	dm.StatusActive:          "active",
+	dm.StatusRequestSent:     "request_sent",
+	dm.StatusRequestReceived: "request_received",
+}
+
 func decodeData(raw json.RawMessage, v any) bool {
 	if len(raw) == 0 {
 		return false
@@ -465,6 +487,7 @@ func (c *conn) invalid(frameID, field string) {
 //	subscribe   { tayfa_id, channel_id }  → subscribed
 //	unsubscribe { tayfa_id, channel_id }  → unsubscribed (reason requested)
 //	send        { tayfa_id, channel_id, body, client_request_id } → sent
+//	dm.send     { recipient_user_id, body, client_request_id }     → dm.sent
 func (c *conn) handle(ctx context.Context, f frame) {
 	switch f.Type {
 	case "subscribe", "unsubscribe":
@@ -512,6 +535,28 @@ func (c *conn) handle(ctx context.Context, f frame) {
 			return
 		}
 		c.sendFrame("sent", f.ID, realtime.MessageFrom(tayfa, msg))
+	case "dm.send":
+		var d dmSendData
+		if !decodeData(f.Data, &d) {
+			c.invalid(f.ID, "data")
+			return
+		}
+		recipient, ok := id.Parse(d.RecipientUserID)
+		if !ok {
+			c.invalid(f.ID, "recipient_user_id")
+			return
+		}
+		req, ok := id.Parse(d.ClientRequestID)
+		if !ok {
+			c.invalid(f.ID, "client_request_id")
+			return
+		}
+		msg, conv, err := c.cfg.Live.SendDirect(ctx, c.m, dm.SendInput{Recipient: recipient, Body: d.Body, ClientRequestID: req})
+		if err != nil {
+			c.appError(ctx, f.ID, err)
+			return
+		}
+		c.sendFrame("dm.sent", f.ID, dmSentData{DMData: realtime.DMFrom(msg), Status: dmStatuses[conv.Status]})
 	default:
 		c.fail(f.ID, "unsupported_type")
 	}
@@ -545,6 +590,11 @@ func (c *conn) appError(ctx context.Context, frameID string, err error) {
 		{realtime.ErrTooManySubscriptions, "too_many_subscriptions"},
 		{apperr.ErrUnavailable, "unavailable"},
 		{apperr.ErrChannelsUnavailable, "unavailable"},
+		{apperr.ErrConversationNotFound, "conversation_not_found"},
+		{apperr.ErrDirectMessageNotAllowed, "direct_message_not_allowed"},
+		{apperr.ErrMessageRequestPending, "message_request_pending"},
+		{apperr.ErrMessageRequestLimit, "message_request_limit"},
+		{apperr.ErrDirectMessagesUnavailable, "unavailable"},
 		{context.DeadlineExceeded, "unavailable"},
 	} {
 		if errors.Is(err, e.err) {

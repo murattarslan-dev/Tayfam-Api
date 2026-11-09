@@ -136,6 +136,10 @@ func TestValidation(t *testing.T) {
 		"tayfalı arkadaşlık": req(func(r *notification.Request) {
 			r.Type, r.TargetType = notification.TypeFriendRequest, notification.TargetUser
 		}),
+		// Direct message notices are chat's own; core cannot ask for them.
+		"core'dan DM bildirimi": {ID: id.New(), Notification: &notification.Request{
+			Type: notification.TypeDMMessage, TargetType: notification.TargetDMConversation, Target: id.New(), Recipients: []id.ID{u},
+		}},
 		"arkadaşlık hedefi": {ID: id.New(), Notification: &notification.Request{
 			Type: notification.TypeFriendAccepted, TargetType: notification.TargetTayfa, Target: id.New(), Recipients: []id.ID{u},
 		}},

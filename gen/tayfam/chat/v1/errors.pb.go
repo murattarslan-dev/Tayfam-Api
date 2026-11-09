@@ -78,6 +78,23 @@ const (
 	//
 	// Deprecated: Marked as deprecated in tayfam/chat/v1/errors.proto.
 	ErrorReason_ERROR_REASON_TICKET_LIMIT ErrorReason = 13
+	// NOT_FOUND. No such conversation of the caller, or a request the caller
+	// declined. These cases are indistinguishable on purpose.
+	ErrorReason_ERROR_REASON_CONVERSATION_NOT_FOUND ErrorReason = 14
+	// PERMISSION_DENIED. The caller cannot write to this user (core's answer:
+	// a block in either direction, no shared live tayfa and no friendship, or
+	// an unknown or deleted user). Which one is never said.
+	ErrorReason_ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED ErrorReason = 15
+	// FAILED_PRECONDITION. The caller's message request waits for an answer;
+	// only one message until the recipient replies or accepts. Also after a
+	// decline, which the sender is never told.
+	ErrorReason_ERROR_REASON_MESSAGE_REQUEST_PENDING ErrorReason = 16
+	// RESOURCE_EXHAUSTED. The caller opened as many message requests in the
+	// last 24 hours as allowed (5 or 20). Declined requests still count.
+	ErrorReason_ERROR_REASON_MESSAGE_REQUEST_LIMIT ErrorReason = 17
+	// NOT_FOUND. No message request waits for the caller in this
+	// conversation.
+	ErrorReason_ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND ErrorReason = 18
 )
 
 // Enum value maps for ErrorReason.
@@ -97,22 +114,32 @@ var (
 		11: "ERROR_REASON_TAYFA_READ_ONLY",
 		12: "ERROR_REASON_ROLE_HIERARCHY",
 		13: "ERROR_REASON_TICKET_LIMIT",
+		14: "ERROR_REASON_CONVERSATION_NOT_FOUND",
+		15: "ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED",
+		16: "ERROR_REASON_MESSAGE_REQUEST_PENDING",
+		17: "ERROR_REASON_MESSAGE_REQUEST_LIMIT",
+		18: "ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND",
 	}
 	ErrorReason_value = map[string]int32{
-		"ERROR_REASON_UNSPECIFIED":            0,
-		"ERROR_REASON_VALIDATION":             1,
-		"ERROR_REASON_NOTIFICATION_NOT_FOUND": 2,
-		"ERROR_REASON_TAYFA_NOT_FOUND":        3,
-		"ERROR_REASON_CHANNEL_NOT_FOUND":      4,
-		"ERROR_REASON_MESSAGE_NOT_FOUND":      5,
-		"ERROR_REASON_PERMISSION_DENIED":      6,
-		"ERROR_REASON_MUTED":                  7,
-		"ERROR_REASON_CHANNEL_ARCHIVED":       8,
-		"ERROR_REASON_CHANNEL_NAME_TAKEN":     9,
-		"ERROR_REASON_SLOW_MODE":              10,
-		"ERROR_REASON_TAYFA_READ_ONLY":        11,
-		"ERROR_REASON_ROLE_HIERARCHY":         12,
-		"ERROR_REASON_TICKET_LIMIT":           13,
+		"ERROR_REASON_UNSPECIFIED":                0,
+		"ERROR_REASON_VALIDATION":                 1,
+		"ERROR_REASON_NOTIFICATION_NOT_FOUND":     2,
+		"ERROR_REASON_TAYFA_NOT_FOUND":            3,
+		"ERROR_REASON_CHANNEL_NOT_FOUND":          4,
+		"ERROR_REASON_MESSAGE_NOT_FOUND":          5,
+		"ERROR_REASON_PERMISSION_DENIED":          6,
+		"ERROR_REASON_MUTED":                      7,
+		"ERROR_REASON_CHANNEL_ARCHIVED":           8,
+		"ERROR_REASON_CHANNEL_NAME_TAKEN":         9,
+		"ERROR_REASON_SLOW_MODE":                  10,
+		"ERROR_REASON_TAYFA_READ_ONLY":            11,
+		"ERROR_REASON_ROLE_HIERARCHY":             12,
+		"ERROR_REASON_TICKET_LIMIT":               13,
+		"ERROR_REASON_CONVERSATION_NOT_FOUND":     14,
+		"ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED": 15,
+		"ERROR_REASON_MESSAGE_REQUEST_PENDING":    16,
+		"ERROR_REASON_MESSAGE_REQUEST_LIMIT":      17,
+		"ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND":  18,
 	}
 )
 
@@ -147,7 +174,7 @@ var File_tayfam_chat_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\xe1\x03\n" +
+	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\xb5\x05\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12'\n" +
@@ -163,7 +190,12 @@ const file_tayfam_chat_v1_errors_proto_rawDesc = "" +
 	"\x12 \n" +
 	"\x1cERROR_REASON_TAYFA_READ_ONLY\x10\v\x12\x1f\n" +
 	"\x1bERROR_REASON_ROLE_HIERARCHY\x10\f\x12!\n" +
-	"\x19ERROR_REASON_TICKET_LIMIT\x10\r\x1a\x02\b\x01B\xbd\x01\n" +
+	"\x19ERROR_REASON_TICKET_LIMIT\x10\r\x1a\x02\b\x01\x12'\n" +
+	"#ERROR_REASON_CONVERSATION_NOT_FOUND\x10\x0e\x12+\n" +
+	"'ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED\x10\x0f\x12(\n" +
+	"$ERROR_REASON_MESSAGE_REQUEST_PENDING\x10\x10\x12&\n" +
+	"\"ERROR_REASON_MESSAGE_REQUEST_LIMIT\x10\x11\x12*\n" +
+	"&ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND\x10\x12B\xbd\x01\n" +
 	"\x12com.tayfam.chat.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1;chatv1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Chat.V1\xca\x02\x0eTayfam\\Chat\\V1\xe2\x02\x1aTayfam\\Chat\\V1\\GPBMetadata\xea\x02\x10Tayfam::Chat::V1b\x06proto3"
 
 var (

@@ -86,6 +86,21 @@ WHERE (c.user_low_id = @user_id::uuid OR c.user_high_id = @user_id::uuid)
 ORDER BY c.last_message_at DESC, c.id DESC
 LIMIT @n;
 
+-- Tek konuşma, listedeki sütunlarla (kişi taraf değilse boş).
+-- name: GetConversationView :one
+SELECT c.id, c.user_low_id, c.user_high_id, c.status, c.requested_by, c.accepted_at, c.last_message_at, c.created_at,
+       r.last_read_message_id, p.last_read_message_id AS peer_last_read_message_id,
+       (SELECT count(*) FROM (
+          SELECT 1 FROM dm_messages m
+          WHERE m.conversation_id = c.id AND m.deleted_at IS NULL
+            AND m.sender_id IS DISTINCT FROM @user_id::uuid
+            AND (r.last_read_message_id IS NULL OR m.id > r.last_read_message_id)
+          LIMIT 100) u)::int AS unread
+FROM dm_conversations c
+LEFT JOIN dm_conversation_reads r ON r.conversation_id = c.id AND r.user_id = @user_id::uuid
+LEFT JOIN dm_conversation_reads p ON p.conversation_id = c.id AND p.user_id <> @user_id::uuid
+WHERE c.id = @id AND (c.user_low_id = @user_id::uuid OR c.user_high_id = @user_id::uuid);
+
 -- Mesajlar.
 
 -- name: GetDirectMessageByRequest :one
