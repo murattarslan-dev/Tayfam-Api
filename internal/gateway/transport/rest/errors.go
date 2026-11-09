@@ -107,6 +107,14 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_VALIDATION":             {http.StatusBadRequest, "invalid-request"},
 		"ERROR_REASON_NOTIFICATION_NOT_FOUND": {http.StatusNotFound, "notification-not-found"},
 		"ERROR_REASON_TAYFA_NOT_FOUND":        {http.StatusNotFound, "tayfa-not-found"},
+		// Channels (issue #81).
+		"ERROR_REASON_CHANNEL_NOT_FOUND":  {http.StatusNotFound, "channel-not-found"},
+		"ERROR_REASON_MESSAGE_NOT_FOUND":  {http.StatusNotFound, "message-not-found"},
+		"ERROR_REASON_PERMISSION_DENIED":  {http.StatusForbidden, "permission-denied"},
+		"ERROR_REASON_MUTED":              {http.StatusForbidden, "muted"},
+		"ERROR_REASON_CHANNEL_ARCHIVED":   {http.StatusConflict, "channel-archived"},
+		"ERROR_REASON_CHANNEL_NAME_TAKEN": {http.StatusConflict, "channel-name-taken"},
+		"ERROR_REASON_SLOW_MODE":          {http.StatusTooManyRequests, "slow-mode"},
 	},
 }
 

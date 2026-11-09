@@ -102,14 +102,15 @@ func setup(rt *service.Runtime) error {
 		}
 	}
 	if conn := conns["chat"]; conn != nil {
-		// Bildirim uçları (issue #64): gateway token'ı chat'e ulaşmadan
-		// doğrular; chat yeniden doğrular (ADR-0011).
+		// Bildirim (issue #64) ve kanal (issue #81) uçları: gateway token'ı
+		// chat'e ulaşmadan doğrular; chat yeniden doğrular (ADR-0011).
 		v, err := rt.IdentityVerifier()
 		if err != nil {
 			return err
 		}
 		deps.Chat = rest.ChatDeps{
 			Notifications: chatv1.NewNotificationServiceClient(conn),
+			Channels:      chatv1.NewChannelServiceClient(conn),
 			Verifier:      v,
 			Log:           rt.Log,
 		}
