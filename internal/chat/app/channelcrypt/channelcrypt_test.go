@@ -163,7 +163,7 @@ func TestDirectBindsMessageConversationAndTable(t *testing.T) {
 		"kanal olarak":  func() (string, error) { return c.Decrypt(msg, conv, s) },
 		"kanaldan":      func() (string, error) { return c.DecryptDirect(msg, conv, c.Encrypt(msg, conv, "merhaba")) },
 	} {
-		if _, err := open(); err != ErrDecrypt {
+		if _, err := open(); !errors.Is(err, ErrDecrypt) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
