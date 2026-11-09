@@ -117,6 +117,12 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_SLOW_MODE":          {http.StatusTooManyRequests, "slow-mode"},
 		"ERROR_REASON_TAYFA_READ_ONLY":    {http.StatusConflict, "tayfa-read-only"},
 		"ERROR_REASON_ROLE_HIERARCHY":     {http.StatusForbidden, "role-hierarchy"},
+		// Direct messages (issue #95).
+		"ERROR_REASON_CONVERSATION_NOT_FOUND":     {http.StatusNotFound, "conversation-not-found"},
+		"ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED": {http.StatusForbidden, "direct-message-not-allowed"},
+		"ERROR_REASON_MESSAGE_REQUEST_PENDING":    {http.StatusConflict, "message-request-pending"},
+		"ERROR_REASON_MESSAGE_REQUEST_LIMIT":      {http.StatusTooManyRequests, "message-request-limit"},
+		"ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND":  {http.StatusNotFound, "message-request-not-found"},
 	},
 }
 

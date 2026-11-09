@@ -29,6 +29,9 @@ type ChatDeps struct {
 	Notifications NotificationClient
 	// Channels enables the channel routes when set.
 	Channels ChannelClient
+	// DirectMessages enables the direct message routes when set (issue
+	// #95).
+	DirectMessages DirectMessageClient
 	// RealtimeURL (chat's HTTP port) enables the WebSocket route (issue
 	// #82).
 	RealtimeURL *url.URL
@@ -78,6 +81,8 @@ var notificationTypeNames = map[chatv1.NotificationType]string{
 	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_ACCEPTED:          "friend_accepted",
 	chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_INVITATION:         "tayfa_invitation",
 	chatv1.NotificationType_NOTIFICATION_TYPE_REPORT_RESOLVED:          "report_resolved",
+	chatv1.NotificationType_NOTIFICATION_TYPE_DM_REQUEST:               "dm_request",
+	chatv1.NotificationType_NOTIFICATION_TYPE_DM_MESSAGE:               "dm_message",
 }
 
 var warningReasonNames = map[chatv1.TayfaWarningReason]string{
@@ -86,13 +91,14 @@ var warningReasonNames = map[chatv1.TayfaWarningReason]string{
 }
 
 var notificationTargetNames = map[chatv1.NotificationTargetType]string{
-	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_TAYFA:        "tayfa",
-	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_MEMBERSHIP:   "membership",
-	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT: "announcement",
-	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_EVENT:        "event",
-	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_ANSWER:       "answer",
-	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_USER:         "user",
-	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_REPORT:       "report",
+	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_TAYFA:           "tayfa",
+	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_MEMBERSHIP:      "membership",
+	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT:    "announcement",
+	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_EVENT:           "event",
+	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_ANSWER:          "answer",
+	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_USER:            "user",
+	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_REPORT:          "report",
+	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_DM_CONVERSATION: "dm_conversation",
 }
 
 var notificationLevelNames = map[chatv1.NotificationLevel]string{
