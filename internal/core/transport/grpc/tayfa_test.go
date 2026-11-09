@@ -223,7 +223,7 @@ func startGuarded(t *testing.T) (corev1.TayfaServiceClient, func(user id.ID) con
 	if err != nil {
 		t.Fatal(err)
 	}
-	pool := dbtest.New(t, coredb.Migrations())
+	pool := dbtest.New(t, "core", coredb.Migrations())
 	app, err := tayfa.New(tayfa.Config{Pool: pool, Log: discard})
 	if err != nil {
 		t.Fatal(err)

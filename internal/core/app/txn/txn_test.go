@@ -15,7 +15,7 @@ import (
 )
 
 func TestWithActor(t *testing.T) {
-	pool := dbtest.New(t, coredb.Migrations())
+	pool := dbtest.New(t, "core", coredb.Migrations())
 	ctx := context.Background()
 	actor := id.New()
 
@@ -57,7 +57,7 @@ func TestWithActor(t *testing.T) {
 }
 
 func TestAuditAndEvent(t *testing.T) {
-	pool := dbtest.New(t, coredb.Migrations())
+	pool := dbtest.New(t, "core", coredb.Migrations())
 	ctx := context.Background()
 	actor, tayfa, target := id.New(), id.New(), id.New()
 	err := WithActor(ctx, pool, actor, func(tx pgx.Tx, q *store.Queries) error {

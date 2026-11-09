@@ -36,7 +36,7 @@ type env struct {
 
 func setup(t *testing.T) *env {
 	t.Helper()
-	pool := dbtest.New(t, identitydb.Migrations())
+	pool := dbtest.New(t, "identity", identitydb.Migrations())
 	c, err := birthdate.ParseKeys("1:" + base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{3}, 32)))
 	if err != nil {
 		t.Fatal(err)

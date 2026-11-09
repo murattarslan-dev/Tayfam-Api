@@ -45,7 +45,9 @@ func (c *countLimiter) Allow(k string) bool {
 type env struct {
 	svc  *Service
 	pool *pgxpool.Pool
-	q    *store.Queries
+	// admin is a superuser pool for fixtures core_app cannot write.
+	admin *pgxpool.Pool
+	q     *store.Queries
 }
 
 func setup(t *testing.T) *env {
@@ -55,12 +57,12 @@ func setup(t *testing.T) *env {
 
 func setupWith(t *testing.T, l Limiter) *env {
 	t.Helper()
-	pool := dbtest.New(t, coredb.Migrations())
-	svc, err := New(Config{Pool: pool, JoinLimiter: l})
+	d := dbtest.Open(t, "core", coredb.Migrations())
+	svc, err := New(Config{Pool: d.App, JoinLimiter: l})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &env{svc: svc, pool: pool, q: store.New(pool)}
+	return &env{svc: svc, pool: d.App, admin: d.Admin, q: store.New(d.App)}
 }
 
 var ctx = context.Background()
@@ -134,11 +136,11 @@ func (e *env) newTayfa(t *testing.T, policy string) tayfa {
 }
 
 // seed writes a membership directly with triggers disabled, to set up a
-// state for a test (the test connection is a superuser).
+// state for a test (superuser pool; core_app cannot do this).
 func (e *env) seed(t *testing.T, tf id.ID, role authz.Role, st authz.Status) id.ID {
 	t.Helper()
 	u := id.New()
-	tx, err := e.pool.Begin(ctx)
+	tx, err := e.admin.Begin(ctx)
 	must(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = tx.Exec(ctx, "SET LOCAL session_replication_role = replica")

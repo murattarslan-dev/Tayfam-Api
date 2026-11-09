@@ -23,9 +23,11 @@ export AUTH_ISSUER=tayfam-identity AUTH_AUDIENCE=tayfam-api
 signing_key="local:$(head -c 32 /dev/urandom | base64 -w0)"
 
 # identity, core ve chat veritabanları: make test-db ile açılan yerel Postgres
-# (docker compose). Her servis kendi veritabanına bağlanır.
+# (docker compose). Her servis kendi veritabanına bağlanır; migration'ı sahip
+# kullanıcı (<servis>), servisi çalışma zamanı kullanıcısı (<servis>_app)
+# çalıştırır (ADR-0014, scripts/postgres-init.sql).
 export DB_HOST=${DB_HOST:-127.0.0.1} DB_PORT=${DB_PORT:-5432} \
-  DB_USER=${DB_USER:-postgres} DB_PASSWORD=${DB_PASSWORD:-yerel} DB_SSLMODE=${DB_SSLMODE:-disable}
+  DB_PASSWORD=${DB_PASSWORD:-yerel} DB_SSLMODE=${DB_SSLMODE:-disable}
 identity_db=${IDENTITY_DB_NAME:-identity}
 core_db=${CORE_DB_NAME:-core}
 chat_db=${CHAT_DB_NAME:-chat}
@@ -35,14 +37,14 @@ birthdate_key="1:$(head -c 32 /dev/urandom | base64 -w0)"
 # Kanal mesajı anahtarı da her çalıştırmada yenidir: önceki çalıştırmanın
 # kanal mesajları okunamaz (yerel, atılabilir veri).
 message_key="1:$(head -c 32 /dev/urandom | base64 -w0)"
-DB_NAME=$identity_db ./bin/identity migrate
-DB_NAME=$core_db ./bin/core migrate
-DB_NAME=$chat_db ./bin/chat migrate
-DB_NAME=$identity_db AUTH_SIGNING_KEY=$signing_key IDENTITY_BIRTHDATE_KEYS=$birthdate_key \
+DB_NAME=$identity_db DB_USER=identity ./bin/identity migrate
+DB_NAME=$core_db DB_USER=core ./bin/core migrate
+DB_NAME=$chat_db DB_USER=chat ./bin/chat migrate
+DB_NAME=$identity_db DB_USER=identity_app AUTH_SIGNING_KEY=$signing_key IDENTITY_BIRTHDATE_KEYS=$birthdate_key \
   OPS_ADDR=127.0.0.1:8091 GRPC_ADDR=127.0.0.1:9091 ./bin/identity & pids+=($!)
 unset signing_key birthdate_key
-DB_NAME=$core_db IDENTITY_GRPC_ADDR=127.0.0.1:9091 OPS_ADDR=127.0.0.1:8092 GRPC_ADDR=127.0.0.1:9092 ./bin/core & pids+=($!)
-DB_NAME=$chat_db CHAT_MESSAGE_KEYS=$message_key IDENTITY_GRPC_ADDR=127.0.0.1:9091 CORE_GRPC_ADDR=127.0.0.1:9092 OPS_ADDR=127.0.0.1:8093 GRPC_ADDR=127.0.0.1:9093 \
+DB_NAME=$core_db DB_USER=core_app IDENTITY_GRPC_ADDR=127.0.0.1:9091 OPS_ADDR=127.0.0.1:8092 GRPC_ADDR=127.0.0.1:9092 ./bin/core & pids+=($!)
+DB_NAME=$chat_db DB_USER=chat_app CHAT_MESSAGE_KEYS=$message_key IDENTITY_GRPC_ADDR=127.0.0.1:9091 CORE_GRPC_ADDR=127.0.0.1:9092 OPS_ADDR=127.0.0.1:8093 GRPC_ADDR=127.0.0.1:9093 \
   HTTP_ADDR=127.0.0.1:8094 CORS_ALLOWED_ORIGINS=http://localhost:3000 ./bin/chat & pids+=($!)
 unset message_key
 

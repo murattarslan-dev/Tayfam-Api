@@ -26,7 +26,8 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       # Migration'lar servis binary'sinin "migrate" alt komutuyla, servis
       # başlamadan önce çalışır; advisory lock aynı anda tek migration'ı
-      # garanti eder (ADR-0006).
+      # garanti eder (ADR-0006). Şemanın sahibi identity kullanıcısıyla bağlanan
+      # tek container budur (ADR-0014).
       initContainers:
         - name: migrate
           image: ghcr.io/murattarslan-dev/tayfam-identity
@@ -82,14 +83,16 @@ spec:
             - name: IDENTITY_BIRTHDATE_KEYS
               valueFrom:
                 secretKeyRef: { name: identity-birthdate-key, key: IDENTITY_BIRTHDATE_KEYS }
+            # Çalışma zamanı kullanıcısı identity_app (ADR-0014); sahip
+            # (identity-db) yalnızca migrate initContainer'ındadır.
             - { name: DB_HOST, value: tayfam-pg-rw }
             - { name: DB_NAME, value: identity }
             - name: DB_USER
               valueFrom:
-                secretKeyRef: { name: identity-db, key: username }
+                secretKeyRef: { name: identity-app-db, key: username }
             - name: DB_PASSWORD
               valueFrom:
-                secretKeyRef: { name: identity-db, key: password }
+                secretKeyRef: { name: identity-app-db, key: password }
           ports:
             - { name: grpc, containerPort: 9090 }
             - { name: ops, containerPort: 8081 }
