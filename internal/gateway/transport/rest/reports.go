@@ -73,9 +73,6 @@ var (
 		"member_sanctioned": corev1.ReportResolution_REPORT_RESOLUTION_MEMBER_SANCTIONED,
 		"dismissed":         corev1.ReportResolution_REPORT_RESOLUTION_DISMISSED,
 	})
-	reportPriorities = newEnum(map[string]corev1.ReportPriority{
-		"normal": corev1.ReportPriority_REPORT_PRIORITY_NORMAL, "minor_involved": corev1.ReportPriority_REPORT_PRIORITY_MINOR_INVOLVED,
-	})
 	reportOutcomes = newEnum(map[string]corev1.ReportOutcome{
 		"action_taken": corev1.ReportOutcome_REPORT_OUTCOME_ACTION_TAKEN, "dismissed": corev1.ReportOutcome_REPORT_OUTCOME_DISMISSED,
 	})
@@ -107,7 +104,8 @@ func myReportFrom(m *corev1.MyReport) myReportJSON {
 	return out
 }
 
-// modReportJSON has no field for the reporter.
+// modReportJSON has no field for the reporter, the priority or the
+// escalation (ADR-0012: tayfa admins never learn that a party is under 18).
 type modReportJSON struct {
 	ID            string `json:"id"`
 	TayfaID       string `json:"tayfa_id"`
@@ -116,12 +114,10 @@ type modReportJSON struct {
 	SubjectUserID string `json:"subject_user_id,omitempty"`
 	Reason        string `json:"reason"`
 	Description   string `json:"description,omitempty"`
-	Priority      string `json:"priority"`
 	Status        string `json:"status"`
 	// Resolved reports only.
 	Resolution      string     `json:"resolution,omitempty"`
 	HandledByUserID string     `json:"handled_by_user_id,omitempty"`
-	Escalated       bool       `json:"escalated"`
 	CreatedAt       time.Time  `json:"created_at"`
 	ResolvedAt      *time.Time `json:"resolved_at,omitempty"`
 }
@@ -130,8 +126,7 @@ func modReportFrom(m *corev1.ModerationReport) modReportJSON {
 	out := modReportJSON{
 		ID: m.GetId(), TayfaID: m.GetTayfaId(), TargetType: reportTargets.name(m.GetTargetType()), TargetID: m.GetTargetId(),
 		SubjectUserID: m.GetSubjectUserId(), Reason: reportReasons.name(m.GetReason()), Description: m.GetDescription(),
-		Priority: reportPriorities.name(m.GetPriority()), Status: reportStatuses.name(m.GetStatus()),
-		HandledByUserID: m.GetHandledByUserId(), Escalated: m.GetEscalated(),
+		Status: reportStatuses.name(m.GetStatus()), HandledByUserID: m.GetHandledByUserId(),
 		CreatedAt: m.GetCreateTime().AsTime(), ResolvedAt: optTime(m.GetResolveTime()),
 	}
 	if m.GetResolution() != corev1.ReportResolution_REPORT_RESOLUTION_UNSPECIFIED {

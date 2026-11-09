@@ -30,8 +30,7 @@ func testModReport() *corev1.ModerationReport {
 	return &corev1.ModerationReport{
 		Id: reportID, TayfaId: tayfaID, TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_USER, TargetId: targetID,
 		SubjectUserId: targetID, Reason: corev1.ReportReason_REPORT_REASON_CHILD_SAFETY,
-		Priority: corev1.ReportPriority_REPORT_PRIORITY_MINOR_INVOLVED, Status: corev1.ReportStatus_REPORT_STATUS_OPEN,
-		Escalated: true, CreateTime: timestamppb.New(t0),
+		Status: corev1.ReportStatus_REPORT_STATUS_OPEN, CreateTime: timestamppb.New(t0),
 	}
 }
 
@@ -103,12 +102,14 @@ func TestReportRoutes(t *testing.T) {
 	}
 	w = as(h, "GET", base, "")
 	q := decodeBody[modReportListJSON](t, w)
-	if len(q.Reports) != 1 || q.Reports[0].Priority != "minor_involved" || q.Reports[0].Reason != "child_safety" ||
-		q.Reports[0].SubjectUserID != targetID || !q.Reports[0].Escalated || q.Reports[0].Resolution != "" || q.Reports[0].HandledByUserID != "" {
+	if len(q.Reports) != 1 || q.Reports[0].Reason != "child_safety" ||
+		q.Reports[0].SubjectUserID != targetID || q.Reports[0].Resolution != "" || q.Reports[0].HandledByUserID != "" {
 		t.Fatalf("kuyruk: %+v", q)
 	}
-	if strings.Contains(w.Body.String(), "reporter") {
-		t.Fatalf("kuyrukta şikâyet eden: %s", w.Body)
+	for _, banned := range []string{"reporter", "priority", "minor", "escalat"} {
+		if strings.Contains(w.Body.String(), banned) {
+			t.Fatalf("kuyrukta %s: %s", banned, w.Body)
+		}
 	}
 	w = as(h, "POST", base+"/"+reportID+"/resolution", `{"resolution":"dismissed"}`)
 	if r := decodeBody[modReportJSON](t, w); r.Resolution != "dismissed" || r.HandledByUserID != userID || r.ResolvedAt == nil {

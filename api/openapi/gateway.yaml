@@ -2769,10 +2769,11 @@ paths:
       operationId: listTayfaReports
       summary: Tayfanın moderasyon kuyruğu (moderatör, yönetici)
       description: |
-        `status=open` (varsayılan): önce `minor_involved` öncelikliler, sonra
-        eskiden yeniye. `status=resolved`: son çözülen önce. Platforma özel
-        şikâyetler ve sizin hakkınızdaki şikâyetler listelenmez. Şikâyet
-        edenin kimliği yoktur; önceliğe göre kimsenin yaşı gösterilmez.
+        `status=open` (varsayılan): eskiden yeniye. `status=resolved`: son
+        çözülen önce. Platforma özel şikâyetler ve sizin hakkınızdaki
+        şikâyetler listelenmez. Şikâyet edenin kimliği yoktur. Taraflardan
+        birinin 18 yaşından küçük olup olmadığı hiçbir biçimde (alan, sıra)
+        gösterilmez; bu öncelik yalnızca platform tarafındadır (ADR-0012).
         Susturulmuş moderatör de okur.
       parameters:
         - name: status
@@ -4564,11 +4565,10 @@ security:
     ModerationReport:
       type: object
       description: |
-        Şikâyet, tayfa moderatörünün gördüğü haliyle. Şikâyet edenin kimliği
-        için alan yoktur. `priority: minor_involved` taraflardan birinin 18
-        yaşından küçük olduğunu (ya da bilinmediğini) söyler; hangisi olduğu
-        ve kimsenin yaşı gösterilmez.
-      required: [id, tayfa_id, target_type, target_id, reason, priority, status, escalated, created_at]
+        Şikâyet, tayfa moderatörünün gördüğü haliyle. Şikâyet edenin kimliği,
+        öncelik ve platforma yükselme bilgisi için alan yoktur (ADR-0012:
+        tayfa yöneticileri 18 yaş altı bilgisini görmez).
+      required: [id, tayfa_id, target_type, target_id, reason, status, created_at]
       properties:
         id: { type: string, format: uuid }
         tayfa_id: { type: string, format: uuid }
@@ -4580,7 +4580,6 @@ security:
           description: Şikâyet edilen üye ya da içeriğin yazarı; hesap silindiyse yoktur.
         reason: { $ref: "#/components/schemas/ReportReason" }
         description: { type: string }
-        priority: { type: string, enum: [normal, minor_involved] }
         status: { type: string, enum: [open, resolved] }
         resolution:
           type: string
@@ -4590,9 +4589,6 @@ security:
           type: string
           format: uuid
           description: Çözen moderatör; açıkken ya da hesap silindiyse yoktur.
-        escalated:
-          type: boolean
-          description: Şikâyet platforma da yükseldi (7 gün çözülmedi, çocuk güvenliği ya da öncelik).
         created_at: { type: string, format: date-time }
         resolved_at: { type: string, format: date-time }
 
