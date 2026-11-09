@@ -83,7 +83,14 @@ func TestListCarriesIDsOnly(t *testing.T) {
 	if len(list) != 3 || next != "" {
 		t.Fatalf("liste = %+v %q", list, next)
 	}
-	warned, hike, answer := list[0], list[1], list[2]
+	// The three rows are often written in the same millisecond, where
+	// UUIDv7 order is random (issue #88): find them by type, not position.
+	// TestListOrderWithinMillisecond pins the order itself.
+	byType := map[string]Notification{}
+	for _, n := range list {
+		byType[n.Type] = n
+	}
+	warned, hike, answer := byType[TypeTayfaWarned], byType[TypeHikeOverdue], byType[TypeAnswerReceived]
 	if warned.Type != TypeTayfaWarned || warned.Reason != ReasonInactive || warned.Actor != (id.ID{}) {
 		t.Errorf("uyarı = %+v", warned)
 	}
@@ -93,6 +100,64 @@ func TestListCarriesIDsOnly(t *testing.T) {
 	if answer.Type != TypeAnswerReceived || answer.Question != q || answer.Target != a || answer.Actor != actor ||
 		answer.Tayfa != e.tayfa || !answer.ReadAt.IsZero() {
 		t.Errorf("cevap = %+v", answer)
+	}
+}
+
+// TestListOrderWithinMillisecond: the list is ordered by id alone (newest
+// first), a total order on a unique key, so rows written in the same
+// millisecond still come back in one fixed order and keyset pages neither
+// repeat nor skip a row, whatever the insertion order or created_at
+// (issue #88).
+func TestListOrderWithinMillisecond(t *testing.T) {
+	e := setup(t)
+	u := id.New()
+	// Three IDs of one millisecond that differ only in their last random
+	// byte.
+	lo := id.New()
+	lo[15] = 0
+	mid, hi := lo, lo
+	mid[15], hi[15] = 1, 2
+	// Insert in reverse id order with created_at running the other way: the
+	// worst case for an order that leaned on either.
+	at := time.Now().UTC()
+	for i, n := range []id.ID{hi, lo, mid} {
+		_, err := e.pool.Exec(ctx, `INSERT INTO notifications (id, user_id, tayfa_id, type, target_type, target_id, source_event_id, created_at)
+			VALUES ($1, $2, $3, 'announcement', 'announcement', $4, $5, $6)`,
+			n.PG(), u.PG(), e.tayfa.PG(), id.New().PG(), id.New().PG(), at.Add(time.Duration(i)*time.Microsecond))
+		must(t, err)
+	}
+	want := []id.ID{hi, mid, lo}
+
+	all, next, err := e.svc.List(ctx, u, 10, "")
+	must(t, err)
+	if len(all) != 3 || next != "" {
+		t.Fatalf("liste = %+v %q", all, next)
+	}
+	for i := range want {
+		if all[i].ID != want[i] {
+			t.Fatalf("sıra %d = %v, beklenen %v", i, all[i].ID, want[i])
+		}
+	}
+
+	var paged []id.ID
+	tok := ""
+	for range len(want) + 1 {
+		page, n, err := e.svc.List(ctx, u, 1, tok)
+		must(t, err)
+		for _, p := range page {
+			paged = append(paged, p.ID)
+		}
+		if tok = n; tok == "" {
+			break
+		}
+	}
+	if len(paged) != len(want) {
+		t.Fatalf("sayfalar = %v", paged)
+	}
+	for i := range want {
+		if paged[i] != want[i] {
+			t.Fatalf("sayfa sırası %d = %v, beklenen %v", i, paged[i], want[i])
+		}
 	}
 }
 
