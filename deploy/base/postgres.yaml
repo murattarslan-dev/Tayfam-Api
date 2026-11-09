@@ -90,8 +90,12 @@ spec:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { memory: 768Mi }
 ---
-# Veritabanları template1'den oluşturulur; initdb onu zaten ICU tr-TR ile
-# kurduğu için yerel ayar aynıdır. (template alanı burada yazılmaz: kustomize'ın
+# Veritabanları template1'den oluşturulur. CNPG'nin initdb'si template1'i
+# yerel ayar C ile bırakır; bu yüzden yeni cluster'da template1 bir kez ICU
+# tr-TR / C.UTF-8 ile yeniden oluşturulmalıdır (docs/runbooks/flux-kurulumu.md,
+# "Veritabanı oluşmuyor"). Aksi halde Database kaynağı "new collation
+# (C.UTF-8) is incompatible with the collation of the template database (C)"
+# hatasıyla uygulanmaz. (template: template0 burada yazılamaz: kustomize'ın
 # image dönüştürücüsü spec.template'i pod şablonu sanıp hata veriyor.)
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
