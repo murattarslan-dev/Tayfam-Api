@@ -63,6 +63,12 @@ func TestInviteFriend(t *testing.T) {
 		AND payload = jsonb_build_object('tayfa_id', $2::text, 'user_id', $3::text)`, member.PG(), tf.id.PG(), f.String()); n != 1 {
 		t.Fatalf("davet olayı = %d", n)
 	}
+	// The invited user (not a member yet) is notified, alone.
+	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'notification.requested' AND actor_id = $1 AND tayfa_id = $2
+		AND payload = jsonb_build_object('type', 'tayfa_invitation', 'tayfa_id', $2::text, 'target_type', 'tayfa', 'target_id', $2::text, 'recipient_ids', jsonb_build_array($3::text))`,
+		member.PG(), tf.id.PG(), f.String()); n != 1 {
+		t.Fatalf("davet bildirimi = %d", n)
+	}
 	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'membership.changed' AND subject_id = $1`, f.PG()); n != 0 {
 		t.Fatalf("üyelik olayı = %d", n)
 	}

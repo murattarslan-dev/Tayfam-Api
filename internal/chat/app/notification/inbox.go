@@ -39,6 +39,11 @@ const (
 	// TypeHikeOverdue cannot be muted (v14): push will send it whatever the
 	// preference.
 	TypeHikeOverdue = "hike_overdue"
+	// Social notifications (issue #71). The two friend types are not about
+	// a tayfa.
+	TypeFriendRequest   = "friend_request"
+	TypeFriendAccepted  = "friend_accepted"
+	TypeTayfaInvitation = "tayfa_invitation"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -48,6 +53,7 @@ const (
 	TargetAnnouncement = "announcement"
 	TargetEvent        = "event"
 	TargetAnswer       = "answer"
+	TargetUser         = "user"
 )
 
 // Reasons of TypeTayfaWarned.
@@ -70,16 +76,23 @@ func targetOf(typ string) (string, bool) {
 		return TargetAnswer, true
 	case TypeJoinRequest:
 		return TargetMembership, true
-	case TypeJoinApproved, TypeTayfaDeletionRequested, TypeTayfaWarned, TypeTayfaArchived:
+	case TypeJoinApproved, TypeTayfaDeletionRequested, TypeTayfaWarned, TypeTayfaArchived, TypeTayfaInvitation:
 		return TargetTayfa, true
+	case TypeFriendRequest, TypeFriendAccepted:
+		return TargetUser, true
 	}
 	return "", false
+}
+
+// withoutTayfa reports whether a notification type is not about a tayfa.
+func withoutTayfa(typ string) bool {
+	return typ == TypeFriendRequest || typ == TypeFriendAccepted
 }
 
 // Request is one notification.requested event of core.
 type Request struct {
 	Event      id.ID // core's outbox event ID: one row per event and recipient
-	Tayfa      id.ID
+	Tayfa      id.ID // zero only for the types withoutTayfa
 	Actor      id.ID // zero: the system
 	Type       string
 	TargetType string
@@ -96,7 +109,7 @@ func (r Request) Validate() error {
 	switch {
 	case r.Event == (id.ID{}):
 		return apperr.Validation("event_id")
-	case r.Tayfa == (id.ID{}):
+	case (r.Tayfa == id.ID{}) != withoutTayfa(r.Type):
 		return apperr.Validation("tayfa_id")
 	case r.Target == (id.ID{}):
 		return apperr.Validation("notification_requested.target_id")
@@ -163,7 +176,7 @@ func Store(ctx context.Context, q *store.Queries, r Request) error {
 		ids[i], users[i] = id.New().PG(), u.PG()
 	}
 	if _, err := q.CreateNotifications(ctx, store.CreateNotificationsParams{
-		TayfaID: r.Tayfa.PG(), Type: r.Type, ActorID: optional(r.Actor),
+		TayfaID: optional(r.Tayfa), Type: r.Type, ActorID: optional(r.Actor),
 		TargetType: r.TargetType, TargetID: r.Target.PG(), Payload: raw,
 		SourceEventID: r.Event.PG(), Ids: ids, UserIds: users,
 	}); err != nil {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/social"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
@@ -28,8 +29,9 @@ import (
 // every tayfa together (v14 "üye başına günde 10 doğrudan davet").
 const DirectInvitesPerDay = 10
 
-// Outbox events of direct invitations. tayfa.invited is for the
-// notification; the other two only record what happened (they are not
+// Outbox events of direct invitations. tayfa.invited is counted for the
+// daily limit and followed by a notification.requested (tayfa_invitation)
+// for the invited user; the other two only record what happened (they are not
 // membership.changed: the invited user never was a member). Accepting is a
 // membership.changed (joined or requested) like every other way in.
 const (
@@ -124,7 +126,14 @@ func (s *Service) InviteFriend(ctx context.Context, caller, tayfa, target id.ID)
 			return fmt.Errorf("tayfa: %w", err)
 		}
 		out = Invitation{TayfaID: tayfa, TayfaName: tf.Name, UserID: target, InviterID: caller, InvitedAt: s.now()}
-		return s.invitationRecord(ctx, q, tayfa, caller, target, "member.invited", EventInvited)
+		if err := s.invitationRecord(ctx, q, tayfa, caller, target, "member.invited", EventInvited); err != nil {
+			return err
+		}
+		// The invited user is not a member, so not one of notify's member
+		// audiences: the one recipient is named directly.
+		return notify.Write(ctx, q, notify.Request{
+			Type: notify.TypeTayfaInvitation, Tayfa: tayfa, Actor: caller, TargetType: notify.TargetTayfa, Target: tayfa,
+		}, []id.ID{target})
 	})
 	return out, err
 }

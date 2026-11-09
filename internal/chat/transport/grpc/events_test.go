@@ -194,7 +194,7 @@ func TestApplyCoreEventConversion(t *testing.T) {
 	}
 	for name, r := range map[string]*chatv1.ApplyCoreEventRequest{
 		"olay kimliği":  {EventId: "x", TayfaId: tf.String(), Event: coreReq().Event},
-		"tayfa":         {EventId: id.New().String(), Event: coreReq().Event},
+		"tayfa":         {EventId: id.New().String(), TayfaId: "x", Event: coreReq().Event},
 		"aktör":         {EventId: id.New().String(), TayfaId: tf.String(), ActorId: "x", Event: coreReq().Event},
 		"tür yok":       {EventId: id.New().String(), TayfaId: tf.String()},
 		"bildirim türü": notice(func(n *chatv1.NotificationRequested) { n.Type = 0 }),

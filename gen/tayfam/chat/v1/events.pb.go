@@ -263,7 +263,9 @@ type ApplyCoreEventRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Outbox event ID in core (UUIDv7).
 	EventId string `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	// The tayfa the event belongs to (UUID).
+	// The tayfa the event belongs to (UUID). Empty only for a
+	// notification_requested that is not about a tayfa (FRIEND_REQUEST,
+	// FRIEND_ACCEPTED).
 	TayfaId string `protobuf:"bytes,2,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
 	// The user who made the change (UUID); empty for the system (background
 	// jobs, account deletion).
@@ -385,8 +387,10 @@ type NotificationRequested struct {
 	Type       NotificationType       `protobuf:"varint,1,opt,name=type,proto3,enum=tayfam.chat.v1.NotificationType" json:"type,omitempty"`
 	TargetType NotificationTargetType `protobuf:"varint,2,opt,name=target_type,json=targetType,proto3,enum=tayfam.chat.v1.NotificationTargetType" json:"target_type,omitempty"`
 	TargetId   string                 `protobuf:"bytes,3,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
-	// Active members chosen by core, never the actor (UUIDs, 1–200; a large
-	// audience comes as several events).
+	// Users chosen by core, never the actor (UUIDs, 1–200; a large audience
+	// comes as several events): active members for tayfa notifications, the
+	// one person concerned for FRIEND_REQUEST, FRIEND_ACCEPTED and
+	// TAYFA_INVITATION.
 	RecipientIds []string `protobuf:"bytes,4,rep,name=recipient_ids,json=recipientIds,proto3" json:"recipient_ids,omitempty"`
 	// ANSWER_RECEIVED: the answered question.
 	QuestionId string `protobuf:"bytes,5,opt,name=question_id,json=questionId,proto3" json:"question_id,omitempty"`

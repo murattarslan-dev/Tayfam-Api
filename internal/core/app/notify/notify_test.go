@@ -210,12 +210,34 @@ func TestWriteSplitsRecipients(t *testing.T) {
 	}
 	// Only known extra keys; required fields.
 	for name, bad := range map[string]Request{
-		"metin alanı": {Type: TypeAnnouncement, Tayfa: tf, TargetType: TargetAnnouncement, Target: target, Extra: map[string]string{"title": "x"}},
-		"türsüz":      {Tayfa: tf, TargetType: TargetAnnouncement, Target: target},
-		"hedefsiz":    {Type: TypeAnnouncement, Tayfa: tf, TargetType: TargetAnnouncement},
+		"metin alanı":        {Type: TypeAnnouncement, Tayfa: tf, TargetType: TargetAnnouncement, Target: target, Extra: map[string]string{"title": "x"}},
+		"türsüz":             {Tayfa: tf, TargetType: TargetAnnouncement, Target: target},
+		"hedefsiz":           {Type: TypeAnnouncement, Tayfa: tf, TargetType: TargetAnnouncement},
+		"tayfasız":           {Type: TypeAnnouncement, TargetType: TargetAnnouncement, Target: target},
+		"tayfalı arkadaşlık": {Type: TypeFriendRequest, Tayfa: tf, TargetType: TargetUser, Target: target},
 	} {
 		if err := f.write(t, bad, to[:1]); err == nil {
 			t.Errorf("%s kabul edildi", name)
 		}
+	}
+}
+
+// Friend notifications are not about a tayfa: no tayfa_id anywhere (issue
+// #71). The invitation names its tayfa.
+func TestWriteWithoutTayfa(t *testing.T) {
+	f := setup(t)
+	actor, friend := id.New(), id.New()
+	must(t, f.write(t, Request{Type: TypeFriendRequest, Actor: actor, TargetType: TargetUser, Target: actor}, []id.ID{friend}))
+	got := f.written(t)
+	if len(got) != 1 || got[0].tayfa.Valid || got[0].payload["tayfa_id"] != nil || got[0].payload["target_type"] != TargetUser {
+		t.Fatalf("olay = %+v", got)
+	}
+	tf := id.New()
+	must(t, f.write(t, Request{Type: TypeTayfaInvitation, Tayfa: tf, Actor: actor, TargetType: TargetTayfa, Target: tf}, []id.ID{friend}))
+	if got := f.written(t); len(got) != 2 || id.ID(got[1].tayfa.Bytes) != tf {
+		t.Fatalf("davet = %+v", got)
+	}
+	if err := f.write(t, Request{Type: TypeTayfaInvitation, Actor: actor, TargetType: TargetTayfa, Target: tf}, []id.ID{friend}); err == nil {
+		t.Fatal("tayfasız davet kabul edildi")
 	}
 }

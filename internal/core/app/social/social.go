@@ -21,8 +21,10 @@
 // (direct invitations, the profile view). chat's DM rules will reach them
 // through a core service method added with the DM work.
 //
-// Events carry IDs only: friend.requested (recipient in user_id) and
-// friend.accepted (the original requester in user_id), for notifications.
+// Events carry IDs only: friend.requested (recipient in user_id; the daily
+// limit counts them) and friend.accepted (the original requester in
+// user_id), each followed by a notification.requested for its one
+// recipient (friend_request, friend_accepted; not about a tayfa).
 package social
 
 import (
@@ -39,6 +41,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -245,8 +248,14 @@ func (s *Service) SendFriendRequest(ctx context.Context, caller, target id.ID) (
 			return apperr.ErrFriendRequestPending
 		}
 		out = friendOf(p, StateOutgoing, s.now(), time.Time{})
-		return txn.Event(ctx, q, EventFriendRequested, id.ID{}, caller, txn.Target{Type: "user", ID: target},
-			map[string]any{"user_id": target.String()})
+		if err := txn.Event(ctx, q, EventFriendRequested, id.ID{}, caller, txn.Target{Type: "user", ID: target},
+			map[string]any{"user_id": target.String()}); err != nil {
+			return err
+		}
+		// The recipient opens the requester's profile.
+		return notify.Write(ctx, q, notify.Request{
+			Type: notify.TypeFriendRequest, Actor: caller, TargetType: notify.TargetUser, Target: caller,
+		}, []id.ID{target})
 	})
 	return out, err
 }
@@ -289,8 +298,14 @@ func (s *Service) accept(ctx context.Context, q *store.Queries, caller, requeste
 		return Friend{}, fmt.Errorf("arkadaşlık: %w", err)
 	}
 	out := friendOf(p, StateFriends, f.CreatedAt.Time, f.AcceptedAt.Time)
-	return out, txn.Event(ctx, q, EventFriendAccepted, id.ID{}, caller, txn.Target{Type: "user", ID: requester},
-		map[string]any{"user_id": requester.String()})
+	if err := txn.Event(ctx, q, EventFriendAccepted, id.ID{}, caller, txn.Target{Type: "user", ID: requester},
+		map[string]any{"user_id": requester.String()}); err != nil {
+		return Friend{}, err
+	}
+	// The requester opens the new friend's profile.
+	return out, notify.Write(ctx, q, notify.Request{
+		Type: notify.TypeFriendAccepted, Actor: caller, TargetType: notify.TargetUser, Target: caller,
+	}, []id.ID{requester})
 }
 
 // RemoveFriendship ends a friendship, withdraws the caller's request or

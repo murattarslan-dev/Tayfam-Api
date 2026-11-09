@@ -49,6 +49,9 @@ var notificationTypes = map[chatv1.NotificationType]string{
 	chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_WARNED:             notification.TypeTayfaWarned,
 	chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_ARCHIVED:           notification.TypeTayfaArchived,
 	chatv1.NotificationType_NOTIFICATION_TYPE_HIKE_OVERDUE:             notification.TypeHikeOverdue,
+	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_REQUEST:           notification.TypeFriendRequest,
+	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_ACCEPTED:          notification.TypeFriendAccepted,
+	chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_INVITATION:         notification.TypeTayfaInvitation,
 }
 
 var targetTypes = map[chatv1.NotificationTargetType]string{
@@ -57,6 +60,7 @@ var targetTypes = map[chatv1.NotificationTargetType]string{
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT: notification.TargetAnnouncement,
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_EVENT:        notification.TargetEvent,
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_ANSWER:       notification.TargetAnswer,
+	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_USER:         notification.TargetUser,
 }
 
 var warningReasons = map[chatv1.TayfaWarningReason]string{
@@ -86,8 +90,12 @@ func coreEventFromProto(req *chatv1.ApplyCoreEventRequest) (coreevents.Event, er
 	if e.ID, ok = id.Parse(req.GetEventId()); !ok {
 		return e, validation("event_id")
 	}
-	if e.Tayfa, ok = id.Parse(req.GetTayfaId()); !ok {
-		return e, validation("tayfa_id")
+	// Empty for a notification not about a tayfa; the app layer checks it
+	// against the type.
+	if t := req.GetTayfaId(); t != "" {
+		if e.Tayfa, ok = id.Parse(t); !ok {
+			return e, validation("tayfa_id")
+		}
 	}
 	var actor id.ID
 	if a := req.GetActorId(); a != "" {

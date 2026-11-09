@@ -88,6 +88,9 @@ var types = map[string]chatv1.NotificationType{
 	notify.TypeTayfaWarned:            chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_WARNED,
 	notify.TypeTayfaArchived:          chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_ARCHIVED,
 	notify.TypeHikeOverdue:            chatv1.NotificationType_NOTIFICATION_TYPE_HIKE_OVERDUE,
+	notify.TypeFriendRequest:          chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_REQUEST,
+	notify.TypeFriendAccepted:         chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_ACCEPTED,
+	notify.TypeTayfaInvitation:        chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_INVITATION,
 }
 
 var targets = map[string]chatv1.NotificationTargetType{
@@ -96,6 +99,7 @@ var targets = map[string]chatv1.NotificationTargetType{
 	notify.TargetAnnouncement: chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT,
 	notify.TargetEvent:        chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_EVENT,
 	notify.TargetAnswer:       chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_ANSWER,
+	notify.TargetUser:         chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_USER,
 }
 
 var reasons = map[string]chatv1.TayfaWarningReason{

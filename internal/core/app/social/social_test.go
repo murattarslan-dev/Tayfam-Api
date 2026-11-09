@@ -124,6 +124,18 @@ func TestFriendRequestFlow(t *testing.T) {
 	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'friend.accepted' AND actor_id = $1 AND payload = jsonb_build_object('user_id', $2::text)`, b.PG(), a.String()); n != 1 {
 		t.Fatalf("kabul olayı = %d", n)
 	}
+	// One notification each, to the one person concerned, not about a tayfa;
+	// the target is the other user's profile.
+	for _, c := range []struct {
+		typ              string
+		actor, recipient id.ID
+	}{{"friend_request", a, b}, {"friend_accepted", b, a}} {
+		if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'notification.requested' AND actor_id = $1 AND tayfa_id IS NULL
+			AND payload = jsonb_build_object('type', $2::text, 'target_type', 'user', 'target_id', $3::text, 'recipient_ids', jsonb_build_array($4::text))`,
+			c.actor.PG(), c.typ, c.actor.String(), c.recipient.String()); n != 1 {
+			t.Fatalf("%s bildirimi = %d", c.typ, n)
+		}
+	}
 
 	// Unfriending removes the row on both sides; doing it again is fine.
 	must(t, e.svc.RemoveFriendship(ctx, a, b))
@@ -142,8 +154,9 @@ func TestDeclinedRequestIsDeletedSilently(t *testing.T) {
 	if n := e.count(t, `SELECT count(*) FROM friendships`); n != 0 {
 		t.Fatalf("reddedilen istek kaldı: %d", n)
 	}
-	// No event tells the sender; only the original request is recorded.
-	if n := e.count(t, `SELECT count(*) FROM domain_events`); n != 1 {
+	// No event tells the sender; only the original request (and its
+	// notification to the recipient) is recorded.
+	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type <> 'notification.requested'`); n != 1 {
 		t.Fatalf("olay sayısı = %d", n)
 	}
 }

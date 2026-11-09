@@ -23,7 +23,7 @@ import (
 // Event is one core event: exactly one of Notification and Purged.
 type Event struct {
 	ID    id.ID // core's outbox event ID
-	Tayfa id.ID
+	Tayfa id.ID // zero only for a notification not about a tayfa
 	// Notification is a notification.requested; its Event, Tayfa and Actor
 	// come from the event.
 	Notification *notification.Request
@@ -53,7 +53,8 @@ func (s *Service) Apply(ctx context.Context, e Event) error {
 	switch {
 	case e.ID == (id.ID{}):
 		return apperr.Validation("event_id")
-	case e.Tayfa == (id.ID{}):
+	case e.Purged && e.Tayfa == (id.ID{}):
+		// A notification checks its tayfa by type (Request.Validate).
 		return apperr.Validation("tayfa_id")
 	case (e.Notification == nil) == !e.Purged:
 		return apperr.Validation("event")
