@@ -78,6 +78,9 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_TAG_NOT_FOUND":               {http.StatusNotFound, "tag-not-found"},
 		"ERROR_REASON_OWN_ANSWER_VOTE":             {http.StatusConflict, "own-answer-vote"},
 		"ERROR_REASON_TAG_LIMIT":                   {http.StatusConflict, "tag-limit"},
+		"ERROR_REASON_POLL_NOT_FOUND":              {http.StatusNotFound, "poll-not-found"},
+		"ERROR_REASON_POLL_CLOSED":                 {http.StatusConflict, "poll-closed"},
+		"ERROR_REASON_POLL_ANONYMOUS":              {http.StatusForbidden, "poll-anonymous"},
 	},
 }
 

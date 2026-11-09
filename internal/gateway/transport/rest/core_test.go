@@ -209,7 +209,7 @@ func (f *fakeCore) LeaveTayfa(ctx context.Context, in *corev1.LeaveTayfaRequest,
 
 func testCoreDeps(f *fakeCore, burst int) CoreDeps {
 	return CoreDeps{
-		Tayfas: f, Members: f, Announcements: f, Events: f, QA: f, Verifier: fakeVerifier{},
+		Tayfas: f, Members: f, Announcements: f, Events: f, QA: f, Polls: f, Verifier: fakeVerifier{},
 		Log:                 slog.New(slog.NewTextHandler(io.Discard, nil)),
 		TrustCFConnectingIP: true,
 		CreateTayfaLimit:    ratelimit.New(60, burst),

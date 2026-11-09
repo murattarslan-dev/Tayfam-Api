@@ -1174,6 +1174,198 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Anketler (core PollService, issue #60) ---
+  /v1/tayfas/{tayfa_id}/polls:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listPolls
+      summary: Anketleri listeler
+      description: |
+        Her etkin üyeye açıktır (susturulmuş üye de okur). Yeniden eskiye.
+        `event_id` verilirse yalnızca o etkinliğin anketleri. Tayfanın anket
+        modülü kapalıysa `module-disabled`.
+      parameters:
+        - name: event_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Anketler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PollList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createPoll
+      summary: Anket açar (her etkin üye)
+      description: |
+        Susturulmuş üye anket açamaz (`muted`). `event_id` verilirse
+        etkinlik aynı tayfada ve silinmemiş olmalıdır (`event-not-found`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PollCreateRequest" }
+      responses:
+        "201":
+          description: Açılan anket
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Poll" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/polls/{poll_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/PollID"
+    get:
+      operationId: getPoll
+      summary: Tek bir anket, sayımlar ve kendi oyunuz
+      responses:
+        "200":
+          description: Anket
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Poll" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deletePoll
+      summary: Anketi ve oylarını siler (açan; moderatör, yönetici)
+      description: |
+        Geri alınamaz. Başkasının anketini silmek için anketi açanın şu anki
+        rolü sizinkinden düşük olmalıdır (`role-hierarchy`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Anket silindi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/polls/{poll_id}/vote:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/PollID"
+    put:
+      operationId: votePoll
+      summary: Oyunuzu verir ya da değiştirir
+      description: |
+        Önceki oyunuzun yerine geçer. Tek seçimli ankette tam bir, çok seçimli
+        ankette en az bir seçenek. Kapalı ankette `poll-closed`; susturulmuş
+        üye oy veremez (`muted`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PollVoteRequest" }
+      responses:
+        "200":
+          description: Güncel anket
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Poll" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: withdrawPollVote
+      summary: Oyunuzu geri çeker
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Güncel anket
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Poll" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/polls/{poll_id}/options/{option_id}/voters:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/PollID"
+      - $ref: "#/components/parameters/OptionID"
+    get:
+      operationId: listPollVoters
+      summary: Açık ankette bir seçeneğe oy verenler
+      description: |
+        Gizli ankette kimse, yöneticiler dahil, oy verenleri göremez:
+        `poll-anonymous`. En eski oy önce.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Oy verenler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PollVoterList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/polls/{poll_id}/closure:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/PollID"
+    post:
+      operationId: closePoll
+      summary: Anketi erken kapatır (açan; moderatör, yönetici)
+      description: |
+        Hiyerarşi silmedeki gibidir. Kapalı anket için de başarılıdır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Kapanan anket
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Poll" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   # --- Etkinlikler (core EventService) ---
   #
   # Ortak kurallar: tayfanın etkinlik modülü kapalıysa okumalar dahil her uç
@@ -1924,6 +2116,16 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    PollID:
+      name: poll_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    OptionID:
+      name: option_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     QuestionID:
       name: question_id
       in: path
@@ -2024,6 +2226,10 @@ components:
         - tag-not-found
         - own-answer-vote
         - tag-limit
+        # core: anketler (#60)
+        - poll-not-found
+        - poll-closed
+        - poll-anonymous
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
@@ -2584,6 +2790,129 @@ components:
       additionalProperties: false
       properties:
         body: { type: string, minLength: 1, maxLength: 10000 }
+
+    # --- Anketler ---
+
+    Poll:
+      type: object
+      description: |
+        Gizli ankette (`anonymous`) diğer üyeler, yöneticiler dahil, kimin
+        neye oy verdiğini göremez; `own_option_ids` her zaman yalnızca
+        çağıranın kendi oyudur. Sayımlar her ankette döner.
+      required: [id, tayfa_id, question, anonymous, multiple_choice, closed, created_at, options, voter_count, own_option_ids]
+      properties:
+        id: { type: string, format: uuid }
+        tayfa_id: { type: string, format: uuid }
+        event_id:
+          type: string
+          format: uuid
+          description: Anket bir etkinliğe bağlı değilse yoktur.
+        created_by_user_id:
+          type: string
+          format: uuid
+          description: Anketi açanın hesabı silindiyse yoktur ("Silinmiş kullanıcı").
+        question: { type: string }
+        anonymous: { type: boolean }
+        multiple_choice: { type: boolean }
+        closes_at:
+          type: string
+          format: date-time
+          description: Planlanan kapanma zamanı; yoksa elle kapatılana kadar açık.
+        closed_at:
+          type: string
+          format: date-time
+          description: Erken kapatıldıysa.
+        closed:
+          type: boolean
+          description: Erken kapatıldı ya da kapanma zamanı geçti; oy alınmaz.
+        created_at: { type: string, format: date-time }
+        options:
+          type: array
+          items: { $ref: "#/components/schemas/PollOption" }
+        voter_count:
+          type: integer
+          format: int64
+          description: Oy veren kişi sayısı (çok seçimlide kişi bir kez sayılır).
+        own_option_ids:
+          type: array
+          description: Çağıranın kendi oyu; oy vermediyse boş.
+          items: { type: string, format: uuid }
+
+    PollOption:
+      type: object
+      required: [id, text, position, vote_count]
+      properties:
+        id: { type: string, format: uuid }
+        text: { type: string }
+        position: { type: integer }
+        vote_count: { type: integer, format: int64 }
+
+    PollList:
+      type: object
+      required: [polls]
+      properties:
+        polls:
+          type: array
+          items: { $ref: "#/components/schemas/Poll" }
+        next_page_token: { type: string }
+
+    PollCreateRequest:
+      type: object
+      required: [question, options]
+      additionalProperties: false
+      properties:
+        question:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Baştaki ve sondaki boşluklar atıldıktan sonra 1–200 karakter, tek satır.
+        options:
+          type: array
+          minItems: 2
+          maxItems: 10
+          description: Her biri 1–100 karakter, tek satır; büyük/küçük harf farkı gözetmeden tekil.
+          items: { type: string, minLength: 1, maxLength: 100 }
+        anonymous:
+          type: boolean
+          default: false
+          description: İlk oydan sonra değiştirilemez.
+        multiple_choice: { type: boolean, default: false }
+        closes_at:
+          type: string
+          format: date-time
+          description: İsteğe bağlı; gelecekte, en fazla 365 gün sonra.
+        event_id:
+          type: string
+          format: uuid
+          description: İsteğe bağlı; aynı tayfanın etkinliği.
+
+    PollVoteRequest:
+      type: object
+      required: [option_ids]
+      additionalProperties: false
+      properties:
+        option_ids:
+          type: array
+          minItems: 1
+          maxItems: 10
+          uniqueItems: true
+          items: { type: string, format: uuid }
+
+    PollVoter:
+      type: object
+      required: [user_id, voted_at]
+      properties:
+        user_id: { type: string, format: uuid }
+        voted_at: { type: string, format: date-time }
+
+    PollVoterList:
+      type: object
+      required: [voters]
+      properties:
+        voters:
+          type: array
+          items: { $ref: "#/components/schemas/PollVoter" }
+        next_page_token: { type: string }
 
     # --- Etkinlikler ---
 
