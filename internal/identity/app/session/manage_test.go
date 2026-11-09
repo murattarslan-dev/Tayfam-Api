@@ -51,8 +51,9 @@ func TestConsentRequiredForNewVersion(t *testing.T) {
 	if err != nil || r.ConsentRequired {
 		t.Fatalf("onaydan sonra yenileme: %+v %v", r.ConsentRequired, err)
 	}
-	// Geri çekilen onay yeniden istenir.
-	if _, err := e.pool.Exec(ctx, `UPDATE consent_records SET withdrawn_at = now() WHERE user_id = $1 AND document_type = 'terms'`, pending.UserID.PG()); err != nil {
+	// Geri çekilen onay yeniden istenir. Geri çekmenin henüz sorgusu yok;
+	// identity_app'in consent_records'ta UPDATE yetkisi de yok.
+	if _, err := e.admin.Exec(ctx, `UPDATE consent_records SET withdrawn_at = now() WHERE user_id = $1 AND document_type = 'terms'`, pending.UserID.PG()); err != nil {
 		t.Fatal(err)
 	}
 	if r, err = e.svc.Refresh(ctx, r.RefreshToken); err != nil || !r.ConsentRequired {

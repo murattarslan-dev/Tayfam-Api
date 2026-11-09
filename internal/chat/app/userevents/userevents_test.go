@@ -22,7 +22,7 @@ func must(t *testing.T, err error) {
 }
 
 func TestProfileAndDeletion(t *testing.T) {
-	pool := dbtest.New(t, chatdb.Migrations())
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
 	q := store.New(pool)
 	var cleaned []id.ID
 	svc, err := New(Config{Pool: pool, Cleanups: []Cleanup{func(_ context.Context, _ *store.Queries, u id.ID) error {
@@ -54,7 +54,7 @@ func TestProfileAndDeletion(t *testing.T) {
 }
 
 func TestValidation(t *testing.T) {
-	pool := dbtest.New(t, chatdb.Migrations())
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
 	svc, err := New(Config{Pool: pool})
 	must(t, err)
 	for name, e := range map[string]Event{
@@ -90,7 +90,7 @@ func (f *fakeSessions) EndUser(_ context.Context, u id.ID) error {
 // session.revoked, user.sanctioned and user.deleted end the real-time
 // connections (issue #82).
 func TestSessionEvents(t *testing.T) {
-	pool := dbtest.New(t, chatdb.Migrations())
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
 	fs := &fakeSessions{}
 	svc, err := New(Config{Pool: pool, Sessions: fs})
 	must(t, err)

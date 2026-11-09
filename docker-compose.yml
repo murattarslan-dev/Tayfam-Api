@@ -39,7 +39,7 @@ services:
       IDENTITY_BIRTHDATE_KEYS: ${IDENTITY_BIRTHDATE_KEYS:?make up ile başlatın; anahtarı o üretir}
       DB_HOST: postgres
       DB_NAME: identity
-      DB_USER: postgres
+      DB_USER: identity_app
       DB_PASSWORD: yerel
       DB_SSLMODE: disable
       GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-yerel-gelistirme.apps.googleusercontent.com}
@@ -56,7 +56,7 @@ services:
     environment:
       DB_HOST: postgres
       DB_NAME: identity
-      DB_USER: postgres
+      DB_USER: identity
       DB_PASSWORD: yerel
       DB_SSLMODE: disable
     depends_on:
@@ -72,7 +72,7 @@ services:
       IDENTITY_GRPC_ADDR: identity:9090
       DB_HOST: postgres
       DB_NAME: core
-      DB_USER: postgres
+      DB_USER: core_app
       DB_PASSWORD: yerel
       DB_SSLMODE: disable
     depends_on:
@@ -86,7 +86,7 @@ services:
     environment:
       DB_HOST: postgres
       DB_NAME: core
-      DB_USER: postgres
+      DB_USER: core
       DB_PASSWORD: yerel
       DB_SSLMODE: disable
     depends_on:
@@ -108,7 +108,7 @@ services:
       CORS_ALLOWED_ORIGINS: http://localhost:3000
       DB_HOST: postgres
       DB_NAME: chat
-      DB_USER: postgres
+      DB_USER: chat_app
       DB_PASSWORD: yerel
       DB_SSLMODE: disable
     depends_on:
@@ -122,7 +122,7 @@ services:
     environment:
       DB_HOST: postgres
       DB_NAME: chat
-      DB_USER: postgres
+      DB_USER: chat
       DB_PASSWORD: yerel
       DB_SSLMODE: disable
     depends_on:
@@ -130,8 +130,9 @@ services:
 
   # Yerel geliştirme ve store testleri için Postgres. Cluster'daki CNPG
   # image'ı tek başına başlatılamaz; aynı ana ve ara sürümdeki resmi image
-  # kullanılır (PostGIS core'a geçince eklenir). identity, core ve chat veritabanları
-  # ilk açılışta oluşur. Yalnızca bu makineden erişilir.
+  # kullanılır (PostGIS core'a geçince eklenir). identity, core ve chat
+  # veritabanları ve kullanıcıları ilk açılışta oluşur
+  # (scripts/postgres-init.sql). Yalnızca bu makineden erişilir.
   #   make test-db
   #   TEST_DATABASE_URL=postgres://postgres:yerel@127.0.0.1:5432/postgres?sslmode=disable make test
   # Parola yalnızca yerel, atılabilir bir veritabanı içindir.

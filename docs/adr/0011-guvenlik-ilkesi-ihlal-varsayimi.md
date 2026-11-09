@@ -70,7 +70,7 @@ bunlardan birini bilerek zayıflatıyorsa gerekçesini yazar.
 | 5 | NetworkPolicy'lerin uygulandığını doğrulayan test (yasaklı bağlantının reddedildiği): `scripts/netpol-test.sh` | Tamamlandı (2026-11-07) |
 | 6 | k3s'te secret'ların diskte şifrelenmesi (`secrets-encryption`) | Tamamlandı (2026-11-07) |
 | 7 | Servislerin JWT'yi kendilerinin doğrulaması (yukarıda) | Tamamlandı (PR #16); kayıt bekleyen token yalnızca identity'de geçer (PR #21) |
-| 8 | Postgres'te servis başına en az yetkili kullanıcı (sahiplik ve şema değişikliği yalnızca migration kullanıcısında) | Kısmen: servis başına kullanıcı, veritabanı, pg_hba ve PUBLIC yetkilerinin kaldırılması (PR #19); migration kullanıcısının uygulama kullanıcısından ayrılması açık |
+| 8 | Postgres'te servis başına en az yetkili kullanıcı (sahiplik ve şema değişikliği yalnızca migration kullanıcısında) | Servis başına kullanıcı, veritabanı, pg_hba ve PUBLIC yetkilerinin kaldırılması (PR #19); sahip (migration) ile çalışma zamanı kullanıcısının (`<servis>_app`, tablo başına yalnızca gereken DML) ayrılması: [ADR-0015](0015-veritabani-rolleri.md) (PR #45; platform adımı ve birleştirmeyle tamamlanır) |
 | 9 | Tayfa kapsamını veritabanında da zorlayan Row Level Security | Değerlendirilecek (core ile) |
 | 10 | Şüpheli olaylar için bildirim (token yeniden kullanımı, admin girişi) | Gözlem işiyle |
 | 11 | R2 erişim anahtarlarının bucket ve işlem bazında ayrılması (yedek yazan anahtar dosyaları okuyamaz) | CloudNativePG ile |

@@ -150,7 +150,7 @@ type env struct {
 
 func setup(t *testing.T) *env {
 	t.Helper()
-	pool := dbtest.New(t, chatdb.Migrations())
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
 	e := &env{
 		pool: pool, members: &fakeMembers{m: map[[2]id.ID]Member{}, readOnly: map[id.ID]bool{}}, logs: &bytes.Buffer{},
 		tayfa: id.New(), admin: id.New(), mod: id.New(), member: id.New(), other: id.New(), pub: &recPub{},

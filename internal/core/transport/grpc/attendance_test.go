@@ -141,7 +141,7 @@ func TestAttendanceServerConverts(t *testing.T) {
 // TestCheckInLocationNotLogged runs the real app: the location sent with a
 // check-in is neither logged nor in the status the client gets.
 func TestCheckInLocationNotLogged(t *testing.T) {
-	pool := dbtest.New(t, coredb.Migrations())
+	pool := dbtest.New(t, "core", coredb.Migrations())
 	logs := &bytes.Buffer{}
 	log := slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	tayfas, err := tayfa.New(tayfa.Config{Pool: pool, Log: log})

@@ -12,7 +12,7 @@ import (
 )
 
 func TestReconsentForNewVersion(t *testing.T) {
-	pool := dbtest.New(t, identitydb.Migrations())
+	pool := dbtest.New(t, "identity", identitydb.Migrations())
 	ctx := context.Background()
 	old := Documents{PrivacyNotice: "2026-11-08", Terms: "2026-11-08"}
 	cur := Documents{PrivacyNotice: "2026-12-01", Terms: "2026-11-08"}

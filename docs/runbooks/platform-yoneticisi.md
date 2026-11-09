@@ -5,7 +5,8 @@ veritabanındaki `platform_admins` tablosunda kaydı olan kullanıcılar girer
 (Notion "Platform Yönetim Paneli", erişim katmanı 4; ADR-0008). Bu tabloya
 **uygulama içinden kayıt eklenemez**: identity'nin hiçbir sorgusu tabloya
 yazmaz (`TestNoPlatformAdminWrites`) ve çalışma zamanı kullanıcısı
-`identity_app` yalnızca okuma yetkisi alır (#45 birleşince). Kaydı platform
+`identity_app` yalnızca okuma yetkisi alır (ADR-0015,
+`db/identity/migrations/00008_app_role.sql`). Kaydı platform
 sahibi, migration sahibi kullanıcıyla tek bir SQL komutuyla ekler.
 
 ## Ön koşul

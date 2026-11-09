@@ -27,7 +27,7 @@ func must(t *testing.T, err error) {
 
 func setup(t *testing.T) (*Service, *pgxpool.Pool) {
 	t.Helper()
-	pool := dbtest.New(t, chatdb.Migrations())
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
 	svc, err := New(Config{Pool: pool})
 	must(t, err)
 	return svc, pool
@@ -208,7 +208,7 @@ func (f *fakeCache) ForgetTayfa(tayfa id.ID)  { f.forgotTayfa = append(f.forgotT
 // Membership and tayfa state changes only clear the channel permission
 // cache; nothing is stored (chat keeps no copy of memberships).
 func TestStateChangesClearCache(t *testing.T) {
-	pool := dbtest.New(t, chatdb.Migrations())
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
 	cache := &fakeCache{}
 	svc, err := New(Config{Pool: pool, Access: cache})
 	must(t, err)
@@ -259,7 +259,7 @@ func (f *fakeLive) Notified(r notification.Request) {
 // cleared, so its rechecks ask core afresh; notifications after they are
 // stored (issue #82).
 func TestLiveHearsChanges(t *testing.T) {
-	pool := dbtest.New(t, chatdb.Migrations())
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
 	cache := &fakeCache{}
 	live := &fakeLive{cache: cache}
 	svc, err := New(Config{Pool: pool, Access: cache, Live: live})

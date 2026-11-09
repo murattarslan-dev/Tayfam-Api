@@ -30,17 +30,21 @@ type env struct {
 	tayfas *tayfa.Service
 	pool   *pgxpool.Pool
 	q      *store.Queries
+	// admin is a superuser pool for fixtures core_app cannot write
+	// (seeding with triggers off, ADR-0015).
+	admin *pgxpool.Pool
 }
 
 func setup(t *testing.T) *env {
 	t.Helper()
-	pool := dbtest.New(t, coredb.Migrations())
+	d := dbtest.Open(t, "core", coredb.Migrations())
+	pool := d.App
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	svc, err := New(Config{Pool: pool, Log: log})
 	must(t, err)
 	ts, err := tayfa.New(tayfa.Config{Pool: pool, Log: log})
 	must(t, err)
-	return &env{svc: svc, tayfas: ts, pool: pool, q: store.New(pool)}
+	return &env{svc: svc, tayfas: ts, pool: pool, q: store.New(pool), admin: d.Admin}
 }
 
 func must(t *testing.T, err error) {
@@ -84,7 +88,7 @@ func (e *env) seed(t *testing.T, tf id.ID, role authz.Role) id.ID {
 
 func (e *env) seedAs(t *testing.T, tf, u id.ID, role authz.Role) id.ID {
 	t.Helper()
-	tx, err := e.pool.Begin(ctx)
+	tx, err := e.admin.Begin(ctx)
 	must(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = tx.Exec(ctx, "SET LOCAL session_replication_role = replica")
@@ -99,7 +103,7 @@ func (e *env) seedAs(t *testing.T, tf, u id.ID, role authz.Role) id.ID {
 
 func (e *env) exec(t *testing.T, sql string, args ...any) {
 	t.Helper()
-	tx, err := e.pool.Begin(ctx)
+	tx, err := e.admin.Begin(ctx)
 	must(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = tx.Exec(ctx, "SET LOCAL session_replication_role = replica")

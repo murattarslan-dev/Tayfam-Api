@@ -139,7 +139,7 @@ func TestAuditAndStatsNeedAdmin(t *testing.T) {
 			t.Fatalf("sayılar: %v", err)
 		}
 	}
-	if _, err := e.pool.Exec(ctx, `DELETE FROM platform_admins`); err != nil {
+	if _, err := e.owner.Exec(ctx, `DELETE FROM platform_admins`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.svc.ListAuditLogs(ctx, c, AuditFilter{}, 0, ""); !errors.Is(err, ErrNotAdmin) {

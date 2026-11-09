@@ -14,7 +14,7 @@ import (
 
 func setup(t *testing.T) (*pgxpool.Pool, *Queries) {
 	t.Helper()
-	pool := dbtest.New(t, chatdb.Migrations())
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
 	return pool, New(pool)
 }
 

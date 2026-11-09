@@ -66,7 +66,7 @@ type env struct {
 
 func setup(t *testing.T) *env {
 	t.Helper()
-	pool := dbtest.New(t, coredb.Migrations())
+	pool := dbtest.New(t, "core", coredb.Migrations())
 	e := &env{pool: pool, minors: &fakeMinors{minors: map[id.ID]bool{}}}
 	now := func() time.Time { return time.Now().Add(e.shift) }
 	var err error

@@ -20,7 +20,7 @@ import (
 
 func setup(t *testing.T) (*pgxpool.Pool, *Queries) {
 	t.Helper()
-	pool := dbtest.New(t, identitydb.Migrations())
+	pool := dbtest.New(t, "identity", identitydb.Migrations())
 	return pool, New(pool)
 }
 
@@ -254,6 +254,8 @@ func TestDeletingUserRemovesCredentials(t *testing.T) {
 	if err := q.CreateAuthIdentity(ctx, CreateAuthIdentityParams{ID: id.New().PG(), UserID: u.PG(), Provider: "google", Subject: "sub-" + u.String()}); err != nil {
 		t.Fatal(err)
 	}
+	// Kalıcı silme (retention) identity_app ile çalışır; bağlı satırlar
+	// cascade ile tablo sahibinin yetkisiyle gider.
 	if _, err := pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, u.PG()); err != nil {
 		t.Fatal(err)
 	}

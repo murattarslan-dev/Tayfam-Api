@@ -22,8 +22,10 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/config"
 )
 
-// Config is a database connection target. Password comes from the service's
-// own secret (deploy/apps/<env>/secrets/<service>-db).
+// Config is a database connection target. The service connects as its
+// runtime user (<service>_app, secrets/<service>-app-db); only the migrate
+// init container uses the owner (<service>, secrets/<service>-db), see
+// ADR-0015.
 type Config struct {
 	Host     string
 	Port     int

@@ -31,7 +31,7 @@ func (f *fakeCore) ApplyUserEvent(_ context.Context, req *corev1.ApplyUserEventR
 }
 
 func TestCoreConsumerDelivers(t *testing.T) {
-	pool := dbtest.New(t, identitydb.Migrations())
+	pool := dbtest.New(t, "identity", identitydb.Migrations())
 	ctx := context.Background()
 	user := id.New()
 	avatar := id.New().String()

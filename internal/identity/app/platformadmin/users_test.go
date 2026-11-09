@@ -222,7 +222,7 @@ func TestSuspension(t *testing.T) {
 		t.Fatalf("olaylar = %v", got)
 	}
 	// Once the suspension is over (not lifted), a new sanction replaces it.
-	if _, err := e.pool.Exec(ctx, `UPDATE platform_sanctions SET starts_at = now() - interval '3 hours', ends_at = now() - interval '1 hour' WHERE user_id = $1`, target.PG()); err != nil {
+	if _, err := e.owner.Exec(ctx, `UPDATE platform_sanctions SET starts_at = now() - interval '3 hours', ends_at = now() - interval '1 hour' WHERE user_id = $1`, target.PG()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.svc.SanctionUser(ctx, c, SanctionInput{User: target, Type: SanctionBan, Reason: reason}); err != nil {

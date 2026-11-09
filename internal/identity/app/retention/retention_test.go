@@ -75,7 +75,7 @@ func (f fixture) token(session id.ID, usedDaysAgo int) id.ID {
 }
 
 func TestRetention(t *testing.T) {
-	pool := dbtest.New(t, identitydb.Migrations())
+	pool := dbtest.New(t, "identity", identitydb.Migrations())
 	f := fixture{t, pool}
 	u := f.user()
 
@@ -158,7 +158,7 @@ func TestRetention(t *testing.T) {
 }
 
 func TestRunStopsWithContext(t *testing.T) {
-	pool := dbtest.New(t, identitydb.Migrations())
+	pool := dbtest.New(t, "identity", identitydb.Migrations())
 	svc, err := New(Config{Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Interval: time.Hour})
 	if err != nil {
 		t.Fatal(err)

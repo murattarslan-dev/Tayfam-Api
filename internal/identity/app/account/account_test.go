@@ -24,7 +24,7 @@ type env struct {
 
 func setup(t *testing.T) *env {
 	t.Helper()
-	pool := dbtest.New(t, identitydb.Migrations())
+	pool := dbtest.New(t, "identity", identitydb.Migrations())
 	e := &env{pool: pool, now: time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)}
 	svc, err := New(Config{Pool: pool, Now: func() time.Time { return e.now }})
 	if err != nil {

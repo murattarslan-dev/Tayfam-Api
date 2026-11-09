@@ -41,6 +41,10 @@ CREATE TABLE event_consumers (
   updated_at    timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT event_consumers_name_format CHECK (consumer_name ~ '^[a-z][a-z0-9_.-]{0,62}$')
 );
+-- The services' runtime roles get exactly this on the outbox tables
+-- (db/<service>/migrations/*_app_role.sql, ADR-0015).
+GRANT SELECT, INSERT ON domain_events TO outbox_app;
+GRANT SELECT, INSERT, UPDATE ON event_consumers TO outbox_app;
 -- +goose Down
 DROP TABLE event_consumers;
 DROP TABLE domain_events;
@@ -48,7 +52,7 @@ DROP TABLE domain_events;
 
 func newDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	return dbtest.New(t, fstest.MapFS{"00001_outbox.sql": {Data: []byte(schema)}})
+	return dbtest.New(t, "outbox", fstest.MapFS{"00001_outbox.sql": {Data: []byte(schema)}})
 }
 
 func write(t *testing.T, pool *pgxpool.Pool, e NewEvent) id.ID {

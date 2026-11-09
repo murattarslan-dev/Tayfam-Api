@@ -26,7 +26,8 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       # Migration'lar servis binary'sinin "migrate" alt komutuyla, servis
       # başlamadan önce çalışır; advisory lock aynı anda tek migration'ı
-      # garanti eder (ADR-0006).
+      # garanti eder (ADR-0006). Şemanın sahibi core kullanıcısıyla bağlanan
+      # tek container budur (ADR-0015).
       initContainers:
         - name: migrate
           image: ghcr.io/murattarslan-dev/tayfam-core
@@ -76,14 +77,16 @@ spec:
             - { name: SERVICE_TOKEN_FILE_IDENTITY, value: /var/run/secrets/tayfam/identity/token }
             # Ortama özel secret (deploy/apps/<ortam>/secrets, SOPS ile şifreli).
             # pg_hba core kullanıcısını yalnızca core veritabanına, TLS ile alır.
+            # Çalışma zamanı kullanıcısı core_app (ADR-0015); sahip
+            # (core-db) yalnızca migrate initContainer'ındadır.
             - { name: DB_HOST, value: tayfam-pg-rw }
             - { name: DB_NAME, value: core }
             - name: DB_USER
               valueFrom:
-                secretKeyRef: { name: core-db, key: username }
+                secretKeyRef: { name: core-app-db, key: username }
             - name: DB_PASSWORD
               valueFrom:
-                secretKeyRef: { name: core-db, key: password }
+                secretKeyRef: { name: core-app-db, key: password }
           ports:
             - { name: grpc, containerPort: 9090 }
             - { name: ops, containerPort: 8081 }

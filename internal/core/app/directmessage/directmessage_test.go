@@ -31,24 +31,25 @@ func must(t *testing.T, err error) {
 }
 
 type env struct {
-	svc   *Service
-	pool  *pgxpool.Pool
+	svc *Service
+	// admin is the superuser test connection; only fixtures use it.
+	admin *pgxpool.Pool
 	codes int
 }
 
 func setup(t *testing.T) *env {
 	t.Helper()
-	pool := dbtest.New(t, coredb.Migrations())
-	svc, err := New(Config{Pool: pool, Now: func() time.Time { return now }})
+	d := dbtest.Open(t, "core", coredb.Migrations())
+	svc, err := New(Config{Pool: d.App, Now: func() time.Time { return now }})
 	must(t, err)
-	return &env{svc: svc, pool: pool}
+	return &env{svc: svc, admin: d.Admin}
 }
 
 // exec writes fixture rows with triggers off (superuser test connection),
 // so the rules are tested apart from how the rows came to be.
 func (e *env) exec(t *testing.T, sql string, args ...any) {
 	t.Helper()
-	tx, err := e.pool.Begin(ctx)
+	tx, err := e.admin.Begin(ctx)
 	must(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = tx.Exec(ctx, "SET LOCAL session_replication_role = replica")

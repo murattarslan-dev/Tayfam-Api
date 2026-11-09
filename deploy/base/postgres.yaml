@@ -1,6 +1,10 @@
 # Ortamın Postgres cluster'ı (ADR-0002, ADR-0006). Tek instance; içinde servis
-# başına ayrı veritabanı ve ayrı kullanıcı. Her servis yalnızca kendi
-# kullanıcısının parolasını bilir (deploy/apps/<ortam>/secrets/<servis>-db).
+# başına ayrı veritabanı ve iki kullanıcı (ADR-0015):
+#   <servis>      veritabanının ve şemanın sahibi; yalnızca migrate
+#                 initContainer'ı kullanır (secrets/<servis>-db)
+#   <servis>_app  çalışma zamanı; tablolarda yalnızca migration'ların verdiği
+#                 DML, DDL ve trigger yetkisi yok (secrets/<servis>-app-db)
+# Uygulama container'ı sahip parolasını hiç görmez.
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
@@ -35,6 +39,27 @@ spec:
         login: true
         connectionLimit: 20
         passwordSecret: { name: chat-db }
+      # Çalışma zamanı kullanıcıları. Yetkilerini CNPG değil, sahibin
+      # çalıştırdığı migration'lar verir (db/<servis>/migrations, *_app_role).
+      # Limit 20: yuvarlanan güncellemede iki pod'un havuzu (2 x 10).
+      - name: identity_app
+        ensure: present
+        login: true
+        inherit: false
+        connectionLimit: 20
+        passwordSecret: { name: identity-app-db }
+      - name: core_app
+        ensure: present
+        login: true
+        inherit: false
+        connectionLimit: 20
+        passwordSecret: { name: core-app-db }
+      - name: chat_app
+        ensure: present
+        login: true
+        inherit: false
+        connectionLimit: 20
+        passwordSecret: { name: chat-app-db }
   postgresql:
     parameters:
       # 4 GB'lık ev makinesine göre (ADR-0006); prod'da büyütülür.
@@ -53,8 +78,11 @@ spec:
       # SCRAM ile, yalnızca kendi veritabanlarına bağlanır.
       - hostnossl all all all reject
       - hostssl identity identity all scram-sha-256
+      - hostssl identity identity_app all scram-sha-256
       - hostssl core core all scram-sha-256
+      - hostssl core core_app all scram-sha-256
       - hostssl chat chat all scram-sha-256
+      - hostssl chat chat_app all scram-sha-256
       - host all all all reject
   storage:
     size: 5Gi

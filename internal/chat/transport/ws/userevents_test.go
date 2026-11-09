@@ -17,7 +17,7 @@ import (
 // no others (issue #92).
 func TestUserEventsCloseConnections(t *testing.T) {
 	e := newEnv(t, nil)
-	svc, err := userevents.New(userevents.Config{Pool: dbtest.New(t, chatdb.Migrations()), Sessions: e.hub})
+	svc, err := userevents.New(userevents.Config{Pool: dbtest.New(t, "chat", chatdb.Migrations()), Sessions: e.hub})
 	if err != nil {
 		t.Fatal(err)
 	}

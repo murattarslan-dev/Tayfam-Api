@@ -18,7 +18,7 @@ func (e *env) profile(t *testing.T, u id.ID) {
 // raw runs sql with the memberships trigger off, to set up a state.
 func (e *env) raw(t *testing.T, sql string, args ...any) {
 	t.Helper()
-	tx, err := e.pool.Begin(ctx)
+	tx, err := e.admin.Begin(ctx)
 	must(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = tx.Exec(ctx, "SET LOCAL session_replication_role = replica")
@@ -141,8 +141,9 @@ func TestDirectInviteDailyLimit(t *testing.T) {
 	e := setup(t)
 	t1, t2 := e.newTayfa(t, "approval"), e.newTayfa(t, "open")
 	inviter := e.seed(t, t1.id, authz.Member, authz.StatusActive)
-	tx, err := e.pool.Begin(ctx)
+	tx, err := e.admin.Begin(ctx)
 	must(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = tx.Exec(ctx, "SET LOCAL session_replication_role = replica")
 	must(t, err)
 	_, err = tx.Exec(ctx, `INSERT INTO memberships (tayfa_id, user_id, role, status, joined_via, joined_at) VALUES ($1, $2, 'member', 'active', 'code', now())`, t2.id.PG(), inviter.PG())
@@ -166,7 +167,9 @@ func TestDirectInviteDailyLimit(t *testing.T) {
 	if _, err := e.svc.InviteFriend(ctx, t1.admin, t1.id, e.friend(t, t1.admin)); err != nil {
 		t.Fatalf("başka üye: %v", err)
 	}
-	e.exec(t, `UPDATE domain_events SET occurred_at = occurred_at - interval '25 hours' WHERE actor_id = $1`, inviter.PG())
+	// Moving outbox events back in time is a fixture core_app cannot write.
+	_, err = e.admin.Exec(ctx, `UPDATE domain_events SET occurred_at = occurred_at - interval '25 hours' WHERE actor_id = $1`, inviter.PG())
+	must(t, err)
 	if _, err := e.svc.InviteFriend(ctx, inviter, t1.id, e.friend(t, inviter)); err != nil {
 		t.Fatalf("ertesi gün: %v", err)
 	}

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,10 +21,28 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
+// admins maps each test's runtime pool (core_app) to the superuser pool of
+// the same database, for fixtures the service cannot create itself.
+var admins sync.Map
+
 func setup(t *testing.T) (*pgxpool.Pool, *Queries) {
 	t.Helper()
-	pool := dbtest.New(t, coredb.Migrations())
-	return pool, New(pool)
+	d := dbtest.Open(t, "core", coredb.Migrations())
+	admins.Store(d.App, d.Admin)
+	t.Cleanup(func() { admins.Delete(d.App) })
+	return d.App, New(d.App)
+}
+
+// adminOf returns the superuser pool of pool's database. Only fixtures and
+// trigger tests that model a caller with more privileges than core_app use
+// it.
+func adminOf(t *testing.T, pool *pgxpool.Pool) *pgxpool.Pool {
+	t.Helper()
+	a, ok := admins.Load(pool)
+	if !ok {
+		t.Fatal("yönetici bağlantısı yok")
+	}
+	return a.(*pgxpool.Pool)
 }
 
 var noActor id.ID
@@ -128,12 +147,11 @@ func newTayfa(t *testing.T, pool *pgxpool.Pool, creator id.ID, o tayfaOpts) id.I
 }
 
 // seed writes a membership directly with triggers disabled, to set up a
-// state for a test. The test connection is a superuser; the service's own
-// user cannot do this.
+// state for a test. It uses the superuser pool; core_app cannot do this.
 func seed(t *testing.T, pool *pgxpool.Pool, tayfa, user id.ID, role, status string) {
 	t.Helper()
 	ctx := context.Background()
-	tx, err := pool.Begin(ctx)
+	tx, err := adminOf(t, pool).Begin(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -759,7 +777,9 @@ func TestTayfaDeletionCascades(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Kalıcı silme işi (aktörsüz) tayfayı ve ona ait her şeyi siler.
+	// Kalıcı silme işi (aktörsüz, core_app) tayfayı ve ona ait her şeyi
+	// siler. Cascade tablo sahibinin yetkisiyle çalışır: core_app'in
+	// audit_logs'u silmesi için ayrıca yetkiye gerek yoktur.
 	if _, err := pool.Exec(ctx, `DELETE FROM tayfas WHERE id = $1`, tayfa.PG()); err != nil {
 		t.Fatalf("tayfa silinemedi: %v", err)
 	}
@@ -829,8 +849,9 @@ func TestInviteDeletionKeepsMembership(t *testing.T) {
 	_, err = pool.Exec(ctx, `UPDATE memberships SET invite_id = NULL WHERE tayfa_id = $1 AND user_id = $2`, tayfa.PG(), joiner.PG())
 	wantCode(t, err, CodeNoActor)
 
-	// Davet silinince (aktörsüz) üyelik kalır, invite_id boşalır.
-	if _, err := pool.Exec(ctx, `DELETE FROM invites WHERE id = $1`, inv.PG()); err != nil {
+	// Davet silinince (aktörsüz) üyelik kalır, invite_id boşalır. core_app
+	// davet silemez (davetler iptal edilir); silme yönetici bağlantısıyla.
+	if _, err := adminOf(t, pool).Exec(ctx, `DELETE FROM invites WHERE id = $1`, inv.PG()); err != nil {
 		t.Fatalf("davet silinemedi: %v", err)
 	}
 	m, ok := membership(t, q, tayfa, joiner)
@@ -852,30 +873,74 @@ func TestAuditLogIsAppendOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// core_app'in audit_logs'ta yalnızca UPDATE (actor_id) ve DELETE yetkisi
+	// vardır (hesap silme ve 1 yıllık saklama, 00013); geri kalanı yetki
+	// düzeyinde reddedilir.
+	t.Run("güncelleme", func(t *testing.T) {
+		_, err := pool.Exec(ctx, `UPDATE audit_logs SET action = 'member.unbanned' WHERE id = $1`, logID.PG())
+		wantCode(t, err, "42501")
+	})
+	t.Run("truncate", func(t *testing.T) {
+		_, err := pool.Exec(ctx, `TRUNCATE audit_logs`)
+		wantCode(t, err, "42501")
+	})
+	// Verilen dar yetkilerin sınırı trigger'dadır: iş dışında ya da genç bir
+	// kayıtta core_app de değiştiremez.
 	for name, sql := range map[string]string{
-		"güncelleme":   `UPDATE audit_logs SET action = 'member.unbanned' WHERE id = $1`,
-		"aktörü silme": `UPDATE audit_logs SET actor_id = NULL WHERE id = $1`,
-		"silme":        `DELETE FROM audit_logs WHERE id = $1`,
+		"işsiz aktörü silme":  `UPDATE audit_logs SET actor_id = NULL WHERE id = $1`,
+		"aktörü değiştirme":   `UPDATE audit_logs SET actor_id = gen_random_uuid() WHERE id = $1`,
+		"saklama işsiz silme": `DELETE FROM audit_logs WHERE id = $1`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := pool.Exec(ctx, sql, logID.PG())
 			wantCode(t, err, CodeAppendOnly)
 		})
 	}
-	t.Run("truncate", func(t *testing.T) {
-		_, err := pool.Exec(ctx, `TRUNCATE audit_logs`)
+	t.Run("saklama işi genç kaydı silemez", func(t *testing.T) {
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		if err := New(tx).SetAuditRetentionJob(ctx); err != nil {
+			t.Fatal(err)
+		}
+		_, err = tx.Exec(ctx, `DELETE FROM audit_logs WHERE id = $1`, logID.PG())
+		wantCode(t, err, CodeAppendOnly)
+	})
+	t.Run("hesap silme işi aktörü başka değere çeviremez", func(t *testing.T) {
+		wantCode(t, asJob(t, pool, SystemJobAccountDeletion, func(q *Queries) error {
+			_, err := q.db.Exec(ctx, `UPDATE audit_logs SET actor_id = gen_random_uuid() WHERE id = $1`, logID.PG())
+			return err
+		}), CodeAppendOnly)
+	})
+
+	// Trigger ikinci savunma hattıdır: tüm yetkilere sahip bir bağlantı
+	// (burada yönetici) da kaydı değiştiremez.
+	priv := adminOf(t, pool)
+	for name, sql := range map[string]string{
+		"yönetici güncelleme":   `UPDATE audit_logs SET action = 'member.unbanned' WHERE id = $1`,
+		"yönetici aktörü silme": `UPDATE audit_logs SET actor_id = NULL WHERE id = $1`,
+		"yönetici silme":        `DELETE FROM audit_logs WHERE id = $1`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := priv.Exec(ctx, sql, logID.PG())
+			wantCode(t, err, CodeAppendOnly)
+		})
+	}
+	t.Run("yönetici truncate", func(t *testing.T) {
+		_, err := priv.Exec(ctx, `TRUNCATE audit_logs`)
 		wantCode(t, err, CodeAppendOnly)
 	})
 	t.Run("hesap silme işi başka alan değiştiremez", func(t *testing.T) {
-		wantCode(t, asJob(t, pool, SystemJobAccountDeletion, func(q *Queries) error {
+		wantCode(t, asJob(t, priv, SystemJobAccountDeletion, func(q *Queries) error {
 			_, err := q.db.Exec(ctx, `UPDATE audit_logs SET actor_id = NULL, action = 'x.y' WHERE id = $1`, logID.PG())
 			return err
 		}), CodeAppendOnly)
 	})
 	t.Run("hesap silme işi aktörü boşaltır", func(t *testing.T) {
 		wantCode(t, asJob(t, pool, SystemJobAccountDeletion, func(q *Queries) error {
-			_, err := q.db.Exec(ctx, `UPDATE audit_logs SET actor_id = NULL WHERE actor_id = $1`, admin.PG())
-			return err
+			return q.ClearAuditActor(ctx, admin.PG())
 		}), "")
 	})
 
@@ -950,7 +1015,7 @@ func TestConstraints(t *testing.T) {
 		"davetlinin katılım zamanı yok": {"member", "invited", "now()", "memberships_joined_at"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			tx, err := pool.Begin(ctx)
+			tx, err := adminOf(t, pool).Begin(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}

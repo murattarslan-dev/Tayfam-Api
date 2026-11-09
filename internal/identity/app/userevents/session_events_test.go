@@ -17,7 +17,7 @@ import (
 // session.revoked carries the session ID only and user.sanctioned nothing:
 // no reason, no sanction type, no device, no token (issue #92).
 func TestSessionEventPayloads(t *testing.T) {
-	pool := dbtest.New(t, identitydb.Migrations())
+	pool := dbtest.New(t, "identity", identitydb.Migrations())
 	ctx := context.Background()
 	user, s1, s2 := id.New(), id.New(), id.New()
 	inTx(t, pool, func(tx pgx.Tx) error { return SessionsRevoked(ctx, tx, user, s1, s2) })
@@ -43,7 +43,7 @@ func TestSessionEventPayloads(t *testing.T) {
 
 // The session events go to chat only; core does not use them (issue #92).
 func TestSessionEventsGoToChatOnly(t *testing.T) {
-	pool := dbtest.New(t, identitydb.Migrations())
+	pool := dbtest.New(t, "identity", identitydb.Migrations())
 	ctx := context.Background()
 	user, sess := id.New(), id.New()
 	inTx(t, pool, func(tx pgx.Tx) error { return SessionsRevoked(ctx, tx, user, sess) })

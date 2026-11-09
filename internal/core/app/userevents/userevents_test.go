@@ -27,16 +27,20 @@ var (
 type env struct {
 	svc  *Service
 	pool *pgxpool.Pool
+	// admin is a superuser pool for fixtures core_app cannot write
+	// (seeding with triggers off, ADR-0015).
+	admin *pgxpool.Pool
 }
 
 func setup(t *testing.T) *env {
 	t.Helper()
-	pool := dbtest.New(t, coredb.Migrations())
+	d := dbtest.Open(t, "core", coredb.Migrations())
+	pool := d.App
 	svc, err := New(Config{Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: func() time.Time { return now }})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &env{svc: svc, pool: pool}
+	return &env{svc: svc, pool: pool, admin: d.Admin}
 }
 
 func must(t *testing.T, err error) {
@@ -50,7 +54,7 @@ func must(t *testing.T, err error) {
 // test connection is a superuser). Apply itself always runs with triggers.
 func (e *env) seed(t *testing.T, sql string, args ...any) {
 	t.Helper()
-	tx, err := e.pool.Begin(ctx)
+	tx, err := e.admin.Begin(ctx)
 	must(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = tx.Exec(ctx, "SET LOCAL session_replication_role = replica")

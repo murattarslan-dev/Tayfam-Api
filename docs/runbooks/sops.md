@@ -79,6 +79,28 @@ token'ları doğrulanabilsin diye kısa süre yayında kalır (ADR-0004, ADR-001
 eklenmez, böylece onunla imzalanmış token'lar hemen geçersiz olur ve tüm
 kullanıcıların erişim token'ı yenilenir (refresh token'lar etkilenmez).
 
+## Veritabanı kullanıcı parolaları
+
+Servis başına iki Postgres kullanıcısı vardır (ADR-0015): sahip `<servis>`
+(`secrets/<servis>-db`, yalnızca migrate initContainer'ı) ve çalışma zamanı
+kullanıcısı `<servis>_app` (`secrets/<servis>-app-db`, servis container'ı).
+
+```sh
+./scripts/new-db-secrets.sh dev        # yalnızca eksik olanları üretir, kustomization'a ekler
+git add deploy/apps/dev/secrets/ deploy/apps/dev/kustomization.yaml
+```
+
+Rotasyon (CloudNativePG `cnpg.io/reload` etiketiyle parolayı kendisi
+günceller; servis pod'u yeni secret'ı yeniden başlayınca alır):
+
+```sh
+FORCE=1 ./scripts/new-db-secrets.sh dev core:app     # ya da core:owner
+```
+
+Birleştirdikten sonra `kubectl -n tayfam-dev rollout restart deploy/core`.
+Parola değiştikten sonra yeni bağlantılar eski parolayla açılamaz; restart
+geciktirilmez.
+
 ## age anahtarı kaybolursa
 
 Şifreli dosyalar açılamaz. Yeni bir age anahtarı üretilir (İlk kurulum, 2-3),

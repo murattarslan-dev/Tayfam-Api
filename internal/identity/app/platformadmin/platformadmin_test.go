@@ -46,8 +46,11 @@ func (f fakeGoogle) Verify(_ context.Context, tok, n string) (oidc.Identity, err
 }
 
 type env struct {
-	svc      *Service
-	pool     *pgxpool.Pool
+	svc  *Service
+	pool *pgxpool.Pool
+	// owner is a superuser pool for what only the platform owner does
+	// (adding and removing administrators) and for moving time in fixtures.
+	owner    *pgxpool.Pool
 	q        *store.Queries
 	now      time.Time
 	issued   time.Time
@@ -58,14 +61,15 @@ type env struct {
 
 func setup(t *testing.T) *env {
 	t.Helper()
-	pool := dbtest.New(t, identitydb.Migrations())
+	d := dbtest.Open(t, "identity", identitydb.Migrations())
+	pool := d.App
 	seed := make([]byte, ed25519.SeedSize)
 	copy(seed, "platform-admin-test")
 	key, err := auth.ParseSigningKey("k1", base64.StdEncoding.EncodeToString(seed))
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &env{pool: pool, q: store.New(pool), now: time.Now().UTC().Truncate(time.Second), logs: &bytes.Buffer{}}
+	e := &env{pool: pool, owner: d.Admin, q: store.New(pool), now: time.Now().UTC().Truncate(time.Second), logs: &bytes.Buffer{}}
 	e.issued = e.now.Add(-30 * time.Second)
 	clock := func() time.Time { return e.now }
 	signer, err := auth.NewAdminSigner(auth.AdminSignerConfig{Key: key, Issuer: "tayfam-identity", Now: clock})
@@ -85,7 +89,7 @@ func setup(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	e.admin = e.user(t, "g-admin")
-	if _, err := pool.Exec(context.Background(), `INSERT INTO platform_admins (user_id) VALUES ($1)`, e.admin.PG()); err != nil {
+	if _, err := e.owner.Exec(context.Background(), `INSERT INTO platform_admins (user_id) VALUES ($1)`, e.admin.PG()); err != nil {
 		t.Fatal(err)
 	}
 	e.user(t, "g-plain")
@@ -200,7 +204,7 @@ func TestRemovedAdminIsShutOut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.pool.Exec(ctx, `DELETE FROM platform_admins WHERE user_id = $1`, e.admin.PG()); err != nil {
+	if _, err := e.owner.Exec(ctx, `DELETE FROM platform_admins WHERE user_id = $1`, e.admin.PG()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.svc.Get(ctx, c); !errors.Is(err, ErrNotAdmin) {

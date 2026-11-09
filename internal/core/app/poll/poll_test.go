@@ -30,12 +30,16 @@ type env struct {
 	tayfas *tayfa.Service
 	pool   *pgxpool.Pool
 	shift  time.Duration
+	// admin is a superuser pool: the triggers are checked behind privileges
+	// core_app does not have (ADR-0015).
+	admin *pgxpool.Pool
 }
 
 func setup(t *testing.T) *env {
 	t.Helper()
-	pool := dbtest.New(t, coredb.Migrations())
-	e := &env{pool: pool}
+	d := dbtest.Open(t, "core", coredb.Migrations())
+	pool := d.App
+	e := &env{pool: pool, admin: d.Admin}
 	now := func() time.Time { return time.Now().Add(e.shift) }
 	var err error
 	if e.svc, err = New(Config{Pool: pool, Now: now}); err != nil {
@@ -628,7 +632,11 @@ func TestDatabaseRules(t *testing.T) {
 	code("üye olmayanın oyu", insertVote(c.nonMember, opts[0]), store.CodePollVote)
 	code("onay bekleyenin oyu", insertVote(c.pending, opts[0]), store.CodePollVote)
 	code("susturulmuşun oyu", insertVote(c.muted, opts[0]), store.CodePollVote)
+	// core_app cannot update votes or options at all; the triggers are the
+	// second line for a connection that can.
 	_, err := e.pool.Exec(ctx, "UPDATE poll_votes SET option_id = $1 WHERE poll_id = $2", opts[1].ID.PG(), p.ID.PG())
+	code("oy güncelleme yetkisi", err, "42501")
+	_, err = e.admin.Exec(ctx, "UPDATE poll_votes SET option_id = $1 WHERE poll_id = $2", opts[1].ID.PG(), p.ID.PG())
 	code("oy güncelleme", err, store.CodePollVote)
 
 	// Another poll's option.
@@ -646,6 +654,8 @@ func TestDatabaseRules(t *testing.T) {
 	_, err = e.pool.Exec(ctx, "UPDATE polls SET tayfa_id = $1 WHERE id = $2", e.crew(t).tayfa.PG(), other.ID.PG())
 	code("anketin tayfası", err, store.CodePollFrozen)
 	_, err = e.pool.Exec(ctx, "UPDATE poll_options SET text = 'x' WHERE poll_id = $1", p.ID.PG())
+	code("seçenek değiştirme yetkisi", err, "42501")
+	_, err = e.admin.Exec(ctx, "UPDATE poll_options SET text = 'x' WHERE poll_id = $1", p.ID.PG())
 	code("seçenek değiştirme", err, store.CodePollFrozen)
 
 	// A closed or deleted poll takes no votes.

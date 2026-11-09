@@ -29,7 +29,7 @@ func count(t *testing.T, pool *pgxpool.Pool, sql string, args ...any) int {
 }
 
 func TestDeletedRemovesPersonalDataFromOutbox(t *testing.T) {
-	pool := dbtest.New(t, identitydb.Migrations())
+	pool := dbtest.New(t, "identity", identitydb.Migrations())
 	ctx := context.Background()
 	user, other := id.New(), id.New()
 	avatar := id.New().String()
@@ -60,7 +60,7 @@ func TestDeletedRemovesPersonalDataFromOutbox(t *testing.T) {
 }
 
 func TestProfileUpdatedNeedsName(t *testing.T) {
-	pool := dbtest.New(t, identitydb.Migrations())
+	pool := dbtest.New(t, "identity", identitydb.Migrations())
 	err := pgx.BeginFunc(context.Background(), pool, func(tx pgx.Tx) error {
 		return ProfileUpdated(context.Background(), tx, id.New(), Profile{})
 	})
