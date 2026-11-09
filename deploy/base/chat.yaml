@@ -86,6 +86,12 @@ spec:
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef: { name: chat-db, key: password }
+            # Kanal mesajı şifreleme anahtarı (issue #81, ADR-0005). Yalnızca
+            # chat okur; doğum tarihi anahtarından ayrıdır. Üretim:
+            # scripts/new-chat-message-key.sh <ortam>.
+            - name: CHAT_MESSAGE_KEYS
+              valueFrom:
+                secretKeyRef: { name: chat-message-key, key: CHAT_MESSAGE_KEYS }
           ports:
             - { name: grpc, containerPort: 9090 }
             - { name: http, containerPort: 8080 }
