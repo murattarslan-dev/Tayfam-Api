@@ -93,8 +93,8 @@ func (s *NotificationServer) ListNotifications(ctx context.Context, req *chatv1.
 	out := &chatv1.ListNotificationsResponse{Notifications: make([]*chatv1.Notification, 0, len(list)), NextPageToken: next}
 	for _, n := range list {
 		out.Notifications = append(out.Notifications, &chatv1.Notification{
-			Id: n.ID.String(), Type: toProto(notificationTypes, n.Type), TayfaId: idOrEmpty(n.Tayfa), ActorId: idOrEmpty(n.Actor),
-			TargetType: toProto(targetTypes, n.TargetType), TargetId: n.Target.String(), QuestionId: idOrEmpty(n.Question),
+			Id: n.ID.String(), Type: toProto(listedTypes, n.Type), TayfaId: idOrEmpty(n.Tayfa), ActorId: idOrEmpty(n.Actor),
+			TargetType: toProto(listedTargets, n.TargetType), TargetId: n.Target.String(), QuestionId: idOrEmpty(n.Question),
 			Read: !n.ReadAt.IsZero(), CreateTime: timestamppb.New(n.CreatedAt),
 			SubjectUserId: idOrEmpty(n.Subject), WarningReason: toProto(warningReasons, n.Reason),
 		})

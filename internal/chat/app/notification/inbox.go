@@ -47,6 +47,11 @@ const (
 	// TypeReportResolved: a report the recipient filed was resolved (issue
 	// #76). It never has an actor.
 	TypeReportResolved = "report_resolved"
+	// Direct message notices (issue #95). chat writes them itself (its own
+	// data); they say only that there is something new: no actor, no
+	// content, not about a tayfa (ADR-0005, v14).
+	TypeDMRequest = "dm_request"
+	TypeDMMessage = "dm_message"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -58,6 +63,8 @@ const (
 	TargetAnswer       = "answer"
 	TargetUser         = "user"
 	TargetReport       = "report"
+	// TargetDMConversation: a conversation of the recipient.
+	TargetDMConversation = "dm_conversation"
 )
 
 // Reasons of TypeTayfaWarned.
@@ -86,14 +93,19 @@ func targetOf(typ string) (string, bool) {
 		return TargetTayfa, true
 	case TypeFriendRequest, TypeFriendAccepted:
 		return TargetUser, true
+	case TypeDMRequest, TypeDMMessage:
+		return TargetDMConversation, true
 	}
 	return "", false
 }
 
 // withoutTayfa reports whether a notification type is not about a tayfa.
 func withoutTayfa(typ string) bool {
-	return typ == TypeFriendRequest || typ == TypeFriendAccepted
+	return typ == TypeFriendRequest || typ == TypeFriendAccepted || IsDirect(typ)
 }
+
+// IsDirect reports whether a notification type is about a direct message.
+func IsDirect(typ string) bool { return typ == TypeDMRequest || typ == TypeDMMessage }
 
 // Request is one notification.requested event of core.
 type Request struct {
@@ -135,8 +147,9 @@ func (r Request) Validate() error {
 	if (r.Type == TypeHikeOverdue) != (r.Subject != id.ID{}) {
 		return apperr.Validation("notification_requested.subject_user_id")
 	}
-	// The reporter is never told who handled their report.
-	if r.Type == TypeReportResolved && r.Actor != (id.ID{}) {
+	// The reporter is never told who handled their report; a direct
+	// message notice does not say who wrote.
+	if (r.Type == TypeReportResolved || IsDirect(r.Type)) && r.Actor != (id.ID{}) {
 		return apperr.Validation("actor_id")
 	}
 	if r.Type == TypeTayfaWarned {

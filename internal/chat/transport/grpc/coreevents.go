@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"log/slog"
+	"maps"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -64,6 +65,23 @@ var targetTypes = map[chatv1.NotificationTargetType]string{
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_USER:         notification.TargetUser,
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_REPORT:       notification.TargetReport,
 }
+
+// listedTypes and listedTargets add chat's own direct message notices to
+// what core may request. They are for listing only, so core cannot ask for
+// a direct message notice.
+var (
+	listedTypes = func() map[chatv1.NotificationType]string {
+		m := maps.Clone(notificationTypes)
+		m[chatv1.NotificationType_NOTIFICATION_TYPE_DM_REQUEST] = notification.TypeDMRequest
+		m[chatv1.NotificationType_NOTIFICATION_TYPE_DM_MESSAGE] = notification.TypeDMMessage
+		return m
+	}()
+	listedTargets = func() map[chatv1.NotificationTargetType]string {
+		m := maps.Clone(targetTypes)
+		m[chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_DM_CONVERSATION] = notification.TargetDMConversation
+		return m
+	}()
+)
 
 var warningReasons = map[chatv1.TayfaWarningReason]string{
 	chatv1.TayfaWarningReason_TAYFA_WARNING_REASON_INACTIVE:    notification.ReasonInactive,

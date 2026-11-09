@@ -102,7 +102,9 @@ func MessageFrom(tayfa id.ID, m channel.Message) MessageData {
 type LiveConfig struct {
 	Hub      *Hub
 	Channels Channels
-	Log      *slog.Logger
+	// DirectMessages may be left nil and given with BindDirect.
+	DirectMessages DirectMessages
+	Log            *slog.Logger
 }
 
 // Live subscribes connections to channels, sends from them and delivers

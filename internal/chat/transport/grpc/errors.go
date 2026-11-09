@@ -53,6 +53,16 @@ func reasonFor(err error) (code codes.Code, reason chatv1.ErrorReason, ok bool) 
 		return codes.PermissionDenied, chatv1.ErrorReason_ERROR_REASON_ROLE_HIERARCHY, true
 	case errors.Is(err, apperr.ErrChannelNameTaken):
 		return codes.AlreadyExists, chatv1.ErrorReason_ERROR_REASON_CHANNEL_NAME_TAKEN, true
+	case errors.Is(err, apperr.ErrConversationNotFound):
+		return codes.NotFound, chatv1.ErrorReason_ERROR_REASON_CONVERSATION_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrDirectMessageNotAllowed):
+		return codes.PermissionDenied, chatv1.ErrorReason_ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED, true
+	case errors.Is(err, apperr.ErrMessageRequestPending):
+		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_MESSAGE_REQUEST_PENDING, true
+	case errors.Is(err, apperr.ErrMessageRequestLimit):
+		return codes.ResourceExhausted, chatv1.ErrorReason_ERROR_REASON_MESSAGE_REQUEST_LIMIT, true
+	case errors.Is(err, apperr.ErrMessageRequestNotFound):
+		return codes.NotFound, chatv1.ErrorReason_ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND, true
 	}
 	return codes.Unknown, chatv1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }
@@ -74,7 +84,7 @@ func errorStatus(ctx context.Context, log *slog.Logger, err error) error {
 		return reasonStatus(code, reason, nil)
 	}
 	switch {
-	case errors.Is(err, apperr.ErrUnavailable), errors.Is(err, apperr.ErrChannelsUnavailable):
+	case errors.Is(err, apperr.ErrUnavailable), errors.Is(err, apperr.ErrChannelsUnavailable), errors.Is(err, apperr.ErrDirectMessagesUnavailable):
 		return status.Error(codes.Unavailable, msgRejected)
 	case errors.Is(err, context.Canceled):
 		return status.Error(codes.Canceled, msgRejected)

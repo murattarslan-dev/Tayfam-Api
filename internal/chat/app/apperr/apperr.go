@@ -78,3 +78,25 @@ var (
 	// (its access token may still be valid); no connection for it.
 	ErrSessionEnded = errors.New("oturum kapatılmış")
 )
+
+// DirectMessageService errors (issue #95).
+var (
+	// ErrConversationNotFound: no such conversation of the caller, or a
+	// request the caller declined. Indistinguishable on purpose.
+	ErrConversationNotFound = errors.New("konuşma bulunamadı")
+	// ErrDirectMessageNotAllowed: core says the caller cannot write to the
+	// user (block, no shared tayfa nor friendship, unknown user); which one
+	// is never said.
+	ErrDirectMessageNotAllowed = errors.New("birebir mesaj izni yok")
+	// ErrMessageRequestPending: the caller's request waits for an answer
+	// (or was declined, which the sender is never told).
+	ErrMessageRequestPending = errors.New("mesaj isteği cevap bekliyor")
+	// ErrMessageRequestLimit: the caller's daily message request limit.
+	ErrMessageRequestLimit = errors.New("günlük mesaj isteği sınırı")
+	// ErrMessageRequestNotFound: no request waits for the caller in the
+	// conversation.
+	ErrMessageRequestNotFound = errors.New("mesaj isteği bulunamadı")
+	// ErrDirectMessagesUnavailable: chat runs without a message key
+	// (CHAT_MESSAGE_KEYS); direct messages are off until it is configured.
+	ErrDirectMessagesUnavailable = errors.New("birebir mesaj anahtarı yok")
+)

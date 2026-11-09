@@ -54,6 +54,14 @@ enum NotificationType {
   // not told who handled it. The client reads the outcome from core's
   // GetMyReport.
   NOTIFICATION_TYPE_REPORT_RESOLVED = 16;
+  // Someone sent the recipient a message request (target:
+  // DM_CONVERSATION). Not about a tayfa. It says only that there is a new
+  // request: no actor, no content (ADR-0005, v14).
+  NOTIFICATION_TYPE_DM_REQUEST = 17;
+  // A new direct message (target: DM_CONVERSATION). Not about a tayfa; no
+  // actor, no content. At most one unread per conversation: further
+  // messages add none until the conversation is read.
+  NOTIFICATION_TYPE_DM_MESSAGE = 18;
 }
 
 enum NotificationTargetType {
@@ -68,6 +76,9 @@ enum NotificationTargetType {
   NOTIFICATION_TARGET_TYPE_USER = 6;
   // target_id is a report ID of the recipient (core's GetMyReport).
   NOTIFICATION_TARGET_TYPE_REPORT = 7;
+  // target_id is a conversation ID of the recipient
+  // (DirectMessageService.GetConversation).
+  NOTIFICATION_TARGET_TYPE_DM_CONVERSATION = 8;
 }
 
 // Why an inactive tayfa was warned (core's cleanup job).

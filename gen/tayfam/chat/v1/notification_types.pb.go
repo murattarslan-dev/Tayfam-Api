@@ -75,6 +75,14 @@ const (
 	// not told who handled it. The client reads the outcome from core's
 	// GetMyReport.
 	NotificationType_NOTIFICATION_TYPE_REPORT_RESOLVED NotificationType = 16
+	// Someone sent the recipient a message request (target:
+	// DM_CONVERSATION). Not about a tayfa. It says only that there is a new
+	// request: no actor, no content (ADR-0005, v14).
+	NotificationType_NOTIFICATION_TYPE_DM_REQUEST NotificationType = 17
+	// A new direct message (target: DM_CONVERSATION). Not about a tayfa; no
+	// actor, no content. At most one unread per conversation: further
+	// messages add none until the conversation is read.
+	NotificationType_NOTIFICATION_TYPE_DM_MESSAGE NotificationType = 18
 )
 
 // Enum value maps for NotificationType.
@@ -97,6 +105,8 @@ var (
 		14: "NOTIFICATION_TYPE_FRIEND_ACCEPTED",
 		15: "NOTIFICATION_TYPE_TAYFA_INVITATION",
 		16: "NOTIFICATION_TYPE_REPORT_RESOLVED",
+		17: "NOTIFICATION_TYPE_DM_REQUEST",
+		18: "NOTIFICATION_TYPE_DM_MESSAGE",
 	}
 	NotificationType_value = map[string]int32{
 		"NOTIFICATION_TYPE_UNSPECIFIED":              0,
@@ -116,6 +126,8 @@ var (
 		"NOTIFICATION_TYPE_FRIEND_ACCEPTED":          14,
 		"NOTIFICATION_TYPE_TAYFA_INVITATION":         15,
 		"NOTIFICATION_TYPE_REPORT_RESOLVED":          16,
+		"NOTIFICATION_TYPE_DM_REQUEST":               17,
+		"NOTIFICATION_TYPE_DM_MESSAGE":               18,
 	}
 )
 
@@ -160,6 +172,9 @@ const (
 	NotificationTargetType_NOTIFICATION_TARGET_TYPE_USER NotificationTargetType = 6
 	// target_id is a report ID of the recipient (core's GetMyReport).
 	NotificationTargetType_NOTIFICATION_TARGET_TYPE_REPORT NotificationTargetType = 7
+	// target_id is a conversation ID of the recipient
+	// (DirectMessageService.GetConversation).
+	NotificationTargetType_NOTIFICATION_TARGET_TYPE_DM_CONVERSATION NotificationTargetType = 8
 )
 
 // Enum value maps for NotificationTargetType.
@@ -173,16 +188,18 @@ var (
 		5: "NOTIFICATION_TARGET_TYPE_ANSWER",
 		6: "NOTIFICATION_TARGET_TYPE_USER",
 		7: "NOTIFICATION_TARGET_TYPE_REPORT",
+		8: "NOTIFICATION_TARGET_TYPE_DM_CONVERSATION",
 	}
 	NotificationTargetType_value = map[string]int32{
-		"NOTIFICATION_TARGET_TYPE_UNSPECIFIED":  0,
-		"NOTIFICATION_TARGET_TYPE_TAYFA":        1,
-		"NOTIFICATION_TARGET_TYPE_MEMBERSHIP":   2,
-		"NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT": 3,
-		"NOTIFICATION_TARGET_TYPE_EVENT":        4,
-		"NOTIFICATION_TARGET_TYPE_ANSWER":       5,
-		"NOTIFICATION_TARGET_TYPE_USER":         6,
-		"NOTIFICATION_TARGET_TYPE_REPORT":       7,
+		"NOTIFICATION_TARGET_TYPE_UNSPECIFIED":     0,
+		"NOTIFICATION_TARGET_TYPE_TAYFA":           1,
+		"NOTIFICATION_TARGET_TYPE_MEMBERSHIP":      2,
+		"NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT":    3,
+		"NOTIFICATION_TARGET_TYPE_EVENT":           4,
+		"NOTIFICATION_TARGET_TYPE_ANSWER":          5,
+		"NOTIFICATION_TARGET_TYPE_USER":            6,
+		"NOTIFICATION_TARGET_TYPE_REPORT":          7,
+		"NOTIFICATION_TARGET_TYPE_DM_CONVERSATION": 8,
 	}
 )
 
@@ -269,7 +286,7 @@ var File_tayfam_chat_v1_notification_types_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\n" +
-	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\x99\x05\n" +
+	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xdd\x05\n" +
 	"\x10NotificationType\x12!\n" +
 	"\x1dNOTIFICATION_TYPE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fNOTIFICATION_TYPE_EVENT_CREATED\x10\x01\x12#\n" +
@@ -288,7 +305,9 @@ const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	" NOTIFICATION_TYPE_FRIEND_REQUEST\x10\r\x12%\n" +
 	"!NOTIFICATION_TYPE_FRIEND_ACCEPTED\x10\x0e\x12&\n" +
 	"\"NOTIFICATION_TYPE_TAYFA_INVITATION\x10\x0f\x12%\n" +
-	"!NOTIFICATION_TYPE_REPORT_RESOLVED\x10\x10*\xcb\x02\n" +
+	"!NOTIFICATION_TYPE_REPORT_RESOLVED\x10\x10\x12 \n" +
+	"\x1cNOTIFICATION_TYPE_DM_REQUEST\x10\x11\x12 \n" +
+	"\x1cNOTIFICATION_TYPE_DM_MESSAGE\x10\x12*\xf9\x02\n" +
 	"\x16NotificationTargetType\x12(\n" +
 	"$NOTIFICATION_TARGET_TYPE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eNOTIFICATION_TARGET_TYPE_TAYFA\x10\x01\x12'\n" +
@@ -297,7 +316,8 @@ const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\x1eNOTIFICATION_TARGET_TYPE_EVENT\x10\x04\x12#\n" +
 	"\x1fNOTIFICATION_TARGET_TYPE_ANSWER\x10\x05\x12!\n" +
 	"\x1dNOTIFICATION_TARGET_TYPE_USER\x10\x06\x12#\n" +
-	"\x1fNOTIFICATION_TARGET_TYPE_REPORT\x10\a*\x83\x01\n" +
+	"\x1fNOTIFICATION_TARGET_TYPE_REPORT\x10\a\x12,\n" +
+	"(NOTIFICATION_TARGET_TYPE_DM_CONVERSATION\x10\b*\x83\x01\n" +
 	"\x12TayfaWarningReason\x12$\n" +
 	" TAYFA_WARNING_REASON_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dTAYFA_WARNING_REASON_INACTIVE\x10\x01\x12$\n" +

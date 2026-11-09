@@ -19,6 +19,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/channelcrypt"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/coreevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/coremembers"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/dm"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/realtime"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/userevents"
@@ -64,7 +65,7 @@ func setup(rt *service.Runtime) error {
 	if cipher != nil {
 		rt.Log.Info("kanal mesajı anahtarı yüklendi", slog.Int("active_version", int(cipher.ActiveVersion())))
 	} else {
-		rt.Log.Warn("CHAT_MESSAGE_KEYS yok; kanallar kapalı (UNAVAILABLE)")
+		rt.Log.Warn("CHAT_MESSAGE_KEYS yok; kanallar ve birebir mesajlar kapalı (UNAVAILABLE)")
 	}
 	pool, err := db.Open(context.Background(), dbCfg.URL())
 	if err != nil {
@@ -92,10 +93,12 @@ func setup(rt *service.Runtime) error {
 
 	// Hesap silinince bildirimler ve tercihler de silinir (ADR-0009).
 	// Kanal mesajları kalır, yazar alanı boşalır; okunma kayıtları silinir.
+	// Birebir konuşmalarda silinen kişinin tarafı ve gönderen alanı boşalır
+	// (v14 "İlişkiler ve Silme Davranışı").
 	// Oturum iptali, yaptırım ve silme açık bağlantıları kapatır (ADR-0004).
 	userEvents, err := userevents.New(userevents.Config{
 		Pool:     pool,
-		Cleanups: []userevents.Cleanup{notification.Cleanup, channel.Cleanup},
+		Cleanups: []userevents.Cleanup{notification.Cleanup, channel.Cleanup, dm.Cleanup},
 		Sessions: hub,
 	})
 	if err != nil {
@@ -149,6 +152,19 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 	live.Bind(channels)
+	// Birebir mesajlar (issue #95, düz sürüm): kim kime yazabilir core'a
+	// her mesajda, kullanıcının kendi token'ıyla sorulur (CheckDirectMessage).
+	// Metin kanal mesajlarıyla aynı anahtarla şifreli saklanır; anahtar
+	// yoksa DM metodları da UNAVAILABLE döner. REST ve WebSocket gönderimi
+	// aynı fonksiyondan geçer.
+	directMessages, err := dm.New(dm.Config{
+		Pool: pool, Log: rt.Log, Rules: coremembers.NewDirectMessageRules(corev1.NewDirectMessageServiceClient(coreConn)),
+		Cipher: cipher, Publisher: live.Direct(),
+	})
+	if err != nil {
+		return err
+	}
+	live.BindDirect(directMessages)
 	// Bildirimlerin alıcılarını core seçer (ADR-0009); chat kaydı yazar.
 	// Üyelik ve tayfa durumu olayları yalnızca kanal izni önbelleğini
 	// temizler; chat üyelik kopyası tutmaz.
@@ -164,6 +180,7 @@ func setup(rt *service.Runtime) error {
 	chatv1.RegisterCoreEventServiceServer(srv, grpcapi.NewCoreEventServer(coreEvents, rt.Log))
 	chatv1.RegisterNotificationServiceServer(srv, grpcapi.NewNotificationServer(notifications, rt.Log))
 	chatv1.RegisterChannelServiceServer(srv, grpcapi.NewChannelServer(channels, rt.Log))
+	chatv1.RegisterDirectMessageServiceServer(srv, grpcapi.NewDirectMessageServer(directMessages, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
 
 	wsHandler, err := ws.New(ws.Config{
@@ -185,6 +202,7 @@ func setup(rt *service.Runtime) error {
 	rt.AddWorker("notification-retention", notifications.RunRetention)
 	// Silinmiş kanal mesajları 30 gün sonra kalıcı silinir (v14).
 	rt.AddWorker("channel-message-purge", channels.RunPurge)
+	rt.AddWorker("direct-message-purge", directMessages.RunPurge)
 	return nil
 }
 

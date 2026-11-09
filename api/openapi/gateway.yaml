@@ -3201,6 +3201,13 @@ paths:
           okunur tayfa (`tayfa_read_only`), yetki (`permission_denied`),
           boyut (`invalid_request`, `data.field: body`). Aynı
           `client_request_id` ile tekrar gönderim ilk mesajı döner.
+        - `dm.send` `{recipient_user_id, body, client_request_id}` →
+          `dm.sent` (birebir mesaj ve `conversation_status`: `active`,
+          `request_sent`, `request_received`). REST'teki
+          `POST /v1/direct-messages` ile aynı fonksiyondan geçer; abonelik
+          gerekmez. Hatalar: `direct_message_not_allowed`,
+          `message_request_pending`, `message_request_limit`,
+          `invalid_request` (`data.field`), `unavailable`.
 
         Sunucu çerçeveleri:
         - `ready`: bağlantı hazır; `data.heartbeat_seconds` ping aralığı,
@@ -3217,6 +3224,14 @@ paths:
           olunabilir).
         - `notification`: yeni bildirim `{type, tayfa_id, target_type,
           target_id}`; içerik yok, liste REST'ten çekilir.
+        - `dm.message_created`: birebir mesaj `{id, conversation_id,
+          sender_user_id, body, created_at}`; konuşmanın iki tarafının tüm
+          bağlantılarına gider (gönderenin diğer cihazları dahil).
+        - `dm.message_deleted`: `{conversation_id, message_id}`.
+        - `dm.conversation_accepted`: mesaj isteği kabul edildi
+          `{conversation_id}`. Reddedilen istek gönderene bildirilmez.
+        - `dm.read`: karşı tarafın okundu işareti `{conversation_id,
+          user_id, last_read_message_id}`; yalnızca aktif konuşmada.
         - `error`: `data.code`: `invalid_frame`, `invalid_request`
           (`data.field`), `unsupported_type`, `rate_limited` (kullanıcı
           başına dakikada 60, en fazla 20'lik ani gönderim; sürdüren

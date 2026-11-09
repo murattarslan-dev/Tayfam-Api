@@ -311,3 +311,22 @@ func TestReportResolvedHasNoActor(t *testing.T) {
 		t.Fatalf("bildirim: %+v", n)
 	}
 }
+
+// A direct message notice is not about a tayfa and never names the sender.
+func TestDirectNoticeRules(t *testing.T) {
+	ok := Request{Event: id.New(), Type: TypeDMRequest, TargetType: TargetDMConversation, Target: id.New(), Recipients: []id.ID{id.New()}}
+	if err := ok.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for name, f := range map[string]func(r *Request){
+		"gönderenli": func(r *Request) { r.Actor = id.New() },
+		"tayfalı":    func(r *Request) { r.Tayfa = id.New() },
+		"hedef":      func(r *Request) { r.TargetType = TargetUser },
+	} {
+		r := ok
+		f(&r)
+		if err := r.Validate(); err == nil {
+			t.Errorf("%s kabul edildi", name)
+		}
+	}
+}

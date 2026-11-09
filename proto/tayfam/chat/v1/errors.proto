@@ -68,4 +68,28 @@ enum ErrorReason {
 
   // Deprecated: real-time tickets are gone (RealtimeService); never sent.
   ERROR_REASON_TICKET_LIMIT = 13 [deprecated = true];
+
+  // Direct messages (DirectMessageService, direct_messages.proto; issue #95).
+
+  // NOT_FOUND. No such conversation of the caller, or a request the caller
+  // declined. These cases are indistinguishable on purpose.
+  ERROR_REASON_CONVERSATION_NOT_FOUND = 14;
+
+  // PERMISSION_DENIED. The caller cannot write to this user (core's answer:
+  // a block in either direction, no shared live tayfa and no friendship, or
+  // an unknown or deleted user). Which one is never said.
+  ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED = 15;
+
+  // FAILED_PRECONDITION. The caller's message request waits for an answer;
+  // only one message until the recipient replies or accepts. Also after a
+  // decline, which the sender is never told.
+  ERROR_REASON_MESSAGE_REQUEST_PENDING = 16;
+
+  // RESOURCE_EXHAUSTED. The caller opened as many message requests in the
+  // last 24 hours as allowed (5 or 20). Declined requests still count.
+  ERROR_REASON_MESSAGE_REQUEST_LIMIT = 17;
+
+  // NOT_FOUND. No message request waits for the caller in this
+  // conversation.
+  ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND = 18;
 }
