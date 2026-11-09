@@ -53,16 +53,22 @@ SET invited_by_user_id = NULLIF(invited_by_user_id, @user_id),
     muted_by           = NULLIF(muted_by, @user_id)
 WHERE @user_id IN (invited_by_user_id, approved_by, muted_by);
 
+-- Duyurular kalır, yazar "Silinmiş kullanıcı" olur (v14 "İlişkiler ve
+-- Silme Davranışı").
+-- name: ClearAnnouncementUserFields :exec
+UPDATE announcements
+SET author_id  = NULLIF(author_id, @user_id),
+    deleted_by = NULLIF(deleted_by, @user_id)
+WHERE @user_id IN (author_id, deleted_by);
+
 -- name: ClearAuditActor :exec
 UPDATE audit_logs SET actor_id = NULL WHERE actor_id = @user_id;
 
 -- name: ClearEventActor :exec
 UPDATE domain_events SET actor_id = NULL WHERE actor_id = @user_id;
 
+-- Sistemin olayları txn.Event (internal/platform/outbox.Write) ile, işlemi
+-- yapan olmadan yazılır.
 -- name: CreateSystemAuditLog :exec
 INSERT INTO audit_logs (id, tayfa_id, actor_id, action, target_type, target_id, metadata)
 VALUES (@id, @tayfa_id, NULL, @action, @target_type, @target_id, @metadata);
-
--- name: CreateSystemDomainEvent :exec
-INSERT INTO domain_events (id, type, actor_id, tayfa_id, subject_type, subject_id, payload)
-VALUES (@id, @type, NULL, @tayfa_id, @subject_type, @subject_id, @payload);

@@ -18,6 +18,9 @@ type Querier interface {
 	ApproveMembership(ctx context.Context, arg ApproveMembershipParams) (int64, error)
 	BanMembership(ctx context.Context, arg BanMembershipParams) (int64, error)
 	CancelTayfaDeletion(ctx context.Context, id pgtype.UUID) (int64, error)
+	// Duyurular kalır, yazar "Silinmiş kullanıcı" olur (v14 "İlişkiler ve
+	// Silme Davranışı").
+	ClearAnnouncementUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearAuditActor(ctx context.Context, userID pgtype.UUID) error
 	ClearEventActor(ctx context.Context, userID pgtype.UUID) error
 	ClearInviteCreator(ctx context.Context, userID pgtype.UUID) error
@@ -40,8 +43,9 @@ type Querier interface {
 	// Üyelik değişiklikleri transaction içinde SetActor ya da SetSystemJob'dan
 	// sonra yapılır; aksi halde trigger reddeder.
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) error
+	// Sistemin olayları txn.Event (internal/platform/outbox.Write) ile, işlemi
+	// yapan olmadan yazılır.
 	CreateSystemAuditLog(ctx context.Context, arg CreateSystemAuditLogParams) error
-	CreateSystemDomainEvent(ctx context.Context, arg CreateSystemDomainEventParams) error
 	// Tayfa, kurucu üyelik, modüller ve ilgi alanları tek transaction'da
 	// yazılır; birleştirmeyi app katmanı yapar.
 	CreateTayfa(ctx context.Context, arg CreateTayfaParams) error

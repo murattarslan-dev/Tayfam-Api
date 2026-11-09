@@ -11,6 +11,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearAnnouncementUserFields = `-- name: ClearAnnouncementUserFields :exec
+UPDATE announcements
+SET author_id  = NULLIF(author_id, $1),
+    deleted_by = NULLIF(deleted_by, $1)
+WHERE $1 IN (author_id, deleted_by)
+`
+
+// Duyurular kalır, yazar "Silinmiş kullanıcı" olur (v14 "İlişkiler ve
+// Silme Davranışı").
+func (q *Queries) ClearAnnouncementUserFields(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearAnnouncementUserFields, userID)
+	return err
+}
+
 const clearAuditActor = `-- name: ClearAuditActor :exec
 UPDATE audit_logs SET actor_id = NULL WHERE actor_id = $1
 `
@@ -79,6 +93,8 @@ type CreateSystemAuditLogParams struct {
 	Metadata   []byte
 }
 
+// Sistemin olayları txn.Event (internal/platform/outbox.Write) ile, işlemi
+// yapan olmadan yazılır.
 func (q *Queries) CreateSystemAuditLog(ctx context.Context, arg CreateSystemAuditLogParams) error {
 	_, err := q.db.Exec(ctx, createSystemAuditLog,
 		arg.ID,
@@ -87,32 +103,6 @@ func (q *Queries) CreateSystemAuditLog(ctx context.Context, arg CreateSystemAudi
 		arg.TargetType,
 		arg.TargetID,
 		arg.Metadata,
-	)
-	return err
-}
-
-const createSystemDomainEvent = `-- name: CreateSystemDomainEvent :exec
-INSERT INTO domain_events (id, type, actor_id, tayfa_id, subject_type, subject_id, payload)
-VALUES ($1, $2, NULL, $3, $4, $5, $6)
-`
-
-type CreateSystemDomainEventParams struct {
-	ID          pgtype.UUID
-	Type        string
-	TayfaID     pgtype.UUID
-	SubjectType pgtype.Text
-	SubjectID   pgtype.UUID
-	Payload     []byte
-}
-
-func (q *Queries) CreateSystemDomainEvent(ctx context.Context, arg CreateSystemDomainEventParams) error {
-	_, err := q.db.Exec(ctx, createSystemDomainEvent,
-		arg.ID,
-		arg.Type,
-		arg.TayfaID,
-		arg.SubjectType,
-		arg.SubjectID,
-		arg.Payload,
 	)
 	return err
 }

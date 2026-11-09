@@ -23,6 +23,7 @@ import (
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -158,7 +159,7 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 		}
 		for _, clear := range []func(context.Context, pgtype.UUID) error{
 			q.ClearTayfaUserFields, q.ClearInviteCreator, q.ClearMembershipUserFields,
-			q.ClearAuditActor, q.ClearEventActor,
+			q.ClearAnnouncementUserFields, q.ClearAuditActor, q.ClearEventActor,
 		} {
 			if err := clear(ctx, e.User.PG()); err != nil {
 				return fmt.Errorf("yazar alanları: %w", err)
@@ -256,12 +257,8 @@ func systemRecord(ctx context.Context, q *store.Queries, tf id.ID, action, event
 	}); err != nil {
 		return fmt.Errorf("denetim kaydı: %w", err)
 	}
-	if err := q.CreateSystemDomainEvent(ctx, store.CreateSystemDomainEventParams{
-		ID: id.New().PG(), Type: event, TayfaID: tf.PG(), SubjectType: tt, SubjectID: target.PG(), Payload: b,
-	}); err != nil {
-		return fmt.Errorf("olay: %w", err)
-	}
-	return nil
+	// No actor: outbox.Write leaves actor_id NULL for the zero ID.
+	return txn.Event(ctx, q, event, tf, id.ID{}, txn.Target{Type: targetType, ID: target}, meta)
 }
 
 func ts(t time.Time) pgtype.Timestamptz { return pgtype.Timestamptz{Time: t, Valid: true} }
