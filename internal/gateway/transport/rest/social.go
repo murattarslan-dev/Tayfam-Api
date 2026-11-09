@@ -53,6 +53,13 @@ type AccountClient interface {
 	RotateReferralCode(ctx context.Context, in *identityv1.RotateReferralCodeRequest, opts ...grpc.CallOption) (*identityv1.RotateReferralCodeResponse, error)
 	FindUserByReferralCode(ctx context.Context, in *identityv1.FindUserByReferralCodeRequest, opts ...grpc.CallOption) (*identityv1.FindUserByReferralCodeResponse, error)
 	SetActivityVisibility(ctx context.Context, in *identityv1.SetActivityVisibilityRequest, opts ...grpc.CallOption) (*identityv1.SetActivityVisibilityResponse, error)
+	// Sessions, consents and account deletion (issue #75, account.go).
+	ListSessions(ctx context.Context, in *identityv1.ListSessionsRequest, opts ...grpc.CallOption) (*identityv1.ListSessionsResponse, error)
+	RevokeSession(ctx context.Context, in *identityv1.RevokeSessionRequest, opts ...grpc.CallOption) (*identityv1.RevokeSessionResponse, error)
+	RevokeOtherSessions(ctx context.Context, in *identityv1.RevokeOtherSessionsRequest, opts ...grpc.CallOption) (*identityv1.RevokeOtherSessionsResponse, error)
+	GetConsents(ctx context.Context, in *identityv1.GetConsentsRequest, opts ...grpc.CallOption) (*identityv1.GetConsentsResponse, error)
+	AcceptConsents(ctx context.Context, in *identityv1.AcceptConsentsRequest, opts ...grpc.CallOption) (*identityv1.AcceptConsentsResponse, error)
+	DeleteAccount(ctx context.Context, in *identityv1.DeleteAccountRequest, opts ...grpc.CallOption) (*identityv1.DeleteAccountResponse, error)
 }
 
 // maxReferralCode bounds the code before it reaches identity.

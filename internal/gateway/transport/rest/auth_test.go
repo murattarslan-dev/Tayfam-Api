@@ -30,6 +30,8 @@ type fakeIdentity struct {
 	gotRefresh string
 	gotToken   string
 	gotReg     *identityv1.CompleteRegistrationRequest
+	// consentRequired is returned in Tokens (account_test.go).
+	consentRequired bool
 }
 
 func (f *fakeIdentity) tokens() *identityv1.Tokens {
@@ -38,6 +40,7 @@ func (f *fakeIdentity) tokens() *identityv1.Tokens {
 		AccessExpireTime:    timestamppb.New(t0.Add(15 * time.Minute)),
 		RefreshExpireTime:   timestamppb.New(t0.Add(90 * 24 * time.Hour)),
 		RegistrationPending: true,
+		ConsentRequired:     f.consentRequired,
 	}
 }
 

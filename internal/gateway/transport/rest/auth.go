@@ -89,6 +89,7 @@ type sessionBody struct {
 	RefreshToken        string    `json:"refresh_token,omitempty"`
 	RefreshExpiresAt    time.Time `json:"refresh_expires_at"`
 	RegistrationPending bool      `json:"registration_pending"`
+	ConsentRequired     bool      `json:"consent_required"`
 }
 
 var providers = map[string]identityv1.Provider{"google": identityv1.Provider_PROVIDER_GOOGLE}
@@ -243,6 +244,7 @@ func (h authHandlers) writeSession(w http.ResponseWriter, web bool, t *identityv
 		AccessExpiresAt:     t.GetAccessExpireTime().AsTime(),
 		RefreshExpiresAt:    t.GetRefreshExpireTime().AsTime(),
 		RegistrationPending: t.GetRegistrationPending(),
+		ConsentRequired:     t.GetConsentRequired(),
 	}
 	if web {
 		now := h.d.Now()

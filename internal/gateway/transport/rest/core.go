@@ -79,8 +79,8 @@ type CoreDeps struct {
 	Invitations InvitationClient
 	// Profiles enables the profile routes when set.
 	Profiles ProfileClient
-	// Accounts is identity's AccountService; it enables the account and
-	// referral code routes when set. Its routes take the same verified user
+	// Accounts is identity's AccountService; it enables the account,
+	// referral code, session, consent and account deletion routes when set. Its routes take the same verified user
 	// token as core's.
 	Accounts AccountClient
 	// Verifier checks the user's token before anything reaches core. core
@@ -169,6 +169,7 @@ func registerCore(mux *http.ServeMux, d CoreDeps) {
 	}
 	if d.Accounts != nil {
 		registerAccount(mux, h)
+		registerAccountManagement(mux, h)
 	}
 }
 
