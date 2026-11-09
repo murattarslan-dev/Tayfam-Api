@@ -356,6 +356,7 @@ type Querier interface {
 	// Hesap silme: kişinin gönderdiği, henüz cevaplanmamış davetler. Tayfalar
 	// kimlik sırasıyla işlenir (kilit sırası).
 	ListInvitationsSentByUser(ctx context.Context, userID pgtype.UUID) ([]ListInvitationsSentByUserRow, error)
+	// Yeniden eskiye; aynı created_at'te id ikincil anahtardır (issue #93).
 	ListInvites(ctx context.Context, arg ListInvitesParams) ([]ListInvitesRow, error)
 	// Geçerli davetler (iptal edilmemiş, süresi dolmamış, tükenmemiş), yeniden
 	// eskiye. created_by verilirse yalnızca o kişinin açtıkları.

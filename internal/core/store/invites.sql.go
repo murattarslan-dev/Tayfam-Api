@@ -140,7 +140,7 @@ const listInvites = `-- name: ListInvites :many
 SELECT id, created_by, expires_at, max_uses, use_count, revoked_at, created_at
 FROM invites
 WHERE tayfa_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2
 `
 
@@ -159,6 +159,7 @@ type ListInvitesRow struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+// Yeniden eskiye; aynı created_at'te id ikincil anahtardır (issue #93).
 func (q *Queries) ListInvites(ctx context.Context, arg ListInvitesParams) ([]ListInvitesRow, error) {
 	rows, err := q.db.Query(ctx, listInvites, arg.TayfaID, arg.PageSize)
 	if err != nil {
