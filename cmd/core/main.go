@@ -18,6 +18,7 @@ import (
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/announcement"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/channelaccess"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatdm"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatrelay"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/directmessage"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
@@ -109,7 +110,11 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	reports, err := report.New(report.Config{Pool: pool, Minors: minors})
+	dmCheck, err := chatDirectMessages(rt)
+	if err != nil {
+		return err
+	}
+	reports, err := report.New(report.Config{Pool: pool, Minors: minors, DirectMessages: dmCheck})
 	if err != nil {
 		return err
 	}
@@ -206,6 +211,24 @@ func identityMinors(rt *service.Runtime) (report.MinorChecker, error) {
 		return nil, err
 	}
 	return identityminor.New(identityv1.NewMinorServiceClient(conn)), nil
+}
+
+// chatDirectMessages returns the check of reported direct messages with
+// chat (issue #95, ADR-0009): the connection forwards the reporter's own
+// token (auth.ForwardToken); core gets no service identity for it
+// (ADR-0013). Without CHAT_GRPC_ADDR (a local run without chat) direct
+// message reports are UNAVAILABLE.
+func chatDirectMessages(rt *service.Runtime) (report.DirectMessages, error) {
+	addr := rt.Config.String("CHAT_GRPC_ADDR", "")
+	if addr == "" {
+		rt.Log.Warn("CHAT_GRPC_ADDR yok; birebir mesaj şikâyetleri kapalı (UNAVAILABLE)")
+		return nil, nil
+	}
+	conn, err := grpcx.NewClient(addr, auth.ForwardToken()...)
+	if err != nil {
+		return nil, err
+	}
+	return chatdm.New(chatv1.NewDirectMessageServiceClient(conn)), nil
 }
 
 // addRelay starts the outbox relay that delivers core's events to chat with

@@ -93,6 +93,17 @@ service DirectMessageService {
   // later reopens it as active. ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND
   // otherwise.
   rpc DeclineMessageRequest(DeclineMessageRequestRequest) returns (DeclineMessageRequestResponse);
+
+  // VerifyDirectMessageForReport answers core's question when the caller
+  // reports a direct message (core ReportService.CreateReport with
+  // REPORT_TARGET_TYPE_DM_MESSAGE; ADR-0009): core forwards the reporter's
+  // own token. The caller must be a party of the message's conversation
+  // (also of a request they declined); the message may be deleted (not yet
+  // purged). The answer is the conversation and the sender only: never the
+  // body. The caller's own message, a message whose sender's account was
+  // deleted, and anything else are ERROR_REASON_MESSAGE_NOT_FOUND. Works
+  // without the message key.
+  rpc VerifyDirectMessageForReport(VerifyDirectMessageForReportRequest) returns (VerifyDirectMessageForReportResponse);
 }
 
 // ConversationStatus is the conversation as the caller sees it.
@@ -204,3 +215,12 @@ message DeclineMessageRequestRequest {
 }
 
 message DeclineMessageRequestResponse {}
+
+message VerifyDirectMessageForReportRequest {
+  string message_id = 1;
+}
+
+message VerifyDirectMessageForReportResponse {
+  string conversation_id = 1;
+  string sender_user_id = 2;
+}

@@ -88,6 +88,11 @@ type Querier interface {
 	GetDirectMessage(ctx context.Context, arg GetDirectMessageParams) (GetDirectMessageRow, error)
 	// Mesajlar.
 	GetDirectMessageByRequest(ctx context.Context, arg GetDirectMessageByRequestParams) (GetDirectMessageByRequestRow, error)
+	// Şikâyet doğrulaması (core'un sorusu, issue #95): kişinin taraf olduğu
+	// konuşmadaki mesajın konuşması ve göndereni. İçerik seçilmez. Silinmiş
+	// mesaj da bulunur (taciz edip silen şikâyetten kaçamasın); reddedilmiş
+	// istek de (isteği reddeden şikâyet edebilsin).
+	GetDirectMessageForParty(ctx context.Context, arg GetDirectMessageForPartyParams) (GetDirectMessageForPartyRow, error)
 	GetMessage(ctx context.Context, arg GetMessageParams) (GetMessageRow, error)
 	// Mesajlar.
 	// Tekrar gönderim: yazarın aynı client_request_id ile daha önce yazdığı

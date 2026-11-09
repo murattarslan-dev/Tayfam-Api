@@ -21,6 +21,7 @@ type DirectMessages interface {
 	MarkRead(ctx context.Context, caller, conversation, message id.ID) error
 	Accept(ctx context.Context, caller, conversation id.ID) (dm.Conversation, error)
 	Decline(ctx context.Context, caller, conversation id.ID) error
+	VerifyForReport(ctx context.Context, caller, message id.ID) (conversation, sender id.ID, err error)
 }
 
 // DirectMessageServer implements chatv1.DirectMessageServiceServer (issue
@@ -174,4 +175,17 @@ func (s *DirectMessageServer) DeclineMessageRequest(ctx context.Context, req *ch
 		return nil, errorStatus(ctx, s.log, err)
 	}
 	return &chatv1.DeclineMessageRequestResponse{}, nil
+}
+
+// VerifyDirectMessageForReport implements chatv1.DirectMessageServiceServer.
+func (s *DirectMessageServer) VerifyDirectMessageForReport(ctx context.Context, req *chatv1.VerifyDirectMessageForReportRequest) (*chatv1.VerifyDirectMessageForReportResponse, error) {
+	caller, v, err := ids(ctx, f("message_id", req.GetMessageId()))
+	if err != nil {
+		return nil, err
+	}
+	conv, sender, err := s.app.VerifyForReport(ctx, caller, v[0])
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &chatv1.VerifyDirectMessageForReportResponse{ConversationId: conv.String(), SenderUserId: sender.String()}, nil
 }

@@ -3225,7 +3225,9 @@ paths:
         Şikâyet edenin kimliği şikâyet edilen kişiye hiçbir zaman gösterilmez;
         tayfanın moderatörlerine ve yöneticilerine de gösterilmez. Tayfanın
         kendisi ve `staff_conduct` şikâyetleri yalnızca platforma gider.
-        Kanal ve birebir mesaj şikâyetleri bu uçta değildir.
+        Birebir mesaj (`dm_message`) şikâyeti bir tayfaya ait olmadığı için
+        bu uçta değil, `POST /v1/me/reports` ile yapılır (burada
+        `invalid-request`). Kanal mesajları henüz şikâyet edilemez.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -3336,6 +3338,53 @@ paths:
               schema: { $ref: "#/components/schemas/MyReportList" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createDirectMessageReport
+      summary: Bir birebir mesajı şikâyet eder (yalnızca platforma gider)
+      description: |
+        Tayfaya ait olmayan şikâyetler için; şimdilik yalnızca
+        `target_type: dm_message`. `target_id` mesajın kimliğidir. Mesajın
+        konuşmasının tarafı olmalısınız (reddettiğiniz istek dahil; silinmiş
+        mesaj da olur); kendi mesajınız, bilinmeyen mesaj ve göndereni
+        hesabını silmiş mesaj `report-target-not-found`.
+
+        `evidence_text` zorunludur (1–2000 karakter): mesajın metnini kendi
+        cihazınızdan bilinçli olarak paylaşırsınız; sunucu mesaj içeriğini
+        şikâyete kendisi eklemez (uçtan uca şifreleme aşamasında göremeyecek).
+        Bu metin yalnızca platform tarafından okunur, size de geri dönmez.
+
+        Şikâyet hiçbir tayfanın moderasyon kuyruğuna düşmez; oluşturulduğu
+        anda platforma gider. Öncelik kuralı aynıdır (sizden ya da
+        göndericiden biri 18 yaş altıysa öne geçer; yaş gösterilmez).
+        `staff_conduct` geçerli değildir. Aynı mesajı ikinci kez şikâyet
+        etmek ilk şikâyetinizi `200` ile döndürür; 24 saatte en fazla 20
+        şikâyet (`report-limit`, tüm şikâyetlerle birlikte).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReportCreateRequest" }
+      responses:
+        "200":
+          description: Bu mesaja daha önce yaptığınız şikâyet
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MyReport" }
+        "201":
+          description: Yeni şikâyet
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MyReport" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
   /v1/me/reports/{report_id}:
@@ -5304,8 +5353,10 @@ components:
 
     ReportTargetType:
       type: string
-      description: Kanal ve birebir mesajlar bu listede değildir.
-      enum: [user, tayfa, announcement, event, question, answer, poll, fishing_catch]
+      description: |
+        `dm_message` (birebir mesaj) yalnızca `POST /v1/me/reports` ile;
+        diğerleri yalnızca tayfa ucuyla. Kanal mesajları bu listede değildir.
+      enum: [user, tayfa, announcement, event, question, answer, poll, fishing_catch, dm_message]
 
     ReportReason:
       type: string
@@ -5330,16 +5381,27 @@ components:
           type: string
           maxLength: 1000
           description: İsteğe bağlı; baştaki ve sondaki boşluklar atılır. Satır sonu olabilir.
+        evidence_text:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: |
+            Yalnızca ve zorunlu olarak `dm_message` için: şikâyet ettiğiniz
+            mesajın kendi cihazınızdan paylaştığınız metni. Yalnızca platform
+            okur; log'a ve olaylara yazılmaz, size geri dönmez.
 
     MyReport:
       type: object
       description: |
         Şikâyet, şikâyet eden kişinin gördüğü haliyle. Hangi işlemin yapıldığı
         ve kimin çözdüğü gösterilmez; yalnızca sonuç (`outcome`) vardır.
-      required: [id, tayfa_id, target_type, target_id, reason, status, created_at]
+      required: [id, target_type, target_id, reason, status, created_at]
       properties:
         id: { type: string, format: uuid }
-        tayfa_id: { type: string, format: uuid }
+        tayfa_id:
+          type: string
+          format: uuid
+          description: Birebir mesaj şikâyetinde yoktur.
         target_type: { $ref: "#/components/schemas/ReportTargetType" }
         target_id: { type: string, format: uuid }
         reason: { $ref: "#/components/schemas/ReportReason" }

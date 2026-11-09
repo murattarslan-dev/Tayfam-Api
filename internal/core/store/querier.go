@@ -134,7 +134,9 @@ type Querier interface {
 	// Soru-cevap (issue #59). Her sorgu tayfa_id ile sınırlıdır (IDOR); üyelik
 	// ve izin kontrolü app katmanındadır (access, authz).
 	CreateQuestion(ctx context.Context, arg CreateQuestionParams) error
-	// Aynı hedefe ikinci şikâyet mevcut kaydı döndürür.
+	// Aynı hedefe ikinci şikâyet mevcut kaydı döndürür. tayfa_id ve
+	// evidence_text yalnızca birebir mesaj şikâyetinde boş/dolu değişir
+	// (00013_dm_reports.sql).
 	CreateReport(ctx context.Context, arg CreateReportParams) (pgtype.UUID, error)
 	// Üretilen örnek. Aynı seride aynı başlangıç zamanı zaten varsa hiçbir şey
 	// yazılmaz (events_series_starts_at_key); iki pod aynı örneği üretemez.

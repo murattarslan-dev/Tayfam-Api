@@ -39,7 +39,12 @@ import "google/protobuf/timestamp.proto";
 // valid for the same list; a bad token is ERROR_REASON_VALIDATION. An empty
 // next_page_token means the last page.
 service ReportService {
-  // CreateReport files a report by the caller about a target in a tayfa.
+  // CreateReport files a report by the caller about a target in a tayfa,
+  // or about a direct message (REPORT_TARGET_TYPE_DM_MESSAGE, tayfa_id
+  // empty; see there): the rules below about tayfas do not apply to it,
+  // the duplicate, daily limit and priority rules do (the priority asks
+  // IsMinor about the reporter and the sender). REPORT_REASON_STAFF_CONDUCT
+  // is not valid for it. UNAVAILABLE when chat cannot answer.
   //
   // The caller must be an ACTIVE member of the tayfa (muted members too;
   // anyone else gets ERROR_REASON_TAYFA_NOT_FOUND). The target must be
@@ -103,8 +108,8 @@ service ReportService {
   rpc ResolveReport(ResolveReportRequest) returns (ResolveReportResponse);
 }
 
-// ReportTargetType is what a report is about. Channel and direct messages
-// are reported through chat.
+// ReportTargetType is what a report is about. Channel messages are not
+// reportable yet.
 enum ReportTargetType {
   REPORT_TARGET_TYPE_UNSPECIFIED = 0;
   // target_id is a user ID: an active member of the tayfa.
@@ -117,6 +122,14 @@ enum ReportTargetType {
   REPORT_TARGET_TYPE_ANSWER = 6;
   REPORT_TARGET_TYPE_POLL = 7;
   REPORT_TARGET_TYPE_FISHING_CATCH = 8;
+  // target_id is a direct message ID (issue #95). Not about a tayfa:
+  // tayfa_id is empty. core asks chat with the reporter's own token
+  // (DirectMessageService.VerifyDirectMessageForReport) whether the
+  // reporter is a party of the message's conversation and who sent it;
+  // anything else is ERROR_REASON_REPORT_TARGET_NOT_FOUND. evidence_text
+  // is required. Goes to the platform only, at once; never to a tayfa's
+  // queue.
+  REPORT_TARGET_TYPE_DM_MESSAGE = 9;
 }
 
 // ReportReason follows the community rules (Notion "Topluluk Kuralları").
@@ -171,6 +184,7 @@ enum ReportOutcome {
 // MyReport is a report as its reporter sees it.
 message MyReport {
   string id = 1;
+  // Empty for a direct message report.
   string tayfa_id = 2;
   ReportTargetType target_type = 3;
   string target_id = 4;
@@ -217,6 +231,7 @@ enum ReportPriority {
 }
 
 message CreateReportRequest {
+  // Empty for REPORT_TARGET_TYPE_DM_MESSAGE, required otherwise.
   string tayfa_id = 1;
   ReportTargetType target_type = 2;
   // For TARGET_TYPE_TAYFA it must equal tayfa_id.
@@ -225,6 +240,12 @@ message CreateReportRequest {
   // Optional, up to 1000 characters after trimming surrounding spaces; line
   // breaks allowed, other control characters not. Never logged.
   string description = 5;
+  // Only and required for REPORT_TARGET_TYPE_DM_MESSAGE: the message text
+  // the reporter shares from their own device (ADR-0005 "Şikâyet"), 1–2000
+  // characters after trimming surrounding spaces; line breaks allowed,
+  // other control characters not. Stored for the platform only; never
+  // logged, never in events, never returned (MyReport does not carry it).
+  string evidence_text = 6;
 }
 
 message CreateReportResponse {

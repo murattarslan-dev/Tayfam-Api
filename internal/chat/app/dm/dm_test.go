@@ -662,3 +662,46 @@ func TestCleanup(t *testing.T) {
 		t.Fatal("okunma kaydı kaldı")
 	}
 }
+
+// core's report check: parties only, IDs only, deleted and declined count,
+// one's own message and a deleted sender do not.
+func TestVerifyForReport(t *testing.T) {
+	e := setup(t)
+	a, b := id.New(), id.New()
+	e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 20})
+	m, c := e.mustSend(t, a, b, "taciz")
+	conv, sender, err := e.svc.VerifyForReport(ctx, b, m.ID)
+	if err != nil || conv != c.ID || sender != a {
+		t.Fatalf("doğrulama = %v %v %v", conv, sender, err)
+	}
+	// The recipient declined and the sender deleted: still reportable.
+	must(t, e.svc.Decline(ctx, b, c.ID))
+	must(t, e.svc.Delete(ctx, a, c.ID, m.ID))
+	if _, s, err := e.svc.VerifyForReport(ctx, b, m.ID); err != nil || s != a {
+		t.Fatalf("silinmiş ve reddedilmiş: %v %v", s, err)
+	}
+	for name, who := range map[string]id.ID{"kendi mesajı": a, "taraf değil": id.New()} {
+		if _, _, err := e.svc.VerifyForReport(ctx, who, m.ID); !errors.Is(err, apperr.ErrMessageNotFound) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if _, _, err := e.svc.VerifyForReport(ctx, b, id.New()); !errors.Is(err, apperr.ErrMessageNotFound) {
+		t.Errorf("bilinmeyen mesaj: %v", err)
+	}
+	tx, err := e.pool.Begin(ctx)
+	must(t, err)
+	must(t, Cleanup(ctx, store.New(tx), a))
+	must(t, tx.Commit(ctx))
+	if _, _, err := e.svc.VerifyForReport(ctx, b, m.ID); !errors.Is(err, apperr.ErrMessageNotFound) {
+		t.Errorf("silinmiş gönderen: %v", err)
+	}
+	// It works without the message key.
+	keyless, err := New(Config{Pool: e.pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Rules: e.rules})
+	must(t, err)
+	x, y := id.New(), id.New()
+	e.rules.set(x, y, Verdict{Decision: Active})
+	m2, _ := e.mustSend(t, x, y, "x")
+	if _, s, err := keyless.VerifyForReport(ctx, y, m2.ID); err != nil || s != x {
+		t.Fatalf("anahtarsız: %v %v", s, err)
+	}
+}

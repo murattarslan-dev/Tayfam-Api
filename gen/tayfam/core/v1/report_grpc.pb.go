@@ -65,7 +65,12 @@ const (
 // valid for the same list; a bad token is ERROR_REASON_VALIDATION. An empty
 // next_page_token means the last page.
 type ReportServiceClient interface {
-	// CreateReport files a report by the caller about a target in a tayfa.
+	// CreateReport files a report by the caller about a target in a tayfa,
+	// or about a direct message (REPORT_TARGET_TYPE_DM_MESSAGE, tayfa_id
+	// empty; see there): the rules below about tayfas do not apply to it,
+	// the duplicate, daily limit and priority rules do (the priority asks
+	// IsMinor about the reporter and the sender). REPORT_REASON_STAFF_CONDUCT
+	// is not valid for it. UNAVAILABLE when chat cannot answer.
 	//
 	// The caller must be an ACTIVE member of the tayfa (muted members too;
 	// anyone else gets ERROR_REASON_TAYFA_NOT_FOUND). The target must be
@@ -222,7 +227,12 @@ func (c *reportServiceClient) ResolveReport(ctx context.Context, in *ResolveRepo
 // valid for the same list; a bad token is ERROR_REASON_VALIDATION. An empty
 // next_page_token means the last page.
 type ReportServiceServer interface {
-	// CreateReport files a report by the caller about a target in a tayfa.
+	// CreateReport files a report by the caller about a target in a tayfa,
+	// or about a direct message (REPORT_TARGET_TYPE_DM_MESSAGE, tayfa_id
+	// empty; see there): the rules below about tayfas do not apply to it,
+	// the duplicate, daily limit and priority rules do (the priority asks
+	// IsMinor about the reporter and the sender). REPORT_REASON_STAFF_CONDUCT
+	// is not valid for it. UNAVAILABLE when chat cannot answer.
 	//
 	// The caller must be an ACTIVE member of the tayfa (muted members too;
 	// anyone else gets ERROR_REASON_TAYFA_NOT_FOUND). The target must be

@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/report"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -143,5 +144,38 @@ func TestReportServer(t *testing.T) {
 	_, err = srv.GetMyReport(ctx, &corev1.GetMyReportRequest{ReportId: "x"})
 	if code, info := infoOf(t, err); code != codes.InvalidArgument || info.GetMetadata()["field"] != "report_id" {
 		t.Errorf("bozuk kimlik: %v", err)
+	}
+}
+
+// A direct message report has no tayfa and carries the evidence; MyReport
+// never carries the evidence back.
+func TestDirectMessageReportTransport(t *testing.T) {
+	user, msg := id.New(), id.New()
+	f := &fakeReports{mine: report.MyView{ID: id.New(), TargetType: report.TargetDMMessage, TargetID: msg, Status: report.StatusOpen}}
+	srv := NewReportServer(f, discard)
+	ctx := callerCtx(user)
+	resp, err := srv.CreateReport(ctx, &corev1.CreateReportRequest{
+		TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE, TargetId: msg.String(),
+		Reason: corev1.ReportReason_REPORT_REASON_HARASSMENT, EvidenceText: "kanıt",
+	})
+	if err != nil || f.tayfa != (id.ID{}) || f.create.TargetType != report.TargetDMMessage || f.create.Evidence != "kanıt" ||
+		resp.GetReport().GetTayfaId() != "" || resp.GetReport().GetTargetType() != corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE {
+		t.Fatalf("DM şikâyeti = %v %+v %v", resp, f.create, err)
+	}
+	if fields := (&corev1.MyReport{}).ProtoReflect().Descriptor().Fields(); fields.ByName("evidence_text") != nil {
+		t.Fatal("MyReport kanıt metni taşıyor")
+	}
+	// Other targets still need a tayfa.
+	_, err = srv.CreateReport(ctx, &corev1.CreateReportRequest{TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_USER, TargetId: msg.String(), Reason: corev1.ReportReason_REPORT_REASON_SPAM})
+	if code, info := infoOf(t, err); code != codes.InvalidArgument || info.GetMetadata()["field"] != "tayfa_id" {
+		t.Fatalf("tayfasız üye şikâyeti: %v", err)
+	}
+}
+
+// chat being unreachable is UNAVAILABLE without detail.
+func TestUnavailableStatus(t *testing.T) {
+	err := errorStatus(context.Background(), discard, apperr.ErrUnavailable)
+	if code, info := infoOf(t, err); code != codes.Unavailable || info != nil {
+		t.Fatalf("durum = %v", err)
 	}
 }

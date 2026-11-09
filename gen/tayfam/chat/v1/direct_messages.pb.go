@@ -1040,6 +1040,102 @@ func (*DeclineMessageRequestResponse) Descriptor() ([]byte, []int) {
 	return file_tayfam_chat_v1_direct_messages_proto_rawDescGZIP(), []int{17}
 }
 
+type VerifyDirectMessageForReportRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MessageId     string                 `protobuf:"bytes,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VerifyDirectMessageForReportRequest) Reset() {
+	*x = VerifyDirectMessageForReportRequest{}
+	mi := &file_tayfam_chat_v1_direct_messages_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VerifyDirectMessageForReportRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VerifyDirectMessageForReportRequest) ProtoMessage() {}
+
+func (x *VerifyDirectMessageForReportRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_chat_v1_direct_messages_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VerifyDirectMessageForReportRequest.ProtoReflect.Descriptor instead.
+func (*VerifyDirectMessageForReportRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_chat_v1_direct_messages_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *VerifyDirectMessageForReportRequest) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+type VerifyDirectMessageForReportResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	SenderUserId   string                 `protobuf:"bytes,2,opt,name=sender_user_id,json=senderUserId,proto3" json:"sender_user_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *VerifyDirectMessageForReportResponse) Reset() {
+	*x = VerifyDirectMessageForReportResponse{}
+	mi := &file_tayfam_chat_v1_direct_messages_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VerifyDirectMessageForReportResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VerifyDirectMessageForReportResponse) ProtoMessage() {}
+
+func (x *VerifyDirectMessageForReportResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_chat_v1_direct_messages_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VerifyDirectMessageForReportResponse.ProtoReflect.Descriptor instead.
+func (*VerifyDirectMessageForReportResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_chat_v1_direct_messages_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *VerifyDirectMessageForReportResponse) GetConversationId() string {
+	if x != nil {
+		return x.ConversationId
+	}
+	return ""
+}
+
+func (x *VerifyDirectMessageForReportResponse) GetSenderUserId() string {
+	if x != nil {
+		return x.SenderUserId
+	}
+	return ""
+}
+
 var File_tayfam_chat_v1_direct_messages_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_direct_messages_proto_rawDesc = "" +
@@ -1106,12 +1202,18 @@ const file_tayfam_chat_v1_direct_messages_proto_rawDesc = "" +
 	"\fconversation\x18\x01 \x01(\v2\x1c.tayfam.chat.v1.ConversationR\fconversation\"G\n" +
 	"\x1cDeclineMessageRequestRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\"\x1f\n" +
-	"\x1dDeclineMessageRequestResponse*\xa9\x01\n" +
+	"\x1dDeclineMessageRequestResponse\"D\n" +
+	"#VerifyDirectMessageForReportRequest\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x01 \x01(\tR\tmessageId\"u\n" +
+	"$VerifyDirectMessageForReportResponse\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12$\n" +
+	"\x0esender_user_id\x18\x02 \x01(\tR\fsenderUserId*\xa9\x01\n" +
 	"\x12ConversationStatus\x12#\n" +
 	"\x1fCONVERSATION_STATUS_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aCONVERSATION_STATUS_ACTIVE\x10\x01\x12$\n" +
 	" CONVERSATION_STATUS_REQUEST_SENT\x10\x02\x12(\n" +
-	"$CONVERSATION_STATUS_REQUEST_RECEIVED\x10\x032\x87\a\n" +
+	"$CONVERSATION_STATUS_REQUEST_RECEIVED\x10\x032\x93\b\n" +
 	"\x14DirectMessageService\x12h\n" +
 	"\x11SendDirectMessage\x12(.tayfam.chat.v1.SendDirectMessageRequest\x1a).tayfam.chat.v1.SendDirectMessageResponse\x12h\n" +
 	"\x11ListConversations\x12(.tayfam.chat.v1.ListConversationsRequest\x1a).tayfam.chat.v1.ListConversationsResponse\x12b\n" +
@@ -1120,7 +1222,8 @@ const file_tayfam_chat_v1_direct_messages_proto_rawDesc = "" +
 	"\x13DeleteDirectMessage\x12*.tayfam.chat.v1.DeleteDirectMessageRequest\x1a+.tayfam.chat.v1.DeleteDirectMessageResponse\x12q\n" +
 	"\x14MarkConversationRead\x12+.tayfam.chat.v1.MarkConversationReadRequest\x1a,.tayfam.chat.v1.MarkConversationReadResponse\x12q\n" +
 	"\x14AcceptMessageRequest\x12+.tayfam.chat.v1.AcceptMessageRequestRequest\x1a,.tayfam.chat.v1.AcceptMessageRequestResponse\x12t\n" +
-	"\x15DeclineMessageRequest\x12,.tayfam.chat.v1.DeclineMessageRequestRequest\x1a-.tayfam.chat.v1.DeclineMessageRequestResponseB\xc5\x01\n" +
+	"\x15DeclineMessageRequest\x12,.tayfam.chat.v1.DeclineMessageRequestRequest\x1a-.tayfam.chat.v1.DeclineMessageRequestResponse\x12\x89\x01\n" +
+	"\x1cVerifyDirectMessageForReport\x123.tayfam.chat.v1.VerifyDirectMessageForReportRequest\x1a4.tayfam.chat.v1.VerifyDirectMessageForReportResponseB\xc5\x01\n" +
 	"\x12com.tayfam.chat.v1B\x13DirectMessagesProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1;chatv1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Chat.V1\xca\x02\x0eTayfam\\Chat\\V1\xe2\x02\x1aTayfam\\Chat\\V1\\GPBMetadata\xea\x02\x10Tayfam::Chat::V1b\x06proto3"
 
 var (
@@ -1136,34 +1239,36 @@ func file_tayfam_chat_v1_direct_messages_proto_rawDescGZIP() []byte {
 }
 
 var file_tayfam_chat_v1_direct_messages_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_tayfam_chat_v1_direct_messages_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_tayfam_chat_v1_direct_messages_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_tayfam_chat_v1_direct_messages_proto_goTypes = []any{
-	(ConversationStatus)(0),               // 0: tayfam.chat.v1.ConversationStatus
-	(*Conversation)(nil),                  // 1: tayfam.chat.v1.Conversation
-	(*DirectMessage)(nil),                 // 2: tayfam.chat.v1.DirectMessage
-	(*SendDirectMessageRequest)(nil),      // 3: tayfam.chat.v1.SendDirectMessageRequest
-	(*SendDirectMessageResponse)(nil),     // 4: tayfam.chat.v1.SendDirectMessageResponse
-	(*ListConversationsRequest)(nil),      // 5: tayfam.chat.v1.ListConversationsRequest
-	(*ListConversationsResponse)(nil),     // 6: tayfam.chat.v1.ListConversationsResponse
-	(*GetConversationRequest)(nil),        // 7: tayfam.chat.v1.GetConversationRequest
-	(*GetConversationResponse)(nil),       // 8: tayfam.chat.v1.GetConversationResponse
-	(*ListDirectMessagesRequest)(nil),     // 9: tayfam.chat.v1.ListDirectMessagesRequest
-	(*ListDirectMessagesResponse)(nil),    // 10: tayfam.chat.v1.ListDirectMessagesResponse
-	(*DeleteDirectMessageRequest)(nil),    // 11: tayfam.chat.v1.DeleteDirectMessageRequest
-	(*DeleteDirectMessageResponse)(nil),   // 12: tayfam.chat.v1.DeleteDirectMessageResponse
-	(*MarkConversationReadRequest)(nil),   // 13: tayfam.chat.v1.MarkConversationReadRequest
-	(*MarkConversationReadResponse)(nil),  // 14: tayfam.chat.v1.MarkConversationReadResponse
-	(*AcceptMessageRequestRequest)(nil),   // 15: tayfam.chat.v1.AcceptMessageRequestRequest
-	(*AcceptMessageRequestResponse)(nil),  // 16: tayfam.chat.v1.AcceptMessageRequestResponse
-	(*DeclineMessageRequestRequest)(nil),  // 17: tayfam.chat.v1.DeclineMessageRequestRequest
-	(*DeclineMessageRequestResponse)(nil), // 18: tayfam.chat.v1.DeclineMessageRequestResponse
-	(*timestamppb.Timestamp)(nil),         // 19: google.protobuf.Timestamp
+	(ConversationStatus)(0),                      // 0: tayfam.chat.v1.ConversationStatus
+	(*Conversation)(nil),                         // 1: tayfam.chat.v1.Conversation
+	(*DirectMessage)(nil),                        // 2: tayfam.chat.v1.DirectMessage
+	(*SendDirectMessageRequest)(nil),             // 3: tayfam.chat.v1.SendDirectMessageRequest
+	(*SendDirectMessageResponse)(nil),            // 4: tayfam.chat.v1.SendDirectMessageResponse
+	(*ListConversationsRequest)(nil),             // 5: tayfam.chat.v1.ListConversationsRequest
+	(*ListConversationsResponse)(nil),            // 6: tayfam.chat.v1.ListConversationsResponse
+	(*GetConversationRequest)(nil),               // 7: tayfam.chat.v1.GetConversationRequest
+	(*GetConversationResponse)(nil),              // 8: tayfam.chat.v1.GetConversationResponse
+	(*ListDirectMessagesRequest)(nil),            // 9: tayfam.chat.v1.ListDirectMessagesRequest
+	(*ListDirectMessagesResponse)(nil),           // 10: tayfam.chat.v1.ListDirectMessagesResponse
+	(*DeleteDirectMessageRequest)(nil),           // 11: tayfam.chat.v1.DeleteDirectMessageRequest
+	(*DeleteDirectMessageResponse)(nil),          // 12: tayfam.chat.v1.DeleteDirectMessageResponse
+	(*MarkConversationReadRequest)(nil),          // 13: tayfam.chat.v1.MarkConversationReadRequest
+	(*MarkConversationReadResponse)(nil),         // 14: tayfam.chat.v1.MarkConversationReadResponse
+	(*AcceptMessageRequestRequest)(nil),          // 15: tayfam.chat.v1.AcceptMessageRequestRequest
+	(*AcceptMessageRequestResponse)(nil),         // 16: tayfam.chat.v1.AcceptMessageRequestResponse
+	(*DeclineMessageRequestRequest)(nil),         // 17: tayfam.chat.v1.DeclineMessageRequestRequest
+	(*DeclineMessageRequestResponse)(nil),        // 18: tayfam.chat.v1.DeclineMessageRequestResponse
+	(*VerifyDirectMessageForReportRequest)(nil),  // 19: tayfam.chat.v1.VerifyDirectMessageForReportRequest
+	(*VerifyDirectMessageForReportResponse)(nil), // 20: tayfam.chat.v1.VerifyDirectMessageForReportResponse
+	(*timestamppb.Timestamp)(nil),                // 21: google.protobuf.Timestamp
 }
 var file_tayfam_chat_v1_direct_messages_proto_depIdxs = []int32{
 	0,  // 0: tayfam.chat.v1.Conversation.status:type_name -> tayfam.chat.v1.ConversationStatus
-	19, // 1: tayfam.chat.v1.Conversation.last_message_time:type_name -> google.protobuf.Timestamp
-	19, // 2: tayfam.chat.v1.Conversation.create_time:type_name -> google.protobuf.Timestamp
-	19, // 3: tayfam.chat.v1.DirectMessage.create_time:type_name -> google.protobuf.Timestamp
+	21, // 1: tayfam.chat.v1.Conversation.last_message_time:type_name -> google.protobuf.Timestamp
+	21, // 2: tayfam.chat.v1.Conversation.create_time:type_name -> google.protobuf.Timestamp
+	21, // 3: tayfam.chat.v1.DirectMessage.create_time:type_name -> google.protobuf.Timestamp
 	2,  // 4: tayfam.chat.v1.SendDirectMessageResponse.message:type_name -> tayfam.chat.v1.DirectMessage
 	1,  // 5: tayfam.chat.v1.SendDirectMessageResponse.conversation:type_name -> tayfam.chat.v1.Conversation
 	1,  // 6: tayfam.chat.v1.ListConversationsResponse.conversations:type_name -> tayfam.chat.v1.Conversation
@@ -1178,16 +1283,18 @@ var file_tayfam_chat_v1_direct_messages_proto_depIdxs = []int32{
 	13, // 15: tayfam.chat.v1.DirectMessageService.MarkConversationRead:input_type -> tayfam.chat.v1.MarkConversationReadRequest
 	15, // 16: tayfam.chat.v1.DirectMessageService.AcceptMessageRequest:input_type -> tayfam.chat.v1.AcceptMessageRequestRequest
 	17, // 17: tayfam.chat.v1.DirectMessageService.DeclineMessageRequest:input_type -> tayfam.chat.v1.DeclineMessageRequestRequest
-	4,  // 18: tayfam.chat.v1.DirectMessageService.SendDirectMessage:output_type -> tayfam.chat.v1.SendDirectMessageResponse
-	6,  // 19: tayfam.chat.v1.DirectMessageService.ListConversations:output_type -> tayfam.chat.v1.ListConversationsResponse
-	8,  // 20: tayfam.chat.v1.DirectMessageService.GetConversation:output_type -> tayfam.chat.v1.GetConversationResponse
-	10, // 21: tayfam.chat.v1.DirectMessageService.ListDirectMessages:output_type -> tayfam.chat.v1.ListDirectMessagesResponse
-	12, // 22: tayfam.chat.v1.DirectMessageService.DeleteDirectMessage:output_type -> tayfam.chat.v1.DeleteDirectMessageResponse
-	14, // 23: tayfam.chat.v1.DirectMessageService.MarkConversationRead:output_type -> tayfam.chat.v1.MarkConversationReadResponse
-	16, // 24: tayfam.chat.v1.DirectMessageService.AcceptMessageRequest:output_type -> tayfam.chat.v1.AcceptMessageRequestResponse
-	18, // 25: tayfam.chat.v1.DirectMessageService.DeclineMessageRequest:output_type -> tayfam.chat.v1.DeclineMessageRequestResponse
-	18, // [18:26] is the sub-list for method output_type
-	10, // [10:18] is the sub-list for method input_type
+	19, // 18: tayfam.chat.v1.DirectMessageService.VerifyDirectMessageForReport:input_type -> tayfam.chat.v1.VerifyDirectMessageForReportRequest
+	4,  // 19: tayfam.chat.v1.DirectMessageService.SendDirectMessage:output_type -> tayfam.chat.v1.SendDirectMessageResponse
+	6,  // 20: tayfam.chat.v1.DirectMessageService.ListConversations:output_type -> tayfam.chat.v1.ListConversationsResponse
+	8,  // 21: tayfam.chat.v1.DirectMessageService.GetConversation:output_type -> tayfam.chat.v1.GetConversationResponse
+	10, // 22: tayfam.chat.v1.DirectMessageService.ListDirectMessages:output_type -> tayfam.chat.v1.ListDirectMessagesResponse
+	12, // 23: tayfam.chat.v1.DirectMessageService.DeleteDirectMessage:output_type -> tayfam.chat.v1.DeleteDirectMessageResponse
+	14, // 24: tayfam.chat.v1.DirectMessageService.MarkConversationRead:output_type -> tayfam.chat.v1.MarkConversationReadResponse
+	16, // 25: tayfam.chat.v1.DirectMessageService.AcceptMessageRequest:output_type -> tayfam.chat.v1.AcceptMessageRequestResponse
+	18, // 26: tayfam.chat.v1.DirectMessageService.DeclineMessageRequest:output_type -> tayfam.chat.v1.DeclineMessageRequestResponse
+	20, // 27: tayfam.chat.v1.DirectMessageService.VerifyDirectMessageForReport:output_type -> tayfam.chat.v1.VerifyDirectMessageForReportResponse
+	19, // [19:28] is the sub-list for method output_type
+	10, // [10:19] is the sub-list for method input_type
 	10, // [10:10] is the sub-list for extension type_name
 	10, // [10:10] is the sub-list for extension extendee
 	0,  // [0:10] is the sub-list for field type_name
@@ -1204,7 +1311,7 @@ func file_tayfam_chat_v1_direct_messages_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_chat_v1_direct_messages_proto_rawDesc), len(file_tayfam_chat_v1_direct_messages_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   18,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

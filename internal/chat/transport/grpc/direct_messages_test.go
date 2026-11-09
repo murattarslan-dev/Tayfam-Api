@@ -27,6 +27,7 @@ import (
 // fakeDirect records what the transport passed and returns err.
 type fakeDirect struct {
 	caller, conversation, message id.ID
+	sender                        id.ID
 	send                          dm.SendInput
 	list                          dm.ListInput
 	size                          int32
@@ -74,6 +75,11 @@ func (f *fakeDirect) Accept(_ context.Context, caller, c id.ID) (dm.Conversation
 func (f *fakeDirect) Decline(_ context.Context, caller, c id.ID) error {
 	f.caller, f.conversation = caller, c
 	return f.err
+}
+
+func (f *fakeDirect) VerifyForReport(_ context.Context, caller, m id.ID) (id.ID, id.ID, error) {
+	f.caller, f.message = caller, m
+	return f.conversation, f.sender, f.err
 }
 
 func directConn(t *testing.T, app DirectMessages, logs *bytes.Buffer) (chatv1.DirectMessageServiceClient, context.Context, id.ID) {
@@ -216,5 +222,24 @@ func TestDirectNoticesListedNotRequested(t *testing.T) {
 	}
 	if len(listedTypes) != len(notificationTypes)+2 || len(listedTargets) != len(targetTypes)+1 {
 		t.Error("liste eşlemesi eksik")
+	}
+}
+
+// The verification answer for core's report check carries IDs only.
+func TestVerifyDirectMessageForReport(t *testing.T) {
+	app := &fakeDirect{conversation: id.New(), sender: id.New()}
+	client, ctx, user := directConn(t, app, &bytes.Buffer{})
+	msg := id.New()
+	resp, err := client.VerifyDirectMessageForReport(ctx, &chatv1.VerifyDirectMessageForReportRequest{MessageId: msg.String()})
+	if err != nil || app.caller != user || app.message != msg || resp.GetConversationId() != app.conversation.String() || resp.GetSenderUserId() != app.sender.String() {
+		t.Fatalf("doğrulama = %v %v", resp, err)
+	}
+	if _, err := client.VerifyDirectMessageForReport(ctx, &chatv1.VerifyDirectMessageForReportRequest{MessageId: "x"}); func() string { _, _, m := reasonOf(err); return m["field"] }() != "message_id" {
+		t.Fatalf("geçersiz: %v", err)
+	}
+	app.err = apperr.ErrMessageNotFound
+	_, err = client.VerifyDirectMessageForReport(ctx, &chatv1.VerifyDirectMessageForReportRequest{MessageId: msg.String()})
+	if code, reason, _ := reasonOf(err); code != codes.NotFound || reason != "ERROR_REASON_MESSAGE_NOT_FOUND" {
+		t.Fatalf("bulunamadı: %v", err)
 	}
 }

@@ -179,6 +179,8 @@ func errorStatus(ctx context.Context, log *slog.Logger, err error) error {
 		return reasonStatus(codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LAST_ADMIN, nil)
 	}
 	switch {
+	case errors.Is(err, apperr.ErrUnavailable):
+		return status.Error(codes.Unavailable, msgRejected)
 	case errors.Is(err, context.Canceled):
 		return status.Error(codes.Canceled, msgRejected)
 	case errors.Is(err, context.DeadlineExceeded):
