@@ -207,6 +207,24 @@ const (
 	ReportCreate
 	ReportQueueView
 	ReportResolve
+	// Channels (issue #81). chat asks core with AuthorizeChannelAction; the
+	// channels and messages are chat's data. ChannelView reads members
+	// channels and their messages; ChannelViewStaff also sees staff
+	// channels. ChannelManage opens, edits and archives channels.
+	// ChannelPost writes a message; ChannelSkipSlowMode writes without
+	// waiting for slow mode. ChannelDeleteOwn erases one's own message;
+	// ChannelModerate hides someone else's (with CanActOnContent against
+	// the author's current role) and ChannelRestore undoes that.
+	// ChannelMarkRead moves one's own read marker.
+	ChannelView
+	ChannelViewStaff
+	ChannelManage
+	ChannelPost
+	ChannelSkipSlowMode
+	ChannelDeleteOwn
+	ChannelModerate
+	ChannelRestore
+	ChannelMarkRead
 
 	actionEnd // sentinel; keep last
 )
@@ -278,6 +296,15 @@ var actionNames = [...]string{
 	ReportCreate:         "report.create",
 	ReportQueueView:      "report.queue_view",
 	ReportResolve:        "report.resolve",
+	ChannelView:          "channel.view",
+	ChannelViewStaff:     "channel.view_staff",
+	ChannelManage:        "channel.manage",
+	ChannelPost:          "channel.post",
+	ChannelSkipSlowMode:  "channel.skip_slow_mode",
+	ChannelDeleteOwn:     "channel.delete_own",
+	ChannelModerate:      "channel.moderate",
+	ChannelRestore:       "channel.restore",
+	ChannelMarkRead:      "channel.mark_read",
 	actionEnd:            "",
 }
 
@@ -337,6 +364,12 @@ var permissions = map[Action]Role{
 	// Every active member reports (Topluluk Kuralları: "Her kullanıcı
 	// şikâyet eder").
 	ReportCreate: Member,
+	// Channels (issue #81, v14 "Sohbet"): every active member reads members
+	// channels, writes, erases their own messages and marks read.
+	ChannelView:      Member,
+	ChannelPost:      Member,
+	ChannelDeleteOwn: Member,
+	ChannelMarkRead:  Member,
 
 	// Moderation: moderator and above.
 	// Lowering one's own role; members have nothing to step down to.
@@ -378,6 +411,13 @@ var permissions = map[Action]Role{
 	// moderatörler kendi tayfalarındaki şikâyetleri makul sürede ele alır").
 	ReportQueueView: Moderator,
 	ReportResolve:   Moderator,
+	// Channels: only moderators and admins see staff channels and open
+	// channels (v14 "Sohbet"), are exempt from slow mode (v14 "Spam ve
+	// taciz") and hide others' messages.
+	ChannelViewStaff:    Moderator,
+	ChannelManage:       Moderator,
+	ChannelSkipSlowMode: Moderator,
+	ChannelModerate:     Moderator,
 
 	// Tayfa management: admin only.
 	TayfaUpdateSettings:  Admin,
@@ -395,6 +435,7 @@ var permissions = map[Action]Role{
 	AnnouncementRestore: Admin,
 	QuestionRestore:     Admin,
 	AnswerRestore:       Admin,
+	ChannelRestore:      Admin,
 }
 
 // allowedWhileMuted lists the actions a muted member may still perform: reads,
@@ -430,6 +471,14 @@ var allowedWhileMuted = map[Action]bool{
 	// nothing to the tayfa. Reading the queue is a read; resolving is not.
 	ReportCreate:    true,
 	ReportQueueView: true,
+	// Channels: a muted member reads (staff channels too, if their role
+	// sees them), marks read and erases their own messages ("okur ama
+	// yazamaz"; one's own words are not kept against one's will). Writing,
+	// managing and moderating are refused.
+	ChannelView:      true,
+	ChannelViewStaff: true,
+	ChannelDeleteOwn: true,
+	ChannelMarkRead:  true,
 }
 
 // Settings are the tayfa settings that change the permission table. The zero

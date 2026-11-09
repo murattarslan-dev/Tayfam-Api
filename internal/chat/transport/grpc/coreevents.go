@@ -115,6 +115,14 @@ func coreEventFromProto(req *chatv1.ApplyCoreEventRequest) (coreevents.Event, er
 		e.Notification = &r
 	case *chatv1.ApplyCoreEventRequest_TayfaPurged:
 		e.Purged = true
+	case *chatv1.ApplyCoreEventRequest_MembershipChanged:
+		u, ok := id.Parse(ev.MembershipChanged.GetUserId())
+		if !ok {
+			return e, validation("membership_changed.user_id")
+		}
+		e.MemberChanged = u
+	case *chatv1.ApplyCoreEventRequest_TayfaStatusChanged:
+		e.StatusChanged = true
 	default:
 		return e, validation("event")
 	}

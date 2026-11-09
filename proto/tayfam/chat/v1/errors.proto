@@ -29,4 +29,40 @@ enum ErrorReason {
   // member of it (core's answer). These cases are indistinguishable on
   // purpose.
   ERROR_REASON_TAYFA_NOT_FOUND = 3;
+
+  // NOT_FOUND. No such channel in the tayfa, or a staff channel the caller
+  // may not see. These cases are indistinguishable on purpose.
+  ERROR_REASON_CHANNEL_NOT_FOUND = 4;
+
+  // NOT_FOUND. No such message in the channel, or a deletion that can no
+  // longer be restored (the author's own, or older than 30 days).
+  ERROR_REASON_MESSAGE_NOT_FOUND = 5;
+
+  // PERMISSION_DENIED. The caller's role in the tayfa is too low for the
+  // action.
+  ERROR_REASON_PERMISSION_DENIED = 6;
+
+  // PERMISSION_DENIED. The caller is muted in the tayfa; muted members read
+  // but do not write.
+  ERROR_REASON_MUTED = 7;
+
+  // FAILED_PRECONDITION. The channel is archived and takes no new messages.
+  ERROR_REASON_CHANNEL_ARCHIVED = 8;
+
+  // ALREADY_EXISTS. Another channel of the tayfa that is not archived has
+  // the same name (Turkish case-insensitive).
+  ERROR_REASON_CHANNEL_NAME_TAKEN = 9;
+
+  // RESOURCE_EXHAUSTED. The channel's slow mode does not allow the caller
+  // another message yet. ErrorInfo metadata "retry_after_seconds" holds the
+  // whole seconds to wait.
+  ERROR_REASON_SLOW_MODE = 10;
+
+  // FAILED_PRECONDITION. The tayfa is suspended, archived or waiting for
+  // deletion (core's answer); channels take no changes.
+  ERROR_REASON_TAYFA_READ_ONLY = 11;
+
+  // PERMISSION_DENIED. The message's author has the caller's role or a
+  // higher one (core's role hierarchy).
+  ERROR_REASON_ROLE_HIERARCHY = 12;
 }

@@ -147,3 +147,20 @@ func (c *Cipher) Decrypt(message, channel id.ID, s Sealed) (string, error) {
 
 // NeedsReencrypt reports whether s was encrypted with an older key.
 func (c *Cipher) NeedsReencrypt(s Sealed) bool { return s.Version != c.active }
+
+// ErrKeyRequired is returned by Load when prod runs without a key.
+var ErrKeyRequired = errors.New("CHAT_MESSAGE_KEYS prod ortamında zorunlu")
+
+// Load builds the Cipher for environment env (TAYFAM_ENV) from the value of
+// CHAT_MESSAGE_KEYS. prod must have a key. local and dev may run without
+// one; the result is then nil and channels stay off until the key exists
+// (the secret is created by the platform owner, issue #81).
+func Load(env, keys string) (*Cipher, error) {
+	if strings.TrimSpace(keys) == "" {
+		if env == "prod" {
+			return nil, ErrKeyRequired
+		}
+		return nil, nil
+	}
+	return ParseKeys(keys)
+}

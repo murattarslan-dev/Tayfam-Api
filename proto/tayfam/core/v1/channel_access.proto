@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/membership.proto";
+
+// ChannelAccessService answers chat's permission questions about tayfa
+// channels (issue #81, ADR-0004, ADR-0009). Channels and messages are chat's
+// data; who may do what with them is decided here, by core's single
+// permission table (CLAUDE.md rule 5).
+//
+// Authentication: the caller's own access token, forwarded by chat
+// (auth.ForwardToken, ADR-0011). Every answer is about the caller only.
+// Service tokens are refused.
+service ChannelAccessService {
+  // AuthorizeChannelAction checks action for the caller in the tayfa.
+  //
+  // A caller who is not an active member of a live tayfa (none, pending,
+  // invited, banned; unknown or deleted tayfa) gets
+  // ERROR_REASON_TAYFA_NOT_FOUND. Otherwise the call succeeds and the answer
+  // says whether the action is allowed and, if not, why.
+  //
+  // target_user_id is the author of the message the action is about. It is
+  // accepted only with CHANNEL_ACTION_MODERATE and CHANNEL_ACTION_RESTORE
+  // (ERROR_REASON_VALIDATION otherwise): then the role hierarchy applies
+  // against the author's current role (a moderator cannot hide a
+  // moderator's or an admin's message, an admin not another admin's); an
+  // author who is no longer an active member does not limit it.
+  //
+  // decisions holds the answer for every action without a target, so chat
+  // can serve one request with one call (and keep the answer a few
+  // seconds).
+  rpc AuthorizeChannelAction(AuthorizeChannelActionRequest) returns (AuthorizeChannelActionResponse);
+}
+
+enum ChannelAction {
+  CHANNEL_ACTION_UNSPECIFIED = 0;
+  // Read members channels and their messages; list channels.
+  CHANNEL_ACTION_VIEW = 1;
+  // See staff channels.
+  CHANNEL_ACTION_VIEW_STAFF = 2;
+  // Open, edit, archive and unarchive channels.
+  CHANNEL_ACTION_MANAGE = 3;
+  // Write a message.
+  CHANNEL_ACTION_POST = 4;
+  // Write without waiting for slow mode.
+  CHANNEL_ACTION_SKIP_SLOW_MODE = 5;
+  // Erase one's own message.
+  CHANNEL_ACTION_DELETE_OWN = 6;
+  // Hide someone else's message.
+  CHANNEL_ACTION_MODERATE = 7;
+  // Undo a moderation deletion.
+  CHANNEL_ACTION_RESTORE = 8;
+  // Move one's own read marker.
+  CHANNEL_ACTION_MARK_READ = 9;
+}
+
+// ChannelDenial says why an action is refused. UNSPECIFIED means allowed.
+enum ChannelDenial {
+  CHANNEL_DENIAL_UNSPECIFIED = 0;
+  // The caller's role is too low.
+  CHANNEL_DENIAL_ROLE = 1;
+  // The caller is muted and the action writes.
+  CHANNEL_DENIAL_MUTED = 2;
+  // The tayfa is suspended, archived or waiting for deletion; channel
+  // changes (manage, post, delete, moderate, restore) are refused. Reads
+  // and read markers are not.
+  CHANNEL_DENIAL_READ_ONLY = 3;
+  // target_user_id outranks or equals the caller (role hierarchy).
+  CHANNEL_DENIAL_HIERARCHY = 4;
+}
+
+message ChannelActionDecision {
+  ChannelAction action = 1;
+  ChannelDenial denial = 2;
+}
+
+message AuthorizeChannelActionRequest {
+  string tayfa_id = 1;
+  ChannelAction action = 2;
+  // Optional; only with MODERATE and RESTORE.
+  string target_user_id = 3;
+}
+
+message AuthorizeChannelActionResponse {
+  // The answer for action (and target_user_id, if given).
+  bool allowed = 1;
+  ChannelDenial denial = 2;
+  // Every action without a target, in enum order.
+  repeated ChannelActionDecision decisions = 3;
+  // The caller's role.
+  Role role = 4;
+  // End of the caller's mute; unset when not muted.
+  google.protobuf.Timestamp mute_expire_time = 5;
+  // The tayfa is suspended, archived or waiting for deletion.
+  bool tayfa_read_only = 6;
+}

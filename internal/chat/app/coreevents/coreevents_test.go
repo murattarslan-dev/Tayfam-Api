@@ -73,6 +73,13 @@ func TestPurgeRemovesTayfaNotifications(t *testing.T) {
 	must(t, svc.Apply(ctx, announcement(tf, id.New(), u)))
 	must(t, svc.Apply(ctx, announcement(other, id.New(), u)))
 	must(t, store.New(pool).UpsertNotificationPreference(ctx, store.UpsertNotificationPreferenceParams{UserID: u.PG(), ScopeType: "tayfa", ScopeID: tf.PG(), Level: "none"}))
+	// One channel in each tayfa; only the purged tayfa's goes.
+	for _, tayfa := range []id.ID{tf, other} {
+		_, err := store.New(pool).CreateChannel(ctx, store.CreateChannelParams{
+			ID: id.New().PG(), TayfaID: tayfa.PG(), Name: "genel", NameNormalized: "genel", Visibility: "members",
+		})
+		must(t, err)
+	}
 
 	for range 2 {
 		must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, Purged: true}))
@@ -82,6 +89,12 @@ func TestPurgeRemovesTayfaNotifications(t *testing.T) {
 	}
 	if n := count(t, pool, `SELECT count(*) FROM notification_preferences`); n != 0 {
 		t.Fatal("tercih kaldı")
+	}
+	if n := count(t, pool, `SELECT count(*) FROM channels WHERE tayfa_id = $1`, tf.PG()); n != 0 {
+		t.Fatal("kanal kaldı")
+	}
+	if n := count(t, pool, `SELECT count(*) FROM channels WHERE tayfa_id = $1`, other.PG()); n != 1 {
+		t.Fatal("başka tayfanın kanalı silindi")
 	}
 }
 
@@ -177,5 +190,42 @@ func TestSocialNotifications(t *testing.T) {
 	}
 	if n := count(t, pool, `SELECT count(*) FROM notifications WHERE user_id = $1 AND tayfa_id = $2 AND type = 'tayfa_invitation'`, friend.PG(), tf.PG()); n != 1 {
 		t.Fatalf("davet bildirimi = %d", n)
+	}
+}
+
+type fakeCache struct {
+	forgot      [][2]id.ID
+	forgotTayfa []id.ID
+}
+
+func (f *fakeCache) Forget(tayfa, user id.ID) { f.forgot = append(f.forgot, [2]id.ID{tayfa, user}) }
+func (f *fakeCache) ForgetTayfa(tayfa id.ID)  { f.forgotTayfa = append(f.forgotTayfa, tayfa) }
+
+// Membership and tayfa state changes only clear the channel permission
+// cache; nothing is stored (chat keeps no copy of memberships).
+func TestStateChangesClearCache(t *testing.T) {
+	pool := dbtest.New(t, chatdb.Migrations())
+	cache := &fakeCache{}
+	svc, err := New(Config{Pool: pool, Access: cache})
+	must(t, err)
+	tf, u := id.New(), id.New()
+	must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, MemberChanged: u}))
+	must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, StatusChanged: true}))
+	must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, Purged: true}))
+	if len(cache.forgot) != 1 || cache.forgot[0] != [2]id.ID{tf, u} || len(cache.forgotTayfa) != 2 {
+		t.Fatalf("önbellek = %+v", cache)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM domain_events`); n != 0 {
+		t.Fatal("olay yazıldı")
+	}
+	for name, e := range map[string]Event{
+		"tayfasız üyelik": {ID: id.New(), MemberChanged: u},
+		"tayfasız durum":  {ID: id.New(), StatusChanged: true},
+		"iki tür":         {ID: id.New(), Tayfa: tf, MemberChanged: u, StatusChanged: true},
+	} {
+		var v *apperr.ValidationError
+		if err := svc.Apply(ctx, e); !errors.As(err, &v) {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }

@@ -159,16 +159,22 @@ const (
 //
 // Following ADR-0009, core decides who is notified: it owns memberships and
 // sends the recipients with each notification request. chat keeps no copy
-// of memberships; it stores what it is told. Only two event types reach
-// chat (an explicit list in core's relay): notification.requested and
-// tayfa.purged.
+// of memberships; it stores what it is told. Only these event types reach
+// chat (an explicit list in core's relay): notification.requested,
+// tayfa.purged, membership.changed and the tayfa state changes
+// (tayfa.warned, tayfa.archived, tayfa.reactivated, tayfa.deleted,
+// tayfa.deletion_requested, tayfa.deletion_cancelled).
 type CoreEventServiceClient interface {
 	// ApplyCoreEvent applies one core event.
 	//
 	// notification_requested writes one in-app notification per recipient,
 	// at most once per event and recipient; a recipient whose account was
-	// deleted is skipped. tayfa_purged removes the tayfa's notifications and
-	// notification preferences.
+	// deleted is skipped. tayfa_purged removes the tayfa's notifications,
+	// notification preferences and channels with their messages.
+	//
+	// membership_changed and tayfa_status_changed carry no state: chat drops
+	// the channel permissions it keeps for a few seconds (the user's in the
+	// tayfa, or everyone's in the tayfa) and asks core again (issue #81).
 	ApplyCoreEvent(ctx context.Context, in *ApplyCoreEventRequest, opts ...grpc.CallOption) (*ApplyCoreEventResponse, error)
 }
 
@@ -199,16 +205,22 @@ func (c *coreEventServiceClient) ApplyCoreEvent(ctx context.Context, in *ApplyCo
 //
 // Following ADR-0009, core decides who is notified: it owns memberships and
 // sends the recipients with each notification request. chat keeps no copy
-// of memberships; it stores what it is told. Only two event types reach
-// chat (an explicit list in core's relay): notification.requested and
-// tayfa.purged.
+// of memberships; it stores what it is told. Only these event types reach
+// chat (an explicit list in core's relay): notification.requested,
+// tayfa.purged, membership.changed and the tayfa state changes
+// (tayfa.warned, tayfa.archived, tayfa.reactivated, tayfa.deleted,
+// tayfa.deletion_requested, tayfa.deletion_cancelled).
 type CoreEventServiceServer interface {
 	// ApplyCoreEvent applies one core event.
 	//
 	// notification_requested writes one in-app notification per recipient,
 	// at most once per event and recipient; a recipient whose account was
-	// deleted is skipped. tayfa_purged removes the tayfa's notifications and
-	// notification preferences.
+	// deleted is skipped. tayfa_purged removes the tayfa's notifications,
+	// notification preferences and channels with their messages.
+	//
+	// membership_changed and tayfa_status_changed carry no state: chat drops
+	// the channel permissions it keeps for a few seconds (the user's in the
+	// tayfa, or everyone's in the tayfa) and asks core again (issue #81).
 	ApplyCoreEvent(context.Context, *ApplyCoreEventRequest) (*ApplyCoreEventResponse, error)
 	mustEmbedUnimplementedCoreEventServiceServer()
 }

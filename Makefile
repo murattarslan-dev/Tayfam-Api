@@ -50,6 +50,7 @@ dev: build
 up:
 	AUTH_SIGNING_KEY="local:$$(head -c 32 /dev/urandom | base64 -w0)" \
 	IDENTITY_BIRTHDATE_KEYS="1:$$(head -c 32 /dev/urandom | base64 -w0)" \
+	CHAT_MESSAGE_KEYS="1:$$(head -c 32 /dev/urandom | base64 -w0)" \
 	docker compose up --build
 
 down:

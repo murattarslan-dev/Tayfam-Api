@@ -99,6 +99,9 @@ services:
       <<: *env
       IDENTITY_GRPC_ADDR: identity:9090
       CORE_GRPC_ADDR: core:9090
+      # Kanal mesajı anahtarı; make up her seferinde yenisini üretir (eski
+      # mesajlar okunamaz). Yoksa kanallar kapalıdır (UNAVAILABLE).
+      CHAT_MESSAGE_KEYS: ${CHAT_MESSAGE_KEYS:-}
       DB_HOST: postgres
       DB_NAME: chat
       DB_USER: postgres

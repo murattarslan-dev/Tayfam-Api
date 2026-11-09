@@ -1,0 +1,261 @@
+syntax = "proto3";
+
+package tayfam.chat.v1;
+
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+
+// ChannelService runs a tayfa's channels and their messages (ADR-0005
+// "Kanal mesajları"; data model v14 "Sohbet", "Spam ve taciz", "Silinen
+// içeriği geri alma", "Okunma bilgisi"; issue #81). Real-time delivery is a
+// separate WebSocket (issue #82); sending there goes through the same rules.
+//
+// Authentication: the caller's access token (ADR-0004, ADR-0011). Service
+// tokens are refused. Requests never name the acting user.
+//
+// Common rules for every method:
+//   - chat asks core what the caller may do with the tayfa's channels
+//     (ChannelAccessService.AuthorizeChannelAction with the caller's own
+//     token; core's single permission table). Answers are kept for a few
+//     seconds and dropped as soon as core reports a membership or tayfa
+//     state change. Anyone who is not an active member gets
+//     ERROR_REASON_TAYFA_NOT_FOUND; UNAVAILABLE when core cannot answer.
+//   - A channel is looked up within the tayfa: a channel of another tayfa,
+//     and a STAFF channel for a plain member, are
+//     ERROR_REASON_CHANNEL_NOT_FOUND.
+//   - Permissions are core's (default "no"): every active member reads
+//     MEMBERS channels, sends, deletes their own messages and marks read;
+//     moderators and admins also see STAFF channels, create, edit and
+//     archive channels, hide others' messages and are exempt from slow
+//     mode; only admins restore hidden messages. A role too low is
+//     ERROR_REASON_PERMISSION_DENIED. A muted member reads, marks read and
+//     deletes their own messages, nothing else (ERROR_REASON_MUTED).
+//     Hiding and restoring someone else's message also need a role above
+//     the author's current one (ERROR_REASON_ROLE_HIERARCHY; an author who
+//     left does not limit it).
+//   - A suspended, archived or deletion-pending tayfa makes its channels
+//     read-only: changes get ERROR_REASON_TAYFA_READ_ONLY; reading and read
+//     markers go on.
+//   - Message bodies are stored encrypted (AES-256-GCM, server key) and
+//     never appear in logs, events, notifications or error messages.
+//   - UNAVAILABLE without ErrorInfo also when chat runs without its message
+//     key (only possible outside prod).
+//   - IDs are UUID strings (ERROR_REASON_VALIDATION otherwise).
+//
+// Paging: page_size 0 means 50; values above 100 are treated as 100;
+// negative values are ERROR_REASON_VALIDATION. page_token is opaque, only
+// valid for the same method and request fields; a bad token is
+// ERROR_REASON_VALIDATION. An empty next_page_token means the last page.
+service ChannelService {
+  // ListChannels lists the tayfa's channels the caller may see, with the
+  // caller's unread count. Archived channels come last.
+  rpc ListChannels(ListChannelsRequest) returns (ListChannelsResponse);
+
+  // GetChannel returns one channel.
+  rpc GetChannel(GetChannelRequest) returns (GetChannelResponse);
+
+  // CreateChannel opens a channel. Moderators and admins.
+  //
+  // Errors: ERROR_REASON_VALIDATION (name 1–40 characters without control
+  // characters or extra spaces; slow_mode_seconds 0–3600),
+  // ERROR_REASON_CHANNEL_NAME_TAKEN.
+  rpc CreateChannel(CreateChannelRequest) returns (CreateChannelResponse);
+
+  // UpdateChannel changes the fields in update_mask: "name", "visibility",
+  // "slow_mode_seconds". Moderators and admins. An empty or unknown mask is
+  // ERROR_REASON_VALIDATION.
+  rpc UpdateChannel(UpdateChannelRequest) returns (UpdateChannelResponse);
+
+  // ArchiveChannel makes a channel read-only; UnarchiveChannel undoes it
+  // (ERROR_REASON_CHANNEL_NAME_TAKEN if the name was taken meanwhile).
+  // Moderators and admins. Doing it twice changes nothing.
+  rpc ArchiveChannel(ArchiveChannelRequest) returns (ArchiveChannelResponse);
+  rpc UnarchiveChannel(UnarchiveChannelRequest) returns (UnarchiveChannelResponse);
+
+  // SendMessage writes a message. body is 1–4000 characters, not only white
+  // space, without control characters other than tab and line breaks.
+  // client_request_id (UUID, chosen by the client) is required: sending
+  // again with the same value returns the first message and writes nothing
+  // (also past slow mode); reusing it in another channel is
+  // ERROR_REASON_VALIDATION. The message ID is always the server's.
+  //
+  // Errors: ERROR_REASON_MUTED, ERROR_REASON_CHANNEL_ARCHIVED,
+  // ERROR_REASON_SLOW_MODE.
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+
+  // ListMessages returns messages of a channel. Without after_message_id
+  // the newest come first and next_page_token goes to older ones. With
+  // after_message_id (the last message the client has) the newer messages
+  // come oldest first and next_page_token goes to newer ones: this is how a
+  // client catches up after a reconnect (ADR-0005). Deleted messages keep
+  // their place with deleted set and no body.
+  rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse);
+
+  // DeleteMessage deletes a message. The author's own deletion erases the
+  // body at once and cannot be undone. A moderator's or admin's deletion of
+  // someone else's message hides it; an admin can restore it within 30
+  // days, after which it is deleted permanently. Deleting a deleted message
+  // changes nothing. Messages cannot be edited.
+  rpc DeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse);
+
+  // RestoreMessage undoes a moderation deletion within 30 days. Admins.
+  // ERROR_REASON_MESSAGE_NOT_FOUND for an author's own deletion or an older
+  // one. Restoring a visible message changes nothing.
+  rpc RestoreMessage(RestoreMessageRequest) returns (RestoreMessageResponse);
+
+  // MarkChannelRead moves the caller's read marker to message_id. It only
+  // moves forward; an older message changes nothing.
+  rpc MarkChannelRead(MarkChannelReadRequest) returns (MarkChannelReadResponse);
+}
+
+enum ChannelVisibility {
+  CHANNEL_VISIBILITY_UNSPECIFIED = 0;
+  // Every active member.
+  CHANNEL_VISIBILITY_MEMBERS = 1;
+  // Moderators and admins only.
+  CHANNEL_VISIBILITY_STAFF = 2;
+}
+
+message Channel {
+  string id = 1;
+  string tayfa_id = 2;
+  string name = 3;
+  ChannelVisibility visibility = 4;
+  // 0: off. Moderators and admins are exempt.
+  int32 slow_mode_seconds = 5;
+  // Empty when the account was deleted.
+  string creator_user_id = 6;
+  // Set while archived (read-only).
+  google.protobuf.Timestamp archive_time = 7;
+  google.protobuf.Timestamp create_time = 8;
+  google.protobuf.Timestamp update_time = 9;
+  // ListChannels only: the caller's unread messages from others, at most
+  // 100 (shown as "99+").
+  int32 unread_count = 10;
+  // ListChannels only: the caller's read marker; empty if none.
+  string last_read_message_id = 11;
+}
+
+message Message {
+  string id = 1;
+  string channel_id = 2;
+  // Empty when the author's account was deleted ("Silinmiş kullanıcı").
+  string author_user_id = 3;
+  // Empty when deleted.
+  string body = 4;
+  bool deleted = 5;
+  google.protobuf.Timestamp create_time = 6;
+  // Set for admins on a moderation deletion that can still be restored.
+  bool restorable = 7;
+}
+
+message ListChannelsRequest {
+  string tayfa_id = 1;
+}
+
+message ListChannelsResponse {
+  repeated Channel channels = 1;
+}
+
+message GetChannelRequest {
+  string tayfa_id = 1;
+  string channel_id = 2;
+}
+
+message GetChannelResponse {
+  Channel channel = 1;
+}
+
+message CreateChannelRequest {
+  string tayfa_id = 1;
+  string name = 2;
+  // UNSPECIFIED means MEMBERS.
+  ChannelVisibility visibility = 3;
+  int32 slow_mode_seconds = 4;
+}
+
+message CreateChannelResponse {
+  Channel channel = 1;
+}
+
+message UpdateChannelRequest {
+  string tayfa_id = 1;
+  string channel_id = 2;
+  string name = 3;
+  ChannelVisibility visibility = 4;
+  int32 slow_mode_seconds = 5;
+  google.protobuf.FieldMask update_mask = 6;
+}
+
+message UpdateChannelResponse {
+  Channel channel = 1;
+}
+
+message ArchiveChannelRequest {
+  string tayfa_id = 1;
+  string channel_id = 2;
+}
+
+message ArchiveChannelResponse {
+  Channel channel = 1;
+}
+
+message UnarchiveChannelRequest {
+  string tayfa_id = 1;
+  string channel_id = 2;
+}
+
+message UnarchiveChannelResponse {
+  Channel channel = 1;
+}
+
+message SendMessageRequest {
+  string tayfa_id = 1;
+  string channel_id = 2;
+  string body = 3;
+  string client_request_id = 4;
+}
+
+message SendMessageResponse {
+  Message message = 1;
+}
+
+message ListMessagesRequest {
+  string tayfa_id = 1;
+  string channel_id = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+  // Optional: return the messages newer than this one, oldest first.
+  string after_message_id = 5;
+}
+
+message ListMessagesResponse {
+  repeated Message messages = 1;
+  string next_page_token = 2;
+}
+
+message DeleteMessageRequest {
+  string tayfa_id = 1;
+  string channel_id = 2;
+  string message_id = 3;
+}
+
+message DeleteMessageResponse {}
+
+message RestoreMessageRequest {
+  string tayfa_id = 1;
+  string channel_id = 2;
+  string message_id = 3;
+}
+
+message RestoreMessageResponse {
+  Message message = 1;
+}
+
+message MarkChannelReadRequest {
+  string tayfa_id = 1;
+  string channel_id = 2;
+  string message_id = 3;
+}
+
+message MarkChannelReadResponse {}

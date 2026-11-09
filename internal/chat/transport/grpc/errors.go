@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math"
+	"strconv"
 
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
@@ -35,6 +37,22 @@ func reasonFor(err error) (code codes.Code, reason chatv1.ErrorReason, ok bool) 
 		return codes.NotFound, chatv1.ErrorReason_ERROR_REASON_NOTIFICATION_NOT_FOUND, true
 	case errors.Is(err, apperr.ErrTayfaNotFound):
 		return codes.NotFound, chatv1.ErrorReason_ERROR_REASON_TAYFA_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrChannelNotFound):
+		return codes.NotFound, chatv1.ErrorReason_ERROR_REASON_CHANNEL_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrMessageNotFound):
+		return codes.NotFound, chatv1.ErrorReason_ERROR_REASON_MESSAGE_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrPermissionDenied):
+		return codes.PermissionDenied, chatv1.ErrorReason_ERROR_REASON_PERMISSION_DENIED, true
+	case errors.Is(err, apperr.ErrMuted):
+		return codes.PermissionDenied, chatv1.ErrorReason_ERROR_REASON_MUTED, true
+	case errors.Is(err, apperr.ErrChannelArchived):
+		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_CHANNEL_ARCHIVED, true
+	case errors.Is(err, apperr.ErrTayfaReadOnly):
+		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_TAYFA_READ_ONLY, true
+	case errors.Is(err, apperr.ErrRoleHierarchy):
+		return codes.PermissionDenied, chatv1.ErrorReason_ERROR_REASON_ROLE_HIERARCHY, true
+	case errors.Is(err, apperr.ErrChannelNameTaken):
+		return codes.AlreadyExists, chatv1.ErrorReason_ERROR_REASON_CHANNEL_NAME_TAKEN, true
 	}
 	return codes.Unknown, chatv1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }
@@ -46,11 +64,17 @@ func errorStatus(ctx context.Context, log *slog.Logger, err error) error {
 	if errors.As(err, &v) {
 		return validation(v.Field)
 	}
+	var slow *apperr.SlowModeError
+	if errors.As(err, &slow) {
+		secs := int64(math.Ceil(slow.RetryAfter.Seconds()))
+		return reasonStatus(codes.ResourceExhausted, chatv1.ErrorReason_ERROR_REASON_SLOW_MODE,
+			map[string]string{"retry_after_seconds": strconv.FormatInt(max(secs, 1), 10)})
+	}
 	if code, reason, ok := reasonFor(err); ok {
 		return reasonStatus(code, reason, nil)
 	}
 	switch {
-	case errors.Is(err, apperr.ErrUnavailable):
+	case errors.Is(err, apperr.ErrUnavailable), errors.Is(err, apperr.ErrChannelsUnavailable):
 		return status.Error(codes.Unavailable, msgRejected)
 	case errors.Is(err, context.Canceled):
 		return status.Error(codes.Canceled, msgRejected)

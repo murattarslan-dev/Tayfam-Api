@@ -17,6 +17,7 @@ import (
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/announcement"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/channelaccess"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatrelay"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/identityminor"
@@ -111,6 +112,10 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
+	channelAccess, err := channelaccess.New(channelaccess.Config{Pool: pool})
+	if err != nil {
+		return err
+	}
 
 	background, err := jobs.New(jobs.Config{Pool: pool, Log: rt.Log})
 	if err != nil {
@@ -153,6 +158,9 @@ func setup(rt *service.Runtime) error {
 	corev1.RegisterSocialServiceServer(srv, grpcapi.NewSocialServer(socials, rt.Log))
 	corev1.RegisterProfileServiceServer(srv, grpcapi.NewProfileServer(profiles, rt.Log))
 	corev1.RegisterReportServiceServer(srv, grpcapi.NewReportServer(reports, rt.Log))
+	// chat'in kanal izinleri (issue #81): kullanıcının kendi token'ıyla,
+	// core'un tek izin tablosundan.
+	corev1.RegisterChannelAccessServiceServer(srv, grpcapi.NewChannelAccessServer(channelAccess, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
 	// Tekrarlayan etkinliklerin önümüzdeki 8 haftalık örnekleri (issue #51).
 	// Birden fazla pod'da çalışabilir: tayfa ve seri satırı kilitlenir,
