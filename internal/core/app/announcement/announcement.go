@@ -515,7 +515,8 @@ func validText(s string, multiline bool) bool {
 		return false
 	}
 	return !slices.ContainsFunc([]rune(s), func(r rune) bool {
-		return unicode.IsControl(r) && !(multiline && (r == '\n' || r == '\r' || r == '\t'))
+		lineBreak := r == '\n' || r == '\r' || r == '\t'
+		return unicode.IsControl(r) && (!multiline || !lineBreak)
 	})
 }
 

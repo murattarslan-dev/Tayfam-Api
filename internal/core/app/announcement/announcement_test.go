@@ -273,10 +273,10 @@ func TestEditHierarchy(t *testing.T) {
 		_, err := q.DeleteMembership(ctx, store.DeleteMembershipParams{TayfaID: c.tayfa.PG(), UserID: c.mod2.PG()})
 		return err
 	})
-	v, err := e.svc.Update(ctx, c.mutedMod, c.tayfa, byMod2.ID, UpdateInput{Fields: []string{FieldBody}, Body: "x"})
+	_, err := e.svc.Update(ctx, c.mutedMod, c.tayfa, byMod2.ID, UpdateInput{Fields: []string{FieldBody}, Body: "x"})
 	is(t, "susturulmuş", err, apperr.ErrMuted)
 	e.setRole(t, c, c.member, authz.Moderator)
-	v, err = e.svc.Update(ctx, c.member, c.tayfa, byMod2.ID, UpdateInput{Fields: []string{FieldBody}, Body: " Yeni gövde "})
+	v, err := e.svc.Update(ctx, c.member, c.tayfa, byMod2.ID, UpdateInput{Fields: []string{FieldBody}, Body: " Yeni gövde "})
 	if err != nil || v.Body != "Yeni gövde" || v.Title != "Ayrılanın duyurusu" {
 		t.Fatalf("ayrılan yazar: %+v %v", v, err)
 	}
