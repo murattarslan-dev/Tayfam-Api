@@ -31,9 +31,11 @@
 // priority is decided then and never changes (reports_guard); the answer
 // itself is not kept, and nobody's age is ever stored, returned or logged.
 //
-// The priority is for the platform only. Tayfa admins and moderators never
-// learn that a party is under 18 (ADR-0012): the queue (ModView) carries
-// no priority and no escalation flag, and is ordered by time only.
+// The tayfa's queue shows the priority and puts MinorInvolved first
+// (ADR-0012 as updated by the platform owner on 2026-11-09; Notion v14
+// "Şikâyet önceliği"). It never shows anyone's age or birth date, nor which
+// party is under 18; core has neither. The escalation flag stays out of the
+// queue.
 //
 // Escalation to the platform (v14 "Platforma yükselen şikâyetler"): at once
 // for reports about the tayfa itself and about staff conduct (those go to
@@ -262,8 +264,8 @@ type MyView struct {
 }
 
 // ModView is a report as the tayfa's moderators see it. It deliberately has
-// no reporter, priority or escalation field (see the package comment); a
-// test keeps it that way.
+// no reporter field and nothing about age (see the package comment); a test
+// keeps it that way.
 type ModView struct {
 	ID         id.ID
 	TayfaID    id.ID
@@ -274,11 +276,14 @@ type ModView struct {
 	SubjectID   id.ID
 	Reason      Reason
 	Description string
-	Status      Status
-	Resolution  Resolution // empty while open
-	HandledBy   id.ID      // zero while open or when the account was deleted
-	CreatedAt   time.Time
-	ResolvedAt  time.Time
+	// Priority is MinorInvolved when a party was under 18 (or not known to
+	// be adult) when the report was filed; which party is never said.
+	Priority   Priority
+	Status     Status
+	Resolution Resolution // empty while open
+	HandledBy  id.ID      // zero while open or when the account was deleted
+	CreatedAt  time.Time
+	ResolvedAt time.Time
 }
 
 // CreateInput is a report.
@@ -640,7 +645,7 @@ func (s *Service) Resolve(ctx context.Context, user, tayfa, report id.ID, r Reso
 			ID: row.ID, TayfaID: row.TayfaID, TargetType: row.TargetType, TargetID: row.TargetID,
 			SubjectUserID: row.SubjectUserID, Reason: row.Reason, Description: row.Description,
 			Status: string(StatusResolved), Resolution: pgtype.Text{String: string(r), Valid: true},
-			HandledBy: user.PG(), HandledAt: ts(now), CreatedAt: row.CreatedAt,
+			HandledBy: user.PG(), HandledAt: ts(now), Priority: row.Priority, CreatedAt: row.CreatedAt,
 		})
 
 		ref := txn.Target{Type: subjectType, ID: report}
@@ -749,11 +754,18 @@ func myView(r store.ListReportsOfReporterRow) MyView {
 	return v
 }
 
+// urgent reports whether v goes first in the queue: MinorInvolved, or a
+// child safety report (ADR-0012, Notion "Kötüye Kullanım ve Genç Kullanıcı
+// Güvenliği").
+func (v ModView) urgent() bool {
+	return v.Priority == PriorityMinorInvolved || v.Reason == ReasonChildSafety
+}
+
 func modView(r store.ListOpenTayfaReportsRow) ModView {
 	v := ModView{
 		ID: id.ID(r.ID.Bytes), TayfaID: id.ID(r.TayfaID.Bytes), TargetType: TargetType(r.TargetType),
 		TargetID: id.ID(r.TargetID.Bytes), SubjectID: pgID(r.SubjectUserID), Reason: Reason(r.Reason),
-		Description: r.Description.String, Status: Status(r.Status),
+		Description: r.Description.String, Priority: Priority(r.Priority), Status: Status(r.Status),
 		Resolution: Resolution(r.Resolution.String), HandledBy: pgID(r.HandledBy),
 		CreatedAt: r.CreatedAt.Time.UTC(),
 	}

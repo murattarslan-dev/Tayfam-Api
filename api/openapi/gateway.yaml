@@ -2769,11 +2769,11 @@ paths:
       operationId: listTayfaReports
       summary: Tayfanın moderasyon kuyruğu (moderatör, yönetici)
       description: |
-        `status=open` (varsayılan): eskiden yeniye. `status=resolved`: son
-        çözülen önce. Platforma özel şikâyetler ve sizin hakkınızdaki
-        şikâyetler listelenmez. Şikâyet edenin kimliği yoktur. Taraflardan
-        birinin 18 yaşından küçük olup olmadığı hiçbir biçimde (alan, sıra)
-        gösterilmez; bu öncelik yalnızca platform tarafındadır (ADR-0012).
+        `status=open` (varsayılan): önce `priority: minor_involved` ve
+        `reason: child_safety` şikâyetler, sonra eskiden yeniye. `status=resolved`: son çözülen
+        önce. Platforma özel şikâyetler ve sizin hakkınızdaki şikâyetler
+        listelenmez. Şikâyet edenin kimliği yoktur. Tarafların yaşı ve doğum
+        tarihi gösterilmez; yalnızca öncelik (ADR-0012, 2026-11-09 kararı).
         Susturulmuş moderatör de okur.
       parameters:
         - name: status
@@ -4566,9 +4566,11 @@ security:
       type: object
       description: |
         Şikâyet, tayfa moderatörünün gördüğü haliyle. Şikâyet edenin kimliği,
-        öncelik ve platforma yükselme bilgisi için alan yoktur (ADR-0012:
-        tayfa yöneticileri 18 yaş altı bilgisini görmez).
-      required: [id, tayfa_id, target_type, target_id, reason, status, created_at]
+        platforma yükselme ve yaş için alan yoktur. `priority:
+        minor_involved` taraflardan birinin (şikâyet eden ya da şikâyet
+        edilen) şikâyet anında 18 yaşından küçük olduğunu ya da bunun
+        bilinmediğini söyler; hangisi olduğu ve kimsenin yaşı gösterilmez.
+      required: [id, tayfa_id, target_type, target_id, reason, priority, status, created_at]
       properties:
         id: { type: string, format: uuid }
         tayfa_id: { type: string, format: uuid }
@@ -4580,6 +4582,7 @@ security:
           description: Şikâyet edilen üye ya da içeriğin yazarı; hesap silindiyse yoktur.
         reason: { $ref: "#/components/schemas/ReportReason" }
         description: { type: string }
+        priority: { type: string, enum: [normal, minor_involved] }
         status: { type: string, enum: [open, resolved] }
         resolution:
           type: string

@@ -1,7 +1,8 @@
 # ADR-0012: Doğum tarihi, genç kullanıcı güvenliği ve kötüye kullanım tespiti
 
 - **Durum:** Kabul edildi
-- **Tarih:** 2026-11-07
+- **Tarih:** 2026-11-07 (güncelleme: 2026-11-09, şikâyet önceliğinin tayfa
+  kuyruğunda görünmesi)
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0008](0008-kvkk-ve-platform-yonetimi.md), [ADR-0009](0009-veri-modelinin-servislere-dagilimi.md), [ADR-0011](0011-guvenlik-ilkesi-ihlal-varsayimi.md)
 - **Kaynak:** Notion: Veri Modeli v14 ("Doğum Tarihi ve Şikâyet Önceliği"),
@@ -81,8 +82,11 @@ tutulmalıdır.
   - `birth_date_audience`: `friends` (varsayılan), `tayfa` (ortak tayfa
     üyeleri), `public`; `hidden` iken etkisizdir
 - Yanıt alanları baştan izleyiciye göre üretilir; tam nesne üretilip sonra
-  filtrelenmez. Kullanıcının kendisi her zaman tam tarihi görür. Yaş ve 18 yaş
-  altı bilgisi tayfa yöneticilerine ve moderatörlerine gösterilmez.
+  filtrelenmez. Kullanıcının kendisi her zaman tam tarihi görür. Yaş ve doğum
+  tarihi tayfa yöneticilerine ve moderatörlerine gösterilmez; yalnızca
+  kullanıcının seçtiği görünürlük geçerlidir. Şikâyetin `minor_involved`
+  önceliği ise tayfa moderasyon kuyruğunda görünür ve kuyrukta öne alınır
+  (aşağıda, "Şikâyetlerde yaş önceliği").
 - Görünürlük kararını **identity** verir. Arkadaşlık ve ortak tayfa bilgisi
   core'dadır (ADR-0009); identity bunu core'a sorar. Bu, core → identity
   (`IsMinor`) ile birlikte iki yönlü bir senkron bağımlılık yaratır; ADR-0002
@@ -114,6 +118,15 @@ tutulmalıdır.
 - `minor_involved` veya "çocuk/genç güvenliği" kategorisindeki şikâyetler
   kuyrukta en öne geçer, platform sahibine anında bildirilir ve 7 günlük
   otomatik yükselmeyi beklemeden platforma düşer.
+- **Tayfa kuyruğunda öncelik (platform sahibinin 2026-11-09 kararı):** Tayfa
+  moderasyon kuyruğu şikâyetin önceliğini (`normal` / `minor_involved`)
+  gösterir ve `minor_involved` şikâyetleri öne alır (Notion v14 "Şikâyet
+  önceliği"). Tarafların yaşı ve doğum tarihi gösterilmez, hangi tarafın 18
+  yaşından küçük olduğu söylenmez; core bunları hiç tutmaz. Bilinen bedel:
+  öncelik, taraflardan birinin 18 yaşından küçük olduğunu dolaylı olarak
+  gösterir. Tayfa moderatörlerinin daha hızlı müdahale edebilmesi için bu
+  bedel kabul edildi. Şikâyet edenin kimliği ve platforma yükselme bilgisi
+  kuyrukta gösterilmez.
 
 ### Kötüye kullanım tespiti (içerik okumadan)
 

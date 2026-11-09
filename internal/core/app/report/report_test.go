@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"reflect"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -478,11 +477,11 @@ func TestPriorityAndEscalation(t *testing.T) {
 		t.Error("olayda yaş bilgisi")
 	}
 
-	// Queue: platform-only reports are not listed, and the priority leaks in
-	// no form (ADR-0012): oldest first whatever the priority, and the view
-	// has no priority or escalation field (TestQueueHidesPriority).
+	// Queue: platform-only reports are not listed; MinorInvolved and child
+	// safety reports first, then oldest first (ADR-0012 as updated
+	// 2026-11-09; Notion v14).
 	got := ids(e.queue(t, c, c.admin, StatusOpen))
-	want := []id.ID{adults.ID, byMinor.ID, aboutUnknown.ID, child.ID, outage.ID}
+	want := []id.ID{byMinor.ID, aboutUnknown.ID, child.ID, outage.ID, adults.ID}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("kuyruk sırası = %v, %v bekleniyordu", got, want)
 	}
@@ -610,7 +609,7 @@ func TestPaging(t *testing.T) {
 	minor := e.member(t, c, authz.Member)
 	e.profile(t, minor, true)
 	last := e.report(t, c, c.member2, TargetUser, minor, ReasonSpam).ID
-	want := append(slices.Clone(all), last) // by time only, never by priority
+	want := append([]id.ID{last}, all...) // MinorInvolved first
 
 	var got []id.ID
 	token := ""
@@ -698,16 +697,17 @@ func (c crew) member2Peer(t *testing.T, e *env) id.ID {
 	return u
 }
 
-// TestQueueHidesPriority pins ADR-0012 ("Yaş ve 18 yaş altı bilgisi tayfa
-// yöneticilerine ve moderatörlerine gösterilmez"): whether a report
-// involves a minor shows in no form in the tayfa's queue. Two reports that
-// differ only in that come out identical apart from IDs and times, in the
-// order they were filed.
-func TestQueueHidesPriority(t *testing.T) {
+// TestQueueShowsPriorityNotAge pins ADR-0012 as updated by the platform
+// owner on 2026-11-09: the tayfa's queue shows the report's priority and
+// puts MinorInvolved first, but nothing else about age. Two reports that
+// differ only in that come out identical apart from IDs, times and the
+// priority; no field names an age, a birth date or a minor, and nothing
+// says which party is under 18.
+func TestQueueShowsPriorityNotAge(t *testing.T) {
 	typ := reflect.TypeFor[ModView]()
 	for i := range typ.NumField() {
 		n := strings.ToLower(typ.Field(i).Name)
-		for _, banned := range []string{"priority", "minor", "escalat", "age", "birth"} {
+		for _, banned := range []string{"minor", "age", "birth", "escalat", "reporter"} {
 			if strings.Contains(n, banned) {
 				t.Fatalf("ModView.%s", typ.Field(i).Name)
 			}
@@ -724,27 +724,35 @@ func TestQueueHidesPriority(t *testing.T) {
 	urgent := e.report(t, c, c.member, TargetUser, minor, ReasonSpam)
 
 	q := e.queue(t, c, c.admin, StatusOpen)
-	if len(q) != 2 || q[0].ID != normal.ID || q[1].ID != urgent.ID {
-		t.Fatalf("kuyruk = %+v", q)
+	if len(q) != 2 || q[0].ID != urgent.ID || q[1].ID != normal.ID {
+		t.Fatalf("kuyruk sırası = %+v", q)
+	}
+	if q[0].Priority != PriorityMinorInvolved || q[1].Priority != PriorityNormal {
+		t.Fatalf("öncelik = %q %q", q[0].Priority, q[1].Priority)
 	}
 	strip := func(v ModView) ModView {
-		v.ID, v.TargetID, v.SubjectID, v.CreatedAt = id.ID{}, id.ID{}, id.ID{}, time.Time{}
+		v.ID, v.TargetID, v.SubjectID, v.CreatedAt, v.ResolvedAt, v.Priority = id.ID{}, id.ID{}, id.ID{}, time.Time{}, time.Time{}, ""
 		return v
 	}
 	if strip(q[0]) != strip(q[1]) {
-		t.Fatalf("öncelik görünümde fark yaratıyor:\n%+v\n%+v", q[0], q[1])
+		t.Fatalf("öncelik dışında fark var:\n%+v\n%+v", q[0], q[1])
 	}
-	// Resolving shows nothing either.
 	r, err := e.svc.Resolve(ctx, c.admin, c.tayfa, urgent.ID, ResolutionDismissed)
 	must(t, err)
 	n, err := e.svc.Resolve(ctx, c.admin, c.tayfa, normal.ID, ResolutionDismissed)
 	must(t, err)
-	r.ResolvedAt, n.ResolvedAt = time.Time{}, time.Time{}
-	if strip(r) != strip(n) {
-		t.Fatalf("çözümde öncelik farkı:\n%+v\n%+v", r, n)
+	if r.Priority != PriorityMinorInvolved || strip(r) != strip(n) {
+		t.Fatalf("çözüm:\n%+v\n%+v", r, n)
 	}
-	// It is still recorded for the platform.
-	if n := e.count(t, `SELECT count(*) FROM reports WHERE id = $1 AND priority = 'minor_involved' AND escalated_to_platform_at IS NOT NULL`, urgent.ID.PG()); n != 1 {
-		t.Fatal("öncelik platform için yazılmadı")
+	// core keeps no age, birth date or minor flag anywhere: the only trace
+	// is the report's priority.
+	var cols int
+	must(t, e.pool.QueryRow(ctx, `SELECT count(*) FROM information_schema.columns
+		WHERE table_schema = current_schema() AND column_name ~ '(birth|^age$|^age_|_age$|^minor$|^is_minor$)'`).Scan(&cols))
+	if cols != 0 {
+		t.Fatalf("core'da yaş/doğum tarihi kolonu: %d", cols)
+	}
+	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE payload::text ~* '(birth|"age"|"minor")'`); n != 0 {
+		t.Fatal("olayda yaş bilgisi")
 	}
 }
