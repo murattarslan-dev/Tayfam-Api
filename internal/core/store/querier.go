@@ -170,6 +170,9 @@ type Querier interface {
 	// Yazarın kendi silmesi: başlık ve gövde hemen boşaltılır, geri alınamaz
 	// (v14 "Silinen içeriği geri alma"). Etiket bağları ayrıca silinir.
 	EraseQuestion(ctx context.Context, arg EraseQuestionParams) (int64, error)
+	// Verilen kullanıcılardan hâlâ etkin üye olanlar (tek alıcılı bildirimler
+	// ve arka plan işlerinin seçtiği alıcılar).
+	FilterNotifyActive(ctx context.Context, arg FilterNotifyActiveParams) ([]pgtype.UUID, error)
 	GetAnnouncement(ctx context.Context, arg GetAnnouncementParams) (GetAnnouncementRow, error)
 	// Tekrar gönderilen yayınlama isteği aynı duyuruyu döndürür.
 	GetAnnouncementByClientRequest(ctx context.Context, arg GetAnnouncementByClientRequestParams) (GetAnnouncementByClientRequestRow, error)
@@ -295,6 +298,15 @@ type Querier interface {
 	// "Tayfalarım": kullanıcının aktif üyelikleri ve bekleyen başvuruları, en
 	// yeni üyelik kaydı önce; (created_at, tayfa_id) ile sayfalanır.
 	ListMyTayfas(ctx context.Context, arg ListMyTayfasParams) ([]ListMyTayfasRow, error)
+	// Bildirim alıcıları (ADR-0009 "Bildirim oluşturma", issue #64). Alıcıları
+	// üyeliklerin sahibi core hesaplar ve notification.requested olayıyla
+	// chat'e bildirir. Yalnızca etkin üyeler; bekleyen, banlı, ayrılmış ya da
+	// hiç üye olmamış kullanıcılar ve işlemi yapan (exclude_user_id) hariç.
+	ListNotifyMembers(ctx context.Context, arg ListNotifyMembersParams) ([]pgtype.UUID, error)
+	// Etkinliğe going, maybe ya da waitlist diyen etkin üyeler.
+	ListNotifyParticipants(ctx context.Context, arg ListNotifyParticipantsParams) ([]pgtype.UUID, error)
+	// Yönetici ve moderatörler (başvuru, silme talebi).
+	ListNotifyStaff(ctx context.Context, arg ListNotifyStaffParams) ([]pgtype.UUID, error)
 	// Yalnızca çağıranın kendi oyları.
 	ListOwnPollVotes(ctx context.Context, arg ListOwnPollVotesParams) ([]ListOwnPollVotesRow, error)
 	// Bekleyen başvurular, eskiden yeniye; kimin davetiyle geldiği: doğrudan

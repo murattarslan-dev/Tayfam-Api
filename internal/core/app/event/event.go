@@ -35,6 +35,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/access"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -239,8 +240,70 @@ func (s *Service) write(ctx context.Context, user, tayfa id.ID, fn writeFunc) er
 				return err
 			}
 		}
-		return nil
+		return notifyBatch(ctx, q, b)
 	})
+}
+
+// notifyBatch writes the notification requests of a write's events, after
+// them (ADR-0009, package notify): a new event for every active member,
+// a change or cancellation for its going, maybe and waitlist participants,
+// a waitlist promotion for the promoted member. The actor never hears
+// about their own change. Changes to the lists on an event (camp items,
+// convoy vehicles) notify nobody.
+func notifyBatch(ctx context.Context, q *store.Queries, b *batch) error {
+	for _, e := range b.events {
+		req := notify.Request{Tayfa: b.tayfa, Actor: b.actor, TargetType: notify.TargetEvent, Target: e.subject}
+		var (
+			to  []id.ID
+			err error
+		)
+		switch e.typ {
+		case EventCreated:
+			req.Type = notify.TypeEventCreated
+			to, err = notify.Members(ctx, q, b.tayfa, b.actor)
+		case EventUpdated:
+			if listsOnly(e.payload["fields"]) {
+				continue
+			}
+			req.Type = notify.TypeEventUpdated
+			to, err = notify.Participants(ctx, q, b.tayfa, e.subject, b.actor)
+		case EventCancelled:
+			req.Type = notify.TypeEventCancelled
+			to, err = notify.Participants(ctx, q, b.tayfa, e.subject, b.actor)
+		case RSVPPromoted:
+			req.Type = notify.TypeRSVPPromoted
+			u, _ := e.payload["user_id"].(string)
+			promoted, ok := id.Parse(u)
+			if !ok {
+				return errors.New("terfi olayında kullanıcı yok")
+			}
+			to, err = notify.Only(ctx, q, b.tayfa, []id.ID{promoted}, b.actor)
+		default:
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if err := notify.Write(ctx, q, req, to); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// listsOnly reports an event.updated whose fields are all lists on the
+// event (fieldCampItems, fieldVehicles).
+func listsOnly(v any) bool {
+	fields, ok := v.([]string)
+	if !ok || len(fields) == 0 {
+		return false
+	}
+	for _, f := range fields {
+		if f != fieldCampItems && f != fieldVehicles {
+			return false
+		}
+	}
+	return true
 }
 
 // lockEvent loads and locks an event of the tayfa.

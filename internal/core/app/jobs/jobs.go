@@ -103,19 +103,19 @@ const (
 // Outbox event types. Every event has no actor and its domain_events
 // tayfa_id is the tayfa. Payloads (IDs and classification only):
 //
-//	tayfa.warned       tayfa_id, reason (inactive|few_members), recipient_ids
-//	tayfa.archived     tayfa_id, recipient_ids
+//	tayfa.warned       tayfa_id, reason (inactive|few_members)
+//	tayfa.archived     tayfa_id
 //	tayfa.reactivated  tayfa_id
 //	tayfa.deleted      tayfa_id
 //	tayfa.purged       tayfa_id
 //	hike.overdue       tayfa_id, event_id, user_id (the hiker),
-//	                   organizer_id (absent if the account was deleted),
-//	                   recipient_ids
+//	                   organizer_id (absent if the account was deleted)
 //
-// recipient_ids: tayfa.warned and tayfa.archived go to the active admins
-// and moderators; hike.overdue to the organizer if still an active member
-// and the active admins and moderators, never the hiker. At most
-// maxRecipients, admins first.
+// tayfa.warned, tayfa.archived and hike.overdue are followed by
+// notification.requested events (package notify, ADR-0009): tayfa_warned
+// and tayfa_archived for the active admins and moderators, hike_overdue
+// for the organizer if still an active member and the active admins and
+// moderators, never the hiker. At most maxRecipients, admins first.
 const (
 	EventTayfaWarned      = "tayfa.warned"
 	EventTayfaArchived    = "tayfa.archived"
@@ -296,10 +296,10 @@ func systemAudit(ctx context.Context, q *store.Queries, tayfa id.ID, action stri
 }
 
 // ids returns the IDs as strings for event payloads.
-func ids(us []pgtype.UUID) []string {
-	out := make([]string, 0, len(us))
+func idList(us []pgtype.UUID) []id.ID {
+	out := make([]id.ID, 0, len(us))
 	for _, u := range us {
-		out = append(out, id.ID(u.Bytes).String())
+		out = append(out, id.ID(u.Bytes))
 	}
 	return out
 }

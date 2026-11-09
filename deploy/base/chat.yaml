@@ -12,7 +12,8 @@ spec:
     metadata:
       labels: { app.kubernetes.io/name: chat, app.kubernetes.io/part-of: tayfam }
     spec:
-      # Kendi ServiceAccount'u (ADR-0013); rol bağlanmaz, token bağlanmaz.
+      # Kendi ServiceAccount'u (ADR-0013). Kubernetes API'sinde hiçbir RBAC
+      # yetkisi yoktur; varsayılan token pod'a hiç bağlanmaz.
       serviceAccountName: tayfam-chat
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 30
@@ -20,6 +21,8 @@ spec:
         runAsNonRoot: true
         runAsUser: 65532
         runAsGroup: 65532
+        # Projected token ve CA dosyaları bu grupla okunur (defaultMode 0440).
+        fsGroup: 65532
         seccompProfile: { type: RuntimeDefault }
       # Migration'lar servis binary'sinin "migrate" alt komutuyla, servis
       # başlamadan önce çalışır; advisory lock aynı anda tek migration'ı
@@ -55,6 +58,16 @@ spec:
             - { name: OPS_ADDR, value: ":8081" }
             - { name: GRPC_ADDR, value: ":9090" }
             - { name: IDENTITY_GRPC_ADDR, value: "identity:9090" }
+            # Servis token'ı doğrulaması (ADR-0013): identity'nin ve core'un
+            # outbox relay'leri olay servislerini servis token'ıyla çağırır.
+            # İzinli çağıranlar bu namespace'teki ServiceAccount'lardır.
+            # Issuer tayfam-env'de.
+            - name: SERVICE_NAMESPACE
+              valueFrom:
+                fieldRef: { fieldPath: metadata.namespace }
+            - { name: SERVICE_TOKEN_JWKS_URL, value: "https://kubernetes.default.svc/openid/v1/jwks" }
+            - { name: SERVICE_TOKEN_CA_FILE, value: /var/run/secrets/tayfam/kube-api/ca.crt }
+            - { name: SERVICE_TOKEN_API_TOKEN_FILE, value: /var/run/secrets/tayfam/kube-api/token }
             # Ortama özel secret (deploy/apps/<ortam>/secrets, SOPS ile şifreli).
             # pg_hba chat kullanıcısını yalnızca chat veritabanına, TLS ile alır.
             - { name: DB_HOST, value: tayfam-pg-rw }
@@ -81,6 +94,24 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: kube-api, mountPath: /var/run/secrets/tayfam/kube-api, readOnly: true }
+      volumes:
+        # Cluster'ın açık anahtarlarını (JWKS) okumak için API sunucusunun CA'sı
+        # ve audience'ı API sunucusu olan 10 dakikalık token. Bu token'la
+        # ServiceAccount'un yapabildiği tek şey herkese açık keşif uçlarını
+        # okumaktır (system:service-account-issuer-discovery); kubelet yeniler.
+        - name: kube-api
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - { key: ca.crt, path: ca.crt }
 ---
 # Yalnızca gRPC portu servis üzerinden açılır; ops portu (8081) sadece
 # kubelet probe'ları içindir ve servis üzerinden yayınlanmaz.

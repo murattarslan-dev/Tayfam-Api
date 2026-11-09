@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	identitydb "github.com/murattarslan-dev/tayfam-api/db/identity"
+	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/birthdate"
@@ -124,30 +125,43 @@ func setup(rt *service.Runtime) error {
 	return addRelay(rt, pool)
 }
 
-// addRelay starts the outbox relay that delivers user events to core with
-// identity's service token for core (ADR-0002, ADR-0013). Only a local
-// environment may run without it; events then wait in the outbox.
+// addRelay starts the outbox relay that delivers user events to core and
+// chat, each with identity's service token for that target (ADR-0002,
+// ADR-0013). Only a local environment may run without it; events then wait
+// in the outbox.
 func addRelay(rt *service.Runtime, pool *pgxpool.Pool) error {
-	coreToken, ok := rt.ServiceToken("core")
-	if !ok {
-		if err := rt.Config.Err(); err != nil {
-			return err
-		}
-		rt.Log.Warn("core servis token'ı yok; outbox relay kapalı (yalnızca yerel ortam)")
-		return nil
+	coreToken, coreOK := rt.ServiceToken("core")
+	chatToken, chatOK := rt.ServiceToken("chat")
+	var coreAddr, chatAddr string
+	if coreOK {
+		coreAddr = rt.Config.Required("CORE_GRPC_ADDR")
 	}
-	addr := rt.Config.Required("CORE_GRPC_ADDR")
+	if chatOK {
+		chatAddr = rt.Config.Required("CHAT_GRPC_ADDR")
+	}
 	if err := rt.Config.Err(); err != nil {
 		return err
 	}
-	conn, err := grpcx.NewClient(addr, auth.ServiceTokenFrom(coreToken)...)
-	if err != nil {
-		return err
+	var consumers []outbox.Consumer
+	if coreOK {
+		conn, err := grpcx.NewClient(coreAddr, auth.ServiceTokenFrom(coreToken)...)
+		if err != nil {
+			return err
+		}
+		consumers = append(consumers, userevents.CoreConsumer(corev1.NewUserEventServiceClient(conn)))
 	}
-	relay, err := outbox.NewRelay(outbox.RelayConfig{
-		Pool: pool, Log: rt.Log,
-		Consumers: []outbox.Consumer{userevents.CoreConsumer(corev1.NewUserEventServiceClient(conn))},
-	})
+	if chatOK {
+		conn, err := grpcx.NewClient(chatAddr, auth.ServiceTokenFrom(chatToken)...)
+		if err != nil {
+			return err
+		}
+		consumers = append(consumers, userevents.ChatConsumer(chatv1.NewUserEventServiceClient(conn)))
+	}
+	if len(consumers) == 0 {
+		rt.Log.Warn("servis token'ı yok; outbox relay kapalı (yalnızca yerel ortam)")
+		return nil
+	}
+	relay, err := outbox.NewRelay(outbox.RelayConfig{Pool: pool, Log: rt.Log, Consumers: consumers})
 	if err != nil {
 		return err
 	}

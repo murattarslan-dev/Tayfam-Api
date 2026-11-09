@@ -1,0 +1,149 @@
+package coreevents
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	chatdb "github.com/murattarslan-dev/tayfam-api/db/chat"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/userevents"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/store"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
+)
+
+var ctx = context.Background()
+
+func must(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func setup(t *testing.T) (*Service, *pgxpool.Pool) {
+	t.Helper()
+	pool := dbtest.New(t, chatdb.Migrations())
+	svc, err := New(Config{Pool: pool})
+	must(t, err)
+	return svc, pool
+}
+
+func count(t *testing.T, pool *pgxpool.Pool, sql string, args ...any) int {
+	t.Helper()
+	var n int
+	must(t, pool.QueryRow(ctx, sql, args...).Scan(&n))
+	return n
+}
+
+func announcement(tf, actor id.ID, to ...id.ID) Event {
+	return Event{ID: id.New(), Tayfa: tf, Notification: &notification.Request{
+		Type: notification.TypeAnnouncement, Actor: actor, TargetType: notification.TargetAnnouncement, Target: id.New(), Recipients: to,
+	}}
+}
+
+// The same event twice gives one notification per recipient; a recipient
+// whose account is deleted gets none (issue #64).
+func TestNotificationRequestIsIdempotent(t *testing.T) {
+	svc, pool := setup(t)
+	tf, actor, a, b, gone := id.New(), id.New(), id.New(), id.New(), id.New()
+	must(t, store.New(pool).TombstoneUserProfile(ctx, store.TombstoneUserProfileParams{UserID: gone.PG(), SourceEventID: id.New().PG()}))
+
+	e := announcement(tf, actor, a, b, gone)
+	must(t, svc.Apply(ctx, e))
+	must(t, svc.Apply(ctx, e))
+	if n := count(t, pool, `SELECT count(*) FROM notifications WHERE source_event_id = $1`, e.ID.PG()); n != 2 {
+		t.Fatalf("%d bildirim", n)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM notifications WHERE user_id = $1`, gone.PG()); n != 0 {
+		t.Fatal("silinmiş hesaba bildirim yazıldı")
+	}
+	if n := count(t, pool, `SELECT count(*) FROM notifications WHERE actor_id = $1 AND tayfa_id = $2 AND type = 'announcement'`, actor.PG(), tf.PG()); n != 2 {
+		t.Fatalf("aktör/tayfa: %d", n)
+	}
+}
+
+func TestPurgeRemovesTayfaNotifications(t *testing.T) {
+	svc, pool := setup(t)
+	tf, other, u := id.New(), id.New(), id.New()
+	must(t, svc.Apply(ctx, announcement(tf, id.New(), u)))
+	must(t, svc.Apply(ctx, announcement(other, id.New(), u)))
+	must(t, store.New(pool).UpsertNotificationPreference(ctx, store.UpsertNotificationPreferenceParams{UserID: u.PG(), ScopeType: "tayfa", ScopeID: tf.PG(), Level: "none"}))
+
+	for range 2 {
+		must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, Purged: true}))
+	}
+	if n := count(t, pool, `SELECT count(*) FROM notifications WHERE user_id = $1`, u.PG()); n != 1 {
+		t.Fatalf("%d bildirim kaldı", n)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM notification_preferences`); n != 0 {
+		t.Fatal("tercih kaldı")
+	}
+}
+
+func TestValidation(t *testing.T) {
+	svc, _ := setup(t)
+	tf, actor, u := id.New(), id.New(), id.New()
+	many := make([]id.ID, notification.MaxRecipients+1)
+	for i := range many {
+		many[i] = id.New()
+	}
+	req := func(f func(r *notification.Request)) Event {
+		e := announcement(tf, actor, u)
+		f(e.Notification)
+		return e
+	}
+	for name, e := range map[string]Event{
+		"kimliksiz":      {Tayfa: tf, Purged: true},
+		"tayfasız":       {ID: id.New(), Purged: true},
+		"ikisi":          {ID: id.New(), Tayfa: tf, Purged: true, Notification: &notification.Request{}},
+		"hiçbiri":        {ID: id.New(), Tayfa: tf},
+		"alıcısız":       req(func(r *notification.Request) { r.Recipients = nil }),
+		"çok alıcı":      req(func(r *notification.Request) { r.Recipients = many }),
+		"aktör alıcı":    req(func(r *notification.Request) { r.Recipients = []id.ID{actor} }),
+		"bilinmeyen tür": req(func(r *notification.Request) { r.Type = "poke" }),
+		"yanlış hedef":   req(func(r *notification.Request) { r.TargetType = notification.TargetEvent }),
+		"sorusuz cevap": req(func(r *notification.Request) {
+			r.Type, r.TargetType = notification.TypeAnswerReceived, notification.TargetAnswer
+		}),
+		"yürüyüşçüsüz alarm": req(func(r *notification.Request) {
+			r.Type, r.TargetType = notification.TypeHikeOverdue, notification.TargetEvent
+		}),
+		"nedensiz uyarı": req(func(r *notification.Request) {
+			r.Type, r.TargetType = notification.TypeTayfaWarned, notification.TargetTayfa
+		}),
+		"duyuruda neden": req(func(r *notification.Request) { r.Reason = notification.ReasonInactive }),
+	} {
+		var v *apperr.ValidationError
+		if err := svc.Apply(ctx, e); !errors.As(err, &v) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// Account deletion removes the user's notifications and clears them as an
+// actor (ADR-0009); later requests skip them.
+func TestAccountDeletionCleansNotifications(t *testing.T) {
+	svc, pool := setup(t)
+	tf, u, other := id.New(), id.New(), id.New()
+	must(t, svc.Apply(ctx, announcement(tf, other, u)))
+	must(t, svc.Apply(ctx, announcement(tf, u, other)))
+	users, err := userevents.New(userevents.Config{Pool: pool, Cleanups: []userevents.Cleanup{notification.Cleanup}})
+	must(t, err)
+	must(t, users.Apply(ctx, userevents.Event{ID: id.New(), User: u, Deleted: true}))
+
+	if n := count(t, pool, `SELECT count(*) FROM notifications WHERE user_id = $1 OR actor_id = $1`, u.PG()); n != 0 {
+		t.Fatalf("silinen hesabın %d izi kaldı", n)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM notifications WHERE user_id = $1`, other.PG()); n != 1 {
+		t.Fatal("başkasının bildirimi silindi")
+	}
+	must(t, svc.Apply(ctx, announcement(tf, other, u)))
+	if n := count(t, pool, `SELECT count(*) FROM notifications WHERE user_id = $1`, u.PG()); n != 0 {
+		t.Fatal("silinen hesaba yeni bildirim yazıldı")
+	}
+}

@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package tayfam.chat.v1;
+
+// Notification types (data model v14 "Senaryo Kuralları → Bildirimler",
+// issue #64, and the background job notices of issue #66). Who receives
+// each one is core's decision (ADR-0009).
+enum NotificationType {
+  NOTIFICATION_TYPE_UNSPECIFIED = 0;
+  // A member created an event (target: EVENT); every active member.
+  NOTIFICATION_TYPE_EVENT_CREATED = 1;
+  // An event the recipient answered GOING, MAYBE or WAITLIST to changed
+  // (target: EVENT).
+  NOTIFICATION_TYPE_EVENT_UPDATED = 2;
+  // Such an event was cancelled (target: EVENT).
+  NOTIFICATION_TYPE_EVENT_CANCELLED = 3;
+  // The recipient moved from the waitlist to GOING (target: EVENT).
+  NOTIFICATION_TYPE_RSVP_PROMOTED = 4;
+  // A new announcement (target: ANNOUNCEMENT); every active member.
+  NOTIFICATION_TYPE_ANNOUNCEMENT = 5;
+  // Someone answered the recipient's question (target: ANSWER;
+  // question_id set).
+  NOTIFICATION_TYPE_ANSWER_RECEIVED = 6;
+  // Someone asked to join; for admins and moderators (target: MEMBERSHIP,
+  // target_id is the user who asked).
+  NOTIFICATION_TYPE_JOIN_REQUEST = 7;
+  // The recipient's request to join was approved (target: TAYFA).
+  NOTIFICATION_TYPE_JOIN_APPROVED = 8;
+  // The tayfa will be deleted after the waiting period; for admins and
+  // moderators (target: TAYFA).
+  NOTIFICATION_TYPE_TAYFA_DELETION_REQUESTED = 9;
+  // The tayfa will be archived in 7 days unless there is activity; for
+  // admins and moderators (target: TAYFA; warning_reason set).
+  NOTIFICATION_TYPE_TAYFA_WARNED = 10;
+  // The tayfa was archived (read-only); for admins and moderators (target:
+  // TAYFA).
+  NOTIFICATION_TYPE_TAYFA_ARCHIVED = 11;
+  // A hiker did not return in time; for the organizer and the admins and
+  // moderators, never the hiker (target: EVENT; subject_user_id is the
+  // hiker). Muting does not apply to it.
+  NOTIFICATION_TYPE_HIKE_OVERDUE = 12;
+}
+
+enum NotificationTargetType {
+  NOTIFICATION_TARGET_TYPE_UNSPECIFIED = 0;
+  NOTIFICATION_TARGET_TYPE_TAYFA = 1;
+  // target_id is a user ID: the membership of that user in the tayfa.
+  NOTIFICATION_TARGET_TYPE_MEMBERSHIP = 2;
+  NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT = 3;
+  NOTIFICATION_TARGET_TYPE_EVENT = 4;
+  NOTIFICATION_TARGET_TYPE_ANSWER = 5;
+}
+
+// Why an inactive tayfa was warned (core's cleanup job).
+enum TayfaWarningReason {
+  TAYFA_WARNING_REASON_UNSPECIFIED = 0;
+  // No activity for 30 days.
+  TAYFA_WARNING_REASON_INACTIVE = 1;
+  // Fewer than three members after the first week.
+  TAYFA_WARNING_REASON_FEW_MEMBERS = 2;
+}

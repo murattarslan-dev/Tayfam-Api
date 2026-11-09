@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
@@ -303,6 +304,16 @@ func promoteWaitlist(ctx context.Context, q *store.Queries, tf, event id.ID, cap
 		uid := id.ID(u.Bytes)
 		if err := systemRecord(ctx, q, tf, eventRSVPPromoted, eventRSVPPromoted, "event", event,
 			map[string]any{"tayfa_id": tf.String(), "event_id": event.String(), "user_id": uid.String()}); err != nil {
+			return err
+		}
+		// The promoted member hears about the freed seat (ADR-0009).
+		to, err := notify.Only(ctx, q, tf, []id.ID{uid}, id.ID{})
+		if err != nil {
+			return err
+		}
+		if err := notify.Write(ctx, q, notify.Request{
+			Type: notify.TypeRSVPPromoted, Tayfa: tf, TargetType: notify.TargetEvent, Target: event,
+		}, to); err != nil {
 			return err
 		}
 	}

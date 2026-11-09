@@ -61,6 +61,10 @@ spec:
             # yalnızca core audience'ı için geçerli ve 10 dakikalık.
             - { name: CORE_GRPC_ADDR, value: "core:9090" }
             - { name: SERVICE_TOKEN_FILE_CORE, value: /var/run/secrets/tayfam/core/token }
+            # Outbox relay → chat UserEventService (issue #64); token yalnızca
+            # chat audience'ı için geçerli.
+            - { name: CHAT_GRPC_ADDR, value: "chat:9090" }
+            - { name: SERVICE_TOKEN_FILE_CHAT, value: /var/run/secrets/tayfam/chat/token }
             # Ortama özel secret (deploy/apps/<ortam>/secrets, SOPS ile şifreli).
             # Yalnızca identity okur; diğer servisler açık anahtarı gRPC'den alır.
             - name: AUTH_SIGNING_KEY
@@ -95,6 +99,7 @@ spec:
             capabilities: { drop: ["ALL"] }
           volumeMounts:
             - { name: core-token, mountPath: /var/run/secrets/tayfam/core, readOnly: true }
+            - { name: chat-token, mountPath: /var/run/secrets/tayfam/chat, readOnly: true }
       volumes:
         # core'u çağırmak için servis token'ı: audience core.tayfam.internal,
         # 10 dakika; kubelet süresi dolmadan yeniler. Başka hiçbir hedefte ve
@@ -106,6 +111,16 @@ spec:
               - serviceAccountToken:
                   path: token
                   audience: core.tayfam.internal
+                  expirationSeconds: 600
+        # chat'i çağırmak için servis token'ı: audience chat.tayfam.internal,
+        # 10 dakika. core'da geçmez.
+        - name: chat-token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: chat.tayfam.internal
                   expirationSeconds: 600
 ---
 # identity'nin kimliği (ADR-0013). Rol bağlanmaz.

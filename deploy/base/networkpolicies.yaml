@@ -245,3 +245,59 @@ spec:
         - { protocol: TCP, port: 443 }
     - ports:
         - { protocol: TCP, port: 6443 }
+---
+# Servisler arası outbox çağrıları (issue #64, ADR-0013):
+#   identity → chat  UserEventService (kullanıcı olayları)
+#   core → chat      CoreEventService (notification.requested, tayfa.purged)
+# Hedef servis her metodda yalnızca izinli ServiceAccount'un token'ını kabul
+# eder; ağ izni ikinci katmandır.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: to-chat-from-identity-core
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app.kubernetes.io/name, operator: In, values: [identity, core] }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: chat }
+      ports:
+        - { protocol: TCP, port: 9090 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: chat-from-identity-core
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: chat }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - { key: app.kubernetes.io/name, operator: In, values: [identity, core] }
+      ports:
+        - { protocol: TCP, port: 9090 }
+---
+# chat → API sunucusu: servis token'larını doğrulamak için cluster'ın açık
+# anahtarları (core-egress-kube-api ile aynı kural). chat'in ServiceAccount'unda
+# RBAC yetkisi yoktur.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: chat-egress-kube-api
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: chat }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: { cidr: 10.43.0.1/32 }
+      ports:
+        - { protocol: TCP, port: 443 }
+    - ports:
+        - { protocol: TCP, port: 6443 }
