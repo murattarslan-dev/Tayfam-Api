@@ -63,6 +63,8 @@ func reasonFor(err error) (code codes.Code, reason chatv1.ErrorReason, ok bool) 
 		return codes.ResourceExhausted, chatv1.ErrorReason_ERROR_REASON_MESSAGE_REQUEST_LIMIT, true
 	case errors.Is(err, apperr.ErrMessageRequestNotFound):
 		return codes.NotFound, chatv1.ErrorReason_ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrRateLimited):
+		return codes.ResourceExhausted, chatv1.ErrorReason_ERROR_REASON_RATE_LIMITED, true
 	}
 	return codes.Unknown, chatv1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

@@ -40,9 +40,9 @@ func (q *Queries) CountUnreadNotifications(ctx context.Context, arg CountUnreadN
 
 const createNotifications = `-- name: CreateNotifications :execrows
 
-INSERT INTO notifications (id, user_id, tayfa_id, type, actor_id, target_type, target_id, payload, source_event_id)
-SELECT n.id, n.user_id, $1, $2, $3, $4, $5, $6, $7
-FROM (SELECT unnest($8::uuid[]) AS id, unnest($9::uuid[]) AS user_id) AS n
+INSERT INTO notifications (id, user_id, tayfa_id, type, actor_id, target_type, target_id, payload, source_event_id, unread_count)
+SELECT n.id, n.user_id, $1, $2, $3, $4, $5, $6, $7, $8::int
+FROM (SELECT unnest($9::uuid[]) AS id, unnest($10::uuid[]) AS user_id) AS n
 WHERE NOT EXISTS (SELECT 1 FROM user_profiles p WHERE p.user_id = n.user_id AND p.deleted_at IS NOT NULL)
 ON CONFLICT (source_event_id, user_id) DO NOTHING
 `
@@ -55,6 +55,7 @@ type CreateNotificationsParams struct {
 	TargetID      pgtype.UUID
 	Payload       []byte
 	SourceEventID pgtype.UUID
+	UnreadCount   pgtype.Int4
 	Ids           []pgtype.UUID
 	UserIds       []pgtype.UUID
 }
@@ -74,6 +75,7 @@ func (q *Queries) CreateNotifications(ctx context.Context, arg CreateNotificatio
 		arg.TargetID,
 		arg.Payload,
 		arg.SourceEventID,
+		arg.UnreadCount,
 		arg.Ids,
 		arg.UserIds,
 	)
@@ -202,7 +204,7 @@ func (q *Queries) ListNotificationPreferences(ctx context.Context, userID pgtype
 }
 
 const listNotifications = `-- name: ListNotifications :many
-SELECT id, tayfa_id, type, actor_id, target_type, target_id, payload, read_at, created_at
+SELECT id, tayfa_id, type, actor_id, target_type, target_id, payload, read_at, created_at, unread_count
 FROM notifications
 WHERE user_id = $1 AND ($2::uuid IS NULL OR id < $2::uuid)
 ORDER BY id DESC
@@ -216,18 +218,20 @@ type ListNotificationsParams struct {
 }
 
 type ListNotificationsRow struct {
-	ID         pgtype.UUID
-	TayfaID    pgtype.UUID
-	Type       string
-	ActorID    pgtype.UUID
-	TargetType string
-	TargetID   pgtype.UUID
-	Payload    []byte
-	ReadAt     pgtype.Timestamptz
-	CreatedAt  pgtype.Timestamptz
+	ID          pgtype.UUID
+	TayfaID     pgtype.UUID
+	Type        string
+	ActorID     pgtype.UUID
+	TargetType  string
+	TargetID    pgtype.UUID
+	Payload     []byte
+	ReadAt      pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	UnreadCount pgtype.Int4
 }
 
 // En yeni önce; after_id verilirse ondan eskiler (UUIDv7 zaman sıralı).
+// unread_count yalnızca birebir mesaj bildirimlerinde doludur.
 func (q *Queries) ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]ListNotificationsRow, error) {
 	rows, err := q.db.Query(ctx, listNotifications, arg.UserID, arg.AfterID, arg.N)
 	if err != nil {
@@ -247,6 +251,7 @@ func (q *Queries) ListNotifications(ctx context.Context, arg ListNotificationsPa
 			&i.Payload,
 			&i.ReadAt,
 			&i.CreatedAt,
+			&i.UnreadCount,
 		); err != nil {
 			return nil, err
 		}

@@ -146,6 +146,12 @@ type Notification struct {
 	SubjectUserId string `protobuf:"bytes,10,opt,name=subject_user_id,json=subjectUserId,proto3" json:"subject_user_id,omitempty"`
 	// Set for TAYFA_WARNED.
 	WarningReason TayfaWarningReason `protobuf:"varint,11,opt,name=warning_reason,json=warningReason,proto3,enum=tayfam.chat.v1.TayfaWarningReason" json:"warning_reason,omitempty"`
+	// Set for DM_REQUEST and DM_MESSAGE: there is one notice per
+	// conversation, and this is the caller's unread messages in it when the
+	// notice was last updated (1–100; the client shows 100 as "99+"). Each
+	// new message updates the waiting notice; reading the conversation marks
+	// it read, and the next message opens a new one.
+	UnreadCount   int32 `protobuf:"varint,12,opt,name=unread_count,json=unreadCount,proto3" json:"unread_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -255,6 +261,13 @@ func (x *Notification) GetWarningReason() TayfaWarningReason {
 		return x.WarningReason
 	}
 	return TayfaWarningReason_TAYFA_WARNING_REASON_UNSPECIFIED
+}
+
+func (x *Notification) GetUnreadCount() int32 {
+	if x != nil {
+		return x.UnreadCount
+	}
+	return 0
 }
 
 type ListNotificationsRequest struct {
@@ -859,7 +872,7 @@ var File_tayfam_chat_v1_notifications_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_notifications_proto_rawDesc = "" +
 	"\n" +
-	"\"tayfam/chat/v1/notifications.proto\x12\x0etayfam.chat.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a'tayfam/chat/v1/notification_types.proto\"\xd5\x03\n" +
+	"\"tayfam/chat/v1/notifications.proto\x12\x0etayfam.chat.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a'tayfam/chat/v1/notification_types.proto\"\xf8\x03\n" +
 	"\fNotification\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x124\n" +
 	"\x04type\x18\x02 \x01(\x0e2 .tayfam.chat.v1.NotificationTypeR\x04type\x12\x19\n" +
@@ -875,7 +888,8 @@ const file_tayfam_chat_v1_notifications_proto_rawDesc = "" +
 	"createTime\x12&\n" +
 	"\x0fsubject_user_id\x18\n" +
 	" \x01(\tR\rsubjectUserId\x12I\n" +
-	"\x0ewarning_reason\x18\v \x01(\x0e2\".tayfam.chat.v1.TayfaWarningReasonR\rwarningReason\"V\n" +
+	"\x0ewarning_reason\x18\v \x01(\x0e2\".tayfam.chat.v1.TayfaWarningReasonR\rwarningReason\x12!\n" +
+	"\funread_count\x18\f \x01(\x05R\vunreadCount\"V\n" +
 	"\x18ListNotificationsRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +

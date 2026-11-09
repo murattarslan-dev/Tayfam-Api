@@ -87,6 +87,8 @@ type NotificationData struct {
 	TayfaID    string `json:"tayfa_id,omitempty"`
 	TargetType string `json:"target_type"`
 	TargetID   string `json:"target_id"`
+	// UnreadCount: direct message notices only (issue #101).
+	UnreadCount int32 `json:"unread_count,omitempty"`
 }
 
 // MessageFrom converts a message for a frame.
@@ -218,7 +220,7 @@ func (l *Live) TayfaPurged(tayfa id.ID) {
 // Notified tells the recipients' open connections that a notification was
 // written (after the transaction committed).
 func (l *Live) Notified(r notification.Request) {
-	d := NotificationData{Type: r.Type, TargetType: r.TargetType, TargetID: r.Target.String()}
+	d := NotificationData{Type: r.Type, TargetType: r.TargetType, TargetID: r.Target.String(), UnreadCount: r.Unread}
 	if r.Tayfa != (id.ID{}) {
 		d.TayfaID = r.Tayfa.String()
 	}

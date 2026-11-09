@@ -147,7 +147,14 @@ func setup(rt *service.Runtime) error {
 	// sürede telafi edilir.
 	channelAccess := coremembers.NewChannelAccess(corev1.NewChannelAccessServiceClient(coreConn), channelAccessTTL)
 	// Kaydedilen değişiklikler abonelere canlı iletilir (ADR-0005).
-	channels, err := channel.New(channel.Config{Pool: pool, Log: rt.Log, Access: channelAccess, Cipher: cipher, Publisher: live})
+	// Spam koruması (issue #101): kullanıcı başına tek mesaj hızı sınırı;
+	// kanal ve birebir mesaj, REST ve WebSocket aynı sayacı paylaşır
+	// (dakikada 30, kısa patlama 10). Tek replika: bellek içi yeter
+	// (ADR-0005). Yavaş mod ve DM istek sınırı ayrıca geçerlidir.
+	sendLimit := ratelimit.New(30, 10)
+	channels, err := channel.New(channel.Config{
+		Pool: pool, Log: rt.Log, Access: channelAccess, SendLimit: sendLimit, Cipher: cipher, Publisher: live,
+	})
 	if err != nil {
 		return err
 	}
@@ -159,7 +166,7 @@ func setup(rt *service.Runtime) error {
 	// aynı fonksiyondan geçer.
 	directMessages, err := dm.New(dm.Config{
 		Pool: pool, Log: rt.Log, Rules: coremembers.NewDirectMessageRules(corev1.NewDirectMessageServiceClient(coreConn)),
-		Cipher: cipher, Publisher: live.Direct(),
+		SendLimit: sendLimit, Cipher: cipher, Publisher: live.Direct(),
 	})
 	if err != nil {
 		return err

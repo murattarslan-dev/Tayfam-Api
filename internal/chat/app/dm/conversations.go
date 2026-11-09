@@ -304,7 +304,7 @@ func (s *Service) Decline(ctx context.Context, caller, conversation id.ID) error
 		if r.Status != stateRequest || uuidOf(r.RequestedBy) == caller {
 			return apperr.ErrMessageRequestNotFound
 		}
-		if _, err := q.DeclineConversation(ctx, r.ID); err != nil {
+		if _, err := q.DeclineConversation(ctx, store.DeclineConversationParams{ID: r.ID, DeclinedAt: ts(s.now())}); err != nil {
 			return fmt.Errorf("istek reddi: %w", err)
 		}
 		if err := q.MarkConversationNotificationsRead(ctx, store.MarkConversationNotificationsReadParams{
@@ -313,6 +313,83 @@ func (s *Service) Decline(ctx context.Context, caller, conversation id.ID) error
 			return fmt.Errorf("bildirim okundu: %w", err)
 		}
 		return record(ctx, tx, EventRequestDeclined, caller, "dm_conversation", conversation, nil)
+	})
+}
+
+// DeclinedRequest is a request the caller declined (their "declined list",
+// issue #101).
+type DeclinedRequest struct {
+	ConversationID id.ID
+	Sender         id.ID
+	DeclinedAt     time.Time
+	CreatedAt      time.Time
+}
+
+// Declined returns a page of the requests the caller declined, the latest
+// decline first. Only the decliner sees the list; the sender never does.
+// A request whose sender's account was deleted is not listed.
+func (s *Service) Declined(ctx context.Context, caller id.ID, size int32, token string) ([]DeclinedRequest, string, error) {
+	n, err := pageSize(size)
+	if err != nil {
+		return nil, "", err
+	}
+	p := store.ListDeclinedRequestsParams{UserID: caller.PG(), N: n + 1}
+	if token != "" {
+		at, after, err := decodeCursor(token)
+		if err != nil {
+			return nil, "", err
+		}
+		p.AfterAt, p.AfterID = ts(at), after.PG()
+	}
+	if err := s.ready(); err != nil {
+		return nil, "", err
+	}
+	rows, err := store.New(s.cfg.Pool).ListDeclinedRequests(ctx, p)
+	if err != nil {
+		return nil, "", fmt.Errorf("reddedilenler: %w", err)
+	}
+	next := ""
+	if int32(len(rows)) > n { //nolint:gosec // at most n+1 rows
+		rows = rows[:n]
+		last := rows[n-1]
+		next = encodeCursor(last.DeclinedAt.Time, uuidOf(last.ID))
+	}
+	out := make([]DeclinedRequest, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, DeclinedRequest{
+			ConversationID: uuidOf(r.ID), Sender: uuidOf(r.RequestedBy),
+			DeclinedAt: r.DeclinedAt.Time.UTC(), CreatedAt: r.CreatedAt.Time.UTC(),
+		})
+	}
+	return out, next, nil
+}
+
+// RemoveDeclined takes a request off the caller's declined list: the
+// conversation becomes a waiting request again (the caller may accept,
+// reply or decline it; the sender still has only their one message until
+// then, unless core lets them write freely). The sender is not told: no
+// notice, no live event. A conversation the caller is not a party of is
+// apperr.ErrConversationNotFound; one that is not a request the caller
+// declined is apperr.ErrMessageRequestNotFound.
+func (s *Service) RemoveDeclined(ctx context.Context, caller, conversation id.ID) error {
+	if err := s.ready(); err != nil {
+		return err
+	}
+	if _, err := store.New(s.cfg.Pool).GetConversationForUser(ctx, store.GetConversationForUserParams{ID: conversation.PG(), UserID: caller.PG()}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return apperr.ErrConversationNotFound
+		}
+		return fmt.Errorf("konuşma: %w", err)
+	}
+	return pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
+		n, err := store.New(tx).RestoreDeclinedRequest(ctx, store.RestoreDeclinedRequestParams{ID: conversation.PG(), UserID: caller.PG()})
+		if err != nil {
+			return fmt.Errorf("reddedilenlerden çıkarma: %w", err)
+		}
+		if n == 0 {
+			return apperr.ErrMessageRequestNotFound
+		}
+		return record(ctx, tx, EventRequestRestored, caller, "dm_conversation", conversation, nil)
 	})
 }
 

@@ -77,6 +77,16 @@ func (f *fakeDirect) Decline(_ context.Context, caller, c id.ID) error {
 	return f.err
 }
 
+func (f *fakeDirect) Declined(_ context.Context, caller id.ID, size int32, token string) ([]dm.DeclinedRequest, string, error) {
+	f.caller, f.size, f.token = caller, size, token
+	return []dm.DeclinedRequest{{ConversationID: f.conversation, Sender: f.sender, DeclinedAt: time.Unix(1700000000, 0).UTC()}}, "sonraki", f.err
+}
+
+func (f *fakeDirect) RemoveDeclined(_ context.Context, caller, c id.ID) error {
+	f.caller, f.conversation = caller, c
+	return f.err
+}
+
 func (f *fakeDirect) VerifyForReport(_ context.Context, caller, m id.ID) (id.ID, id.ID, error) {
 	f.caller, f.message = caller, m
 	return f.conversation, f.sender, f.err
@@ -169,6 +179,20 @@ func TestDirectMessageServiceConverts(t *testing.T) {
 	if _, err := client.DeclineMessageRequest(ctx, &chatv1.DeclineMessageRequestRequest{ConversationId: conv.String()}); err != nil || app.conversation != conv {
 		t.Fatalf("ret: %v", err)
 	}
+	app.sender = to
+	declined, err := client.ListDeclinedRequests(ctx, &chatv1.ListDeclinedRequestsRequest{PageSize: 4, PageToken: "r"})
+	if err != nil || app.size != 4 || app.token != "r" || declined.GetNextPageToken() != "sonraki" || len(declined.GetDeclinedRequests()) != 1 ||
+		declined.GetDeclinedRequests()[0].GetConversationId() != conv.String() || declined.GetDeclinedRequests()[0].GetSenderUserId() != to.String() ||
+		declined.GetDeclinedRequests()[0].GetDeclineTime().AsTime().Unix() != 1700000000 {
+		t.Fatalf("reddedilenler = %v, %v", declined, err)
+	}
+	other := id.New()
+	if _, err := client.RemoveDeclinedRequest(ctx, &chatv1.RemoveDeclinedRequestRequest{ConversationId: other.String()}); err != nil || app.conversation != other || app.caller != user {
+		t.Fatalf("listeden çıkarma: %v", err)
+	}
+	if _, err := client.RemoveDeclinedRequest(ctx, &chatv1.RemoveDeclinedRequestRequest{ConversationId: "x"}); func() string { _, _, m := reasonOf(err); return m["field"] }() != "conversation_id" {
+		t.Fatalf("geçersiz çıkarma: %v", err)
+	}
 }
 
 func TestDirectMessageErrors(t *testing.T) {
@@ -186,6 +210,7 @@ func TestDirectMessageErrors(t *testing.T) {
 		{apperr.ErrMessageRequestPending, codes.FailedPrecondition, "ERROR_REASON_MESSAGE_REQUEST_PENDING"},
 		{apperr.ErrMessageRequestLimit, codes.ResourceExhausted, "ERROR_REASON_MESSAGE_REQUEST_LIMIT"},
 		{apperr.ErrMessageRequestNotFound, codes.NotFound, "ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND"},
+		{apperr.ErrRateLimited, codes.ResourceExhausted, "ERROR_REASON_RATE_LIMITED"},
 		{apperr.ErrMessageNotFound, codes.NotFound, "ERROR_REASON_MESSAGE_NOT_FOUND"},
 		{apperr.ErrDirectMessagesUnavailable, codes.Unavailable, ""},
 		{apperr.ErrUnavailable, codes.Unavailable, ""},

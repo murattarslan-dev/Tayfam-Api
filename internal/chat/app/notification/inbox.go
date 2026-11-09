@@ -120,7 +120,14 @@ type Request struct {
 	Question id.ID  // answer_received
 	Subject  id.ID  // hike_overdue: the hiker
 	Reason   string // tayfa_warned
+	// Unread is the recipient's unread messages in the conversation, for
+	// the direct message types only (1–MaxDirectUnread).
+	Unread int32
 }
+
+// MaxDirectUnread caps a direct message notice's unread count; the client
+// shows 100 as "99+" (issue #101).
+const MaxDirectUnread = 100
 
 // Validate checks a request against the rules of its type.
 func (r Request) Validate() error {
@@ -151,6 +158,9 @@ func (r Request) Validate() error {
 	// message notice does not say who wrote.
 	if (r.Type == TypeReportResolved || IsDirect(r.Type)) && r.Actor != (id.ID{}) {
 		return apperr.Validation("actor_id")
+	}
+	if IsDirect(r.Type) != (r.Unread > 0) || r.Unread > MaxDirectUnread {
+		return apperr.Validation("unread_count")
 	}
 	if r.Type == TypeTayfaWarned {
 		if r.Reason != ReasonInactive && r.Reason != ReasonFewMembers {
@@ -201,7 +211,7 @@ func Store(ctx context.Context, q *store.Queries, r Request) error {
 	if _, err := q.CreateNotifications(ctx, store.CreateNotificationsParams{
 		TayfaID: optional(r.Tayfa), Type: r.Type, ActorID: optional(r.Actor),
 		TargetType: r.TargetType, TargetID: r.Target.PG(), Payload: raw,
-		SourceEventID: r.Event.PG(), Ids: ids, UserIds: users,
+		SourceEventID: r.Event.PG(), Ids: ids, UserIds: users, UnreadCount: unread(r.Unread),
 	}); err != nil {
 		return fmt.Errorf("bildirimler: %w", err)
 	}
@@ -233,6 +243,13 @@ func Cleanup(ctx context.Context, q *store.Queries, user id.ID) error {
 		return fmt.Errorf("bildirim tercihleri: %w", err)
 	}
 	return nil
+}
+
+func unread(n int32) pgtype.Int4 {
+	if n == 0 {
+		return pgtype.Int4{}
+	}
+	return pgtype.Int4{Int32: n, Valid: true}
 }
 
 func optional(u id.ID) pgtype.UUID {

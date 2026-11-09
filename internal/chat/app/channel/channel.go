@@ -87,6 +87,9 @@ type Config struct {
 	Pool   *pgxpool.Pool
 	Log    *slog.Logger
 	Access Access
+	// SendLimit is the per-user message rate, shared with direct messages
+	// and every transport (issue #101); required.
+	SendLimit SendLimit
 	// Cipher encrypts message bodies. nil turns the user methods off
 	// (apperr.ErrChannelsUnavailable); only local and dev may run so.
 	Cipher *channelcrypt.Cipher
@@ -94,6 +97,13 @@ type Config struct {
 	// (WebSocket, issue #82); optional.
 	Publisher Publisher
 	Now       func() time.Time // optional, for tests
+}
+
+// SendLimit is the per-user message rate shared by every send path:
+// channel and direct messages, REST and WebSocket (issue #101). Allow
+// reports whether key (the user ID) may send one more message now.
+type SendLimit interface {
+	Allow(key string) bool
 }
 
 // Publisher is told about changes after they are committed, so that
@@ -129,7 +139,7 @@ type Service struct {
 
 // New returns a Service.
 func New(cfg Config) (*Service, error) {
-	if cfg.Pool == nil || cfg.Log == nil || cfg.Access == nil {
+	if cfg.Pool == nil || cfg.Log == nil || cfg.Access == nil || cfg.SendLimit == nil {
 		return nil, errors.New("channel: eksik yapılandırma")
 	}
 	if cfg.Now == nil {

@@ -12,7 +12,7 @@ import (
 )
 
 const acceptConversation = `-- name: AcceptConversation :execrows
-UPDATE dm_conversations SET status = 'active', accepted_at = $1
+UPDATE dm_conversations SET status = 'active', accepted_at = $1, declined_at = NULL
 WHERE id = $2 AND status <> 'active'
 `
 
@@ -21,7 +21,8 @@ type AcceptConversationParams struct {
 	ID         pgtype.UUID
 }
 
-// İstek kabul edildi (alıcı kabul etti ya da cevap yazdı).
+// İstek kabul edildi (alıcı kabul etti ya da cevap yazdı; reddettiği
+// isteğe yazması da onu reddedilenlerden çıkarır).
 func (q *Queries) AcceptConversation(ctx context.Context, arg AcceptConversationParams) (int64, error) {
 	result, err := q.db.Exec(ctx, acceptConversation, arg.AcceptedAt, arg.ID)
 	if err != nil {
@@ -100,6 +101,33 @@ func (q *Queries) CountSenderMessages(ctx context.Context, arg CountSenderMessag
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const countUnreadDirectMessages = `-- name: CountUnreadDirectMessages :one
+
+SELECT count(*)::int FROM (
+  SELECT 1 FROM dm_messages m
+  LEFT JOIN dm_conversation_reads r ON r.conversation_id = m.conversation_id AND r.user_id = $1::uuid
+  WHERE m.conversation_id = $2 AND m.deleted_at IS NULL
+    AND m.sender_id IS DISTINCT FROM $1::uuid
+    AND (r.last_read_message_id IS NULL OR m.id > r.last_read_message_id)
+  LIMIT 100
+) u
+`
+
+type CountUnreadDirectMessagesParams struct {
+	UserID         pgtype.UUID
+	ConversationID pgtype.UUID
+}
+
+// Bildirimler: konuşma başına okunmamış tek "yeni mesaj" bildirimi.
+// Kişinin konuşmadaki okunmamış mesajları: karşı tarafın, silinmemiş,
+// okundu işaretinden sonraki mesajları (en fazla 100; liste ile aynı).
+func (q *Queries) CountUnreadDirectMessages(ctx context.Context, arg CountUnreadDirectMessagesParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countUnreadDirectMessages, arg.UserID, arg.ConversationID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const createConversation = `-- name: CreateConversation :one
@@ -205,13 +233,18 @@ func (q *Queries) CreateDirectMessage(ctx context.Context, arg CreateDirectMessa
 }
 
 const declineConversation = `-- name: DeclineConversation :execrows
-UPDATE dm_conversations SET status = 'declined'
-WHERE id = $1 AND status = 'request'
+UPDATE dm_conversations SET status = 'declined', declined_at = $1
+WHERE id = $2 AND status = 'request'
 `
 
+type DeclineConversationParams struct {
+	DeclinedAt pgtype.Timestamptz
+	ID         pgtype.UUID
+}
+
 // Alıcı isteği reddetti.
-func (q *Queries) DeclineConversation(ctx context.Context, id pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, declineConversation, id)
+func (q *Queries) DeclineConversation(ctx context.Context, arg DeclineConversationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, declineConversation, arg.DeclinedAt, arg.ID)
 	if err != nil {
 		return 0, err
 	}
@@ -526,27 +559,6 @@ func (q *Queries) GetDirectMessageForParty(ctx context.Context, arg GetDirectMes
 	return i, err
 }
 
-const hasUnreadConversationNotification = `-- name: HasUnreadConversationNotification :one
-
-SELECT EXISTS (
-  SELECT 1 FROM notifications
-  WHERE user_id = $1 AND target_type = 'dm_conversation' AND target_id = $2 AND read_at IS NULL
-)
-`
-
-type HasUnreadConversationNotificationParams struct {
-	UserID         pgtype.UUID
-	ConversationID pgtype.UUID
-}
-
-// Bildirimler: konuşma başına okunmamış tek "yeni mesaj" bildirimi.
-func (q *Queries) HasUnreadConversationNotification(ctx context.Context, arg HasUnreadConversationNotificationParams) (bool, error) {
-	row := q.db.QueryRow(ctx, hasUnreadConversationNotification, arg.UserID, arg.ConversationID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const listConversationsPage = `-- name: ListConversationsPage :many
 SELECT c.id, c.user_low_id, c.user_high_id, c.status, c.requested_by, c.accepted_at, c.last_message_at, c.created_at,
        r.last_read_message_id, p.last_read_message_id AS peer_last_read_message_id,
@@ -620,6 +632,66 @@ func (q *Queries) ListConversationsPage(ctx context.Context, arg ListConversatio
 			&i.LastReadMessageID,
 			&i.PeerLastReadMessageID,
 			&i.Unread,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDeclinedRequests = `-- name: ListDeclinedRequests :many
+SELECT id, requested_by, declined_at, created_at
+FROM dm_conversations
+WHERE status = 'declined'
+  AND (user_low_id = $1::uuid OR user_high_id = $1::uuid)
+  AND requested_by IS NOT NULL AND requested_by <> $1::uuid
+  AND ($2::timestamptz IS NULL
+       OR (declined_at, id) < ($2::timestamptz, $3::uuid))
+ORDER BY declined_at DESC, id DESC
+LIMIT $4
+`
+
+type ListDeclinedRequestsParams struct {
+	UserID  pgtype.UUID
+	AfterAt pgtype.Timestamptz
+	AfterID pgtype.UUID
+	N       int32
+}
+
+type ListDeclinedRequestsRow struct {
+	ID          pgtype.UUID
+	RequestedBy pgtype.UUID
+	DeclinedAt  pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+}
+
+// Kişinin reddettiği istekler ("reddedilenler", issue #101), en son
+// reddedilen önce; imleç (declined_at, id). Gönderenin hesabı silinmiş
+// istek listelenmez (kimse yazamaz). Gönderen bu listeyi hiç görmez:
+// requested_by çağıran olamaz.
+func (q *Queries) ListDeclinedRequests(ctx context.Context, arg ListDeclinedRequestsParams) ([]ListDeclinedRequestsRow, error) {
+	rows, err := q.db.Query(ctx, listDeclinedRequests,
+		arg.UserID,
+		arg.AfterAt,
+		arg.AfterID,
+		arg.N,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDeclinedRequestsRow{}
+	for rows.Next() {
+		var i ListDeclinedRequestsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RequestedBy,
+			&i.DeclinedAt,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -861,6 +933,28 @@ func (q *Queries) PurgeDeletedDirectMessages(ctx context.Context, arg PurgeDelet
 	return result.RowsAffected(), nil
 }
 
+const restoreDeclinedRequest = `-- name: RestoreDeclinedRequest :execrows
+UPDATE dm_conversations SET status = 'request', declined_at = NULL
+WHERE id = $1 AND status = 'declined'
+  AND (user_low_id = $2::uuid OR user_high_id = $2::uuid)
+  AND requested_by IS NOT NULL AND requested_by <> $2::uuid
+`
+
+type RestoreDeclinedRequestParams struct {
+	ID     pgtype.UUID
+	UserID pgtype.UUID
+}
+
+// Reddedeni listesinden çıkarır: konuşma bekleyen isteğe döner. Yalnızca
+// reddeden taraf (istek açan değil) çıkarabilir; başkasınınki etkilenmez.
+func (q *Queries) RestoreDeclinedRequest(ctx context.Context, arg RestoreDeclinedRequestParams) (int64, error) {
+	result, err := q.db.Exec(ctx, restoreDeclinedRequest, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const touchConversation = `-- name: TouchConversation :exec
 UPDATE dm_conversations SET last_message_at = GREATEST(last_message_at, $1)
 WHERE id = $2
@@ -874,4 +968,25 @@ type TouchConversationParams struct {
 func (q *Queries) TouchConversation(ctx context.Context, arg TouchConversationParams) error {
 	_, err := q.db.Exec(ctx, touchConversation, arg.At, arg.ID)
 	return err
+}
+
+const updateConversationNotificationUnread = `-- name: UpdateConversationNotificationUnread :one
+UPDATE notifications SET unread_count = $1
+WHERE user_id = $2 AND target_type = 'dm_conversation' AND target_id = $3 AND read_at IS NULL
+RETURNING type
+`
+
+type UpdateConversationNotificationUnreadParams struct {
+	UnreadCount    pgtype.Int4
+	UserID         pgtype.UUID
+	ConversationID pgtype.UUID
+}
+
+// Bekleyen (okunmamış) konuşma bildiriminin sayacını günceller ve türünü
+// döner; yoksa sonuç boştur (yeni bildirim açılır).
+func (q *Queries) UpdateConversationNotificationUnread(ctx context.Context, arg UpdateConversationNotificationUnreadParams) (string, error) {
+	row := q.db.QueryRow(ctx, updateConversationNotificationUnread, arg.UnreadCount, arg.UserID, arg.ConversationID)
+	var type_ string
+	err := row.Scan(&type_)
+	return type_, err
 }

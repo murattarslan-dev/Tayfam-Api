@@ -21,6 +21,8 @@ type DirectMessages interface {
 	MarkRead(ctx context.Context, caller, conversation, message id.ID) error
 	Accept(ctx context.Context, caller, conversation id.ID) (dm.Conversation, error)
 	Decline(ctx context.Context, caller, conversation id.ID) error
+	Declined(ctx context.Context, caller id.ID, size int32, token string) ([]dm.DeclinedRequest, string, error)
+	RemoveDeclined(ctx context.Context, caller, conversation id.ID) error
 	VerifyForReport(ctx context.Context, caller, message id.ID) (conversation, sender id.ID, err error)
 }
 
@@ -175,6 +177,38 @@ func (s *DirectMessageServer) DeclineMessageRequest(ctx context.Context, req *ch
 		return nil, errorStatus(ctx, s.log, err)
 	}
 	return &chatv1.DeclineMessageRequestResponse{}, nil
+}
+
+// ListDeclinedRequests implements chatv1.DirectMessageServiceServer.
+func (s *DirectMessageServer) ListDeclinedRequests(ctx context.Context, req *chatv1.ListDeclinedRequestsRequest) (*chatv1.ListDeclinedRequestsResponse, error) {
+	caller, err := callerID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	list, next, err := s.app.Declined(ctx, caller, req.GetPageSize(), req.GetPageToken())
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	out := &chatv1.ListDeclinedRequestsResponse{DeclinedRequests: make([]*chatv1.DeclinedRequest, 0, len(list)), NextPageToken: next}
+	for _, d := range list {
+		out.DeclinedRequests = append(out.DeclinedRequests, &chatv1.DeclinedRequest{
+			ConversationId: d.ConversationID.String(), SenderUserId: d.Sender.String(),
+			DeclineTime: timestamppb.New(d.DeclinedAt), CreateTime: timestamppb.New(d.CreatedAt),
+		})
+	}
+	return out, nil
+}
+
+// RemoveDeclinedRequest implements chatv1.DirectMessageServiceServer.
+func (s *DirectMessageServer) RemoveDeclinedRequest(ctx context.Context, req *chatv1.RemoveDeclinedRequestRequest) (*chatv1.RemoveDeclinedRequestResponse, error) {
+	caller, v, err := ids(ctx, f("conversation_id", req.GetConversationId()))
+	if err != nil {
+		return nil, err
+	}
+	if err := s.app.RemoveDeclined(ctx, caller, v[0]); err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &chatv1.RemoveDeclinedRequestResponse{}, nil
 }
 
 // VerifyDirectMessageForReport implements chatv1.DirectMessageServiceServer.

@@ -30,15 +30,39 @@ VALUES (@id, @user_low_id, @user_high_id, @status, sqlc.narg(requested_by), sqlc
 ON CONFLICT (user_low_id, user_high_id) DO NOTHING
 RETURNING id, user_low_id, user_high_id, status, requested_by, accepted_at, last_message_at, created_at;
 
--- İstek kabul edildi (alıcı kabul etti ya da cevap yazdı).
+-- İstek kabul edildi (alıcı kabul etti ya da cevap yazdı; reddettiği
+-- isteğe yazması da onu reddedilenlerden çıkarır).
 -- name: AcceptConversation :execrows
-UPDATE dm_conversations SET status = 'active', accepted_at = @accepted_at
+UPDATE dm_conversations SET status = 'active', accepted_at = @accepted_at, declined_at = NULL
 WHERE id = @id AND status <> 'active';
 
 -- Alıcı isteği reddetti.
 -- name: DeclineConversation :execrows
-UPDATE dm_conversations SET status = 'declined'
+UPDATE dm_conversations SET status = 'declined', declined_at = @declined_at
 WHERE id = @id AND status = 'request';
+
+-- Kişinin reddettiği istekler ("reddedilenler", issue #101), en son
+-- reddedilen önce; imleç (declined_at, id). Gönderenin hesabı silinmiş
+-- istek listelenmez (kimse yazamaz). Gönderen bu listeyi hiç görmez:
+-- requested_by çağıran olamaz.
+-- name: ListDeclinedRequests :many
+SELECT id, requested_by, declined_at, created_at
+FROM dm_conversations
+WHERE status = 'declined'
+  AND (user_low_id = @user_id::uuid OR user_high_id = @user_id::uuid)
+  AND requested_by IS NOT NULL AND requested_by <> @user_id::uuid
+  AND (sqlc.narg(after_at)::timestamptz IS NULL
+       OR (declined_at, id) < (sqlc.narg(after_at)::timestamptz, sqlc.narg(after_id)::uuid))
+ORDER BY declined_at DESC, id DESC
+LIMIT @n;
+
+-- Reddedeni listesinden çıkarır: konuşma bekleyen isteğe döner. Yalnızca
+-- reddeden taraf (istek açan değil) çıkarabilir; başkasınınki etkilenmez.
+-- name: RestoreDeclinedRequest :execrows
+UPDATE dm_conversations SET status = 'request', declined_at = NULL
+WHERE id = @id AND status = 'declined'
+  AND (user_low_id = @user_id::uuid OR user_high_id = @user_id::uuid)
+  AND requested_by IS NOT NULL AND requested_by <> @user_id::uuid;
 
 -- name: TouchConversation :exec
 UPDATE dm_conversations SET last_message_at = GREATEST(last_message_at, @at)
@@ -171,11 +195,24 @@ WHERE conversation_id = @conversation_id AND user_id = @user_id;
 
 -- Bildirimler: konuşma başına okunmamış tek "yeni mesaj" bildirimi.
 
--- name: HasUnreadConversationNotification :one
-SELECT EXISTS (
-  SELECT 1 FROM notifications
-  WHERE user_id = @user_id AND target_type = 'dm_conversation' AND target_id = @conversation_id AND read_at IS NULL
-);
+-- Kişinin konuşmadaki okunmamış mesajları: karşı tarafın, silinmemiş,
+-- okundu işaretinden sonraki mesajları (en fazla 100; liste ile aynı).
+-- name: CountUnreadDirectMessages :one
+SELECT count(*)::int FROM (
+  SELECT 1 FROM dm_messages m
+  LEFT JOIN dm_conversation_reads r ON r.conversation_id = m.conversation_id AND r.user_id = @user_id::uuid
+  WHERE m.conversation_id = @conversation_id AND m.deleted_at IS NULL
+    AND m.sender_id IS DISTINCT FROM @user_id::uuid
+    AND (r.last_read_message_id IS NULL OR m.id > r.last_read_message_id)
+  LIMIT 100
+) u;
+
+-- Bekleyen (okunmamış) konuşma bildiriminin sayacını günceller ve türünü
+-- döner; yoksa sonuç boştur (yeni bildirim açılır).
+-- name: UpdateConversationNotificationUnread :one
+UPDATE notifications SET unread_count = @unread_count
+WHERE user_id = @user_id AND target_type = 'dm_conversation' AND target_id = @conversation_id AND read_at IS NULL
+RETURNING type;
 
 -- Konuşma okununca o konuşmanın bildirimleri de okunmuş olur.
 -- name: MarkConversationNotificationsRead :exec

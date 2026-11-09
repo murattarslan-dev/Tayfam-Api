@@ -64,6 +64,11 @@ var (
 	ErrChannelsUnavailable = errors.New("kanal mesajı anahtarı yok")
 )
 
+// ErrRateLimited: the caller sends messages too fast (one per-user limit
+// for channel and direct messages, REST and WebSocket together; issue
+// #101).
+var ErrRateLimited = errors.New("mesaj gönderim hızı aşıldı")
+
 // SlowModeError: the channel's slow mode does not allow the caller another
 // message yet.
 type SlowModeError struct {

@@ -50,6 +50,7 @@ type DmConversation struct {
 	LastMessageAt pgtype.Timestamptz
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
+	DeclinedAt    pgtype.Timestamptz
 }
 
 type DmConversationRead struct {
@@ -100,6 +101,7 @@ type Notification struct {
 	SourceEventID pgtype.UUID
 	ReadAt        pgtype.Timestamptz
 	CreatedAt     pgtype.Timestamptz
+	UnreadCount   pgtype.Int4
 }
 
 type NotificationPreference struct {

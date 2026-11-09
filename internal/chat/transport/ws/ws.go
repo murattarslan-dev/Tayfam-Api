@@ -14,8 +14,11 @@
 // Limits on every connection: the Origin header must be absent (native
 // clients) or one of the allowed web origins; a frame is at most
 // MaxFrameBytes (larger closes with 1009); incoming frames are rate limited
-// per user; the server pings every PingInterval and closes a connection
-// that does not answer within PongTimeout; a client that does not read its
+// per user (Frames; "rate_limited"), and sending a message also counts
+// against the per-user message rate the app layer shares with REST
+// (issue #101; an error frame "rate_limited" for that frame, the
+// connection stays open); the server pings every PingInterval and closes a
+// connection that does not answer within PongTimeout; a client that does not read its
 // frames fast enough (send buffer full) is closed with 4002 and catches up
 // over REST after reconnecting (ADR-0005).
 //
@@ -594,6 +597,7 @@ func (c *conn) appError(ctx context.Context, frameID string, err error) {
 		{apperr.ErrDirectMessageNotAllowed, "direct_message_not_allowed"},
 		{apperr.ErrMessageRequestPending, "message_request_pending"},
 		{apperr.ErrMessageRequestLimit, "message_request_limit"},
+		{apperr.ErrRateLimited, "rate_limited"},
 		{apperr.ErrDirectMessagesUnavailable, "unavailable"},
 		{context.DeadlineExceeded, "unavailable"},
 	} {

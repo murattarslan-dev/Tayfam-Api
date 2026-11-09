@@ -161,7 +161,7 @@ func setup(t *testing.T) *env {
 	e.members.set(e.tayfa, e.other, Member{Active: true, Role: RoleMember})
 	svc, err := New(Config{
 		Pool: pool, Log: slog.New(slog.NewJSONHandler(e.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		Access: e.members, Cipher: channelcrypt.Ephemeral(), Publisher: e.pub,
+		Access: e.members, SendLimit: unlimited{}, Cipher: channelcrypt.Ephemeral(), Publisher: e.pub,
 		Now: func() time.Time { return time.Now().Add(e.shift) },
 	})
 	must(t, err)
@@ -620,7 +620,7 @@ func TestMovedRowDoesNotDecrypt(t *testing.T) {
 
 func TestWithoutKeyEverythingIsUnavailable(t *testing.T) {
 	e := setup(t)
-	svc, err := New(Config{Pool: e.pool, Log: slog.New(slog.DiscardHandler), Access: e.members})
+	svc, err := New(Config{Pool: e.pool, Log: slog.New(slog.DiscardHandler), Access: e.members, SendLimit: unlimited{}})
 	must(t, err)
 	_, err = svc.List(ctx, e.admin, e.tayfa)
 	is(t, err, apperr.ErrChannelsUnavailable)

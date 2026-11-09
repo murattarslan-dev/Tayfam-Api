@@ -12,8 +12,11 @@
 //     may send only that one message. The recipient accepts by replying or
 //     with Accept; Decline makes it declined;
 //   - declined: the sender is never told, still sees the request as sent
-//     and cannot write again; the recipient no longer sees it. If the
-//     recipient writes later, it becomes active.
+//     and cannot write again, even as a friend, until the recipient takes
+//     it off their declined list (Declined, RemoveDeclined; issue #101):
+//     then it is a waiting request again. The recipient no longer sees it
+//     among conversations. If the recipient writes later, it becomes
+//     active.
 //
 // A sender opens at most core's daily limit (5 or 20) of requests in 24
 // hours, counted from the database so a restart resets nothing; declined
@@ -22,7 +25,11 @@
 //
 // Send is the single send path: REST (gRPC) and the WebSocket call it, so
 // the rule, the request state and the limits are checked in one place
-// (ADR-0005 "Mesaj protokolü", v7).
+// (ADR-0005 "Mesaj protokolü", v7). The per-user send rate (Config.SendLimit)
+// is shared with channel messages (issue #101).
+//
+// The recipient has one notice per conversation; it carries their unread
+// count, updated with every message until the conversation is read.
 //
 // Message bodies exist in plain text only in memory: they are encrypted with
 // the channel message key (channelcrypt.EncryptDirect, AAD message +
@@ -87,6 +94,9 @@ const (
 	EventMessageDeleted  = "dm.message_deleted"
 	EventRequestAccepted = "dm.request_accepted"
 	EventRequestDeclined = "dm.request_declined"
+	// EventRequestRestored: the decliner took the request off their
+	// declined list (issue #101).
+	EventRequestRestored = "dm.request_restored"
 )
 
 // Conversation states in the database.
@@ -154,11 +164,21 @@ func (nopPublisher) ConversationAccepted([2]id.ID, id.ID)        {}
 func (nopPublisher) ConversationRead(id.ID, id.ID, id.ID, id.ID) {}
 func (nopPublisher) Notified(notification.Request)               {}
 
+// SendLimit is the per-user message rate shared by every send path:
+// channel and direct messages, REST and WebSocket (issue #101). Allow
+// reports whether key (the user ID) may send one more message now.
+type SendLimit interface {
+	Allow(key string) bool
+}
+
 // Config wires a Service.
 type Config struct {
 	Pool  *pgxpool.Pool
 	Log   *slog.Logger
 	Rules Rules
+	// SendLimit is the per-user send rate (required: there is no unlimited
+	// sending).
+	SendLimit SendLimit
 	// Cipher encrypts message bodies. nil turns the user methods off
 	// (apperr.ErrDirectMessagesUnavailable); only local and dev may run so.
 	Cipher    *channelcrypt.Cipher
@@ -174,7 +194,7 @@ type Service struct {
 
 // New returns a Service.
 func New(cfg Config) (*Service, error) {
-	if cfg.Pool == nil || cfg.Log == nil || cfg.Rules == nil {
+	if cfg.Pool == nil || cfg.Log == nil || cfg.Rules == nil || cfg.SendLimit == nil {
 		return nil, errors.New("dm: eksik yapılandırma")
 	}
 	if cfg.Now == nil {
