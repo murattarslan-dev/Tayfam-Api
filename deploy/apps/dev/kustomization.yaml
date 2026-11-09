@@ -16,6 +16,7 @@ resources:
   - secrets/core-db.sops.yaml
   - secrets/chat-db.sops.yaml
   - secrets/identity-birthdate-key.sops.yaml
+  - secrets/chat-message-key.sops.yaml
 
 configMapGenerator:
   - name: tayfam-env
