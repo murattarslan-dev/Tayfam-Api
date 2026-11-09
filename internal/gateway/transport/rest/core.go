@@ -157,6 +157,13 @@ type coreHandler func(ctx context.Context, w http.ResponseWriter, r *http.Reques
 // authed verifies the access token (Bearer or the web cookie) and passes
 // it on to core unchanged (auth.WithToken). core verifies it again.
 func (h coreHandlers) authed(next coreHandler) http.HandlerFunc {
+	return authenticated(h.d.Verifier, h.d.Log, next)
+}
+
+// authenticated verifies the access token (Bearer or the web cookie) and
+// passes it on unchanged (auth.WithToken) to the service next calls, which
+// verifies it again (ADR-0011).
+func authenticated(v TokenVerifier, log *slog.Logger, next coreHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token, _ := bearer(r)
 		if token == "" || len(token) > maxAccessTokenBytes {
@@ -165,13 +172,13 @@ func (h coreHandlers) authed(next coreHandler) http.HandlerFunc {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), upstreamWait)
 		defer cancel()
-		if _, err := h.d.Verifier.Verify(ctx, token); err != nil {
+		if _, err := v.Verify(ctx, token); err != nil {
 			if errors.Is(err, auth.ErrInvalidToken) {
 				httpx.WriteProblem(w, r, http.StatusUnauthorized, "unauthenticated", "Unauthorized", "")
 				return
 			}
 			// The key source failed (identity unreachable); not the user's fault.
-			h.d.Log.WarnContext(r.Context(), "token doğrulanamadı: anahtar alınamadı")
+			log.WarnContext(r.Context(), "token doğrulanamadı: anahtar alınamadı")
 			httpx.WriteProblem(w, r, http.StatusServiceUnavailable, "unavailable", "Service Unavailable", "")
 			return
 		}

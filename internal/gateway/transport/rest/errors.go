@@ -82,9 +82,15 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_POLL_CLOSED":                 {http.StatusConflict, "poll-closed"},
 		"ERROR_REASON_POLL_ANONYMOUS":              {http.StatusForbidden, "poll-anonymous"},
 	},
+	// proto/tayfam/chat/v1/errors.proto
+	"chat.tayfam.app": {
+		"ERROR_REASON_VALIDATION":             {http.StatusBadRequest, "invalid-request"},
+		"ERROR_REASON_NOTIFICATION_NOT_FOUND": {http.StatusNotFound, "notification-not-found"},
+		"ERROR_REASON_TAYFA_NOT_FOUND":        {http.StatusNotFound, "tayfa-not-found"},
+	},
 }
 
-// writeUpstreamError turns a gRPC error from service (identity, core) into
+// writeUpstreamError turns a gRPC error from service (identity, core, chat) into
 // a problem response without passing on any internal detail: only a known
 // ErrorInfo reason from that service's own domain, or the bare status code,
 // decides the answer.

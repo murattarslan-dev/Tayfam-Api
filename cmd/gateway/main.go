@@ -7,6 +7,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/gateway/transport/rest"
@@ -94,6 +95,19 @@ func setup(rt *service.Runtime) error {
 			// Check-in at an event: many members may share one venue
 			// network; core also allows five attempts per event and user.
 			CheckInLimit: ratelimit.New(30, 30),
+		}
+	}
+	if conn := conns["chat"]; conn != nil {
+		// Bildirim uçları (issue #64): gateway token'ı chat'e ulaşmadan
+		// doğrular; chat yeniden doğrular (ADR-0011).
+		v, err := rt.IdentityVerifier()
+		if err != nil {
+			return err
+		}
+		deps.Chat = rest.ChatDeps{
+			Notifications: chatv1.NewNotificationServiceClient(conn),
+			Verifier:      v,
+			Log:           rt.Log,
 		}
 	}
 	rt.AddHTTPServer("http", httpAddr, rest.NewRouter(deps))

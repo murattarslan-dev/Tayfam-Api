@@ -29,6 +29,9 @@ type Deps struct {
 	// Core enables the tayfa and membership routes when its clients and
 	// verifier are set.
 	Core CoreDeps
+	// Chat enables the notification routes when its client and verifier
+	// are set.
+	Chat ChatDeps
 	// AllowedOrigins are the web origins allowed to call the API with
 	// credentials (CORS), such as https://tayfam.app.
 	AllowedOrigins []string
@@ -46,6 +49,9 @@ func NewRouter(d Deps) http.Handler {
 	}
 	if d.Core.Tayfas != nil && d.Core.Members != nil && d.Core.Verifier != nil {
 		registerCore(mux, d.Core)
+	}
+	if d.Chat.Notifications != nil && d.Chat.Verifier != nil {
+		registerNotifications(mux, d.Chat)
 	}
 	mux.HandleFunc("/", httpx.NotFound)
 	return httpx.Chain(mux, cors(d.AllowedOrigins), requireClientHeader)

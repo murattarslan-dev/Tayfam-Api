@@ -84,6 +84,7 @@ func newTestRouter(f *fakeIdentity) http.Handler { return newTestRouterBurst(f, 
 func newTestRouterBurst(f *fakeIdentity, burst int) http.Handler {
 	return NewRouter(Deps{
 		Core:    testCoreDeps(&fakeCore{}, burst),
+		Chat:    testChatDeps(&fakeChat{}),
 		Version: "test",
 		Auth: AuthDeps{
 			Auth: f, Registration: f, Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
