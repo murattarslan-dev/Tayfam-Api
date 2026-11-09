@@ -1,0 +1,75 @@
+{{define "content"}}
+{{$csrf := .CSRF}}
+{{with .Data.User}}
+<h1>{{if .User.DisplayName}}{{.User.DisplayName}}{{else}}(adsız){{end}}</h1>
+<div class="card">
+<dl class="meta">
+  <dt>Referans kodu</dt><dd>{{.User.ReferralCode}}</dd>
+  <dt>Hesap</dt><dd>{{if .User.Deleted}}Silindi{{else if .User.Registered}}Kayıtlı{{else}}Kayıt tamamlanmadı{{end}}</dd>
+  <dt>Oluşturuldu</dt><dd>{{ts .CreateTime}}</dd>
+  <dt>Aktif oturum</dt><dd>{{.ActiveSessions}}</dd>
+  <dt>Yaptırım</dt><dd>{{with .Sanction}}<span class="tag danger">{{label .Type}}</span> {{ts .StartTime}}{{if .EndTime}} → {{ts .EndTime}}{{end}}{{else}}—{{end}}</dd>
+  {{with .Sanction}}<dt>Yaptırım gerekçesi</dt><dd>{{.Reason}}</dd>{{end}}
+</dl>
+</div>
+{{end}}
+
+<h2>Üye olduğu tayfalar</h2>
+{{if .Data.Tayfas}}
+<div class="table-wrap"><table>
+<thead><tr><th>Tayfa</th><th>Rol</th><th>Durum</th></tr></thead>
+<tbody>
+{{range .Data.Tayfas}}
+<tr>
+  <td><a href="/tayfalar/{{.Tayfa.TayfaId}}">{{.Tayfa.Name}}</a></td>
+  <td>{{label .Role}}</td>
+  <td>{{label .Tayfa.Status}}{{if .Tayfa.SuspendTime}} <span class="tag warn">Askıda</span>{{end}}</td>
+</tr>
+{{end}}
+</tbody>
+</table></div>
+{{else}}
+<p>Aktif üyeliği yok.</p>
+{{end}}
+
+{{if not .Data.User.User.Deleted}}
+{{$id := .Data.User.User.UserId}}
+<h2>İşlemler</h2>
+{{template "reauth" .}}
+<div class="card">
+<h3>Tüm oturumları kapat</h3>
+<form class="stack" method="post" action="/kullanicilar/{{$id}}/oturumlar">
+  <input type="hidden" name="csrf" value="{{$csrf}}">
+  {{template "reason" "oturumlar"}}
+  <button type="submit" class="danger">Oturumları kapat</button>
+</form>
+</div>
+<div class="card">
+{{if .Data.User.Sanction}}
+<h3>Yaptırımı kaldır</h3>
+<form class="stack" method="post" action="/kullanicilar/{{$id}}/yaptirim-kaldir">
+  <input type="hidden" name="csrf" value="{{$csrf}}">
+  {{template "reason" "kaldir"}}
+  <button type="submit">Yaptırımı kaldır</button>
+</form>
+{{else}}
+<h3>Askıya al veya banla</h3>
+<p class="hint">Tüm oturumlar kapanır ve yaptırım sürerken giriş yapılamaz. Banda içerikler gizlenir, silinmez.</p>
+<form class="stack" method="post" action="/kullanicilar/{{$id}}/yaptirim">
+  <input type="hidden" name="csrf" value="{{$csrf}}">
+  <label for="tur">Yaptırım</label>
+  <select id="tur" name="tur" required>
+    <option value="aski">Süreli askı</option>
+    <option value="ban">Ban</option>
+  </select>
+  <label for="sure">Askı süresi (banda kullanılmaz)</label>
+  <select id="sure" name="sure">
+    {{range .Data.Durations}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+  </select>
+  {{template "reason" "yaptirim"}}
+  <button type="submit" class="danger">Uygula</button>
+</form>
+{{end}}
+</div>
+{{end}}
+{{end}}

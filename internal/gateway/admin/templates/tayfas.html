@@ -1,0 +1,29 @@
+{{define "content"}}
+<h1>Tayfalar</h1>
+<form class="inline" method="get" action="/tayfalar" role="search">
+  <label for="q" class="hint">Ada göre ara</label>
+  <input type="search" id="q" name="q" value="{{.Data.Query}}" maxlength="50"
+    hx-get="/tayfalar" hx-trigger="input changed delay:300ms, search" hx-target="#sonuclar" hx-select="#sonuclar" hx-swap="outerHTML" hx-push-url="true">
+  <button type="submit">Ara</button>
+</form>
+<div id="sonuclar">
+{{if .Data.Tayfas}}
+<div class="table-wrap"><table>
+<thead><tr><th>Ad</th><th>Durum</th><th>Üye</th><th>Keşfet</th><th>Açıldı</th></tr></thead>
+<tbody>
+{{range .Data.Tayfas}}
+<tr>
+  <td><a href="/tayfalar/{{.TayfaId}}">{{.Name}}</a></td>
+  <td>{{label .Status}}{{if .SuspendTime}} <span class="tag warn">Askıda</span>{{end}}{{if .DeleteTime}} <span class="tag danger">Silindi</span>{{end}}{{if .DeletionScheduledTime}} <span class="tag warn">Silme bekliyor</span>{{end}}</td>
+  <td>{{.MemberCount}}</td>
+  <td>{{if .Listed}}Görünür{{else}}Gizli{{end}}</td>
+  <td>{{ts .CreateTime}}</td>
+</tr>
+{{end}}
+</tbody>
+</table></div>
+{{else}}
+<p>Sonuç yok.</p>
+{{end}}
+</div>
+{{end}}

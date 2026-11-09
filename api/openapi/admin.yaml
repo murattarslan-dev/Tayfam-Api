@@ -5,10 +5,30 @@
 openapi: 3.1.0
 info:
   title: Tayfam Platform Yönetim Paneli
-  version: 0.1.0
+  version: 0.2.0
   description: |
-    1. aşama: erişim katmanı. Panel sayfaları (3. aşama) ve yönetim işlemleri
-    (2. aşama) bunun üzerine eklenir.
+    1. aşama: erişim katmanı (`/auth/*` JSON uçları). 3. aşama: sunucuda
+    render edilen panel sayfaları (`text/html`, aşağıda "Sayfalar"). Sayfalar
+    core `AdminService` ve identity `AdminUserService`'i (2. aşama) admin
+    token'ıyla çağırır.
+
+    **Sayfalar:** Türkçe metinler sunucuda üretilir (panel uygulama
+    API'sinin istemcisi değildir; "arayüz metinleri API'den Türkçe dönmez"
+    kuralı uygulama API'si içindir). Oturumsuz ya da geçersiz oturumla her
+    sayfa ve işlem `303 → /giris` döner; hiçbir yönetim servisi çağrılmaz.
+    Durum değiştiren her form `application/x-www-form-urlencoded` gönderir
+    ve `csrf` alanında (ya da `X-CSRF-Token` başlığında)
+    `__Host-tayfam_admin_csrf` çerezindeki değeri taşır; yoksa 403.
+    Değişiklikler 10–1000 karakter `gerekce` ister (tayfa askısında en
+    fazla 500) ve son 5 dakikada Google girişi gerektirir; yoksa
+    `303 → /giris?yeniden=1&devam=<sayfa>`. İşlemler `303` ile sayfaya
+    `?sonuc=<kod>` ya da `?hata=<kod>` ile döner (yalnızca kod, metin değil).
+
+    **CSP:** `default-src 'none'; script-src 'self'; style-src 'self';
+    img-src 'self'; connect-src 'self'; form-action 'self'
+    https://accounts.google.com/o/oauth2/v2/auth; frame-ancestors 'none';
+    base-uri 'none'`. htmx 2.0.11 binary'ye gömülüdür ve panelin kendi
+    adresinden sunulur; satır içi script ve stil yoktur.
 
     **Cloudflare Access:** Her istek Cloudflare Zero Trust'tan geçer ve
     `Cf-Access-Jwt-Assertion` başlığını taşır. gateway bu JWT'yi takımın
@@ -128,8 +148,266 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
 
+  # --- Sayfalar (3. aşama, text/html) ---
+
+  /static/{file}:
+    get:
+      operationId: adminStatic
+      summary: Gömülü stil dosyası ve htmx (oturum gerekmez, Access JWT gerekir)
+      parameters:
+        - { name: file, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Dosya }
+        "404": { description: Yok }
+
+  /giris:
+    get:
+      operationId: adminLoginPage
+      summary: Giriş sayfası
+      parameters:
+        - { name: yeniden, in: query, schema: { type: string, enum: ["1"] }, description: Değişiklikten önce yeniden giriş }
+        - { name: devam, in: query, schema: { type: string }, description: Girişten sonra dönülecek panel yolu (yalnızca "/" ile başlayan yol) }
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+
+  /giris/google:
+    post:
+      operationId: adminGoogleStart
+      summary: Google girişini başlatır
+      description: |
+        CSRF denetimli. `__Host-tayfam_admin_nonce` ve
+        `__Host-tayfam_admin_state` çerezlerini (HttpOnly, Secure,
+        SameSite=None, 5 dakika) yazar ve Google'a yönlendirir:
+        `response_type=id_token`, `response_mode=form_post`,
+        `scope=openid email`, `redirect_uri=https://admin.tayfam.app/auth/google/callback`.
+        İstemci sırrı yoktur.
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [csrf]
+              properties:
+                csrf: { type: string }
+                devam: { type: string }
+      responses:
+        "303": { description: Google'ın giriş sayfasına }
+        "403": { $ref: "#/components/responses/Page" }
+
+  /auth/google/callback:
+    post:
+      operationId: adminGoogleCallback
+      summary: Google'ın form_post dönüşü
+      description: |
+        Google'dan gelir; Origin denetiminden muaftır, onun yerine `state`
+        çerezdeki değerle sabit zamanda karşılaştırılır. identity
+        `AdminSignIn` ID token'ını, çerezdeki nonce'u ve Access e-postasını
+        doğrular. Başarıda `__Host-tayfam_admin` çerezi yazılır ve sayfa
+        `meta refresh` ile `devam` yoluna geçer (yönlendirme değil: tarayıcı
+        siteler arası POST'un başlattığı yönlendirmede SameSite=Strict
+        çerezi göndermez). Nonce ve state çerezleri her sonuçta silinir.
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                state: { type: string }
+                id_token: { type: string, maxLength: 8192 }
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+        "400": { $ref: "#/components/responses/Page" }
+        "401": { $ref: "#/components/responses/Page" }
+        "429": { $ref: "#/components/responses/Page" }
+
+  /cikis:
+    post:
+      operationId: adminSignOutPage
+      summary: Panel çerezini siler (CSRF denetimli)
+      responses:
+        "303": { description: /giris }
+
+  /:
+    get:
+      operationId: adminDashboard
+      summary: Pano (bekleyen ve öncelikli platform şikâyetleri, oturum)
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+        "303": { description: /giris }
+
+  /tayfalar:
+    get:
+      operationId: adminTayfas
+      summary: Tayfa arama (ada göre, en fazla 50)
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 50 } }
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+        "303": { description: /giris }
+
+  /tayfalar/{id}:
+    get:
+      operationId: adminTayfa
+      summary: Tayfa ayrıntısı, üyeler ve roller, işlemler
+      parameters: [{ $ref: "#/components/parameters/ID" }]
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+        "303": { description: /giris }
+        "404": { $ref: "#/components/responses/Page" }
+
+  /tayfalar/{id}/aski:
+    post:
+      operationId: adminSuspendTayfa
+      summary: Tayfayı askıya alır (gerekçe en fazla 500)
+      parameters: [{ $ref: "#/components/parameters/ID" }]
+      requestBody: { $ref: "#/components/requestBodies/Change" }
+      responses: { "303": { $ref: "#/components/responses/Changed" }, "403": { $ref: "#/components/responses/Page" } }
+
+  /tayfalar/{id}/aski-kaldir:
+    post:
+      operationId: adminUnsuspendTayfa
+      summary: Askıyı kaldırır
+      parameters: [{ $ref: "#/components/parameters/ID" }]
+      requestBody: { $ref: "#/components/requestBodies/Change" }
+      responses: { "303": { $ref: "#/components/responses/Changed" }, "403": { $ref: "#/components/responses/Page" } }
+
+  /tayfalar/{id}/sil:
+    post:
+      operationId: adminDeleteTayfa
+      summary: Tayfayı hemen siler (`onay=sil` zorunlu)
+      parameters: [{ $ref: "#/components/parameters/ID" }]
+      requestBody: { $ref: "#/components/requestBodies/Change" }
+      responses: { "303": { $ref: "#/components/responses/Changed" }, "403": { $ref: "#/components/responses/Page" } }
+
+  /tayfalar/{id}/rol:
+    post:
+      operationId: adminSetMemberRole
+      summary: Aktif üyenin rolünü değiştirir (`uye`, `rol` = uye | moderator | yonetici)
+      parameters: [{ $ref: "#/components/parameters/ID" }]
+      requestBody: { $ref: "#/components/requestBodies/Change" }
+      responses: { "303": { $ref: "#/components/responses/Changed" }, "403": { $ref: "#/components/responses/Page" } }
+
+  /kullanicilar:
+    get:
+      operationId: adminUsers
+      summary: Kullanıcı arama formu
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+        "303": { description: /giris }
+    post:
+      operationId: adminSearchUsers
+      summary: Kullanıcı arama (ad, referans kodu, e-posta; 2–100 karakter)
+      description: |
+        POST'tur: sorgu e-posta olabilir ve URL'ye (tarayıcı geçmişi, vekil
+        log'ları) girmemeli. Sorgu sayfada yeniden gösterilmez; sonuçlarda
+        e-posta yoktur. CSRF denetimli, gerekçe ve yeniden giriş istemez.
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [csrf, q]
+              properties:
+                csrf: { type: string }
+                q: { type: string, minLength: 2, maxLength: 100 }
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+        "400": { $ref: "#/components/responses/Page" }
+        "403": { $ref: "#/components/responses/Page" }
+
+  /kullanicilar/{id}:
+    get:
+      operationId: adminUser
+      summary: Kullanıcı ayrıntısı (hesap, oturum sayısı, yaptırım, tayfalar)
+      parameters: [{ $ref: "#/components/parameters/ID" }]
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+        "303": { description: /giris }
+        "404": { $ref: "#/components/responses/Page" }
+
+  /kullanicilar/{id}/oturumlar:
+    post:
+      operationId: adminRevokeUserSessions
+      summary: Kullanıcının tüm oturumlarını kapatır
+      parameters: [{ $ref: "#/components/parameters/ID" }]
+      requestBody: { $ref: "#/components/requestBodies/Change" }
+      responses: { "303": { $ref: "#/components/responses/Changed" }, "403": { $ref: "#/components/responses/Page" } }
+
+  /kullanicilar/{id}/yaptirim:
+    post:
+      operationId: adminSanctionUser
+      summary: Platform askısı (`tur=aski`, `sure` = 1 | 3 | 7 | 30 | 90 | 180 gün) veya ban (`tur=ban`)
+      parameters: [{ $ref: "#/components/parameters/ID" }]
+      requestBody: { $ref: "#/components/requestBodies/Change" }
+      responses: { "303": { $ref: "#/components/responses/Changed" }, "403": { $ref: "#/components/responses/Page" } }
+
+  /kullanicilar/{id}/yaptirim-kaldir:
+    post:
+      operationId: adminLiftSanction
+      summary: Etkin yaptırımı kaldırır
+      parameters: [{ $ref: "#/components/parameters/ID" }]
+      requestBody: { $ref: "#/components/requestBodies/Change" }
+      responses: { "303": { $ref: "#/components/responses/Changed" }, "403": { $ref: "#/components/responses/Page" } }
+
+  /sikayetler:
+    get:
+      operationId: adminReports
+      summary: Platform şikâyet kuyruğu (önce açık, önce 18 yaş altı ve çocuk güvenliği)
+      parameters:
+        - { name: tumu, in: query, schema: { type: string, enum: ["1"] }, description: Karara bağlananlar da }
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+        "303": { description: /giris }
+
+  /sikayetler/{id}:
+    get:
+      operationId: adminReport
+      summary: Şikâyet ve yalnızca şikâyet edilen öğe (görüntüleme denetim kaydına yazılır)
+      parameters: [{ $ref: "#/components/parameters/ID" }]
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+        "303": { description: /giris }
+        "404": { $ref: "#/components/responses/Page" }
+
+  /sikayetler/{id}/karar:
+    post:
+      operationId: adminDecideReport
+      summary: Platform kararı (`karar` = kaldir | uyar | tayfa-aski | ban | reddet)
+      description: |
+        `ban`: önce identity `SanctionUser` (ban, şikâyet kimliğiyle), sonra
+        core `DecideReport`. İkinci çağrı başarısız olursa ban geçerli kalır;
+        karar yeniden gönderilebilir (var olan ban kabul edilir).
+      parameters: [{ $ref: "#/components/parameters/ID" }]
+      requestBody: { $ref: "#/components/requestBodies/Change" }
+      responses: { "303": { $ref: "#/components/responses/Changed" }, "403": { $ref: "#/components/responses/Page" } }
+
 components:
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  requestBodies:
+    Change:
+      required: true
+      content:
+        application/x-www-form-urlencoded:
+          schema:
+            type: object
+            required: [csrf, gerekce]
+            properties:
+              csrf: { type: string }
+              gerekce: { type: string, minLength: 10, maxLength: 1000 }
   responses:
+    Page:
+      description: Panel sayfası
+      content:
+        text/html: {}
+    Changed:
+      description: |
+        Sayfaya `?sonuc=<kod>` ya da `?hata=<kod>` ile döner; oturum yoksa
+        `/giris`, son 5 dakikada giriş yoksa `/giris?yeniden=1&devam=<sayfa>`.
     Problem:
       description: Hata
       content:

@@ -1,0 +1,126 @@
+/* Platform yönetim paneli. Renkler Notion "Tasarım Standartları" token'ları;
+   yazı tipi harici kaynak yasağı nedeniyle system-ui (Bricolage Grotesque
+   Google Fonts'tan gelir, panelde yüklenmez). */
+:root {
+  --brand: #5B2BE0;
+  --mango: #FFB000;
+  --pomegranate: #FF3D68;
+  --ink: #1B1036;
+  --ink-muted: #5A5275;
+  --ink-body: #3F3758;
+  --surface: #FAF8FF;
+  --card: #FFFFFF;
+  --line: #E6E1F5;
+  --tint-brand: #ECE4FF;
+  --tint-mango: #FFF0CC;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font: 400 16px/1.6 system-ui, sans-serif;
+}
+
+a { color: var(--brand); }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid var(--mango);
+  outline-offset: 3px;
+}
+
+header.top {
+  background: var(--ink);
+  color: #fff;
+  padding: 12px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  align-items: center;
+}
+header.top .brand { font-weight: 800; letter-spacing: -0.01em; }
+header.top nav { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+header.top nav a { color: #fff; text-decoration: none; padding: 8px 0; }
+header.top nav a[aria-current="page"] { text-decoration: underline; text-underline-offset: 6px; }
+header.top .who { margin-left: auto; display: flex; gap: 12px; align-items: center; font-size: 14px; }
+header.top form { margin: 0; }
+header.top button { background: transparent; color: #fff; border: 1px solid #fff; }
+
+main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 64px; }
+
+h1 { font-size: 28px; line-height: 1.1; letter-spacing: -0.02em; margin: 8px 0 20px; }
+h2 { font-size: 20px; line-height: 1.2; margin: 32px 0 12px; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+.stat .n { font-size: 32px; font-weight: 800; }
+.stat .l { color: var(--ink-muted); font-size: 14px; }
+
+table { width: 100%; border-collapse: collapse; background: var(--card); }
+th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 14px; color: var(--ink-muted); font-weight: 700; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
+
+dl.meta { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
+dl.meta dt { color: var(--ink-muted); }
+dl.meta dd { margin: 0; overflow-wrap: anywhere; }
+
+.tag {
+  display: inline-block;
+  background: var(--tint-brand);
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0 10px;
+}
+.tag.warn { background: var(--tint-mango); color: var(--ink); }
+.tag.danger { background: var(--pomegranate); color: var(--ink); }
+
+.notice { border-radius: 14px; padding: 12px 16px; margin-bottom: 16px; border: 1px solid var(--line); }
+.notice.ok { background: var(--tint-brand); }
+.notice.err { background: var(--tint-mango); }
+
+form.stack { display: grid; gap: 12px; max-width: 640px; }
+label { font-weight: 600; font-size: 15px; }
+input[type="text"], input[type="search"], select, textarea {
+  font: inherit;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+}
+textarea { min-height: 88px; }
+.inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.inline input[type="search"], .inline input[type="text"] { flex: 1 1 240px; width: auto; }
+.hint { color: var(--ink-muted); font-size: 14px; }
+
+button {
+  font: inherit;
+  font-weight: 700;
+  min-height: 44px;
+  padding: 8px 20px;
+  border-radius: 999px;
+  border: 0;
+  cursor: pointer;
+  background: var(--brand);
+  color: #fff;
+}
+button.danger { background: var(--pomegranate); color: var(--ink); }
+button.secondary { background: var(--tint-brand); color: var(--brand); }
+
+.item-body { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface); border-radius: 14px; padding: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

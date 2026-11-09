@@ -1,0 +1,17 @@
+{{define "content"}}
+<h1>Platform yönetim paneli</h1>
+<div class="card">
+  {{if .Data.Reauth}}
+  <p>Bu işlem için son 5 dakika içinde Google ile yeniden giriş yapmanız gerekiyor.</p>
+  {{else}}
+  <p>Yalnızca platform yöneticileri girebilir. Cloudflare Access ile girdiğiniz hesabın e-posta adresiyle aynı Google hesabını seçin.</p>
+  {{end}}
+  {{/* Not boosted: the answer is a redirect to Google, which only a full
+       page navigation can follow. */}}
+  <form method="post" action="/giris/google" hx-boost="false">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input type="hidden" name="devam" value="{{.Data.Next}}">
+    <button type="submit">Google ile giriş yap</button>
+  </form>
+</div>
+{{end}}

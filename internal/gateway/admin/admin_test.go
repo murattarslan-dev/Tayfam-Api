@@ -75,6 +75,10 @@ type env struct {
 	adminTok string
 	appTok   string
 	logs     *bytes.Buffer
+	core     *fakeCore
+	users    *fakeUsers
+	// signingKey signs further admin tokens (old sign-ins).
+	signingKey auth.SigningKey
 }
 
 func setup(t *testing.T) *env {
@@ -112,13 +116,17 @@ func setup(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	now := time.Now()
-	e := &env{cluster: c, identity: &fakeIdentity{token: adminTok}, adminTok: adminTok, appTok: appTok, logs: &bytes.Buffer{}}
+	e := &env{cluster: c, identity: &fakeIdentity{token: adminTok}, adminTok: adminTok, appTok: appTok, logs: &bytes.Buffer{},
+		signingKey: key}
+	shared := &calls{}
+	e.core, e.users = newFakeCore(shared), newFakeUsers(shared)
 	e.access = c.Token(t, satest.Spec{Alg: "RS256", Claims: map[string]any{
 		"iss": "https://" + team, "aud": []string{aud}, "sub": "cf-1", "email": accessTo, "type": "app",
 		"iat": now.Unix(), "exp": now.Add(8 * time.Hour).Unix(),
 	}})
 	e.h, err = NewHandler(Config{
 		Host: host, Access: av, Admin: adminV, Identity: e.identity,
+		Core: e.core, Users: e.users, GoogleClientID: googleClient,
 		Log: slog.New(slog.NewJSONHandler(e.logs, nil)), SignInLimit: ratelimit.New(60, 60),
 	})
 	if err != nil {
@@ -211,7 +219,7 @@ func TestAccessJWTRequired(t *testing.T) {
 			r.AddCookie(&http.Cookie{Name: "CF_Authorization", Value: e.access})
 		},
 	} {
-		for _, path := range []string{"/auth/nonce", "/auth/me", "/bilinmeyen"} {
+		for _, path := range []string{"/auth/nonce", "/auth/me", "/bilinmeyen", "/", "/giris", "/tayfalar", "/static/panel.css", HTMXPath} {
 			r := e.req(http.MethodGet, path, "")
 			r.AddCookie(&http.Cookie{Name: TokenCookie, Value: e.adminTok})
 			set(r)
@@ -336,7 +344,7 @@ func TestSignInRefusals(t *testing.T) {
 func TestSignInRateLimited(t *testing.T) {
 	e := setup(t)
 	e.h, _ = NewHandler(Config{Host: host, Access: mustAccess(t, e.cluster), Admin: noAdmin{}, Identity: e.identity,
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), SignInLimit: ratelimit.New(1, 1)})
+		Core: e.core, Users: e.users, GoogleClientID: googleClient, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), SignInLimit: ratelimit.New(1, 1)})
 	nonce := &http.Cookie{Name: NonceCookie, Value: strings.Repeat("n", 43)}
 	var last int
 	for range 3 {
@@ -433,7 +441,7 @@ func TestRoutesMatchContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pathRe := regexp.MustCompile(`^  (/\S+):$`)
+	pathRe := regexp.MustCompile(`^  (/\S*):$`)
 	opRe := regexp.MustCompile(`^    (get|post|put|patch|delete):$`)
 	var path string
 	ops := 0
@@ -447,12 +455,13 @@ func TestRoutesMatchContract(t *testing.T) {
 			continue
 		}
 		ops++
-		w := e.do(e.req(strings.ToUpper(m[1]), path, "{}"))
+		p := strings.NewReplacer("{id}", tayfaID, "{file}", "panel.css").Replace(path)
+		w := e.do(e.req(strings.ToUpper(m[1]), p, "{}"))
 		if w.Code == http.StatusNotFound || w.Code == http.StatusMethodNotAllowed {
 			t.Errorf("sözleşmedeki %s %s sunulmuyor (%d)", m[1], path, w.Code)
 		}
 	}
-	if ops != 4 {
+	if ops != 25 {
 		t.Fatalf("sözleşmede %d işlem bulundu", ops)
 	}
 }

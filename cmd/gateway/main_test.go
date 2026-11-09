@@ -84,12 +84,15 @@ func TestPanelClosedWithoutCloudflareAccess(t *testing.T) {
 }
 
 func TestPanelRequiresAccessJWT(t *testing.T) {
-	addr, err := run(t, map[string]string{"CF_ACCESS_TEAM_DOMAIN": "tayfam-test.cloudflareaccess.com", "CF_ACCESS_AUD": testAUD})
+	addr, err := run(t, map[string]string{"CF_ACCESS_TEAM_DOMAIN": "tayfam-test.cloudflareaccess.com", "CF_ACCESS_AUD": testAUD,
+		"ADMIN_GOOGLE_CLIENT_ID": "panel-test.apps.googleusercontent.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if code := get(t, addr, "admin.tayfam.test", "/auth/nonce"); code != http.StatusForbidden {
-		t.Fatalf("Access JWT'siz istek: %d", code)
+	for _, path := range []string{"/auth/nonce", "/", "/giris", "/static/panel.css", "/tayfalar"} {
+		if code := get(t, addr, "admin.tayfam.test", path); code != http.StatusForbidden {
+			t.Fatalf("Access JWT'siz istek %s: %d", path, code)
+		}
 	}
 	if code := get(t, addr, "api.tayfam.test", "/auth/nonce"); code != http.StatusNotFound {
 		t.Fatalf("API adresinde panel yolu: %d", code)
@@ -98,10 +101,11 @@ func TestPanelRequiresAccessJWT(t *testing.T) {
 
 func TestPanelConfigMustBeComplete(t *testing.T) {
 	for name, env := range map[string]map[string]string{
-		"yalnızca takım": {"CF_ACCESS_TEAM_DOMAIN": "tayfam-test.cloudflareaccess.com"},
-		"yalnızca AUD":   {"CF_ACCESS_AUD": testAUD},
-		"geçersiz takım": {"CF_ACCESS_TEAM_DOMAIN": "tayfam.example.com", "CF_ACCESS_AUD": testAUD},
-		"geçersiz AUD":   {"CF_ACCESS_TEAM_DOMAIN": "tayfam-test.cloudflareaccess.com", "CF_ACCESS_AUD": "abc"},
+		"yalnızca takım":       {"CF_ACCESS_TEAM_DOMAIN": "tayfam-test.cloudflareaccess.com"},
+		"yalnızca AUD":         {"CF_ACCESS_AUD": testAUD},
+		"geçersiz takım":       {"CF_ACCESS_TEAM_DOMAIN": "tayfam.example.com", "CF_ACCESS_AUD": testAUD},
+		"geçersiz AUD":         {"CF_ACCESS_TEAM_DOMAIN": "tayfam-test.cloudflareaccess.com", "CF_ACCESS_AUD": "abc"},
+		"Google istemcisi yok": {"CF_ACCESS_TEAM_DOMAIN": "tayfam-test.cloudflareaccess.com", "CF_ACCESS_AUD": testAUD},
 	} {
 		if _, err := run(t, env); err == nil || !strings.Contains(err.Error(), "kurulum") {
 			t.Errorf("%s: başladı (%v)", name, err)
