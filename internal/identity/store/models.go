@@ -35,6 +35,22 @@ type Device struct {
 	LastSeenAt pgtype.Timestamptz
 }
 
+type DomainEvent struct {
+	ID          pgtype.UUID
+	Type        string
+	ActorID     pgtype.UUID
+	SubjectType pgtype.Text
+	SubjectID   pgtype.UUID
+	Payload     []byte
+	OccurredAt  pgtype.Timestamptz
+}
+
+type EventConsumer struct {
+	ConsumerName string
+	LastEventID  pgtype.UUID
+	UpdatedAt    pgtype.Timestamptz
+}
+
 type RefreshToken struct {
 	ID        pgtype.UUID
 	SessionID pgtype.UUID

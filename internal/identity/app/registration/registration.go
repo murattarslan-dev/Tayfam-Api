@@ -24,6 +24,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/birthdate"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/userevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -151,7 +152,19 @@ func (s *Service) Complete(ctx context.Context, user id.ID, in Input) error {
 				return fmt.Errorf("ad: %w", err)
 			}
 		}
-		return assignRefCode(ctx, tx, q, user)
+		if err := assignRefCode(ctx, tx, q, user); err != nil {
+			return err
+		}
+		// The user is now visible to other services: core and chat get the
+		// profile copy (ADR-0009). Written last, see outbox.Write.
+		profile := userevents.Profile{DisplayName: name}
+		if profile.DisplayName == "" {
+			profile.DisplayName = u.DisplayName.String
+		}
+		if u.AvatarUploadID.Valid {
+			profile.AvatarUploadID = id.ID(u.AvatarUploadID.Bytes).String()
+		}
+		return userevents.ProfileUpdated(ctx, tx, user, profile)
 	})
 	if err != nil {
 		return err

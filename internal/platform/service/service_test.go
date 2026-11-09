@@ -195,3 +195,52 @@ func TestRunServesGRPCHealthAndDrains(t *testing.T) {
 		t.Fatal("Run did not stop")
 	}
 }
+
+func TestRunStartsAndStopsWorkers(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	started := make(chan map[string]string, 1)
+	running := make(chan struct{})
+	stopped := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(ctx, "deneme", lookup(map[string]string{"OPS_ADDR": "127.0.0.1:0"}), io.Discard, func(rt *Runtime) error {
+			rt.AddWorker("iş", func(ctx context.Context) error {
+				close(running)
+				<-ctx.Done()
+				close(stopped)
+				return nil
+			})
+			return nil
+		}, started)
+	}()
+	<-started
+	select {
+	case <-running:
+	case <-time.After(5 * time.Second):
+		t.Fatal("iş başlamadı")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run durmadı")
+	}
+	select {
+	case <-stopped:
+	default:
+		t.Fatal("iş durdurulmadan Run döndü")
+	}
+}
+
+func TestRunStopsWhenWorkerFails(t *testing.T) {
+	err := Run(context.Background(), "deneme", lookup(map[string]string{"OPS_ADDR": "127.0.0.1:0"}), io.Discard, func(rt *Runtime) error {
+		rt.AddWorker("iş", func(context.Context) error { return errors.New("bozuldu") })
+		return nil
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "bozuldu") {
+		t.Fatalf("err = %v", err)
+	}
+}

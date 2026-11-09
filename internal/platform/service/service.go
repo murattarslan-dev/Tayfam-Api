@@ -45,8 +45,22 @@ type Runtime struct {
 	Health *health.Health
 
 	servers []*namedServer
+	workers []namedWorker
 	onStart []func()
 	onDrain []func()
+}
+
+// namedWorker is a background job, such as the outbox relay.
+type namedWorker struct {
+	name string
+	run  func(context.Context) error
+}
+
+// AddWorker registers a background job that starts once the servers listen
+// and whose context is cancelled when the service starts draining. run must
+// return when its context is done; an error before that stops the service.
+func (rt *Runtime) AddWorker(name string, run func(ctx context.Context) error) {
+	rt.workers = append(rt.workers, namedWorker{name: name, run: run})
 }
 
 // namedServer is any server the runtime starts and stops: HTTP or gRPC.
@@ -184,7 +198,7 @@ func Run(ctx context.Context, name string, lookup func(string) (string, bool), o
 		s.ln = ln
 	}
 
-	errCh := make(chan error, len(rt.servers))
+	errCh := make(chan error, len(rt.servers)+len(rt.workers))
 	var wg sync.WaitGroup
 	addrs := make(map[string]string, len(rt.servers))
 	for _, s := range rt.servers {
@@ -196,6 +210,16 @@ func Run(ctx context.Context, name string, lookup func(string) (string, bool), o
 				errCh <- fmt.Errorf("%s sunucusu durdu: %w", s.name, err)
 			}
 		}()
+	}
+	workerCtx, stopWorkers := context.WithCancel(ctx)
+	defer stopWorkers()
+	var workers sync.WaitGroup
+	for _, w := range rt.workers {
+		workers.Go(func() {
+			if err := w.run(workerCtx); err != nil && workerCtx.Err() == nil {
+				errCh <- fmt.Errorf("%s işi durdu: %w", w.name, err)
+			}
+		})
 	}
 	for _, f := range rt.onStart {
 		f()
@@ -213,7 +237,10 @@ func Run(ctx context.Context, name string, lookup func(string) (string, bool), o
 		log.Error("sunucu hatası", slog.String("hata", runErr.Error()))
 	}
 
-	// Fail readiness first so traffic drains, then stop the servers.
+	// Background jobs stop first; they finish their current step.
+	stopWorkers()
+	workers.Wait()
+	// Fail readiness so traffic drains, then stop the servers.
 	rt.Health.SetDraining()
 	for _, f := range rt.onDrain {
 		f()

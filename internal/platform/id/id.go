@@ -4,6 +4,7 @@
 package id
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
@@ -62,4 +63,30 @@ func Parse(s string) (ID, bool) {
 		return ID{}, false
 	}
 	return u, true
+}
+
+// After returns a new UUIDv7 that sorts after prev. It is New when the clock
+// has moved past prev; otherwise (same millisecond, or a clock that went
+// back) it is prev with its random bits incremented by one. The outbox uses
+// it so that event IDs follow commit order (ADR-0002).
+func After(prev ID) ID {
+	u := New()
+	if bytes.Compare(u[:], prev[:]) > 0 {
+		return u
+	}
+	u = prev
+	// Bytes 9..15 are random; byte 8 has 6 random bits under the variant.
+	for i := 15; i >= 9; i-- {
+		u[i]++
+		if u[i] != 0 {
+			return u
+		}
+	}
+	if u[8]&0x3f != 0x3f {
+		u[8]++
+		return u
+	}
+	// Every random bit is set: move to the next millisecond.
+	ms := uint64(prev[0])<<40 | uint64(prev[1])<<32 | uint64(prev[2])<<24 | uint64(prev[3])<<16 | uint64(prev[4])<<8 | uint64(prev[5])
+	return newAt(time.UnixMilli(int64(ms + 1))) // #nosec G115 -- 48-bit value
 }
