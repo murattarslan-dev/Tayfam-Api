@@ -46,11 +46,24 @@ type AccessCache interface {
 	ForgetTayfa(tayfa id.ID)
 }
 
+// Live is the real-time layer (realtime.Live, issue #82): after the cache
+// is cleared it checks the affected subscriptions again with each
+// connection's own token, and tells connected recipients about new
+// notifications. Methods must not block.
+type Live interface {
+	MembershipChanged(tayfa, user id.ID)
+	TayfaChanged(tayfa id.ID)
+	TayfaPurged(tayfa id.ID)
+	Notified(r notification.Request)
+}
+
 // Config wires a Service.
 type Config struct {
 	Pool *pgxpool.Pool
 	// Access is cleared by membership and tayfa state changes; optional.
 	Access AccessCache
+	// Live hears about changes for connected clients; optional.
+	Live Live
 }
 
 // Service applies core events.
@@ -83,13 +96,22 @@ func (s *Service) Apply(ctx context.Context, e Event) error {
 		// A notification checks its tayfa by type (Request.Validate).
 		return apperr.Validation("tayfa_id")
 	}
-	// Cache clearing is idempotent and needs no transaction.
+	// Cache clearing is idempotent and needs no transaction. The live
+	// rechecks come after it, so they ask core afresh.
 	if e.MemberChanged != (id.ID{}) || e.StatusChanged || e.Purged {
 		if s.cfg.Access != nil {
 			if e.MemberChanged != (id.ID{}) {
 				s.cfg.Access.Forget(e.Tayfa, e.MemberChanged)
 			} else {
 				s.cfg.Access.ForgetTayfa(e.Tayfa)
+			}
+		}
+		if s.cfg.Live != nil {
+			switch {
+			case e.MemberChanged != (id.ID{}):
+				s.cfg.Live.MembershipChanged(e.Tayfa, e.MemberChanged)
+			case e.StatusChanged:
+				s.cfg.Live.TayfaChanged(e.Tayfa)
 			}
 		}
 		if !e.Purged {
@@ -102,15 +124,27 @@ func (s *Service) Apply(ctx context.Context, e Event) error {
 		if err := r.Validate(); err != nil {
 			return err
 		}
-		return pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
+		if err := pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
 			return notification.Store(ctx, store.New(tx), r)
-		})
+		}); err != nil {
+			return err
+		}
+		if s.cfg.Live != nil {
+			s.cfg.Live.Notified(r)
+		}
+		return nil
 	}
-	return pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
+	if err := pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
 		q := store.New(tx)
 		if err := notification.PurgeTayfa(ctx, q, e.Tayfa); err != nil {
 			return err
 		}
 		return channel.PurgeTayfa(ctx, q, e.Tayfa)
-	})
+	}); err != nil {
+		return err
+	}
+	if s.cfg.Live != nil {
+		s.cfg.Live.TayfaPurged(e.Tayfa)
+	}
+	return nil
 }

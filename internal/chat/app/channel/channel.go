@@ -90,8 +90,35 @@ type Config struct {
 	// Cipher encrypts message bodies. nil turns the user methods off
 	// (apperr.ErrChannelsUnavailable); only local and dev may run so.
 	Cipher *channelcrypt.Cipher
-	Now    func() time.Time // optional, for tests
+	// Publisher hears about committed changes for live delivery
+	// (WebSocket, issue #82); optional.
+	Publisher Publisher
+	Now       func() time.Time // optional, for tests
 }
+
+// Publisher is told about changes after they are committed, so that
+// connected clients get them at once (ADR-0005 "Mesaj protokolü": the
+// WebSocket carries live delivery only). Methods must not block.
+type Publisher interface {
+	// MessageCreated: a new message (not a retry of an existing one). m
+	// carries the plain body; it goes only to the channel's subscribers.
+	MessageCreated(tayfa id.ID, m Message)
+	// MessageDeleted: a message was erased or hidden.
+	MessageDeleted(tayfa, channel, message id.ID)
+	// MessageRestored: a hidden message is visible again; m carries the body.
+	MessageRestored(tayfa id.ID, m Message)
+	// ChannelChanged: who may see the channel may have changed
+	// (visibility), so subscriptions must be checked again.
+	ChannelChanged(tayfa, channel id.ID)
+}
+
+// nopPublisher is used when none is configured.
+type nopPublisher struct{}
+
+func (nopPublisher) MessageCreated(id.ID, Message)      {}
+func (nopPublisher) MessageDeleted(id.ID, id.ID, id.ID) {}
+func (nopPublisher) MessageRestored(id.ID, Message)     {}
+func (nopPublisher) ChannelChanged(id.ID, id.ID)        {}
 
 // Service implements ChannelService's business logic.
 type Service struct {
@@ -107,6 +134,9 @@ func New(cfg Config) (*Service, error) {
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
+	}
+	if cfg.Publisher == nil {
+		cfg.Publisher = nopPublisher{}
 	}
 	return &Service{cfg: cfg, slow: newSlowMode()}, nil
 }
@@ -388,7 +418,10 @@ func (s *Service) Update(ctx context.Context, caller, tayfa, channel id.ID, in C
 	if err := authorize(m, ActionManage); err != nil {
 		return Channel{}, err
 	}
-	var c Channel
+	var (
+		c          Channel
+		visibility bool
+	)
 	err = pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
 		q := store.New(tx)
 		row, err := s.loadChannel(ctx, q, m, tayfa, channel, true)
@@ -417,10 +450,14 @@ func (s *Service) Update(ctx context.Context, caller, tayfa, channel id.ID, in C
 			return nameErr(err)
 		}
 		c = channelView(chanRow(r))
+		visibility = next.Visibility != row.Visibility
 		return record(ctx, tx, EventChannelUpdated, caller, "channel", channel, map[string]any{"tayfa_id": tayfa.String(), "change": "edited"})
 	})
 	if err != nil {
 		return Channel{}, err
+	}
+	if visibility {
+		s.cfg.Publisher.ChannelChanged(tayfa, channel)
 	}
 	return c, nil
 }

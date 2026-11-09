@@ -66,7 +66,6 @@ enum ErrorReason {
   // higher one (core's role hierarchy).
   ERROR_REASON_ROLE_HIERARCHY = 12;
 
-  // RESOURCE_EXHAUSTED. The caller already has as many unused real-time
-  // tickets as allowed; they expire within 30 seconds.
-  ERROR_REASON_TICKET_LIMIT = 13;
+  // Deprecated: real-time tickets are gone (RealtimeService); never sent.
+  ERROR_REASON_TICKET_LIMIT = 13 [deprecated = true];
 }

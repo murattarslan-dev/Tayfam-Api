@@ -108,7 +108,34 @@ func (f *fakeMembers) set(tayfa, user id.ID, m Member) {
 	f.m[[2]id.ID{tayfa, user}] = m
 }
 
+// recPub records what Service publishes.
+type recPub struct {
+	mu     sync.Mutex
+	events []string
+	bodies []string
+}
+
+func (r *recPub) add(ev, body string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.events = append(r.events, ev)
+	r.bodies = append(r.bodies, body)
+}
+
+func (r *recPub) MessageCreated(_ id.ID, m Message)  { r.add("created:"+m.ID.String(), m.Body) }
+func (r *recPub) MessageDeleted(_, _, m id.ID)       { r.add("deleted:"+m.String(), "") }
+func (r *recPub) MessageRestored(_ id.ID, m Message) { r.add("restored:"+m.ID.String(), m.Body) }
+func (r *recPub) ChannelChanged(_, ch id.ID)         { r.add("channel:"+ch.String(), "") }
+func (r *recPub) take() ([]string, []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ev, b := r.events, r.bodies
+	r.events, r.bodies = nil, nil
+	return ev, b
+}
+
 type env struct {
+	pub     *recPub
 	pool    *pgxpool.Pool
 	svc     *Service
 	members *fakeMembers
@@ -126,7 +153,7 @@ func setup(t *testing.T) *env {
 	pool := dbtest.New(t, chatdb.Migrations())
 	e := &env{
 		pool: pool, members: &fakeMembers{m: map[[2]id.ID]Member{}, readOnly: map[id.ID]bool{}}, logs: &bytes.Buffer{},
-		tayfa: id.New(), admin: id.New(), mod: id.New(), member: id.New(), other: id.New(),
+		tayfa: id.New(), admin: id.New(), mod: id.New(), member: id.New(), other: id.New(), pub: &recPub{},
 	}
 	e.members.set(e.tayfa, e.admin, Member{Active: true, Role: RoleAdmin})
 	e.members.set(e.tayfa, e.mod, Member{Active: true, Role: RoleModerator})
@@ -134,7 +161,7 @@ func setup(t *testing.T) *env {
 	e.members.set(e.tayfa, e.other, Member{Active: true, Role: RoleMember})
 	svc, err := New(Config{
 		Pool: pool, Log: slog.New(slog.NewJSONHandler(e.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		Access: e.members, Cipher: channelcrypt.Ephemeral(),
+		Access: e.members, Cipher: channelcrypt.Ephemeral(), Publisher: e.pub,
 		Now: func() time.Time { return time.Now().Add(e.shift) },
 	})
 	must(t, err)
@@ -699,5 +726,53 @@ func TestSlowModeLimiter(t *testing.T) {
 	undo()
 	if _, undo := s.take(ch, u2, now.Add(time.Second), 10*time.Second); undo == nil {
 		t.Fatal("geri verilen hak kullanılamadı")
+	}
+}
+
+// Committed changes reach the publisher once each, after the transaction;
+// refused or repeated operations publish nothing (issue #82).
+func TestPublisher(t *testing.T) {
+	e := setup(t)
+	c := e.channel(t, ChannelInput{Name: "genel"})
+	e.pub.take()
+
+	req := id.New()
+	m, err := e.svc.Send(ctx, e.member, e.tayfa, c.ID, SendInput{Body: "selam", ClientRequestID: req})
+	must(t, err)
+	_, err = e.svc.Send(ctx, e.member, e.tayfa, c.ID, SendInput{Body: "selam", ClientRequestID: req}) // retry
+	must(t, err)
+	e.members.set(e.tayfa, e.other, Member{Active: true, Role: RoleMember, MutedUntil: time.Now().Add(time.Hour)})
+	_, err = e.svc.Send(ctx, e.other, e.tayfa, c.ID, SendInput{Body: "x", ClientRequestID: id.New()})
+	is(t, err, apperr.ErrMuted)
+	ev, bodies := e.pub.take()
+	if len(ev) != 1 || ev[0] != "created:"+m.ID.String() || bodies[0] != "selam" {
+		t.Fatalf("gönderim yayını: %v", ev)
+	}
+
+	must(t, e.svc.Delete(ctx, e.mod, e.tayfa, c.ID, m.ID))
+	must(t, e.svc.Delete(ctx, e.mod, e.tayfa, c.ID, m.ID)) // already hidden
+	_, err = e.svc.Restore(ctx, e.admin, e.tayfa, c.ID, m.ID)
+	must(t, err)
+	_, err = e.svc.Restore(ctx, e.admin, e.tayfa, c.ID, m.ID) // already visible
+	must(t, err)
+	ev, bodies = e.pub.take()
+	if len(ev) != 2 || ev[0] != "deleted:"+m.ID.String() || ev[1] != "restored:"+m.ID.String() || bodies[1] != "selam" {
+		t.Fatalf("silme/geri alma yayını: %v", ev)
+	}
+
+	// Only a visibility change can change who may follow the channel.
+	name := "duyurular"
+	_, err = e.svc.Update(ctx, e.mod, e.tayfa, c.ID, ChannelUpdate{Name: &name})
+	must(t, err)
+	if ev, _ := e.pub.take(); len(ev) != 0 {
+		t.Fatalf("ad değişikliği yayını: %v", ev)
+	}
+	staff := VisibilityStaff
+	_, err = e.svc.Update(ctx, e.mod, e.tayfa, c.ID, ChannelUpdate{Visibility: &staff})
+	must(t, err)
+	_, err = e.svc.Update(ctx, e.mod, e.tayfa, c.ID, ChannelUpdate{Visibility: &staff}) // no change
+	must(t, err)
+	if ev, _ := e.pub.take(); len(ev) != 1 || ev[0] != "channel:"+c.ID.String() {
+		t.Fatalf("görünürlük yayını: %v", ev)
 	}
 }

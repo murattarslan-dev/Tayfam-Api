@@ -8,6 +8,9 @@
   - Notion'daki proje planı ve veri modeli v13 ile hizalandı: kanal mesajları
     şifreli saklanır, moderatör silmesi 30 gün geri alınabilir, E2E protokolü
     Signal'dir, birebir mesaj izin kuralları ve bildirim merkezi eklendi.
+- **Revizyon:** 2026-11-09: "Bağlantı" bölümü
+  [ADR-0014](0014-websocket-erisim-tokeniyla.md) ile değişti (bilet yerine
+  erişim token'ı).
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md)
 
@@ -33,11 +36,18 @@ görünür.
 
 ### Bağlantı
 
-- İstemci, `POST /realtime/ticket` ile bilet alır (ADR-0004). Bilet **chat
-  tarafından üretilir** ve Postgres'te kısa ömürlü, tek kullanımlık olarak
-  saklanır.
-- WebSocket bağlantısı `GET /realtime?ticket=...` ile açılır. gateway bu yolu
-  olduğu gibi chat'e aktarır (reverse proxy); bileti chat doğrular.
+> 2026-11-09: bilet kaldırıldı, bağlantı kullanıcının erişim token'ıyla
+> açılır ([ADR-0014](0014-websocket-erisim-tokeniyla.md)).
+
+- WebSocket bağlantısı `GET /v1/realtime` ile, kullanıcının erişim token'ıyla
+  açılır: mobilde `Authorization: Bearer` başlığı, web'de `tayfam_at` çerezi;
+  token URL'de taşınmaz. gateway Origin'i ve token'ı doğrular, isteği chat'e
+  aktarır (reverse proxy) ve token'ı `Authorization` başlığıyla iletir (çerezi
+  değil); chat token'ı kendisi yeniden doğrular.
+- Token yalnızca bağlantının belleğinde tutulur. Abonelikte, gönderimde ve
+  üyelik değişince yeniden denetimde core'a bu token'la sorulur.
+- Bağlantı en geç token'ın süresi dolunca kapanır (4003); istemci token'ı
+  yenileyip yeniden bağlanır.
 - Bağlantı mantığı tamamen chat'tedir. WebSocket kütüphanesi olarak
   `github.com/coder/websocket` kullanılır.
 - Sunucu 30 saniyede bir ping gönderir; yanıt vermeyen bağlantı kapatılır.
@@ -182,7 +192,7 @@ arşivlerine kendi anahtarlarıyla yazar.
 
 - Canlı iletimi WebSocket'e, geçmişi ve senkronizasyonu REST'e bırakmak, kopan
   bağlantılarda mesaj kaybını önler ve WebSocket katmanını basit tutar.
-- Biletin chat'te olması gateway'i durumsuz bırakır.
+- Bağlantının chat'te olması gateway'i durumsuz bırakır.
 - Postgres LISTEN/NOTIFY, birkaç kopyaya kadar ek bileşen olmadan ölçeklenmeyi
   sağlar.
 - Canlı zarflar ile geçmiş arşivinin ayrılması, eşleştirme yapılmamış bir
@@ -191,7 +201,7 @@ arşivlerine kendi anahtarlarıyla yazar.
 
 ## Sonuçlar
 
-- chat servisi bağlantı yönetimi, bilet, kanal mesajları, DM zarfları ve
+- chat servisi bağlantı yönetimi, kanal mesajları, DM zarfları ve
   arşivi, cihaz anahtarları ve bildirim merkezini içerir; servislerin en
   karmaşığıdır.
 - Uygulama sırası (Notion faz planı): önce kanallar ve düz birebir mesaj

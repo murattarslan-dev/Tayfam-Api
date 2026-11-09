@@ -40,7 +40,7 @@ type Event struct {
 }
 
 // Sessions ends sessions in chat's real-time layer
-// (realtime.Sessions): their connections close and their tickets go.
+// (realtime.Hub): their connections close.
 type Sessions interface {
 	EndSession(ctx context.Context, session id.ID) error
 	EndUser(ctx context.Context, user id.ID) error

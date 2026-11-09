@@ -229,3 +229,64 @@ func TestStateChangesClearCache(t *testing.T) {
 		}
 	}
 }
+
+// fakeLive records what reaches the real-time layer, and whether the cache
+// had been cleared by then.
+type fakeLive struct {
+	cache  *fakeCache
+	calls  []string
+	notice []notification.Request
+}
+
+func (f *fakeLive) MembershipChanged(tayfa, user id.ID) {
+	f.calls = append(f.calls, "member")
+	if len(f.cache.forgot) == 0 {
+		f.calls = append(f.calls, "ÖNBELLEK TEMİZLENMEDEN")
+	}
+}
+func (f *fakeLive) TayfaChanged(id.ID) { f.calls = append(f.calls, "tayfa") }
+func (f *fakeLive) TayfaPurged(id.ID)  { f.calls = append(f.calls, "purged") }
+func (f *fakeLive) Notified(r notification.Request) {
+	f.calls = append(f.calls, "notified")
+	f.notice = append(f.notice, r)
+}
+
+// Membership and tayfa changes reach the live layer after the cache is
+// cleared, so its rechecks ask core afresh; notifications after they are
+// stored (issue #82).
+func TestLiveHearsChanges(t *testing.T) {
+	pool := dbtest.New(t, chatdb.Migrations())
+	cache := &fakeCache{}
+	live := &fakeLive{cache: cache}
+	svc, err := New(Config{Pool: pool, Access: cache, Live: live})
+	must(t, err)
+	tf, u, actor := id.New(), id.New(), id.New()
+	must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, MemberChanged: u}))
+	must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, StatusChanged: true}))
+	must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, Purged: true}))
+	e := announcement(tf, actor, u)
+	must(t, svc.Apply(ctx, e))
+	want := []string{"member", "tayfa", "purged", "notified"}
+	if len(live.calls) != len(want) {
+		t.Fatalf("canlı katman = %v", live.calls)
+	}
+	for i := range want {
+		if live.calls[i] != want[i] {
+			t.Fatalf("canlı katman = %v", live.calls)
+		}
+	}
+	if r := live.notice[0]; r.Event != e.ID || r.Tayfa != tf || len(r.Recipients) != 1 || r.Recipients[0] != u {
+		t.Fatalf("bildirim = %+v", r)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM notifications WHERE source_event_id = $1`, e.ID.PG()); n != 1 {
+		t.Fatal("bildirim yazılmadan iletildi")
+	}
+	// An invalid notification reaches nobody.
+	bad := announcement(tf, actor)
+	if err := svc.Apply(ctx, bad); err == nil {
+		t.Fatal("alıcısız bildirim kabul edildi")
+	}
+	if len(live.calls) != len(want) {
+		t.Fatalf("geçersiz olay iletildi: %v", live.calls)
+	}
+}

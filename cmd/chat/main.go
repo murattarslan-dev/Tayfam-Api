@@ -47,14 +47,13 @@ func setup(rt *service.Runtime) error {
 	// issue #81). prod'da zorunludur. local ve dev anahtarsız açılabilir:
 	// o zaman kanal metodları UNAVAILABLE döner, mesaj yazılmaz.
 	messageKeys := c.String("CHAT_MESSAGE_KEYS", "")
-	// WebSocket (issue #82): gateway GET /v1/realtime'ı bu porta olduğu gibi
-	// aktarır. İzinli web origin'leri gateway'in CORS listesiyle aynıdır
-	// (tayfam-env). Bağlantılar bellektedir; chat tek kopya çalışır
-	// (ADR-0005 "Ölçekleme").
+	// WebSocket (issue #82): gateway GET /v1/realtime'ı kullanıcının erişim
+	// token'ıyla bu porta aktarır; chat token'ı yeniden doğrular. İzinli web
+	// origin'leri gateway'in CORS listesiyle aynıdır (tayfam-env).
+	// Bağlantılar bellektedir; chat tek kopya çalışır (ADR-0005 "Ölçekleme").
 	httpAddr := c.String("HTTP_ADDR", ":8080")
 	origins := splitList(c.String("CORS_ALLOWED_ORIGINS", "https://tayfam.app"))
 	maxConns := c.Int("REALTIME_MAX_CONNECTIONS", 2000)
-	maxLifetime := c.Duration("REALTIME_MAX_LIFETIME", ws.DefaultMaxLifetime)
 	if err := c.Err(); err != nil {
 		return err
 	}
@@ -81,12 +80,12 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 
-	// Açık bağlantılar ve kapatılmış oturumlar (issue #82).
-	hub, err := realtime.NewHub(realtime.HubConfig{MaxTotal: maxConns, MaxPerUser: 5})
+	// Açık bağlantılar, abonelikler ve kapatılmış oturumlar (issue #82).
+	hub, err := realtime.NewHub(realtime.HubConfig{MaxTotal: maxConns, MaxPerUser: 5, MaxSubscriptions: 100})
 	if err != nil {
 		return err
 	}
-	tickets, err := realtime.NewTickets(realtime.TicketsConfig{Pool: pool, Log: rt.Log, Ended: hub})
+	live, err := realtime.NewLive(realtime.LiveConfig{Hub: hub, Log: rt.Log})
 	if err != nil {
 		return err
 	}
@@ -96,8 +95,8 @@ func setup(rt *service.Runtime) error {
 	// Oturum iptali, yaptırım ve silme açık bağlantıları kapatır (ADR-0004).
 	userEvents, err := userevents.New(userevents.Config{
 		Pool:     pool,
-		Cleanups: []userevents.Cleanup{notification.Cleanup, channel.Cleanup, realtime.Cleanup},
-		Sessions: realtime.Sessions{Pool: pool, Hub: hub},
+		Cleanups: []userevents.Cleanup{notification.Cleanup, channel.Cleanup},
+		Sessions: hub,
 	})
 	if err != nil {
 		return err
@@ -144,14 +143,18 @@ func setup(rt *service.Runtime) error {
 	// durum olayları önbelleği hemen temizler, kaçan bir olay en geç bu
 	// sürede telafi edilir.
 	channelAccess := coremembers.NewChannelAccess(corev1.NewChannelAccessServiceClient(coreConn), channelAccessTTL)
-	channels, err := channel.New(channel.Config{Pool: pool, Log: rt.Log, Access: channelAccess, Cipher: cipher})
+	// Kaydedilen değişiklikler abonelere canlı iletilir (ADR-0005).
+	channels, err := channel.New(channel.Config{Pool: pool, Log: rt.Log, Access: channelAccess, Cipher: cipher, Publisher: live})
 	if err != nil {
 		return err
 	}
+	live.Bind(channels)
 	// Bildirimlerin alıcılarını core seçer (ADR-0009); chat kaydı yazar.
 	// Üyelik ve tayfa durumu olayları yalnızca kanal izni önbelleğini
 	// temizler; chat üyelik kopyası tutmaz.
-	coreEvents, err := coreevents.New(coreevents.Config{Pool: pool, Access: channelAccess})
+	// Üyelik değişince açık abonelikler bağlantının kendi token'ıyla core'a
+	// yeniden sorulur; yeni bildirimler bağlı alıcılara iletilir.
+	coreEvents, err := coreevents.New(coreevents.Config{Pool: pool, Access: channelAccess, Live: live})
 	if err != nil {
 		return err
 	}
@@ -161,14 +164,12 @@ func setup(rt *service.Runtime) error {
 	chatv1.RegisterCoreEventServiceServer(srv, grpcapi.NewCoreEventServer(coreEvents, rt.Log))
 	chatv1.RegisterNotificationServiceServer(srv, grpcapi.NewNotificationServer(notifications, rt.Log))
 	chatv1.RegisterChannelServiceServer(srv, grpcapi.NewChannelServer(channels, rt.Log))
-	chatv1.RegisterRealtimeServiceServer(srv, grpcapi.NewRealtimeServer(tickets, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
 
 	wsHandler, err := ws.New(ws.Config{
-		Tickets: tickets, Hub: hub, Log: rt.Log, AllowedOrigins: origins,
+		Verifier: v, Hub: hub, Live: live, Log: rt.Log, AllowedOrigins: origins,
 		// Kullanıcı başına gelen çerçeve sınırı (ADR-0005 "gönderim hızı").
-		Frames:      ratelimit.New(60, 20),
-		MaxLifetime: maxLifetime,
+		Frames: ratelimit.New(60, 20),
 	})
 	if err != nil {
 		return err
@@ -176,9 +177,10 @@ func setup(rt *service.Runtime) error {
 	mux := http.NewServeMux()
 	wsHandler.Register(mux)
 	rt.AddHTTPServer("http", httpAddr, mux)
-	// Kapanışta bağlantılara 1001 gönderilir; süresi dolan biletler silinir.
+	// Kapanışta bağlantılara 1001 gönderilir; abonelikler üyelik değişince
+	// yeniden denetlenir.
 	rt.AddWorker("realtime-hub", hub.Run)
-	rt.AddWorker("realtime-ticket-purge", tickets.RunPurge)
+	rt.AddWorker("realtime-recheck", live.Run)
 	// 90 günden eski bildirimler (v14 "Saklama süreleri").
 	rt.AddWorker("notification-retention", notifications.RunRetention)
 	// Silinmiş kanal mesajları 30 gün sonra kalıcı silinir (v14).

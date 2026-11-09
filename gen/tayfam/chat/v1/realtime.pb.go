@@ -120,9 +120,9 @@ const file_tayfam_chat_v1_realtime_proto_rawDesc = "" +
 	"\x1cCreateRealtimeTicketResponse\x12\x16\n" +
 	"\x06ticket\x18\x01 \x01(\tR\x06ticket\x12;\n" +
 	"\vexpire_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTime2\x84\x01\n" +
-	"\x0fRealtimeService\x12q\n" +
-	"\x14CreateRealtimeTicket\x12+.tayfam.chat.v1.CreateRealtimeTicketRequest\x1a,.tayfam.chat.v1.CreateRealtimeTicketResponseB\xbf\x01\n" +
+	"expireTime2\x8e\x01\n" +
+	"\x0fRealtimeService\x12v\n" +
+	"\x14CreateRealtimeTicket\x12+.tayfam.chat.v1.CreateRealtimeTicketRequest\x1a,.tayfam.chat.v1.CreateRealtimeTicketResponse\"\x03\x88\x02\x01\x1a\x03\x88\x02\x01B\xbf\x01\n" +
 	"\x12com.tayfam.chat.v1B\rRealtimeProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1;chatv1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Chat.V1\xca\x02\x0eTayfam\\Chat\\V1\xe2\x02\x1aTayfam\\Chat\\V1\\GPBMetadata\xea\x02\x10Tayfam::Chat::V1b\x06proto3"
 
 var (

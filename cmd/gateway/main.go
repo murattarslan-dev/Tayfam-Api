@@ -127,7 +127,6 @@ func setup(rt *service.Runtime) error {
 		deps.Chat = rest.ChatDeps{
 			Notifications: chatv1.NewNotificationServiceClient(conn),
 			Channels:      chatv1.NewChannelServiceClient(conn),
-			Realtime:      chatv1.NewRealtimeServiceClient(conn),
 			RealtimeURL:   realtimeURL,
 			Verifier:      v,
 			Log:           rt.Log,

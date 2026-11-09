@@ -117,6 +117,7 @@ func (s *Service) Send(ctx context.Context, caller, tayfa, channel id.ID, in Sen
 	}
 	// The caller wrote it: return the body without decrypting it again.
 	msg := Message{ID: msgID, ChannelID: channel, AuthorID: caller, Body: in.Body, CreatedAt: row.CreatedAt.Time.UTC()}
+	s.cfg.Publisher.MessageCreated(tayfa, msg)
 	return msg, nil
 }
 
@@ -241,7 +242,8 @@ func (s *Service) Delete(ctx context.Context, caller, tayfa, channel, message id
 		return err
 	}
 	now := s.now()
-	return pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
+	changed := false
+	err = pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
 		q := store.New(tx)
 		r, err := q.GetMessageForUpdate(ctx, store.GetMessageForUpdateParams{ChannelID: channel.PG(), ID: message.PG()})
 		switch {
@@ -268,10 +270,18 @@ func (s *Service) Delete(ctx context.Context, caller, tayfa, channel, message id
 		if n != 1 {
 			return apperr.ErrMessageNotFound
 		}
+		changed = true
 		return record(ctx, tx, EventMessageDeleted, caller, "channel_message", message, map[string]any{
 			"tayfa_id": tayfa.String(), "channel_id": channel.String(), "restorable": !own,
 		})
 	})
+	if err != nil {
+		return err
+	}
+	if changed {
+		s.cfg.Publisher.MessageDeleted(tayfa, channel, message)
+	}
+	return nil
 }
 
 // findMessage loads a message of a channel the caller may see.
@@ -333,7 +343,10 @@ func (s *Service) Restore(ctx context.Context, caller, tayfa, channel, message i
 	if err := s.onAuthor(ctx, caller, tayfa, ActionRestore, row); err != nil {
 		return Message{}, err
 	}
-	var msg Message
+	var (
+		msg      Message
+		restored bool
+	)
 	err = pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
 		q := store.New(tx)
 		r, err := q.GetMessageForUpdate(ctx, store.GetMessageForUpdateParams{ChannelID: channel.PG(), ID: message.PG()})
@@ -363,12 +376,16 @@ func (s *Service) Restore(ctx context.Context, caller, tayfa, channel, message i
 		if msg, err = s.view(locked, m, now); err != nil {
 			return err
 		}
+		restored = true
 		return record(ctx, tx, EventMessageRestored, caller, "channel_message", message, map[string]any{
 			"tayfa_id": tayfa.String(), "channel_id": channel.String(), "deleted_by": deletedBy,
 		})
 	})
 	if err != nil {
 		return Message{}, err
+	}
+	if restored {
+		s.cfg.Publisher.MessageRestored(tayfa, msg)
 	}
 	return msg, nil
 }

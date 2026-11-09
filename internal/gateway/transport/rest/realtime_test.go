@@ -13,46 +13,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
-	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
 )
-
-// testTicket has the shape of a chat ticket (32 bytes, base64url).
-const testTicket = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-
-func (f *fakeChat) CreateRealtimeTicket(ctx context.Context, in *chatv1.CreateRealtimeTicketRequest, _ ...grpc.CallOption) (*chatv1.CreateRealtimeTicketResponse, error) {
-	return &chatv1.CreateRealtimeTicketResponse{Ticket: testTicket, ExpireTime: timestamppb.New(t0)}, f.record(ctx, in)
-}
-
-func TestRealtimeTicket(t *testing.T) {
-	f := &fakeChat{}
-	h := chatRouter(f)
-	w := as(h, "POST", "/v1/realtime/ticket", "")
-	got, tok, _ := f.last()
-	if w.Code != http.StatusCreated || !proto.Equal(got, &chatv1.CreateRealtimeTicketRequest{}) || tok != "USERTOKEN" {
-		t.Fatalf("%d %s; chat'e giden %v", w.Code, w.Body, got)
-	}
-	b := decodeBody[ticketJSON](t, w)
-	if b.Ticket != testTicket || !b.ExpiresAt.Equal(t0) || w.Header().Get("Cache-Control") != "no-store" {
-		t.Fatalf("gövde: %+v", b)
-	}
-	// Without a token nothing reaches chat.
-	_, _, before := f.last()
-	if w := do(h, "POST", "/v1/realtime/ticket", "", map[string]string{clientHeader: "web"}); w.Code != http.StatusUnauthorized {
-		t.Fatalf("token yok: %d", w.Code)
-	}
-	if _, _, after := f.last(); after != before {
-		t.Fatal("token olmadan chat çağrıldı")
-	}
-	f.err = chatErr(codes.ResourceExhausted, "ERROR_REASON_TICKET_LIMIT")
-	if w := as(h, "POST", "/v1/realtime/ticket", ""); w.Code != http.StatusTooManyRequests || problemType(t, w) != "rate-limited" {
-		t.Fatalf("sınır: %d %s", w.Code, w.Body)
-	}
-}
 
 // fakeRealtime is chat's WebSocket port: it records the handshake request
 // and sends one frame.
@@ -97,64 +58,101 @@ func wsURL(base, query string) string {
 	return "ws" + strings.TrimPrefix(base, "http") + "/v1/realtime" + query
 }
 
-func TestRealtimeProxiesUpgradeWithoutCredentials(t *testing.T) {
-	up := &fakeRealtime{}
-	gw := realtimeRouter(t, up)
+func dialRealtime(t *testing.T, gw *httptest.Server, query string, hdr http.Header) (*websocket.Conn, int, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+	c, resp, err := websocket.Dial(ctx, wsURL(gw.URL, query), &websocket.DialOptions{HTTPHeader: hdr})
+	code := 0
+	if resp != nil {
+		code = resp.StatusCode
+		if resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+	}
+	return c, code, err
+}
+
+func readReady(t *testing.T, c *websocket.Conn) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	if _, b, err := c.Read(ctx); err != nil || string(b) != `{"type":"ready"}` {
+		t.Fatalf("çerçeve: %q %v", b, err)
+	}
+}
+
+// Mobile: the token in the Authorization header reaches chat in the same
+// header; nothing else of the client's credentials does.
+func TestRealtimeMobileToken(t *testing.T) {
+	up := &fakeRealtime{}
+	gw := realtimeRouter(t, up)
 	hdr := http.Header{}
-	hdr.Set("Origin", "https://tayfam.app")
-	hdr.Set("Cookie", "tayfam_at=TOKEN")
-	hdr.Set("Authorization", "Bearer TOKEN")
-	c, resp, err := websocket.Dial(ctx, wsURL(gw.URL, "?ticket="+testTicket), &websocket.DialOptions{HTTPHeader: hdr})
+	hdr.Set("Authorization", "Bearer USERTOKEN")
+	hdr.Set("Cookie", "tayfam_at=BASKA; other=1")
+	c, _, err := dialRealtime(t, gw, "?ticket=eski", hdr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Body != nil {
-		_ = resp.Body.Close()
-	}
 	defer func() { _ = c.CloseNow() }()
-	_, b, err := c.Read(ctx)
-	if err != nil || string(b) != `{"type":"ready"}` {
-		t.Fatalf("çerçeve: %q %v", b, err)
-	}
+	readReady(t, c)
 	r := up.last()
-	if r.URL.Path != "/v1/realtime" || r.URL.Query().Get("ticket") != testTicket || r.Header.Get("Origin") != "https://tayfam.app" {
+	if r.URL.Path != "/v1/realtime" || r.URL.RawQuery != "" || r.Header.Get("Authorization") != "Bearer USERTOKEN" || r.Header.Get("Cookie") != "" {
 		t.Fatalf("chat'e giden istek: %s %v", r.URL, r.Header)
 	}
-	if r.Header.Get("Cookie") != "" || r.Header.Get("Authorization") != "" {
-		t.Fatalf("kimlik bilgisi chat'e iletildi: %v", r.Header)
+}
+
+// Web: the token comes from the cookie and goes on as a header; the cookie
+// itself does not reach chat.
+func TestRealtimeWebCookie(t *testing.T) {
+	up := &fakeRealtime{}
+	gw := realtimeRouter(t, up)
+	hdr := http.Header{}
+	hdr.Set("Origin", "https://tayfam.app")
+	hdr.Set("Cookie", "tayfam_at=USERTOKEN")
+	c, _, err := dialRealtime(t, gw, "", hdr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.CloseNow() }()
+	readReady(t, c)
+	r := up.last()
+	if r.Header.Get("Authorization") != "Bearer USERTOKEN" || r.Header.Get("Cookie") != "" || r.Header.Get("Origin") != "https://tayfam.app" {
+		t.Fatalf("chat'e giden başlıklar: %v", r.Header)
 	}
 }
 
 func TestRealtimeRefusesBeforeChat(t *testing.T) {
 	up := &fakeRealtime{}
 	gw := realtimeRouter(t, up)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	for name, tc := range map[string]struct {
-		origin, query string
-		code          int
-		problem       string
-	}{
-		"yabancı origin": {"https://kotu.example", "?ticket=" + testTicket, http.StatusForbidden, "forbidden-origin"},
-		"bilet yok":      {"", "", http.StatusUnauthorized, "invalid-ticket"},
-		"bilet kısa":     {"", "?ticket=abc", http.StatusUnauthorized, "invalid-ticket"},
-		"bilet biçimi":   {"", "?ticket=" + strings.Repeat("*", len(testTicket)), http.StatusUnauthorized, "invalid-ticket"},
-	} {
+	h := func(kv ...string) http.Header {
 		hdr := http.Header{}
-		if tc.origin != "" {
-			hdr.Set("Origin", tc.origin)
+		for i := 0; i+1 < len(kv); i += 2 {
+			hdr.Set(kv[i], kv[i+1])
 		}
-		_, resp, err := websocket.Dial(ctx, wsURL(gw.URL, tc.query), &websocket.DialOptions{HTTPHeader: hdr})
-		if err == nil || resp == nil || resp.StatusCode != tc.code {
-			t.Errorf("%s: %v %v", name, resp, err)
-			continue
+		return hdr
+	}
+	for name, tc := range map[string]struct {
+		hdr  http.Header
+		code int
+	}{
+		"yabancı origin":         {h("Origin", "https://kotu.example", "Authorization", "Bearer USERTOKEN"), http.StatusForbidden},
+		"çerezle origin'siz":     {h("Cookie", "tayfam_at=USERTOKEN"), http.StatusForbidden},
+		"çerezle yabancı origin": {h("Origin", "https://kotu.example", "Cookie", "tayfam_at=USERTOKEN"), http.StatusForbidden},
+		"token yok":              {h("Origin", "https://tayfam.app"), http.StatusUnauthorized},
+		"geçersiz token":         {h("Authorization", "Bearer BAD"), http.StatusUnauthorized},
+		"anahtar alınamadı":      {h("Authorization", "Bearer DOWN"), http.StatusServiceUnavailable},
+		"çok uzun token":         {h("Authorization", "Bearer "+strings.Repeat("a", maxAccessTokenBytes+1)), http.StatusUnauthorized},
+	} {
+		if _, code, err := dialRealtime(t, gw, "", tc.hdr); err == nil || code != tc.code {
+			t.Errorf("%s: %d %v", name, code, err)
 		}
-		_ = resp.Body.Close()
 	}
 	// A plain GET (no upgrade) is not passed on either.
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, gw.URL+"/v1/realtime?ticket="+testTicket, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, gw.URL+"/v1/realtime", nil)
+	req.Header.Set("Authorization", "Bearer USERTOKEN")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -173,11 +171,9 @@ func TestRealtimeChatDown(t *testing.T) {
 	d.RealtimeURL = &url.URL{Scheme: "http", Host: "127.0.0.1:1"}
 	gw := httptest.NewServer(NewRouter(Deps{Version: "test", Chat: d}))
 	defer gw.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	_, resp, err := websocket.Dial(ctx, wsURL(gw.URL, "?ticket="+testTicket), nil)
-	if err == nil || resp == nil || resp.StatusCode != http.StatusServiceUnavailable {
-		t.Fatalf("%v %v", resp, err)
+	hdr := http.Header{}
+	hdr.Set("Authorization", "Bearer USERTOKEN")
+	if _, code, err := dialRealtime(t, gw, "", hdr); err == nil || code != http.StatusServiceUnavailable {
+		t.Fatalf("%d %v", code, err)
 	}
-	_ = resp.Body.Close()
 }
