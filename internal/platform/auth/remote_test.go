@@ -27,7 +27,7 @@ func (f *fakeFetch) fetch(context.Context) ([]PublicKey, time.Duration, error) {
 func newRemote(t *testing.T, f *fakeFetch, now *time.Time) *RemoteKeys {
 	t.Helper()
 	r := NewRemoteKeys(f.fetch)
-	r.now = func() time.Time { return *now }
+	r.cache.now = func() time.Time { return *now }
 	return r
 }
 
@@ -116,10 +116,10 @@ func TestRemoteKeysDropsMalformedAndClampsTTL(t *testing.T) {
 	if _, err := r.PublicKey(ctx, "k1"); err != nil {
 		t.Fatal(err)
 	}
-	if len(r.keys) != 1 {
-		t.Fatalf("bozuk anahtarlar elenmedi: %d anahtar", len(r.keys))
+	if len(r.cache.keys) != 1 {
+		t.Fatalf("bozuk anahtarlar elenmedi: %d anahtar", len(r.cache.keys))
 	}
-	if got := r.expires.Sub(now); got != maxCacheTTL {
+	if got := r.cache.expires.Sub(now); got != maxCacheTTL {
 		t.Fatalf("TTL sınırlanmadı: %v", got)
 	}
 }
