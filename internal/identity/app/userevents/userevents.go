@@ -25,11 +25,17 @@ const (
 )
 
 // Profile is the public profile carried by user.profile_updated: what other
-// users see next to the user's content. Nothing else about the user is sent.
+// users see next to the user's content, and who may see the user's
+// attendance history (core shows the profile, issue #71). Nothing else
+// about the user is sent.
 type Profile struct {
 	DisplayName string `json:"display_name"`
 	// AvatarUploadID is a core upload ID, empty when there is no avatar.
 	AvatarUploadID string `json:"avatar_upload_id,omitempty"`
+	// ActivityVisibility is users.activity_visibility: private, tayfa or
+	// public. Empty in events written before it was added; core then keeps
+	// its default (tayfa).
+	ActivityVisibility string `json:"activity_visibility,omitempty"`
 }
 
 // ProfileUpdated records that user's public profile is now p.

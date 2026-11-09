@@ -48,12 +48,29 @@ message ApplyUserEventRequest {
 }
 
 // UserProfileUpdated carries the public profile only: what other users see
-// next to the user's content.
+// next to the user's content, and who may see the user's attendance history
+// on their profile (data model v14 "Profil görünürlüğü", issue #71).
 message UserProfileUpdated {
   // 1–40 characters.
   string display_name = 1;
   // Upload ID (UUID) of the avatar; empty when there is none.
   string avatar_upload_id = 2;
+  // UNSPECIFIED in events written before the field existed: core keeps the
+  // copy's current setting (default TAYFA).
+  ActivityVisibility activity_visibility = 3;
+}
+
+// ActivityVisibility is who sees a user's attendance history (identity's
+// users.activity_visibility).
+enum ActivityVisibility {
+  ACTIVITY_VISIBILITY_UNSPECIFIED = 0;
+  // Nobody but the user.
+  ACTIVITY_VISIBILITY_PRIVATE = 1;
+  // Friends, and members of a tayfa the viewer shares with the user
+  // (without the last 14 days). The default.
+  ACTIVITY_VISIBILITY_TAYFA = 2;
+  // Everyone; only friends see the last 14 days.
+  ACTIVITY_VISIBILITY_PUBLIC = 3;
 }
 
 // UserDeleted carries nothing but the fact.

@@ -31,6 +31,11 @@ message CompleteRegistrationRequest {
   string display_name = 2;
   string accepted_privacy_notice_version = 3;
   string accepted_terms_version = 4;
+  // Optional referral code of the user who brought the caller to the app
+  // (Android install referrer, or typed in on iOS), such as "TYF-8K2M4Q".
+  // Recorded once and never changed. A code that finds nobody is ignored
+  // without an error, so registration reveals nothing about codes.
+  string referral_code = 5;
 }
 
 message CompleteRegistrationResponse {}

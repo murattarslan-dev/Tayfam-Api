@@ -50,6 +50,12 @@ enum ErrorReason {
   ERROR_REASON_CONSENT_OUTDATED = 7;
   ERROR_REASON_ALREADY_REGISTERED = 8;
   ERROR_REASON_INVALID_DISPLAY_NAME = 9;
+  // Account (AccountService, issue #71).
+  // RESOURCE_EXHAUSTED. More than 10 referral code lookups in the last hour.
+  ERROR_REASON_RATE_LIMITED = 10;
+  // NOT_FOUND. No registered user has this referral code: it is malformed,
+  // unknown, or was replaced by a new one.
+  ERROR_REASON_REFERRAL_CODE_NOT_FOUND = 11;
 }
 
 message SignInRequest {

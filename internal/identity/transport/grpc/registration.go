@@ -53,7 +53,8 @@ func (s *RegistrationServer) CompleteRegistration(ctx context.Context, req *iden
 		return nil, status.Error(codes.Unauthenticated, "kimlik doğrulanamadı")
 	}
 	if len(req.GetBirthDate()) > 10 || len(req.GetDisplayName()) > 400 ||
-		len(req.GetAcceptedPrivacyNoticeVersion()) > 32 || len(req.GetAcceptedTermsVersion()) > 32 {
+		len(req.GetAcceptedPrivacyNoticeVersion()) > 32 || len(req.GetAcceptedTermsVersion()) > 32 ||
+		len(req.GetReferralCode()) > maxReferralCode {
 		return nil, fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_UNSPECIFIED)
 	}
 	err := s.reg.Complete(ctx, user, registration.Input{
@@ -61,6 +62,7 @@ func (s *RegistrationServer) CompleteRegistration(ctx context.Context, req *iden
 		DisplayName:          req.GetDisplayName(),
 		PrivacyNoticeVersion: req.GetAcceptedPrivacyNoticeVersion(),
 		TermsVersion:         req.GetAcceptedTermsVersion(),
+		ReferralCode:         req.GetReferralCode(),
 	})
 	switch {
 	case err == nil:

@@ -125,8 +125,13 @@ type CompleteRegistrationRequest struct {
 	DisplayName                  string `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	AcceptedPrivacyNoticeVersion string `protobuf:"bytes,3,opt,name=accepted_privacy_notice_version,json=acceptedPrivacyNoticeVersion,proto3" json:"accepted_privacy_notice_version,omitempty"`
 	AcceptedTermsVersion         string `protobuf:"bytes,4,opt,name=accepted_terms_version,json=acceptedTermsVersion,proto3" json:"accepted_terms_version,omitempty"`
-	unknownFields                protoimpl.UnknownFields
-	sizeCache                    protoimpl.SizeCache
+	// Optional referral code of the user who brought the caller to the app
+	// (Android install referrer, or typed in on iOS), such as "TYF-8K2M4Q".
+	// Recorded once and never changed. A code that finds nobody is ignored
+	// without an error, so registration reveals nothing about codes.
+	ReferralCode  string `protobuf:"bytes,5,opt,name=referral_code,json=referralCode,proto3" json:"referral_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CompleteRegistrationRequest) Reset() {
@@ -187,6 +192,13 @@ func (x *CompleteRegistrationRequest) GetAcceptedTermsVersion() string {
 	return ""
 }
 
+func (x *CompleteRegistrationRequest) GetReferralCode() string {
+	if x != nil {
+		return x.ReferralCode
+	}
+	return ""
+}
+
 type CompleteRegistrationResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -233,13 +245,14 @@ const file_tayfam_identity_v1_registration_proto_rawDesc = "" +
 	"\x16privacy_notice_version\x18\x01 \x01(\tR\x14privacyNoticeVersion\x12#\n" +
 	"\rterms_version\x18\x02 \x01(\tR\ftermsVersion\x12\x1f\n" +
 	"\vminimum_age\x18\x03 \x01(\x05R\n" +
-	"minimumAge\"\xdc\x01\n" +
+	"minimumAge\"\x81\x02\n" +
 	"\x1bCompleteRegistrationRequest\x12\x1d\n" +
 	"\n" +
 	"birth_date\x18\x01 \x01(\tR\tbirthDate\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12E\n" +
 	"\x1faccepted_privacy_notice_version\x18\x03 \x01(\tR\x1cacceptedPrivacyNoticeVersion\x124\n" +
-	"\x16accepted_terms_version\x18\x04 \x01(\tR\x14acceptedTermsVersion\"\x1e\n" +
+	"\x16accepted_terms_version\x18\x04 \x01(\tR\x14acceptedTermsVersion\x12#\n" +
+	"\rreferral_code\x18\x05 \x01(\tR\freferralCode\"\x1e\n" +
 	"\x1cCompleteRegistrationResponse2\xfc\x01\n" +
 	"\x13RegistrationService\x12j\n" +
 	"\x0fGetRequirements\x12*.tayfam.identity.v1.GetRequirementsRequest\x1a+.tayfam.identity.v1.GetRequirementsResponse\x12y\n" +

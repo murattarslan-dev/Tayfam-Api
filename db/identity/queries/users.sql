@@ -38,3 +38,49 @@ UPDATE users SET display_name = @display_name WHERE id = @id AND deleted_at IS N
 -- Yaş nedeniyle reddedilen hesapta e-posta tutulmaz (veri azaltma).
 -- name: ClearIdentityEmails :exec
 UPDATE auth_identities SET email = NULL WHERE user_id = @user_id;
+
+-- Referans kodu (veri modeli v14 "Arkadaşlık ve Davet (v11)", issue #71).
+
+-- Kodu yeniler; eski kod aynı anda geçersiz olur (eski link çalışmaz).
+-- Yalnızca kodu olan, kayıtlı ve silinmemiş hesapta çalışır.
+-- name: RotateRefCode :execrows
+UPDATE users SET ref_code = @ref_code, ref_code_rotated_at = now()
+WHERE id = @id AND ref_code IS NOT NULL AND registered_at IS NOT NULL AND deleted_at IS NULL;
+
+-- Kodla bulunan kişinin yalnızca kimliği, adı ve avatarı döner; kayıtlı ve
+-- silinmemiş hesaplar. Tayfaları, geçmişi ve arkadaşları buradan çıkmaz.
+-- name: FindUserByRefCode :one
+SELECT id, display_name, avatar_upload_id
+FROM users
+WHERE ref_code = @ref_code AND registered_at IS NOT NULL AND deleted_at IS NULL;
+
+-- Arama sınırı için aramayı yapan kişinin satırını kilitler: aynı kişinin
+-- eşzamanlı aramaları sırayla sayılır. Yalnızca kayıtlı ve silinmemiş hesap.
+-- name: LockRegisteredUser :one
+SELECT id FROM users
+WHERE id = @id AND registered_at IS NOT NULL AND deleted_at IS NULL
+FOR NO KEY UPDATE;
+
+-- name: CountRecentRefCodeLookups :one
+SELECT count(*) FROM ref_code_lookups
+WHERE user_id = @user_id AND looked_up_at > @since;
+
+-- Sayılmayacak kadar eski denemeler aynı kişinin bir sonraki aramasında
+-- silinir; tablo kendi kendini küçük tutar.
+-- name: DeleteOldRefCodeLookups :exec
+DELETE FROM ref_code_lookups WHERE user_id = @user_id AND looked_up_at <= @since;
+
+-- name: RecordRefCodeLookup :exec
+INSERT INTO ref_code_lookups (id, user_id, looked_up_at) VALUES (@id, @user_id, @looked_up_at);
+
+-- Referans kayıtta bir kez yazılır (trigger users_referral_once da
+-- korur). Referans veren kayıtlı ve silinmemiş olmalıdır.
+-- name: SetReferrer :execrows
+UPDATE users u SET referred_by_user_id = @referrer_id, referred_at = now()
+WHERE u.id = @id AND u.referred_at IS NULL AND u.id <> @referrer_id
+  AND EXISTS (SELECT 1 FROM users r WHERE r.id = @referrer_id AND r.registered_at IS NOT NULL AND r.deleted_at IS NULL);
+
+-- Katılım geçmişinin kime görüneceği (v14 "Profil görünürlüğü").
+-- name: SetActivityVisibility :execrows
+UPDATE users SET activity_visibility = @activity_visibility
+WHERE id = @id AND registered_at IS NOT NULL AND deleted_at IS NULL;

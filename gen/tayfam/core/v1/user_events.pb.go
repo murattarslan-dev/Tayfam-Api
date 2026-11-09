@@ -22,6 +22,64 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// ActivityVisibility is who sees a user's attendance history (identity's
+// users.activity_visibility).
+type ActivityVisibility int32
+
+const (
+	ActivityVisibility_ACTIVITY_VISIBILITY_UNSPECIFIED ActivityVisibility = 0
+	// Nobody but the user.
+	ActivityVisibility_ACTIVITY_VISIBILITY_PRIVATE ActivityVisibility = 1
+	// Friends, and members of a tayfa the viewer shares with the user
+	// (without the last 14 days). The default.
+	ActivityVisibility_ACTIVITY_VISIBILITY_TAYFA ActivityVisibility = 2
+	// Everyone; only friends see the last 14 days.
+	ActivityVisibility_ACTIVITY_VISIBILITY_PUBLIC ActivityVisibility = 3
+)
+
+// Enum value maps for ActivityVisibility.
+var (
+	ActivityVisibility_name = map[int32]string{
+		0: "ACTIVITY_VISIBILITY_UNSPECIFIED",
+		1: "ACTIVITY_VISIBILITY_PRIVATE",
+		2: "ACTIVITY_VISIBILITY_TAYFA",
+		3: "ACTIVITY_VISIBILITY_PUBLIC",
+	}
+	ActivityVisibility_value = map[string]int32{
+		"ACTIVITY_VISIBILITY_UNSPECIFIED": 0,
+		"ACTIVITY_VISIBILITY_PRIVATE":     1,
+		"ACTIVITY_VISIBILITY_TAYFA":       2,
+		"ACTIVITY_VISIBILITY_PUBLIC":      3,
+	}
+)
+
+func (x ActivityVisibility) Enum() *ActivityVisibility {
+	p := new(ActivityVisibility)
+	*p = x
+	return p
+}
+
+func (x ActivityVisibility) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ActivityVisibility) Descriptor() protoreflect.EnumDescriptor {
+	return file_tayfam_core_v1_user_events_proto_enumTypes[0].Descriptor()
+}
+
+func (ActivityVisibility) Type() protoreflect.EnumType {
+	return &file_tayfam_core_v1_user_events_proto_enumTypes[0]
+}
+
+func (x ActivityVisibility) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ActivityVisibility.Descriptor instead.
+func (ActivityVisibility) EnumDescriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_user_events_proto_rawDescGZIP(), []int{0}
+}
+
 type ApplyUserEventRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Outbox event ID in identity (UUIDv7). Later events have greater IDs.
@@ -131,15 +189,19 @@ func (*ApplyUserEventRequest_ProfileUpdated) isApplyUserEventRequest_Event() {}
 func (*ApplyUserEventRequest_Deleted) isApplyUserEventRequest_Event() {}
 
 // UserProfileUpdated carries the public profile only: what other users see
-// next to the user's content.
+// next to the user's content, and who may see the user's attendance history
+// on their profile (data model v14 "Profil görünürlüğü", issue #71).
 type UserProfileUpdated struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 1–40 characters.
 	DisplayName string `protobuf:"bytes,1,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	// Upload ID (UUID) of the avatar; empty when there is none.
 	AvatarUploadId string `protobuf:"bytes,2,opt,name=avatar_upload_id,json=avatarUploadId,proto3" json:"avatar_upload_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// UNSPECIFIED in events written before the field existed: core keeps the
+	// copy's current setting (default TAYFA).
+	ActivityVisibility ActivityVisibility `protobuf:"varint,3,opt,name=activity_visibility,json=activityVisibility,proto3,enum=tayfam.core.v1.ActivityVisibility" json:"activity_visibility,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *UserProfileUpdated) Reset() {
@@ -184,6 +246,13 @@ func (x *UserProfileUpdated) GetAvatarUploadId() string {
 		return x.AvatarUploadId
 	}
 	return ""
+}
+
+func (x *UserProfileUpdated) GetActivityVisibility() ActivityVisibility {
+	if x != nil {
+		return x.ActivityVisibility
+	}
+	return ActivityVisibility_ACTIVITY_VISIBILITY_UNSPECIFIED
 }
 
 // UserDeleted carries nothing but the fact.
@@ -272,12 +341,18 @@ const file_tayfam_core_v1_user_events_proto_rawDesc = "" +
 	"\x0fprofile_updated\x18\n" +
 	" \x01(\v2\".tayfam.core.v1.UserProfileUpdatedH\x00R\x0eprofileUpdated\x127\n" +
 	"\adeleted\x18\v \x01(\v2\x1b.tayfam.core.v1.UserDeletedH\x00R\adeletedB\a\n" +
-	"\x05event\"a\n" +
+	"\x05event\"\xb6\x01\n" +
 	"\x12UserProfileUpdated\x12!\n" +
 	"\fdisplay_name\x18\x01 \x01(\tR\vdisplayName\x12(\n" +
-	"\x10avatar_upload_id\x18\x02 \x01(\tR\x0eavatarUploadId\"\r\n" +
+	"\x10avatar_upload_id\x18\x02 \x01(\tR\x0eavatarUploadId\x12S\n" +
+	"\x13activity_visibility\x18\x03 \x01(\x0e2\".tayfam.core.v1.ActivityVisibilityR\x12activityVisibility\"\r\n" +
 	"\vUserDeleted\"\x18\n" +
-	"\x16ApplyUserEventResponse2s\n" +
+	"\x16ApplyUserEventResponse*\x99\x01\n" +
+	"\x12ActivityVisibility\x12#\n" +
+	"\x1fACTIVITY_VISIBILITY_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bACTIVITY_VISIBILITY_PRIVATE\x10\x01\x12\x1d\n" +
+	"\x19ACTIVITY_VISIBILITY_TAYFA\x10\x02\x12\x1e\n" +
+	"\x1aACTIVITY_VISIBILITY_PUBLIC\x10\x032s\n" +
 	"\x10UserEventService\x12_\n" +
 	"\x0eApplyUserEvent\x12%.tayfam.core.v1.ApplyUserEventRequest\x1a&.tayfam.core.v1.ApplyUserEventResponseB\xc1\x01\n" +
 	"\x12com.tayfam.core.v1B\x0fUserEventsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
@@ -294,25 +369,28 @@ func file_tayfam_core_v1_user_events_proto_rawDescGZIP() []byte {
 	return file_tayfam_core_v1_user_events_proto_rawDescData
 }
 
+var file_tayfam_core_v1_user_events_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_tayfam_core_v1_user_events_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_tayfam_core_v1_user_events_proto_goTypes = []any{
-	(*ApplyUserEventRequest)(nil),  // 0: tayfam.core.v1.ApplyUserEventRequest
-	(*UserProfileUpdated)(nil),     // 1: tayfam.core.v1.UserProfileUpdated
-	(*UserDeleted)(nil),            // 2: tayfam.core.v1.UserDeleted
-	(*ApplyUserEventResponse)(nil), // 3: tayfam.core.v1.ApplyUserEventResponse
-	(*timestamppb.Timestamp)(nil),  // 4: google.protobuf.Timestamp
+	(ActivityVisibility)(0),        // 0: tayfam.core.v1.ActivityVisibility
+	(*ApplyUserEventRequest)(nil),  // 1: tayfam.core.v1.ApplyUserEventRequest
+	(*UserProfileUpdated)(nil),     // 2: tayfam.core.v1.UserProfileUpdated
+	(*UserDeleted)(nil),            // 3: tayfam.core.v1.UserDeleted
+	(*ApplyUserEventResponse)(nil), // 4: tayfam.core.v1.ApplyUserEventResponse
+	(*timestamppb.Timestamp)(nil),  // 5: google.protobuf.Timestamp
 }
 var file_tayfam_core_v1_user_events_proto_depIdxs = []int32{
-	4, // 0: tayfam.core.v1.ApplyUserEventRequest.occurred_at:type_name -> google.protobuf.Timestamp
-	1, // 1: tayfam.core.v1.ApplyUserEventRequest.profile_updated:type_name -> tayfam.core.v1.UserProfileUpdated
-	2, // 2: tayfam.core.v1.ApplyUserEventRequest.deleted:type_name -> tayfam.core.v1.UserDeleted
-	0, // 3: tayfam.core.v1.UserEventService.ApplyUserEvent:input_type -> tayfam.core.v1.ApplyUserEventRequest
-	3, // 4: tayfam.core.v1.UserEventService.ApplyUserEvent:output_type -> tayfam.core.v1.ApplyUserEventResponse
-	4, // [4:5] is the sub-list for method output_type
-	3, // [3:4] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	5, // 0: tayfam.core.v1.ApplyUserEventRequest.occurred_at:type_name -> google.protobuf.Timestamp
+	2, // 1: tayfam.core.v1.ApplyUserEventRequest.profile_updated:type_name -> tayfam.core.v1.UserProfileUpdated
+	3, // 2: tayfam.core.v1.ApplyUserEventRequest.deleted:type_name -> tayfam.core.v1.UserDeleted
+	0, // 3: tayfam.core.v1.UserProfileUpdated.activity_visibility:type_name -> tayfam.core.v1.ActivityVisibility
+	1, // 4: tayfam.core.v1.UserEventService.ApplyUserEvent:input_type -> tayfam.core.v1.ApplyUserEventRequest
+	4, // 5: tayfam.core.v1.UserEventService.ApplyUserEvent:output_type -> tayfam.core.v1.ApplyUserEventResponse
+	5, // [5:6] is the sub-list for method output_type
+	4, // [4:5] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_user_events_proto_init() }
@@ -329,13 +407,14 @@ func file_tayfam_core_v1_user_events_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_user_events_proto_rawDesc), len(file_tayfam_core_v1_user_events_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_tayfam_core_v1_user_events_proto_goTypes,
 		DependencyIndexes: file_tayfam_core_v1_user_events_proto_depIdxs,
+		EnumInfos:         file_tayfam_core_v1_user_events_proto_enumTypes,
 		MessageInfos:      file_tayfam_core_v1_user_events_proto_msgTypes,
 	}.Build()
 	File_tayfam_core_v1_user_events_proto = out.File

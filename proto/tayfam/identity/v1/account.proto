@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package tayfam.identity.v1;
+
+// AccountService holds the caller's own account settings that identity owns:
+// the referral code and who sees the attendance history (data model v14
+// "Arkadaşlık ve Davet (v11)", "Profil görünürlüğü"; issue #71).
+//
+// Every method needs a full access token: a registration-only token
+// (aud=tayfam-registration) is refused with UNAUTHENTICATED. The caller
+// always comes from the verified token. Errors use the ErrorReason values in
+// auth.proto.
+service AccountService {
+  // GetAccount returns the caller's referral code and settings.
+  rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
+  // RotateReferralCode gives the caller a new referral code. The old code,
+  // and every link that carries it, finds nobody from then on.
+  rpc RotateReferralCode(RotateReferralCodeRequest) returns (RotateReferralCodeResponse);
+  // FindUserByReferralCode returns the user behind a referral code: ID, name
+  // and avatar only, never tayfas, history or friends. Every call counts
+  // toward the caller's limit of 10 per hour, found or not
+  // (ERROR_REASON_RATE_LIMITED); a code that finds nobody is
+  // ERROR_REASON_REFERRAL_CODE_NOT_FOUND.
+  rpc FindUserByReferralCode(FindUserByReferralCodeRequest) returns (FindUserByReferralCodeResponse);
+  // SetActivityVisibility changes who sees the caller's attendance history.
+  // core gets the new setting with the profile copy (user.profile_updated).
+  rpc SetActivityVisibility(SetActivityVisibilityRequest) returns (SetActivityVisibilityResponse);
+}
+
+// ActivityVisibility is who sees the user's attendance history.
+enum ActivityVisibility {
+  ACTIVITY_VISIBILITY_UNSPECIFIED = 0;
+  // Nobody but the user.
+  ACTIVITY_VISIBILITY_PRIVATE = 1;
+  // Friends see all of it; members of a shared tayfa see it without the
+  // last 14 days. The default.
+  ACTIVITY_VISIBILITY_TAYFA = 2;
+  // Friends see all of it; everyone else without the last 14 days.
+  ACTIVITY_VISIBILITY_PUBLIC = 3;
+}
+
+message GetAccountRequest {}
+
+message GetAccountResponse {
+  // Such as "TYF-8K2M4Q"; the share link is tayfam.app/r/<code>.
+  string referral_code = 1;
+  ActivityVisibility activity_visibility = 2;
+}
+
+message RotateReferralCodeRequest {}
+
+message RotateReferralCodeResponse {
+  string referral_code = 1;
+}
+
+message FindUserByReferralCodeRequest {
+  // With or without the "TYF-" prefix, in any case.
+  string referral_code = 1;
+}
+
+message FindUserByReferralCodeResponse {
+  string user_id = 1;
+  string display_name = 2;
+  // Upload ID (UUID) of the avatar; empty when there is none.
+  string avatar_upload_id = 3;
+}
+
+message SetActivityVisibilityRequest {
+  ActivityVisibility activity_visibility = 1;
+}
+
+message SetActivityVisibilityResponse {
+  ActivityVisibility activity_visibility = 1;
+}

@@ -18,6 +18,7 @@ import (
 	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/account"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/birthdate"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/oidc"
@@ -106,6 +107,10 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
+	accounts, err := account.New(account.Config{Pool: pool})
+	if err != nil {
+		return err
+	}
 
 	// identity kendi token'larını kendi açık anahtarlarıyla doğrular. Kayıt
 	// bekleyen kullanıcının token'ı (aud=tayfam-registration) yalnızca burada
@@ -121,6 +126,9 @@ func setup(rt *service.Runtime) error {
 	identityv1.RegisterKeyServiceServer(srv, grpcapi.NewKeyServer(ring))
 	identityv1.RegisterAuthServiceServer(srv, grpcapi.NewAuthServer(sessions, rt.Log))
 	identityv1.RegisterRegistrationServiceServer(srv, grpcapi.NewRegistrationServer(reg, rt.Log))
+	// Hesap ayarları yalnızca tam erişim token'ıyla (aud=AUTH_AUDIENCE);
+	// kayıt bekleyen hesabın token'ı reddedilir.
+	identityv1.RegisterAccountServiceServer(srv, grpcapi.NewAccountServer(accounts, audience, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
 	return addRelay(rt, pool)
 }

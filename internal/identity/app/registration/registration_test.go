@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -104,7 +105,7 @@ func TestCompleteRegistration(t *testing.T) {
 		t.Fatalf("ikinci kayıt: %v", err)
 	}
 	// The profile copy event: name only, no birth date, e-mail or ref code.
-	if got := e.profileEvents(t, u); len(got) != 1 || got[0] != `{"display_name": "Ayşe Işık"}` {
+	if got := e.profileEvents(t, u); len(got) != 1 || got[0] != `{"display_name": "Ayşe Işık", "activity_visibility": "tayfa"}` {
 		t.Fatalf("profil olayları = %q", got)
 	}
 }
@@ -192,16 +193,57 @@ func TestEmptyDisplayNameKeepsProviderName(t *testing.T) {
 	if got.DisplayName.String != "Google Adı" {
 		t.Fatalf("ad = %q", got.DisplayName.String)
 	}
-	if got := e.profileEvents(t, u); len(got) != 1 || got[0] != `{"display_name": "Google Adı"}` {
+	if got := e.profileEvents(t, u); len(got) != 1 || got[0] != `{"display_name": "Google Adı", "activity_visibility": "tayfa"}` {
 		t.Fatalf("profil olayları = %q", got)
 	}
 }
 
-func TestRefCodeAlphabet(t *testing.T) {
-	re := regexp.MustCompile(`^TYF-[2-9A-HJ-NP-Z]{6}$`)
-	for range 2000 {
-		if c := newRefCode(); !re.MatchString(c) {
-			t.Fatalf("kod biçimi: %s", c)
+func TestReferralCodeAtRegistration(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	ref := e.newUser(t)
+	must(t, e.svc.Complete(ctx, ref, input("1990-05-19")))
+	refUser, err := e.q.GetUser(ctx, ref.PG())
+	must(t, err)
+	code := refUser.RefCode.String
+
+	referredBy := func(u id.ID) (pgtype.UUID, pgtype.Timestamptz) {
+		t.Helper()
+		var by pgtype.UUID
+		var at pgtype.Timestamptz
+		must(t, e.pool.QueryRow(ctx, `SELECT referred_by_user_id, referred_at FROM users WHERE id = $1`, u.PG()).Scan(&by, &at))
+		return by, at
+	}
+
+	// Lower case, without the prefix: it is the same code.
+	u := e.newUser(t)
+	in := input("1990-05-19")
+	in.ReferralCode = " " + strings.ToLower(strings.TrimPrefix(code, "TYF-")) + " "
+	must(t, e.svc.Complete(ctx, u, in))
+	if by, at := referredBy(u); id.ID(by.Bytes) != ref || !at.Valid {
+		t.Fatalf("referans = %v %v", by, at)
+	}
+	// Once set it never changes, not even straight in the database.
+	other := e.newUser(t)
+	must(t, e.svc.Complete(ctx, other, input("1990-05-19")))
+	if _, err := e.pool.Exec(ctx, `UPDATE users SET referred_by_user_id = $2 WHERE id = $1`, u.PG(), other.PG()); err == nil {
+		t.Fatal("referans değiştirildi")
+	}
+	if _, err := e.pool.Exec(ctx, `UPDATE users SET referred_at = NULL, referred_by_user_id = NULL WHERE id = $1`, u.PG()); err == nil {
+		t.Fatal("referans silinip yeniden yazılabilir")
+	}
+
+	// Unknown and malformed codes are ignored; registration still succeeds
+	// and tells nothing about the code.
+	for _, c := range []string{"TYF-ZZZZZZ", "bozuk kod", strings.Repeat("A", 20)} {
+		u := e.newUser(t)
+		in := input("1990-05-19")
+		in.ReferralCode = c
+		if err := e.svc.Complete(ctx, u, in); err != nil {
+			t.Fatalf("%q: %v", c, err)
+		}
+		if by, at := referredBy(u); by.Valid || at.Valid {
+			t.Fatalf("%q: referans yazıldı", c)
 		}
 	}
 }

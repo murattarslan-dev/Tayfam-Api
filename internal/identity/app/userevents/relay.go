@@ -39,6 +39,15 @@ func CoreConsumer(client corev1.UserEventServiceClient) outbox.Consumer {
 	}
 }
 
+// coreVisibility maps users.activity_visibility to core's enum. Events
+// written before the field existed carry none.
+var coreVisibility = map[string]corev1.ActivityVisibility{
+	"":        corev1.ActivityVisibility_ACTIVITY_VISIBILITY_UNSPECIFIED,
+	"private": corev1.ActivityVisibility_ACTIVITY_VISIBILITY_PRIVATE,
+	"tayfa":   corev1.ActivityVisibility_ACTIVITY_VISIBILITY_TAYFA,
+	"public":  corev1.ActivityVisibility_ACTIVITY_VISIBILITY_PUBLIC,
+}
+
 // coreRequest converts a stored event to core's request.
 func coreRequest(e outbox.Event) (*corev1.ApplyUserEventRequest, error) {
 	if e.SubjectType != subjectUser {
@@ -55,8 +64,12 @@ func coreRequest(e outbox.Event) (*corev1.ApplyUserEventRequest, error) {
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
 			return nil, errors.New("profil olayı çözümlenemedi")
 		}
+		vis, ok := coreVisibility[p.ActivityVisibility]
+		if !ok {
+			return nil, fmt.Errorf("bilinmeyen görünürlük %q", p.ActivityVisibility)
+		}
 		req.Event = &corev1.ApplyUserEventRequest_ProfileUpdated{ProfileUpdated: &corev1.UserProfileUpdated{
-			DisplayName: p.DisplayName, AvatarUploadId: p.AvatarUploadID,
+			DisplayName: p.DisplayName, AvatarUploadId: p.AvatarUploadID, ActivityVisibility: vis,
 		}}
 	case TypeDeleted:
 		req.Event = &corev1.ApplyUserEventRequest_Deleted{Deleted: &corev1.UserDeleted{}}
