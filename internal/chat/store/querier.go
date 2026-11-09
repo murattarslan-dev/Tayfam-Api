@@ -11,11 +11,25 @@ import (
 )
 
 type Querier interface {
+	// İstek kabul edildi (alıcı kabul etti ya da cevap yazdı).
+	AcceptConversation(ctx context.Context, arg AcceptConversationParams) (int64, error)
 	ClearChannelCreator(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silindi (user.deleted): içerik kalır, yazar "Silinmiş kullanıcı".
 	ClearChannelMessageAuthor(ctx context.Context, userID pgtype.UUID) error
 	ClearChannelMessageDeletedBy(ctx context.Context, userID pgtype.UUID) error
+	ClearConversationHighSide(ctx context.Context, userID pgtype.UUID) error
+	// Hesap silindi (user.deleted; v14 "İlişkiler ve Silme Davranışı"): kişinin
+	// tarafı, isteği ve gönderen alanı NULL olur, okunma kayıtları silinir; iki
+	// tarafı da silinmiş konuşma mesajlarıyla birlikte gider.
+	ClearConversationLowSide(ctx context.Context, userID pgtype.UUID) error
+	ClearDirectMessageSender(ctx context.Context, userID pgtype.UUID) error
 	ClearNotificationActor(ctx context.Context, userID pgtype.UUID) error
+	// Son 24 saatte istek olarak açılan konuşmalar (v7 günlük sınırı). Durumun
+	// sonradan değişmesi (kabul, ret) sayımı değiştirmez.
+	CountRecentRequests(ctx context.Context, arg CountRecentRequestsParams) (int64, error)
+	// Gönderenin konuşmadaki mesaj sayısı (istek durumunda tek mesaj; silinen
+	// de sayılır).
+	CountSenderMessages(ctx context.Context, arg CountSenderMessagesParams) (int64, error)
 	CountUnreadNotifications(ctx context.Context, arg CountUnreadNotificationsParams) (int64, error)
 	// Tayfa kanalları ve kanal mesajları (issue #81). Her kanal sorgusu
 	// tayfa_id ile, her mesaj sorgusu tayfa kapsamında doğrulanmış bir
@@ -23,6 +37,10 @@ type Querier interface {
 	// cevabıyla yapılır. Mesaj metni burada yalnızca şifreli bayt olarak geçer.
 	// Kanallar.
 	CreateChannel(ctx context.Context, arg CreateChannelParams) (CreateChannelRow, error)
+	// Satır varsa (eşzamanlı ilk mesaj) hiçbir şey yapmaz; sonuç boş döner.
+	CreateConversation(ctx context.Context, arg CreateConversationParams) (CreateConversationRow, error)
+	// Aynı (gönderen, client_request_id) varsa satır açılmaz ve sonuç boş döner.
+	CreateDirectMessage(ctx context.Context, arg CreateDirectMessageParams) (CreateDirectMessageRow, error)
 	// Aynı (yazar, client_request_id) varsa satır açılmaz ve sonuç boş döner.
 	CreateMessage(ctx context.Context, arg CreateMessageParams) (CreateMessageRow, error)
 	// Uygulama içi bildirimler (issue #64). Alıcıları core seçer (ADR-0009);
@@ -32,6 +50,9 @@ type Querier interface {
 	// yeni satır açılmaz. Hesabı silinmiş kullanıcıya (profil mezar taşı) satır
 	// açılmaz.
 	CreateNotifications(ctx context.Context, arg CreateNotificationsParams) (int64, error)
+	// Alıcı isteği reddetti.
+	DeclineConversation(ctx context.Context, id pgtype.UUID) (int64, error)
+	DeleteAbandonedConversations(ctx context.Context) error
 	DeleteNotificationPreference(ctx context.Context, arg DeleteNotificationPreferenceParams) error
 	// 90 gün saklama: en eski satırlardan bir parti.
 	DeleteOldNotifications(ctx context.Context, arg DeleteOldNotificationsParams) (int64, error)
@@ -41,14 +62,30 @@ type Querier interface {
 	// Tayfa kalıcı silindi (tayfa.purged).
 	DeleteTayfaNotifications(ctx context.Context, tayfaID pgtype.UUID) error
 	DeleteUserChannelReads(ctx context.Context, userID pgtype.UUID) error
+	DeleteUserConversationReads(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserNotificationPreferences(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silindi.
 	DeleteUserNotifications(ctx context.Context, userID pgtype.UUID) error
+	// Gönderenin kendi silmesi: metin hemen gider, geri alınamaz.
+	EraseDirectMessage(ctx context.Context, arg EraseDirectMessageParams) (int64, error)
 	// Yazarın kendi silmesi: metin hemen gider, geri alınamaz.
 	EraseMessage(ctx context.Context, arg EraseMessageParams) (int64, error)
 	GetChannel(ctx context.Context, arg GetChannelParams) (GetChannelRow, error)
 	GetChannelForUpdate(ctx context.Context, arg GetChannelForUpdateParams) (GetChannelForUpdateRow, error)
 	GetChannelRead(ctx context.Context, arg GetChannelReadParams) (pgtype.UUID, error)
+	// Birebir mesajlar (issue #95; 00006_direct_messages.sql). Taraflar her
+	// zaman user_low_id < user_high_id sırasıyla verilir. Bir kullanıcının
+	// erişebildiği konuşma yalnızca taraf olduğu konuşmadır: her okuma
+	// sorgusu konuşma kimliğinin yanında kullanıcıyı da alır (IDOR).
+	// Konuşmalar.
+	GetConversationByPair(ctx context.Context, arg GetConversationByPairParams) (GetConversationByPairRow, error)
+	// Kişinin taraf olduğu konuşma; başkasınınki "yok".
+	GetConversationForUser(ctx context.Context, arg GetConversationForUserParams) (GetConversationForUserRow, error)
+	// Karşı tarafın okunma işareti (okundu bilgisi, v14 "Okunma bilgisi").
+	GetConversationRead(ctx context.Context, arg GetConversationReadParams) (GetConversationReadRow, error)
+	GetDirectMessage(ctx context.Context, arg GetDirectMessageParams) (GetDirectMessageRow, error)
+	// Mesajlar.
+	GetDirectMessageByRequest(ctx context.Context, arg GetDirectMessageByRequestParams) (GetDirectMessageByRequestRow, error)
 	GetMessage(ctx context.Context, arg GetMessageParams) (GetMessageRow, error)
 	// Mesajlar.
 	// Tekrar gönderim: yazarın aynı client_request_id ile daha önce yazdığı
@@ -56,12 +93,24 @@ type Querier interface {
 	GetMessageByRequest(ctx context.Context, arg GetMessageByRequestParams) (GetMessageByRequestRow, error)
 	GetMessageForUpdate(ctx context.Context, arg GetMessageForUpdateParams) (GetMessageForUpdateRow, error)
 	GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUserProfileRow, error)
+	// Bildirimler: konuşma başına okunmamış tek "yeni mesaj" bildirimi.
+	HasUnreadConversationNotification(ctx context.Context, arg HasUnreadConversationNotificationParams) (bool, error)
 	// Moderatör veya yönetici silmesi: metin şifreli kalır, mesaj gizlenir.
 	HideMessage(ctx context.Context, arg HideMessageParams) (int64, error)
 	// Tayfanın kanalları ve çağıranın okunmamış sayısı (en fazla max_unread;
 	// silinmiş ve kendi mesajları sayılmaz). include_staff false ise yalnızca
 	// members kanalları. Arşivlenmişler sonda.
 	ListChannels(ctx context.Context, arg ListChannelsParams) ([]ListChannelsRow, error)
+	// Kişinin konuşmaları, son mesaja göre yeniden eskiye. Reddettiği istekler
+	// listelenmez; gönderen reddedilen isteğini görmeye devam eder (v7: bunu
+	// bilmez). unread karşı tarafın okunmamış, silinmemiş mesajlarıdır (en
+	// fazla 100). İmleç (last_message_at, id).
+	ListConversationsPage(ctx context.Context, arg ListConversationsPageParams) ([]ListConversationsPageRow, error)
+	// En eski önce, after_id'den yeniler: kaçırılan mesajları tamamlama
+	// (ADR-0005).
+	ListDirectMessagesAfter(ctx context.Context, arg ListDirectMessagesAfterParams) ([]ListDirectMessagesAfterRow, error)
+	// En yeni önce; before_id verilirse ondan eskiler.
+	ListDirectMessagesBefore(ctx context.Context, arg ListDirectMessagesBeforeParams) ([]ListDirectMessagesBeforeRow, error)
 	// En eski önce, after_id'den yeniler: kaçırılan mesajları tamamlama
 	// (ADR-0005).
 	ListMessagesAfter(ctx context.Context, arg ListMessagesAfterParams) ([]ListMessagesAfterRow, error)
@@ -71,12 +120,25 @@ type Querier interface {
 	ListNotificationPreferences(ctx context.Context, userID pgtype.UUID) ([]ListNotificationPreferencesRow, error)
 	// En yeni önce; after_id verilirse ondan eskiler (UUIDv7 zaman sıralı).
 	ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]ListNotificationsRow, error)
+	// Aynı iki kişinin eşzamanlı gönderimleri sırayla işlenir.
+	LockConversationByPair(ctx context.Context, arg LockConversationByPairParams) (LockConversationByPairRow, error)
+	// Kişinin günlük istek sayımını sıraya sokar: aynı kişinin eşzamanlı
+	// istekleri sınırı birlikte aşamaz.
+	LockRequestLimit(ctx context.Context, userID pgtype.UUID) error
 	MarkAllNotificationsRead(ctx context.Context, arg MarkAllNotificationsReadParams) (int64, error)
 	// Okunma bilgisi.
 	// Okundu işareti yalnızca ileri gider (UUIDv7 zaman sıralı).
 	MarkChannelRead(ctx context.Context, arg MarkChannelReadParams) error
+	// Konuşma okununca o konuşmanın bildirimleri de okunmuş olur.
+	MarkConversationNotificationsRead(ctx context.Context, arg MarkConversationNotificationsReadParams) error
+	// Okunma bilgisi.
+	// Okundu işareti yalnızca ileri gider (UUIDv7 zaman sıralı).
+	MarkConversationRead(ctx context.Context, arg MarkConversationReadParams) error
 	// Zaten okunmuşsa okunma zamanı değişmez; başkasının bildirimi bulunmaz.
 	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (pgtype.UUID, error)
+	// Saklama ve silme.
+	// 30 gün: silinmiş mesajlardan bir parti kalıcı silinir.
+	PurgeDeletedDirectMessages(ctx context.Context, arg PurgeDeletedDirectMessagesParams) (int64, error)
 	// Saklama ve silme.
 	// 30 gün: silinmiş mesajlardan bir parti kalıcı silinir.
 	PurgeDeletedMessages(ctx context.Context, arg PurgeDeletedMessagesParams) (int64, error)
@@ -86,6 +148,7 @@ type Querier interface {
 	// Hesap silindi: ad ve avatar temizlenir, satır mezar taşı olarak kalır.
 	// Tekrar uygulanınca sonuç değişmez.
 	TombstoneUserProfile(ctx context.Context, arg TombstoneUserProfileParams) error
+	TouchConversation(ctx context.Context, arg TouchConversationParams) error
 	UpdateChannel(ctx context.Context, arg UpdateChannelParams) (UpdateChannelRow, error)
 	UpsertNotificationPreference(ctx context.Context, arg UpsertNotificationPreferenceParams) error
 	// Profil kopyası (ADR-0009). Yalnızca identity'nin kullanıcı olaylarını
