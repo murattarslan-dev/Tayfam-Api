@@ -8,6 +8,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Announcement struct {
+	ID              pgtype.UUID
+	TayfaID         pgtype.UUID
+	AuthorID        pgtype.UUID
+	Title           string
+	Body            string
+	Pinned          bool
+	ClientRequestID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	DeletedBy       pgtype.UUID
+}
+
 type AuditLog struct {
 	ID         pgtype.UUID
 	TayfaID    pgtype.UUID

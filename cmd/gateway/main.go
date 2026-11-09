@@ -78,6 +78,7 @@ func setup(rt *service.Runtime) error {
 		deps.Core = rest.CoreDeps{
 			Tayfas:              corev1.NewTayfaServiceClient(conn),
 			Members:             corev1.NewMembershipServiceClient(conn),
+			Announcements:       corev1.NewAnnouncementServiceClient(conn),
 			Verifier:            v,
 			Log:                 rt.Log,
 			TrustCFConnectingIP: trustCF,

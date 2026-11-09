@@ -15,6 +15,7 @@ const specPath = "../../../../api/openapi/gateway.yaml"
 // pathParams fill the path templates of the contract with valid values.
 var pathParams = strings.NewReplacer(
 	"{tayfa_id}", tayfaID, "{user_id}", userID, "{invite_id}", inviteID, "{module}", "events",
+	"{announcement_id}", annID,
 )
 
 // TestRoutesMatchContract keeps the router and api/openapi/gateway.yaml in

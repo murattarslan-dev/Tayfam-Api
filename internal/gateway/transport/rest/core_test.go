@@ -30,6 +30,7 @@ const (
 	tayfaID  = "01965a3c-0000-7000-8000-000000000001"
 	userID   = "01965a3c-0000-7000-8000-000000000002"
 	inviteID = "01965a3c-0000-7000-8000-000000000003"
+	annID    = "01965a3c-0000-7000-8000-000000000004"
 	reqID    = "01965a3c-0000-7000-8000-0000000000aa"
 )
 
@@ -208,7 +209,7 @@ func (f *fakeCore) LeaveTayfa(ctx context.Context, in *corev1.LeaveTayfaRequest,
 
 func testCoreDeps(f *fakeCore, burst int) CoreDeps {
 	return CoreDeps{
-		Tayfas: f, Members: f, Verifier: fakeVerifier{},
+		Tayfas: f, Members: f, Announcements: f, Verifier: fakeVerifier{},
 		Log:                 slog.New(slog.NewTextHandler(io.Discard, nil)),
 		TrustCFConnectingIP: true,
 		CreateTayfaLimit:    ratelimit.New(60, burst),

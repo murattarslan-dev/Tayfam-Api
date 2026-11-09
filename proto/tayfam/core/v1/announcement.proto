@@ -1,0 +1,179 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+
+// AnnouncementService publishes and manages a tayfa's announcements (data
+// model v14 "Duyuru ve Etkinlik", "Silinen içeriği geri alma"; issue #48).
+// Only gateway calls it, with the user's access token.
+//
+// Every method needs the caller's access token; there are no open methods.
+// Errors carry a google.rpc.ErrorInfo detail with domain "core.tayfam.app"
+// and a reason from ErrorReason (errors.proto). The common rules of
+// MembershipService (membership.proto) apply, in this order:
+//   - tayfa_id and announcement_id are UUID strings; anything else is
+//     ERROR_REASON_VALIDATION.
+//   - A caller who is not an ACTIVE member gets
+//     ERROR_REASON_TAYFA_NOT_FOUND, the same as for an unknown tayfa.
+//   - While the tayfa has MODULE_ANNOUNCEMENTS turned off, every method,
+//     reads included, fails with ERROR_REASON_MODULE_DISABLED.
+//   - The permission table (ADR-0004) decides the rest:
+//     ERROR_REASON_PERMISSION_DENIED for a role that is too low,
+//     ERROR_REASON_MUTED for a muted member's writes.
+//   - Writes to a read-only tayfa fail with ERROR_REASON_TAYFA_READ_ONLY.
+//   - An announcement that is not visible in this tayfa gets
+//     ERROR_REASON_ANNOUNCEMENT_NOT_FOUND.
+//
+// Who may do what (decision 2026-11-09: moderators and admins publish):
+//   - Every active member reads (List, Get), also while muted.
+//   - Moderators and admins publish, edit, delete and pin. Editing or
+//     deleting someone else's announcement also needs a role above the
+//     author's current role (ERROR_REASON_ROLE_HIERARCHY); an author who is
+//     no longer an active member has no role. A demoted author can no longer
+//     edit their own announcement.
+//   - Only admins restore.
+//
+// Audit records and events never hold the title or the body.
+//
+// Paging: page_size 0 means 20; values above 100 are treated as 100;
+// negative values are ERROR_REASON_VALIDATION. page_token is opaque and only
+// valid for the same tayfa; a bad token is ERROR_REASON_VALIDATION. An
+// empty next_page_token means the last page.
+service AnnouncementService {
+  // CreateAnnouncement publishes an announcement by the caller, unpinned.
+  // A repeat with the same client_request_id by the same caller returns the
+  // first announcement and creates nothing.
+  //
+  // Errors: the common ones, ERROR_REASON_VALIDATION.
+  rpc CreateAnnouncement(CreateAnnouncementRequest) returns (CreateAnnouncementResponse);
+
+  // GetAnnouncement returns one visible announcement. Works on read-only
+  // tayfas.
+  rpc GetAnnouncement(GetAnnouncementRequest) returns (GetAnnouncementResponse);
+
+  // ListAnnouncements lists visible announcements: pinned first, then
+  // newest first. Works on read-only tayfas.
+  rpc ListAnnouncements(ListAnnouncementsRequest) returns (ListAnnouncementsResponse);
+
+  // UpdateAnnouncement changes the fields named in update_mask. Setting the
+  // current values succeeds and records nothing.
+  //
+  // Errors: the common ones, ERROR_REASON_ROLE_HIERARCHY,
+  // ERROR_REASON_VALIDATION.
+  rpc UpdateAnnouncement(UpdateAnnouncementRequest) returns (UpdateAnnouncementResponse);
+
+  // SetAnnouncementPinned pins or unpins an announcement of any author.
+  // Setting the current value succeeds and records nothing.
+  rpc SetAnnouncementPinned(SetAnnouncementPinnedRequest) returns (SetAnnouncementPinnedResponse);
+
+  // DeleteAnnouncement deletes an announcement. The author's own deletion
+  // empties the title and the body at once and cannot be undone. Deleting
+  // someone else's announcement (role hierarchy as in UpdateAnnouncement)
+  // hides it; an admin can restore it for 30 days.
+  //
+  // Errors: the common ones, ERROR_REASON_ROLE_HIERARCHY.
+  rpc DeleteAnnouncement(DeleteAnnouncementRequest) returns (DeleteAnnouncementResponse);
+
+  // RestoreAnnouncement undoes a hiding deletion within 30 days. Admin
+  // only, and only above the author's current role. An announcement erased
+  // by its author, or deleted more than 30 days ago, gets
+  // ERROR_REASON_ANNOUNCEMENT_NOT_FOUND. Restoring a visible announcement
+  // succeeds and changes nothing.
+  //
+  // Errors: the common ones, ERROR_REASON_ROLE_HIERARCHY.
+  rpc RestoreAnnouncement(RestoreAnnouncementRequest) returns (RestoreAnnouncementResponse);
+}
+
+message Announcement {
+  string id = 1;
+  string tayfa_id = 2;
+  // Empty when the author's account was deleted.
+  string author_user_id = 3;
+  // 1–120 characters, one line.
+  string title = 4;
+  // Up to 5000 characters; may be empty.
+  string body = 5;
+  bool pinned = 6;
+  google.protobuf.Timestamp create_time = 7;
+  // Changes on every edit, pin and restore.
+  google.protobuf.Timestamp update_time = 8;
+}
+
+message CreateAnnouncementRequest {
+  string tayfa_id = 1;
+  // 1–120 characters after trimming surrounding spaces; no line breaks or
+  // control characters.
+  string title = 2;
+  // Up to 5000 characters after trimming; line breaks and tabs allowed.
+  string body = 3;
+  // Required. A UUID the client generates once per publish attempt and
+  // reuses on retry (offline write protection).
+  string client_request_id = 4;
+}
+
+message CreateAnnouncementResponse {
+  Announcement announcement = 1;
+}
+
+message GetAnnouncementRequest {
+  string tayfa_id = 1;
+  string announcement_id = 2;
+}
+
+message GetAnnouncementResponse {
+  Announcement announcement = 1;
+}
+
+message ListAnnouncementsRequest {
+  string tayfa_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListAnnouncementsResponse {
+  repeated Announcement announcements = 1;
+  string next_page_token = 2;
+}
+
+message UpdateAnnouncementRequest {
+  string tayfa_id = 1;
+  string announcement_id = 2;
+  // Same rules as CreateAnnouncementRequest.title.
+  string title = 3;
+  // Same rules as CreateAnnouncementRequest.body.
+  string body = 4;
+  // Required, non-empty. Allowed paths: "title", "body".
+  google.protobuf.FieldMask update_mask = 5;
+}
+
+message UpdateAnnouncementResponse {
+  Announcement announcement = 1;
+}
+
+message SetAnnouncementPinnedRequest {
+  string tayfa_id = 1;
+  string announcement_id = 2;
+  bool pinned = 3;
+}
+
+message SetAnnouncementPinnedResponse {
+  Announcement announcement = 1;
+}
+
+message DeleteAnnouncementRequest {
+  string tayfa_id = 1;
+  string announcement_id = 2;
+}
+
+message DeleteAnnouncementResponse {}
+
+message RestoreAnnouncementRequest {
+  string tayfa_id = 1;
+  string announcement_id = 2;
+}
+
+message RestoreAnnouncementResponse {
+  Announcement announcement = 1;
+}

@@ -128,6 +128,13 @@ const (
 	MemberRemove
 	AuditView
 	RoleStepDown
+	// Announcements (issue #48). Edit and delete of another author's
+	// announcement also need CanActOnContent.
+	AnnouncementCreate
+	AnnouncementEdit
+	AnnouncementDelete
+	AnnouncementPin
+	AnnouncementRestore
 
 	actionEnd // sentinel; keep last
 )
@@ -154,6 +161,11 @@ var actionNames = [...]string{
 	MemberRemove:         "member.remove",
 	AuditView:            "audit.view",
 	RoleStepDown:         "role.step_down",
+	AnnouncementCreate:   "announcement.create",
+	AnnouncementEdit:     "announcement.edit",
+	AnnouncementDelete:   "announcement.delete",
+	AnnouncementPin:      "announcement.pin",
+	AnnouncementRestore:  "announcement.restore",
 	actionEnd:            "",
 }
 
@@ -187,6 +199,14 @@ var permissions = map[Action]Role{
 	MemberMute:        Moderator,
 	MemberBan:         Moderator,
 	MemberRemove:      Moderator,
+	// Announcements are published by moderators and admins only (veri
+	// modeli v14, karar 2026-11-09). Editing and deleting need the same
+	// role, also for one's own announcement: a demoted author no longer
+	// speaks for the tayfa.
+	AnnouncementCreate: Moderator,
+	AnnouncementEdit:   Moderator,
+	AnnouncementDelete: Moderator,
+	AnnouncementPin:    Moderator,
 
 	// Tayfa management: admin only.
 	TayfaUpdateSettings:  Admin,
@@ -197,6 +217,9 @@ var permissions = map[Action]Role{
 	InviteRevokeAny:      Admin,
 	MemberChangeRole:     Admin,
 	AuditView:            Admin,
+	// Undoing a moderator's or admin's deletion (v14 "Silinen içeriği geri
+	// alma").
+	AnnouncementRestore: Admin,
 }
 
 // allowedWhileMuted lists the actions a muted member may still perform: reads,
@@ -256,4 +279,21 @@ func CanAssign(actor, newRole Role) bool {
 // would leave the tayfa without an active admin.
 func CanDemoteSelf(current, newRole Role) bool {
 	return current.Valid() && newRole.Valid() && newRole < current
+}
+
+// CanActOnContent reports whether actor may edit or delete content written
+// by someone else whose current role in the tayfa is author: the same
+// hierarchy as for members, so a moderator cannot change a moderator's or an
+// admin's announcement and an admin cannot change another admin's. author
+// is 0 when the writer is no longer an active member (left, removed, banned
+// or deleted account); such content belongs to the tayfa and any actor with
+// a valid role may act on it. Callers check the action itself with Allowed.
+func CanActOnContent(actor, author Role) bool {
+	if !actor.Valid() {
+		return false
+	}
+	if author == 0 {
+		return true
+	}
+	return CanActOn(actor, author)
 }

@@ -233,6 +233,56 @@ var expected = []struct {
 	{invited, RoleStepDown, false},
 	{banned, RoleStepDown, false},
 	{nonMember, RoleStepDown, false},
+	// AnnouncementCreate
+	{admin, AnnouncementCreate, true},
+	{moderator, AnnouncementCreate, true},
+	{member, AnnouncementCreate, false},
+	{mutedMember, AnnouncementCreate, false},
+	{mutedModerator, AnnouncementCreate, false},
+	{pending, AnnouncementCreate, false},
+	{invited, AnnouncementCreate, false},
+	{banned, AnnouncementCreate, false},
+	{nonMember, AnnouncementCreate, false},
+	// AnnouncementEdit
+	{admin, AnnouncementEdit, true},
+	{moderator, AnnouncementEdit, true},
+	{member, AnnouncementEdit, false},
+	{mutedMember, AnnouncementEdit, false},
+	{mutedModerator, AnnouncementEdit, false},
+	{pending, AnnouncementEdit, false},
+	{invited, AnnouncementEdit, false},
+	{banned, AnnouncementEdit, false},
+	{nonMember, AnnouncementEdit, false},
+	// AnnouncementDelete
+	{admin, AnnouncementDelete, true},
+	{moderator, AnnouncementDelete, true},
+	{member, AnnouncementDelete, false},
+	{mutedMember, AnnouncementDelete, false},
+	{mutedModerator, AnnouncementDelete, false},
+	{pending, AnnouncementDelete, false},
+	{invited, AnnouncementDelete, false},
+	{banned, AnnouncementDelete, false},
+	{nonMember, AnnouncementDelete, false},
+	// AnnouncementPin
+	{admin, AnnouncementPin, true},
+	{moderator, AnnouncementPin, true},
+	{member, AnnouncementPin, false},
+	{mutedMember, AnnouncementPin, false},
+	{mutedModerator, AnnouncementPin, false},
+	{pending, AnnouncementPin, false},
+	{invited, AnnouncementPin, false},
+	{banned, AnnouncementPin, false},
+	{nonMember, AnnouncementPin, false},
+	// AnnouncementRestore
+	{admin, AnnouncementRestore, true},
+	{moderator, AnnouncementRestore, false},
+	{member, AnnouncementRestore, false},
+	{mutedMember, AnnouncementRestore, false},
+	{mutedModerator, AnnouncementRestore, false},
+	{pending, AnnouncementRestore, false},
+	{invited, AnnouncementRestore, false},
+	{banned, AnnouncementRestore, false},
+	{nonMember, AnnouncementRestore, false},
 }
 
 func TestAllowedMatrix(t *testing.T) {
@@ -455,6 +505,33 @@ func TestParseStatus(t *testing.T) {
 	for _, s := range []string{"", "Active", "muted", "removed"} {
 		if _, err := ParseStatus(s); !errors.Is(err, ErrUnknownStatus) {
 			t.Errorf("ParseStatus(%q) kabul edildi", s)
+		}
+	}
+}
+
+func TestCanActOnContent(t *testing.T) {
+	tests := []struct {
+		actor, author Role
+		want          bool
+	}{
+		{Admin, Admin, false},
+		{Admin, Moderator, true},
+		{Admin, Member, true},
+		{Admin, 0, true},
+		{Moderator, Admin, false},
+		{Moderator, Moderator, false},
+		{Moderator, Member, true},
+		{Moderator, 0, true},
+		{Member, Member, false},
+		{Member, 0, true},
+		{0, 0, false},
+		{4, 0, false},
+		{Admin, 4, false},
+		{Admin, -1, false},
+	}
+	for _, tt := range tests {
+		if got := CanActOnContent(tt.actor, tt.author); got != tt.want {
+			t.Errorf("CanActOnContent(%d, %d) = %v", tt.actor, tt.author, got)
 		}
 	}
 }

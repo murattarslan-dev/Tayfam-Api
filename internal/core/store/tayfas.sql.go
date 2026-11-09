@@ -307,6 +307,26 @@ func (q *Queries) GetTayfaForUpdate(ctx context.Context, id pgtype.UUID) (GetTay
 	return i, err
 }
 
+const isTayfaModuleEnabled = `-- name: IsTayfaModuleEnabled :one
+SELECT EXISTS (
+  SELECT 1 FROM tayfa_modules
+  WHERE tayfa_id = $1 AND module = $2 AND enabled
+)::boolean AS enabled
+`
+
+type IsTayfaModuleEnabledParams struct {
+	TayfaID pgtype.UUID
+	Module  string
+}
+
+// Kapalı ya da kaydı olmayan modül kapalı sayılır (varsayılan "hayır").
+func (q *Queries) IsTayfaModuleEnabled(ctx context.Context, arg IsTayfaModuleEnabledParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isTayfaModuleEnabled, arg.TayfaID, arg.Module)
+	var enabled bool
+	err := row.Scan(&enabled)
+	return enabled, err
+}
+
 const listInterestsForTayfas = `-- name: ListInterestsForTayfas :many
 SELECT tayfa_id, event_type FROM tayfa_interests
 WHERE tayfa_id = ANY($1::uuid[])

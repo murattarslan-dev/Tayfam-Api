@@ -4,12 +4,14 @@
 // app.actor_id (SET LOCAL) to the verified caller, so the memberships
 // trigger can check the role hierarchy again in the database (ADR-0004).
 // Audit records and outbox events are written with Audit and Event in the
-// same transaction as the change they describe (ADR-0002).
+// same transaction as the change they describe (ADR-0002); events go
+// through internal/platform/outbox.Write.
 package txn
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -17,6 +19,7 @@ import (
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/outbox"
 )
 
 // Beginner starts a transaction; *pgxpool.Pool and pgx.Tx satisfy it.
@@ -69,19 +72,30 @@ func Audit(ctx context.Context, q *store.Queries, tayfa, actor id.ID, action str
 	return nil
 }
 
-// Event writes an outbox event (ADR-0002). The same rule as Audit applies to
-// payload: IDs only, no personal data.
+// Event writes an outbox event with outbox.Write (ADR-0002), which keeps
+// event IDs in commit order for the relay, and records the event's tayfa in
+// core's tayfa_id column. q must run in a transaction (WithActor); call
+// Event as the last write of it, as outbox.Write asks. The same rule as Audit
+// applies to payload: IDs only, no personal data.
 func Event(ctx context.Context, q *store.Queries, typ string, tayfa, actor id.ID, subject Target, payload map[string]any) error {
-	b, err := object(payload)
-	if err != nil {
-		return err
+	tx, ok := q.Tx()
+	if !ok {
+		return errors.New("olay transaction dışında yazılamaz")
 	}
-	st, sid := subject.pg()
-	if err := q.CreateDomainEvent(ctx, store.CreateDomainEventParams{
-		ID: id.New().PG(), Type: typ, ActorID: actor.PG(), TayfaID: tayfa.PG(),
-		SubjectType: st, SubjectID: sid, Payload: b,
-	}); err != nil {
+	var p any
+	if payload != nil {
+		p = payload
+	}
+	eid, err := outbox.Write(ctx, tx, outbox.NewEvent{
+		Type: typ, Actor: actor, SubjectType: subject.Type, SubjectID: subject.ID, Payload: p,
+	})
+	if err != nil {
 		return fmt.Errorf("olay: %w", err)
+	}
+	if tayfa != (id.ID{}) {
+		if _, err := q.SetDomainEventTayfa(ctx, store.SetDomainEventTayfaParams{ID: eid.PG(), TayfaID: tayfa.PG()}); err != nil {
+			return fmt.Errorf("olayın tayfası: %w", err)
+		}
 	}
 	return nil
 }

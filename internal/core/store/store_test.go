@@ -1173,7 +1173,19 @@ func TestModulesAndInterests(t *testing.T) {
 	if err != nil || len(mods) != 1 || mods[0].Enabled {
 		t.Fatalf("modüller = %+v, %v", mods, err)
 	}
-	if err := q.CreateDomainEvent(ctx, CreateDomainEventParams{ID: id.New().PG(), Type: "tayfa.created", TayfaID: tayfa.PG(), SubjectType: text("tayfa"), SubjectID: tayfa.PG(), Payload: []byte(`{}`)}); err != nil {
+	for module, want := range map[string]bool{"polls": false, "events": false, "qa": false} {
+		got, err := q.IsTayfaModuleEnabled(ctx, IsTayfaModuleEnabledParams{TayfaID: tayfa.PG(), Module: module})
+		if err != nil || got != want {
+			t.Fatalf("%s açık = %v, %v", module, got, err)
+		}
+	}
+	if err := q.SetTayfaModule(ctx, SetTayfaModuleParams{TayfaID: tayfa.PG(), Module: "events", Enabled: true}); err != nil {
 		t.Fatal(err)
+	}
+	if got, err := q.IsTayfaModuleEnabled(ctx, IsTayfaModuleEnabledParams{TayfaID: tayfa.PG(), Module: "events"}); err != nil || !got {
+		t.Fatalf("events açık değil: %v", err)
+	}
+	if got, err := q.IsTayfaModuleEnabled(ctx, IsTayfaModuleEnabledParams{TayfaID: id.New().PG(), Module: "events"}); err != nil || got {
+		t.Fatalf("başka tayfanın modülü: %v %v", got, err)
 	}
 }
