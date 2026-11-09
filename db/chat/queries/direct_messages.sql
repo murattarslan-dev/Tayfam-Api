@@ -143,6 +143,16 @@ UPDATE dm_messages
 SET body_encrypted = NULL, key_version = NULL, deleted_at = @deleted_at
 WHERE conversation_id = @conversation_id AND id = @id AND sender_id = @sender_id AND deleted_at IS NULL;
 
+-- Şikâyet doğrulaması (core'un sorusu, issue #95): kişinin taraf olduğu
+-- konuşmadaki mesajın konuşması ve göndereni. İçerik seçilmez. Silinmiş
+-- mesaj da bulunur (taciz edip silen şikâyetten kaçamasın); reddedilmiş
+-- istek de (isteği reddeden şikâyet edebilsin).
+-- name: GetDirectMessageForParty :one
+SELECT m.conversation_id, m.sender_id
+FROM dm_messages m
+JOIN dm_conversations c ON c.id = m.conversation_id
+WHERE m.id = @id AND (c.user_low_id = @user_id OR c.user_high_id = @user_id);
+
 -- Okunma bilgisi.
 
 -- Okundu işareti yalnızca ileri gider (UUIDv7 zaman sıralı).

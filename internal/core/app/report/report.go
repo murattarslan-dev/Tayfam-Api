@@ -103,6 +103,9 @@ const (
 	TargetAnswer       TargetType = "answer"
 	TargetPoll         TargetType = "poll"
 	TargetFishingCatch TargetType = "fishing_catch"
+	// TargetDMMessage: a direct message (issue #95). Not about a tayfa; see
+	// createDirect.
+	TargetDMMessage TargetType = "dm_message"
 )
 
 // content reports whether t is content (has an author and can be removed).
@@ -114,7 +117,9 @@ func (t TargetType) content() bool {
 	return false
 }
 
-func (t TargetType) valid() bool { return t == TargetUser || t == TargetTayfa || t.content() }
+func (t TargetType) valid() bool {
+	return t == TargetUser || t == TargetTayfa || t == TargetDMMessage || t.content()
+}
 
 // Reason is a report category (reports.reason; Notion "Topluluk Kuralları").
 type Reason string
@@ -196,6 +201,9 @@ const (
 	EscalationChildSafety   = "child_safety"
 	EscalationMinorInvolved = "minor_involved"
 	EscalationUnresolved    = "unresolved"
+	// EscalationDirectMessage: a direct message report goes to the platform
+	// only (issue #95).
+	EscalationDirectMessage = "direct_message"
 )
 
 // Outbox event types. Payloads hold IDs and classification only: never the
@@ -226,7 +234,10 @@ type Config struct {
 	Pool *pgxpool.Pool
 	// Minors is required. An error from it counts as "under 18".
 	Minors MinorChecker
-	Now    func() time.Time
+	// DirectMessages checks direct message reports with chat. Without it
+	// (a local run without chat) they are apperr.ErrUnavailable.
+	DirectMessages DirectMessages
+	Now            func() time.Time
 }
 
 // Service implements ReportService's business logic.
@@ -292,6 +303,9 @@ type CreateInput struct {
 	TargetID    string
 	Reason      Reason
 	Description string
+	// Evidence is only, and required, for TargetDMMessage: the text the
+	// reporter shares from their own device.
+	Evidence string
 }
 
 // Create files a report by user. A second report by the same user about the
@@ -299,6 +313,15 @@ type CreateInput struct {
 func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in CreateInput) (v MyView, created bool, err error) {
 	if !in.TargetType.valid() {
 		return MyView{}, false, apperr.Validation("target_type")
+	}
+	if in.TargetType == TargetDMMessage {
+		if tayfa != (id.ID{}) {
+			return MyView{}, false, apperr.Validation("tayfa_id")
+		}
+		return s.createDirect(ctx, user, in)
+	}
+	if in.Evidence != "" {
+		return MyView{}, false, apperr.Validation("evidence_text")
 	}
 	target, ok := id.Parse(in.TargetID)
 	if !ok || (in.TargetType == TargetTayfa && target != tayfa) || (in.TargetType == TargetUser && target == user) {

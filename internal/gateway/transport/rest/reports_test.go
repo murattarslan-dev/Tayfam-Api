@@ -172,3 +172,44 @@ func TestReportErrors(t *testing.T) {
 		}
 	}
 }
+
+// A direct message report goes to POST /v1/me/reports, without a tayfa and
+// with the evidence; the tayfa route refuses it and the evidence is refused
+// anywhere else.
+func TestDirectMessageReportRoute(t *testing.T) {
+	f := &fakeCore{}
+	h := coreRouter(f)
+	body := `{"target_type":"dm_message","target_id":"` + targetID + `","reason":"harassment","evidence_text":"tehdit metni"}`
+	w := as(h, "POST", "/v1/me/reports", body)
+	got, tok, _ := f.last()
+	want := &corev1.CreateReportRequest{TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE, TargetId: targetID,
+		Reason: corev1.ReportReason_REPORT_REASON_HARASSMENT, EvidenceText: "tehdit metni"}
+	if w.Code != 201 || !proto.Equal(got, want) || tok != "USERTOKEN" || w.Header().Get("Location") != "/v1/me/reports/"+reportID {
+		t.Fatalf("DM şikâyeti: %d %s; core'a giden %v", w.Code, w.Body, got)
+	}
+	if strings.Contains(w.Body.String(), "tehdit") {
+		t.Fatalf("kanıt metni geri döndü: %s", w.Body)
+	}
+	f = &fakeCore{}
+	h = coreRouter(f)
+	base := "/v1/tayfas/" + tayfaID + "/reports"
+	ok := `"target_id":"` + targetID + `"`
+	for name, tc := range map[string]struct{ path, body string }{
+		"tayfa ucunda DM":       {base, body},
+		"kanıtsız DM":           {"/v1/me/reports", `{"target_type":"dm_message",` + ok + `,"reason":"spam"}`},
+		"boş kanıt":             {"/v1/me/reports", `{"target_type":"dm_message",` + ok + `,"reason":"spam","evidence_text":"   "}`},
+		"uzun kanıt":            {"/v1/me/reports", `{"target_type":"dm_message",` + ok + `,"reason":"spam","evidence_text":"` + strings.Repeat("ş", 2001) + `"}`},
+		"tayfasız üye":          {"/v1/me/reports", `{"target_type":"user",` + ok + `,"reason":"spam"}`},
+		"üye şikâyetinde kanıt": {base, `{"target_type":"user",` + ok + `,"reason":"spam","evidence_text":"x"}`},
+	} {
+		if w := as(h, "POST", tc.path, tc.body); w.Code != 400 || problemType(t, w) != "invalid-request" {
+			t.Errorf("%s: %d %s", name, w.Code, problemType(t, w))
+		}
+	}
+	if _, _, n := f.last(); n != 0 {
+		t.Fatal("geçersiz istek core'a gitti")
+	}
+	if w := as(h, "POST", "/v1/me/reports", `{"target_type":"dm_message",`+ok+`,"reason":"spam","evidence_text":"  `+strings.Repeat("ş", 2000)+`  "}`); w.Code != 201 {
+		t.Fatalf("2000 karakter: %d %s", w.Code, w.Body)
+	}
+}

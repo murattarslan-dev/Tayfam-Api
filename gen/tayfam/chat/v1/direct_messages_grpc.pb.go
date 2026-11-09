@@ -19,14 +19,15 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	DirectMessageService_SendDirectMessage_FullMethodName     = "/tayfam.chat.v1.DirectMessageService/SendDirectMessage"
-	DirectMessageService_ListConversations_FullMethodName     = "/tayfam.chat.v1.DirectMessageService/ListConversations"
-	DirectMessageService_GetConversation_FullMethodName       = "/tayfam.chat.v1.DirectMessageService/GetConversation"
-	DirectMessageService_ListDirectMessages_FullMethodName    = "/tayfam.chat.v1.DirectMessageService/ListDirectMessages"
-	DirectMessageService_DeleteDirectMessage_FullMethodName   = "/tayfam.chat.v1.DirectMessageService/DeleteDirectMessage"
-	DirectMessageService_MarkConversationRead_FullMethodName  = "/tayfam.chat.v1.DirectMessageService/MarkConversationRead"
-	DirectMessageService_AcceptMessageRequest_FullMethodName  = "/tayfam.chat.v1.DirectMessageService/AcceptMessageRequest"
-	DirectMessageService_DeclineMessageRequest_FullMethodName = "/tayfam.chat.v1.DirectMessageService/DeclineMessageRequest"
+	DirectMessageService_SendDirectMessage_FullMethodName            = "/tayfam.chat.v1.DirectMessageService/SendDirectMessage"
+	DirectMessageService_ListConversations_FullMethodName            = "/tayfam.chat.v1.DirectMessageService/ListConversations"
+	DirectMessageService_GetConversation_FullMethodName              = "/tayfam.chat.v1.DirectMessageService/GetConversation"
+	DirectMessageService_ListDirectMessages_FullMethodName           = "/tayfam.chat.v1.DirectMessageService/ListDirectMessages"
+	DirectMessageService_DeleteDirectMessage_FullMethodName          = "/tayfam.chat.v1.DirectMessageService/DeleteDirectMessage"
+	DirectMessageService_MarkConversationRead_FullMethodName         = "/tayfam.chat.v1.DirectMessageService/MarkConversationRead"
+	DirectMessageService_AcceptMessageRequest_FullMethodName         = "/tayfam.chat.v1.DirectMessageService/AcceptMessageRequest"
+	DirectMessageService_DeclineMessageRequest_FullMethodName        = "/tayfam.chat.v1.DirectMessageService/DeclineMessageRequest"
+	DirectMessageService_VerifyDirectMessageForReport_FullMethodName = "/tayfam.chat.v1.DirectMessageService/VerifyDirectMessageForReport"
 )
 
 // DirectMessageServiceClient is the client API for DirectMessageService service.
@@ -115,6 +116,16 @@ type DirectMessageServiceClient interface {
 	// later reopens it as active. ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND
 	// otherwise.
 	DeclineMessageRequest(ctx context.Context, in *DeclineMessageRequestRequest, opts ...grpc.CallOption) (*DeclineMessageRequestResponse, error)
+	// VerifyDirectMessageForReport answers core's question when the caller
+	// reports a direct message (core ReportService.CreateReport with
+	// REPORT_TARGET_TYPE_DM_MESSAGE; ADR-0009): core forwards the reporter's
+	// own token. The caller must be a party of the message's conversation
+	// (also of a request they declined); the message may be deleted (not yet
+	// purged). The answer is the conversation and the sender only: never the
+	// body. The caller's own message, a message whose sender's account was
+	// deleted, and anything else are ERROR_REASON_MESSAGE_NOT_FOUND. Works
+	// without the message key.
+	VerifyDirectMessageForReport(ctx context.Context, in *VerifyDirectMessageForReportRequest, opts ...grpc.CallOption) (*VerifyDirectMessageForReportResponse, error)
 }
 
 type directMessageServiceClient struct {
@@ -199,6 +210,16 @@ func (c *directMessageServiceClient) DeclineMessageRequest(ctx context.Context, 
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeclineMessageRequestResponse)
 	err := c.cc.Invoke(ctx, DirectMessageService_DeclineMessageRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *directMessageServiceClient) VerifyDirectMessageForReport(ctx context.Context, in *VerifyDirectMessageForReportRequest, opts ...grpc.CallOption) (*VerifyDirectMessageForReportResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VerifyDirectMessageForReportResponse)
+	err := c.cc.Invoke(ctx, DirectMessageService_VerifyDirectMessageForReport_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -291,6 +312,16 @@ type DirectMessageServiceServer interface {
 	// later reopens it as active. ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND
 	// otherwise.
 	DeclineMessageRequest(context.Context, *DeclineMessageRequestRequest) (*DeclineMessageRequestResponse, error)
+	// VerifyDirectMessageForReport answers core's question when the caller
+	// reports a direct message (core ReportService.CreateReport with
+	// REPORT_TARGET_TYPE_DM_MESSAGE; ADR-0009): core forwards the reporter's
+	// own token. The caller must be a party of the message's conversation
+	// (also of a request they declined); the message may be deleted (not yet
+	// purged). The answer is the conversation and the sender only: never the
+	// body. The caller's own message, a message whose sender's account was
+	// deleted, and anything else are ERROR_REASON_MESSAGE_NOT_FOUND. Works
+	// without the message key.
+	VerifyDirectMessageForReport(context.Context, *VerifyDirectMessageForReportRequest) (*VerifyDirectMessageForReportResponse, error)
 	mustEmbedUnimplementedDirectMessageServiceServer()
 }
 
@@ -324,6 +355,9 @@ func (UnimplementedDirectMessageServiceServer) AcceptMessageRequest(context.Cont
 }
 func (UnimplementedDirectMessageServiceServer) DeclineMessageRequest(context.Context, *DeclineMessageRequestRequest) (*DeclineMessageRequestResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeclineMessageRequest not implemented")
+}
+func (UnimplementedDirectMessageServiceServer) VerifyDirectMessageForReport(context.Context, *VerifyDirectMessageForReportRequest) (*VerifyDirectMessageForReportResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method VerifyDirectMessageForReport not implemented")
 }
 func (UnimplementedDirectMessageServiceServer) mustEmbedUnimplementedDirectMessageServiceServer() {}
 func (UnimplementedDirectMessageServiceServer) testEmbeddedByValue()                              {}
@@ -490,6 +524,24 @@ func _DirectMessageService_DeclineMessageRequest_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DirectMessageService_VerifyDirectMessageForReport_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(VerifyDirectMessageForReportRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DirectMessageServiceServer).VerifyDirectMessageForReport(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DirectMessageService_VerifyDirectMessageForReport_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DirectMessageServiceServer).VerifyDirectMessageForReport(ctx, req.(*VerifyDirectMessageForReportRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DirectMessageService_ServiceDesc is the grpc.ServiceDesc for DirectMessageService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -528,6 +580,10 @@ var DirectMessageService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeclineMessageRequest",
 			Handler:    _DirectMessageService_DeclineMessageRequest_Handler,
+		},
+		{
+			MethodName: "VerifyDirectMessageForReport",
+			Handler:    _DirectMessageService_VerifyDirectMessageForReport_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

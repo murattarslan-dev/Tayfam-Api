@@ -41,13 +41,16 @@ func (s *ReportServer) CreateReport(ctx context.Context, req *corev1.CreateRepor
 	if err != nil {
 		return nil, err
 	}
-	t, err := tayfaID(req.GetTayfaId())
-	if err != nil {
-		return nil, err
-	}
 	tt, ok := reportTargets[req.GetTargetType()]
 	if !ok {
 		return nil, validation("target_type")
+	}
+	// A direct message report is not about a tayfa (issue #95).
+	var t id.ID
+	if tt != report.TargetDMMessage || req.GetTayfaId() != "" {
+		if t, err = tayfaID(req.GetTayfaId()); err != nil {
+			return nil, err
+		}
 	}
 	reason, ok := reportReasons[req.GetReason()]
 	if !ok {
@@ -55,6 +58,7 @@ func (s *ReportServer) CreateReport(ctx context.Context, req *corev1.CreateRepor
 	}
 	v, created, err := s.app.Create(ctx, user, t, report.CreateInput{
 		TargetType: tt, TargetID: req.GetTargetId(), Reason: reason, Description: req.GetDescription(),
+		Evidence: req.GetEvidenceText(),
 	})
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
@@ -160,6 +164,7 @@ var reportTargets = map[corev1.ReportTargetType]report.TargetType{
 	corev1.ReportTargetType_REPORT_TARGET_TYPE_ANSWER:        report.TargetAnswer,
 	corev1.ReportTargetType_REPORT_TARGET_TYPE_POLL:          report.TargetPoll,
 	corev1.ReportTargetType_REPORT_TARGET_TYPE_FISHING_CATCH: report.TargetFishingCatch,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE:    report.TargetDMMessage,
 }
 
 var reportReasons = map[corev1.ReportReason]report.Reason{
@@ -218,7 +223,7 @@ func optionalTime(t time.Time) *timestamppb.Timestamp {
 
 func myReportPB(v report.MyView) *corev1.MyReport {
 	out := &corev1.MyReport{
-		Id: v.ID.String(), TayfaId: v.TayfaID.String(), TargetType: toProto(reportTargets, v.TargetType),
+		Id: v.ID.String(), TayfaId: optionalID(v.TayfaID), TargetType: toProto(reportTargets, v.TargetType),
 		TargetId: v.TargetID.String(), Reason: toProto(reportReasons, v.Reason), Description: v.Description,
 		Status: reportStatusPB(v.Status), CreateTime: timestamppb.New(v.CreatedAt), ResolveTime: optionalTime(v.ResolvedAt),
 	}

@@ -333,6 +333,7 @@ type Report struct {
 	PlatformHandledBy     pgtype.UUID
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
+	EvidenceText          pgtype.Text
 }
 
 type Tag struct {

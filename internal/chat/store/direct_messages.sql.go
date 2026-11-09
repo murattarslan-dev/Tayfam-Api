@@ -498,6 +498,34 @@ func (q *Queries) GetDirectMessageByRequest(ctx context.Context, arg GetDirectMe
 	return i, err
 }
 
+const getDirectMessageForParty = `-- name: GetDirectMessageForParty :one
+SELECT m.conversation_id, m.sender_id
+FROM dm_messages m
+JOIN dm_conversations c ON c.id = m.conversation_id
+WHERE m.id = $1 AND (c.user_low_id = $2 OR c.user_high_id = $2)
+`
+
+type GetDirectMessageForPartyParams struct {
+	ID     pgtype.UUID
+	UserID pgtype.UUID
+}
+
+type GetDirectMessageForPartyRow struct {
+	ConversationID pgtype.UUID
+	SenderID       pgtype.UUID
+}
+
+// Şikâyet doğrulaması (core'un sorusu, issue #95): kişinin taraf olduğu
+// konuşmadaki mesajın konuşması ve göndereni. İçerik seçilmez. Silinmiş
+// mesaj da bulunur (taciz edip silen şikâyetten kaçamasın); reddedilmiş
+// istek de (isteği reddeden şikâyet edebilsin).
+func (q *Queries) GetDirectMessageForParty(ctx context.Context, arg GetDirectMessageForPartyParams) (GetDirectMessageForPartyRow, error) {
+	row := q.db.QueryRow(ctx, getDirectMessageForParty, arg.ID, arg.UserID)
+	var i GetDirectMessageForPartyRow
+	err := row.Scan(&i.ConversationID, &i.SenderID)
+	return i, err
+}
+
 const hasUnreadConversationNotification = `-- name: HasUnreadConversationNotification :one
 
 SELECT EXISTS (

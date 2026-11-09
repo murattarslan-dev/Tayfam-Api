@@ -3,6 +3,10 @@
 - **Durum:** Kabul edildi
 - **Tarih:** 2026-11-07
 - **Karar veren:** Murat Tarslan
+- **Revizyon:** 2026-11-09 (issue #95): `CheckDirectMessage` imzası
+  (gönderen token'dan), core → chat `VerifyDirectMessageForReport` ve
+  birebir mesaj şikâyetinin `reports` tablosundaki yeri ("Birebir mesaj
+  şikâyeti").
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0005](0005-gercek-zamanli-iletisim-ve-chat.md), [ADR-0008](0008-kvkk-ve-platform-yonetimi.md)
 - **Kaynak:** Notion: Veri Modeli (taslak v13) ve ER diyagramı
 
@@ -111,7 +115,8 @@ Tüm tüketici metodları idempotenttir (ADR-0002).
 |-----------------|-------|------|
 | chat → core | `GetMembership(tayfa_id)` | Bildirim tercihlerinde üyelik kontrolü; kullanıcının token'ı iletilir |
 | chat → core | `AuthorizeChannelAction(tayfa_id, action, target_user_id?)` | Kanal işlemleri için core'daki tek izin tablosunun kararı (CLAUDE.md kural 5): izin, rol, susturma, tayfa salt okunur mu, hedefe göre hiyerarşi. Kullanıcının token'ı iletilir; hedefsiz cevap 5 sn önbelleklenir |
-| chat → core | `CheckDirectMessage(sender_id, recipient_id)` | Notion v7 kuralları: ortak aktif tayfa, arkadaşlık, engelleme, ortak etkinlik geçmişi. Sonuç: yazamaz, istek, aktif |
+| chat → core | `CheckDirectMessage(recipient_id)` | Notion v7 kuralları: engelleme, arkadaşlık, ortak aktif tayfa, ortak etkinlik geçmişi. Gönderen her zaman iletilen kullanıcı token'ındaki kişidir (2026-11-09, issue #95; başkası adına sorulamaz). Sonuç yalnızca karar: yazamaz, istek (+ çağıranın günlük istek sınırı 5/20), aktif. Her mesajda sorulur, önbelleklenmez |
+| core → chat | `VerifyDirectMessageForReport(message_id)` | Birebir mesaj şikâyeti (2026-11-09, issue #95): şikâyet edenin token'ı iletilir; chat çağıranın o konuşmanın tarafı olduğunu doğrular, yalnızca konuşma ve gönderen kimliğini döner, içerik dönmez |
 | chat → core | `ListActiveMemberIDs(tayfa_id)` | Canlı olay dağıtımı (WebSocket, gerekirse). Bildirim alıcıları için kullanılmaz; onları core `notification.requested` ile verir |
 | identity → core, chat | `ExportUserData(user_id)` | KVKK veri dışa aktarma (ADR-0008) |
 | core → identity | `IsMinor(user_ids)` | Şikâyet önceliği; yalnızca evet/hayır döner (ADR-0012) |
@@ -120,6 +125,37 @@ Tüm tüketici metodları idempotenttir (ADR-0002).
 
 Sosyal ilişkiler (arkadaşlık, engelleme) core'dadır; böylece birebir mesaj izni
 tek bir servise tek bir çağrıyla sorulur.
+
+### Birebir mesaj şikâyeti (2026-11-09)
+
+Platform sahibinin kararı (issue #95, seçenek a): birebir mesaj şikâyeti de
+core'un `reports` tablosundadır; ayrı bir chat tablosu yoktur.
+
+- Hedef türü `dm_message`, `target_id` mesajın kimliği, `subject_user_id`
+  gönderen. DM bir tayfaya ait olmadığı için `tayfa_id` **yalnızca** bu
+  türde NULL'dır (CHECK).
+- core hedefi kendisi göremez (chat'in verisi): şikâyet edenin token'ıyla
+  chat'e `VerifyDirectMessageForReport` sorar. Taraf olmayan, kendi mesajı,
+  bilinmeyen mesaj ve göndereni silinmiş mesaj "hedef bulunamadı" olur.
+  Reddedilmiş istek ve silinmiş (henüz kalıcı silinmemiş) mesaj şikâyet
+  edilebilir.
+- Kanıt, şikâyet edenin kendi cihazından bilinçli olarak paylaştığı açık
+  metindir (`evidence_text`, 1–2000 karakter, yalnızca bu türde ve
+  zorunlu; ADR-0005 "Şikâyet"). Sunucu şikâyete mesaj içeriğini kendisi
+  eklemez; böylece akış E2E aşamasında değişmez. Metin log'a, olaya ve
+  yanıtlara girmez; yalnızca platform paneli okur, oluşturulduktan sonra
+  değişmez, çözülmüş şikâyetle 1 yıl sonra silinir.
+- Bu şikâyetler hiçbir tayfa kuyruğuna düşmez (`platform_only`),
+  oluşturulduğu anda platforma yükselir (`escalation_reason =
+  direct_message`). Tekrar, günlük sınır (20) ve öncelik kuralları diğer
+  şikâyetlerle aynıdır; öncelik için IsMinor'a şikâyet eden ve gönderen
+  sorulur (ADR-0012). `staff_conduct` sebebi geçerli değildir.
+- REST: `POST /v1/me/reports` (tayfa yolu olmayan şikâyetler); tayfa
+  ucundaki `POST /v1/tayfas/{tayfa_id}/reports` bu türü reddeder.
+
+Böylece core ile chat arasında iki yönlü senkron çağrı olur (chat → core:
+izinler; core → chat: şikâyet doğrulaması). İkisi de yalnızca kullanıcının
+kendi token'ıyla yapılır; ağ izinleri zaten vardır (outbox relay).
 
 ### Veri modeline eklenenler
 

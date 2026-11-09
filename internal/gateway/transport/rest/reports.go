@@ -22,10 +22,11 @@ type ReportClient interface {
 }
 
 const (
-	// maxReportBody fits a 1000-character description in the worst JSON
-	// escaping (\uXXXX surrogate pairs).
-	maxReportBody        = 16 << 10
+	// maxReportBody fits a 1000-character description and a 2000-character
+	// evidence text in the worst JSON escaping (\uXXXX surrogate pairs).
+	maxReportBody        = 48 << 10
 	reportDescriptionMax = 1000
+	reportEvidenceMax    = 2000
 )
 
 // registerReports serves the report routes. The reporter is always the
@@ -37,6 +38,8 @@ func registerReports(mux *http.ServeMux, h coreHandlers) {
 	mux.HandleFunc("GET /v1/tayfas/{tayfa_id}/reports", a(h.listTayfaReports))
 	mux.HandleFunc("POST /v1/tayfas/{tayfa_id}/reports/{report_id}/resolution", a(h.resolveReport))
 	mux.HandleFunc("GET /v1/me/reports", a(h.listMyReports))
+	// Reports that are not about a tayfa: direct messages (issue #95).
+	mux.HandleFunc("POST /v1/me/reports", a(h.createDirectReport))
 	mux.HandleFunc("GET /v1/me/reports/{report_id}", a(h.getMyReport))
 }
 
@@ -46,6 +49,7 @@ var (
 		"announcement": corev1.ReportTargetType_REPORT_TARGET_TYPE_ANNOUNCEMENT, "event": corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT,
 		"question": corev1.ReportTargetType_REPORT_TARGET_TYPE_QUESTION, "answer": corev1.ReportTargetType_REPORT_TARGET_TYPE_ANSWER,
 		"poll": corev1.ReportTargetType_REPORT_TARGET_TYPE_POLL, "fishing_catch": corev1.ReportTargetType_REPORT_TARGET_TYPE_FISHING_CATCH,
+		"dm_message": corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE,
 	})
 	reportReasons = newEnum(map[string]corev1.ReportReason{
 		"harassment":         corev1.ReportReason_REPORT_REASON_HARASSMENT,
@@ -82,8 +86,9 @@ var (
 )
 
 type myReportJSON struct {
-	ID          string `json:"id"`
-	TayfaID     string `json:"tayfa_id"`
+	ID string `json:"id"`
+	// Absent for a direct message report.
+	TayfaID     string `json:"tayfa_id,omitempty"`
 	TargetType  string `json:"target_type"`
 	TargetID    string `json:"target_id"`
 	Reason      string `json:"reason"`
@@ -151,29 +156,46 @@ type modReportListJSON struct {
 }
 
 type reportCreateBody struct {
-	TargetType  string `json:"target_type"`
-	TargetID    string `json:"target_id"`
-	Reason      string `json:"reason"`
-	Description string `json:"description"`
+	TargetType   string `json:"target_type"`
+	TargetID     string `json:"target_id"`
+	Reason       string `json:"reason"`
+	Description  string `json:"description"`
+	EvidenceText string `json:"evidence_text"`
 }
 
+// createReport files a report about something in a tayfa.
 func (h coreHandlers) createReport(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	id, ok := pathUUID(w, r, "tayfa_id")
 	if !ok {
 		return
 	}
+	h.fileReport(ctx, w, r, id)
+}
+
+// createDirectReport files a report that is not about a tayfa: a direct
+// message (issue #95). It goes to the platform only.
+func (h coreHandlers) createDirectReport(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	h.fileReport(ctx, w, r, "")
+}
+
+// fileReport checks the body; tayfaID is empty exactly for direct message
+// reports, which alone carry evidence_text.
+func (h coreHandlers) fileReport(ctx context.Context, w http.ResponseWriter, r *http.Request, tayfaID string) {
 	var b reportCreateBody
 	if !decodeLimit(w, r, &b, maxReportBody) {
 		return
 	}
 	tt, okT := reportTargets.value(b.TargetType)
 	reason, okR := reportReasons.value(b.Reason)
-	if !okT || !okR || !validUUID(b.TargetID) || utf8.RuneCountInString(strings.TrimSpace(b.Description)) > reportDescriptionMax {
+	direct := tt == corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE
+	evidence := utf8.RuneCountInString(strings.TrimSpace(b.EvidenceText))
+	if !okT || !okR || !validUUID(b.TargetID) || utf8.RuneCountInString(strings.TrimSpace(b.Description)) > reportDescriptionMax ||
+		direct != (tayfaID == "") || (direct && (evidence < 1 || evidence > reportEvidenceMax)) || (!direct && b.EvidenceText != "") {
 		badRequest(w, r)
 		return
 	}
 	resp, err := h.d.Reports.CreateReport(ctx, &corev1.CreateReportRequest{
-		TayfaId: id, TargetType: tt, TargetId: b.TargetID, Reason: reason, Description: b.Description,
+		TayfaId: tayfaID, TargetType: tt, TargetId: b.TargetID, Reason: reason, Description: b.Description, EvidenceText: b.EvidenceText,
 	})
 	if err != nil {
 		h.fail(w, r, err)

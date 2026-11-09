@@ -11,6 +11,9 @@
 - **Revizyon:** 2026-11-09: "Bağlantı" bölümü
   [ADR-0014](0014-websocket-erisim-tokeniyla.md) ile değişti (bilet yerine
   erişim token'ı).
+- **Revizyon:** 2026-11-09 (issue #95): "Direkt mesajlar: düz sürüm"
+  bölümü eklendi (önce sunucu anahtarıyla şifreli birebir mesaj, E2E
+  sonra) ve "Şikâyet" maddesi akışla tamamlandı.
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md)
 
@@ -117,7 +120,35 @@ görünür.
   kapatır, ortak etkinlik geçmişi olmayanlar tek mesajlık istek atabilir. Bu
   kontrol için chat, core'a tek bir gRPC çağrısıyla sorar (ADR-0009).
 - **Şikâyet:** Sunucu DM içeriğini göremediği için şikâyet eden kişi mesajı
-  kendi cihazından açık metin olarak iletir.
+  kendi cihazından açık metin olarak iletir. 2026-11-09 (issue #95): kanıt
+  core'un `reports.evidence_text` alanına yazılır; core mesajın varlığını ve
+  göndereni şikâyet edenin token'ıyla chat'e sorar (içerik chat'ten gelmez),
+  şikâyet yalnızca platforma gider ([ADR-0009](0009-veri-modelinin-servislere-dagilimi.md)
+  "Birebir mesaj şikâyeti"). Düz sürümde de aynı akış kullanılır, böylece
+  E2E'ye geçişte değişmez.
+
+### Direkt mesajlar: düz sürüm (2026-11-09)
+
+Platform sahibinin kararı (issue #95): Notion faz planındaki sıraya uyulur;
+önce **düz birebir mesaj** çalışır, E2E katmanı modülün son adımıdır.
+Mesajlar sunucuda saklanır, böylece yeni cihazda geçmiş görünür.
+
+- Düz sürümde DM metni kanal mesajlarıyla aynı şekilde, uygulamada
+  AES-256-GCM ile **sunucu anahtarıyla** şifreli saklanır
+  (`dm_messages.body_encrypted`, `CHAT_MESSAGE_KEYS`; AAD tablo + mesaj +
+  konuşma). **Düz sürümde sunucu içeriği sunucu anahtarıyla çözebilir;**
+  bu, E2E aşamasına kadar bilinçli kabul edilen ara durumdur. Anahtarın
+  olmadığı ortamda DM metodları kullanılamaz (prod'da anahtar zorunlu).
+- E2E aşamasında `dm_messages.encryption = 'e2e'` olan mesajların
+  `body_encrypted` alanı her zaman boştur (CHECK); içerik yukarıdaki zarflar
+  ve arşivdedir. **Sunucu `encryption = 'e2e'` mesajları çözemez.** Şema bu
+  geçiş için değişmez; yalnızca zarf ve arşiv tabloları eklenir. Düz
+  sürümde yazılmış eski mesajların ne olacağı (silme ya da istemcinin
+  arşive taşıması) E2E aşamasının kararıdır.
+- Kim kime yazabilir kuralı, istek akışı (tek mesaj, kabul, gönderene
+  söylenmeyen ret), günlük istek sınırı, okundu bilgisi ve içeriksiz
+  bildirimler düz sürümde de E2E'deki gibidir; E2E yalnızca içeriğin
+  taşınmasını ve saklanmasını değiştirir.
 
 **İki katman: canlı zarflar ve geçmiş arşivi**
 

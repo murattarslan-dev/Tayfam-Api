@@ -22,8 +22,8 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ReportTargetType is what a report is about. Channel and direct messages
-// are reported through chat.
+// ReportTargetType is what a report is about. Channel messages are not
+// reportable yet.
 type ReportTargetType int32
 
 const (
@@ -38,6 +38,14 @@ const (
 	ReportTargetType_REPORT_TARGET_TYPE_ANSWER        ReportTargetType = 6
 	ReportTargetType_REPORT_TARGET_TYPE_POLL          ReportTargetType = 7
 	ReportTargetType_REPORT_TARGET_TYPE_FISHING_CATCH ReportTargetType = 8
+	// target_id is a direct message ID (issue #95). Not about a tayfa:
+	// tayfa_id is empty. core asks chat with the reporter's own token
+	// (DirectMessageService.VerifyDirectMessageForReport) whether the
+	// reporter is a party of the message's conversation and who sent it;
+	// anything else is ERROR_REASON_REPORT_TARGET_NOT_FOUND. evidence_text
+	// is required. Goes to the platform only, at once; never to a tayfa's
+	// queue.
+	ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE ReportTargetType = 9
 )
 
 // Enum value maps for ReportTargetType.
@@ -52,6 +60,7 @@ var (
 		6: "REPORT_TARGET_TYPE_ANSWER",
 		7: "REPORT_TARGET_TYPE_POLL",
 		8: "REPORT_TARGET_TYPE_FISHING_CATCH",
+		9: "REPORT_TARGET_TYPE_DM_MESSAGE",
 	}
 	ReportTargetType_value = map[string]int32{
 		"REPORT_TARGET_TYPE_UNSPECIFIED":   0,
@@ -63,6 +72,7 @@ var (
 		"REPORT_TARGET_TYPE_ANSWER":        6,
 		"REPORT_TARGET_TYPE_POLL":          7,
 		"REPORT_TARGET_TYPE_FISHING_CATCH": 8,
+		"REPORT_TARGET_TYPE_DM_MESSAGE":    9,
 	}
 )
 
@@ -398,12 +408,13 @@ func (ReportPriority) EnumDescriptor() ([]byte, []int) {
 
 // MyReport is a report as its reporter sees it.
 type MyReport struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	TayfaId    string                 `protobuf:"bytes,2,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
-	TargetType ReportTargetType       `protobuf:"varint,3,opt,name=target_type,json=targetType,proto3,enum=tayfam.core.v1.ReportTargetType" json:"target_type,omitempty"`
-	TargetId   string                 `protobuf:"bytes,4,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
-	Reason     ReportReason           `protobuf:"varint,5,opt,name=reason,proto3,enum=tayfam.core.v1.ReportReason" json:"reason,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Empty for a direct message report.
+	TayfaId    string           `protobuf:"bytes,2,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	TargetType ReportTargetType `protobuf:"varint,3,opt,name=target_type,json=targetType,proto3,enum=tayfam.core.v1.ReportTargetType" json:"target_type,omitempty"`
+	TargetId   string           `protobuf:"bytes,4,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	Reason     ReportReason     `protobuf:"varint,5,opt,name=reason,proto3,enum=tayfam.core.v1.ReportReason" json:"reason,omitempty"`
 	// Empty when none was given.
 	Description string       `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
 	Status      ReportStatus `protobuf:"varint,7,opt,name=status,proto3,enum=tayfam.core.v1.ReportStatus" json:"status,omitempty"`
@@ -663,15 +674,22 @@ func (x *ModerationReport) GetPriority() ReportPriority {
 }
 
 type CreateReportRequest struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	TayfaId    string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
-	TargetType ReportTargetType       `protobuf:"varint,2,opt,name=target_type,json=targetType,proto3,enum=tayfam.core.v1.ReportTargetType" json:"target_type,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Empty for REPORT_TARGET_TYPE_DM_MESSAGE, required otherwise.
+	TayfaId    string           `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	TargetType ReportTargetType `protobuf:"varint,2,opt,name=target_type,json=targetType,proto3,enum=tayfam.core.v1.ReportTargetType" json:"target_type,omitempty"`
 	// For TARGET_TYPE_TAYFA it must equal tayfa_id.
 	TargetId string       `protobuf:"bytes,3,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
 	Reason   ReportReason `protobuf:"varint,4,opt,name=reason,proto3,enum=tayfam.core.v1.ReportReason" json:"reason,omitempty"`
 	// Optional, up to 1000 characters after trimming surrounding spaces; line
 	// breaks allowed, other control characters not. Never logged.
-	Description   string `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
+	Description string `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
+	// Only and required for REPORT_TARGET_TYPE_DM_MESSAGE: the message text
+	// the reporter shares from their own device (ADR-0005 "Şikâyet"), 1–2000
+	// characters after trimming surrounding spaces; line breaks allowed,
+	// other control characters not. Stored for the platform only; never
+	// logged, never in events, never returned (MyReport does not carry it).
+	EvidenceText  string `protobuf:"bytes,6,opt,name=evidence_text,json=evidenceText,proto3" json:"evidence_text,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -737,6 +755,13 @@ func (x *CreateReportRequest) GetReason() ReportReason {
 func (x *CreateReportRequest) GetDescription() string {
 	if x != nil {
 		return x.Description
+	}
+	return ""
+}
+
+func (x *CreateReportRequest) GetEvidenceText() string {
+	if x != nil {
+		return x.EvidenceText
 	}
 	return ""
 }
@@ -1249,14 +1274,15 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"\vcreate_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12=\n" +
 	"\fresolve_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vresolveTime\x12:\n" +
-	"\bpriority\x18\r \x01(\x0e2\x1e.tayfam.core.v1.ReportPriorityR\bpriority\"\xe8\x01\n" +
+	"\bpriority\x18\r \x01(\x0e2\x1e.tayfam.core.v1.ReportPriorityR\bpriority\"\x8d\x02\n" +
 	"\x13CreateReportRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12A\n" +
 	"\vtarget_type\x18\x02 \x01(\x0e2 .tayfam.core.v1.ReportTargetTypeR\n" +
 	"targetType\x12\x1b\n" +
 	"\ttarget_id\x18\x03 \x01(\tR\btargetId\x124\n" +
 	"\x06reason\x18\x04 \x01(\x0e2\x1c.tayfam.core.v1.ReportReasonR\x06reason\x12 \n" +
-	"\vdescription\x18\x05 \x01(\tR\vdescription\"b\n" +
+	"\vdescription\x18\x05 \x01(\tR\vdescription\x12#\n" +
+	"\revidence_text\x18\x06 \x01(\tR\fevidenceText\"b\n" +
 	"\x14CreateReportResponse\x120\n" +
 	"\x06report\x18\x01 \x01(\v2\x18.tayfam.core.v1.MyReportR\x06report\x12\x18\n" +
 	"\acreated\x18\x02 \x01(\bR\acreated\"1\n" +
@@ -1287,7 +1313,7 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"resolution\x18\x03 \x01(\x0e2 .tayfam.core.v1.ReportResolutionR\n" +
 	"resolution\"Q\n" +
 	"\x15ResolveReportResponse\x128\n" +
-	"\x06report\x18\x01 \x01(\v2 .tayfam.core.v1.ModerationReportR\x06report*\xb7\x02\n" +
+	"\x06report\x18\x01 \x01(\v2 .tayfam.core.v1.ModerationReportR\x06report*\xda\x02\n" +
 	"\x10ReportTargetType\x12\"\n" +
 	"\x1eREPORT_TARGET_TYPE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17REPORT_TARGET_TYPE_USER\x10\x01\x12\x1c\n" +
@@ -1297,7 +1323,8 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"\x1bREPORT_TARGET_TYPE_QUESTION\x10\x05\x12\x1d\n" +
 	"\x19REPORT_TARGET_TYPE_ANSWER\x10\x06\x12\x1b\n" +
 	"\x17REPORT_TARGET_TYPE_POLL\x10\a\x12$\n" +
-	" REPORT_TARGET_TYPE_FISHING_CATCH\x10\b*\x8d\x04\n" +
+	" REPORT_TARGET_TYPE_FISHING_CATCH\x10\b\x12!\n" +
+	"\x1dREPORT_TARGET_TYPE_DM_MESSAGE\x10\t*\x8d\x04\n" +
 	"\fReportReason\x12\x1d\n" +
 	"\x19REPORT_REASON_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18REPORT_REASON_HARASSMENT\x10\x01\x12\x1d\n" +

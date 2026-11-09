@@ -151,6 +151,9 @@ var (
 	// ErrReportTargetNotFound: the reported user or content does not exist
 	// in the tayfa or the caller cannot see it.
 	ErrReportTargetNotFound = errors.New("şikâyet hedefi bulunamadı")
+	// ErrUnavailable: another service core needed could not answer (chat,
+	// for a direct message report); the caller may retry. No ErrorInfo.
+	ErrUnavailable = errors.New("bağımlı servis yanıt vermedi")
 	// ErrReportLimit: the caller filed the most reports a day allows.
 	ErrReportLimit = errors.New("günlük şikâyet sınırı")
 	// ErrReportAlreadyResolved: resolutions do not change.

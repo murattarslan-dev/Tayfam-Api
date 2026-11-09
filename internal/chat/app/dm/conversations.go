@@ -369,3 +369,25 @@ func (s *Service) RunPurge(ctx context.Context) error {
 		}
 	}
 }
+
+// VerifyForReport answers core when caller reports a direct message
+// (issue #95; core forwards the reporter's own token): the message's
+// conversation and its sender, never the body. caller must be a party of
+// the conversation (a request they declined included); a deleted message
+// that is not yet purged counts. The caller's own message and a message
+// whose sender's account was deleted are apperr.ErrMessageNotFound. It
+// needs no message key.
+func (s *Service) VerifyForReport(ctx context.Context, caller, message id.ID) (conversation, sender id.ID, err error) {
+	r, err := store.New(s.cfg.Pool).GetDirectMessageForParty(ctx, store.GetDirectMessageForPartyParams{ID: message.PG(), UserID: caller.PG()})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return id.ID{}, id.ID{}, apperr.ErrMessageNotFound
+	case err != nil:
+		return id.ID{}, id.ID{}, fmt.Errorf("şikâyet doğrulaması: %w", err)
+	}
+	sender = uuidOf(r.SenderID)
+	if sender == (id.ID{}) || sender == caller {
+		return id.ID{}, id.ID{}, apperr.ErrMessageNotFound
+	}
+	return uuidOf(r.ConversationID), sender, nil
+}

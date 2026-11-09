@@ -48,13 +48,15 @@ SELECT count(*)::integer
 FROM reports
 WHERE reporter_id = @reporter_id AND created_at > @since;
 
--- Aynı hedefe ikinci şikâyet mevcut kaydı döndürür.
+-- Aynı hedefe ikinci şikâyet mevcut kaydı döndürür. tayfa_id ve
+-- evidence_text yalnızca birebir mesaj şikâyetinde boş/dolu değişir
+-- (00013_dm_reports.sql).
 -- name: CreateReport :one
 INSERT INTO reports (
-  id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description,
+  id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, evidence_text,
   priority, minor_involved_at, platform_only, escalated_to_platform_at, escalation_reason, platform_status, created_at)
 VALUES (
-  @id, @tayfa_id, @reporter_id, @target_type, @target_id, @subject_user_id, @reason, sqlc.narg(description),
+  @id, sqlc.narg(tayfa_id), @reporter_id, @target_type, @target_id, @subject_user_id, @reason, sqlc.narg(description), sqlc.narg(evidence_text),
   @priority, sqlc.narg(minor_involved_at), @platform_only, sqlc.narg(escalated_to_platform_at),
   sqlc.narg(escalation_reason), sqlc.narg(platform_status), @created_at)
 ON CONFLICT (reporter_id, target_type, target_id) DO NOTHING

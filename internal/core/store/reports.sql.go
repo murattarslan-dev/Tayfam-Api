@@ -51,12 +51,12 @@ func (q *Queries) CountRecentReportsByReporter(ctx context.Context, arg CountRec
 
 const createReport = `-- name: CreateReport :one
 INSERT INTO reports (
-  id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description,
+  id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, evidence_text,
   priority, minor_involved_at, platform_only, escalated_to_platform_at, escalation_reason, platform_status, created_at)
 VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8,
-  $9, $10, $11, $12,
-  $13, $14, $15)
+  $1, $2, $3, $4, $5, $6, $7, $8, $9,
+  $10, $11, $12, $13,
+  $14, $15, $16)
 ON CONFLICT (reporter_id, target_type, target_id) DO NOTHING
 RETURNING id
 `
@@ -70,6 +70,7 @@ type CreateReportParams struct {
 	SubjectUserID         pgtype.UUID
 	Reason                string
 	Description           pgtype.Text
+	EvidenceText          pgtype.Text
 	Priority              string
 	MinorInvolvedAt       pgtype.Timestamptz
 	PlatformOnly          bool
@@ -79,7 +80,9 @@ type CreateReportParams struct {
 	CreatedAt             pgtype.Timestamptz
 }
 
-// Aynı hedefe ikinci şikâyet mevcut kaydı döndürür.
+// Aynı hedefe ikinci şikâyet mevcut kaydı döndürür. tayfa_id ve
+// evidence_text yalnızca birebir mesaj şikâyetinde boş/dolu değişir
+// (00013_dm_reports.sql).
 func (q *Queries) CreateReport(ctx context.Context, arg CreateReportParams) (pgtype.UUID, error) {
 	row := q.db.QueryRow(ctx, createReport,
 		arg.ID,
@@ -90,6 +93,7 @@ func (q *Queries) CreateReport(ctx context.Context, arg CreateReportParams) (pgt
 		arg.SubjectUserID,
 		arg.Reason,
 		arg.Description,
+		arg.EvidenceText,
 		arg.Priority,
 		arg.MinorInvolvedAt,
 		arg.PlatformOnly,
