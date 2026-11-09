@@ -11,6 +11,7 @@ import (
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -85,6 +86,9 @@ func (s *Service) SetRSVP(ctx context.Context, user, tayfa, event id.ID, want st
 			return err
 		}
 		b.add(RSVPChanged, event, map[string]any{"event_id": event.String(), "user_id": user.String(), "status": next})
+		if err := txn.TouchTayfa(ctx, q, tayfa, c.now); err != nil {
+			return err
+		}
 		if cur == RSVPGoing {
 			return promote(ctx, q, c, b, event, ev.Capacity)
 		}
@@ -135,6 +139,10 @@ func promote(ctx context.Context, q *store.Queries, c caller, b *batch, event id
 type Attendee struct {
 	UserID id.ID
 	Status string
+	// Attendance and AttendanceMethod are the verified attendance
+	// (AttendanceUnknown and "" until checked in).
+	Attendance       string
+	AttendanceMethod string
 	// UpdatedAt is when the answer last changed.
 	UpdatedAt time.Time
 }
@@ -183,7 +191,10 @@ func (s *Service) ListAttendees(ctx context.Context, user, tayfa, event id.ID, s
 	}
 	out := make([]Attendee, len(rows))
 	for i, r := range rows {
-		out[i] = Attendee{UserID: id.ID(r.UserID.Bytes), Status: r.Status, UpdatedAt: r.UpdatedAt.Time.UTC()}
+		out[i] = Attendee{
+			UserID: id.ID(r.UserID.Bytes), Status: r.Status, Attendance: r.Attendance,
+			AttendanceMethod: r.AttendanceMethod.String, UpdatedAt: r.UpdatedAt.Time.UTC(),
+		}
 	}
 	return out, next, nil
 }

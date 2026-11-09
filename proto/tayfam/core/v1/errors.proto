@@ -121,14 +121,37 @@ enum ErrorReason {
   // change.
   ERROR_REASON_EVENT_ENDED = 32;
   // FAILED_PRECONDITION. The action needs the caller's GOING answer (adding
-  // a convoy vehicle).
+  // a convoy vehicle, checking in; online check-in also needs it given
+  // before the start).
   ERROR_REASON_EVENT_NOT_GOING = 33;
-  // NOT_FOUND. No camp item or convoy vehicle with this ID on this event
-  // that the caller may remove.
+  // NOT_FOUND. No camp item, convoy vehicle or fishing catch with this ID
+  // on this event that the caller may remove.
   ERROR_REASON_EVENT_ITEM_NOT_FOUND = 34;
   // RESOURCE_EXHAUSTED. The event's list is full (200 camp items).
   ERROR_REASON_EVENT_LIMIT = 35;
   // FAILED_PRECONDITION. The method is for another event type (for example
   // AddCampItem on a convoy event).
   ERROR_REASON_EVENT_TYPE_MISMATCH = 36;
+
+  // Attendance (EventService check-in, correction and fishing catches;
+  // issue #50). None of these errors says anything about the location that
+  // was sent.
+
+  // FAILED_PRECONDITION. Outside the check-in window: from 30 minutes
+  // before the start until the end.
+  ERROR_REASON_CHECK_IN_CLOSED = 40;
+  // FAILED_PRECONDITION. The sent location is farther than 300 m from the
+  // meeting point. The attempt counts; the distance is not returned.
+  ERROR_REASON_CHECK_IN_TOO_FAR = 41;
+  // RESOURCE_EXHAUSTED. The caller used all five location attempts for this
+  // event; the organizer can still add the attendance after the end.
+  ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED = 42;
+  // FAILED_PRECONDITION. Outside the organizer's correction window: the
+  // seven days after the end.
+  ERROR_REASON_CORRECTION_CLOSED = 43;
+  // FAILED_PRECONDITION. FinishHike without StartHike.
+  ERROR_REASON_HIKE_NOT_STARTED = 44;
+  // FAILED_PRECONDITION. The action needs the caller's verified attendance
+  // (AddFishingCatch).
+  ERROR_REASON_NOT_ATTENDED = 45;
 }

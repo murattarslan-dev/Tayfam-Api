@@ -78,6 +78,12 @@ func TestErrorStatus(t *testing.T) {
 		{apperr.ErrEventItemNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_EVENT_ITEM_NOT_FOUND},
 		{apperr.ErrEventLimit, codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_EVENT_LIMIT},
 		{apperr.ErrEventTypeMismatch, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_TYPE_MISMATCH},
+		{apperr.ErrCheckInClosed, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_CHECK_IN_CLOSED},
+		{apperr.ErrCheckInTooFar, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_CHECK_IN_TOO_FAR},
+		{apperr.ErrCheckInAttempts, codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED},
+		{apperr.ErrCorrectionClosed, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_CORRECTION_CLOSED},
+		{apperr.ErrHikeNotStarted, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_HIKE_NOT_STARTED},
+		{apperr.ErrNotAttended, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_NOT_ATTENDED},
 		// Wrapped errors keep their reason.
 		{fmt.Errorf("katman: %w", apperr.ErrTayfaNotFound), codes.NotFound, corev1.ErrorReason_ERROR_REASON_TAYFA_NOT_FOUND},
 		// The memberships trigger, second line of defence.

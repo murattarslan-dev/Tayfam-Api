@@ -142,6 +142,18 @@ type EventHike struct {
 	ReturnGraceMinutes int32
 }
 
+type EventHikeCheckin struct {
+	EventID            pgtype.UUID
+	UserID             pgtype.UUID
+	StartedAt          pgtype.Timestamptz
+	StartedReceivedAt  pgtype.Timestamptz
+	ReturnedAt         pgtype.Timestamptz
+	ReturnedReceivedAt pgtype.Timestamptz
+	AlertSentAt        pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+}
+
 type EventRsvp struct {
 	EventID            pgtype.UUID
 	UserID             pgtype.UUID
@@ -153,6 +165,8 @@ type EventRsvp struct {
 	AttendanceMarkedAt pgtype.Timestamptz
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
+	StatusChangedAt    pgtype.Timestamptz
+	CheckInAttempts    int32
 }
 
 type EventSeries struct {
@@ -173,6 +187,21 @@ type EventSport struct {
 	Type      string
 	Sport     string
 	VenueName pgtype.Text
+}
+
+type FishingCatch struct {
+	ID              pgtype.UUID
+	EventID         pgtype.UUID
+	UserID          pgtype.UUID
+	Species         string
+	LengthCm        pgtype.Numeric
+	Lat             pgtype.Float8
+	Lng             pgtype.Float8
+	Visibility      string
+	ClientRequestID pgtype.UUID
+	DeletedAt       pgtype.Timestamptz
+	DeletedBy       pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
 }
 
 type Invite struct {
@@ -244,6 +273,23 @@ type TayfaModule struct {
 	Enabled   bool
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
+}
+
+type UserActivityRecord struct {
+	ID               pgtype.UUID
+	UserID           pgtype.UUID
+	EventID          pgtype.UUID
+	TayfaID          pgtype.UUID
+	EventType        string
+	Mode             string
+	EventTitle       string
+	City             pgtype.Text
+	District         pgtype.Text
+	StartedAt        pgtype.Timestamptz
+	DurationMinutes  int32
+	AttendanceMethod string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
 }
 
 type UserProfile struct {

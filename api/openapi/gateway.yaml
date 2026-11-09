@@ -988,6 +988,13 @@ components:
         - event-item-not-found
         - event-limit
         - event-type-mismatch
+        # core: katılım doğrulama (REST uçları ayrı issue)
+        - check-in-closed
+        - check-in-too-far
+        - check-in-attempts-exhausted
+        - correction-closed
+        - hike-not-started
+        - not-attended
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }

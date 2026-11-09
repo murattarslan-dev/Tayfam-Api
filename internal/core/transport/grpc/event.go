@@ -26,6 +26,13 @@ type Events interface {
 	RemoveCampItem(ctx context.Context, user, t, e, item id.ID) error
 	SetVehicle(ctx context.Context, user, t, e id.ID, in event.VehicleInput) (event.Vehicle, error)
 	RemoveVehicle(ctx context.Context, user, t, e, vehicle id.ID) error
+	CheckIn(ctx context.Context, user, t, e id.ID, at *event.Point) (event.Attendance, error)
+	StartHike(ctx context.Context, user, t, e id.ID, startedAt time.Time) (event.HikeCheckin, error)
+	FinishHike(ctx context.Context, user, t, e id.ID, returnedAt time.Time) (event.HikeCheckin, error)
+	SetAttendance(ctx context.Context, user, t, e, target id.ID, attended bool) error
+	AddCatch(ctx context.Context, user, t, e id.ID, in event.CatchInput) (event.Catch, error)
+	ListCatches(ctx context.Context, user, t, e id.ID, pageSize int32, pageToken string) ([]event.Catch, string, error)
+	RemoveCatch(ctx context.Context, user, t, e, catch id.ID) error
 }
 
 // EventServer implements corev1.EventServiceServer. The acting user always
@@ -204,6 +211,7 @@ func (s *EventServer) ListAttendees(ctx context.Context, req *corev1.ListAttende
 	for _, a := range list {
 		resp.Attendees = append(resp.Attendees, &corev1.Attendee{
 			UserId: a.UserID.String(), Status: rsvpToProto(a.Status), UpdateTime: timestamppb.New(a.UpdatedAt),
+			Attendance: attendanceToProto(a.Attendance), AttendanceMethod: methodToProto(a.AttendanceMethod),
 		})
 	}
 	return resp, nil
@@ -393,6 +401,7 @@ func eventToProto(v event.Event) *corev1.Event {
 		CreateTime: timestamppb.New(v.CreatedAt), UpdateTime: timestamppb.New(v.UpdatedAt),
 		GoingCount: v.Going, MaybeCount: v.Maybe, WaitlistCount: v.Waitlist,
 		CallerRsvp: rsvpToProto(v.CallerRSVP), CallerCanManage: v.CallerCanManage,
+		CallerAttendance: attendanceToProto(v.CallerAttendance),
 	}
 	switch v.Mode {
 	case event.ModeInPerson:

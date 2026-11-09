@@ -363,6 +363,56 @@ var expected = []struct {
 	{invited, EventViewAttendees, false},
 	{banned, EventViewAttendees, false},
 	{nonMember, EventViewAttendees, false},
+	// EventCheckIn
+	{admin, EventCheckIn, true},
+	{moderator, EventCheckIn, true},
+	{member, EventCheckIn, true},
+	{mutedMember, EventCheckIn, true},
+	{mutedModerator, EventCheckIn, true},
+	{pending, EventCheckIn, false},
+	{invited, EventCheckIn, false},
+	{banned, EventCheckIn, false},
+	{nonMember, EventCheckIn, false},
+	// EventAttendanceOwn
+	{admin, EventAttendanceOwn, true},
+	{moderator, EventAttendanceOwn, true},
+	{member, EventAttendanceOwn, true},
+	{mutedMember, EventAttendanceOwn, false},
+	{mutedModerator, EventAttendanceOwn, false},
+	{pending, EventAttendanceOwn, false},
+	{invited, EventAttendanceOwn, false},
+	{banned, EventAttendanceOwn, false},
+	{nonMember, EventAttendanceOwn, false},
+	// EventAttendanceAny
+	{admin, EventAttendanceAny, true},
+	{moderator, EventAttendanceAny, true},
+	{member, EventAttendanceAny, false},
+	{mutedMember, EventAttendanceAny, false},
+	{mutedModerator, EventAttendanceAny, false},
+	{pending, EventAttendanceAny, false},
+	{invited, EventAttendanceAny, false},
+	{banned, EventAttendanceAny, false},
+	{nonMember, EventAttendanceAny, false},
+	// EventCatchAdd
+	{admin, EventCatchAdd, true},
+	{moderator, EventCatchAdd, true},
+	{member, EventCatchAdd, true},
+	{mutedMember, EventCatchAdd, false},
+	{mutedModerator, EventCatchAdd, false},
+	{pending, EventCatchAdd, false},
+	{invited, EventCatchAdd, false},
+	{banned, EventCatchAdd, false},
+	{nonMember, EventCatchAdd, false},
+	// EventCatchDeleteAny
+	{admin, EventCatchDeleteAny, true},
+	{moderator, EventCatchDeleteAny, true},
+	{member, EventCatchDeleteAny, false},
+	{mutedMember, EventCatchDeleteAny, false},
+	{mutedModerator, EventCatchDeleteAny, false},
+	{pending, EventCatchDeleteAny, false},
+	{invited, EventCatchDeleteAny, false},
+	{banned, EventCatchDeleteAny, false},
+	{nonMember, EventCatchDeleteAny, false},
 }
 
 func TestAllowedMatrix(t *testing.T) {
@@ -478,6 +528,8 @@ func TestMutedAdmin(t *testing.T) {
 		// Reads only: a muted admin can neither create, edit, cancel nor
 		// answer events.
 		EventViewAttendees: true,
+		// Checking in publishes nothing; a hike return is a safety signal.
+		EventCheckIn: true,
 	}
 	for a := Action(1); a < actionEnd; a++ {
 		if got := Allowed(m, a, now); got != want[a] {

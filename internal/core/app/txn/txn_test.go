@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -136,5 +137,51 @@ func TestEventUsesOutbox(t *testing.T) {
 	}
 	if n != 4 {
 		t.Fatalf("%d olay", n)
+	}
+}
+
+// TouchTayfa moves last_activity_at forward at most once per hour and
+// leaves the tayfa's update time alone.
+func TestTouchTayfa(t *testing.T) {
+	pool := dbtest.New(t, coredb.Migrations())
+	ctx := context.Background()
+	tf := id.New()
+	start := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	if _, err := pool.Exec(ctx, `INSERT INTO tayfas (id, name, name_normalized, join_code, last_activity_at, updated_at) VALUES ($1, 'Kamp Tayfası', 'kamp tayfası', 'TESTAAAA', $2, $2)`, tf.PG(), start); err != nil {
+		t.Fatal(err)
+	}
+	read := func() (activity, updated time.Time) {
+		t.Helper()
+		if err := pool.QueryRow(ctx, `SELECT last_activity_at, updated_at FROM tayfas WHERE id = $1`, tf.PG()).Scan(&activity, &updated); err != nil {
+			t.Fatal(err)
+		}
+		return activity, updated
+	}
+	touch := func(at time.Time) {
+		t.Helper()
+		if err := WithActor(ctx, pool, id.New(), func(_ pgx.Tx, q *store.Queries) error { return TouchTayfa(ctx, q, tf, at) }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct {
+		at, want time.Time
+	}{
+		{start.Add(30 * time.Minute), start},                 // within the hour: no new row version
+		{start.Add(time.Hour), start.Add(time.Hour)},         // an hour later: moves
+		{start.Add(-time.Hour), start.Add(time.Hour)},        // never backwards
+		{start.Add(3 * time.Hour), start.Add(3 * time.Hour)}, // moves again
+		{start.Add(3*time.Hour + time.Minute), start.Add(3 * time.Hour)},
+	} {
+		touch(tc.at)
+		if got, updated := read(); !got.Equal(tc.want) || !updated.Equal(start) {
+			t.Errorf("TouchTayfa(%v): last_activity_at = %v, updated_at = %v", tc.at, got, updated)
+		}
+	}
+	// Any other change still moves updated_at.
+	if _, err := pool.Exec(ctx, `UPDATE tayfas SET description = 'x' WHERE id = $1`, tf.PG()); err != nil {
+		t.Fatal(err)
+	}
+	if _, updated := read(); updated.Equal(start) {
+		t.Error("başka bir değişiklik updated_at'i ilerletmedi")
 	}
 }

@@ -187,6 +187,9 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"event_rsvps":                    `SELECT count(*) FROM event_rsvps WHERE $1 IN (user_id, attendance_marked_by)`,
 		"event_convoy_vehicles.user_id":  `SELECT count(*) FROM event_convoy_vehicles WHERE user_id = $1`,
 		"event_camp_items":               `SELECT count(*) FROM event_camp_items WHERE $1 IN (assigned_user_id, created_by)`,
+		"event_hike_checkins.user_id":    `SELECT count(*) FROM event_hike_checkins WHERE user_id = $1`,
+		"fishing_catches":                `SELECT count(*) FROM fishing_catches WHERE $1 IN (user_id, deleted_by)`,
+		"user_activity_records.user_id":  `SELECT count(*) FROM user_activity_records WHERE user_id = $1`,
 		"user_profiles (kişisel)":        `SELECT count(*) FROM user_profiles WHERE user_id = $1 AND (display_name IS NOT NULL OR avatar_upload_id IS NOT NULL OR deleted_at IS NULL)`,
 	} {
 		if n := e.count(t, sql, u.PG()); n != 0 {
@@ -259,7 +262,7 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 	e.seed(t, `INSERT INTO event_convoy (event_id) VALUES ($1), ($2)`, ownEvent.PG(), otherEvent.PG())
 	e.seed(t, `INSERT INTO event_camp (event_id) VALUES ($1)`, campEvent.PG())
 	e.seed(t, `INSERT INTO event_rsvps (event_id, user_id, status) VALUES ($1, $2, 'going')`, otherEvent.PG(), u.PG())
-	e.seed(t, `INSERT INTO event_rsvps (event_id, user_id, status, attendance, attendance_marked_by, attendance_marked_at) VALUES ($1, $2, 'going', 'attended', $3, now())`, otherEvent.PG(), other.PG(), u.PG())
+	e.seed(t, `INSERT INTO event_rsvps (event_id, user_id, status, attendance, attendance_method, attendance_marked_by, attendance_marked_at) VALUES ($1, $2, 'going', 'attended', 'organizer', $3, now())`, otherEvent.PG(), other.PG(), u.PG())
 	e.seed(t, `INSERT INTO event_convoy_vehicles (id, event_id, user_id, make, plate) VALUES ($1, $2, $3, 'Ford', '35 ABC 123')`, id.New().PG(), otherEvent.PG(), u.PG())
 	e.seed(t, `INSERT INTO event_camp_items (id, event_id, name, assigned_user_id, created_by) VALUES ($1, $2, 'Çadır', $3, $3)`, id.New().PG(), campEvent.PG(), u.PG())
 
@@ -379,5 +382,121 @@ func TestDeletedKeepsExistingDeletionRequest(t *testing.T) {
 	}
 	if refs := e.userRefs(t, u); len(refs) != 0 {
 		t.Fatalf("kayıt kaldı: %v", refs)
+	}
+}
+
+// eventAt seeds an in-person event of tf from start to end.
+func (e *env) eventAt(t *testing.T, tf id.ID, typ string, start, end time.Time, capacity any, status string) id.ID {
+	t.Helper()
+	ev := id.New()
+	cancelled := any(nil)
+	if status == "cancelled" {
+		cancelled = now
+	}
+	e.seed(t, `INSERT INTO events (id, tayfa_id, type, mode, title, starts_at, ends_at, meeting_lat, meeting_lng, city, district, capacity, status, cancelled_at)
+		VALUES ($1, $2, $3, 'in_person', 'Etkinlik', $4, $5, 38.42, 27.14, 'İzmir', 'Konak', $6, $7, $8)`,
+		ev.PG(), tf.PG(), typ, start, end, capacity, status, cancelled)
+	return ev
+}
+
+func (e *env) rsvp(t *testing.T, ev, u id.ID, status string, at time.Time) {
+	t.Helper()
+	e.seed(t, `INSERT INTO event_rsvps (event_id, user_id, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $4)`, ev.PG(), u.PG(), status, at)
+}
+
+func (e *env) status(t *testing.T, ev, u id.ID) string {
+	t.Helper()
+	var s string
+	must(t, e.pool.QueryRow(ctx, `SELECT status FROM event_rsvps WHERE event_id = $1 AND user_id = $2`, ev.PG(), u.PG()).Scan(&s))
+	return s
+}
+
+// Deleting an account frees the user's seats: on every upcoming event they
+// were going to, the oldest waitlisted answer becomes going in the same
+// transaction, with an rsvp.promoted event and audit record by the system
+// (issue #50). Ended, cancelled and not-going events are left alone. The
+// user's hike roll calls, catches and activity records go too.
+func TestDeletedPromotesWaitlist(t *testing.T) {
+	e := setup(t)
+	u, admin, a, w1, w2 := id.New(), id.New(), id.New(), id.New(), id.New()
+	tf := e.tayfa(t, admin)
+	t0 := now.Add(-48 * time.Hour)
+	for _, m := range []id.ID{admin, u, a, w1, w2} {
+		role := "member"
+		if m == admin {
+			role = "admin"
+		}
+		e.member(t, tf, m, role, "active", t0)
+	}
+	soon, later := now.Add(24*time.Hour), now.Add(27*time.Hour)
+
+	full := e.eventAt(t, tf, "general", soon, later, 2, "scheduled")
+	e.rsvp(t, full, u, "going", t0)
+	e.rsvp(t, full, a, "going", t0)
+	e.rsvp(t, full, w2, "waitlist", t0.Add(2*time.Minute))
+	e.rsvp(t, full, w1, "waitlist", t0.Add(time.Minute))
+
+	ended := e.eventAt(t, tf, "general", now.Add(-3*time.Hour), now.Add(-time.Hour), 1, "scheduled")
+	e.rsvp(t, ended, u, "going", t0)
+	e.rsvp(t, ended, w1, "waitlist", t0)
+
+	cancelled := e.eventAt(t, tf, "general", soon, later, 1, "cancelled")
+	e.rsvp(t, cancelled, u, "going", t0)
+	e.rsvp(t, cancelled, w1, "waitlist", t0)
+
+	maybe := e.eventAt(t, tf, "general", soon, later, 1, "scheduled")
+	e.rsvp(t, maybe, u, "maybe", t0)
+	e.rsvp(t, maybe, a, "going", t0)
+	e.rsvp(t, maybe, w1, "waitlist", t0)
+
+	// Personal attendance data of u.
+	hike := e.eventAt(t, tf, "hike", now.Add(-5*time.Hour), now.Add(-time.Hour), nil, "scheduled")
+	e.seed(t, `INSERT INTO event_hike (event_id) VALUES ($1)`, hike.PG())
+	e.seed(t, `INSERT INTO event_hike_checkins (event_id, user_id, started_at, started_received_at) VALUES ($1, $2, $3, $3)`, hike.PG(), u.PG(), now.Add(-4*time.Hour))
+	e.seed(t, `INSERT INTO user_activity_records (id, user_id, event_id, tayfa_id, event_type, mode, event_title, started_at, duration_minutes, attendance_method)
+		VALUES ($1, $2, $3, $4, 'hike', 'in_person', 'Etkinlik', $5, 240, 'hike_start')`, id.New().PG(), u.PG(), hike.PG(), tf.PG(), now.Add(-4*time.Hour))
+	fishing := e.eventAt(t, tf, "fishing", now.Add(-5*time.Hour), now.Add(-time.Hour), nil, "scheduled")
+	e.seed(t, `INSERT INTO event_fishing (event_id) VALUES ($1)`, fishing.PG())
+	e.seed(t, `INSERT INTO fishing_catches (id, event_id, user_id, species, length_cm, lat, lng, client_request_id) VALUES ($1, $2, $3, 'Levrek', 40, 38.1, 26.9, $4)`,
+		id.New().PG(), fishing.PG(), u.PG(), id.New().PG())
+	e.seed(t, `INSERT INTO fishing_catches (id, event_id, user_id, species, length_cm, client_request_id, deleted_at, deleted_by) VALUES ($1, $2, $3, 'Çipura', 30, $4, now(), $5)`,
+		id.New().PG(), fishing.PG(), a.PG(), id.New().PG(), u.PG())
+
+	must(t, e.svc.Apply(ctx, Event{ID: id.New(), User: u, Deleted: true}))
+
+	if refs := e.userRefs(t, u); len(refs) != 0 {
+		t.Fatalf("core'da kullanıcıya ait kayıt kaldı: %v", refs)
+	}
+	if got := e.status(t, full, w1); got != "going" {
+		t.Errorf("en eski bekleyen = %s, going bekleniyordu", got)
+	}
+	if got := e.status(t, full, w2); got != "waitlist" {
+		t.Errorf("ikinci bekleyen = %s", got)
+	}
+	for name, ev := range map[string]id.ID{"bitmiş": ended, "iptal": cancelled, "belki": maybe} {
+		if got := e.status(t, ev, w1); got != "waitlist" {
+			t.Errorf("%s etkinlikte terfi oldu: %s", name, got)
+		}
+	}
+	if n := e.count(t, `SELECT count(*) FROM fishing_catches WHERE user_id = $1 AND deleted_at IS NOT NULL AND deleted_by IS NULL`, a.PG()); n != 1 {
+		t.Error("başkasının av kaydı silindi ya da silen boşalmadı")
+	}
+	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'rsvp.promoted' AND actor_id IS NULL AND tayfa_id = $1 AND subject_id = $2 AND payload->>'user_id' = $3`,
+		tf.PG(), full.PG(), w1.String()); n != 1 {
+		t.Fatalf("terfi olayı = %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'rsvp.promoted'`); n != 1 {
+		t.Fatalf("terfi olayı sayısı = %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM audit_logs WHERE action = 'rsvp.promoted' AND actor_id IS NULL AND target_id = $1`, full.PG()); n != 1 {
+		t.Fatalf("terfi denetim kaydı = %d", n)
+	}
+
+	// Again: nothing changes.
+	before := e.snapshot(t)
+	statuses := e.status(t, full, w1) + e.status(t, full, w2)
+	must(t, e.svc.Apply(ctx, Event{ID: id.New(), User: u, Deleted: true}))
+	if e.snapshot(t) != before || e.status(t, full, w1)+e.status(t, full, w2) != statuses {
+		t.Fatal("tekrar uygulama sonucu değiştirdi")
 	}
 }

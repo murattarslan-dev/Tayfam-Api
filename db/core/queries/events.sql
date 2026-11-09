@@ -77,7 +77,7 @@ WHERE event_id = ANY(@event_ids::uuid[]) AND status IN ('going', 'maybe', 'waitl
 GROUP BY event_id, status;
 
 -- name: ListUserRsvpsForEvents :many
-SELECT event_id, status FROM event_rsvps
+SELECT event_id, status, attendance FROM event_rsvps
 WHERE user_id = @user_id AND event_id = ANY(@event_ids::uuid[]);
 
 -- name: GetRsvp :one
@@ -109,7 +109,7 @@ WHERE event_id = @event_id AND user_id = @user_id AND status = 'waitlist';
 -- (updated_at, user_id) ile sayfalanır; bekleme listesinde bu sıra
 -- terfi sırasıdır.
 -- name: ListAttendees :many
-SELECT user_id, status, updated_at FROM event_rsvps
+SELECT user_id, status, attendance, attendance_method, updated_at FROM event_rsvps
 WHERE event_id = @event_id
   AND status = @status
   AND (updated_at, user_id) > (@after_time::timestamptz, @after_user_id::uuid)

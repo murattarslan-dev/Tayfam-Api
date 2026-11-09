@@ -47,6 +47,15 @@ func (q *Queries) ClearCampItemUserFields(ctx context.Context, userID pgtype.UUI
 	return err
 }
 
+const clearCatchDeleter = `-- name: ClearCatchDeleter :exec
+UPDATE fishing_catches SET deleted_by = NULL WHERE deleted_by = $1
+`
+
+func (q *Queries) ClearCatchDeleter(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearCatchDeleter, userID)
+	return err
+}
+
 const clearEventActor = `-- name: ClearEventActor :exec
 UPDATE domain_events SET actor_id = NULL WHERE actor_id = $1
 `
@@ -156,6 +165,27 @@ func (q *Queries) CreateSystemAuditLog(ctx context.Context, arg CreateSystemAudi
 	return err
 }
 
+const deleteUserActivityRecords = `-- name: DeleteUserActivityRecords :exec
+DELETE FROM user_activity_records WHERE user_id = $1
+`
+
+// Kalıcı katılım geçmişi kişiye aittir: hesapla birlikte silinir (v14
+// "Kalıcı katılım geçmişi", user_id → CASCADE).
+func (q *Queries) DeleteUserActivityRecords(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserActivityRecords, userID)
+	return err
+}
+
+const deleteUserCatches = `-- name: DeleteUserCatches :exec
+DELETE FROM fishing_catches WHERE user_id = $1
+`
+
+// Av kayıtları konum içerebilir; kişiyle birlikte silinir.
+func (q *Queries) DeleteUserCatches(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserCatches, userID)
+	return err
+}
+
 const deleteUserConvoyVehicles = `-- name: DeleteUserConvoyVehicles :exec
 DELETE FROM event_convoy_vehicles WHERE user_id = $1
 `
@@ -163,6 +193,15 @@ DELETE FROM event_convoy_vehicles WHERE user_id = $1
 // Araç (plaka dahil) kişisel veridir ve kişiye aittir: silinir.
 func (q *Queries) DeleteUserConvoyVehicles(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserConvoyVehicles, userID)
+	return err
+}
+
+const deleteUserHikeCheckins = `-- name: DeleteUserHikeCheckins :exec
+DELETE FROM event_hike_checkins WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserHikeCheckins(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserHikeCheckins, userID)
 	return err
 }
 
@@ -233,6 +272,50 @@ func (q *Queries) LockTayfaForSystem(ctx context.Context, id pgtype.UUID) (LockT
 	var i LockTayfaForSystemRow
 	err := row.Scan(&i.ID, &i.DeletedAt, &i.DeletionRequestedAt)
 	return i, err
+}
+
+const lockUserGoingUpcomingEvents = `-- name: LockUserGoingUpcomingEvents :many
+SELECT e.id, e.tayfa_id, e.capacity
+FROM event_rsvps r
+JOIN events e ON e.id = r.event_id
+WHERE r.user_id = $1 AND r.status = 'going'
+  AND e.deleted_at IS NULL AND e.status = 'scheduled' AND e.ends_at > $2
+ORDER BY e.id
+FOR UPDATE OF e
+`
+
+type LockUserGoingUpcomingEventsParams struct {
+	UserID pgtype.UUID
+	Now    pgtype.Timestamptz
+}
+
+type LockUserGoingUpcomingEventsRow struct {
+	ID       pgtype.UUID
+	TayfaID  pgtype.UUID
+	Capacity pgtype.Int4
+}
+
+// Kişinin "geliyorum" dediği, bitmemiş ve iptal edilmemiş etkinlikler;
+// kişinin yeri her birinde bekleme listesine geçer. Etkinlik satırları
+// katılım akışıyla (SetRsvp) aynı kilitle, kimlik sırasıyla kilitlenir.
+func (q *Queries) LockUserGoingUpcomingEvents(ctx context.Context, arg LockUserGoingUpcomingEventsParams) ([]LockUserGoingUpcomingEventsRow, error) {
+	rows, err := q.db.Query(ctx, lockUserGoingUpcomingEvents, arg.UserID, arg.Now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LockUserGoingUpcomingEventsRow{}
+	for rows.Next() {
+		var i LockUserGoingUpcomingEventsRow
+		if err := rows.Scan(&i.ID, &i.TayfaID, &i.Capacity); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const pickAdminSuccessor = `-- name: PickAdminSuccessor :one

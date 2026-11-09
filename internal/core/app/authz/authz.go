@@ -148,6 +148,18 @@ const (
 	EventCancelAny
 	EventRSVP
 	EventViewAttendees
+	// Attendance (issue #50). EventCheckIn covers the caller's own location
+	// or online check-in and their hike start and return.
+	EventCheckIn
+	// EventAttendanceOwn is the organizer's correction on their own event
+	// (the caller checks that the event is theirs); EventAttendanceAny is
+	// the same on every event of the tayfa.
+	EventAttendanceOwn
+	EventAttendanceAny
+	// EventCatchAdd adds and removes one's own fishing catches;
+	// EventCatchDeleteAny removes anyone's.
+	EventCatchAdd
+	EventCatchDeleteAny
 
 	actionEnd // sentinel; keep last
 )
@@ -187,6 +199,11 @@ var actionNames = [...]string{
 	EventCancelAny:       "event.cancel_any",
 	EventRSVP:            "event.rsvp",
 	EventViewAttendees:   "event.view_attendees",
+	EventCheckIn:         "event.check_in",
+	EventAttendanceOwn:   "event.attendance_own",
+	EventAttendanceAny:   "event.attendance_any",
+	EventCatchAdd:        "event.catch_add",
+	EventCatchDeleteAny:  "event.catch_delete_any",
 	actionEnd:            "",
 }
 
@@ -218,6 +235,11 @@ var permissions = map[Action]Role{
 	EventRSVP:          Member,
 	EventEditOwn:       Member,
 	EventCancelOwn:     Member,
+	// Attendance (issue #50): one's own check-in, the organizer's
+	// correction of their own event, one's own fishing catches.
+	EventCheckIn:       Member,
+	EventAttendanceOwn: Member,
+	EventCatchAdd:      Member,
 
 	// Moderation: moderator and above.
 	// Lowering one's own role; members have nothing to step down to.
@@ -241,6 +263,10 @@ var permissions = map[Action]Role{
 	EventCreate:    Moderator,
 	EventEditAny:   Moderator,
 	EventCancelAny: Moderator,
+	// Correcting attendance on every event (v14 "Organizatör düzeltmesi")
+	// and removing anyone's fishing catch.
+	EventAttendanceAny:  Moderator,
+	EventCatchDeleteAny: Moderator,
 
 	// Tayfa management: admin only.
 	TayfaUpdateSettings:  Admin,
@@ -272,6 +298,10 @@ var allowedWhileMuted = map[Action]bool{
 	EventViewAttendees: true,
 	// Stepping down only narrows the caller's own access.
 	RoleStepDown: true,
+	// Checking in records that one was there; it publishes nothing. A muted
+	// member who attends keeps their history, and a hike return (a safety
+	// signal) must never be refused.
+	EventCheckIn: true,
 }
 
 // Settings are the tayfa settings that change the permission table. The zero

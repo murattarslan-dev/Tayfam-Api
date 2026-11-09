@@ -164,6 +164,9 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in CreateInput)
 		if v, err = get(ctx, q, tayfa, aid); err != nil {
 			return err
 		}
+		if err := txn.TouchTayfa(ctx, q, tayfa, s.now()); err != nil {
+			return err
+		}
 		return record(ctx, q, tayfa, user, aid, "announcement.created", EventCreated, nil, nil)
 	})
 	if err != nil {
