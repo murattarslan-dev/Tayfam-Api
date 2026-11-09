@@ -24,11 +24,12 @@ WHERE id = @id
 UPDATE invites SET revoked_at = now()
 WHERE tayfa_id = @tayfa_id AND id = @id AND revoked_at IS NULL;
 
+-- Yeniden eskiye; aynı created_at'te id ikincil anahtardır (issue #93).
 -- name: ListInvites :many
 SELECT id, created_by, expires_at, max_uses, use_count, revoked_at, created_at
 FROM invites
 WHERE tayfa_id = @tayfa_id
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT @page_size;
 
 -- name: GetInvite :one

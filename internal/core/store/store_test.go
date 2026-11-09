@@ -1,10 +1,12 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -1105,6 +1107,43 @@ func TestInviteUse(t *testing.T) {
 		t.Fatalf("ListInvites = %d, %v", len(list), err)
 	}
 	_ = inv
+}
+
+// Issue #93: invites created at the same instant come back in a stable
+// order (id DESC as the tie-breaker), so a page boundary never shuffles them.
+func TestListInvitesTieOrder(t *testing.T) {
+	pool, q := setup(t)
+	ctx := context.Background()
+	admin := id.New()
+	tayfa := newTayfa(t, pool, admin, tayfaOpts{})
+
+	ids := make([]id.ID, 5)
+	for i := range ids {
+		ids[i] = id.New()
+		h := sha256.Sum256(ids[i][:])
+		if err := q.CreateInvite(ctx, CreateInviteParams{ID: ids[i].PG(), TayfaID: tayfa.PG(), TokenHash: h[:], CreatedBy: admin.PG(), ExpiresAt: ts(time.Now().Add(time.Hour))}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := pool.Exec(ctx, `UPDATE invites SET created_at = '2026-01-01T00:00:00Z' WHERE tayfa_id = $1`, tayfa.PG()); err != nil {
+		t.Fatal(err)
+	}
+	want := slices.Clone(ids)
+	slices.SortFunc(want, func(a, b id.ID) int { return bytes.Compare(b[:], a[:]) })
+
+	for _, size := range []int32{int32(len(ids)), 2} {
+		rows, err := q.ListInvites(ctx, ListInvitesParams{TayfaID: tayfa.PG(), PageSize: size})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := make([]id.ID, len(rows))
+		for i, r := range rows {
+			got[i] = id.ID(r.ID.Bytes)
+		}
+		if !slices.Equal(got, want[:size]) {
+			t.Fatalf("ListInvites(page_size=%d) sırası = %v, beklenen %v", size, got, want[:size])
+		}
+	}
 }
 
 func TestListUserActiveTayfas(t *testing.T) {
