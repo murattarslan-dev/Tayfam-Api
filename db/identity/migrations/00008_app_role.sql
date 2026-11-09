@@ -66,6 +66,25 @@ $$;
 CREATE TRIGGER domain_events_delete_guard BEFORE DELETE ON domain_events
   FOR EACH ROW EXECUTE FUNCTION domain_events_delete_guard();
 
+-- Platform yönetim paneli (00006, 00007; ADR-0008):
+--   platform_admins: yalnızca okunur. Kayıt uygulamadan eklenemez,
+--     değiştirilemez, silinemez; platform sahibi migration kullanıcısıyla
+--     ekler (docs/runbooks/platform-yoneticisi.md). Kullanıcının kalıcı
+--     silinmesi satırı ON DELETE CASCADE ile tablo sahibinin yetkisiyle
+--     siler.
+--   platform_audit_logs: okunur ve eklenir; DELETE yalnızca saklama işi
+--     (1 yıl) içindir ve sınırı platform_audit_logs_append_only
+--     trigger'ındadır (365 günden yeni satır silinemez, hiçbir satır
+--     güncellenemez). InsertPlatformAuditLogOnce'ın ON CONFLICT DO NOTHING'i
+--     UPDATE istemez.
+--   platform_sanctions: okunur ve eklenir; yalnızca kaldırma kolonları
+--     (lifted_at, lifted_by) güncellenir. Tür, gerekçe, süre ve oluşturan
+--     değiştirilemez; satır silinmez (kullanıcı silinince CASCADE).
+GRANT SELECT ON platform_admins TO identity_app;
+GRANT SELECT, INSERT, DELETE ON platform_audit_logs TO identity_app;
+GRANT SELECT, INSERT ON platform_sanctions TO identity_app;
+GRANT UPDATE (lifted_at, lifted_by) ON platform_sanctions TO identity_app;
+
 -- Sonraki migration'larda açılan tablolar varsayılan olarak yalnızca okunur
 -- ve eklenir; UPDATE ve DELETE gereken tablo bunu kendi migration'ında açıkça
 -- verir. Sıra (sequence) ve fonksiyonlar için varsayılan yetki verilmez.

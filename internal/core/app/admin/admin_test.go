@@ -39,8 +39,11 @@ type fakeChecker struct{ err error }
 func (f *fakeChecker) Check(context.Context) error { return f.err }
 
 type env struct {
-	svc     *Service
-	pool    *pgxpool.Pool
+	svc  *Service
+	pool *pgxpool.Pool
+	// super is the superuser test connection, for fixtures core_app cannot
+	// create (switching a trigger off).
+	super   *pgxpool.Pool
 	checker *fakeChecker
 	now     time.Time
 	tayfas  *tayfa.Service
@@ -51,8 +54,9 @@ type env struct {
 
 func setup(t *testing.T) *env {
 	t.Helper()
-	pool := dbtest.New(t, coredb.Migrations())
-	e := &env{pool: pool, checker: &fakeChecker{}, now: time.Now().UTC().Truncate(time.Second), admin: id.New()}
+	d := dbtest.Open(t, "core", coredb.Migrations())
+	pool := d.App
+	e := &env{pool: pool, super: d.Admin, checker: &fakeChecker{}, now: time.Now().UTC().Truncate(time.Second), admin: id.New()}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	var err error
 	e.svc, err = New(Config{Pool: pool, Log: log, Checker: e.checker, Now: func() time.Time { return e.now }})
@@ -237,7 +241,7 @@ func TestSetMemberRole(t *testing.T) {
 	c := e.crew(t)
 	// Make the tayfa ownerless: the trigger lets nobody remove the last
 	// admin, so the test does it with the trigger off.
-	_, err := e.pool.Exec(ctx, `ALTER TABLE memberships DISABLE TRIGGER memberships_guard;
+	_, err := e.super.Exec(ctx, `ALTER TABLE memberships DISABLE TRIGGER memberships_guard;
 		UPDATE memberships SET role = 'member' WHERE tayfa_id = '`+c.tayfa.String()+`' AND user_id = '`+c.admin.String()+`';
 		ALTER TABLE memberships ENABLE TRIGGER memberships_guard;`)
 	must(t, err)

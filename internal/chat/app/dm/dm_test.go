@@ -139,7 +139,7 @@ type env struct {
 
 func setup(t *testing.T) *env {
 	t.Helper()
-	pool := dbtest.New(t, chatdb.Migrations())
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
 	e := &env{pool: pool, rules: &fakeRules{v: map[[2]id.ID]Verdict{}}, limit: &fakeLimit{}, pub: &recPub{}, now: time.Now().UTC()}
 	svc, err := New(Config{
 		Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Rules: e.rules, SendLimit: e.limit,
@@ -635,7 +635,7 @@ func TestPaging(t *testing.T) {
 }
 
 func TestUnavailableWithoutKey(t *testing.T) {
-	pool := dbtest.New(t, chatdb.Migrations())
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
 	svc, err := New(Config{Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Rules: &fakeRules{}, SendLimit: &fakeLimit{}})
 	must(t, err)
 	a, b, c := id.New(), id.New(), id.New()

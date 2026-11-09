@@ -13,9 +13,22 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
+	identitydb "github.com/murattarslan-dev/tayfam-api/db/identity"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
+
+// setupWithOwner is setup plus a superuser pool for what only the platform
+// owner does (adding administrators, docs/runbooks/platform-yoneticisi.md)
+// and for trigger tests that model a caller with more privileges than
+// identity_app.
+func setupWithOwner(t *testing.T) (app, owner *pgxpool.Pool, q *Queries) {
+	t.Helper()
+	d := dbtest.Open(t, "identity", identitydb.Migrations())
+	return d.App, d.Admin, New(d.App)
+}
 
 // TestNoPlatformAdminWrites: the application never adds, changes or removes
 // platform administrators (Notion "Platform Yönetim Paneli", layer 4). Only
@@ -70,7 +83,7 @@ func registeredUser(t *testing.T, q *Queries) id.ID {
 }
 
 func TestGetPlatformAdmin(t *testing.T) {
-	pool, q := setup(t)
+	_, owner, q := setupWithOwner(t)
 	ctx := context.Background()
 	admin := registeredUser(t, q)
 	plain := registeredUser(t, q)
@@ -80,8 +93,8 @@ func TestGetPlatformAdmin(t *testing.T) {
 	if err := q.CreateAuthIdentity(ctx, CreateAuthIdentityParams{ID: id.New().PG(), UserID: plain.PG(), Provider: "google", Subject: "g-plain"}); err != nil {
 		t.Fatal(err)
 	}
-	// What the runbook's command does, as the migration owner.
-	if _, err := pool.Exec(ctx, `INSERT INTO platform_admins (user_id) VALUES ($1)`, admin.PG()); err != nil {
+	// What the runbook's command does, outside the service.
+	if _, err := owner.Exec(ctx, `INSERT INTO platform_admins (user_id) VALUES ($1)`, admin.PG()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -105,7 +118,7 @@ func TestGetPlatformAdmin(t *testing.T) {
 		t.Fatalf("silinmiş hesap yönetici sayıldı: %v", err)
 	}
 
-	if _, err := pool.Exec(ctx, `INSERT INTO platform_admins (user_id, granted_by) VALUES ($1, $1)`, plain.PG()); constraintOf(err) != "platform_admins_not_self_granted" {
+	if _, err := owner.Exec(ctx, `INSERT INTO platform_admins (user_id, granted_by) VALUES ($1, $1)`, plain.PG()); constraintOf(err) != "platform_admins_not_self_granted" {
 		t.Fatalf("kendine yetki: %v", err)
 	}
 }
@@ -118,18 +131,25 @@ func auditParams(actor id.ID) InsertPlatformAuditLogParams {
 }
 
 func TestPlatformAuditLogIsAppendOnly(t *testing.T) {
-	pool, q := setup(t)
+	pool, owner, q := setupWithOwner(t)
 	ctx := context.Background()
 	actor := id.New()
 	if err := q.InsertPlatformAuditLog(ctx, auditParams(actor)); err != nil {
 		t.Fatal(err)
 	}
-	for name, sql := range map[string]string{
-		"gerekçe değiştirme": `UPDATE platform_audit_logs SET reason = 'başka bir gerekçe'`,
-		"silme":              `DELETE FROM platform_audit_logs`,
-		"boşaltma":           `TRUNCATE platform_audit_logs`,
+	// The trigger holds even for a caller with every table privilege;
+	// identity_app has no UPDATE or TRUNCATE at all (TestAppRoleCannotBypassGuards)
+	// and its DELETE reaches the trigger.
+	for name, c := range map[string]struct {
+		pool *pgxpool.Pool
+		sql  string
+	}{
+		"gerekçe değiştirme": {owner, `UPDATE platform_audit_logs SET reason = 'başka bir gerekçe'`},
+		"silme":              {owner, `DELETE FROM platform_audit_logs`},
+		"boşaltma":           {owner, `TRUNCATE platform_audit_logs`},
+		"servisin silmesi":   {pool, `DELETE FROM platform_audit_logs`},
 	} {
-		_, err := pool.Exec(ctx, sql)
+		_, err := c.pool.Exec(ctx, c.sql)
 		var pgErr *pgconn.PgError
 		if !errors.As(err, &pgErr) || pgErr.Code != "TI003" {
 			t.Errorf("%s reddedilmedi: %v", name, err)
@@ -137,17 +157,17 @@ func TestPlatformAuditLogIsAppendOnly(t *testing.T) {
 	}
 
 	// A year-old row may go (retention), and only through the purge.
-	if _, err := pool.Exec(ctx, `ALTER TABLE platform_audit_logs DISABLE TRIGGER platform_audit_logs_append_only`); err != nil {
+	if _, err := owner.Exec(ctx, `ALTER TABLE platform_audit_logs DISABLE TRIGGER platform_audit_logs_append_only`); err != nil {
 		t.Fatal(err)
 	}
 	old := auditParams(actor)
 	if err := q.InsertPlatformAuditLog(ctx, old); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `UPDATE platform_audit_logs SET created_at = now() - interval '366 days' WHERE id = $1`, old.ID); err != nil {
+	if _, err := owner.Exec(ctx, `UPDATE platform_audit_logs SET created_at = now() - interval '366 days' WHERE id = $1`, old.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `ALTER TABLE platform_audit_logs ENABLE TRIGGER platform_audit_logs_append_only`); err != nil {
+	if _, err := owner.Exec(ctx, `ALTER TABLE platform_audit_logs ENABLE TRIGGER platform_audit_logs_append_only`); err != nil {
 		t.Fatal(err)
 	}
 	future := pgtype.Timestamptz{Time: time.Now().UTC().AddDate(1, 0, 0), Valid: true}

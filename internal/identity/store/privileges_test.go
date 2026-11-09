@@ -12,10 +12,12 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
-// identity_app's table privileges (db/identity/migrations/00006_app_role.sql,
+// identity_app's table privileges (db/identity/migrations/00008_app_role.sql,
 // ADR-0015). DELETE is there for account deletion and the retention jobs;
 // the outbox gets only the account-deletion exceptions (actor_id, profile
-// events). A new table or grant must be added here on purpose.
+// events). Platform administrators are read-only; the platform audit log
+// is append-only except for the retention purge, and a sanction can only be
+// lifted. A new table or grant must be added here on purpose.
 var wantAppPrivileges = map[string]string{
 	"users":            "DELETE,INSERT,SELECT,UPDATE",
 	"auth_identities":  "DELETE,INSERT,SELECT,UPDATE",
@@ -26,6 +28,10 @@ var wantAppPrivileges = map[string]string{
 	"consent_records":  "INSERT,SELECT",
 	"domain_events":    "DELETE,INSERT,SELECT,UPDATE(actor_id)",
 	"event_consumers":  "INSERT,SELECT,UPDATE",
+
+	"platform_admins":     "SELECT",
+	"platform_audit_logs": "DELETE,INSERT,SELECT",
+	"platform_sanctions":  "INSERT,SELECT,UPDATE(lifted_at,lifted_by)",
 }
 
 func TestAppRolePrivileges(t *testing.T) {
@@ -62,6 +68,16 @@ func TestAppRoleCannotBypassGuards(t *testing.T) {
 		"migration sürümünü okuma": `SELECT * FROM goose_db_version`,
 		"sahipliği alma":           `ALTER TABLE users OWNER TO identity_app`,
 		"migration sürümü ekleme":  `INSERT INTO goose_db_version (version_id, is_applied) VALUES (99999, true)`,
+		"yönetici ekleme":          `INSERT INTO platform_admins (user_id) SELECT id FROM users LIMIT 1`,
+		"yöneticiyi değiştirme":    `UPDATE platform_admins SET granted_by = NULL`,
+		"yöneticiyi silme":         `DELETE FROM platform_admins`,
+		"panel kaydını değiştirme": `UPDATE platform_audit_logs SET reason = 'değiştirildi'`,
+		"panel kaydını boşaltma":   `TRUNCATE platform_audit_logs`,
+		"panel trigger'ı":          `ALTER TABLE platform_audit_logs DISABLE TRIGGER platform_audit_logs_append_only`,
+		"yaptırım türü":            `UPDATE platform_sanctions SET type = 'suspend'`,
+		"yaptırım gerekçesi":       `UPDATE platform_sanctions SET reason = 'değiştirilmiş gerekçe'`,
+		"yaptırım süresi":          `UPDATE platform_sanctions SET ends_at = NULL`,
+		"yaptırımı silme":          `DELETE FROM platform_sanctions`,
 	} {
 		t.Run(name, func(t *testing.T) { dbtest.WantDenied(t, pool, sql) })
 	}

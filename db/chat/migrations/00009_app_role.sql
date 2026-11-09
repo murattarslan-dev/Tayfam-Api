@@ -8,7 +8,7 @@
 -- satırlar dahil. TRUNCATE, REFERENCES ve TRIGGER hiçbir tabloda verilmez;
 -- goose_db_version'a hiçbir yetkisi yoktur.
 --
--- Tablolar 00001–00005'tekilerdir; 00004'ün açtığı realtime_tickets 00005'te
+-- Tablolar 00001–00008'dekilerdir; 00004'ün açtığı realtime_tickets 00005'te
 -- kaldırıldı (bağlantı erişim token'ıyla açılır, ADR-0014) ve yetki almaz.
 --
 -- 00001 veritabanında PUBLIC'in CONNECT/TEMP ve şemadaki varsayılan
@@ -38,6 +38,24 @@ GRANT SELECT, INSERT, UPDATE ON user_profiles TO chat_app;
 GRANT SELECT, INSERT, UPDATE ON event_consumers TO chat_app;
 -- Outbox yalnızca eklenir ve okunur.
 GRANT SELECT, INSERT ON domain_events TO chat_app;
+
+-- Birebir mesajlar (00006, 00007). Satır kilidi (LockConversationByPair)
+-- en az bir kolonda UPDATE ister.
+--   dm_conversations: durum (istek, kabul, ret, reddedilenlerden çıkarma),
+--     son mesaj zamanı ve hesap silmede tarafın/isteyenin NULL'lanması
+--     güncellenir; iki tarafı da silinmiş konuşma silinir. Kimlik ve
+--     oluşturma zamanı (günlük istek sınırı buna göre sayılır) değişmez.
+--   dm_messages: mesaj düzenlenemez. Yalnızca gönderenin silmesi (metin ve
+--     anahtar sürümü boşalır, deleted_at yazılır) ve hesap silmede
+--     sender_id'nin NULL'lanması güncellenir; konuşma, şifreleme türü,
+--     client_request_id ve zaman değişmez. 30 gün sonra kalıcı silinir.
+--   dm_conversation_reads: okundu işareti ileri gider (ON CONFLICT DO
+--     UPDATE); hesap silmede satırlar silinir.
+GRANT SELECT, INSERT, DELETE ON dm_conversations, dm_messages, dm_conversation_reads TO chat_app;
+GRANT UPDATE (user_low_id, user_high_id, status, requested_by, accepted_at, declined_at, last_message_at)
+  ON dm_conversations TO chat_app;
+GRANT UPDATE (sender_id, body_encrypted, key_version, deleted_at) ON dm_messages TO chat_app;
+GRANT UPDATE (last_read_message_id, read_at) ON dm_conversation_reads TO chat_app;
 
 -- Sonraki migration'larda açılan tablolar varsayılan olarak yalnızca okunur
 -- ve eklenir; UPDATE ve DELETE gereken tablo bunu kendi migration'ında açıkça

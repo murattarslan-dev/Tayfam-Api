@@ -8,7 +8,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
 )
 
-// core_app's table privileges (db/core/migrations/00013_app_role.sql,
+// core_app's table privileges (db/core/migrations/00016_app_role.sql,
 // ADR-0015). The append-only tables get only the narrow exceptions the
 // account deletion consumer and the retention job need, each limited by its
 // trigger. A new table or grant must be added here on purpose.
@@ -48,6 +48,8 @@ var wantAppPrivileges = map[string]string{
 	"event_consumers":       "INSERT,SELECT,UPDATE",
 	"domain_events":         "INSERT,SELECT,UPDATE(actor_id,tayfa_id)",
 	"audit_logs":            "DELETE,INSERT,SELECT,UPDATE(actor_id)",
+	"user_platform_bans":    "DELETE,INSERT,SELECT,UPDATE(banned_at,event_id)",
+	"job_runs":              "INSERT,SELECT,UPDATE(changed,finished_at,last_succeeded_at,succeeded)",
 }
 
 func TestAppRolePrivileges(t *testing.T) {
@@ -80,6 +82,12 @@ func TestAppRoleCannotBypassGuards(t *testing.T) {
 		"anket trigger'ı":               `ALTER TABLE polls DISABLE TRIGGER polls_guard`,
 		"oy trigger'ı":                  `ALTER TABLE poll_votes DISABLE TRIGGER poll_votes_no_update`,
 		"şikâyet trigger'ı":             `ALTER TABLE reports DISABLE TRIGGER reports_guard`,
+		"platform kararı trigger'ı":     `ALTER TABLE reports DISABLE TRIGGER reports_platform_guard`,
+		"ban kaydının kullanıcısı":      `UPDATE user_platform_bans SET user_id = user_id`,
+		"banları boşaltma":              `TRUNCATE user_platform_bans`,
+		"iş kaydını silme":              `DELETE FROM job_runs`,
+		"iş adını değiştirme":           `UPDATE job_runs SET job = 'x'`,
+		"sistem işi fonksiyonu":         `CREATE OR REPLACE FUNCTION current_system_job() RETURNS text LANGUAGE sql AS $$ SELECT 'platform_admin' $$`,
 		"anket seçeneğini değiştirme":   `UPDATE poll_options SET position = position`,
 		"relay konumunu silme":          `DELETE FROM event_consumers`,
 		"tablo silme":                   `DROP TABLE audit_logs`,

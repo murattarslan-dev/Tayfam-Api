@@ -80,6 +80,18 @@ GRANT SELECT, INSERT ON audit_logs TO core_app;
 GRANT UPDATE (actor_id) ON audit_logs TO core_app;
 GRANT DELETE ON audit_logs TO core_app;
 
+-- Platform banları (00014): identity'nin user.banned / user.unbanned
+-- olaylarıyla yazılır (ApplyUserBan, ON CONFLICT DO UPDATE yalnızca
+-- banned_at ve event_id'yi değiştirir), hesap silmede satır silinir.
+GRANT SELECT, INSERT, DELETE ON user_platform_bans TO core_app;
+GRANT UPDATE (banned_at, event_id) ON user_platform_bans TO core_app;
+
+-- Arka plan işlerinin son çalışması (00015): her iş için tek satır,
+-- RecordJobRun ON CONFLICT DO UPDATE ile yazar; satır silinmez. İş adı
+-- (anahtar) değiştirilemez.
+GRANT SELECT, INSERT ON job_runs TO core_app;
+GRANT UPDATE (finished_at, succeeded, changed, last_succeeded_at) ON job_runs TO core_app;
+
 -- Sonraki migration'larda açılan tablolar varsayılan olarak yalnızca okunur
 -- ve eklenir; UPDATE ve DELETE gereken tablo bunu kendi migration'ında açıkça
 -- verir. Sıra (sequence) ve fonksiyonlar için varsayılan yetki verilmez.

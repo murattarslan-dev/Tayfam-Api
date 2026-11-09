@@ -8,9 +8,10 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
 )
 
-// chat_app's table privileges (db/chat/migrations/00006_app_role.sql,
-// ADR-0015). The outbox is append-only. A new table or grant must be added
-// here on purpose.
+// chat_app's table privileges (db/chat/migrations/00009_app_role.sql,
+// ADR-0015). The outbox is append-only; a direct message cannot be edited,
+// only erased by its sender or detached from a deleted account. A new table
+// or grant must be added here on purpose.
 var wantAppPrivileges = map[string]string{
 	"channels":                 "DELETE,INSERT,SELECT,UPDATE",
 	"channel_messages":         "DELETE,INSERT,SELECT,UPDATE",
@@ -20,6 +21,9 @@ var wantAppPrivileges = map[string]string{
 	"user_profiles":            "INSERT,SELECT,UPDATE",
 	"event_consumers":          "INSERT,SELECT,UPDATE",
 	"domain_events":            "INSERT,SELECT",
+	"dm_conversations":         "DELETE,INSERT,SELECT,UPDATE(accepted_at,declined_at,last_message_at,requested_by,status,user_high_id,user_low_id)",
+	"dm_messages":              "DELETE,INSERT,SELECT,UPDATE(body_encrypted,deleted_at,key_version,sender_id)",
+	"dm_conversation_reads":    "DELETE,INSERT,SELECT,UPDATE(last_read_message_id,read_at)",
 }
 
 func TestAppRolePrivileges(t *testing.T) {
@@ -52,6 +56,12 @@ func TestAppRoleCannotBypassGuards(t *testing.T) {
 		"sahipliği alma":           `ALTER TABLE channel_messages OWNER TO chat_app`,
 		"migration sürümünü okuma": `SELECT * FROM goose_db_version`,
 		"migration sürümü ekleme":  `INSERT INTO goose_db_version (version_id, is_applied) VALUES (99999, true)`,
+		"mesajı taşıma":            `UPDATE dm_messages SET conversation_id = conversation_id`,
+		"mesaj zamanı":             `UPDATE dm_messages SET created_at = now()`,
+		"şifreleme türü":           `UPDATE dm_messages SET encryption = 'e2e'`,
+		"konuşma zamanı":           `UPDATE dm_conversations SET created_at = now()`,
+		"okunma kaydını taşıma":    `UPDATE dm_conversation_reads SET user_id = user_id`,
+		"DM mesajlarını boşaltma":  `TRUNCATE dm_messages`,
 	} {
 		t.Run(name, func(t *testing.T) { dbtest.WantDenied(t, pool, sql) })
 	}

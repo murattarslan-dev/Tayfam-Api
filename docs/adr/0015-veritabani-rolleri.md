@@ -27,8 +27,8 @@ karşı korumaz (ADR-0011 sertleştirme listesi madde 8, issue #39).
      değildir, rol özelliği (CREATEDB, CREATEROLE, BYPASSRLS) ve üyeliği
      yoktur. Servis container'ı sahibin parolasını görmez.
 2. **Kullanıcıları CloudNativePG `managed.roles`, yetkileri migration'lar
-   verir.** Her servisin `*_app_role` migration'ı (identity `00006`, core
-   `00013`, chat `00006`) `CONNECT`, şemada `USAGE` ve tablo başına yalnızca
+   verir.** Her servisin `*_app_role` migration'ı (identity `00008`, core
+   `00016`, chat `00009`) `CONNECT`, şemada `USAGE` ve tablo başına yalnızca
    sorguların (`db/<servis>/queries`) ve arka plan işlerinin (kalıcı silme,
    saklama, hesap silme tüketicisi) gerektirdiği DML'i verir. `TRUNCATE`,
    `REFERENCES`, `TRIGGER` hiçbir tabloda verilmez; `goose_db_version`'a
@@ -46,6 +46,19 @@ karşı korumaz (ADR-0011 sertleştirme listesi madde 8, issue #39).
      `domain_events_delete_guard` trigger'ı yalnızca `user.profile_updated`
      olaylarıyla sınırlar (hesap silmede görünen adı taşıyan olaylar).
    - `domain_events` (chat) ve `consent_records`: yalnızca `SELECT, INSERT`.
+   - `platform_audit_logs` (identity): `SELECT, INSERT` ve 1 yıllık saklama
+     silmesi için `DELETE`; sınırı `platform_audit_logs_append_only`
+     trigger'ındadır (güncelleme ve 365 günden yeni satırın silinmesi
+     reddedilir).
+   - `platform_admins` (identity): yalnızca `SELECT`. Yönetici kaydını
+     uygulama ekleyemez, değiştiremez, silemez; platform sahibi migration
+     kullanıcısıyla ekler (`docs/runbooks/platform-yoneticisi.md`).
+   - Kolon düzeyinde `UPDATE`: değişmemesi gereken alanları olan tablolarda
+     yalnızca sorguların yazdığı kolonlar güncellenebilir —
+     `platform_sanctions` (`lifted_at, lifted_by`), `user_platform_bans`
+     (`banned_at, event_id`), `job_runs` (iş adı hariç), `dm_messages` (silme ve hesap silme kolonları;
+     mesaj düzenlenemez), `dm_conversations` (kimlik ve `created_at` hariç),
+     `dm_conversation_reads` (`last_read_message_id, read_at`).
 4. **Varsayılan yetkiler dardır.** Sonraki migration'larda açılan tablolar
    `ALTER DEFAULT PRIVILEGES` ile yalnızca `SELECT, INSERT` alır. `UPDATE` ve
    `DELETE` gereken tablo bunu kendi migration'ında açıkça verir.
