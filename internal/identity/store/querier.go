@@ -11,6 +11,12 @@ import (
 )
 
 type Querier interface {
+	// Pano sayaçları (issue #110). Yalnızca sayılar. Aktif: son @active_since
+	// sonrasında yenilenmiş, iptal edilmemiş oturumu olan kayıtlı hesap.
+	// Silinen hesap (KVKK silme talebi): kişisel veri hemen temizlenir, satır
+	// 30 gün sonra saklama işiyle kalıcı silinir; @overdue_before'dan eski
+	// satır saklama işinin geride kaldığını gösterir.
+	AdminUserStats(ctx context.Context, arg AdminUserStatsParams) (AdminUserStatsRow, error)
 	BlockRegistrationForAge(ctx context.Context, id pgtype.UUID) (int64, error)
 	// Veri modeli v14: domain_events.actor_id hesap silinince NULL olur.
 	ClearEventActor(ctx context.Context, userID pgtype.UUID) error
@@ -83,6 +89,10 @@ type Querier interface {
 	// silinmemiş hesapların şifreli doğum tarihi okunur; cevap yalnızca
 	// evet/hayır olarak servisten çıkar.
 	ListBirthDatesForMinorCheck(ctx context.Context, ids []pgtype.UUID) ([]ListBirthDatesForMinorCheckRow, error)
+	// Panelde denetim kaydı (issue #110). En yeni önce, imleçli. related_id
+	// kaydın hedefi ya da metadata'daki tayfa, kullanıcı veya şikâyet
+	// kimliğidir. Metadata'dan yalnızca bu üç kimlik okunur.
+	ListPlatformAuditLogs(ctx context.Context, arg ListPlatformAuditLogsParams) ([]ListPlatformAuditLogsRow, error)
 	// Hesap yönetimi (issue #75).
 	// Kullanıcının kendi açık oturumları, cihaz platformuyla. IP ve token
 	// dönmez. Son görülme oturumun son yenilenme zamanıdır.

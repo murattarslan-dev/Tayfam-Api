@@ -210,3 +210,16 @@ WHERE tayfa_id = @tayfa_id AND status = 'active' AND user_id <> @hiker_id
   AND (role IN ('admin', 'moderator') OR user_id = sqlc.narg(organizer_id))
 ORDER BY COALESCE(user_id = sqlc.narg(organizer_id), false) DESC, role_rank(role) DESC, user_id
 LIMIT @n;
+
+-- Bir turun sonucu (issue #110, 00015). Başka bir pod'un daha yeni bitişi
+-- ezilmez. Başarısız tur son başarılı zamanı korur.
+-- name: RecordJobRun :exec
+INSERT INTO job_runs (job, finished_at, succeeded, changed, last_succeeded_at)
+VALUES (@job, @finished_at, @succeeded, @changed,
+        CASE WHEN @succeeded::boolean THEN @finished_at::timestamptz END)
+ON CONFLICT (job) DO UPDATE
+SET finished_at = EXCLUDED.finished_at,
+    succeeded = EXCLUDED.succeeded,
+    changed = EXCLUDED.changed,
+    last_succeeded_at = COALESCE(EXCLUDED.last_succeeded_at, job_runs.last_succeeded_at)
+WHERE job_runs.finished_at < EXCLUDED.finished_at;

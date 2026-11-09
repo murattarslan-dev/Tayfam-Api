@@ -5,12 +5,12 @@
 openapi: 3.1.0
 info:
   title: Tayfam Platform Yönetim Paneli
-  version: 0.2.0
+  version: 0.3.0
   description: |
     1. aşama: erişim katmanı (`/auth/*` JSON uçları). 3. aşama: sunucuda
     render edilen panel sayfaları (`text/html`, aşağıda "Sayfalar"). Sayfalar
-    core `AdminService` ve identity `AdminUserService`'i (2. aşama) admin
-    token'ıyla çağırır.
+    core `AdminService` ve identity `AdminUserService`'i (2. aşama) ve
+    `AdminAuditService`'i (#110) admin token'ıyla çağırır.
 
     **Sayfalar:** Türkçe metinler sunucuda üretilir (panel uygulama
     API'sinin istemcisi değildir; "arayüz metinleri API'den Türkçe dönmez"
@@ -230,10 +230,35 @@ paths:
   /:
     get:
       operationId: adminDashboard
-      summary: Pano (bekleyen ve öncelikli platform şikâyetleri, oturum)
+      summary: Pano (sayaçlar, bekleyen ve öncelikli platform şikâyetleri, oturum)
+      description: |
+        Yalnızca sayılar (#110): toplam ve aktif kullanıcı, askıda ve banlı
+        kullanıcı, hesap silme talepleri (kalıcı silinmeyi bekleyen ve
+        süresi geçen), toplam/aktif/askıdaki/uyarılmış/arşivlenmiş tayfa,
+        arka plan işlerinin son çalışması. Kimlik, ad veya kişisel veri yok.
       responses:
         "200": { $ref: "#/components/responses/Page" }
         "303": { description: /giris }
+
+  /denetim:
+    get:
+      operationId: adminAuditLog
+      summary: Platform denetim kaydı (en yeni önce, sayfa başına 50)
+      description: |
+        identity `AdminAuditService.ListPlatformAuditLogs`. Gerekçe metni
+        yalnızca bu sayfada gösterilir; log'a yazılmaz. Geçersiz filtre
+        `400`.
+      parameters:
+        - { name: islem, in: query, schema: { type: string, enum: [admin.sign_in, user.revoke_sessions, user.suspend, user.ban, user.lift_sanction, tayfa.suspend, tayfa.unsuspend, tayfa.delete, membership.set_role, report.view_item, report.decide] }, description: İşlem }
+        - { name: tur, in: query, schema: { type: string, enum: [user, tayfa, membership, report, moderation_term, subscription] }, description: Hedef türü }
+        - { name: ilgili, in: query, schema: { type: string, format: uuid }, description: Hedef ya da kayıttaki tayfa/kullanıcı/şikâyet kimliği }
+        - { name: baslangic, in: query, schema: { type: string, format: date }, description: "Bu günden itibaren (TSİ)" }
+        - { name: bitis, in: query, schema: { type: string, format: date }, description: "Bu gün dahil (TSİ)" }
+        - { name: imlec, in: query, schema: { type: string, maxLength: 512 }, description: Sonraki sayfa }
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+        "303": { description: /giris }
+        "400": { $ref: "#/components/responses/Page" }
 
   /tayfalar:
     get:

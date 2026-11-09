@@ -92,3 +92,48 @@ RETURNING id, user_id, type, reason, starts_at, ends_at;
 -- name: LiftSanction :execrows
 UPDATE platform_sanctions SET lifted_at = @lifted_at, lifted_by = @lifted_by
 WHERE id = @id AND lifted_at IS NULL;
+
+-- Pano sayaçları (issue #110). Yalnızca sayılar. Aktif: son @active_since
+-- sonrasında yenilenmiş, iptal edilmemiş oturumu olan kayıtlı hesap.
+-- Silinen hesap (KVKK silme talebi): kişisel veri hemen temizlenir, satır
+-- 30 gün sonra saklama işiyle kalıcı silinir; @overdue_before'dan eski
+-- satır saklama işinin geride kaldığını gösterir.
+-- name: AdminUserStats :one
+SELECT
+  (SELECT count(*) FROM users u
+   WHERE u.deleted_at IS NULL AND u.registered_at IS NOT NULL)::bigint AS total,
+  (SELECT count(*) FROM users u
+   WHERE u.deleted_at IS NULL AND u.registered_at IS NOT NULL
+     AND EXISTS (SELECT 1 FROM sessions s
+                 WHERE s.user_id = u.id AND s.revoked_at IS NULL AND s.last_refreshed_at >= @active_since))::bigint AS active,
+  (SELECT count(*) FROM platform_sanctions ps
+   WHERE ps.type = 'suspend' AND ps.lifted_at IS NULL AND ps.ends_at > now())::bigint AS suspended,
+  (SELECT count(*) FROM platform_sanctions ps
+   WHERE ps.type = 'ban' AND ps.lifted_at IS NULL)::bigint AS banned,
+  (SELECT count(*) FROM users u WHERE u.deleted_at IS NOT NULL)::bigint AS deletions_pending,
+  (SELECT count(*) FROM users u WHERE u.deleted_at < @overdue_before)::bigint AS deletions_overdue;
+
+-- Panelde denetim kaydı (issue #110). En yeni önce, imleçli. related_id
+-- kaydın hedefi ya da metadata'daki tayfa, kullanıcı veya şikâyet
+-- kimliğidir. Metadata'dan yalnızca bu üç kimlik okunur.
+-- name: ListPlatformAuditLogs :many
+SELECT l.id, l.created_at, l.actor_id, u.display_name AS actor_name, l.action,
+       l.target_type, l.target_id, l.reason,
+       COALESCE(l.metadata->>'tayfa_id', '')::text AS tayfa_id,
+       COALESCE(l.metadata->>'user_id', '')::text AS user_id,
+       COALESCE(l.metadata->>'report_id', '')::text AS report_id
+FROM platform_audit_logs l
+LEFT JOIN users u ON u.id = l.actor_id AND u.deleted_at IS NULL
+WHERE (sqlc.narg('action')::text IS NULL OR l.action = sqlc.narg('action')::text)
+  AND (sqlc.narg('target_type')::text IS NULL OR l.target_type = sqlc.narg('target_type')::text)
+  AND (sqlc.narg('related_id')::uuid IS NULL
+       OR l.target_id = sqlc.narg('related_id')::uuid
+       OR l.metadata->>'tayfa_id' = sqlc.narg('related_id')::uuid::text
+       OR l.metadata->>'user_id' = sqlc.narg('related_id')::uuid::text
+       OR l.metadata->>'report_id' = sqlc.narg('related_id')::uuid::text)
+  AND (sqlc.narg('since')::timestamptz IS NULL OR l.created_at >= sqlc.narg('since')::timestamptz)
+  AND (sqlc.narg('until')::timestamptz IS NULL OR l.created_at < sqlc.narg('until')::timestamptz)
+  AND (NOT @has_cursor::boolean
+       OR (l.created_at, l.id) < (@after_created_at::timestamptz, @after_id::uuid))
+ORDER BY l.created_at DESC, l.id DESC
+LIMIT @n;

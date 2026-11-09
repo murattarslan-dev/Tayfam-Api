@@ -37,6 +37,9 @@ func (f *fakeUsers) SanctionUser(_ context.Context, _ auth.AdminClaims, in platf
 func (f *fakeUsers) LiftSanction(context.Context, auth.AdminClaims, id.ID, string) error {
 	return f.err
 }
+func (f *fakeUsers) UserStats(context.Context, auth.AdminClaims) (platformadmin.UserStats, error) {
+	return platformadmin.UserStats{Total: 10, Active: 4, Suspended: 1, Banned: 2, DeletionsPending: 3}, f.err
+}
 
 func adminCtx() context.Context {
 	return auth.WithAdminCallerForTest(context.Background(), auth.AdminClaims{Subject: id.New().String()})

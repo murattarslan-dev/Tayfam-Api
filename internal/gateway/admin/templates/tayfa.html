@@ -13,6 +13,7 @@
   <dt>Keşfet</dt><dd>{{if .Tayfa.Listed}}Görünür{{else}}Gizli{{end}}</dd>
   <dt>Açıldı</dt><dd>{{ts .Tayfa.CreateTime}}</dd>
   <dt>Açık platform şikâyeti</dt><dd>{{.OpenPlatformReports}}</dd>
+  <dt>Denetim kaydı</dt><dd><a href="/denetim?ilgili={{.Tayfa.TayfaId}}">Bu tayfayla ilgili panel işlemleri</a></dd>
 </dl>
 </div>
 {{end}}

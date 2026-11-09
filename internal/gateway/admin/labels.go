@@ -16,11 +16,14 @@ func panelZone() *time.Location { return time.FixedZone("TSİ", 3*60*60) }
 
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
-		"label":  label,
-		"when":   when,
-		"ts":     ts,
-		"urgent": urgent,
-		"htmx":   func() string { return HTMXPath },
+		"label":      label,
+		"when":       when,
+		"ts":         ts,
+		"urgent":     urgent,
+		"action":     actionLabel,
+		"targetType": targetTypeLabel,
+		"job":        jobLabel,
+		"htmx":       func() string { return HTMXPath },
 		"activeMember": func(m *corev1.AdminMember) bool {
 			return m.GetStatus() == corev1.MembershipStatus_MEMBERSHIP_STATUS_ACTIVE
 		},

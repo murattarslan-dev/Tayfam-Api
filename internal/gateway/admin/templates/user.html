@@ -10,6 +10,7 @@
   <dt>Aktif oturum</dt><dd>{{.ActiveSessions}}</dd>
   <dt>Yaptırım</dt><dd>{{with .Sanction}}<span class="tag danger">{{label .Type}}</span> {{ts .StartTime}}{{if .EndTime}} → {{ts .EndTime}}{{end}}{{else}}—{{end}}</dd>
   {{with .Sanction}}<dt>Yaptırım gerekçesi</dt><dd>{{.Reason}}</dd>{{end}}
+  <dt>Denetim kaydı</dt><dd><a href="/denetim?ilgili={{.User.UserId}}">Bu kullanıcıyla ilgili panel işlemleri</a></dd>
 </dl>
 </div>
 {{end}}

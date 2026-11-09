@@ -208,6 +208,7 @@ const (
 	AdminUserService_RevokeUserSessions_FullMethodName = "/tayfam.identity.v1.AdminUserService/RevokeUserSessions"
 	AdminUserService_SanctionUser_FullMethodName       = "/tayfam.identity.v1.AdminUserService/SanctionUser"
 	AdminUserService_LiftSanction_FullMethodName       = "/tayfam.identity.v1.AdminUserService/LiftSanction"
+	AdminUserService_GetUserStats_FullMethodName       = "/tayfam.identity.v1.AdminUserService/GetUserStats"
 )
 
 // AdminUserServiceClient is the client API for AdminUserService service.
@@ -240,6 +241,9 @@ type AdminUserServiceClient interface {
 	// LiftSanction ends the user's active sanction; for a ban, user.unbanned
 	// goes to core.
 	LiftSanction(ctx context.Context, in *LiftSanctionRequest, opts ...grpc.CallOption) (*LiftSanctionResponse, error)
+	// GetUserStats returns the panel dashboard's user counts (issue #110).
+	// Counts only: no user ID, name or other personal data.
+	GetUserStats(ctx context.Context, in *GetUserStatsRequest, opts ...grpc.CallOption) (*GetUserStatsResponse, error)
 }
 
 type adminUserServiceClient struct {
@@ -300,6 +304,16 @@ func (c *adminUserServiceClient) LiftSanction(ctx context.Context, in *LiftSanct
 	return out, nil
 }
 
+func (c *adminUserServiceClient) GetUserStats(ctx context.Context, in *GetUserStatsRequest, opts ...grpc.CallOption) (*GetUserStatsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetUserStatsResponse)
+	err := c.cc.Invoke(ctx, AdminUserService_GetUserStats_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminUserServiceServer is the server API for AdminUserService service.
 // All implementations must embed UnimplementedAdminUserServiceServer
 // for forward compatibility.
@@ -330,6 +344,9 @@ type AdminUserServiceServer interface {
 	// LiftSanction ends the user's active sanction; for a ban, user.unbanned
 	// goes to core.
 	LiftSanction(context.Context, *LiftSanctionRequest) (*LiftSanctionResponse, error)
+	// GetUserStats returns the panel dashboard's user counts (issue #110).
+	// Counts only: no user ID, name or other personal data.
+	GetUserStats(context.Context, *GetUserStatsRequest) (*GetUserStatsResponse, error)
 	mustEmbedUnimplementedAdminUserServiceServer()
 }
 
@@ -354,6 +371,9 @@ func (UnimplementedAdminUserServiceServer) SanctionUser(context.Context, *Sancti
 }
 func (UnimplementedAdminUserServiceServer) LiftSanction(context.Context, *LiftSanctionRequest) (*LiftSanctionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method LiftSanction not implemented")
+}
+func (UnimplementedAdminUserServiceServer) GetUserStats(context.Context, *GetUserStatsRequest) (*GetUserStatsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetUserStats not implemented")
 }
 func (UnimplementedAdminUserServiceServer) mustEmbedUnimplementedAdminUserServiceServer() {}
 func (UnimplementedAdminUserServiceServer) testEmbeddedByValue()                          {}
@@ -466,6 +486,24 @@ func _AdminUserService_LiftSanction_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminUserService_GetUserStats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUserStatsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminUserServiceServer).GetUserStats(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminUserService_GetUserStats_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminUserServiceServer).GetUserStats(ctx, req.(*GetUserStatsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminUserService_ServiceDesc is the grpc.ServiceDesc for AdminUserService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -492,6 +530,132 @@ var AdminUserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "LiftSanction",
 			Handler:    _AdminUserService_LiftSanction_Handler,
+		},
+		{
+			MethodName: "GetUserStats",
+			Handler:    _AdminUserService_GetUserStats_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "tayfam/identity/v1/admin.proto",
+}
+
+const (
+	AdminAuditService_ListPlatformAuditLogs_FullMethodName = "/tayfam.identity.v1.AdminAuditService/ListPlatformAuditLogs"
+)
+
+// AdminAuditServiceClient is the client API for AdminAuditService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// AdminAuditService is the panel's view of the platform audit log
+// (issue #110; Notion "Platform Yönetim Paneli → Denetim kaydı"). Only an
+// admin token is accepted and identity checks platform_admins again on
+// every call. It is a separate service from PlatformAuditService, which
+// accepts only tayfam-core's service token: auth.Guard keeps admin and
+// service methods in separate services.
+type AdminAuditServiceClient interface {
+	// ListPlatformAuditLogs lists audit entries newest first. Entries hold
+	// the action, IDs and the written reason only; no e-mail address, message
+	// text, location or token is ever written to the log (00006).
+	ListPlatformAuditLogs(ctx context.Context, in *ListPlatformAuditLogsRequest, opts ...grpc.CallOption) (*ListPlatformAuditLogsResponse, error)
+}
+
+type adminAuditServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewAdminAuditServiceClient(cc grpc.ClientConnInterface) AdminAuditServiceClient {
+	return &adminAuditServiceClient{cc}
+}
+
+func (c *adminAuditServiceClient) ListPlatformAuditLogs(ctx context.Context, in *ListPlatformAuditLogsRequest, opts ...grpc.CallOption) (*ListPlatformAuditLogsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListPlatformAuditLogsResponse)
+	err := c.cc.Invoke(ctx, AdminAuditService_ListPlatformAuditLogs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// AdminAuditServiceServer is the server API for AdminAuditService service.
+// All implementations must embed UnimplementedAdminAuditServiceServer
+// for forward compatibility.
+//
+// AdminAuditService is the panel's view of the platform audit log
+// (issue #110; Notion "Platform Yönetim Paneli → Denetim kaydı"). Only an
+// admin token is accepted and identity checks platform_admins again on
+// every call. It is a separate service from PlatformAuditService, which
+// accepts only tayfam-core's service token: auth.Guard keeps admin and
+// service methods in separate services.
+type AdminAuditServiceServer interface {
+	// ListPlatformAuditLogs lists audit entries newest first. Entries hold
+	// the action, IDs and the written reason only; no e-mail address, message
+	// text, location or token is ever written to the log (00006).
+	ListPlatformAuditLogs(context.Context, *ListPlatformAuditLogsRequest) (*ListPlatformAuditLogsResponse, error)
+	mustEmbedUnimplementedAdminAuditServiceServer()
+}
+
+// UnimplementedAdminAuditServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedAdminAuditServiceServer struct{}
+
+func (UnimplementedAdminAuditServiceServer) ListPlatformAuditLogs(context.Context, *ListPlatformAuditLogsRequest) (*ListPlatformAuditLogsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListPlatformAuditLogs not implemented")
+}
+func (UnimplementedAdminAuditServiceServer) mustEmbedUnimplementedAdminAuditServiceServer() {}
+func (UnimplementedAdminAuditServiceServer) testEmbeddedByValue()                           {}
+
+// UnsafeAdminAuditServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to AdminAuditServiceServer will
+// result in compilation errors.
+type UnsafeAdminAuditServiceServer interface {
+	mustEmbedUnimplementedAdminAuditServiceServer()
+}
+
+func RegisterAdminAuditServiceServer(s grpc.ServiceRegistrar, srv AdminAuditServiceServer) {
+	// If the following call panics, it indicates UnimplementedAdminAuditServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&AdminAuditService_ServiceDesc, srv)
+}
+
+func _AdminAuditService_ListPlatformAuditLogs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListPlatformAuditLogsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminAuditServiceServer).ListPlatformAuditLogs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminAuditService_ListPlatformAuditLogs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminAuditServiceServer).ListPlatformAuditLogs(ctx, req.(*ListPlatformAuditLogsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// AdminAuditService_ServiceDesc is the grpc.ServiceDesc for AdminAuditService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var AdminAuditService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "tayfam.identity.v1.AdminAuditService",
+	HandlerType: (*AdminAuditServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ListPlatformAuditLogs",
+			Handler:    _AdminAuditService_ListPlatformAuditLogs_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

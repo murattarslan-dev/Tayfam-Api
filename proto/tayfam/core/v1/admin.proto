@@ -64,6 +64,9 @@ service AdminService {
   rpc GetReportedItem(GetReportedItemRequest) returns (GetReportedItemResponse);
   // DecideReport records the platform's decision on an escalated report.
   rpc DecideReport(DecideReportRequest) returns (DecideReportResponse);
+  // GetStats returns the panel dashboard's tayfa counts and the last run of
+  // each background job (issue #110). Counts and times only.
+  rpc GetStats(GetStatsRequest) returns (GetStatsResponse);
 }
 
 message AdminTayfaSummary {
@@ -249,3 +252,35 @@ message DecideReportRequest {
 }
 
 message DecideReportResponse {}
+
+message GetStatsRequest {}
+
+message GetStatsResponse {
+  // Tayfas that are not deleted (a tayfa waiting out its 72-hour deletion
+  // wait is still counted).
+  int64 total_tayfas = 1;
+  // Not deleted, not suspended, status active.
+  int64 active_tayfas = 2;
+  // Not deleted, suspended by the platform.
+  int64 suspended_tayfas = 3;
+  // Not deleted, status warned or archived by the inactivity cleanup.
+  int64 warned_tayfas = 4;
+  int64 archived_tayfas = 5;
+  // The last finished run of each background job that has run since the
+  // job_runs table exists, by job name.
+  repeated JobRun job_runs = 6;
+}
+
+message JobRun {
+  // tayfa-cleanup, tayfa-deletion, purge, hike-alert, plates,
+  // report-escalation or retention.
+  string job = 1;
+  google.protobuf.Timestamp finish_time = 2;
+  // False when the run stopped with an error (the error itself is in the
+  // service log only).
+  bool succeeded = 3;
+  // Rows the run changed.
+  int64 changed = 4;
+  // The last run that succeeded; unset if none did.
+  google.protobuf.Timestamp last_success_time = 5;
+}

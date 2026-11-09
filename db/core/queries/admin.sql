@@ -162,3 +162,20 @@ WHERE user_platform_bans.event_id < EXCLUDED.event_id;
 
 -- name: DeleteUserBan :exec
 DELETE FROM user_platform_bans WHERE user_id = @user_id;
+
+-- Pano sayaçları (issue #110). Yalnızca sayılar; tayfa kimliği ya da adı
+-- dönmez.
+-- name: AdminTayfaStats :one
+SELECT
+  count(*)::bigint AS total,
+  count(*) FILTER (WHERE suspended_at IS NULL AND status = 'active')::bigint AS active,
+  count(*) FILTER (WHERE suspended_at IS NOT NULL)::bigint AS suspended,
+  count(*) FILTER (WHERE status = 'warned')::bigint AS warned,
+  count(*) FILTER (WHERE status = 'archived')::bigint AS archived
+FROM tayfas
+WHERE deleted_at IS NULL;
+
+-- name: AdminListJobRuns :many
+SELECT job, finished_at, succeeded, changed, last_succeeded_at
+FROM job_runs
+ORDER BY job;

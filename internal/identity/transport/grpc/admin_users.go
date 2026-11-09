@@ -30,6 +30,7 @@ type AdminUsers interface {
 	RevokeUserSessions(ctx context.Context, c auth.AdminClaims, user id.ID, reason string) (int, error)
 	SanctionUser(ctx context.Context, c auth.AdminClaims, in platformadmin.SanctionInput) (platformadmin.Sanction, error)
 	LiftSanction(ctx context.Context, c auth.AdminClaims, user id.ID, reason string) error
+	UserStats(ctx context.Context, c auth.AdminClaims) (platformadmin.UserStats, error)
 }
 
 // AdminUserServer implements identityv1.AdminUserServiceServer.
@@ -193,7 +194,29 @@ func (s *AdminUserServer) LiftSanction(ctx context.Context, req *identityv1.Lift
 	return &identityv1.LiftSanctionResponse{}, nil
 }
 
+// GetUserStats implements identityv1.AdminUserServiceServer.
+func (s *AdminUserServer) GetUserStats(ctx context.Context, _ *identityv1.GetUserStatsRequest) (*identityv1.GetUserStatsResponse, error) {
+	c, err := adminCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	st, err := s.users.UserStats(ctx, c)
+	if err != nil {
+		return nil, s.mapError(ctx, err)
+	}
+	return &identityv1.GetUserStatsResponse{
+		TotalUsers: st.Total, ActiveUsers: st.Active, SuspendedUsers: st.Suspended, BannedUsers: st.Banned,
+		DeletionsPending: st.DeletionsPending, DeletionsOverdue: st.DeletionsOverdue,
+	}, nil
+}
+
 func (s *AdminUserServer) mapError(ctx context.Context, err error) error {
+	return adminUserError(ctx, s.log, err)
+}
+
+// adminUserError maps the panel app errors of platformadmin to gRPC
+// statuses.
+func adminUserError(ctx context.Context, log *slog.Logger, err error) error {
 	switch {
 	case errors.Is(err, platformadmin.ErrNotAdmin):
 		return status.Error(codes.Unauthenticated, "kimlik doğrulanamadı")
@@ -208,7 +231,7 @@ func (s *AdminUserServer) mapError(ctx context.Context, err error) error {
 	case errors.Is(err, platformadmin.ErrValidation):
 		return fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_VALIDATION)
 	default:
-		s.log.ErrorContext(ctx, "panel kullanıcı işlemi başarısız", slog.Any("err", err))
+		log.ErrorContext(ctx, "panel kullanıcı işlemi başarısız", slog.Any("err", err))
 		return status.Error(codes.Internal, "iç hata")
 	}
 }

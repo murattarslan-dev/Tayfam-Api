@@ -91,7 +91,7 @@ dl.meta dd { margin: 0; overflow-wrap: anywhere; }
 
 form.stack { display: grid; gap: 12px; max-width: 640px; }
 label { font-weight: 600; font-size: 15px; }
-input[type="text"], input[type="search"], select, textarea {
+input[type="text"], input[type="search"], input[type="date"], select, textarea {
   font: inherit;
   width: 100%;
   padding: 10px 12px;
@@ -124,3 +124,10 @@ button.secondary { background: var(--tint-brand); color: var(--brand); }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* Denetim kaydı (#110) */
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; align-items: end; margin-bottom: 16px; }
+.filters div { display: grid; gap: 4px; }
+.reason { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 40ch; }
+.ids { font-size: 13px; color: var(--ink-muted); overflow-wrap: anywhere; }
+.stat.alert { border-color: var(--pomegranate); }
