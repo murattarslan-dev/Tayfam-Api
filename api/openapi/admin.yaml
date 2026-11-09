@@ -1,0 +1,156 @@
+# Platform yönetim paneli sözleşmesi (ADR-0003, ADR-0008, issue #104).
+# Uygulama API'sinden (gateway.yaml) ayrıdır: yalnızca admin.tayfam.app
+# adresinde sunulur, uygulama API'si o adreste hiç sunulmaz. Önce burası
+# değişir, sonra kod (internal/gateway/admin, contract_test.go).
+openapi: 3.1.0
+info:
+  title: Tayfam Platform Yönetim Paneli
+  version: 0.1.0
+  description: |
+    1. aşama: erişim katmanı. Panel sayfaları (3. aşama) ve yönetim işlemleri
+    (2. aşama) bunun üzerine eklenir.
+
+    **Cloudflare Access:** Her istek Cloudflare Zero Trust'tan geçer ve
+    `Cf-Access-Jwt-Assertion` başlığını taşır. gateway bu JWT'yi takımın
+    açık anahtarları ve uygulamanın AUD etiketiyle her istekte doğrular;
+    başlık yoksa veya geçersizse `access-denied` (403). Cloudflare Access
+    yapılandırılmamışsa bu adres her istekte `not-found` (404) döner.
+
+    **Oturum:** Admin token'ı `__Host-tayfam_admin` çerezindedir (HttpOnly,
+    Secure, SameSite=Strict, Path=/, yalnızca bu host). Ayrı türde ve
+    audience'tadır (`tayfam-admin`), 8 saat geçerlidir ve yenilenmez.
+    Uygulama token'ı (`tayfam_at`, `Authorization`) burada yok sayılır.
+
+    **Giriş:** `GET /auth/nonce` → nonce ile Google girişi → `POST
+    /auth/sign-in`. Google hesabının doğrulanmış e-postası Cloudflare Access
+    kimliğinin e-postasıyla aynı olmalı, kimlik token'ı son 5 dakikada
+    verilmiş olmalı ve kullanıcı `platform_admins`'te olmalıdır.
+
+    **Kaynak denetimi:** Durum değiştiren istekler panelin kendi
+    adresinden gelir: `Origin: https://admin.tayfam.app`; `Sec-Fetch-Site`
+    varsa `same-origin`. Aksi halde `cross-origin` (403).
+
+    **Hatalar:** RFC 9457 `application/problem+json`; `type`
+    `https://tayfam.app/problems/<kod>`.
+servers:
+  - url: https://admin.tayfam.app
+
+paths:
+  /auth/nonce:
+    get:
+      operationId: adminNonce
+      summary: Giriş denemesi başlatır
+      description: |
+        Rastgele bir nonce üretir; Google girişine verilir. Aynı değer 5
+        dakikalık `__Host-tayfam_admin_nonce` çerezine (HttpOnly) yazılır;
+        `POST /auth/sign-in` nonce'u gövdeden değil bu çerezden okur.
+      responses:
+        "200":
+          description: Nonce
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [nonce]
+                properties:
+                  nonce: { type: string }
+        "403": { $ref: "#/components/responses/Problem" }
+
+  /auth/sign-in:
+    post:
+      operationId: adminSignIn
+      summary: Google ID token'ı ile panel girişi
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id_token]
+              additionalProperties: false
+              properties:
+                id_token: { type: string, maxLength: 8192 }
+      responses:
+        "200":
+          description: |
+            Giriş yapıldı; admin token'ı `__Host-tayfam_admin` çerezinde
+            (gövdede yok). Giriş platform denetim kaydına yazılır.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user_id, expires_at, auth_time]
+                properties:
+                  user_id: { type: string, format: uuid }
+                  expires_at: { type: string, format: date-time }
+                  auth_time: { type: string, format: date-time }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401":
+          description: |
+            `unauthenticated`: kimlik token'ı geçersiz ya da eski, e-posta
+            Cloudflare Access kimliğiyle eşleşmiyor veya kullanıcı platform
+            yöneticisi değil. Hangisi olduğu söylenmez.
+        "403": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+
+  /auth/sign-out:
+    post:
+      operationId: adminSignOut
+      summary: Panel çerezini siler
+      responses:
+        "204": { description: Çıkış yapıldı }
+        "403": { $ref: "#/components/responses/Problem" }
+
+  /auth/me:
+    get:
+      operationId: adminMe
+      summary: Oturumdaki platform yöneticisi
+      description: |
+        identity her çağrıda `platform_admins` kaydını yeniden denetler;
+        kayıt silinmişse `unauthenticated` döner ve çerez silinir.
+      responses:
+        "200":
+          description: Yönetici
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user_id, display_name, auth_time, expires_at, reauth_until]
+                properties:
+                  user_id: { type: string, format: uuid }
+                  display_name: { type: string }
+                  auth_time: { type: string, format: date-time }
+                  expires_at: { type: string, format: date-time }
+                  reauth_until:
+                    type: string
+                    format: date-time
+                    description: Yıkıcı işlemler bu ana kadar yeniden giriş istemez (auth_time + 5 dakika).
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+
+components:
+  responses:
+    Problem:
+      description: Hata
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            required: [type, status]
+            properties:
+              type: { type: string }
+              title: { type: string }
+              status: { type: integer }
+              instance: { type: string }
+              request_id: { type: string }
+x-problem-types:
+  - access-denied
+  - cross-origin
+  - invalid-request
+  - unsupported-media-type
+  - unauthenticated
+  - reauthentication-required
+  - rate-limited
+  - not-found
+  - unavailable
+  - internal

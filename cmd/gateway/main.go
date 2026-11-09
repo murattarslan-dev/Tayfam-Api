@@ -3,6 +3,7 @@ package main
 
 import (
 	"errors"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -12,7 +13,9 @@ import (
 	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/gateway/admin"
 	"github.com/murattarslan-dev/tayfam-api/internal/gateway/transport/rest"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/buildinfo"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/grpcx"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/ratelimit"
@@ -138,8 +141,64 @@ func setup(rt *service.Runtime) error {
 	if conn := conns["identity"]; conn != nil && deps.Core.Verifier != nil {
 		deps.Core.Accounts = identityv1.NewAccountServiceClient(conn)
 	}
-	rt.AddHTTPServer("http", httpAddr, rest.NewRouter(deps))
+	adminHost := rt.Config.String("ADMIN_HOST", "admin.tayfam.app")
+	panel, err := adminRouter(rt, adminHost, conns["identity"], trustCF)
+	if err != nil {
+		return err
+	}
+	rt.AddHTTPServer("http", httpAddr, admin.Mux(rest.NewRouter(deps), adminHost, panel))
 	return nil
+}
+
+// adminRouter builds the platform administration panel's router (ADR-0008,
+// issue #104) from:
+//
+//	CF_ACCESS_TEAM_DOMAIN  Zero Trust team domain, <team>.cloudflareaccess.com
+//	CF_ACCESS_AUD          AUD tag of the admin.tayfam.app Access application
+//
+// Neither is secret. Without both, there is no panel: it returns nil and
+// the admin host answers 404, so the panel never runs without Cloudflare
+// Access in front of it. One without the other stops the service.
+func adminRouter(rt *service.Runtime, host string, identity *grpc.ClientConn, trustCF bool) (http.Handler, error) {
+	team := rt.Config.String("CF_ACCESS_TEAM_DOMAIN", "")
+	aud := rt.Config.String("CF_ACCESS_AUD", "")
+	if team == "" && aud == "" {
+		rt.Log.Info("Cloudflare Access yapılandırılmadı; yönetim paneli kapalı")
+		return nil, nil
+	}
+	if team == "" || aud == "" {
+		return nil, errors.New("CF_ACCESS_TEAM_DOMAIN ve CF_ACCESS_AUD birlikte verilmeli")
+	}
+	if identity == nil {
+		return nil, errors.New("yönetim paneli IDENTITY_GRPC_ADDR gerektirir")
+	}
+	issuer := rt.Config.Required("AUTH_ISSUER")
+	if err := rt.Config.Err(); err != nil {
+		return nil, err
+	}
+	access, err := auth.NewAccessVerifier(auth.AccessVerifierConfig{
+		TeamDomain: team, Audience: aud, Client: &http.Client{Timeout: 5 * time.Second},
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Admin tokens are checked with identity's public keys, by a verifier
+	// that accepts nothing but admin tokens.
+	adminV, err := auth.NewAdminVerifier(auth.AdminVerifierConfig{
+		Keys:   auth.NewRemoteKeys(auth.FetchFromIdentity(identityv1.NewKeyServiceClient(identity))),
+		Issuer: issuer,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return admin.NewHandler(admin.Config{
+		Host: host, Access: access, Admin: adminV,
+		Identity:            identityv1.NewAdminAuthServiceClient(identity),
+		Log:                 rt.Log,
+		TrustCFConnectingIP: trustCF,
+		// One person signs in a few times a day.
+		SignInLimit: ratelimit.New(5, 5),
+	})
 }
 
 func splitList(s string) []string {
