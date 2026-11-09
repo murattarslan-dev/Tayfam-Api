@@ -51,8 +51,8 @@ func (rt *Runtime) IdentityVerifier() (*auth.Verifier, error) {
 // mounted.
 const (
 	defaultJWKSURL      = "https://kubernetes.default.svc/openid/v1/jwks"
-	defaultKubeCAFile   = "/var/run/secrets/tayfam/kube-api/ca.crt"
-	defaultKubeAPIToken = "/var/run/secrets/tayfam/kube-api/token"
+	defaultKubeCAFile   = "/var/run/secrets/tayfam/kube-api/ca.crt" // #nosec G101 -- a file path, not a credential
+	defaultKubeAPIToken = "/var/run/secrets/tayfam/kube-api/token"  // #nosec G101 -- a file path, not a credential
 )
 
 // ServiceIdentity is what a service needs to accept service tokens.
