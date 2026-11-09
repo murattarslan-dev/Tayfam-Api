@@ -196,7 +196,7 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 		}
 		for _, inv := range sent {
 			tf, invitee := id.ID(inv.TayfaID.Bytes), id.ID(inv.UserID.Bytes)
-			if _, err := q.DeleteMembership(ctx, store.DeleteMembershipParams{TayfaID: inv.TayfaID, UserID: inv.UserID}); err != nil {
+			if _, err := q.DeleteMembership(ctx, store.DeleteMembershipParams(inv)); err != nil {
 				return fmt.Errorf("davet silme: %w", err)
 			}
 			if err := systemRecord(ctx, q, tf, "member.invitation_cancelled", eventInvitationCancelled, "membership", invitee,
