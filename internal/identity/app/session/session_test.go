@@ -35,8 +35,11 @@ func (fakeGoogle) Verify(_ context.Context, tok, nonce string) (oidc.Identity, e
 }
 
 type env struct {
-	svc   *Service
-	pool  *pgxpool.Pool
+	svc  *Service
+	pool *pgxpool.Pool
+	// admin is a superuser pool for fixtures identity_app cannot write
+	// (consent withdrawal has no query yet).
+	admin *pgxpool.Pool
 	now   time.Time
 	api   *auth.Verifier
 	reg   *auth.Verifier
@@ -45,14 +48,15 @@ type env struct {
 
 func setup(t *testing.T) *env {
 	t.Helper()
-	pool := dbtest.New(t, "identity", identitydb.Migrations())
+	d := dbtest.Open(t, "identity", identitydb.Migrations())
+	pool := d.App
 	seed := make([]byte, ed25519.SeedSize)
 	copy(seed, "session-test")
 	key, err := auth.ParseSigningKey("k1", base64.StdEncoding.EncodeToString(seed))
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &env{pool: pool, now: time.Now()}
+	e := &env{pool: pool, admin: d.Admin, now: time.Now()}
 	e.clock = &e.now
 	clock := func() time.Time { return *e.clock }
 	signer := func(aud string) *auth.Signer {

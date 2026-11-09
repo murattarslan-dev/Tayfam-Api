@@ -44,7 +44,7 @@ type env struct {
 
 func setup(t *testing.T) *env {
 	t.Helper()
-	pool := dbtest.New(t, identitydb.Migrations())
+	pool := dbtest.New(t, "identity", identitydb.Migrations())
 	seed := make([]byte, ed25519.SeedSize)
 	copy(seed, "deletion-test")
 	key, err := auth.ParseSigningKey("k1", base64.StdEncoding.EncodeToString(seed))

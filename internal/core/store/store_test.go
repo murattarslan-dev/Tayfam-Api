@@ -777,10 +777,10 @@ func TestTayfaDeletionCascades(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Kalıcı silme işi (aktörsüz) tayfayı ve ona ait her şeyi siler. İş henüz
-	// yok ve core_app'in tayfas'ta DELETE yetkisi yok; cascade'in trigger'lardan
-	// geçtiği yönetici bağlantısıyla sınanır.
-	if _, err := adminOf(t, pool).Exec(ctx, `DELETE FROM tayfas WHERE id = $1`, tayfa.PG()); err != nil {
+	// Kalıcı silme işi (aktörsüz, core_app) tayfayı ve ona ait her şeyi
+	// siler. Cascade tablo sahibinin yetkisiyle çalışır: core_app'in
+	// audit_logs'u silmesi için ayrıca yetkiye gerek yoktur.
+	if _, err := pool.Exec(ctx, `DELETE FROM tayfas WHERE id = $1`, tayfa.PG()); err != nil {
 		t.Fatalf("tayfa silinemedi: %v", err)
 	}
 	var n int
@@ -873,21 +873,62 @@ func TestAuditLogIsAppendOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// core_app'in audit_logs'ta UPDATE, DELETE ve TRUNCATE yetkisi yoktur
-	// (TestAppRolePrivileges). Trigger ikinci savunma hattıdır: bu yetkilere
-	// sahip bir bağlantı (burada yönetici) da kaydı değiştiremez.
+	// core_app'in audit_logs'ta yalnızca UPDATE (actor_id) ve DELETE yetkisi
+	// vardır (hesap silme ve 1 yıllık saklama, 00013); geri kalanı yetki
+	// düzeyinde reddedilir.
+	t.Run("güncelleme", func(t *testing.T) {
+		_, err := pool.Exec(ctx, `UPDATE audit_logs SET action = 'member.unbanned' WHERE id = $1`, logID.PG())
+		wantCode(t, err, "42501")
+	})
+	t.Run("truncate", func(t *testing.T) {
+		_, err := pool.Exec(ctx, `TRUNCATE audit_logs`)
+		wantCode(t, err, "42501")
+	})
+	// Verilen dar yetkilerin sınırı trigger'dadır: iş dışında ya da genç bir
+	// kayıtta core_app de değiştiremez.
+	for name, sql := range map[string]string{
+		"işsiz aktörü silme":  `UPDATE audit_logs SET actor_id = NULL WHERE id = $1`,
+		"aktörü değiştirme":   `UPDATE audit_logs SET actor_id = gen_random_uuid() WHERE id = $1`,
+		"saklama işsiz silme": `DELETE FROM audit_logs WHERE id = $1`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := pool.Exec(ctx, sql, logID.PG())
+			wantCode(t, err, CodeAppendOnly)
+		})
+	}
+	t.Run("saklama işi genç kaydı silemez", func(t *testing.T) {
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		if err := New(tx).SetAuditRetentionJob(ctx); err != nil {
+			t.Fatal(err)
+		}
+		_, err = tx.Exec(ctx, `DELETE FROM audit_logs WHERE id = $1`, logID.PG())
+		wantCode(t, err, CodeAppendOnly)
+	})
+	t.Run("hesap silme işi aktörü başka değere çeviremez", func(t *testing.T) {
+		wantCode(t, asJob(t, pool, SystemJobAccountDeletion, func(q *Queries) error {
+			_, err := q.db.Exec(ctx, `UPDATE audit_logs SET actor_id = gen_random_uuid() WHERE id = $1`, logID.PG())
+			return err
+		}), CodeAppendOnly)
+	})
+
+	// Trigger ikinci savunma hattıdır: tüm yetkilere sahip bir bağlantı
+	// (burada yönetici) da kaydı değiştiremez.
 	priv := adminOf(t, pool)
 	for name, sql := range map[string]string{
-		"güncelleme":   `UPDATE audit_logs SET action = 'member.unbanned' WHERE id = $1`,
-		"aktörü silme": `UPDATE audit_logs SET actor_id = NULL WHERE id = $1`,
-		"silme":        `DELETE FROM audit_logs WHERE id = $1`,
+		"yönetici güncelleme":   `UPDATE audit_logs SET action = 'member.unbanned' WHERE id = $1`,
+		"yönetici aktörü silme": `UPDATE audit_logs SET actor_id = NULL WHERE id = $1`,
+		"yönetici silme":        `DELETE FROM audit_logs WHERE id = $1`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := priv.Exec(ctx, sql, logID.PG())
 			wantCode(t, err, CodeAppendOnly)
 		})
 	}
-	t.Run("truncate", func(t *testing.T) {
+	t.Run("yönetici truncate", func(t *testing.T) {
 		_, err := priv.Exec(ctx, `TRUNCATE audit_logs`)
 		wantCode(t, err, CodeAppendOnly)
 	})
@@ -898,9 +939,8 @@ func TestAuditLogIsAppendOnly(t *testing.T) {
 		}), CodeAppendOnly)
 	})
 	t.Run("hesap silme işi aktörü boşaltır", func(t *testing.T) {
-		wantCode(t, asJob(t, priv, SystemJobAccountDeletion, func(q *Queries) error {
-			_, err := q.db.Exec(ctx, `UPDATE audit_logs SET actor_id = NULL WHERE actor_id = $1`, admin.PG())
-			return err
+		wantCode(t, asJob(t, pool, SystemJobAccountDeletion, func(q *Queries) error {
+			return q.ClearAuditActor(ctx, admin.PG())
 		}), "")
 	})
 

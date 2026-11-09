@@ -26,7 +26,8 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       # Migration'lar servis binary'sinin "migrate" alt komutuyla, servis
       # başlamadan önce çalışır; advisory lock aynı anda tek migration'ı
-      # garanti eder (ADR-0006).
+      # garanti eder (ADR-0006). Şemanın sahibi chat kullanıcısıyla bağlanan
+      # tek container budur (ADR-0014).
       initContainers:
         - name: migrate
           image: ghcr.io/murattarslan-dev/tayfam-chat
@@ -77,15 +78,17 @@ spec:
             - { name: SERVICE_TOKEN_CA_FILE, value: /var/run/secrets/tayfam/kube-api/ca.crt }
             - { name: SERVICE_TOKEN_API_TOKEN_FILE, value: /var/run/secrets/tayfam/kube-api/token }
             # Ortama özel secret (deploy/apps/<ortam>/secrets, SOPS ile şifreli).
-            # pg_hba chat kullanıcısını yalnızca chat veritabanına, TLS ile alır.
+            # pg_hba chat kullanıcılarını yalnızca chat veritabanına, TLS ile alır.
+            # Çalışma zamanı kullanıcısı chat_app (ADR-0014); sahip
+            # (chat-db) yalnızca migrate initContainer'ındadır.
             - { name: DB_HOST, value: tayfam-pg-rw }
             - { name: DB_NAME, value: chat }
             - name: DB_USER
               valueFrom:
-                secretKeyRef: { name: chat-db, key: username }
+                secretKeyRef: { name: chat-app-db, key: username }
             - name: DB_PASSWORD
               valueFrom:
-                secretKeyRef: { name: chat-db, key: password }
+                secretKeyRef: { name: chat-app-db, key: password }
             # Kanal mesajı şifreleme anahtarı (issue #81, ADR-0005). Yalnızca
             # chat okur; doğum tarihi anahtarından ayrıdır. Üretim:
             # scripts/new-chat-message-key.sh <ortam>.

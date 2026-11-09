@@ -85,7 +85,7 @@ func TestAuditAndEvent(t *testing.T) {
 // TestEventUsesOutbox: events go through outbox.Write (ordered IDs) and keep
 // core's tayfa_id; outside a transaction nothing is written.
 func TestEventUsesOutbox(t *testing.T) {
-	pool := dbtest.New(t, coredb.Migrations())
+	pool := dbtest.New(t, "core", coredb.Migrations())
 	ctx := context.Background()
 	actor, tayfa := id.New(), id.New()
 
@@ -143,7 +143,7 @@ func TestEventUsesOutbox(t *testing.T) {
 // TouchTayfa moves last_activity_at forward at most once per hour and
 // leaves the tayfa's update time alone.
 func TestTouchTayfa(t *testing.T) {
-	pool := dbtest.New(t, coredb.Migrations())
+	pool := dbtest.New(t, "core", coredb.Migrations())
 	ctx := context.Background()
 	tf := id.New()
 	start := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)

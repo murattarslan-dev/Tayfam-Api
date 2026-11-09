@@ -26,16 +26,21 @@ var ctx = context.Background()
 
 type env struct {
 	pool *pgxpool.Pool
-	log  *slog.Logger
-	base time.Time
+	// admin is a superuser pool for fixtures core_app cannot write
+	// (seeding with triggers off, ADR-0014).
+	admin *pgxpool.Pool
+	log   *slog.Logger
+	base  time.Time
 }
 
 func setup(t *testing.T) *env {
 	t.Helper()
+	d := dbtest.Open(t, "core", coredb.Migrations())
 	return &env{
-		pool: dbtest.New(t, coredb.Migrations()),
-		log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		base: time.Now().UTC().Truncate(time.Microsecond),
+		pool:  d.App,
+		admin: d.Admin,
+		log:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		base:  time.Now().UTC().Truncate(time.Microsecond),
 	}
 }
 
@@ -85,7 +90,7 @@ func (e *env) exec(t *testing.T, sql string, args ...any) {
 func (e *env) seed(t *testing.T, tf id.ID, role string) id.ID {
 	t.Helper()
 	u := id.New()
-	tx, err := e.pool.Begin(ctx)
+	tx, err := e.admin.Begin(ctx)
 	must(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = tx.Exec(ctx, "SET LOCAL session_replication_role = replica")

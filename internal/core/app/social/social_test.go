@@ -21,16 +21,20 @@ type env struct {
 	svc  *Service
 	pool *pgxpool.Pool
 	q    *store.Queries
+	// admin is a superuser pool for fixtures core_app cannot write (moving
+	// outbox events back in time, ADR-0014).
+	admin *pgxpool.Pool
 }
 
 func setup(t *testing.T) *env {
 	t.Helper()
-	pool := dbtest.New(t, coredb.Migrations())
+	d := dbtest.Open(t, "core", coredb.Migrations())
+	pool := d.App
 	svc, err := New(Config{Pool: pool})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &env{svc: svc, pool: pool, q: store.New(pool)}
+	return &env{svc: svc, pool: pool, q: store.New(pool), admin: d.Admin}
 }
 
 func must(t *testing.T, err error) {
@@ -217,7 +221,7 @@ func TestFriendRequestDailyLimit(t *testing.T) {
 	}
 
 	// A day later the window has moved.
-	_, err = e.pool.Exec(ctx, `UPDATE domain_events SET occurred_at = occurred_at - interval '25 hours' WHERE actor_id = $1`, a.PG())
+	_, err = e.admin.Exec(ctx, `UPDATE domain_events SET occurred_at = occurred_at - interval '25 hours' WHERE actor_id = $1`, a.PG())
 	must(t, err)
 	if _, err := e.svc.SendFriendRequest(ctx, a, e.user(t, "Ertesi gün")); err != nil {
 		t.Fatalf("ertesi gün: %v", err)

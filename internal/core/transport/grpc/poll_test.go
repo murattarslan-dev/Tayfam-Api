@@ -222,7 +222,7 @@ func TestAnonymousPollBehindGuard(t *testing.T) {
 	}
 	var logs bytes.Buffer
 	log := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	pool := dbtest.New(t, coredb.Migrations())
+	pool := dbtest.New(t, "core", coredb.Migrations())
 	tayfas, err := tayfa.New(tayfa.Config{Pool: pool, Log: log})
 	if err != nil {
 		t.Fatal(err)

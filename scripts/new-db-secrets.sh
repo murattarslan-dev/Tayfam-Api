@@ -8,7 +8,7 @@
 #   <servis>_app  çalışma zamanı (servis container'ı)  secrets/<servis>-app-db
 #
 #   ./scripts/new-db-secrets.sh dev                     # tüm servislerin eksikleri
-#   ./scripts/new-db-secrets.sh dev identity core       # yalnızca bu servislerin eksikleri
+#   ./scripts/new-db-secrets.sh dev identity core chat  # yalnızca bu servislerin eksikleri
 #   FORCE=1 ./scripts/new-db-secrets.sh dev core:app    # core_app parolasını yenile (rotasyon)
 #   FORCE=1 ./scripts/new-db-secrets.sh dev core:owner  # core (sahip) parolasını yenile
 #
@@ -26,8 +26,7 @@ cd "$(dirname "$0")/.."
 env=${1:?kullanım: $0 <ortam> [servis[:owner|:app]...]}
 shift
 args=("$@")
-# chat'in henüz veritabanı kodu yok; chat_app veritabanıyla birlikte gelir.
-[ ${#args[@]} -gt 0 ] || args=(identity core chat:owner)
+[ ${#args[@]} -gt 0 ] || args=(identity core chat)
 
 dir="deploy/apps/$env"
 [ -d "$dir" ] || { echo "ortam yok: $dir" >&2; exit 1; }

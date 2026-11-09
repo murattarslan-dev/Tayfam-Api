@@ -54,6 +54,12 @@ spec:
         inherit: false
         connectionLimit: 20
         passwordSecret: { name: core-app-db }
+      - name: chat_app
+        ensure: present
+        login: true
+        inherit: false
+        connectionLimit: 20
+        passwordSecret: { name: chat-app-db }
   postgresql:
     parameters:
       # 4 GB'lık ev makinesine göre (ADR-0006); prod'da büyütülür.
@@ -76,6 +82,7 @@ spec:
       - hostssl core core all scram-sha-256
       - hostssl core core_app all scram-sha-256
       - hostssl chat chat all scram-sha-256
+      - hostssl chat chat_app all scram-sha-256
       - host all all all reject
   storage:
     size: 5Gi

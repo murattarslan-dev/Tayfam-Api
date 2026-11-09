@@ -456,7 +456,7 @@ func TestEventServiceBehindGuard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pool := dbtest.New(t, coredb.Migrations())
+	pool := dbtest.New(t, "core", coredb.Migrations())
 	tayfas, err := tayfa.New(tayfa.Config{Pool: pool, Log: discard})
 	if err != nil {
 		t.Fatal(err)

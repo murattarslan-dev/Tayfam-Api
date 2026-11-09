@@ -33,7 +33,7 @@ func (f *fakeChat) ApplyUserEvent(_ context.Context, req *chatv1.ApplyUserEventR
 // chat and core are separate consumers: chat being down does not hold up
 // core, and chat gets the same events once it is back (issue #64).
 func TestChatConsumerIsIndependent(t *testing.T) {
-	pool := dbtest.New(t, identitydb.Migrations())
+	pool := dbtest.New(t, "identity", identitydb.Migrations())
 	ctx := context.Background()
 	user := id.New()
 	inTx(t, pool, func(tx pgx.Tx) error {

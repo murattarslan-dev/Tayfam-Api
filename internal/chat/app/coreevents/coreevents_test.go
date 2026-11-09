@@ -27,7 +27,7 @@ func must(t *testing.T, err error) {
 
 func setup(t *testing.T) (*Service, *pgxpool.Pool) {
 	t.Helper()
-	pool := dbtest.New(t, chatdb.Migrations())
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
 	svc, err := New(Config{Pool: pool})
 	must(t, err)
 	return svc, pool

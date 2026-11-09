@@ -20,16 +20,8 @@ import (
 
 func setup(t *testing.T) (*pgxpool.Pool, *Queries) {
 	t.Helper()
-	pool, _, q := setupAdmin(t)
-	return pool, q
-}
-
-// setupAdmin also returns a superuser pool for what identity_app must not
-// do itself (the future 30-day hard delete job).
-func setupAdmin(t *testing.T) (app, admin *pgxpool.Pool, q *Queries) {
-	t.Helper()
-	d := dbtest.Open(t, "identity", identitydb.Migrations())
-	return d.App, d.Admin, New(d.App)
+	pool := dbtest.New(t, "identity", identitydb.Migrations())
+	return pool, New(pool)
 }
 
 func text(s string) pgtype.Text { return pgtype.Text{String: s, Valid: true} }
@@ -255,15 +247,16 @@ func TestRevokeSessions(t *testing.T) {
 }
 
 func TestDeletingUserRemovesCredentials(t *testing.T) {
-	pool, admin, q := setupAdmin(t)
+	pool, q := setup(t)
 	ctx := context.Background()
 	u := newUser(t, q)
 	session(t, q, u)
 	if err := q.CreateAuthIdentity(ctx, CreateAuthIdentityParams{ID: id.New().PG(), UserID: u.PG(), Provider: "google", Subject: "sub-" + u.String()}); err != nil {
 		t.Fatal(err)
 	}
-	// Kalıcı silme işi henüz yok; identity_app'in users'ta DELETE yetkisi yok.
-	if _, err := admin.Exec(ctx, `DELETE FROM users WHERE id = $1`, u.PG()); err != nil {
+	// Kalıcı silme (retention) identity_app ile çalışır; bağlı satırlar
+	// cascade ile tablo sahibinin yetkisiyle gider.
+	if _, err := pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, u.PG()); err != nil {
 		t.Fatal(err)
 	}
 	for _, table := range []string{"auth_identities", "devices", "sessions", "refresh_tokens"} {

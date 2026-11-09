@@ -31,17 +31,20 @@ func must(t *testing.T, err error) {
 type fixture struct {
 	pool *pgxpool.Pool
 	q    *store.Queries
+	// admin is a superuser pool for fixtures core_app cannot write
+	// (seeding with triggers off, ADR-0014).
+	admin *pgxpool.Pool
 }
 
 func setup(t *testing.T) *fixture {
 	t.Helper()
-	pool := dbtest.New(t, coredb.Migrations())
-	return &fixture{pool: pool, q: store.New(pool)}
+	d := dbtest.Open(t, "core", coredb.Migrations())
+	return &fixture{pool: d.App, q: store.New(d.App), admin: d.Admin}
 }
 
 func (f *fixture) exec(t *testing.T, sql string, args ...any) {
 	t.Helper()
-	tx, err := f.pool.Begin(ctx)
+	tx, err := f.admin.Begin(ctx)
 	must(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = tx.Exec(ctx, "SET LOCAL session_replication_role = replica")

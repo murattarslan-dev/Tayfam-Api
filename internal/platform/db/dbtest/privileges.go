@@ -3,6 +3,8 @@ package dbtest
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,31 +13,68 @@ import (
 )
 
 // TablePrivileges returns the table privileges the pool's current role
-// holds directly, as "table" → "INSERT,SELECT,…" (sorted). Tests compare it
-// with the exact set the service needs, so a widened grant fails a test.
+// holds directly, as "table" → "INSERT,SELECT,UPDATE(actor_id)" (sorted;
+// column-level grants appear as PRIVILEGE(col,…)). Tests compare it with the
+// exact set the service needs, so a widened grant fails a test.
 func TablePrivileges(t testing.TB, pool *pgxpool.Pool) map[string]string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	// Table-level grants from pg_class.relacl, column-level grants from
+	// pg_attribute.attacl (information_schema.table_privileges does not list
+	// the latter).
 	rows, err := pool.Query(ctx, `
-		SELECT table_name::text, string_agg(privilege_type::text, ',' ORDER BY privilege_type)
-		FROM information_schema.table_privileges
-		WHERE grantee = current_user AND table_schema = 'public'
-		GROUP BY table_name`)
+		SELECT c.relname::text, p.privilege_type::text, NULL::text
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+		CROSS JOIN LATERAL aclexplode(c.relacl) p
+		WHERE c.relkind IN ('r', 'p', 'v') AND p.grantee = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+		UNION ALL
+		SELECT c.relname::text, p.privilege_type::text, a.attname::text
+		FROM pg_attribute a
+		JOIN pg_class c ON c.oid = a.attrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+		CROSS JOIN LATERAL aclexplode(a.attacl) p
+		WHERE a.attnum > 0 AND NOT a.attisdropped
+		  AND p.grantee = (SELECT oid FROM pg_roles WHERE rolname = current_user)`)
 	if err != nil {
 		t.Fatalf("tablo yetkileri okunamadı: %v", err)
 	}
 	defer rows.Close()
-	got := map[string]string{}
+	tables := map[string]map[string][]string{}
 	for rows.Next() {
-		var table, privs string
-		if err := rows.Scan(&table, &privs); err != nil {
+		var table, priv string
+		var column *string
+		if err := rows.Scan(&table, &priv, &column); err != nil {
 			t.Fatal(err)
 		}
-		got[table] = privs
+		if tables[table] == nil {
+			tables[table] = map[string][]string{}
+		}
+		cols := tables[table][priv]
+		if column != nil {
+			cols = append(cols, *column)
+		} else if cols == nil {
+			cols = []string{}
+		}
+		tables[table][priv] = cols
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for table, privs := range tables {
+		var parts []string
+		for priv, cols := range privs {
+			if len(cols) == 0 {
+				parts = append(parts, priv)
+				continue
+			}
+			slices.Sort(cols)
+			parts = append(parts, priv+"("+strings.Join(cols, ",")+")")
+		}
+		slices.Sort(parts)
+		got[table] = strings.Join(parts, ",")
 	}
 	return got
 }

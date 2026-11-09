@@ -7,7 +7,7 @@
 
 ## Bağlam
 
-identity ve core çalışma zamanında kendi veritabanlarının sahibi olan
+identity, core ve chat çalışma zamanında kendi veritabanlarının sahibi olan
 kullanıcıyla bağlanıyordu. Sahip her şeyi yapabilir: trigger'ları kapatır
 (`ALTER TABLE … DISABLE TRIGGER`), `audit_logs`'u boşaltır, kısıtları ve
 tabloları siler. Bu durumda core'daki üyelik ve denetim kaydı trigger'ları
@@ -27,13 +27,25 @@ karşı korumaz (ADR-0011 sertleştirme listesi madde 8, issue #39).
      değildir, rol özelliği (CREATEDB, CREATEROLE, BYPASSRLS) ve üyeliği
      yoktur. Servis container'ı sahibin parolasını görmez.
 2. **Kullanıcıları CloudNativePG `managed.roles`, yetkileri migration'lar
-   verir.** Her servisin `*_app_role` migration'ı `CONNECT`, şemada `USAGE` ve
-   tablo başına yalnızca sorguların (`db/<servis>/queries`) gerektirdiği
-   DML'i verir. `TRUNCATE`, `REFERENCES`, `TRIGGER` hiçbir tabloda verilmez;
-   `goose_db_version`'a yetki yoktur; `TEMP` ve şemada `CREATE` yoktur.
+   verir.** Her servisin `*_app_role` migration'ı (identity `00006`, core
+   `00013`, chat `00004`) `CONNECT`, şemada `USAGE` ve tablo başına yalnızca
+   sorguların (`db/<servis>/queries`) ve arka plan işlerinin (kalıcı silme,
+   saklama, hesap silme tüketicisi) gerektirdiği DML'i verir. `TRUNCATE`,
+   `REFERENCES`, `TRIGGER` hiçbir tabloda verilmez; `goose_db_version`'a
+   yetki yoktur; `TEMP` ve şemada `CREATE` yoktur.
 3. **Yalnızca eklenen tablolar yetki düzeyinde de öyledir.** `audit_logs`,
-   `domain_events`, `consent_records`: yalnızca `SELECT, INSERT`. Trigger'lar
-   ikinci savunma hattı olarak kalır.
+   `domain_events`, `consent_records` temelde yalnızca `SELECT, INSERT`
+   alır. Gerekli istisnalar en dar biçimde ve trigger'la sınırlı verilir:
+   - `audit_logs` (core): `UPDATE (actor_id)` (hesap silmede NULL'lama) ve
+     `DELETE` (365 günden eski kayıtların saklama silmesi). İkisinin de
+     sınırı `audit_logs_append_only` trigger'ındadır; `core_app` onu
+     kapatamaz.
+   - `domain_events` (core): `UPDATE (tayfa_id, actor_id)` (outbox'ın
+     ardından tayfa_id'nin yazılması, hesap silmede actor_id). `DELETE` yok.
+   - `domain_events` (identity): `UPDATE (actor_id)` ve `DELETE`; DELETE'i
+     `domain_events_delete_guard` trigger'ı yalnızca `user.profile_updated`
+     olaylarıyla sınırlar (hesap silmede görünen adı taşıyan olaylar).
+   - `domain_events` (chat) ve `consent_records`: yalnızca `SELECT, INSERT`.
 4. **Varsayılan yetkiler dardır.** Sonraki migration'larda açılan tablolar
    `ALTER DEFAULT PRIVILEGES` ile yalnızca `SELECT, INSERT` alır. `UPDATE` ve
    `DELETE` gereken tablo bunu kendi migration'ında açıkça verir.
@@ -60,14 +72,19 @@ karşı korumaz (ADR-0011 sertleştirme listesi madde 8, issue #39).
 - Yeni bir sorgu yeni bir yetki gerektiriyorsa aynı PR'da bir migration
   ile verilir ve `TestAppRolePrivileges` güncellenir; unutulursa testler
   yetki hatasıyla düşer.
-- Arka plan işleri (30 günlük kalıcı silme, hesap silmede denetim
-  kaydındaki `actor_id`'nin boşaltılması) geldiğinde ihtiyaç duydukları
-  yetki ayrıca ve en dar biçimde verilir (örneğin kolon düzeyinde
-  `UPDATE (actor_id)` ya da sahibe ait `SECURITY DEFINER` bir fonksiyon).
+- Bir arka plan işi yeni bir yetki isterse en dar biçimde verilir:
+  kolon düzeyinde `UPDATE`, ya da kolon düzeyinde verilemeyen `DELETE` için
+  satırları sınırlayan bir trigger (ya da sahibe ait `SECURITY DEFINER`
+  bir fonksiyon).
+- Kalıcı silme işleri için içerik tablolarında `DELETE` vardır; servisi ele
+  geçiren biri bu tablolardaki satırları (tayfanın cascade ile tüm verisi
+  dahil) silebilir. Bunu "soft delete'ten 30 gün geçmiş" koşuluna bağlayan
+  trigger'lar ayrı bir iştir.
 - Sahip kullanıcının adında `_owner` eki yoktur; sahip olduğu servis adını
   taşır.
 - Platform sahibi ortam başına bir kez `scripts/new-db-secrets.sh` ile
-  çalışma zamanı secret'larını üretir.
+  çalışma zamanı secret'larını üretir (`identity-app-db`, `core-app-db`,
+  `chat-app-db`).
 
 ## Değerlendirilen alternatifler
 

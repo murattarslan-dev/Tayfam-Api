@@ -30,7 +30,7 @@ func must(t *testing.T, err error) {
 }
 
 func TestIsMinor(t *testing.T) {
-	pool := dbtest.New(t, identitydb.Migrations())
+	pool := dbtest.New(t, "identity", identitydb.Migrations())
 	q := store.New(pool)
 	c, err := birthdate.ParseKeys("1:" + base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{5}, 32)))
 	must(t, err)
