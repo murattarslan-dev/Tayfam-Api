@@ -40,6 +40,7 @@ FROM friendships f
 JOIN user_profiles p
   ON p.user_id = (CASE WHEN f.user_low_id = @user_id THEN f.user_high_id ELSE f.user_low_id END)
  AND p.deleted_at IS NULL
+ AND NOT EXISTS (SELECT 1 FROM user_platform_bans b WHERE b.user_id = p.user_id AND b.banned_at IS NOT NULL)
 WHERE (f.user_low_id = @user_id OR f.user_high_id = @user_id)
   AND f.status = @status
   AND (@direction::text = ''
@@ -84,11 +85,13 @@ WHERE b.blocker_id = @blocker_id AND b.blocked_id > @after_user_id
 ORDER BY b.blocked_id
 LIMIT @page_size;
 
--- Profil kopyası olan, silinmemiş kullanıcı.
+-- Profil kopyası olan, silinmemiş ve platform banı olmayan kullanıcı
+-- (banlı kullanıcının profili gizlenir, silinmez; issue #104).
 -- name: GetLiveUserProfile :one
-SELECT user_id, display_name, avatar_upload_id, activity_visibility
-FROM user_profiles
-WHERE user_id = @user_id AND deleted_at IS NULL;
+SELECT up.user_id, up.display_name, up.avatar_upload_id, up.activity_visibility
+FROM user_profiles up
+WHERE up.user_id = @user_id AND up.deleted_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM user_platform_bans b WHERE b.user_id = up.user_id AND b.banned_at IS NOT NULL);
 
 -- Hesap silme (user.deleted): kişinin arkadaşlıkları, istekleri ve iki
 -- yöndeki engellemeleri.

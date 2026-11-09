@@ -334,6 +334,8 @@ type Report struct {
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 	EvidenceText          pgtype.Text
+	PlatformDecision      pgtype.Text
+	PlatformHandledAt     pgtype.Timestamptz
 }
 
 type Tag struct {
@@ -408,6 +410,12 @@ type UserBlock struct {
 	BlockerID pgtype.UUID
 	BlockedID pgtype.UUID
 	CreatedAt pgtype.Timestamptz
+}
+
+type UserPlatformBan struct {
+	UserID   pgtype.UUID
+	BannedAt pgtype.Timestamptz
+	EventID  pgtype.UUID
 }
 
 type UserProfile struct {

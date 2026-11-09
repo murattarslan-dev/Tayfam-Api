@@ -81,7 +81,7 @@ bunlardan birini bilerek zayıflatıyorsa gerekçesini yazar.
 | 16 | Postgres bağlantısında sunucu sertifikasının doğrulanması (`verify-full`); CloudNativePG CA'sının özel anahtarı olmadan dağıtılması | Açık (şu an `require`: şifreli ama doğrulamasız) |
 | 17 | `cnpg-system` namespace'i için NetworkPolicy (webhook girişi, API server çıkışı) | Açık |
 | 18 | Güvenlik denetim kaydı: giriş, yenileme, oturum iptali (ADR-0004); şimdilik yalnızca log | Açık |
-| 19 | Platform yaptırımlarının giriş ve yenilemede kontrolü (`platform_sanctions`) | Yönetim paneliyle |
+| 19 | Platform yaptırımlarının giriş ve yenilemede kontrolü (`platform_sanctions`) | Tamamlandı (issue #104) |
 
 1–6 numaralı önlemler, ilk gerçek kullanıcı verisinin gireceği identity iş
 paketlerinden **önce** tamamlanır. 2026-11-07 itibarıyla açık kalan: 2

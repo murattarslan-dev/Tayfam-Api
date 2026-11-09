@@ -16,12 +16,14 @@ import (
 	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/admin"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/announcement"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/channelaccess"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatdm"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatrelay"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/directmessage"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/identityadmin"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/identityminor"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/jobs"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
@@ -157,6 +159,17 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
+	// Platform yönetim paneli (ADR-0008, issue #104): AdminService yalnızca
+	// admin token'ını kabul eder; her çağrıda identity'ye aynı token'la
+	// yöneticilik sorulur. Diğer bütün metodlar admin token'ını reddeder.
+	admins, adminV, err := platformAdmin(rt, pool)
+	if err != nil {
+		return err
+	}
+	guard, err = guard.WithAdmin(auth.AdminPolicy{Verifier: adminV, Services: []string{grpcapi.AdminServiceName}})
+	if err != nil {
+		return err
+	}
 	srv := rt.NewGRPCServer(guard.ServerOptions()...)
 	corev1.RegisterTayfaServiceServer(srv, grpcapi.NewTayfaServer(tayfas, rt.Log))
 	corev1.RegisterMembershipServiceServer(srv, grpcapi.NewMembershipServer(memberships, rt.Log))
@@ -168,6 +181,7 @@ func setup(rt *service.Runtime) error {
 	corev1.RegisterSocialServiceServer(srv, grpcapi.NewSocialServer(socials, rt.Log))
 	corev1.RegisterProfileServiceServer(srv, grpcapi.NewProfileServer(profiles, rt.Log))
 	corev1.RegisterReportServiceServer(srv, grpcapi.NewReportServer(reports, rt.Log))
+	corev1.RegisterAdminServiceServer(srv, grpcapi.NewAdminServer(admins, rt.Log))
 	// chat'in kanal izinleri (issue #81): kullanıcının kendi token'ıyla,
 	// core'un tek izin tablosundan.
 	corev1.RegisterChannelAccessServiceServer(srv, grpcapi.NewChannelAccessServer(channelAccess, rt.Log))
@@ -187,6 +201,33 @@ func setup(rt *service.Runtime) error {
 		rt.AddWorker(w.Name, w.Run)
 	}
 	return addRelay(rt, pool)
+}
+
+// platformAdmin returns the panel's service and the admin token verifier,
+// both with identity: its public keys check the admin token, and a
+// connection that forwards the caller's admin token asks whether the
+// caller is still a platform administrator.
+func platformAdmin(rt *service.Runtime, pool *pgxpool.Pool) (*admin.Service, *auth.AdminVerifier, error) {
+	addr := rt.Config.Required("IDENTITY_GRPC_ADDR")
+	issuer := rt.Config.Required("AUTH_ISSUER")
+	if err := rt.Config.Err(); err != nil {
+		return nil, nil, err
+	}
+	conn, err := grpcx.NewClient(addr, auth.ForwardToken()...)
+	if err != nil {
+		return nil, nil, err
+	}
+	av, err := auth.NewAdminVerifier(auth.AdminVerifierConfig{
+		Keys: auth.NewRemoteKeys(auth.FetchFromIdentity(identityv1.NewKeyServiceClient(conn))), Issuer: issuer,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	svc, err := admin.New(admin.Config{Pool: pool, Log: rt.Log, Checker: identityadmin.NewChecker(identityv1.NewAdminAuthServiceClient(conn))})
+	if err != nil {
+		return nil, nil, err
+	}
+	return svc, av, nil
 }
 
 // identityMinors returns the client of identity's IsMinor with core's
@@ -253,10 +294,19 @@ func addRelay(rt *service.Runtime, pool *pgxpool.Pool) error {
 	if err != nil {
 		return err
 	}
-	relay, err := outbox.NewRelay(outbox.RelayConfig{
-		Pool: pool, Log: rt.Log,
-		Consumers: []outbox.Consumer{chatrelay.Consumer(chatv1.NewCoreEventServiceClient(conn))},
-	})
+	consumers := []outbox.Consumer{chatrelay.Consumer(chatv1.NewCoreEventServiceClient(conn))}
+	// Panel işlemlerinin denetim kaydı identity'ye (issue #104), core'un
+	// identity için servis token'ıyla.
+	if idToken, ok := rt.ServiceToken("identity"); ok {
+		idConn, err := grpcx.NewClient(rt.Config.Required("IDENTITY_GRPC_ADDR"), auth.ServiceTokenFrom(idToken)...)
+		if err != nil {
+			return err
+		}
+		consumers = append(consumers, identityadmin.AuditConsumer(identityv1.NewPlatformAuditServiceClient(idConn)))
+	} else {
+		rt.Log.Warn("identity servis token'ı yok; platform denetim kayıtları outbox'ta bekler (yalnızca yerel ortam)")
+	}
+	relay, err := outbox.NewRelay(outbox.RelayConfig{Pool: pool, Log: rt.Log, Consumers: consumers})
 	if err != nil {
 		return err
 	}

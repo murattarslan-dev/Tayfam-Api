@@ -2,6 +2,10 @@
 
 - **Durum:** Kabul edildi
 - **Tarih:** 2026-11-07
+- **Revizyon:** 2026-11-09, platform paneli uygulanırken (issue #104):
+  `platform_admins` kaydının runbook SQL'iyle eklenmesi, Access e-postası
+  eşleşmesinin identity'de yapılması, denetim kaydının core outbox'ıyla
+  tutarlılığı, rol düzeltme istisnası, platform banı.
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md), [ADR-0006](0006-dagitim-ve-ortamlar.md), [ADR-0009](0009-veri-modelinin-servislere-dagilimi.md)
 - **Kaynak:** Notion: Proje Planı (Güvenlik Tedbirleri), Platform Yönetim
@@ -128,8 +132,13 @@ Erişim güvenliği Notion'daki tasarımla aynıdır; katmanlar bağımsızdır:
    açık anahtarlarıyla doğrular. Başlık yoksa veya imza geçersizse istek
    reddedilir.
 4. **Uygulama içi yetki:** Kullanıcı identity'deki `platform_admins`
-   tablosunda olmalıdır. Bu tabloya API üzerinden kayıt eklenemez; yalnızca
-   identity binary'sinin bir komutuyla eklenir.
+   tablosunda olmalıdır. Bu tabloya API üzerinden kayıt eklenemez;
+   uygulamada tabloya yazan kod yoktur (testle sabit) ve kaydı platform
+   sahibi migration sahibi kullanıcıyla tek bir SQL komutuyla ekler
+   (`docs/runbooks/platform-yoneticisi.md`; 2026-11-09 güncellemesi, önceki
+   metin "identity binary'sinin bir komutuyla" idi). Yöneticilik her panel
+   isteğinde identity'de yeniden okunur; satırı silmek açık panel
+   oturumlarını hemen kapatır.
 5. **Ayrı oturum:** Panel girişinde identity ayrı türde bir **admin token'ı**
    verir (`aud` farklı); ömrü 8 saattir. Uygulama token'ı panelde, panel
    token'ı uygulamada geçmez.
@@ -142,6 +151,41 @@ Erişim güvenliği Notion'daki tasarımla aynıdır; katmanlar bağımsızdır:
 Panelin göremedikleri de Notion'daki gibidir: birebir mesaj içerikleri, gizli
 anket oyları, konum, üyesi olunmayan tayfaların içerikleri (şikâyet edilen
 içerik hariç). Kullanıcı adına işlem yapma (kimliğe bürünme) yoktur.
+
+**Panel girişi ve Cloudflare Access eşleşmesi (2026-11-09, issue #104):**
+gateway Access JWT'sini her istekte doğrular ve doğrulanmış e-postayı panel
+girişinde identity'ye iletir. Google kimlik token'ının doğrulanmış
+e-postasıyla Access e-postasının eşleşmesini **identity** yapar; eşleşmezse
+admin token'ı hiç üretilmez. Google kimlik token'ı son 5 dakikada verilmiş
+olmalıdır.
+
+**Yönetim servisleri (2026-11-09, issue #104 2. aşama):**
+
+- **Denetim kaydının tutarlılığı.** `platform_audit_logs` identity'dedir.
+  identity'nin kendi işlemleri (kullanıcı askısı/banı, oturum kapatma)
+  işlemle aynı transaction'da kaydı yazar. core'un işlemleri (tayfa askısı,
+  silme, rol düzeltme, şikâyet kararı, şikâyet edilen öğeyi görüntüleme)
+  kaydı işlemle **aynı core transaction'ında** `platform.audit` outbox
+  olayı olarak yazar; relay olayı en az bir kez identity'nin
+  `PlatformAuditService`'ine (yalnızca `tayfam-core` servis token'ı)
+  iletir, identity olay kimliğiyle bir kez kaydeder. Böylece kaydı olmayan
+  işlem de, gerçekleşmemiş işlemin kaydı da olmaz; kayıt identity'ye outbox
+  gecikmesiyle ulaşır. Değerlendirilen alternatif: önce identity'de kayıt ve
+  izin belirteci, sonra core işlemi. Reddedildi: core işlemi başarısız
+  olursa kayıt yapılmamış bir işlemi gösterir ve ek bir belirteç türü
+  gerekir.
+- **Yöneticilik ve yeniden giriş core'da da denetlenir.** core'un
+  `AdminService`'i yalnızca admin token'ını kabul eder (`auth.Guard` admin
+  yolu), her çağrıda identity'ye aynı token'la `GetAdmin` sorar ve yıkıcı
+  işlemlerde token'daki `auth_time`'ın son 5 dakikada ve gerekçenin
+  10–1000 karakter olduğunu kendisi denetler.
+- **Rol düzeltme.** Platform yöneticisi tayfanın üyesi değildir; üyelik
+  trigger'ı ona `app.system_job = 'platform_admin'` ile dar bir istisna
+  tanır: yalnızca aktif üyenin rolü değişir, son yönetici kuralı geçerlidir.
+- **Platform banı.** identity oturumları kapatır (`session.revoked`), girişi
+  ve token yenilemeyi reddeder, chat'e `user.sanctioned`, core'a
+  `user.banned` yayınlar; core banlı kullanıcının profilini gizler, içeriği
+  silmez. Askı yalnızca oturumları kapatır ve girişi süre boyunca engeller.
 
 **Notion'da mimariye bırakılan iki karar:**
 

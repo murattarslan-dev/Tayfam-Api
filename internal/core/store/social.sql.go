@@ -177,9 +177,10 @@ func (q *Queries) GetFriendship(ctx context.Context, arg GetFriendshipParams) (F
 }
 
 const getLiveUserProfile = `-- name: GetLiveUserProfile :one
-SELECT user_id, display_name, avatar_upload_id, activity_visibility
-FROM user_profiles
-WHERE user_id = $1 AND deleted_at IS NULL
+SELECT up.user_id, up.display_name, up.avatar_upload_id, up.activity_visibility
+FROM user_profiles up
+WHERE up.user_id = $1 AND up.deleted_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM user_platform_bans b WHERE b.user_id = up.user_id AND b.banned_at IS NOT NULL)
 `
 
 type GetLiveUserProfileRow struct {
@@ -189,7 +190,8 @@ type GetLiveUserProfileRow struct {
 	ActivityVisibility string
 }
 
-// Profil kopyası olan, silinmemiş kullanıcı.
+// Profil kopyası olan, silinmemiş ve platform banı olmayan kullanıcı
+// (banlı kullanıcının profili gizlenir, silinmez; issue #104).
 func (q *Queries) GetLiveUserProfile(ctx context.Context, userID pgtype.UUID) (GetLiveUserProfileRow, error) {
 	row := q.db.QueryRow(ctx, getLiveUserProfile, userID)
 	var i GetLiveUserProfileRow
@@ -277,6 +279,7 @@ FROM friendships f
 JOIN user_profiles p
   ON p.user_id = (CASE WHEN f.user_low_id = $1 THEN f.user_high_id ELSE f.user_low_id END)
  AND p.deleted_at IS NULL
+ AND NOT EXISTS (SELECT 1 FROM user_platform_bans b WHERE b.user_id = p.user_id AND b.banned_at IS NOT NULL)
 WHERE (f.user_low_id = $1 OR f.user_high_id = $1)
   AND f.status = $2
   AND ($3::text = ''
