@@ -98,10 +98,31 @@ services:
     environment:
       <<: *env
       IDENTITY_GRPC_ADDR: identity:9090
+      DB_HOST: postgres
+      DB_NAME: chat
+      DB_USER: postgres
+      DB_PASSWORD: yerel
+      DB_SSLMODE: disable
+    depends_on:
+      chat-migrate: { condition: service_completed_successfully }
+
+  chat-migrate:
+    build:
+      context: .
+      args: { SERVICE: chat }
+    command: ["migrate"]
+    environment:
+      DB_HOST: postgres
+      DB_NAME: chat
+      DB_USER: postgres
+      DB_PASSWORD: yerel
+      DB_SSLMODE: disable
+    depends_on:
+      postgres: { condition: service_healthy }
 
   # Yerel geliştirme ve store testleri için Postgres. Cluster'daki CNPG
   # image'ı tek başına başlatılamaz; aynı ana ve ara sürümdeki resmi image
-  # kullanılır (PostGIS core'a geçince eklenir). identity ve core veritabanları
+  # kullanılır (PostGIS core'a geçince eklenir). identity, core ve chat veritabanları
   # ilk açılışta oluşur. Yalnızca bu makineden erişilir.
   #   make test-db
   #   TEST_DATABASE_URL=postgres://postgres:yerel@127.0.0.1:5432/postgres?sslmode=disable make test
