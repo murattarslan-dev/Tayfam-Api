@@ -34,12 +34,50 @@ func (q *Queries) ClearAuditActor(ctx context.Context, userID pgtype.UUID) error
 	return err
 }
 
+const clearCampItemUserFields = `-- name: ClearCampItemUserFields :exec
+UPDATE event_camp_items
+SET assigned_user_id = NULLIF(assigned_user_id, $1),
+    created_by       = NULLIF(created_by, $1)
+WHERE $1 IN (assigned_user_id, created_by)
+`
+
+// Malzeme listede kalır; üstlenen ve ekleyen boşalır.
+func (q *Queries) ClearCampItemUserFields(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearCampItemUserFields, userID)
+	return err
+}
+
 const clearEventActor = `-- name: ClearEventActor :exec
 UPDATE domain_events SET actor_id = NULL WHERE actor_id = $1
 `
 
 func (q *Queries) ClearEventActor(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, clearEventActor, userID)
+	return err
+}
+
+const clearEventSeriesCreator = `-- name: ClearEventSeriesCreator :exec
+UPDATE event_series SET created_by = NULL WHERE created_by = $1
+`
+
+func (q *Queries) ClearEventSeriesCreator(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearEventSeriesCreator, userID)
+	return err
+}
+
+const clearEventUserFields = `-- name: ClearEventUserFields :exec
+UPDATE events
+SET created_by   = NULLIF(created_by, $1),
+    cancelled_by = NULLIF(cancelled_by, $1),
+    deleted_by   = NULLIF(deleted_by, $1)
+WHERE $1 IN (created_by, cancelled_by, deleted_by)
+`
+
+// Etkinlikler kalır, organizatör ve iptal eden "Silinmiş kullanıcı" olur;
+// seriler de öyle (v14 "İlişkiler ve Silme Davranışı": yazar kolonları
+// SET NULL).
+func (q *Queries) ClearEventUserFields(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearEventUserFields, userID)
 	return err
 }
 
@@ -62,6 +100,17 @@ WHERE $1 IN (invited_by_user_id, approved_by, muted_by)
 
 func (q *Queries) ClearMembershipUserFields(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, clearMembershipUserFields, userID)
+	return err
+}
+
+const clearRsvpMarker = `-- name: ClearRsvpMarker :exec
+UPDATE event_rsvps SET attendance_marked_by = NULL WHERE attendance_marked_by = $1
+`
+
+// Başkasının yoklamasını işaretleyen kişi boşalır; kişinin kendi katılım
+// kayıtları silinir (kullanıcı → event_rsvps CASCADE).
+func (q *Queries) ClearRsvpMarker(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearRsvpMarker, userID)
 	return err
 }
 
@@ -104,6 +153,25 @@ func (q *Queries) CreateSystemAuditLog(ctx context.Context, arg CreateSystemAudi
 		arg.TargetID,
 		arg.Metadata,
 	)
+	return err
+}
+
+const deleteUserConvoyVehicles = `-- name: DeleteUserConvoyVehicles :exec
+DELETE FROM event_convoy_vehicles WHERE user_id = $1
+`
+
+// Araç (plaka dahil) kişisel veridir ve kişiye aittir: silinir.
+func (q *Queries) DeleteUserConvoyVehicles(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserConvoyVehicles, userID)
+	return err
+}
+
+const deleteUserRsvps = `-- name: DeleteUserRsvps :exec
+DELETE FROM event_rsvps WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserRsvps(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserRsvps, userID)
 	return err
 }
 

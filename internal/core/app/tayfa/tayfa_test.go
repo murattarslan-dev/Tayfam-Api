@@ -638,3 +638,57 @@ func TestJoinCodeAlphabet(t *testing.T) {
 		t.Fatalf("kullanılan karakter = %d", len(seen))
 	}
 }
+
+func TestMembersCanCreateEventsSetting(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	tayfa, admin := e.create(t, JoinOpen)
+	mod := e.member(t, tayfa, admin, authz.Moderator)
+
+	v, _, err := e.svc.Get(ctx, admin, tayfa)
+	must(t, err)
+	if v.MembersCanCreateEvents {
+		t.Fatal("yeni tayfada ayar açık")
+	}
+
+	// Moderators cannot change it; only admins update settings.
+	if _, err := e.svc.Update(ctx, mod, tayfa, UpdateInput{Fields: []string{FieldMembersCanCreateEvents}, MembersCanCreateEvents: true}); !errors.Is(err, apperr.ErrPermissionDenied) {
+		t.Fatalf("moderatör ayarı değiştirdi: %v", err)
+	}
+
+	v, err = e.svc.Update(ctx, admin, tayfa, UpdateInput{Fields: []string{FieldMembersCanCreateEvents}, MembersCanCreateEvents: true})
+	must(t, err)
+	if !v.MembersCanCreateEvents {
+		t.Fatal("ayar açılmadı")
+	}
+	// Updating another field keeps the setting.
+	v, err = e.svc.Update(ctx, admin, tayfa, UpdateInput{Fields: []string{FieldName}, Name: "Başka Ad"})
+	must(t, err)
+	if !v.MembersCanCreateEvents {
+		t.Fatal("başka alan güncellenince ayar kapandı")
+	}
+	// Outside the mask the value is ignored.
+	v, err = e.svc.Update(ctx, admin, tayfa, UpdateInput{Fields: []string{FieldDescription}, Description: "x"})
+	must(t, err)
+	if !v.MembersCanCreateEvents {
+		t.Fatal("maskede olmayan ayar değişti")
+	}
+	v, err = e.svc.Update(ctx, admin, tayfa, UpdateInput{Fields: []string{FieldMembersCanCreateEvents}})
+	must(t, err)
+	if v.MembersCanCreateEvents {
+		t.Fatal("ayar kapanmadı")
+	}
+
+	var payload string
+	must(t, e.pool.QueryRow(ctx, "SELECT payload::text FROM domain_events WHERE type = 'tayfa.updated' ORDER BY id LIMIT 1").Scan(&payload))
+	if payload != `{"fields": ["members_can_create_events"]}` {
+		t.Fatalf("olay = %s", payload)
+	}
+
+	// The list view carries it too.
+	list, _, err := e.svc.ListMine(ctx, admin, 0, "")
+	must(t, err)
+	if len(list) != 1 || list[0].Tayfa == nil || list[0].Tayfa.MembersCanCreateEvents {
+		t.Fatalf("liste = %+v", list)
+	}
+}

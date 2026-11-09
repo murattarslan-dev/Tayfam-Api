@@ -112,7 +112,10 @@ func (s *TayfaServer) UpdateTayfa(ctx context.Context, req *corev1.UpdateTayfaRe
 	if err != nil {
 		return nil, err
 	}
-	in := tayfa.UpdateInput{Fields: req.GetUpdateMask().GetPaths(), Name: req.GetName(), Description: req.GetDescription()}
+	in := tayfa.UpdateInput{
+		Fields: req.GetUpdateMask().GetPaths(), Name: req.GetName(), Description: req.GetDescription(),
+		MembersCanCreateEvents: req.GetMembersCanCreateEvents(),
+	}
 	for _, f := range in.Fields {
 		switch f {
 		case tayfa.FieldInterests:
@@ -208,9 +211,10 @@ func tayfaToProto(v tayfa.View) *corev1.Tayfa {
 	out := &corev1.Tayfa{
 		Id: v.ID.String(), Name: v.Name, Description: v.Description,
 		JoinPolicy: joinPolicyToProto(v.JoinPolicy), Status: tayfaStatusToProto(v.Status),
-		MemberCount: int32(min(v.MemberCount, 1<<31-1)), //nolint:gosec // clamped above
-		JoinCode:    v.JoinCode,
-		CreateTime:  timestamppb.New(v.CreatedAt), UpdateTime: timestamppb.New(v.UpdatedAt),
+		MemberCount:            int32(min(v.MemberCount, 1<<31-1)), //nolint:gosec // clamped above
+		JoinCode:               v.JoinCode,
+		MembersCanCreateEvents: v.MembersCanCreateEvents,
+		CreateTime:             timestamppb.New(v.CreatedAt), UpdateTime: timestamppb.New(v.UpdatedAt),
 	}
 	for _, i := range v.Interests {
 		out.Interests = append(out.Interests, interestToProto(i))

@@ -162,6 +162,13 @@ func TestTayfaServerValidatesRequest(t *testing.T) {
 	if _, err := srv.UpdateTayfa(ctx, &corev1.UpdateTayfaRequest{TayfaId: tid, JoinPolicy: 9, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"name"}}}); err != nil {
 		t.Fatal(err)
 	}
+	// The event creation setting is passed on with its mask path.
+	if _, err := srv.UpdateTayfa(ctx, &corev1.UpdateTayfaRequest{TayfaId: tid, MembersCanCreateEvents: true, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"members_can_create_events"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if !f.update.MembersCanCreateEvents || len(f.update.Fields) != 1 || f.update.Fields[0] != tayfa.FieldMembersCanCreateEvents {
+		t.Fatalf("girdi = %+v", f.update)
+	}
 }
 
 func TestTayfaServerConverts(t *testing.T) {
@@ -170,6 +177,7 @@ func TestTayfaServerConverts(t *testing.T) {
 		ID: id.New(), Name: "Tayfa", Interests: []string{"camp", "general"}, JoinPolicy: "open", Status: "archived",
 		Modules:     []tayfa.ModuleState{{Module: "announcements", Enabled: true}, {Module: "events"}, {Module: "qa", Enabled: true}, {Module: "polls"}},
 		MemberCount: 3, JoinCode: "ABCDEFGH", DeletionAt: time.Now(), CreatedAt: time.Now(), UpdatedAt: time.Now(),
+		MembersCanCreateEvents: true,
 	}
 	f := &fakeTayfas{view: view}
 	srv := NewTayfaServer(f, discard)
@@ -185,7 +193,7 @@ func TestTayfaServerConverts(t *testing.T) {
 		p.GetJoinPolicy() != corev1.JoinPolicy_JOIN_POLICY_OPEN || p.GetStatus() != corev1.TayfaStatus_TAYFA_STATUS_ARCHIVED ||
 		len(p.GetInterests()) != 2 || p.GetInterests()[1] != corev1.EventType_EVENT_TYPE_GENERAL ||
 		len(p.GetModules()) != 4 || p.GetModules()[2].GetModule() != corev1.Module_MODULE_QA || !p.GetModules()[2].GetEnabled() ||
-		p.GetMemberCount() != 3 || p.GetSuspendTime() != nil || p.GetDeletionTime() == nil {
+		p.GetMemberCount() != 3 || p.GetSuspendTime() != nil || p.GetDeletionTime() == nil || !p.GetMembersCanCreateEvents() {
 		t.Fatalf("dönüştürme = %v", resp)
 	}
 

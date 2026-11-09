@@ -61,6 +61,38 @@ SET author_id  = NULLIF(author_id, @user_id),
     deleted_by = NULLIF(deleted_by, @user_id)
 WHERE @user_id IN (author_id, deleted_by);
 
+-- Etkinlikler kalır, organizatör ve iptal eden "Silinmiş kullanıcı" olur;
+-- seriler de öyle (v14 "İlişkiler ve Silme Davranışı": yazar kolonları
+-- SET NULL).
+-- name: ClearEventUserFields :exec
+UPDATE events
+SET created_by   = NULLIF(created_by, @user_id),
+    cancelled_by = NULLIF(cancelled_by, @user_id),
+    deleted_by   = NULLIF(deleted_by, @user_id)
+WHERE @user_id IN (created_by, cancelled_by, deleted_by);
+
+-- name: ClearEventSeriesCreator :exec
+UPDATE event_series SET created_by = NULL WHERE created_by = @user_id;
+
+-- Başkasının yoklamasını işaretleyen kişi boşalır; kişinin kendi katılım
+-- kayıtları silinir (kullanıcı → event_rsvps CASCADE).
+-- name: ClearRsvpMarker :exec
+UPDATE event_rsvps SET attendance_marked_by = NULL WHERE attendance_marked_by = @user_id;
+
+-- name: DeleteUserRsvps :exec
+DELETE FROM event_rsvps WHERE user_id = @user_id;
+
+-- Araç (plaka dahil) kişisel veridir ve kişiye aittir: silinir.
+-- name: DeleteUserConvoyVehicles :exec
+DELETE FROM event_convoy_vehicles WHERE user_id = @user_id;
+
+-- Malzeme listede kalır; üstlenen ve ekleyen boşalır.
+-- name: ClearCampItemUserFields :exec
+UPDATE event_camp_items
+SET assigned_user_id = NULLIF(assigned_user_id, @user_id),
+    created_by       = NULLIF(created_by, @user_id)
+WHERE @user_id IN (assigned_user_id, created_by);
+
 -- name: ClearAuditActor :exec
 UPDATE audit_logs SET actor_id = NULL WHERE actor_id = @user_id;
 

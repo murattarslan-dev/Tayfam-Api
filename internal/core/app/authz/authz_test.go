@@ -283,6 +283,86 @@ var expected = []struct {
 	{invited, AnnouncementRestore, false},
 	{banned, AnnouncementRestore, false},
 	{nonMember, AnnouncementRestore, false},
+	// EventView
+	{admin, EventView, true},
+	{moderator, EventView, true},
+	{member, EventView, true},
+	{mutedMember, EventView, true},
+	{mutedModerator, EventView, true},
+	{pending, EventView, false},
+	{invited, EventView, false},
+	{banned, EventView, false},
+	{nonMember, EventView, false},
+	// EventCreate
+	{admin, EventCreate, true},
+	{moderator, EventCreate, true},
+	{member, EventCreate, false},
+	{mutedMember, EventCreate, false},
+	{mutedModerator, EventCreate, false},
+	{pending, EventCreate, false},
+	{invited, EventCreate, false},
+	{banned, EventCreate, false},
+	{nonMember, EventCreate, false},
+	// EventEditOwn
+	{admin, EventEditOwn, true},
+	{moderator, EventEditOwn, true},
+	{member, EventEditOwn, true},
+	{mutedMember, EventEditOwn, false},
+	{mutedModerator, EventEditOwn, false},
+	{pending, EventEditOwn, false},
+	{invited, EventEditOwn, false},
+	{banned, EventEditOwn, false},
+	{nonMember, EventEditOwn, false},
+	// EventEditAny
+	{admin, EventEditAny, true},
+	{moderator, EventEditAny, true},
+	{member, EventEditAny, false},
+	{mutedMember, EventEditAny, false},
+	{mutedModerator, EventEditAny, false},
+	{pending, EventEditAny, false},
+	{invited, EventEditAny, false},
+	{banned, EventEditAny, false},
+	{nonMember, EventEditAny, false},
+	// EventCancelOwn
+	{admin, EventCancelOwn, true},
+	{moderator, EventCancelOwn, true},
+	{member, EventCancelOwn, true},
+	{mutedMember, EventCancelOwn, false},
+	{mutedModerator, EventCancelOwn, false},
+	{pending, EventCancelOwn, false},
+	{invited, EventCancelOwn, false},
+	{banned, EventCancelOwn, false},
+	{nonMember, EventCancelOwn, false},
+	// EventCancelAny
+	{admin, EventCancelAny, true},
+	{moderator, EventCancelAny, true},
+	{member, EventCancelAny, false},
+	{mutedMember, EventCancelAny, false},
+	{mutedModerator, EventCancelAny, false},
+	{pending, EventCancelAny, false},
+	{invited, EventCancelAny, false},
+	{banned, EventCancelAny, false},
+	{nonMember, EventCancelAny, false},
+	// EventRSVP
+	{admin, EventRSVP, true},
+	{moderator, EventRSVP, true},
+	{member, EventRSVP, true},
+	{mutedMember, EventRSVP, false},
+	{mutedModerator, EventRSVP, false},
+	{pending, EventRSVP, false},
+	{invited, EventRSVP, false},
+	{banned, EventRSVP, false},
+	{nonMember, EventRSVP, false},
+	// EventViewAttendees
+	{admin, EventViewAttendees, true},
+	{moderator, EventViewAttendees, true},
+	{member, EventViewAttendees, true},
+	{mutedMember, EventViewAttendees, true},
+	{mutedModerator, EventViewAttendees, true},
+	{pending, EventViewAttendees, false},
+	{invited, EventViewAttendees, false},
+	{banned, EventViewAttendees, false},
+	{nonMember, EventViewAttendees, false},
 }
 
 func TestAllowedMatrix(t *testing.T) {
@@ -394,6 +474,10 @@ func TestMutedAdmin(t *testing.T) {
 		MemberListPending: true,
 		AuditView:         true,
 		RoleStepDown:      true,
+		EventView:         true,
+		// Reads only: a muted admin can neither create, edit, cancel nor
+		// answer events.
+		EventViewAttendees: true,
 	}
 	for a := Action(1); a < actionEnd; a++ {
 		if got := Allowed(m, a, now); got != want[a] {
@@ -532,6 +616,34 @@ func TestCanActOnContent(t *testing.T) {
 	for _, tt := range tests {
 		if got := CanActOnContent(tt.actor, tt.author); got != tt.want {
 			t.Errorf("CanActOnContent(%d, %d) = %v", tt.actor, tt.author, got)
+		}
+	}
+}
+
+// TestSettingsMatrix: with members_can_create_events every active, unmuted
+// member may create events; the setting changes no other action.
+func TestSettingsMatrix(t *testing.T) {
+	on := Settings{MembersCanCreateEvents: true}
+	want := map[string]bool{
+		admin.name: true, moderator.name: true, member.name: true,
+		mutedMember.name: false, mutedModerator.name: false,
+		pending.name: false, invited.name: false, banned.name: false, nonMember.name: false,
+	}
+	for _, s := range []subject{admin, moderator, member, mutedMember, mutedModerator, pending, invited, banned, nonMember} {
+		if got := AllowedIn(s.m, EventCreate, now, on); got != want[s.name] {
+			t.Errorf("ayar açık, %s / %s: AllowedIn = %v, %v bekleniyordu", s.name, EventCreate, got, want[s.name])
+		}
+		if got := AllowedIn(s.m, EventCreate, now, Settings{}); got != Allowed(s.m, EventCreate, now) {
+			t.Errorf("ayar kapalı, %s: AllowedIn ile Allowed farklı", s.name)
+		}
+	}
+	// Every other action answers the same with the setting on.
+	for _, tt := range expected {
+		if tt.a == EventCreate {
+			continue
+		}
+		if got := AllowedIn(tt.who.m, tt.a, now, on); got != tt.want {
+			t.Errorf("ayar açık, %s / %s: AllowedIn = %v, %v bekleniyordu", tt.who.name, tt.a, got, tt.want)
 		}
 	}
 }

@@ -135,6 +135,19 @@ const (
 	AnnouncementDelete
 	AnnouncementPin
 	AnnouncementRestore
+	// Events (issue #49). The event module switch is checked by the caller.
+	EventView
+	// EventCreate needs a moderator; Settings.MembersCanCreateEvents lowers
+	// it to every active member (AllowedIn).
+	EventCreate
+	// EventEditOwn and EventCancelOwn are for the organizer (events.created_by);
+	// the caller checks that the event is theirs.
+	EventEditOwn
+	EventEditAny
+	EventCancelOwn
+	EventCancelAny
+	EventRSVP
+	EventViewAttendees
 
 	actionEnd // sentinel; keep last
 )
@@ -166,6 +179,14 @@ var actionNames = [...]string{
 	AnnouncementDelete:   "announcement.delete",
 	AnnouncementPin:      "announcement.pin",
 	AnnouncementRestore:  "announcement.restore",
+	EventView:            "event.view",
+	EventCreate:          "event.create",
+	EventEditOwn:         "event.edit_own",
+	EventEditAny:         "event.edit_any",
+	EventCancelOwn:       "event.cancel_own",
+	EventCancelAny:       "event.cancel_any",
+	EventRSVP:            "event.rsvp",
+	EventViewAttendees:   "event.view_attendees",
 	actionEnd:            "",
 }
 
@@ -189,6 +210,14 @@ var permissions = map[Action]Role{
 	MemberList:      Member,
 	// Members see their own links; callers allowed InviteRevokeAny see all.
 	InviteList: Member,
+	// Events: reading, answering and the organizer's own event. An organizer
+	// keeps managing their event even if the tayfa later stops letting
+	// members create events (2026-11-09).
+	EventView:          Member,
+	EventViewAttendees: Member,
+	EventRSVP:          Member,
+	EventEditOwn:       Member,
+	EventCancelOwn:     Member,
 
 	// Moderation: moderator and above.
 	// Lowering one's own role; members have nothing to step down to.
@@ -207,6 +236,11 @@ var permissions = map[Action]Role{
 	AnnouncementEdit:   Moderator,
 	AnnouncementDelete: Moderator,
 	AnnouncementPin:    Moderator,
+	// Events: creating (unless the tayfa setting opens it to members) and
+	// managing every event of the tayfa.
+	EventCreate:    Moderator,
+	EventEditAny:   Moderator,
+	EventCancelAny: Moderator,
 
 	// Tayfa management: admin only.
 	TayfaUpdateSettings:  Admin,
@@ -233,8 +267,33 @@ var allowedWhileMuted = map[Action]bool{
 	MemberList:        true,
 	MemberListPending: true,
 	AuditView:         true,
+	EventView:         true,
+	// The attendee list is a read.
+	EventViewAttendees: true,
 	// Stepping down only narrows the caller's own access.
 	RoleStepDown: true,
+}
+
+// Settings are the tayfa settings that change the permission table. The zero
+// value is the default of a new tayfa.
+type Settings struct {
+	// MembersCanCreateEvents (tayfas.members_can_create_events) lets every
+	// active member perform EventCreate.
+	MembersCanCreateEvents bool
+}
+
+// minRole returns the lowest role that may perform a under s; ok is false
+// for an action missing from the table. A setting can only lower the
+// minimum of the action it names, never another one.
+func minRole(a Action, s Settings) (need Role, ok bool) {
+	need, ok = permissions[a]
+	if !ok {
+		return 0, false
+	}
+	if a == EventCreate && s.MembersCanCreateEvents {
+		need = Member
+	}
+	return need, true
 }
 
 // Allowed reports whether a user with membership m may perform a at now. Only
@@ -244,10 +303,17 @@ var allowedWhileMuted = map[Action]bool{
 // For actions on another member (mute, ban, remove, role change) callers must
 // also check CanActOn, and for role changes CanAssign or CanDemoteSelf.
 func Allowed(m Membership, a Action, now time.Time) bool {
+	return AllowedIn(m, a, now, Settings{})
+}
+
+// AllowedIn is Allowed for a tayfa with settings s. Actions whose rule
+// depends on a setting (EventCreate) must be checked with AllowedIn and the
+// tayfa's current settings; Allowed assumes the defaults.
+func AllowedIn(m Membership, a Action, now time.Time, s Settings) bool {
 	if m.Status != StatusActive || !m.Role.Valid() {
 		return false
 	}
-	need, ok := permissions[a]
+	need, ok := minRole(a, s)
 	if !ok || m.Role < need {
 		return false
 	}

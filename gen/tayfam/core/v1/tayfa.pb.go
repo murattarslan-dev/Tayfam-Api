@@ -326,11 +326,15 @@ type Tayfa struct {
 	MemberCount int32 `protobuf:"varint,10,opt,name=member_count,json=memberCount,proto3" json:"member_count,omitempty"`
 	// Filled only for callers allowed to rotate the join code (admin); empty
 	// for everyone else. Never logged.
-	JoinCode      string                 `protobuf:"bytes,11,opt,name=join_code,json=joinCode,proto3" json:"join_code,omitempty"`
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	JoinCode   string                 `protobuf:"bytes,11,opt,name=join_code,json=joinCode,proto3" json:"join_code,omitempty"`
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	UpdateTime *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	// When true every ACTIVE member may create events; when false (the
+	// default) only moderators and admins can. Organizers always manage their
+	// own events (data model v14, 2026-11-09).
+	MembersCanCreateEvents bool `protobuf:"varint,14,opt,name=members_can_create_events,json=membersCanCreateEvents,proto3" json:"members_can_create_events,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *Tayfa) Reset() {
@@ -452,6 +456,13 @@ func (x *Tayfa) GetUpdateTime() *timestamppb.Timestamp {
 		return x.UpdateTime
 	}
 	return nil
+}
+
+func (x *Tayfa) GetMembersCanCreateEvents() bool {
+	if x != nil {
+		return x.MembersCanCreateEvents
+	}
+	return false
 }
 
 type CreateTayfaRequest struct {
@@ -875,10 +886,13 @@ type UpdateTayfaRequest struct {
 	// Must not be UNSPECIFIED when named in update_mask.
 	JoinPolicy JoinPolicy `protobuf:"varint,5,opt,name=join_policy,json=joinPolicy,proto3,enum=tayfam.core.v1.JoinPolicy" json:"join_policy,omitempty"`
 	// Required, non-empty. Allowed paths: "name", "description", "interests",
-	// "join_policy". Any other path is ERROR_REASON_VALIDATION.
-	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,6,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// "join_policy", "members_can_create_events". Any other path is
+	// ERROR_REASON_VALIDATION.
+	UpdateMask *fieldmaskpb.FieldMask `protobuf:"bytes,6,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
+	// See Tayfa.members_can_create_events.
+	MembersCanCreateEvents bool `protobuf:"varint,7,opt,name=members_can_create_events,json=membersCanCreateEvents,proto3" json:"members_can_create_events,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *UpdateTayfaRequest) Reset() {
@@ -951,6 +965,13 @@ func (x *UpdateTayfaRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
 		return x.UpdateMask
 	}
 	return nil
+}
+
+func (x *UpdateTayfaRequest) GetMembersCanCreateEvents() bool {
+	if x != nil {
+		return x.MembersCanCreateEvents
+	}
+	return false
 }
 
 type UpdateTayfaResponse struct {
@@ -1359,7 +1380,7 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\x1atayfam/core/v1/tayfa.proto\x12\x0etayfam.core.v1\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1ftayfam/core/v1/membership.proto\"W\n" +
 	"\vModuleState\x12.\n" +
 	"\x06module\x18\x01 \x01(\x0e2\x16.tayfam.core.v1.ModuleR\x06module\x12\x18\n" +
-	"\aenabled\x18\x02 \x01(\bR\aenabled\"\xe9\x04\n" +
+	"\aenabled\x18\x02 \x01(\bR\aenabled\"\xa4\x05\n" +
 	"\x05Tayfa\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1377,7 +1398,8 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\vcreate_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12;\n" +
 	"\vupdate_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"updateTime\"\xec\x01\n" +
+	"updateTime\x129\n" +
+	"\x19members_can_create_events\x18\x0e \x01(\bR\x16membersCanCreateEvents\"\xec\x01\n" +
 	"\x12CreateTayfaRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x127\n" +
@@ -1405,7 +1427,7 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12(\n" +
 	"\x04role\x18\x03 \x01(\x0e2\x14.tayfam.core.v1.RoleR\x04role\x128\n" +
 	"\x06status\x18\x04 \x01(\x0e2 .tayfam.core.v1.MembershipStatusR\x06status\x12+\n" +
-	"\x05tayfa\x18\x05 \x01(\v2\x15.tayfam.core.v1.TayfaR\x05tayfa\"\x98\x02\n" +
+	"\x05tayfa\x18\x05 \x01(\v2\x15.tayfam.core.v1.TayfaR\x05tayfa\"\xd3\x02\n" +
 	"\x12UpdateTayfaRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1414,7 +1436,8 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\vjoin_policy\x18\x05 \x01(\x0e2\x1a.tayfam.core.v1.JoinPolicyR\n" +
 	"joinPolicy\x12;\n" +
 	"\vupdate_mask\x18\x06 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
-	"updateMask\"B\n" +
+	"updateMask\x129\n" +
+	"\x19members_can_create_events\x18\a \x01(\bR\x16membersCanCreateEvents\"B\n" +
 	"\x13UpdateTayfaResponse\x12+\n" +
 	"\x05tayfa\x18\x01 \x01(\v2\x15.tayfam.core.v1.TayfaR\x05tayfa\"w\n" +
 	"\x10SetModuleRequest\x12\x19\n" +
