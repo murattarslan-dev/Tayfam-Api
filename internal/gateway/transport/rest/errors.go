@@ -58,6 +58,13 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_DELETION_NOT_REQUESTED":     {http.StatusConflict, "deletion-not-requested"},
 		"ERROR_REASON_MODULE_DISABLED":            {http.StatusConflict, "module-disabled"},
 		"ERROR_REASON_ANNOUNCEMENT_NOT_FOUND":     {http.StatusNotFound, "announcement-not-found"},
+		"ERROR_REASON_EVENT_NOT_FOUND":            {http.StatusNotFound, "event-not-found"},
+		"ERROR_REASON_EVENT_CANCELLED":            {http.StatusConflict, "event-cancelled"},
+		"ERROR_REASON_EVENT_ENDED":                {http.StatusConflict, "event-ended"},
+		"ERROR_REASON_EVENT_NOT_GOING":            {http.StatusConflict, "event-not-going"},
+		"ERROR_REASON_EVENT_ITEM_NOT_FOUND":       {http.StatusNotFound, "event-item-not-found"},
+		"ERROR_REASON_EVENT_LIMIT":                {http.StatusConflict, "event-limit"},
+		"ERROR_REASON_EVENT_TYPE_MISMATCH":        {http.StatusConflict, "event-type-mismatch"},
 	},
 }
 

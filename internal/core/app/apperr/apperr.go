@@ -53,6 +53,17 @@ var (
 	ErrAnnouncementNotFound = errors.New("duyuru bulunamadı")
 )
 
+// EventService errors.
+var (
+	ErrEventNotFound     = errors.New("etkinlik bulunamadı")
+	ErrEventCancelled    = errors.New("etkinlik iptal edilmiş")
+	ErrEventEnded        = errors.New("etkinlik bitmiş")
+	ErrEventNotGoing     = errors.New("katılım yok")
+	ErrEventItemNotFound = errors.New("kayıt bulunamadı")
+	ErrEventLimit        = errors.New("liste dolu")
+	ErrEventTypeMismatch = errors.New("etkinlik türü uymuyor")
+)
+
 // ValidationError reports a request field that failed validation. Field is
 // the request field name as written in the proto ("name", "update_mask");
 // the rejected value is never kept.

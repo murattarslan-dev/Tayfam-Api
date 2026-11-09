@@ -116,6 +116,25 @@ const (
 	// tayfa that the method can work on (unknown, in another tayfa, deleted,
 	// or no longer restorable).
 	ErrorReason_ERROR_REASON_ANNOUNCEMENT_NOT_FOUND ErrorReason = 23
+	// NOT_FOUND. No event with this ID in this tayfa, or it was deleted.
+	ErrorReason_ERROR_REASON_EVENT_NOT_FOUND ErrorReason = 30
+	// FAILED_PRECONDITION. The event is cancelled; it and its RSVPs no longer
+	// change.
+	ErrorReason_ERROR_REASON_EVENT_CANCELLED ErrorReason = 31
+	// FAILED_PRECONDITION. The event has ended; it and its RSVPs no longer
+	// change.
+	ErrorReason_ERROR_REASON_EVENT_ENDED ErrorReason = 32
+	// FAILED_PRECONDITION. The action needs the caller's GOING answer (adding
+	// a convoy vehicle).
+	ErrorReason_ERROR_REASON_EVENT_NOT_GOING ErrorReason = 33
+	// NOT_FOUND. No camp item or convoy vehicle with this ID on this event
+	// that the caller may remove.
+	ErrorReason_ERROR_REASON_EVENT_ITEM_NOT_FOUND ErrorReason = 34
+	// RESOURCE_EXHAUSTED. The event's list is full (200 camp items).
+	ErrorReason_ERROR_REASON_EVENT_LIMIT ErrorReason = 35
+	// FAILED_PRECONDITION. The method is for another event type (for example
+	// AddCampItem on a convoy event).
+	ErrorReason_ERROR_REASON_EVENT_TYPE_MISMATCH ErrorReason = 36
 )
 
 // Enum value maps for ErrorReason.
@@ -145,6 +164,13 @@ var (
 		21: "ERROR_REASON_DELETION_NOT_REQUESTED",
 		22: "ERROR_REASON_MODULE_DISABLED",
 		23: "ERROR_REASON_ANNOUNCEMENT_NOT_FOUND",
+		30: "ERROR_REASON_EVENT_NOT_FOUND",
+		31: "ERROR_REASON_EVENT_CANCELLED",
+		32: "ERROR_REASON_EVENT_ENDED",
+		33: "ERROR_REASON_EVENT_NOT_GOING",
+		34: "ERROR_REASON_EVENT_ITEM_NOT_FOUND",
+		35: "ERROR_REASON_EVENT_LIMIT",
+		36: "ERROR_REASON_EVENT_TYPE_MISMATCH",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                0,
@@ -171,6 +197,13 @@ var (
 		"ERROR_REASON_DELETION_NOT_REQUESTED":     21,
 		"ERROR_REASON_MODULE_DISABLED":            22,
 		"ERROR_REASON_ANNOUNCEMENT_NOT_FOUND":     23,
+		"ERROR_REASON_EVENT_NOT_FOUND":            30,
+		"ERROR_REASON_EVENT_CANCELLED":            31,
+		"ERROR_REASON_EVENT_ENDED":                32,
+		"ERROR_REASON_EVENT_NOT_GOING":            33,
+		"ERROR_REASON_EVENT_ITEM_NOT_FOUND":       34,
+		"ERROR_REASON_EVENT_LIMIT":                35,
+		"ERROR_REASON_EVENT_TYPE_MISMATCH":        36,
 	}
 )
 
@@ -205,7 +238,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xb7\x06\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xa6\b\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -231,7 +264,14 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"'ERROR_REASON_DELETION_ALREADY_REQUESTED\x10\x14\x12'\n" +
 	"#ERROR_REASON_DELETION_NOT_REQUESTED\x10\x15\x12 \n" +
 	"\x1cERROR_REASON_MODULE_DISABLED\x10\x16\x12'\n" +
-	"#ERROR_REASON_ANNOUNCEMENT_NOT_FOUND\x10\x17B\xbd\x01\n" +
+	"#ERROR_REASON_ANNOUNCEMENT_NOT_FOUND\x10\x17\x12 \n" +
+	"\x1cERROR_REASON_EVENT_NOT_FOUND\x10\x1e\x12 \n" +
+	"\x1cERROR_REASON_EVENT_CANCELLED\x10\x1f\x12\x1c\n" +
+	"\x18ERROR_REASON_EVENT_ENDED\x10 \x12 \n" +
+	"\x1cERROR_REASON_EVENT_NOT_GOING\x10!\x12%\n" +
+	"!ERROR_REASON_EVENT_ITEM_NOT_FOUND\x10\"\x12\x1c\n" +
+	"\x18ERROR_REASON_EVENT_LIMIT\x10#\x12$\n" +
+	" ERROR_REASON_EVENT_TYPE_MISMATCH\x10$B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (
