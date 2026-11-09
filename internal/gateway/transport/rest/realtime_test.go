@@ -106,9 +106,12 @@ func TestRealtimeProxiesUpgradeWithoutCredentials(t *testing.T) {
 	hdr.Set("Origin", "https://tayfam.app")
 	hdr.Set("Cookie", "tayfam_at=TOKEN")
 	hdr.Set("Authorization", "Bearer TOKEN")
-	c, _, err := websocket.Dial(ctx, wsURL(gw.URL, "?ticket="+testTicket), &websocket.DialOptions{HTTPHeader: hdr})
+	c, resp, err := websocket.Dial(ctx, wsURL(gw.URL, "?ticket="+testTicket), &websocket.DialOptions{HTTPHeader: hdr})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if resp.Body != nil {
+		_ = resp.Body.Close()
 	}
 	defer func() { _ = c.CloseNow() }()
 	_, b, err := c.Read(ctx)
