@@ -15,6 +15,9 @@ resources:
   - secrets/identity-db.sops.yaml
   - secrets/core-db.sops.yaml
   - secrets/chat-db.sops.yaml
+  - secrets/identity-app-db.sops.yaml
+  - secrets/core-app-db.sops.yaml
+  - secrets/chat-app-db.sops.yaml
   - secrets/identity-birthdate-key.sops.yaml
   - secrets/chat-message-key.sops.yaml
 
