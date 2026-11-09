@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -184,13 +185,6 @@ func (e *env) profile(_ *testing.T, u id.ID, minor bool) {
 	e.minors.mu.Lock()
 	defer e.minors.mu.Unlock()
 	e.minors.minors[u] = minor
-}
-
-func (e *env) exec(t *testing.T, sql string, args ...any) {
-	t.Helper()
-	if _, err := e.pool.Exec(ctx, sql, args...); err != nil {
-		t.Fatalf("%s: %v", sql, err)
-	}
 }
 
 func (e *env) count(t *testing.T, sql string, args ...any) int {
@@ -616,7 +610,7 @@ func TestPaging(t *testing.T) {
 	minor := e.member(t, c, authz.Member)
 	e.profile(t, minor, true)
 	last := e.report(t, c, c.member2, TargetUser, minor, ReasonSpam).ID
-	want := append(all, last) // by time only, never by priority
+	want := append(slices.Clone(all), last) // by time only, never by priority
 
 	var got []id.ID
 	token := ""
