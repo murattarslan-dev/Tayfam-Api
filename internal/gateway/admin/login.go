@@ -154,15 +154,17 @@ func (h *handlers) signOutPage(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/giris", http.StatusSeeOther)
 }
 
+// setLoginCookie and clearLoginCookie: SameSite=None is what lets the
+// cookie reach Google's cross-site form post (see the package comment).
 func (h *handlers) setLoginCookie(w http.ResponseWriter, name, value string) {
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- SameSite=None needed for Google's form_post; HttpOnly, Secure, __Host-, 5 minutes, single use
 		Name: name, Value: value, Path: "/", MaxAge: int(nonceTTL.Seconds()),
 		HttpOnly: true, Secure: true, SameSite: http.SameSiteNoneMode,
 	})
 }
 
 func (h *handlers) clearLoginCookie(w http.ResponseWriter, name string) {
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- deletes the cookie set by setLoginCookie with the same attributes
 		Name: name, Value: "", Path: "/", MaxAge: -1,
 		HttpOnly: true, Secure: true, SameSite: http.SameSiteNoneMode,
 	})

@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
@@ -28,9 +29,26 @@ const (
 	maxFormSize = 16 << 10
 )
 
+type csrfKey struct{}
+
+// csrfSlot holds a CSRF token issued during the current request, so a
+// request never sets two different ones.
+type csrfSlot struct{ v string }
+
+// withCSRFSlot gives every request a slot for a newly issued token.
+func withCSRFSlot(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), csrfKey{}, &csrfSlot{})))
+	})
+}
+
 // csrfToken returns the browser's CSRF token, setting a new one if it has
 // none. It lives as long as the browser session.
 func (h *handlers) csrfToken(w http.ResponseWriter, r *http.Request) string {
+	slot, _ := r.Context().Value(csrfKey{}).(*csrfSlot)
+	if slot != nil && slot.v != "" {
+		return slot.v
+	}
 	if c, err := r.Cookie(CSRFCookie); err == nil && len(c.Value) == csrfLen {
 		return c.Value
 	}
@@ -41,8 +59,9 @@ func (h *handlers) csrfToken(w http.ResponseWriter, r *http.Request) string {
 		Name: CSRFCookie, Value: v, Path: "/",
 		HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode,
 	})
-	// Later reads in this request see the new value.
-	r.AddCookie(&http.Cookie{Name: CSRFCookie, Value: v})
+	if slot != nil {
+		slot.v = v
+	}
 	return v
 }
 

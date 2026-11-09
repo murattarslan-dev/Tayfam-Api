@@ -159,7 +159,7 @@ func NewHandler(cfg Config) (http.Handler, error) {
 	page("GET /sikayetler/{id}", h.report)
 	change("POST /sikayetler/{id}/karar", h.decideReport)
 	mux.HandleFunc("/", httpx.NotFound)
-	return httpx.Chain(mux, securityHeaders, h.requireAccess, h.sameOrigin), nil
+	return httpx.Chain(mux, securityHeaders, h.requireAccess, h.sameOrigin, withCSRFSlot), nil
 }
 
 // Mux sends requests for the admin host to admin and every other request

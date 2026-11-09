@@ -381,7 +381,7 @@ func TestCSRF(t *testing.T) {
 			"JSON gövde": func(r *http.Request) { r.Header.Set("Content-Type", "application/json") },
 		} {
 			e.resetCalls()
-			r := e.form(path, url.Values(cloneValues(v)))
+			r := e.form(path, cloneValues(v))
 			mod(r)
 			w := e.do(r)
 			if w.Code != http.StatusForbidden && w.Code != http.StatusUnsupportedMediaType {
