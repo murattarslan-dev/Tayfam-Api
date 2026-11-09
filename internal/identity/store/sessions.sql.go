@@ -135,10 +135,11 @@ func (q *Queries) ListUserSessions(ctx context.Context, arg ListUserSessionsPara
 	return items, nil
 }
 
-const revokeOtherSessions = `-- name: RevokeOtherSessions :execrows
+const revokeOtherSessions = `-- name: RevokeOtherSessions :many
 UPDATE sessions
 SET revoked_at = now(), revoked_reason = 'user_signout_remote'
 WHERE user_id = $1 AND id <> $2 AND revoked_at IS NULL
+RETURNING id
 `
 
 type RevokeOtherSessionsParams struct {
@@ -146,18 +147,33 @@ type RevokeOtherSessionsParams struct {
 	KeepID pgtype.UUID
 }
 
-func (q *Queries) RevokeOtherSessions(ctx context.Context, arg RevokeOtherSessionsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, revokeOtherSessions, arg.UserID, arg.KeepID)
+// Kapatılan oturumların kimliklerini döner: her biri için session.revoked
+// yazılır (issue #92).
+func (q *Queries) RevokeOtherSessions(ctx context.Context, arg RevokeOtherSessionsParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, revokeOtherSessions, arg.UserID, arg.KeepID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
-const revokeOwnSession = `-- name: RevokeOwnSession :execrows
+const revokeOwnSession = `-- name: RevokeOwnSession :many
 UPDATE sessions
 SET revoked_at = now(), revoked_reason = $1
 WHERE id = $2 AND user_id = $3 AND revoked_at IS NULL
+RETURNING id
 `
 
 type RevokeOwnSessionParams struct {
@@ -168,18 +184,31 @@ type RevokeOwnSessionParams struct {
 
 // Oturum yalnızca sahibi tarafından kapatılır: user_id koşulu başka
 // kullanıcının oturumunu kapatmayı (IDOR) engeller.
-func (q *Queries) RevokeOwnSession(ctx context.Context, arg RevokeOwnSessionParams) (int64, error) {
-	result, err := q.db.Exec(ctx, revokeOwnSession, arg.Reason, arg.ID, arg.UserID)
+func (q *Queries) RevokeOwnSession(ctx context.Context, arg RevokeOwnSessionParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, revokeOwnSession, arg.Reason, arg.ID, arg.UserID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
-const revokeSession = `-- name: RevokeSession :execrows
+const revokeSession = `-- name: RevokeSession :many
 UPDATE sessions
 SET revoked_at = now(), revoked_reason = $1
 WHERE id = $2 AND revoked_at IS NULL
+RETURNING user_id
 `
 
 type RevokeSessionParams struct {
@@ -187,18 +216,33 @@ type RevokeSessionParams struct {
 	ID     pgtype.UUID
 }
 
-func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) (int64, error) {
-	result, err := q.db.Exec(ctx, revokeSession, arg.Reason, arg.ID)
+// Kapatılan oturumun kullanıcısını döner (session.revoked olayı için);
+// zaten kapalıysa satır dönmez.
+func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, revokeSession, arg.Reason, arg.ID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var user_id pgtype.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
-const revokeUserSessions = `-- name: RevokeUserSessions :execrows
+const revokeUserSessions = `-- name: RevokeUserSessions :many
 UPDATE sessions
 SET revoked_at = now(), revoked_reason = $1
 WHERE user_id = $2 AND revoked_at IS NULL
+RETURNING id
 `
 
 type RevokeUserSessionsParams struct {
@@ -206,10 +250,22 @@ type RevokeUserSessionsParams struct {
 	UserID pgtype.UUID
 }
 
-func (q *Queries) RevokeUserSessions(ctx context.Context, arg RevokeUserSessionsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, revokeUserSessions, arg.Reason, arg.UserID)
+func (q *Queries) RevokeUserSessions(ctx context.Context, arg RevokeUserSessionsParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, revokeUserSessions, arg.Reason, arg.UserID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

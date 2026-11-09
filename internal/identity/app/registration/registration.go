@@ -176,7 +176,9 @@ func (s *Service) Complete(ctx context.Context, user id.ID, in Input) error {
 }
 
 // block refuses the account for good and keeps as little as possible: no
-// birth date, no e-mail, no live sessions.
+// birth date, no e-mail, no live sessions. It writes no session.revoked: an
+// unregistered user holds only registration tokens, which chat refuses, so
+// chat has no connection to close and does not need to learn the ID.
 func (s *Service) block(ctx context.Context, q *store.Queries, user id.ID) error {
 	if _, err := q.BlockRegistrationForAge(ctx, user.PG()); err != nil {
 		return fmt.Errorf("yaş engeli: %w", err)

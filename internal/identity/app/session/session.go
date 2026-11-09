@@ -6,6 +6,10 @@
 // tokens are 256-bit random values; only their SHA-256 hashes are stored.
 // Every refresh replaces the token. Presenting an already used token
 // revokes the whole session, because it means the token was copied.
+//
+// Every path that ends a session writes session.revoked in the same
+// transaction, so chat closes the session's real-time connections at once
+// rather than when the access token expires (ADR-0014, issue #92).
 package session
 
 import (
@@ -25,6 +29,7 @@ import (
 
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/consent"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/oidc"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/userevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -268,7 +273,8 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (Tokens, err
 				return fmt.Errorf("oturum iptali: %w", err)
 			}
 			revoked = sessionID
-			return nil
+			userID, _ := id.FromPG(row.UserID)
+			return userevents.SessionsRevoked(ctx, tx, userID, sessionID)
 		}
 
 		if n, err := q.MarkRefreshTokenUsed(ctx, row.ID); err != nil || n != 1 {
@@ -276,6 +282,8 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (Tokens, err
 		}
 		user, err := q.GetUser(ctx, row.UserID)
 		if errors.Is(err, pgx.ErrNoRows) {
+			// No session.revoked: the account's deletion wrote user.deleted,
+			// which closes every connection of the user in chat.
 			if _, err := q.RevokeSession(ctx, store.RevokeSessionParams{ID: row.SessionID, Reason: text(reasonAccountGone)}); err != nil {
 				return fmt.Errorf("oturum iptali: %w", err)
 			}
@@ -315,10 +323,23 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (Tokens, err
 	return t, nil
 }
 
-// SignOut ends a session. Ending an already ended session is not an error.
+// SignOut ends a session. Ending an already ended session is not an error
+// and writes no event.
 func (s *Service) SignOut(ctx context.Context, sessionID id.ID) error {
-	if _, err := s.q.RevokeSession(ctx, store.RevokeSessionParams{ID: sessionID.PG(), Reason: text(reasonLogout)}); err != nil {
-		return fmt.Errorf("oturum kapatma: %w", err)
+	err := pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
+		users, err := s.q.WithTx(tx).RevokeSession(ctx, store.RevokeSessionParams{ID: sessionID.PG(), Reason: text(reasonLogout)})
+		if err != nil {
+			return fmt.Errorf("oturum kapatma: %w", err)
+		}
+		for _, u := range users {
+			if err := userevents.SessionsRevoked(ctx, tx, id.ID(u.Bytes), sessionID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	s.cfg.Log.InfoContext(ctx, "oturum kapatıldı", slog.String("session_id", sessionID.String()))
 	return nil
@@ -400,14 +421,14 @@ func (s *Service) Revoke(ctx context.Context, c Caller, target id.ID) error {
 		if err := s.checkCaller(ctx, q, c); err != nil {
 			return err
 		}
-		n, err := q.RevokeOwnSession(ctx, store.RevokeOwnSessionParams{ID: target.PG(), UserID: c.User.PG(), Reason: text(reason)})
+		ended, err := q.RevokeOwnSession(ctx, store.RevokeOwnSessionParams{ID: target.PG(), UserID: c.User.PG(), Reason: text(reason)})
 		if err != nil {
 			return fmt.Errorf("oturum kapatma: %w", err)
 		}
-		if n != 1 {
+		if len(ended) != 1 {
 			return ErrSessionNotFound
 		}
-		return nil
+		return userevents.SessionsRevoked(ctx, tx, c.User, target)
 	})
 	if err != nil {
 		return err
@@ -422,17 +443,22 @@ func (s *Service) Revoke(ctx context.Context, c Caller, target id.ID) error {
 // RevokeOthers ends every session of the caller except the current one and
 // returns how many it ended.
 func (s *Service) RevokeOthers(ctx context.Context, c Caller) (int, error) {
-	var n int64
+	var n int
 	err := pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 		if err := s.checkCaller(ctx, q, c); err != nil {
 			return err
 		}
-		var err error
-		if n, err = q.RevokeOtherSessions(ctx, store.RevokeOtherSessionsParams{UserID: c.User.PG(), KeepID: c.Session.PG()}); err != nil {
+		ended, err := q.RevokeOtherSessions(ctx, store.RevokeOtherSessionsParams{UserID: c.User.PG(), KeepID: c.Session.PG()})
+		if err != nil {
 			return fmt.Errorf("oturum kapatma: %w", err)
 		}
-		return nil
+		n = len(ended)
+		ids := make([]id.ID, len(ended))
+		for i, e := range ended {
+			ids[i] = id.ID(e.Bytes)
+		}
+		return userevents.SessionsRevoked(ctx, tx, c.User, ids...)
 	})
 	if err != nil {
 		return 0, err
@@ -440,8 +466,8 @@ func (s *Service) RevokeOthers(ctx context.Context, c Caller) (int, error) {
 	s.cfg.Log.InfoContext(ctx, "diğer oturumlar kapatıldı",
 		slog.String("user_id", c.User.String()),
 		slog.String("session_id", c.Session.String()),
-		slog.Int64("count", n))
-	return int(n), nil
+		slog.Int("count", n))
+	return n, nil
 }
 
 // checkCaller makes sure the caller's own session is still open. A token

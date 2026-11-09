@@ -92,12 +92,16 @@ type Querier interface {
 	// Aynı sürüm ikinci kez onaylanırsa yeni kayıt açılmaz.
 	RecordConsent(ctx context.Context, arg RecordConsentParams) error
 	RecordRefCodeLookup(ctx context.Context, arg RecordRefCodeLookupParams) error
-	RevokeOtherSessions(ctx context.Context, arg RevokeOtherSessionsParams) (int64, error)
+	// Kapatılan oturumların kimliklerini döner: her biri için session.revoked
+	// yazılır (issue #92).
+	RevokeOtherSessions(ctx context.Context, arg RevokeOtherSessionsParams) ([]pgtype.UUID, error)
 	// Oturum yalnızca sahibi tarafından kapatılır: user_id koşulu başka
 	// kullanıcının oturumunu kapatmayı (IDOR) engeller.
-	RevokeOwnSession(ctx context.Context, arg RevokeOwnSessionParams) (int64, error)
-	RevokeSession(ctx context.Context, arg RevokeSessionParams) (int64, error)
-	RevokeUserSessions(ctx context.Context, arg RevokeUserSessionsParams) (int64, error)
+	RevokeOwnSession(ctx context.Context, arg RevokeOwnSessionParams) ([]pgtype.UUID, error)
+	// Kapatılan oturumun kullanıcısını döner (session.revoked olayı için);
+	// zaten kapalıysa satır dönmez.
+	RevokeSession(ctx context.Context, arg RevokeSessionParams) ([]pgtype.UUID, error)
+	RevokeUserSessions(ctx context.Context, arg RevokeUserSessionsParams) ([]pgtype.UUID, error)
 	// Referans kodu (veri modeli v14 "Arkadaşlık ve Davet (v11)", issue #71).
 	// Kodu yeniler; eski kod aynı anda geçersiz olur (eski link çalışmaz).
 	// Yalnızca kodu olan, kayıtlı ve silinmemiş hesapta çalışır.

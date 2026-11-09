@@ -228,20 +228,21 @@ func TestRevokeSessions(t *testing.T) {
 	ctx := context.Background()
 	u := newUser(t, q)
 	s1, _ := session(t, q, u)
-	session(t, q, u)
+	s2, _ := session(t, q, u)
 
-	if n, err := q.RevokeSession(ctx, RevokeSessionParams{ID: s1.PG(), Reason: text("logout")}); err != nil || n != 1 {
-		t.Fatalf("RevokeSession: n=%d err=%v", n, err)
+	// The revoke queries return what they ended: session.revoked needs it.
+	if users, err := q.RevokeSession(ctx, RevokeSessionParams{ID: s1.PG(), Reason: text("logout")}); err != nil || len(users) != 1 || users[0] != u.PG() {
+		t.Fatalf("RevokeSession: %v err=%v", users, err)
 	}
 	if _, err := q.GetActiveSession(ctx, s1.PG()); !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("iptal edilen oturum aktif görünüyor: %v", err)
 	}
-	if n, _ := q.RevokeUserSessions(ctx, RevokeUserSessionsParams{UserID: u.PG(), Reason: text("token_reuse")}); n != 1 {
-		t.Fatalf("kalan oturum sayısı = %d", n)
+	if ids, _ := q.RevokeUserSessions(ctx, RevokeUserSessionsParams{UserID: u.PG(), Reason: text("token_reuse")}); len(ids) != 1 || ids[0] != s2.PG() {
+		t.Fatalf("kalan oturumlar = %v", ids)
 	}
-	if _, err := q.RevokeSession(ctx, RevokeSessionParams{ID: s1.PG(), Reason: text("uydurma")}); err != nil {
+	if users, err := q.RevokeSession(ctx, RevokeSessionParams{ID: s1.PG(), Reason: text("uydurma")}); err != nil || len(users) != 0 {
 		// already revoked: no row matches, so the CHECK is not reached
-		t.Fatal(err)
+		t.Fatalf("%v %v", users, err)
 	}
 }
 
