@@ -209,6 +209,8 @@ type registrationBody struct {
 	DisplayName                  string `json:"display_name"`
 	AcceptedPrivacyNoticeVersion string `json:"accepted_privacy_notice_version"`
 	AcceptedTermsVersion         string `json:"accepted_terms_version"`
+	// Optional; identity ignores a code that finds nobody.
+	ReferralCode string `json:"referral_code"`
 }
 
 func (h authHandlers) completeRegistration(w http.ResponseWriter, r *http.Request) {
@@ -226,6 +228,7 @@ func (h authHandlers) completeRegistration(w http.ResponseWriter, r *http.Reques
 	_, err := h.d.Registration.CompleteRegistration(auth.WithToken(ctx, token), &identityv1.CompleteRegistrationRequest{
 		BirthDate: b.BirthDate, DisplayName: b.DisplayName,
 		AcceptedPrivacyNoticeVersion: b.AcceptedPrivacyNoticeVersion, AcceptedTermsVersion: b.AcceptedTermsVersion,
+		ReferralCode: b.ReferralCode,
 	})
 	if err != nil {
 		h.upstreamError(w, r, err)

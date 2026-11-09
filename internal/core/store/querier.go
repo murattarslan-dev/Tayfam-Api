@@ -259,6 +259,7 @@ type Querier interface {
 	// aynı satırı kilitlediği için üyelik değişiklikleriyle sırayla çalışır.
 	GetTayfaForUpdate(ctx context.Context, id pgtype.UUID) (GetTayfaForUpdateRow, error)
 	GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUserProfileRow, error)
+	HasMutualTayfa(ctx context.Context, arg HasMutualTayfaParams) (bool, error)
 	// Moderatör/yönetici silmesi: içerik gizlenir, geri alınabilir.
 	HideAnnouncement(ctx context.Context, arg HideAnnouncementParams) (int64, error)
 	HideAnswer(ctx context.Context, arg HideAnswerParams) (int64, error)
@@ -274,6 +275,11 @@ type Querier interface {
 	IsBlockedEitherWay(ctx context.Context, arg IsBlockedEitherWayParams) (bool, error)
 	// Kapalı ya da kaydı olmayan modül kapalı sayılır (varsayılan "hayır").
 	IsTayfaModuleEnabled(ctx context.Context, arg IsTayfaModuleEnabledParams) (bool, error)
+	// Kişinin katılım geçmişi, yeniden eskiye; started_at @not_after'dan yeni
+	// kayıtlar dönmez (14 günlük gecikme). Tayfa adı ve viewer_member yalnızca
+	// izleyici o tayfanın aktif üyesiyse doludur; uygulama diğer alanları da
+	// buna göre gizler. Sayfa imleci (started_at, id).
+	ListActivityPage(ctx context.Context, arg ListActivityPageParams) ([]ListActivityPageRow, error)
 	// Etkinlik düzenlenince anlık görüntüsü yenilenecek kayıtlar.
 	ListActivityRecordsOfEvent(ctx context.Context, eventID pgtype.UUID) ([]ListActivityRecordsOfEventRow, error)
 	// Sabitlenenler önce, yeniden eskiye. Sayfa, önceki sayfanın son satırından
@@ -327,6 +333,11 @@ type Querier interface {
 	// Tayfalar kilitlenme olmaması için tayfa_id sırasıyla işlenir.
 	ListMembershipsOfUser(ctx context.Context, userID pgtype.UUID) ([]ListMembershipsOfUserRow, error)
 	ListModulesForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListModulesForTayfasRow, error)
+	// Profil görünümü (issue #71, veri modeli v14 "Profil görünürlüğü",
+	// "Kalıcı katılım geçmişi").
+	// İkisinin de aktif üyesi olduğu canlı tayfalar. Yalnızca izleyicinin de
+	// üyesi olduğu tayfalar döner; gizli bir tayfanın varlığı profilden sızmaz.
+	ListMutualTayfas(ctx context.Context, arg ListMutualTayfasParams) ([]ListMutualTayfasRow, error)
 	// Doğrudan davetler (issue #71, v14 "Tayfaya davet").
 	// Kişiye gelen bekleyen davetler; silinmiş tayfalarınki görünmez. Davet
 	// edilen kişi henüz üye değildir; yalnızca tayfanın adını ve kimin davet

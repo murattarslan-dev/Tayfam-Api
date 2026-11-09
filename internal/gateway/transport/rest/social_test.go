@@ -1,0 +1,268 @@
+package rest
+
+import (
+	"context"
+	"net/http"
+	"strings"
+	"testing"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
+)
+
+// --- fakeCore: SocialService, invitations, ProfileService, identity's
+// AccountService ---
+
+func testFriend() *corev1.Friend {
+	return &corev1.Friend{UserId: userID, DisplayName: "Ece", State: corev1.FriendState_FRIEND_STATE_OUTGOING, RequestTime: timestamppb.New(time.Unix(1, 0))}
+}
+
+func (f *fakeCore) SendFriendRequest(ctx context.Context, in *corev1.SendFriendRequestRequest, _ ...grpc.CallOption) (*corev1.SendFriendRequestResponse, error) {
+	return &corev1.SendFriendRequestResponse{Friend: testFriend()}, f.record(ctx, in)
+}
+func (f *fakeCore) AcceptFriendRequest(ctx context.Context, in *corev1.AcceptFriendRequestRequest, _ ...grpc.CallOption) (*corev1.AcceptFriendRequestResponse, error) {
+	fr := testFriend()
+	fr.State, fr.AcceptTime = corev1.FriendState_FRIEND_STATE_FRIENDS, timestamppb.New(time.Unix(2, 0))
+	return &corev1.AcceptFriendRequestResponse{Friend: fr}, f.record(ctx, in)
+}
+func (f *fakeCore) RemoveFriendship(ctx context.Context, in *corev1.RemoveFriendshipRequest, _ ...grpc.CallOption) (*corev1.RemoveFriendshipResponse, error) {
+	return &corev1.RemoveFriendshipResponse{}, f.record(ctx, in)
+}
+func (f *fakeCore) ListFriends(ctx context.Context, in *corev1.ListFriendsRequest, _ ...grpc.CallOption) (*corev1.ListFriendsResponse, error) {
+	return &corev1.ListFriendsResponse{Friends: []*corev1.Friend{testFriend()}, NextPageToken: "sonraki"}, f.record(ctx, in)
+}
+func (f *fakeCore) ListFriendRequests(ctx context.Context, in *corev1.ListFriendRequestsRequest, _ ...grpc.CallOption) (*corev1.ListFriendRequestsResponse, error) {
+	return &corev1.ListFriendRequestsResponse{}, f.record(ctx, in)
+}
+func (f *fakeCore) BlockUser(ctx context.Context, in *corev1.BlockUserRequest, _ ...grpc.CallOption) (*corev1.BlockUserResponse, error) {
+	return &corev1.BlockUserResponse{}, f.record(ctx, in)
+}
+func (f *fakeCore) UnblockUser(ctx context.Context, in *corev1.UnblockUserRequest, _ ...grpc.CallOption) (*corev1.UnblockUserResponse, error) {
+	return &corev1.UnblockUserResponse{}, f.record(ctx, in)
+}
+func (f *fakeCore) ListBlockedUsers(ctx context.Context, in *corev1.ListBlockedUsersRequest, _ ...grpc.CallOption) (*corev1.ListBlockedUsersResponse, error) {
+	return &corev1.ListBlockedUsersResponse{Users: []*corev1.BlockedUser{{UserId: userID, BlockTime: timestamppb.New(time.Unix(1, 0))}}}, f.record(ctx, in)
+}
+
+func testInvitation() *corev1.Invitation {
+	return &corev1.Invitation{TayfaId: tayfaID, TayfaName: "Klasikçiler", UserId: userID, InviteTime: timestamppb.New(time.Unix(1, 0))}
+}
+
+func (f *fakeCore) InviteFriend(ctx context.Context, in *corev1.InviteFriendRequest, _ ...grpc.CallOption) (*corev1.InviteFriendResponse, error) {
+	return &corev1.InviteFriendResponse{Invitation: testInvitation()}, f.record(ctx, in)
+}
+func (f *fakeCore) ListMyInvitations(ctx context.Context, in *corev1.ListMyInvitationsRequest, _ ...grpc.CallOption) (*corev1.ListMyInvitationsResponse, error) {
+	return &corev1.ListMyInvitationsResponse{Invitations: []*corev1.Invitation{testInvitation()}}, f.record(ctx, in)
+}
+func (f *fakeCore) AcceptInvitation(ctx context.Context, in *corev1.AcceptInvitationRequest, _ ...grpc.CallOption) (*corev1.AcceptInvitationResponse, error) {
+	return &corev1.AcceptInvitationResponse{Membership: testMembership()}, f.record(ctx, in)
+}
+func (f *fakeCore) DeclineInvitation(ctx context.Context, in *corev1.DeclineInvitationRequest, _ ...grpc.CallOption) (*corev1.DeclineInvitationResponse, error) {
+	return &corev1.DeclineInvitationResponse{}, f.record(ctx, in)
+}
+func (f *fakeCore) ListInvitations(ctx context.Context, in *corev1.ListInvitationsRequest, _ ...grpc.CallOption) (*corev1.ListInvitationsResponse, error) {
+	return &corev1.ListInvitationsResponse{}, f.record(ctx, in)
+}
+func (f *fakeCore) CancelInvitation(ctx context.Context, in *corev1.CancelInvitationRequest, _ ...grpc.CallOption) (*corev1.CancelInvitationResponse, error) {
+	return &corev1.CancelInvitationResponse{}, f.record(ctx, in)
+}
+
+func (f *fakeCore) GetUserProfile(ctx context.Context, in *corev1.GetUserProfileRequest, _ ...grpc.CallOption) (*corev1.GetUserProfileResponse, error) {
+	return &corev1.GetUserProfileResponse{Profile: &corev1.UserProfile{
+		UserId: userID, DisplayName: "Ece", ActivityVisible: true,
+		MutualTayfas: []*corev1.MutualTayfa{{TayfaId: tayfaID, Name: "Klasikçiler"}},
+	}}, f.record(ctx, in)
+}
+func (f *fakeCore) ListUserActivity(ctx context.Context, in *corev1.ListUserActivityRequest, _ ...grpc.CallOption) (*corev1.ListUserActivityResponse, error) {
+	return &corev1.ListUserActivityResponse{Records: []*corev1.ActivityRecord{
+		{EventType: corev1.EventType_EVENT_TYPE_HIKE, Mode: corev1.EventMode_EVENT_MODE_IN_PERSON, City: "Bursa", StartTime: timestamppb.New(time.Unix(1, 0))},
+	}}, f.record(ctx, in)
+}
+
+func (f *fakeCore) GetAccount(ctx context.Context, in *identityv1.GetAccountRequest, _ ...grpc.CallOption) (*identityv1.GetAccountResponse, error) {
+	return &identityv1.GetAccountResponse{ReferralCode: "TYF-8K2M4Q", ActivityVisibility: identityv1.ActivityVisibility_ACTIVITY_VISIBILITY_TAYFA}, f.record(ctx, in)
+}
+func (f *fakeCore) RotateReferralCode(ctx context.Context, in *identityv1.RotateReferralCodeRequest, _ ...grpc.CallOption) (*identityv1.RotateReferralCodeResponse, error) {
+	return &identityv1.RotateReferralCodeResponse{ReferralCode: "TYF-2222AB"}, f.record(ctx, in)
+}
+func (f *fakeCore) FindUserByReferralCode(ctx context.Context, in *identityv1.FindUserByReferralCodeRequest, _ ...grpc.CallOption) (*identityv1.FindUserByReferralCodeResponse, error) {
+	return &identityv1.FindUserByReferralCodeResponse{UserId: userID, DisplayName: "Ece"}, f.record(ctx, in)
+}
+func (f *fakeCore) SetActivityVisibility(ctx context.Context, in *identityv1.SetActivityVisibilityRequest, _ ...grpc.CallOption) (*identityv1.SetActivityVisibilityResponse, error) {
+	return &identityv1.SetActivityVisibilityResponse{ActivityVisibility: in.GetActivityVisibility()}, f.record(ctx, in)
+}
+
+// --- tests ---
+
+func TestFriendRoutes(t *testing.T) {
+	f := &fakeCore{}
+	h := coreRouter(f)
+
+	w := as(h, "POST", "/v1/me/friend-requests", `{"user_id":"`+userID+`"}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("istek: %d %s", w.Code, w.Body)
+	}
+	got, tok, _ := f.last()
+	if got.(*corev1.SendFriendRequestRequest).GetUserId() != userID || tok != "USERTOKEN" {
+		t.Fatalf("core'a giden: %v %q", got, tok)
+	}
+	if v := decodeBody[friendJSON](t, w); v.State != "outgoing" || v.AcceptedAt != nil {
+		t.Fatalf("cevap: %+v", v)
+	}
+	w = as(h, "POST", "/v1/me/friend-requests/"+userID+"/acceptance", "")
+	if v := decodeBody[friendJSON](t, w); w.Code != 200 || v.State != "friends" || v.AcceptedAt == nil {
+		t.Fatalf("kabul: %d %+v", w.Code, v)
+	}
+	w = as(h, "GET", "/v1/me/friend-requests?direction=outgoing", "")
+	got, _, _ = f.last()
+	if w.Code != 200 || got.(*corev1.ListFriendRequestsRequest).GetDirection() != corev1.RequestDirection_REQUEST_DIRECTION_OUTGOING {
+		t.Fatalf("giden: %d %v", w.Code, got)
+	}
+	as(h, "GET", "/v1/me/friend-requests", "")
+	if got, _, _ = f.last(); got.(*corev1.ListFriendRequestsRequest).GetDirection() != corev1.RequestDirection_REQUEST_DIRECTION_INCOMING {
+		t.Fatalf("varsayılan yön: %v", got)
+	}
+	w = as(h, "GET", "/v1/me/friends", "")
+	if v := decodeBody[friendListJSON](t, w); w.Code != 200 || len(v.Friends) != 1 || v.NextPageToken != "sonraki" {
+		t.Fatalf("arkadaşlar: %d %+v", w.Code, v)
+	}
+	for _, c := range []struct{ method, path string }{
+		{"DELETE", "/v1/me/friends/" + userID}, {"PUT", "/v1/me/blocks/" + userID}, {"DELETE", "/v1/me/blocks/" + userID},
+	} {
+		if w := as(h, c.method, c.path, ""); w.Code != http.StatusNoContent {
+			t.Errorf("%s %s: %d", c.method, c.path, w.Code)
+		}
+	}
+	w = as(h, "GET", "/v1/me/blocks", "")
+	if !strings.Contains(w.Body.String(), `"users":[{"user_id":"`+userID) || strings.Contains(w.Body.String(), "display_name") {
+		t.Fatalf("engeller: %s", w.Body)
+	}
+}
+
+func TestSocialRoutesValidateInput(t *testing.T) {
+	f := &fakeCore{}
+	h := coreRouter(f)
+	for _, c := range []struct{ method, path, body string }{
+		{"POST", "/v1/me/friend-requests", `{"user_id":"x"}`},
+		{"POST", "/v1/me/friend-requests", `{"user_id":"` + userID + `","extra":1}`},
+		{"GET", "/v1/me/friend-requests?direction=sideways", ""},
+		{"PUT", "/v1/me/blocks/x", ""},
+		{"POST", "/v1/tayfas/" + tayfaID + "/invitations", `{}`},
+		{"POST", "/v1/me/invitations/x/acceptance", ""},
+		{"GET", "/v1/users/x/profile", ""},
+		{"GET", "/v1/users/" + userID + "/activity?page_size=101", ""},
+		{"PATCH", "/v1/me/account", `{"activity_visibility":"friends"}`},
+		{"POST", "/v1/referral-lookups", `{"referral_code":""}`},
+		{"POST", "/v1/referral-lookups", `{"referral_code":"` + strings.Repeat("A", 33) + `"}`},
+	} {
+		if w := as(h, c.method, c.path, c.body); w.Code != http.StatusBadRequest {
+			t.Errorf("%s %s: %d", c.method, c.path, w.Code)
+		}
+	}
+	if _, _, n := f.last(); n != 0 {
+		t.Fatalf("geçersiz istekler core'a ulaştı: %d", n)
+	}
+	// No token, no call.
+	w := do(h, "GET", "/v1/me/friends", "", map[string]string{clientHeader: "android"})
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("token'sız: %d", w.Code)
+	}
+}
+
+func TestInvitationRoutes(t *testing.T) {
+	f := &fakeCore{}
+	h := coreRouter(f)
+	w := as(h, "POST", "/v1/tayfas/"+tayfaID+"/invitations", `{"user_id":"`+userID+`"}`)
+	got, _, _ := f.last()
+	if w.Code != http.StatusCreated || got.(*corev1.InviteFriendRequest).GetTayfaId() != tayfaID || got.(*corev1.InviteFriendRequest).GetUserId() != userID {
+		t.Fatalf("davet: %d %v", w.Code, got)
+	}
+	if v := decodeBody[invitationJSON](t, w); v.TayfaName != "Klasikçiler" || v.InviterUserID != "" {
+		t.Fatalf("davet cevabı: %+v", v)
+	}
+	w = as(h, "POST", "/v1/me/invitations/"+tayfaID+"/acceptance", "")
+	if v := decodeBody[membershipJSON](t, w); w.Code != 200 || v.TayfaID == "" {
+		t.Fatalf("kabul: %d %+v", w.Code, v)
+	}
+	for _, c := range []struct {
+		method, path string
+		code         int
+	}{
+		{"DELETE", "/v1/me/invitations/" + tayfaID, 204},
+		{"GET", "/v1/me/invitations", 200},
+		{"GET", "/v1/tayfas/" + tayfaID + "/invitations", 200},
+		{"DELETE", "/v1/tayfas/" + tayfaID + "/invitations/" + userID, 204},
+	} {
+		if w := as(h, c.method, c.path, ""); w.Code != c.code {
+			t.Errorf("%s %s: %d", c.method, c.path, w.Code)
+		}
+	}
+	w = as(coreRouter(&fakeCore{err: coreErr(codes.ResourceExhausted, "ERROR_REASON_DIRECT_INVITE_LIMIT")}), "POST", "/v1/tayfas/"+tayfaID+"/invitations", `{"user_id":"`+userID+`"}`)
+	if w.Code != http.StatusTooManyRequests || problemType(t, w) != "direct-invite-limit" {
+		t.Fatalf("sınır: %d %s", w.Code, problemType(t, w))
+	}
+}
+
+func TestProfileRoutes(t *testing.T) {
+	f := &fakeCore{}
+	h := coreRouter(f)
+	w := as(h, "GET", "/v1/users/"+userID+"/profile", "")
+	v := decodeBody[profileJSON](t, w)
+	if w.Code != 200 || v.FriendState != "" || v.ActivityVisibility != "" || len(v.MutualTayfas) != 1 || !v.ActivityVisible {
+		t.Fatalf("profil: %d %+v", w.Code, v)
+	}
+	w = as(h, "GET", "/v1/users/"+userID+"/activity?page_size=10", "")
+	a := decodeBody[activityListJSON](t, w)
+	if w.Code != 200 || len(a.Records) != 1 || a.Records[0].EventType != "hike" || a.Records[0].Mode != "in_person" || a.Records[0].TayfaMember || strings.Contains(w.Body.String(), "tayfa_name") {
+		t.Fatalf("geçmiş: %d %s", w.Code, w.Body)
+	}
+	w = as(coreRouter(&fakeCore{err: coreErr(codes.NotFound, "ERROR_REASON_USER_NOT_FOUND")}), "GET", "/v1/users/"+userID+"/profile", "")
+	if w.Code != http.StatusNotFound || problemType(t, w) != "user-not-found" {
+		t.Fatalf("engel: %d %s", w.Code, problemType(t, w))
+	}
+}
+
+func TestAccountRoutes(t *testing.T) {
+	f := &fakeCore{}
+	h := coreRouter(f)
+	w := as(h, "GET", "/v1/me/account", "")
+	if v := decodeBody[accountJSON](t, w); w.Code != 200 || v.ReferralCode != "TYF-8K2M4Q" || v.ActivityVisibility != "tayfa" {
+		t.Fatalf("hesap: %d %+v", w.Code, v)
+	}
+	w = as(h, "PATCH", "/v1/me/account", `{"activity_visibility":"private"}`)
+	if w.Code != 200 {
+		t.Fatalf("güncelleme: %d", w.Code)
+	}
+	w = as(h, "POST", "/v1/me/referral-code", "")
+	if v := decodeBody[referralCodeJSON](t, w); w.Code != 200 || v.ReferralCode != "TYF-2222AB" {
+		t.Fatalf("yenileme: %d %+v", w.Code, v)
+	}
+	w = as(h, "POST", "/v1/referral-lookups", `{"referral_code":"tyf-8k2m4q"}`)
+	got, tok, _ := f.last()
+	if w.Code != 200 || got.(*identityv1.FindUserByReferralCodeRequest).GetReferralCode() != "tyf-8k2m4q" || tok != "USERTOKEN" {
+		t.Fatalf("arama: %d %v", w.Code, got)
+	}
+	// identity's reasons are trusted only from identity's domain.
+	w = as(coreRouter(&fakeCore{err: identityErr(codes.ResourceExhausted, "ERROR_REASON_RATE_LIMITED")}), "POST", "/v1/referral-lookups", `{"referral_code":"TYF-8K2M4Q"}`)
+	if w.Code != http.StatusTooManyRequests || problemType(t, w) != "rate-limited" {
+		t.Fatalf("sınır: %d %s", w.Code, problemType(t, w))
+	}
+	w = as(coreRouter(&fakeCore{err: identityErr(codes.NotFound, "ERROR_REASON_REFERRAL_CODE_NOT_FOUND")}), "POST", "/v1/referral-lookups", `{"referral_code":"TYF-8K2M4Q"}`)
+	if w.Code != http.StatusNotFound || problemType(t, w) != "referral-code-not-found" {
+		t.Fatalf("bulunamadı: %d %s", w.Code, problemType(t, w))
+	}
+}
+
+func TestRegistrationCarriesReferralCode(t *testing.T) {
+	f := &fakeIdentity{}
+	body := `{"birth_date":"1990-05-19","accepted_privacy_notice_version":"v","accepted_terms_version":"v","referral_code":"TYF-8K2M4Q"}`
+	w := do(newTestRouter(f), "POST", "/v1/registration", body, map[string]string{"Authorization": "Bearer REGTOKEN", clientHeader: "ios"})
+	if w.Code != http.StatusNoContent || f.gotReg.GetReferralCode() != "TYF-8K2M4Q" {
+		t.Fatalf("kayıt: %d %v", w.Code, f.gotReg)
+	}
+}

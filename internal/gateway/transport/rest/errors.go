@@ -23,15 +23,17 @@ type problem struct {
 // service cannot produce another's problems.
 var problemsByDomain = map[string]map[string]problem{
 	"identity.tayfam.app": {
-		"ERROR_REASON_INVALID_CREDENTIALS":  {http.StatusUnauthorized, "invalid-credentials"},
-		"ERROR_REASON_UNSUPPORTED_PROVIDER": {http.StatusBadRequest, "unsupported-provider"},
-		"ERROR_REASON_AGE_BLOCKED":          {http.StatusForbidden, "age-blocked"},
-		"ERROR_REASON_INVALID_REFRESH":      {http.StatusUnauthorized, "invalid-refresh"},
-		"ERROR_REASON_REFRESH_CONFLICT":     {http.StatusConflict, "refresh-conflict"},
-		"ERROR_REASON_INVALID_BIRTH_DATE":   {http.StatusBadRequest, "invalid-birth-date"},
-		"ERROR_REASON_CONSENT_OUTDATED":     {http.StatusConflict, "consent-outdated"},
-		"ERROR_REASON_ALREADY_REGISTERED":   {http.StatusConflict, "already-registered"},
-		"ERROR_REASON_INVALID_DISPLAY_NAME": {http.StatusBadRequest, "invalid-display-name"},
+		"ERROR_REASON_INVALID_CREDENTIALS":     {http.StatusUnauthorized, "invalid-credentials"},
+		"ERROR_REASON_UNSUPPORTED_PROVIDER":    {http.StatusBadRequest, "unsupported-provider"},
+		"ERROR_REASON_AGE_BLOCKED":             {http.StatusForbidden, "age-blocked"},
+		"ERROR_REASON_INVALID_REFRESH":         {http.StatusUnauthorized, "invalid-refresh"},
+		"ERROR_REASON_REFRESH_CONFLICT":        {http.StatusConflict, "refresh-conflict"},
+		"ERROR_REASON_INVALID_BIRTH_DATE":      {http.StatusBadRequest, "invalid-birth-date"},
+		"ERROR_REASON_CONSENT_OUTDATED":        {http.StatusConflict, "consent-outdated"},
+		"ERROR_REASON_ALREADY_REGISTERED":      {http.StatusConflict, "already-registered"},
+		"ERROR_REASON_INVALID_DISPLAY_NAME":    {http.StatusBadRequest, "invalid-display-name"},
+		"ERROR_REASON_RATE_LIMITED":            {http.StatusTooManyRequests, "rate-limited"},
+		"ERROR_REASON_REFERRAL_CODE_NOT_FOUND": {http.StatusNotFound, "referral-code-not-found"},
 	},
 	// proto/tayfam/core/v1/errors.proto
 	"core.tayfam.app": {

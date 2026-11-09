@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/event.proto";
+import "tayfam/core/v1/social.proto";
+import "tayfam/core/v1/tayfa.proto";
+import "tayfam/core/v1/user_events.proto";
+
+// ProfileService shows a user's profile to another user (issue #71; data
+// model v14 "Profil görünürlüğü", "Kalıcı katılım geçmişi").
+//
+// Every method needs the caller's access token; the viewer is always the
+// verified token subject. user_id is the profile's user and may be the
+// caller. An unknown or deleted user, and a block between the two in either
+// direction, are the same ERROR_REASON_USER_NOT_FOUND.
+//
+// Attendance history follows the user's setting (ActivityVisibility):
+//
+//   setting  | friends       | shared tayfa         | everyone else
+//   PRIVATE  | nothing       | nothing              | nothing
+//   TAYFA    | all           | without last 14 days | nothing
+//   PUBLIC   | all           | without last 14 days | without last 14 days
+//
+// The user always sees all of their own. A record's tayfa, event and
+// duration are filled only for active members of that tayfa.
+service ProfileService {
+  // GetUserProfile returns name, avatar, the friendship as the caller sees
+  // it, and the live tayfas both are active members of.
+  rpc GetUserProfile(GetUserProfileRequest) returns (GetUserProfileResponse);
+  // ListUserActivity lists the attendance history the caller may see,
+  // newest first. A caller the setting shows nothing to gets an empty list.
+  // Paging: page_size 0 means 50, above 100 means 100.
+  rpc ListUserActivity(ListUserActivityRequest) returns (ListUserActivityResponse);
+}
+
+message GetUserProfileRequest {
+  string user_id = 1;
+}
+
+message MutualTayfa {
+  string tayfa_id = 1;
+  string name = 2;
+}
+
+message UserProfile {
+  string user_id = 1;
+  string display_name = 2;
+  // Upload ID (UUID); empty when there is none.
+  string avatar_upload_id = 3;
+  // The caller's own profile.
+  bool self = 4;
+  // UNSPECIFIED when there is no friendship or request between the two.
+  FriendState friend_state = 5;
+  // Live tayfas both are active members of (at most 100); empty on one's
+  // own profile.
+  repeated MutualTayfa mutual_tayfas = 6;
+  // Whether ListUserActivity can show the caller anything.
+  bool activity_visible = 7;
+  // The user's setting; filled only on one's own profile.
+  ActivityVisibility activity_visibility = 8;
+}
+
+message GetUserProfileResponse {
+  UserProfile profile = 1;
+}
+
+message ListUserActivityRequest {
+  string user_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+// ActivityRecord is one attendance as the caller may see it.
+message ActivityRecord {
+  EventType event_type = 1;
+  EventMode mode = 2;
+  // Province and district of an in-person event; empty for online ones.
+  string city = 3;
+  string district = 4;
+  google.protobuf.Timestamp start_time = 5;
+  // The rest is filled only when the caller is an active member of the
+  // record's tayfa.
+  bool tayfa_member = 6;
+  string tayfa_id = 7;
+  string tayfa_name = 8;
+  // Empty when the event was deleted.
+  string event_id = 9;
+  string event_title = 10;
+  int32 duration_minutes = 11;
+}
+
+message ListUserActivityResponse {
+  repeated ActivityRecord records = 1;
+  string next_page_token = 2;
+}
