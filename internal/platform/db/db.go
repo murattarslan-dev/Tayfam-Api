@@ -25,7 +25,7 @@ import (
 // Config is a database connection target. The service connects as its
 // runtime user (<service>_app, secrets/<service>-app-db); only the migrate
 // init container uses the owner (<service>, secrets/<service>-db), see
-// ADR-0014.
+// ADR-0015.
 type Config struct {
 	Host     string
 	Port     int

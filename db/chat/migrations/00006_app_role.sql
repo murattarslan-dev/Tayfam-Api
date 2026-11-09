@@ -1,4 +1,4 @@
--- Çalışma zamanı kullanıcısı chat_app (ADR-0014, ADR-0011 madde 8).
+-- Çalışma zamanı kullanıcısı chat_app (ADR-0015, ADR-0011 madde 8).
 --
 -- Migration'ları veritabanının ve tüm nesnelerin sahibi olan chat kullanıcısı
 -- çalıştırır. Servis chat_app ile bağlanır; sahip olmadığı için DDL yapamaz,
@@ -7,6 +7,9 @@
 -- silinen mesajlar ve eski bildirimler, hesap ve tayfa silmede temizlenen
 -- satırlar dahil. TRUNCATE, REFERENCES ve TRIGGER hiçbir tabloda verilmez;
 -- goose_db_version'a hiçbir yetkisi yoktur.
+--
+-- Tablolar 00001–00005'tekilerdir; 00004'ün açtığı realtime_tickets 00005'te
+-- kaldırıldı (bağlantı erişim token'ıyla açılır, ADR-0014) ve yetki almaz.
 --
 -- 00001 veritabanında PUBLIC'in CONNECT/TEMP ve şemadaki varsayılan
 -- yetkilerini kaldırır; chat_app'e yalnızca CONNECT ve şemada USAGE verilir.

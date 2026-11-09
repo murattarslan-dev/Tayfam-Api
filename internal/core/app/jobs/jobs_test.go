@@ -27,7 +27,7 @@ var ctx = context.Background()
 type env struct {
 	pool *pgxpool.Pool
 	// admin is a superuser pool for fixtures core_app cannot write
-	// (seeding with triggers off, ADR-0014).
+	// (seeding with triggers off, ADR-0015).
 	admin *pgxpool.Pool
 	log   *slog.Logger
 	base  time.Time

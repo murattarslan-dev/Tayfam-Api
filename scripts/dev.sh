@@ -25,7 +25,7 @@ signing_key="local:$(head -c 32 /dev/urandom | base64 -w0)"
 # identity, core ve chat veritabanları: make test-db ile açılan yerel Postgres
 # (docker compose). Her servis kendi veritabanına bağlanır; migration'ı sahip
 # kullanıcı (<servis>), servisi çalışma zamanı kullanıcısı (<servis>_app)
-# çalıştırır (ADR-0014, scripts/postgres-init.sql).
+# çalıştırır (ADR-0015, scripts/postgres-init.sql).
 export DB_HOST=${DB_HOST:-127.0.0.1} DB_PORT=${DB_PORT:-5432} \
   DB_PASSWORD=${DB_PASSWORD:-yerel} DB_SSLMODE=${DB_SSLMODE:-disable}
 identity_db=${IDENTITY_DB_NAME:-identity}

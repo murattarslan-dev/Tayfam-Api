@@ -81,7 +81,7 @@ kullanıcıların erişim token'ı yenilenir (refresh token'lar etkilenmez).
 
 ## Veritabanı kullanıcı parolaları
 
-Servis başına iki Postgres kullanıcısı vardır (ADR-0014): sahip `<servis>`
+Servis başına iki Postgres kullanıcısı vardır (ADR-0015): sahip `<servis>`
 (`secrets/<servis>-db`, yalnızca migrate initContainer'ı) ve çalışma zamanı
 kullanıcısı `<servis>_app` (`secrets/<servis>-app-db`, servis container'ı).
 

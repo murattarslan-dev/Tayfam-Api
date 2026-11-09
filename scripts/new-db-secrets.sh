@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Servislerin Postgres kullanıcı parolalarını üretir ve her kullanıcı için ayrı,
-# SOPS ile şifreli bir secret dosyası yazar (ADR-0002, ADR-0006, ADR-0014).
+# SOPS ile şifreli bir secret dosyası yazar (ADR-0002, ADR-0006, ADR-0015).
 # Platform sahibinin bilgisayarında, sops ve age kurulu iken çalıştırılır.
 #
 # Servis başına iki kullanıcı vardır:

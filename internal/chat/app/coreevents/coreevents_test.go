@@ -259,7 +259,7 @@ func (f *fakeLive) Notified(r notification.Request) {
 // cleared, so its rechecks ask core afresh; notifications after they are
 // stored (issue #82).
 func TestLiveHearsChanges(t *testing.T) {
-	pool := dbtest.New(t, chatdb.Migrations())
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
 	cache := &fakeCache{}
 	live := &fakeLive{cache: cache}
 	svc, err := New(Config{Pool: pool, Access: cache, Live: live})

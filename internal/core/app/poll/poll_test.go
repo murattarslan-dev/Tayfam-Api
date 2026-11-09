@@ -31,7 +31,7 @@ type env struct {
 	pool   *pgxpool.Pool
 	shift  time.Duration
 	// admin is a superuser pool: the triggers are checked behind privileges
-	// core_app does not have (ADR-0014).
+	// core_app does not have (ADR-0015).
 	admin *pgxpool.Pool
 }
 

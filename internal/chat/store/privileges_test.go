@@ -8,8 +8,8 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
 )
 
-// chat_app's table privileges (db/chat/migrations/00004_app_role.sql,
-// ADR-0014). The outbox is append-only. A new table or grant must be added
+// chat_app's table privileges (db/chat/migrations/00006_app_role.sql,
+// ADR-0015). The outbox is append-only. A new table or grant must be added
 // here on purpose.
 var wantAppPrivileges = map[string]string{
 	"channels":                 "DELETE,INSERT,SELECT,UPDATE",

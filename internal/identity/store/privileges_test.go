@@ -13,7 +13,7 @@ import (
 )
 
 // identity_app's table privileges (db/identity/migrations/00006_app_role.sql,
-// ADR-0014). DELETE is there for account deletion and the retention jobs;
+// ADR-0015). DELETE is there for account deletion and the retention jobs;
 // the outbox gets only the account-deletion exceptions (actor_id, profile
 // events). A new table or grant must be added here on purpose.
 var wantAppPrivileges = map[string]string{

@@ -3,7 +3,7 @@
 -- oluşturulur. Cluster'da veritabanları ve kullanıcılar CloudNativePG ile
 -- gelir (deploy/base/postgres.yaml).
 --
--- Cluster'daki gibi servis başına iki kullanıcı (ADR-0014): <servis>
+-- Cluster'daki gibi servis başına iki kullanıcı (ADR-0015): <servis>
 -- veritabanının sahibidir ve migration'ları çalıştırır, <servis>_app servisin
 -- çalışma zamanı kullanıcısıdır; yetkilerini migration'lar verir. Parola
 -- yalnızca yerel, atılabilir bir veritabanı içindir.

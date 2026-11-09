@@ -9,7 +9,7 @@ import (
 )
 
 // core_app's table privileges (db/core/migrations/00013_app_role.sql,
-// ADR-0014). The append-only tables get only the narrow exceptions the
+// ADR-0015). The append-only tables get only the narrow exceptions the
 // account deletion consumer and the retention job need, each limited by its
 // trigger. A new table or grant must be added here on purpose.
 var wantAppPrivileges = map[string]string{

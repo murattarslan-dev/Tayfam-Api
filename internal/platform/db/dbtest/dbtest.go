@@ -8,7 +8,7 @@
 // REQUIRE_TEST_DATABASE is set: CI sets it, so the tests cannot silently stop
 // running there.
 //
-// The database mirrors the clusters' roles (ADR-0014): it is owned by the
+// The database mirrors the clusters' roles (ADR-0015): it is owned by the
 // service's owner role (<service>), which runs the migrations, and tests get
 // a pool acting as the runtime role (<service>_app), so a query that needs a
 // privilege the migrations did not grant fails here as it would in the

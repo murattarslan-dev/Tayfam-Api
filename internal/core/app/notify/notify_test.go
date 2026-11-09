@@ -32,7 +32,7 @@ type fixture struct {
 	pool *pgxpool.Pool
 	q    *store.Queries
 	// admin is a superuser pool for fixtures core_app cannot write
-	// (seeding with triggers off, ADR-0014).
+	// (seeding with triggers off, ADR-0015).
 	admin *pgxpool.Pool
 }
 

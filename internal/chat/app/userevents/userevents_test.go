@@ -90,7 +90,7 @@ func (f *fakeSessions) EndUser(_ context.Context, u id.ID) error {
 // session.revoked, user.sanctioned and user.deleted end the real-time
 // connections (issue #82).
 func TestSessionEvents(t *testing.T) {
-	pool := dbtest.New(t, chatdb.Migrations())
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
 	fs := &fakeSessions{}
 	svc, err := New(Config{Pool: pool, Sessions: fs})
 	must(t, err)

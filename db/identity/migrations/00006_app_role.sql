@@ -1,4 +1,4 @@
--- Çalışma zamanı kullanıcısı identity_app (ADR-0014, ADR-0011 madde 8).
+-- Çalışma zamanı kullanıcısı identity_app (ADR-0015, ADR-0011 madde 8).
 --
 -- Migration'ları veritabanının ve tüm nesnelerin sahibi olan identity
 -- kullanıcısı çalıştırır. Servis identity_app ile bağlanır; sahip olmadığı

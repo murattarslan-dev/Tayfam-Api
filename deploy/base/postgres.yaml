@@ -1,5 +1,5 @@
 # Ortamın Postgres cluster'ı (ADR-0002, ADR-0006). Tek instance; içinde servis
-# başına ayrı veritabanı ve iki kullanıcı (ADR-0014):
+# başına ayrı veritabanı ve iki kullanıcı (ADR-0015):
 #   <servis>      veritabanının ve şemanın sahibi; yalnızca migrate
 #                 initContainer'ı kullanır (secrets/<servis>-db)
 #   <servis>_app  çalışma zamanı; tablolarda yalnızca migration'ların verdiği

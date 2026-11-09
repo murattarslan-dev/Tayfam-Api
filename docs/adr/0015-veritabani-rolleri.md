@@ -1,4 +1,4 @@
-# ADR-0014: Veritabanında sahip ve çalışma zamanı kullanıcısının ayrılması
+# ADR-0015: Veritabanında sahip ve çalışma zamanı kullanıcısının ayrılması
 
 - **Durum:** Önerildi
 - **Tarih:** 2026-11-09
@@ -28,7 +28,7 @@ karşı korumaz (ADR-0011 sertleştirme listesi madde 8, issue #39).
      yoktur. Servis container'ı sahibin parolasını görmez.
 2. **Kullanıcıları CloudNativePG `managed.roles`, yetkileri migration'lar
    verir.** Her servisin `*_app_role` migration'ı (identity `00006`, core
-   `00013`, chat `00004`) `CONNECT`, şemada `USAGE` ve tablo başına yalnızca
+   `00013`, chat `00006`) `CONNECT`, şemada `USAGE` ve tablo başına yalnızca
    sorguların (`db/<servis>/queries`) ve arka plan işlerinin (kalıcı silme,
    saklama, hesap silme tüketicisi) gerektirdiği DML'i verir. `TRUNCATE`,
    `REFERENCES`, `TRIGGER` hiçbir tabloda verilmez; `goose_db_version`'a

@@ -42,7 +42,7 @@ CREATE TABLE event_consumers (
   CONSTRAINT event_consumers_name_format CHECK (consumer_name ~ '^[a-z][a-z0-9_.-]{0,62}$')
 );
 -- The services' runtime roles get exactly this on the outbox tables
--- (db/<service>/migrations/*_app_role.sql, ADR-0014).
+-- (db/<service>/migrations/*_app_role.sql, ADR-0015).
 GRANT SELECT, INSERT ON domain_events TO outbox_app;
 GRANT SELECT, INSERT, UPDATE ON event_consumers TO outbox_app;
 -- +goose Down

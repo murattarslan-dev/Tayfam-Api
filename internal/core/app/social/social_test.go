@@ -22,7 +22,7 @@ type env struct {
 	pool *pgxpool.Pool
 	q    *store.Queries
 	// admin is a superuser pool for fixtures core_app cannot write (moving
-	// outbox events back in time, ADR-0014).
+	// outbox events back in time, ADR-0015).
 	admin *pgxpool.Pool
 }
 
