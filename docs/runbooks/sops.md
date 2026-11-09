@@ -70,6 +70,10 @@ token'ları doğrulanabilsin diye kısa süre yayında kalır (ADR-0004, ADR-001
 4. İkisini aynı PR'da birleştir. identity yeni anahtarla imzalamaya başlar;
    diğer servisler yeni kid'i ilk gördüklerinde açık anahtarları yeniden alır.
 5. En az 30 dakika sonra `AUTH_RETIRED_KEYS`'i kaldıran ikinci bir PR aç.
+   Aynı anahtar 8 saatlik panel (admin) token'larını da imzalar; emekli
+   anahtar kaldırılınca açık panel oturumu kapanır ve yönetici yeniden giriş
+   yapar. Bu kabul edilebilir; panel oturumunu korumak istenirse 5. adım 8
+   saat sonraya bırakılır.
 
 **Anahtar sızdıysa** 1. ve 2. adımlar atlanır: eski anahtar emekli listesine
 eklenmez, böylece onunla imzalanmış token'lar hemen geçersiz olur ve tüm

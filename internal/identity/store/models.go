@@ -51,6 +51,23 @@ type EventConsumer struct {
 	UpdatedAt    pgtype.Timestamptz
 }
 
+type PlatformAdmin struct {
+	UserID    pgtype.UUID
+	GrantedAt pgtype.Timestamptz
+	GrantedBy pgtype.UUID
+}
+
+type PlatformAuditLog struct {
+	ID         pgtype.UUID
+	ActorID    pgtype.UUID
+	Action     string
+	TargetType pgtype.Text
+	TargetID   pgtype.UUID
+	Reason     string
+	Metadata   []byte
+	CreatedAt  pgtype.Timestamptz
+}
+
 type RefCodeLookup struct {
 	ID         pgtype.UUID
 	UserID     pgtype.UUID

@@ -7,6 +7,8 @@
 //	devices         not seen for 90 days (their sessions with them)
 //	users           deleted 30 days ago (personal data was cleared at
 //	                deletion; the row and what still points to it go now)
+//	platform audit  365 days old (ADR-0008; the table's trigger refuses
+//	                to delete anything younger)
 //
 // consent_records are not touched: how long they are kept after an account
 // is deleted waits for legal advice (00002).
@@ -32,10 +34,11 @@ import (
 
 // Retention periods (v14 "Saklama süreleri").
 const (
-	RefreshTokenRetention = 30 * 24 * time.Hour
-	SessionRetention      = 90 * 24 * time.Hour
-	DeviceRetention       = 90 * 24 * time.Hour
-	DeletedUserRetention  = 30 * 24 * time.Hour
+	RefreshTokenRetention  = 30 * 24 * time.Hour
+	SessionRetention       = 90 * 24 * time.Hour
+	DeviceRetention        = 90 * 24 * time.Hour
+	DeletedUserRetention   = 30 * 24 * time.Hour
+	PlatformAuditRetention = 365 * 24 * time.Hour
 )
 
 // DefaultInterval is how often Run runs.
@@ -82,6 +85,7 @@ type Result struct {
 	Sessions      int64
 	Devices       int64
 	Users         int64
+	PlatformAudit int64
 }
 
 // RunOnce deletes everything whose period is over now.
@@ -106,6 +110,9 @@ func (s *Service) RunOnce(ctx context.Context) (Result, error) {
 		{"users", DeletedUserRetention, func(ctx context.Context, c pgtype.Timestamptz) (int64, error) {
 			return s.q.PurgeDeletedUsers(ctx, store.PurgeDeletedUsersParams{Cutoff: c, Batch: batch})
 		}, &r.Users},
+		{"platform_audit_logs", PlatformAuditRetention, func(ctx context.Context, c pgtype.Timestamptz) (int64, error) {
+			return s.q.PurgePlatformAuditLogs(ctx, store.PurgePlatformAuditLogsParams{Cutoff: c, Batch: batch})
+		}, &r.PlatformAudit},
 	}
 	for _, st := range steps {
 		cutoff := pgtype.Timestamptz{Time: now.Add(-st.age), Valid: true}
@@ -137,7 +144,8 @@ func (s *Service) Run(ctx context.Context) error {
 				slog.Int64("refresh_tokens", r.RefreshTokens),
 				slog.Int64("sessions", r.Sessions),
 				slog.Int64("devices", r.Devices),
-				slog.Int64("users", r.Users))
+				slog.Int64("users", r.Users),
+				slog.Int64("platform_audit_logs", r.PlatformAudit))
 		}
 		select {
 		case <-ctx.Done():

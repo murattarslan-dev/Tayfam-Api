@@ -44,6 +44,10 @@ type Identity struct {
 	Email string
 	// Name is the display name the provider suggests, possibly empty.
 	Name string
+	// IssuedAt is when the provider issued the ID token, i.e. when it last
+	// checked the person. The panel sign-in requires it to be recent
+	// (ADR-0008, layer 6).
+	IssuedAt time.Time
 }
 
 // Verifier checks one provider's ID tokens.

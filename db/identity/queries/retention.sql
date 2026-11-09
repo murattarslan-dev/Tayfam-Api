@@ -38,3 +38,13 @@ DELETE FROM users
 WHERE id IN (
   SELECT x.id FROM users x WHERE x.deleted_at < @cutoff LIMIT @batch
 );
+
+-- Platform denetim kaydı 1 yıl (ADR-0008). Trigger 365 günden yeni satırın
+-- silinmesini reddeder; koşul burada da veritabanı saatiyle denetlenir.
+-- name: PurgePlatformAuditLogs :execrows
+DELETE FROM platform_audit_logs
+WHERE id IN (
+  SELECT x.id FROM platform_audit_logs x
+  WHERE x.created_at < @cutoff AND x.created_at < now() - interval '365 days'
+  LIMIT @batch
+);

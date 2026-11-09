@@ -50,5 +50,5 @@ func (g *Google) Verify(ctx context.Context, idToken, nonce string) (Identity, e
 	if err := checkStandard(c, googleIssuers, g.audiences, nonce, g.now()); err != nil {
 		return Identity{}, err
 	}
-	return Identity{Provider: "google", Subject: c.Sub, Email: verifiedEmail(c), Name: cleanName(c.Name)}, nil
+	return Identity{Provider: "google", Subject: c.Sub, Email: verifiedEmail(c), Name: cleanName(c.Name), IssuedAt: time.Unix(c.Iat, 0).UTC()}, nil
 }

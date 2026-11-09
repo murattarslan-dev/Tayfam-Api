@@ -96,7 +96,7 @@ func TestGoogleVerify(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Identity{Provider: "google", Subject: "110169484474386276334", Email: "ornek@example.com", Name: "Ayşe Işık"}
+	want := Identity{Provider: "google", Subject: "110169484474386276334", Email: "ornek@example.com", Name: "Ayşe Işık", IssuedAt: time.Unix(now0.Add(-time.Minute).Unix(), 0).UTC()}
 	if id != want {
 		t.Fatalf("kimlik = %+v", id)
 	}
