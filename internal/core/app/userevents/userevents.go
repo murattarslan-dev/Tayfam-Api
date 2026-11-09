@@ -167,6 +167,8 @@ func validDisplayName(s string) bool {
 //     still unanswered (issue #71);
 //   - on every upcoming event the user was going to, the seat goes to the
 //     oldest waitlisted answer (rsvp.promoted), as when an answer changes;
+//   - reports stay, but the user's ID in them (as reporter, reported
+//     person or handler) becomes NULL (v14 "Kullanıcı → yazdığı içerik");
 //   - the profile copy becomes a tombstone.
 //
 // Everything runs as the account_deletion system job, the only identity the
@@ -218,7 +220,7 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			q.ClearQuestionUserFields, q.ClearAnswerUserFields, q.DeleteUserAnswerVotes,
 			q.ClearPollUserFields, q.DeleteUserPollVotes,
 			q.DeleteUserFriendships, q.DeleteUserBlocks,
-			q.ClearAuditActor, q.ClearEventActor,
+			q.ClearAuditActor, q.ClearEventActor, q.ClearReportUserFields,
 		} {
 			if err := clear(ctx, e.User.PG()); err != nil {
 				return fmt.Errorf("yazar alanları: %w", err)

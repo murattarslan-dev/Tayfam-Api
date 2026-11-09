@@ -142,6 +142,24 @@ var (
 	ErrInviteNotAllowed = errors.New("davet edilemez")
 )
 
+// ReportService errors (issue #76). None of them says who reported or
+// whether someone else reported the same target.
+var (
+	// ErrReportNotFound: no report with this ID the caller may see (not
+	// theirs, not in the tayfa's queue, or about the caller).
+	ErrReportNotFound = errors.New("şikâyet bulunamadı")
+	// ErrReportTargetNotFound: the reported user or content does not exist
+	// in the tayfa or the caller cannot see it.
+	ErrReportTargetNotFound = errors.New("şikâyet hedefi bulunamadı")
+	// ErrReportLimit: the caller filed the most reports a day allows.
+	ErrReportLimit = errors.New("günlük şikâyet sınırı")
+	// ErrReportAlreadyResolved: resolutions do not change.
+	ErrReportAlreadyResolved = errors.New("şikâyet zaten çözülmüş")
+	// ErrReportActionMissing: the resolution names an action that was not
+	// taken.
+	ErrReportActionMissing = errors.New("çözümdeki işlem yapılmamış")
+)
+
 // ValidationError reports a request field that failed validation. Field is
 // the request field name as written in the proto ("name", "update_mask");
 // the rejected value is never kept.

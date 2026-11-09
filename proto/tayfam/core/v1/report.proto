@@ -1,0 +1,266 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// ReportService files reports and runs a tayfa's moderation queue (data
+// model v14 "Denetim", "Spam ve taciz", "Platforma yükselen şikâyetler",
+// "Doğum Tarihi ve Şikâyet Önceliği"; Notion "Kötüye Kullanım ve Genç
+// Kullanıcı Güvenliği", "Topluluk Kuralları"; ADR-0012; issue #76). Only
+// gateway calls it, with the user's access token.
+//
+// Every method needs the caller's access token; there are no open methods.
+// Errors carry a google.rpc.ErrorInfo detail with domain "core.tayfam.app"
+// and a reason from ErrorReason (errors.proto). IDs are UUID strings;
+// anything else is ERROR_REASON_VALIDATION.
+//
+// Who learns what:
+//   - The reporter's identity never reaches the reported person and is not
+//     shown in the tayfa's moderation queue either (Topluluk Kuralları:
+//     "Şikâyetin şikâyet edilen kişiye kimin yaptığı bilgisiyle
+//     iletilmez"). Creating a report writes nothing to the tayfa's audit
+//     log, which admins can read. Only the reporter (GetMyReport,
+//     ListMyReports) and, later, the platform panel see who reported.
+//   - A report is never shown to the person it is about (the reported user
+//     or the content's author), whatever their role.
+//   - Reports about the tayfa itself and about an admin's or moderator's
+//     conduct (REPORT_REASON_STAFF_CONDUCT) go to the platform only; the
+//     tayfa's queue does not list them.
+//   - Tayfa admins and moderators never learn that anyone involved is under
+//     18 (ADR-0012): the queue has no priority, is ordered by time only and
+//     does not say whether the platform has a report (that would give away
+//     the reports escalated at once for MINOR_INVOLVED). The priority is
+//     for the platform only.
+//   - The reporter sees only whether action was taken, not which action
+//     and not who handled it.
+//
+// Paging: page_size 0 means 20; values above 100 are treated as 100;
+// negative values are ERROR_REASON_VALIDATION. page_token is opaque and only
+// valid for the same list; a bad token is ERROR_REASON_VALIDATION. An empty
+// next_page_token means the last page.
+service ReportService {
+  // CreateReport files a report by the caller about a target in a tayfa.
+  //
+  // The caller must be an ACTIVE member of the tayfa (muted members too;
+  // anyone else gets ERROR_REASON_TAYFA_NOT_FOUND). The target must be
+  // something the caller can see there: an active member other than the
+  // caller (TARGET_TYPE_USER), the tayfa itself, or visible content of a
+  // module the tayfa has on. Anything else is
+  // ERROR_REASON_REPORT_TARGET_NOT_FOUND.
+  //
+  // A second report by the same caller about the same target creates
+  // nothing and returns the first one, in whatever state it is (v14 "Şikâyet
+  // tekrarı"); created is false then. Reports work on read-only tayfas.
+  //
+  // The priority is decided now and never changes (ADR-0012): core asks
+  // identity's IsMinor about the reporter and the reported person (the
+  // content's author); MINOR_INVOLVED when either is under 18 or identity
+  // cannot answer. MINOR_INVOLVED and child safety reports go to the
+  // platform at once. Neither the priority nor anyone's age is returned.
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_REPORT_TARGET_NOT_FOUND,
+  // ERROR_REASON_REPORT_LIMIT, ERROR_REASON_VALIDATION.
+  rpc CreateReport(CreateReportRequest) returns (CreateReportResponse);
+
+  // GetMyReport returns one of the caller's own reports, also after they
+  // left the tayfa. Anything else is ERROR_REASON_REPORT_NOT_FOUND.
+  rpc GetMyReport(GetMyReportRequest) returns (GetMyReportResponse);
+
+  // ListMyReports lists the caller's own reports, newest first.
+  rpc ListMyReports(ListMyReportsRequest) returns (ListMyReportsResponse);
+
+  // ListTayfaReports is the tayfa's moderation queue: moderators and admins
+  // (also while muted). Open reports oldest first, resolved ones last
+  // handled first. Reports that go to the platform only, and reports about
+  // the caller, are not listed.
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_VALIDATION.
+  rpc ListTayfaReports(ListTayfaReportsRequest) returns (ListTayfaReportsResponse);
+
+  // ResolveReport closes an open report of the queue. Moderators and
+  // admins, not while muted, and only above the reported person's current
+  // role in the tayfa (ERROR_REASON_ROLE_HIERARCHY). The resolution links
+  // to an action already taken with the content's or the membership's own
+  // methods, which apply their own rules:
+  //   - CONTENT_REMOVED: the reported content is no longer visible (deleted,
+  //     or for an event also cancelled). Not for user or tayfa targets.
+  //   - MEMBER_SANCTIONED: the reported person is muted or banned in the
+  //     tayfa now.
+  //   - DISMISSED: no action.
+  // Otherwise ERROR_REASON_REPORT_ACTION_MISSING. The resolution is
+  // recorded in the tayfa's audit log (without the reporter) and the
+  // reporter gets a REPORT_RESOLVED notification if still an active member.
+  // A report escalated to the platform can still be resolved here; the
+  // platform's own status does not change.
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED, ERROR_REASON_REPORT_NOT_FOUND,
+  // ERROR_REASON_REPORT_ALREADY_RESOLVED, ERROR_REASON_REPORT_ACTION_MISSING,
+  // ERROR_REASON_ROLE_HIERARCHY, ERROR_REASON_VALIDATION.
+  rpc ResolveReport(ResolveReportRequest) returns (ResolveReportResponse);
+}
+
+// ReportTargetType is what a report is about. Channel and direct messages
+// are reported through chat.
+enum ReportTargetType {
+  REPORT_TARGET_TYPE_UNSPECIFIED = 0;
+  // target_id is a user ID: an active member of the tayfa.
+  REPORT_TARGET_TYPE_USER = 1;
+  // target_id is the tayfa ID itself. Goes to the platform only.
+  REPORT_TARGET_TYPE_TAYFA = 2;
+  REPORT_TARGET_TYPE_ANNOUNCEMENT = 3;
+  REPORT_TARGET_TYPE_EVENT = 4;
+  REPORT_TARGET_TYPE_QUESTION = 5;
+  REPORT_TARGET_TYPE_ANSWER = 6;
+  REPORT_TARGET_TYPE_POLL = 7;
+  REPORT_TARGET_TYPE_FISHING_CATCH = 8;
+}
+
+// ReportReason follows the community rules (Notion "Topluluk Kuralları").
+enum ReportReason {
+  REPORT_REASON_UNSPECIFIED = 0;
+  REPORT_REASON_HARASSMENT = 1;
+  REPORT_REASON_HATE_SPEECH = 2;
+  // Violence or a threat of violence.
+  REPORT_REASON_VIOLENCE = 3;
+  // Someone's personal information shared without consent.
+  REPORT_REASON_PRIVACY = 4;
+  REPORT_REASON_IMPERSONATION = 5;
+  // Illegal trade (weapons, stolen goods, protected species, ...).
+  REPORT_REASON_ILLEGAL_TRADE = 6;
+  REPORT_REASON_DRUGS = 7;
+  REPORT_REASON_GAMBLING = 8;
+  REPORT_REASON_DANGEROUS_ACTIVITY = 9;
+  REPORT_REASON_FAKE_EVENT = 10;
+  REPORT_REASON_SEXUAL_CONTENT = 11;
+  // "Çocuk/genç güvenliği": goes first in the queue and to the platform at
+  // once.
+  REPORT_REASON_CHILD_SAFETY = 12;
+  REPORT_REASON_SPAM = 13;
+  REPORT_REASON_COPYRIGHT = 14;
+  // An admin's or moderator's use of their powers. Goes to the platform
+  // only.
+  REPORT_REASON_STAFF_CONDUCT = 15;
+  REPORT_REASON_OTHER = 16;
+}
+
+enum ReportStatus {
+  REPORT_STATUS_UNSPECIFIED = 0;
+  REPORT_STATUS_OPEN = 1;
+  REPORT_STATUS_RESOLVED = 2;
+}
+
+enum ReportResolution {
+  REPORT_RESOLUTION_UNSPECIFIED = 0;
+  REPORT_RESOLUTION_CONTENT_REMOVED = 1;
+  REPORT_RESOLUTION_MEMBER_SANCTIONED = 2;
+  REPORT_RESOLUTION_DISMISSED = 3;
+}
+
+// ReportOutcome is all the reporter learns about a resolution.
+enum ReportOutcome {
+  REPORT_OUTCOME_UNSPECIFIED = 0;
+  // Content removed or member sanctioned; which one is not said.
+  REPORT_OUTCOME_ACTION_TAKEN = 1;
+  REPORT_OUTCOME_DISMISSED = 2;
+}
+
+// MyReport is a report as its reporter sees it.
+message MyReport {
+  string id = 1;
+  string tayfa_id = 2;
+  ReportTargetType target_type = 3;
+  string target_id = 4;
+  ReportReason reason = 5;
+  // Empty when none was given.
+  string description = 6;
+  ReportStatus status = 7;
+  // UNSPECIFIED while open.
+  ReportOutcome outcome = 8;
+  google.protobuf.Timestamp create_time = 9;
+  // Unset while open.
+  google.protobuf.Timestamp resolve_time = 10;
+}
+
+// ModerationReport is a report as the tayfa's moderators see it. It has no
+// field for the reporter and none for the priority or the escalation
+// (ADR-0012).
+message ModerationReport {
+  string id = 1;
+  string tayfa_id = 2;
+  ReportTargetType target_type = 3;
+  string target_id = 4;
+  // The reported user, or the content's author when the report was filed.
+  // Empty when the account was deleted or the author unknown.
+  string subject_user_id = 5;
+  ReportReason reason = 6;
+  string description = 7;
+  ReportStatus status = 8;
+  // UNSPECIFIED while open.
+  ReportResolution resolution = 9;
+  // Who resolved it; empty while open or when the account was deleted.
+  string handled_by_user_id = 10;
+  google.protobuf.Timestamp create_time = 11;
+  google.protobuf.Timestamp resolve_time = 12;
+}
+
+message CreateReportRequest {
+  string tayfa_id = 1;
+  ReportTargetType target_type = 2;
+  // For TARGET_TYPE_TAYFA it must equal tayfa_id.
+  string target_id = 3;
+  ReportReason reason = 4;
+  // Optional, up to 1000 characters after trimming surrounding spaces; line
+  // breaks allowed, other control characters not. Never logged.
+  string description = 5;
+}
+
+message CreateReportResponse {
+  MyReport report = 1;
+  // False when the caller had already reported this target.
+  bool created = 2;
+}
+
+message GetMyReportRequest {
+  string report_id = 1;
+}
+
+message GetMyReportResponse {
+  MyReport report = 1;
+}
+
+message ListMyReportsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListMyReportsResponse {
+  repeated MyReport reports = 1;
+  string next_page_token = 2;
+}
+
+message ListTayfaReportsRequest {
+  string tayfa_id = 1;
+  // OPEN (also when UNSPECIFIED) or RESOLVED.
+  ReportStatus status = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListTayfaReportsResponse {
+  repeated ModerationReport reports = 1;
+  string next_page_token = 2;
+}
+
+message ResolveReportRequest {
+  string tayfa_id = 1;
+  string report_id = 2;
+  // Required.
+  ReportResolution resolution = 3;
+}
+
+message ResolveReportResponse {
+  ModerationReport report = 1;
+}

@@ -56,6 +56,10 @@ type Querier interface {
 	GetCallerSession(ctx context.Context, arg GetCallerSessionParams) (GetCallerSessionRow, error)
 	GetUser(ctx context.Context, id pgtype.UUID) (GetUserRow, error)
 	HasActiveConsent(ctx context.Context, arg HasActiveConsentParams) (bool, error)
+	// 18 yaş altı sorgusu (ADR-0012, issue #76). Yalnızca kaydı tamamlanmış ve
+	// silinmemiş hesapların şifreli doğum tarihi okunur; cevap yalnızca
+	// evet/hayır olarak servisten çıkar.
+	ListBirthDatesForMinorCheck(ctx context.Context, ids []pgtype.UUID) ([]ListBirthDatesForMinorCheckRow, error)
 	// Hesap yönetimi (issue #75).
 	// Kullanıcının kendi açık oturumları, cihaz platformuyla. IP ve token
 	// dönmez. Son görülme oturumun son yenilenme zamanıdır.

@@ -197,6 +197,7 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"poll_votes.user_id":             `SELECT count(*) FROM poll_votes WHERE user_id = $1`,
 		"friendships":                    `SELECT count(*) FROM friendships WHERE $1 IN (user_low_id, user_high_id, requested_by)`,
 		"user_blocks":                    `SELECT count(*) FROM user_blocks WHERE $1 IN (blocker_id, blocked_id)`,
+		"reports":                        `SELECT count(*) FROM reports WHERE $1 IN (reporter_id, subject_user_id, handled_by, platform_handled_by)`,
 		"user_profiles (kişisel)":        `SELECT count(*) FROM user_profiles WHERE user_id = $1 AND (display_name IS NOT NULL OR avatar_upload_id IS NOT NULL OR deleted_at IS NULL)`,
 	} {
 		if n := e.count(t, sql, u.PG()); n != 0 {
@@ -634,5 +635,29 @@ func TestProfileCarriesActivityVisibility(t *testing.T) {
 	var verr *apperr.ValidationError
 	if err := e.svc.Apply(ctx, Event{ID: id.New(), User: u, Profile: &Profile{DisplayName: "Ece", ActivityVisibility: "friends"}}); !errors.As(err, &verr) {
 		t.Fatalf("geçersiz görünürlük: %v", err)
+	}
+}
+
+// TestDeletedClearsReports: reports stay after the account's deletion, but
+// the user's ID in them (reporter, reported, handler) goes (v14
+// "Kullanıcı → yazdığı içerik: SET NULL").
+func TestDeletedClearsReports(t *testing.T) {
+	e := setup(t)
+	u, other := id.New(), id.New()
+	tf := e.tayfa(t, other)
+	must(t, e.svc.Apply(ctx, profile(id.New(), u, "Deniz")))
+	byU, aboutU, handledByU := id.New(), id.New(), id.New()
+	e.seed(t, `INSERT INTO reports (id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason) VALUES
+		($1, $3, $4, 'user', $5, $5, 'spam'), ($2, $3, $5, 'user', $4, $4, 'spam')`,
+		byU.PG(), aboutU.PG(), tf.PG(), u.PG(), other.PG())
+	e.seed(t, `INSERT INTO reports (id, tayfa_id, reporter_id, target_type, target_id, reason, status, resolution, handled_by, handled_at)
+		VALUES ($1, $2, $3, 'user', $5, 'other', 'resolved', 'dismissed', $4, now())`, handledByU.PG(), tf.PG(), other.PG(), u.PG(), id.New().PG())
+
+	must(t, e.svc.Apply(ctx, Event{ID: id.New(), User: u, Deleted: true}))
+	if refs := e.userRefs(t, u); len(refs) != 0 {
+		t.Fatalf("kalan kayıtlar: %v", refs)
+	}
+	if n := e.count(t, `SELECT count(*) FROM reports`); n != 3 {
+		t.Fatalf("şikâyetler silindi: %d", n)
 	}
 }

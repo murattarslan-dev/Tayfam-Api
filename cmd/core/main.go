@@ -15,14 +15,17 @@ import (
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
 	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/announcement"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatrelay"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/identityminor"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/jobs"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/poll"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/profile"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/qa"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/report"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/social"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/userevents"
@@ -100,6 +103,14 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
+	minors, err := identityMinors(rt)
+	if err != nil {
+		return err
+	}
+	reports, err := report.New(report.Config{Pool: pool, Minors: minors})
+	if err != nil {
+		return err
+	}
 
 	background, err := jobs.New(jobs.Config{Pool: pool, Log: rt.Log})
 	if err != nil {
@@ -141,19 +152,45 @@ func setup(rt *service.Runtime) error {
 	corev1.RegisterPollServiceServer(srv, grpcapi.NewPollServer(polls, rt.Log))
 	corev1.RegisterSocialServiceServer(srv, grpcapi.NewSocialServer(socials, rt.Log))
 	corev1.RegisterProfileServiceServer(srv, grpcapi.NewProfileServer(profiles, rt.Log))
+	corev1.RegisterReportServiceServer(srv, grpcapi.NewReportServer(reports, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
 	// Tekrarlayan etkinliklerin önümüzdeki 8 haftalık örnekleri (issue #51).
 	// Birden fazla pod'da çalışabilir: tayfa ve seri satırı kilitlenir,
 	// örnekler (series_id, starts_at) ile tekildir.
 	rt.AddWorker("event-series", events.RunSeriesGenerator)
 	// Pasif tayfa temizliği, 72 saatlik tayfa silme, 30 günlük kalıcı silme,
-	// yürüyüş dönmeme alarmı ve plaka temizliği (issue #66). Her biri ayrı
+	// yürüyüş dönmeme alarmı ve plaka temizliği (issue #66); şikâyetlerin
+	// 7 gün sonra platforma yükselmesi ve 1 yıllık saklama süresi (#76). Her biri ayrı
 	// bir worker; birden fazla pod'da her partiyi advisory kilidi alan tek
 	// pod işler.
 	for _, w := range background.Workers() {
 		rt.AddWorker(w.Name, w.Run)
 	}
 	return addRelay(rt, pool)
+}
+
+// identityMinors returns the client of identity's IsMinor with core's
+// service token for identity (ADR-0012, ADR-0013). Only a local environment
+// may run without the token; every report then counts as involving a minor
+// (the safe side).
+func identityMinors(rt *service.Runtime) (report.MinorChecker, error) {
+	tok, ok := rt.ServiceToken("identity")
+	if !ok {
+		if err := rt.Config.Err(); err != nil {
+			return nil, err
+		}
+		rt.Log.Warn("identity servis token'ı yok; şikâyetler 18 yaş altı sayılır (yalnızca yerel ortam)")
+		return identityminor.Unavailable{}, nil
+	}
+	addr := rt.Config.Required("IDENTITY_GRPC_ADDR")
+	if err := rt.Config.Err(); err != nil {
+		return nil, err
+	}
+	conn, err := grpcx.NewClient(addr, auth.ServiceTokenFrom(tok)...)
+	if err != nil {
+		return nil, err
+	}
+	return identityminor.New(identityv1.NewMinorServiceClient(conn)), nil
 }
 
 // addRelay starts the outbox relay that delivers core's events to chat with

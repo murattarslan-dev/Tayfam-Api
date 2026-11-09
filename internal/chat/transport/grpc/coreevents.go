@@ -52,6 +52,7 @@ var notificationTypes = map[chatv1.NotificationType]string{
 	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_REQUEST:           notification.TypeFriendRequest,
 	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_ACCEPTED:          notification.TypeFriendAccepted,
 	chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_INVITATION:         notification.TypeTayfaInvitation,
+	chatv1.NotificationType_NOTIFICATION_TYPE_REPORT_RESOLVED:          notification.TypeReportResolved,
 }
 
 var targetTypes = map[chatv1.NotificationTargetType]string{
@@ -61,6 +62,7 @@ var targetTypes = map[chatv1.NotificationTargetType]string{
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_EVENT:        notification.TargetEvent,
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_ANSWER:       notification.TargetAnswer,
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_USER:         notification.TargetUser,
+	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_REPORT:       notification.TargetReport,
 }
 
 var warningReasons = map[chatv1.TayfaWarningReason]string{

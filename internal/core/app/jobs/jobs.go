@@ -9,6 +9,9 @@
 //	purge           hard deletes tayfas and content soft deleted 30 days ago
 //	hike-alert      raises hike.overdue for hikers who did not return
 //	plates          clears convoy plates 30 days after the event ended
+//	report-escalation  sends reports open for 7 days to the platform (#76)
+//	retention       deletes resolved reports and audit records after a
+//	                year (#76)
 //
 // There is no job queue. Each job is a Go ticker that scans the database
 // state, so after a restart the next run continues where the last one
@@ -50,6 +53,9 @@ const (
 	JobPurge         = "purge"
 	JobHikeAlert     = "hike-alert"
 	JobPlates        = "plates"
+	// Issue #76.
+	JobReportEscalation = "report-escalation"
+	JobRetention        = "retention"
 )
 
 // Default run intervals.
@@ -61,6 +67,10 @@ const (
 	// DefaultHikeAlertInterval: every five minutes (v14).
 	DefaultHikeAlertInterval = 5 * time.Minute
 	DefaultPlatesInterval    = 24 * time.Hour
+	// DefaultReportEscalationInterval: a report is escalated at most an
+	// hour after its seventh day.
+	DefaultReportEscalationInterval = time.Hour
+	DefaultRetentionInterval        = 24 * time.Hour
 )
 
 // Thresholds (project plan §7, v14 "Saklama süreleri").
@@ -89,6 +99,9 @@ const (
 	contentBatch = 500
 	hikeBatch    = 100
 	plateBatch   = 500
+	reportBatch  = 100
+	// retentionBatch: reports and audit records deleted per transaction.
+	retentionBatch = 500
 	// A purged tayfa takes its whole content with it (ON DELETE CASCADE),
 	// so tayfas are purged one per transaction.
 	purgeTayfaBatch = 1
@@ -139,6 +152,9 @@ type Intervals struct {
 	Purge         time.Duration
 	HikeAlert     time.Duration
 	Plates        time.Duration
+	// Issue #76.
+	ReportEscalation time.Duration
+	Retention        time.Duration
 }
 
 func (i Intervals) withDefaults() Intervals {
@@ -152,6 +168,8 @@ func (i Intervals) withDefaults() Intervals {
 	def(&i.Purge, DefaultPurgeInterval)
 	def(&i.HikeAlert, DefaultHikeAlertInterval)
 	def(&i.Plates, DefaultPlatesInterval)
+	def(&i.ReportEscalation, DefaultReportEscalationInterval)
+	def(&i.Retention, DefaultRetentionInterval)
 	return i
 }
 
@@ -199,6 +217,8 @@ func (s *Service) Workers() []Worker {
 		{JobPurge, s.every(JobPurge, iv.Purge, s.Purge)},
 		{JobHikeAlert, s.every(JobHikeAlert, iv.HikeAlert, s.AlertOverdueHikes)},
 		{JobPlates, s.every(JobPlates, iv.Plates, s.ClearPlates)},
+		{JobReportEscalation, s.every(JobReportEscalation, iv.ReportEscalation, s.EscalateReports)},
+		{JobRetention, s.every(JobRetention, iv.Retention, s.ExpireRecords)},
 	}
 }
 

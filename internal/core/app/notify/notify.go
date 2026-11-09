@@ -57,6 +57,9 @@ const (
 	TypeFriendRequest   = "friend_request"
 	TypeFriendAccepted  = "friend_accepted"
 	TypeTayfaInvitation = "tayfa_invitation"
+	// TypeReportResolved goes to the reporter alone, always without an
+	// actor: the reporter is not told who handled the report (issue #76).
+	TypeReportResolved = "report_resolved"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -66,7 +69,8 @@ const (
 	TargetAnnouncement = "announcement"
 	TargetEvent        = "event"
 	TargetAnswer       = "answer"
-	TargetUser         = "user" // target ID: a user, whose profile the client opens
+	TargetUser         = "user"   // target ID: a user, whose profile the client opens
+	TargetReport       = "report" // target ID: the reporter's own report
 )
 
 // Extra keys: further IDs or a classification, never text.

@@ -44,6 +44,9 @@ const (
 	TypeFriendRequest   = "friend_request"
 	TypeFriendAccepted  = "friend_accepted"
 	TypeTayfaInvitation = "tayfa_invitation"
+	// TypeReportResolved: a report the recipient filed was resolved (issue
+	// #76). It never has an actor.
+	TypeReportResolved = "report_resolved"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -54,6 +57,7 @@ const (
 	TargetEvent        = "event"
 	TargetAnswer       = "answer"
 	TargetUser         = "user"
+	TargetReport       = "report"
 )
 
 // Reasons of TypeTayfaWarned.
@@ -76,6 +80,8 @@ func targetOf(typ string) (string, bool) {
 		return TargetAnswer, true
 	case TypeJoinRequest:
 		return TargetMembership, true
+	case TypeReportResolved:
+		return TargetReport, true
 	case TypeJoinApproved, TypeTayfaDeletionRequested, TypeTayfaWarned, TypeTayfaArchived, TypeTayfaInvitation:
 		return TargetTayfa, true
 	case TypeFriendRequest, TypeFriendAccepted:
@@ -128,6 +134,10 @@ func (r Request) Validate() error {
 	}
 	if (r.Type == TypeHikeOverdue) != (r.Subject != id.ID{}) {
 		return apperr.Validation("notification_requested.subject_user_id")
+	}
+	// The reporter is never told who handled their report.
+	if r.Type == TypeReportResolved && r.Actor != (id.ID{}) {
+		return apperr.Validation("actor_id")
 	}
 	if r.Type == TypeTayfaWarned {
 		if r.Reason != ReasonInactive && r.Reason != ReasonFewMembers {

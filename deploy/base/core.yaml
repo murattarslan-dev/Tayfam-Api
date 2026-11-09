@@ -71,6 +71,9 @@ spec:
             # chat audience'ı için geçerli ve 10 dakikalık.
             - { name: CHAT_GRPC_ADDR, value: "chat:9090" }
             - { name: SERVICE_TOKEN_FILE_CHAT, value: /var/run/secrets/tayfam/chat/token }
+            # Şikâyet önceliği → identity MinorService.IsMinor (ADR-0012).
+            # Token yalnızca identity audience'ı için geçerli ve 10 dakikalık.
+            - { name: SERVICE_TOKEN_FILE_IDENTITY, value: /var/run/secrets/tayfam/identity/token }
             # Ortama özel secret (deploy/apps/<ortam>/secrets, SOPS ile şifreli).
             # pg_hba core kullanıcısını yalnızca core veritabanına, TLS ile alır.
             - { name: DB_HOST, value: tayfam-pg-rw }
@@ -100,6 +103,7 @@ spec:
           volumeMounts:
             - { name: kube-api, mountPath: /var/run/secrets/tayfam/kube-api, readOnly: true }
             - { name: chat-token, mountPath: /var/run/secrets/tayfam/chat, readOnly: true }
+            - { name: identity-token, mountPath: /var/run/secrets/tayfam/identity, readOnly: true }
       volumes:
         # Cluster'ın açık anahtarlarını (JWKS) okumak için API sunucusunun CA'sı
         # ve audience'ı API sunucusu olan 10 dakikalık token. Bu token'la
@@ -126,6 +130,17 @@ spec:
               - serviceAccountToken:
                   path: token
                   audience: chat.tayfam.internal
+                  expirationSeconds: 600
+        # identity'nin IsMinor metodunu çağırmak için servis token'ı: audience
+        # identity.tayfam.internal, 10 dakika. identity bu token'ı yalnızca
+        # IsMinor'da kabul eder; chat ve core'da geçmez.
+        - name: identity-token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: identity.tayfam.internal
                   expirationSeconds: 600
 ---
 # core'un kimliği (ADR-0013). Rol bağlanmaz.

@@ -142,6 +142,16 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.AlreadyExists, corev1.ErrorReason_ERROR_REASON_ALREADY_INVITED, true
 	case errors.Is(err, apperr.ErrInviteNotAllowed):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_INVITE_NOT_ALLOWED, true
+	case errors.Is(err, apperr.ErrReportNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_REPORT_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrReportTargetNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_REPORT_TARGET_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrReportLimit):
+		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_REPORT_LIMIT, true
+	case errors.Is(err, apperr.ErrReportAlreadyResolved):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_REPORT_ALREADY_RESOLVED, true
+	case errors.Is(err, apperr.ErrReportActionMissing):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_REPORT_ACTION_MISSING, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

@@ -653,6 +653,38 @@ var expected = []struct {
 	{invited, InviteDirectCancel, false},
 	{banned, InviteDirectCancel, false},
 	{nonMember, InviteDirectCancel, false},
+	// ReportCreate
+	{admin, ReportCreate, true},
+	{moderator, ReportCreate, true},
+	{member, ReportCreate, true},
+	{mutedMember, ReportCreate, true},
+	{mutedModerator, ReportCreate, true},
+	{pending, ReportCreate, false},
+	{invited, ReportCreate, false},
+	{banned, ReportCreate, false},
+	{nonMember, ReportCreate, false},
+
+	// ReportQueueView
+	{admin, ReportQueueView, true},
+	{moderator, ReportQueueView, true},
+	{member, ReportQueueView, false},
+	{mutedMember, ReportQueueView, false},
+	{mutedModerator, ReportQueueView, true},
+	{pending, ReportQueueView, false},
+	{invited, ReportQueueView, false},
+	{banned, ReportQueueView, false},
+	{nonMember, ReportQueueView, false},
+
+	// ReportResolve
+	{admin, ReportResolve, true},
+	{moderator, ReportResolve, true},
+	{member, ReportResolve, false},
+	{mutedMember, ReportResolve, false},
+	{mutedModerator, ReportResolve, false},
+	{pending, ReportResolve, false},
+	{invited, ReportResolve, false},
+	{banned, ReportResolve, false},
+	{nonMember, ReportResolve, false},
 }
 
 func TestAllowedMatrix(t *testing.T) {
@@ -776,6 +808,9 @@ func TestMutedAdmin(t *testing.T) {
 		// Reading polls; a muted member neither opens polls nor votes.
 		PollView:       true,
 		PollViewVoters: true,
+		// Filing a report and reading the queue; resolving is a write.
+		ReportCreate:    true,
+		ReportQueueView: true,
 	}
 	for a := Action(1); a < actionEnd; a++ {
 		if got := Allowed(m, a, now); got != want[a] {

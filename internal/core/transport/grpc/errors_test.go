@@ -104,6 +104,11 @@ func TestErrorStatus(t *testing.T) {
 		{apperr.ErrInvitationNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_INVITATION_NOT_FOUND},
 		{apperr.ErrAlreadyInvited, codes.AlreadyExists, corev1.ErrorReason_ERROR_REASON_ALREADY_INVITED},
 		{apperr.ErrInviteNotAllowed, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_INVITE_NOT_ALLOWED},
+		{apperr.ErrReportNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_REPORT_NOT_FOUND},
+		{apperr.ErrReportTargetNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_REPORT_TARGET_NOT_FOUND},
+		{apperr.ErrReportLimit, codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_REPORT_LIMIT},
+		{apperr.ErrReportAlreadyResolved, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_REPORT_ALREADY_RESOLVED},
+		{apperr.ErrReportActionMissing, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_REPORT_ACTION_MISSING},
 		// Wrapped errors keep their reason.
 		{fmt.Errorf("katman: %w", apperr.ErrTayfaNotFound), codes.NotFound, corev1.ErrorReason_ERROR_REASON_TAYFA_NOT_FOUND},
 		// The memberships trigger, second line of defence.
