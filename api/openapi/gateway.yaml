@@ -151,6 +151,127 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
 
+  # --- Hesap (identity AccountService, issue #75) ---
+
+  /v1/me:
+    delete:
+      operationId: deleteAccount
+      summary: Hesabınızı siler (KVKK)
+      description: |
+        **Yeniden kimlik doğrulama:** Son 10 dakika içinde Google/Apple ile
+        giriş yapılmış olmalıdır; hem erişim token'ı hem de oturumu o
+        girişten gelmelidir. `/v1/auth/refresh` ile yenilenmiş bir token
+        yetmez. Değilse `403 reauthentication-required`: istemci kullanıcıyı
+        sağlayıcıyla yeniden giriş yaptırır (`/v1/auth/sign-in`) ve yeni
+        token'la tekrar dener.
+
+        Kişisel bilgiler (ad, profil fotoğrafı, doğum tarihi, referans kodu)
+        hemen silinir; tüm cihazlardaki oturumlar kapanır, tayfalardan
+        çıkılır. İçerikler kalır, yazarı "Silinmiş kullanıcı" görünür. Kayıt
+        30 gün sonra tamamen silinir; geri alma yoktur. Aynı Google/Apple
+        hesabıyla sonraki giriş yeni bir hesap açar. Web çerezleri silinir.
+
+        Erişim token'ı iptal edilemez (ADR-0004): kalan ömrü boyunca (en
+        fazla 15 dakika) hesap uçları onu reddeder, tayfa uçları üyelik
+        kalmadığı için reddeder.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Hesap silindi; web çerezleri silindi }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/sessions:
+    get:
+      operationId: listSessions
+      summary: Açık oturumlarınız (cihaz başına bir oturum)
+      description: |
+        En son kullanılan önce, en fazla 100. IP adresi ve token dönmez.
+        `current` bu isteğin oturumudur. Kapatılmış bir oturumun token'ı
+        oturum uçlarında `401` alır.
+      responses:
+        "200":
+          description: Oturumlar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceSessionList" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/sessions/{session_id}:
+    parameters:
+      - $ref: "#/components/parameters/SessionID"
+    delete:
+      operationId: revokeSession
+      summary: Bir oturumu kapatır (uzaktan çıkış)
+      description: |
+        O cihazın refresh token'ı hemen geçersiz olur; erişim token'ı en
+        fazla 15 dakika daha geçerli kalabilir (ADR-0004). Kendi oturumunuzu
+        kapatmak çıkış yapmaktır (çerezler silinmez; web için
+        `/v1/auth/sign-out` kullanılır). Başka kullanıcının, bilinmeyen ya da
+        zaten kapalı oturum aynı cevabı alır (`session-not-found`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Oturum kapandı }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/sessions/sign-out-others:
+    post:
+      operationId: revokeOtherSessions
+      summary: Bu oturum dışındaki tüm oturumları kapatır
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Kapatılan oturum sayısı
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RevokedSessions" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/consents:
+    get:
+      operationId: getConsents
+      summary: Güncel metin sürümleri ve onay durumunuz
+      description: |
+        Aydınlatma metni veya kullanım koşulları yeni sürümle yayınlanınca
+        `consent_required` true olur (giriş ve yenileme yanıtında da döner).
+        İstemci yeni metinleri gösterir ve `POST /v1/me/consents` ile onaylar.
+      responses:
+        "200":
+          description: Onay durumu
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConsentStatus" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: acceptConsents
+      summary: Güncel metin sürümlerini onaylar
+      description: |
+        Gösterilen sürümler gönderilir; güncel değillerse `409
+        consent-outdated` (ekran açıkken yeni sürüm yayınlanmış olabilir).
+        Onaylar yalnızca eklenir; aynı sürüm tekrar onaylanınca bir şey
+        değişmez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConsentRequest" }
+      responses:
+        "204": { description: Onaylandı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   # --- Tayfalar (core TayfaService) ---
 
   /v1/tayfas:
@@ -2662,6 +2783,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    SessionID:
+      name: session_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     PageSize:
       name: page_size
       in: query
@@ -2764,6 +2890,9 @@ components:
         - invite-not-allowed
         # identity: hesap ve referans kodu (#71; rate-limited yukarıda)
         - referral-code-not-found
+        # identity: hesap yönetimi (#75)
+        - reauthentication-required
+        - session-not-found
         # chat: bildirimler (#64)
         - notification-not-found
       content:
@@ -2827,6 +2956,12 @@ components:
           description: Yalnızca mobil; web'de çerezdedir.
         refresh_expires_at: { type: string, format: date-time }
         registration_pending: { type: boolean }
+        consent_required:
+          type: boolean
+          description: |
+            Kayıtlı kullanıcı aydınlatma metninin veya kullanım koşullarının
+            güncel sürümünü onaylamamış. İstemci `/v1/me/consents` ile
+            yeni metinleri gösterip onay alır.
 
     RegistrationRequirements:
       type: object
@@ -2835,6 +2970,49 @@ components:
         privacy_notice_version: { type: string }
         terms_version: { type: string }
         minimum_age: { type: integer }
+
+    DeviceSession:
+      type: object
+      required: [session_id, platform, created_at, last_seen_at, current]
+      properties:
+        session_id: { type: string, format: uuid }
+        platform: { type: string, enum: [android, ios, web, unknown] }
+        created_at: { type: string, format: date-time }
+        last_seen_at:
+          type: string
+          format: date-time
+          description: Oturumun son token yenilemesi.
+        current: { type: boolean, description: Bu isteğin oturumu. }
+
+    DeviceSessionList:
+      type: object
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          items: { $ref: "#/components/schemas/DeviceSession" }
+
+    RevokedSessions:
+      type: object
+      required: [revoked_count]
+      properties:
+        revoked_count: { type: integer, minimum: 0 }
+
+    ConsentStatus:
+      type: object
+      required: [privacy_notice_version, terms_version, consent_required]
+      properties:
+        privacy_notice_version: { type: string }
+        terms_version: { type: string }
+        consent_required: { type: boolean }
+
+    ConsentRequest:
+      type: object
+      required: [privacy_notice_version, terms_version]
+      additionalProperties: false
+      properties:
+        privacy_notice_version: { type: string, maxLength: 32 }
+        terms_version: { type: string, maxLength: 32 }
 
     RegistrationRequest:
       type: object

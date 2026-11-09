@@ -34,6 +34,9 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_INVALID_DISPLAY_NAME":    {http.StatusBadRequest, "invalid-display-name"},
 		"ERROR_REASON_RATE_LIMITED":            {http.StatusTooManyRequests, "rate-limited"},
 		"ERROR_REASON_REFERRAL_CODE_NOT_FOUND": {http.StatusNotFound, "referral-code-not-found"},
+		// Account management (issue #75).
+		"ERROR_REASON_REAUTHENTICATION_REQUIRED": {http.StatusForbidden, "reauthentication-required"},
+		"ERROR_REASON_SESSION_NOT_FOUND":         {http.StatusNotFound, "session-not-found"},
 	},
 	// proto/tayfam/core/v1/errors.proto
 	"core.tayfam.app": {
