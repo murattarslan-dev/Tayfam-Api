@@ -46,7 +46,7 @@ configMapGenerator:
       # "Tayfam Panel" (admin.tayfam.app). Gizli değildir; ikisi birlikte
       # verilmezse panel kurulmaz ve admin host'u 404 döner.
       - ADMIN_HOST=admin.tayfam.app
-      - CF_ACCESS_TEAM_DOMAIN=mio-app-pages.cloudflareaccess.com
+      - CF_ACCESS_TEAM_DOMAIN=murattarslan-dev.cloudflareaccess.com
       # AUD tag gizli değildir (her Access JWT'sinin aud alanında görünür);
       # gitleaks onu API anahtarı sanıyor.
       - CF_ACCESS_AUD=d008112c2504d19f293d7859a3d99bd0abfc9d51419f78893a0dee81c2324578 # gitleaks:allow
