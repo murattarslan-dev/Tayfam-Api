@@ -21,6 +21,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/jobs"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/poll"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/profile"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/qa"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/social"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
@@ -95,6 +96,10 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
+	profiles, err := profile.New(profile.Config{Pool: pool})
+	if err != nil {
+		return err
+	}
 
 	background, err := jobs.New(jobs.Config{Pool: pool, Log: rt.Log})
 	if err != nil {
@@ -135,6 +140,7 @@ func setup(rt *service.Runtime) error {
 	corev1.RegisterQAServiceServer(srv, grpcapi.NewQAServer(questions, rt.Log))
 	corev1.RegisterPollServiceServer(srv, grpcapi.NewPollServer(polls, rt.Log))
 	corev1.RegisterSocialServiceServer(srv, grpcapi.NewSocialServer(socials, rt.Log))
+	corev1.RegisterProfileServiceServer(srv, grpcapi.NewProfileServer(profiles, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
 	// Tekrarlayan etkinliklerin önümüzdeki 8 haftalık örnekleri (issue #51).
 	// Birden fazla pod'da çalışabilir: tayfa ve seri satırı kilitlenir,

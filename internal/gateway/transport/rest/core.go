@@ -73,6 +73,16 @@ type CoreDeps struct {
 	QA QAClient
 	// Polls enables the poll routes when set.
 	Polls PollClient
+	// Social enables the friend and block routes when set (issue #71).
+	Social SocialClient
+	// Invitations enables the direct invitation routes when set.
+	Invitations InvitationClient
+	// Profiles enables the profile routes when set.
+	Profiles ProfileClient
+	// Accounts is identity's AccountService; it enables the account and
+	// referral code routes when set. Its routes take the same verified user
+	// token as core's.
+	Accounts AccountClient
 	// Verifier checks the user's token before anything reaches core. core
 	// checks it again itself (ADR-0011); this only keeps junk out early.
 	Verifier TokenVerifier
@@ -147,6 +157,18 @@ func registerCore(mux *http.ServeMux, d CoreDeps) {
 	}
 	if d.Polls != nil {
 		registerPolls(mux, h)
+	}
+	if d.Social != nil {
+		registerSocial(mux, h)
+	}
+	if d.Invitations != nil {
+		registerInvitations(mux, h)
+	}
+	if d.Profiles != nil {
+		registerProfiles(mux, h)
+	}
+	if d.Accounts != nil {
+		registerAccount(mux, h)
 	}
 }
 

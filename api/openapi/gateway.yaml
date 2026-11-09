@@ -2201,6 +2201,400 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Hesap, referans kodu (identity AccountService, #71) ---
+
+  /v1/me/account:
+    get:
+      operationId: getAccount
+      summary: Kendi referans kodunuz ve katılım geçmişi görünürlüğünüz
+      responses:
+        "200":
+          description: Hesap ayarları
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: updateAccount
+      summary: Katılım geçmişinin kime görüneceğini değiştirir
+      description: |
+        `private`: yalnızca siz. `tayfa` (varsayılan): arkadaşlar tümünü,
+        ortak tayfa üyeleri son 14 gün hariç. `public`: arkadaşlar tümünü,
+        diğer herkes son 14 gün hariç.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AccountUpdate" }
+      responses:
+        "200":
+          description: Güncel hesap ayarları
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/referral-code:
+    post:
+      operationId: rotateReferralCode
+      summary: Yeni referans kodu üretir; eski kod ve linki hemen geçersiz olur
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Yeni kod
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReferralCode" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/referral-lookups:
+    post:
+      operationId: lookupReferralCode
+      summary: Referans koduyla kullanıcı bulur (yalnızca kimlik, ad, avatar)
+      description: |
+        Kod gövdededir; yol ve sorguda taşınmaz (erişim log'larına düşmez).
+        Kullanıcı başına saatte 10 arama; bulunan, bulunamayan ve bozuk her
+        deneme sayılır (`rate-limited`). Bulunamayan kod
+        `referral-code-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReferralLookupRequest" }
+      responses:
+        "200":
+          description: Kodun sahibi
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReferredUser" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  # --- Arkadaşlık ve engelleme (core SocialService, #71) ---
+
+  /v1/me/friends:
+    get:
+      operationId: listFriends
+      summary: Arkadaşlarınız (yalnızca size görünür)
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Arkadaşlar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FriendList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/friends/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/UserID"
+    delete:
+      operationId: removeFriendship
+      summary: Arkadaşlığı bitirir, isteğinizi geri çeker ya da gelen isteği reddeder
+      description: Karşı tarafa bildirilmez. Silinecek bir şey yoksa da başarılıdır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Kaldırıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/friend-requests:
+    get:
+      operationId: listFriendRequests
+      summary: Size gelen (`incoming`, varsayılan) ya da gönderdiğiniz (`outgoing`) istekler
+      parameters:
+        - name: direction
+          in: query
+          schema: { type: string, enum: [incoming, outgoing], default: incoming }
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: İstekler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FriendList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: sendFriendRequest
+      summary: Arkadaşlık isteği gönderir
+      description: |
+        Karşı tarafın size isteği zaten bekliyorsa kabul edilir (`state:
+        friends`). Günde 20 istek; reddedilenler de sayılır
+        (`friend-request-limit`). Engel varsa (iki yönden biri) kullanıcı
+        bilinmeyen gibi görünür (`user-not-found`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UserRef" }
+      responses:
+        "201":
+          description: İstek (ya da kabul edilen arkadaşlık)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Friend" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/friend-requests/{user_id}/acceptance:
+    parameters:
+      - $ref: "#/components/parameters/UserID"
+    post:
+      operationId: acceptFriendRequest
+      summary: Bu kullanıcının size gönderdiği isteği kabul eder
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Arkadaşlık
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Friend" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/blocks:
+    get:
+      operationId: listBlockedUsers
+      summary: Engellediğiniz kullanıcılar (sizi engelleyenler hiç listelenmez)
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Engellenenler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BlockedUserList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/blocks/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/UserID"
+    put:
+      operationId: blockUser
+      summary: Kullanıcıyı engeller; arkadaşlık ve bekleyen istek silinir
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Engellendi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: unblockUser
+      summary: Engeli kaldırır; arkadaşlık geri gelmez
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Engel kaldırıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  # --- Doğrudan tayfa daveti (core MembershipService, #71) ---
+
+  /v1/tayfas/{tayfa_id}/invitations:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listInvitations
+      summary: Tayfanın cevaplanmamış doğrudan davetleri, yeniden eskiye (yönetici)
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Davetler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvitationList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: inviteFriend
+      summary: Arkadaşınızı tayfaya davet eder (etkin, susturulmamış üye)
+      description: |
+        Yalnızca arkadaşlar (`not-friends`). Davet eden başına günde 10, tüm
+        tayfalar birlikte (`direct-invite-limit`). Banlı ya da başvurusu
+        bekleyen kişi `invite-not-allowed` (hangisi olduğu söylenmez).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UserRef" }
+      responses:
+        "201":
+          description: Davet
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Invitation" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/invitations/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/UserID"
+    delete:
+      operationId: cancelInvitation
+      summary: Cevaplanmamış bir daveti iptal eder (yönetici)
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Davet iptal edildi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/invitations:
+    get:
+      operationId: listMyInvitations
+      summary: Size gelen cevaplanmamış davetler, yeniden eskiye
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Davetler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvitationList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/invitations/{tayfa_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    delete:
+      operationId: declineInvitation
+      summary: Daveti reddeder; davet edene bildirilmez
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Davet reddedildi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/invitations/{tayfa_id}/acceptance:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    post:
+      operationId: acceptInvitation
+      summary: Daveti kabul eder
+      description: |
+        Tayfa açık katılımlıysa ya da davet eden şu an moderatör veya
+        yöneticiyse üyelik etkin olur; değilse onay bekler.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Üyelik (etkin ya da bekleyen)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Membership" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  # --- Profil (core ProfileService, #71) ---
+
+  /v1/users/{user_id}/profile:
+    parameters:
+      - $ref: "#/components/parameters/UserID"
+    get:
+      operationId: getUserProfile
+      summary: Bir kullanıcının profili (ad, avatar, ortak tayfalar)
+      description: |
+        Ortak tayfalar yalnızca ikinizin de etkin üyesi olduğu tayfalardır.
+        Engel varsa (iki yönden biri) `user-not-found`, var olmayan kullanıcıyla
+        aynı cevap.
+      responses:
+        "200":
+          description: Profil
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserProfile" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/users/{user_id}/activity:
+    parameters:
+      - $ref: "#/components/parameters/UserID"
+    get:
+      operationId: listUserActivity
+      summary: Kullanıcının katılım geçmişi, görünürlük ayarına göre
+      description: |
+        Arkadaşlar tümünü görür; ortak tayfa üyeleri (`tayfa`, `public`) ve
+        diğerleri (`public`) son 14 günü göremez; `private` yalnızca kişinin
+        kendisine görünür. Görmeye yetkiniz yoksa liste boş döner. Tayfa,
+        etkinlik ve süre yalnızca o tayfanın etkin üyelerine doludur.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Kayıtlar, yeniden eskiye
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActivityList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
 components:
   securitySchemes:
     bearer: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -2368,6 +2762,8 @@ components:
         - invitation-not-found
         - already-invited
         - invite-not-allowed
+        # identity: hesap ve referans kodu (#71; rate-limited yukarıda)
+        - referral-code-not-found
         # chat: bildirimler (#64)
         - notification-not-found
       content:
@@ -2449,6 +2845,13 @@ components:
         display_name: { type: string, minLength: 1, maxLength: 40 }
         accepted_privacy_notice_version: { type: string, maxLength: 32 }
         accepted_terms_version: { type: string, maxLength: 32 }
+        referral_code:
+          type: string
+          maxLength: 32
+          description: |
+            İsteğe bağlı; uygulamaya getiren kişinin referans kodu (Android'de
+            mağaza referansı, iOS'ta elle). Bir kez kaydedilir; kimseyi
+            bulmayan kod hata vermeden yok sayılır.
 
     # --- core ---
 
@@ -3587,3 +3990,167 @@ components:
 security:
   - bearer: []
   - cookie: []
+
+    # --- arkadaşlık, davet, profil, hesap (#71) ---
+
+    ActivityVisibility:
+      type: string
+      description: Katılım geçmişinin kime görüneceği.
+      enum: [private, tayfa, public]
+    Account:
+      type: object
+      required: [referral_code, activity_visibility]
+      properties:
+        referral_code:
+          type: string
+          description: Örn. `TYF-8K2M4Q`; paylaşım linki `tayfam.app/r/<kod>`.
+        activity_visibility: { $ref: "#/components/schemas/ActivityVisibility" }
+    AccountUpdate:
+      type: object
+      required: [activity_visibility]
+      additionalProperties: false
+      properties:
+        activity_visibility: { $ref: "#/components/schemas/ActivityVisibility" }
+    ReferralCode:
+      type: object
+      required: [referral_code]
+      properties:
+        referral_code: { type: string }
+    ReferralLookupRequest:
+      type: object
+      required: [referral_code]
+      additionalProperties: false
+      properties:
+        referral_code:
+          type: string
+          maxLength: 32
+          description: "`TYF-` öneki ve büyük/küçük harf fark etmez."
+    ReferredUser:
+      type: object
+      required: [user_id, display_name]
+      properties:
+        user_id: { type: string, format: uuid }
+        display_name: { type: string }
+        avatar_upload_id: { type: string, format: uuid }
+    UserRef:
+      type: object
+      required: [user_id]
+      additionalProperties: false
+      properties:
+        user_id: { type: string, format: uuid }
+    Friend:
+      type: object
+      required: [user_id, display_name, state, requested_at]
+      properties:
+        user_id: { type: string, format: uuid }
+        display_name: { type: string }
+        avatar_upload_id: { type: string, format: uuid }
+        state:
+          type: string
+          description: "`incoming`: size gelen istek; `outgoing`: sizin isteğiniz."
+          enum: [friends, incoming, outgoing]
+        requested_at: { type: string, format: date-time }
+        accepted_at: { type: string, format: date-time }
+    FriendList:
+      type: object
+      required: [friends]
+      properties:
+        friends:
+          type: array
+          items: { $ref: "#/components/schemas/Friend" }
+        next_page_token: { type: string }
+    BlockedUser:
+      type: object
+      required: [user_id, blocked_at]
+      properties:
+        user_id: { type: string, format: uuid }
+        display_name:
+          type: string
+          description: Hesap silinmişse yoktur.
+        avatar_upload_id: { type: string, format: uuid }
+        blocked_at: { type: string, format: date-time }
+    BlockedUserList:
+      type: object
+      required: [users]
+      properties:
+        users:
+          type: array
+          items: { $ref: "#/components/schemas/BlockedUser" }
+        next_page_token: { type: string }
+    Invitation:
+      type: object
+      required: [tayfa_id, tayfa_name, user_id, invited_at]
+      properties:
+        tayfa_id: { type: string, format: uuid }
+        tayfa_name: { type: string }
+        user_id:
+          type: string
+          format: uuid
+          description: Davet edilen kişi.
+        inviter_user_id:
+          type: string
+          format: uuid
+          description: Davet edenin hesabı silinmişse yoktur.
+        invited_at: { type: string, format: date-time }
+    InvitationList:
+      type: object
+      required: [invitations]
+      properties:
+        invitations:
+          type: array
+          items: { $ref: "#/components/schemas/Invitation" }
+        next_page_token: { type: string }
+    UserProfile:
+      type: object
+      required: [user_id, display_name, self, mutual_tayfas, activity_visible]
+      properties:
+        user_id: { type: string, format: uuid }
+        display_name: { type: string }
+        avatar_upload_id: { type: string, format: uuid }
+        self: { type: boolean }
+        friend_state:
+          type: string
+          description: Aranızda arkadaşlık ya da istek yoksa alan yoktur.
+          enum: [friends, incoming, outgoing]
+        mutual_tayfas:
+          type: array
+          description: İkinizin de etkin üyesi olduğu tayfalar (en fazla 100); kendi profilinizde boş.
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: string }
+        activity_visible:
+          type: boolean
+          description: Katılım geçmişinden size bir şey gösterilip gösterilemeyeceği.
+        activity_visibility:
+          $ref: "#/components/schemas/ActivityVisibility"
+    ActivityRecord:
+      type: object
+      required: [event_type, mode, started_at, tayfa_member]
+      properties:
+        event_type: { $ref: "#/components/schemas/EventType" }
+        mode: { type: string, enum: [in_person, online] }
+        city: { type: string }
+        district: { type: string }
+        started_at: { type: string, format: date-time }
+        tayfa_member:
+          type: boolean
+          description: Kaydın tayfasının etkin üyesisiniz; aşağıdaki alanlar yalnızca o zaman doludur.
+        tayfa_id: { type: string, format: uuid }
+        tayfa_name: { type: string }
+        event_id:
+          type: string
+          format: uuid
+          description: Etkinlik silinmişse yoktur.
+        event_title: { type: string }
+        duration_minutes: { type: integer }
+    ActivityList:
+      type: object
+      required: [records]
+      properties:
+        records:
+          type: array
+          items: { $ref: "#/components/schemas/ActivityRecord" }
+        next_page_token: { type: string }

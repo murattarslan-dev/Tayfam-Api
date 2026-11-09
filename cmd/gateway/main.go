@@ -83,6 +83,9 @@ func setup(rt *service.Runtime) error {
 			Events:              corev1.NewEventServiceClient(conn),
 			QA:                  corev1.NewQAServiceClient(conn),
 			Polls:               corev1.NewPollServiceClient(conn),
+			Social:              corev1.NewSocialServiceClient(conn),
+			Invitations:         corev1.NewMembershipServiceClient(conn),
+			Profiles:            corev1.NewProfileServiceClient(conn),
 			Verifier:            v,
 			Log:                 rt.Log,
 			TrustCFConnectingIP: trustCF,
@@ -109,6 +112,11 @@ func setup(rt *service.Runtime) error {
 			Verifier:      v,
 			Log:           rt.Log,
 		}
+	}
+	// Account settings live in identity but take the same user token
+	// check as core's routes (identity checks it again itself).
+	if conn := conns["identity"]; conn != nil && deps.Core.Verifier != nil {
+		deps.Core.Accounts = identityv1.NewAccountServiceClient(conn)
 	}
 	rt.AddHTTPServer("http", httpAddr, rest.NewRouter(deps))
 	return nil
