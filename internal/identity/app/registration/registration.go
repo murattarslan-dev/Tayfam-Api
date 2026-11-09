@@ -10,7 +10,6 @@ package registration
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -19,11 +18,11 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/birthdate"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/refcode"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/userevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -92,6 +91,11 @@ type Input struct {
 	// Versions of the texts the user was shown and accepted.
 	PrivacyNoticeVersion string
 	TermsVersion         string
+	// ReferralCode is the code of the user who brought this one to the app
+	// (Android install referrer or typed in on iOS), optional. A code that
+	// finds nobody is ignored without an error, so registration tells
+	// nothing about which codes exist.
+	ReferralCode string
 }
 
 // Complete validates input and finishes registration. On ErrUnderAge the
@@ -152,12 +156,15 @@ func (s *Service) Complete(ctx context.Context, user id.ID, in Input) error {
 				return fmt.Errorf("ad: %w", err)
 			}
 		}
-		if err := assignRefCode(ctx, tx, q, user); err != nil {
+		if _, err := refcode.Assign(ctx, tx, user, false); err != nil {
+			return err
+		}
+		if err := setReferrer(ctx, q, user, in.ReferralCode); err != nil {
 			return err
 		}
 		// The user is now visible to other services: core and chat get the
 		// profile copy (ADR-0009). Written last, see outbox.Write.
-		profile := userevents.Profile{DisplayName: name}
+		profile := userevents.Profile{DisplayName: name, ActivityVisibility: u.ActivityVisibility}
 		if profile.DisplayName == "" {
 			profile.DisplayName = u.DisplayName.String
 		}
@@ -192,40 +199,24 @@ func (s *Service) block(ctx context.Context, q *store.Queries, user id.ID) error
 	return nil
 }
 
-// refCodeAlphabet has no easily confused characters (0/O, 1/I/L).
-const refCodeAlphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ" + "L"
-
-// assignRefCode gives the user a referral code such as TYF-8K2M4Q. A clash
-// with an existing code is retried inside a savepoint.
-func assignRefCode(ctx context.Context, tx pgx.Tx, q *store.Queries, user id.ID) error {
-	for range 5 {
-		sp, err := tx.Begin(ctx)
-		if err != nil {
-			return fmt.Errorf("savepoint: %w", err)
-		}
-		_, err = q.WithTx(sp).SetRefCode(ctx, store.SetRefCodeParams{ID: user.PG(), RefCode: pgtype.Text{String: newRefCode(), Valid: true}})
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			_ = sp.Rollback(ctx)
-			continue
-		}
-		if err != nil {
-			_ = sp.Rollback(ctx)
-			return fmt.Errorf("referans kodu: %w", err)
-		}
-		return sp.Commit(ctx)
+// setReferrer records who referred user, once (users_referral_once). An
+// empty, malformed or unknown code is ignored.
+func setReferrer(ctx context.Context, q *store.Queries, user id.ID, code string) error {
+	code, ok := refcode.Normalize(code)
+	if !ok {
+		return nil
 	}
-	return errors.New("referans kodu üretilemedi")
-}
-
-func newRefCode() string {
-	var b [6]byte
-	_, _ = rand.Read(b[:]) // crypto/rand.Read never returns an error
-	out := []byte("TYF-")
-	for _, x := range b {
-		out = append(out, refCodeAlphabet[int(x)%len(refCodeAlphabet)])
+	ref, err := q.FindUserByRefCode(ctx, pgtype.Text{String: code, Valid: true})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
 	}
-	return string(out)
+	if err != nil {
+		return fmt.Errorf("referans: %w", err)
+	}
+	if _, err := q.SetReferrer(ctx, store.SetReferrerParams{ID: user.PG(), ReferrerID: ref.ID}); err != nil {
+		return fmt.Errorf("referans: %w", err)
+	}
+	return nil
 }
 
 // cleanDisplayName normalises spaces and checks the 1–40 character limit.

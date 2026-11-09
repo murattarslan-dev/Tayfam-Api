@@ -51,6 +51,12 @@ type EventConsumer struct {
 	UpdatedAt    pgtype.Timestamptz
 }
 
+type RefCodeLookup struct {
+	ID         pgtype.UUID
+	UserID     pgtype.UUID
+	LookedUpAt pgtype.Timestamptz
+}
+
 type RefreshToken struct {
 	ID        pgtype.UUID
 	SessionID pgtype.UUID

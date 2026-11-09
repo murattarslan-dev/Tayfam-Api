@@ -20,11 +20,15 @@ type Querier interface {
 	// tamamlanamaz. Etkilenen satır sayısı 0 ise kayıt zaten yapılmış ya da
 	// engellenmiştir.
 	CompleteRegistration(ctx context.Context, arg CompleteRegistrationParams) (int64, error)
+	CountRecentRefCodeLookups(ctx context.Context, arg CountRecentRefCodeLookupsParams) (int64, error)
 	CreateAuthIdentity(ctx context.Context, arg CreateAuthIdentityParams) error
 	CreateDevice(ctx context.Context, arg CreateDeviceParams) error
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) error
+	// Sayılmayacak kadar eski denemeler aynı kişinin bir sonraki aramasında
+	// silinir; tablo kendi kendini küçük tutar.
+	DeleteOldRefCodeLookups(ctx context.Context, arg DeleteOldRefCodeLookupsParams) error
 	// Olaylar internal/platform/outbox.Write ile yazılır (sıralama kilidi). Bu
 	// dosyada yalnızca hesap silmede gereken temizlik var.
 	// Silinen kullanıcının henüz silinmemiş profil olayları görünen adını
@@ -33,6 +37,9 @@ type Querier interface {
 	// Oturum 90 gün kullanılmazsa sona erer (ADR-0004); her yenilemede süre
 	// yeniden başlar.
 	ExtendSession(ctx context.Context, arg ExtendSessionParams) error
+	// Kodla bulunan kişinin yalnızca kimliği, adı ve avatarı döner; kayıtlı ve
+	// silinmemiş hesaplar. Tayfaları, geçmişi ve arkadaşları buradan çıkmaz.
+	FindUserByRefCode(ctx context.Context, refCode pgtype.Text) (FindUserByRefCodeRow, error)
 	GetActiveSession(ctx context.Context, id pgtype.UUID) (GetActiveSessionRow, error)
 	GetAuthIdentity(ctx context.Context, arg GetAuthIdentityParams) (GetAuthIdentityRow, error)
 	GetUser(ctx context.Context, id pgtype.UUID) (GetUserRow, error)
@@ -40,13 +47,26 @@ type Querier interface {
 	// Yenilemede token ve oturumu birlikte kilitler; aynı token'la eşzamanlı iki
 	// yenileme isteğinden yalnızca biri ilerler, diğeri yeniden kullanım sayılır.
 	LockRefreshToken(ctx context.Context, tokenHash []byte) (LockRefreshTokenRow, error)
+	// Arama sınırı için aramayı yapan kişinin satırını kilitler: aynı kişinin
+	// eşzamanlı aramaları sırayla sayılır. Yalnızca kayıtlı ve silinmemiş hesap.
+	LockRegisteredUser(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
 	MarkRefreshTokenUsed(ctx context.Context, id pgtype.UUID) (int64, error)
 	// Aynı sürüm ikinci kez onaylanırsa yeni kayıt açılmaz.
 	RecordConsent(ctx context.Context, arg RecordConsentParams) error
+	RecordRefCodeLookup(ctx context.Context, arg RecordRefCodeLookupParams) error
 	RevokeSession(ctx context.Context, arg RevokeSessionParams) (int64, error)
 	RevokeUserSessions(ctx context.Context, arg RevokeUserSessionsParams) (int64, error)
+	// Referans kodu (veri modeli v14 "Arkadaşlık ve Davet (v11)", issue #71).
+	// Kodu yeniler; eski kod aynı anda geçersiz olur (eski link çalışmaz).
+	// Yalnızca kodu olan, kayıtlı ve silinmemiş hesapta çalışır.
+	RotateRefCode(ctx context.Context, arg RotateRefCodeParams) (int64, error)
+	// Katılım geçmişinin kime görüneceği (v14 "Profil görünürlüğü").
+	SetActivityVisibility(ctx context.Context, arg SetActivityVisibilityParams) (int64, error)
 	SetDisplayName(ctx context.Context, arg SetDisplayNameParams) error
 	SetRefCode(ctx context.Context, arg SetRefCodeParams) (int64, error)
+	// Referans kayıtta bir kez yazılır (trigger users_referral_once da
+	// korur). Referans veren kayıtlı ve silinmemiş olmalıdır.
+	SetReferrer(ctx context.Context, arg SetReferrerParams) (int64, error)
 	TouchAuthIdentity(ctx context.Context, arg TouchAuthIdentityParams) error
 	TouchDevice(ctx context.Context, id pgtype.UUID) error
 }

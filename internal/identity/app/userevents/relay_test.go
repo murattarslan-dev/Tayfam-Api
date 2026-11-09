@@ -85,9 +85,25 @@ func TestCoreRequestRejectsUnknown(t *testing.T) {
 		"konu yok":       {ID: id.New(), Type: TypeDeleted},
 		"bilinmeyen tür": {ID: id.New(), Type: "user.renamed", SubjectType: "user", SubjectID: id.New()},
 		"bozuk içerik":   {ID: id.New(), Type: TypeProfileUpdated, SubjectType: "user", SubjectID: id.New(), Payload: []byte("{")},
+		"bilinmeyen görünürlük": {ID: id.New(), Type: TypeProfileUpdated, SubjectType: "user", SubjectID: id.New(),
+			Payload: []byte(`{"display_name": "Ece", "activity_visibility": "friends"}`)},
 	} {
 		if _, err := coreRequest(e); err == nil {
 			t.Errorf("%s: hata bekleniyordu", name)
+		}
+	}
+}
+
+func TestCoreRequestCarriesVisibility(t *testing.T) {
+	for payload, want := range map[string]corev1.ActivityVisibility{
+		`{"display_name": "Ece"}`:                                   corev1.ActivityVisibility_ACTIVITY_VISIBILITY_UNSPECIFIED,
+		`{"display_name": "Ece", "activity_visibility": "private"}`: corev1.ActivityVisibility_ACTIVITY_VISIBILITY_PRIVATE,
+		`{"display_name": "Ece", "activity_visibility": "tayfa"}`:   corev1.ActivityVisibility_ACTIVITY_VISIBILITY_TAYFA,
+		`{"display_name": "Ece", "activity_visibility": "public"}`:  corev1.ActivityVisibility_ACTIVITY_VISIBILITY_PUBLIC,
+	} {
+		req, err := coreRequest(outbox.Event{ID: id.New(), Type: TypeProfileUpdated, SubjectType: "user", SubjectID: id.New(), Payload: []byte(payload)})
+		if err != nil || req.GetProfileUpdated().GetActivityVisibility() != want {
+			t.Errorf("%s: %v %v", payload, req, err)
 		}
 	}
 }

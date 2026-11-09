@@ -63,6 +63,23 @@ func (q *Queries) CompleteRegistration(ctx context.Context, arg CompleteRegistra
 	return result.RowsAffected(), nil
 }
 
+const countRecentRefCodeLookups = `-- name: CountRecentRefCodeLookups :one
+SELECT count(*) FROM ref_code_lookups
+WHERE user_id = $1 AND looked_up_at > $2
+`
+
+type CountRecentRefCodeLookupsParams struct {
+	UserID pgtype.UUID
+	Since  pgtype.Timestamptz
+}
+
+func (q *Queries) CountRecentRefCodeLookups(ctx context.Context, arg CountRecentRefCodeLookupsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRecentRefCodeLookups, arg.UserID, arg.Since)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createUser = `-- name: CreateUser :exec
 INSERT INTO users (id, display_name, locale)
 VALUES ($1, $2, $3)
@@ -77,6 +94,43 @@ type CreateUserParams struct {
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 	_, err := q.db.Exec(ctx, createUser, arg.ID, arg.DisplayName, arg.Locale)
 	return err
+}
+
+const deleteOldRefCodeLookups = `-- name: DeleteOldRefCodeLookups :exec
+DELETE FROM ref_code_lookups WHERE user_id = $1 AND looked_up_at <= $2
+`
+
+type DeleteOldRefCodeLookupsParams struct {
+	UserID pgtype.UUID
+	Since  pgtype.Timestamptz
+}
+
+// Sayılmayacak kadar eski denemeler aynı kişinin bir sonraki aramasında
+// silinir; tablo kendi kendini küçük tutar.
+func (q *Queries) DeleteOldRefCodeLookups(ctx context.Context, arg DeleteOldRefCodeLookupsParams) error {
+	_, err := q.db.Exec(ctx, deleteOldRefCodeLookups, arg.UserID, arg.Since)
+	return err
+}
+
+const findUserByRefCode = `-- name: FindUserByRefCode :one
+SELECT id, display_name, avatar_upload_id
+FROM users
+WHERE ref_code = $1 AND registered_at IS NOT NULL AND deleted_at IS NULL
+`
+
+type FindUserByRefCodeRow struct {
+	ID             pgtype.UUID
+	DisplayName    pgtype.Text
+	AvatarUploadID pgtype.UUID
+}
+
+// Kodla bulunan kişinin yalnızca kimliği, adı ve avatarı döner; kayıtlı ve
+// silinmemiş hesaplar. Tayfaları, geçmişi ve arkadaşları buradan çıkmaz.
+func (q *Queries) FindUserByRefCode(ctx context.Context, refCode pgtype.Text) (FindUserByRefCodeRow, error) {
+	row := q.db.QueryRow(ctx, findUserByRefCode, refCode)
+	var i FindUserByRefCodeRow
+	err := row.Scan(&i.ID, &i.DisplayName, &i.AvatarUploadID)
+	return i, err
 }
 
 const getUser = `-- name: GetUser :one
@@ -122,6 +176,77 @@ func (q *Queries) GetUser(ctx context.Context, id pgtype.UUID) (GetUserRow, erro
 	return i, err
 }
 
+const lockRegisteredUser = `-- name: LockRegisteredUser :one
+SELECT id FROM users
+WHERE id = $1 AND registered_at IS NOT NULL AND deleted_at IS NULL
+FOR NO KEY UPDATE
+`
+
+// Arama sınırı için aramayı yapan kişinin satırını kilitler: aynı kişinin
+// eşzamanlı aramaları sırayla sayılır. Yalnızca kayıtlı ve silinmemiş hesap.
+func (q *Queries) LockRegisteredUser(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockRegisteredUser, id)
+	var id_2 pgtype.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
+const recordRefCodeLookup = `-- name: RecordRefCodeLookup :exec
+INSERT INTO ref_code_lookups (id, user_id, looked_up_at) VALUES ($1, $2, $3)
+`
+
+type RecordRefCodeLookupParams struct {
+	ID         pgtype.UUID
+	UserID     pgtype.UUID
+	LookedUpAt pgtype.Timestamptz
+}
+
+func (q *Queries) RecordRefCodeLookup(ctx context.Context, arg RecordRefCodeLookupParams) error {
+	_, err := q.db.Exec(ctx, recordRefCodeLookup, arg.ID, arg.UserID, arg.LookedUpAt)
+	return err
+}
+
+const rotateRefCode = `-- name: RotateRefCode :execrows
+
+UPDATE users SET ref_code = $1, ref_code_rotated_at = now()
+WHERE id = $2 AND ref_code IS NOT NULL AND registered_at IS NOT NULL AND deleted_at IS NULL
+`
+
+type RotateRefCodeParams struct {
+	RefCode pgtype.Text
+	ID      pgtype.UUID
+}
+
+// Referans kodu (veri modeli v14 "Arkadaşlık ve Davet (v11)", issue #71).
+// Kodu yeniler; eski kod aynı anda geçersiz olur (eski link çalışmaz).
+// Yalnızca kodu olan, kayıtlı ve silinmemiş hesapta çalışır.
+func (q *Queries) RotateRefCode(ctx context.Context, arg RotateRefCodeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, rotateRefCode, arg.RefCode, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setActivityVisibility = `-- name: SetActivityVisibility :execrows
+UPDATE users SET activity_visibility = $1
+WHERE id = $2 AND registered_at IS NOT NULL AND deleted_at IS NULL
+`
+
+type SetActivityVisibilityParams struct {
+	ActivityVisibility string
+	ID                 pgtype.UUID
+}
+
+// Katılım geçmişinin kime görüneceği (v14 "Profil görünürlüğü").
+func (q *Queries) SetActivityVisibility(ctx context.Context, arg SetActivityVisibilityParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setActivityVisibility, arg.ActivityVisibility, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setDisplayName = `-- name: SetDisplayName :exec
 UPDATE users SET display_name = $1 WHERE id = $2 AND deleted_at IS NULL
 `
@@ -148,6 +273,27 @@ type SetRefCodeParams struct {
 
 func (q *Queries) SetRefCode(ctx context.Context, arg SetRefCodeParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setRefCode, arg.RefCode, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setReferrer = `-- name: SetReferrer :execrows
+UPDATE users u SET referred_by_user_id = $1, referred_at = now()
+WHERE u.id = $2 AND u.referred_at IS NULL AND u.id <> $1
+  AND EXISTS (SELECT 1 FROM users r WHERE r.id = $1 AND r.registered_at IS NOT NULL AND r.deleted_at IS NULL)
+`
+
+type SetReferrerParams struct {
+	ReferrerID pgtype.UUID
+	ID         pgtype.UUID
+}
+
+// Referans kayıtta bir kez yazılır (trigger users_referral_once da
+// korur). Referans veren kayıtlı ve silinmemiş olmalıdır.
+func (q *Queries) SetReferrer(ctx context.Context, arg SetReferrerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setReferrer, arg.ReferrerID, arg.ID)
 	if err != nil {
 		return 0, err
 	}
