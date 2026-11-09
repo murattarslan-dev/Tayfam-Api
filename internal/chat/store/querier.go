@@ -104,7 +104,9 @@ type Querier interface {
 	// Kişinin konuşmaları, son mesaja göre yeniden eskiye. Reddettiği istekler
 	// listelenmez; gönderen reddedilen isteğini görmeye devam eder (v7: bunu
 	// bilmez). unread karşı tarafın okunmamış, silinmemiş mesajlarıdır (en
-	// fazla 100). İmleç (last_message_at, id).
+	// fazla 100). peer_last_read_message_id karşı tarafın okundu işaretidir
+	// (okundu bilgisi; uygulama yalnızca active konuşmada gösterir). İmleç
+	// (last_message_at, id).
 	ListConversationsPage(ctx context.Context, arg ListConversationsPageParams) ([]ListConversationsPageRow, error)
 	// En eski önce, after_id'den yeniler: kaçırılan mesajları tamamlama
 	// (ADR-0005).

@@ -64,10 +64,12 @@ WHERE conversation_id = @conversation_id AND sender_id = @sender_id;
 -- Kişinin konuşmaları, son mesaja göre yeniden eskiye. Reddettiği istekler
 -- listelenmez; gönderen reddedilen isteğini görmeye devam eder (v7: bunu
 -- bilmez). unread karşı tarafın okunmamış, silinmemiş mesajlarıdır (en
--- fazla 100). İmleç (last_message_at, id).
+-- fazla 100). peer_last_read_message_id karşı tarafın okundu işaretidir
+-- (okundu bilgisi; uygulama yalnızca active konuşmada gösterir). İmleç
+-- (last_message_at, id).
 -- name: ListConversationsPage :many
 SELECT c.id, c.user_low_id, c.user_high_id, c.status, c.requested_by, c.accepted_at, c.last_message_at, c.created_at,
-       r.last_read_message_id,
+       r.last_read_message_id, p.last_read_message_id AS peer_last_read_message_id,
        (SELECT count(*) FROM (
           SELECT 1 FROM dm_messages m
           WHERE m.conversation_id = c.id AND m.deleted_at IS NULL
@@ -76,6 +78,7 @@ SELECT c.id, c.user_low_id, c.user_high_id, c.status, c.requested_by, c.accepted
           LIMIT 100) u)::int AS unread
 FROM dm_conversations c
 LEFT JOIN dm_conversation_reads r ON r.conversation_id = c.id AND r.user_id = @user_id::uuid
+LEFT JOIN dm_conversation_reads p ON p.conversation_id = c.id AND p.user_id <> @user_id::uuid
 WHERE (c.user_low_id = @user_id::uuid OR c.user_high_id = @user_id::uuid)
   AND NOT (c.status = 'declined' AND c.requested_by IS DISTINCT FROM @user_id::uuid)
   AND (sqlc.narg(after_at)::timestamptz IS NULL

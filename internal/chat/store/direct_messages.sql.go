@@ -467,7 +467,7 @@ func (q *Queries) HasUnreadConversationNotification(ctx context.Context, arg Has
 
 const listConversationsPage = `-- name: ListConversationsPage :many
 SELECT c.id, c.user_low_id, c.user_high_id, c.status, c.requested_by, c.accepted_at, c.last_message_at, c.created_at,
-       r.last_read_message_id,
+       r.last_read_message_id, p.last_read_message_id AS peer_last_read_message_id,
        (SELECT count(*) FROM (
           SELECT 1 FROM dm_messages m
           WHERE m.conversation_id = c.id AND m.deleted_at IS NULL
@@ -476,6 +476,7 @@ SELECT c.id, c.user_low_id, c.user_high_id, c.status, c.requested_by, c.accepted
           LIMIT 100) u)::int AS unread
 FROM dm_conversations c
 LEFT JOIN dm_conversation_reads r ON r.conversation_id = c.id AND r.user_id = $1::uuid
+LEFT JOIN dm_conversation_reads p ON p.conversation_id = c.id AND p.user_id <> $1::uuid
 WHERE (c.user_low_id = $1::uuid OR c.user_high_id = $1::uuid)
   AND NOT (c.status = 'declined' AND c.requested_by IS DISTINCT FROM $1::uuid)
   AND ($2::timestamptz IS NULL
@@ -492,22 +493,25 @@ type ListConversationsPageParams struct {
 }
 
 type ListConversationsPageRow struct {
-	ID                pgtype.UUID
-	UserLowID         pgtype.UUID
-	UserHighID        pgtype.UUID
-	Status            string
-	RequestedBy       pgtype.UUID
-	AcceptedAt        pgtype.Timestamptz
-	LastMessageAt     pgtype.Timestamptz
-	CreatedAt         pgtype.Timestamptz
-	LastReadMessageID pgtype.UUID
-	Unread            int32
+	ID                    pgtype.UUID
+	UserLowID             pgtype.UUID
+	UserHighID            pgtype.UUID
+	Status                string
+	RequestedBy           pgtype.UUID
+	AcceptedAt            pgtype.Timestamptz
+	LastMessageAt         pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	LastReadMessageID     pgtype.UUID
+	PeerLastReadMessageID pgtype.UUID
+	Unread                int32
 }
 
 // Kişinin konuşmaları, son mesaja göre yeniden eskiye. Reddettiği istekler
 // listelenmez; gönderen reddedilen isteğini görmeye devam eder (v7: bunu
 // bilmez). unread karşı tarafın okunmamış, silinmemiş mesajlarıdır (en
-// fazla 100). İmleç (last_message_at, id).
+// fazla 100). peer_last_read_message_id karşı tarafın okundu işaretidir
+// (okundu bilgisi; uygulama yalnızca active konuşmada gösterir). İmleç
+// (last_message_at, id).
 func (q *Queries) ListConversationsPage(ctx context.Context, arg ListConversationsPageParams) ([]ListConversationsPageRow, error) {
 	rows, err := q.db.Query(ctx, listConversationsPage,
 		arg.UserID,
@@ -532,6 +536,7 @@ func (q *Queries) ListConversationsPage(ctx context.Context, arg ListConversatio
 			&i.LastMessageAt,
 			&i.CreatedAt,
 			&i.LastReadMessageID,
+			&i.PeerLastReadMessageID,
 			&i.Unread,
 		); err != nil {
 			return nil, err

@@ -202,6 +202,16 @@ func TestConversationListVisibilityUnreadAndPaging(t *testing.T) {
 	if r := list(nil, 10); r[1].Unread != 0 {
 		t.Fatalf("hepsi okundu ama %d", r[1].Unread)
 	}
+	// The other party sees my read marker (read receipts).
+	xs, err := q.ListConversationsPage(ctx, ListConversationsPageParams{UserID: x.PG(), N: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range xs {
+		if c.ID == active.PG() && (c.PeerLastReadMessageID != m3.PG() || c.LastReadMessageID.Valid) {
+			t.Fatalf("karşı tarafın okundu işareti = %v", c.PeerLastReadMessageID)
+		}
+	}
 
 	// Only a party gets the conversation.
 	if _, err := q.GetConversationForUser(ctx, GetConversationForUserParams{ID: active.PG(), UserID: y.PG()}); !errors.Is(err, pgx.ErrNoRows) {
