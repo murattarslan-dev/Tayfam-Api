@@ -5,7 +5,7 @@
 #   gateway  http://localhost:8080  (ops: 8081)
 #   identity grpc: 9091, ops: 8091
 #   core     grpc: 9092, ops: 8092
-#   chat     grpc: 9093, ops: 8093
+#   chat     grpc: 9093, ops: 8093, http (WebSocket): 8094
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -42,13 +42,15 @@ DB_NAME=$identity_db AUTH_SIGNING_KEY=$signing_key IDENTITY_BIRTHDATE_KEYS=$birt
   OPS_ADDR=127.0.0.1:8091 GRPC_ADDR=127.0.0.1:9091 ./bin/identity & pids+=($!)
 unset signing_key birthdate_key
 DB_NAME=$core_db IDENTITY_GRPC_ADDR=127.0.0.1:9091 OPS_ADDR=127.0.0.1:8092 GRPC_ADDR=127.0.0.1:9092 ./bin/core & pids+=($!)
-DB_NAME=$chat_db CHAT_MESSAGE_KEYS=$message_key IDENTITY_GRPC_ADDR=127.0.0.1:9091 CORE_GRPC_ADDR=127.0.0.1:9092 OPS_ADDR=127.0.0.1:8093 GRPC_ADDR=127.0.0.1:9093 ./bin/chat & pids+=($!)
+DB_NAME=$chat_db CHAT_MESSAGE_KEYS=$message_key IDENTITY_GRPC_ADDR=127.0.0.1:9091 CORE_GRPC_ADDR=127.0.0.1:9092 OPS_ADDR=127.0.0.1:8093 GRPC_ADDR=127.0.0.1:9093 \
+  HTTP_ADDR=127.0.0.1:8094 CORS_ALLOWED_ORIGINS=http://localhost:3000 ./bin/chat & pids+=($!)
 unset message_key
 
 OPS_ADDR=127.0.0.1:8081 HTTP_ADDR=127.0.0.1:8080 \
 IDENTITY_GRPC_ADDR=127.0.0.1:9091 \
 CORE_GRPC_ADDR=127.0.0.1:9092 \
 CHAT_GRPC_ADDR=127.0.0.1:9093 \
+CHAT_REALTIME_URL=http://127.0.0.1:8094 \
 CORS_ALLOWED_ORIGINS=http://localhost:3000 \
   ./bin/gateway & pids+=($!)
 

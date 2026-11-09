@@ -53,6 +53,8 @@ func reasonFor(err error) (code codes.Code, reason chatv1.ErrorReason, ok bool) 
 		return codes.PermissionDenied, chatv1.ErrorReason_ERROR_REASON_ROLE_HIERARCHY, true
 	case errors.Is(err, apperr.ErrChannelNameTaken):
 		return codes.AlreadyExists, chatv1.ErrorReason_ERROR_REASON_CHANNEL_NAME_TAKEN, true
+	case errors.Is(err, apperr.ErrTicketLimit):
+		return codes.ResourceExhausted, chatv1.ErrorReason_ERROR_REASON_TICKET_LIMIT, true
 	}
 	return codes.Unknown, chatv1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }
@@ -74,6 +76,9 @@ func errorStatus(ctx context.Context, log *slog.Logger, err error) error {
 		return reasonStatus(code, reason, nil)
 	}
 	switch {
+	case errors.Is(err, apperr.ErrSessionEnded):
+		// Like an invalid token: the session is over.
+		return status.Error(codes.Unauthenticated, msgUnauthenticated)
 	case errors.Is(err, apperr.ErrUnavailable), errors.Is(err, apperr.ErrChannelsUnavailable):
 		return status.Error(codes.Unavailable, msgRejected)
 	case errors.Is(err, context.Canceled):

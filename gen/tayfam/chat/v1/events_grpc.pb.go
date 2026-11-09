@@ -39,6 +39,11 @@ type UserEventServiceClient interface {
 	// notification preferences; the user stays nowhere as a recipient or an
 	// actor) and keeps the profile copy as a tombstone, so a late event
 	// cannot bring it back.
+	//
+	// session_revoked, sanctioned and deleted also close the real-time
+	// connections of the session (or of every session of the user), remove
+	// its unused tickets and refuse new tickets for it until any access
+	// token it may still hold has expired (ADR-0004, ADR-0009; issue #82).
 	ApplyUserEvent(ctx context.Context, in *ApplyUserEventRequest, opts ...grpc.CallOption) (*ApplyUserEventResponse, error)
 }
 
@@ -77,6 +82,11 @@ type UserEventServiceServer interface {
 	// notification preferences; the user stays nowhere as a recipient or an
 	// actor) and keeps the profile copy as a tombstone, so a late event
 	// cannot bring it back.
+	//
+	// session_revoked, sanctioned and deleted also close the real-time
+	// connections of the session (or of every session of the user), remove
+	// its unused tickets and refuse new tickets for it until any access
+	// token it may still hold has expired (ADR-0004, ADR-0009; issue #82).
 	ApplyUserEvent(context.Context, *ApplyUserEventRequest) (*ApplyUserEventResponse, error)
 	mustEmbedUnimplementedUserEventServiceServer()
 }

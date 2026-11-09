@@ -57,6 +57,11 @@ spec:
           env:
             - { name: OPS_ADDR, value: ":8081" }
             - { name: GRPC_ADDR, value: ":9090" }
+            # WebSocket (issue #82): yalnızca gateway'den (NetworkPolicy
+            # chat-realtime). İzinli web origin'leri tayfam-env'deki
+            # CORS_ALLOWED_ORIGINS'tir. Bağlantılar bellektedir; replicas 1
+            # kalır (ADR-0005 "Ölçekleme").
+            - { name: HTTP_ADDR, value: ":8080" }
             - { name: IDENTITY_GRPC_ADDR, value: "identity:9090" }
             # Sessize almada üyelik kontrolü: core GetMembership, kullanıcının
             # kendi token'ıyla (ADR-0009). Servis token'ı gerekmez.
@@ -83,6 +88,7 @@ spec:
                 secretKeyRef: { name: chat-db, key: password }
           ports:
             - { name: grpc, containerPort: 9090 }
+            - { name: http, containerPort: 8080 }
             - { name: ops, containerPort: 8081 }
           livenessProbe:
             httpGet: { path: /livez, port: ops }
@@ -116,8 +122,8 @@ spec:
                   items:
                     - { key: ca.crt, path: ca.crt }
 ---
-# Yalnızca gRPC portu servis üzerinden açılır; ops portu (8081) sadece
-# kubelet probe'ları içindir ve servis üzerinden yayınlanmaz.
+# gRPC ve WebSocket (http) portları servis üzerinden açılır; ops portu (8081)
+# sadece kubelet probe'ları içindir ve servis üzerinden yayınlanmaz.
 apiVersion: v1
 kind: Service
 metadata:
@@ -127,6 +133,7 @@ spec:
   selector: { app.kubernetes.io/name: chat }
   ports:
     - { name: grpc, port: 9090, targetPort: grpc, appProtocol: grpc }
+    - { name: http, port: 8080, targetPort: http }
 ---
 # chat'in kimliği (ADR-0013). Rol bağlanmaz.
 apiVersion: v1

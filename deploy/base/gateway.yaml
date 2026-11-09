@@ -30,6 +30,9 @@ spec:
             - { name: IDENTITY_GRPC_ADDR, value: "identity:9090" }
             - { name: CORE_GRPC_ADDR, value: "core:9090" }
             - { name: CHAT_GRPC_ADDR, value: "chat:9090" }
+            # WebSocket (GET /v1/realtime) chat'in HTTP portuna olduğu gibi
+            # aktarılır; bileti chat doğrular (ADR-0005).
+            - { name: CHAT_REALTIME_URL, value: "http://chat:8080" }
           ports:
             - { name: http, containerPort: 8080 }
             - { name: ops, containerPort: 8081 }

@@ -61,6 +61,12 @@ func (s *UserEventServer) ApplyUserEvent(ctx context.Context, req *chatv1.ApplyU
 		e.Profile = p
 	case *chatv1.ApplyUserEventRequest_Deleted:
 		e.Deleted = true
+	case *chatv1.ApplyUserEventRequest_SessionRevoked:
+		if e.SessionRevoked, ok = id.Parse(ev.SessionRevoked.GetSessionId()); !ok {
+			return nil, validation("session_revoked.session_id")
+		}
+	case *chatv1.ApplyUserEventRequest_Sanctioned:
+		e.Sanctioned = true
 	default:
 		return nil, validation("event")
 	}

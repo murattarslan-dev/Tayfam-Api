@@ -2,6 +2,8 @@
 package main
 
 import (
+	"errors"
+	"net/url"
 	"strings"
 	"time"
 
@@ -101,6 +103,20 @@ func setup(rt *service.Runtime) error {
 			CheckInLimit: ratelimit.New(30, 30),
 		}
 	}
+	// chat's WebSocket port; GET /v1/realtime is passed there (ADR-0005).
+	var realtimeURL *url.URL
+	if conns["chat"] != nil {
+		if raw := rt.Config.Required("CHAT_REALTIME_URL"); raw != "" {
+			u, err := url.Parse(raw)
+			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+				return errors.New("CHAT_REALTIME_URL geçersiz")
+			}
+			realtimeURL = u
+		}
+		if err := rt.Config.Err(); err != nil {
+			return err
+		}
+	}
 	if conn := conns["chat"]; conn != nil {
 		// Bildirim (issue #64) ve kanal (issue #81) uçları: gateway token'ı
 		// chat'e ulaşmadan doğrular; chat yeniden doğrular (ADR-0011).
@@ -111,6 +127,8 @@ func setup(rt *service.Runtime) error {
 		deps.Chat = rest.ChatDeps{
 			Notifications: chatv1.NewNotificationServiceClient(conn),
 			Channels:      chatv1.NewChannelServiceClient(conn),
+			Realtime:      chatv1.NewRealtimeServiceClient(conn),
+			RealtimeURL:   realtimeURL,
 			Verifier:      v,
 			Log:           rt.Log,
 		}

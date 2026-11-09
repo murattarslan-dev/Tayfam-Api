@@ -66,6 +66,7 @@ run_outside "1) Başka bir namespace'ten (ele geçirilmiş pod):" "" \
   KAPALI "$(grpc identity)" \
   KAPALI "$(grpc core)" \
   KAPALI "$(grpc chat)" \
+  KAPALI "tcp://chat.$NS.svc.cluster.local:8080" \
   ACIK   "http://example.com"
 
 run_outside "2) Başka namespace, sahte 'gateway' etiketiyle:" "--labels=app.kubernetes.io/name=gateway" \
@@ -76,6 +77,7 @@ run_inside "3) gateway'in içinden:" gateway \
   ACIK   "tcp://identity:9090" \
   ACIK   "tcp://core:9090" \
   ACIK   "tcp://chat:9090" \
+  ACIK   "tcp://chat:8080" \
   KAPALI "tcp://tayfam-pg-rw:5432" \
   KAPALI "http://example.com"
 
@@ -84,6 +86,7 @@ run_inside "4) cloudflared'in içinden:" cloudflared \
   KAPALI "tcp://identity:9090" \
   KAPALI "tcp://core:9090" \
   KAPALI "tcp://chat:9090" \
+  KAPALI "tcp://chat:8080" \
   KAPALI "tcp://tayfam-pg-rw:5432"
 
 run_inside "5) core'un içinden (identity'ye açık anahtar için, Postgres'e, API sunucusuna JWKS için):" core \
@@ -91,6 +94,7 @@ run_inside "5) core'un içinden (identity'ye açık anahtar için, Postgres'e, A
   ACIK   "tcp://tayfam-pg-rw:5432" \
   ACIK   "tcp://kubernetes.default.svc:443" \
   KAPALI "tcp://chat:9090" \
+  KAPALI "tcp://chat:8080" \
   KAPALI "http://gateway:8080/v1/status" \
   KAPALI "http://example.com"
 

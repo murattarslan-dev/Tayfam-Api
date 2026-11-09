@@ -71,3 +71,13 @@ type SlowModeError struct {
 }
 
 func (e *SlowModeError) Error() string { return "yavaş mod" }
+
+// RealtimeService errors (issue #82).
+var (
+	// ErrTicketLimit: the caller already has as many unused tickets as
+	// allowed.
+	ErrTicketLimit = errors.New("bilet sınırı")
+	// ErrSessionEnded: the caller's session was revoked a short while ago
+	// (its access token may still be valid); no ticket or connection for it.
+	ErrSessionEnded = errors.New("oturum kapatılmış")
+)

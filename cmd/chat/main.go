@@ -8,6 +8,8 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
+	"strings"
 	"time"
 
 	chatdb "github.com/murattarslan-dev/tayfam-api/db/chat"
@@ -18,11 +20,14 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/coreevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/coremembers"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/realtime"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/userevents"
 	grpcapi "github.com/murattarslan-dev/tayfam-api/internal/chat/transport/grpc"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/transport/ws"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/grpcx"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/ratelimit"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/service"
 )
 
@@ -42,6 +47,14 @@ func setup(rt *service.Runtime) error {
 	// issue #81). prod'da zorunludur. local ve dev anahtarsız açılabilir:
 	// o zaman kanal metodları UNAVAILABLE döner, mesaj yazılmaz.
 	messageKeys := c.String("CHAT_MESSAGE_KEYS", "")
+	// WebSocket (issue #82): gateway GET /v1/realtime'ı bu porta olduğu gibi
+	// aktarır. İzinli web origin'leri gateway'in CORS listesiyle aynıdır
+	// (tayfam-env). Bağlantılar bellektedir; chat tek kopya çalışır
+	// (ADR-0005 "Ölçekleme").
+	httpAddr := c.String("HTTP_ADDR", ":8080")
+	origins := splitList(c.String("CORS_ALLOWED_ORIGINS", "https://tayfam.app"))
+	maxConns := c.Int("REALTIME_MAX_CONNECTIONS", 2000)
+	maxLifetime := c.Duration("REALTIME_MAX_LIFETIME", ws.DefaultMaxLifetime)
 	if err := c.Err(); err != nil {
 		return err
 	}
@@ -68,9 +81,24 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 
+	// Açık bağlantılar ve kapatılmış oturumlar (issue #82).
+	hub, err := realtime.NewHub(realtime.HubConfig{MaxTotal: maxConns, MaxPerUser: 5})
+	if err != nil {
+		return err
+	}
+	tickets, err := realtime.NewTickets(realtime.TicketsConfig{Pool: pool, Log: rt.Log, Ended: hub})
+	if err != nil {
+		return err
+	}
+
 	// Hesap silinince bildirimler ve tercihler de silinir (ADR-0009).
 	// Kanal mesajları kalır, yazar alanı boşalır; okunma kayıtları silinir.
-	userEvents, err := userevents.New(userevents.Config{Pool: pool, Cleanups: []userevents.Cleanup{notification.Cleanup, channel.Cleanup}})
+	// Oturum iptali, yaptırım ve silme açık bağlantıları kapatır (ADR-0004).
+	userEvents, err := userevents.New(userevents.Config{
+		Pool:     pool,
+		Cleanups: []userevents.Cleanup{notification.Cleanup, channel.Cleanup, realtime.Cleanup},
+		Sessions: realtime.Sessions{Pool: pool, Hub: hub},
+	})
 	if err != nil {
 		return err
 	}
@@ -133,10 +161,37 @@ func setup(rt *service.Runtime) error {
 	chatv1.RegisterCoreEventServiceServer(srv, grpcapi.NewCoreEventServer(coreEvents, rt.Log))
 	chatv1.RegisterNotificationServiceServer(srv, grpcapi.NewNotificationServer(notifications, rt.Log))
 	chatv1.RegisterChannelServiceServer(srv, grpcapi.NewChannelServer(channels, rt.Log))
+	chatv1.RegisterRealtimeServiceServer(srv, grpcapi.NewRealtimeServer(tickets, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
+
+	wsHandler, err := ws.New(ws.Config{
+		Tickets: tickets, Hub: hub, Log: rt.Log, AllowedOrigins: origins,
+		// Kullanıcı başına gelen çerçeve sınırı (ADR-0005 "gönderim hızı").
+		Frames:      ratelimit.New(60, 20),
+		MaxLifetime: maxLifetime,
+	})
+	if err != nil {
+		return err
+	}
+	mux := http.NewServeMux()
+	wsHandler.Register(mux)
+	rt.AddHTTPServer("http", httpAddr, mux)
+	// Kapanışta bağlantılara 1001 gönderilir; süresi dolan biletler silinir.
+	rt.AddWorker("realtime-hub", hub.Run)
+	rt.AddWorker("realtime-ticket-purge", tickets.RunPurge)
 	// 90 günden eski bildirimler (v14 "Saklama süreleri").
 	rt.AddWorker("notification-retention", notifications.RunRetention)
 	// Silinmiş kanal mesajları 30 gün sonra kalıcı silinir (v14).
 	rt.AddWorker("channel-message-purge", channels.RunPurge)
 	return nil
+}
+
+func splitList(s string) []string {
+	var out []string
+	for v := range strings.SplitSeq(s, ",") {
+		if v = strings.TrimSpace(v); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }

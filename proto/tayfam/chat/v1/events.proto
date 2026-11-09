@@ -32,6 +32,11 @@ service UserEventService {
   // notification preferences; the user stays nowhere as a recipient or an
   // actor) and keeps the profile copy as a tombstone, so a late event
   // cannot bring it back.
+  //
+  // session_revoked, sanctioned and deleted also close the real-time
+  // connections of the session (or of every session of the user), remove
+  // its unused tickets and refuse new tickets for it until any access
+  // token it may still hold has expired (ADR-0004, ADR-0009; issue #82).
   rpc ApplyUserEvent(ApplyUserEventRequest) returns (ApplyUserEventResponse);
 }
 
@@ -45,6 +50,8 @@ message ApplyUserEventRequest {
   oneof event {
     UserProfileUpdated profile_updated = 10;
     UserDeleted deleted = 11;
+    SessionRevoked session_revoked = 12;
+    UserSanctioned sanctioned = 13;
   }
 }
 
@@ -59,6 +66,18 @@ message UserProfileUpdated {
 
 // UserDeleted carries nothing but the fact.
 message UserDeleted {}
+
+// SessionRevoked: the user signed out, closed the session from another
+// device, or the session was revoked for refresh token reuse.
+message SessionRevoked {
+  // The revoked session (UUID), the sid claim of its access tokens.
+  string session_id = 1;
+}
+
+// UserSanctioned: a platform sanction (suspension or ban) closed every
+// session of the user (ADR-0004 "Platform yaptırımları"). Which sanction is
+// not said.
+message UserSanctioned {}
 
 message ApplyUserEventResponse {}
 
