@@ -93,6 +93,9 @@ type View struct {
 	// Interests in EventType order.
 	Interests  []string
 	JoinPolicy string
+	// MembersCanCreateEvents lets every active member create events; when
+	// false only moderators and admins can (2026-11-09).
+	MembersCanCreateEvents bool
 	// Modules has one entry per Modules value, in that order.
 	Modules []ModuleState
 	Status  string
@@ -246,7 +249,12 @@ type UpdateInput struct {
 	Description string
 	Interests   []string
 	JoinPolicy  string
+	// MembersCanCreateEvents is the event creation setting.
+	MembersCanCreateEvents bool
 }
+
+// updateFields are the allowed update mask paths, in audit record order.
+var updateFields = []string{FieldName, FieldDescription, FieldInterests, FieldJoinPolicy, FieldMembersCanCreateEvents}
 
 // Update changes the tayfa's settings. Admin only.
 func (s *Service) Update(ctx context.Context, user, tayfa id.ID, in UpdateInput) (View, error) {
@@ -255,7 +263,7 @@ func (s *Service) Update(ctx context.Context, user, tayfa id.ID, in UpdateInput)
 	}
 	set := map[string]bool{}
 	for _, f := range in.Fields {
-		if !slices.Contains([]string{FieldName, FieldDescription, FieldInterests, FieldJoinPolicy}, f) {
+		if !slices.Contains(updateFields, f) {
 			return View{}, apperr.Validation("update_mask")
 		}
 		set[f] = true
@@ -285,7 +293,7 @@ func (s *Service) Update(ctx context.Context, user, tayfa id.ID, in UpdateInput)
 	}
 	// Field names in a fixed order for the audit record.
 	var fields []string
-	for _, f := range []string{FieldName, FieldDescription, FieldInterests, FieldJoinPolicy} {
+	for _, f := range updateFields {
 		if set[f] {
 			fields = append(fields, f)
 		}
@@ -295,6 +303,7 @@ func (s *Service) Update(ctx context.Context, user, tayfa id.ID, in UpdateInput)
 		p := store.UpdateTayfaSettingsParams{
 			ID: tayfa.PG(), Name: t.Name, NameNormalized: t.NameNormalized,
 			Description: t.Description, JoinPolicy: t.JoinPolicy,
+			MembersCanCreateEvents: t.MembersCanCreateEvents,
 		}
 		if set[FieldName] {
 			p.Name, p.NameNormalized = name, normalized
@@ -304,6 +313,9 @@ func (s *Service) Update(ctx context.Context, user, tayfa id.ID, in UpdateInput)
 		}
 		if set[FieldJoinPolicy] {
 			p.JoinPolicy = in.JoinPolicy
+		}
+		if set[FieldMembersCanCreateEvents] {
+			p.MembersCanCreateEvents = in.MembersCanCreateEvents
 		}
 		if n, err := q.UpdateTayfaSettings(ctx, p); err != nil {
 			return fmt.Errorf("ayarlar: %w", err)

@@ -136,29 +136,31 @@ func (q *Queries) DeleteTayfaInterests(ctx context.Context, tayfaID pgtype.UUID)
 const getTayfa = `-- name: GetTayfa :one
 SELECT id, name, name_normalized, description, join_code, status, visibility,
        join_policy, city, district, created_by, last_activity_at, suspended_at,
-       deletion_requested_at, deletion_scheduled_for, created_at, updated_at
+       deletion_requested_at, deletion_scheduled_for, members_can_create_events,
+       created_at, updated_at
 FROM tayfas
 WHERE id = $1 AND deleted_at IS NULL
 `
 
 type GetTayfaRow struct {
-	ID                   pgtype.UUID
-	Name                 string
-	NameNormalized       string
-	Description          pgtype.Text
-	JoinCode             string
-	Status               string
-	Visibility           string
-	JoinPolicy           string
-	City                 pgtype.Text
-	District             pgtype.Text
-	CreatedBy            pgtype.UUID
-	LastActivityAt       pgtype.Timestamptz
-	SuspendedAt          pgtype.Timestamptz
-	DeletionRequestedAt  pgtype.Timestamptz
-	DeletionScheduledFor pgtype.Timestamptz
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	ID                     pgtype.UUID
+	Name                   string
+	NameNormalized         string
+	Description            pgtype.Text
+	JoinCode               string
+	Status                 string
+	Visibility             string
+	JoinPolicy             string
+	City                   pgtype.Text
+	District               pgtype.Text
+	CreatedBy              pgtype.UUID
+	LastActivityAt         pgtype.Timestamptz
+	SuspendedAt            pgtype.Timestamptz
+	DeletionRequestedAt    pgtype.Timestamptz
+	DeletionScheduledFor   pgtype.Timestamptz
+	MembersCanCreateEvents bool
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
 }
 
 func (q *Queries) GetTayfa(ctx context.Context, id pgtype.UUID) (GetTayfaRow, error) {
@@ -180,6 +182,7 @@ func (q *Queries) GetTayfa(ctx context.Context, id pgtype.UUID) (GetTayfaRow, er
 		&i.SuspendedAt,
 		&i.DeletionRequestedAt,
 		&i.DeletionScheduledFor,
+		&i.MembersCanCreateEvents,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -254,30 +257,32 @@ func (q *Queries) GetTayfaByJoinCode(ctx context.Context, joinCode string) (GetT
 const getTayfaForUpdate = `-- name: GetTayfaForUpdate :one
 SELECT id, name, name_normalized, description, join_code, status, visibility,
        join_policy, city, district, created_by, last_activity_at, suspended_at,
-       deletion_requested_at, deletion_scheduled_for, created_at, updated_at
+       deletion_requested_at, deletion_scheduled_for, members_can_create_events,
+       created_at, updated_at
 FROM tayfas
 WHERE id = $1 AND deleted_at IS NULL
 FOR NO KEY UPDATE
 `
 
 type GetTayfaForUpdateRow struct {
-	ID                   pgtype.UUID
-	Name                 string
-	NameNormalized       string
-	Description          pgtype.Text
-	JoinCode             string
-	Status               string
-	Visibility           string
-	JoinPolicy           string
-	City                 pgtype.Text
-	District             pgtype.Text
-	CreatedBy            pgtype.UUID
-	LastActivityAt       pgtype.Timestamptz
-	SuspendedAt          pgtype.Timestamptz
-	DeletionRequestedAt  pgtype.Timestamptz
-	DeletionScheduledFor pgtype.Timestamptz
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	ID                     pgtype.UUID
+	Name                   string
+	NameNormalized         string
+	Description            pgtype.Text
+	JoinCode               string
+	Status                 string
+	Visibility             string
+	JoinPolicy             string
+	City                   pgtype.Text
+	District               pgtype.Text
+	CreatedBy              pgtype.UUID
+	LastActivityAt         pgtype.Timestamptz
+	SuspendedAt            pgtype.Timestamptz
+	DeletionRequestedAt    pgtype.Timestamptz
+	DeletionScheduledFor   pgtype.Timestamptz
+	MembersCanCreateEvents bool
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
 }
 
 // Yazan işlemler tayfa satırını kilitleyerek okur; memberships trigger'ı da
@@ -301,6 +306,7 @@ func (q *Queries) GetTayfaForUpdate(ctx context.Context, id pgtype.UUID) (GetTay
 		&i.SuspendedAt,
 		&i.DeletionRequestedAt,
 		&i.DeletionScheduledFor,
+		&i.MembersCanCreateEvents,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -390,8 +396,8 @@ func (q *Queries) ListModulesForTayfas(ctx context.Context, tayfaIds []pgtype.UU
 
 const listMyTayfas = `-- name: ListMyTayfas :many
 SELECT t.id, t.name, t.name_normalized, t.description, t.join_code, t.status,
-       t.join_policy, t.suspended_at, t.deletion_scheduled_for, t.created_at,
-       t.updated_at, m.role, m.status AS membership_status, m.muted_until,
+       t.join_policy, t.suspended_at, t.deletion_scheduled_for,
+       t.members_can_create_events, t.created_at, t.updated_at, m.role, m.status AS membership_status, m.muted_until,
        m.created_at AS membership_created_at
 FROM memberships m
 JOIN tayfas t ON t.id = m.tayfa_id
@@ -411,21 +417,22 @@ type ListMyTayfasParams struct {
 }
 
 type ListMyTayfasRow struct {
-	ID                   pgtype.UUID
-	Name                 string
-	NameNormalized       string
-	Description          pgtype.Text
-	JoinCode             string
-	Status               string
-	JoinPolicy           string
-	SuspendedAt          pgtype.Timestamptz
-	DeletionScheduledFor pgtype.Timestamptz
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	Role                 string
-	MembershipStatus     string
-	MutedUntil           pgtype.Timestamptz
-	MembershipCreatedAt  pgtype.Timestamptz
+	ID                     pgtype.UUID
+	Name                   string
+	NameNormalized         string
+	Description            pgtype.Text
+	JoinCode               string
+	Status                 string
+	JoinPolicy             string
+	SuspendedAt            pgtype.Timestamptz
+	DeletionScheduledFor   pgtype.Timestamptz
+	MembersCanCreateEvents bool
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	Role                   string
+	MembershipStatus       string
+	MutedUntil             pgtype.Timestamptz
+	MembershipCreatedAt    pgtype.Timestamptz
 }
 
 // "Tayfalarım": kullanıcının aktif üyelikleri ve bekleyen başvuruları, en
@@ -454,6 +461,7 @@ func (q *Queries) ListMyTayfas(ctx context.Context, arg ListMyTayfasParams) ([]L
 			&i.JoinPolicy,
 			&i.SuspendedAt,
 			&i.DeletionScheduledFor,
+			&i.MembersCanCreateEvents,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Role,
@@ -662,16 +670,18 @@ func (q *Queries) SetTayfaModule(ctx context.Context, arg SetTayfaModuleParams) 
 const updateTayfaSettings = `-- name: UpdateTayfaSettings :execrows
 UPDATE tayfas
 SET name = $1, name_normalized = $2,
-    description = $3, join_policy = $4
-WHERE id = $5 AND deleted_at IS NULL
+    description = $3, join_policy = $4,
+    members_can_create_events = $5
+WHERE id = $6 AND deleted_at IS NULL
 `
 
 type UpdateTayfaSettingsParams struct {
-	Name           string
-	NameNormalized string
-	Description    pgtype.Text
-	JoinPolicy     string
-	ID             pgtype.UUID
+	Name                   string
+	NameNormalized         string
+	Description            pgtype.Text
+	JoinPolicy             string
+	MembersCanCreateEvents bool
+	ID                     pgtype.UUID
 }
 
 func (q *Queries) UpdateTayfaSettings(ctx context.Context, arg UpdateTayfaSettingsParams) (int64, error) {
@@ -680,6 +690,7 @@ func (q *Queries) UpdateTayfaSettings(ctx context.Context, arg UpdateTayfaSettin
 		arg.NameNormalized,
 		arg.Description,
 		arg.JoinPolicy,
+		arg.MembersCanCreateEvents,
 		arg.ID,
 	)
 	if err != nil {

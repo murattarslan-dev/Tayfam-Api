@@ -136,7 +136,9 @@ func validDisplayName(s string) bool {
 //     first (data model v14 "Son yönetici koruması");
 //   - a tayfa left without any active member is scheduled for deletion
 //     after tayfa.DeletionDelay, requested by nobody (the system);
-//   - author and actor fields pointing at the user become NULL;
+//   - author and actor fields pointing at the user become NULL; the user's
+//     event RSVPs and convoy vehicles (plates) are deleted. A deleted going
+//     RSVP does not promote the waitlist here;
 //   - the profile copy becomes a tombstone.
 //
 // Everything runs as the account_deletion system job, the only identity the
@@ -159,7 +161,9 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 		}
 		for _, clear := range []func(context.Context, pgtype.UUID) error{
 			q.ClearTayfaUserFields, q.ClearInviteCreator, q.ClearMembershipUserFields,
-			q.ClearAnnouncementUserFields, q.ClearAuditActor, q.ClearEventActor,
+			q.ClearAnnouncementUserFields, q.ClearEventUserFields, q.ClearEventSeriesCreator,
+			q.ClearRsvpMarker, q.DeleteUserRsvps, q.DeleteUserConvoyVehicles, q.ClearCampItemUserFields,
+			q.ClearAuditActor, q.ClearEventActor,
 		} {
 			if err := clear(ctx, e.User.PG()); err != nil {
 				return fmt.Errorf("yazar alanları: %w", err)

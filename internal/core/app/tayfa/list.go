@@ -80,8 +80,8 @@ func (s *Service) ListMine(ctx context.Context, user id.ID, pageSize int32, page
 			active = append(active, viewRow{
 				ID: id.ID(r.ID.Bytes), Name: r.Name, Description: r.Description, JoinCode: r.JoinCode,
 				Status: r.Status, JoinPolicy: r.JoinPolicy, SuspendedAt: r.SuspendedAt,
-				DeletionScheduledFor: r.DeletionScheduledFor, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
-				Member: m,
+				DeletionScheduledFor: r.DeletionScheduledFor, MembersCanCreateEvents: r.MembersCanCreateEvents,
+				CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, Member: m,
 			})
 			activeIdx = append(activeIdx, i)
 		}

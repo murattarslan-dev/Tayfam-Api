@@ -22,9 +22,19 @@ type Querier interface {
 	// Silme Davranışı").
 	ClearAnnouncementUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearAuditActor(ctx context.Context, userID pgtype.UUID) error
+	// Malzeme listede kalır; üstlenen ve ekleyen boşalır.
+	ClearCampItemUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearEventActor(ctx context.Context, userID pgtype.UUID) error
+	ClearEventSeriesCreator(ctx context.Context, userID pgtype.UUID) error
+	// Etkinlikler kalır, organizatör ve iptal eden "Silinmiş kullanıcı" olur;
+	// seriler de öyle (v14 "İlişkiler ve Silme Davranışı": yazar kolonları
+	// SET NULL).
+	ClearEventUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearInviteCreator(ctx context.Context, userID pgtype.UUID) error
 	ClearMembershipUserFields(ctx context.Context, userID pgtype.UUID) error
+	// Başkasının yoklamasını işaretleyen kişi boşalır; kişinin kendi katılım
+	// kayıtları silinir (kullanıcı → event_rsvps CASCADE).
+	ClearRsvpMarker(ctx context.Context, userID pgtype.UUID) error
 	ClearTayfaUserFields(ctx context.Context, userID pgtype.UUID) error
 	CountActiveMembers(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
 	CountActiveMembersForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]CountActiveMembersForTayfasRow, error)
@@ -52,6 +62,9 @@ type Querier interface {
 	// Ayrılma, çıkarma, başvuru reddi, ban kaldırma.
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (int64, error)
 	DeleteTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) error
+	// Araç (plaka dahil) kişisel veridir ve kişiye aittir: silinir.
+	DeleteUserConvoyVehicles(ctx context.Context, userID pgtype.UUID) error
+	DeleteUserRsvps(ctx context.Context, userID pgtype.UUID) error
 	// Yazarın kendi silmesi: başlık ve gövde hemen boşaltılır, geri alınamaz
 	// (v14 "Silinen içeriği geri alma").
 	EraseAnnouncement(ctx context.Context, arg EraseAnnouncementParams) (int64, error)

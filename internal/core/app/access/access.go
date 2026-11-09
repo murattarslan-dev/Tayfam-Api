@@ -93,12 +93,17 @@ func Membership(role, status string, mutedUntil pgtype.Timestamptz) (authz.Membe
 // apperr.ErrMuted when only the mute stands in the way, or
 // apperr.ErrPermissionDenied.
 func Authorize(m authz.Membership, a authz.Action, now time.Time) error {
-	if authz.Allowed(m, a, now) {
+	return AuthorizeIn(m, a, now, authz.Settings{})
+}
+
+// AuthorizeIn is Authorize for a tayfa with settings s (authz.AllowedIn).
+func AuthorizeIn(m authz.Membership, a authz.Action, now time.Time, s authz.Settings) error {
+	if authz.AllowedIn(m, a, now, s) {
 		return nil
 	}
 	unmuted := m
 	unmuted.MutedUntil = time.Time{}
-	if m.Muted(now) && authz.Allowed(unmuted, a, now) {
+	if m.Muted(now) && authz.AllowedIn(unmuted, a, now, s) {
 		return apperr.ErrMuted
 	}
 	return apperr.ErrPermissionDenied
@@ -124,6 +129,11 @@ func RequireModule(ctx context.Context, q *store.Queries, tayfa id.ID, module st
 		return apperr.ErrModuleDisabled
 	}
 	return nil
+}
+
+// Settings returns the tayfa settings the permission table depends on.
+func Settings(t Tayfa) authz.Settings {
+	return authz.Settings{MembersCanCreateEvents: t.MembersCanCreateEvents}
 }
 
 // Suspended reports whether the platform has suspended the tayfa.

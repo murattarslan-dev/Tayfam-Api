@@ -182,6 +182,11 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"audit_logs.actor_id":            `SELECT count(*) FROM audit_logs WHERE actor_id = $1`,
 		"domain_events.actor_id":         `SELECT count(*) FROM domain_events WHERE actor_id = $1`,
 		"announcements":                  `SELECT count(*) FROM announcements WHERE $1 IN (author_id, deleted_by)`,
+		"events":                         `SELECT count(*) FROM events WHERE $1 IN (created_by, cancelled_by, deleted_by)`,
+		"event_series.created_by":        `SELECT count(*) FROM event_series WHERE created_by = $1`,
+		"event_rsvps":                    `SELECT count(*) FROM event_rsvps WHERE $1 IN (user_id, attendance_marked_by)`,
+		"event_convoy_vehicles.user_id":  `SELECT count(*) FROM event_convoy_vehicles WHERE user_id = $1`,
+		"event_camp_items":               `SELECT count(*) FROM event_camp_items WHERE $1 IN (assigned_user_id, created_by)`,
 		"user_profiles (kişisel)":        `SELECT count(*) FROM user_profiles WHERE user_id = $1 AND (display_name IS NOT NULL OR avatar_upload_id IS NOT NULL OR deleted_at IS NULL)`,
 	} {
 		if n := e.count(t, sql, u.PG()); n != 0 {
@@ -239,6 +244,25 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 	e.seed(t, `INSERT INTO announcements (id, tayfa_id, author_id, title, client_request_id) VALUES ($1, $2, $3, 'Duyuru', $4)`, ownAnn.PG(), t2.PG(), u.PG(), id.New().PG())
 	e.seed(t, `INSERT INTO announcements (id, tayfa_id, author_id, title, client_request_id, deleted_at, deleted_by) VALUES ($1, $2, $3, 'Gizlenen', $4, now(), $5)`, hiddenAnn.PG(), t2.PG(), other.PG(), id.New().PG(), u.PG())
 
+	// u's events stay with an empty organizer; u's RSVPs and vehicle (plate)
+	// go; camp items stay without u.
+	ownEvent, otherEvent, campEvent := id.New(), id.New(), id.New()
+	for _, x := range []struct {
+		ev, by id.ID
+		typ    string
+	}{{ownEvent, u, "convoy"}, {otherEvent, other, "convoy"}, {campEvent, other, "camp"}} {
+		e.seed(t, `INSERT INTO events (id, tayfa_id, type, mode, title, starts_at, ends_at, online_url, created_by, status, cancelled_at, cancelled_by)
+			VALUES ($1, $2, $3, 'online', 'Etkinlik', now() + interval '1 day', now() + interval '2 days', 'https://example.com', $4, 'cancelled', now(), $5)`,
+			x.ev.PG(), t2.PG(), x.typ, x.by.PG(), u.PG())
+	}
+	e.seed(t, `INSERT INTO event_series (id, tayfa_id, rrule, timezone, created_by) VALUES ($1, $2, 'FREQ=WEEKLY', 'Europe/Istanbul', $3)`, id.New().PG(), t2.PG(), u.PG())
+	e.seed(t, `INSERT INTO event_convoy (event_id) VALUES ($1), ($2)`, ownEvent.PG(), otherEvent.PG())
+	e.seed(t, `INSERT INTO event_camp (event_id) VALUES ($1)`, campEvent.PG())
+	e.seed(t, `INSERT INTO event_rsvps (event_id, user_id, status) VALUES ($1, $2, 'going')`, otherEvent.PG(), u.PG())
+	e.seed(t, `INSERT INTO event_rsvps (event_id, user_id, status, attendance, attendance_marked_by, attendance_marked_at) VALUES ($1, $2, 'going', 'attended', $3, now())`, otherEvent.PG(), other.PG(), u.PG())
+	e.seed(t, `INSERT INTO event_convoy_vehicles (id, event_id, user_id, make, plate) VALUES ($1, $2, $3, 'Ford', '35 ABC 123')`, id.New().PG(), otherEvent.PG(), u.PG())
+	e.seed(t, `INSERT INTO event_camp_items (id, event_id, name, assigned_user_id, created_by) VALUES ($1, $2, 'Çadır', $3, $3)`, id.New().PG(), campEvent.PG(), u.PG())
+
 	// T3: u's pending application. T4: u is the only member left.
 	t3 := e.tayfa(t, other)
 	e.member(t, t3, other, "admin", "active", t0)
@@ -254,6 +278,15 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 	}
 	if n := e.count(t, `SELECT count(*) FROM announcements WHERE (id = $1 AND author_id IS NULL AND title = 'Duyuru') OR (id = $2 AND author_id = $3 AND deleted_at IS NOT NULL AND deleted_by IS NULL)`, ownAnn.PG(), hiddenAnn.PG(), other.PG()); n != 2 {
 		t.Fatalf("duyurular = %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM events WHERE id IN ($1, $2, $3)`, ownEvent.PG(), otherEvent.PG(), campEvent.PG()); n != 3 {
+		t.Fatalf("etkinlikler silindi: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_rsvps WHERE event_id = $1 AND user_id = $2 AND attendance = 'attended'`, otherEvent.PG(), other.PG()); n != 1 {
+		t.Fatal("başkasının katılım kaydı silindi")
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_camp_items WHERE event_id = $1`, campEvent.PG()); n != 1 {
+		t.Fatal("kamp malzemesi silindi")
 	}
 	if got := e.role(t, t1, modOld); got != "active/admin" {
 		t.Fatalf("halef = %s", got)

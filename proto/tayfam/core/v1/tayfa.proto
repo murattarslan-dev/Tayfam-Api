@@ -150,6 +150,10 @@ message Tayfa {
   string join_code = 11;
   google.protobuf.Timestamp create_time = 12;
   google.protobuf.Timestamp update_time = 13;
+  // When true every ACTIVE member may create events; when false (the
+  // default) only moderators and admins can. Organizers always manage their
+  // own events (data model v14, 2026-11-09).
+  bool members_can_create_events = 14;
 }
 
 message CreateTayfaRequest {
@@ -215,8 +219,11 @@ message UpdateTayfaRequest {
   // Must not be UNSPECIFIED when named in update_mask.
   JoinPolicy join_policy = 5;
   // Required, non-empty. Allowed paths: "name", "description", "interests",
-  // "join_policy". Any other path is ERROR_REASON_VALIDATION.
+  // "join_policy", "members_can_create_events". Any other path is
+  // ERROR_REASON_VALIDATION.
   google.protobuf.FieldMask update_mask = 6;
+  // See Tayfa.members_can_create_events.
+  bool members_can_create_events = 7;
 }
 
 message UpdateTayfaResponse {

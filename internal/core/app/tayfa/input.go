@@ -39,6 +39,9 @@ const (
 	FieldDescription = "description"
 	FieldInterests   = "interests"
 	FieldJoinPolicy  = "join_policy"
+	// FieldMembersCanCreateEvents is the event creation setting
+	// (tayfas.members_can_create_events).
+	FieldMembersCanCreateEvents = "members_can_create_events"
 )
 
 // cleanName trims surrounding spaces and returns the name and its

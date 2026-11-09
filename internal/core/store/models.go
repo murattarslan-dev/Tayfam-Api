@@ -44,10 +44,135 @@ type DomainEvent struct {
 	OccurredAt  pgtype.Timestamptz
 }
 
+type Event struct {
+	ID               pgtype.UUID
+	TayfaID          pgtype.UUID
+	Type             string
+	Mode             string
+	Title            string
+	Description      pgtype.Text
+	StartsAt         pgtype.Timestamptz
+	EndsAt           pgtype.Timestamptz
+	MeetingPointName pgtype.Text
+	MeetingLat       pgtype.Float8
+	MeetingLng       pgtype.Float8
+	City             pgtype.Text
+	District         pgtype.Text
+	OnlineUrl        pgtype.Text
+	Capacity         pgtype.Int4
+	Status           string
+	CancelledAt      pgtype.Timestamptz
+	CancelledBy      pgtype.UUID
+	CancelReason     pgtype.Text
+	SeriesID         pgtype.UUID
+	SeriesOverride   bool
+	Discoverable     bool
+	CreatedBy        pgtype.UUID
+	ClientRequestID  pgtype.UUID
+	DeletedAt        pgtype.Timestamptz
+	DeletedBy        pgtype.UUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+type EventCamp struct {
+	EventID   pgtype.UUID
+	Type      string
+	SiteName  pgtype.Text
+	HasWater  pgtype.Bool
+	HasToilet pgtype.Bool
+	Notes     pgtype.Text
+}
+
+type EventCampItem struct {
+	ID             pgtype.UUID
+	EventID        pgtype.UUID
+	Name           string
+	Quantity       int32
+	AssignedUserID pgtype.UUID
+	CreatedBy      pgtype.UUID
+	CreatedAt      pgtype.Timestamptz
+}
+
 type EventConsumer struct {
 	ConsumerName string
 	LastEventID  pgtype.UUID
 	UpdatedAt    pgtype.Timestamptz
+}
+
+type EventConvoy struct {
+	EventID pgtype.UUID
+	Type    string
+	Route   []byte
+}
+
+type EventConvoyVehicle struct {
+	ID        pgtype.UUID
+	EventID   pgtype.UUID
+	UserID    pgtype.UUID
+	VehicleID pgtype.UUID
+	Make      string
+	Model     pgtype.Text
+	ModelYear pgtype.Int4
+	Color     pgtype.Text
+	Plate     pgtype.Text
+	CreatedAt pgtype.Timestamptz
+}
+
+type EventFishing struct {
+	EventID        pgtype.UUID
+	Type           string
+	SpotVisibility string
+}
+
+type EventGaming struct {
+	EventID  pgtype.UUID
+	Type     string
+	Game     string
+	Platform string
+}
+
+type EventHike struct {
+	EventID            pgtype.UUID
+	Type               string
+	Difficulty         pgtype.Int4
+	DistanceKm         pgtype.Numeric
+	ElevationM         pgtype.Int4
+	ExpectedReturnAt   pgtype.Timestamptz
+	ReturnGraceMinutes int32
+}
+
+type EventRsvp struct {
+	EventID            pgtype.UUID
+	UserID             pgtype.UUID
+	Status             string
+	Attendance         string
+	AttendanceMethod   pgtype.Text
+	CheckedInAt        pgtype.Timestamptz
+	AttendanceMarkedBy pgtype.UUID
+	AttendanceMarkedAt pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+}
+
+type EventSeries struct {
+	ID              pgtype.UUID
+	TayfaID         pgtype.UUID
+	TemplateEventID pgtype.UUID
+	Rrule           string
+	Timezone        string
+	GeneratedUntil  pgtype.Timestamptz
+	EndedAt         pgtype.Timestamptz
+	CreatedBy       pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+type EventSport struct {
+	EventID   pgtype.UUID
+	Type      string
+	Sport     string
+	VenueName pgtype.Text
 }
 
 type Invite struct {
@@ -79,31 +204,32 @@ type Membership struct {
 }
 
 type Tayfa struct {
-	ID                   pgtype.UUID
-	Name                 string
-	NameNormalized       string
-	Description          pgtype.Text
-	JoinCode             string
-	Status               string
-	Visibility           string
-	JoinPolicy           string
-	City                 pgtype.Text
-	District             pgtype.Text
-	CreatedBy            pgtype.UUID
-	ClientRequestID      pgtype.UUID
-	LastActivityAt       pgtype.Timestamptz
-	WarnedAt             pgtype.Timestamptz
-	ArchivedAt           pgtype.Timestamptz
-	SuspendedAt          pgtype.Timestamptz
-	SuspendedReason      pgtype.Text
-	SuspendedBy          pgtype.UUID
-	DeletionRequestedAt  pgtype.Timestamptz
-	DeletionRequestedBy  pgtype.UUID
-	DeletionScheduledFor pgtype.Timestamptz
-	DeletedAt            pgtype.Timestamptz
-	DeletedBy            pgtype.UUID
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	ID                     pgtype.UUID
+	Name                   string
+	NameNormalized         string
+	Description            pgtype.Text
+	JoinCode               string
+	Status                 string
+	Visibility             string
+	JoinPolicy             string
+	City                   pgtype.Text
+	District               pgtype.Text
+	CreatedBy              pgtype.UUID
+	ClientRequestID        pgtype.UUID
+	LastActivityAt         pgtype.Timestamptz
+	WarnedAt               pgtype.Timestamptz
+	ArchivedAt             pgtype.Timestamptz
+	SuspendedAt            pgtype.Timestamptz
+	SuspendedReason        pgtype.Text
+	SuspendedBy            pgtype.UUID
+	DeletionRequestedAt    pgtype.Timestamptz
+	DeletionRequestedBy    pgtype.UUID
+	DeletionScheduledFor   pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	DeletedBy              pgtype.UUID
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	MembersCanCreateEvents bool
 }
 
 type TayfaInterest struct {

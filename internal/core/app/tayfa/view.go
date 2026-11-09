@@ -21,17 +21,19 @@ type viewRow struct {
 	JoinPolicy           string
 	SuspendedAt          pgtype.Timestamptz
 	DeletionScheduledFor pgtype.Timestamptz
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	Member               authz.Membership
+	// MembersCanCreateEvents is tayfas.members_can_create_events.
+	MembersCanCreateEvents bool
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	Member                 authz.Membership
 }
 
 func fromTayfa(t access.Tayfa, m authz.Membership) viewRow {
 	return viewRow{
 		ID: id.ID(t.ID.Bytes), Name: t.Name, Description: t.Description, JoinCode: t.JoinCode,
 		Status: t.Status, JoinPolicy: t.JoinPolicy, SuspendedAt: t.SuspendedAt,
-		DeletionScheduledFor: t.DeletionScheduledFor, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
-		Member: m,
+		DeletionScheduledFor: t.DeletionScheduledFor, MembersCanCreateEvents: t.MembersCanCreateEvents,
+		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, Member: m,
 	}
 }
 
@@ -85,7 +87,8 @@ func (s *Service) views(ctx context.Context, rows []viewRow) ([]View, error) {
 		v := View{
 			ID: r.ID, Name: r.Name, Description: r.Description.String,
 			JoinPolicy: r.JoinPolicy, Status: r.Status, MemberCount: byCount[r.ID],
-			CreatedAt: r.CreatedAt.Time.UTC(), UpdatedAt: r.UpdatedAt.Time.UTC(),
+			MembersCanCreateEvents: r.MembersCanCreateEvents,
+			CreatedAt:              r.CreatedAt.Time.UTC(), UpdatedAt: r.UpdatedAt.Time.UTC(),
 			Interests: []string{},
 		}
 		if r.SuspendedAt.Valid {
