@@ -35,6 +35,26 @@ SQL
 Çıktıda tek satır görünmelidir. `INSERT 0 0` ise referans kodu yanlıştır ya
 da hesap silinmiş veya kaydı tamamlanmamıştır.
 
+### İlk yönetici (referans kodu elde yoksa)
+
+Platform sahibi kendini eklerken referans koduna uygulamadan bakmak zorunda
+kalmasın diye Google giriş e-postasıyla da eklenebilir. E-posta yalnızca
+komutu çalıştıran makinede yazılır; repoya, log'a veya sohbete girmez.
+Başka biri için referans koduyla eklemeyi kullan.
+
+```sh
+EMAIL='<google-giris-epostan>'
+kubectl -n tayfam-dev exec -i tayfam-pg-1 -c postgres -- \
+  psql -v ON_ERROR_STOP=1 -v email="$EMAIL" -d identity <<'SQL'
+INSERT INTO platform_admins (user_id)
+SELECT u.id FROM users u
+JOIN auth_identities a ON a.user_id = u.id AND a.provider = 'google'
+WHERE lower(a.email) = lower(:'email')
+  AND u.deleted_at IS NULL AND u.registered_at IS NOT NULL
+RETURNING user_id, granted_at;
+SQL
+```
+
 `granted_by` boş kalır: kaydı platform sahibinin doğrudan eklediği anlamına
 gelir.
 
