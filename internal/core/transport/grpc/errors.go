@@ -116,6 +116,12 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_OWN_ANSWER_VOTE, true
 	case errors.Is(err, apperr.ErrTagLimit):
 		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_TAG_LIMIT, true
+	case errors.Is(err, apperr.ErrPollNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_POLL_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrPollClosed):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_POLL_CLOSED, true
+	case errors.Is(err, apperr.ErrPollAnonymous):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_POLL_ANONYMOUS, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

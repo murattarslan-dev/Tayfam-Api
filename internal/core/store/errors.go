@@ -20,6 +20,15 @@ const (
 	CodeLastAdmin = "TF003"
 	// CodeAppendOnly: an UPDATE, DELETE or TRUNCATE on audit_logs.
 	CodeAppendOnly = "TF004"
+	// CodePollVote: the poll_votes trigger refused a vote (poll missing,
+	// deleted or closed, voter not an unmuted active member, or a second
+	// vote in a single-choice poll). Its message names neither the voter nor
+	// the option.
+	CodePollVote = "TF070"
+	// CodePollFrozen: a change the poll triggers forbid (fewer than two
+	// options, identity fields, the anonymous or multiple-choice setting
+	// after the first vote, an option edit).
+	CodePollFrozen = "TF071"
 	// CodeUniqueViolation is Postgres' unique_violation.
 	CodeUniqueViolation = "23505"
 )

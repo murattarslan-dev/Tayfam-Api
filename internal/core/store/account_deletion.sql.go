@@ -124,6 +124,20 @@ func (q *Queries) ClearMembershipUserFields(ctx context.Context, userID pgtype.U
 	return err
 }
 
+const clearPollUserFields = `-- name: ClearPollUserFields :exec
+UPDATE polls
+SET created_by = NULLIF(created_by, $1),
+    deleted_by = NULLIF(deleted_by, $1)
+WHERE $1 IN (created_by, deleted_by)
+`
+
+// Anketler kalır, açan ve silen "Silinmiş kullanıcı" olur; kişinin oyları
+// silinir (issue #60). Sayımlar buna göre düşer.
+func (q *Queries) ClearPollUserFields(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearPollUserFields, userID)
+	return err
+}
+
 const clearQuestionUserFields = `-- name: ClearQuestionUserFields :exec
 UPDATE questions
 SET author_id  = NULLIF(author_id, $1),
@@ -246,6 +260,15 @@ DELETE FROM event_hike_checkins WHERE user_id = $1
 
 func (q *Queries) DeleteUserHikeCheckins(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserHikeCheckins, userID)
+	return err
+}
+
+const deleteUserPollVotes = `-- name: DeleteUserPollVotes :exec
+DELETE FROM poll_votes WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserPollVotes(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserPollVotes, userID)
 	return err
 }
 

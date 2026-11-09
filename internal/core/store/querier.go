@@ -44,6 +44,9 @@ type Querier interface {
 	ClearEventUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearInviteCreator(ctx context.Context, userID pgtype.UUID) error
 	ClearMembershipUserFields(ctx context.Context, userID pgtype.UUID) error
+	// Anketler kalır, açan ve silen "Silinmiş kullanıcı" olur; kişinin oyları
+	// silinir (issue #60). Sayımlar buna göre düşer.
+	ClearPollUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearQuestionTags(ctx context.Context, arg ClearQuestionTagsParams) error
 	// Sorular ve cevaplar kalır, yazar "Silinmiş kullanıcı" olur (v14
 	// "İlişkiler ve Silme Davranışı").
@@ -52,6 +55,7 @@ type Querier interface {
 	// kayıtları silinir (kullanıcı → event_rsvps CASCADE).
 	ClearRsvpMarker(ctx context.Context, userID pgtype.UUID) error
 	ClearTayfaUserFields(ctx context.Context, userID pgtype.UUID) error
+	ClosePoll(ctx context.Context, arg ClosePollParams) (int64, error)
 	CountActiveMembers(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
 	CountActiveMembersForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]CountActiveMembersForTayfasRow, error)
 	// ---------------------------------------------------------------------------
@@ -62,6 +66,8 @@ type Querier interface {
 	CountGoing(ctx context.Context, eventID pgtype.UUID) (int64, error)
 	// Son yönetici kontrolü; çağıran tayfa satırını kilitlemiş olmalıdır.
 	CountOtherActiveAdmins(ctx context.Context, arg CountOtherActiveAdminsParams) (int64, error)
+	// Oy veren kişi sayısı (çoklu seçimde bir kişi bir kez sayılır).
+	CountPollVoters(ctx context.Context, pollIds []pgtype.UUID) ([]CountPollVotersRow, error)
 	// ---------------------------------------------------------------------------
 	// Katılım
 	CountRsvpsForEvents(ctx context.Context, eventIds []pgtype.UUID) ([]CountRsvpsForEventsRow, error)
@@ -92,6 +98,17 @@ type Querier interface {
 	// Üyelik değişiklikleri transaction içinde SetActor ya da SetSystemJob'dan
 	// sonra yapılır; aksi halde trigger reddeder.
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) error
+	// Anketler (issue #60). Her sorgu tayfa_id ile sınırlıdır (IDOR); üyelik ve
+	// izin kontrolü app katmanındadır (access, authz).
+	//
+	// Gizli anket: kimin hangi seçeneğe oy verdiğini döndüren tek sorgu
+	// ListPollVoters'tır ve yalnızca gizli olmayan ankette sonuç verir
+	// (anonymous = false koşulu sorgunun içindedir). Kişinin kendi oyu
+	// ListOwnPollVotes ile, yalnızca o kişi için okunur. Sayımlar seçenek
+	// başına toplamdır.
+	CreatePoll(ctx context.Context, arg CreatePollParams) error
+	CreatePollOption(ctx context.Context, arg CreatePollOptionParams) error
+	CreatePollVote(ctx context.Context, arg CreatePollVoteParams) error
 	// Soru-cevap (issue #59). Her sorgu tayfa_id ile sınırlıdır (IDOR); üyelik
 	// ve izin kontrolü app katmanındadır (access, authz).
 	CreateQuestion(ctx context.Context, arg CreateQuestionParams) error
@@ -112,6 +129,11 @@ type Querier interface {
 	DeleteConvoyVehicle(ctx context.Context, arg DeleteConvoyVehicleParams) (int64, error)
 	// Ayrılma, çıkarma, başvuru reddi, ban kaldırma.
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (int64, error)
+	// Oy değiştirmek eski oyu siler (v14).
+	DeleteOwnPollVotes(ctx context.Context, arg DeleteOwnPollVotesParams) (int64, error)
+	DeletePoll(ctx context.Context, arg DeletePollParams) (int64, error)
+	// Silinen anketin oyları hemen silinir; geri alma yoktur.
+	DeletePollVotes(ctx context.Context, pollID pgtype.UUID) error
 	// Etiket silinince bağları CASCADE ile gider; sorular kalır.
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
 	DeleteTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) error
@@ -129,6 +151,7 @@ type Querier interface {
 	// Araç (plaka dahil) kişisel veridir ve kişiye aittir: silinir.
 	DeleteUserConvoyVehicles(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserHikeCheckins(ctx context.Context, userID pgtype.UUID) error
+	DeleteUserPollVotes(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserRsvps(ctx context.Context, userID pgtype.UUID) error
 	EndEventSeries(ctx context.Context, arg EndEventSeriesParams) (int64, error)
 	// Yazarın kendi silmesi: başlık ve gövde hemen boşaltılır, geri alınamaz
@@ -178,6 +201,9 @@ type Querier interface {
 	// daveti bulunmaz.
 	GetInviteByHash(ctx context.Context, tokenHash []byte) (GetInviteByHashRow, error)
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
+	GetPoll(ctx context.Context, arg GetPollParams) (GetPollRow, error)
+	// Yazma işlemleri anket satırını kilitleyerek okur.
+	GetPollForUpdate(ctx context.Context, arg GetPollForUpdateParams) (GetPollForUpdateRow, error)
 	GetQuestion(ctx context.Context, arg GetQuestionParams) (GetQuestionRow, error)
 	// Tekrar gönderilen soru isteği aynı soruyu döndürür.
 	GetQuestionByClientRequest(ctx context.Context, arg GetQuestionByClientRequestParams) (GetQuestionByClientRequestRow, error)
@@ -257,9 +283,21 @@ type Querier interface {
 	// "Tayfalarım": kullanıcının aktif üyelikleri ve bekleyen başvuruları, en
 	// yeni üyelik kaydı önce; (created_at, tayfa_id) ile sayfalanır.
 	ListMyTayfas(ctx context.Context, arg ListMyTayfasParams) ([]ListMyTayfasRow, error)
+	// Yalnızca çağıranın kendi oyları.
+	ListOwnPollVotes(ctx context.Context, arg ListOwnPollVotesParams) ([]ListOwnPollVotesRow, error)
 	// Bekleyen başvurular, eskiden yeniye; kimin davetiyle geldiği: doğrudan
 	// davet eden ya da davet linkini açan.
 	ListPendingPage(ctx context.Context, arg ListPendingPageParams) ([]ListPendingPageRow, error)
+	ListPollOptionIDs(ctx context.Context, pollID pgtype.UUID) ([]pgtype.UUID, error)
+	// Seçenekler ve seçenek başına oy sayısı; kimin oy verdiği dönmez.
+	ListPollOptionsWithCounts(ctx context.Context, pollIds []pgtype.UUID) ([]ListPollOptionsWithCountsRow, error)
+	// Açık ankette bir seçeneğe oy verenler, oy sırasıyla. Gizli ankette hiç
+	// satır dönmez: koşul sorgunun kendisindedir, app katmanındaki kontrol
+	// ikinci savunma değil birincisidir.
+	ListPollVoters(ctx context.Context, arg ListPollVotersParams) ([]ListPollVotersRow, error)
+	// Yeniden eskiye; isteğe bağlı olarak tek bir etkinliğin anketleri. Sayfa,
+	// önceki sayfanın son satırından sonra başlar.
+	ListPollsPage(ctx context.Context, arg ListPollsPageParams) ([]ListPollsPageRow, error)
 	ListQuestionTags(ctx context.Context, arg ListQuestionTagsParams) ([]ListQuestionTagsRow, error)
 	// Yeniden eskiye. İsteğe bağlı etiket filtresi. Sayfa, önceki sayfanın son
 	// satırından sonra başlar (created_at, id azalan).
@@ -298,6 +336,8 @@ type Querier interface {
 	// Son yöneticinin halefi (veri modeli v14 "Son yönetici koruması"): en
 	// eski moderatör, yoksa en eski üye.
 	PickAdminSuccessor(ctx context.Context, arg PickAdminSuccessorParams) (pgtype.UUID, error)
+	// Etkinliğe bağlanacak anket için: etkinlik bu tayfada ve silinmemiş.
+	PollEventExists(ctx context.Context, arg PollEventExistsParams) (bool, error)
 	PromoteRsvp(ctx context.Context, arg PromoteRsvpParams) (int64, error)
 	RemoveAnswerVote(ctx context.Context, arg RemoveAnswerVoteParams) (int64, error)
 	RequestTayfaDeletion(ctx context.Context, arg RequestTayfaDeletionParams) (int64, error)

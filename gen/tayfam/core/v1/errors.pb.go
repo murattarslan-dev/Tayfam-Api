@@ -171,6 +171,14 @@ const (
 	// RESOURCE_EXHAUSTED. The question names a new tag, but the tayfa already
 	// has 200 tags; a moderator can remove unused ones.
 	ErrorReason_ERROR_REASON_TAG_LIMIT ErrorReason = 64
+	// NOT_FOUND. No poll with this ID in this tayfa, or it was deleted.
+	ErrorReason_ERROR_REASON_POLL_NOT_FOUND ErrorReason = 70
+	// FAILED_PRECONDITION. The poll is closed (early or past its close time);
+	// votes no longer change.
+	ErrorReason_ERROR_REASON_POLL_CLOSED ErrorReason = 71
+	// FAILED_PRECONDITION. ListPollVoters on an anonymous poll: nobody, admins
+	// included, sees who voted for what.
+	ErrorReason_ERROR_REASON_POLL_ANONYMOUS ErrorReason = 72
 )
 
 // Enum value maps for ErrorReason.
@@ -220,6 +228,9 @@ var (
 		62: "ERROR_REASON_TAG_NOT_FOUND",
 		63: "ERROR_REASON_OWN_ANSWER_VOTE",
 		64: "ERROR_REASON_TAG_LIMIT",
+		70: "ERROR_REASON_POLL_NOT_FOUND",
+		71: "ERROR_REASON_POLL_CLOSED",
+		72: "ERROR_REASON_POLL_ANONYMOUS",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                 0,
@@ -266,6 +277,9 @@ var (
 		"ERROR_REASON_TAG_NOT_FOUND":               62,
 		"ERROR_REASON_OWN_ANSWER_VOTE":             63,
 		"ERROR_REASON_TAG_LIMIT":                   64,
+		"ERROR_REASON_POLL_NOT_FOUND":              70,
+		"ERROR_REASON_POLL_CLOSED":                 71,
+		"ERROR_REASON_POLL_ANONYMOUS":              72,
 	}
 )
 
@@ -300,7 +314,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xf3\v\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xd3\f\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -346,7 +360,10 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\x1dERROR_REASON_ANSWER_NOT_FOUND\x10=\x12\x1e\n" +
 	"\x1aERROR_REASON_TAG_NOT_FOUND\x10>\x12 \n" +
 	"\x1cERROR_REASON_OWN_ANSWER_VOTE\x10?\x12\x1a\n" +
-	"\x16ERROR_REASON_TAG_LIMIT\x10@B\xbd\x01\n" +
+	"\x16ERROR_REASON_TAG_LIMIT\x10@\x12\x1f\n" +
+	"\x1bERROR_REASON_POLL_NOT_FOUND\x10F\x12\x1c\n" +
+	"\x18ERROR_REASON_POLL_CLOSED\x10G\x12\x1f\n" +
+	"\x1bERROR_REASON_POLL_ANONYMOUS\x10HB\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (
