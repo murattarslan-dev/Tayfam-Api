@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/reflect/protoreflect"
 
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/report"
@@ -54,7 +53,7 @@ func TestModerationReportHasNoReporter(t *testing.T) {
 			t.Fatalf("ModerationReport.%s", f.Name())
 		}
 	}
-	var mine protoreflect.FieldDescriptors = (&corev1.MyReport{}).ProtoReflect().Descriptor().Fields()
+	mine := (&corev1.MyReport{}).ProtoReflect().Descriptor().Fields()
 	for i := range mine.Len() {
 		if n := string(mine.Get(i).Name()); strings.Contains(n, "handled_by") || strings.Contains(n, "subject") {
 			t.Fatalf("MyReport.%s", n)

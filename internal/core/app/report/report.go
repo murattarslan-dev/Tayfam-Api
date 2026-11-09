@@ -594,7 +594,7 @@ func (s *Service) Resolve(ctx context.Context, user, tayfa, report id.ID, r Reso
 				return apperr.ErrReportActionMissing
 			}
 		case ResolutionMemberSanctioned:
-			if subject == (id.ID{}) || !(sub.banned || sub.muted(now)) {
+			if subject == (id.ID{}) || (!sub.banned && !sub.muted(now)) {
 				return apperr.ErrReportActionMissing
 			}
 		}
