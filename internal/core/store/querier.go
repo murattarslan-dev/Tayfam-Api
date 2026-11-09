@@ -295,6 +295,10 @@ type Querier interface {
 	GetTayfaForUpdate(ctx context.Context, id pgtype.UUID) (GetTayfaForUpdateRow, error)
 	GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUserProfileRow, error)
 	HasMutualTayfa(ctx context.Context, arg HasMutualTayfaParams) (bool, error)
+	// Ortak etkinlik geçmişi: ikisinin de attended işaretlendiği, iptal
+	// edilmemiş, silinmemiş ve bitmiş en az bir etkinlik (hangi tayfada
+	// olduğu fark etmez).
+	HasSharedEventHistory(ctx context.Context, arg HasSharedEventHistoryParams) (bool, error)
 	// Moderatör/yönetici silmesi: içerik gizlenir, geri alınabilir.
 	HideAnnouncement(ctx context.Context, arg HideAnnouncementParams) (int64, error)
 	HideAnswer(ctx context.Context, arg HideAnswerParams) (int64, error)
@@ -556,6 +560,13 @@ type Querier interface {
 	SetSystemJob(ctx context.Context, job string) error
 	SetTayfaJoinCode(ctx context.Context, arg SetTayfaJoinCodeParams) (int64, error)
 	SetTayfaModule(ctx context.Context, arg SetTayfaModuleParams) error
+	// Birebir mesaj kuralının girdileri (issue #95, veri modeli v14 "Mesaj
+	// İsteği Modeli (v7)", ADR-0009 CheckDirectMessage). Engelleme ve
+	// arkadaşlık social.sql'deki sorgularla okunur.
+	// Gönderenin, alıcıyla ortak olduğu canlı tayfalardaki en eski aktif
+	// üyeliğinin başlangıcı; ortak tayfa yoksa NULL. Canlı tayfa: silinmemiş,
+	// askıya alınmamış, silme talebi beklemeyen ve arşivlenmemiş tayfa.
+	SharedTayfaSenderJoinedAt(ctx context.Context, arg SharedTayfaSenderJoinedAtParams) (pgtype.Timestamptz, error)
 	// ---------------------------------------------------------------------------
 	// 72 saatlik tayfa silme (v14 "Tayfa silmede bekleme")
 	// ---------------------------------------------------------------------------
