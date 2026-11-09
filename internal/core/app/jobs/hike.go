@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -19,10 +20,11 @@ import (
 // out even when the event was cancelled or deleted: the person may still be
 // out.
 //
-// The event carries IDs only: chat (#64) writes the high-priority
-// hike_overdue notification for recipient_ids, which muting cannot block.
-// Recipients are the organizer, if still an active member, and the tayfa's
-// active admins and moderators, never the hiker.
+// The event carries IDs only. A notification.requested for hike_overdue
+// follows it (package notify): chat writes the high-priority notification,
+// which muting cannot block. Recipients are the organizer, if still an
+// active member, and the tayfa's active admins and moderators, never the
+// hiker.
 func (s *Service) AlertOverdueHikes(ctx context.Context) (int, error) {
 	now := s.now()
 	return s.drain(ctx, JobHikeAlert, hikeBatch, func(q *store.Queries) (int, error) {
@@ -31,8 +33,9 @@ func (s *Service) AlertOverdueHikes(ctx context.Context) (int, error) {
 			return 0, fmt.Errorf("gecikenler: %w", err)
 		}
 		type alert struct {
-			tayfa, event id.ID
-			payload      map[string]any
+			tayfa, event, hiker id.ID
+			payload             map[string]any
+			recipients          []id.ID
 		}
 		alerts := make([]alert, 0, len(rows))
 		for _, r := range rows {
@@ -51,19 +54,26 @@ func (s *Service) AlertOverdueHikes(ctx context.Context) (int, error) {
 			}
 			tf, ev := id.ID(r.TayfaID.Bytes), id.ID(r.EventID.Bytes)
 			p := map[string]any{
-				"tayfa_id":      tf.String(),
-				"event_id":      ev.String(),
-				"user_id":       id.ID(r.UserID.Bytes).String(),
-				"recipient_ids": ids(recipients),
+				"tayfa_id": tf.String(),
+				"event_id": ev.String(),
+				"user_id":  id.ID(r.UserID.Bytes).String(),
 			}
 			if r.CreatedBy.Valid {
 				p["organizer_id"] = id.ID(r.CreatedBy.Bytes).String()
 			}
-			alerts = append(alerts, alert{tayfa: tf, event: ev, payload: p})
+			alerts = append(alerts, alert{tayfa: tf, event: ev, hiker: id.ID(r.UserID.Bytes), payload: p, recipients: idList(recipients)})
 		}
 		// Events last (outbox.Write).
 		for _, a := range alerts {
 			if err := txn.Event(ctx, q, EventHikeOverdue, a.tayfa, id.ID{}, txn.Target{Type: "event", ID: a.event}, a.payload); err != nil {
+				return 0, err
+			}
+		}
+		for _, a := range alerts {
+			if err := notify.Write(ctx, q, notify.Request{
+				Type: notify.TypeHikeOverdue, Tayfa: a.tayfa, TargetType: notify.TargetEvent, Target: a.event,
+				Extra: map[string]string{notify.ExtraUserID: a.hiker.String()},
+			}, a.recipients); err != nil {
 				return 0, err
 			}
 		}

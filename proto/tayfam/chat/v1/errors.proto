@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package tayfam.chat.v1;
+
+// Reasons in google.rpc.ErrorInfo; listed here so clients share one source.
+//
+// Every chat error that a client is expected to tell apart carries a
+// google.rpc.ErrorInfo detail with domain "chat.tayfam.app" and reason set to
+// one of the ERROR_REASON_* names below. The gRPC status code of each reason
+// is fixed and written next to it. Status messages are fixed strings: they
+// never echo request values, tokens or internal details.
+//
+// UNAUTHENTICATED (missing or invalid token) and PERMISSION_DENIED for a
+// service token of the wrong ServiceAccount come from auth.Guard and carry no
+// ErrorInfo. Any other code without an ErrorInfo is an internal error.
+enum ErrorReason {
+  ERROR_REASON_UNSPECIFIED = 0;
+
+  // INVALID_ARGUMENT. A request field failed validation (format, length,
+  // range, unknown enum value, bad page token). ErrorInfo metadata "field"
+  // holds the request field name; the rejected value is never included.
+  ERROR_REASON_VALIDATION = 1;
+}

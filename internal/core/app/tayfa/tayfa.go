@@ -24,6 +24,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/access"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -411,8 +412,18 @@ func (s *Service) RequestDeletion(ctx context.Context, user, tayfa id.ID) (time.
 		if n != 1 {
 			return apperr.ErrDeletionAlreadyRequested
 		}
-		return record(ctx, q, tayfa, user, EventDeletionRequested, EventDeletionRequested,
-			map[string]any{"deletion_scheduled_for": at.Format(time.RFC3339Nano)})
+		if err := record(ctx, q, tayfa, user, EventDeletionRequested, EventDeletionRequested,
+			map[string]any{"deletion_scheduled_for": at.Format(time.RFC3339Nano)}); err != nil {
+			return err
+		}
+		// v14 "Tayfa silmede bekleme": all admins and moderators hear about it.
+		to, err := notify.Staff(ctx, q, tayfa, user)
+		if err != nil {
+			return err
+		}
+		return notify.Write(ctx, q, notify.Request{
+			Type: notify.TypeTayfaDeletionRequested, Tayfa: tayfa, Actor: user, TargetType: notify.TargetTayfa, Target: tayfa,
+		}, to)
 	})
 	if err != nil {
 		return time.Time{}, err

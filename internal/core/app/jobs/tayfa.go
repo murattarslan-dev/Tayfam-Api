@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -35,8 +36,8 @@ func (s *Service) CleanupTayfas(ctx context.Context) (int, error) {
 		if err != nil {
 			return 0, fmt.Errorf("yeniden etkinleştirme: %w", err)
 		}
-		return len(rows), s.recordTayfas(ctx, q, rows, EventTayfaReactivated, func(id.ID) (map[string]any, []byte, error) {
-			return map[string]any{}, nil, nil
+		return len(rows), s.recordTayfas(ctx, q, rows, EventTayfaReactivated, "", func(id.ID) (map[string]any, []byte, []id.ID, error) {
+			return map[string]any{}, nil, nil, nil
 		})
 	})
 	total += n
@@ -51,12 +52,12 @@ func (s *Service) CleanupTayfas(ctx context.Context) (int, error) {
 		if err != nil {
 			return 0, fmt.Errorf("arşivleme: %w", err)
 		}
-		return len(rows), s.recordTayfas(ctx, q, rows, EventTayfaArchived, func(tf id.ID) (map[string]any, []byte, error) {
+		return len(rows), s.recordTayfas(ctx, q, rows, EventTayfaArchived, notify.TypeTayfaArchived, func(tf id.ID) (map[string]any, []byte, []id.ID, error) {
 			staff, err := staffOf(ctx, q, tf)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
-			return map[string]any{"recipient_ids": staff}, nil, nil
+			return map[string]any{}, nil, staff, nil
 		})
 	})
 	total += n
@@ -85,18 +86,18 @@ func (s *Service) CleanupTayfas(ctx context.Context) (int, error) {
 			}
 			tayfas = append(tayfas, r.ID)
 		}
-		return len(rows), s.recordTayfas(ctx, q, tayfas, EventTayfaWarned, func(tf id.ID) (map[string]any, []byte, error) {
+		return len(rows), s.recordTayfas(ctx, q, tayfas, EventTayfaWarned, notify.TypeTayfaWarned, func(tf id.ID) (map[string]any, []byte, []id.ID, error) {
 			staff, err := staffOf(ctx, q, tf)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			// The audit reason is what WarnTayfas reads to warn for
 			// few_members only once.
 			meta, err := json.Marshal(map[string]string{"reason": reason[tf]})
 			if err != nil {
-				return nil, nil, fmt.Errorf("json: %w", err)
+				return nil, nil, nil, fmt.Errorf("json: %w", err)
 			}
-			return map[string]any{"reason": reason[tf], "recipient_ids": staff}, meta, nil
+			return map[string]any{"reason": reason[tf]}, meta, staff, nil
 		})
 	})
 	total += n
@@ -114,26 +115,29 @@ func (s *Service) DeleteDueTayfas(ctx context.Context) (int, error) {
 		if err != nil {
 			return 0, fmt.Errorf("tayfa silme: %w", err)
 		}
-		return len(rows), s.recordTayfas(ctx, q, rows, EventTayfaDeleted, func(id.ID) (map[string]any, []byte, error) {
-			return map[string]any{}, nil, nil
+		return len(rows), s.recordTayfas(ctx, q, rows, EventTayfaDeleted, "", func(id.ID) (map[string]any, []byte, []id.ID, error) {
+			return map[string]any{}, nil, nil, nil
 		})
 	})
 }
 
 // recordTayfas writes, for each tayfa, a system audit record (action =
 // event type) and then the outbox events: events last, as outbox.Write
-// asks. payload returns the event payload (tayfa_id is added) and the
-// audit metadata (nil means {}).
-func (s *Service) recordTayfas(ctx context.Context, q *store.Queries, rows []pgtype.UUID, event string, payload func(id.ID) (map[string]any, []byte, error)) error {
+// asks. payload returns the event payload (tayfa_id is added), the audit
+// metadata (nil means {}) and, when notice is a notification type, the
+// recipients of that notification: they go in notification.requested
+// events after the tayfa events (ADR-0009, issue #64).
+func (s *Service) recordTayfas(ctx context.Context, q *store.Queries, rows []pgtype.UUID, event, notice string, payload func(id.ID) (map[string]any, []byte, []id.ID, error)) error {
 	payloads := make([]map[string]any, len(rows))
+	recipients := make([][]id.ID, len(rows))
 	for i, r := range rows {
 		tf := id.ID(r.Bytes)
-		p, meta, err := payload(tf)
+		p, meta, to, err := payload(tf)
 		if err != nil {
 			return err
 		}
 		p["tayfa_id"] = tf.String()
-		payloads[i] = p
+		payloads[i], recipients[i] = p, to
 		if err := systemAudit(ctx, q, tf, event, txn.Target{Type: "tayfa", ID: tf}, meta); err != nil {
 			return err
 		}
@@ -144,15 +148,28 @@ func (s *Service) recordTayfas(ctx context.Context, q *store.Queries, rows []pgt
 			return err
 		}
 	}
+	if notice == "" {
+		return nil
+	}
+	for i, r := range rows {
+		tf := id.ID(r.Bytes)
+		req := notify.Request{Type: notice, Tayfa: tf, TargetType: notify.TargetTayfa, Target: tf}
+		if reason, ok := payloads[i]["reason"].(string); ok {
+			req.Extra = map[string]string{notify.ExtraReason: reason}
+		}
+		if err := notify.Write(ctx, q, req, recipients[i]); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-// staffOf returns the tayfa's active admins and moderators, the recipients
-// of warning and archive notifications.
-func staffOf(ctx context.Context, q *store.Queries, tf id.ID) ([]string, error) {
+// staffOf returns the tayfa's active admins and moderators, admins first:
+// the recipients of warning and archive notifications.
+func staffOf(ctx context.Context, q *store.Queries, tf id.ID) ([]id.ID, error) {
 	us, err := q.ListTayfaStaffIDs(ctx, store.ListTayfaStaffIDsParams{TayfaID: tf.PG(), N: maxRecipients})
 	if err != nil {
 		return nil, fmt.Errorf("yöneticiler: %w", err)
 	}
-	return ids(us), nil
+	return idList(us), nil
 }

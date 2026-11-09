@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
@@ -155,6 +156,33 @@ func run(t *testing.T, what string, pass func(context.Context) (int, error), wan
 	}
 }
 
+// notices returns the notification.requested events of type typ, in order.
+func (e *env) notices(t *testing.T, typ string) []event {
+	t.Helper()
+	var out []event
+	for _, ev := range e.events(t, notify.EventType) {
+		if ev.payload["type"] == typ {
+			out = append(out, ev)
+		}
+	}
+	return out
+}
+
+// noticeFor returns the recipients of the typ notification about target.
+func (e *env) noticeFor(t *testing.T, typ string, target id.ID, extra ...string) []string {
+	t.Helper()
+	for _, ev := range e.notices(t, typ) {
+		if ev.subject != target {
+			continue
+		}
+		if len(extra) == 2 && ev.payload[extra[0]] != extra[1] {
+			continue
+		}
+		return strs(ev.payload["recipient_ids"])
+	}
+	return nil
+}
+
 func strs(v any) []string {
 	var out []string
 	for _, x := range v.([]any) {
@@ -215,11 +243,15 @@ func TestCleanupTayfas(t *testing.T) {
 	if r := byTayfa[idle].payload["reason"]; r != ReasonInactive {
 		t.Errorf("idle sebebi %v", r)
 	}
-	if got := strs(byTayfa[few].payload["recipient_ids"]); !slices.Equal(got, []string{fewAdmin.String()}) {
+	// Recipients travel in notification.requested, not in the tayfa event.
+	if _, ok := byTayfa[few].payload["recipient_ids"]; ok {
+		t.Error("tayfa.warned alıcı taşıyor")
+	}
+	if got := e.noticeFor(t, notify.TypeTayfaWarned, few, "reason", ReasonFewMembers); !slices.Equal(got, []string{fewAdmin.String()}) {
 		t.Errorf("few alıcıları %v", got)
 	}
 	// Admins first, then moderators; plain members are not recipients.
-	if got := strs(byTayfa[idle].payload["recipient_ids"]); !slices.Equal(got, []string{idleAdmin.String(), idleMod.String()}) {
+	if got := e.noticeFor(t, notify.TypeTayfaWarned, idle, "reason", ReasonInactive); !slices.Equal(got, []string{idleAdmin.String(), idleMod.String()}) {
 		t.Errorf("idle alıcıları %v", got)
 	}
 	if n := e.count(t, `SELECT count(*) FROM audit_logs WHERE action = 'tayfa.warned' AND actor_id IS NULL`); n != 2 {
@@ -260,7 +292,7 @@ func TestCleanupTayfas(t *testing.T) {
 		t.Errorf("few = %+v", s)
 	}
 	archived := e.events(t, EventTayfaArchived)
-	if len(archived) != 1 || archived[0].tayfa != idle || len(strs(archived[0].payload["recipient_ids"])) != 2 {
+	if len(archived) != 1 || archived[0].tayfa != idle || len(e.noticeFor(t, notify.TypeTayfaArchived, idle)) != 2 {
 		t.Errorf("tayfa.archived = %+v", archived)
 	}
 	// An archived tayfa stays archived.
@@ -543,7 +575,7 @@ func TestAlertOverdueHikes(t *testing.T) {
 		if ev.tayfa != tf || ev.subject != late || ev.payload["event_id"] != late.String() || ev.payload["organizer_id"] != organizer.String() {
 			t.Errorf("olay = %+v", ev)
 		}
-		if r := strs(ev.payload["recipient_ids"]); !slices.Equal(r, want) {
+		if r := e.noticeFor(t, notify.TypeHikeOverdue, late, "user_id", user); !slices.Equal(r, want) {
 			t.Errorf("%s alıcıları %v, %v bekleniyordu", user, r, want)
 		}
 	}
@@ -565,8 +597,7 @@ func TestAlertOverdueHikesOrganizerLeft(t *testing.T) {
 	ev := e.hike(t, tf, id.New(), -2*time.Hour) // organizer is not a member
 	e.checkin(t, ev, hiker, false)
 	run(t, "alarm", e.at(t, 0).AlertOverdueHikes, 1)
-	got := e.events(t, EventHikeOverdue)
-	if r := strs(got[0].payload["recipient_ids"]); !slices.Equal(r, []string{admin.String()}) {
+	if r := e.noticeFor(t, notify.TypeHikeOverdue, ev, "user_id", hiker.String()); !slices.Equal(r, []string{admin.String()}) {
 		t.Errorf("alıcılar %v", r)
 	}
 }

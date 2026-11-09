@@ -1,0 +1,120 @@
+syntax = "proto3";
+
+package tayfam.chat.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/chat/v1/notification_types.proto";
+
+// Event consumers of chat (ADR-0002, ADR-0009, issue #64). Both services are
+// service-to-service APIs: no user can call them.
+//
+// Authentication: only a Kubernetes service token (ADR-0013) with audience
+// chat.tayfam.internal is accepted, and only from the ServiceAccount named on
+// each service. A user access token is refused (UNAUTHENTICATED); a service
+// token from any other ServiceAccount is PERMISSION_DENIED.
+//
+// Every method is idempotent: the relay delivers at least once, so the same
+// event may arrive more than once, and events may arrive out of order (two
+// relays during a rolling update). Applying an event again leaves the same
+// result. Errors: ERROR_REASON_VALIDATION for a malformed request; any other
+// error is retried by the relay.
+
+// UserEventService receives identity's user events from identity's outbox
+// relay. Only the tayfam-identity ServiceAccount may call it.
+service UserEventService {
+  // ApplyUserEvent applies one user event.
+  //
+  // profile_updated updates chat's copy of the public profile
+  // (user_profiles) unless a newer event, or the user's deletion, was
+  // already applied.
+  //
+  // deleted removes the user's records from chat (notifications and
+  // notification preferences; the user stays nowhere as a recipient or an
+  // actor) and keeps the profile copy as a tombstone, so a late event
+  // cannot bring it back.
+  rpc ApplyUserEvent(ApplyUserEventRequest) returns (ApplyUserEventResponse);
+}
+
+message ApplyUserEventRequest {
+  // Outbox event ID in identity (UUIDv7). Later events have greater IDs.
+  string event_id = 1;
+  // The user the event is about (UUID).
+  string user_id = 2;
+  google.protobuf.Timestamp occurred_at = 3;
+
+  oneof event {
+    UserProfileUpdated profile_updated = 10;
+    UserDeleted deleted = 11;
+  }
+}
+
+// UserProfileUpdated carries the public profile only: what other users see
+// next to the user's content.
+message UserProfileUpdated {
+  // 1–40 characters.
+  string display_name = 1;
+  // Upload ID (UUID) of the avatar; empty when there is none.
+  string avatar_upload_id = 2;
+}
+
+// UserDeleted carries nothing but the fact.
+message UserDeleted {}
+
+message ApplyUserEventResponse {}
+
+// CoreEventService receives core's events from core's outbox relay. Only the
+// tayfam-core ServiceAccount may call it.
+//
+// Following ADR-0009, core decides who is notified: it owns memberships and
+// sends the recipients with each notification request. chat keeps no copy
+// of memberships; it stores what it is told. Only two event types reach
+// chat (an explicit list in core's relay): notification.requested and
+// tayfa.purged.
+service CoreEventService {
+  // ApplyCoreEvent applies one core event.
+  //
+  // notification_requested writes one in-app notification per recipient,
+  // at most once per event and recipient; a recipient whose account was
+  // deleted is skipped. tayfa_purged removes the tayfa's notifications and
+  // notification preferences.
+  rpc ApplyCoreEvent(ApplyCoreEventRequest) returns (ApplyCoreEventResponse);
+}
+
+message ApplyCoreEventRequest {
+  // Outbox event ID in core (UUIDv7).
+  string event_id = 1;
+  // The tayfa the event belongs to (UUID).
+  string tayfa_id = 2;
+  // The user who made the change (UUID); empty for the system (background
+  // jobs, account deletion).
+  string actor_id = 3;
+  google.protobuf.Timestamp occurred_at = 4;
+
+  oneof event {
+    NotificationRequested notification_requested = 10;
+    TayfaPurged tayfa_purged = 11;
+  }
+}
+
+// NotificationRequested is one notification for many recipients. It
+// carries IDs and classification only, never content text: clients read
+// the content from core with the target ID, and core checks access again.
+message NotificationRequested {
+  NotificationType type = 1;
+  NotificationTargetType target_type = 2;
+  string target_id = 3;
+  // Active members chosen by core, never the actor (UUIDs, 1–200; a large
+  // audience comes as several events).
+  repeated string recipient_ids = 4;
+  // ANSWER_RECEIVED: the answered question.
+  string question_id = 5;
+  // HIKE_OVERDUE: the hiker who did not return.
+  string subject_user_id = 6;
+  // TAYFA_WARNED: why.
+  TayfaWarningReason warning_reason = 7;
+}
+
+// The tayfa was deleted for good (30 days after its deletion).
+message TayfaPurged {}
+
+message ApplyCoreEventResponse {}

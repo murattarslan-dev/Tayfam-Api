@@ -9,6 +9,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/outbox"
 )
@@ -61,6 +62,48 @@ func coreRequest(e outbox.Event) (*corev1.ApplyUserEventRequest, error) {
 		req.Event = &corev1.ApplyUserEventRequest_Deleted{Deleted: &corev1.UserDeleted{}}
 	default:
 		return nil, fmt.Errorf("bilinmeyen olay türü %q", e.Type)
+	}
+	return req, nil
+}
+
+// ChatConsumer is the outbox consumer that delivers user events to chat's
+// UserEventService (ADR-0009, issue #64). client must carry identity's
+// service token for chat (auth.ServiceTokenFrom, ADR-0013). It has its own
+// position: chat being down does not hold up core.
+func ChatConsumer(client chatv1.UserEventServiceClient) outbox.Consumer {
+	return outbox.Consumer{
+		Name:  "chat",
+		Types: []string{TypeProfileUpdated, TypeDeleted},
+		Deliver: func(ctx context.Context, e outbox.Event) error {
+			req, err := chatRequest(e)
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(ctx, deliverTimeout)
+			defer cancel()
+			if _, err := client.ApplyUserEvent(ctx, req); err != nil {
+				return fmt.Errorf("chat: %w", err)
+			}
+			return nil
+		},
+	}
+}
+
+// chatRequest converts a stored event to chat's request; it carries the
+// same fields as core's.
+func chatRequest(e outbox.Event) (*chatv1.ApplyUserEventRequest, error) {
+	c, err := coreRequest(e)
+	if err != nil {
+		return nil, err
+	}
+	req := &chatv1.ApplyUserEventRequest{EventId: c.GetEventId(), UserId: c.GetUserId(), OccurredAt: c.GetOccurredAt()}
+	switch ev := c.GetEvent().(type) {
+	case *corev1.ApplyUserEventRequest_ProfileUpdated:
+		req.Event = &chatv1.ApplyUserEventRequest_ProfileUpdated{ProfileUpdated: &chatv1.UserProfileUpdated{
+			DisplayName: ev.ProfileUpdated.GetDisplayName(), AvatarUploadId: ev.ProfileUpdated.GetAvatarUploadId(),
+		}}
+	case *corev1.ApplyUserEventRequest_Deleted:
+		req.Event = &chatv1.ApplyUserEventRequest_Deleted{Deleted: &chatv1.UserDeleted{}}
 	}
 	return req, nil
 }

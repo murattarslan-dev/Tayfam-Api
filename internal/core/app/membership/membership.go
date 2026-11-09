@@ -35,6 +35,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/access"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -342,6 +343,18 @@ func (s *Service) join(ctx context.Context, q *store.Queries, tayfa, user id.ID,
 	if err := s.membershipChanged(ctx, q, tayfa, user, user, change, meta); err != nil {
 		return Member{}, err
 	}
+	if st == authz.StatusPending {
+		// A request to join: the admins and moderators decide (ADR-0009).
+		to, err := notify.Staff(ctx, q, tayfa, user)
+		if err != nil {
+			return Member{}, err
+		}
+		if err := notify.Write(ctx, q, notify.Request{
+			Type: notify.TypeJoinRequest, Tayfa: tayfa, Actor: user, TargetType: notify.TargetMembership, Target: user,
+		}, to); err != nil {
+			return Member{}, err
+		}
+	}
 	m := Member{TayfaID: tayfa, UserID: user, Role: authz.Member, Status: st}
 	if st == authz.StatusActive {
 		m.JoinedAt = now
@@ -631,6 +644,15 @@ func (s *Service) ApproveMember(ctx context.Context, caller, tayfa, target id.ID
 			return apperr.ErrMemberNotFound
 		}
 		if err := s.membershipChanged(ctx, q, tayfa, caller, target, changeApproved, nil); err != nil {
+			return err
+		}
+		to, err := notify.Only(ctx, q, tayfa, []id.ID{target}, caller)
+		if err != nil {
+			return err
+		}
+		if err := notify.Write(ctx, q, notify.Request{
+			Type: notify.TypeJoinApproved, Tayfa: tayfa, Actor: caller, TargetType: notify.TargetTayfa, Target: tayfa,
+		}, to); err != nil {
 			return err
 		}
 		out, err = s.reload(ctx, q, tayfa, target)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -65,9 +66,21 @@ func (s *Service) CreateAnswer(ctx context.Context, user, tayfa, question id.ID,
 		if err := txn.TouchTayfa(ctx, q, tayfa, w.now); err != nil {
 			return err
 		}
-		return record(ctx, q, tayfa, user, txn.Target{Type: subjectAnswer, ID: aid}, EventAnswerCreated,
+		if err := record(ctx, q, tayfa, user, txn.Target{Type: subjectAnswer, ID: aid}, EventAnswerCreated,
 			map[string]any{"question_id": question.String(), "answer_id": aid.String(), "question_author_id": idString(qrow.AuthorID)},
-			"", nil)
+			"", nil); err != nil {
+			return err
+		}
+		// The question's author, if still an active member and not the one
+		// answering (ADR-0009).
+		to, err := notify.Only(ctx, q, tayfa, []id.ID{optional(qrow.AuthorID)}, user)
+		if err != nil {
+			return err
+		}
+		return notify.Write(ctx, q, notify.Request{
+			Type: notify.TypeAnswerReceived, Tayfa: tayfa, Actor: user, TargetType: notify.TargetAnswer, Target: aid,
+			Extra: map[string]string{notify.ExtraQuestionID: question.String()},
+		}, to)
 	})
 	if err != nil {
 		return Answer{}, err

@@ -11,10 +11,36 @@ import (
 )
 
 type Querier interface {
+	ClearNotificationActor(ctx context.Context, userID pgtype.UUID) error
+	CountUnreadNotifications(ctx context.Context, arg CountUnreadNotificationsParams) (int64, error)
+	// Uygulama içi bildirimler (issue #64). Alıcıları core seçer (ADR-0009);
+	// chat yalnızca yazar. Kullanıcı uçlarındaki her okuma ve yazma çağıranın
+	// user_id'siyle sınırlıdır: başkasının bildirimi "yok" sayılır (IDOR).
+	// Bir isteğin bildirimleri; aynı olay ikinci kez gelince kullanıcı başına
+	// yeni satır açılmaz. Hesabı silinmiş kullanıcıya (profil mezar taşı) satır
+	// açılmaz.
+	CreateNotifications(ctx context.Context, arg CreateNotificationsParams) (int64, error)
+	DeleteNotificationPreference(ctx context.Context, arg DeleteNotificationPreferenceParams) error
+	// 90 gün saklama: en eski satırlardan bir parti.
+	DeleteOldNotifications(ctx context.Context, arg DeleteOldNotificationsParams) (int64, error)
+	DeleteTayfaNotificationPreferences(ctx context.Context, tayfaID pgtype.UUID) error
+	// Tayfa kalıcı silindi (tayfa.purged).
+	DeleteTayfaNotifications(ctx context.Context, tayfaID pgtype.UUID) error
+	DeleteUserNotificationPreferences(ctx context.Context, userID pgtype.UUID) error
+	// Hesap silindi.
+	DeleteUserNotifications(ctx context.Context, userID pgtype.UUID) error
 	GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUserProfileRow, error)
+	// Tercihler.
+	ListNotificationPreferences(ctx context.Context, userID pgtype.UUID) ([]ListNotificationPreferencesRow, error)
+	// En yeni önce; after_id verilirse ondan eskiler (UUIDv7 zaman sıralı).
+	ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]ListNotificationsRow, error)
+	MarkAllNotificationsRead(ctx context.Context, arg MarkAllNotificationsReadParams) (int64, error)
+	// Zaten okunmuşsa okunma zamanı değişmez; başkasının bildirimi bulunmaz.
+	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (pgtype.UUID, error)
 	// Hesap silindi: ad ve avatar temizlenir, satır mezar taşı olarak kalır.
 	// Tekrar uygulanınca sonuç değişmez.
 	TombstoneUserProfile(ctx context.Context, arg TombstoneUserProfileParams) error
+	UpsertNotificationPreference(ctx context.Context, arg UpsertNotificationPreferenceParams) error
 	// Profil kopyası (ADR-0009). Yalnızca identity'nin kullanıcı olaylarını
 	// uygulayan tüketici yazar.
 	// Daha yeni bir olay uygulanmışsa ya da profil silinmişse değişmez; etkilenen

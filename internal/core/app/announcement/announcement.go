@@ -34,6 +34,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/access"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -167,7 +168,17 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in CreateInput)
 		if err := txn.TouchTayfa(ctx, q, tayfa, s.now()); err != nil {
 			return err
 		}
-		return record(ctx, q, tayfa, user, aid, "announcement.created", EventCreated, nil, nil)
+		if err := record(ctx, q, tayfa, user, aid, "announcement.created", EventCreated, nil, nil); err != nil {
+			return err
+		}
+		// Every active member hears about it, but the author (ADR-0009).
+		to, err := notify.Members(ctx, q, tayfa, user)
+		if err != nil {
+			return err
+		}
+		return notify.Write(ctx, q, notify.Request{
+			Type: notify.TypeAnnouncement, Tayfa: tayfa, Actor: user, TargetType: notify.TargetAnnouncement, Target: aid,
+		}, to)
 	})
 	if err != nil {
 		return View{}, err

@@ -10,9 +10,13 @@ import (
 	"time"
 	_ "time/tzdata" // series time zones: the same IANA database in every image (issue #51)
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
+	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/announcement"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatrelay"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/jobs"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
@@ -23,6 +27,8 @@ import (
 	grpcapi "github.com/murattarslan-dev/tayfam-api/internal/core/transport/grpc"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/grpcx"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/outbox"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/ratelimit"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/service"
 )
@@ -135,5 +141,38 @@ func setup(rt *service.Runtime) error {
 	for _, w := range background.Workers() {
 		rt.AddWorker(w.Name, w.Run)
 	}
+	return addRelay(rt, pool)
+}
+
+// addRelay starts the outbox relay that delivers core's events to chat with
+// core's service token for chat (ADR-0002, ADR-0013). Only the event types
+// in chatrelay.Types reach chat: notification.requested and tayfa.purged.
+// Only a local environment may run without it; events then wait in the
+// outbox.
+func addRelay(rt *service.Runtime, pool *pgxpool.Pool) error {
+	chatToken, ok := rt.ServiceToken("chat")
+	if !ok {
+		if err := rt.Config.Err(); err != nil {
+			return err
+		}
+		rt.Log.Warn("chat servis token'ı yok; outbox relay kapalı (yalnızca yerel ortam)")
+		return nil
+	}
+	addr := rt.Config.Required("CHAT_GRPC_ADDR")
+	if err := rt.Config.Err(); err != nil {
+		return err
+	}
+	conn, err := grpcx.NewClient(addr, auth.ServiceTokenFrom(chatToken)...)
+	if err != nil {
+		return err
+	}
+	relay, err := outbox.NewRelay(outbox.RelayConfig{
+		Pool: pool, Log: rt.Log,
+		Consumers: []outbox.Consumer{chatrelay.Consumer(chatv1.NewCoreEventServiceClient(conn))},
+	})
+	if err != nil {
+		return err
+	}
+	rt.AddWorker("outbox", relay.Run)
 	return nil
 }

@@ -67,6 +67,10 @@ spec:
             - { name: SERVICE_TOKEN_JWKS_URL, value: "https://kubernetes.default.svc/openid/v1/jwks" }
             - { name: SERVICE_TOKEN_CA_FILE, value: /var/run/secrets/tayfam/kube-api/ca.crt }
             - { name: SERVICE_TOKEN_API_TOKEN_FILE, value: /var/run/secrets/tayfam/kube-api/token }
+            # Outbox relay → chat CoreEventService (issue #64). Token yalnızca
+            # chat audience'ı için geçerli ve 10 dakikalık.
+            - { name: CHAT_GRPC_ADDR, value: "chat:9090" }
+            - { name: SERVICE_TOKEN_FILE_CHAT, value: /var/run/secrets/tayfam/chat/token }
             # Ortama özel secret (deploy/apps/<ortam>/secrets, SOPS ile şifreli).
             # pg_hba core kullanıcısını yalnızca core veritabanına, TLS ile alır.
             - { name: DB_HOST, value: tayfam-pg-rw }
@@ -95,6 +99,7 @@ spec:
             capabilities: { drop: ["ALL"] }
           volumeMounts:
             - { name: kube-api, mountPath: /var/run/secrets/tayfam/kube-api, readOnly: true }
+            - { name: chat-token, mountPath: /var/run/secrets/tayfam/chat, readOnly: true }
       volumes:
         # Cluster'ın açık anahtarlarını (JWKS) okumak için API sunucusunun CA'sı
         # ve audience'ı API sunucusu olan 10 dakikalık token. Bu token'la
@@ -111,6 +116,17 @@ spec:
                   name: kube-root-ca.crt
                   items:
                     - { key: ca.crt, path: ca.crt }
+        # chat'i çağırmak için servis token'ı: audience chat.tayfam.internal,
+        # 10 dakika; kubelet süresi dolmadan yeniler. Başka hiçbir hedefte ve
+        # Kubernetes API'sinde geçmez.
+        - name: chat-token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: chat.tayfam.internal
+                  expirationSeconds: 600
 ---
 # core'un kimliği (ADR-0013). Rol bağlanmaz.
 apiVersion: v1

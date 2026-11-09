@@ -24,6 +24,29 @@ type EventConsumer struct {
 	UpdatedAt    pgtype.Timestamptz
 }
 
+type Notification struct {
+	ID            pgtype.UUID
+	UserID        pgtype.UUID
+	TayfaID       pgtype.UUID
+	Type          string
+	ActorID       pgtype.UUID
+	TargetType    string
+	TargetID      pgtype.UUID
+	Payload       []byte
+	SourceEventID pgtype.UUID
+	ReadAt        pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+}
+
+type NotificationPreference struct {
+	UserID     pgtype.UUID
+	ScopeType  string
+	ScopeID    pgtype.UUID
+	Level      string
+	MutedUntil pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
 type UserProfile struct {
 	UserID         pgtype.UUID
 	DisplayName    pgtype.Text
