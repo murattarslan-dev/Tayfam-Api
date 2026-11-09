@@ -106,6 +106,11 @@ Ek kurallar:
 
 ### WebSocket kimlik doğrulaması
 
+> Bu bölümün yerine [ADR-0014](0014-websocket-erisim-tokeniyla.md) geçti
+> (2026-11-09): bilet kaldırıldı; bağlantı erişim token'ıyla (mobilde
+> başlık, web'de çerez) açılır ve en geç token'ın süresi dolunca kapanır.
+> Aşağıdaki metin tarihçe için duruyor.
+
 - İstemci önce `POST /realtime/ticket` ile **30 saniye geçerli, tek kullanımlık**
   bir bilet alır.
 - WebSocket bağlantısı bu biletle açılır. Böylece erişim token'ı URL'de taşınmaz

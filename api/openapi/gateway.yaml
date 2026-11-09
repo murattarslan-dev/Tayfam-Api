@@ -3158,81 +3158,84 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
-  /v1/realtime/ticket:
-    post:
-      operationId: createRealtimeTicket
-      summary: Gerçek zamanlı bağlantı için tek kullanımlık bilet alır
-      description: |
-        WebSocket bağlantısı erişim token'ıyla değil bu biletle açılır
-        (ADR-0004, ADR-0005); böylece token URL'de taşınmaz ve web ile mobil
-        aynı yolu kullanır. Bilet **30 saniye** geçerlidir ve **tek bir**
-        bağlantı açar; aynı bileti ikinci kez kullanmak `invalid-ticket`
-        alır. Bilet oturuma bağlıdır: oturum kapatılınca bağlantı da kapanır.
-
-        Kullanılmamış en fazla 10 bilet olabilir (`rate-limited`). Kısa süre
-        önce kapatılmış bir oturum, erişim token'ı hâlâ geçerli olsa da bilet
-        alamaz (`unauthenticated`).
-      parameters:
-        - $ref: "#/components/parameters/ClientHeader"
-      responses:
-        "201":
-          description: Bilet
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/RealtimeTicket" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "429": { $ref: "#/components/responses/Problem" }
-        "503": { $ref: "#/components/responses/Problem" }
-
   /v1/realtime:
     get:
       operationId: connectRealtime
       summary: WebSocket bağlantısını açar
       description: |
-        `GET /v1/realtime?ticket=<bilet>` ile WebSocket el sıkışması
-        (`Upgrade: websocket`). Bilet doğrulanınca `101 Switching Protocols`
-        döner. Bağlantı chat servisinde çalışır; gateway isteği olduğu gibi
-        aktarır, çerez ve `Authorization` başlığını iletmez.
+        WebSocket el sıkışması (`Upgrade: websocket`), kullanıcının erişim
+        token'ıyla (ADR-0014): mobil istemci `Authorization: Bearer` başlığı
+        koyar; web istemcisinde tarayıcı `tayfam_at` çerezini kendisi
+        gönderir. Token URL'de taşınmaz. Token geçerliyse `101 Switching
+        Protocols` döner. Bağlantı chat servisinde çalışır; gateway token'ı
+        doğrulayıp chat'e iletir (çerezi değil), chat yeniden doğrular.
+
+        **Token ömrü:** Bağlantı en geç erişim token'ının süresi dolunca
+        **4003 `token_expired`** ile kapanır (`ready.data.expires_at`).
+        İstemci token'ı yeniler (`POST /v1/auth/refresh`; web'de çerez
+        yenilenir) ve yeniden bağlanır, kaçırdıklarını REST ile çeker.
 
         **Origin:** Web istemcisinin `Origin` başlığı izinli web adreslerinden
-        biri olmalıdır (`forbidden-origin`). `Origin` göndermeyen yerel
-        (mobil) istemciler kabul edilir.
+        biri olmalıdır (`forbidden-origin`). Çerezle gelen istek `Origin`
+        taşımak zorundadır. `Origin` göndermeyen yerel (mobil) istemciler
+        `Authorization` başlığıyla kabul edilir.
 
         **Çerçeveler:** Yalnızca metin çerçevesi, JSON:
         `{ "type": "...", "id": "...", "data": { ... } }`. Bir çerçeve en
-        fazla 64 KB'tır; büyüğü bağlantıyı 1009 ile kapatır. İkili çerçeve
-        1003 ile kapatır. İstemcinin gönderdiği `id` (en fazla 64 karakter)
-        cevapta aynen döner.
+        fazla 64 KB'tır; büyüğü bağlantıyı 1009 ile kapatır, ikili çerçeve
+        1003 ile. İstemcinin gönderdiği `id` (en fazla 64 karakter) cevapta
+        aynen döner.
+
+        İstemci çerçeveleri:
+        - `subscribe` `{tayfa_id, channel_id}` → `subscribed`. Yetki her
+          abonelikte core'a sorulur (REST ile aynı kural): üye olunmayan
+          tayfa `tayfa_not_found`; görülemeyen kanal (staff kanalı dahil)
+          `channel_not_found`. Bağlantı başına en fazla 100 abonelik
+          (`too_many_subscriptions`).
+        - `unsubscribe` `{tayfa_id, channel_id}` → `unsubscribed`
+          (`reason: requested`).
+        - `send` `{tayfa_id, channel_id, body, client_request_id}` → `sent`
+          (mesaj). REST'teki `POST …/messages` ile aynı fonksiyondan geçer:
+          susturma (`muted`), yavaş mod (`slow_mode`,
+          `data.retry_after_seconds`), arşiv (`channel_archived`), salt
+          okunur tayfa (`tayfa_read_only`), yetki (`permission_denied`),
+          boyut (`invalid_request`, `data.field: body`). Aynı
+          `client_request_id` ile tekrar gönderim ilk mesajı döner.
 
         Sunucu çerçeveleri:
-        - `ready`: bağlantı hazır; `data.heartbeat_seconds` ping aralığıdır.
-        - `error`: `data.code` makine tarafından okunur: `invalid_frame`
-          (JSON veya alanlar hatalı), `unsupported_type` (bilinmeyen tür),
-          `rate_limited` (kullanıcı başına dakikada 60, en fazla 20'lik
-          ani gönderim; sınırı aşmayı sürdüren bağlantı 1008 ile kapanır).
+        - `ready`: bağlantı hazır; `data.heartbeat_seconds` ping aralığı,
+          `data.expires_at` bağlantının en geç kapanacağı an.
+        - `message.created`, `message.restored`: abone olunan kanalda yeni
+          ya da geri alınan mesaj `{id, tayfa_id, channel_id,
+          author_user_id, body, created_at}`; gönderenin kendi bağlantısına
+          da gelir (istemci `id` ile tekilleştirir).
+        - `message.deleted`: `{tayfa_id, channel_id, message_id}`.
+        - `unsubscribed`: sunucunun kestiği abonelik; `data.reason`:
+          `access_lost` (tayfadan ayrılma, ban, rol düşmesi sonrası staff
+          kanalı, kanalın staff yapılması, tayfanın silinmesi) veya
+          `recheck_failed` (izin yeniden denetlenemedi; tekrar abone
+          olunabilir).
+        - `notification`: yeni bildirim `{type, tayfa_id, target_type,
+          target_id}`; içerik yok, liste REST'ten çekilir.
+        - `error`: `data.code`: `invalid_frame`, `invalid_request`
+          (`data.field`), `unsupported_type`, `rate_limited` (kullanıcı
+          başına dakikada 60, en fazla 20'lik ani gönderim; sürdüren
+          bağlantı 1008 ile kapanır), `busy`, `unavailable`, `internal` ve
+          yukarıdaki yetki kodları.
 
-        Kanal aboneliği, mesaj gönderimi ve canlı olay çerçeveleri sonraki
-        adımda eklenir (issue #82). WebSocket yalnızca canlı iletim içindir:
-        yeniden bağlanan istemci kaçırdıklarını REST ile, son gördüğü
-        kimlikten itibaren çeker.
+        WebSocket yalnızca canlı iletim içindir: yeniden bağlanan istemci
+        kaçırdıklarını REST ile, son gördüğü kimlikten itibaren çeker.
 
         **Canlılık:** Sunucu 30 saniyede bir ping gönderir; 10 saniye içinde
         pong gelmezse bağlantıyı kapatır. Okunmayan çerçeveler birikirse
-        (yavaş istemci) bağlantı kapanır.
+        bağlantı 4002 `slow_consumer` ile kapanır.
 
-        **Kapatma kodları:** 1001 sunucu kapanıyor (yeniden bağlan), 4000
-        bağlantı süresi doldu (en fazla 1 saat; yeni biletle yeniden bağlan),
-        4001 oturum kapatıldı, hesap askıya alındı veya silindi (yeniden
-        bağlanma; yeniden giriş gerekir), 4002 yavaş istemci (yeniden bağlan,
-        eksikleri REST ile çek).
+        **Kapatma kodları:** 1001 sunucu kapanıyor (yeniden bağlan), 4001
+        oturum kapatıldı, hesap askıya alındı veya silindi (yeniden giriş
+        gerekir), 4002 yavaş istemci, 4003 token süresi doldu (token'ı
+        yenile, yeniden bağlan).
 
         Kullanıcı başına en fazla 5 açık bağlantı vardır (`rate-limited`).
-      parameters:
-        - name: ticket
-          in: query
-          required: true
-          description: "`POST /v1/realtime/ticket` ile alınan bilet."
-          schema: { type: string, minLength: 43, maxLength: 43 }
       responses:
         "101": { description: WebSocket bağlantısı açıldı }
         "400": { $ref: "#/components/responses/Problem" }
@@ -3448,7 +3451,6 @@ components:
         - channel-name-taken
         - slow-mode
         # chat: gerçek zamanlı bağlantı (#82)
-        - invalid-ticket
         - forbidden-origin
       content:
         application/problem+json:
@@ -3476,13 +3478,6 @@ components:
           type: object
           additionalProperties: { type: string, enum: [ok, unavailable] }
         checked_at: { type: string, format: date-time }
-
-    RealtimeTicket:
-      type: object
-      required: [ticket, expires_at]
-      properties:
-        ticket: { type: string, description: Opak; olduğu gibi geri gönderilir. }
-        expires_at: { type: string, format: date-time }
 
     SignInRequest:
       type: object

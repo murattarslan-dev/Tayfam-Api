@@ -26,7 +26,13 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// RealtimeService hands out the tickets that open a WebSocket connection
+// Deprecated: no longer served. Since issue #82 (step 2) the WebSocket is
+// opened with the user's access token itself (ADR-0005 "Bağlantı", revised
+// 2026-11-09) and tickets are gone; chat does not register this service and
+// calls get UNIMPLEMENTED. The definition stays only so that the contract
+// remains backward compatible (buf breaking); nothing calls it.
+//
+// RealtimeService handed out the tickets that opened a WebSocket connection
 // (ADR-0004 "WebSocket kimlik doğrulaması", ADR-0005 "Bağlantı", issue #82).
 //
 // Authentication: the caller's access token (ADR-0004). Service tokens are
@@ -36,7 +42,10 @@ const (
 // GET /v1/realtime?ticket=... on the gateway, which passes it to chat's
 // HTTP port unchanged; chat checks the ticket. The access token never
 // travels in a URL.
+//
+// Deprecated: Do not use.
 type RealtimeServiceClient interface {
+	// Deprecated: Do not use.
 	// CreateRealtimeTicket returns a new ticket for the caller's session.
 	//
 	// A ticket is valid for 30 seconds and opens one connection: using it
@@ -52,10 +61,12 @@ type realtimeServiceClient struct {
 	cc grpc.ClientConnInterface
 }
 
+// Deprecated: Do not use.
 func NewRealtimeServiceClient(cc grpc.ClientConnInterface) RealtimeServiceClient {
 	return &realtimeServiceClient{cc}
 }
 
+// Deprecated: Do not use.
 func (c *realtimeServiceClient) CreateRealtimeTicket(ctx context.Context, in *CreateRealtimeTicketRequest, opts ...grpc.CallOption) (*CreateRealtimeTicketResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CreateRealtimeTicketResponse)
@@ -70,7 +81,13 @@ func (c *realtimeServiceClient) CreateRealtimeTicket(ctx context.Context, in *Cr
 // All implementations must embed UnimplementedRealtimeServiceServer
 // for forward compatibility.
 //
-// RealtimeService hands out the tickets that open a WebSocket connection
+// Deprecated: no longer served. Since issue #82 (step 2) the WebSocket is
+// opened with the user's access token itself (ADR-0005 "Bağlantı", revised
+// 2026-11-09) and tickets are gone; chat does not register this service and
+// calls get UNIMPLEMENTED. The definition stays only so that the contract
+// remains backward compatible (buf breaking); nothing calls it.
+//
+// RealtimeService handed out the tickets that opened a WebSocket connection
 // (ADR-0004 "WebSocket kimlik doğrulaması", ADR-0005 "Bağlantı", issue #82).
 //
 // Authentication: the caller's access token (ADR-0004). Service tokens are
@@ -80,7 +97,10 @@ func (c *realtimeServiceClient) CreateRealtimeTicket(ctx context.Context, in *Cr
 // GET /v1/realtime?ticket=... on the gateway, which passes it to chat's
 // HTTP port unchanged; chat checks the ticket. The access token never
 // travels in a URL.
+//
+// Deprecated: Do not use.
 type RealtimeServiceServer interface {
+	// Deprecated: Do not use.
 	// CreateRealtimeTicket returns a new ticket for the caller's session.
 	//
 	// A ticket is valid for 30 seconds and opens one connection: using it
@@ -113,6 +133,7 @@ type UnsafeRealtimeServiceServer interface {
 	mustEmbedUnimplementedRealtimeServiceServer()
 }
 
+// Deprecated: Do not use.
 func RegisterRealtimeServiceServer(s grpc.ServiceRegistrar, srv RealtimeServiceServer) {
 	// If the following call panics, it indicates UnimplementedRealtimeServiceServer was
 	// embedded by pointer and is nil.  This will cause panics if an

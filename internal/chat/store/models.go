@@ -79,15 +79,6 @@ type NotificationPreference struct {
 	UpdatedAt  pgtype.Timestamptz
 }
 
-type RealtimeTicket struct {
-	ID        pgtype.UUID
-	TokenHash []byte
-	UserID    pgtype.UUID
-	SessionID pgtype.UUID
-	CreatedAt pgtype.Timestamptz
-	ExpiresAt pgtype.Timestamptz
-}
-
 type UserProfile struct {
 	UserID         pgtype.UUID
 	DisplayName    pgtype.Text

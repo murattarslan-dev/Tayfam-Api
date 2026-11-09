@@ -2,7 +2,7 @@ package rest
 
 import (
 	"context"
-	"encoding/base64"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -11,21 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/grpc"
-
-	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/httpx"
 )
 
-// RealtimeClient is chat's RealtimeService as the gateway uses it (issue
-// #82).
-type RealtimeClient interface {
-	CreateRealtimeTicket(ctx context.Context, in *chatv1.CreateRealtimeTicketRequest, opts ...grpc.CallOption) (*chatv1.CreateRealtimeTicketResponse, error)
-}
-
-// ticketLen is the length of chat's tickets (32 bytes, base64url without
-// padding); anything else is refused before it reaches chat.
-var ticketLen = base64.RawURLEncoding.EncodedLen(32)
+type realtimeTokenKey struct{}
 
 type realtimeHandlers struct {
 	d       ChatDeps
@@ -33,38 +23,29 @@ type realtimeHandlers struct {
 	proxy   *httputil.ReverseProxy
 }
 
-// registerRealtime adds the ticket route and the WebSocket route. The
-// connection is not terminated here (ADR-0005): the gateway checks the
-// Origin and the shape of the ticket and passes the request to chat's HTTP
-// port unchanged; chat redeems the ticket and runs the connection. The
+// registerRealtime adds the WebSocket route (issue #82; ADR-0005
+// "Bağlantı", ADR-0014). The connection is not terminated here: the
+// gateway checks the Origin and the user's access token (mobile:
+// Authorization header; web: the tayfam_at cookie) and passes the upgrade
+// to chat's HTTP port with that token in the Authorization header, never
+// the cookie. chat verifies the token again and runs the connection. The
 // gateway stays stateless.
 func registerRealtime(mux *http.ServeMux, d ChatDeps, origins []string) {
 	h := realtimeHandlers{d: d, origins: map[string]bool{}, proxy: newRealtimeProxy(d.RealtimeURL, d.Log)}
 	for _, o := range origins {
 		h.origins[o] = true
 	}
-	mux.HandleFunc("POST /v1/realtime/ticket", authenticated(d.Verifier, d.Log, h.createTicket))
 	mux.HandleFunc("GET /v1/realtime", h.connect)
 }
 
-type ticketJSON struct {
-	Ticket    string    `json:"ticket"`
-	ExpiresAt time.Time `json:"expires_at"`
-}
-
-func (h realtimeHandlers) createTicket(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	resp, err := h.d.Realtime.CreateRealtimeTicket(ctx, &chatv1.CreateRealtimeTicketRequest{})
-	if err != nil {
-		writeUpstreamError(w, r, h.d.Log, "chat", err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, ticketJSON{Ticket: resp.GetTicket(), ExpiresAt: resp.GetExpireTime().AsTime()})
-}
-
-// connect checks what it can without state, then proxies to chat. chat
-// checks the Origin again (ADR-0011).
+// connect checks what it can, then proxies to chat. A token from the web
+// cookie needs an allowed Origin: browsers always send one with a
+// WebSocket, so a cross-site page cannot ride on the cookie
+// (cross-site WebSocket hijacking). chat checks the Origin again
+// (ADR-0011).
 func (h realtimeHandlers) connect(w http.ResponseWriter, r *http.Request) {
-	if o := r.Header.Get("Origin"); o != "" && !h.origins[o] {
+	origin := r.Header.Get("Origin")
+	if origin != "" && !h.origins[origin] {
 		httpx.WriteProblem(w, r, http.StatusForbidden, "forbidden-origin", "Forbidden", "")
 		return
 	}
@@ -72,28 +53,44 @@ func (h realtimeHandlers) connect(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-request", "Bad Request", "")
 		return
 	}
-	t := r.URL.Query().Get("ticket")
-	if len(t) != ticketLen {
-		httpx.WriteProblem(w, r, http.StatusUnauthorized, "invalid-ticket", "Unauthorized", "")
+	token, web := bearer(r)
+	if token == "" || len(token) > maxAccessTokenBytes {
+		httpx.WriteProblem(w, r, http.StatusUnauthorized, "unauthenticated", "Unauthorized", "")
 		return
 	}
-	if _, err := base64.RawURLEncoding.DecodeString(t); err != nil {
-		httpx.WriteProblem(w, r, http.StatusUnauthorized, "invalid-ticket", "Unauthorized", "")
+	if web && origin == "" {
+		httpx.WriteProblem(w, r, http.StatusForbidden, "forbidden-origin", "Forbidden", "")
 		return
 	}
-	h.proxy.ServeHTTP(w, r)
+	ctx, cancel := context.WithTimeout(r.Context(), upstreamWait)
+	_, err := h.d.Verifier.Verify(ctx, token)
+	cancel()
+	switch {
+	case errors.Is(err, auth.ErrInvalidToken):
+		httpx.WriteProblem(w, r, http.StatusUnauthorized, "unauthenticated", "Unauthorized", "")
+		return
+	case err != nil:
+		h.d.Log.WarnContext(r.Context(), "token doğrulanamadı: anahtar alınamadı")
+		httpx.WriteProblem(w, r, http.StatusServiceUnavailable, "unavailable", "Service Unavailable", "")
+		return
+	}
+	h.proxy.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), realtimeTokenKey{}, token)))
 }
 
-// newRealtimeProxy passes the upgrade to chat. Only what the WebSocket
-// handshake needs goes on: credentials (the token cookie, Authorization)
-// are dropped, chat authenticates with the ticket alone. Errors are logged
-// without the request URL, which carries the ticket.
+// newRealtimeProxy passes the upgrade to chat. Only what the handshake
+// needs goes on: cookies are dropped and the Authorization header is set to
+// the verified access token, whichever way it came. The query string is
+// dropped (the route takes none). Errors are logged without the request.
 func newRealtimeProxy(target *url.URL, log *slog.Logger) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(target)
+			pr.Out.URL.RawQuery = ""
 			pr.Out.Header.Del("Cookie")
 			pr.Out.Header.Del("Authorization")
+			if t, ok := pr.In.Context().Value(realtimeTokenKey{}).(string); ok {
+				pr.Out.Header.Set("Authorization", "Bearer "+t)
+			}
 			if id := httpx.RequestIDFrom(pr.In.Context()); id != "" {
 				pr.Out.Header.Set(httpx.RequestIDHeader, id)
 			}

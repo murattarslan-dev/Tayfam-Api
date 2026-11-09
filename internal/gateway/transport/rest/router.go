@@ -56,7 +56,7 @@ func NewRouter(d Deps) http.Handler {
 	if d.Chat.Channels != nil && d.Chat.Verifier != nil {
 		registerChannels(mux, chatHandlers{d: d.Chat})
 	}
-	if d.Chat.Realtime != nil && d.Chat.RealtimeURL != nil && d.Chat.Verifier != nil {
+	if d.Chat.RealtimeURL != nil && d.Chat.Verifier != nil {
 		registerRealtime(mux, d.Chat, d.AllowedOrigins)
 	}
 	mux.HandleFunc("/", httpx.NotFound)

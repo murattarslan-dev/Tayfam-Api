@@ -16,9 +16,6 @@ type Querier interface {
 	ClearChannelMessageAuthor(ctx context.Context, userID pgtype.UUID) error
 	ClearChannelMessageDeletedBy(ctx context.Context, userID pgtype.UUID) error
 	ClearNotificationActor(ctx context.Context, userID pgtype.UUID) error
-	// Gerçek zamanlı bağlantı biletleri (issue #82). Yalnızca biletin SHA-256
-	// özeti tutulur.
-	CountLiveRealtimeTickets(ctx context.Context, arg CountLiveRealtimeTicketsParams) (int64, error)
 	CountUnreadNotifications(ctx context.Context, arg CountUnreadNotificationsParams) (int64, error)
 	// Tayfa kanalları ve kanal mesajları (issue #81). Her kanal sorgusu
 	// tayfa_id ile, her mesaj sorgusu tayfa kapsamında doğrulanmış bir
@@ -35,12 +32,9 @@ type Querier interface {
 	// yeni satır açılmaz. Hesabı silinmiş kullanıcıya (profil mezar taşı) satır
 	// açılmaz.
 	CreateNotifications(ctx context.Context, arg CreateNotificationsParams) (int64, error)
-	CreateRealtimeTicket(ctx context.Context, arg CreateRealtimeTicketParams) error
-	DeleteExpiredRealtimeTickets(ctx context.Context, now pgtype.Timestamptz) (int64, error)
 	DeleteNotificationPreference(ctx context.Context, arg DeleteNotificationPreferenceParams) error
 	// 90 gün saklama: en eski satırlardan bir parti.
 	DeleteOldNotifications(ctx context.Context, arg DeleteOldNotificationsParams) (int64, error)
-	DeleteSessionRealtimeTickets(ctx context.Context, sessionID pgtype.UUID) error
 	// Tayfa kalıcı silindi (tayfa.purged): mesajlar ve okunma kayıtları CASCADE.
 	DeleteTayfaChannels(ctx context.Context, tayfaID pgtype.UUID) error
 	DeleteTayfaNotificationPreferences(ctx context.Context, tayfaID pgtype.UUID) error
@@ -50,7 +44,6 @@ type Querier interface {
 	DeleteUserNotificationPreferences(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silindi.
 	DeleteUserNotifications(ctx context.Context, userID pgtype.UUID) error
-	DeleteUserRealtimeTickets(ctx context.Context, userID pgtype.UUID) error
 	// Yazarın kendi silmesi: metin hemen gider, geri alınamaz.
 	EraseMessage(ctx context.Context, arg EraseMessageParams) (int64, error)
 	GetChannel(ctx context.Context, arg GetChannelParams) (GetChannelRow, error)
@@ -87,10 +80,6 @@ type Querier interface {
 	// Saklama ve silme.
 	// 30 gün: silinmiş mesajlardan bir parti kalıcı silinir.
 	PurgeDeletedMessages(ctx context.Context, arg PurgeDeletedMessagesParams) (int64, error)
-	// Bilet tek kullanımlıktır: bulunan satır aynı ifadede silinir, aynı bileti
-	// ikinci kez (ya da aynı anda iki kez) kullanan bulamaz. Süresi dolmuş
-	// bilet de silinir ama döndürülmez.
-	RedeemRealtimeTicket(ctx context.Context, arg RedeemRealtimeTicketParams) (RedeemRealtimeTicketRow, error)
 	RestoreMessage(ctx context.Context, arg RestoreMessageParams) (int64, error)
 	// archived_at NULL: arşivden çıkar.
 	SetChannelArchived(ctx context.Context, arg SetChannelArchivedParams) (SetChannelArchivedRow, error)

@@ -61,7 +61,8 @@ ele alır.
   alanları), `device_signed_prekeys`, `device_one_time_prekeys`,
   `user_key_events`
 - Bildirim: `notifications`, `notification_preferences`, `push_tokens`
-- Bağlantı: `realtime_tickets`
+- Bağlantı: yok (`realtime_tickets` 2026-11-09'da kaldırıldı;
+  [ADR-0014](0014-websocket-erisim-tokeniyla.md))
 
 **Her serviste:** `domain_events`, `event_consumers` (outbox, ADR-0002) ve
 `user_profiles` (aşağıya bakın).

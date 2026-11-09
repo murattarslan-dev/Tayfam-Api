@@ -1,8 +1,15 @@
 // Package ws is chat's WebSocket transport (ADR-0005 "Bağlantı", "Mesaj
-// protokolü"; issue #82). It opens a connection for a one-time ticket,
-// registers it with the hub, keeps it alive with pings and carries JSON
-// frames { "type", "id", "data" } both ways. It converts and limits; the
-// rules live in the app layer.
+// protokolü"; issue #82). It opens a connection for a verified access
+// token, registers it with the hub and carries JSON frames
+// { "type", "id", "data" } both ways. It converts and limits; the rules
+// live in the app layer (realtime.Live, channel.Service).
+//
+// Authentication: the gateway passes the user's access token in the
+// Authorization header (from the client's own header, or from the web
+// cookie); chat verifies the signature itself (CLAUDE.md rule 8) and keeps
+// the token only in the connection's memory, to ask core with it. The
+// connection closes when the token expires (4003); the client reconnects
+// with a fresh one.
 //
 // Limits on every connection: the Origin header must be absent (native
 // clients) or one of the allowed web origins; a frame is at most
@@ -10,11 +17,10 @@
 // per user; the server pings every PingInterval and closes a connection
 // that does not answer within PongTimeout; a client that does not read its
 // frames fast enough (send buffer full) is closed with 4002 and catches up
-// over REST after reconnecting (ADR-0005); after MaxLifetime the server
-// closes with 4000 and the client reconnects with a new ticket.
+// over REST after reconnecting (ADR-0005).
 //
-// Nothing a client sends is logged, and the request URL (it carries the
-// ticket) is never logged either.
+// Nothing a client sends is logged, message bodies included, and neither is
+// the token.
 package ws
 
 import (
@@ -23,6 +29,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"math"
 	"net/http"
 	"strings"
 	"sync"
@@ -32,29 +39,30 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/channel"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/realtime"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/httpx"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/ratelimit"
 )
 
-// Path is the connection's route; the gateway passes GET /v1/realtime here
-// unchanged.
+// Path is the connection's route; the gateway passes GET /v1/realtime here.
 const Path = "/v1/realtime"
 
 // Close codes the server uses besides the standard ones (1001 going away
 // on shutdown, 1003 binary frame, 1008 too many frames, 1009 frame too
 // large). The reason text is the same machine-readable word.
 const (
-	// CloseReconnect (4000, "reconnect"): MaxLifetime reached; reconnect
-	// with a new ticket.
-	CloseReconnect websocket.StatusCode = 4000
 	// CloseSessionEnded (4001, "session_ended"): the session was revoked
-	// or the account sanctioned or deleted; do not reconnect.
+	// or the account sanctioned or deleted; sign in again.
 	CloseSessionEnded websocket.StatusCode = 4001
 	// CloseSlowConsumer (4002, "slow_consumer"): the client did not read
 	// its frames; reconnect and catch up over REST.
 	CloseSlowConsumer websocket.StatusCode = 4002
+	// CloseTokenExpired (4003, "token_expired"): the access token the
+	// connection was opened with expired; refresh it and reconnect.
+	CloseTokenExpired websocket.StatusCode = 4003
 )
 
 // Defaults for Config's zero values.
@@ -64,41 +72,55 @@ const (
 	DefaultWriteTimeout  = 10 * time.Second
 	DefaultSendBuffer    = 64
 	DefaultMaxFrameBytes = 64 << 10
-	DefaultMaxLifetime   = time.Hour
+	DefaultCallTimeout   = 10 * time.Second
 	// maxFrameID bounds a client frame's id, echoed in replies.
 	maxFrameID = 64
 	// maxDenied closes a connection that keeps sending over its rate.
 	maxDenied = 10
+	// maxTokenBytes bounds the access token read from the header.
+	maxTokenBytes = 4096
+	// inbox holds client frames waiting for their answer; a full inbox
+	// answers "busy".
+	inbox = 8
 )
 
-// Tickets redeems tickets (realtime.Tickets).
-type Tickets interface {
-	Redeem(ctx context.Context, v string) (realtime.Identity, error)
+// Verifier checks an access token (auth.Verifier).
+type Verifier interface {
+	Verify(ctx context.Context, token string) (auth.Claims, error)
 }
 
 // Hub admits connections (realtime.Hub).
 type Hub interface {
-	Admit(user, session id.ID, c realtime.Conn) (release func(), err error)
+	Admit(user, session id.ID, token string, c realtime.Conn) (*realtime.Member, error)
+}
+
+// Live is the app layer of a connection (realtime.Live).
+type Live interface {
+	Subscribe(ctx context.Context, m *realtime.Member, tayfa, ch id.ID) error
+	Unsubscribe(m *realtime.Member, tayfa, ch id.ID) bool
+	Send(ctx context.Context, m *realtime.Member, tayfa, ch id.ID, in channel.SendInput) (channel.Message, error)
 }
 
 // Config wires a Handler.
 type Config struct {
-	Tickets Tickets
-	Hub     Hub
-	Log     *slog.Logger
+	Verifier Verifier
+	Hub      Hub
+	Live     Live
+	Log      *slog.Logger
 	// AllowedOrigins are the web origins that may open a connection, such
 	// as https://tayfam.app (the gateway's CORS list). A request without
 	// Origin (native clients) is allowed.
 	AllowedOrigins []string
 	// Frames limits incoming frames per user.
 	Frames *ratelimit.Limiter
+	Now    func() time.Time // optional, for tests
 
 	PingInterval  time.Duration
 	PongTimeout   time.Duration
 	WriteTimeout  time.Duration
+	CallTimeout   time.Duration
 	SendBuffer    int
 	MaxFrameBytes int64
-	MaxLifetime   time.Duration
 }
 
 // Handler serves GET /v1/realtime.
@@ -109,8 +131,11 @@ type Handler struct {
 
 // New returns a Handler.
 func New(cfg Config) (*Handler, error) {
-	if cfg.Tickets == nil || cfg.Hub == nil || cfg.Log == nil || cfg.Frames == nil {
+	if cfg.Verifier == nil || cfg.Hub == nil || cfg.Live == nil || cfg.Log == nil || cfg.Frames == nil {
 		return nil, errors.New("ws: eksik yapılandırma")
+	}
+	if cfg.Now == nil {
+		cfg.Now = time.Now
 	}
 	if cfg.PingInterval <= 0 {
 		cfg.PingInterval = DefaultPingInterval
@@ -121,14 +146,14 @@ func New(cfg Config) (*Handler, error) {
 	if cfg.WriteTimeout <= 0 {
 		cfg.WriteTimeout = DefaultWriteTimeout
 	}
+	if cfg.CallTimeout <= 0 {
+		cfg.CallTimeout = DefaultCallTimeout
+	}
 	if cfg.SendBuffer <= 0 {
 		cfg.SendBuffer = DefaultSendBuffer
 	}
 	if cfg.MaxFrameBytes <= 0 {
 		cfg.MaxFrameBytes = DefaultMaxFrameBytes
-	}
-	if cfg.MaxLifetime <= 0 {
-		cfg.MaxLifetime = DefaultMaxLifetime
 	}
 	h := &Handler{cfg: cfg, origins: map[string]bool{}}
 	for _, o := range cfg.AllowedOrigins {
@@ -143,13 +168,6 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/", httpx.NotFound)
 }
 
-// AllowedOrigin reports whether a request with this Origin header may open
-// a connection: none (a native client) or exactly one of origins.
-func AllowedOrigin(origins map[string]bool, origin string) bool {
-	return origin == "" || origins[origin]
-}
-
-// isUpgrade reports whether r asks for a WebSocket.
 func isUpgrade(r *http.Request) bool {
 	for v := range strings.SplitSeq(r.Header.Get("Upgrade"), ",") {
 		if strings.EqualFold(strings.TrimSpace(v), "websocket") {
@@ -159,11 +177,17 @@ func isUpgrade(r *http.Request) bool {
 	return false
 }
 
-// ServeHTTP checks the Origin and the ticket, then upgrades. The cheap
-// checks come first, so a cross-site page or a plain GET cannot use up a
-// ticket.
+func bearer(r *http.Request) string {
+	h := r.Header.Get("Authorization")
+	if !strings.HasPrefix(h, "Bearer ") {
+		return ""
+	}
+	return strings.TrimSpace(h[len("Bearer "):])
+}
+
+// ServeHTTP checks the Origin and the token, then upgrades.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if !AllowedOrigin(h.origins, r.Header.Get("Origin")) {
+	if o := r.Header.Get("Origin"); o != "" && !h.origins[o] {
 		httpx.WriteProblem(w, r, http.StatusForbidden, "forbidden-origin", "Forbidden", "")
 		return
 	}
@@ -171,21 +195,32 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-request", "Bad Request", "")
 		return
 	}
-	who, err := h.cfg.Tickets.Redeem(r.Context(), r.URL.Query().Get("ticket"))
+	token := bearer(r)
+	if token == "" || len(token) > maxTokenBytes {
+		httpx.WriteProblem(w, r, http.StatusUnauthorized, "unauthenticated", "Unauthorized", "")
+		return
+	}
+	claims, err := h.cfg.Verifier.Verify(r.Context(), token)
 	switch {
-	case errors.Is(err, realtime.ErrInvalidTicket):
-		httpx.WriteProblem(w, r, http.StatusUnauthorized, "invalid-ticket", "Unauthorized", "")
+	case errors.Is(err, auth.ErrInvalidToken):
+		httpx.WriteProblem(w, r, http.StatusUnauthorized, "unauthenticated", "Unauthorized", "")
 		return
 	case err != nil:
-		h.cfg.Log.WarnContext(r.Context(), "bilet doğrulanamadı", slog.String("hata", err.Error()))
+		h.cfg.Log.WarnContext(r.Context(), "token doğrulanamadı: anahtar alınamadı")
 		httpx.WriteProblem(w, r, http.StatusServiceUnavailable, "unavailable", "Service Unavailable", "")
 		return
 	}
-	c := newConn(h.cfg, who)
-	release, err := h.cfg.Hub.Admit(who.User, who.Session, c)
+	user, okU := id.Parse(claims.Subject)
+	session, okS := id.Parse(claims.SessionID)
+	if !okU || !okS {
+		httpx.WriteProblem(w, r, http.StatusUnauthorized, "unauthenticated", "Unauthorized", "")
+		return
+	}
+	c := newConn(h.cfg, claims.ExpiresAt)
+	m, err := h.cfg.Hub.Admit(user, session, token, c)
 	switch {
 	case errors.Is(err, apperr.ErrSessionEnded):
-		httpx.WriteProblem(w, r, http.StatusUnauthorized, "invalid-ticket", "Unauthorized", "")
+		httpx.WriteProblem(w, r, http.StatusUnauthorized, "unauthenticated", "Unauthorized", "")
 		return
 	case errors.Is(err, realtime.ErrTooManyConnections):
 		httpx.WriteProblem(w, r, http.StatusTooManyRequests, "rate-limited", "Too Many Requests", "")
@@ -194,7 +229,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteProblem(w, r, http.StatusServiceUnavailable, "unavailable", "Service Unavailable", "")
 		return
 	}
-	defer release()
+	defer m.Release()
+	c.m = m
 	patterns := make([]string, 0, len(h.origins))
 	for o := range h.origins {
 		patterns = append(patterns, o)
@@ -203,8 +239,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Checked above as well; the library checks again.
 		OriginPatterns: patterns,
 		// No permessage-deflate: compression of attacker-influenced frames
-		// next to secrets (CRIME/BREACH) and its memory cost are not worth
-		// it for small JSON frames.
+		// next to message bodies (CRIME/BREACH) and its memory cost are not
+		// worth it for small JSON frames.
 		CompressionMode: websocket.CompressionDisabled,
 	})
 	if err != nil {
@@ -220,23 +256,28 @@ type frame struct {
 	Data json.RawMessage `json:"data,omitempty"`
 }
 
-// closeReq is a request to end the connection.
 type closeReq struct {
 	code   websocket.StatusCode
 	reason string
 }
 
-// conn is one connection. Close and send may be called from any goroutine.
+// conn is one connection. Close, Deliver and send may be called from any
+// goroutine.
 type conn struct {
-	cfg Config
-	who realtime.Identity
-	out chan []byte
+	cfg     Config
+	m       *realtime.Member
+	expires time.Time
+	out     chan []byte
+	in      chan frame
 	// end receives the first close request; later ones are dropped.
 	end chan closeReq
 }
 
-func newConn(cfg Config, who realtime.Identity) *conn {
-	return &conn{cfg: cfg, who: who, out: make(chan []byte, cfg.SendBuffer), end: make(chan closeReq, 1)}
+func newConn(cfg Config, expires time.Time) *conn {
+	return &conn{
+		cfg: cfg, expires: expires, out: make(chan []byte, cfg.SendBuffer),
+		in: make(chan frame, inbox), end: make(chan closeReq, 1),
+	}
 }
 
 // Close implements realtime.Conn.
@@ -248,6 +289,9 @@ func (c *conn) Close(reason realtime.CloseReason) {
 		c.requestClose(websocket.StatusGoingAway, "shutdown")
 	}
 }
+
+// Deliver implements realtime.Conn.
+func (c *conn) Deliver(e realtime.Event) { c.sendFrame(e.Type, "", e.Data) }
 
 func (c *conn) requestClose(code websocket.StatusCode, reason string) {
 	select {
@@ -283,11 +327,18 @@ func (c *conn) sendFrame(typ, frameID string, data any) {
 
 type errorData struct {
 	Code string `json:"code"`
+	// Field names the invalid field of invalid_request.
+	Field string `json:"field,omitempty"`
+	// RetryAfterSeconds comes with slow_mode.
+	RetryAfterSeconds int64 `json:"retry_after_seconds,omitempty"`
 }
 
 type readyData struct {
-	HeartbeatSeconds int `json:"heartbeat_seconds"`
+	HeartbeatSeconds int       `json:"heartbeat_seconds"`
+	ExpiresAt        time.Time `json:"expires_at"`
 }
+
+func (c *conn) fail(frameID, code string) { c.sendFrame("error", frameID, errorData{Code: code}) }
 
 // run serves the connection until it ends. The request's context is not
 // used: after the upgrade it belongs to the hijacked HTTP request.
@@ -300,17 +351,20 @@ func (c *conn) run(ws *websocket.Conn) {
 	wg.Go(func() { c.writeLoop(ctx, cancel, ws) })
 	wg.Go(func() { c.pingLoop(ctx, cancel, ws) })
 	wg.Go(func() { c.closeLoop(ctx, cancel, ws) })
+	wg.Go(func() { c.work(ctx) })
 
-	c.sendFrame("ready", "", readyData{HeartbeatSeconds: int(c.cfg.PingInterval.Seconds())})
+	c.sendFrame("ready", "", readyData{HeartbeatSeconds: int(c.cfg.PingInterval.Seconds()), ExpiresAt: c.expires.UTC()})
 	c.readLoop(ctx, ws)
 	cancel()
 	wg.Wait()
 	_ = ws.CloseNow()
 }
 
+// readLoop reads frames and hands them to work, so that pongs and close
+// frames keep being read while core answers.
 func (c *conn) readLoop(ctx context.Context, ws *websocket.Conn) {
 	denied := 0
-	key := c.who.User.String()
+	key := c.m.User().String()
 	for {
 		typ, data, err := ws.Read(ctx)
 		if err != nil {
@@ -325,29 +379,183 @@ func (c *conn) readLoop(ctx context.Context, ws *websocket.Conn) {
 				c.requestClose(websocket.StatusPolicyViolation, "rate_limited")
 				continue
 			}
-			c.sendFrame("error", "", errorData{Code: "rate_limited"})
+			c.fail("", "rate_limited")
 			continue
 		}
 		denied = 0
-		c.handle(data)
+		f, ok := decodeFrame(data)
+		if !ok {
+			c.fail("", "invalid_frame")
+			continue
+		}
+		select {
+		case c.in <- f:
+		default:
+			c.fail(f.ID, "busy")
+		}
 	}
 }
 
-// handle answers one client frame. No client frame type is served yet;
-// channel subscriptions and sending come with the next step of issue #82.
-func (c *conn) handle(data []byte) {
+func decodeFrame(data []byte) (frame, bool) {
 	var f frame
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&f); err != nil || f.Type == "" {
-		c.sendFrame("error", "", errorData{Code: "invalid_frame"})
-		return
+		return frame{}, false
 	}
 	if len(f.ID) > maxFrameID || !utf8.ValidString(f.ID) || strings.ContainsFunc(f.ID, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
-		c.sendFrame("error", "", errorData{Code: "invalid_frame"})
+		return frame{}, false
+	}
+	return f, true
+}
+
+func (c *conn) work(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case f := <-c.in:
+			cctx, cancel := context.WithTimeout(ctx, c.cfg.CallTimeout)
+			c.handle(cctx, f)
+			cancel()
+		}
+	}
+}
+
+// Client frame data.
+type channelRef struct {
+	TayfaID   string `json:"tayfa_id"`
+	ChannelID string `json:"channel_id"`
+}
+
+type sendData struct {
+	TayfaID         string `json:"tayfa_id"`
+	ChannelID       string `json:"channel_id"`
+	Body            string `json:"body"`
+	ClientRequestID string `json:"client_request_id"`
+}
+
+func decodeData(raw json.RawMessage, v any) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	return dec.Decode(v) == nil
+}
+
+func (r channelRef) ids() (id.ID, id.ID, string) {
+	tayfa, ok := id.Parse(r.TayfaID)
+	if !ok {
+		return id.ID{}, id.ID{}, "tayfa_id"
+	}
+	ch, ok := id.Parse(r.ChannelID)
+	if !ok {
+		return id.ID{}, id.ID{}, "channel_id"
+	}
+	return tayfa, ch, ""
+}
+
+func (c *conn) invalid(frameID, field string) {
+	c.sendFrame("error", frameID, errorData{Code: "invalid_request", Field: field})
+}
+
+// handle answers one client frame:
+//
+//	subscribe   { tayfa_id, channel_id }  → subscribed
+//	unsubscribe { tayfa_id, channel_id }  → unsubscribed (reason requested)
+//	send        { tayfa_id, channel_id, body, client_request_id } → sent
+func (c *conn) handle(ctx context.Context, f frame) {
+	switch f.Type {
+	case "subscribe", "unsubscribe":
+		var d channelRef
+		if !decodeData(f.Data, &d) {
+			c.invalid(f.ID, "data")
+			return
+		}
+		tayfa, ch, bad := d.ids()
+		if bad != "" {
+			c.invalid(f.ID, bad)
+			return
+		}
+		ref := realtime.SubscriptionData{TayfaID: tayfa.String(), ChannelID: ch.String()}
+		if f.Type == "unsubscribe" {
+			c.cfg.Live.Unsubscribe(c.m, tayfa, ch)
+			ref.Reason = realtime.ReasonRequested
+			c.sendFrame(realtime.EventUnsubscribed, f.ID, ref)
+			return
+		}
+		if err := c.cfg.Live.Subscribe(ctx, c.m, tayfa, ch); err != nil {
+			c.appError(ctx, f.ID, err)
+			return
+		}
+		c.sendFrame("subscribed", f.ID, ref)
+	case "send":
+		var d sendData
+		if !decodeData(f.Data, &d) {
+			c.invalid(f.ID, "data")
+			return
+		}
+		tayfa, ch, bad := channelRef{TayfaID: d.TayfaID, ChannelID: d.ChannelID}.ids()
+		if bad != "" {
+			c.invalid(f.ID, bad)
+			return
+		}
+		req, ok := id.Parse(d.ClientRequestID)
+		if !ok {
+			c.invalid(f.ID, "client_request_id")
+			return
+		}
+		msg, err := c.cfg.Live.Send(ctx, c.m, tayfa, ch, channel.SendInput{Body: d.Body, ClientRequestID: req})
+		if err != nil {
+			c.appError(ctx, f.ID, err)
+			return
+		}
+		c.sendFrame("sent", f.ID, realtime.MessageFrom(tayfa, msg))
+	default:
+		c.fail(f.ID, "unsupported_type")
+	}
+}
+
+// appError answers an app error with its machine-readable code; the same
+// names as the REST problem types, with underscores. Unknown errors are
+// logged (never with the frame's content) and answered "internal".
+func (c *conn) appError(ctx context.Context, frameID string, err error) {
+	var v *apperr.ValidationError
+	if errors.As(err, &v) {
+		c.invalid(frameID, v.Field)
 		return
 	}
-	c.sendFrame("error", f.ID, errorData{Code: "unsupported_type"})
+	var slow *apperr.SlowModeError
+	if errors.As(err, &slow) {
+		secs := max(int64(math.Ceil(slow.RetryAfter.Seconds())), 1)
+		c.sendFrame("error", frameID, errorData{Code: "slow_mode", RetryAfterSeconds: secs})
+		return
+	}
+	for _, e := range []struct {
+		err  error
+		code string
+	}{
+		{apperr.ErrTayfaNotFound, "tayfa_not_found"},
+		{apperr.ErrChannelNotFound, "channel_not_found"},
+		{apperr.ErrPermissionDenied, "permission_denied"},
+		{apperr.ErrMuted, "muted"},
+		{apperr.ErrChannelArchived, "channel_archived"},
+		{apperr.ErrTayfaReadOnly, "tayfa_read_only"},
+		{realtime.ErrTooManySubscriptions, "too_many_subscriptions"},
+		{apperr.ErrUnavailable, "unavailable"},
+		{apperr.ErrChannelsUnavailable, "unavailable"},
+		{context.DeadlineExceeded, "unavailable"},
+	} {
+		if errors.Is(err, e.err) {
+			c.fail(frameID, e.code)
+			return
+		}
+	}
+	if !errors.Is(err, context.Canceled) {
+		c.cfg.Log.ErrorContext(ctx, "gerçek zamanlı istek başarısız", slog.String("hata", err.Error()))
+	}
+	c.fail(frameID, "internal")
 }
 
 func (c *conn) writeLoop(ctx context.Context, cancel context.CancelFunc, ws *websocket.Conn) {
@@ -388,19 +596,19 @@ func (c *conn) pingLoop(ctx context.Context, cancel context.CancelFunc, ws *webs
 	}
 }
 
-// closeLoop ends the connection on the first close request or when its
-// lifetime is over. The close handshake needs the read loop running, so it
-// happens here and the read loop ends with it.
+// closeLoop ends the connection on the first close request or when the
+// access token expires. The close handshake needs the read loop running,
+// so it happens here and the read loop ends with it.
 func (c *conn) closeLoop(ctx context.Context, cancel context.CancelFunc, ws *websocket.Conn) {
-	life := time.NewTimer(c.cfg.MaxLifetime)
-	defer life.Stop()
+	exp := time.NewTimer(max(c.expires.Sub(c.cfg.Now()), 0))
+	defer exp.Stop()
 	var req closeReq
 	select {
 	case <-ctx.Done():
 		return
 	case req = <-c.end:
-	case <-life.C:
-		req = closeReq{code: CloseReconnect, reason: "reconnect"}
+	case <-exp.C:
+		req = closeReq{code: CloseTokenExpired, reason: "token_expired"}
 	}
 	_ = ws.Close(req.code, req.reason)
 	cancel()

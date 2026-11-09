@@ -21,6 +21,7 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | [0011](0011-guvenlik-ilkesi-ihlal-varsayimi.md) | Güvenlik ilkesi: ihlal varsayımı ve hasar sınırlama | Kabul edildi |
 | [0012](0012-dogum-tarihi-ve-kotuye-kullanim.md) | Doğum tarihi, genç kullanıcı güvenliği ve kötüye kullanım tespiti | Kabul edildi |
 | [0013](0013-servis-kimligi.md) | Kullanıcısız servisler arası çağrılarda servis kimliği | Kabul edildi |
+| [0014](0014-websocket-erisim-tokeniyla.md) | WebSocket bağlantısı kullanıcının erişim token'ıyla | Kabul edildi |
 
 Ürün kararları (kavram modeli, özellikler, veri modeli, KVKK metni, platform
 yönetim paneli) Notion'daki "Tayfam — Proje Planı" sayfasındadır. ADR'ler bu
