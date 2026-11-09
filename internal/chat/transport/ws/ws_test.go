@@ -92,17 +92,22 @@ func (e *env) url(ticket string) string {
 	return "ws" + strings.TrimPrefix(e.srv.URL, "http") + Path + "?ticket=" + ticket
 }
 
-func (e *env) dial(t *testing.T, ticket, origin string) (*websocket.Conn, *http.Response, error) {
+// dial opens a connection and returns the handshake's HTTP status.
+func (e *env) dial(t *testing.T, ticket, origin string) (*websocket.Conn, int, error) {
 	t.Helper()
 	hdr := http.Header{}
 	if origin != "" {
 		hdr.Set("Origin", origin)
 	}
 	c, resp, err := websocket.Dial(testCtx(t), e.url(ticket), &websocket.DialOptions{HTTPHeader: hdr})
-	if resp != nil && resp.Body != nil {
-		_ = resp.Body.Close()
+	code := 0
+	if resp != nil {
+		code = resp.StatusCode
+		if resp.Body != nil {
+			_ = resp.Body.Close()
+		}
 	}
-	return c, resp, err
+	return c, code, err
 }
 
 // connect opens a connection for a new user and reads the ready frame.
@@ -161,7 +166,7 @@ func TestRefusedBeforeUpgrade(t *testing.T) {
 
 	// A foreign web origin is refused, and the ticket is not used up.
 	ticket := e.tickets.add(who)
-	if _, resp, err := e.dial(t, ticket, "https://kotu.example"); err == nil || resp.StatusCode != http.StatusForbidden {
+	if _, resp, err := e.dial(t, ticket, "https://kotu.example"); err == nil || resp != http.StatusForbidden {
 		t.Fatalf("yabancı origin: %v %v", resp, err)
 	}
 	if e.tickets.left() != 1 {
@@ -182,12 +187,12 @@ func TestRefusedBeforeUpgrade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.CloseNow()
+	defer func() { _ = c.CloseNow() }()
 	// The ticket worked once; a second use is refused.
-	if _, resp, err := e.dial(t, ticket, ""); err == nil || resp.StatusCode != http.StatusUnauthorized {
+	if _, resp, err := e.dial(t, ticket, ""); err == nil || resp != http.StatusUnauthorized {
 		t.Fatalf("bilet tekrar kullanıldı: %v %v", resp, err)
 	}
-	if _, resp, err := e.dial(t, "", ""); err == nil || resp.StatusCode != http.StatusUnauthorized {
+	if _, resp, err := e.dial(t, "", ""); err == nil || resp != http.StatusUnauthorized {
 		t.Fatalf("bilet yok: %v %v", resp, err)
 	}
 }
@@ -197,7 +202,7 @@ func TestTooManyConnections(t *testing.T) {
 	who := newWho()
 	e.connect(t, who)
 	e.connect(t, who)
-	if _, resp, err := e.dial(t, e.tickets.add(who), ""); err == nil || resp.StatusCode != http.StatusTooManyRequests {
+	if _, resp, err := e.dial(t, e.tickets.add(who), ""); err == nil || resp != http.StatusTooManyRequests {
 		t.Fatalf("üçüncü bağlantı: %v %v", resp, err)
 	}
 }
@@ -219,7 +224,7 @@ func TestSessionEndClosesConnection(t *testing.T) {
 		t.Fatalf("diğer bağlantı: %+v", f)
 	}
 	// The session cannot connect again.
-	if _, resp, err := e.dial(t, e.tickets.add(who), ""); err == nil || resp.StatusCode != http.StatusUnauthorized {
+	if _, resp, err := e.dial(t, e.tickets.add(who), ""); err == nil || resp != http.StatusUnauthorized {
 		t.Fatalf("kapatılan oturum yeniden bağlandı: %v %v", resp, err)
 	}
 	waitConnections(t, e.hub, 1)
@@ -352,7 +357,9 @@ func TestShutdownCloses(t *testing.T) {
 	done := make(chan error)
 	go func() { done <- e.hub.Run(ctx) }()
 	cancel()
-	<-done
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
 	if code := closedWith(t, c); code != websocket.StatusGoingAway {
 		t.Fatalf("kapanış kodu %d", code)
 	}

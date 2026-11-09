@@ -69,7 +69,7 @@ func (s *fakeRealtime) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	defer c.CloseNow()
+	defer func() { _ = c.CloseNow() }()
 	_ = c.Write(r.Context(), websocket.MessageText, []byte(`{"type":"ready"}`))
 	_, _, _ = c.Read(r.Context())
 }
@@ -110,7 +110,7 @@ func TestRealtimeProxiesUpgradeWithoutCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.CloseNow()
+	defer func() { _ = c.CloseNow() }()
 	_, b, err := c.Read(ctx)
 	if err != nil || string(b) != `{"type":"ready"}` {
 		t.Fatalf("çerçeve: %q %v", b, err)
