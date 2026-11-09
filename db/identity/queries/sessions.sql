@@ -7,15 +7,19 @@ SELECT id, user_id, device_id, expires_at
 FROM sessions
 WHERE id = @id AND revoked_at IS NULL AND expires_at > now();
 
--- name: RevokeSession :execrows
+-- Kapatılan oturumun kullanıcısını döner (session.revoked olayı için);
+-- zaten kapalıysa satır dönmez.
+-- name: RevokeSession :many
 UPDATE sessions
 SET revoked_at = now(), revoked_reason = @reason
-WHERE id = @id AND revoked_at IS NULL;
+WHERE id = @id AND revoked_at IS NULL
+RETURNING user_id;
 
--- name: RevokeUserSessions :execrows
+-- name: RevokeUserSessions :many
 UPDATE sessions
 SET revoked_at = now(), revoked_reason = @reason
-WHERE user_id = @user_id AND revoked_at IS NULL;
+WHERE user_id = @user_id AND revoked_at IS NULL
+RETURNING id;
 
 -- Hesap yönetimi (issue #75).
 
@@ -31,15 +35,19 @@ LIMIT 100;
 
 -- Oturum yalnızca sahibi tarafından kapatılır: user_id koşulu başka
 -- kullanıcının oturumunu kapatmayı (IDOR) engeller.
--- name: RevokeOwnSession :execrows
+-- name: RevokeOwnSession :many
 UPDATE sessions
 SET revoked_at = now(), revoked_reason = @reason
-WHERE id = @id AND user_id = @user_id AND revoked_at IS NULL;
+WHERE id = @id AND user_id = @user_id AND revoked_at IS NULL
+RETURNING id;
 
--- name: RevokeOtherSessions :execrows
+-- Kapatılan oturumların kimliklerini döner: her biri için session.revoked
+-- yazılır (issue #92).
+-- name: RevokeOtherSessions :many
 UPDATE sessions
 SET revoked_at = now(), revoked_reason = 'user_signout_remote'
-WHERE user_id = @user_id AND id <> @keep_id AND revoked_at IS NULL;
+WHERE user_id = @user_id AND id <> @keep_id AND revoked_at IS NULL
+RETURNING id;
 
 -- Çağıranın oturumu: açık, süresi dolmamış ve token'daki kullanıcıya ait.
 -- created_at, hesap silmede yeniden kimlik doğrulama için girişin

@@ -1,8 +1,11 @@
 // Package userevents writes identity's outbox events about a user (ADR-0002,
-// ADR-0009): user.profile_updated keeps the profile copies in core (and later
-// chat) current, user.deleted makes them remove the user's personal records.
+// ADR-0009): user.profile_updated keeps the profile copies in core and chat
+// current, user.deleted makes them remove the user's personal records.
+// session.revoked and user.sanctioned make chat close the real-time
+// connections of a session or of every session of the user (ADR-0014,
+// issue #92); they go to chat only.
 //
-// Both are written inside the caller's transaction, as its last step, so the
+// All are written inside the caller's transaction, as its last step, so the
 // event exists exactly when the change it describes is committed.
 package userevents
 
@@ -21,6 +24,8 @@ import (
 const (
 	TypeProfileUpdated = "user.profile_updated"
 	TypeDeleted        = "user.deleted"
+	TypeSessionRevoked = "session.revoked"
+	TypeSanctioned     = "user.sanctioned"
 	subjectUser        = "user"
 )
 
@@ -69,6 +74,44 @@ func Deleted(ctx context.Context, tx pgx.Tx, user id.ID) error {
 		Type: TypeDeleted, SubjectType: subjectUser, SubjectID: user,
 	}); err != nil {
 		return fmt.Errorf("silme olayı: %w", err)
+	}
+	return nil
+}
+
+// Revoked is the payload of session.revoked: the session ID only. The user
+// is the event's subject; the reason (sign-out, token reuse, …) is not sent.
+type Revoked struct {
+	SessionID string `json:"session_id"`
+}
+
+// SessionsRevoked records that sessions of user are ended, one
+// session.revoked event per session: the payload stays a fixed few bytes
+// however many sessions end at once. No sessions writes nothing.
+func SessionsRevoked(ctx context.Context, tx pgx.Tx, user id.ID, sessions ...id.ID) error {
+	for _, s := range sessions {
+		if s == (id.ID{}) {
+			return fmt.Errorf("oturum olayı: oturum kimliği boş")
+		}
+		if _, err := outbox.Write(ctx, tx, outbox.NewEvent{
+			Type: TypeSessionRevoked, SubjectType: subjectUser, SubjectID: user,
+			Payload: Revoked{SessionID: s.String()},
+		}); err != nil {
+			return fmt.Errorf("oturum olayı: %w", err)
+		}
+	}
+	return nil
+}
+
+// Sanctioned records that a platform sanction (suspension or ban) ended
+// every session of user (ADR-0004 "Platform yaptırımları"). The payload is
+// empty: which sanction, and why, stays in identity. Nothing calls it yet;
+// the platform panel's sanction flow will, in the transaction that ends the
+// sessions.
+func Sanctioned(ctx context.Context, tx pgx.Tx, user id.ID) error {
+	if _, err := outbox.Write(ctx, tx, outbox.NewEvent{
+		Type: TypeSanctioned, SubjectType: subjectUser, SubjectID: user,
+	}); err != nil {
+		return fmt.Errorf("yaptırım olayı: %w", err)
 	}
 	return nil
 }

@@ -148,6 +148,13 @@ func TestUnderAgeIsBlockedForGood(t *testing.T) {
 	if got := e.profileEvents(t, u); len(got) != 0 {
 		t.Fatalf("reddedilen kayıt profil olayı yazdı: %q", got)
 	}
+	// No session.revoked either: the user had registration tokens only,
+	// which chat refuses, and chat need not learn the ID (issue #92).
+	var revoked int
+	must(t, e.pool.QueryRow(ctx, `SELECT count(*) FROM domain_events WHERE type = 'session.revoked'`).Scan(&revoked))
+	if revoked != 0 {
+		t.Fatalf("yaş engeli session.revoked yazdı: %d", revoked)
+	}
 	// Başka bir tarihle tekrar denemek işe yaramaz.
 	if err := e.svc.Complete(ctx, u, input("1990-01-01")); !errors.Is(err, ErrAgeBlocked) {
 		t.Fatalf("tekrar deneme: %v", err)

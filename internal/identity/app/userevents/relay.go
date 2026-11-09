@@ -11,6 +11,7 @@ import (
 
 	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/outbox"
 )
 
@@ -86,7 +87,7 @@ func coreRequest(e outbox.Event) (*corev1.ApplyUserEventRequest, error) {
 func ChatConsumer(client chatv1.UserEventServiceClient) outbox.Consumer {
 	return outbox.Consumer{
 		Name:  "chat",
-		Types: []string{TypeProfileUpdated, TypeDeleted},
+		Types: []string{TypeProfileUpdated, TypeDeleted, TypeSessionRevoked, TypeSanctioned},
 		Deliver: func(ctx context.Context, e outbox.Event) error {
 			req, err := chatRequest(e)
 			if err != nil {
@@ -102,9 +103,13 @@ func ChatConsumer(client chatv1.UserEventServiceClient) outbox.Consumer {
 	}
 }
 
-// chatRequest converts a stored event to chat's request; it carries the
-// same fields as core's.
+// chatRequest converts a stored event to chat's request. Profile and
+// deletion carry the same fields as core's; session events are chat's only.
 func chatRequest(e outbox.Event) (*chatv1.ApplyUserEventRequest, error) {
+	switch e.Type {
+	case TypeSessionRevoked, TypeSanctioned:
+		return chatSessionRequest(e)
+	}
 	c, err := coreRequest(e)
 	if err != nil {
 		return nil, err
@@ -118,5 +123,31 @@ func chatRequest(e outbox.Event) (*chatv1.ApplyUserEventRequest, error) {
 	case *corev1.ApplyUserEventRequest_Deleted:
 		req.Event = &chatv1.ApplyUserEventRequest_Deleted{Deleted: &chatv1.UserDeleted{}}
 	}
+	return req, nil
+}
+
+// chatSessionRequest converts session.revoked and user.sanctioned.
+func chatSessionRequest(e outbox.Event) (*chatv1.ApplyUserEventRequest, error) {
+	if e.SubjectType != subjectUser || e.SubjectID == (id.ID{}) {
+		return nil, errors.New("olayın konusu kullanıcı değil")
+	}
+	req := &chatv1.ApplyUserEventRequest{
+		EventId:    e.ID.String(),
+		UserId:     e.SubjectID.String(),
+		OccurredAt: timestamppb.New(e.OccurredAt),
+	}
+	if e.Type == TypeSanctioned {
+		req.Event = &chatv1.ApplyUserEventRequest_Sanctioned{Sanctioned: &chatv1.UserSanctioned{}}
+		return req, nil
+	}
+	var r Revoked
+	if err := json.Unmarshal(e.Payload, &r); err != nil {
+		return nil, errors.New("oturum olayı çözümlenemedi")
+	}
+	sid, ok := id.Parse(r.SessionID)
+	if !ok {
+		return nil, errors.New("oturum olayında geçersiz oturum kimliği")
+	}
+	req.Event = &chatv1.ApplyUserEventRequest_SessionRevoked{SessionRevoked: &chatv1.SessionRevoked{SessionId: sid.String()}}
 	return req, nil
 }
