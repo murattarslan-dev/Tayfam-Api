@@ -84,6 +84,8 @@ func TestErrorStatus(t *testing.T) {
 		{apperr.ErrCorrectionClosed, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_CORRECTION_CLOSED},
 		{apperr.ErrHikeNotStarted, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_HIKE_NOT_STARTED},
 		{apperr.ErrNotAttended, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_NOT_ATTENDED},
+		{apperr.ErrEventSeriesNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_EVENT_SERIES_NOT_FOUND},
+		{apperr.ErrEventSeriesEnded, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_SERIES_ENDED},
 		// Wrapped errors keep their reason.
 		{fmt.Errorf("katman: %w", apperr.ErrTayfaNotFound), codes.NotFound, corev1.ErrorReason_ERROR_REASON_TAYFA_NOT_FOUND},
 		// The memberships trigger, second line of defence.

@@ -154,4 +154,11 @@ enum ErrorReason {
   // FAILED_PRECONDITION. The action needs the caller's verified attendance
   // (AddFishingCatch).
   ERROR_REASON_NOT_ATTENDED = 45;
+
+  // Event series (issue #51).
+
+  // NOT_FOUND. No event series with this ID in this tayfa.
+  ERROR_REASON_EVENT_SERIES_NOT_FOUND = 50;
+  // FAILED_PRECONDITION. The series was ended; it no longer changes.
+  ERROR_REASON_EVENT_SERIES_ENDED = 51;
 }

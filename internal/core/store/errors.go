@@ -20,6 +20,8 @@ const (
 	CodeLastAdmin = "TF003"
 	// CodeAppendOnly: an UPDATE, DELETE or TRUNCATE on audit_logs.
 	CodeAppendOnly = "TF004"
+	// CodeUniqueViolation is Postgres' unique_violation.
+	CodeUniqueViolation = "23505"
 )
 
 // SystemJobAccountDeletion is the only system job the membership trigger
@@ -31,6 +33,15 @@ func SQLState(err error) string {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		return pgErr.Code
+	}
+	return ""
+}
+
+// Constraint returns the constraint a Postgres error names, or "".
+func Constraint(err error) string {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.ConstraintName
 	}
 	return ""
 }

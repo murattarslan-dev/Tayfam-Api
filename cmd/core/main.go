@@ -8,6 +8,9 @@ package main
 import (
 	"context"
 	"time"
+	// Series time zones are validated and expanded with the IANA database
+	// built into the binary, the same in every image (issue #51).
+	_ "time/tzdata"
 
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
@@ -105,5 +108,9 @@ func setup(rt *service.Runtime) error {
 	corev1.RegisterAnnouncementServiceServer(srv, grpcapi.NewAnnouncementServer(announcements, rt.Log))
 	corev1.RegisterEventServiceServer(srv, grpcapi.NewEventServer(events, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
+	// Tekrarlayan etkinliklerin önümüzdeki 8 haftalık örnekleri (issue #51).
+	// Birden fazla pod'da çalışabilir: tayfa ve seri satırı kilitlenir,
+	// örnekler (series_id, starts_at) ile tekildir.
+	rt.AddWorker("event-series", events.RunSeriesGenerator)
 	return nil
 }

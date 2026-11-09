@@ -10,6 +10,7 @@ import (
 
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event/ical"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
@@ -33,6 +34,9 @@ type Events interface {
 	AddCatch(ctx context.Context, user, t, e id.ID, in event.CatchInput) (event.Catch, error)
 	ListCatches(ctx context.Context, user, t, e id.ID, pageSize int32, pageToken string) ([]event.Catch, string, error)
 	RemoveCatch(ctx context.Context, user, t, e, catch id.ID) error
+	GetSeries(ctx context.Context, user, t, series id.ID) (event.Series, error)
+	EndSeries(ctx context.Context, user, t, series id.ID) (event.Series, int, error)
+	Export(ctx context.Context, user, t, e id.ID) ([]byte, error)
 }
 
 // EventServer implements corev1.EventServiceServer. The acting user always
@@ -92,6 +96,9 @@ func (s *EventServer) CreateEvent(ctx context.Context, req *corev1.CreateEventRe
 		Capacity: req.GetCapacity(), Discoverable: req.GetDiscoverable(), Details: d,
 		ClientRequestID: req.GetClientRequestId(),
 	}
+	if r := req.GetRecurrence(); r != nil {
+		in.Recurrence = &event.Recurrence{RRule: r.GetRrule(), TimeZone: r.GetTimeZone()}
+	}
 	v, err := s.app.Create(ctx, user, t, in)
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
@@ -109,7 +116,7 @@ func (s *EventServer) UpdateEvent(ctx context.Context, req *corev1.UpdateEventRe
 	in := event.Input{
 		Title: req.GetTitle(), Description: req.GetDescription(),
 		StartsAt: timeOf(req.GetStartTime()), EndsAt: timeOf(req.GetEndTime()),
-		Capacity: req.GetCapacity(), Discoverable: req.GetDiscoverable(),
+		Capacity: req.GetCapacity(), Discoverable: req.GetDiscoverable(), Series: req.GetSeries(),
 	}
 	// Only the fields named in the mask are converted.
 	for _, f := range fields {
@@ -284,8 +291,75 @@ func (s *EventServer) RemoveConvoyVehicle(ctx context.Context, req *corev1.Remov
 	return &corev1.RemoveConvoyVehicleResponse{}, nil
 }
 
+// GetEventSeries implements corev1.EventServiceServer.
+func (s *EventServer) GetEventSeries(ctx context.Context, req *corev1.GetEventSeriesRequest) (*corev1.GetEventSeriesResponse, error) {
+	user, t, series, err := seriesScope(ctx, req.GetTayfaId(), req.GetSeriesId())
+	if err != nil {
+		return nil, err
+	}
+	v, err := s.app.GetSeries(ctx, user, t, series)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.GetEventSeriesResponse{Series: seriesToProto(v)}, nil
+}
+
+// EndEventSeries implements corev1.EventServiceServer.
+func (s *EventServer) EndEventSeries(ctx context.Context, req *corev1.EndEventSeriesRequest) (*corev1.EndEventSeriesResponse, error) {
+	user, t, series, err := seriesScope(ctx, req.GetTayfaId(), req.GetSeriesId())
+	if err != nil {
+		return nil, err
+	}
+	v, n, err := s.app.EndSeries(ctx, user, t, series)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.EndEventSeriesResponse{Series: seriesToProto(v), CancelledCount: int32(min(n, math.MaxInt32))}, nil //nolint:gosec // clamped
+}
+
+// ExportEvent implements corev1.EventServiceServer.
+func (s *EventServer) ExportEvent(ctx context.Context, req *corev1.ExportEventRequest) (*corev1.ExportEventResponse, error) {
+	user, t, e, err := scope(ctx, req.GetTayfaId(), ptr(req.GetEventId()))
+	if err != nil {
+		return nil, err
+	}
+	b, err := s.app.Export(ctx, user, t, e)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.ExportEventResponse{Ics: b, ContentType: ical.ContentType}, nil
+}
+
+func seriesScope(ctx context.Context, tayfa, series string) (user, t, sid id.ID, err error) {
+	if user, t, _, err = scope(ctx, tayfa, nil); err != nil {
+		return
+	}
+	var ok bool
+	if sid, ok = id.Parse(series); !ok {
+		err = validation("series_id")
+	}
+	return
+}
+
 // ---------------------------------------------------------------------------
 // Conversions
+
+func seriesToProto(v event.Series) *corev1.EventSeries {
+	out := &corev1.EventSeries{
+		Id: v.ID.String(), TayfaId: v.TayfaID.String(), Rrule: v.RRule, TimeZone: v.TimeZone,
+		StartTime: timestamppb.New(v.StartsAt), CreateTime: timestamppb.New(v.CreatedAt),
+	}
+	if v.TemplateEventID != (id.ID{}) {
+		out.TemplateEventId = v.TemplateEventID.String()
+	}
+	if !v.EndedAt.IsZero() {
+		out.EndTime = timestamppb.New(v.EndedAt)
+	}
+	if v.CreatedBy != (id.ID{}) {
+		out.CreatedBy = v.CreatedBy.String()
+	}
+	return out
+}
 
 // timeOf returns the zero time for an unset or invalid timestamp; the app
 // layer refuses it.
@@ -423,6 +497,9 @@ func eventToProto(v event.Event) *corev1.Event {
 	}
 	if v.CreatedBy != (id.ID{}) {
 		out.CreatedBy = v.CreatedBy.String()
+	}
+	if v.SeriesID != (id.ID{}) {
+		out.SeriesId, out.SeriesOverride = v.SeriesID.String(), v.SeriesOverride
 	}
 	d := v.Details
 	switch {

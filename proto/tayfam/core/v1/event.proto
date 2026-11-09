@@ -187,6 +187,39 @@ service EventService {
   // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
   // ERROR_REASON_EVENT_ITEM_NOT_FOUND.
   rpc RemoveFishingCatch(RemoveFishingCatchRequest) returns (RemoveFishingCatchResponse);
+
+  // GetEventSeries returns a series' rule (issue #51). Every active member
+  // may read it.
+  //
+  // Errors: common, ERROR_REASON_EVENT_SERIES_NOT_FOUND.
+  rpc GetEventSeries(GetEventSeriesRequest) returns (GetEventSeriesResponse);
+
+  // EndEventSeries ends a series: no more events are generated, and its
+  // events that have not started, are scheduled and were not edited on
+  // their own (series_override) are cancelled, as CancelEvent would. Who
+  // may: like CancelEvent, with the series' creator as organizer.
+  //
+  // Errors: common, ERROR_REASON_EVENT_SERIES_NOT_FOUND,
+  // ERROR_REASON_EVENT_SERIES_ENDED.
+  rpc EndEventSeries(EndEventSeriesRequest) returns (EndEventSeriesResponse);
+
+  // ExportEvent returns the event as an iCalendar (RFC 5545) file for the
+  // caller's calendar ("Takvime ekleme"). It holds only what the caller
+  // sees in GetEvent, and less:
+  //   - UID is the event ID, so a calendar updates the entry on a second
+  //     import; a cancelled event has STATUS:CANCELLED.
+  //   - Times are in UTC.
+  //   - LOCATION is the meeting point name, district and city of an
+  //     in-person event, never its coordinates (no GEO property): the file
+  //     leaves the app and may be synced to third-party calendars. A
+  //     participants-only fishing spot is left out for callers who do not
+  //     see it.
+  //   - An online event's link (online_url) goes into LOCATION and URL.
+  //     Only active members get this file at all.
+  //   - No attendees, organizer, plates or other members' data.
+  //
+  // Errors: common.
+  rpc ExportEvent(ExportEventRequest) returns (ExportEventResponse);
 }
 
 enum EventMode {
@@ -399,6 +432,11 @@ message Event {
   bool caller_can_manage = 26;
   // The caller's verified attendance; UNSPECIFIED until checked in.
   AttendanceStatus caller_attendance = 27;
+  // The series this event belongs to (issue #51); empty for a single event.
+  string series_id = 28;
+  // The event was edited on its own (UpdateEvent without series): changes
+  // to the series and ending it leave it alone.
+  bool series_override = 29;
   // Set by GetEvent for every type except GENERAL; never by
   // ListUpcomingEvents.
   oneof details {
@@ -453,6 +491,54 @@ message CreateEventRequest {
   // Required. A UUID the client generates once per create attempt and
   // reuses on retry.
   string client_request_id = 15;
+  // Optional: makes the event the first of a repeating series. The server
+  // creates the following events itself, eight weeks ahead, as ordinary
+  // events (see Recurrence).
+  Recurrence recurrence = 16;
+}
+
+// Recurrence is how a series repeats (issue #51; data model v14
+// "Tekrarlayan etkinlik").
+message Recurrence {
+  // An RFC 5545 RRULE, this subset only (anything else is
+  // ERROR_REASON_VALIDATION, field "recurrence.rrule"):
+  //   FREQ=WEEKLY or FREQ=MONTHLY (required)
+  //   INTERVAL=1..52
+  //   BYDAY: WEEKLY: weekdays (MO,WE); MONTHLY: weekdays with an ordinal
+  //     -5..-1 or 1..5 (2SA = second Saturday, -1FR = last Friday)
+  //   COUNT=1..500 or UNTIL=YYYYMMDDTHHMMSSZ (UTC; at most five years after
+  //     the start), not both
+  //   WKST=MO
+  // An optional "RRULE:" prefix is accepted; the stored form is canonical.
+  // The event's start_time is the first occurrence and must match the rule
+  // (for example a Saturday for BYDAY=SA). Without BYDAY a weekly rule
+  // repeats on the start's weekday and a monthly one on the start's day of
+  // the month; months without that day are skipped.
+  string rrule = 1;
+  // IANA time zone name, for example "Europe/Istanbul" (the default when
+  // empty). Every event keeps the first one's local time across daylight
+  // saving changes. Unknown names are ERROR_REASON_VALIDATION, field
+  // "recurrence.time_zone".
+  string time_zone = 2;
+}
+
+// EventSeries is a repeating series.
+message EventSeries {
+  string id = 1;
+  string tayfa_id = 2;
+  // The event new occurrences are copied from: an upcoming event of the
+  // series that was not edited on its own, when there is one.
+  string template_event_id = 3;
+  // Canonical form.
+  string rrule = 4;
+  string time_zone = 5;
+  // The first occurrence.
+  google.protobuf.Timestamp start_time = 6;
+  // Set once the series was ended.
+  google.protobuf.Timestamp end_time = 7;
+  // Empty if their account was deleted.
+  string created_by = 8;
+  google.protobuf.Timestamp create_time = 9;
 }
 
 message CreateEventResponse {
@@ -490,6 +576,16 @@ message UpdateEventRequest {
   // details; vehicles and camp items stay). Any other path is
   // ERROR_REASON_VALIDATION.
   google.protobuf.FieldMask update_mask = 15;
+  // Only for an event of a series (otherwise ERROR_REASON_VALIDATION, field
+  // "series"). false: only this event changes and it is marked
+  // series_override, so later changes to the series leave it alone. true:
+  // the change is made to the series: this event and every event of the
+  // series that has not started, is scheduled and was not edited on its
+  // own, and the events generated later. "time" cannot be changed for a
+  // series (ERROR_REASON_VALIDATION, field "update_mask"); hike details'
+  // expected_return_time keeps its distance from each event's start.
+  // ERROR_REASON_EVENT_SERIES_ENDED if the series was ended.
+  bool series = 16;
 }
 
 message UpdateEventResponse {
@@ -715,3 +811,35 @@ message RemoveFishingCatchRequest {
 }
 
 message RemoveFishingCatchResponse {}
+
+message GetEventSeriesRequest {
+  string tayfa_id = 1;
+  string series_id = 2;
+}
+
+message GetEventSeriesResponse {
+  EventSeries series = 1;
+}
+
+message EndEventSeriesRequest {
+  string tayfa_id = 1;
+  string series_id = 2;
+}
+
+message EndEventSeriesResponse {
+  EventSeries series = 1;
+  // How many upcoming events were cancelled.
+  int32 cancelled_count = 2;
+}
+
+message ExportEventRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+}
+
+message ExportEventResponse {
+  // The iCalendar object: UTF-8, CRLF line endings.
+  bytes ics = 1;
+  // Always "text/calendar; charset=utf-8".
+  string content_type = 2;
+}

@@ -259,7 +259,7 @@ func (q *Queries) GetConvoyVehicleOwner(ctx context.Context, arg GetConvoyVehicl
 const getEvent = `-- name: GetEvent :one
 SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
-       capacity, status, cancelled_at, cancel_reason, series_id, discoverable,
+       capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
        created_by, created_at, updated_at
 FROM events
 WHERE tayfa_id = $1 AND id = $2 AND deleted_at IS NULL
@@ -290,6 +290,7 @@ type GetEventRow struct {
 	CancelledAt      pgtype.Timestamptz
 	CancelReason     pgtype.Text
 	SeriesID         pgtype.UUID
+	SeriesOverride   bool
 	Discoverable     bool
 	CreatedBy        pgtype.UUID
 	CreatedAt        pgtype.Timestamptz
@@ -319,6 +320,7 @@ func (q *Queries) GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow
 		&i.CancelledAt,
 		&i.CancelReason,
 		&i.SeriesID,
+		&i.SeriesOverride,
 		&i.Discoverable,
 		&i.CreatedBy,
 		&i.CreatedAt,
@@ -399,7 +401,7 @@ func (q *Queries) GetEventFishing(ctx context.Context, eventID pgtype.UUID) (str
 const getEventForUpdate = `-- name: GetEventForUpdate :one
 SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
-       capacity, status, cancelled_at, cancel_reason, series_id, discoverable,
+       capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
        created_by, created_at, updated_at
 FROM events
 WHERE tayfa_id = $1 AND id = $2 AND deleted_at IS NULL
@@ -431,6 +433,7 @@ type GetEventForUpdateRow struct {
 	CancelledAt      pgtype.Timestamptz
 	CancelReason     pgtype.Text
 	SeriesID         pgtype.UUID
+	SeriesOverride   bool
 	Discoverable     bool
 	CreatedBy        pgtype.UUID
 	CreatedAt        pgtype.Timestamptz
@@ -462,6 +465,7 @@ func (q *Queries) GetEventForUpdate(ctx context.Context, arg GetEventForUpdatePa
 		&i.CancelledAt,
 		&i.CancelReason,
 		&i.SeriesID,
+		&i.SeriesOverride,
 		&i.Discoverable,
 		&i.CreatedBy,
 		&i.CreatedAt,
@@ -725,7 +729,7 @@ func (q *Queries) ListFishingVisibility(ctx context.Context, eventIds []pgtype.U
 const listUpcomingEvents = `-- name: ListUpcomingEvents :many
 SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
-       capacity, status, cancelled_at, cancel_reason, series_id, discoverable,
+       capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
        created_by, created_at, updated_at
 FROM events
 WHERE tayfa_id = $1
@@ -764,6 +768,7 @@ type ListUpcomingEventsRow struct {
 	CancelledAt      pgtype.Timestamptz
 	CancelReason     pgtype.Text
 	SeriesID         pgtype.UUID
+	SeriesOverride   bool
 	Discoverable     bool
 	CreatedBy        pgtype.UUID
 	CreatedAt        pgtype.Timestamptz
@@ -807,6 +812,7 @@ func (q *Queries) ListUpcomingEvents(ctx context.Context, arg ListUpcomingEvents
 			&i.CancelledAt,
 			&i.CancelReason,
 			&i.SeriesID,
+			&i.SeriesOverride,
 			&i.Discoverable,
 			&i.CreatedBy,
 			&i.CreatedAt,

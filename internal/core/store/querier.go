@@ -14,10 +14,14 @@ type Querier interface {
 	// Doğrudan davetin kabulü; status active ya da pending.
 	AcceptInvitation(ctx context.Context, arg AcceptInvitationParams) (int64, error)
 	AddTayfaInterest(ctx context.Context, arg AddTayfaInterestParams) error
+	// generated_until yalnızca ileri gider.
+	AdvanceEventSeries(ctx context.Context, arg AdvanceEventSeriesParams) error
 	// Başvuru onayı.
 	ApproveMembership(ctx context.Context, arg ApproveMembershipParams) (int64, error)
 	BanMembership(ctx context.Context, arg BanMembershipParams) (int64, error)
 	CancelEvent(ctx context.Context, arg CancelEventParams) (int64, error)
+	// Seri sonlandırılınca gelecekteki düzenlenmemiş örnekler iptal edilir.
+	CancelSeriesUpcomingEvents(ctx context.Context, arg CancelSeriesUpcomingEventsParams) ([]pgtype.UUID, error)
 	CancelTayfaDeletion(ctx context.Context, id pgtype.UUID) (int64, error)
 	// Duyurular kalır, yazar "Silinmiş kullanıcı" olur (v14 "İlişkiler ve
 	// Silme Davranışı").
@@ -67,10 +71,16 @@ type Querier interface {
 	// yüklenmiş bir etkinliğin kimliğiyle çalışır (IDOR); yetki kontrolü app
 	// katmanındadır (authz).
 	CreateEvent(ctx context.Context, arg CreateEventParams) error
+	// Tekrarlayan etkinlik serileri (issue #51). Kullanıcı istekleri her sorguyu
+	// tayfa_id ile çalıştırır (IDOR); üretim işi seriyi kendi listesinden alır.
+	CreateEventSeries(ctx context.Context, arg CreateEventSeriesParams) error
 	CreateInvite(ctx context.Context, arg CreateInviteParams) error
 	// Üyelik değişiklikleri transaction içinde SetActor ya da SetSystemJob'dan
 	// sonra yapılır; aksi halde trigger reddeder.
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) error
+	// Üretilen örnek. Aynı seride aynı başlangıç zamanı zaten varsa hiçbir şey
+	// yazılmaz (events_series_starts_at_key); iki pod aynı örneği üretemez.
+	CreateSeriesEvent(ctx context.Context, arg CreateSeriesEventParams) (int64, error)
 	// Sistemin olayları txn.Event (internal/platform/outbox.Write) ile, işlemi
 	// yapan olmadan yazılır.
 	CreateSystemAuditLog(ctx context.Context, arg CreateSystemAuditLogParams) error
@@ -95,6 +105,7 @@ type Querier interface {
 	DeleteUserConvoyVehicles(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserHikeCheckins(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserRsvps(ctx context.Context, userID pgtype.UUID) error
+	EndEventSeries(ctx context.Context, arg EndEventSeriesParams) (int64, error)
 	// Yazarın kendi silmesi: başlık ve gövde hemen boşaltılır, geri alınamaz
 	// (v14 "Silinen içeriği geri alma").
 	EraseAnnouncement(ctx context.Context, arg EraseAnnouncementParams) (int64, error)
@@ -119,6 +130,11 @@ type Querier interface {
 	GetEventForUpdate(ctx context.Context, arg GetEventForUpdateParams) (GetEventForUpdateRow, error)
 	GetEventGaming(ctx context.Context, eventID pgtype.UUID) (GetEventGamingRow, error)
 	GetEventHike(ctx context.Context, eventID pgtype.UUID) (GetEventHikeRow, error)
+	GetEventSeries(ctx context.Context, arg GetEventSeriesParams) (GetEventSeriesRow, error)
+	// Seriyi değiştiren istekler ve üretim işi aynı satırı kilitler; çağıran
+	// tayfa satırını önceden kilitlemiştir (kilit sırası: tayfa, seri,
+	// etkinlikler).
+	GetEventSeriesForUpdate(ctx context.Context, arg GetEventSeriesForUpdateParams) (GetEventSeriesForUpdateRow, error)
 	GetEventSports(ctx context.Context, eventID pgtype.UUID) (GetEventSportsRow, error)
 	// ---------------------------------------------------------------------------
 	// Yürüyüş yoklaması
@@ -168,6 +184,9 @@ type Querier interface {
 	// (created_at, id) ile sayfalanır.
 	ListCatches(ctx context.Context, arg ListCatchesParams) ([]ListCatchesRow, error)
 	ListConvoyVehicles(ctx context.Context, eventID pgtype.UUID) ([]ListConvoyVehiclesRow, error)
+	// Üretim sırası gelen seriler: bitmemiş, şablonu olan ve generated_until'ı
+	// verilen zamandan önce kalanlar.
+	ListDueEventSeries(ctx context.Context, arg ListDueEventSeriesParams) ([]ListDueEventSeriesRow, error)
 	// Liste görünümünde mera gizliliği için.
 	ListFishingVisibility(ctx context.Context, eventIds []pgtype.UUID) ([]ListFishingVisibilityRow, error)
 	ListInterestsForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListInterestsForTayfasRow, error)
@@ -195,6 +214,9 @@ type Querier interface {
 	// Bekleyen başvurular, eskiden yeniye; kimin davetiyle geldiği: doğrudan
 	// davet eden ya da davet linkini açan.
 	ListPendingPage(ctx context.Context, arg ListPendingPageParams) ([]ListPendingPageRow, error)
+	// Serinin henüz başlamamış, iptal edilmemiş ve tek başına düzenlenmemiş
+	// örnekleri; seri güncellemesi bunları değiştirir.
+	ListSeriesUpcomingEvents(ctx context.Context, arg ListSeriesUpcomingEventsParams) ([]pgtype.UUID, error)
 	ListTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) ([]string, error)
 	ListTayfaModules(ctx context.Context, tayfaID pgtype.UUID) ([]ListTayfaModulesRow, error)
 	// Bitmemiş etkinlikler, başlangıç zamanına göre; (starts_at, id) ile
@@ -255,6 +277,8 @@ type Querier interface {
 	SetEventFishing(ctx context.Context, arg SetEventFishingParams) error
 	SetEventGaming(ctx context.Context, arg SetEventGamingParams) error
 	SetEventHike(ctx context.Context, arg SetEventHikeParams) error
+	SetEventSeriesID(ctx context.Context, arg SetEventSeriesIDParams) (int64, error)
+	SetEventSeriesTemplate(ctx context.Context, arg SetEventSeriesTemplateParams) error
 	SetEventSports(ctx context.Context, arg SetEventSportsParams) error
 	SetMembershipRole(ctx context.Context, arg SetMembershipRoleParams) (int64, error)
 	SetRsvp(ctx context.Context, arg SetRsvpParams) error
@@ -276,6 +300,8 @@ type Querier interface {
 	UpdateAnnouncementContent(ctx context.Context, arg UpdateAnnouncementContentParams) (int64, error)
 	// Seri örneği elle düzenlenince seri güncellemeleri ona dokunmaz.
 	UpdateEvent(ctx context.Context, arg UpdateEventParams) (int64, error)
+	// Seri güncellemesi: UpdateEvent gibi, ama series_override'a dokunmaz.
+	UpdateSeriesEvent(ctx context.Context, arg UpdateSeriesEventParams) (int64, error)
 	UpdateTayfaSettings(ctx context.Context, arg UpdateTayfaSettingsParams) (int64, error)
 	// ---------------------------------------------------------------------------
 	// Kalıcı katılım geçmişi

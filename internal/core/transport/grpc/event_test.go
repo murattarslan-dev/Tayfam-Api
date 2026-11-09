@@ -97,6 +97,18 @@ func (f *fakeEvents) RemoveVehicle(_ context.Context, u, t, e, _ id.ID) error {
 	f.rec(u, t, e)
 	return f.err
 }
+func (f *fakeEvents) GetSeries(_ context.Context, u, t, sr id.ID) (event.Series, error) {
+	f.rec(u, t, sr)
+	return event.Series{ID: sr, TayfaID: t, RRule: "FREQ=WEEKLY", TimeZone: "Europe/Istanbul", CreatedBy: u}, f.err
+}
+func (f *fakeEvents) EndSeries(_ context.Context, u, t, sr id.ID) (event.Series, int, error) {
+	f.rec(u, t, sr)
+	return event.Series{ID: sr, TayfaID: t, EndedAt: time.Now()}, 3, f.err
+}
+func (f *fakeEvents) Export(_ context.Context, u, t, e id.ID) ([]byte, error) {
+	f.rec(u, t, e)
+	return []byte("BEGIN:VCALENDAR\r\n"), f.err
+}
 
 func (f *fakeEvents) CheckIn(_ context.Context, u, t, e id.ID, at *event.Point) (event.Attendance, error) {
 	f.rec(u, t, e)
@@ -168,6 +180,10 @@ func callAllEvents(ctx context.Context, c corev1.EventServiceServer, tayfaID, ev
 	_, out["AddFishingCatch"] = c.AddFishingCatch(ctx, &corev1.AddFishingCatchRequest{TayfaId: tayfaID, EventId: eventID, Species: "Levrek", LengthCm: 40, ClientRequestId: id.New().String()})
 	_, out["ListFishingCatches"] = c.ListFishingCatches(ctx, &corev1.ListFishingCatchesRequest{TayfaId: tayfaID, EventId: eventID})
 	_, out["RemoveFishingCatch"] = c.RemoveFishingCatch(ctx, &corev1.RemoveFishingCatchRequest{TayfaId: tayfaID, EventId: eventID, CatchId: id.New().String()})
+	// Series methods take the same ID as series_id.
+	_, out["GetEventSeries"] = c.GetEventSeries(ctx, &corev1.GetEventSeriesRequest{TayfaId: tayfaID, SeriesId: eventID})
+	_, out["EndEventSeries"] = c.EndEventSeries(ctx, &corev1.EndEventSeriesRequest{TayfaId: tayfaID, SeriesId: eventID})
+	_, out["ExportEvent"] = c.ExportEvent(ctx, &corev1.ExportEventRequest{TayfaId: tayfaID, EventId: eventID})
 	return out
 }
 
@@ -207,8 +223,12 @@ func TestEventServerValidatesRequest(t *testing.T) {
 			if method == "CreateEvent" || method == "ListUpcomingEvents" {
 				continue
 			}
-			if got := field(err); got != "event_id" {
-				t.Errorf("%s event_id %q: %s", method, bad, got)
+			want := "event_id"
+			if method == "GetEventSeries" || method == "EndEventSeries" {
+				want = "series_id"
+			}
+			if got := field(err); got != want {
+				t.Errorf("%s %s %q: %s", method, want, bad, got)
 			}
 		}
 	}
@@ -386,6 +406,40 @@ func TestEventServerConverts(t *testing.T) {
 	if err != nil || len(list.GetEvents()) != 1 || list.GetNextPageToken() != "sonraki" {
 		t.Fatalf("liste = %v %v", list, err)
 	}
+
+	// Series: recurrence and the series flag reach the app layer; series
+	// fields come back.
+	r = createReq(view.TayfaID.String())
+	r.Recurrence = &corev1.Recurrence{Rrule: "FREQ=WEEKLY", TimeZone: "Europe/Berlin"}
+	if _, err := srv.CreateEvent(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	if f.in.Recurrence == nil || f.in.Recurrence.RRule != "FREQ=WEEKLY" || f.in.Recurrence.TimeZone != "Europe/Berlin" {
+		t.Fatalf("tekrar = %+v", f.in.Recurrence)
+	}
+	if _, err := srv.CreateEvent(ctx, createReq(view.TayfaID.String())); err != nil || f.in.Recurrence != nil {
+		t.Fatalf("tekrarsız istek: %+v %v", f.in.Recurrence, err)
+	}
+	if _, err := srv.UpdateEvent(ctx, &corev1.UpdateEventRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String(), Series: true, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"title"}}}); err != nil || !f.in.Series {
+		t.Fatalf("seri bayrağı: %v", err)
+	}
+	f.view.SeriesID, f.view.SeriesOverride = id.New(), true
+	got, err := srv.GetEvent(ctx, &corev1.GetEventRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String()})
+	if err != nil || got.GetEvent().GetSeriesId() != f.view.SeriesID.String() || !got.GetEvent().GetSeriesOverride() {
+		t.Fatalf("seri alanları = %v %v", got, err)
+	}
+	sr, err := srv.GetEventSeries(ctx, &corev1.GetEventSeriesRequest{TayfaId: view.TayfaID.String(), SeriesId: f.view.SeriesID.String()})
+	if err != nil || sr.GetSeries().GetRrule() != "FREQ=WEEKLY" || sr.GetSeries().GetEndTime() != nil || sr.GetSeries().GetTemplateEventId() != "" || f.event != f.view.SeriesID {
+		t.Fatalf("seri = %v %v", sr, err)
+	}
+	end, err := srv.EndEventSeries(ctx, &corev1.EndEventSeriesRequest{TayfaId: view.TayfaID.String(), SeriesId: f.view.SeriesID.String()})
+	if err != nil || end.GetCancelledCount() != 3 || end.GetSeries().GetEndTime() == nil {
+		t.Fatalf("seri sonu = %v %v", end, err)
+	}
+	ex, err := srv.ExportEvent(ctx, &corev1.ExportEventRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String()})
+	if err != nil || string(ex.GetIcs()) != "BEGIN:VCALENDAR\r\n" || ex.GetContentType() != "text/calendar; charset=utf-8" {
+		t.Fatalf("dışa aktarma = %v %v", ex, err)
+	}
 }
 
 // TestEventServiceBehindGuard runs the real app behind auth.Guard.
@@ -482,6 +536,44 @@ func TestEventServiceBehindGuard(t *testing.T) {
 	_, err = ec.SetRsvp(as(owner), &corev1.SetRsvpRequest{TayfaId: tid, EventId: eid, Status: corev1.RsvpStatus_RSVP_STATUS_MAYBE})
 	if code, info := infoOf(t, err); code != codes.FailedPrecondition || info.GetReason() != corev1.ErrorReason_ERROR_REASON_EVENT_CANCELLED.String() {
 		t.Errorf("iptal sonrası katılım: %v", err)
+	}
+
+	// A weekly series: the next occurrences exist right after create, the
+	// export is an iCalendar file, ending the series cancels them.
+	r := createReq(tid)
+	r.Recurrence = &corev1.Recurrence{Rrule: "FREQ=WEEKLY;COUNT=3"}
+	sev, err := ec.CreateEvent(as(owner), r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sid := sev.GetEvent().GetSeriesId()
+	if sid == "" || sev.GetEvent().GetSeriesOverride() {
+		t.Fatalf("seri etkinliği = %v", sev)
+	}
+	ser, err := ec.GetEventSeries(as(owner), &corev1.GetEventSeriesRequest{TayfaId: tid, SeriesId: sid})
+	if err != nil || ser.GetSeries().GetRrule() != "FREQ=WEEKLY;COUNT=3" || ser.GetSeries().GetTimeZone() != "Europe/Istanbul" ||
+		ser.GetSeries().GetTemplateEventId() != sev.GetEvent().GetId() {
+		t.Fatalf("seri = %v %v", ser, err)
+	}
+	ex, err := ec.ExportEvent(as(owner), &corev1.ExportEventRequest{TayfaId: tid, EventId: sev.GetEvent().GetId()})
+	if err != nil || !bytes.Contains(ex.GetIcs(), []byte("UID:"+sev.GetEvent().GetId()+"\r\n")) {
+		t.Fatalf("ics = %v %v", ex, err)
+	}
+	_, err = ec.ExportEvent(as(stranger), &corev1.ExportEventRequest{TayfaId: tid, EventId: sev.GetEvent().GetId()})
+	if _, info := infoOf(t, err); info.GetReason() != corev1.ErrorReason_ERROR_REASON_TAYFA_NOT_FOUND.String() {
+		t.Errorf("yabancının dışa aktarması: %v", err)
+	}
+	end, err := ec.EndEventSeries(as(owner), &corev1.EndEventSeriesRequest{TayfaId: tid, SeriesId: sid})
+	if err != nil || end.GetCancelledCount() != 3 {
+		t.Fatalf("seri sonu = %v %v", end, err)
+	}
+	_, err = ec.EndEventSeries(as(owner), &corev1.EndEventSeriesRequest{TayfaId: tid, SeriesId: sid})
+	if code, info := infoOf(t, err); code != codes.FailedPrecondition || info.GetReason() != corev1.ErrorReason_ERROR_REASON_EVENT_SERIES_ENDED.String() {
+		t.Errorf("ikinci sonlandırma: %v", err)
+	}
+	_, err = ec.GetEventSeries(as(owner), &corev1.GetEventSeriesRequest{TayfaId: tid, SeriesId: id.New().String()})
+	if code, info := infoOf(t, err); code != codes.NotFound || info.GetReason() != corev1.ErrorReason_ERROR_REASON_EVENT_SERIES_NOT_FOUND.String() {
+		t.Errorf("olmayan seri: %v", err)
 	}
 }
 

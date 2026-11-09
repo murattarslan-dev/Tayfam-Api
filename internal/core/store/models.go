@@ -180,6 +180,7 @@ type EventSeries struct {
 	CreatedBy       pgtype.UUID
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+	Dtstart         pgtype.Timestamptz
 }
 
 type EventSport struct {

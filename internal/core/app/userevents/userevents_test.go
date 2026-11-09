@@ -258,7 +258,7 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 			VALUES ($1, $2, $3, 'online', 'Etkinlik', now() + interval '1 day', now() + interval '2 days', 'https://example.com', $4, 'cancelled', now(), $5)`,
 			x.ev.PG(), t2.PG(), x.typ, x.by.PG(), u.PG())
 	}
-	e.seed(t, `INSERT INTO event_series (id, tayfa_id, rrule, timezone, created_by) VALUES ($1, $2, 'FREQ=WEEKLY', 'Europe/Istanbul', $3)`, id.New().PG(), t2.PG(), u.PG())
+	e.seed(t, `INSERT INTO event_series (id, tayfa_id, rrule, timezone, dtstart, created_by) VALUES ($1, $2, 'FREQ=WEEKLY', 'Europe/Istanbul', now(), $3)`, id.New().PG(), t2.PG(), u.PG())
 	e.seed(t, `INSERT INTO event_convoy (event_id) VALUES ($1), ($2)`, ownEvent.PG(), otherEvent.PG())
 	e.seed(t, `INSERT INTO event_camp (event_id) VALUES ($1)`, campEvent.PG())
 	e.seed(t, `INSERT INTO event_rsvps (event_id, user_id, status) VALUES ($1, $2, 'going')`, otherEvent.PG(), u.PG())

@@ -71,6 +71,8 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_CORRECTION_CLOSED":           {http.StatusConflict, "correction-closed"},
 		"ERROR_REASON_HIKE_NOT_STARTED":            {http.StatusConflict, "hike-not-started"},
 		"ERROR_REASON_NOT_ATTENDED":                {http.StatusConflict, "not-attended"},
+		"ERROR_REASON_EVENT_SERIES_NOT_FOUND":      {http.StatusNotFound, "event-series-not-found"},
+		"ERROR_REASON_EVENT_SERIES_ENDED":          {http.StatusConflict, "event-series-ended"},
 	},
 }
 

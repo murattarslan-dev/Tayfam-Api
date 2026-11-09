@@ -21,7 +21,7 @@ WHERE created_by = @created_by AND client_request_id = @client_request_id;
 -- name: GetEvent :one
 SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
-       capacity, status, cancelled_at, cancel_reason, series_id, discoverable,
+       capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
        created_by, created_at, updated_at
 FROM events
 WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL;
@@ -31,7 +31,7 @@ WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL;
 -- name: GetEventForUpdate :one
 SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
-       capacity, status, cancelled_at, cancel_reason, series_id, discoverable,
+       capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
        created_by, created_at, updated_at
 FROM events
 WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL
@@ -58,7 +58,7 @@ WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL AND status = 'sch
 -- name: ListUpcomingEvents :many
 SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
-       capacity, status, cancelled_at, cancel_reason, series_id, discoverable,
+       capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
        created_by, created_at, updated_at
 FROM events
 WHERE tayfa_id = @tayfa_id

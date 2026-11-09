@@ -1,0 +1,2 @@
+go test fuzz v1
+string("FREQ=WEEKLY;BYDAY=FR;INTERVAL=7")
