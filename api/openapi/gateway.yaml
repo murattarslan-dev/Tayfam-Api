@@ -2487,6 +2487,206 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  /v1/direct-messages:
+    post:
+      operationId: sendDirectMessage
+      summary: Birebir mesaj gönderir
+      description: |
+        `recipient_user_id` kişisine yazar; ilk mesaj konuşmayı açar. Kim
+        kime yazabilir her mesajda core'a sorulur (Notion v7): iki yönden
+        biri engellediyse, ortak aktif tayfanız yoksa ve arkadaş
+        değilseniz `direct-message-not-allowed` (403; hangisi olduğu
+        söylenmez, bilinmeyen kullanıcı da aynı cevabı alır). Arkadaşlar ve
+        ortak etkinlik geçmişi olanlar serbestçe yazışır; diğerleri **mesaj
+        isteği** açar: alıcı cevap yazana ya da kabul edene kadar yalnızca
+        bir mesaj (`message-request-pending`, 409; alıcı reddettiyse de aynı
+        cevap, ret size söylenmez). Günde en fazla 20 istek; ortak tayfaya 7
+        günden kısa süredir üyeyseniz 5 (`message-request-limit`, 429;
+        reddedilen istekler de sayılır).
+
+        Metin 1–4000 karakter, yalnız boşluk olamaz; sekme ve satır sonu
+        dışında kontrol karakteri içeremez. Aynı `client_request_id` ile
+        tekrar gönderim ilk mesajı döndürür; başka konuşmada kullanılmış
+        değer `invalid-request`. Mesaj düzenlenemez. Düz sürümde mesajlar
+        sunucuda şifreli saklanır (uçtan uca şifreleme sonraki aşama).
+        Aynı kurallar WebSocket `dm.send` çerçevesinde de geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DirectMessageCreateRequest" }
+      responses:
+        "201":
+          description: Mesaj ve konuşma (tekrar gönderimde ilk mesaj)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DirectMessageSent" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/direct-messages/conversations:
+    get:
+      operationId: listConversations
+      summary: Birebir konuşmalarınız (son mesaja göre)
+      description: |
+        Okunmamış sayısıyla (en fazla 100; istemci "99+" gösterir).
+        Reddettiğiniz istekler listelenmez. `peer_last_read_message_id`
+        karşı tarafın okundu işaretidir; yalnızca aktif konuşmada vardır.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Konuşmalar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConversationList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/direct-messages/conversations/{conversation_id}:
+    parameters:
+      - $ref: "#/components/parameters/ConversationID"
+    get:
+      operationId: getConversation
+      summary: Bir konuşma
+      description: |
+        Yalnızca tarafı olduğunuz konuşma; başkasınınki ve reddettiğiniz
+        istek `conversation-not-found`.
+      responses:
+        "200":
+          description: Konuşma
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Conversation" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/direct-messages/conversations/{conversation_id}/messages:
+    parameters:
+      - $ref: "#/components/parameters/ConversationID"
+    get:
+      operationId: listDirectMessages
+      summary: Konuşmanın mesajları
+      description: |
+        Kanal mesajlarıyla aynı sayfalama: `after_message_id` yoksa en yeni
+        önce; verilirse ondan yeniler en eski önce (yeniden bağlanınca
+        eksikleri tamamlama, ADR-0005). Silinen mesaj yerinde
+        `deleted: true` ve metinsiz durur ("Bu mesaj silindi").
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+        - name: after_message_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Mesajlar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DirectMessageList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/direct-messages/conversations/{conversation_id}/messages/{message_id}:
+    parameters:
+      - $ref: "#/components/parameters/ConversationID"
+      - $ref: "#/components/parameters/MessageID"
+    delete:
+      operationId: deleteDirectMessage
+      summary: Kendi mesajınızı siler
+      description: |
+        Metin hemen ve geri alınamaz biçimde silinir. Başkasının mesajı
+        `message-not-found`. Silinmiş mesajı silmek bir şey değiştirmez.
+        Engellemeden sonra da kendi mesajınızı silebilirsiniz.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Silindi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/direct-messages/conversations/{conversation_id}/read:
+    parameters:
+      - $ref: "#/components/parameters/ConversationID"
+    put:
+      operationId: markConversationRead
+      summary: Konuşmayı bu mesaja kadar okundu işaretler
+      description: |
+        Okundu işareti yalnızca ileri gider. Mesaj bu konuşmada olmalıdır
+        (`message-not-found`). Karşı taraf işaretinizi yalnızca aktif
+        konuşmada görür (isteği okuduğunuzu gönderen öğrenmez). Konuşmanın
+        bildirimleri de okunmuş olur.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChannelReadRequest" }
+      responses:
+        "204": { description: Okundu }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/direct-messages/conversations/{conversation_id}/accept:
+    parameters:
+      - $ref: "#/components/parameters/ConversationID"
+    post:
+      operationId: acceptMessageRequest
+      summary: Size gelen mesaj isteğini kabul eder
+      description: |
+        Konuşma aktif olur; cevap yazmak da kabul sayılır. Aktif konuşmayı
+        kabul etmek bir şey değiştirmez. Bekleyen isteğiniz yoksa (kendi
+        isteğiniz dahil) `message-request-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Konuşma
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Conversation" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/direct-messages/conversations/{conversation_id}/decline:
+    parameters:
+      - $ref: "#/components/parameters/ConversationID"
+    post:
+      operationId: declineMessageRequest
+      summary: Size gelen mesaj isteğini reddeder
+      description: |
+        Gönderen bunu öğrenmez ve yeniden yazamaz; konuşma sizin için
+        kaybolur. Sonra siz yazarsanız konuşma aktif açılır. Bekleyen
+        isteğiniz yoksa `message-request-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Reddedildi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /v1/notifications:
     get:
       operationId: listNotifications
@@ -3341,6 +3541,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    ConversationID:
+      name: conversation_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     SessionID:
       name: session_id
       in: path
@@ -3467,6 +3672,12 @@ components:
         - slow-mode
         # chat: gerçek zamanlı bağlantı (#82)
         - forbidden-origin
+        # chat: birebir mesajlar (#95)
+        - conversation-not-found
+        - direct-message-not-allowed
+        - message-request-pending
+        - message-request-limit
+        - message-request-not-found
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
@@ -4662,9 +4873,13 @@ components:
             hedef tayfa), `report_resolved` (şikâyetiniz çözüldü; hedef
             `report`, `actor_id` hiçbir zaman yoktur; sonucu
             `GET /v1/me/reports/{report_id}` verir). İki arkadaşlık bildirimi
-            bir tayfayla ilgili değildir, `tayfa_id` yoktur. Tanınmayan değer
-            `unknown`.
-          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, unknown]
+            bir tayfayla ilgili değildir, `tayfa_id` yoktur. `dm_request`
+            (size mesaj isteği) ve `dm_message` (yeni birebir mesaj;
+            konuşma okunana kadar konuşma başına tek bildirim) yalnızca
+            "yeni" bilgisi taşır: hedef `dm_conversation`, `actor_id` ve
+            `tayfa_id` yoktur, içerik de gönderen de yazılmaz. Tanınmayan
+            değer `unknown`.
+          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, unknown]
         tayfa_id:
           type: string
           format: uuid
@@ -4678,8 +4893,9 @@ components:
           description: |
             `membership` için `target_id` başvuran kullanıcının kimliğidir;
             `user` için bir kullanıcının kimliği (profilini açın); `report`
-            için kendi şikâyetinizin kimliği.
-          enum: [tayfa, membership, announcement, event, answer, user, report, unknown]
+            için kendi şikâyetinizin kimliği; `dm_conversation` için
+            konuşmanızın kimliği.
+          enum: [tayfa, membership, announcement, event, answer, user, report, dm_conversation, unknown]
         target_id: { type: string, format: uuid }
         question_id:
           type: string
@@ -4846,6 +5062,81 @@ components:
       additionalProperties: false
       properties:
         message_id: { type: string, format: uuid }
+
+    # --- birebir mesajlar (#95) ---
+    Conversation:
+      type: object
+      required: [id, status, unread_count, last_message_at, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        other_user_id:
+          type: string
+          format: uuid
+          description: Karşı tarafın hesabı silindiyse yoktur ("Silinmiş kullanıcı"; yazılamaz).
+        status:
+          type: string
+          description: |
+            `active` (serbest yazışma), `request_sent` (isteğiniz cevap
+            bekliyor; reddedilse de böyle görünür), `request_received`
+            (size gelen istek: cevap yazın, kabul edin ya da reddedin).
+            Tanınmayan değer `unknown`.
+          enum: [active, request_sent, request_received, unknown]
+        unread_count: { type: integer, minimum: 0, maximum: 100 }
+        last_read_message_id: { type: string, format: uuid }
+        peer_last_read_message_id:
+          type: string
+          format: uuid
+          description: Karşı tarafın okundu işareti; yalnızca aktif konuşmada.
+        last_message_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+    ConversationList:
+      type: object
+      required: [conversations]
+      properties:
+        conversations:
+          type: array
+          items: { $ref: "#/components/schemas/Conversation" }
+        next_page_token: { type: string }
+    DirectMessage:
+      type: object
+      required: [id, conversation_id, deleted, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        conversation_id: { type: string, format: uuid }
+        sender_user_id:
+          type: string
+          format: uuid
+          description: Gönderenin hesabı silindiyse yoktur.
+        body:
+          type: string
+          description: Silinmiş mesajda yoktur.
+        deleted: { type: boolean }
+        created_at: { type: string, format: date-time }
+    DirectMessageList:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/DirectMessage" }
+        next_page_token: { type: string }
+    DirectMessageCreateRequest:
+      type: object
+      required: [recipient_user_id, body, client_request_id]
+      additionalProperties: false
+      properties:
+        recipient_user_id: { type: string, format: uuid }
+        body: { type: string, minLength: 1, maxLength: 4000 }
+        client_request_id:
+          type: string
+          format: uuid
+          description: İstemcinin ürettiği tekrar gönderim anahtarı.
+    DirectMessageSent:
+      type: object
+      required: [message, conversation]
+      properties:
+        message: { $ref: "#/components/schemas/DirectMessage" }
+        conversation: { $ref: "#/components/schemas/Conversation" }
 
     # --- arkadaşlık, davet, profil, hesap (#71) ---
 

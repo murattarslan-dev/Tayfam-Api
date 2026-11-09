@@ -118,18 +118,19 @@ func setup(rt *service.Runtime) error {
 		}
 	}
 	if conn := conns["chat"]; conn != nil {
-		// Bildirim (issue #64) ve kanal (issue #81) uçları: gateway token'ı
+		// Bildirim (issue #64), kanal (issue #81) ve birebir mesaj (issue #95) uçları: gateway token'ı
 		// chat'e ulaşmadan doğrular; chat yeniden doğrular (ADR-0011).
 		v, err := rt.IdentityVerifier()
 		if err != nil {
 			return err
 		}
 		deps.Chat = rest.ChatDeps{
-			Notifications: chatv1.NewNotificationServiceClient(conn),
-			Channels:      chatv1.NewChannelServiceClient(conn),
-			RealtimeURL:   realtimeURL,
-			Verifier:      v,
-			Log:           rt.Log,
+			Notifications:  chatv1.NewNotificationServiceClient(conn),
+			Channels:       chatv1.NewChannelServiceClient(conn),
+			DirectMessages: chatv1.NewDirectMessageServiceClient(conn),
+			RealtimeURL:    realtimeURL,
+			Verifier:       v,
+			Log:            rt.Log,
 		}
 	}
 	// Account settings live in identity but take the same user token
