@@ -91,6 +91,16 @@ func TestRequest(t *testing.T) {
 		}
 	}
 
+	rep := id.New()
+	r, err = Request(ev(t, "notification.requested", id.ID{}, map[string]any{
+		"type": "report_resolved", "tayfa_id": tf.String(), "target_type": "report", "target_id": rep.String(),
+		"recipient_ids": []string{u1.String()},
+	}))
+	if n := r.GetNotificationRequested(); err != nil || n.GetType() != chatv1.NotificationType_NOTIFICATION_TYPE_REPORT_RESOLVED ||
+		n.GetTargetType() != chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_REPORT || n.GetTargetId() != rep.String() || r.GetActorId() != "" {
+		t.Fatalf("şikâyet sonucu = %v %v", r, err)
+	}
+
 	r, err = Request(ev(t, "tayfa.purged", id.ID{}, map[string]any{"tayfa_id": tf.String()}))
 	if err != nil || r.GetTayfaPurged() == nil || r.GetTayfaId() != tf.String() {
 		t.Fatalf("kalıcı silme = %v %v", r, err)

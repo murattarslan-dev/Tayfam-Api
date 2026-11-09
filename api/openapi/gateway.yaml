@@ -2762,6 +2762,12 @@ components:
         - invitation-not-found
         - already-invited
         - invite-not-allowed
+        # core: şikâyetler ve moderasyon kuyruğu (#76)
+        - report-not-found
+        - report-target-not-found
+        - report-limit
+        - report-already-resolved
+        - report-action-missing
         # identity: hesap ve referans kodu (#71; rate-limited yukarıda)
         - referral-code-not-found
         # chat: bildirimler (#64)

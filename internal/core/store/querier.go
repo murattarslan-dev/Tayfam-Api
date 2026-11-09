@@ -61,6 +61,10 @@ type Querier interface {
 	// Sorular ve cevaplar kalır, yazar "Silinmiş kullanıcı" olur (v14
 	// "İlişkiler ve Silme Davranışı").
 	ClearQuestionUserFields(ctx context.Context, userID pgtype.UUID) error
+	// ---------------------------------------------------------------------------
+	// Hesap silme (SetSystemJob('account_deletion') sonrası)
+	// ---------------------------------------------------------------------------
+	ClearReportUserFields(ctx context.Context, userID pgtype.UUID) error
 	// Başkasının yoklamasını işaretleyen kişi boşalır; kişinin kendi katılım
 	// kayıtları silinir (kullanıcı → event_rsvps CASCADE).
 	ClearRsvpMarker(ctx context.Context, userID pgtype.UUID) error
@@ -81,6 +85,8 @@ type Querier interface {
 	// Son 24 saatte gönderilen arkadaşlık isteği ya da doğrudan davet sayısı
 	// (günlük sınır). Satırın sonradan silinmesi sayımı değiştirmez.
 	CountRecentEventsByActor(ctx context.Context, arg CountRecentEventsByActorParams) (int64, error)
+	// Şikâyet edenin son 24 saatteki şikâyetleri (günlük sınır).
+	CountRecentReportsByReporter(ctx context.Context, arg CountRecentReportsByReporterParams) (int32, error)
 	// ---------------------------------------------------------------------------
 	// Katılım
 	CountRsvpsForEvents(ctx context.Context, eventIds []pgtype.UUID) ([]CountRsvpsForEventsRow, error)
@@ -128,6 +134,8 @@ type Querier interface {
 	// Soru-cevap (issue #59). Her sorgu tayfa_id ile sınırlıdır (IDOR); üyelik
 	// ve izin kontrolü app katmanındadır (access, authz).
 	CreateQuestion(ctx context.Context, arg CreateQuestionParams) error
+	// Aynı hedefe ikinci şikâyet mevcut kaydı döndürür.
+	CreateReport(ctx context.Context, arg CreateReportParams) (pgtype.UUID, error)
 	// Üretilen örnek. Aynı seride aynı başlangıç zamanı zaten varsa hiçbir şey
 	// yazılmaz (events_series_starts_at_key); iki pod aynı örneği üretemez.
 	CreateSeriesEvent(ctx context.Context, arg CreateSeriesEventParams) (int64, error)
@@ -144,6 +152,9 @@ type Querier interface {
 	DeleteCampItem(ctx context.Context, arg DeleteCampItemParams) (int64, error)
 	DeleteCatch(ctx context.Context, arg DeleteCatchParams) (int64, error)
 	DeleteConvoyVehicle(ctx context.Context, arg DeleteConvoyVehicleParams) (int64, error)
+	DeleteExpiredAuditLogs(ctx context.Context, arg DeleteExpiredAuditLogsParams) (int64, error)
+	// Çözülmüş şikâyetler 1 yıl sonra silinir; platformda açık olan kalır.
+	DeleteExpiredReports(ctx context.Context, arg DeleteExpiredReportsParams) (int64, error)
 	// Arkadaşlığı bitirme, isteği geri çekme ya da reddetme.
 	DeleteFriendship(ctx context.Context, arg DeleteFriendshipParams) (int64, error)
 	// Ayrılma, çıkarma, başvuru reddi, ban kaldırma.
@@ -185,6 +196,11 @@ type Querier interface {
 	// Yazarın kendi silmesi: başlık ve gövde hemen boşaltılır, geri alınamaz
 	// (v14 "Silinen içeriği geri alma"). Etiket bağları ayrıca silinir.
 	EraseQuestion(ctx context.Context, arg EraseQuestionParams) (int64, error)
+	// ---------------------------------------------------------------------------
+	// Arka plan işleri
+	// ---------------------------------------------------------------------------
+	// 7 gün çözülmeyen şikâyetler platforma yükselir.
+	EscalateUnresolvedReports(ctx context.Context, arg EscalateUnresolvedReportsParams) ([]EscalateUnresolvedReportsRow, error)
 	// Verilen kullanıcılardan hâlâ etkin üye olanlar (tek alıcılı bildirimler
 	// ve arka plan işlerinin seçtiği alıcılar).
 	FilterNotifyActive(ctx context.Context, arg FilterNotifyActiveParams) ([]pgtype.UUID, error)
@@ -241,6 +257,25 @@ type Querier interface {
 	GetQuestionByClientRequest(ctx context.Context, arg GetQuestionByClientRequestParams) (GetQuestionByClientRequestRow, error)
 	// Yazma işlemleri satırı kilitleyerek okur; silinmiş satır da döner.
 	GetQuestionForUpdate(ctx context.Context, arg GetQuestionForUpdateParams) (GetQuestionForUpdateRow, error)
+	// Şikâyet edenin kendi şikâyeti.
+	GetReportOfReporter(ctx context.Context, arg GetReportOfReporterParams) (GetReportOfReporterRow, error)
+	GetReportOfReporterByTarget(ctx context.Context, arg GetReportOfReporterByTargetParams) (GetReportOfReporterByTargetRow, error)
+	// Şikâyetler ve tayfa moderasyon kuyruğu (issue #76). Her sorgu tayfa_id ya
+	// da şikâyet eden ile sınırlıdır (IDOR); üyelik ve izin kontrolü app
+	// katmanındadır (access, authz). Şikâyet edenin kimliği kuyruk sorgularından
+	// hiç okunmaz.
+	// Hedefler: şikâyet edilebilmesi için çağıranın görebildiği bir içerik
+	// olmalıdır. Her sorgu yazarı ve görünür olup olmadığını döndürür.
+	GetReportTargetAnnouncement(ctx context.Context, arg GetReportTargetAnnouncementParams) (GetReportTargetAnnouncementRow, error)
+	// Silinmiş sorunun cevabı da görünmez.
+	GetReportTargetAnswer(ctx context.Context, arg GetReportTargetAnswerParams) (GetReportTargetAnswerRow, error)
+	// Av kaydı: etkinliği de görünür olmalı; 'self' görünürlüğündeki kaydı
+	// yalnızca sahibi görür (app katmanı kontrol eder).
+	GetReportTargetCatch(ctx context.Context, arg GetReportTargetCatchParams) (GetReportTargetCatchRow, error)
+	// İptal edilmiş etkinlik görünür kalır; kaldırılmış sayılır (çözüm için).
+	GetReportTargetEvent(ctx context.Context, arg GetReportTargetEventParams) (GetReportTargetEventRow, error)
+	GetReportTargetPoll(ctx context.Context, arg GetReportTargetPollParams) (GetReportTargetPollRow, error)
+	GetReportTargetQuestion(ctx context.Context, arg GetReportTargetQuestionParams) (GetReportTargetQuestionRow, error)
 	GetRsvp(ctx context.Context, arg GetRsvpParams) (GetRsvpRow, error)
 	// Katılım doğrulama, organizatör düzeltmesi, yürüyüş yoklaması, kalıcı
 	// katılım geçmişi ve av günlüğü (issue #50). Etkinlik her zaman önce tayfa
@@ -258,6 +293,9 @@ type Querier interface {
 	// Yazan işlemler tayfa satırını kilitleyerek okur; memberships trigger'ı da
 	// aynı satırı kilitlediği için üyelik değişiklikleriyle sırayla çalışır.
 	GetTayfaForUpdate(ctx context.Context, id pgtype.UUID) (GetTayfaForUpdateRow, error)
+	// 18 yaş altı bayrağı (ADR-0012). Satır yoksa ya da bayrak bilinmiyorsa
+	// (NULL) app katmanı küçük sayar.
+	GetUserMinorFlags(ctx context.Context, userIds []pgtype.UUID) ([]GetUserMinorFlagsRow, error)
 	GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUserProfileRow, error)
 	HasMutualTayfa(ctx context.Context, arg HasMutualTayfaParams) (bool, error)
 	// Moderatör/yönetici silmesi: içerik gizlenir, geri alınabilir.
@@ -355,6 +393,10 @@ type Querier interface {
 	ListNotifyParticipants(ctx context.Context, arg ListNotifyParticipantsParams) ([]pgtype.UUID, error)
 	// Yönetici ve moderatörler (başvuru, silme talebi).
 	ListNotifyStaff(ctx context.Context, arg ListNotifyStaffParams) ([]pgtype.UUID, error)
+	// Kuyruk: tayfanın açık şikâyetleri; platforma özel olanlar ve izleyicinin
+	// kendisi hakkındakiler hariç. Öncelikliler (minor_involved) önce, sonra
+	// eskiden yeniye. reporter_id seçilmez.
+	ListOpenTayfaReports(ctx context.Context, arg ListOpenTayfaReportsParams) ([]ListOpenTayfaReportsRow, error)
 	// Yalnızca çağıranın kendi oyları.
 	ListOwnPollVotes(ctx context.Context, arg ListOwnPollVotesParams) ([]ListOwnPollVotesRow, error)
 	// Bekleyen başvurular, eskiden yeniye; kimin davetiyle geldiği: doğrudan
@@ -383,6 +425,10 @@ type Querier interface {
 	// Yeniden eskiye. İsteğe bağlı etiket filtresi. Sayfa, önceki sayfanın son
 	// satırından sonra başlar (created_at, id azalan).
 	ListQuestionsPage(ctx context.Context, arg ListQuestionsPageParams) ([]ListQuestionsPageRow, error)
+	// Şikâyet edenin şikâyetleri, yeniden eskiye.
+	ListReportsOfReporter(ctx context.Context, arg ListReportsOfReporterParams) ([]ListReportsOfReporterRow, error)
+	// Çözülmüşler, son çözülen önce.
+	ListResolvedTayfaReports(ctx context.Context, arg ListResolvedTayfaReportsParams) ([]ListResolvedTayfaReportsRow, error)
 	// Serinin henüz başlamamış, iptal edilmemiş ve tek başına düzenlenmemiş
 	// örnekleri; seri güncellemesi bunları değiştirir.
 	ListSeriesUpcomingEvents(ctx context.Context, arg ListSeriesUpcomingEventsParams) ([]pgtype.UUID, error)
@@ -421,6 +467,9 @@ type Querier interface {
 	LockTayfaCreation(ctx context.Context, lockKey string) error
 	// Silinmiş tayfalar dahil; tayfa satırını kilitler.
 	LockTayfaForSystem(ctx context.Context, id pgtype.UUID) (LockTayfaForSystemRow, error)
+	// Çözüm için kilitlenir; kuyruğun kuralları aynı (platforma özel ve
+	// izleyicinin kendisi hakkındaki şikâyet bulunamaz).
+	LockTayfaReport(ctx context.Context, arg LockTayfaReportParams) (LockTayfaReportRow, error)
 	// Kişinin "geliyorum" dediği, bitmemiş ve iptal edilmemiş etkinlikler;
 	// kişinin yeri her birinde bekleme listesine geçer. Etkinlik satırları
 	// katılım akışıyla (SetRsvp) aynı kilitle, kimlik sırasıyla kilitlenir.
@@ -460,6 +509,7 @@ type Querier interface {
 	ReactivateWarnedTayfas(ctx context.Context, n int32) ([]pgtype.UUID, error)
 	RemoveAnswerVote(ctx context.Context, arg RemoveAnswerVoteParams) (int64, error)
 	RequestTayfaDeletion(ctx context.Context, arg RequestTayfaDeletionParams) (int64, error)
+	ResolveReport(ctx context.Context, arg ResolveReportParams) (int64, error)
 	RestoreAnnouncement(ctx context.Context, arg RestoreAnnouncementParams) (int64, error)
 	RestoreAnswer(ctx context.Context, arg RestoreAnswerParams) (int64, error)
 	RestoreQuestion(ctx context.Context, arg RestoreQuestionParams) (int64, error)
@@ -477,6 +527,9 @@ type Querier interface {
 	// anlamlıdır: değer transaction bitince silinir (set_config is_local = true).
 	SetActor(ctx context.Context, actorID string) error
 	SetAnnouncementPinned(ctx context.Context, arg SetAnnouncementPinnedParams) (int64, error)
+	// audit_logs saklama işi; trigger yalnızca bu ayarla ve 365 günden eski
+	// kayıtlar için silmeye izin verir.
+	SetAuditRetentionJob(ctx context.Context) error
 	// ---------------------------------------------------------------------------
 	// Konvoy araçları. Kişi başına bir araç; yeniden eklemek öncekinin yerine
 	// geçer.
@@ -504,6 +557,10 @@ type Querier interface {
 	SetSystemJob(ctx context.Context, job string) error
 	SetTayfaJoinCode(ctx context.Context, arg SetTayfaJoinCodeParams) (int64, error)
 	SetTayfaModule(ctx context.Context, arg SetTayfaModuleParams) error
+	// 18 yaş altı bayrağı (ADR-0012, issue #76). Yalnızca kopyaya bu olay
+	// uygulandıysa (source_event_id aynı) yazılır: arada daha yeni bir olay
+	// uygulandıysa onunki geçerlidir. Silinmiş profile yazılmaz.
+	SetUserProfileMinor(ctx context.Context, arg SetUserProfileMinorParams) (int64, error)
 	// ---------------------------------------------------------------------------
 	// 72 saatlik tayfa silme (v14 "Tayfa silmede bekleme")
 	// ---------------------------------------------------------------------------

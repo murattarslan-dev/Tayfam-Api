@@ -311,6 +311,30 @@ type QuestionTag struct {
 	TayfaID    pgtype.UUID
 }
 
+type Report struct {
+	ID                    pgtype.UUID
+	TayfaID               pgtype.UUID
+	ReporterID            pgtype.UUID
+	TargetType            string
+	TargetID              pgtype.UUID
+	SubjectUserID         pgtype.UUID
+	Reason                string
+	Description           pgtype.Text
+	Status                string
+	Resolution            pgtype.Text
+	HandledBy             pgtype.UUID
+	HandledAt             pgtype.Timestamptz
+	Priority              string
+	MinorInvolvedAt       pgtype.Timestamptz
+	PlatformOnly          bool
+	EscalatedToPlatformAt pgtype.Timestamptz
+	EscalationReason      pgtype.Text
+	PlatformStatus        pgtype.Text
+	PlatformHandledBy     pgtype.UUID
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
 type Tag struct {
 	ID             pgtype.UUID
 	TayfaID        pgtype.UUID
@@ -393,4 +417,5 @@ type UserProfile struct {
 	DeletedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	ActivityVisibility string
+	Minor              pgtype.Bool
 }

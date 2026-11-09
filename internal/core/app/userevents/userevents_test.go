@@ -197,6 +197,8 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"poll_votes.user_id":             `SELECT count(*) FROM poll_votes WHERE user_id = $1`,
 		"friendships":                    `SELECT count(*) FROM friendships WHERE $1 IN (user_low_id, user_high_id, requested_by)`,
 		"user_blocks":                    `SELECT count(*) FROM user_blocks WHERE $1 IN (blocker_id, blocked_id)`,
+		"reports":                        `SELECT count(*) FROM reports WHERE $1 IN (reporter_id, subject_user_id, handled_by, platform_handled_by)`,
+		"user_profiles.minor":            `SELECT count(*) FROM user_profiles WHERE user_id = $1 AND minor IS NOT NULL`,
 		"user_profiles (kişisel)":        `SELECT count(*) FROM user_profiles WHERE user_id = $1 AND (display_name IS NOT NULL OR avatar_upload_id IS NOT NULL OR deleted_at IS NULL)`,
 	} {
 		if n := e.count(t, sql, u.PG()); n != 0 {
@@ -634,5 +636,63 @@ func TestProfileCarriesActivityVisibility(t *testing.T) {
 	var verr *apperr.ValidationError
 	if err := e.svc.Apply(ctx, Event{ID: id.New(), User: u, Profile: &Profile{DisplayName: "Ece", ActivityVisibility: "friends"}}); !errors.As(err, &verr) {
 		t.Fatalf("geçersiz görünürlük: %v", err)
+	}
+}
+
+// TestMinorFlag: identity's "under 18" answer follows the profile copy's
+// event order (ADR-0012, issue #76); an event without it keeps the copy's
+// value, and the account's deletion clears it.
+func TestMinorFlag(t *testing.T) {
+	e := setup(t)
+	u := id.New()
+	ev := eventIDs(4)
+	yes, no := true, false
+	minor := func() *bool {
+		t.Helper()
+		var m *bool
+		must(t, e.pool.QueryRow(ctx, `SELECT minor FROM user_profiles WHERE user_id = $1`, u.PG()).Scan(&m))
+		return m
+	}
+	with := func(eid id.ID, m *bool) Event {
+		return Event{ID: eid, User: u, Profile: &Profile{DisplayName: "Deniz", Minor: m}}
+	}
+
+	must(t, e.svc.Apply(ctx, with(ev[0], nil)))
+	if minor() != nil {
+		t.Fatal("bilinmeyen bayrak yazıldı")
+	}
+	must(t, e.svc.Apply(ctx, with(ev[2], &yes)))
+	must(t, e.svc.Apply(ctx, with(ev[1], &no))) // older, arrives late
+	if m := minor(); m == nil || !*m {
+		t.Fatalf("bayrak = %v", m)
+	}
+	must(t, e.svc.Apply(ctx, with(ev[3], nil))) // an event without the field
+	if m := minor(); m == nil || !*m {
+		t.Fatalf("alanı taşımayan olay bayrağı değiştirdi: %v", m)
+	}
+}
+
+// TestDeletedClearsReports: reports stay after the account's deletion, but
+// the user's ID in them (reporter, reported, handler) and the minor flag
+// go (v14 "Kullanıcı → yazdığı içerik: SET NULL").
+func TestDeletedClearsReports(t *testing.T) {
+	e := setup(t)
+	u, other := id.New(), id.New()
+	tf := e.tayfa(t, other)
+	yes := true
+	must(t, e.svc.Apply(ctx, Event{ID: id.New(), User: u, Profile: &Profile{DisplayName: "Deniz", Minor: &yes}}))
+	byU, aboutU, handledByU := id.New(), id.New(), id.New()
+	e.seed(t, `INSERT INTO reports (id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason) VALUES
+		($1, $3, $4, 'user', $5, $5, 'spam'), ($2, $3, $5, 'user', $4, $4, 'spam')`,
+		byU.PG(), aboutU.PG(), tf.PG(), u.PG(), other.PG())
+	e.seed(t, `INSERT INTO reports (id, tayfa_id, reporter_id, target_type, target_id, reason, status, resolution, handled_by, handled_at)
+		VALUES ($1, $2, $3, 'user', $5, 'other', 'resolved', 'dismissed', $4, now())`, handledByU.PG(), tf.PG(), other.PG(), u.PG(), id.New().PG())
+
+	must(t, e.svc.Apply(ctx, Event{ID: id.New(), User: u, Deleted: true}))
+	if refs := e.userRefs(t, u); len(refs) != 0 {
+		t.Fatalf("kalan kayıtlar: %v", refs)
+	}
+	if n := e.count(t, `SELECT count(*) FROM reports`); n != 3 {
+		t.Fatalf("şikâyetler silindi: %d", n)
 	}
 }

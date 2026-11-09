@@ -157,7 +157,7 @@ func TestApplyUserEventValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := app.got[len(app.got)-1]
-	if got.Profile == nil || got.Profile.DisplayName != "Deniz" || got.Profile.AvatarUploadID != avatar || got.Deleted || got.User.String() != user || got.ID.String() != eid {
+	if got.Profile == nil || got.Profile.DisplayName != "Deniz" || got.Profile.AvatarUploadID != avatar || got.Profile.Minor != nil || got.Deleted || got.User.String() != user || got.ID.String() != eid {
 		t.Fatalf("olay = %+v", got)
 	}
 	if got.Profile.ActivityVisibility != "" {
@@ -175,6 +175,18 @@ func TestApplyUserEventValidation(t *testing.T) {
 		}
 		if got := app.got[len(app.got)-1]; got.Profile.ActivityVisibility != want {
 			t.Fatalf("%v: %q", pb, got.Profile.ActivityVisibility)
+		}
+	}
+	// The optional minor flag (ADR-0012): absent stays nil, false stays a
+	// known false.
+	for _, want := range []bool{false, true} {
+		req := &corev1.ApplyUserEventRequest{EventId: eid, UserId: user, Event: &corev1.ApplyUserEventRequest_ProfileUpdated{
+			ProfileUpdated: &corev1.UserProfileUpdated{DisplayName: "Deniz", Minor: &want}}}
+		if _, err := client.ApplyUserEvent(ctx, req); err != nil {
+			t.Fatal(err)
+		}
+		if m := app.got[len(app.got)-1].Profile.Minor; m == nil || *m != want {
+			t.Fatalf("minor = %v, %v bekleniyordu", m, want)
 		}
 	}
 }

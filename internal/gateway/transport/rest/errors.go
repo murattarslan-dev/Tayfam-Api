@@ -93,6 +93,11 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_INVITATION_NOT_FOUND":        {http.StatusNotFound, "invitation-not-found"},
 		"ERROR_REASON_ALREADY_INVITED":             {http.StatusConflict, "already-invited"},
 		"ERROR_REASON_INVITE_NOT_ALLOWED":          {http.StatusConflict, "invite-not-allowed"},
+		"ERROR_REASON_REPORT_NOT_FOUND":            {http.StatusNotFound, "report-not-found"},
+		"ERROR_REASON_REPORT_TARGET_NOT_FOUND":     {http.StatusNotFound, "report-target-not-found"},
+		"ERROR_REASON_REPORT_LIMIT":                {http.StatusTooManyRequests, "report-limit"},
+		"ERROR_REASON_REPORT_ALREADY_RESOLVED":     {http.StatusConflict, "report-already-resolved"},
+		"ERROR_REASON_REPORT_ACTION_MISSING":       {http.StatusConflict, "report-action-missing"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

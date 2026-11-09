@@ -200,8 +200,16 @@ type UserProfileUpdated struct {
 	// UNSPECIFIED in events written before the field existed: core keeps the
 	// copy's current setting (default TAYFA).
 	ActivityVisibility ActivityVisibility `protobuf:"varint,3,opt,name=activity_visibility,json=activityVisibility,proto3,enum=tayfam.core.v1.ActivityVisibility" json:"activity_visibility,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Whether the user is under 18 today (ADR-0012, issue #76): a derived
+	// yes/no, never the birth date or the age. core uses it only to put a
+	// report first (reports.priority) and never returns it. Absent in events
+	// written before the field existed: core treats the user as a minor when
+	// ordering reports until identity tells otherwise (the safe side).
+	// identity sends a new profile_updated when the answer changes (18th
+	// birthday).
+	Minor         *bool `protobuf:"varint,4,opt,name=minor,proto3,oneof" json:"minor,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UserProfileUpdated) Reset() {
@@ -253,6 +261,13 @@ func (x *UserProfileUpdated) GetActivityVisibility() ActivityVisibility {
 		return x.ActivityVisibility
 	}
 	return ActivityVisibility_ACTIVITY_VISIBILITY_UNSPECIFIED
+}
+
+func (x *UserProfileUpdated) GetMinor() bool {
+	if x != nil && x.Minor != nil {
+		return *x.Minor
+	}
+	return false
 }
 
 // UserDeleted carries nothing but the fact.
@@ -341,11 +356,13 @@ const file_tayfam_core_v1_user_events_proto_rawDesc = "" +
 	"\x0fprofile_updated\x18\n" +
 	" \x01(\v2\".tayfam.core.v1.UserProfileUpdatedH\x00R\x0eprofileUpdated\x127\n" +
 	"\adeleted\x18\v \x01(\v2\x1b.tayfam.core.v1.UserDeletedH\x00R\adeletedB\a\n" +
-	"\x05event\"\xb6\x01\n" +
+	"\x05event\"\xdb\x01\n" +
 	"\x12UserProfileUpdated\x12!\n" +
 	"\fdisplay_name\x18\x01 \x01(\tR\vdisplayName\x12(\n" +
 	"\x10avatar_upload_id\x18\x02 \x01(\tR\x0eavatarUploadId\x12S\n" +
-	"\x13activity_visibility\x18\x03 \x01(\x0e2\".tayfam.core.v1.ActivityVisibilityR\x12activityVisibility\"\r\n" +
+	"\x13activity_visibility\x18\x03 \x01(\x0e2\".tayfam.core.v1.ActivityVisibilityR\x12activityVisibility\x12\x19\n" +
+	"\x05minor\x18\x04 \x01(\bH\x00R\x05minor\x88\x01\x01B\b\n" +
+	"\x06_minor\"\r\n" +
 	"\vUserDeleted\"\x18\n" +
 	"\x16ApplyUserEventResponse*\x99\x01\n" +
 	"\x12ActivityVisibility\x12#\n" +
@@ -402,6 +419,7 @@ func file_tayfam_core_v1_user_events_proto_init() {
 		(*ApplyUserEventRequest_ProfileUpdated)(nil),
 		(*ApplyUserEventRequest_Deleted)(nil),
 	}
+	file_tayfam_core_v1_user_events_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

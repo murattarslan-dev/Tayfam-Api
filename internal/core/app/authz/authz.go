@@ -199,6 +199,14 @@ const (
 	// invitation and lists them.
 	InviteDirect
 	InviteDirectCancel
+	// Reports (issue #76). ReportCreate files a report about a member, the
+	// tayfa or content of it; ReportQueueView reads the tayfa's moderation
+	// queue and ReportResolve closes a report of it. Reports about the
+	// caller and those that go to the platform only never reach the queue
+	// (the caller checks).
+	ReportCreate
+	ReportQueueView
+	ReportResolve
 
 	actionEnd // sentinel; keep last
 )
@@ -267,6 +275,9 @@ var actionNames = [...]string{
 	PollDeleteAny:        "poll.delete_any",
 	InviteDirect:         "invite.direct",
 	InviteDirectCancel:   "invite.direct_cancel",
+	ReportCreate:         "report.create",
+	ReportQueueView:      "report.queue_view",
+	ReportResolve:        "report.resolve",
 	actionEnd:            "",
 }
 
@@ -323,6 +334,9 @@ var permissions = map[Action]Role{
 	// Every active member invites friends directly, like invite links (v14
 	// "Tayfaya davet"); a muted member cannot.
 	InviteDirect: Member,
+	// Every active member reports (Topluluk Kuralları: "Her kullanıcı
+	// şikâyet eder").
+	ReportCreate: Member,
 
 	// Moderation: moderator and above.
 	// Lowering one's own role; members have nothing to step down to.
@@ -360,6 +374,10 @@ var permissions = map[Action]Role{
 	// Closing early and deleting anyone's poll.
 	PollCloseAny:  Moderator,
 	PollDeleteAny: Moderator,
+	// The moderation queue (Topluluk Kuralları: "Yöneticiler ve
+	// moderatörler kendi tayfalarındaki şikâyetleri makul sürede ele alır").
+	ReportQueueView: Moderator,
+	ReportResolve:   Moderator,
 
 	// Tayfa management: admin only.
 	TayfaUpdateSettings:  Admin,
@@ -408,6 +426,10 @@ var allowedWhileMuted = map[Action]bool{
 	// refused while muted (v14 "Anket (MVP)").
 	PollView:       true,
 	PollViewVoters: true,
+	// A mute must never silence a safety report: filing one publishes
+	// nothing to the tayfa. Reading the queue is a read; resolving is not.
+	ReportCreate:    true,
+	ReportQueueView: true,
 }
 
 // Settings are the tayfa settings that change the permission table. The zero

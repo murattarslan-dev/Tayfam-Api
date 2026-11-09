@@ -221,3 +221,28 @@ func TestTayfaPreference(t *testing.T) {
 }
 
 func second[T any](_ T, err error) error { return err }
+
+// TestReportResolvedHasNoActor: the reporter is never told who handled
+// their report (issue #76), so a report_resolved with an actor is refused.
+func TestReportResolvedHasNoActor(t *testing.T) {
+	e := setup(t)
+	reporter := id.New()
+	base := Request{Event: id.New(), Tayfa: e.tayfa, Type: TypeReportResolved, TargetType: TargetReport, Target: id.New(), Recipients: []id.ID{reporter}}
+	withActor := base
+	withActor.Actor = id.New()
+	var v *apperr.ValidationError
+	if err := withActor.Validate(); !errors.As(err, &v) || v.Field != "actor_id" {
+		t.Fatalf("aktörlü report_resolved: %v", err)
+	}
+	wrongTarget := base
+	wrongTarget.TargetType = TargetAnswer
+	if err := wrongTarget.Validate(); !errors.As(err, &v) {
+		t.Fatalf("yanlış hedefli report_resolved: %v", err)
+	}
+	e.store(t, base)
+	n, _, err := e.svc.List(ctx, reporter, 0, "")
+	must(t, err)
+	if len(n) != 1 || n[0].Type != TypeReportResolved || n[0].Actor != (id.ID{}) || n[0].Target != base.Target {
+		t.Fatalf("bildirim: %+v", n)
+	}
+}
