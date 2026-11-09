@@ -103,6 +103,27 @@ func TestCompleteRegistration(t *testing.T) {
 	if err := e.svc.Complete(ctx, u, input("1990-01-01")); !errors.Is(err, ErrAlreadyRegistered) {
 		t.Fatalf("ikinci kayıt: %v", err)
 	}
+	// The profile copy event: name only, no birth date, e-mail or ref code.
+	if got := e.profileEvents(t, u); len(got) != 1 || got[0] != `{"display_name": "Ayşe Işık"}` {
+		t.Fatalf("profil olayları = %q", got)
+	}
+}
+
+// profileEvents returns the payloads of user.profile_updated events for u.
+func (e *env) profileEvents(t *testing.T, u id.ID) []string {
+	t.Helper()
+	rows, err := e.pool.Query(context.Background(),
+		`SELECT payload::text FROM domain_events WHERE type = 'user.profile_updated' AND subject_type = 'user' AND subject_id = $1 AND actor_id = $1 ORDER BY id`, u.PG())
+	must(t, err)
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var p string
+		must(t, rows.Scan(&p))
+		out = append(out, p)
+	}
+	must(t, rows.Err())
+	return out
 }
 
 func TestUnderAgeIsBlockedForGood(t *testing.T) {
@@ -122,6 +143,9 @@ func TestUnderAgeIsBlockedForGood(t *testing.T) {
 	must(t, e.pool.QueryRow(ctx, `SELECT count(*) FROM sessions WHERE user_id = $1 AND revoked_at IS NULL`, u.PG()).Scan(&active))
 	if emails != 0 || active != 0 {
 		t.Fatalf("engellenen hesapta e-posta=%d açık oturum=%d", emails, active)
+	}
+	if got := e.profileEvents(t, u); len(got) != 0 {
+		t.Fatalf("reddedilen kayıt profil olayı yazdı: %q", got)
 	}
 	// Başka bir tarihle tekrar denemek işe yaramaz.
 	if err := e.svc.Complete(ctx, u, input("1990-01-01")); !errors.Is(err, ErrAgeBlocked) {
@@ -152,7 +176,7 @@ func TestRejectsBadInput(t *testing.T) {
 	}
 	// Hiçbiri kalıcı bir değişiklik bırakmadı.
 	got, _ := e.q.GetUser(ctx, u.PG())
-	if got.RegisteredAt.Valid || got.AgeBlockedAt.Valid {
+	if got.RegisteredAt.Valid || got.AgeBlockedAt.Valid || len(e.profileEvents(t, u)) != 0 {
 		t.Fatal("geçersiz girdi hesabı değiştirdi")
 	}
 	if err := e.svc.Complete(ctx, id.New(), input("1990-05-19")); !errors.Is(err, ErrUnknownUser) {
@@ -167,6 +191,9 @@ func TestEmptyDisplayNameKeepsProviderName(t *testing.T) {
 	got, _ := e.q.GetUser(context.Background(), u.PG())
 	if got.DisplayName.String != "Google Adı" {
 		t.Fatalf("ad = %q", got.DisplayName.String)
+	}
+	if got := e.profileEvents(t, u); len(got) != 1 || got[0] != `{"display_name": "Google Adı"}` {
+		t.Fatalf("profil olayları = %q", got)
 	}
 }
 

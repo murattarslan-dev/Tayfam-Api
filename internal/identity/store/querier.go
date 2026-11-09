@@ -12,6 +12,8 @@ import (
 
 type Querier interface {
 	BlockRegistrationForAge(ctx context.Context, id pgtype.UUID) (int64, error)
+	// Veri modeli v14: domain_events.actor_id hesap silinince NULL olur.
+	ClearEventActor(ctx context.Context, userID pgtype.UUID) error
 	// Yaş nedeniyle reddedilen hesapta e-posta tutulmaz (veri azaltma).
 	ClearIdentityEmails(ctx context.Context, userID pgtype.UUID) error
 	// Kayıt bir kez tamamlanır; yaş nedeniyle reddedilmiş veya silinmiş hesapta
@@ -23,6 +25,11 @@ type Querier interface {
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) error
+	// Olaylar internal/platform/outbox.Write ile yazılır (sıralama kilidi). Bu
+	// dosyada yalnızca hesap silmede gereken temizlik var.
+	// Silinen kullanıcının henüz silinmemiş profil olayları görünen adını
+	// taşır; hesap silinince outbox'ta kalmazlar (veri azaltma, ADR-0011).
+	DeleteUserProfileEvents(ctx context.Context, userID pgtype.UUID) error
 	// Oturum 90 gün kullanılmazsa sona erer (ADR-0004); her yenilemede süre
 	// yeniden başlar.
 	ExtendSession(ctx context.Context, arg ExtendSessionParams) error

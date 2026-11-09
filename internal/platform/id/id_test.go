@@ -58,3 +58,33 @@ func TestParse(t *testing.T) {
 		}
 	}
 }
+
+func TestAfter(t *testing.T) {
+	less := func(a, b ID) bool { return a.String() < b.String() }
+	// A previous ID from the future: After still sorts after it.
+	future := newAt(time.Now().Add(time.Hour))
+	for range 100 {
+		next := After(future)
+		if !less(future, next) || !canonical.MatchString(next.String()) {
+			t.Fatalf("%s !< %s", future, next)
+		}
+		future = next
+	}
+	// The usual case: a fresh ID.
+	past := newAt(time.Now().Add(-time.Hour))
+	if n := After(past); !less(past, n) || n.String()[:13] == past.String()[:13] {
+		t.Fatalf("yeni ID bekleniyordu: %s", n)
+	}
+	// Carry through the random bits.
+	edge := newAt(time.Now().Add(time.Hour))
+	for i := 9; i < 16; i++ {
+		edge[i] = 0xff
+	}
+	if n := After(edge); !less(edge, n) || !canonical.MatchString(n.String()) {
+		t.Fatalf("taşma: %s → %s", edge, n)
+	}
+	edge[8] = 0xbf // variant 10, all six random bits set
+	if n := After(edge); !less(edge, n) || !canonical.MatchString(n.String()) {
+		t.Fatalf("milisaniye taşması: %s → %s", edge, n)
+	}
+}
