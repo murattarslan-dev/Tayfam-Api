@@ -116,6 +116,11 @@ type Event struct {
 	// CallerAttendance is the caller's verified attendance:
 	// AttendanceUnknown without an answer.
 	CallerAttendance string
+	// SeriesID is the event's series; zero for a single event.
+	SeriesID id.ID
+	// SeriesOverride: the event was edited on its own; series changes
+	// leave it alone.
+	SeriesOverride bool
 	// CallerCanManage tells whether the caller may edit and cancel.
 	CallerCanManage bool
 	// Details are filled by Get only.
@@ -135,6 +140,11 @@ type Input struct {
 	Details      Details
 	// ClientRequestID is required on create and ignored on update.
 	ClientRequestID string
+	// Recurrence, on create only, makes the event the first of a series.
+	Recurrence *Recurrence
+	// Series, on update only, applies the change to the event's series
+	// (UpdateEventRequest.series).
+	Series bool
 }
 
 // caller is the verified caller's standing in a tayfa, loaded inside the
@@ -309,8 +319,12 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in Input) (Even
 	if !ok {
 		return Event{}, apperr.Validation("client_request_id")
 	}
+	rec, err := cleanRecurrence(in.Recurrence, start)
+	if err != nil {
+		return Event{}, err
+	}
 
-	var eventID id.ID
+	var eventID, seriesID id.ID
 	err = s.write(ctx, user, tayfa, func(q *store.Queries, c caller, b *batch) error {
 		if err := c.authorize(authz.EventCreate); err != nil {
 			return err
@@ -343,11 +357,25 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in Input) (Even
 		if err := audit(ctx, q, c, EventCreated, eventID, map[string]any{"type": in.Type}); err != nil {
 			return err
 		}
-		b.add(EventCreated, eventID, map[string]any{"event_id": eventID.String(), "type": in.Type})
+		payload := map[string]any{"event_id": eventID.String(), "type": in.Type}
+		if rec != nil {
+			if seriesID, err = createSeries(ctx, q, c, eventID, start, rec); err != nil {
+				return err
+			}
+			payload["series_id"] = seriesID.String()
+		}
+		b.add(EventCreated, eventID, payload)
 		return txn.TouchTayfa(ctx, q, tayfa, c.now)
 	})
 	if err != nil {
 		return Event{}, err
+	}
+	if seriesID != (id.ID{}) {
+		// The first occurrences right away; the generator retries on
+		// failure, so the request does not fail for it.
+		if _, err := s.GenerateSeries(ctx, tayfa, seriesID); err != nil {
+			s.cfg.Log.WarnContext(ctx, "seri örnekleri üretilemedi", slog.String("seri", seriesID.String()), slog.String("hata", err.Error()))
+		}
 	}
 	return s.Get(ctx, user, tayfa, eventID)
 }
@@ -396,6 +424,10 @@ func (s *Service) Update(ctx context.Context, user, tayfa, event id.ID, fields [
 			return Event{}, err
 		}
 	}
+	if in.Series && set[FieldTime] {
+		// A series' times come from its rule.
+		return Event{}, apperr.Validation("update_mask")
+	}
 	var changed []string
 	for _, f := range updateFields {
 		if set[f] {
@@ -413,6 +445,22 @@ func (s *Service) Update(ctx context.Context, user, tayfa, event id.ID, fields [
 		}
 		if err := changeable(ev, c.now); err != nil {
 			return err
+		}
+		if in.Series {
+			if !ev.SeriesID.Valid {
+				return apperr.Validation("series")
+			}
+			return updateSeries(ctx, q, c, b, ev, set, changed, in, loc, title, desc, capacity)
+		}
+		if ev.SeriesID.Valid {
+			// Edited alone: the series stops copying this event.
+			sr, err := lockSeries(ctx, q, tayfa, ev.SeriesID)
+			if err != nil {
+				return err
+			}
+			if err := retemplate(ctx, q, sr, event, c.now); err != nil {
+				return err
+			}
 		}
 		p := store.UpdateEventParams{
 			TayfaID: tayfa.PG(), ID: event.PG(), Title: ev.Title, Description: ev.Description,
@@ -454,6 +502,10 @@ func (s *Service) Update(ctx context.Context, user, tayfa, event id.ID, fields [
 			}
 		}
 		if n, err := q.UpdateEvent(ctx, p); err != nil {
+			// Another event of the series already starts at this time.
+			if store.SQLState(err) == store.CodeUniqueViolation && store.Constraint(err) == "events_series_starts_at_key" {
+				return apperr.Validation("start_time")
+			}
 			return fmt.Errorf("etkinlik: %w", err)
 		} else if n != 1 {
 			return apperr.ErrEventNotFound

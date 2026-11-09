@@ -102,6 +102,10 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_HIKE_NOT_STARTED, true
 	case errors.Is(err, apperr.ErrNotAttended):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_NOT_ATTENDED, true
+	case errors.Is(err, apperr.ErrEventSeriesNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_EVENT_SERIES_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrEventSeriesEnded):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_SERIES_ENDED, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

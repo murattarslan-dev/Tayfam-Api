@@ -86,6 +86,12 @@ var (
 	ErrNotAttended = errors.New("katılım doğrulanmamış")
 )
 
+// Event series errors (issue #51).
+var (
+	ErrEventSeriesNotFound = errors.New("etkinlik serisi bulunamadı")
+	ErrEventSeriesEnded    = errors.New("etkinlik serisi sonlandırılmış")
+)
+
 // ValidationError reports a request field that failed validation. Field is
 // the request field name as written in the proto ("name", "update_mask");
 // the rejected value is never kept.

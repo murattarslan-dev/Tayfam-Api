@@ -37,6 +37,9 @@ const (
 	EventService_AddFishingCatch_FullMethodName     = "/tayfam.core.v1.EventService/AddFishingCatch"
 	EventService_ListFishingCatches_FullMethodName  = "/tayfam.core.v1.EventService/ListFishingCatches"
 	EventService_RemoveFishingCatch_FullMethodName  = "/tayfam.core.v1.EventService/RemoveFishingCatch"
+	EventService_GetEventSeries_FullMethodName      = "/tayfam.core.v1.EventService/GetEventSeries"
+	EventService_EndEventSeries_FullMethodName      = "/tayfam.core.v1.EventService/EndEventSeries"
+	EventService_ExportEvent_FullMethodName         = "/tayfam.core.v1.EventService/ExportEvent"
 )
 
 // EventServiceClient is the client API for EventService service.
@@ -201,6 +204,36 @@ type EventServiceClient interface {
 	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
 	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
 	RemoveFishingCatch(ctx context.Context, in *RemoveFishingCatchRequest, opts ...grpc.CallOption) (*RemoveFishingCatchResponse, error)
+	// GetEventSeries returns a series' rule (issue #51). Every active member
+	// may read it.
+	//
+	// Errors: common, ERROR_REASON_EVENT_SERIES_NOT_FOUND.
+	GetEventSeries(ctx context.Context, in *GetEventSeriesRequest, opts ...grpc.CallOption) (*GetEventSeriesResponse, error)
+	// EndEventSeries ends a series: no more events are generated, and its
+	// events that have not started, are scheduled and were not edited on
+	// their own (series_override) are cancelled, as CancelEvent would. Who
+	// may: like CancelEvent, with the series' creator as organizer.
+	//
+	// Errors: common, ERROR_REASON_EVENT_SERIES_NOT_FOUND,
+	// ERROR_REASON_EVENT_SERIES_ENDED.
+	EndEventSeries(ctx context.Context, in *EndEventSeriesRequest, opts ...grpc.CallOption) (*EndEventSeriesResponse, error)
+	// ExportEvent returns the event as an iCalendar (RFC 5545) file for the
+	// caller's calendar ("Takvime ekleme"). It holds only what the caller
+	// sees in GetEvent, and less:
+	//   - UID is the event ID, so a calendar updates the entry on a second
+	//     import; a cancelled event has STATUS:CANCELLED.
+	//   - Times are in UTC.
+	//   - LOCATION is the meeting point name, district and city of an
+	//     in-person event, never its coordinates (no GEO property): the file
+	//     leaves the app and may be synced to third-party calendars. A
+	//     participants-only fishing spot is left out for callers who do not
+	//     see it.
+	//   - An online event's link (online_url) goes into LOCATION and URL.
+	//     Only active members get this file at all.
+	//   - No attendees, organizer, plates or other members' data.
+	//
+	// Errors: common.
+	ExportEvent(ctx context.Context, in *ExportEventRequest, opts ...grpc.CallOption) (*ExportEventResponse, error)
 }
 
 type eventServiceClient struct {
@@ -391,6 +424,36 @@ func (c *eventServiceClient) RemoveFishingCatch(ctx context.Context, in *RemoveF
 	return out, nil
 }
 
+func (c *eventServiceClient) GetEventSeries(ctx context.Context, in *GetEventSeriesRequest, opts ...grpc.CallOption) (*GetEventSeriesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetEventSeriesResponse)
+	err := c.cc.Invoke(ctx, EventService_GetEventSeries_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *eventServiceClient) EndEventSeries(ctx context.Context, in *EndEventSeriesRequest, opts ...grpc.CallOption) (*EndEventSeriesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EndEventSeriesResponse)
+	err := c.cc.Invoke(ctx, EventService_EndEventSeries_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *eventServiceClient) ExportEvent(ctx context.Context, in *ExportEventRequest, opts ...grpc.CallOption) (*ExportEventResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExportEventResponse)
+	err := c.cc.Invoke(ctx, EventService_ExportEvent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // EventServiceServer is the server API for EventService service.
 // All implementations must embed UnimplementedEventServiceServer
 // for forward compatibility.
@@ -553,6 +616,36 @@ type EventServiceServer interface {
 	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
 	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
 	RemoveFishingCatch(context.Context, *RemoveFishingCatchRequest) (*RemoveFishingCatchResponse, error)
+	// GetEventSeries returns a series' rule (issue #51). Every active member
+	// may read it.
+	//
+	// Errors: common, ERROR_REASON_EVENT_SERIES_NOT_FOUND.
+	GetEventSeries(context.Context, *GetEventSeriesRequest) (*GetEventSeriesResponse, error)
+	// EndEventSeries ends a series: no more events are generated, and its
+	// events that have not started, are scheduled and were not edited on
+	// their own (series_override) are cancelled, as CancelEvent would. Who
+	// may: like CancelEvent, with the series' creator as organizer.
+	//
+	// Errors: common, ERROR_REASON_EVENT_SERIES_NOT_FOUND,
+	// ERROR_REASON_EVENT_SERIES_ENDED.
+	EndEventSeries(context.Context, *EndEventSeriesRequest) (*EndEventSeriesResponse, error)
+	// ExportEvent returns the event as an iCalendar (RFC 5545) file for the
+	// caller's calendar ("Takvime ekleme"). It holds only what the caller
+	// sees in GetEvent, and less:
+	//   - UID is the event ID, so a calendar updates the entry on a second
+	//     import; a cancelled event has STATUS:CANCELLED.
+	//   - Times are in UTC.
+	//   - LOCATION is the meeting point name, district and city of an
+	//     in-person event, never its coordinates (no GEO property): the file
+	//     leaves the app and may be synced to third-party calendars. A
+	//     participants-only fishing spot is left out for callers who do not
+	//     see it.
+	//   - An online event's link (online_url) goes into LOCATION and URL.
+	//     Only active members get this file at all.
+	//   - No attendees, organizer, plates or other members' data.
+	//
+	// Errors: common.
+	ExportEvent(context.Context, *ExportEventRequest) (*ExportEventResponse, error)
 	mustEmbedUnimplementedEventServiceServer()
 }
 
@@ -616,6 +709,15 @@ func (UnimplementedEventServiceServer) ListFishingCatches(context.Context, *List
 }
 func (UnimplementedEventServiceServer) RemoveFishingCatch(context.Context, *RemoveFishingCatchRequest) (*RemoveFishingCatchResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RemoveFishingCatch not implemented")
+}
+func (UnimplementedEventServiceServer) GetEventSeries(context.Context, *GetEventSeriesRequest) (*GetEventSeriesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetEventSeries not implemented")
+}
+func (UnimplementedEventServiceServer) EndEventSeries(context.Context, *EndEventSeriesRequest) (*EndEventSeriesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method EndEventSeries not implemented")
+}
+func (UnimplementedEventServiceServer) ExportEvent(context.Context, *ExportEventRequest) (*ExportEventResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ExportEvent not implemented")
 }
 func (UnimplementedEventServiceServer) mustEmbedUnimplementedEventServiceServer() {}
 func (UnimplementedEventServiceServer) testEmbeddedByValue()                      {}
@@ -962,6 +1064,60 @@ func _EventService_RemoveFishingCatch_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _EventService_GetEventSeries_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetEventSeriesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).GetEventSeries(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_GetEventSeries_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).GetEventSeries(ctx, req.(*GetEventSeriesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EventService_EndEventSeries_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EndEventSeriesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).EndEventSeries(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_EndEventSeries_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).EndEventSeries(ctx, req.(*EndEventSeriesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EventService_ExportEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExportEventRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).ExportEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_ExportEvent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).ExportEvent(ctx, req.(*ExportEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // EventService_ServiceDesc is the grpc.ServiceDesc for EventService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1040,6 +1196,18 @@ var EventService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveFishingCatch",
 			Handler:    _EventService_RemoveFishingCatch_Handler,
+		},
+		{
+			MethodName: "GetEventSeries",
+			Handler:    _EventService_GetEventSeries_Handler,
+		},
+		{
+			MethodName: "EndEventSeries",
+			Handler:    _EventService_EndEventSeries_Handler,
+		},
+		{
+			MethodName: "ExportEvent",
+			Handler:    _EventService_ExportEvent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

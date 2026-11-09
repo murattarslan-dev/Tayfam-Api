@@ -1154,6 +1154,11 @@ type Event struct {
 	CallerCanManage bool `protobuf:"varint,26,opt,name=caller_can_manage,json=callerCanManage,proto3" json:"caller_can_manage,omitempty"`
 	// The caller's verified attendance; UNSPECIFIED until checked in.
 	CallerAttendance AttendanceStatus `protobuf:"varint,27,opt,name=caller_attendance,json=callerAttendance,proto3,enum=tayfam.core.v1.AttendanceStatus" json:"caller_attendance,omitempty"`
+	// The series this event belongs to (issue #51); empty for a single event.
+	SeriesId string `protobuf:"bytes,28,opt,name=series_id,json=seriesId,proto3" json:"series_id,omitempty"`
+	// The event was edited on its own (UpdateEvent without series): changes
+	// to the series and ending it leave it alone.
+	SeriesOverride bool `protobuf:"varint,29,opt,name=series_override,json=seriesOverride,proto3" json:"series_override,omitempty"`
 	// Set by GetEvent for every type except GENERAL; never by
 	// ListUpcomingEvents.
 	//
@@ -1389,6 +1394,20 @@ func (x *Event) GetCallerAttendance() AttendanceStatus {
 	return AttendanceStatus_ATTENDANCE_STATUS_UNSPECIFIED
 }
 
+func (x *Event) GetSeriesId() string {
+	if x != nil {
+		return x.SeriesId
+	}
+	return ""
+}
+
+func (x *Event) GetSeriesOverride() bool {
+	if x != nil {
+		return x.SeriesOverride
+	}
+	return false
+}
+
 func (x *Event) GetDetails() isEvent_Details {
 	if x != nil {
 		return x.Details
@@ -1535,8 +1554,12 @@ type CreateEventRequest struct {
 	// Required. A UUID the client generates once per create attempt and
 	// reuses on retry.
 	ClientRequestId string `protobuf:"bytes,15,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Optional: makes the event the first of a repeating series. The server
+	// creates the following events itself, eight weeks ahead, as ordinary
+	// events (see Recurrence).
+	Recurrence    *Recurrence `protobuf:"bytes,16,opt,name=recurrence,proto3" json:"recurrence,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateEventRequest) Reset() {
@@ -1735,6 +1758,13 @@ func (x *CreateEventRequest) GetClientRequestId() string {
 	return ""
 }
 
+func (x *CreateEventRequest) GetRecurrence() *Recurrence {
+	if x != nil {
+		return x.Recurrence
+	}
+	return nil
+}
+
 type isCreateEventRequest_Details interface {
 	isCreateEventRequest_Details()
 }
@@ -1775,6 +1805,193 @@ func (*CreateEventRequest_Gaming) isCreateEventRequest_Details() {}
 
 func (*CreateEventRequest_Sports) isCreateEventRequest_Details() {}
 
+// Recurrence is how a series repeats (issue #51; data model v14
+// "Tekrarlayan etkinlik").
+type Recurrence struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// An RFC 5545 RRULE, this subset only (anything else is
+	// ERROR_REASON_VALIDATION, field "recurrence.rrule"):
+	//   FREQ=WEEKLY or FREQ=MONTHLY (required)
+	//   INTERVAL=1..52
+	//   BYDAY: WEEKLY: weekdays (MO,WE); MONTHLY: weekdays with an ordinal
+	//     -5..-1 or 1..5 (2SA = second Saturday, -1FR = last Friday)
+	//   COUNT=1..500 or UNTIL=YYYYMMDDTHHMMSSZ (UTC; at most five years after
+	//     the start), not both
+	//   WKST=MO
+	// An optional "RRULE:" prefix is accepted; the stored form is canonical.
+	// The event's start_time is the first occurrence and must match the rule
+	// (for example a Saturday for BYDAY=SA). Without BYDAY a weekly rule
+	// repeats on the start's weekday and a monthly one on the start's day of
+	// the month; months without that day are skipped.
+	Rrule string `protobuf:"bytes,1,opt,name=rrule,proto3" json:"rrule,omitempty"`
+	// IANA time zone name, for example "Europe/Istanbul" (the default when
+	// empty). Every event keeps the first one's local time across daylight
+	// saving changes. Unknown names are ERROR_REASON_VALIDATION, field
+	// "recurrence.time_zone".
+	TimeZone      string `protobuf:"bytes,2,opt,name=time_zone,json=timeZone,proto3" json:"time_zone,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Recurrence) Reset() {
+	*x = Recurrence{}
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Recurrence) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Recurrence) ProtoMessage() {}
+
+func (x *Recurrence) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Recurrence.ProtoReflect.Descriptor instead.
+func (*Recurrence) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *Recurrence) GetRrule() string {
+	if x != nil {
+		return x.Rrule
+	}
+	return ""
+}
+
+func (x *Recurrence) GetTimeZone() string {
+	if x != nil {
+		return x.TimeZone
+	}
+	return ""
+}
+
+// EventSeries is a repeating series.
+type EventSeries struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Id      string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	TayfaId string                 `protobuf:"bytes,2,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	// The event new occurrences are copied from: an upcoming event of the
+	// series that was not edited on its own, when there is one.
+	TemplateEventId string `protobuf:"bytes,3,opt,name=template_event_id,json=templateEventId,proto3" json:"template_event_id,omitempty"`
+	// Canonical form.
+	Rrule    string `protobuf:"bytes,4,opt,name=rrule,proto3" json:"rrule,omitempty"`
+	TimeZone string `protobuf:"bytes,5,opt,name=time_zone,json=timeZone,proto3" json:"time_zone,omitempty"`
+	// The first occurrence.
+	StartTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	// Set once the series was ended.
+	EndTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	// Empty if their account was deleted.
+	CreatedBy     string                 `protobuf:"bytes,8,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EventSeries) Reset() {
+	*x = EventSeries{}
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EventSeries) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EventSeries) ProtoMessage() {}
+
+func (x *EventSeries) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EventSeries.ProtoReflect.Descriptor instead.
+func (*EventSeries) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *EventSeries) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *EventSeries) GetTayfaId() string {
+	if x != nil {
+		return x.TayfaId
+	}
+	return ""
+}
+
+func (x *EventSeries) GetTemplateEventId() string {
+	if x != nil {
+		return x.TemplateEventId
+	}
+	return ""
+}
+
+func (x *EventSeries) GetRrule() string {
+	if x != nil {
+		return x.Rrule
+	}
+	return ""
+}
+
+func (x *EventSeries) GetTimeZone() string {
+	if x != nil {
+		return x.TimeZone
+	}
+	return ""
+}
+
+func (x *EventSeries) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
+	}
+	return nil
+}
+
+func (x *EventSeries) GetEndTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EndTime
+	}
+	return nil
+}
+
+func (x *EventSeries) GetCreatedBy() string {
+	if x != nil {
+		return x.CreatedBy
+	}
+	return ""
+}
+
+func (x *EventSeries) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
 type CreateEventResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Event         *Event                 `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
@@ -1784,7 +2001,7 @@ type CreateEventResponse struct {
 
 func (x *CreateEventResponse) Reset() {
 	*x = CreateEventResponse{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[11]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1796,7 +2013,7 @@ func (x *CreateEventResponse) String() string {
 func (*CreateEventResponse) ProtoMessage() {}
 
 func (x *CreateEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[11]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1809,7 +2026,7 @@ func (x *CreateEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateEventResponse.ProtoReflect.Descriptor instead.
 func (*CreateEventResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{11}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CreateEventResponse) GetEvent() *Event {
@@ -1851,14 +2068,24 @@ type UpdateEventRequest struct {
 	// together), "capacity", "discoverable", "details" (replaces the type
 	// details; vehicles and camp items stay). Any other path is
 	// ERROR_REASON_VALIDATION.
-	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,15,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
+	UpdateMask *fieldmaskpb.FieldMask `protobuf:"bytes,15,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
+	// Only for an event of a series (otherwise ERROR_REASON_VALIDATION, field
+	// "series"). false: only this event changes and it is marked
+	// series_override, so later changes to the series leave it alone. true:
+	// the change is made to the series: this event and every event of the
+	// series that has not started, is scheduled and was not edited on its
+	// own, and the events generated later. "time" cannot be changed for a
+	// series (ERROR_REASON_VALIDATION, field "update_mask"); hike details'
+	// expected_return_time keeps its distance from each event's start.
+	// ERROR_REASON_EVENT_SERIES_ENDED if the series was ended.
+	Series        bool `protobuf:"varint,16,opt,name=series,proto3" json:"series,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpdateEventRequest) Reset() {
 	*x = UpdateEventRequest{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[12]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1870,7 +2097,7 @@ func (x *UpdateEventRequest) String() string {
 func (*UpdateEventRequest) ProtoMessage() {}
 
 func (x *UpdateEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[12]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1883,7 +2110,7 @@ func (x *UpdateEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateEventRequest.ProtoReflect.Descriptor instead.
 func (*UpdateEventRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{12}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *UpdateEventRequest) GetTayfaId() string {
@@ -2052,6 +2279,13 @@ func (x *UpdateEventRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
 	return nil
 }
 
+func (x *UpdateEventRequest) GetSeries() bool {
+	if x != nil {
+		return x.Series
+	}
+	return false
+}
+
 type isUpdateEventRequest_Details interface {
 	isUpdateEventRequest_Details()
 }
@@ -2101,7 +2335,7 @@ type UpdateEventResponse struct {
 
 func (x *UpdateEventResponse) Reset() {
 	*x = UpdateEventResponse{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[13]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2113,7 +2347,7 @@ func (x *UpdateEventResponse) String() string {
 func (*UpdateEventResponse) ProtoMessage() {}
 
 func (x *UpdateEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[13]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2126,7 +2360,7 @@ func (x *UpdateEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateEventResponse.ProtoReflect.Descriptor instead.
 func (*UpdateEventResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{13}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *UpdateEventResponse) GetEvent() *Event {
@@ -2148,7 +2382,7 @@ type CancelEventRequest struct {
 
 func (x *CancelEventRequest) Reset() {
 	*x = CancelEventRequest{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[14]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2160,7 +2394,7 @@ func (x *CancelEventRequest) String() string {
 func (*CancelEventRequest) ProtoMessage() {}
 
 func (x *CancelEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[14]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2173,7 +2407,7 @@ func (x *CancelEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelEventRequest.ProtoReflect.Descriptor instead.
 func (*CancelEventRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{14}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CancelEventRequest) GetTayfaId() string {
@@ -2206,7 +2440,7 @@ type CancelEventResponse struct {
 
 func (x *CancelEventResponse) Reset() {
 	*x = CancelEventResponse{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[15]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2218,7 +2452,7 @@ func (x *CancelEventResponse) String() string {
 func (*CancelEventResponse) ProtoMessage() {}
 
 func (x *CancelEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[15]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2231,7 +2465,7 @@ func (x *CancelEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelEventResponse.ProtoReflect.Descriptor instead.
 func (*CancelEventResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{15}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *CancelEventResponse) GetEvent() *Event {
@@ -2251,7 +2485,7 @@ type GetEventRequest struct {
 
 func (x *GetEventRequest) Reset() {
 	*x = GetEventRequest{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[16]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2263,7 +2497,7 @@ func (x *GetEventRequest) String() string {
 func (*GetEventRequest) ProtoMessage() {}
 
 func (x *GetEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[16]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2276,7 +2510,7 @@ func (x *GetEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEventRequest.ProtoReflect.Descriptor instead.
 func (*GetEventRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{16}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GetEventRequest) GetTayfaId() string {
@@ -2302,7 +2536,7 @@ type GetEventResponse struct {
 
 func (x *GetEventResponse) Reset() {
 	*x = GetEventResponse{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[17]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2314,7 +2548,7 @@ func (x *GetEventResponse) String() string {
 func (*GetEventResponse) ProtoMessage() {}
 
 func (x *GetEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[17]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2327,7 +2561,7 @@ func (x *GetEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEventResponse.ProtoReflect.Descriptor instead.
 func (*GetEventResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{17}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GetEventResponse) GetEvent() *Event {
@@ -2348,7 +2582,7 @@ type ListUpcomingEventsRequest struct {
 
 func (x *ListUpcomingEventsRequest) Reset() {
 	*x = ListUpcomingEventsRequest{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[18]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2360,7 +2594,7 @@ func (x *ListUpcomingEventsRequest) String() string {
 func (*ListUpcomingEventsRequest) ProtoMessage() {}
 
 func (x *ListUpcomingEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[18]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2373,7 +2607,7 @@ func (x *ListUpcomingEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListUpcomingEventsRequest.ProtoReflect.Descriptor instead.
 func (*ListUpcomingEventsRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{18}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListUpcomingEventsRequest) GetTayfaId() string {
@@ -2407,7 +2641,7 @@ type ListUpcomingEventsResponse struct {
 
 func (x *ListUpcomingEventsResponse) Reset() {
 	*x = ListUpcomingEventsResponse{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[19]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2419,7 +2653,7 @@ func (x *ListUpcomingEventsResponse) String() string {
 func (*ListUpcomingEventsResponse) ProtoMessage() {}
 
 func (x *ListUpcomingEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[19]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2432,7 +2666,7 @@ func (x *ListUpcomingEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListUpcomingEventsResponse.ProtoReflect.Descriptor instead.
 func (*ListUpcomingEventsResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{19}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ListUpcomingEventsResponse) GetEvents() []*Event {
@@ -2461,7 +2695,7 @@ type SetRsvpRequest struct {
 
 func (x *SetRsvpRequest) Reset() {
 	*x = SetRsvpRequest{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[20]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2473,7 +2707,7 @@ func (x *SetRsvpRequest) String() string {
 func (*SetRsvpRequest) ProtoMessage() {}
 
 func (x *SetRsvpRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[20]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2486,7 +2720,7 @@ func (x *SetRsvpRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRsvpRequest.ProtoReflect.Descriptor instead.
 func (*SetRsvpRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{20}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SetRsvpRequest) GetTayfaId() string {
@@ -2520,7 +2754,7 @@ type SetRsvpResponse struct {
 
 func (x *SetRsvpResponse) Reset() {
 	*x = SetRsvpResponse{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[21]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2532,7 +2766,7 @@ func (x *SetRsvpResponse) String() string {
 func (*SetRsvpResponse) ProtoMessage() {}
 
 func (x *SetRsvpResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[21]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2545,7 +2779,7 @@ func (x *SetRsvpResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRsvpResponse.ProtoReflect.Descriptor instead.
 func (*SetRsvpResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{21}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *SetRsvpResponse) GetStatus() RsvpStatus {
@@ -2569,7 +2803,7 @@ type ListAttendeesRequest struct {
 
 func (x *ListAttendeesRequest) Reset() {
 	*x = ListAttendeesRequest{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[22]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2581,7 +2815,7 @@ func (x *ListAttendeesRequest) String() string {
 func (*ListAttendeesRequest) ProtoMessage() {}
 
 func (x *ListAttendeesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[22]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2594,7 +2828,7 @@ func (x *ListAttendeesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAttendeesRequest.ProtoReflect.Descriptor instead.
 func (*ListAttendeesRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{22}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ListAttendeesRequest) GetTayfaId() string {
@@ -2646,7 +2880,7 @@ type Attendee struct {
 
 func (x *Attendee) Reset() {
 	*x = Attendee{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[23]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2658,7 +2892,7 @@ func (x *Attendee) String() string {
 func (*Attendee) ProtoMessage() {}
 
 func (x *Attendee) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[23]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2671,7 +2905,7 @@ func (x *Attendee) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Attendee.ProtoReflect.Descriptor instead.
 func (*Attendee) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{23}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *Attendee) GetUserId() string {
@@ -2719,7 +2953,7 @@ type ListAttendeesResponse struct {
 
 func (x *ListAttendeesResponse) Reset() {
 	*x = ListAttendeesResponse{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[24]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2731,7 +2965,7 @@ func (x *ListAttendeesResponse) String() string {
 func (*ListAttendeesResponse) ProtoMessage() {}
 
 func (x *ListAttendeesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[24]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2744,7 +2978,7 @@ func (x *ListAttendeesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAttendeesResponse.ProtoReflect.Descriptor instead.
 func (*ListAttendeesResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{24}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListAttendeesResponse) GetAttendees() []*Attendee {
@@ -2777,7 +3011,7 @@ type AddCampItemRequest struct {
 
 func (x *AddCampItemRequest) Reset() {
 	*x = AddCampItemRequest{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[25]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2789,7 +3023,7 @@ func (x *AddCampItemRequest) String() string {
 func (*AddCampItemRequest) ProtoMessage() {}
 
 func (x *AddCampItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[25]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2802,7 +3036,7 @@ func (x *AddCampItemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddCampItemRequest.ProtoReflect.Descriptor instead.
 func (*AddCampItemRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{25}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *AddCampItemRequest) GetTayfaId() string {
@@ -2849,7 +3083,7 @@ type AddCampItemResponse struct {
 
 func (x *AddCampItemResponse) Reset() {
 	*x = AddCampItemResponse{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[26]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2861,7 +3095,7 @@ func (x *AddCampItemResponse) String() string {
 func (*AddCampItemResponse) ProtoMessage() {}
 
 func (x *AddCampItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[26]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2874,7 +3108,7 @@ func (x *AddCampItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddCampItemResponse.ProtoReflect.Descriptor instead.
 func (*AddCampItemResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{26}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *AddCampItemResponse) GetItem() *CampItem {
@@ -2895,7 +3129,7 @@ type RemoveCampItemRequest struct {
 
 func (x *RemoveCampItemRequest) Reset() {
 	*x = RemoveCampItemRequest{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[27]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2907,7 +3141,7 @@ func (x *RemoveCampItemRequest) String() string {
 func (*RemoveCampItemRequest) ProtoMessage() {}
 
 func (x *RemoveCampItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[27]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2920,7 +3154,7 @@ func (x *RemoveCampItemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveCampItemRequest.ProtoReflect.Descriptor instead.
 func (*RemoveCampItemRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{27}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *RemoveCampItemRequest) GetTayfaId() string {
@@ -2952,7 +3186,7 @@ type RemoveCampItemResponse struct {
 
 func (x *RemoveCampItemResponse) Reset() {
 	*x = RemoveCampItemResponse{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[28]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2964,7 +3198,7 @@ func (x *RemoveCampItemResponse) String() string {
 func (*RemoveCampItemResponse) ProtoMessage() {}
 
 func (x *RemoveCampItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[28]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2977,7 +3211,7 @@ func (x *RemoveCampItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveCampItemResponse.ProtoReflect.Descriptor instead.
 func (*RemoveCampItemResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{28}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{30}
 }
 
 type AddConvoyVehicleRequest struct {
@@ -2996,7 +3230,7 @@ type AddConvoyVehicleRequest struct {
 
 func (x *AddConvoyVehicleRequest) Reset() {
 	*x = AddConvoyVehicleRequest{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[29]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3008,7 +3242,7 @@ func (x *AddConvoyVehicleRequest) String() string {
 func (*AddConvoyVehicleRequest) ProtoMessage() {}
 
 func (x *AddConvoyVehicleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[29]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3021,7 +3255,7 @@ func (x *AddConvoyVehicleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddConvoyVehicleRequest.ProtoReflect.Descriptor instead.
 func (*AddConvoyVehicleRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{29}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *AddConvoyVehicleRequest) GetTayfaId() string {
@@ -3082,7 +3316,7 @@ type AddConvoyVehicleResponse struct {
 
 func (x *AddConvoyVehicleResponse) Reset() {
 	*x = AddConvoyVehicleResponse{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[30]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3094,7 +3328,7 @@ func (x *AddConvoyVehicleResponse) String() string {
 func (*AddConvoyVehicleResponse) ProtoMessage() {}
 
 func (x *AddConvoyVehicleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[30]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3107,7 +3341,7 @@ func (x *AddConvoyVehicleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddConvoyVehicleResponse.ProtoReflect.Descriptor instead.
 func (*AddConvoyVehicleResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{30}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *AddConvoyVehicleResponse) GetVehicle() *ConvoyVehicle {
@@ -3128,7 +3362,7 @@ type RemoveConvoyVehicleRequest struct {
 
 func (x *RemoveConvoyVehicleRequest) Reset() {
 	*x = RemoveConvoyVehicleRequest{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[31]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3140,7 +3374,7 @@ func (x *RemoveConvoyVehicleRequest) String() string {
 func (*RemoveConvoyVehicleRequest) ProtoMessage() {}
 
 func (x *RemoveConvoyVehicleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[31]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3153,7 +3387,7 @@ func (x *RemoveConvoyVehicleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveConvoyVehicleRequest.ProtoReflect.Descriptor instead.
 func (*RemoveConvoyVehicleRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{31}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *RemoveConvoyVehicleRequest) GetTayfaId() string {
@@ -3185,7 +3419,7 @@ type RemoveConvoyVehicleResponse struct {
 
 func (x *RemoveConvoyVehicleResponse) Reset() {
 	*x = RemoveConvoyVehicleResponse{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[32]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3197,7 +3431,7 @@ func (x *RemoveConvoyVehicleResponse) String() string {
 func (*RemoveConvoyVehicleResponse) ProtoMessage() {}
 
 func (x *RemoveConvoyVehicleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[32]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3210,7 +3444,7 @@ func (x *RemoveConvoyVehicleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveConvoyVehicleResponse.ProtoReflect.Descriptor instead.
 func (*RemoveConvoyVehicleResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{32}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{34}
 }
 
 type CheckInRequest struct {
@@ -3226,7 +3460,7 @@ type CheckInRequest struct {
 
 func (x *CheckInRequest) Reset() {
 	*x = CheckInRequest{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[33]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3238,7 +3472,7 @@ func (x *CheckInRequest) String() string {
 func (*CheckInRequest) ProtoMessage() {}
 
 func (x *CheckInRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[33]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3251,7 +3485,7 @@ func (x *CheckInRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckInRequest.ProtoReflect.Descriptor instead.
 func (*CheckInRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{33}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *CheckInRequest) GetTayfaId() string {
@@ -3286,7 +3520,7 @@ type CheckInResponse struct {
 
 func (x *CheckInResponse) Reset() {
 	*x = CheckInResponse{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[34]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3298,7 +3532,7 @@ func (x *CheckInResponse) String() string {
 func (*CheckInResponse) ProtoMessage() {}
 
 func (x *CheckInResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[34]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3311,7 +3545,7 @@ func (x *CheckInResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckInResponse.ProtoReflect.Descriptor instead.
 func (*CheckInResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{34}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *CheckInResponse) GetAttendance() AttendanceStatus {
@@ -3340,7 +3574,7 @@ type HikeCheckin struct {
 
 func (x *HikeCheckin) Reset() {
 	*x = HikeCheckin{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[35]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3352,7 +3586,7 @@ func (x *HikeCheckin) String() string {
 func (*HikeCheckin) ProtoMessage() {}
 
 func (x *HikeCheckin) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[35]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3365,7 +3599,7 @@ func (x *HikeCheckin) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HikeCheckin.ProtoReflect.Descriptor instead.
 func (*HikeCheckin) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{35}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *HikeCheckin) GetStartTime() *timestamppb.Timestamp {
@@ -3395,7 +3629,7 @@ type StartHikeRequest struct {
 
 func (x *StartHikeRequest) Reset() {
 	*x = StartHikeRequest{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[36]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3407,7 +3641,7 @@ func (x *StartHikeRequest) String() string {
 func (*StartHikeRequest) ProtoMessage() {}
 
 func (x *StartHikeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[36]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3420,7 +3654,7 @@ func (x *StartHikeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartHikeRequest.ProtoReflect.Descriptor instead.
 func (*StartHikeRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{36}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *StartHikeRequest) GetTayfaId() string {
@@ -3453,7 +3687,7 @@ type StartHikeResponse struct {
 
 func (x *StartHikeResponse) Reset() {
 	*x = StartHikeResponse{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[37]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3465,7 +3699,7 @@ func (x *StartHikeResponse) String() string {
 func (*StartHikeResponse) ProtoMessage() {}
 
 func (x *StartHikeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[37]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3478,7 +3712,7 @@ func (x *StartHikeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartHikeResponse.ProtoReflect.Descriptor instead.
 func (*StartHikeResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{37}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *StartHikeResponse) GetCheckin() *HikeCheckin {
@@ -3501,7 +3735,7 @@ type FinishHikeRequest struct {
 
 func (x *FinishHikeRequest) Reset() {
 	*x = FinishHikeRequest{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[38]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3513,7 +3747,7 @@ func (x *FinishHikeRequest) String() string {
 func (*FinishHikeRequest) ProtoMessage() {}
 
 func (x *FinishHikeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[38]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3526,7 +3760,7 @@ func (x *FinishHikeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FinishHikeRequest.ProtoReflect.Descriptor instead.
 func (*FinishHikeRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{38}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *FinishHikeRequest) GetTayfaId() string {
@@ -3559,7 +3793,7 @@ type FinishHikeResponse struct {
 
 func (x *FinishHikeResponse) Reset() {
 	*x = FinishHikeResponse{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[39]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3571,7 +3805,7 @@ func (x *FinishHikeResponse) String() string {
 func (*FinishHikeResponse) ProtoMessage() {}
 
 func (x *FinishHikeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[39]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3584,7 +3818,7 @@ func (x *FinishHikeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FinishHikeResponse.ProtoReflect.Descriptor instead.
 func (*FinishHikeResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{39}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *FinishHikeResponse) GetCheckin() *HikeCheckin {
@@ -3608,7 +3842,7 @@ type SetAttendanceRequest struct {
 
 func (x *SetAttendanceRequest) Reset() {
 	*x = SetAttendanceRequest{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[40]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3620,7 +3854,7 @@ func (x *SetAttendanceRequest) String() string {
 func (*SetAttendanceRequest) ProtoMessage() {}
 
 func (x *SetAttendanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[40]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3633,7 +3867,7 @@ func (x *SetAttendanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetAttendanceRequest.ProtoReflect.Descriptor instead.
 func (*SetAttendanceRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{40}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *SetAttendanceRequest) GetTayfaId() string {
@@ -3672,7 +3906,7 @@ type SetAttendanceResponse struct {
 
 func (x *SetAttendanceResponse) Reset() {
 	*x = SetAttendanceResponse{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[41]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3684,7 +3918,7 @@ func (x *SetAttendanceResponse) String() string {
 func (*SetAttendanceResponse) ProtoMessage() {}
 
 func (x *SetAttendanceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[41]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3697,7 +3931,7 @@ func (x *SetAttendanceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetAttendanceResponse.ProtoReflect.Descriptor instead.
 func (*SetAttendanceResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{41}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{43}
 }
 
 type FishingCatch struct {
@@ -3720,7 +3954,7 @@ type FishingCatch struct {
 
 func (x *FishingCatch) Reset() {
 	*x = FishingCatch{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[42]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3732,7 +3966,7 @@ func (x *FishingCatch) String() string {
 func (*FishingCatch) ProtoMessage() {}
 
 func (x *FishingCatch) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[42]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3745,7 +3979,7 @@ func (x *FishingCatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FishingCatch.ProtoReflect.Descriptor instead.
 func (*FishingCatch) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{42}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *FishingCatch) GetId() string {
@@ -3815,7 +4049,7 @@ type AddFishingCatchRequest struct {
 
 func (x *AddFishingCatchRequest) Reset() {
 	*x = AddFishingCatchRequest{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[43]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3827,7 +4061,7 @@ func (x *AddFishingCatchRequest) String() string {
 func (*AddFishingCatchRequest) ProtoMessage() {}
 
 func (x *AddFishingCatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[43]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3840,7 +4074,7 @@ func (x *AddFishingCatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddFishingCatchRequest.ProtoReflect.Descriptor instead.
 func (*AddFishingCatchRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{43}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *AddFishingCatchRequest) GetTayfaId() string {
@@ -3901,7 +4135,7 @@ type AddFishingCatchResponse struct {
 
 func (x *AddFishingCatchResponse) Reset() {
 	*x = AddFishingCatchResponse{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[44]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3913,7 +4147,7 @@ func (x *AddFishingCatchResponse) String() string {
 func (*AddFishingCatchResponse) ProtoMessage() {}
 
 func (x *AddFishingCatchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[44]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3926,7 +4160,7 @@ func (x *AddFishingCatchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddFishingCatchResponse.ProtoReflect.Descriptor instead.
 func (*AddFishingCatchResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{44}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *AddFishingCatchResponse) GetCatch() *FishingCatch {
@@ -3948,7 +4182,7 @@ type ListFishingCatchesRequest struct {
 
 func (x *ListFishingCatchesRequest) Reset() {
 	*x = ListFishingCatchesRequest{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[45]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3960,7 +4194,7 @@ func (x *ListFishingCatchesRequest) String() string {
 func (*ListFishingCatchesRequest) ProtoMessage() {}
 
 func (x *ListFishingCatchesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[45]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3973,7 +4207,7 @@ func (x *ListFishingCatchesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFishingCatchesRequest.ProtoReflect.Descriptor instead.
 func (*ListFishingCatchesRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{45}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *ListFishingCatchesRequest) GetTayfaId() string {
@@ -4014,7 +4248,7 @@ type ListFishingCatchesResponse struct {
 
 func (x *ListFishingCatchesResponse) Reset() {
 	*x = ListFishingCatchesResponse{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[46]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4026,7 +4260,7 @@ func (x *ListFishingCatchesResponse) String() string {
 func (*ListFishingCatchesResponse) ProtoMessage() {}
 
 func (x *ListFishingCatchesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[46]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4039,7 +4273,7 @@ func (x *ListFishingCatchesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFishingCatchesResponse.ProtoReflect.Descriptor instead.
 func (*ListFishingCatchesResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{46}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ListFishingCatchesResponse) GetCatches() []*FishingCatch {
@@ -4067,7 +4301,7 @@ type RemoveFishingCatchRequest struct {
 
 func (x *RemoveFishingCatchRequest) Reset() {
 	*x = RemoveFishingCatchRequest{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[47]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4079,7 +4313,7 @@ func (x *RemoveFishingCatchRequest) String() string {
 func (*RemoveFishingCatchRequest) ProtoMessage() {}
 
 func (x *RemoveFishingCatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[47]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4092,7 +4326,7 @@ func (x *RemoveFishingCatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveFishingCatchRequest.ProtoReflect.Descriptor instead.
 func (*RemoveFishingCatchRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{47}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *RemoveFishingCatchRequest) GetTayfaId() string {
@@ -4124,7 +4358,7 @@ type RemoveFishingCatchResponse struct {
 
 func (x *RemoveFishingCatchResponse) Reset() {
 	*x = RemoveFishingCatchResponse{}
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[48]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4136,7 +4370,7 @@ func (x *RemoveFishingCatchResponse) String() string {
 func (*RemoveFishingCatchResponse) ProtoMessage() {}
 
 func (x *RemoveFishingCatchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_event_proto_msgTypes[48]
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4149,7 +4383,314 @@ func (x *RemoveFishingCatchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveFishingCatchResponse.ProtoReflect.Descriptor instead.
 func (*RemoveFishingCatchResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{48}
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{50}
+}
+
+type GetEventSeriesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TayfaId       string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	SeriesId      string                 `protobuf:"bytes,2,opt,name=series_id,json=seriesId,proto3" json:"series_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEventSeriesRequest) Reset() {
+	*x = GetEventSeriesRequest{}
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEventSeriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEventSeriesRequest) ProtoMessage() {}
+
+func (x *GetEventSeriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEventSeriesRequest.ProtoReflect.Descriptor instead.
+func (*GetEventSeriesRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *GetEventSeriesRequest) GetTayfaId() string {
+	if x != nil {
+		return x.TayfaId
+	}
+	return ""
+}
+
+func (x *GetEventSeriesRequest) GetSeriesId() string {
+	if x != nil {
+		return x.SeriesId
+	}
+	return ""
+}
+
+type GetEventSeriesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Series        *EventSeries           `protobuf:"bytes,1,opt,name=series,proto3" json:"series,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEventSeriesResponse) Reset() {
+	*x = GetEventSeriesResponse{}
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEventSeriesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEventSeriesResponse) ProtoMessage() {}
+
+func (x *GetEventSeriesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEventSeriesResponse.ProtoReflect.Descriptor instead.
+func (*GetEventSeriesResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *GetEventSeriesResponse) GetSeries() *EventSeries {
+	if x != nil {
+		return x.Series
+	}
+	return nil
+}
+
+type EndEventSeriesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TayfaId       string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	SeriesId      string                 `protobuf:"bytes,2,opt,name=series_id,json=seriesId,proto3" json:"series_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EndEventSeriesRequest) Reset() {
+	*x = EndEventSeriesRequest{}
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EndEventSeriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EndEventSeriesRequest) ProtoMessage() {}
+
+func (x *EndEventSeriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EndEventSeriesRequest.ProtoReflect.Descriptor instead.
+func (*EndEventSeriesRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *EndEventSeriesRequest) GetTayfaId() string {
+	if x != nil {
+		return x.TayfaId
+	}
+	return ""
+}
+
+func (x *EndEventSeriesRequest) GetSeriesId() string {
+	if x != nil {
+		return x.SeriesId
+	}
+	return ""
+}
+
+type EndEventSeriesResponse struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Series *EventSeries           `protobuf:"bytes,1,opt,name=series,proto3" json:"series,omitempty"`
+	// How many upcoming events were cancelled.
+	CancelledCount int32 `protobuf:"varint,2,opt,name=cancelled_count,json=cancelledCount,proto3" json:"cancelled_count,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *EndEventSeriesResponse) Reset() {
+	*x = EndEventSeriesResponse{}
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EndEventSeriesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EndEventSeriesResponse) ProtoMessage() {}
+
+func (x *EndEventSeriesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EndEventSeriesResponse.ProtoReflect.Descriptor instead.
+func (*EndEventSeriesResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *EndEventSeriesResponse) GetSeries() *EventSeries {
+	if x != nil {
+		return x.Series
+	}
+	return nil
+}
+
+func (x *EndEventSeriesResponse) GetCancelledCount() int32 {
+	if x != nil {
+		return x.CancelledCount
+	}
+	return 0
+}
+
+type ExportEventRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TayfaId       string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	EventId       string                 `protobuf:"bytes,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportEventRequest) Reset() {
+	*x = ExportEventRequest{}
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportEventRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportEventRequest) ProtoMessage() {}
+
+func (x *ExportEventRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportEventRequest.ProtoReflect.Descriptor instead.
+func (*ExportEventRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *ExportEventRequest) GetTayfaId() string {
+	if x != nil {
+		return x.TayfaId
+	}
+	return ""
+}
+
+func (x *ExportEventRequest) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+type ExportEventResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The iCalendar object: UTF-8, CRLF line endings.
+	Ics []byte `protobuf:"bytes,1,opt,name=ics,proto3" json:"ics,omitempty"`
+	// Always "text/calendar; charset=utf-8".
+	ContentType   string `protobuf:"bytes,2,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportEventResponse) Reset() {
+	*x = ExportEventResponse{}
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportEventResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportEventResponse) ProtoMessage() {}
+
+func (x *ExportEventResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_event_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportEventResponse.ProtoReflect.Descriptor instead.
+func (*ExportEventResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *ExportEventResponse) GetIcs() []byte {
+	if x != nil {
+		return x.Ics
+	}
+	return nil
+}
+
+func (x *ExportEventResponse) GetContentType() string {
+	if x != nil {
+		return x.ContentType
+	}
+	return ""
 }
 
 var File_tayfam_core_v1_event_proto protoreflect.FileDescriptor
@@ -4205,7 +4746,7 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\rSportsDetails\x12+\n" +
 	"\x05sport\x18\x01 \x01(\x0e2\x15.tayfam.core.v1.SportR\x05sport\x12\x1d\n" +
 	"\n" +
-	"venue_name\x18\x02 \x01(\tR\tvenueName\"\xdd\v\n" +
+	"venue_name\x18\x02 \x01(\tR\tvenueName\"\xa3\f\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\btayfa_id\x18\x02 \x01(\tR\atayfaId\x12-\n" +
@@ -4243,14 +4784,16 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\vcaller_rsvp\x18\x19 \x01(\x0e2\x1a.tayfam.core.v1.RsvpStatusR\n" +
 	"callerRsvp\x12*\n" +
 	"\x11caller_can_manage\x18\x1a \x01(\bR\x0fcallerCanManage\x12M\n" +
-	"\x11caller_attendance\x18\x1b \x01(\x0e2 .tayfam.core.v1.AttendanceStatusR\x10callerAttendance\x127\n" +
+	"\x11caller_attendance\x18\x1b \x01(\x0e2 .tayfam.core.v1.AttendanceStatusR\x10callerAttendance\x12\x1b\n" +
+	"\tseries_id\x18\x1c \x01(\tR\bseriesId\x12'\n" +
+	"\x0fseries_override\x18\x1d \x01(\bR\x0eseriesOverride\x127\n" +
 	"\x06convoy\x18\x1e \x01(\v2\x1d.tayfam.core.v1.ConvoyDetailsH\x00R\x06convoy\x121\n" +
 	"\x04camp\x18\x1f \x01(\v2\x1b.tayfam.core.v1.CampDetailsH\x00R\x04camp\x121\n" +
 	"\x04hike\x18  \x01(\v2\x1b.tayfam.core.v1.HikeDetailsH\x00R\x04hike\x12:\n" +
 	"\afishing\x18! \x01(\v2\x1e.tayfam.core.v1.FishingDetailsH\x00R\afishing\x127\n" +
 	"\x06gaming\x18\" \x01(\v2\x1d.tayfam.core.v1.GamingDetailsH\x00R\x06gaming\x127\n" +
 	"\x06sports\x18# \x01(\v2\x1d.tayfam.core.v1.SportsDetailsH\x00R\x06sportsB\t\n" +
-	"\adetails\"\xb5\a\n" +
+	"\adetails\"\xf1\a\n" +
 	"\x12CreateEventRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12-\n" +
 	"\x04type\x18\x02 \x01(\x0e2\x19.tayfam.core.v1.EventTypeR\x04type\x12-\n" +
@@ -4275,10 +4818,30 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\afishing\x18\x17 \x01(\v2\x1e.tayfam.core.v1.FishingDetailsH\x00R\afishing\x127\n" +
 	"\x06gaming\x18\x18 \x01(\v2\x1d.tayfam.core.v1.GamingDetailsH\x00R\x06gaming\x127\n" +
 	"\x06sports\x18\x19 \x01(\v2\x1d.tayfam.core.v1.SportsDetailsH\x00R\x06sports\x12*\n" +
-	"\x11client_request_id\x18\x0f \x01(\tR\x0fclientRequestIdB\t\n" +
-	"\adetails\"B\n" +
+	"\x11client_request_id\x18\x0f \x01(\tR\x0fclientRequestId\x12:\n" +
+	"\n" +
+	"recurrence\x18\x10 \x01(\v2\x1a.tayfam.core.v1.RecurrenceR\n" +
+	"recurrenceB\t\n" +
+	"\adetails\"?\n" +
+	"\n" +
+	"Recurrence\x12\x14\n" +
+	"\x05rrule\x18\x01 \x01(\tR\x05rrule\x12\x1b\n" +
+	"\ttime_zone\x18\x02 \x01(\tR\btimeZone\"\xe5\x02\n" +
+	"\vEventSeries\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
+	"\btayfa_id\x18\x02 \x01(\tR\atayfaId\x12*\n" +
+	"\x11template_event_id\x18\x03 \x01(\tR\x0ftemplateEventId\x12\x14\n" +
+	"\x05rrule\x18\x04 \x01(\tR\x05rrule\x12\x1b\n" +
+	"\ttime_zone\x18\x05 \x01(\tR\btimeZone\x129\n" +
+	"\n" +
+	"start_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
+	"\bend_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12\x1d\n" +
+	"\n" +
+	"created_by\x18\b \x01(\tR\tcreatedBy\x12;\n" +
+	"\vcreate_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\"B\n" +
 	"\x13CreateEventResponse\x12+\n" +
-	"\x05event\x18\x01 \x01(\v2\x15.tayfam.core.v1.EventR\x05event\"\xb2\a\n" +
+	"\x05event\x18\x01 \x01(\v2\x15.tayfam.core.v1.EventR\x05event\"\xca\a\n" +
 	"\x12UpdateEventRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x19\n" +
 	"\bevent_id\x18\x02 \x01(\tR\aeventId\x12\x14\n" +
@@ -4304,7 +4867,8 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\x06gaming\x18\x18 \x01(\v2\x1d.tayfam.core.v1.GamingDetailsH\x00R\x06gaming\x127\n" +
 	"\x06sports\x18\x19 \x01(\v2\x1d.tayfam.core.v1.SportsDetailsH\x00R\x06sports\x12;\n" +
 	"\vupdate_mask\x18\x0f \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
-	"updateMaskB\t\n" +
+	"updateMask\x12\x16\n" +
+	"\x06series\x18\x10 \x01(\bR\x06seriesB\t\n" +
 	"\adetails\"B\n" +
 	"\x13UpdateEventResponse\x12+\n" +
 	"\x05event\x18\x01 \x01(\v2\x15.tayfam.core.v1.EventR\x05event\"b\n" +
@@ -4452,7 +5016,24 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x19\n" +
 	"\bevent_id\x18\x02 \x01(\tR\aeventId\x12\x19\n" +
 	"\bcatch_id\x18\x03 \x01(\tR\acatchId\"\x1c\n" +
-	"\x1aRemoveFishingCatchResponse*X\n" +
+	"\x1aRemoveFishingCatchResponse\"O\n" +
+	"\x15GetEventSeriesRequest\x12\x19\n" +
+	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x1b\n" +
+	"\tseries_id\x18\x02 \x01(\tR\bseriesId\"M\n" +
+	"\x16GetEventSeriesResponse\x123\n" +
+	"\x06series\x18\x01 \x01(\v2\x1b.tayfam.core.v1.EventSeriesR\x06series\"O\n" +
+	"\x15EndEventSeriesRequest\x12\x19\n" +
+	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x1b\n" +
+	"\tseries_id\x18\x02 \x01(\tR\bseriesId\"v\n" +
+	"\x16EndEventSeriesResponse\x123\n" +
+	"\x06series\x18\x01 \x01(\v2\x1b.tayfam.core.v1.EventSeriesR\x06series\x12'\n" +
+	"\x0fcancelled_count\x18\x02 \x01(\x05R\x0ecancelledCount\"J\n" +
+	"\x12ExportEventRequest\x12\x19\n" +
+	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x19\n" +
+	"\bevent_id\x18\x02 \x01(\tR\aeventId\"J\n" +
+	"\x13ExportEventResponse\x12\x10\n" +
+	"\x03ics\x18\x01 \x01(\fR\x03ics\x12!\n" +
+	"\fcontent_type\x18\x02 \x01(\tR\vcontentType*X\n" +
 	"\tEventMode\x12\x1a\n" +
 	"\x16EVENT_MODE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14EVENT_MODE_IN_PERSON\x10\x01\x12\x15\n" +
@@ -4502,7 +5083,7 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\x10SPORT_VOLLEYBALL\x10\x04\x12\x10\n" +
 	"\fSPORT_TENNIS\x10\x05\x12\x16\n" +
 	"\x12SPORT_TABLE_TENNIS\x10\x06\x12\x0f\n" +
-	"\vSPORT_OTHER\x10\a2\x9b\r\n" +
+	"\vSPORT_OTHER\x10\a2\xb5\x0f\n" +
 	"\fEventService\x12V\n" +
 	"\vCreateEvent\x12\".tayfam.core.v1.CreateEventRequest\x1a#.tayfam.core.v1.CreateEventResponse\x12V\n" +
 	"\vUpdateEvent\x12\".tayfam.core.v1.UpdateEventRequest\x1a#.tayfam.core.v1.UpdateEventResponse\x12V\n" +
@@ -4522,7 +5103,10 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\rSetAttendance\x12$.tayfam.core.v1.SetAttendanceRequest\x1a%.tayfam.core.v1.SetAttendanceResponse\x12b\n" +
 	"\x0fAddFishingCatch\x12&.tayfam.core.v1.AddFishingCatchRequest\x1a'.tayfam.core.v1.AddFishingCatchResponse\x12k\n" +
 	"\x12ListFishingCatches\x12).tayfam.core.v1.ListFishingCatchesRequest\x1a*.tayfam.core.v1.ListFishingCatchesResponse\x12k\n" +
-	"\x12RemoveFishingCatch\x12).tayfam.core.v1.RemoveFishingCatchRequest\x1a*.tayfam.core.v1.RemoveFishingCatchResponseB\xbc\x01\n" +
+	"\x12RemoveFishingCatch\x12).tayfam.core.v1.RemoveFishingCatchRequest\x1a*.tayfam.core.v1.RemoveFishingCatchResponse\x12_\n" +
+	"\x0eGetEventSeries\x12%.tayfam.core.v1.GetEventSeriesRequest\x1a&.tayfam.core.v1.GetEventSeriesResponse\x12_\n" +
+	"\x0eEndEventSeries\x12%.tayfam.core.v1.EndEventSeriesRequest\x1a&.tayfam.core.v1.EndEventSeriesResponse\x12V\n" +
+	"\vExportEvent\x12\".tayfam.core.v1.ExportEventRequest\x1a#.tayfam.core.v1.ExportEventResponseB\xbc\x01\n" +
 	"\x12com.tayfam.core.v1B\n" +
 	"EventProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
@@ -4539,7 +5123,7 @@ func file_tayfam_core_v1_event_proto_rawDescGZIP() []byte {
 }
 
 var file_tayfam_core_v1_event_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
-var file_tayfam_core_v1_event_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
+var file_tayfam_core_v1_event_proto_msgTypes = make([]protoimpl.MessageInfo, 57)
 var file_tayfam_core_v1_event_proto_goTypes = []any{
 	(EventMode)(0),                      // 0: tayfam.core.v1.EventMode
 	(EventStatus)(0),                    // 1: tayfam.core.v1.EventStatus
@@ -4561,167 +5145,187 @@ var file_tayfam_core_v1_event_proto_goTypes = []any{
 	(*SportsDetails)(nil),               // 17: tayfam.core.v1.SportsDetails
 	(*Event)(nil),                       // 18: tayfam.core.v1.Event
 	(*CreateEventRequest)(nil),          // 19: tayfam.core.v1.CreateEventRequest
-	(*CreateEventResponse)(nil),         // 20: tayfam.core.v1.CreateEventResponse
-	(*UpdateEventRequest)(nil),          // 21: tayfam.core.v1.UpdateEventRequest
-	(*UpdateEventResponse)(nil),         // 22: tayfam.core.v1.UpdateEventResponse
-	(*CancelEventRequest)(nil),          // 23: tayfam.core.v1.CancelEventRequest
-	(*CancelEventResponse)(nil),         // 24: tayfam.core.v1.CancelEventResponse
-	(*GetEventRequest)(nil),             // 25: tayfam.core.v1.GetEventRequest
-	(*GetEventResponse)(nil),            // 26: tayfam.core.v1.GetEventResponse
-	(*ListUpcomingEventsRequest)(nil),   // 27: tayfam.core.v1.ListUpcomingEventsRequest
-	(*ListUpcomingEventsResponse)(nil),  // 28: tayfam.core.v1.ListUpcomingEventsResponse
-	(*SetRsvpRequest)(nil),              // 29: tayfam.core.v1.SetRsvpRequest
-	(*SetRsvpResponse)(nil),             // 30: tayfam.core.v1.SetRsvpResponse
-	(*ListAttendeesRequest)(nil),        // 31: tayfam.core.v1.ListAttendeesRequest
-	(*Attendee)(nil),                    // 32: tayfam.core.v1.Attendee
-	(*ListAttendeesResponse)(nil),       // 33: tayfam.core.v1.ListAttendeesResponse
-	(*AddCampItemRequest)(nil),          // 34: tayfam.core.v1.AddCampItemRequest
-	(*AddCampItemResponse)(nil),         // 35: tayfam.core.v1.AddCampItemResponse
-	(*RemoveCampItemRequest)(nil),       // 36: tayfam.core.v1.RemoveCampItemRequest
-	(*RemoveCampItemResponse)(nil),      // 37: tayfam.core.v1.RemoveCampItemResponse
-	(*AddConvoyVehicleRequest)(nil),     // 38: tayfam.core.v1.AddConvoyVehicleRequest
-	(*AddConvoyVehicleResponse)(nil),    // 39: tayfam.core.v1.AddConvoyVehicleResponse
-	(*RemoveConvoyVehicleRequest)(nil),  // 40: tayfam.core.v1.RemoveConvoyVehicleRequest
-	(*RemoveConvoyVehicleResponse)(nil), // 41: tayfam.core.v1.RemoveConvoyVehicleResponse
-	(*CheckInRequest)(nil),              // 42: tayfam.core.v1.CheckInRequest
-	(*CheckInResponse)(nil),             // 43: tayfam.core.v1.CheckInResponse
-	(*HikeCheckin)(nil),                 // 44: tayfam.core.v1.HikeCheckin
-	(*StartHikeRequest)(nil),            // 45: tayfam.core.v1.StartHikeRequest
-	(*StartHikeResponse)(nil),           // 46: tayfam.core.v1.StartHikeResponse
-	(*FinishHikeRequest)(nil),           // 47: tayfam.core.v1.FinishHikeRequest
-	(*FinishHikeResponse)(nil),          // 48: tayfam.core.v1.FinishHikeResponse
-	(*SetAttendanceRequest)(nil),        // 49: tayfam.core.v1.SetAttendanceRequest
-	(*SetAttendanceResponse)(nil),       // 50: tayfam.core.v1.SetAttendanceResponse
-	(*FishingCatch)(nil),                // 51: tayfam.core.v1.FishingCatch
-	(*AddFishingCatchRequest)(nil),      // 52: tayfam.core.v1.AddFishingCatchRequest
-	(*AddFishingCatchResponse)(nil),     // 53: tayfam.core.v1.AddFishingCatchResponse
-	(*ListFishingCatchesRequest)(nil),   // 54: tayfam.core.v1.ListFishingCatchesRequest
-	(*ListFishingCatchesResponse)(nil),  // 55: tayfam.core.v1.ListFishingCatchesResponse
-	(*RemoveFishingCatchRequest)(nil),   // 56: tayfam.core.v1.RemoveFishingCatchRequest
-	(*RemoveFishingCatchResponse)(nil),  // 57: tayfam.core.v1.RemoveFishingCatchResponse
-	(*timestamppb.Timestamp)(nil),       // 58: google.protobuf.Timestamp
-	(EventType)(0),                      // 59: tayfam.core.v1.EventType
-	(*fieldmaskpb.FieldMask)(nil),       // 60: google.protobuf.FieldMask
+	(*Recurrence)(nil),                  // 20: tayfam.core.v1.Recurrence
+	(*EventSeries)(nil),                 // 21: tayfam.core.v1.EventSeries
+	(*CreateEventResponse)(nil),         // 22: tayfam.core.v1.CreateEventResponse
+	(*UpdateEventRequest)(nil),          // 23: tayfam.core.v1.UpdateEventRequest
+	(*UpdateEventResponse)(nil),         // 24: tayfam.core.v1.UpdateEventResponse
+	(*CancelEventRequest)(nil),          // 25: tayfam.core.v1.CancelEventRequest
+	(*CancelEventResponse)(nil),         // 26: tayfam.core.v1.CancelEventResponse
+	(*GetEventRequest)(nil),             // 27: tayfam.core.v1.GetEventRequest
+	(*GetEventResponse)(nil),            // 28: tayfam.core.v1.GetEventResponse
+	(*ListUpcomingEventsRequest)(nil),   // 29: tayfam.core.v1.ListUpcomingEventsRequest
+	(*ListUpcomingEventsResponse)(nil),  // 30: tayfam.core.v1.ListUpcomingEventsResponse
+	(*SetRsvpRequest)(nil),              // 31: tayfam.core.v1.SetRsvpRequest
+	(*SetRsvpResponse)(nil),             // 32: tayfam.core.v1.SetRsvpResponse
+	(*ListAttendeesRequest)(nil),        // 33: tayfam.core.v1.ListAttendeesRequest
+	(*Attendee)(nil),                    // 34: tayfam.core.v1.Attendee
+	(*ListAttendeesResponse)(nil),       // 35: tayfam.core.v1.ListAttendeesResponse
+	(*AddCampItemRequest)(nil),          // 36: tayfam.core.v1.AddCampItemRequest
+	(*AddCampItemResponse)(nil),         // 37: tayfam.core.v1.AddCampItemResponse
+	(*RemoveCampItemRequest)(nil),       // 38: tayfam.core.v1.RemoveCampItemRequest
+	(*RemoveCampItemResponse)(nil),      // 39: tayfam.core.v1.RemoveCampItemResponse
+	(*AddConvoyVehicleRequest)(nil),     // 40: tayfam.core.v1.AddConvoyVehicleRequest
+	(*AddConvoyVehicleResponse)(nil),    // 41: tayfam.core.v1.AddConvoyVehicleResponse
+	(*RemoveConvoyVehicleRequest)(nil),  // 42: tayfam.core.v1.RemoveConvoyVehicleRequest
+	(*RemoveConvoyVehicleResponse)(nil), // 43: tayfam.core.v1.RemoveConvoyVehicleResponse
+	(*CheckInRequest)(nil),              // 44: tayfam.core.v1.CheckInRequest
+	(*CheckInResponse)(nil),             // 45: tayfam.core.v1.CheckInResponse
+	(*HikeCheckin)(nil),                 // 46: tayfam.core.v1.HikeCheckin
+	(*StartHikeRequest)(nil),            // 47: tayfam.core.v1.StartHikeRequest
+	(*StartHikeResponse)(nil),           // 48: tayfam.core.v1.StartHikeResponse
+	(*FinishHikeRequest)(nil),           // 49: tayfam.core.v1.FinishHikeRequest
+	(*FinishHikeResponse)(nil),          // 50: tayfam.core.v1.FinishHikeResponse
+	(*SetAttendanceRequest)(nil),        // 51: tayfam.core.v1.SetAttendanceRequest
+	(*SetAttendanceResponse)(nil),       // 52: tayfam.core.v1.SetAttendanceResponse
+	(*FishingCatch)(nil),                // 53: tayfam.core.v1.FishingCatch
+	(*AddFishingCatchRequest)(nil),      // 54: tayfam.core.v1.AddFishingCatchRequest
+	(*AddFishingCatchResponse)(nil),     // 55: tayfam.core.v1.AddFishingCatchResponse
+	(*ListFishingCatchesRequest)(nil),   // 56: tayfam.core.v1.ListFishingCatchesRequest
+	(*ListFishingCatchesResponse)(nil),  // 57: tayfam.core.v1.ListFishingCatchesResponse
+	(*RemoveFishingCatchRequest)(nil),   // 58: tayfam.core.v1.RemoveFishingCatchRequest
+	(*RemoveFishingCatchResponse)(nil),  // 59: tayfam.core.v1.RemoveFishingCatchResponse
+	(*GetEventSeriesRequest)(nil),       // 60: tayfam.core.v1.GetEventSeriesRequest
+	(*GetEventSeriesResponse)(nil),      // 61: tayfam.core.v1.GetEventSeriesResponse
+	(*EndEventSeriesRequest)(nil),       // 62: tayfam.core.v1.EndEventSeriesRequest
+	(*EndEventSeriesResponse)(nil),      // 63: tayfam.core.v1.EndEventSeriesResponse
+	(*ExportEventRequest)(nil),          // 64: tayfam.core.v1.ExportEventRequest
+	(*ExportEventResponse)(nil),         // 65: tayfam.core.v1.ExportEventResponse
+	(*timestamppb.Timestamp)(nil),       // 66: google.protobuf.Timestamp
+	(EventType)(0),                      // 67: tayfam.core.v1.EventType
+	(*fieldmaskpb.FieldMask)(nil),       // 68: google.protobuf.FieldMask
 }
 var file_tayfam_core_v1_event_proto_depIdxs = []int32{
-	9,  // 0: tayfam.core.v1.ConvoyDetails.route:type_name -> tayfam.core.v1.LatLng
-	11, // 1: tayfam.core.v1.ConvoyDetails.vehicles:type_name -> tayfam.core.v1.ConvoyVehicle
-	13, // 2: tayfam.core.v1.CampDetails.items:type_name -> tayfam.core.v1.CampItem
-	58, // 3: tayfam.core.v1.HikeDetails.expected_return_time:type_name -> google.protobuf.Timestamp
-	6,  // 4: tayfam.core.v1.FishingDetails.spot_visibility:type_name -> tayfam.core.v1.SpotVisibility
-	7,  // 5: tayfam.core.v1.GamingDetails.platform:type_name -> tayfam.core.v1.GamingPlatform
-	8,  // 6: tayfam.core.v1.SportsDetails.sport:type_name -> tayfam.core.v1.Sport
-	59, // 7: tayfam.core.v1.Event.type:type_name -> tayfam.core.v1.EventType
-	0,  // 8: tayfam.core.v1.Event.mode:type_name -> tayfam.core.v1.EventMode
-	58, // 9: tayfam.core.v1.Event.start_time:type_name -> google.protobuf.Timestamp
-	58, // 10: tayfam.core.v1.Event.end_time:type_name -> google.protobuf.Timestamp
-	9,  // 11: tayfam.core.v1.Event.meeting_point:type_name -> tayfam.core.v1.LatLng
-	1,  // 12: tayfam.core.v1.Event.status:type_name -> tayfam.core.v1.EventStatus
-	58, // 13: tayfam.core.v1.Event.cancel_time:type_name -> google.protobuf.Timestamp
-	58, // 14: tayfam.core.v1.Event.create_time:type_name -> google.protobuf.Timestamp
-	58, // 15: tayfam.core.v1.Event.update_time:type_name -> google.protobuf.Timestamp
-	2,  // 16: tayfam.core.v1.Event.caller_rsvp:type_name -> tayfam.core.v1.RsvpStatus
-	3,  // 17: tayfam.core.v1.Event.caller_attendance:type_name -> tayfam.core.v1.AttendanceStatus
-	10, // 18: tayfam.core.v1.Event.convoy:type_name -> tayfam.core.v1.ConvoyDetails
-	12, // 19: tayfam.core.v1.Event.camp:type_name -> tayfam.core.v1.CampDetails
-	14, // 20: tayfam.core.v1.Event.hike:type_name -> tayfam.core.v1.HikeDetails
-	15, // 21: tayfam.core.v1.Event.fishing:type_name -> tayfam.core.v1.FishingDetails
-	16, // 22: tayfam.core.v1.Event.gaming:type_name -> tayfam.core.v1.GamingDetails
-	17, // 23: tayfam.core.v1.Event.sports:type_name -> tayfam.core.v1.SportsDetails
-	59, // 24: tayfam.core.v1.CreateEventRequest.type:type_name -> tayfam.core.v1.EventType
-	0,  // 25: tayfam.core.v1.CreateEventRequest.mode:type_name -> tayfam.core.v1.EventMode
-	58, // 26: tayfam.core.v1.CreateEventRequest.start_time:type_name -> google.protobuf.Timestamp
-	58, // 27: tayfam.core.v1.CreateEventRequest.end_time:type_name -> google.protobuf.Timestamp
-	9,  // 28: tayfam.core.v1.CreateEventRequest.meeting_point:type_name -> tayfam.core.v1.LatLng
-	10, // 29: tayfam.core.v1.CreateEventRequest.convoy:type_name -> tayfam.core.v1.ConvoyDetails
-	12, // 30: tayfam.core.v1.CreateEventRequest.camp:type_name -> tayfam.core.v1.CampDetails
-	14, // 31: tayfam.core.v1.CreateEventRequest.hike:type_name -> tayfam.core.v1.HikeDetails
-	15, // 32: tayfam.core.v1.CreateEventRequest.fishing:type_name -> tayfam.core.v1.FishingDetails
-	16, // 33: tayfam.core.v1.CreateEventRequest.gaming:type_name -> tayfam.core.v1.GamingDetails
-	17, // 34: tayfam.core.v1.CreateEventRequest.sports:type_name -> tayfam.core.v1.SportsDetails
-	18, // 35: tayfam.core.v1.CreateEventResponse.event:type_name -> tayfam.core.v1.Event
-	58, // 36: tayfam.core.v1.UpdateEventRequest.start_time:type_name -> google.protobuf.Timestamp
-	58, // 37: tayfam.core.v1.UpdateEventRequest.end_time:type_name -> google.protobuf.Timestamp
-	0,  // 38: tayfam.core.v1.UpdateEventRequest.mode:type_name -> tayfam.core.v1.EventMode
-	9,  // 39: tayfam.core.v1.UpdateEventRequest.meeting_point:type_name -> tayfam.core.v1.LatLng
-	10, // 40: tayfam.core.v1.UpdateEventRequest.convoy:type_name -> tayfam.core.v1.ConvoyDetails
-	12, // 41: tayfam.core.v1.UpdateEventRequest.camp:type_name -> tayfam.core.v1.CampDetails
-	14, // 42: tayfam.core.v1.UpdateEventRequest.hike:type_name -> tayfam.core.v1.HikeDetails
-	15, // 43: tayfam.core.v1.UpdateEventRequest.fishing:type_name -> tayfam.core.v1.FishingDetails
-	16, // 44: tayfam.core.v1.UpdateEventRequest.gaming:type_name -> tayfam.core.v1.GamingDetails
-	17, // 45: tayfam.core.v1.UpdateEventRequest.sports:type_name -> tayfam.core.v1.SportsDetails
-	60, // 46: tayfam.core.v1.UpdateEventRequest.update_mask:type_name -> google.protobuf.FieldMask
-	18, // 47: tayfam.core.v1.UpdateEventResponse.event:type_name -> tayfam.core.v1.Event
-	18, // 48: tayfam.core.v1.CancelEventResponse.event:type_name -> tayfam.core.v1.Event
-	18, // 49: tayfam.core.v1.GetEventResponse.event:type_name -> tayfam.core.v1.Event
-	18, // 50: tayfam.core.v1.ListUpcomingEventsResponse.events:type_name -> tayfam.core.v1.Event
-	2,  // 51: tayfam.core.v1.SetRsvpRequest.status:type_name -> tayfam.core.v1.RsvpStatus
-	2,  // 52: tayfam.core.v1.SetRsvpResponse.status:type_name -> tayfam.core.v1.RsvpStatus
-	2,  // 53: tayfam.core.v1.ListAttendeesRequest.status:type_name -> tayfam.core.v1.RsvpStatus
-	2,  // 54: tayfam.core.v1.Attendee.status:type_name -> tayfam.core.v1.RsvpStatus
-	58, // 55: tayfam.core.v1.Attendee.update_time:type_name -> google.protobuf.Timestamp
-	3,  // 56: tayfam.core.v1.Attendee.attendance:type_name -> tayfam.core.v1.AttendanceStatus
-	4,  // 57: tayfam.core.v1.Attendee.attendance_method:type_name -> tayfam.core.v1.AttendanceMethod
-	32, // 58: tayfam.core.v1.ListAttendeesResponse.attendees:type_name -> tayfam.core.v1.Attendee
-	13, // 59: tayfam.core.v1.AddCampItemResponse.item:type_name -> tayfam.core.v1.CampItem
-	11, // 60: tayfam.core.v1.AddConvoyVehicleResponse.vehicle:type_name -> tayfam.core.v1.ConvoyVehicle
-	9,  // 61: tayfam.core.v1.CheckInRequest.location:type_name -> tayfam.core.v1.LatLng
-	3,  // 62: tayfam.core.v1.CheckInResponse.attendance:type_name -> tayfam.core.v1.AttendanceStatus
-	4,  // 63: tayfam.core.v1.CheckInResponse.method:type_name -> tayfam.core.v1.AttendanceMethod
-	58, // 64: tayfam.core.v1.HikeCheckin.start_time:type_name -> google.protobuf.Timestamp
-	58, // 65: tayfam.core.v1.HikeCheckin.return_time:type_name -> google.protobuf.Timestamp
-	58, // 66: tayfam.core.v1.StartHikeRequest.start_time:type_name -> google.protobuf.Timestamp
-	44, // 67: tayfam.core.v1.StartHikeResponse.checkin:type_name -> tayfam.core.v1.HikeCheckin
-	58, // 68: tayfam.core.v1.FinishHikeRequest.return_time:type_name -> google.protobuf.Timestamp
-	44, // 69: tayfam.core.v1.FinishHikeResponse.checkin:type_name -> tayfam.core.v1.HikeCheckin
-	9,  // 70: tayfam.core.v1.FishingCatch.location:type_name -> tayfam.core.v1.LatLng
-	5,  // 71: tayfam.core.v1.FishingCatch.visibility:type_name -> tayfam.core.v1.CatchVisibility
-	58, // 72: tayfam.core.v1.FishingCatch.create_time:type_name -> google.protobuf.Timestamp
-	9,  // 73: tayfam.core.v1.AddFishingCatchRequest.location:type_name -> tayfam.core.v1.LatLng
-	5,  // 74: tayfam.core.v1.AddFishingCatchRequest.visibility:type_name -> tayfam.core.v1.CatchVisibility
-	51, // 75: tayfam.core.v1.AddFishingCatchResponse.catch:type_name -> tayfam.core.v1.FishingCatch
-	51, // 76: tayfam.core.v1.ListFishingCatchesResponse.catches:type_name -> tayfam.core.v1.FishingCatch
-	19, // 77: tayfam.core.v1.EventService.CreateEvent:input_type -> tayfam.core.v1.CreateEventRequest
-	21, // 78: tayfam.core.v1.EventService.UpdateEvent:input_type -> tayfam.core.v1.UpdateEventRequest
-	23, // 79: tayfam.core.v1.EventService.CancelEvent:input_type -> tayfam.core.v1.CancelEventRequest
-	25, // 80: tayfam.core.v1.EventService.GetEvent:input_type -> tayfam.core.v1.GetEventRequest
-	27, // 81: tayfam.core.v1.EventService.ListUpcomingEvents:input_type -> tayfam.core.v1.ListUpcomingEventsRequest
-	29, // 82: tayfam.core.v1.EventService.SetRsvp:input_type -> tayfam.core.v1.SetRsvpRequest
-	31, // 83: tayfam.core.v1.EventService.ListAttendees:input_type -> tayfam.core.v1.ListAttendeesRequest
-	34, // 84: tayfam.core.v1.EventService.AddCampItem:input_type -> tayfam.core.v1.AddCampItemRequest
-	36, // 85: tayfam.core.v1.EventService.RemoveCampItem:input_type -> tayfam.core.v1.RemoveCampItemRequest
-	38, // 86: tayfam.core.v1.EventService.AddConvoyVehicle:input_type -> tayfam.core.v1.AddConvoyVehicleRequest
-	40, // 87: tayfam.core.v1.EventService.RemoveConvoyVehicle:input_type -> tayfam.core.v1.RemoveConvoyVehicleRequest
-	42, // 88: tayfam.core.v1.EventService.CheckIn:input_type -> tayfam.core.v1.CheckInRequest
-	45, // 89: tayfam.core.v1.EventService.StartHike:input_type -> tayfam.core.v1.StartHikeRequest
-	47, // 90: tayfam.core.v1.EventService.FinishHike:input_type -> tayfam.core.v1.FinishHikeRequest
-	49, // 91: tayfam.core.v1.EventService.SetAttendance:input_type -> tayfam.core.v1.SetAttendanceRequest
-	52, // 92: tayfam.core.v1.EventService.AddFishingCatch:input_type -> tayfam.core.v1.AddFishingCatchRequest
-	54, // 93: tayfam.core.v1.EventService.ListFishingCatches:input_type -> tayfam.core.v1.ListFishingCatchesRequest
-	56, // 94: tayfam.core.v1.EventService.RemoveFishingCatch:input_type -> tayfam.core.v1.RemoveFishingCatchRequest
-	20, // 95: tayfam.core.v1.EventService.CreateEvent:output_type -> tayfam.core.v1.CreateEventResponse
-	22, // 96: tayfam.core.v1.EventService.UpdateEvent:output_type -> tayfam.core.v1.UpdateEventResponse
-	24, // 97: tayfam.core.v1.EventService.CancelEvent:output_type -> tayfam.core.v1.CancelEventResponse
-	26, // 98: tayfam.core.v1.EventService.GetEvent:output_type -> tayfam.core.v1.GetEventResponse
-	28, // 99: tayfam.core.v1.EventService.ListUpcomingEvents:output_type -> tayfam.core.v1.ListUpcomingEventsResponse
-	30, // 100: tayfam.core.v1.EventService.SetRsvp:output_type -> tayfam.core.v1.SetRsvpResponse
-	33, // 101: tayfam.core.v1.EventService.ListAttendees:output_type -> tayfam.core.v1.ListAttendeesResponse
-	35, // 102: tayfam.core.v1.EventService.AddCampItem:output_type -> tayfam.core.v1.AddCampItemResponse
-	37, // 103: tayfam.core.v1.EventService.RemoveCampItem:output_type -> tayfam.core.v1.RemoveCampItemResponse
-	39, // 104: tayfam.core.v1.EventService.AddConvoyVehicle:output_type -> tayfam.core.v1.AddConvoyVehicleResponse
-	41, // 105: tayfam.core.v1.EventService.RemoveConvoyVehicle:output_type -> tayfam.core.v1.RemoveConvoyVehicleResponse
-	43, // 106: tayfam.core.v1.EventService.CheckIn:output_type -> tayfam.core.v1.CheckInResponse
-	46, // 107: tayfam.core.v1.EventService.StartHike:output_type -> tayfam.core.v1.StartHikeResponse
-	48, // 108: tayfam.core.v1.EventService.FinishHike:output_type -> tayfam.core.v1.FinishHikeResponse
-	50, // 109: tayfam.core.v1.EventService.SetAttendance:output_type -> tayfam.core.v1.SetAttendanceResponse
-	53, // 110: tayfam.core.v1.EventService.AddFishingCatch:output_type -> tayfam.core.v1.AddFishingCatchResponse
-	55, // 111: tayfam.core.v1.EventService.ListFishingCatches:output_type -> tayfam.core.v1.ListFishingCatchesResponse
-	57, // 112: tayfam.core.v1.EventService.RemoveFishingCatch:output_type -> tayfam.core.v1.RemoveFishingCatchResponse
-	95, // [95:113] is the sub-list for method output_type
-	77, // [77:95] is the sub-list for method input_type
-	77, // [77:77] is the sub-list for extension type_name
-	77, // [77:77] is the sub-list for extension extendee
-	0,  // [0:77] is the sub-list for field type_name
+	9,   // 0: tayfam.core.v1.ConvoyDetails.route:type_name -> tayfam.core.v1.LatLng
+	11,  // 1: tayfam.core.v1.ConvoyDetails.vehicles:type_name -> tayfam.core.v1.ConvoyVehicle
+	13,  // 2: tayfam.core.v1.CampDetails.items:type_name -> tayfam.core.v1.CampItem
+	66,  // 3: tayfam.core.v1.HikeDetails.expected_return_time:type_name -> google.protobuf.Timestamp
+	6,   // 4: tayfam.core.v1.FishingDetails.spot_visibility:type_name -> tayfam.core.v1.SpotVisibility
+	7,   // 5: tayfam.core.v1.GamingDetails.platform:type_name -> tayfam.core.v1.GamingPlatform
+	8,   // 6: tayfam.core.v1.SportsDetails.sport:type_name -> tayfam.core.v1.Sport
+	67,  // 7: tayfam.core.v1.Event.type:type_name -> tayfam.core.v1.EventType
+	0,   // 8: tayfam.core.v1.Event.mode:type_name -> tayfam.core.v1.EventMode
+	66,  // 9: tayfam.core.v1.Event.start_time:type_name -> google.protobuf.Timestamp
+	66,  // 10: tayfam.core.v1.Event.end_time:type_name -> google.protobuf.Timestamp
+	9,   // 11: tayfam.core.v1.Event.meeting_point:type_name -> tayfam.core.v1.LatLng
+	1,   // 12: tayfam.core.v1.Event.status:type_name -> tayfam.core.v1.EventStatus
+	66,  // 13: tayfam.core.v1.Event.cancel_time:type_name -> google.protobuf.Timestamp
+	66,  // 14: tayfam.core.v1.Event.create_time:type_name -> google.protobuf.Timestamp
+	66,  // 15: tayfam.core.v1.Event.update_time:type_name -> google.protobuf.Timestamp
+	2,   // 16: tayfam.core.v1.Event.caller_rsvp:type_name -> tayfam.core.v1.RsvpStatus
+	3,   // 17: tayfam.core.v1.Event.caller_attendance:type_name -> tayfam.core.v1.AttendanceStatus
+	10,  // 18: tayfam.core.v1.Event.convoy:type_name -> tayfam.core.v1.ConvoyDetails
+	12,  // 19: tayfam.core.v1.Event.camp:type_name -> tayfam.core.v1.CampDetails
+	14,  // 20: tayfam.core.v1.Event.hike:type_name -> tayfam.core.v1.HikeDetails
+	15,  // 21: tayfam.core.v1.Event.fishing:type_name -> tayfam.core.v1.FishingDetails
+	16,  // 22: tayfam.core.v1.Event.gaming:type_name -> tayfam.core.v1.GamingDetails
+	17,  // 23: tayfam.core.v1.Event.sports:type_name -> tayfam.core.v1.SportsDetails
+	67,  // 24: tayfam.core.v1.CreateEventRequest.type:type_name -> tayfam.core.v1.EventType
+	0,   // 25: tayfam.core.v1.CreateEventRequest.mode:type_name -> tayfam.core.v1.EventMode
+	66,  // 26: tayfam.core.v1.CreateEventRequest.start_time:type_name -> google.protobuf.Timestamp
+	66,  // 27: tayfam.core.v1.CreateEventRequest.end_time:type_name -> google.protobuf.Timestamp
+	9,   // 28: tayfam.core.v1.CreateEventRequest.meeting_point:type_name -> tayfam.core.v1.LatLng
+	10,  // 29: tayfam.core.v1.CreateEventRequest.convoy:type_name -> tayfam.core.v1.ConvoyDetails
+	12,  // 30: tayfam.core.v1.CreateEventRequest.camp:type_name -> tayfam.core.v1.CampDetails
+	14,  // 31: tayfam.core.v1.CreateEventRequest.hike:type_name -> tayfam.core.v1.HikeDetails
+	15,  // 32: tayfam.core.v1.CreateEventRequest.fishing:type_name -> tayfam.core.v1.FishingDetails
+	16,  // 33: tayfam.core.v1.CreateEventRequest.gaming:type_name -> tayfam.core.v1.GamingDetails
+	17,  // 34: tayfam.core.v1.CreateEventRequest.sports:type_name -> tayfam.core.v1.SportsDetails
+	20,  // 35: tayfam.core.v1.CreateEventRequest.recurrence:type_name -> tayfam.core.v1.Recurrence
+	66,  // 36: tayfam.core.v1.EventSeries.start_time:type_name -> google.protobuf.Timestamp
+	66,  // 37: tayfam.core.v1.EventSeries.end_time:type_name -> google.protobuf.Timestamp
+	66,  // 38: tayfam.core.v1.EventSeries.create_time:type_name -> google.protobuf.Timestamp
+	18,  // 39: tayfam.core.v1.CreateEventResponse.event:type_name -> tayfam.core.v1.Event
+	66,  // 40: tayfam.core.v1.UpdateEventRequest.start_time:type_name -> google.protobuf.Timestamp
+	66,  // 41: tayfam.core.v1.UpdateEventRequest.end_time:type_name -> google.protobuf.Timestamp
+	0,   // 42: tayfam.core.v1.UpdateEventRequest.mode:type_name -> tayfam.core.v1.EventMode
+	9,   // 43: tayfam.core.v1.UpdateEventRequest.meeting_point:type_name -> tayfam.core.v1.LatLng
+	10,  // 44: tayfam.core.v1.UpdateEventRequest.convoy:type_name -> tayfam.core.v1.ConvoyDetails
+	12,  // 45: tayfam.core.v1.UpdateEventRequest.camp:type_name -> tayfam.core.v1.CampDetails
+	14,  // 46: tayfam.core.v1.UpdateEventRequest.hike:type_name -> tayfam.core.v1.HikeDetails
+	15,  // 47: tayfam.core.v1.UpdateEventRequest.fishing:type_name -> tayfam.core.v1.FishingDetails
+	16,  // 48: tayfam.core.v1.UpdateEventRequest.gaming:type_name -> tayfam.core.v1.GamingDetails
+	17,  // 49: tayfam.core.v1.UpdateEventRequest.sports:type_name -> tayfam.core.v1.SportsDetails
+	68,  // 50: tayfam.core.v1.UpdateEventRequest.update_mask:type_name -> google.protobuf.FieldMask
+	18,  // 51: tayfam.core.v1.UpdateEventResponse.event:type_name -> tayfam.core.v1.Event
+	18,  // 52: tayfam.core.v1.CancelEventResponse.event:type_name -> tayfam.core.v1.Event
+	18,  // 53: tayfam.core.v1.GetEventResponse.event:type_name -> tayfam.core.v1.Event
+	18,  // 54: tayfam.core.v1.ListUpcomingEventsResponse.events:type_name -> tayfam.core.v1.Event
+	2,   // 55: tayfam.core.v1.SetRsvpRequest.status:type_name -> tayfam.core.v1.RsvpStatus
+	2,   // 56: tayfam.core.v1.SetRsvpResponse.status:type_name -> tayfam.core.v1.RsvpStatus
+	2,   // 57: tayfam.core.v1.ListAttendeesRequest.status:type_name -> tayfam.core.v1.RsvpStatus
+	2,   // 58: tayfam.core.v1.Attendee.status:type_name -> tayfam.core.v1.RsvpStatus
+	66,  // 59: tayfam.core.v1.Attendee.update_time:type_name -> google.protobuf.Timestamp
+	3,   // 60: tayfam.core.v1.Attendee.attendance:type_name -> tayfam.core.v1.AttendanceStatus
+	4,   // 61: tayfam.core.v1.Attendee.attendance_method:type_name -> tayfam.core.v1.AttendanceMethod
+	34,  // 62: tayfam.core.v1.ListAttendeesResponse.attendees:type_name -> tayfam.core.v1.Attendee
+	13,  // 63: tayfam.core.v1.AddCampItemResponse.item:type_name -> tayfam.core.v1.CampItem
+	11,  // 64: tayfam.core.v1.AddConvoyVehicleResponse.vehicle:type_name -> tayfam.core.v1.ConvoyVehicle
+	9,   // 65: tayfam.core.v1.CheckInRequest.location:type_name -> tayfam.core.v1.LatLng
+	3,   // 66: tayfam.core.v1.CheckInResponse.attendance:type_name -> tayfam.core.v1.AttendanceStatus
+	4,   // 67: tayfam.core.v1.CheckInResponse.method:type_name -> tayfam.core.v1.AttendanceMethod
+	66,  // 68: tayfam.core.v1.HikeCheckin.start_time:type_name -> google.protobuf.Timestamp
+	66,  // 69: tayfam.core.v1.HikeCheckin.return_time:type_name -> google.protobuf.Timestamp
+	66,  // 70: tayfam.core.v1.StartHikeRequest.start_time:type_name -> google.protobuf.Timestamp
+	46,  // 71: tayfam.core.v1.StartHikeResponse.checkin:type_name -> tayfam.core.v1.HikeCheckin
+	66,  // 72: tayfam.core.v1.FinishHikeRequest.return_time:type_name -> google.protobuf.Timestamp
+	46,  // 73: tayfam.core.v1.FinishHikeResponse.checkin:type_name -> tayfam.core.v1.HikeCheckin
+	9,   // 74: tayfam.core.v1.FishingCatch.location:type_name -> tayfam.core.v1.LatLng
+	5,   // 75: tayfam.core.v1.FishingCatch.visibility:type_name -> tayfam.core.v1.CatchVisibility
+	66,  // 76: tayfam.core.v1.FishingCatch.create_time:type_name -> google.protobuf.Timestamp
+	9,   // 77: tayfam.core.v1.AddFishingCatchRequest.location:type_name -> tayfam.core.v1.LatLng
+	5,   // 78: tayfam.core.v1.AddFishingCatchRequest.visibility:type_name -> tayfam.core.v1.CatchVisibility
+	53,  // 79: tayfam.core.v1.AddFishingCatchResponse.catch:type_name -> tayfam.core.v1.FishingCatch
+	53,  // 80: tayfam.core.v1.ListFishingCatchesResponse.catches:type_name -> tayfam.core.v1.FishingCatch
+	21,  // 81: tayfam.core.v1.GetEventSeriesResponse.series:type_name -> tayfam.core.v1.EventSeries
+	21,  // 82: tayfam.core.v1.EndEventSeriesResponse.series:type_name -> tayfam.core.v1.EventSeries
+	19,  // 83: tayfam.core.v1.EventService.CreateEvent:input_type -> tayfam.core.v1.CreateEventRequest
+	23,  // 84: tayfam.core.v1.EventService.UpdateEvent:input_type -> tayfam.core.v1.UpdateEventRequest
+	25,  // 85: tayfam.core.v1.EventService.CancelEvent:input_type -> tayfam.core.v1.CancelEventRequest
+	27,  // 86: tayfam.core.v1.EventService.GetEvent:input_type -> tayfam.core.v1.GetEventRequest
+	29,  // 87: tayfam.core.v1.EventService.ListUpcomingEvents:input_type -> tayfam.core.v1.ListUpcomingEventsRequest
+	31,  // 88: tayfam.core.v1.EventService.SetRsvp:input_type -> tayfam.core.v1.SetRsvpRequest
+	33,  // 89: tayfam.core.v1.EventService.ListAttendees:input_type -> tayfam.core.v1.ListAttendeesRequest
+	36,  // 90: tayfam.core.v1.EventService.AddCampItem:input_type -> tayfam.core.v1.AddCampItemRequest
+	38,  // 91: tayfam.core.v1.EventService.RemoveCampItem:input_type -> tayfam.core.v1.RemoveCampItemRequest
+	40,  // 92: tayfam.core.v1.EventService.AddConvoyVehicle:input_type -> tayfam.core.v1.AddConvoyVehicleRequest
+	42,  // 93: tayfam.core.v1.EventService.RemoveConvoyVehicle:input_type -> tayfam.core.v1.RemoveConvoyVehicleRequest
+	44,  // 94: tayfam.core.v1.EventService.CheckIn:input_type -> tayfam.core.v1.CheckInRequest
+	47,  // 95: tayfam.core.v1.EventService.StartHike:input_type -> tayfam.core.v1.StartHikeRequest
+	49,  // 96: tayfam.core.v1.EventService.FinishHike:input_type -> tayfam.core.v1.FinishHikeRequest
+	51,  // 97: tayfam.core.v1.EventService.SetAttendance:input_type -> tayfam.core.v1.SetAttendanceRequest
+	54,  // 98: tayfam.core.v1.EventService.AddFishingCatch:input_type -> tayfam.core.v1.AddFishingCatchRequest
+	56,  // 99: tayfam.core.v1.EventService.ListFishingCatches:input_type -> tayfam.core.v1.ListFishingCatchesRequest
+	58,  // 100: tayfam.core.v1.EventService.RemoveFishingCatch:input_type -> tayfam.core.v1.RemoveFishingCatchRequest
+	60,  // 101: tayfam.core.v1.EventService.GetEventSeries:input_type -> tayfam.core.v1.GetEventSeriesRequest
+	62,  // 102: tayfam.core.v1.EventService.EndEventSeries:input_type -> tayfam.core.v1.EndEventSeriesRequest
+	64,  // 103: tayfam.core.v1.EventService.ExportEvent:input_type -> tayfam.core.v1.ExportEventRequest
+	22,  // 104: tayfam.core.v1.EventService.CreateEvent:output_type -> tayfam.core.v1.CreateEventResponse
+	24,  // 105: tayfam.core.v1.EventService.UpdateEvent:output_type -> tayfam.core.v1.UpdateEventResponse
+	26,  // 106: tayfam.core.v1.EventService.CancelEvent:output_type -> tayfam.core.v1.CancelEventResponse
+	28,  // 107: tayfam.core.v1.EventService.GetEvent:output_type -> tayfam.core.v1.GetEventResponse
+	30,  // 108: tayfam.core.v1.EventService.ListUpcomingEvents:output_type -> tayfam.core.v1.ListUpcomingEventsResponse
+	32,  // 109: tayfam.core.v1.EventService.SetRsvp:output_type -> tayfam.core.v1.SetRsvpResponse
+	35,  // 110: tayfam.core.v1.EventService.ListAttendees:output_type -> tayfam.core.v1.ListAttendeesResponse
+	37,  // 111: tayfam.core.v1.EventService.AddCampItem:output_type -> tayfam.core.v1.AddCampItemResponse
+	39,  // 112: tayfam.core.v1.EventService.RemoveCampItem:output_type -> tayfam.core.v1.RemoveCampItemResponse
+	41,  // 113: tayfam.core.v1.EventService.AddConvoyVehicle:output_type -> tayfam.core.v1.AddConvoyVehicleResponse
+	43,  // 114: tayfam.core.v1.EventService.RemoveConvoyVehicle:output_type -> tayfam.core.v1.RemoveConvoyVehicleResponse
+	45,  // 115: tayfam.core.v1.EventService.CheckIn:output_type -> tayfam.core.v1.CheckInResponse
+	48,  // 116: tayfam.core.v1.EventService.StartHike:output_type -> tayfam.core.v1.StartHikeResponse
+	50,  // 117: tayfam.core.v1.EventService.FinishHike:output_type -> tayfam.core.v1.FinishHikeResponse
+	52,  // 118: tayfam.core.v1.EventService.SetAttendance:output_type -> tayfam.core.v1.SetAttendanceResponse
+	55,  // 119: tayfam.core.v1.EventService.AddFishingCatch:output_type -> tayfam.core.v1.AddFishingCatchResponse
+	57,  // 120: tayfam.core.v1.EventService.ListFishingCatches:output_type -> tayfam.core.v1.ListFishingCatchesResponse
+	59,  // 121: tayfam.core.v1.EventService.RemoveFishingCatch:output_type -> tayfam.core.v1.RemoveFishingCatchResponse
+	61,  // 122: tayfam.core.v1.EventService.GetEventSeries:output_type -> tayfam.core.v1.GetEventSeriesResponse
+	63,  // 123: tayfam.core.v1.EventService.EndEventSeries:output_type -> tayfam.core.v1.EndEventSeriesResponse
+	65,  // 124: tayfam.core.v1.EventService.ExportEvent:output_type -> tayfam.core.v1.ExportEventResponse
+	104, // [104:125] is the sub-list for method output_type
+	83,  // [83:104] is the sub-list for method input_type
+	83,  // [83:83] is the sub-list for extension type_name
+	83,  // [83:83] is the sub-list for extension extendee
+	0,   // [0:83] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_event_proto_init() }
@@ -4747,7 +5351,7 @@ func file_tayfam_core_v1_event_proto_init() {
 		(*CreateEventRequest_Gaming)(nil),
 		(*CreateEventRequest_Sports)(nil),
 	}
-	file_tayfam_core_v1_event_proto_msgTypes[12].OneofWrappers = []any{
+	file_tayfam_core_v1_event_proto_msgTypes[14].OneofWrappers = []any{
 		(*UpdateEventRequest_Convoy)(nil),
 		(*UpdateEventRequest_Camp)(nil),
 		(*UpdateEventRequest_Hike)(nil),
@@ -4761,7 +5365,7 @@ func file_tayfam_core_v1_event_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_event_proto_rawDesc), len(file_tayfam_core_v1_event_proto_rawDesc)),
 			NumEnums:      9,
-			NumMessages:   49,
+			NumMessages:   57,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

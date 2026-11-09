@@ -149,6 +149,9 @@ func (s *Service) views(ctx context.Context, c caller, rows []store.GetEventRow)
 		if r.CreatedBy.Valid {
 			v.CreatedBy = id.ID(r.CreatedBy.Bytes)
 		}
+		if r.SeriesID.Valid {
+			v.SeriesID, v.SeriesOverride = id.ID(r.SeriesID.Bytes), r.SeriesOverride
+		}
 		// A secret fishing spot is shown only to participants, the
 		// organizer, moderators and admins.
 		if bySpot[k] == SpotParticipants && !c.seesSpot(r, v.CallerRSVP) {
@@ -179,34 +182,19 @@ func (c caller) participant(ev store.GetEventRow, rsvp string) bool {
 	return rsvp == RSVPGoing || (ev.CreatedBy.Valid && id.ID(ev.CreatedBy.Bytes) == c.user)
 }
 
-// details loads the type details of ev for Get.
+// details loads the type details of ev for Get, with the convoy's vehicles
+// and the camp's items.
 func (s *Service) details(ctx context.Context, c caller, ev store.GetEventRow, v Event) (Details, error) {
-	evID := ev.ID
-	var d Details
-	var err error
-	switch ev.Type {
-	case TypeConvoy:
-		var route []byte
-		route, err = s.q.GetEventConvoy(ctx, evID)
+	d, err := typeDetails(ctx, s.q, ev)
+	if err != nil {
+		return Details{}, err
+	}
+	switch {
+	case d.Convoy != nil:
+		d.Convoy.Vehicles = []Vehicle{}
+		vs, err := s.q.ListConvoyVehicles(ctx, ev.ID)
 		if err != nil {
-			break
-		}
-		cv := &Convoy{Route: []Point{}, Vehicles: []Vehicle{}}
-		if len(route) > 0 {
-			var pts []struct {
-				Lat float64 `json:"lat"`
-				Lng float64 `json:"lng"`
-			}
-			if err := json.Unmarshal(route, &pts); err != nil {
-				return Details{}, fmt.Errorf("rota: %w", err)
-			}
-			for _, p := range pts {
-				cv.Route = append(cv.Route, Point{Lat: p.Lat, Lng: p.Lng})
-			}
-		}
-		vs, verr := s.q.ListConvoyVehicles(ctx, evID)
-		if verr != nil {
-			return Details{}, fmt.Errorf("araçlar: %w", verr)
+			return Details{}, fmt.Errorf("araçlar: %w", err)
 		}
 		seesPlates := c.participant(ev, v.CallerRSVP)
 		for _, r := range vs {
@@ -219,37 +207,69 @@ func (s *Service) details(ctx context.Context, c caller, ev store.GetEventRow, v
 			if seesPlates || veh.UserID == c.user {
 				veh.Plate = r.Plate.String
 			}
-			cv.Vehicles = append(cv.Vehicles, veh)
+			d.Convoy.Vehicles = append(d.Convoy.Vehicles, veh)
 		}
-		d.Convoy = cv
-	case TypeCamp:
-		var r store.GetEventCampRow
-		r, err = s.q.GetEventCamp(ctx, evID)
+	case d.Camp != nil:
+		d.Camp.Items = []CampItem{}
+		items, err := s.q.ListCampItems(ctx, ev.ID)
 		if err != nil {
-			break
-		}
-		cp := &Camp{SiteName: r.SiteName.String, Notes: r.Notes.String, Items: []CampItem{}}
-		if r.HasWater.Valid {
-			cp.HasWater = &r.HasWater.Bool
-		}
-		if r.HasToilet.Valid {
-			cp.HasToilet = &r.HasToilet.Bool
-		}
-		items, ierr := s.q.ListCampItems(ctx, evID)
-		if ierr != nil {
-			return Details{}, fmt.Errorf("kamp malzemeleri: %w", ierr)
+			return Details{}, fmt.Errorf("kamp malzemeleri: %w", err)
 		}
 		for _, it := range items {
 			ci := CampItem{ID: id.ID(it.ID.Bytes), Name: it.Name, Quantity: it.Quantity}
 			if it.AssignedUserID.Valid {
 				ci.AssignedUserID = id.ID(it.AssignedUserID.Bytes)
 			}
-			cp.Items = append(cp.Items, ci)
+			d.Camp.Items = append(d.Camp.Items, ci)
+		}
+	}
+	return d, nil
+}
+
+// typeDetails loads the type details of ev from its type's table, without
+// lists (vehicles, camp items). A series copies these to new occurrences.
+func typeDetails(ctx context.Context, q *store.Queries, ev store.GetEventRow) (Details, error) {
+	evID := ev.ID
+	var d Details
+	var err error
+	switch ev.Type {
+	case TypeConvoy:
+		var route []byte
+		route, err = q.GetEventConvoy(ctx, evID)
+		if err != nil {
+			break
+		}
+		cv := &Convoy{Route: []Point{}}
+		if len(route) > 0 {
+			var pts []struct {
+				Lat float64 `json:"lat"`
+				Lng float64 `json:"lng"`
+			}
+			if err := json.Unmarshal(route, &pts); err != nil {
+				return Details{}, fmt.Errorf("rota: %w", err)
+			}
+			for _, p := range pts {
+				cv.Route = append(cv.Route, Point{Lat: p.Lat, Lng: p.Lng})
+			}
+		}
+		d.Convoy = cv
+	case TypeCamp:
+		var r store.GetEventCampRow
+		r, err = q.GetEventCamp(ctx, evID)
+		if err != nil {
+			break
+		}
+		cp := &Camp{SiteName: r.SiteName.String, Notes: r.Notes.String}
+		if r.HasWater.Valid {
+			cp.HasWater = &r.HasWater.Bool
+		}
+		if r.HasToilet.Valid {
+			cp.HasToilet = &r.HasToilet.Bool
 		}
 		d.Camp = cp
 	case TypeHike:
 		var r store.GetEventHikeRow
-		r, err = s.q.GetEventHike(ctx, evID)
+		r, err = q.GetEventHike(ctx, evID)
 		if err != nil {
 			break
 		}
@@ -260,15 +280,15 @@ func (s *Service) details(ctx context.Context, c caller, ev store.GetEventRow, v
 		d.Hike = h
 	case TypeFishing:
 		var vis string
-		vis, err = s.q.GetEventFishing(ctx, evID)
+		vis, err = q.GetEventFishing(ctx, evID)
 		d.Fishing = &Fishing{SpotVisibility: vis}
 	case TypeGaming:
 		var r store.GetEventGamingRow
-		r, err = s.q.GetEventGaming(ctx, evID)
+		r, err = q.GetEventGaming(ctx, evID)
 		d.Gaming = &Gaming{Game: r.Game, Platform: r.Platform}
 	case TypeSports:
 		var r store.GetEventSportsRow
-		r, err = s.q.GetEventSports(ctx, evID)
+		r, err = q.GetEventSports(ctx, evID)
 		d.Sports = &Sports{Sport: r.Sport, VenueName: r.VenueName.String}
 	}
 	// Every event except a general one is created with its detail row; a

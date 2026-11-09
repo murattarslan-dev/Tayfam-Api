@@ -1,0 +1,2 @@
+go test fuzz v1
+string("FREQ=MONTHLY;BYDAY=5SA;COUNT=1")

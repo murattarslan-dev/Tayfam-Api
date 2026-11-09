@@ -995,6 +995,9 @@ components:
         - correction-closed
         - hike-not-started
         - not-attended
+        # core: tekrarlayan etkinlik (#51)
+        - event-series-not-found
+        - event-series-ended
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
