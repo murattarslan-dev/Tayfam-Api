@@ -70,6 +70,7 @@ var notificationTypeNames = map[chatv1.NotificationType]string{
 	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_REQUEST:           "friend_request",
 	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_ACCEPTED:          "friend_accepted",
 	chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_INVITATION:         "tayfa_invitation",
+	chatv1.NotificationType_NOTIFICATION_TYPE_REPORT_RESOLVED:          "report_resolved",
 }
 
 var warningReasonNames = map[chatv1.TayfaWarningReason]string{
@@ -84,6 +85,7 @@ var notificationTargetNames = map[chatv1.NotificationTargetType]string{
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_EVENT:        "event",
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_ANSWER:       "answer",
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_USER:         "user",
+	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_REPORT:       "report",
 }
 
 var notificationLevelNames = map[chatv1.NotificationLevel]string{
