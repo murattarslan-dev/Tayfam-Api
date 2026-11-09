@@ -98,9 +98,9 @@ güncellenir. Kopyanın kısa süre eski kalması kabul edilir.
 | `users.avatar_upload_id` → `uploads` | ID ile referans; core yüklemeyi `attached` yapar |
 | Tayfa → kanallar ve mesajları (CASCADE) | core `tayfa.deleted` ve kalıcı silmede `tayfa.purged` yayınlar, chat soft delete ve kalıcı silme uygular |
 | Üyelik değişiklikleri (rol, çıkarma, ban, susturma) | core `membership.changed` yayınlar; chat önbelleğini temizler, `staff` kanal aboneliklerini keser |
-| Tayfa askı ve arşiv | core `tayfa.status_changed` yayınlar; chat kanalları salt okunur yapar |
+| Tayfa uyarı, arşiv, silme bekleme | core `tayfa.warned`, `tayfa.archived`, `tayfa.reactivated`, `tayfa.deletion_requested`, `tayfa.deletion_cancelled` yayınlar (2026-11-09; önceki taslaktaki `tayfa.status_changed` yerine). chat bunları yalnızca önbelleğini temizlemek için kullanır; salt okunurluğu her işlemde core'a sorar (`AuthorizeChannelAction`) |
 | Oturum iptali, platform yaptırımı | identity `session.revoked`, `user.sanctioned` yayınlar; chat WebSocket bağlantılarını kapatır |
-| Bildirim oluşturma | core ve identity `notification.requested` yayınlar; chat kaydı yazar ve push gönderir |
+| Bildirim oluşturma | core ve identity `notification.requested` yayınlar; alıcıları yayınlayan servis kendi verisiyle hesaplar (core: aktif üyeler; bekleyen, banlı, ayrılmış ve aktör hariç), olay başına en fazla 150 alıcı. chat kaydı yazar ve push gönderir; chat'te üyelik kopyası tutulmaz (platform sahibi kararı, 2026-11-09) |
 
 Tüm tüketici metodları idempotenttir (ADR-0002).
 
@@ -108,9 +108,10 @@ Tüm tüketici metodları idempotenttir (ADR-0002).
 
 | Çağıran → hedef | Metod | Amaç |
 |-----------------|-------|------|
-| chat → core | `GetMembership(tayfa_id, user_id)` | Kanal erişimi, rol, susturma; kısa süre önbelleklenir |
+| chat → core | `GetMembership(tayfa_id)` | Bildirim tercihlerinde üyelik kontrolü; kullanıcının token'ı iletilir |
+| chat → core | `AuthorizeChannelAction(tayfa_id, action, target_user_id?)` | Kanal işlemleri için core'daki tek izin tablosunun kararı (CLAUDE.md kural 5): izin, rol, susturma, tayfa salt okunur mu, hedefe göre hiyerarşi. Kullanıcının token'ı iletilir; hedefsiz cevap 5 sn önbelleklenir |
 | chat → core | `CheckDirectMessage(sender_id, recipient_id)` | Notion v7 kuralları: ortak aktif tayfa, arkadaşlık, engelleme, ortak etkinlik geçmişi. Sonuç: yazamaz, istek, aktif |
-| chat → core | `ListActiveMemberIDs(tayfa_id)` | Canlı olay ve bildirim dağıtımı |
+| chat → core | `ListActiveMemberIDs(tayfa_id)` | Canlı olay dağıtımı (WebSocket, gerekirse). Bildirim alıcıları için kullanılmaz; onları core `notification.requested` ile verir |
 | identity → core, chat | `ExportUserData(user_id)` | KVKK veri dışa aktarma (ADR-0008) |
 | core → identity | `IsMinor(user_ids)` | Şikâyet önceliği; yalnızca evet/hayır döner (ADR-0012) |
 | identity → core | `GetRelationship(viewer_id, subject_id)` | Doğum günü görünürlüğü için arkadaşlık / ortak tayfa (ADR-0012) |
