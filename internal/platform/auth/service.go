@@ -276,19 +276,26 @@ type jwk struct {
 }
 
 func (v *ServiceVerifier) fetchKeys(ctx context.Context) (map[string]crypto.PublicKey, time.Duration, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.cfg.JWKSURL, http.NoBody)
+	return fetchJWKS(ctx, v.cfg.Client, v.cfg.JWKSURL, v.cfg.BearerToken)
+}
+
+// fetchJWKS reads the key set at jwksURL with client, sending the token
+// bearer returns when it is set. Service tokens (API server) and Cloudflare
+// Access (team domain) both use it.
+func fetchJWKS(ctx context.Context, client *http.Client, jwksURL string, bearer func() (string, error)) (map[string]crypto.PublicKey, time.Duration, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, jwksURL, http.NoBody)
 	if err != nil {
 		return nil, 0, fmt.Errorf("JWKS isteği: %w", err)
 	}
 	req.Header.Set("Accept", "application/jwk-set+json, application/json")
-	if v.cfg.BearerToken != nil {
-		tok, err := v.cfg.BearerToken()
+	if bearer != nil {
+		tok, err := bearer()
 		if err != nil {
 			return nil, 0, fmt.Errorf("API sunucusu token'ı: %w", err)
 		}
 		req.Header.Set("Authorization", bearerPrefix+tok)
 	}
-	resp, err := v.cfg.Client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		// The error carries only the URL, which is configuration, not a secret.
 		return nil, 0, fmt.Errorf("JWKS: %w", err)
