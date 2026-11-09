@@ -81,23 +81,27 @@ ORDER BY created_at DESC, id DESC
 LIMIT @page_size;
 
 -- Kuyruk: tayfanın açık şikâyetleri; platforma özel olanlar ve izleyicinin
--- kendisi hakkındakiler hariç. Eskiden yeniye. reporter_id, priority ve
--- yükselme bilgisi seçilmez (ADR-0012: tayfa yöneticileri 18 altı bilgisini
--- görmez; yükselme zamanı önceliği ele verirdi).
+-- kendisi hakkındakiler hariç. minor_involved ve çocuk/genç güvenliği
+-- şikâyetleri önce, sonra eskiden yeniye (ADR-0012, platform sahibinin
+-- 2026-11-09 kararı; Notion v14). reporter_id
+-- ve yükselme bilgisi seçilmez; yaş ve doğum tarihi core'da hiç yoktur.
 -- name: ListOpenTayfaReports :many
 SELECT id, tayfa_id, target_type, target_id, subject_user_id, reason, description, status, resolution,
-       handled_by, handled_at, created_at
+       handled_by, handled_at, priority, created_at
 FROM reports
 WHERE tayfa_id = @tayfa_id AND status = 'open' AND NOT platform_only
   AND subject_user_id IS DISTINCT FROM @viewer_id::uuid
-  AND (NOT @has_cursor::boolean OR (created_at, id) > (@after_created_at::timestamptz, @after_id::uuid))
-ORDER BY created_at, id
+  AND (NOT @has_cursor::boolean
+       OR (priority = 'minor_involved' OR reason = 'child_safety')::int < @after_urgent::int
+       OR ((priority = 'minor_involved' OR reason = 'child_safety')::int = @after_urgent::int
+           AND (created_at, id) > (@after_created_at::timestamptz, @after_id::uuid)))
+ORDER BY (priority = 'minor_involved' OR reason = 'child_safety') DESC, created_at, id
 LIMIT @page_size;
 
 -- Çözülmüşler, son çözülen önce.
 -- name: ListResolvedTayfaReports :many
 SELECT id, tayfa_id, target_type, target_id, subject_user_id, reason, description, status, resolution,
-       handled_by, handled_at, created_at
+       handled_by, handled_at, priority, created_at
 FROM reports
 WHERE tayfa_id = @tayfa_id AND status = 'resolved' AND NOT platform_only
   AND subject_user_id IS DISTINCT FROM @viewer_id::uuid
@@ -109,7 +113,7 @@ LIMIT @page_size;
 -- izleyicinin kendisi hakkındaki şikâyet bulunamaz).
 -- name: LockTayfaReport :one
 SELECT id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, status,
-       resolution, handled_by, handled_at, created_at
+       resolution, handled_by, handled_at, priority, created_at
 FROM reports
 WHERE tayfa_id = @tayfa_id AND id = @id AND NOT platform_only
   AND subject_user_id IS DISTINCT FROM @viewer_id::uuid

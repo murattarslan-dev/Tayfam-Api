@@ -232,8 +232,13 @@ func myReportPB(v report.MyView) *corev1.MyReport {
 }
 
 func modReportPB(v report.ModView) *corev1.ModerationReport {
+	priority := corev1.ReportPriority_REPORT_PRIORITY_NORMAL
+	if v.Priority == report.PriorityMinorInvolved {
+		priority = corev1.ReportPriority_REPORT_PRIORITY_MINOR_INVOLVED
+	}
 	return &corev1.ModerationReport{
-		Id: v.ID.String(), TayfaId: v.TayfaID.String(), TargetType: toProto(reportTargets, v.TargetType),
+		Priority: priority,
+		Id:       v.ID.String(), TayfaId: v.TayfaID.String(), TargetType: toProto(reportTargets, v.TargetType),
 		TargetId: v.TargetID.String(), SubjectUserId: optionalID(v.SubjectID), Reason: toProto(reportReasons, v.Reason),
 		Description: v.Description, Status: reportStatusPB(v.Status),
 		Resolution: toProto(reportResolutions, v.Resolution), HandledByUserId: optionalID(v.HandledBy),

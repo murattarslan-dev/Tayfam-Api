@@ -33,6 +33,9 @@ const (
 type cursor struct {
 	Method string `json:"m"`
 	Scope  string `json:"s"`
+	// Urgent: the last row was MinorInvolved or a child safety report (open
+	// reports only).
+	Urgent bool `json:"u,omitempty"`
 	// Micros is created_at (handled_at for resolved reports) in Unix
 	// microseconds (Postgres precision).
 	Micros int64  `json:"c"`
@@ -69,9 +72,9 @@ func (s *Service) ListMine(ctx context.Context, user id.ID, pageSize int32, page
 	return out, next, nil
 }
 
-// ListQueue returns tayfa's moderation queue for user: open reports (oldest
-// first) or resolved ones (last handled first), never ordered by priority.
-// Platform-only reports and reports about user are never listed.
+// ListQueue returns tayfa's moderation queue for user: open reports
+// (MinorInvolved and child safety first, then oldest first) or resolved ones (last handled
+// first). Platform-only reports and reports about user are never listed.
 func (s *Service) ListQueue(ctx context.Context, user, tayfa id.ID, status Status, pageSize int32, pageToken string) ([]ModView, string, error) {
 	if status == "" {
 		status = StatusOpen
@@ -112,6 +115,9 @@ func (s *Service) ListQueue(ctx context.Context, user, tayfa id.ID, status Statu
 		p := store.ListOpenTayfaReportsParams{TayfaID: tayfa.PG(), ViewerID: user.PG(), PageSize: size}
 		if has {
 			p.HasCursor, p.AfterID, p.AfterCreatedAt = true, after.PG(), micros(c.Micros)
+			if c.Urgent {
+				p.AfterUrgent = 1
+			}
 		}
 		rows, err = s.q.ListOpenTayfaReports(ctx, p)
 	} else {
@@ -137,7 +143,7 @@ func (s *Service) ListQueue(ctx context.Context, user, tayfa id.ID, status Statu
 		last := out[len(out)-1]
 		nc := cursor{Method: method, Scope: tayfa.String(), ID: last.ID.String()}
 		if status == StatusOpen {
-			nc.Micros = last.CreatedAt.UnixMicro()
+			nc.Urgent, nc.Micros = last.urgent(), last.CreatedAt.UnixMicro()
 		} else {
 			nc.Micros = last.ResolvedAt.UnixMicro()
 		}

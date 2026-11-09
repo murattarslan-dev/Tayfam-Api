@@ -391,9 +391,10 @@ type Querier interface {
 	// Yönetici ve moderatörler (başvuru, silme talebi).
 	ListNotifyStaff(ctx context.Context, arg ListNotifyStaffParams) ([]pgtype.UUID, error)
 	// Kuyruk: tayfanın açık şikâyetleri; platforma özel olanlar ve izleyicinin
-	// kendisi hakkındakiler hariç. Eskiden yeniye. reporter_id, priority ve
-	// yükselme bilgisi seçilmez (ADR-0012: tayfa yöneticileri 18 altı bilgisini
-	// görmez; yükselme zamanı önceliği ele verirdi).
+	// kendisi hakkındakiler hariç. minor_involved ve çocuk/genç güvenliği
+	// şikâyetleri önce, sonra eskiden yeniye (ADR-0012, platform sahibinin
+	// 2026-11-09 kararı; Notion v14). reporter_id
+	// ve yükselme bilgisi seçilmez; yaş ve doğum tarihi core'da hiç yoktur.
 	ListOpenTayfaReports(ctx context.Context, arg ListOpenTayfaReportsParams) ([]ListOpenTayfaReportsRow, error)
 	// Yalnızca çağıranın kendi oyları.
 	ListOwnPollVotes(ctx context.Context, arg ListOwnPollVotesParams) ([]ListOwnPollVotesRow, error)
