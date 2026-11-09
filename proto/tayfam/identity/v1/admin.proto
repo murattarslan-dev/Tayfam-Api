@@ -59,3 +59,141 @@ message GetAdminResponse {
   google.protobuf.Timestamp auth_time = 3;
   google.protobuf.Timestamp expire_time = 4;
 }
+
+// AdminUserService is the panel's user management (issue #104 stage 2;
+// Notion "Platform Yönetim Paneli → Kullanıcılar"). Every method accepts
+// only an admin token, and identity checks platform_admins again on every
+// call. It never returns a birth date, an IP address, a token or a device
+// detail. Changes need a reason (10–1000 characters) and a Google sign-in
+// in the last 5 minutes (PERMISSION_DENIED with
+// ERROR_REASON_REAUTHENTICATION_REQUIRED otherwise) and are written to the
+// platform audit log in the same transaction.
+service AdminUserService {
+  // SearchUsers finds users by display name (substring, case-insensitive),
+  // referral code or e-mail address (exact, case-insensitive). At most 20.
+  rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
+  // GetUser returns one user's account state. The tayfas the user is a
+  // member of come from core (AdminService.ListUserTayfas).
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  // RevokeUserSessions ends every session of the user (session.revoked for
+  // each).
+  rpc RevokeUserSessions(RevokeUserSessionsRequest) returns (RevokeUserSessionsResponse);
+  // SanctionUser suspends (until end_time) or bans the user platform-wide:
+  // every session ends, sign-in and refresh are refused while it is active,
+  // user.sanctioned goes to chat and, for a ban, user.banned to core, which
+  // hides the user's content (it is not deleted, for the appeal).
+  rpc SanctionUser(SanctionUserRequest) returns (SanctionUserResponse);
+  // LiftSanction ends the user's active sanction; for a ban, user.unbanned
+  // goes to core.
+  rpc LiftSanction(LiftSanctionRequest) returns (LiftSanctionResponse);
+}
+
+enum SanctionType {
+  SANCTION_TYPE_UNSPECIFIED = 0;
+  SANCTION_TYPE_SUSPEND = 1;
+  SANCTION_TYPE_BAN = 2;
+}
+
+message SearchUsersRequest {
+  // 2–100 characters.
+  string query = 1;
+}
+
+message SearchUsersResponse {
+  repeated AdminUserSummary users = 1;
+}
+
+message AdminUserSummary {
+  string user_id = 1;
+  string display_name = 2;
+  string referral_code = 3;
+  bool registered = 4;
+  bool deleted = 5;
+  SanctionType active_sanction = 6;
+}
+
+message GetUserRequest {
+  string user_id = 1;
+}
+
+message GetUserResponse {
+  AdminUserSummary user = 1;
+  google.protobuf.Timestamp create_time = 2;
+  int32 active_sessions = 3;
+  // Set while a sanction is active.
+  Sanction sanction = 4;
+}
+
+message Sanction {
+  string sanction_id = 1;
+  SanctionType type = 2;
+  string reason = 3;
+  google.protobuf.Timestamp start_time = 4;
+  // Unset for a ban.
+  google.protobuf.Timestamp end_time = 5;
+}
+
+message RevokeUserSessionsRequest {
+  string user_id = 1;
+  string reason = 2;
+}
+
+message RevokeUserSessionsResponse {
+  int32 revoked = 1;
+}
+
+message SanctionUserRequest {
+  string user_id = 1;
+  SanctionType type = 2;
+  string reason = 3;
+  // Required for a suspension (1 hour to 1 year ahead); not allowed for a
+  // ban.
+  google.protobuf.Timestamp end_time = 4;
+  // The platform report that led to it, if any (audit metadata only).
+  string report_id = 5;
+}
+
+message SanctionUserResponse {
+  Sanction sanction = 1;
+}
+
+message LiftSanctionRequest {
+  string user_id = 1;
+  string reason = 2;
+}
+
+message LiftSanctionResponse {}
+
+// PlatformAuditService receives core's platform panel actions for the
+// platform audit log (issue #104 stage 2). core writes each action and its
+// audit entry in one transaction to its outbox; the relay delivers it here
+// at least once. Only a service token of tayfam-core (ADR-0013) is
+// accepted. Recording is idempotent: the entry's ID is core's event ID.
+service PlatformAuditService {
+  rpc RecordPlatformAudit(RecordPlatformAuditRequest) returns (RecordPlatformAuditResponse);
+}
+
+message RecordPlatformAuditRequest {
+  // core's outbox event ID (UUIDv7); the audit entry's ID.
+  string event_id = 1;
+  google.protobuf.Timestamp occur_time = 2;
+  // The platform administrator.
+  string actor_id = 3;
+  // "<area>.<verb>", e.g. "tayfa.suspend".
+  string action = 4;
+  // user, tayfa, membership or report.
+  string target_type = 5;
+  string target_id = 6;
+  string reason = 7;
+  // The admin token's session; IDs only.
+  string admin_session_id = 8;
+  // The tayfa the action concerns, if any.
+  string tayfa_id = 9;
+  // The user the action concerns, if any (a member whose role changed, the
+  // reported person).
+  string user_id = 10;
+  // The platform report the action decided, if any.
+  string report_id = 11;
+}
+
+message RecordPlatformAuditResponse {}

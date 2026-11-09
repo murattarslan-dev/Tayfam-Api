@@ -64,6 +64,20 @@ enum ErrorReason {
   // NOT_FOUND. The caller has no open session with this ID; another
   // user's session gives the same answer.
   ERROR_REASON_SESSION_NOT_FOUND = 13;
+  // Platform panel (issue #104).
+  // PERMISSION_DENIED. Sign-in or refresh of an account under an active
+  // platform suspension or ban.
+  ERROR_REASON_ACCOUNT_SANCTIONED = 14;
+  // INVALID_ARGUMENT. A panel change without a reason of 10–1000
+  // characters.
+  ERROR_REASON_REASON_REQUIRED = 15;
+  // NOT_FOUND. No such user.
+  ERROR_REASON_USER_NOT_FOUND = 16;
+  // FAILED_PRECONDITION. The user already has an active sanction
+  // (SanctionUser) or has none (LiftSanction).
+  ERROR_REASON_SANCTION_CONFLICT = 17;
+  // INVALID_ARGUMENT. Any other invalid field.
+  ERROR_REASON_VALIDATION = 18;
 }
 
 message SignInRequest {

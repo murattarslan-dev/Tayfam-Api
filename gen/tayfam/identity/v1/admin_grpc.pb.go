@@ -201,3 +201,413 @@ var AdminAuthService_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "tayfam/identity/v1/admin.proto",
 }
+
+const (
+	AdminUserService_SearchUsers_FullMethodName        = "/tayfam.identity.v1.AdminUserService/SearchUsers"
+	AdminUserService_GetUser_FullMethodName            = "/tayfam.identity.v1.AdminUserService/GetUser"
+	AdminUserService_RevokeUserSessions_FullMethodName = "/tayfam.identity.v1.AdminUserService/RevokeUserSessions"
+	AdminUserService_SanctionUser_FullMethodName       = "/tayfam.identity.v1.AdminUserService/SanctionUser"
+	AdminUserService_LiftSanction_FullMethodName       = "/tayfam.identity.v1.AdminUserService/LiftSanction"
+)
+
+// AdminUserServiceClient is the client API for AdminUserService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// AdminUserService is the panel's user management (issue #104 stage 2;
+// Notion "Platform Yönetim Paneli → Kullanıcılar"). Every method accepts
+// only an admin token, and identity checks platform_admins again on every
+// call. It never returns a birth date, an IP address, a token or a device
+// detail. Changes need a reason (10–1000 characters) and a Google sign-in
+// in the last 5 minutes (PERMISSION_DENIED with
+// ERROR_REASON_REAUTHENTICATION_REQUIRED otherwise) and are written to the
+// platform audit log in the same transaction.
+type AdminUserServiceClient interface {
+	// SearchUsers finds users by display name (substring, case-insensitive),
+	// referral code or e-mail address (exact, case-insensitive). At most 20.
+	SearchUsers(ctx context.Context, in *SearchUsersRequest, opts ...grpc.CallOption) (*SearchUsersResponse, error)
+	// GetUser returns one user's account state. The tayfas the user is a
+	// member of come from core (AdminService.ListUserTayfas).
+	GetUser(ctx context.Context, in *GetUserRequest, opts ...grpc.CallOption) (*GetUserResponse, error)
+	// RevokeUserSessions ends every session of the user (session.revoked for
+	// each).
+	RevokeUserSessions(ctx context.Context, in *RevokeUserSessionsRequest, opts ...grpc.CallOption) (*RevokeUserSessionsResponse, error)
+	// SanctionUser suspends (until end_time) or bans the user platform-wide:
+	// every session ends, sign-in and refresh are refused while it is active,
+	// user.sanctioned goes to chat and, for a ban, user.banned to core, which
+	// hides the user's content (it is not deleted, for the appeal).
+	SanctionUser(ctx context.Context, in *SanctionUserRequest, opts ...grpc.CallOption) (*SanctionUserResponse, error)
+	// LiftSanction ends the user's active sanction; for a ban, user.unbanned
+	// goes to core.
+	LiftSanction(ctx context.Context, in *LiftSanctionRequest, opts ...grpc.CallOption) (*LiftSanctionResponse, error)
+}
+
+type adminUserServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewAdminUserServiceClient(cc grpc.ClientConnInterface) AdminUserServiceClient {
+	return &adminUserServiceClient{cc}
+}
+
+func (c *adminUserServiceClient) SearchUsers(ctx context.Context, in *SearchUsersRequest, opts ...grpc.CallOption) (*SearchUsersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SearchUsersResponse)
+	err := c.cc.Invoke(ctx, AdminUserService_SearchUsers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminUserServiceClient) GetUser(ctx context.Context, in *GetUserRequest, opts ...grpc.CallOption) (*GetUserResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetUserResponse)
+	err := c.cc.Invoke(ctx, AdminUserService_GetUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminUserServiceClient) RevokeUserSessions(ctx context.Context, in *RevokeUserSessionsRequest, opts ...grpc.CallOption) (*RevokeUserSessionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeUserSessionsResponse)
+	err := c.cc.Invoke(ctx, AdminUserService_RevokeUserSessions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminUserServiceClient) SanctionUser(ctx context.Context, in *SanctionUserRequest, opts ...grpc.CallOption) (*SanctionUserResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SanctionUserResponse)
+	err := c.cc.Invoke(ctx, AdminUserService_SanctionUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminUserServiceClient) LiftSanction(ctx context.Context, in *LiftSanctionRequest, opts ...grpc.CallOption) (*LiftSanctionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LiftSanctionResponse)
+	err := c.cc.Invoke(ctx, AdminUserService_LiftSanction_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// AdminUserServiceServer is the server API for AdminUserService service.
+// All implementations must embed UnimplementedAdminUserServiceServer
+// for forward compatibility.
+//
+// AdminUserService is the panel's user management (issue #104 stage 2;
+// Notion "Platform Yönetim Paneli → Kullanıcılar"). Every method accepts
+// only an admin token, and identity checks platform_admins again on every
+// call. It never returns a birth date, an IP address, a token or a device
+// detail. Changes need a reason (10–1000 characters) and a Google sign-in
+// in the last 5 minutes (PERMISSION_DENIED with
+// ERROR_REASON_REAUTHENTICATION_REQUIRED otherwise) and are written to the
+// platform audit log in the same transaction.
+type AdminUserServiceServer interface {
+	// SearchUsers finds users by display name (substring, case-insensitive),
+	// referral code or e-mail address (exact, case-insensitive). At most 20.
+	SearchUsers(context.Context, *SearchUsersRequest) (*SearchUsersResponse, error)
+	// GetUser returns one user's account state. The tayfas the user is a
+	// member of come from core (AdminService.ListUserTayfas).
+	GetUser(context.Context, *GetUserRequest) (*GetUserResponse, error)
+	// RevokeUserSessions ends every session of the user (session.revoked for
+	// each).
+	RevokeUserSessions(context.Context, *RevokeUserSessionsRequest) (*RevokeUserSessionsResponse, error)
+	// SanctionUser suspends (until end_time) or bans the user platform-wide:
+	// every session ends, sign-in and refresh are refused while it is active,
+	// user.sanctioned goes to chat and, for a ban, user.banned to core, which
+	// hides the user's content (it is not deleted, for the appeal).
+	SanctionUser(context.Context, *SanctionUserRequest) (*SanctionUserResponse, error)
+	// LiftSanction ends the user's active sanction; for a ban, user.unbanned
+	// goes to core.
+	LiftSanction(context.Context, *LiftSanctionRequest) (*LiftSanctionResponse, error)
+	mustEmbedUnimplementedAdminUserServiceServer()
+}
+
+// UnimplementedAdminUserServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedAdminUserServiceServer struct{}
+
+func (UnimplementedAdminUserServiceServer) SearchUsers(context.Context, *SearchUsersRequest) (*SearchUsersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SearchUsers not implemented")
+}
+func (UnimplementedAdminUserServiceServer) GetUser(context.Context, *GetUserRequest) (*GetUserResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetUser not implemented")
+}
+func (UnimplementedAdminUserServiceServer) RevokeUserSessions(context.Context, *RevokeUserSessionsRequest) (*RevokeUserSessionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeUserSessions not implemented")
+}
+func (UnimplementedAdminUserServiceServer) SanctionUser(context.Context, *SanctionUserRequest) (*SanctionUserResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SanctionUser not implemented")
+}
+func (UnimplementedAdminUserServiceServer) LiftSanction(context.Context, *LiftSanctionRequest) (*LiftSanctionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LiftSanction not implemented")
+}
+func (UnimplementedAdminUserServiceServer) mustEmbedUnimplementedAdminUserServiceServer() {}
+func (UnimplementedAdminUserServiceServer) testEmbeddedByValue()                          {}
+
+// UnsafeAdminUserServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to AdminUserServiceServer will
+// result in compilation errors.
+type UnsafeAdminUserServiceServer interface {
+	mustEmbedUnimplementedAdminUserServiceServer()
+}
+
+func RegisterAdminUserServiceServer(s grpc.ServiceRegistrar, srv AdminUserServiceServer) {
+	// If the following call panics, it indicates UnimplementedAdminUserServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&AdminUserService_ServiceDesc, srv)
+}
+
+func _AdminUserService_SearchUsers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchUsersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminUserServiceServer).SearchUsers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminUserService_SearchUsers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminUserServiceServer).SearchUsers(ctx, req.(*SearchUsersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminUserService_GetUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminUserServiceServer).GetUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminUserService_GetUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminUserServiceServer).GetUser(ctx, req.(*GetUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminUserService_RevokeUserSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeUserSessionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminUserServiceServer).RevokeUserSessions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminUserService_RevokeUserSessions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminUserServiceServer).RevokeUserSessions(ctx, req.(*RevokeUserSessionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminUserService_SanctionUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SanctionUserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminUserServiceServer).SanctionUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminUserService_SanctionUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminUserServiceServer).SanctionUser(ctx, req.(*SanctionUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminUserService_LiftSanction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LiftSanctionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminUserServiceServer).LiftSanction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminUserService_LiftSanction_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminUserServiceServer).LiftSanction(ctx, req.(*LiftSanctionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// AdminUserService_ServiceDesc is the grpc.ServiceDesc for AdminUserService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var AdminUserService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "tayfam.identity.v1.AdminUserService",
+	HandlerType: (*AdminUserServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "SearchUsers",
+			Handler:    _AdminUserService_SearchUsers_Handler,
+		},
+		{
+			MethodName: "GetUser",
+			Handler:    _AdminUserService_GetUser_Handler,
+		},
+		{
+			MethodName: "RevokeUserSessions",
+			Handler:    _AdminUserService_RevokeUserSessions_Handler,
+		},
+		{
+			MethodName: "SanctionUser",
+			Handler:    _AdminUserService_SanctionUser_Handler,
+		},
+		{
+			MethodName: "LiftSanction",
+			Handler:    _AdminUserService_LiftSanction_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "tayfam/identity/v1/admin.proto",
+}
+
+const (
+	PlatformAuditService_RecordPlatformAudit_FullMethodName = "/tayfam.identity.v1.PlatformAuditService/RecordPlatformAudit"
+)
+
+// PlatformAuditServiceClient is the client API for PlatformAuditService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// PlatformAuditService receives core's platform panel actions for the
+// platform audit log (issue #104 stage 2). core writes each action and its
+// audit entry in one transaction to its outbox; the relay delivers it here
+// at least once. Only a service token of tayfam-core (ADR-0013) is
+// accepted. Recording is idempotent: the entry's ID is core's event ID.
+type PlatformAuditServiceClient interface {
+	RecordPlatformAudit(ctx context.Context, in *RecordPlatformAuditRequest, opts ...grpc.CallOption) (*RecordPlatformAuditResponse, error)
+}
+
+type platformAuditServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewPlatformAuditServiceClient(cc grpc.ClientConnInterface) PlatformAuditServiceClient {
+	return &platformAuditServiceClient{cc}
+}
+
+func (c *platformAuditServiceClient) RecordPlatformAudit(ctx context.Context, in *RecordPlatformAuditRequest, opts ...grpc.CallOption) (*RecordPlatformAuditResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RecordPlatformAuditResponse)
+	err := c.cc.Invoke(ctx, PlatformAuditService_RecordPlatformAudit_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// PlatformAuditServiceServer is the server API for PlatformAuditService service.
+// All implementations must embed UnimplementedPlatformAuditServiceServer
+// for forward compatibility.
+//
+// PlatformAuditService receives core's platform panel actions for the
+// platform audit log (issue #104 stage 2). core writes each action and its
+// audit entry in one transaction to its outbox; the relay delivers it here
+// at least once. Only a service token of tayfam-core (ADR-0013) is
+// accepted. Recording is idempotent: the entry's ID is core's event ID.
+type PlatformAuditServiceServer interface {
+	RecordPlatformAudit(context.Context, *RecordPlatformAuditRequest) (*RecordPlatformAuditResponse, error)
+	mustEmbedUnimplementedPlatformAuditServiceServer()
+}
+
+// UnimplementedPlatformAuditServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedPlatformAuditServiceServer struct{}
+
+func (UnimplementedPlatformAuditServiceServer) RecordPlatformAudit(context.Context, *RecordPlatformAuditRequest) (*RecordPlatformAuditResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RecordPlatformAudit not implemented")
+}
+func (UnimplementedPlatformAuditServiceServer) mustEmbedUnimplementedPlatformAuditServiceServer() {}
+func (UnimplementedPlatformAuditServiceServer) testEmbeddedByValue()                              {}
+
+// UnsafePlatformAuditServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to PlatformAuditServiceServer will
+// result in compilation errors.
+type UnsafePlatformAuditServiceServer interface {
+	mustEmbedUnimplementedPlatformAuditServiceServer()
+}
+
+func RegisterPlatformAuditServiceServer(s grpc.ServiceRegistrar, srv PlatformAuditServiceServer) {
+	// If the following call panics, it indicates UnimplementedPlatformAuditServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&PlatformAuditService_ServiceDesc, srv)
+}
+
+func _PlatformAuditService_RecordPlatformAudit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordPlatformAuditRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PlatformAuditServiceServer).RecordPlatformAudit(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PlatformAuditService_RecordPlatformAudit_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PlatformAuditServiceServer).RecordPlatformAudit(ctx, req.(*RecordPlatformAuditRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// PlatformAuditService_ServiceDesc is the grpc.ServiceDesc for PlatformAuditService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var PlatformAuditService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "tayfam.identity.v1.PlatformAuditService",
+	HandlerType: (*PlatformAuditServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "RecordPlatformAudit",
+			Handler:    _PlatformAuditService_RecordPlatformAudit_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "tayfam/identity/v1/admin.proto",
+}

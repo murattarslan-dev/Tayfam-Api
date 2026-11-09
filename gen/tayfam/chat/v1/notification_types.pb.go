@@ -83,6 +83,13 @@ const (
 	// actor, no content. At most one unread per conversation: further
 	// messages add none until the conversation is read.
 	NotificationType_NOTIFICATION_TYPE_DM_MESSAGE NotificationType = 18
+	// The platform suspended the tayfa: it is read-only until the suspension
+	// is lifted; for admins and moderators (target: TAYFA; issue #104). The
+	// reason is shown to them in the tayfa's details, not in the notification.
+	NotificationType_NOTIFICATION_TYPE_TAYFA_SUSPENDED NotificationType = 19
+	// The platform lifted the tayfa's suspension; for admins and moderators
+	// (target: TAYFA).
+	NotificationType_NOTIFICATION_TYPE_TAYFA_UNSUSPENDED NotificationType = 20
 )
 
 // Enum value maps for NotificationType.
@@ -107,6 +114,8 @@ var (
 		16: "NOTIFICATION_TYPE_REPORT_RESOLVED",
 		17: "NOTIFICATION_TYPE_DM_REQUEST",
 		18: "NOTIFICATION_TYPE_DM_MESSAGE",
+		19: "NOTIFICATION_TYPE_TAYFA_SUSPENDED",
+		20: "NOTIFICATION_TYPE_TAYFA_UNSUSPENDED",
 	}
 	NotificationType_value = map[string]int32{
 		"NOTIFICATION_TYPE_UNSPECIFIED":              0,
@@ -128,6 +137,8 @@ var (
 		"NOTIFICATION_TYPE_REPORT_RESOLVED":          16,
 		"NOTIFICATION_TYPE_DM_REQUEST":               17,
 		"NOTIFICATION_TYPE_DM_MESSAGE":               18,
+		"NOTIFICATION_TYPE_TAYFA_SUSPENDED":          19,
+		"NOTIFICATION_TYPE_TAYFA_UNSUSPENDED":        20,
 	}
 )
 
@@ -286,7 +297,7 @@ var File_tayfam_chat_v1_notification_types_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\n" +
-	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xdd\x05\n" +
+	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xad\x06\n" +
 	"\x10NotificationType\x12!\n" +
 	"\x1dNOTIFICATION_TYPE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fNOTIFICATION_TYPE_EVENT_CREATED\x10\x01\x12#\n" +
@@ -307,7 +318,9 @@ const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\"NOTIFICATION_TYPE_TAYFA_INVITATION\x10\x0f\x12%\n" +
 	"!NOTIFICATION_TYPE_REPORT_RESOLVED\x10\x10\x12 \n" +
 	"\x1cNOTIFICATION_TYPE_DM_REQUEST\x10\x11\x12 \n" +
-	"\x1cNOTIFICATION_TYPE_DM_MESSAGE\x10\x12*\xf9\x02\n" +
+	"\x1cNOTIFICATION_TYPE_DM_MESSAGE\x10\x12\x12%\n" +
+	"!NOTIFICATION_TYPE_TAYFA_SUSPENDED\x10\x13\x12'\n" +
+	"#NOTIFICATION_TYPE_TAYFA_UNSUSPENDED\x10\x14*\xf9\x02\n" +
 	"\x16NotificationTargetType\x12(\n" +
 	"$NOTIFICATION_TARGET_TYPE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eNOTIFICATION_TARGET_TYPE_TAYFA\x10\x01\x12'\n" +

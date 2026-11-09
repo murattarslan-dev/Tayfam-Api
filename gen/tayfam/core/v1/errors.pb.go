@@ -220,6 +220,19 @@ const (
 	// CONTENT_REMOVED while the content is still visible, MEMBER_SANCTIONED
 	// while the reported member is neither muted nor banned.
 	ErrorReason_ERROR_REASON_REPORT_ACTION_MISSING ErrorReason = 104
+	// Platform panel (AdminService, issue #104).
+	// PERMISSION_DENIED. A change needs a Google sign-in in the last 5
+	// minutes; sign in to the panel again.
+	ErrorReason_ERROR_REASON_REAUTHENTICATION_REQUIRED ErrorReason = 110
+	// INVALID_ARGUMENT. A change without a reason of 10–1000 characters.
+	ErrorReason_ERROR_REASON_REASON_REQUIRED ErrorReason = 111
+	// FAILED_PRECONDITION. The decision does not fit the report (content
+	// removal of a user, tayfa or direct message; tayfa suspension of a DM
+	// report) or the report is not escalated to the platform.
+	ErrorReason_ERROR_REASON_DECISION_NOT_APPLICABLE ErrorReason = 112
+	// FAILED_PRECONDITION. The tayfa is already in the requested state
+	// (suspended, not suspended, deleted).
+	ErrorReason_ERROR_REASON_TAYFA_STATE_CONFLICT ErrorReason = 113
 )
 
 // Enum value maps for ErrorReason.
@@ -287,6 +300,10 @@ var (
 		102: "ERROR_REASON_REPORT_LIMIT",
 		103: "ERROR_REASON_REPORT_ALREADY_RESOLVED",
 		104: "ERROR_REASON_REPORT_ACTION_MISSING",
+		110: "ERROR_REASON_REAUTHENTICATION_REQUIRED",
+		111: "ERROR_REASON_REASON_REQUIRED",
+		112: "ERROR_REASON_DECISION_NOT_APPLICABLE",
+		113: "ERROR_REASON_TAYFA_STATE_CONFLICT",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                 0,
@@ -351,6 +368,10 @@ var (
 		"ERROR_REASON_REPORT_LIMIT":                102,
 		"ERROR_REASON_REPORT_ALREADY_RESOLVED":     103,
 		"ERROR_REASON_REPORT_ACTION_MISSING":       104,
+		"ERROR_REASON_REAUTHENTICATION_REQUIRED":   110,
+		"ERROR_REASON_REASON_REQUIRED":             111,
+		"ERROR_REASON_DECISION_NOT_APPLICABLE":     112,
+		"ERROR_REASON_TAYFA_STATE_CONFLICT":        113,
 	}
 )
 
@@ -385,7 +406,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\x81\x11\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xa0\x12\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -449,7 +470,11 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"$ERROR_REASON_REPORT_TARGET_NOT_FOUND\x10e\x12\x1d\n" +
 	"\x19ERROR_REASON_REPORT_LIMIT\x10f\x12(\n" +
 	"$ERROR_REASON_REPORT_ALREADY_RESOLVED\x10g\x12&\n" +
-	"\"ERROR_REASON_REPORT_ACTION_MISSING\x10hB\xbd\x01\n" +
+	"\"ERROR_REASON_REPORT_ACTION_MISSING\x10h\x12*\n" +
+	"&ERROR_REASON_REAUTHENTICATION_REQUIRED\x10n\x12 \n" +
+	"\x1cERROR_REASON_REASON_REQUIRED\x10o\x12(\n" +
+	"$ERROR_REASON_DECISION_NOT_APPLICABLE\x10p\x12%\n" +
+	"!ERROR_REASON_TAYFA_STATE_CONFLICT\x10qB\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

@@ -91,6 +91,8 @@ type ApplyUserEventRequest struct {
 	//
 	//	*ApplyUserEventRequest_ProfileUpdated
 	//	*ApplyUserEventRequest_Deleted
+	//	*ApplyUserEventRequest_Banned
+	//	*ApplyUserEventRequest_Unbanned
 	Event         isApplyUserEventRequest_Event `protobuf_oneof:"event"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -172,6 +174,24 @@ func (x *ApplyUserEventRequest) GetDeleted() *UserDeleted {
 	return nil
 }
 
+func (x *ApplyUserEventRequest) GetBanned() *UserBanned {
+	if x != nil {
+		if x, ok := x.Event.(*ApplyUserEventRequest_Banned); ok {
+			return x.Banned
+		}
+	}
+	return nil
+}
+
+func (x *ApplyUserEventRequest) GetUnbanned() *UserUnbanned {
+	if x != nil {
+		if x, ok := x.Event.(*ApplyUserEventRequest_Unbanned); ok {
+			return x.Unbanned
+		}
+	}
+	return nil
+}
+
 type isApplyUserEventRequest_Event interface {
 	isApplyUserEventRequest_Event()
 }
@@ -184,9 +204,21 @@ type ApplyUserEventRequest_Deleted struct {
 	Deleted *UserDeleted `protobuf:"bytes,11,opt,name=deleted,proto3,oneof"`
 }
 
+type ApplyUserEventRequest_Banned struct {
+	Banned *UserBanned `protobuf:"bytes,12,opt,name=banned,proto3,oneof"`
+}
+
+type ApplyUserEventRequest_Unbanned struct {
+	Unbanned *UserUnbanned `protobuf:"bytes,13,opt,name=unbanned,proto3,oneof"`
+}
+
 func (*ApplyUserEventRequest_ProfileUpdated) isApplyUserEventRequest_Event() {}
 
 func (*ApplyUserEventRequest_Deleted) isApplyUserEventRequest_Event() {}
+
+func (*ApplyUserEventRequest_Banned) isApplyUserEventRequest_Event() {}
+
+func (*ApplyUserEventRequest_Unbanned) isApplyUserEventRequest_Event() {}
 
 // UserProfileUpdated carries the public profile only: what other users see
 // next to the user's content, and who may see the user's attendance history
@@ -292,6 +324,83 @@ func (*UserDeleted) Descriptor() ([]byte, []int) {
 	return file_tayfam_core_v1_user_events_proto_rawDescGZIP(), []int{2}
 }
 
+// UserBanned: the platform banned the user (issue #104). core hides the
+// user's profile and content from other users; nothing is deleted, so it
+// can come back if the ban is lifted on appeal. Applying an older ban or
+// unban event after a newer one changes nothing.
+type UserBanned struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UserBanned) Reset() {
+	*x = UserBanned{}
+	mi := &file_tayfam_core_v1_user_events_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UserBanned) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UserBanned) ProtoMessage() {}
+
+func (x *UserBanned) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_user_events_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UserBanned.ProtoReflect.Descriptor instead.
+func (*UserBanned) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_user_events_proto_rawDescGZIP(), []int{3}
+}
+
+// UserUnbanned: the platform lifted the user's ban.
+type UserUnbanned struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UserUnbanned) Reset() {
+	*x = UserUnbanned{}
+	mi := &file_tayfam_core_v1_user_events_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UserUnbanned) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UserUnbanned) ProtoMessage() {}
+
+func (x *UserUnbanned) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_user_events_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UserUnbanned.ProtoReflect.Descriptor instead.
+func (*UserUnbanned) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_user_events_proto_rawDescGZIP(), []int{4}
+}
+
 type ApplyUserEventResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -300,7 +409,7 @@ type ApplyUserEventResponse struct {
 
 func (x *ApplyUserEventResponse) Reset() {
 	*x = ApplyUserEventResponse{}
-	mi := &file_tayfam_core_v1_user_events_proto_msgTypes[3]
+	mi := &file_tayfam_core_v1_user_events_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -312,7 +421,7 @@ func (x *ApplyUserEventResponse) String() string {
 func (*ApplyUserEventResponse) ProtoMessage() {}
 
 func (x *ApplyUserEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_user_events_proto_msgTypes[3]
+	mi := &file_tayfam_core_v1_user_events_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -325,14 +434,14 @@ func (x *ApplyUserEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyUserEventResponse.ProtoReflect.Descriptor instead.
 func (*ApplyUserEventResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_user_events_proto_rawDescGZIP(), []int{3}
+	return file_tayfam_core_v1_user_events_proto_rawDescGZIP(), []int{5}
 }
 
 var File_tayfam_core_v1_user_events_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_user_events_proto_rawDesc = "" +
 	"\n" +
-	" tayfam/core/v1/user_events.proto\x12\x0etayfam.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x99\x02\n" +
+	" tayfam/core/v1/user_events.proto\x12\x0etayfam.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x8b\x03\n" +
 	"\x15ApplyUserEventRequest\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12;\n" +
@@ -340,13 +449,18 @@ const file_tayfam_core_v1_user_events_proto_rawDesc = "" +
 	"occurredAt\x12M\n" +
 	"\x0fprofile_updated\x18\n" +
 	" \x01(\v2\".tayfam.core.v1.UserProfileUpdatedH\x00R\x0eprofileUpdated\x127\n" +
-	"\adeleted\x18\v \x01(\v2\x1b.tayfam.core.v1.UserDeletedH\x00R\adeletedB\a\n" +
+	"\adeleted\x18\v \x01(\v2\x1b.tayfam.core.v1.UserDeletedH\x00R\adeleted\x124\n" +
+	"\x06banned\x18\f \x01(\v2\x1a.tayfam.core.v1.UserBannedH\x00R\x06banned\x12:\n" +
+	"\bunbanned\x18\r \x01(\v2\x1c.tayfam.core.v1.UserUnbannedH\x00R\bunbannedB\a\n" +
 	"\x05event\"\xb6\x01\n" +
 	"\x12UserProfileUpdated\x12!\n" +
 	"\fdisplay_name\x18\x01 \x01(\tR\vdisplayName\x12(\n" +
 	"\x10avatar_upload_id\x18\x02 \x01(\tR\x0eavatarUploadId\x12S\n" +
 	"\x13activity_visibility\x18\x03 \x01(\x0e2\".tayfam.core.v1.ActivityVisibilityR\x12activityVisibility\"\r\n" +
-	"\vUserDeleted\"\x18\n" +
+	"\vUserDeleted\"\f\n" +
+	"\n" +
+	"UserBanned\"\x0e\n" +
+	"\fUserUnbanned\"\x18\n" +
 	"\x16ApplyUserEventResponse*\x99\x01\n" +
 	"\x12ActivityVisibility\x12#\n" +
 	"\x1fACTIVITY_VISIBILITY_UNSPECIFIED\x10\x00\x12\x1f\n" +
@@ -370,27 +484,31 @@ func file_tayfam_core_v1_user_events_proto_rawDescGZIP() []byte {
 }
 
 var file_tayfam_core_v1_user_events_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_tayfam_core_v1_user_events_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_tayfam_core_v1_user_events_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_tayfam_core_v1_user_events_proto_goTypes = []any{
 	(ActivityVisibility)(0),        // 0: tayfam.core.v1.ActivityVisibility
 	(*ApplyUserEventRequest)(nil),  // 1: tayfam.core.v1.ApplyUserEventRequest
 	(*UserProfileUpdated)(nil),     // 2: tayfam.core.v1.UserProfileUpdated
 	(*UserDeleted)(nil),            // 3: tayfam.core.v1.UserDeleted
-	(*ApplyUserEventResponse)(nil), // 4: tayfam.core.v1.ApplyUserEventResponse
-	(*timestamppb.Timestamp)(nil),  // 5: google.protobuf.Timestamp
+	(*UserBanned)(nil),             // 4: tayfam.core.v1.UserBanned
+	(*UserUnbanned)(nil),           // 5: tayfam.core.v1.UserUnbanned
+	(*ApplyUserEventResponse)(nil), // 6: tayfam.core.v1.ApplyUserEventResponse
+	(*timestamppb.Timestamp)(nil),  // 7: google.protobuf.Timestamp
 }
 var file_tayfam_core_v1_user_events_proto_depIdxs = []int32{
-	5, // 0: tayfam.core.v1.ApplyUserEventRequest.occurred_at:type_name -> google.protobuf.Timestamp
+	7, // 0: tayfam.core.v1.ApplyUserEventRequest.occurred_at:type_name -> google.protobuf.Timestamp
 	2, // 1: tayfam.core.v1.ApplyUserEventRequest.profile_updated:type_name -> tayfam.core.v1.UserProfileUpdated
 	3, // 2: tayfam.core.v1.ApplyUserEventRequest.deleted:type_name -> tayfam.core.v1.UserDeleted
-	0, // 3: tayfam.core.v1.UserProfileUpdated.activity_visibility:type_name -> tayfam.core.v1.ActivityVisibility
-	1, // 4: tayfam.core.v1.UserEventService.ApplyUserEvent:input_type -> tayfam.core.v1.ApplyUserEventRequest
-	4, // 5: tayfam.core.v1.UserEventService.ApplyUserEvent:output_type -> tayfam.core.v1.ApplyUserEventResponse
-	5, // [5:6] is the sub-list for method output_type
-	4, // [4:5] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	4, // 3: tayfam.core.v1.ApplyUserEventRequest.banned:type_name -> tayfam.core.v1.UserBanned
+	5, // 4: tayfam.core.v1.ApplyUserEventRequest.unbanned:type_name -> tayfam.core.v1.UserUnbanned
+	0, // 5: tayfam.core.v1.UserProfileUpdated.activity_visibility:type_name -> tayfam.core.v1.ActivityVisibility
+	1, // 6: tayfam.core.v1.UserEventService.ApplyUserEvent:input_type -> tayfam.core.v1.ApplyUserEventRequest
+	6, // 7: tayfam.core.v1.UserEventService.ApplyUserEvent:output_type -> tayfam.core.v1.ApplyUserEventResponse
+	7, // [7:8] is the sub-list for method output_type
+	6, // [6:7] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_user_events_proto_init() }
@@ -401,6 +519,8 @@ func file_tayfam_core_v1_user_events_proto_init() {
 	file_tayfam_core_v1_user_events_proto_msgTypes[0].OneofWrappers = []any{
 		(*ApplyUserEventRequest_ProfileUpdated)(nil),
 		(*ApplyUserEventRequest_Deleted)(nil),
+		(*ApplyUserEventRequest_Banned)(nil),
+		(*ApplyUserEventRequest_Unbanned)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -408,7 +528,7 @@ func file_tayfam_core_v1_user_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_user_events_proto_rawDesc), len(file_tayfam_core_v1_user_events_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -159,6 +159,20 @@ const (
 	// NOT_FOUND. The caller has no open session with this ID; another
 	// user's session gives the same answer.
 	ErrorReason_ERROR_REASON_SESSION_NOT_FOUND ErrorReason = 13
+	// Platform panel (issue #104).
+	// PERMISSION_DENIED. Sign-in or refresh of an account under an active
+	// platform suspension or ban.
+	ErrorReason_ERROR_REASON_ACCOUNT_SANCTIONED ErrorReason = 14
+	// INVALID_ARGUMENT. A panel change without a reason of 10–1000
+	// characters.
+	ErrorReason_ERROR_REASON_REASON_REQUIRED ErrorReason = 15
+	// NOT_FOUND. No such user.
+	ErrorReason_ERROR_REASON_USER_NOT_FOUND ErrorReason = 16
+	// FAILED_PRECONDITION. The user already has an active sanction
+	// (SanctionUser) or has none (LiftSanction).
+	ErrorReason_ERROR_REASON_SANCTION_CONFLICT ErrorReason = 17
+	// INVALID_ARGUMENT. Any other invalid field.
+	ErrorReason_ERROR_REASON_VALIDATION ErrorReason = 18
 )
 
 // Enum value maps for ErrorReason.
@@ -178,6 +192,11 @@ var (
 		11: "ERROR_REASON_REFERRAL_CODE_NOT_FOUND",
 		12: "ERROR_REASON_REAUTHENTICATION_REQUIRED",
 		13: "ERROR_REASON_SESSION_NOT_FOUND",
+		14: "ERROR_REASON_ACCOUNT_SANCTIONED",
+		15: "ERROR_REASON_REASON_REQUIRED",
+		16: "ERROR_REASON_USER_NOT_FOUND",
+		17: "ERROR_REASON_SANCTION_CONFLICT",
+		18: "ERROR_REASON_VALIDATION",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":               0,
@@ -194,6 +213,11 @@ var (
 		"ERROR_REASON_REFERRAL_CODE_NOT_FOUND":   11,
 		"ERROR_REASON_REAUTHENTICATION_REQUIRED": 12,
 		"ERROR_REASON_SESSION_NOT_FOUND":         13,
+		"ERROR_REASON_ACCOUNT_SANCTIONED":        14,
+		"ERROR_REASON_REASON_REQUIRED":           15,
+		"ERROR_REASON_USER_NOT_FOUND":            16,
+		"ERROR_REASON_SANCTION_CONFLICT":         17,
+		"ERROR_REASON_VALIDATION":                18,
 	}
 )
 
@@ -640,7 +664,7 @@ const file_tayfam_identity_v1_auth_proto_rawDesc = "" +
 	"\x14PLATFORM_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10PLATFORM_ANDROID\x10\x01\x12\x10\n" +
 	"\fPLATFORM_IOS\x10\x02\x12\x10\n" +
-	"\fPLATFORM_WEB\x10\x03*\x88\x04\n" +
+	"\fPLATFORM_WEB\x10\x03*\xb1\x05\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12$\n" +
 	" ERROR_REASON_INVALID_CREDENTIALS\x10\x01\x12%\n" +
@@ -656,7 +680,12 @@ const file_tayfam_identity_v1_auth_proto_rawDesc = "" +
 	"\x12(\n" +
 	"$ERROR_REASON_REFERRAL_CODE_NOT_FOUND\x10\v\x12*\n" +
 	"&ERROR_REASON_REAUTHENTICATION_REQUIRED\x10\f\x12\"\n" +
-	"\x1eERROR_REASON_SESSION_NOT_FOUND\x10\r2\x86\x02\n" +
+	"\x1eERROR_REASON_SESSION_NOT_FOUND\x10\r\x12#\n" +
+	"\x1fERROR_REASON_ACCOUNT_SANCTIONED\x10\x0e\x12 \n" +
+	"\x1cERROR_REASON_REASON_REQUIRED\x10\x0f\x12\x1f\n" +
+	"\x1bERROR_REASON_USER_NOT_FOUND\x10\x10\x12\"\n" +
+	"\x1eERROR_REASON_SANCTION_CONFLICT\x10\x11\x12\x1b\n" +
+	"\x17ERROR_REASON_VALIDATION\x10\x122\x86\x02\n" +
 	"\vAuthService\x12O\n" +
 	"\x06SignIn\x12!.tayfam.identity.v1.SignInRequest\x1a\".tayfam.identity.v1.SignInResponse\x12R\n" +
 	"\aRefresh\x12\".tayfam.identity.v1.RefreshRequest\x1a#.tayfam.identity.v1.RefreshResponse\x12R\n" +

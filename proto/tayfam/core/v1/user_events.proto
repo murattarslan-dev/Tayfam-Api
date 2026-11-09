@@ -44,6 +44,8 @@ message ApplyUserEventRequest {
   oneof event {
     UserProfileUpdated profile_updated = 10;
     UserDeleted deleted = 11;
+    UserBanned banned = 12;
+    UserUnbanned unbanned = 13;
   }
 }
 
@@ -75,5 +77,14 @@ enum ActivityVisibility {
 
 // UserDeleted carries nothing but the fact.
 message UserDeleted {}
+
+// UserBanned: the platform banned the user (issue #104). core hides the
+// user's profile and content from other users; nothing is deleted, so it
+// can come back if the ban is lifted on appeal. Applying an older ban or
+// unban event after a newer one changes nothing.
+message UserBanned {}
+
+// UserUnbanned: the platform lifted the user's ban.
+message UserUnbanned {}
 
 message ApplyUserEventResponse {}
