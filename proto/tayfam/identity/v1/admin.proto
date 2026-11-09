@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package tayfam.identity.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// AdminAuthService is the access layer of the platform administration panel
+// (ADR-0008, issue #104). Only gateway's admin router (admin.tayfam.app)
+// calls it, after verifying the Cloudflare Access JWT of the request.
+//
+// Authentication: AdminSignIn is callable without a token; it is how the
+// panel gets one. Every other method accepts only an admin token
+// (typ admin+jwt, aud tayfam-admin); an app access token, a registration
+// token or a service token is UNAUTHENTICATED. Admin tokens are accepted by
+// no other service of identity.
+//
+// Errors carry a google.rpc.ErrorInfo detail with an ERROR_REASON_* name
+// from auth.proto, domain "identity.tayfam.app".
+service AdminAuthService {
+  // AdminSignIn checks a Google ID token, matches its verified e-mail
+  // address to the Cloudflare Access identity, checks platform_admins and
+  // returns an admin token valid for 8 hours. The ID token must have been
+  // issued in the last 5 minutes. Every refusal is UNAUTHENTICATED with
+  // ERROR_REASON_INVALID_CREDENTIALS, whatever the cause. A successful
+  // sign-in is written to the platform audit log.
+  rpc AdminSignIn(AdminSignInRequest) returns (AdminSignInResponse);
+  // GetAdmin returns the administrator of the admin token. It fails with
+  // UNAUTHENTICATED once the user is no longer in platform_admins, so
+  // removing the row ends open panel sessions.
+  rpc GetAdmin(GetAdminRequest) returns (GetAdminResponse);
+}
+
+message AdminSignInRequest {
+  // Google ID token. Never logged.
+  string id_token = 1;
+  // Nonce gateway generated for this attempt (kept in an HttpOnly cookie).
+  string nonce = 2;
+  // E-mail address from the Cloudflare Access JWT gateway verified on this
+  // request. Never logged or stored.
+  string access_email = 3;
+}
+
+message AdminSignInResponse {
+  string user_id = 1;
+  // Admin token. gateway puts it in an HttpOnly cookie on the admin host
+  // only. Never logged.
+  string admin_token = 2;
+  google.protobuf.Timestamp expire_time = 3;
+  // When Google signed the administrator in. Destructive actions need it
+  // to be at most 5 minutes old.
+  google.protobuf.Timestamp auth_time = 4;
+}
+
+message GetAdminRequest {}
+
+message GetAdminResponse {
+  string user_id = 1;
+  string display_name = 2;
+  google.protobuf.Timestamp auth_time = 3;
+  google.protobuf.Timestamp expire_time = 4;
+}

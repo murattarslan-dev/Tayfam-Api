@@ -25,6 +25,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/minor"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/oidc"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/platformadmin"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/registration"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/retention"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/session"
@@ -161,9 +162,30 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
+	// Platform yönetim paneli (ADR-0008, issue #104): ayrı tür ve audience'lı,
+	// 8 saatlik admin token'ı. AdminAuthService'in metodları (açık
+	// AdminSignIn dışında) yalnızca admin token'ını, diğer bütün metodlar
+	// yalnızca uygulama token'ını kabul eder.
+	adminSigner, err := auth.NewAdminSigner(auth.AdminSignerConfig{Key: ring.Active(), Issuer: issuer})
+	if err != nil {
+		return err
+	}
+	adminVerifier, err := auth.NewAdminVerifier(auth.AdminVerifierConfig{Keys: ring.Static(), Issuer: issuer})
+	if err != nil {
+		return err
+	}
+	admins, err := platformadmin.New(platformadmin.Config{Pool: pool, Log: rt.Log, Google: google, Signer: adminSigner})
+	if err != nil {
+		return err
+	}
+	guard, err = guard.WithAdmin(auth.AdminPolicy{Verifier: adminVerifier, Services: []string{grpcapi.AdminAuthServiceName}})
+	if err != nil {
+		return err
+	}
 	srv := rt.NewGRPCServer(guard.ServerOptions()...)
 	identityv1.RegisterMinorServiceServer(srv, grpcapi.NewMinorServer(minors, rt.Log))
 	identityv1.RegisterKeyServiceServer(srv, grpcapi.NewKeyServer(ring))
+	identityv1.RegisterAdminAuthServiceServer(srv, grpcapi.NewAdminAuthServer(admins, rt.Log))
 	identityv1.RegisterAuthServiceServer(srv, grpcapi.NewAuthServer(sessions, rt.Log))
 	identityv1.RegisterRegistrationServiceServer(srv, grpcapi.NewRegistrationServer(reg, rt.Log))
 	// Hesap ayarları, oturumlar, yeniden onay ve hesap silme yalnızca tam

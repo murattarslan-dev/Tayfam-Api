@@ -54,6 +54,30 @@ func (q *Queries) PurgeDevices(ctx context.Context, arg PurgeDevicesParams) (int
 	return result.RowsAffected(), nil
 }
 
+const purgePlatformAuditLogs = `-- name: PurgePlatformAuditLogs :execrows
+DELETE FROM platform_audit_logs
+WHERE id IN (
+  SELECT x.id FROM platform_audit_logs x
+  WHERE x.created_at < $1 AND x.created_at < now() - interval '365 days'
+  LIMIT $2
+)
+`
+
+type PurgePlatformAuditLogsParams struct {
+	Cutoff pgtype.Timestamptz
+	Batch  int32
+}
+
+// Platform denetim kaydı 1 yıl (ADR-0008). Trigger 365 günden yeni satırın
+// silinmesini reddeder; koşul burada da veritabanı saatiyle denetlenir.
+func (q *Queries) PurgePlatformAuditLogs(ctx context.Context, arg PurgePlatformAuditLogsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, purgePlatformAuditLogs, arg.Cutoff, arg.Batch)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const purgeRefreshTokens = `-- name: PurgeRefreshTokens :execrows
 
 DELETE FROM refresh_tokens

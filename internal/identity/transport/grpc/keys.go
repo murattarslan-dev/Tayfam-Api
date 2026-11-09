@@ -15,10 +15,17 @@ import (
 // PublicMethods are the identity methods callable without a user token:
 // key listing (services bootstrap with it) and sign-in and refresh (how a
 // client gets a token in the first place). Every other method needs one.
+//
+// AdminSignIn is the panel's sign-in (issue #104): like SignIn, it is how
+// the panel gets its token. It is reached only through gateway's admin
+// router, which has verified the Cloudflare Access JWT; identity itself
+// requires a fresh Google ID token with the nonce of the attempt, a Google
+// address equal to the Access address and a platform_admins row.
 var PublicMethods = []string{
 	identityv1.KeyService_ListPublicKeys_FullMethodName,
 	identityv1.AuthService_SignIn_FullMethodName,
 	identityv1.AuthService_Refresh_FullMethodName,
+	identityv1.AdminAuthService_AdminSignIn_FullMethodName,
 }
 
 // keysCacheTTL tells callers how long to cache the key list. A new key is

@@ -54,8 +54,20 @@ type Querier interface {
 	// created_at, hesap silmede yeniden kimlik doğrulama için girişin
 	// (sağlayıcı token'ının doğrulandığı an) zamanıdır; yenileme onu değiştirmez.
 	GetCallerSession(ctx context.Context, arg GetCallerSessionParams) (GetCallerSessionRow, error)
+	// Admin token'ı taşıyan her istekte: kullanıcı hâlâ yönetici mi? Satır
+	// silinince bütün admin token'ları bir sonraki istekte geçersiz olur.
+	GetPlatformAdmin(ctx context.Context, userID pgtype.UUID) (GetPlatformAdminRow, error)
+	// Platform yönetim paneli (issue #104, ADR-0008). platform_admins bu
+	// dosyada yalnızca okunur: uygulamada kayıt ekleyen, değiştiren veya silen
+	// sorgu yoktur (store testi TestNoPlatformAdminWrites bunu sabitler).
+	// Panel girişinde sağlayıcı kimliğinin sahibi, platform yöneticisiyse.
+	// Silinmiş, kaydı tamamlanmamış veya yaş nedeniyle reddedilmiş hesap
+	// yönetici sayılmaz.
+	GetPlatformAdminByIdentity(ctx context.Context, arg GetPlatformAdminByIdentityParams) (GetPlatformAdminByIdentityRow, error)
 	GetUser(ctx context.Context, id pgtype.UUID) (GetUserRow, error)
 	HasActiveConsent(ctx context.Context, arg HasActiveConsentParams) (bool, error)
+	// Yalnızca ekleme (00006 trigger'ı).
+	InsertPlatformAuditLog(ctx context.Context, arg InsertPlatformAuditLogParams) error
 	// 18 yaş altı sorgusu (ADR-0012, issue #76). Yalnızca kaydı tamamlanmış ve
 	// silinmemiş hesapların şifreli doğum tarihi okunur; cevap yalnızca
 	// evet/hayır olarak servisten çıkar.
@@ -79,6 +91,9 @@ type Querier interface {
 	PurgeDeletedUsers(ctx context.Context, arg PurgeDeletedUsersParams) (int64, error)
 	// 90 gündür görünmeyen cihazlar (oturumları CASCADE ile).
 	PurgeDevices(ctx context.Context, arg PurgeDevicesParams) (int64, error)
+	// Platform denetim kaydı 1 yıl (ADR-0008). Trigger 365 günden yeni satırın
+	// silinmesini reddeder; koşul burada da veritabanı saatiyle denetlenir.
+	PurgePlatformAuditLogs(ctx context.Context, arg PurgePlatformAuditLogsParams) (int64, error)
 	// Saklama işleri (issue #75; v14 "Saklama süreleri"). Her sorgu en fazla
 	// @batch satır siler; iş, silinecek satır kalmayana kadar tekrar çağırır.
 	// Koşullar silmede yeniden değerlendirilir, birden fazla pod aynı satırı

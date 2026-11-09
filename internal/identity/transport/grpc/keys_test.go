@@ -45,6 +45,8 @@ func TestPublicMethodsAreFixed(t *testing.T) {
 		identityv1.KeyService_ListPublicKeys_FullMethodName,
 		identityv1.AuthService_SignIn_FullMethodName,
 		identityv1.AuthService_Refresh_FullMethodName,
+		// Panel sign-in (issue #104): how the panel gets its admin token.
+		identityv1.AdminAuthService_AdminSignIn_FullMethodName,
 	}
 	if !slices.Equal(PublicMethods, want) {
 		t.Fatalf("açık metodlar değişti: %v; her ekleme güvenlik incelemesi gerektirir", PublicMethods)

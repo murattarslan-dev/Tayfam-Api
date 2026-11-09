@@ -74,21 +74,27 @@ var b64 = base64.RawURLEncoding
 
 // sign encodes c and signs it with key under kid.
 func sign(key ed25519.PrivateKey, kid string, c Claims) (string, error) {
-	if !ValidKeyID(kid) {
-		return "", errors.New("geçersiz anahtar kimliği")
-	}
-	h, err := json.Marshal(header{Alg: algEdDSA, Typ: typAccess, Kid: kid})
-	if err != nil {
-		return "", fmt.Errorf("token başlığı: %w", err)
-	}
-	p, err := json.Marshal(payload{
+	return signJWS(key, kid, typAccess, payload{
 		Iss: c.Issuer, Aud: c.Audience, Sub: c.Subject, Sid: c.SessionID,
 		Iat: c.IssuedAt.Unix(), Exp: c.ExpiresAt.Unix(),
 	})
+}
+
+// signJWS encodes the fixed header with typ and the claims p, and signs
+// them with key under kid.
+func signJWS(key ed25519.PrivateKey, kid, typ string, p any) (string, error) {
+	if !ValidKeyID(kid) {
+		return "", errors.New("geçersiz anahtar kimliği")
+	}
+	h, err := json.Marshal(header{Alg: algEdDSA, Typ: typ, Kid: kid})
+	if err != nil {
+		return "", fmt.Errorf("token başlığı: %w", err)
+	}
+	pb, err := json.Marshal(p)
 	if err != nil {
 		return "", fmt.Errorf("token içeriği: %w", err)
 	}
-	signingInput := b64.EncodeToString(h) + "." + b64.EncodeToString(p)
+	signingInput := b64.EncodeToString(h) + "." + b64.EncodeToString(pb)
 	sig := ed25519.Sign(key, []byte(signingInput))
 	return signingInput + "." + b64.EncodeToString(sig), nil
 }
@@ -102,32 +108,43 @@ type parsed struct {
 	signature    []byte
 }
 
-// parse splits and decodes a token without trusting any of it.
+// parse splits and decodes an access token without trusting any of it.
 func parse(token string) (*parsed, error) {
+	var p parsed
+	if err := parseJWS(token, typAccess, &p.header, &p.payload, &p.signingInput, &p.signature); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// parseJWS splits and decodes an Ed25519 token of type typ into h and
+// claims, without trusting any of it. A token of another type is refused
+// here, before its claims are read: an admin token never parses as an
+// access token, nor the reverse.
+func parseJWS(token, typ string, h *header, claims any, signingInput, signature *[]byte) error {
 	if len(token) == 0 || len(token) > maxTokenBytes {
-		return nil, fmt.Errorf("%w: uzunluk", ErrInvalidToken)
+		return fmt.Errorf("%w: uzunluk", ErrInvalidToken)
 	}
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return nil, fmt.Errorf("%w: biçim", ErrInvalidToken)
+		return fmt.Errorf("%w: biçim", ErrInvalidToken)
 	}
-	var p parsed
-	if err := decodeStrict(parts[0], &p.header); err != nil {
-		return nil, fmt.Errorf("%w: başlık: %w", ErrInvalidToken, err)
+	if err := decodeStrict(parts[0], h); err != nil {
+		return fmt.Errorf("%w: başlık: %w", ErrInvalidToken, err)
 	}
-	if p.header.Alg != algEdDSA || p.header.Typ != typAccess || !ValidKeyID(p.header.Kid) {
-		return nil, fmt.Errorf("%w: başlık değerleri", ErrInvalidToken)
+	if h.Alg != algEdDSA || h.Typ != typ || !ValidKeyID(h.Kid) {
+		return fmt.Errorf("%w: başlık değerleri", ErrInvalidToken)
 	}
-	if err := decodeStrict(parts[1], &p.payload); err != nil {
-		return nil, fmt.Errorf("%w: içerik: %w", ErrInvalidToken, err)
+	if err := decodeStrict(parts[1], claims); err != nil {
+		return fmt.Errorf("%w: içerik: %w", ErrInvalidToken, err)
 	}
 	sig, err := b64.Strict().DecodeString(parts[2])
 	if err != nil || len(sig) != ed25519.SignatureSize {
-		return nil, fmt.Errorf("%w: imza biçimi", ErrInvalidToken)
+		return fmt.Errorf("%w: imza biçimi", ErrInvalidToken)
 	}
-	p.signature = sig
-	p.signingInput = []byte(token[:len(parts[0])+1+len(parts[1])])
-	return &p, nil
+	*signature = sig
+	*signingInput = []byte(token[:len(parts[0])+1+len(parts[1])])
+	return nil
 }
 
 // decodeStrict decodes one base64url JSON segment, rejecting padding,

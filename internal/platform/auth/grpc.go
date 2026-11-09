@@ -22,6 +22,8 @@ type callerKey struct{}
 
 type serviceCallerKey struct{}
 
+type adminCallerKey struct{}
+
 type caller struct {
 	claims Claims
 	token  string
@@ -41,6 +43,15 @@ func ServiceCallerFrom(ctx context.Context) (ServiceClaims, bool) {
 	return c, ok
 }
 
+// AdminCallerFrom returns the verified platform administrator of an admin
+// method (ADR-0008). It is never set on user or service methods. Being a
+// platform administrator is checked by identity on every call; the token
+// alone only says who signed in to the panel.
+func AdminCallerFrom(ctx context.Context) (AdminClaims, bool) {
+	c, ok := ctx.Value(adminCallerKey{}).(AdminClaims)
+	return c, ok
+}
+
 // Guard enforces authentication on a gRPC server. Every method requires a
 // valid access token unless it is listed as public: a new method is
 // protected by default (ADR-0004, ADR-0011).
@@ -57,6 +68,9 @@ type Guard struct {
 	sv              *ServiceVerifier
 	serviceServices map[string]bool
 	callers         map[string]map[string]bool // full method → allowed subjects
+
+	av            *AdminVerifier
+	adminServices map[string]bool
 }
 
 // NewGuard returns a Guard. publicMethods are full method names, e.g.
@@ -116,10 +130,46 @@ func (g *Guard) WithServices(p ServicePolicy) (*Guard, error) {
 		}
 		callers[m] = allowed
 	}
+	for svc := range services {
+		if g.adminServices[svc] {
+			return nil, fmt.Errorf("%s hem admin hem servis servisi olamaz", svc)
+		}
+	}
 	out := *g
 	out.sv = p.Verifier
 	out.serviceServices = services
 	out.callers = callers
+	return &out, nil
+}
+
+// AdminPolicy lists the admin services of a server (ADR-0008). Every
+// method of these services accepts only admin tokens; admin tokens are
+// accepted nowhere else.
+type AdminPolicy struct {
+	// Verifier checks admin tokens. It may be nil; every admin method is
+	// then refused.
+	Verifier *AdminVerifier
+	// Services are gRPC service names, e.g. "tayfam.core.v1.AdminService".
+	Services []string
+}
+
+// WithAdmin returns g with the admin services of p. A public method may sit
+// in an admin service (the panel's sign-in); a service may not be both an
+// admin service and a service-token service.
+func (g *Guard) WithAdmin(p AdminPolicy) (*Guard, error) {
+	services := make(map[string]bool, len(p.Services))
+	for _, s := range p.Services {
+		if s == "" || strings.ContainsAny(s, "/ ") {
+			return nil, fmt.Errorf("geçersiz servis adı %q", s)
+		}
+		if g.serviceServices[s] {
+			return nil, fmt.Errorf("%s hem admin hem servis servisi olamaz", s)
+		}
+		services[s] = true
+	}
+	out := *g
+	out.av = p.Verifier
+	out.adminServices = services
 	return &out, nil
 }
 
@@ -177,6 +227,9 @@ func (g *Guard) authenticate(ctx context.Context, method string) (context.Contex
 	if g.serviceServices[serviceOf(method)] {
 		return g.authenticateService(ctx, method, token)
 	}
+	if g.adminServices[serviceOf(method)] {
+		return g.authenticateAdmin(ctx, token)
+	}
 	claims, err := g.v.Verify(ctx, token)
 	switch {
 	case errors.Is(err, ErrInvalidToken):
@@ -207,6 +260,23 @@ func (g *Guard) authenticateService(ctx context.Context, method, token string) (
 		return nil, errNotAllowed
 	}
 	return context.WithValue(ctx, serviceCallerKey{}, claims), nil
+}
+
+// authenticateAdmin checks an admin method call. Anything that does not
+// verify as an admin token (an access or service token included) is
+// Unauthenticated.
+func (g *Guard) authenticateAdmin(ctx context.Context, token string) (context.Context, error) {
+	if g.av == nil {
+		return nil, errUnauthenticated
+	}
+	claims, err := g.av.Verify(ctx, token)
+	switch {
+	case errors.Is(err, ErrInvalidToken):
+		return nil, errUnauthenticated
+	case err != nil:
+		return nil, status.Error(codes.Unavailable, "kimlik doğrulama şu anda yapılamıyor")
+	}
+	return context.WithValue(ctx, adminCallerKey{}, claims), nil
 }
 
 func bearerToken(ctx context.Context) (string, bool) {
@@ -267,6 +337,13 @@ func withToken(ctx context.Context) context.Context {
 // Guard after the token is verified.
 func WithCallerForTest(ctx context.Context, c Claims) context.Context {
 	return context.WithValue(ctx, callerKey{}, caller{claims: c})
+}
+
+// WithAdminCallerForTest returns ctx carrying c as the verified platform
+// administrator, as Guard would set it on an admin method. Only tests may
+// use it.
+func WithAdminCallerForTest(ctx context.Context, c AdminClaims) context.Context {
+	return context.WithValue(ctx, adminCallerKey{}, c)
 }
 
 // WithServiceCallerForTest returns ctx carrying c as the verified calling
