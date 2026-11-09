@@ -1636,6 +1636,12 @@ components:
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
+        # core: soru-cevap (#59)
+        - question-not-found
+        - answer-not-found
+        - tag-not-found
+        - own-answer-vote
+        - tag-limit
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }

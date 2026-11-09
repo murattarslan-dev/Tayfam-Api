@@ -15,6 +15,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/announcement"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/qa"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/userevents"
 	grpcapi "github.com/murattarslan-dev/tayfam-api/internal/core/transport/grpc"
@@ -73,6 +74,10 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
+	questions, err := qa.New(qa.Config{Pool: pool})
+	if err != nil {
+		return err
+	}
 
 	userEvents, err := userevents.New(userevents.Config{Pool: pool, Log: rt.Log})
 	if err != nil {
@@ -105,6 +110,7 @@ func setup(rt *service.Runtime) error {
 	corev1.RegisterUserEventServiceServer(srv, grpcapi.NewUserEventServer(userEvents, rt.Log))
 	corev1.RegisterAnnouncementServiceServer(srv, grpcapi.NewAnnouncementServer(announcements, rt.Log))
 	corev1.RegisterEventServiceServer(srv, grpcapi.NewEventServer(events, rt.Log))
+	corev1.RegisterQAServiceServer(srv, grpcapi.NewQAServer(questions, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
 	// Tekrarlayan etkinliklerin önümüzdeki 8 haftalık örnekleri (issue #51).
 	// Birden fazla pod'da çalışabilir: tayfa ve seri satırı kilitlenir,

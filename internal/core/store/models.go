@@ -22,6 +22,26 @@ type Announcement struct {
 	DeletedBy       pgtype.UUID
 }
 
+type Answer struct {
+	ID              pgtype.UUID
+	QuestionID      pgtype.UUID
+	TayfaID         pgtype.UUID
+	AuthorID        pgtype.UUID
+	Body            string
+	VoteCount       int32
+	ClientRequestID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	DeletedBy       pgtype.UUID
+}
+
+type AnswerVote struct {
+	AnswerID  pgtype.UUID
+	UserID    pgtype.UUID
+	CreatedAt pgtype.Timestamptz
+}
+
 type AuditLog struct {
 	ID         pgtype.UUID
 	TayfaID    pgtype.UUID
@@ -231,6 +251,34 @@ type Membership struct {
 	JoinedAt        pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+}
+
+type Question struct {
+	ID              pgtype.UUID
+	TayfaID         pgtype.UUID
+	AuthorID        pgtype.UUID
+	Title           string
+	Body            string
+	SearchVector    interface{}
+	ClientRequestID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	DeletedBy       pgtype.UUID
+}
+
+type QuestionTag struct {
+	QuestionID pgtype.UUID
+	TagID      pgtype.UUID
+	TayfaID    pgtype.UUID
+}
+
+type Tag struct {
+	ID             pgtype.UUID
+	TayfaID        pgtype.UUID
+	Name           string
+	NameNormalized string
+	CreatedAt      pgtype.Timestamptz
 }
 
 type Tayfa struct {

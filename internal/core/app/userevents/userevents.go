@@ -136,9 +136,10 @@ func validDisplayName(s string) bool {
 //     first (data model v14 "Son yönetici koruması");
 //   - a tayfa left without any active member is scheduled for deletion
 //     after tayfa.DeletionDelay, requested by nobody (the system);
-//   - author and actor fields pointing at the user become NULL; the user's
-//     event RSVPs, convoy vehicles (plates), hike roll calls, fishing
-//     catches and activity records are deleted;
+//   - author and actor fields pointing at the user become NULL (questions
+//     and answers stay, by a deleted user); the user's event RSVPs, convoy
+//     vehicles (plates), hike roll calls, fishing catches, activity records
+//     and helpful votes are deleted, and the vote counts drop with them;
 //   - on every upcoming event the user was going to, the seat goes to the
 //     oldest waitlisted answer (rsvp.promoted), as when an answer changes;
 //   - the profile copy becomes a tombstone.
@@ -172,6 +173,7 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			q.ClearAnnouncementUserFields, q.ClearEventUserFields, q.ClearEventSeriesCreator,
 			q.ClearRsvpMarker, q.DeleteUserRsvps, q.DeleteUserConvoyVehicles, q.ClearCampItemUserFields,
 			q.DeleteUserHikeCheckins, q.DeleteUserCatches, q.ClearCatchDeleter, q.DeleteUserActivityRecords,
+			q.ClearQuestionUserFields, q.ClearAnswerUserFields, q.DeleteUserAnswerVotes,
 			q.ClearAuditActor, q.ClearEventActor,
 		} {
 			if err := clear(ctx, e.User.PG()); err != nil {

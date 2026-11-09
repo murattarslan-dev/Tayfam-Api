@@ -92,6 +92,21 @@ var (
 	ErrEventSeriesEnded    = errors.New("etkinlik serisi sonlandırılmış")
 )
 
+// QAService errors (issue #59).
+var (
+	// ErrQuestionNotFound: no visible question with this ID in this tayfa
+	// that the method can work on (unknown, deleted, or past restoring).
+	ErrQuestionNotFound = errors.New("soru bulunamadı")
+	// ErrAnswerNotFound: the same for answers; an answer of a deleted
+	// question is not found either.
+	ErrAnswerNotFound = errors.New("cevap bulunamadı")
+	ErrTagNotFound    = errors.New("etiket bulunamadı")
+	// ErrOwnAnswerVote: nobody votes for their own answer.
+	ErrOwnAnswerVote = errors.New("kendi cevabına oy verilemez")
+	// ErrTagLimit: the tayfa already has the most tags it may have.
+	ErrTagLimit = errors.New("etiket sınırı")
+)
+
 // ValidationError reports a request field that failed validation. Field is
 // the request field name as written in the proto ("name", "update_mask");
 // the rejected value is never kept.
