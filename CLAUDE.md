@@ -74,7 +74,7 @@ Bunların ihlali PR'ın reddedilmesi için yeterlidir.
    (ADR-0002, ADR-0009). Veritabanları arası foreign key yoktur.
 3. **Kişisel veri log'a girmez.** Log, metrik ve trace'lere mesaj metni,
    konum, e-posta, token, refresh token, davet token'ı, gizli anket oyu
-   yazılmaz. Kullanıcı konumu hiçbir yerde saklanmaz ve loglanmaz (ADR-0008).
+   yazılmaz. Kullanıcı konumu hiçbir yerde saklanmaz ve loglanmaz (ADR-0008). Kullanıcının bilerek paylaştığı yer (buluşma noktası, konvoy rotası, av yeri) içeriktir ve saklanabilir; cihazın anlık konumu saklanmaz (ayrım ADR-0008'de).
 4. **Kendi kriptografini yazma.** E2E için Signal protokolü kullanılır.
    Kanal mesajı şifrelemesi AES-256-GCM ile, standart kütüphaneyle yapılır.
    Rastgele değerler yalnızca `crypto/rand` ile üretilir.
