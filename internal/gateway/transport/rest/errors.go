@@ -123,6 +123,8 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_MESSAGE_REQUEST_PENDING":    {http.StatusConflict, "message-request-pending"},
 		"ERROR_REASON_MESSAGE_REQUEST_LIMIT":      {http.StatusTooManyRequests, "message-request-limit"},
 		"ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND":  {http.StatusNotFound, "message-request-not-found"},
+		// Per-user message rate, channel and direct messages (issue #101).
+		"ERROR_REASON_RATE_LIMITED": {http.StatusTooManyRequests, "rate-limited"},
 	},
 }
 

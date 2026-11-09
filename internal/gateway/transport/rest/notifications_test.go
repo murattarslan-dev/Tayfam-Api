@@ -56,6 +56,8 @@ func (f *fakeChat) ListNotifications(ctx context.Context, in *chatv1.ListNotific
 		{Id: notificationID, Type: chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_WARNED, TayfaId: tayfaID,
 			TargetType: chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_TAYFA, TargetId: tayfaID,
 			WarningReason: chatv1.TayfaWarningReason_TAYFA_WARNING_REASON_INACTIVE, CreateTime: timestamppb.New(t0)},
+		{Id: notificationID, Type: chatv1.NotificationType_NOTIFICATION_TYPE_DM_MESSAGE,
+			TargetType: chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_DM_CONVERSATION, TargetId: conversationID, UnreadCount: 100, CreateTime: timestamppb.New(t0)},
 	}}, f.record(ctx, in)
 }
 
@@ -130,13 +132,14 @@ func TestNotificationRoutes(t *testing.T) {
 	w := as(h, "GET", "/v1/notifications", "")
 	l := decodeBody[notificationListJSON](t, w)
 	n := l.Notifications
-	if len(n) != 4 || n[2].Type != "hike_overdue" || n[2].SubjectUserID != userID || n[3].Type != "tayfa_warned" || n[3].WarningReason != "inactive" || n[0].WarningReason != "" ||
+	if len(n) != 5 || n[4].Type != "dm_message" || n[4].TargetType != "dm_conversation" || n[4].UnreadCount != 100 || n[4].ActorID != "" || n[0].UnreadCount != 0 ||
+		n[2].Type != "hike_overdue" || n[2].SubjectUserID != userID || n[3].Type != "tayfa_warned" || n[3].WarningReason != "inactive" || n[0].WarningReason != "" ||
 		l.NextPageToken != "SONRAKI" || n[0].Type != "answer_received" || n[0].TargetType != "answer" ||
 		n[0].QuestionID != questionID || n[0].ActorID != userID || n[0].Read || !n[0].CreatedAt.Equal(t0) ||
 		n[1].Type != "unknown" || !n[1].Read || n[1].TayfaID != "" {
 		t.Fatalf("liste: %+v", l)
 	}
-	if strings.Count(w.Body.String(), "question_id") != 1 || strings.Count(w.Body.String(), "warning_reason") != 1 || w.Header().Get("Cache-Control") != "no-store" {
+	if strings.Count(w.Body.String(), "question_id") != 1 || strings.Count(w.Body.String(), "warning_reason") != 1 || strings.Count(w.Body.String(), "unread_count") != 1 || w.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("boş alanlar/önbellek: %s %v", w.Body, w.Header())
 	}
 	if c := decodeBody[unreadCountJSON](t, as(h, "GET", "/v1/notifications/unread-count", "")); c.UnreadCount != 12 {

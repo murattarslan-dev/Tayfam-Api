@@ -65,6 +65,16 @@ func (f *fakeChat) DeclineMessageRequest(ctx context.Context, in *chatv1.Decline
 	return &chatv1.DeclineMessageRequestResponse{}, f.record(ctx, in)
 }
 
+func (f *fakeChat) ListDeclinedRequests(ctx context.Context, in *chatv1.ListDeclinedRequestsRequest, _ ...grpc.CallOption) (*chatv1.ListDeclinedRequestsResponse, error) {
+	return &chatv1.ListDeclinedRequestsResponse{NextPageToken: "SONRAKI", DeclinedRequests: []*chatv1.DeclinedRequest{
+		{ConversationId: conversationID, SenderUserId: userID, DeclineTime: timestamppb.New(t0), CreateTime: timestamppb.New(t0)},
+	}}, f.record(ctx, in)
+}
+
+func (f *fakeChat) RemoveDeclinedRequest(ctx context.Context, in *chatv1.RemoveDeclinedRequestRequest, _ ...grpc.CallOption) (*chatv1.RemoveDeclinedRequestResponse, error) {
+	return &chatv1.RemoveDeclinedRequestResponse{}, f.record(ctx, in)
+}
+
 func TestDirectMessageRoutes(t *testing.T) {
 	f := &fakeChat{}
 	h := chatRouter(f)
@@ -84,6 +94,8 @@ func TestDirectMessageRoutes(t *testing.T) {
 		{"PUT", c + "/read", `{"message_id":"` + messageID + `"}`, 204, &chatv1.MarkConversationReadRequest{ConversationId: conversationID, MessageId: messageID}},
 		{"POST", c + "/accept", "", 200, &chatv1.AcceptMessageRequestRequest{ConversationId: conversationID}},
 		{"POST", c + "/decline", "", 204, &chatv1.DeclineMessageRequestRequest{ConversationId: conversationID}},
+		{"GET", "/v1/direct-messages/declined-requests?page_size=5&page_token=P", "", 200, &chatv1.ListDeclinedRequestsRequest{PageSize: 5, PageToken: "P"}},
+		{"DELETE", "/v1/direct-messages/declined-requests/" + conversationID, "", 204, &chatv1.RemoveDeclinedRequestRequest{ConversationId: conversationID}},
 	} {
 		w := as(h, tc.method, tc.path, tc.body)
 		got, tok, _ := f.last()
@@ -113,6 +125,12 @@ func TestDirectMessageRoutes(t *testing.T) {
 	if a := decodeBody[conversationJSON](t, as(h, "POST", c+"/accept", "")); a.Status != "active" {
 		t.Fatalf("kabul: %+v", a)
 	}
+	w = as(h, "GET", "/v1/direct-messages/declined-requests", "")
+	d := decodeBody[declinedRequestListJSON](t, w)
+	if len(d.DeclinedRequests) != 1 || d.DeclinedRequests[0].ConversationID != conversationID || d.DeclinedRequests[0].SenderUserID != userID ||
+		!d.DeclinedRequests[0].DeclinedAt.Equal(t0) || d.NextPageToken != "SONRAKI" || w.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("reddedilenler: %+v %v", d, w.Header())
+	}
 }
 
 func TestDirectMessageBadRequests(t *testing.T) {
@@ -134,6 +152,8 @@ func TestDirectMessageBadRequests(t *testing.T) {
 		"bozuk after":        {"GET", c + "/messages?after_message_id=x", ""},
 		"bozuk sayfa":        {"GET", "/v1/direct-messages/conversations?page_size=x", ""},
 		"okundu kimliği yok": {"PUT", c + "/read", `{}`},
+		"bozuk reddedilen":   {"DELETE", "/v1/direct-messages/declined-requests/x", ""},
+		"bozuk ret sayfası":  {"GET", "/v1/direct-messages/declined-requests?page_size=x", ""},
 	} {
 		if w := as(h, tc.method, tc.path, tc.body); w.Code != 400 || problemType(t, w) != "invalid-request" {
 			t.Errorf("%s: %d %s", name, w.Code, problemType(t, w))
@@ -147,6 +167,20 @@ func TestDirectMessageBadRequests(t *testing.T) {
 	}
 	if w := do(h, "POST", "/v1/direct-messages", send(""), map[string]string{"Authorization": "Bearer USERTOKEN"}); w.Code != 400 {
 		t.Fatalf("istemci başlığı olmadan: %d", w.Code)
+	}
+	// Removing from the declined list changes state: token and client
+	// header are required.
+	if w := do(h, "DELETE", "/v1/direct-messages/declined-requests/"+conversationID, "", map[string]string{clientHeader: "android"}); w.Code != 401 {
+		t.Fatalf("token'sız çıkarma: %d", w.Code)
+	}
+	if w := do(h, "DELETE", "/v1/direct-messages/declined-requests/"+conversationID, "", map[string]string{"Authorization": "Bearer USERTOKEN"}); w.Code != 400 {
+		t.Fatalf("istemci başlığı olmadan çıkarma: %d", w.Code)
+	}
+	if w := do(h, "GET", "/v1/direct-messages/declined-requests", "", nil); w.Code != 401 {
+		t.Fatalf("token'sız liste: %d", w.Code)
+	}
+	if _, _, n := f.last(); n != 0 {
+		t.Fatal("yetkisiz istek chat'e gitti")
 	}
 }
 
@@ -162,6 +196,7 @@ func TestDirectMessageErrors(t *testing.T) {
 		{chatErr(codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_MESSAGE_REQUEST_PENDING.String()), 409, "message-request-pending"},
 		{chatErr(codes.ResourceExhausted, chatv1.ErrorReason_ERROR_REASON_MESSAGE_REQUEST_LIMIT.String()), 429, "message-request-limit"},
 		{chatErr(codes.NotFound, chatv1.ErrorReason_ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND.String()), 404, "message-request-not-found"},
+		{chatErr(codes.ResourceExhausted, chatv1.ErrorReason_ERROR_REASON_RATE_LIMITED.String()), 429, "rate-limited"},
 		{chatErr(codes.InvalidArgument, chatv1.ErrorReason_ERROR_REASON_VALIDATION.String()), 400, "invalid-request"},
 		{status.Error(codes.Unavailable, "x"), 503, "unavailable"},
 		// A reason from another domain is not trusted.
@@ -169,6 +204,26 @@ func TestDirectMessageErrors(t *testing.T) {
 	} {
 		f := &fakeChat{err: tc.err}
 		w := as(chatRouter(f), "POST", "/v1/direct-messages", body)
+		if w.Code != tc.status || problemType(t, w) != tc.typ {
+			t.Errorf("%v: %d %s", tc.err, w.Code, problemType(t, w))
+		}
+	}
+}
+
+// Removing from the declined list maps chat's answers; nobody's list but
+// the caller's is reachable (chat decides; the gateway passes the reason).
+func TestRemoveDeclinedRequestErrors(t *testing.T) {
+	for _, tc := range []struct {
+		err    error
+		status int
+		typ    string
+	}{
+		{chatErr(codes.NotFound, chatv1.ErrorReason_ERROR_REASON_CONVERSATION_NOT_FOUND.String()), 404, "conversation-not-found"},
+		{chatErr(codes.NotFound, chatv1.ErrorReason_ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND.String()), 404, "message-request-not-found"},
+		{status.Error(codes.Unavailable, "x"), 503, "unavailable"},
+	} {
+		f := &fakeChat{err: tc.err}
+		w := as(chatRouter(f), "DELETE", "/v1/direct-messages/declined-requests/"+conversationID, "")
 		if w.Code != tc.status || problemType(t, w) != tc.typ {
 			t.Errorf("%v: %d %s", tc.err, w.Code, problemType(t, w))
 		}
