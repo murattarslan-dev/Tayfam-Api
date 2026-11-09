@@ -23,6 +23,9 @@ type Querier interface {
 	AdvanceEventSeries(ctx context.Context, arg AdvanceEventSeriesParams) error
 	// Başvuru onayı.
 	ApproveMembership(ctx context.Context, arg ApproveMembershipParams) (int64, error)
+	// Uyarıdan sonra @warned_before'a kadar aktivite olmayan tayfa arşivlenir
+	// (salt okunur). Askıdaki ya da silme bekleyen tayfaya dokunulmaz.
+	ArchiveWarnedTayfas(ctx context.Context, arg ArchiveWarnedTayfasParams) ([]pgtype.UUID, error)
 	BanMembership(ctx context.Context, arg BanMembershipParams) (int64, error)
 	CancelEvent(ctx context.Context, arg CancelEventParams) (int64, error)
 	// Seri sonlandırılınca gelecekteki düzenlenmemiş örnekler iptal edilir.
@@ -44,6 +47,11 @@ type Querier interface {
 	ClearEventUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearInviteCreator(ctx context.Context, userID pgtype.UUID) error
 	ClearMembershipUserFields(ctx context.Context, userID pgtype.UUID) error
+	// ---------------------------------------------------------------------------
+	// Plaka temizliği (v14 "Konvoy aracı", "Saklama süreleri")
+	// ---------------------------------------------------------------------------
+	// Bitişi @ended_before'dan önce olan etkinliklerin plakaları boşaltılır.
+	ClearOldPlates(ctx context.Context, arg ClearOldPlatesParams) (int64, error)
 	// Anketler kalır, açan ve silen "Silinmiş kullanıcı" olur; kişinin oyları
 	// silinir (issue #60). Sayımlar buna göre düşer.
 	ClearPollUserFields(ctx context.Context, userID pgtype.UUID) error
@@ -261,6 +269,10 @@ type Querier interface {
 	ListDueEventSeries(ctx context.Context, arg ListDueEventSeriesParams) ([]ListDueEventSeriesRow, error)
 	// Liste görünümünde mera gizliliği için.
 	ListFishingVisibility(ctx context.Context, eventIds []pgtype.UUID) ([]ListFishingVisibilityRow, error)
+	// Alarmın alıcıları: organizatör (tayfada hâlâ aktif üyeyse) ve aktif
+	// yöneticiler ve moderatörler; dönmeyen kişinin kendisi hariç. Organizatör
+	// önce, sonra yönetici, sonra moderatör.
+	ListHikeAlertRecipients(ctx context.Context, arg ListHikeAlertRecipientsParams) ([]pgtype.UUID, error)
 	ListInterestsForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListInterestsForTayfasRow, error)
 	ListInvites(ctx context.Context, arg ListInvitesParams) ([]ListInvitesRow, error)
 	// Geçerli davetler (iptal edilmemiş, süresi dolmamış, tükenmemiş), yeniden
@@ -298,6 +310,15 @@ type Querier interface {
 	// Yeniden eskiye; isteğe bağlı olarak tek bir etkinliğin anketleri. Sayfa,
 	// önceki sayfanın son satırından sonra başlar.
 	ListPollsPage(ctx context.Context, arg ListPollsPageParams) ([]ListPollsPageRow, error)
+	// ---------------------------------------------------------------------------
+	// 30 günlük kalıcı silme (v14 "Saklama süreleri", CLAUDE.md "Silme")
+	//
+	// Tayfa satırı silinince bağlı her şey foreign key'lerle (ON DELETE CASCADE)
+	// gider; memberships ve audit_logs trigger'ları tayfa satırı artık yokken
+	// silmeye izin verir (00001). Katılım geçmişi (user_activity_records) SET
+	// NULL ile kalır. İçerik tabloları parti parti silinir.
+	// ---------------------------------------------------------------------------
+	ListPurgeableTayfas(ctx context.Context, arg ListPurgeableTayfasParams) ([]pgtype.UUID, error)
 	ListQuestionTags(ctx context.Context, arg ListQuestionTagsParams) ([]ListQuestionTagsRow, error)
 	// Yeniden eskiye. İsteğe bağlı etiket filtresi. Sayfa, önceki sayfanın son
 	// satırından sonra başlar (created_at, id azalan).
@@ -308,6 +329,8 @@ type Querier interface {
 	ListTags(ctx context.Context, tayfaID pgtype.UUID) ([]ListTagsRow, error)
 	ListTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) ([]string, error)
 	ListTayfaModules(ctx context.Context, tayfaID pgtype.UUID) ([]ListTayfaModulesRow, error)
+	// Bildirim alıcıları: aktif yöneticiler ve moderatörler, yönetici önce.
+	ListTayfaStaffIDs(ctx context.Context, arg ListTayfaStaffIDsParams) ([]pgtype.UUID, error)
 	// Bitmemiş etkinlikler, başlangıç zamanına göre; (starts_at, id) ile
 	// sayfalanır.
 	ListUpcomingEvents(ctx context.Context, arg ListUpcomingEventsParams) ([]ListUpcomingEventsRow, error)
@@ -318,6 +341,14 @@ type Querier interface {
 	// transaction'da kontrol edilir, eşzamanlı son kullanımdan yalnızca biri
 	// ilerler.
 	LockInviteByHash(ctx context.Context, tokenHash []byte) (LockInviteByHashRow, error)
+	// ---------------------------------------------------------------------------
+	// Yürüyüş dönmeme alarmı (v14 "Yürüyüşte beklenen dönüş")
+	// ---------------------------------------------------------------------------
+	// Yola çıkmış (satır var = started_at dolu), dönmemiş, alarmı gönderilmemiş
+	// ve beklenen dönüş + tolerans süresi @now'dan önce dolmuş yürüyüşçüler.
+	// Etkinlik iptal ya da silinmiş olsa da alarm gider: kişi hâlâ dağda
+	// olabilir.
+	LockOverdueHikers(ctx context.Context, arg LockOverdueHikersParams) ([]LockOverdueHikersRow, error)
 	// Aynı kullanıcının eşzamanlı oluşturma istekleri sırayla işlenir; günlük
 	// sınır iki istekte birden aşılamaz. Kilit transaction bitince bırakılır.
 	LockTayfaCreation(ctx context.Context, lockKey string) error
@@ -328,6 +359,7 @@ type Querier interface {
 	// katılım akışıyla (SetRsvp) aynı kilitle, kimlik sırasıyla kilitlenir.
 	LockUserGoingUpcomingEvents(ctx context.Context, arg LockUserGoingUpcomingEventsParams) ([]LockUserGoingUpcomingEventsRow, error)
 	MarkAttended(ctx context.Context, arg MarkAttendedParams) error
+	MarkHikeAlertSent(ctx context.Context, arg MarkHikeAlertSentParams) (int64, error)
 	MarkNoShow(ctx context.Context, arg MarkNoShowParams) error
 	MuteMembership(ctx context.Context, arg MuteMembershipParams) (int64, error)
 	// Bekleme listesinin başı: en eski kayıt önce. Çağıran etkinlik satırını
@@ -339,6 +371,23 @@ type Querier interface {
 	// Etkinliğe bağlanacak anket için: etkinlik bu tayfada ve silinmemiş.
 	PollEventExists(ctx context.Context, arg PollEventExistsParams) (bool, error)
 	PromoteRsvp(ctx context.Context, arg PromoteRsvpParams) (int64, error)
+	PurgeAnnouncements(ctx context.Context, arg PurgeAnnouncementsParams) (int64, error)
+	PurgeAnswers(ctx context.Context, arg PurgeAnswersParams) (int64, error)
+	// Etkinlik soft delete'i bugün yok; kolon olduğu için iş hazırdır. Katılım,
+	// türe özel tablolar ve av kayıtları cascade ile, bağlı anket ve seri şablonu
+	// SET NULL ile.
+	PurgeEvents(ctx context.Context, arg PurgeEventsParams) (int64, error)
+	PurgeFishingCatches(ctx context.Context, arg PurgeFishingCatchesParams) (int64, error)
+	// Seçenekleri cascade ile gider (oyları soft delete'te silinmiştir).
+	PurgePolls(ctx context.Context, arg PurgePollsParams) (int64, error)
+	// Cevapları, oyları ve etiket bağları cascade ile gider.
+	PurgeQuestions(ctx context.Context, arg PurgeQuestionsParams) (int64, error)
+	PurgeTayfa(ctx context.Context, arg PurgeTayfaParams) (int64, error)
+	// ---------------------------------------------------------------------------
+	// Pasif tayfa temizliği (v14 "Tayfa yönetimi", Proje Planı §7)
+	// ---------------------------------------------------------------------------
+	// Uyarıdan sonra aktivite olan tayfa yeniden aktif olur.
+	ReactivateWarnedTayfas(ctx context.Context, n int32) ([]pgtype.UUID, error)
 	RemoveAnswerVote(ctx context.Context, arg RemoveAnswerVoteParams) (int64, error)
 	RequestTayfaDeletion(ctx context.Context, arg RequestTayfaDeletionParams) (int64, error)
 	RestoreAnnouncement(ctx context.Context, arg RestoreAnnouncementParams) (int64, error)
@@ -385,6 +434,12 @@ type Querier interface {
 	SetSystemJob(ctx context.Context, job string) error
 	SetTayfaJoinCode(ctx context.Context, arg SetTayfaJoinCodeParams) (int64, error)
 	SetTayfaModule(ctx context.Context, arg SetTayfaModuleParams) error
+	// ---------------------------------------------------------------------------
+	// 72 saatlik tayfa silme (v14 "Tayfa silmede bekleme")
+	// ---------------------------------------------------------------------------
+	// Bekleme süresi dolan tayfa soft delete edilir; silen sistemdir
+	// (deleted_by boş). İptal edilen talepte deletion_scheduled_for boştur.
+	SoftDeleteDueTayfas(ctx context.Context, arg SoftDeleteDueTayfasParams) ([]pgtype.UUID, error)
 	StartHikeCheckin(ctx context.Context, arg StartHikeCheckinParams) (int64, error)
 	// Hesap silindi: ad ve avatar temizlenir, satır mezar taşı olarak kalır.
 	// Tekrar uygulanınca sonuç değişmez.
@@ -394,6 +449,17 @@ type Querier interface {
 	// sıcak satıra her yazmada yeni sürüm açılmaz, temizlik işi gün ölçeğinde
 	// çalışır.
 	TouchTayfaActivity(ctx context.Context, arg TouchTayfaActivityParams) (int64, error)
+	// core arka plan işleri (issue #66; internal/core/app/jobs). Hepsi kullanıcısız
+	// çalışır: app.actor_id ve app.system_job ayarlanmaz, denetim kaydı
+	// CreateSystemAuditLog ile işlemi yapan olmadan yazılır.
+	//
+	// Her parti tek bir transaction'dır ve önce işin advisory kilidini dener
+	// (TryJobLock); kilidi alamayan pod o turu atlar. Satırlar ayrıca SKIP LOCKED
+	// ile seçilir ve UPDATE/DELETE koşulu yeniden kontrol eder: kullanıcının aynı
+	// anda yaptığı bir değişiklik (silme iptali, dönüş kaydı) önce commit olursa
+	// iş o satıra dokunmaz.
+	// İş başına bir kilit; transaction bitince bırakılır.
+	TryJobLock(ctx context.Context, lockKey string) (bool, error)
 	UnmuteMembership(ctx context.Context, arg UnmuteMembershipParams) (int64, error)
 	UpdateAnnouncementContent(ctx context.Context, arg UpdateAnnouncementContentParams) (int64, error)
 	UpdateAnswerBody(ctx context.Context, arg UpdateAnswerBodyParams) (int64, error)
@@ -410,6 +476,16 @@ type Querier interface {
 	// Daha yeni bir olay uygulanmışsa ya da profil silinmişse değişmez; etkilenen
 	// satır 0 olur.
 	UpsertUserProfile(ctx context.Context, arg UpsertUserProfileParams) (int64, error)
+	// Uyarı iki sebeple verilir:
+	//   inactive:    last_activity_at @inactive_before'dan eski (30 gün).
+	//   few_members: açılışından @created_before'a kadar (7 gün) geçmiş ve
+	//                @min_members'tan az aktif üyesi olan tayfa. Bu kural tayfa
+	//                başına bir kez uygulanır: daha önce few_members uyarısı
+	//                almış (audit_logs, yalnızca eklenir) tayfa bu sebeple tekrar
+	//                uyarılmaz; küçük ama aktif bir arkadaş grubu her hafta uyarı
+	//                almaz, hareketsiz kalırsa inactive kuralı yine işler.
+	// Askıdaki ya da silme bekleyen tayfaya dokunulmaz.
+	WarnTayfas(ctx context.Context, arg WarnTayfasParams) ([]WarnTayfasRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

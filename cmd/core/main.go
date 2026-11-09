@@ -14,6 +14,7 @@ import (
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/announcement"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/jobs"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/poll"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/qa"
@@ -84,6 +85,11 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 
+	background, err := jobs.New(jobs.Config{Pool: pool, Log: rt.Log})
+	if err != nil {
+		return err
+	}
+
 	userEvents, err := userevents.New(userevents.Config{Pool: pool, Log: rt.Log})
 	if err != nil {
 		return err
@@ -122,5 +128,12 @@ func setup(rt *service.Runtime) error {
 	// Birden fazla pod'da çalışabilir: tayfa ve seri satırı kilitlenir,
 	// örnekler (series_id, starts_at) ile tekildir.
 	rt.AddWorker("event-series", events.RunSeriesGenerator)
+	// Pasif tayfa temizliği, 72 saatlik tayfa silme, 30 günlük kalıcı silme,
+	// yürüyüş dönmeme alarmı ve plaka temizliği (issue #66). Her biri ayrı
+	// bir worker; birden fazla pod'da her partiyi advisory kilidi alan tek
+	// pod işler.
+	for _, w := range background.Workers() {
+		rt.AddWorker(w.Name, w.Run)
+	}
 	return nil
 }
