@@ -187,7 +187,7 @@ func TestRequireRecentAuth(t *testing.T) {
 		{t0.Add(AdminReauthWindow + time.Second), ErrReauthenticationRequired},
 		{t0.Add(time.Hour), ErrReauthenticationRequired},
 	} {
-		if got := c.RequireRecentAuth(tc.now); !errors.Is(got, tc.want) && got != tc.want {
+		if got := c.RequireRecentAuth(tc.now); !errors.Is(got, tc.want) {
 			t.Errorf("%v sonra: %v, beklenen %v", tc.now.Sub(t0), got, tc.want)
 		}
 	}

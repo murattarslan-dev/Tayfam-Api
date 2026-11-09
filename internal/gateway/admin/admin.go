@@ -54,8 +54,8 @@ import (
 // it is Secure, has Path=/ and no Domain, so it is bound to the admin host
 // and never sent to tayfam.app or api.tayfam.app.
 const (
-	TokenCookie = "__Host-tayfam_admin"
-	NonceCookie = "__Host-tayfam_admin_nonce"
+	TokenCookie = "__Host-tayfam_admin"       // #nosec G101 -- a cookie name, not a credential
+	NonceCookie = "__Host-tayfam_admin_nonce" // #nosec G101 -- a cookie name, not a credential
 )
 
 const (

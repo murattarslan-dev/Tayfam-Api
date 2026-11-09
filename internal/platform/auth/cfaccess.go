@@ -80,20 +80,20 @@ type AccessVerifier struct {
 // fetched on first use.
 func NewAccessVerifier(cfg AccessVerifierConfig) (*AccessVerifier, error) {
 	if !teamDomainPattern.MatchString(cfg.TeamDomain) {
-		return nil, errors.New("Cloudflare Access: takım alan adı <takım>.cloudflareaccess.com biçiminde olmalı")
+		return nil, errors.New("cloudflare access: takım alan adı <takım>.cloudflareaccess.com biçiminde olmalı")
 	}
 	if !accessAUDPattern.MatchString(cfg.Audience) {
-		return nil, errors.New("Cloudflare Access: AUD etiketi 64 onaltılık karakter olmalı")
+		return nil, errors.New("cloudflare access: AUD etiketi 64 onaltılık karakter olmalı")
 	}
 	if cfg.Client == nil {
-		return nil, errors.New("Cloudflare Access: HTTP istemcisi zorunlu")
+		return nil, errors.New("cloudflare access: HTTP istemcisi zorunlu")
 	}
 	if cfg.CertsURL == "" {
 		cfg.CertsURL = "https://" + cfg.TeamDomain + "/cdn-cgi/access/certs"
 	}
 	u, err := url.Parse(cfg.CertsURL)
 	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil {
-		return nil, errors.New("Cloudflare Access: anahtar adresi https olmalı")
+		return nil, errors.New("cloudflare access: anahtar adresi https olmalı")
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
@@ -152,7 +152,7 @@ func (v *AccessVerifier) Verify(ctx context.Context, token string) (AccessClaims
 		return zero, fmt.Errorf("%w: anahtar", ErrInvalidToken)
 	}
 	if err != nil {
-		return zero, fmt.Errorf("Cloudflare Access açık anahtarı alınamadı: %w", err)
+		return zero, fmt.Errorf("cloudflare access açık anahtarı alınamadı: %w", err)
 	}
 	digest := sha256.Sum256([]byte(token[:len(parts[0])+1+len(parts[1])]))
 	if !verifySignature(algRS256, key, digest[:], sig) {

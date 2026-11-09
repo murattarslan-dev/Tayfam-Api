@@ -33,7 +33,7 @@ func run(t *testing.T, extra map[string]string) (string, error) {
 	go func() { errc <- service.Run(ctx, "gateway", lookup, io.Discard, setup, started) }()
 	select {
 	case addrs := <-started:
-		t.Cleanup(func() { cancel(); <-errc })
+		t.Cleanup(func() { cancel(); _ = <-errc })
 		return addrs["http"], nil
 	case err := <-errc:
 		cancel()
