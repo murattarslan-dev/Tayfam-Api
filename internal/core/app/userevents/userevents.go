@@ -59,10 +59,6 @@ type Profile struct {
 	// ActivityVisibility is who sees the user's attendance history on their
 	// profile; empty in older events, which keep the copy's current value.
 	ActivityVisibility string
-	// Minor is identity's "under 18" answer (ADR-0012), nil when the event
-	// does not carry it: the copy then keeps what it had. core uses it only
-	// for report priority and never returns or logs it.
-	Minor *bool
 }
 
 // ActivityVisibility values (user_profiles_activity_visibility).
@@ -129,22 +125,11 @@ func (s *Service) applyProfile(ctx context.Context, e Event) error {
 	if e.Profile.AvatarUploadID != (id.ID{}) {
 		avatar = e.Profile.AvatarUploadID.PG()
 	}
-	q := store.New(s.cfg.Pool)
 	// 0 rows: a newer event or the deletion was applied already. That is
 	// the expected result of a repeat, not an error.
-	if _, err := q.UpsertUserProfile(ctx, store.UpsertUserProfileParams{
+	if _, err := store.New(s.cfg.Pool).UpsertUserProfile(ctx, store.UpsertUserProfileParams{
 		UserID: e.User.PG(), DisplayName: pgtype.Text{String: name, Valid: true},
 		AvatarUploadID: avatar, SourceEventID: e.ID.PG(), ActivityVisibility: vis,
-	}); err != nil {
-		return fmt.Errorf("profil kopyası: %w", err)
-	}
-	if e.Profile.Minor == nil {
-		return nil
-	}
-	// Written only while the copy is this event's (source_event_id): a newer
-	// event applied in between wins, and a repeat writes the same value.
-	if _, err := q.SetUserProfileMinor(ctx, store.SetUserProfileMinorParams{
-		UserID: e.User.PG(), Minor: pgtype.Bool{Bool: *e.Profile.Minor, Valid: true}, SourceEventID: e.ID.PG(),
 	}); err != nil {
 		return fmt.Errorf("profil kopyası: %w", err)
 	}
@@ -184,7 +169,7 @@ func validDisplayName(s string) bool {
 //     oldest waitlisted answer (rsvp.promoted), as when an answer changes;
 //   - reports stay, but the user's ID in them (as reporter, reported
 //     person or handler) becomes NULL (v14 "Kullanıcı → yazdığı içerik");
-//   - the profile copy becomes a tombstone, its minor flag cleared.
+//   - the profile copy becomes a tombstone.
 //
 // Everything runs as the account_deletion system job, the only identity the
 // database triggers accept for these changes.

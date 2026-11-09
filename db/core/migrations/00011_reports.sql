@@ -14,10 +14,16 @@
 --     ve ileride platform paneline döner; tayfa moderasyon kuyruğuna ve
 --     şikâyet edilen kişiye hiçbir zaman dönmez. Oluşturma tayfanın
 --     audit_logs'una yazılmaz (yöneticiler denetim kaydını görür).
---   - priority oluşturma anında hesaplanır ve sonradan değişmez (v14):
---     şikâyet eden ya da şikâyet edilen 18 yaşından küçükse minor_involved.
---     Yaş ve doğum tarihi tutulmaz; yalnızca user_profiles.minor bayrağı
---     okunur (ADR-0012).
+--   - priority oluşturma anında hesaplanır ve sonradan değişmez (v14,
+--     ADR-0012): core şikâyet eden ve şikâyet edilen için identity'ye
+--     IsMinor sorar; biri 18 yaşından küçükse ya da identity'ye
+--     ulaşılamazsa minor_involved. Yaş, doğum tarihi ve "18 altı" bilgisi
+--     core'da hiçbir yerde saklanmaz; yalnızca şikâyetin önceliği kalır.
+--   - priority yalnızca platform tarafında kullanılır. ADR-0012 gereği tayfa
+--     yöneticileri ve moderatörleri 18 altı bilgisini görmez: tayfa kuyruğu
+--     priority'yi döndürmez ve ona göre sıralamaz (yalnızca zamana göre).
+--     minor_involved ve çocuk/genç güvenliği şikâyetleri oluşturuldukları
+--     anda platforma yükselir.
 --   - platform_only: hedefi tayfanın kendisi olan ya da bir yöneticinin veya
 --     moderatörün işlemine dair (staff_conduct) şikâyetler tayfa kuyruğunda
 --     görünmez, doğrudan platforma gider.
@@ -27,11 +33,6 @@
 --     paneli ayrı iştir; burada yalnızca alanlar var.
 --   - Çözülmüş şikâyetler 1 yıl sonra silinir (arka plan işi). Platformda
 --     açık olan şikâyet silinmez.
---
--- user_profiles.minor: identity'nin user.profile_updated olayıyla taşıdığı
---   "18 yaşından küçük" bayrağı. NULL: identity henüz bildirmedi; şikâyet
---   önceliğinde güvenli tarafta kalınarak küçük sayılır (ADR-0012). Hesap
---   silinince NULL olur. Hiçbir API yanıtına, log'a ya da olaya yazılmaz.
 --
 -- audit_logs saklama süresi (v14: 1 yıl): yalnızca ekleme kuralına tek bir
 --   istisna eklenir. Saklama işi transaction'da app.retention_job =
@@ -44,9 +45,6 @@
 -- içerik: SET NULL").
 
 -- +goose Up
-ALTER TABLE user_profiles ADD COLUMN minor boolean;
-ALTER TABLE user_profiles ADD CONSTRAINT user_profiles_minor_deleted CHECK (deleted_at IS NULL OR minor IS NULL);
-
 CREATE TABLE reports (
   id                       uuid PRIMARY KEY,
   tayfa_id                 uuid NOT NULL REFERENCES tayfas (id) ON DELETE CASCADE,
@@ -101,8 +99,8 @@ CREATE TABLE reports (
 CREATE TRIGGER reports_updated_at BEFORE UPDATE ON reports FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- Tayfa moderasyon kuyruğu (v14 "İndeksler": (tayfa_id, status)): açıklar
--- öncelikliler önce, eskiden yeniye; çözülmüşler yeniden eskiye.
-CREATE INDEX reports_tayfa_open_idx ON reports (tayfa_id, (priority = 'minor_involved') DESC, created_at, id)
+-- eskiden yeniye, çözülmüşler yeniden eskiye; önceliğe göre sıralanmaz.
+CREATE INDEX reports_tayfa_open_idx ON reports (tayfa_id, created_at, id)
   WHERE status = 'open' AND NOT platform_only;
 CREATE INDEX reports_tayfa_resolved_idx ON reports (tayfa_id, handled_at DESC, id DESC)
   WHERE status = 'resolved' AND NOT platform_only;
@@ -210,5 +208,3 @@ $$;
 -- +goose StatementEnd
 DROP TABLE reports;
 DROP FUNCTION reports_guard();
-ALTER TABLE user_profiles DROP CONSTRAINT user_profiles_minor_deleted;
-ALTER TABLE user_profiles DROP COLUMN minor;

@@ -293,57 +293,6 @@ func (ReportResolution) EnumDescriptor() ([]byte, []int) {
 	return file_tayfam_core_v1_report_proto_rawDescGZIP(), []int{3}
 }
 
-type ReportPriority int32
-
-const (
-	ReportPriority_REPORT_PRIORITY_UNSPECIFIED ReportPriority = 0
-	ReportPriority_REPORT_PRIORITY_NORMAL      ReportPriority = 1
-	// One of the parties is under 18 (or not known to be adult). Never says
-	// which one, nor anyone's age.
-	ReportPriority_REPORT_PRIORITY_MINOR_INVOLVED ReportPriority = 2
-)
-
-// Enum value maps for ReportPriority.
-var (
-	ReportPriority_name = map[int32]string{
-		0: "REPORT_PRIORITY_UNSPECIFIED",
-		1: "REPORT_PRIORITY_NORMAL",
-		2: "REPORT_PRIORITY_MINOR_INVOLVED",
-	}
-	ReportPriority_value = map[string]int32{
-		"REPORT_PRIORITY_UNSPECIFIED":    0,
-		"REPORT_PRIORITY_NORMAL":         1,
-		"REPORT_PRIORITY_MINOR_INVOLVED": 2,
-	}
-)
-
-func (x ReportPriority) Enum() *ReportPriority {
-	p := new(ReportPriority)
-	*p = x
-	return p
-}
-
-func (x ReportPriority) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (ReportPriority) Descriptor() protoreflect.EnumDescriptor {
-	return file_tayfam_core_v1_report_proto_enumTypes[4].Descriptor()
-}
-
-func (ReportPriority) Type() protoreflect.EnumType {
-	return &file_tayfam_core_v1_report_proto_enumTypes[4]
-}
-
-func (x ReportPriority) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use ReportPriority.Descriptor instead.
-func (ReportPriority) EnumDescriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_report_proto_rawDescGZIP(), []int{4}
-}
-
 // ReportOutcome is all the reporter learns about a resolution.
 type ReportOutcome int32
 
@@ -379,11 +328,11 @@ func (x ReportOutcome) String() string {
 }
 
 func (ReportOutcome) Descriptor() protoreflect.EnumDescriptor {
-	return file_tayfam_core_v1_report_proto_enumTypes[5].Descriptor()
+	return file_tayfam_core_v1_report_proto_enumTypes[4].Descriptor()
 }
 
 func (ReportOutcome) Type() protoreflect.EnumType {
-	return &file_tayfam_core_v1_report_proto_enumTypes[5]
+	return &file_tayfam_core_v1_report_proto_enumTypes[4]
 }
 
 func (x ReportOutcome) Number() protoreflect.EnumNumber {
@@ -392,7 +341,7 @@ func (x ReportOutcome) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ReportOutcome.Descriptor instead.
 func (ReportOutcome) EnumDescriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_report_proto_rawDescGZIP(), []int{5}
+	return file_tayfam_core_v1_report_proto_rawDescGZIP(), []int{4}
 }
 
 // MyReport is a report as its reporter sees it.
@@ -516,7 +465,8 @@ func (x *MyReport) GetResolveTime() *timestamppb.Timestamp {
 }
 
 // ModerationReport is a report as the tayfa's moderators see it. It has no
-// field for the reporter.
+// field for the reporter and none for the priority or the escalation
+// (ADR-0012).
 type ModerationReport struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -525,21 +475,18 @@ type ModerationReport struct {
 	TargetId   string                 `protobuf:"bytes,4,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
 	// The reported user, or the content's author when the report was filed.
 	// Empty when the account was deleted or the author unknown.
-	SubjectUserId string         `protobuf:"bytes,5,opt,name=subject_user_id,json=subjectUserId,proto3" json:"subject_user_id,omitempty"`
-	Reason        ReportReason   `protobuf:"varint,6,opt,name=reason,proto3,enum=tayfam.core.v1.ReportReason" json:"reason,omitempty"`
-	Description   string         `protobuf:"bytes,7,opt,name=description,proto3" json:"description,omitempty"`
-	Priority      ReportPriority `protobuf:"varint,8,opt,name=priority,proto3,enum=tayfam.core.v1.ReportPriority" json:"priority,omitempty"`
-	Status        ReportStatus   `protobuf:"varint,9,opt,name=status,proto3,enum=tayfam.core.v1.ReportStatus" json:"status,omitempty"`
+	SubjectUserId string       `protobuf:"bytes,5,opt,name=subject_user_id,json=subjectUserId,proto3" json:"subject_user_id,omitempty"`
+	Reason        ReportReason `protobuf:"varint,6,opt,name=reason,proto3,enum=tayfam.core.v1.ReportReason" json:"reason,omitempty"`
+	Description   string       `protobuf:"bytes,7,opt,name=description,proto3" json:"description,omitempty"`
+	Status        ReportStatus `protobuf:"varint,8,opt,name=status,proto3,enum=tayfam.core.v1.ReportStatus" json:"status,omitempty"`
 	// UNSPECIFIED while open.
-	Resolution ReportResolution `protobuf:"varint,10,opt,name=resolution,proto3,enum=tayfam.core.v1.ReportResolution" json:"resolution,omitempty"`
+	Resolution ReportResolution `protobuf:"varint,9,opt,name=resolution,proto3,enum=tayfam.core.v1.ReportResolution" json:"resolution,omitempty"`
 	// Who resolved it; empty while open or when the account was deleted.
-	HandledByUserId string `protobuf:"bytes,11,opt,name=handled_by_user_id,json=handledByUserId,proto3" json:"handled_by_user_id,omitempty"`
-	// Whether the platform also has the report.
-	Escalated     bool                   `protobuf:"varint,12,opt,name=escalated,proto3" json:"escalated,omitempty"`
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	ResolveTime   *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=resolve_time,json=resolveTime,proto3" json:"resolve_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	HandledByUserId string                 `protobuf:"bytes,10,opt,name=handled_by_user_id,json=handledByUserId,proto3" json:"handled_by_user_id,omitempty"`
+	CreateTime      *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	ResolveTime     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=resolve_time,json=resolveTime,proto3" json:"resolve_time,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ModerationReport) Reset() {
@@ -621,13 +568,6 @@ func (x *ModerationReport) GetDescription() string {
 	return ""
 }
 
-func (x *ModerationReport) GetPriority() ReportPriority {
-	if x != nil {
-		return x.Priority
-	}
-	return ReportPriority_REPORT_PRIORITY_UNSPECIFIED
-}
-
 func (x *ModerationReport) GetStatus() ReportStatus {
 	if x != nil {
 		return x.Status
@@ -647,13 +587,6 @@ func (x *ModerationReport) GetHandledByUserId() string {
 		return x.HandledByUserId
 	}
 	return ""
-}
-
-func (x *ModerationReport) GetEscalated() bool {
-	if x != nil {
-		return x.Escalated
-	}
-	return false
 }
 
 func (x *ModerationReport) GetCreateTime() *timestamppb.Timestamp {
@@ -1238,7 +1171,7 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"\vcreate_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12=\n" +
 	"\fresolve_time\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\vresolveTime\"\x98\x05\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\vresolveTime\"\xbe\x04\n" +
 	"\x10ModerationReport\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\btayfa_id\x18\x02 \x01(\tR\atayfaId\x12A\n" +
@@ -1247,18 +1180,16 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"\ttarget_id\x18\x04 \x01(\tR\btargetId\x12&\n" +
 	"\x0fsubject_user_id\x18\x05 \x01(\tR\rsubjectUserId\x124\n" +
 	"\x06reason\x18\x06 \x01(\x0e2\x1c.tayfam.core.v1.ReportReasonR\x06reason\x12 \n" +
-	"\vdescription\x18\a \x01(\tR\vdescription\x12:\n" +
-	"\bpriority\x18\b \x01(\x0e2\x1e.tayfam.core.v1.ReportPriorityR\bpriority\x124\n" +
-	"\x06status\x18\t \x01(\x0e2\x1c.tayfam.core.v1.ReportStatusR\x06status\x12@\n" +
+	"\vdescription\x18\a \x01(\tR\vdescription\x124\n" +
+	"\x06status\x18\b \x01(\x0e2\x1c.tayfam.core.v1.ReportStatusR\x06status\x12@\n" +
 	"\n" +
-	"resolution\x18\n" +
-	" \x01(\x0e2 .tayfam.core.v1.ReportResolutionR\n" +
+	"resolution\x18\t \x01(\x0e2 .tayfam.core.v1.ReportResolutionR\n" +
 	"resolution\x12+\n" +
-	"\x12handled_by_user_id\x18\v \x01(\tR\x0fhandledByUserId\x12\x1c\n" +
-	"\tescalated\x18\f \x01(\bR\tescalated\x12;\n" +
-	"\vcreate_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"\x12handled_by_user_id\x18\n" +
+	" \x01(\tR\x0fhandledByUserId\x12;\n" +
+	"\vcreate_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12=\n" +
-	"\fresolve_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\vresolveTime\"\xe8\x01\n" +
+	"\fresolve_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vresolveTime\"\xe8\x01\n" +
 	"\x13CreateReportRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12A\n" +
 	"\vtarget_type\x18\x02 \x01(\x0e2 .tayfam.core.v1.ReportTargetTypeR\n" +
@@ -1334,11 +1265,7 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"\x1dREPORT_RESOLUTION_UNSPECIFIED\x10\x00\x12%\n" +
 	"!REPORT_RESOLUTION_CONTENT_REMOVED\x10\x01\x12'\n" +
 	"#REPORT_RESOLUTION_MEMBER_SANCTIONED\x10\x02\x12\x1f\n" +
-	"\x1bREPORT_RESOLUTION_DISMISSED\x10\x03*q\n" +
-	"\x0eReportPriority\x12\x1f\n" +
-	"\x1bREPORT_PRIORITY_UNSPECIFIED\x10\x00\x12\x1a\n" +
-	"\x16REPORT_PRIORITY_NORMAL\x10\x01\x12\"\n" +
-	"\x1eREPORT_PRIORITY_MINOR_INVOLVED\x10\x02*n\n" +
+	"\x1bREPORT_RESOLUTION_DISMISSED\x10\x03*n\n" +
 	"\rReportOutcome\x12\x1e\n" +
 	"\x1aREPORT_OUTCOME_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bREPORT_OUTCOME_ACTION_TAKEN\x10\x01\x12\x1c\n" +
@@ -1363,67 +1290,65 @@ func file_tayfam_core_v1_report_proto_rawDescGZIP() []byte {
 	return file_tayfam_core_v1_report_proto_rawDescData
 }
 
-var file_tayfam_core_v1_report_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_tayfam_core_v1_report_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
 var file_tayfam_core_v1_report_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_tayfam_core_v1_report_proto_goTypes = []any{
 	(ReportTargetType)(0),            // 0: tayfam.core.v1.ReportTargetType
 	(ReportReason)(0),                // 1: tayfam.core.v1.ReportReason
 	(ReportStatus)(0),                // 2: tayfam.core.v1.ReportStatus
 	(ReportResolution)(0),            // 3: tayfam.core.v1.ReportResolution
-	(ReportPriority)(0),              // 4: tayfam.core.v1.ReportPriority
-	(ReportOutcome)(0),               // 5: tayfam.core.v1.ReportOutcome
-	(*MyReport)(nil),                 // 6: tayfam.core.v1.MyReport
-	(*ModerationReport)(nil),         // 7: tayfam.core.v1.ModerationReport
-	(*CreateReportRequest)(nil),      // 8: tayfam.core.v1.CreateReportRequest
-	(*CreateReportResponse)(nil),     // 9: tayfam.core.v1.CreateReportResponse
-	(*GetMyReportRequest)(nil),       // 10: tayfam.core.v1.GetMyReportRequest
-	(*GetMyReportResponse)(nil),      // 11: tayfam.core.v1.GetMyReportResponse
-	(*ListMyReportsRequest)(nil),     // 12: tayfam.core.v1.ListMyReportsRequest
-	(*ListMyReportsResponse)(nil),    // 13: tayfam.core.v1.ListMyReportsResponse
-	(*ListTayfaReportsRequest)(nil),  // 14: tayfam.core.v1.ListTayfaReportsRequest
-	(*ListTayfaReportsResponse)(nil), // 15: tayfam.core.v1.ListTayfaReportsResponse
-	(*ResolveReportRequest)(nil),     // 16: tayfam.core.v1.ResolveReportRequest
-	(*ResolveReportResponse)(nil),    // 17: tayfam.core.v1.ResolveReportResponse
-	(*timestamppb.Timestamp)(nil),    // 18: google.protobuf.Timestamp
+	(ReportOutcome)(0),               // 4: tayfam.core.v1.ReportOutcome
+	(*MyReport)(nil),                 // 5: tayfam.core.v1.MyReport
+	(*ModerationReport)(nil),         // 6: tayfam.core.v1.ModerationReport
+	(*CreateReportRequest)(nil),      // 7: tayfam.core.v1.CreateReportRequest
+	(*CreateReportResponse)(nil),     // 8: tayfam.core.v1.CreateReportResponse
+	(*GetMyReportRequest)(nil),       // 9: tayfam.core.v1.GetMyReportRequest
+	(*GetMyReportResponse)(nil),      // 10: tayfam.core.v1.GetMyReportResponse
+	(*ListMyReportsRequest)(nil),     // 11: tayfam.core.v1.ListMyReportsRequest
+	(*ListMyReportsResponse)(nil),    // 12: tayfam.core.v1.ListMyReportsResponse
+	(*ListTayfaReportsRequest)(nil),  // 13: tayfam.core.v1.ListTayfaReportsRequest
+	(*ListTayfaReportsResponse)(nil), // 14: tayfam.core.v1.ListTayfaReportsResponse
+	(*ResolveReportRequest)(nil),     // 15: tayfam.core.v1.ResolveReportRequest
+	(*ResolveReportResponse)(nil),    // 16: tayfam.core.v1.ResolveReportResponse
+	(*timestamppb.Timestamp)(nil),    // 17: google.protobuf.Timestamp
 }
 var file_tayfam_core_v1_report_proto_depIdxs = []int32{
 	0,  // 0: tayfam.core.v1.MyReport.target_type:type_name -> tayfam.core.v1.ReportTargetType
 	1,  // 1: tayfam.core.v1.MyReport.reason:type_name -> tayfam.core.v1.ReportReason
 	2,  // 2: tayfam.core.v1.MyReport.status:type_name -> tayfam.core.v1.ReportStatus
-	5,  // 3: tayfam.core.v1.MyReport.outcome:type_name -> tayfam.core.v1.ReportOutcome
-	18, // 4: tayfam.core.v1.MyReport.create_time:type_name -> google.protobuf.Timestamp
-	18, // 5: tayfam.core.v1.MyReport.resolve_time:type_name -> google.protobuf.Timestamp
+	4,  // 3: tayfam.core.v1.MyReport.outcome:type_name -> tayfam.core.v1.ReportOutcome
+	17, // 4: tayfam.core.v1.MyReport.create_time:type_name -> google.protobuf.Timestamp
+	17, // 5: tayfam.core.v1.MyReport.resolve_time:type_name -> google.protobuf.Timestamp
 	0,  // 6: tayfam.core.v1.ModerationReport.target_type:type_name -> tayfam.core.v1.ReportTargetType
 	1,  // 7: tayfam.core.v1.ModerationReport.reason:type_name -> tayfam.core.v1.ReportReason
-	4,  // 8: tayfam.core.v1.ModerationReport.priority:type_name -> tayfam.core.v1.ReportPriority
-	2,  // 9: tayfam.core.v1.ModerationReport.status:type_name -> tayfam.core.v1.ReportStatus
-	3,  // 10: tayfam.core.v1.ModerationReport.resolution:type_name -> tayfam.core.v1.ReportResolution
-	18, // 11: tayfam.core.v1.ModerationReport.create_time:type_name -> google.protobuf.Timestamp
-	18, // 12: tayfam.core.v1.ModerationReport.resolve_time:type_name -> google.protobuf.Timestamp
-	0,  // 13: tayfam.core.v1.CreateReportRequest.target_type:type_name -> tayfam.core.v1.ReportTargetType
-	1,  // 14: tayfam.core.v1.CreateReportRequest.reason:type_name -> tayfam.core.v1.ReportReason
-	6,  // 15: tayfam.core.v1.CreateReportResponse.report:type_name -> tayfam.core.v1.MyReport
-	6,  // 16: tayfam.core.v1.GetMyReportResponse.report:type_name -> tayfam.core.v1.MyReport
-	6,  // 17: tayfam.core.v1.ListMyReportsResponse.reports:type_name -> tayfam.core.v1.MyReport
-	2,  // 18: tayfam.core.v1.ListTayfaReportsRequest.status:type_name -> tayfam.core.v1.ReportStatus
-	7,  // 19: tayfam.core.v1.ListTayfaReportsResponse.reports:type_name -> tayfam.core.v1.ModerationReport
-	3,  // 20: tayfam.core.v1.ResolveReportRequest.resolution:type_name -> tayfam.core.v1.ReportResolution
-	7,  // 21: tayfam.core.v1.ResolveReportResponse.report:type_name -> tayfam.core.v1.ModerationReport
-	8,  // 22: tayfam.core.v1.ReportService.CreateReport:input_type -> tayfam.core.v1.CreateReportRequest
-	10, // 23: tayfam.core.v1.ReportService.GetMyReport:input_type -> tayfam.core.v1.GetMyReportRequest
-	12, // 24: tayfam.core.v1.ReportService.ListMyReports:input_type -> tayfam.core.v1.ListMyReportsRequest
-	14, // 25: tayfam.core.v1.ReportService.ListTayfaReports:input_type -> tayfam.core.v1.ListTayfaReportsRequest
-	16, // 26: tayfam.core.v1.ReportService.ResolveReport:input_type -> tayfam.core.v1.ResolveReportRequest
-	9,  // 27: tayfam.core.v1.ReportService.CreateReport:output_type -> tayfam.core.v1.CreateReportResponse
-	11, // 28: tayfam.core.v1.ReportService.GetMyReport:output_type -> tayfam.core.v1.GetMyReportResponse
-	13, // 29: tayfam.core.v1.ReportService.ListMyReports:output_type -> tayfam.core.v1.ListMyReportsResponse
-	15, // 30: tayfam.core.v1.ReportService.ListTayfaReports:output_type -> tayfam.core.v1.ListTayfaReportsResponse
-	17, // 31: tayfam.core.v1.ReportService.ResolveReport:output_type -> tayfam.core.v1.ResolveReportResponse
-	27, // [27:32] is the sub-list for method output_type
-	22, // [22:27] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	2,  // 8: tayfam.core.v1.ModerationReport.status:type_name -> tayfam.core.v1.ReportStatus
+	3,  // 9: tayfam.core.v1.ModerationReport.resolution:type_name -> tayfam.core.v1.ReportResolution
+	17, // 10: tayfam.core.v1.ModerationReport.create_time:type_name -> google.protobuf.Timestamp
+	17, // 11: tayfam.core.v1.ModerationReport.resolve_time:type_name -> google.protobuf.Timestamp
+	0,  // 12: tayfam.core.v1.CreateReportRequest.target_type:type_name -> tayfam.core.v1.ReportTargetType
+	1,  // 13: tayfam.core.v1.CreateReportRequest.reason:type_name -> tayfam.core.v1.ReportReason
+	5,  // 14: tayfam.core.v1.CreateReportResponse.report:type_name -> tayfam.core.v1.MyReport
+	5,  // 15: tayfam.core.v1.GetMyReportResponse.report:type_name -> tayfam.core.v1.MyReport
+	5,  // 16: tayfam.core.v1.ListMyReportsResponse.reports:type_name -> tayfam.core.v1.MyReport
+	2,  // 17: tayfam.core.v1.ListTayfaReportsRequest.status:type_name -> tayfam.core.v1.ReportStatus
+	6,  // 18: tayfam.core.v1.ListTayfaReportsResponse.reports:type_name -> tayfam.core.v1.ModerationReport
+	3,  // 19: tayfam.core.v1.ResolveReportRequest.resolution:type_name -> tayfam.core.v1.ReportResolution
+	6,  // 20: tayfam.core.v1.ResolveReportResponse.report:type_name -> tayfam.core.v1.ModerationReport
+	7,  // 21: tayfam.core.v1.ReportService.CreateReport:input_type -> tayfam.core.v1.CreateReportRequest
+	9,  // 22: tayfam.core.v1.ReportService.GetMyReport:input_type -> tayfam.core.v1.GetMyReportRequest
+	11, // 23: tayfam.core.v1.ReportService.ListMyReports:input_type -> tayfam.core.v1.ListMyReportsRequest
+	13, // 24: tayfam.core.v1.ReportService.ListTayfaReports:input_type -> tayfam.core.v1.ListTayfaReportsRequest
+	15, // 25: tayfam.core.v1.ReportService.ResolveReport:input_type -> tayfam.core.v1.ResolveReportRequest
+	8,  // 26: tayfam.core.v1.ReportService.CreateReport:output_type -> tayfam.core.v1.CreateReportResponse
+	10, // 27: tayfam.core.v1.ReportService.GetMyReport:output_type -> tayfam.core.v1.GetMyReportResponse
+	12, // 28: tayfam.core.v1.ReportService.ListMyReports:output_type -> tayfam.core.v1.ListMyReportsResponse
+	14, // 29: tayfam.core.v1.ReportService.ListTayfaReports:output_type -> tayfam.core.v1.ListTayfaReportsResponse
+	16, // 30: tayfam.core.v1.ReportService.ResolveReport:output_type -> tayfam.core.v1.ResolveReportResponse
+	26, // [26:31] is the sub-list for method output_type
+	21, // [21:26] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_report_proto_init() }
@@ -1436,7 +1361,7 @@ func file_tayfam_core_v1_report_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_report_proto_rawDesc), len(file_tayfam_core_v1_report_proto_rawDesc)),
-			NumEnums:      6,
+			NumEnums:      5,
 			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,

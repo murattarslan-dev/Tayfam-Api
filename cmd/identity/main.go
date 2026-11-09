@@ -23,6 +23,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/consent"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/deletion"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/keys"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/minor"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/oidc"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/registration"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/retention"
@@ -138,7 +139,30 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	srv := rt.NewGRPCServer(auth.NewGuard(v, grpcapi.PublicMethods...).ServerOptions()...)
+	minors, err := minor.New(minor.Config{Pool: pool, Cipher: cipher})
+	if err != nil {
+		return err
+	}
+	// Kullanıcısız servis çağrıları (ADR-0013): MinorService'in tek metodu
+	// IsMinor yalnızca core'un ServiceAccount'unun servis token'ını kabul
+	// eder (ADR-0012: şikâyet önceliği için evet/hayır; doğum tarihi
+	// identity'den çıkmaz). Yerelde (cluster yok) doğrulayıcı yoksa kapalıdır.
+	si, err := rt.ServiceIdentity()
+	if err != nil {
+		return err
+	}
+	policy := auth.ServicePolicy{Verifier: si.Verifier, Services: []string{grpcapi.MinorServiceName}}
+	if si.Verifier != nil {
+		policy.Callers = map[string][]auth.ServiceAccount{
+			identityv1.MinorService_IsMinor_FullMethodName: {si.Account("tayfam-core")},
+		}
+	}
+	guard, err := auth.NewGuard(v, grpcapi.PublicMethods...).WithServices(policy)
+	if err != nil {
+		return err
+	}
+	srv := rt.NewGRPCServer(guard.ServerOptions()...)
+	identityv1.RegisterMinorServiceServer(srv, grpcapi.NewMinorServer(minors, rt.Log))
 	identityv1.RegisterKeyServiceServer(srv, grpcapi.NewKeyServer(ring))
 	identityv1.RegisterAuthServiceServer(srv, grpcapi.NewAuthServer(sessions, rt.Log))
 	identityv1.RegisterRegistrationServiceServer(srv, grpcapi.NewRegistrationServer(reg, rt.Log))

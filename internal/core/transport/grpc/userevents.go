@@ -69,10 +69,6 @@ func (s *UserEventServer) ApplyUserEvent(ctx context.Context, req *corev1.ApplyU
 		default:
 			return nil, validation("profile_updated.activity_visibility")
 		}
-		if ev.ProfileUpdated.Minor != nil {
-			minor := ev.ProfileUpdated.GetMinor()
-			p.Minor = &minor
-		}
 		e.Profile = p
 	case *corev1.ApplyUserEventRequest_Deleted:
 		e.Deleted = true

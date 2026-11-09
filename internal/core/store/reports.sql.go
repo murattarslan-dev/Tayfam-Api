@@ -447,58 +447,21 @@ func (q *Queries) GetReportTargetQuestion(ctx context.Context, arg GetReportTarg
 	return i, err
 }
 
-const getUserMinorFlags = `-- name: GetUserMinorFlags :many
-SELECT user_id, minor
-FROM user_profiles
-WHERE user_id = ANY($1::uuid[]) AND deleted_at IS NULL
-`
-
-type GetUserMinorFlagsRow struct {
-	UserID pgtype.UUID
-	Minor  pgtype.Bool
-}
-
-// 18 yaş altı bayrağı (ADR-0012). Satır yoksa ya da bayrak bilinmiyorsa
-// (NULL) app katmanı küçük sayar.
-func (q *Queries) GetUserMinorFlags(ctx context.Context, userIds []pgtype.UUID) ([]GetUserMinorFlagsRow, error) {
-	rows, err := q.db.Query(ctx, getUserMinorFlags, userIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GetUserMinorFlagsRow{}
-	for rows.Next() {
-		var i GetUserMinorFlagsRow
-		if err := rows.Scan(&i.UserID, &i.Minor); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listOpenTayfaReports = `-- name: ListOpenTayfaReports :many
 SELECT id, tayfa_id, target_type, target_id, subject_user_id, reason, description, status, resolution,
-       handled_by, handled_at, priority, (escalated_to_platform_at IS NOT NULL)::boolean AS escalated, created_at
+       handled_by, handled_at, created_at
 FROM reports
 WHERE tayfa_id = $1 AND status = 'open' AND NOT platform_only
   AND subject_user_id IS DISTINCT FROM $2::uuid
-  AND (NOT $3::boolean
-       OR (priority = 'minor_involved')::int < $4::int
-       OR ((priority = 'minor_involved')::int = $4::int
-           AND (created_at, id) > ($5::timestamptz, $6::uuid)))
-ORDER BY (priority = 'minor_involved') DESC, created_at, id
-LIMIT $7
+  AND (NOT $3::boolean OR (created_at, id) > ($4::timestamptz, $5::uuid))
+ORDER BY created_at, id
+LIMIT $6
 `
 
 type ListOpenTayfaReportsParams struct {
 	TayfaID        pgtype.UUID
 	ViewerID       pgtype.UUID
 	HasCursor      bool
-	AfterUrgent    int32
 	AfterCreatedAt pgtype.Timestamptz
 	AfterID        pgtype.UUID
 	PageSize       int32
@@ -516,20 +479,18 @@ type ListOpenTayfaReportsRow struct {
 	Resolution    pgtype.Text
 	HandledBy     pgtype.UUID
 	HandledAt     pgtype.Timestamptz
-	Priority      string
-	Escalated     bool
 	CreatedAt     pgtype.Timestamptz
 }
 
 // Kuyruk: tayfanın açık şikâyetleri; platforma özel olanlar ve izleyicinin
-// kendisi hakkındakiler hariç. Öncelikliler (minor_involved) önce, sonra
-// eskiden yeniye. reporter_id seçilmez.
+// kendisi hakkındakiler hariç. Eskiden yeniye. reporter_id, priority ve
+// yükselme bilgisi seçilmez (ADR-0012: tayfa yöneticileri 18 altı bilgisini
+// görmez; yükselme zamanı önceliği ele verirdi).
 func (q *Queries) ListOpenTayfaReports(ctx context.Context, arg ListOpenTayfaReportsParams) ([]ListOpenTayfaReportsRow, error) {
 	rows, err := q.db.Query(ctx, listOpenTayfaReports,
 		arg.TayfaID,
 		arg.ViewerID,
 		arg.HasCursor,
-		arg.AfterUrgent,
 		arg.AfterCreatedAt,
 		arg.AfterID,
 		arg.PageSize,
@@ -553,8 +514,6 @@ func (q *Queries) ListOpenTayfaReports(ctx context.Context, arg ListOpenTayfaRep
 			&i.Resolution,
 			&i.HandledBy,
 			&i.HandledAt,
-			&i.Priority,
-			&i.Escalated,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -637,7 +596,7 @@ func (q *Queries) ListReportsOfReporter(ctx context.Context, arg ListReportsOfRe
 
 const listResolvedTayfaReports = `-- name: ListResolvedTayfaReports :many
 SELECT id, tayfa_id, target_type, target_id, subject_user_id, reason, description, status, resolution,
-       handled_by, handled_at, priority, (escalated_to_platform_at IS NOT NULL)::boolean AS escalated, created_at
+       handled_by, handled_at, created_at
 FROM reports
 WHERE tayfa_id = $1 AND status = 'resolved' AND NOT platform_only
   AND subject_user_id IS DISTINCT FROM $2::uuid
@@ -667,8 +626,6 @@ type ListResolvedTayfaReportsRow struct {
 	Resolution    pgtype.Text
 	HandledBy     pgtype.UUID
 	HandledAt     pgtype.Timestamptz
-	Priority      string
-	Escalated     bool
 	CreatedAt     pgtype.Timestamptz
 }
 
@@ -701,8 +658,6 @@ func (q *Queries) ListResolvedTayfaReports(ctx context.Context, arg ListResolved
 			&i.Resolution,
 			&i.HandledBy,
 			&i.HandledAt,
-			&i.Priority,
-			&i.Escalated,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -717,7 +672,7 @@ func (q *Queries) ListResolvedTayfaReports(ctx context.Context, arg ListResolved
 
 const lockTayfaReport = `-- name: LockTayfaReport :one
 SELECT id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, status,
-       resolution, handled_by, handled_at, priority, (escalated_to_platform_at IS NOT NULL)::boolean AS escalated, created_at
+       resolution, handled_by, handled_at, created_at
 FROM reports
 WHERE tayfa_id = $1 AND id = $2 AND NOT platform_only
   AND subject_user_id IS DISTINCT FROM $3::uuid
@@ -743,8 +698,6 @@ type LockTayfaReportRow struct {
 	Resolution    pgtype.Text
 	HandledBy     pgtype.UUID
 	HandledAt     pgtype.Timestamptz
-	Priority      string
-	Escalated     bool
 	CreatedAt     pgtype.Timestamptz
 }
 
@@ -766,8 +719,6 @@ func (q *Queries) LockTayfaReport(ctx context.Context, arg LockTayfaReportParams
 		&i.Resolution,
 		&i.HandledBy,
 		&i.HandledAt,
-		&i.Priority,
-		&i.Escalated,
 		&i.CreatedAt,
 	)
 	return i, err

@@ -58,14 +58,6 @@ message UserProfileUpdated {
   // UNSPECIFIED in events written before the field existed: core keeps the
   // copy's current setting (default TAYFA).
   ActivityVisibility activity_visibility = 3;
-  // Whether the user is under 18 today (ADR-0012, issue #76): a derived
-  // yes/no, never the birth date or the age. core uses it only to put a
-  // report first (reports.priority) and never returns it. Absent in events
-  // written before the field existed: core treats the user as a minor when
-  // ordering reports until identity tells otherwise (the safe side).
-  // identity sends a new profile_updated when the answer changes (18th
-  // birthday).
-  optional bool minor = 4;
 }
 
 // ActivityVisibility is who sees a user's attendance history (identity's

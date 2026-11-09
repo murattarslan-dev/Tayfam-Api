@@ -22,13 +22,18 @@
 //     notification has no actor.
 //   - The platform panel (a separate issue) will read reporter_id.
 //
-// Priority (ADR-0012): MinorInvolved when the reporter or the reported
-// person (the content's author) is under 18 according to core's profile
-// copy (user_profiles.minor, carried by identity's user.profile_updated as
-// a yes/no). A missing or unknown flag counts as under 18: a report never
-// loses its priority because identity has not told core yet. The priority
-// is decided when the report is filed and never changes (reports_guard).
-// Nobody's age is ever stored, returned or logged.
+// Priority (ADR-0012 "Şikâyetlerde yaş önceliği"): when a report is filed,
+// core asks identity's IsMinor (MinorChecker) about the reporter and the
+// reported person (the content's author). MinorInvolved when either is
+// under 18, identity does not know them, or identity cannot be reached: a
+// report never loses its priority to an identity outage. The call is made
+// before the write transaction, so no lock is held while waiting. The
+// priority is decided then and never changes (reports_guard); the answer
+// itself is not kept, and nobody's age is ever stored, returned or logged.
+//
+// The priority is for the platform only. Tayfa admins and moderators never
+// learn that a party is under 18 (ADR-0012): the queue (ModView) carries
+// no priority and no escalation flag, and is ordered by time only.
 //
 // Escalation to the platform (v14 "Platforma yükselen şikâyetler"): at once
 // for reports about the tayfa itself and about staff conduct (those go to
@@ -208,10 +213,18 @@ const (
 
 const subjectType = "report"
 
+// MinorChecker answers whether users are under 18 (identity's IsMinor,
+// package identityminor). Users missing from the answer are unknown.
+type MinorChecker interface {
+	IsMinor(ctx context.Context, users []id.ID) (map[id.ID]bool, error)
+}
+
 // Config wires a Service.
 type Config struct {
 	Pool *pgxpool.Pool
-	Now  func() time.Time
+	// Minors is required. An error from it counts as "under 18".
+	Minors MinorChecker
+	Now    func() time.Time
 }
 
 // Service implements ReportService's business logic.
@@ -222,7 +235,7 @@ type Service struct {
 
 // New returns a Service.
 func New(cfg Config) (*Service, error) {
-	if cfg.Pool == nil {
+	if cfg.Pool == nil || cfg.Minors == nil {
 		return nil, errors.New("report: eksik yapılandırma")
 	}
 	if cfg.Now == nil {
@@ -249,7 +262,8 @@ type MyView struct {
 }
 
 // ModView is a report as the tayfa's moderators see it. It deliberately has
-// no reporter field (see the package comment); a test keeps it that way.
+// no reporter, priority or escalation field (see the package comment); a
+// test keeps it that way.
 type ModView struct {
 	ID         id.ID
 	TayfaID    id.ID
@@ -260,11 +274,9 @@ type ModView struct {
 	SubjectID   id.ID
 	Reason      Reason
 	Description string
-	Priority    Priority
 	Status      Status
 	Resolution  Resolution // empty while open
 	HandledBy   id.ID      // zero while open or when the account was deleted
-	Escalated   bool
 	CreatedAt   time.Time
 	ResolvedAt  time.Time
 }
@@ -296,34 +308,29 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in CreateInput)
 	}
 
 	now := s.now()
+	// First pass, without locks: who is reported, so identity can be asked
+	// before the write transaction (no lock is held while waiting).
+	prev, subject, err := s.prepare(ctx, s.q, user, tayfa, in.TargetType, target, now, false)
+	if err != nil || prev != nil {
+		if prev != nil {
+			return *prev, false, nil
+		}
+		return MyView{}, false, err
+	}
+	minor := s.minorInvolved(ctx, user, subject)
+
 	err = txn.WithActor(ctx, s.cfg.Pool, user, func(_ pgx.Tx, q *store.Queries) error {
-		// Reading only: reports work on read-only tayfas, and a muted member
-		// may report (authz.allowedWhileMuted).
-		_, m, err := access.Load(ctx, q, tayfa, user, true)
-		if err != nil {
+		prev, again, err := s.prepare(ctx, q, user, tayfa, in.TargetType, target, now, true)
+		if err != nil || prev != nil {
+			if prev != nil {
+				v = *prev
+			}
 			return err
 		}
-		if err := access.Authorize(m, authz.ReportCreate, now); err != nil {
-			return err
-		}
-		if prev, found, err := mine(ctx, q, user, in.TargetType, target); err != nil || found {
-			v = prev
-			return err
-		}
-		n, err := q.CountRecentReportsByReporter(ctx, store.CountRecentReportsByReporterParams{ReporterID: user.PG(), Since: ts(now.Add(-24 * time.Hour))})
-		if err != nil {
-			return fmt.Errorf("şikâyet sayısı: %w", err)
-		}
-		if n >= DailyLimit {
-			return apperr.ErrReportLimit
-		}
-		subject, err := s.subjectOf(ctx, q, tayfa, user, in.TargetType, target)
-		if err != nil {
-			return err
-		}
-		minor, err := minorInvolved(ctx, q, user, subject)
-		if err != nil {
-			return err
+		if again != subject {
+			// The author's account went away in between: the answer was
+			// about someone else, so take the safe side.
+			subject, minor = again, true
 		}
 
 		p := store.CreateReportParams{
@@ -381,6 +388,36 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in CreateInput)
 		return MyView{}, false, err
 	}
 	return v, created, nil
+}
+
+// prepare checks the caller and the target. It returns the caller's earlier
+// report about the target if there is one, otherwise the reported person.
+// Writes pass lock = true inside the transaction.
+func (s *Service) prepare(ctx context.Context, q *store.Queries, user, tayfa id.ID, t TargetType, target id.ID, now time.Time, lock bool) (*MyView, id.ID, error) {
+	// Reports work on read-only tayfas, and a muted member may report
+	// (authz.allowedWhileMuted).
+	_, m, err := access.Load(ctx, q, tayfa, user, lock)
+	if err != nil {
+		return nil, id.ID{}, err
+	}
+	if err := access.Authorize(m, authz.ReportCreate, now); err != nil {
+		return nil, id.ID{}, err
+	}
+	if prev, found, err := mine(ctx, q, user, t, target); err != nil || found {
+		if found {
+			return &prev, id.ID{}, nil
+		}
+		return nil, id.ID{}, err
+	}
+	n, err := q.CountRecentReportsByReporter(ctx, store.CountRecentReportsByReporterParams{ReporterID: user.PG(), Since: ts(now.Add(-24 * time.Hour))})
+	if err != nil {
+		return nil, id.ID{}, fmt.Errorf("şikâyet sayısı: %w", err)
+	}
+	if n >= DailyLimit {
+		return nil, id.ID{}, apperr.ErrReportLimit
+	}
+	subject, err := s.subjectOf(ctx, q, tayfa, user, t, target)
+	return nil, subject, err
 }
 
 // escalationAtCreate returns why a new report goes to the platform at once,
@@ -517,33 +554,24 @@ func lookup(ctx context.Context, q *store.Queries, tayfa id.ID, t TargetType, ta
 	return c, nil
 }
 
-// minorInvolved reports whether the reporter or the subject is under 18,
-// or not known to be adult (ADR-0012: the safe side).
-func minorInvolved(ctx context.Context, q *store.Queries, reporter, subject id.ID) (bool, error) {
+// minorInvolved asks identity whether the reporter or the subject is under
+// 18. Unknown users and any failure count as "under 18" (ADR-0012: the safe
+// side). The answer is not logged or kept.
+func (s *Service) minorInvolved(ctx context.Context, reporter, subject id.ID) bool {
 	parties := []id.ID{reporter}
 	if subject != (id.ID{}) {
 		parties = append(parties, subject)
 	}
-	in := make([]pgtype.UUID, len(parties))
-	for i, u := range parties {
-		in[i] = u.PG()
-	}
-	rows, err := q.GetUserMinorFlags(ctx, in)
+	answers, err := s.cfg.Minors.IsMinor(ctx, parties)
 	if err != nil {
-		return false, fmt.Errorf("profil kopyası: %w", err)
-	}
-	adult := map[id.ID]bool{}
-	for _, r := range rows {
-		if r.Minor.Valid && !r.Minor.Bool {
-			adult[id.ID(r.UserID.Bytes)] = true
-		}
+		return true
 	}
 	for _, u := range parties {
-		if !adult[u] {
-			return true, nil
+		if minor, known := answers[u]; !known || minor {
+			return true
 		}
 	}
-	return false, nil
+	return false
 }
 
 // Resolve closes an open report of tayfa's queue with resolution r.
@@ -612,7 +640,7 @@ func (s *Service) Resolve(ctx context.Context, user, tayfa, report id.ID, r Reso
 			ID: row.ID, TayfaID: row.TayfaID, TargetType: row.TargetType, TargetID: row.TargetID,
 			SubjectUserID: row.SubjectUserID, Reason: row.Reason, Description: row.Description,
 			Status: string(StatusResolved), Resolution: pgtype.Text{String: string(r), Valid: true},
-			HandledBy: user.PG(), HandledAt: ts(now), Priority: row.Priority, Escalated: row.Escalated, CreatedAt: row.CreatedAt,
+			HandledBy: user.PG(), HandledAt: ts(now), CreatedAt: row.CreatedAt,
 		})
 
 		ref := txn.Target{Type: subjectType, ID: report}
@@ -725,8 +753,8 @@ func modView(r store.ListOpenTayfaReportsRow) ModView {
 	v := ModView{
 		ID: id.ID(r.ID.Bytes), TayfaID: id.ID(r.TayfaID.Bytes), TargetType: TargetType(r.TargetType),
 		TargetID: id.ID(r.TargetID.Bytes), SubjectID: pgID(r.SubjectUserID), Reason: Reason(r.Reason),
-		Description: r.Description.String, Priority: Priority(r.Priority), Status: Status(r.Status),
-		Resolution: Resolution(r.Resolution.String), HandledBy: pgID(r.HandledBy), Escalated: r.Escalated,
+		Description: r.Description.String, Status: Status(r.Status),
+		Resolution: Resolution(r.Resolution.String), HandledBy: pgID(r.HandledBy),
 		CreatedAt: r.CreatedAt.Time.UTC(),
 	}
 	if r.HandledAt.Valid {

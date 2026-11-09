@@ -24,18 +24,9 @@ VALUES (@user_id, @source_event_id, now())
 ON CONFLICT (user_id) DO UPDATE
 SET display_name = NULL,
     avatar_upload_id = NULL,
-    minor = NULL,
     deleted_at = COALESCE(user_profiles.deleted_at, now()),
     source_event_id = GREATEST(user_profiles.source_event_id, EXCLUDED.source_event_id),
     updated_at = now();
-
--- 18 yaş altı bayrağı (ADR-0012, issue #76). Yalnızca kopyaya bu olay
--- uygulandıysa (source_event_id aynı) yazılır: arada daha yeni bir olay
--- uygulandıysa onunki geçerlidir. Silinmiş profile yazılmaz.
--- name: SetUserProfileMinor :execrows
-UPDATE user_profiles
-SET minor = @minor
-WHERE user_id = @user_id AND source_event_id = @source_event_id AND deleted_at IS NULL;
 
 -- name: GetUserProfile :one
 SELECT user_id, display_name, avatar_upload_id, source_event_id, deleted_at

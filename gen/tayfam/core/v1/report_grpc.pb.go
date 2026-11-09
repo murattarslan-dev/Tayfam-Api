@@ -53,8 +53,11 @@ const (
 //   - Reports about the tayfa itself and about an admin's or moderator's
 //     conduct (REPORT_REASON_STAFF_CONDUCT) go to the platform only; the
 //     tayfa's queue does not list them.
-//   - The queue shows the priority (REPORT_PRIORITY_MINOR_INVOLVED) but
-//     never anyone's age (v14 "Şikâyet önceliği").
+//   - Tayfa admins and moderators never learn that anyone involved is under
+//     18 (ADR-0012): the queue has no priority, is ordered by time only and
+//     does not say whether the platform has a report (that would give away
+//     the reports escalated at once for MINOR_INVOLVED). The priority is
+//     for the platform only.
 //   - The reporter sees only whether action was taken, not which action
 //     and not who handled it.
 //
@@ -76,9 +79,11 @@ type ReportServiceClient interface {
 	// nothing and returns the first one, in whatever state it is (v14 "Şikâyet
 	// tekrarı"); created is false then. Reports work on read-only tayfas.
 	//
-	// The priority is decided now and never changes: MINOR_INVOLVED when the
-	// reporter or the reported person (the content's author) is under 18,
-	// or when that is not known.
+	// The priority is decided now and never changes (ADR-0012): core asks
+	// identity's IsMinor about the reporter and the reported person (the
+	// content's author); MINOR_INVOLVED when either is under 18 or identity
+	// cannot answer. MINOR_INVOLVED and child safety reports go to the
+	// platform at once. Neither the priority nor anyone's age is returned.
 	//
 	// Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_REPORT_TARGET_NOT_FOUND,
 	// ERROR_REASON_REPORT_LIMIT, ERROR_REASON_VALIDATION.
@@ -89,9 +94,9 @@ type ReportServiceClient interface {
 	// ListMyReports lists the caller's own reports, newest first.
 	ListMyReports(ctx context.Context, in *ListMyReportsRequest, opts ...grpc.CallOption) (*ListMyReportsResponse, error)
 	// ListTayfaReports is the tayfa's moderation queue: moderators and admins
-	// (also while muted). Open reports come with MINOR_INVOLVED first, then
-	// oldest first; resolved ones last handled first. Reports that go to the
-	// platform only, and reports about the caller, are not listed.
+	// (also while muted). Open reports oldest first, resolved ones last
+	// handled first. Reports that go to the platform only, and reports about
+	// the caller, are not listed.
 	//
 	// Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
 	// ERROR_REASON_VALIDATION.
@@ -204,8 +209,11 @@ func (c *reportServiceClient) ResolveReport(ctx context.Context, in *ResolveRepo
 //   - Reports about the tayfa itself and about an admin's or moderator's
 //     conduct (REPORT_REASON_STAFF_CONDUCT) go to the platform only; the
 //     tayfa's queue does not list them.
-//   - The queue shows the priority (REPORT_PRIORITY_MINOR_INVOLVED) but
-//     never anyone's age (v14 "Şikâyet önceliği").
+//   - Tayfa admins and moderators never learn that anyone involved is under
+//     18 (ADR-0012): the queue has no priority, is ordered by time only and
+//     does not say whether the platform has a report (that would give away
+//     the reports escalated at once for MINOR_INVOLVED). The priority is
+//     for the platform only.
 //   - The reporter sees only whether action was taken, not which action
 //     and not who handled it.
 //
@@ -227,9 +235,11 @@ type ReportServiceServer interface {
 	// nothing and returns the first one, in whatever state it is (v14 "Şikâyet
 	// tekrarı"); created is false then. Reports work on read-only tayfas.
 	//
-	// The priority is decided now and never changes: MINOR_INVOLVED when the
-	// reporter or the reported person (the content's author) is under 18,
-	// or when that is not known.
+	// The priority is decided now and never changes (ADR-0012): core asks
+	// identity's IsMinor about the reporter and the reported person (the
+	// content's author); MINOR_INVOLVED when either is under 18 or identity
+	// cannot answer. MINOR_INVOLVED and child safety reports go to the
+	// platform at once. Neither the priority nor anyone's age is returned.
 	//
 	// Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_REPORT_TARGET_NOT_FOUND,
 	// ERROR_REASON_REPORT_LIMIT, ERROR_REASON_VALIDATION.
@@ -240,9 +250,9 @@ type ReportServiceServer interface {
 	// ListMyReports lists the caller's own reports, newest first.
 	ListMyReports(context.Context, *ListMyReportsRequest) (*ListMyReportsResponse, error)
 	// ListTayfaReports is the tayfa's moderation queue: moderators and admins
-	// (also while muted). Open reports come with MINOR_INVOLVED first, then
-	// oldest first; resolved ones last handled first. Reports that go to the
-	// platform only, and reports about the caller, are not listed.
+	// (also while muted). Open reports oldest first, resolved ones last
+	// handled first. Reports that go to the platform only, and reports about
+	// the caller, are not listed.
 	//
 	// Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
 	// ERROR_REASON_VALIDATION.

@@ -38,36 +38,12 @@ func (q *Queries) GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUs
 	return i, err
 }
 
-const setUserProfileMinor = `-- name: SetUserProfileMinor :execrows
-UPDATE user_profiles
-SET minor = $1
-WHERE user_id = $2 AND source_event_id = $3 AND deleted_at IS NULL
-`
-
-type SetUserProfileMinorParams struct {
-	Minor         pgtype.Bool
-	UserID        pgtype.UUID
-	SourceEventID pgtype.UUID
-}
-
-// 18 yaş altı bayrağı (ADR-0012, issue #76). Yalnızca kopyaya bu olay
-// uygulandıysa (source_event_id aynı) yazılır: arada daha yeni bir olay
-// uygulandıysa onunki geçerlidir. Silinmiş profile yazılmaz.
-func (q *Queries) SetUserProfileMinor(ctx context.Context, arg SetUserProfileMinorParams) (int64, error) {
-	result, err := q.db.Exec(ctx, setUserProfileMinor, arg.Minor, arg.UserID, arg.SourceEventID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const tombstoneUserProfile = `-- name: TombstoneUserProfile :exec
 INSERT INTO user_profiles (user_id, source_event_id, deleted_at)
 VALUES ($1, $2, now())
 ON CONFLICT (user_id) DO UPDATE
 SET display_name = NULL,
     avatar_upload_id = NULL,
-    minor = NULL,
     deleted_at = COALESCE(user_profiles.deleted_at, now()),
     source_event_id = GREATEST(user_profiles.source_event_id, EXCLUDED.source_event_id),
     updated_at = now()

@@ -45,12 +45,16 @@ func (f *fakeReports) Resolve(_ context.Context, u, t, r id.ID, res report.Resol
 }
 
 // TestModerationReportHasNoReporter: the queue's contract cannot carry the
-// reporter (issue #76).
+// reporter (issue #76), nor the priority or anything that gives it away
+// (ADR-0012: tayfa admins never learn that a party is under 18).
 func TestModerationReportHasNoReporter(t *testing.T) {
 	fields := (&corev1.ModerationReport{}).ProtoReflect().Descriptor().Fields()
 	for i := range fields.Len() {
-		if f := fields.Get(i); strings.Contains(string(f.Name()), "reporter") {
-			t.Fatalf("ModerationReport.%s", f.Name())
+		n := string(fields.Get(i).Name())
+		for _, banned := range []string{"reporter", "priority", "minor", "escalat", "age", "birth"} {
+			if strings.Contains(n, banned) {
+				t.Fatalf("ModerationReport.%s", n)
+			}
 		}
 	}
 	mine := (&corev1.MyReport{}).ProtoReflect().Descriptor().Fields()
@@ -68,7 +72,7 @@ func TestReportServer(t *testing.T) {
 		mine: report.MyView{ID: rid, TayfaID: tid, TargetType: report.TargetFishingCatch, TargetID: subject, Reason: report.ReasonChildSafety,
 			Status: report.StatusResolved, Outcome: report.OutcomeDismissed, CreatedAt: now, ResolvedAt: now},
 		mod: report.ModView{ID: rid, TayfaID: tid, TargetType: report.TargetUser, TargetID: subject, SubjectID: subject,
-			Reason: report.ReasonStaffConduct, Priority: report.PriorityMinorInvolved, Status: report.StatusOpen, CreatedAt: now},
+			Reason: report.ReasonStaffConduct, Status: report.StatusOpen, CreatedAt: now},
 	}
 	srv := NewReportServer(f, discard)
 
@@ -119,7 +123,7 @@ func TestReportServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	q := list.GetReports()[0]
-	if f.status != report.StatusOpen || list.GetNextPageToken() != "sonraki" || q.GetPriority() != corev1.ReportPriority_REPORT_PRIORITY_MINOR_INVOLVED ||
+	if f.status != report.StatusOpen || list.GetNextPageToken() != "sonraki" ||
 		q.GetSubjectUserId() != subject.String() || q.GetHandledByUserId() != "" || q.GetResolveTime() != nil ||
 		q.GetReason() != corev1.ReportReason_REPORT_REASON_STAFF_CONDUCT {
 		t.Fatalf("kuyruk = %v", list)

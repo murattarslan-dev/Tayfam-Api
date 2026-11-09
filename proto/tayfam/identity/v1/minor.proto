@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package tayfam.identity.v1;
+
+// MinorService answers whether users are under 18 (ADR-0012 "Şikâyetlerde
+// yaş önceliği", issue #76). It is a service-to-service API: no user can
+// call it.
+//
+// Authentication: only a Kubernetes service token (ADR-0013) with audience
+// identity.tayfam.internal from the tayfam-core ServiceAccount is accepted.
+// A user access token is refused (UNAUTHENTICATED); a service token from any
+// other ServiceAccount is PERMISSION_DENIED.
+//
+// The answer is a derived yes/no only. The birth date, the age or anything
+// else about the users never leaves identity, and the caller does not keep
+// the answer: core uses it once, to set a new report's priority.
+service MinorService {
+  // IsMinor answers, for each known user, whether they are under 18 today
+  // (Europe/Istanbul date, as everywhere in identity). Users identity cannot
+  // answer for (unknown, deleted, registration not completed) are left out
+  // of the response; the caller treats them as minors (the safe side).
+  //
+  // Errors: INVALID_ARGUMENT for 0 or more than 10 IDs, or an ID that is
+  // not a UUID (ERROR_REASON_VALIDATION is not used; the request comes from
+  // core, not a client).
+  rpc IsMinor(IsMinorRequest) returns (IsMinorResponse);
+}
+
+message IsMinorRequest {
+  // 1–10 user IDs (UUID). A report needs two: the reporter and the
+  // reported person.
+  repeated string user_ids = 1;
+}
+
+message IsMinorResponse {
+  repeated MinorAnswer answers = 1;
+}
+
+message MinorAnswer {
+  string user_id = 1;
+  bool minor = 2;
+}

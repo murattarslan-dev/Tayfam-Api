@@ -27,8 +27,11 @@ import "google/protobuf/timestamp.proto";
 //   - Reports about the tayfa itself and about an admin's or moderator's
 //     conduct (REPORT_REASON_STAFF_CONDUCT) go to the platform only; the
 //     tayfa's queue does not list them.
-//   - The queue shows the priority (REPORT_PRIORITY_MINOR_INVOLVED) but
-//     never anyone's age (v14 "Şikâyet önceliği").
+//   - Tayfa admins and moderators never learn that anyone involved is under
+//     18 (ADR-0012): the queue has no priority, is ordered by time only and
+//     does not say whether the platform has a report (that would give away
+//     the reports escalated at once for MINOR_INVOLVED). The priority is
+//     for the platform only.
 //   - The reporter sees only whether action was taken, not which action
 //     and not who handled it.
 //
@@ -50,9 +53,11 @@ service ReportService {
   // nothing and returns the first one, in whatever state it is (v14 "Şikâyet
   // tekrarı"); created is false then. Reports work on read-only tayfas.
   //
-  // The priority is decided now and never changes: MINOR_INVOLVED when the
-  // reporter or the reported person (the content's author) is under 18,
-  // or when that is not known.
+  // The priority is decided now and never changes (ADR-0012): core asks
+  // identity's IsMinor about the reporter and the reported person (the
+  // content's author); MINOR_INVOLVED when either is under 18 or identity
+  // cannot answer. MINOR_INVOLVED and child safety reports go to the
+  // platform at once. Neither the priority nor anyone's age is returned.
   //
   // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_REPORT_TARGET_NOT_FOUND,
   // ERROR_REASON_REPORT_LIMIT, ERROR_REASON_VALIDATION.
@@ -66,9 +71,9 @@ service ReportService {
   rpc ListMyReports(ListMyReportsRequest) returns (ListMyReportsResponse);
 
   // ListTayfaReports is the tayfa's moderation queue: moderators and admins
-  // (also while muted). Open reports come with MINOR_INVOLVED first, then
-  // oldest first; resolved ones last handled first. Reports that go to the
-  // platform only, and reports about the caller, are not listed.
+  // (also while muted). Open reports oldest first, resolved ones last
+  // handled first. Reports that go to the platform only, and reports about
+  // the caller, are not listed.
   //
   // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
   // ERROR_REASON_VALIDATION.
@@ -154,14 +159,6 @@ enum ReportResolution {
   REPORT_RESOLUTION_DISMISSED = 3;
 }
 
-enum ReportPriority {
-  REPORT_PRIORITY_UNSPECIFIED = 0;
-  REPORT_PRIORITY_NORMAL = 1;
-  // One of the parties is under 18 (or not known to be adult). Never says
-  // which one, nor anyone's age.
-  REPORT_PRIORITY_MINOR_INVOLVED = 2;
-}
-
 // ReportOutcome is all the reporter learns about a resolution.
 enum ReportOutcome {
   REPORT_OUTCOME_UNSPECIFIED = 0;
@@ -188,7 +185,8 @@ message MyReport {
 }
 
 // ModerationReport is a report as the tayfa's moderators see it. It has no
-// field for the reporter.
+// field for the reporter and none for the priority or the escalation
+// (ADR-0012).
 message ModerationReport {
   string id = 1;
   string tayfa_id = 2;
@@ -199,16 +197,13 @@ message ModerationReport {
   string subject_user_id = 5;
   ReportReason reason = 6;
   string description = 7;
-  ReportPriority priority = 8;
-  ReportStatus status = 9;
+  ReportStatus status = 8;
   // UNSPECIFIED while open.
-  ReportResolution resolution = 10;
+  ReportResolution resolution = 9;
   // Who resolved it; empty while open or when the account was deleted.
-  string handled_by_user_id = 11;
-  // Whether the platform also has the report.
-  bool escalated = 12;
-  google.protobuf.Timestamp create_time = 13;
-  google.protobuf.Timestamp resolve_time = 14;
+  string handled_by_user_id = 10;
+  google.protobuf.Timestamp create_time = 11;
+  google.protobuf.Timestamp resolve_time = 12;
 }
 
 message CreateReportRequest {

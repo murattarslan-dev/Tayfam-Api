@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -29,7 +30,33 @@ import (
 
 var ctx = context.Background()
 
+// fakeMinors stands in for identity's IsMinor: users it was told about,
+// and an outage switch.
+type fakeMinors struct {
+	mu     sync.Mutex
+	minors map[id.ID]bool
+	down   bool
+	calls  int
+}
+
+func (f *fakeMinors) IsMinor(_ context.Context, users []id.ID) (map[id.ID]bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	if f.down {
+		return nil, errors.New("identity kapalı")
+	}
+	out := map[id.ID]bool{}
+	for _, u := range users {
+		if m, ok := f.minors[u]; ok {
+			out[u] = m
+		}
+	}
+	return out, nil
+}
+
 type env struct {
+	minors *fakeMinors
 	svc    *Service
 	tayfas *tayfa.Service
 	ann    *announcement.Service
@@ -40,10 +67,10 @@ type env struct {
 func setup(t *testing.T) *env {
 	t.Helper()
 	pool := dbtest.New(t, coredb.Migrations())
-	e := &env{pool: pool}
+	e := &env{pool: pool, minors: &fakeMinors{minors: map[id.ID]bool{}}}
 	now := func() time.Time { return time.Now().Add(e.shift) }
 	var err error
-	e.svc, err = New(Config{Pool: pool, Now: now})
+	e.svc, err = New(Config{Pool: pool, Minors: e.minors, Now: now})
 	must(t, err)
 	e.tayfas, err = tayfa.New(tayfa.Config{Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	must(t, err)
@@ -152,11 +179,11 @@ func (e *env) ban(t *testing.T, c crew, u id.ID) {
 	})
 }
 
-// profile writes the profile copy with identity's minor flag.
-func (e *env) profile(t *testing.T, u id.ID, minor bool) {
-	t.Helper()
-	e.exec(t, `INSERT INTO user_profiles (user_id, display_name, source_event_id, minor) VALUES ($1, 'Deniz', $2, $3)
-		ON CONFLICT (user_id) DO UPDATE SET minor = EXCLUDED.minor`, u.PG(), id.New().PG(), minor)
+// profile tells the fake identity whether u is under 18.
+func (e *env) profile(_ *testing.T, u id.ID, minor bool) {
+	e.minors.mu.Lock()
+	defer e.minors.mu.Unlock()
+	e.minors.minors[u] = minor
 }
 
 func (e *env) exec(t *testing.T, sql string, args ...any) {
@@ -402,7 +429,7 @@ func TestPriorityAndEscalation(t *testing.T) {
 	c := e.crew(t)
 	minor := e.member(t, c, authz.Member)
 	e.profile(t, minor, true)
-	unknown := e.member(t, c, authz.Member) // identity has not told core yet
+	unknown := e.member(t, c, authz.Member) // identity does not know them
 
 	adults := e.report(t, c, c.member, TargetUser, c.member2, ReasonSpam)
 	byMinor := e.report(t, c, minor, TargetUser, c.member2, ReasonSpam)
@@ -410,6 +437,10 @@ func TestPriorityAndEscalation(t *testing.T) {
 	child := e.report(t, c, c.member2, TargetUser, c.member, ReasonChildSafety)
 	aboutTayfa := e.report(t, c, c.member2, TargetTayfa, c.tayfa, ReasonGambling)
 	staff := e.report(t, c, c.member2, TargetUser, c.mod, ReasonStaffConduct)
+	// identity cannot be reached: the safe side (ADR-0012).
+	e.minors.down = true
+	outage := e.report(t, c, c.member2, TargetUser, c.member2Peer(t, e), ReasonSpam)
+	e.minors.down = false
 
 	type row struct {
 		priority, escalation string
@@ -438,6 +469,7 @@ func TestPriorityAndEscalation(t *testing.T) {
 		"çocuk güvenliği":      {child.ID, row{"normal", EscalationChildSafety, false, false}},
 		"tayfa":                {aboutTayfa.ID, row{"normal", EscalationTayfaTarget, false, true}},
 		"yönetici işlemi":      {staff.ID, row{"normal", EscalationStaffConduct, false, true}},
+		"identity kapalı":      {outage.ID, row{"minor_involved", EscalationMinorInvolved, true, false}},
 	} {
 		if got := get(tc.r); got != tc.want {
 			t.Errorf("%s: %+v, %+v bekleniyordu", name, got, tc.want)
@@ -445,17 +477,18 @@ func TestPriorityAndEscalation(t *testing.T) {
 	}
 	// report.created and report.escalated never carry an age or the flag
 	// itself beyond the priority.
-	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'report.escalated'`); n != 5 {
+	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'report.escalated'`); n != 6 {
 		t.Errorf("report.escalated = %d", n)
 	}
 	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type LIKE 'report.%' AND (payload ? 'minor' OR payload ? 'age' OR payload ? 'birth_date')`); n != 0 {
 		t.Error("olayda yaş bilgisi")
 	}
 
-	// Queue: platform-only reports are not listed; MinorInvolved first, then
-	// oldest first; the priority is shown, nobody's age.
+	// Queue: platform-only reports are not listed, and the priority leaks in
+	// no form (ADR-0012): oldest first whatever the priority, and the view
+	// has no priority or escalation field (TestQueueHidesPriority).
 	got := ids(e.queue(t, c, c.admin, StatusOpen))
-	want := []id.ID{byMinor.ID, aboutUnknown.ID, adults.ID, child.ID}
+	want := []id.ID{adults.ID, byMinor.ID, aboutUnknown.ID, child.ID, outage.ID}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("kuyruk sırası = %v, %v bekleniyordu", got, want)
 	}
@@ -582,8 +615,8 @@ func TestPaging(t *testing.T) {
 	}
 	minor := e.member(t, c, authz.Member)
 	e.profile(t, minor, true)
-	first := e.report(t, c, c.member2, TargetUser, minor, ReasonSpam).ID
-	want := append([]id.ID{first}, all...)
+	last := e.report(t, c, c.member2, TargetUser, minor, ReasonSpam).ID
+	want := append(all, last) // by time only, never by priority
 
 	var got []id.ID
 	token := ""
@@ -661,4 +694,63 @@ func TestOtherContent(t *testing.T) {
 	is(t, "kapalı anket modülü", err, apperr.ErrReportTargetNotFound)
 	_, err = e.svc.Resolve(ctx, c.mod, c.tayfa, rp.ID, ResolutionContentRemoved)
 	is(t, "görünür anket", err, apperr.ErrReportActionMissing)
+}
+
+// member2Peer adds another known adult member to report.
+func (c crew) member2Peer(t *testing.T, e *env) id.ID {
+	t.Helper()
+	u := e.member(t, c, authz.Member)
+	e.profile(t, u, false)
+	return u
+}
+
+// TestQueueHidesPriority pins ADR-0012 ("Yaş ve 18 yaş altı bilgisi tayfa
+// yöneticilerine ve moderatörlerine gösterilmez"): whether a report
+// involves a minor shows in no form in the tayfa's queue. Two reports that
+// differ only in that come out identical apart from IDs and times, in the
+// order they were filed.
+func TestQueueHidesPriority(t *testing.T) {
+	typ := reflect.TypeFor[ModView]()
+	for i := range typ.NumField() {
+		n := strings.ToLower(typ.Field(i).Name)
+		for _, banned := range []string{"priority", "minor", "escalat", "age", "birth"} {
+			if strings.Contains(n, banned) {
+				t.Fatalf("ModView.%s", typ.Field(i).Name)
+			}
+		}
+	}
+
+	e := setup(t)
+	c := e.crew(t)
+	minor := e.member(t, c, authz.Member)
+	e.profile(t, minor, true)
+	adult := e.member(t, c, authz.Member)
+	e.profile(t, adult, false)
+	normal := e.report(t, c, c.member, TargetUser, adult, ReasonSpam)
+	urgent := e.report(t, c, c.member, TargetUser, minor, ReasonSpam)
+
+	q := e.queue(t, c, c.admin, StatusOpen)
+	if len(q) != 2 || q[0].ID != normal.ID || q[1].ID != urgent.ID {
+		t.Fatalf("kuyruk = %+v", q)
+	}
+	strip := func(v ModView) ModView {
+		v.ID, v.TargetID, v.SubjectID, v.CreatedAt = id.ID{}, id.ID{}, id.ID{}, time.Time{}
+		return v
+	}
+	if strip(q[0]) != strip(q[1]) {
+		t.Fatalf("öncelik görünümde fark yaratıyor:\n%+v\n%+v", q[0], q[1])
+	}
+	// Resolving shows nothing either.
+	r, err := e.svc.Resolve(ctx, c.admin, c.tayfa, urgent.ID, ResolutionDismissed)
+	must(t, err)
+	n, err := e.svc.Resolve(ctx, c.admin, c.tayfa, normal.ID, ResolutionDismissed)
+	must(t, err)
+	r.ResolvedAt, n.ResolvedAt = time.Time{}, time.Time{}
+	if strip(r) != strip(n) {
+		t.Fatalf("çözümde öncelik farkı:\n%+v\n%+v", r, n)
+	}
+	// It is still recorded for the platform.
+	if n := e.count(t, `SELECT count(*) FROM reports WHERE id = $1 AND priority = 'minor_involved' AND escalated_to_platform_at IS NOT NULL`, urgent.ID.PG()); n != 1 {
+		t.Fatal("öncelik platform için yazılmadı")
+	}
 }

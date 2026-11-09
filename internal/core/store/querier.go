@@ -293,9 +293,6 @@ type Querier interface {
 	// Yazan işlemler tayfa satırını kilitleyerek okur; memberships trigger'ı da
 	// aynı satırı kilitlediği için üyelik değişiklikleriyle sırayla çalışır.
 	GetTayfaForUpdate(ctx context.Context, id pgtype.UUID) (GetTayfaForUpdateRow, error)
-	// 18 yaş altı bayrağı (ADR-0012). Satır yoksa ya da bayrak bilinmiyorsa
-	// (NULL) app katmanı küçük sayar.
-	GetUserMinorFlags(ctx context.Context, userIds []pgtype.UUID) ([]GetUserMinorFlagsRow, error)
 	GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUserProfileRow, error)
 	HasMutualTayfa(ctx context.Context, arg HasMutualTayfaParams) (bool, error)
 	// Moderatör/yönetici silmesi: içerik gizlenir, geri alınabilir.
@@ -394,8 +391,9 @@ type Querier interface {
 	// Yönetici ve moderatörler (başvuru, silme talebi).
 	ListNotifyStaff(ctx context.Context, arg ListNotifyStaffParams) ([]pgtype.UUID, error)
 	// Kuyruk: tayfanın açık şikâyetleri; platforma özel olanlar ve izleyicinin
-	// kendisi hakkındakiler hariç. Öncelikliler (minor_involved) önce, sonra
-	// eskiden yeniye. reporter_id seçilmez.
+	// kendisi hakkındakiler hariç. Eskiden yeniye. reporter_id, priority ve
+	// yükselme bilgisi seçilmez (ADR-0012: tayfa yöneticileri 18 altı bilgisini
+	// görmez; yükselme zamanı önceliği ele verirdi).
 	ListOpenTayfaReports(ctx context.Context, arg ListOpenTayfaReportsParams) ([]ListOpenTayfaReportsRow, error)
 	// Yalnızca çağıranın kendi oyları.
 	ListOwnPollVotes(ctx context.Context, arg ListOwnPollVotesParams) ([]ListOwnPollVotesRow, error)
@@ -557,10 +555,6 @@ type Querier interface {
 	SetSystemJob(ctx context.Context, job string) error
 	SetTayfaJoinCode(ctx context.Context, arg SetTayfaJoinCodeParams) (int64, error)
 	SetTayfaModule(ctx context.Context, arg SetTayfaModuleParams) error
-	// 18 yaş altı bayrağı (ADR-0012, issue #76). Yalnızca kopyaya bu olay
-	// uygulandıysa (source_event_id aynı) yazılır: arada daha yeni bir olay
-	// uygulandıysa onunki geçerlidir. Silinmiş profile yazılmaz.
-	SetUserProfileMinor(ctx context.Context, arg SetUserProfileMinorParams) (int64, error)
 	// ---------------------------------------------------------------------------
 	// 72 saatlik tayfa silme (v14 "Tayfa silmede bekleme")
 	// ---------------------------------------------------------------------------

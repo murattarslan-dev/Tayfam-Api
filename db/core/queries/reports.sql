@@ -42,13 +42,6 @@ FROM fishing_catches c
 JOIN events e ON e.id = c.event_id
 WHERE e.tayfa_id = @tayfa_id AND c.id = @id;
 
--- 18 yaş altı bayrağı (ADR-0012). Satır yoksa ya da bayrak bilinmiyorsa
--- (NULL) app katmanı küçük sayar.
--- name: GetUserMinorFlags :many
-SELECT user_id, minor
-FROM user_profiles
-WHERE user_id = ANY(@user_ids::uuid[]) AND deleted_at IS NULL;
-
 -- Şikâyet edenin son 24 saatteki şikâyetleri (günlük sınır).
 -- name: CountRecentReportsByReporter :one
 SELECT count(*)::integer
@@ -88,25 +81,23 @@ ORDER BY created_at DESC, id DESC
 LIMIT @page_size;
 
 -- Kuyruk: tayfanın açık şikâyetleri; platforma özel olanlar ve izleyicinin
--- kendisi hakkındakiler hariç. Öncelikliler (minor_involved) önce, sonra
--- eskiden yeniye. reporter_id seçilmez.
+-- kendisi hakkındakiler hariç. Eskiden yeniye. reporter_id, priority ve
+-- yükselme bilgisi seçilmez (ADR-0012: tayfa yöneticileri 18 altı bilgisini
+-- görmez; yükselme zamanı önceliği ele verirdi).
 -- name: ListOpenTayfaReports :many
 SELECT id, tayfa_id, target_type, target_id, subject_user_id, reason, description, status, resolution,
-       handled_by, handled_at, priority, (escalated_to_platform_at IS NOT NULL)::boolean AS escalated, created_at
+       handled_by, handled_at, created_at
 FROM reports
 WHERE tayfa_id = @tayfa_id AND status = 'open' AND NOT platform_only
   AND subject_user_id IS DISTINCT FROM @viewer_id::uuid
-  AND (NOT @has_cursor::boolean
-       OR (priority = 'minor_involved')::int < @after_urgent::int
-       OR ((priority = 'minor_involved')::int = @after_urgent::int
-           AND (created_at, id) > (@after_created_at::timestamptz, @after_id::uuid)))
-ORDER BY (priority = 'minor_involved') DESC, created_at, id
+  AND (NOT @has_cursor::boolean OR (created_at, id) > (@after_created_at::timestamptz, @after_id::uuid))
+ORDER BY created_at, id
 LIMIT @page_size;
 
 -- Çözülmüşler, son çözülen önce.
 -- name: ListResolvedTayfaReports :many
 SELECT id, tayfa_id, target_type, target_id, subject_user_id, reason, description, status, resolution,
-       handled_by, handled_at, priority, (escalated_to_platform_at IS NOT NULL)::boolean AS escalated, created_at
+       handled_by, handled_at, created_at
 FROM reports
 WHERE tayfa_id = @tayfa_id AND status = 'resolved' AND NOT platform_only
   AND subject_user_id IS DISTINCT FROM @viewer_id::uuid
@@ -118,7 +109,7 @@ LIMIT @page_size;
 -- izleyicinin kendisi hakkındaki şikâyet bulunamaz).
 -- name: LockTayfaReport :one
 SELECT id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, status,
-       resolution, handled_by, handled_at, priority, (escalated_to_platform_at IS NOT NULL)::boolean AS escalated, created_at
+       resolution, handled_by, handled_at, created_at
 FROM reports
 WHERE tayfa_id = @tayfa_id AND id = @id AND NOT platform_only
   AND subject_user_id IS DISTINCT FROM @viewer_id::uuid

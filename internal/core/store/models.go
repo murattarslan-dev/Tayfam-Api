@@ -417,5 +417,4 @@ type UserProfile struct {
 	DeletedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	ActivityVisibility string
-	Minor              pgtype.Bool
 }
