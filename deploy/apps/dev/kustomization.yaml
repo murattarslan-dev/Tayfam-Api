@@ -25,6 +25,9 @@ configMapGenerator:
       - SHUTDOWN_DRAIN_DELAY=5s
       - AUTH_ISSUER=tayfam-identity
       - AUTH_AUDIENCE=tayfam-api
+      # Servis token'larının issuer'ı (ADR-0013): k3s'in varsayılan
+      # service-account-issuer değeri. Prod VPS'te kendi cluster'ının değeri.
+      - SERVICE_TOKEN_ISSUER=https://kubernetes.default.svc.cluster.local
       # gateway: istekler yalnızca cloudflared'den gelir (NetworkPolicy), bu
       # yüzden Cloudflare'in istemci IP başlığına güvenilir.
       - TRUST_CF_CONNECTING_IP=true

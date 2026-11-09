@@ -13,6 +13,7 @@ import (
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/userevents"
 	grpcapi "github.com/murattarslan-dev/tayfam-api/internal/core/transport/grpc"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db"
@@ -62,11 +63,35 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 
-	// Guard'a açık metod verilmez: her metod kullanıcının erişim token'ını
-	// ister (ADR-0011).
-	srv := rt.NewGRPCServer(auth.NewGuard(v).ServerOptions()...)
+	userEvents, err := userevents.New(userevents.Config{Pool: pool, Log: rt.Log})
+	if err != nil {
+		return err
+	}
+
+	// Kullanıcısız servis çağrıları (ADR-0013): UserEventService'in her
+	// metodu yalnızca servis token'ı kabul eder; ApplyUserEvent'i yalnızca
+	// identity'nin ServiceAccount'u çağırabilir. Yerelde (cluster yok)
+	// doğrulayıcı yoksa bu metodlar kapalıdır.
+	si, err := rt.ServiceIdentity()
+	if err != nil {
+		return err
+	}
+	policy := auth.ServicePolicy{Verifier: si.Verifier, Services: []string{grpcapi.UserEventServiceName}}
+	if si.Verifier != nil {
+		policy.Callers = map[string][]auth.ServiceAccount{
+			corev1.UserEventService_ApplyUserEvent_FullMethodName: {si.Account("tayfam-identity")},
+		}
+	}
+	// Guard'a açık metod verilmez: kullanıcı metodları kullanıcının erişim
+	// token'ını ister (ADR-0011).
+	guard, err := auth.NewGuard(v).WithServices(policy)
+	if err != nil {
+		return err
+	}
+	srv := rt.NewGRPCServer(guard.ServerOptions()...)
 	corev1.RegisterTayfaServiceServer(srv, grpcapi.NewTayfaServer(tayfas, rt.Log))
 	corev1.RegisterMembershipServiceServer(srv, grpcapi.NewMembershipServer(memberships, rt.Log))
+	corev1.RegisterUserEventServiceServer(srv, grpcapi.NewUserEventServer(userEvents, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
 	return nil
 }
