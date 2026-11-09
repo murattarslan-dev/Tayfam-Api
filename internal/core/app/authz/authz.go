@@ -179,6 +179,20 @@ const (
 	// AnswerVote adds and takes back one's own helpful vote.
 	AnswerVote
 	TagDelete
+	// Polls (issue #60). The poll module switch is checked by the caller.
+	PollView
+	PollCreate
+	PollVote
+	// PollViewVoters lists who voted for an option of an open (not
+	// anonymous) poll. Anonymous polls never answer it, whatever the role.
+	PollViewVoters
+	// PollCloseOwn and PollDeleteOwn are for the poll's creator (the caller
+	// checks that the poll is theirs); the Any actions are for every poll
+	// of the tayfa, above the creator's current role (CanActOnContent).
+	PollCloseOwn
+	PollCloseAny
+	PollDeleteOwn
+	PollDeleteAny
 
 	actionEnd // sentinel; keep last
 )
@@ -237,6 +251,14 @@ var actionNames = [...]string{
 	AnswerRestore:        "answer.restore",
 	AnswerVote:           "answer.vote",
 	TagDelete:            "tag.delete",
+	PollView:             "poll.view",
+	PollCreate:           "poll.create",
+	PollVote:             "poll.vote",
+	PollViewVoters:       "poll.view_voters",
+	PollCloseOwn:         "poll.close_own",
+	PollCloseAny:         "poll.close_any",
+	PollDeleteOwn:        "poll.delete_own",
+	PollDeleteAny:        "poll.delete_any",
 	actionEnd:            "",
 }
 
@@ -282,6 +304,14 @@ var permissions = map[Action]Role{
 	AnswerEditOwn:     Member,
 	AnswerDeleteOwn:   Member,
 	AnswerVote:        Member,
+	// Polls (issue #60, v14 "Anket (MVP)"): every active member creates
+	// polls and votes; the creator closes and deletes their own poll.
+	PollView:       Member,
+	PollCreate:     Member,
+	PollVote:       Member,
+	PollViewVoters: Member,
+	PollCloseOwn:   Member,
+	PollDeleteOwn:  Member,
 
 	// Moderation: moderator and above.
 	// Lowering one's own role; members have nothing to step down to.
@@ -316,6 +346,9 @@ var permissions = map[Action]Role{
 	AnswerEditAny:     Moderator,
 	AnswerDeleteAny:   Moderator,
 	TagDelete:         Moderator,
+	// Closing early and deleting anyone's poll.
+	PollCloseAny:  Moderator,
+	PollDeleteAny: Moderator,
 
 	// Tayfa management: admin only.
 	TayfaUpdateSettings:  Admin,
@@ -358,6 +391,10 @@ var allowedWhileMuted = map[Action]bool{
 	// does not keep a member's text in the tayfa against their will.
 	QuestionDeleteOwn: true,
 	AnswerDeleteOwn:   true,
+	// Reading polls and their open voter lists. Creating and voting are
+	// refused while muted (v14 "Anket (MVP)").
+	PollView:       true,
+	PollViewVoters: true,
 }
 
 // Settings are the tayfa settings that change the permission table. The zero

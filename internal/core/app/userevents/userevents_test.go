@@ -193,6 +193,8 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"questions":                      `SELECT count(*) FROM questions WHERE $1 IN (author_id, deleted_by)`,
 		"answers":                        `SELECT count(*) FROM answers WHERE $1 IN (author_id, deleted_by)`,
 		"answer_votes.user_id":           `SELECT count(*) FROM answer_votes WHERE user_id = $1`,
+		"polls":                          `SELECT count(*) FROM polls WHERE $1 IN (created_by, deleted_by)`,
+		"poll_votes.user_id":             `SELECT count(*) FROM poll_votes WHERE user_id = $1`,
 		"user_profiles (kişisel)":        `SELECT count(*) FROM user_profiles WHERE user_id = $1 AND (display_name IS NOT NULL OR avatar_upload_id IS NOT NULL OR deleted_at IS NULL)`,
 	} {
 		if n := e.count(t, sql, u.PG()); n != 0 {
@@ -278,6 +280,17 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 	e.seed(t, `INSERT INTO event_convoy_vehicles (id, event_id, user_id, make, plate) VALUES ($1, $2, $3, 'Ford', '35 ABC 123')`, id.New().PG(), otherEvent.PG(), u.PG())
 	e.seed(t, `INSERT INTO event_camp_items (id, event_id, name, assigned_user_id, created_by) VALUES ($1, $2, 'Çadır', $3, $3)`, id.New().PG(), campEvent.PG(), u.PG())
 
+	// u's poll stays with an empty creator; u's votes go, other votes stay.
+	// One poll u deleted loses deleted_by.
+	ownPoll, deletedPoll, optA, optB := id.New(), id.New(), id.New(), id.New()
+	e.seed(t, `WITH p AS (INSERT INTO polls (id, tayfa_id, event_id, created_by, question, anonymous) VALUES ($1, $2, $3, $4, 'Hangi hafta sonu?', true) RETURNING id)
+		INSERT INTO poll_options (id, poll_id, text, position) SELECT $5::uuid, id, 'Bu hafta', 0 FROM p UNION ALL SELECT $6::uuid, id, 'Gelecek hafta', 1 FROM p`,
+		ownPoll.PG(), t2.PG(), ownEvent.PG(), u.PG(), optA.PG(), optB.PG())
+	e.seed(t, `WITH p AS (INSERT INTO polls (id, tayfa_id, created_by, question, deleted_at, deleted_by) VALUES ($1, $2, $3, 'Silinen', now(), $4) RETURNING id)
+		INSERT INTO poll_options (id, poll_id, text, position) SELECT $5::uuid, id, 'Evet', 0 FROM p UNION ALL SELECT $6::uuid, id, 'Hayır', 1 FROM p`,
+		deletedPoll.PG(), t2.PG(), other.PG(), u.PG(), id.New().PG(), id.New().PG())
+	e.seed(t, `INSERT INTO poll_votes (poll_id, option_id, user_id) VALUES ($1, $2, $3), ($1, $4, $5)`, ownPoll.PG(), optA.PG(), u.PG(), optB.PG(), other.PG())
+
 	// T3: u's pending application. T4: u is the only member left.
 	t3 := e.tayfa(t, other)
 	e.member(t, t3, other, "admin", "active", t0)
@@ -302,6 +315,12 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 	}
 	if n := e.count(t, `SELECT count(*) FROM answers a WHERE a.vote_count <> (SELECT count(*) FROM answer_votes v WHERE v.answer_id = a.id)`); n != 0 {
 		t.Fatalf("oy sayısı tutarsız: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM polls WHERE id = $1 AND created_by IS NULL AND anonymous`, ownPoll.PG()); n != 1 {
+		t.Fatal("anket silindi ya da açan boşalmadı")
+	}
+	if n := e.count(t, `SELECT count(*) FROM poll_votes WHERE poll_id = $1 AND option_id = $2 AND user_id = $3`, ownPoll.PG(), optB.PG(), other.PG()); n != 1 {
+		t.Fatal("başkasının oyu silindi")
 	}
 	if n := e.count(t, `SELECT count(*) FROM events WHERE id IN ($1, $2, $3)`, ownEvent.PG(), otherEvent.PG(), campEvent.PG()); n != 3 {
 		t.Fatalf("etkinlikler silindi: %d", n)

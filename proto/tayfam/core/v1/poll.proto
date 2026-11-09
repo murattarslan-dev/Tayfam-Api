@@ -1,0 +1,231 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// PollService runs a tayfa's polls (data model v14 "Anket ve Albüm (v12)" →
+// "Anket (MVP)"; issue #60). Only gateway calls it, with the user's access
+// token.
+//
+// Every method needs the caller's access token; there are no open methods.
+// Errors carry a google.rpc.ErrorInfo detail with domain "core.tayfam.app"
+// and a reason from ErrorReason (errors.proto). The common rules, in this
+// order:
+//   - tayfa_id, poll_id, event_id and option IDs are UUID strings; anything
+//     else is ERROR_REASON_VALIDATION.
+//   - A caller who is not an ACTIVE member gets
+//     ERROR_REASON_TAYFA_NOT_FOUND, the same as for an unknown tayfa.
+//   - While the tayfa has MODULE_POLLS turned off, every method, reads
+//     included, fails with ERROR_REASON_MODULE_DISABLED.
+//   - The permission table (ADR-0004) decides the rest:
+//     ERROR_REASON_PERMISSION_DENIED for a role that is too low,
+//     ERROR_REASON_MUTED for a muted member's writes.
+//   - Writes to a read-only tayfa fail with ERROR_REASON_TAYFA_READ_ONLY.
+//   - A poll that does not exist in this tayfa, or was deleted, gets
+//     ERROR_REASON_POLL_NOT_FOUND.
+//
+// Who may do what:
+//   - Every active member reads polls (also while muted), creates polls and
+//     votes. A muted member can neither create nor vote.
+//   - The creator closes and deletes their own poll; moderators and admins
+//     close and delete any poll above the creator's current role
+//     (ERROR_REASON_ROLE_HIERARCHY); a creator who is no longer an active
+//     member has no role.
+//
+// Anonymous polls: who voted for which option never leaves core. No
+// response, to anyone and whatever their role, holds another member's
+// choice: Poll.own_option_ids is always the caller's own vote, and
+// ListPollVoters refuses anonymous polls (ERROR_REASON_POLL_ANONYMOUS).
+// Audit records, events and logs never hold an anonymous poll's option.
+// The server still stores the voter to stop double votes; the client says
+// "other members cannot see your vote", not "fully anonymous".
+// Per-option totals (PollOption.vote_count) are returned for every poll.
+//
+// Paging: page_size 0 means 20; values above 100 are treated as 100;
+// negative values are ERROR_REASON_VALIDATION. page_token is opaque and only
+// valid for the same method and request fields; a bad token is
+// ERROR_REASON_VALIDATION. An empty next_page_token means the last page.
+service PollService {
+  // CreatePoll opens a poll by the caller. With event_id the poll belongs
+  // to that event of the same tayfa; an event that is not visible in this
+  // tayfa gets ERROR_REASON_EVENT_NOT_FOUND.
+  //
+  // Errors: common, ERROR_REASON_EVENT_NOT_FOUND, ERROR_REASON_VALIDATION.
+  rpc CreatePoll(CreatePollRequest) returns (CreatePollResponse);
+
+  // GetPoll returns one poll with totals and the caller's own vote. Works
+  // on read-only tayfas.
+  rpc GetPoll(GetPollRequest) returns (GetPollResponse);
+
+  // ListPolls lists the tayfa's polls, newest first, optionally only those
+  // of one event. Works on read-only tayfas.
+  rpc ListPolls(ListPollsRequest) returns (ListPollsResponse);
+
+  // VotePoll sets the caller's vote to option_ids, replacing any earlier
+  // vote of the caller (the old vote is deleted). A single-choice poll
+  // takes exactly one option, a multiple-choice poll one or more. Setting
+  // the current vote again succeeds and records nothing.
+  //
+  // Errors: common, ERROR_REASON_POLL_CLOSED, ERROR_REASON_VALIDATION
+  // (field "option_ids": empty, repeated, too many, or not an option of
+  // this poll).
+  rpc VotePoll(VotePollRequest) returns (VotePollResponse);
+
+  // WithdrawPollVote removes the caller's vote. Without a vote it succeeds
+  // and records nothing.
+  //
+  // Errors: common, ERROR_REASON_POLL_CLOSED.
+  rpc WithdrawPollVote(WithdrawPollVoteRequest) returns (WithdrawPollVoteResponse);
+
+  // ListPollVoters lists who voted for one option of a poll that is not
+  // anonymous, oldest vote first. Works on read-only tayfas.
+  //
+  // Errors: common, ERROR_REASON_POLL_ANONYMOUS, ERROR_REASON_VALIDATION
+  // (option_id is not an option of this poll).
+  rpc ListPollVoters(ListPollVotersRequest) returns (ListPollVotersResponse);
+
+  // ClosePoll closes a poll before its close_time. Closing a closed poll
+  // succeeds and changes nothing.
+  //
+  // Errors: common, ERROR_REASON_ROLE_HIERARCHY.
+  rpc ClosePoll(ClosePollRequest) returns (ClosePollResponse);
+
+  // DeletePoll deletes a poll and its votes; it cannot be restored.
+  //
+  // Errors: common, ERROR_REASON_ROLE_HIERARCHY.
+  rpc DeletePoll(DeletePollRequest) returns (DeletePollResponse);
+}
+
+message Poll {
+  string id = 1;
+  string tayfa_id = 2;
+  // Empty when the poll is not tied to an event.
+  string event_id = 3;
+  // Empty when the creator's account was deleted.
+  string created_by_user_id = 4;
+  // 1–200 characters.
+  string question = 5;
+  // Other members, admins included, cannot see who voted for what.
+  bool anonymous = 6;
+  bool multiple_choice = 7;
+  // The planned close time; unset when the poll stays open until closed.
+  google.protobuf.Timestamp close_time = 8;
+  // When it was closed early; unset otherwise.
+  google.protobuf.Timestamp closed_time = 9;
+  // True once closed early or past close_time; closed polls take no votes.
+  bool closed = 10;
+  google.protobuf.Timestamp create_time = 11;
+  // In position order.
+  repeated PollOption options = 12;
+  // How many people voted (a person counts once in a multiple-choice poll).
+  int64 voter_count = 13;
+  // The caller's own vote; empty when the caller has not voted. Never
+  // anyone else's.
+  repeated string own_option_ids = 14;
+}
+
+message PollOption {
+  string id = 1;
+  // 1–100 characters.
+  string text = 2;
+  // 0-based order in the poll.
+  int32 position = 3;
+  // Votes for this option.
+  int64 vote_count = 4;
+}
+
+message CreatePollRequest {
+  string tayfa_id = 1;
+  // 1–200 characters after trimming surrounding spaces; no line breaks or
+  // control characters.
+  string question = 2;
+  // 2–10 options, each 1–100 characters after trimming, one line, no two
+  // the same (ignoring case, Turkish rules).
+  repeated string options = 3;
+  bool anonymous = 4;
+  bool multiple_choice = 5;
+  // Optional; in the future, at most 365 days ahead.
+  google.protobuf.Timestamp close_time = 6;
+  // Optional; an event of the same tayfa.
+  string event_id = 7;
+}
+
+message CreatePollResponse {
+  Poll poll = 1;
+}
+
+message GetPollRequest {
+  string tayfa_id = 1;
+  string poll_id = 2;
+}
+
+message GetPollResponse {
+  Poll poll = 1;
+}
+
+message ListPollsRequest {
+  string tayfa_id = 1;
+  // Optional: only the polls of this event.
+  string event_id = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListPollsResponse {
+  repeated Poll polls = 1;
+  string next_page_token = 2;
+}
+
+message VotePollRequest {
+  string tayfa_id = 1;
+  string poll_id = 2;
+  repeated string option_ids = 3;
+}
+
+message VotePollResponse {
+  Poll poll = 1;
+}
+
+message WithdrawPollVoteRequest {
+  string tayfa_id = 1;
+  string poll_id = 2;
+}
+
+message WithdrawPollVoteResponse {
+  Poll poll = 1;
+}
+
+message ListPollVotersRequest {
+  string tayfa_id = 1;
+  string poll_id = 2;
+  string option_id = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+}
+
+message PollVoter {
+  string user_id = 1;
+  google.protobuf.Timestamp vote_time = 2;
+}
+
+message ListPollVotersResponse {
+  repeated PollVoter voters = 1;
+  string next_page_token = 2;
+}
+
+message ClosePollRequest {
+  string tayfa_id = 1;
+  string poll_id = 2;
+}
+
+message ClosePollResponse {
+  Poll poll = 1;
+}
+
+message DeletePollRequest {
+  string tayfa_id = 1;
+  string poll_id = 2;
+}
+
+message DeletePollResponse {}

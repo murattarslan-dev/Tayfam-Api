@@ -107,6 +107,14 @@ var (
 	ErrTagLimit = errors.New("etiket sınırı")
 )
 
+// PollService errors (issue #60). None of them says anything about votes.
+var (
+	ErrPollNotFound = errors.New("anket bulunamadı")
+	ErrPollClosed   = errors.New("anket kapalı")
+	// ErrPollAnonymous: voters of an anonymous poll are never listed.
+	ErrPollAnonymous = errors.New("anket gizli")
+)
+
 // ValidationError reports a request field that failed validation. Field is
 // the request field name as written in the proto ("name", "update_mask");
 // the rejected value is never kept.

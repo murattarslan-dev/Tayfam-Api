@@ -91,6 +91,9 @@ func TestErrorStatus(t *testing.T) {
 		{apperr.ErrTagNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_TAG_NOT_FOUND},
 		{apperr.ErrOwnAnswerVote, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_OWN_ANSWER_VOTE},
 		{apperr.ErrTagLimit, codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_TAG_LIMIT},
+		{apperr.ErrPollNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_POLL_NOT_FOUND},
+		{apperr.ErrPollClosed, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_POLL_CLOSED},
+		{apperr.ErrPollAnonymous, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_POLL_ANONYMOUS},
 		// Wrapped errors keep their reason.
 		{fmt.Errorf("katman: %w", apperr.ErrTayfaNotFound), codes.NotFound, corev1.ErrorReason_ERROR_REASON_TAYFA_NOT_FOUND},
 		// The memberships trigger, second line of defence.

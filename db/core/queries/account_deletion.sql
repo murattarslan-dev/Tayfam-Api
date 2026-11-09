@@ -157,3 +157,14 @@ UPDATE answers a
 SET vote_count = a.vote_count - 1
 FROM gone
 WHERE a.id = gone.answer_id;
+
+-- Anketler kalır, açan ve silen "Silinmiş kullanıcı" olur; kişinin oyları
+-- silinir (issue #60). Sayımlar buna göre düşer.
+-- name: ClearPollUserFields :exec
+UPDATE polls
+SET created_by = NULLIF(created_by, @user_id),
+    deleted_by = NULLIF(deleted_by, @user_id)
+WHERE @user_id IN (created_by, deleted_by);
+
+-- name: DeleteUserPollVotes :exec
+DELETE FROM poll_votes WHERE user_id = @user_id;

@@ -178,4 +178,15 @@ enum ErrorReason {
   // RESOURCE_EXHAUSTED. The question names a new tag, but the tayfa already
   // has 200 tags; a moderator can remove unused ones.
   ERROR_REASON_TAG_LIMIT = 64;
+
+  // Polls (PollService, poll.proto; issue #60).
+
+  // NOT_FOUND. No poll with this ID in this tayfa, or it was deleted.
+  ERROR_REASON_POLL_NOT_FOUND = 70;
+  // FAILED_PRECONDITION. The poll is closed (early or past its close time);
+  // votes no longer change.
+  ERROR_REASON_POLL_CLOSED = 71;
+  // FAILED_PRECONDITION. ListPollVoters on an anonymous poll: nobody, admins
+  // included, sees who voted for what.
+  ERROR_REASON_POLL_ANONYMOUS = 72;
 }

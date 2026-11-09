@@ -81,6 +81,7 @@ func setup(rt *service.Runtime) error {
 			Announcements:       corev1.NewAnnouncementServiceClient(conn),
 			Events:              corev1.NewEventServiceClient(conn),
 			QA:                  corev1.NewQAServiceClient(conn),
+			Polls:               corev1.NewPollServiceClient(conn),
 			Verifier:            v,
 			Log:                 rt.Log,
 			TrustCFConnectingIP: trustCF,

@@ -71,6 +71,8 @@ type CoreDeps struct {
 	Events EventClient
 	// QA enables the question and answer routes when set.
 	QA QAClient
+	// Polls enables the poll routes when set.
+	Polls PollClient
 	// Verifier checks the user's token before anything reaches core. core
 	// checks it again itself (ADR-0011); this only keeps junk out early.
 	Verifier TokenVerifier
@@ -142,6 +144,9 @@ func registerCore(mux *http.ServeMux, d CoreDeps) {
 	}
 	if d.QA != nil {
 		registerQA(mux, h)
+	}
+	if d.Polls != nil {
+		registerPolls(mux, h)
 	}
 }
 
