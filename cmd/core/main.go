@@ -19,6 +19,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/announcement"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/channelaccess"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatrelay"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/directmessage"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/identityminor"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/jobs"
@@ -116,6 +117,10 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
+	directMessages, err := directmessage.New(directmessage.Config{Pool: pool})
+	if err != nil {
+		return err
+	}
 
 	background, err := jobs.New(jobs.Config{Pool: pool, Log: rt.Log})
 	if err != nil {
@@ -161,6 +166,8 @@ func setup(rt *service.Runtime) error {
 	// chat'in kanal izinleri (issue #81): kullanıcının kendi token'ıyla,
 	// core'un tek izin tablosundan.
 	corev1.RegisterChannelAccessServiceServer(srv, grpcapi.NewChannelAccessServer(channelAccess, rt.Log))
+	// chat'in birebir mesaj kuralı (issue #95): gönderen çağıranın kendisi.
+	corev1.RegisterDirectMessageServiceServer(srv, grpcapi.NewDirectMessageServer(directMessages, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
 	// Tekrarlayan etkinliklerin önümüzdeki 8 haftalık örnekleri (issue #51).
 	// Birden fazla pod'da çalışabilir: tayfa ve seri satırı kilitlenir,

@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+// DirectMessageService answers chat's one question about direct messages:
+// may the caller write to this user, and how (issue #95, ADR-0005,
+// ADR-0009; data model v14 "Mesaj İsteği Modeli (v7)"). Conversations and
+// messages are chat's data; the rule lives here because the social graph,
+// memberships and attendance are core's.
+//
+// Authentication: the caller's own access token, forwarded by chat
+// (auth.ForwardToken, ADR-0011, ADR-0013). The sender is always the caller.
+// Service tokens are refused.
+service DirectMessageService {
+  // CheckDirectMessage decides whether the caller may write to
+  // recipient_id. The rules, in order:
+  //
+  //   1. a block in either direction: DENIED;
+  //   2. accepted friends: ACTIVE (no shared tayfa needed);
+  //   3. no live tayfa in which both are active members: DENIED;
+  //   4. shared event history (both attended an ended, not cancelled
+  //      event): ACTIVE;
+  //   5. otherwise: REQUEST.
+  //
+  // An unknown or deleted recipient is DENIED, the same as a block: the
+  // answer never tells which rule decided, nor anything about the
+  // relationship. recipient_id equal to the caller is
+  // ERROR_REASON_VALIDATION.
+  rpc CheckDirectMessage(CheckDirectMessageRequest) returns (CheckDirectMessageResponse);
+}
+
+enum DirectMessageDecision {
+  DIRECT_MESSAGE_DECISION_UNSPECIFIED = 0;
+  // The caller cannot write to the recipient.
+  DIRECT_MESSAGE_DECISION_DENIED = 1;
+  // The caller may open a message request (one message until answered).
+  DIRECT_MESSAGE_DECISION_REQUEST = 2;
+  // The caller may write freely.
+  DIRECT_MESSAGE_DECISION_ACTIVE = 3;
+}
+
+message CheckDirectMessageRequest {
+  string recipient_id = 1;
+}
+
+message CheckDirectMessageResponse {
+  DirectMessageDecision decision = 1;
+  // Only with REQUEST: how many new message requests the caller may open
+  // in 24 hours (5 when the caller's oldest active membership in a tayfa
+  // shared with the recipient is younger than seven days, else 20). chat
+  // counts the requests from its own data. It is about the caller only.
+  int32 daily_request_limit = 2;
+}
