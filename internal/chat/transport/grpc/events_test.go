@@ -183,6 +183,22 @@ func TestApplyCoreEventConversion(t *testing.T) {
 		t.Fatalf("olay = %+v %+v", got, n)
 	}
 
+	// Membership and tayfa state changes (issue #81).
+	if _, err := cores.ApplyCoreEvent(ctx, &chatv1.ApplyCoreEventRequest{EventId: id.New().String(), TayfaId: tf.String(),
+		Event: &chatv1.ApplyCoreEventRequest_MembershipChanged{MembershipChanged: &chatv1.MembershipChanged{UserId: u.String()}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := app.core[len(app.core)-1]; got.Tayfa != tf || got.MemberChanged != u || got.StatusChanged || got.Purged {
+		t.Fatalf("üyelik = %+v", got)
+	}
+	if _, err := cores.ApplyCoreEvent(ctx, &chatv1.ApplyCoreEventRequest{EventId: id.New().String(), TayfaId: tf.String(),
+		Event: &chatv1.ApplyCoreEventRequest_TayfaStatusChanged{TayfaStatusChanged: &chatv1.TayfaStatusChanged{}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := app.core[len(app.core)-1]; got.Tayfa != tf || !got.StatusChanged {
+		t.Fatalf("durum = %+v", got)
+	}
+
 	notice := func(f func(n *chatv1.NotificationRequested)) *chatv1.ApplyCoreEventRequest {
 		n := &chatv1.NotificationRequested{
 			Type: chatv1.NotificationType_NOTIFICATION_TYPE_ANNOUNCEMENT, TargetType: chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT,
@@ -204,6 +220,8 @@ func TestApplyCoreEventConversion(t *testing.T) {
 		"çok alıcı":     notice(func(n *chatv1.NotificationRequested) { n.RecipientIds = make([]string, 201) }),
 		"soru":          notice(func(n *chatv1.NotificationRequested) { n.QuestionId = "x" }),
 		"uyarı nedeni":  notice(func(n *chatv1.NotificationRequested) { n.WarningReason = 9 }),
+		"üye": {EventId: id.New().String(), TayfaId: tf.String(),
+			Event: &chatv1.ApplyCoreEventRequest_MembershipChanged{MembershipChanged: &chatv1.MembershipChanged{UserId: "x"}}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := cores.ApplyCoreEvent(ctx, r); status.Code(err) != codes.InvalidArgument {

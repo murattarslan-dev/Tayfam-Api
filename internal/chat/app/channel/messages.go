@@ -23,14 +23,14 @@ type msgRow = store.GetMessageRow
 // view converts a row for a caller with membership m. A body that does not
 // decrypt is an error: it means a wrong key or a tampered row, never
 // something to show.
-func (s *Service) view(r msgRow, m Member, now time.Time) (Message, error) {
+func (s *Service) view(r msgRow, m Decision, now time.Time) (Message, error) {
 	msg := Message{ID: id.ID(r.ID.Bytes), ChannelID: id.ID(r.ChannelID.Bytes), CreatedAt: r.CreatedAt.Time.UTC()}
 	if r.AuthorID.Valid {
 		msg.AuthorID = id.ID(r.AuthorID.Bytes)
 	}
 	if r.DeletedAt.Valid {
 		msg.Deleted = true
-		msg.Restorable = r.BodyEncrypted != nil && now.Sub(r.DeletedAt.Time) <= RestoreWindow && Allowed(m, ActionRestore, now)
+		msg.Restorable = r.BodyEncrypted != nil && now.Sub(r.DeletedAt.Time) <= RestoreWindow && m.Allowed(ActionRestore)
 		return msg, nil
 	}
 	body, err := s.cfg.Cipher.Decrypt(msg.ID, msg.ChannelID, channelcrypt.Sealed{Version: r.KeyVersion.Int16, Data: r.BodyEncrypted})
@@ -67,13 +67,13 @@ func (s *Service) Send(ctx context.Context, caller, tayfa, channel id.ID, in Sen
 	if msg, ok, err := s.existing(ctx, q, m, caller, channel, in.ClientRequestID, now); ok || err != nil {
 		return msg, err
 	}
-	if err := authorize(m, ActionSend, now); err != nil {
+	if err := authorize(m, ActionPost); err != nil {
 		return Message{}, err
 	}
 	if ch.ArchivedAt.Valid {
 		return Message{}, apperr.ErrChannelArchived
 	}
-	if ch.SlowModeSeconds > 0 && !Allowed(m, ActionSkipSlowMode, now) {
+	if ch.SlowModeSeconds > 0 && !m.Allowed(ActionSkipSlowMode) {
 		wait, undo := s.slow.take(channel, caller, now, time.Duration(ch.SlowModeSeconds)*time.Second)
 		if undo == nil {
 			return Message{}, &apperr.SlowModeError{RetryAfter: wait}
@@ -121,7 +121,7 @@ func (s *Service) Send(ctx context.Context, caller, tayfa, channel id.ID, in Sen
 }
 
 // existing returns the caller's message sent with request, if any.
-func (s *Service) existing(ctx context.Context, q *store.Queries, m Member, caller, channel, request id.ID, now time.Time) (Message, bool, error) {
+func (s *Service) existing(ctx context.Context, q *store.Queries, m Decision, caller, channel, request id.ID, now time.Time) (Message, bool, error) {
 	r, err := q.GetMessageByRequest(ctx, store.GetMessageByRequestParams{AuthorID: caller.PG(), ClientRequestID: request.PG()})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -160,7 +160,7 @@ func (s *Service) Messages(ctx context.Context, caller, tayfa, channel id.ID, in
 		return nil, "", err
 	}
 	now := s.now()
-	if err := authorize(m, ActionView, now); err != nil {
+	if err := authorize(m, ActionView); err != nil {
 		return nil, "", err
 	}
 	q := store.New(s.cfg.Pool)
@@ -214,23 +214,35 @@ func (s *Service) Messages(ctx context.Context, caller, tayfa, channel id.ID, in
 
 // Delete removes a message. The author's own deletion erases the body at
 // once and cannot be undone, also when a moderator had hidden it before.
-// A moderator's or admin's deletion of someone else's message hides it; an
-// admin can restore it within RestoreWindow. Deleting an already deleted
-// message changes nothing. Archived channels can still be moderated.
+// Hiding someone else's message needs core's ActionModerate against the
+// author's current role (a moderator cannot hide a moderator's or an
+// admin's message); an admin can restore it within RestoreWindow. Deleting
+// an already deleted message changes nothing. A read-only tayfa refuses
+// both.
 func (s *Service) Delete(ctx context.Context, caller, tayfa, channel, message id.ID) error {
 	m, err := s.access(ctx, caller, tayfa)
 	if err != nil {
 		return err
 	}
-	now := s.now()
-	if err := authorize(m, ActionView, now); err != nil {
+	if err := authorize(m, ActionView); err != nil {
 		return err
 	}
+	row, err := s.findMessage(ctx, m, tayfa, channel, message)
+	if err != nil {
+		return err
+	}
+	own := row.AuthorID.Valid && id.ID(row.AuthorID.Bytes) == caller
+	if own {
+		err = authorize(m, ActionDeleteOwn)
+	} else {
+		err = s.onAuthor(ctx, caller, tayfa, ActionModerate, row)
+	}
+	if err != nil {
+		return err
+	}
+	now := s.now()
 	return pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
 		q := store.New(tx)
-		if _, err := s.loadChannel(ctx, q, m, tayfa, channel, false); err != nil {
-			return err
-		}
 		r, err := q.GetMessageForUpdate(ctx, store.GetMessageForUpdateParams{ChannelID: channel.PG(), ID: message.PG()})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
@@ -238,20 +250,13 @@ func (s *Service) Delete(ctx context.Context, caller, tayfa, channel, message id
 		case err != nil:
 			return fmt.Errorf("mesaj: %w", err)
 		}
-		own := r.AuthorID.Valid && id.ID(r.AuthorID.Bytes) == caller
 		var n int64
 		if own {
-			if err := authorize(m, ActionDeleteOwn, now); err != nil {
-				return err
-			}
 			if r.BodyEncrypted == nil {
 				return nil // already erased
 			}
 			n, err = q.EraseMessage(ctx, store.EraseMessageParams{DeletedAt: ts(now), DeletedBy: caller.PG(), ChannelID: channel.PG(), ID: message.PG()})
 		} else {
-			if err := authorize(m, ActionDeleteOthers, now); err != nil {
-				return err
-			}
 			if r.DeletedAt.Valid {
 				return nil // already deleted
 			}
@@ -269,9 +274,41 @@ func (s *Service) Delete(ctx context.Context, caller, tayfa, channel, message id
 	})
 }
 
-// Restore undoes a moderation deletion within RestoreWindow. Admins only.
-// The author's own deletions cannot be restored (the body is gone).
-// Restoring a visible message changes nothing. Every restore is recorded
+// findMessage loads a message of a channel the caller may see.
+func (s *Service) findMessage(ctx context.Context, m Decision, tayfa, channel, message id.ID) (msgRow, error) {
+	q := store.New(s.cfg.Pool)
+	if _, err := s.loadChannel(ctx, q, m, tayfa, channel, false); err != nil {
+		return msgRow{}, err
+	}
+	r, err := q.GetMessage(ctx, store.GetMessageParams{ChannelID: channel.PG(), ID: message.PG()})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return msgRow{}, apperr.ErrMessageNotFound
+	case err != nil:
+		return msgRow{}, fmt.Errorf("mesaj: %w", err)
+	}
+	return r, nil
+}
+
+// onAuthor asks core whether the caller may perform a on the message's
+// author (role hierarchy against the author's current role). A message
+// whose author's account was deleted has no target.
+func (s *Service) onAuthor(ctx context.Context, caller, tayfa id.ID, a Action, row msgRow) error {
+	var author id.ID
+	if row.AuthorID.Valid {
+		author = id.ID(row.AuthorID.Bytes)
+	}
+	d, err := s.cfg.Access.Channel(ctx, tayfa, caller, a, author)
+	if err != nil {
+		return fmt.Errorf("kanal izni: %w", err)
+	}
+	return denialErr(d.Denial)
+}
+
+// Restore undoes a moderation deletion within RestoreWindow. Admins only,
+// above the author's current role (core decides). The author's own
+// deletions cannot be restored (the body is gone). Restoring a visible
+// message changes nothing. Every restore is recorded
 // (channel.message_restored with the admin as actor and who had deleted
 // it).
 func (s *Service) Restore(ctx context.Context, caller, tayfa, channel, message id.ID) (Message, error) {
@@ -280,15 +317,25 @@ func (s *Service) Restore(ctx context.Context, caller, tayfa, channel, message i
 		return Message{}, err
 	}
 	now := s.now()
-	if err := authorize(m, ActionRestore, now); err != nil {
+	if err := authorize(m, ActionRestore); err != nil {
+		return Message{}, err
+	}
+	row, err := s.findMessage(ctx, m, tayfa, channel, message)
+	if err != nil {
+		return Message{}, err
+	}
+	if !row.DeletedAt.Valid {
+		return s.view(row, m, now)
+	}
+	if row.BodyEncrypted == nil || now.Sub(row.DeletedAt.Time) > RestoreWindow {
+		return Message{}, apperr.ErrMessageNotFound
+	}
+	if err := s.onAuthor(ctx, caller, tayfa, ActionRestore, row); err != nil {
 		return Message{}, err
 	}
 	var msg Message
 	err = pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
 		q := store.New(tx)
-		if _, err := s.loadChannel(ctx, q, m, tayfa, channel, false); err != nil {
-			return err
-		}
 		r, err := q.GetMessageForUpdate(ctx, store.GetMessageForUpdateParams{ChannelID: channel.PG(), ID: message.PG()})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
@@ -296,13 +343,10 @@ func (s *Service) Restore(ctx context.Context, caller, tayfa, channel, message i
 		case err != nil:
 			return fmt.Errorf("mesaj: %w", err)
 		}
-		row := msgRow(r)
-		if !row.DeletedAt.Valid {
-			msg, err = s.view(row, m, now)
+		locked := msgRow(r)
+		if !locked.DeletedAt.Valid {
+			msg, err = s.view(locked, m, now)
 			return err
-		}
-		if row.BodyEncrypted == nil || now.Sub(row.DeletedAt.Time) > RestoreWindow {
-			return apperr.ErrMessageNotFound
 		}
 		n, err := q.RestoreMessage(ctx, store.RestoreMessageParams{ChannelID: channel.PG(), ID: message.PG()})
 		if err != nil {
@@ -312,11 +356,11 @@ func (s *Service) Restore(ctx context.Context, caller, tayfa, channel, message i
 			return apperr.ErrMessageNotFound
 		}
 		deletedBy := ""
-		if row.DeletedBy.Valid {
-			deletedBy = id.ID(row.DeletedBy.Bytes).String()
+		if locked.DeletedBy.Valid {
+			deletedBy = id.ID(locked.DeletedBy.Bytes).String()
 		}
-		row.DeletedAt, row.DeletedBy = pgtype.Timestamptz{}, pgtype.UUID{}
-		if msg, err = s.view(row, m, now); err != nil {
+		locked.DeletedAt, locked.DeletedBy = pgtype.Timestamptz{}, pgtype.UUID{}
+		if msg, err = s.view(locked, m, now); err != nil {
 			return err
 		}
 		return record(ctx, tx, EventMessageRestored, caller, "channel_message", message, map[string]any{
@@ -336,7 +380,7 @@ func (s *Service) MarkRead(ctx context.Context, caller, tayfa, channel, message 
 	if err != nil {
 		return err
 	}
-	if err := authorize(m, ActionMarkRead, s.now()); err != nil {
+	if err := authorize(m, ActionMarkRead); err != nil {
 		return err
 	}
 	q := store.New(s.cfg.Pool)

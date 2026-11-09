@@ -210,6 +210,8 @@ func TestChannelErrors(t *testing.T) {
 		{apperr.ErrMuted, codes.PermissionDenied, "ERROR_REASON_MUTED"},
 		{apperr.ErrChannelArchived, codes.FailedPrecondition, "ERROR_REASON_CHANNEL_ARCHIVED"},
 		{apperr.ErrChannelNameTaken, codes.AlreadyExists, "ERROR_REASON_CHANNEL_NAME_TAKEN"},
+		{apperr.ErrTayfaReadOnly, codes.FailedPrecondition, "ERROR_REASON_TAYFA_READ_ONLY"},
+		{apperr.ErrRoleHierarchy, codes.PermissionDenied, "ERROR_REASON_ROLE_HIERARCHY"},
 		{apperr.ErrChannelsUnavailable, codes.Unavailable, ""},
 		{apperr.ErrUnavailable, codes.Unavailable, ""},
 	} {

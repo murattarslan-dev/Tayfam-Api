@@ -47,6 +47,10 @@ func reasonFor(err error) (code codes.Code, reason chatv1.ErrorReason, ok bool) 
 		return codes.PermissionDenied, chatv1.ErrorReason_ERROR_REASON_MUTED, true
 	case errors.Is(err, apperr.ErrChannelArchived):
 		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_CHANNEL_ARCHIVED, true
+	case errors.Is(err, apperr.ErrTayfaReadOnly):
+		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_TAYFA_READ_ONLY, true
+	case errors.Is(err, apperr.ErrRoleHierarchy):
+		return codes.PermissionDenied, chatv1.ErrorReason_ERROR_REASON_ROLE_HIERARCHY, true
 	case errors.Is(err, apperr.ErrChannelNameTaken):
 		return codes.AlreadyExists, chatv1.ErrorReason_ERROR_REASON_CHANNEL_NAME_TAKEN, true
 	}

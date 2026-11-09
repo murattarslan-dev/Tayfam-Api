@@ -68,6 +68,12 @@ const (
 	// another message yet. ErrorInfo metadata "retry_after_seconds" holds the
 	// whole seconds to wait.
 	ErrorReason_ERROR_REASON_SLOW_MODE ErrorReason = 10
+	// FAILED_PRECONDITION. The tayfa is suspended, archived or waiting for
+	// deletion (core's answer); channels take no changes.
+	ErrorReason_ERROR_REASON_TAYFA_READ_ONLY ErrorReason = 11
+	// PERMISSION_DENIED. The message's author has the caller's role or a
+	// higher one (core's role hierarchy).
+	ErrorReason_ERROR_REASON_ROLE_HIERARCHY ErrorReason = 12
 )
 
 // Enum value maps for ErrorReason.
@@ -84,6 +90,8 @@ var (
 		8:  "ERROR_REASON_CHANNEL_ARCHIVED",
 		9:  "ERROR_REASON_CHANNEL_NAME_TAKEN",
 		10: "ERROR_REASON_SLOW_MODE",
+		11: "ERROR_REASON_TAYFA_READ_ONLY",
+		12: "ERROR_REASON_ROLE_HIERARCHY",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":            0,
@@ -97,6 +105,8 @@ var (
 		"ERROR_REASON_CHANNEL_ARCHIVED":       8,
 		"ERROR_REASON_CHANNEL_NAME_TAKEN":     9,
 		"ERROR_REASON_SLOW_MODE":              10,
+		"ERROR_REASON_TAYFA_READ_ONLY":        11,
+		"ERROR_REASON_ROLE_HIERARCHY":         12,
 	}
 )
 
@@ -131,7 +141,7 @@ var File_tayfam_chat_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\xfb\x02\n" +
+	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\xbe\x03\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12'\n" +
@@ -144,7 +154,9 @@ const file_tayfam_chat_v1_errors_proto_rawDesc = "" +
 	"\x1dERROR_REASON_CHANNEL_ARCHIVED\x10\b\x12#\n" +
 	"\x1fERROR_REASON_CHANNEL_NAME_TAKEN\x10\t\x12\x1a\n" +
 	"\x16ERROR_REASON_SLOW_MODE\x10\n" +
-	"B\xbd\x01\n" +
+	"\x12 \n" +
+	"\x1cERROR_REASON_TAYFA_READ_ONLY\x10\v\x12\x1f\n" +
+	"\x1bERROR_REASON_ROLE_HIERARCHY\x10\fB\xbd\x01\n" +
 	"\x12com.tayfam.chat.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1;chatv1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Chat.V1\xca\x02\x0eTayfam\\Chat\\V1\xe2\x02\x1aTayfam\\Chat\\V1\\GPBMetadata\xea\x02\x10Tayfam::Chat::V1b\x06proto3"
 
 var (

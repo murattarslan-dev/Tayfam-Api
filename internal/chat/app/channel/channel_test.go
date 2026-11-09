@@ -36,16 +36,70 @@ func is(t *testing.T, err, want error) {
 	}
 }
 
-// fakeMembers stands in for core's GetMembership.
-type fakeMembers struct {
-	mu sync.Mutex
-	m  map[[2]id.ID]Member
+// Member is a test membership the fake core answers from.
+type Member struct {
+	Active     bool
+	Role       int
+	MutedUntil time.Time
 }
 
-func (f *fakeMembers) Member(_ context.Context, tayfa, user id.ID) (Member, error) {
+// Roles of the fake core.
+const (
+	RoleMember    = 1
+	RoleModerator = 2
+	RoleAdmin     = 3
+)
+
+// fakeMembers stands in for core's ChannelAccessService. It mirrors core's
+// channel rows of the permission table (authz) and the role hierarchy, so
+// these tests exercise chat's handling of every answer; the table itself
+// is tested in core (internal/core/app/authz, channelaccess).
+type fakeMembers struct {
+	mu       sync.Mutex
+	m        map[[2]id.ID]Member
+	readOnly map[id.ID]bool
+	calls    int
+}
+
+var (
+	fakeMinRole = map[Action]int{
+		ActionView: RoleMember, ActionViewStaff: RoleModerator, ActionManage: RoleModerator, ActionPost: RoleMember,
+		ActionSkipSlowMode: RoleModerator, ActionDeleteOwn: RoleMember, ActionModerate: RoleModerator,
+		ActionRestore: RoleAdmin, ActionMarkRead: RoleMember,
+	}
+	fakeMutedOK = map[Action]bool{ActionView: true, ActionViewStaff: true, ActionDeleteOwn: true, ActionMarkRead: true}
+	fakeWrites  = map[Action]bool{ActionManage: true, ActionPost: true, ActionDeleteOwn: true, ActionModerate: true, ActionRestore: true}
+)
+
+func (f *fakeMembers) Channel(_ context.Context, tayfa, user id.ID, action Action, target id.ID) (Decision, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.m[[2]id.ID{tayfa, user}], nil
+	f.calls++
+	m := f.m[[2]id.ID{tayfa, user}]
+	if !m.Active {
+		return Decision{}, apperr.ErrTayfaNotFound
+	}
+	muted := m.MutedUntil.After(time.Now())
+	d := Decision{All: map[Action]Denial{}}
+	for a, need := range fakeMinRole {
+		switch {
+		case m.Role < need:
+			d.All[a] = DenialRole
+		case muted && !fakeMutedOK[a]:
+			d.All[a] = DenialMuted
+		case f.readOnly[tayfa] && fakeWrites[a]:
+			d.All[a] = DenialReadOnly
+		default:
+			d.All[a] = DenialNone
+		}
+	}
+	d.Denial = d.All[action]
+	if d.Denial == DenialNone && target != (id.ID{}) {
+		if t := f.m[[2]id.ID{tayfa, target}]; t.Active && t.Role >= m.Role {
+			d.Denial = DenialHierarchy
+		}
+	}
+	return d, nil
 }
 
 func (f *fakeMembers) set(tayfa, user id.ID, m Member) {
@@ -71,7 +125,7 @@ func setup(t *testing.T) *env {
 	t.Helper()
 	pool := dbtest.New(t, chatdb.Migrations())
 	e := &env{
-		pool: pool, members: &fakeMembers{m: map[[2]id.ID]Member{}}, logs: &bytes.Buffer{},
+		pool: pool, members: &fakeMembers{m: map[[2]id.ID]Member{}, readOnly: map[id.ID]bool{}}, logs: &bytes.Buffer{},
 		tayfa: id.New(), admin: id.New(), mod: id.New(), member: id.New(), other: id.New(),
 	}
 	e.members.set(e.tayfa, e.admin, Member{Active: true, Role: RoleAdmin})
@@ -80,7 +134,7 @@ func setup(t *testing.T) *env {
 	e.members.set(e.tayfa, e.other, Member{Active: true, Role: RoleMember})
 	svc, err := New(Config{
 		Pool: pool, Log: slog.New(slog.NewJSONHandler(e.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		Members: e.members, Cipher: channelcrypt.Ephemeral(),
+		Access: e.members, Cipher: channelcrypt.Ephemeral(),
 		Now: func() time.Time { return time.Now().Add(e.shift) },
 	})
 	must(t, err)
@@ -539,7 +593,7 @@ func TestMovedRowDoesNotDecrypt(t *testing.T) {
 
 func TestWithoutKeyEverythingIsUnavailable(t *testing.T) {
 	e := setup(t)
-	svc, err := New(Config{Pool: e.pool, Log: slog.New(slog.DiscardHandler), Members: e.members})
+	svc, err := New(Config{Pool: e.pool, Log: slog.New(slog.DiscardHandler), Access: e.members})
 	must(t, err)
 	_, err = svc.List(ctx, e.admin, e.tayfa)
 	is(t, err, apperr.ErrChannelsUnavailable)
@@ -570,5 +624,80 @@ func TestBodyNeverLeaves(t *testing.T) {
 	}
 	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE payload::text LIKE '%Gizli%'`); n != 0 {
 		t.Fatal("olay mesaj metni içeriyor")
+	}
+}
+
+// Hiding and restoring follow core's role hierarchy against the author.
+func TestModerationHierarchy(t *testing.T) {
+	e := setup(t)
+	c := e.channel(t, ChannelInput{Name: "genel"})
+	mod2 := id.New()
+	e.members.set(e.tayfa, mod2, Member{Active: true, Role: RoleModerator})
+	byAdmin := e.send(t, e.admin, c.ID, "yönetici")
+	byMod2 := e.send(t, mod2, c.ID, "moderatör")
+	byMember := e.send(t, e.member, c.ID, "üye")
+	is(t, e.svc.Delete(ctx, e.mod, e.tayfa, c.ID, byAdmin.ID), apperr.ErrRoleHierarchy)
+	is(t, e.svc.Delete(ctx, e.mod, e.tayfa, c.ID, byMod2.ID), apperr.ErrRoleHierarchy)
+	must(t, e.svc.Delete(ctx, e.mod, e.tayfa, c.ID, byMember.ID))
+	must(t, e.svc.Delete(ctx, e.admin, e.tayfa, c.ID, byMod2.ID))
+	// The author left: their message belongs to the tayfa.
+	e.members.set(e.tayfa, mod2, Member{})
+	_, err := e.svc.Restore(ctx, e.admin, e.tayfa, c.ID, byMod2.ID)
+	must(t, err)
+	// An admin cannot restore another admin's message.
+	admin2 := id.New()
+	e.members.set(e.tayfa, admin2, Member{Active: true, Role: RoleAdmin})
+	m := e.send(t, admin2, c.ID, "ikinci yönetici")
+	must(t, e.svc.Delete(ctx, admin2, e.tayfa, c.ID, m.ID)) // own: erased
+	hidden := e.send(t, e.member, c.ID, "gizlenecek")
+	must(t, e.svc.Delete(ctx, admin2, e.tayfa, c.ID, hidden.ID))
+	e.members.set(e.tayfa, e.member, Member{Active: true, Role: RoleAdmin}) // the author became an admin
+	_, err = e.svc.Restore(ctx, e.admin, e.tayfa, c.ID, hidden.ID)
+	is(t, err, apperr.ErrRoleHierarchy)
+}
+
+// A suspended, archived or deletion-pending tayfa (core's answer) makes
+// channels read-only; reading and read markers go on.
+func TestReadOnlyTayfa(t *testing.T) {
+	e := setup(t)
+	c := e.channel(t, ChannelInput{Name: "genel"})
+	m := e.send(t, e.member, c.ID, "önce")
+	e.members.mu.Lock()
+	e.members.readOnly[e.tayfa] = true
+	e.members.mu.Unlock()
+	_, err := e.svc.Send(ctx, e.member, e.tayfa, c.ID, SendInput{Body: "sonra", ClientRequestID: id.New()})
+	is(t, err, apperr.ErrTayfaReadOnly)
+	_, err = e.svc.Create(ctx, e.admin, e.tayfa, ChannelInput{Name: "yeni"})
+	is(t, err, apperr.ErrTayfaReadOnly)
+	is(t, e.svc.Delete(ctx, e.member, e.tayfa, c.ID, m.ID), apperr.ErrTayfaReadOnly)
+	is(t, e.svc.Delete(ctx, e.admin, e.tayfa, c.ID, m.ID), apperr.ErrTayfaReadOnly)
+	if _, _, err := e.svc.Messages(ctx, e.other, e.tayfa, c.ID, ListInput{}); err != nil {
+		t.Fatal(err)
+	}
+	must(t, e.svc.MarkRead(ctx, e.other, e.tayfa, c.ID, m.ID))
+}
+
+func TestSlowModeLimiter(t *testing.T) {
+	s := newSlowMode()
+	ch, u, other := id.New(), id.New(), id.New()
+	now := time.Now()
+	if wait, undo := s.take(ch, u, now, 10*time.Second); wait != 0 || undo == nil {
+		t.Fatal("ilk mesaj bekletildi")
+	}
+	if wait, undo := s.take(ch, u, now.Add(4*time.Second), 10*time.Second); undo != nil || wait != 6*time.Second {
+		t.Fatalf("bekleme = %v", wait)
+	}
+	if _, undo := s.take(ch, other, now, 10*time.Second); undo == nil {
+		t.Fatal("başka kullanıcı bekletildi")
+	}
+	if _, undo := s.take(id.New(), u, now, 10*time.Second); undo == nil {
+		t.Fatal("başka kanal bekletildi")
+	}
+	// A slot given back (the message was not written) frees the user.
+	u2 := id.New()
+	_, undo := s.take(ch, u2, now, 10*time.Second)
+	undo()
+	if _, undo := s.take(ch, u2, now.Add(time.Second), 10*time.Second); undo == nil {
+		t.Fatal("geri verilen hak kullanılamadı")
 	}
 }

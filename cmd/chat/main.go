@@ -26,8 +26,8 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/service"
 )
 
-// membershipCacheTTL is how long core's membership answer is reused.
-const membershipCacheTTL = 5 * time.Second
+// channelAccessTTL is how long core's channel permission answer is reused.
+const channelAccessTTL = 5 * time.Second
 
 func main() {
 	service.MainWithMigrations("chat", chatdb.Migrations(), setup)
@@ -74,12 +74,6 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	// Bildirimlerin alıcılarını core seçer (ADR-0009); chat kaydı yazar.
-	coreEvents, err := coreevents.New(coreevents.Config{Pool: pool})
-	if err != nil {
-		return err
-	}
-
 	// Kullanıcısız servis çağrıları (ADR-0013): olay tüketici servislerinin
 	// her metodu yalnızca servis token'ı kabul eder. UserEventService'i
 	// yalnızca identity'nin, CoreEventService'i yalnızca core'un
@@ -100,8 +94,8 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	// Sessize alma için üyeliği core söyler (ADR-0009 senkron sorgular: chat
-	// → core GetMembership); çağrı kullanıcının kendi token'ını taşır.
+	// Sessize alma için üyeliği, kanal işlemleri için izni core söyler
+	// (ADR-0009 senkron sorgular); çağrı kullanıcının kendi token'ını taşır.
 	coreAddr := c.Required("CORE_GRPC_ADDR")
 	if err := c.Err(); err != nil {
 		return err
@@ -110,16 +104,26 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	// Kanal erişimi de core'un cevabıyla (rol, susturma). Cevap kısa süre
-	// önbellekte tutulur (ADR-0005); core'un membership.changed olayı chat'e
-	// henüz gelmediği için rol değişikliği ve susturma en geç bu sürede
-	// geçerli olur.
-	members := coremembers.NewCached(corev1.NewMembershipServiceClient(coreConn), membershipCacheTTL)
-	notifications, err := notification.New(notification.Config{Pool: pool, Log: rt.Log, Members: members})
+	notifications, err := notification.New(notification.Config{
+		Pool: pool, Log: rt.Log, Members: coremembers.New(corev1.NewMembershipServiceClient(coreConn)),
+	})
 	if err != nil {
 		return err
 	}
-	channels, err := channel.New(channel.Config{Pool: pool, Log: rt.Log, Members: members, Cipher: cipher})
+	// Kanal izinlerini core'un tek izin tablosu verir (CLAUDE.md kural 5,
+	// ChannelAccessService), kullanıcının kendi token'ıyla. Cevap kısa süre
+	// önbellekte tutulur (ADR-0005); core'un membership.changed ve tayfa
+	// durum olayları önbelleği hemen temizler, kaçan bir olay en geç bu
+	// sürede telafi edilir.
+	channelAccess := coremembers.NewChannelAccess(corev1.NewChannelAccessServiceClient(coreConn), channelAccessTTL)
+	channels, err := channel.New(channel.Config{Pool: pool, Log: rt.Log, Access: channelAccess, Cipher: cipher})
+	if err != nil {
+		return err
+	}
+	// Bildirimlerin alıcılarını core seçer (ADR-0009); chat kaydı yazar.
+	// Üyelik ve tayfa durumu olayları yalnızca kanal izni önbelleğini
+	// temizler; chat üyelik kopyası tutmaz.
+	coreEvents, err := coreevents.New(coreevents.Config{Pool: pool, Access: channelAccess})
 	if err != nil {
 		return err
 	}

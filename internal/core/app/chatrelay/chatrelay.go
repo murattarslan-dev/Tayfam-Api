@@ -7,11 +7,16 @@
 //     chat stores the in-app notifications.
 //   - tayfa.purged: chat removes what it keeps about the tayfa (ADR-0009
 //     "Tayfa → kanallar ve mesajları").
+//   - membership.changed: chat drops the channel permissions it keeps for
+//     a few seconds for that member (issue #81; ADR-0009 "Üyelik
+//     değişiklikleri"). Only the user ID goes, not the kind of change.
+//   - tayfa.warned, tayfa.archived, tayfa.reactivated, tayfa.deleted,
+//     tayfa.deletion_requested, tayfa.deletion_cancelled: the tayfa's
+//     read-only state may have changed (ADR-0009 "Tayfa askı ve arşiv");
+//     chat drops the permissions it keeps for the tayfa. They reach chat as
+//     one kind, tayfa_status_changed.
 //
-// Other rows of ADR-0009's table (tayfa.deleted, membership.changed,
-// tayfa.status_changed) join the list with the channel work that needs
-// them. Payloads carry IDs and classification only, and so do the
-// requests.
+// Payloads carry IDs and classification only, and so do the requests.
 package chatrelay
 
 import (
@@ -35,12 +40,33 @@ const ConsumerName = "chat"
 // deliverTimeout bounds one call to chat; the relay retries afterwards.
 const deliverTimeout = 10 * time.Second
 
-// TypeTayfaPurged is the jobs package's tayfa.purged.
-const TypeTayfaPurged = "tayfa.purged"
+// Event types delivered to chat besides notification.requested. They are
+// the jobs, membership and tayfa packages' events, named here so this
+// package does not depend on them.
+const (
+	TypeTayfaPurged            = "tayfa.purged"
+	TypeMembershipChanged      = "membership.changed"
+	TypeTayfaWarned            = "tayfa.warned"
+	TypeTayfaArchived          = "tayfa.archived"
+	TypeTayfaReactivated       = "tayfa.reactivated"
+	TypeTayfaDeleted           = "tayfa.deleted"
+	TypeTayfaDeletionRequested = "tayfa.deletion_requested"
+	TypeTayfaDeletionCancelled = "tayfa.deletion_cancelled"
+)
+
+// statusTypes change whether the tayfa is writable.
+var statusTypes = map[string]bool{
+	TypeTayfaWarned: true, TypeTayfaArchived: true, TypeTayfaReactivated: true, TypeTayfaDeleted: true,
+	TypeTayfaDeletionRequested: true, TypeTayfaDeletionCancelled: true,
+}
 
 // Types returns the explicit list of events delivered to chat.
 func Types() []string {
-	return []string{notify.EventType, TypeTayfaPurged}
+	return []string{
+		notify.EventType, TypeTayfaPurged, TypeMembershipChanged,
+		TypeTayfaWarned, TypeTayfaArchived, TypeTayfaReactivated, TypeTayfaDeleted,
+		TypeTayfaDeletionRequested, TypeTayfaDeletionCancelled,
+	}
 }
 
 // Consumer returns the outbox consumer for chat. client must carry core's
@@ -117,8 +143,13 @@ func Request(e outbox.Event) (*chatv1.ApplyCoreEventRequest, error) {
 	if err := json.Unmarshal(e.Payload, &p); err != nil {
 		return nil, errors.New("olay içeriği çözümlenemedi")
 	}
+	tayfa := p.TayfaID
+	// The tayfa package's events name the tayfa as their subject only.
+	if tayfa == "" && e.SubjectType == "tayfa" {
+		tayfa = e.SubjectID.String()
+	}
 	req := &chatv1.ApplyCoreEventRequest{
-		EventId: e.ID.String(), TayfaId: p.TayfaID, OccurredAt: timestamppb.New(e.OccurredAt),
+		EventId: e.ID.String(), TayfaId: tayfa, OccurredAt: timestamppb.New(e.OccurredAt),
 	}
 	if e.Actor != (id.ID{}) {
 		req.ActorId = e.Actor.String()
@@ -145,8 +176,20 @@ func Request(e outbox.Event) (*chatv1.ApplyCoreEventRequest, error) {
 		req.Event = &chatv1.ApplyCoreEventRequest_NotificationRequested{NotificationRequested: n}
 	case TypeTayfaPurged:
 		req.Event = &chatv1.ApplyCoreEventRequest_TayfaPurged{TayfaPurged: &chatv1.TayfaPurged{}}
+	case TypeMembershipChanged:
+		if _, ok := id.Parse(p.UserID); !ok {
+			return nil, errors.New("üyelik olayında kullanıcı yok")
+		}
+		req.Event = &chatv1.ApplyCoreEventRequest_MembershipChanged{MembershipChanged: &chatv1.MembershipChanged{UserId: p.UserID}}
 	default:
+		if statusTypes[e.Type] {
+			req.Event = &chatv1.ApplyCoreEventRequest_TayfaStatusChanged{TayfaStatusChanged: &chatv1.TayfaStatusChanged{}}
+			break
+		}
 		return nil, fmt.Errorf("bilinmeyen olay türü %q", e.Type)
+	}
+	if req.GetTayfaId() == "" && req.GetNotificationRequested() == nil {
+		return nil, errors.New("olayda tayfa yok")
 	}
 	return req, nil
 }

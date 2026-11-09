@@ -57,4 +57,12 @@ enum ErrorReason {
   // another message yet. ErrorInfo metadata "retry_after_seconds" holds the
   // whole seconds to wait.
   ERROR_REASON_SLOW_MODE = 10;
+
+  // FAILED_PRECONDITION. The tayfa is suspended, archived or waiting for
+  // deletion (core's answer); channels take no changes.
+  ERROR_REASON_TAYFA_READ_ONLY = 11;
+
+  // PERMISSION_DENIED. The message's author has the caller's role or a
+  // higher one (core's role hierarchy).
+  ERROR_REASON_ROLE_HIERARCHY = 12;
 }

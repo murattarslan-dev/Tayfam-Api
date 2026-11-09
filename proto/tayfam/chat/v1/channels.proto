@@ -14,22 +14,28 @@ import "google/protobuf/timestamp.proto";
 // tokens are refused. Requests never name the acting user.
 //
 // Common rules for every method:
-//   - chat asks core whether the caller is an active member of the tayfa and
-//     with which role (MembershipService.GetMembership with the caller's own
-//     token, ADR-0009). Answers are kept for a few seconds, so a role change
-//     or a mute reaches chat with that delay. Anyone who is not an active
-//     member gets ERROR_REASON_TAYFA_NOT_FOUND; UNAVAILABLE when core cannot
-//     answer.
+//   - chat asks core what the caller may do with the tayfa's channels
+//     (ChannelAccessService.AuthorizeChannelAction with the caller's own
+//     token; core's single permission table). Answers are kept for a few
+//     seconds and dropped as soon as core reports a membership or tayfa
+//     state change. Anyone who is not an active member gets
+//     ERROR_REASON_TAYFA_NOT_FOUND; UNAVAILABLE when core cannot answer.
 //   - A channel is looked up within the tayfa: a channel of another tayfa,
 //     and a STAFF channel for a plain member, are
 //     ERROR_REASON_CHANNEL_NOT_FOUND.
-//   - Permissions (default "no"): every active member reads MEMBERS
-//     channels, sends, deletes their own messages and marks read; moderators
-//     and admins also see STAFF channels, create, edit and archive channels,
-//     hide others' messages and are exempt from slow mode; only admins
-//     restore hidden messages. A role too low is
+//   - Permissions are core's (default "no"): every active member reads
+//     MEMBERS channels, sends, deletes their own messages and marks read;
+//     moderators and admins also see STAFF channels, create, edit and
+//     archive channels, hide others' messages and are exempt from slow
+//     mode; only admins restore hidden messages. A role too low is
 //     ERROR_REASON_PERMISSION_DENIED. A muted member reads, marks read and
 //     deletes their own messages, nothing else (ERROR_REASON_MUTED).
+//     Hiding and restoring someone else's message also need a role above
+//     the author's current one (ERROR_REASON_ROLE_HIERARCHY; an author who
+//     left does not limit it).
+//   - A suspended, archived or deletion-pending tayfa makes its channels
+//     read-only: changes get ERROR_REASON_TAYFA_READ_ONLY; reading and read
+//     markers go on.
 //   - Message bodies are stored encrypted (AES-256-GCM, server key) and
 //     never appear in logs, events, notifications or error messages.
 //   - UNAVAILABLE without ErrorInfo also when chat runs without its message

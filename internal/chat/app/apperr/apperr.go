@@ -48,6 +48,12 @@ var (
 	ErrPermissionDenied = errors.New("yetki yok")
 	// ErrMuted: the caller is muted in the tayfa and the action writes.
 	ErrMuted = errors.New("susturulmuş")
+	// ErrTayfaReadOnly: the tayfa is suspended, archived or waiting for
+	// deletion; channels take no changes.
+	ErrTayfaReadOnly = errors.New("tayfa salt okunur")
+	// ErrRoleHierarchy: the message's author has the caller's role or a
+	// higher one.
+	ErrRoleHierarchy = errors.New("rol hiyerarşisi")
 	// ErrChannelArchived: the channel is archived (read-only).
 	ErrChannelArchived = errors.New("kanal arşivlenmiş")
 	// ErrChannelNameTaken: another channel of the tayfa that is not archived

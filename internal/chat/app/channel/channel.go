@@ -4,12 +4,15 @@
 // geri alma", "Okunma bilgisi"; issue #81).
 //
 // Every method starts the same way: the caller comes from the verified
-// token, core says whether the caller is an active member of the tayfa and
-// with which role (GetMembership with the caller's own token, ADR-0009); a
-// non-member gets apperr.ErrTayfaNotFound. The channel is loaded by
-// (tayfa_id, channel_id), so an ID from another tayfa is "not found"
-// (IDOR); a staff channel is "not found" for plain members. Then the
-// permission table (authz.go) decides; it defaults to "no".
+// token and core decides what the caller may do with the tayfa's channels
+// (ChannelAccessService.AuthorizeChannelAction with the caller's own token,
+// ADR-0009; core's single permission table, CLAUDE.md rule 5). A
+// non-member gets apperr.ErrTayfaNotFound; a suspended, archived or
+// deletion-pending tayfa makes channels read-only; hiding or restoring
+// someone else's message also follows the role hierarchy against the
+// author's current role. chat keeps no rule of its own. The channel is
+// loaded by (tayfa_id, channel_id), so an ID from another tayfa is "not
+// found" (IDOR); a staff channel is "not found" for plain members.
 //
 // Message bodies exist in plain text only in memory: they are encrypted
 // with channelcrypt before they reach the database and are never written to
@@ -79,16 +82,11 @@ const (
 	EventChannelUpdated  = "channel.updated"
 )
 
-// Memberships answers who the caller is in a tayfa (core GetMembership).
-type Memberships interface {
-	Member(ctx context.Context, tayfa, user id.ID) (Member, error)
-}
-
 // Config wires a Service.
 type Config struct {
-	Pool    *pgxpool.Pool
-	Log     *slog.Logger
-	Members Memberships
+	Pool   *pgxpool.Pool
+	Log    *slog.Logger
+	Access Access
 	// Cipher encrypts message bodies. nil turns the user methods off
 	// (apperr.ErrChannelsUnavailable); only local and dev may run so.
 	Cipher *channelcrypt.Cipher
@@ -104,7 +102,7 @@ type Service struct {
 
 // New returns a Service.
 func New(cfg Config) (*Service, error) {
-	if cfg.Pool == nil || cfg.Log == nil || cfg.Members == nil {
+	if cfg.Pool == nil || cfg.Log == nil || cfg.Access == nil {
 		return nil, errors.New("channel: eksik yapılandırma")
 	}
 	if cfg.Now == nil {
@@ -181,45 +179,30 @@ type ListInput struct {
 
 func invalid(field string) error { return apperr.Validation(field) }
 
-// access loads the caller's membership and checks it allows a in tayfa.
-func (s *Service) access(ctx context.Context, caller, tayfa id.ID) (Member, error) {
+// access asks core what the caller may do with the tayfa's channels.
+func (s *Service) access(ctx context.Context, caller, tayfa id.ID) (Decision, error) {
 	if s.cfg.Cipher == nil {
-		return Member{}, apperr.ErrChannelsUnavailable
+		return Decision{}, apperr.ErrChannelsUnavailable
 	}
-	m, err := s.cfg.Members.Member(ctx, tayfa, caller)
+	d, err := s.cfg.Access.Channel(ctx, tayfa, caller, ActionView, id.ID{})
 	if err != nil {
-		return Member{}, fmt.Errorf("üyelik: %w", err)
+		return Decision{}, fmt.Errorf("kanal izni: %w", err)
 	}
-	if !m.Active {
-		return Member{}, apperr.ErrTayfaNotFound
-	}
-	return m, nil
-}
-
-// authorize turns a refusal into the error the caller sees: a muted member
-// whose role would allow a gets ErrMuted.
-func authorize(m Member, a Action, now time.Time) error {
-	switch {
-	case Allowed(m, a, now):
-		return nil
-	case roleAllows(m, a):
-		return apperr.ErrMuted
-	}
-	return apperr.ErrPermissionDenied
-}
-
-// visible returns the channel if the member may see it.
-func visible(m Member, row chanRow, now time.Time) error {
-	if row.Visibility == VisibilityStaff && !Allowed(m, ActionViewStaff, now) {
-		return apperr.ErrChannelNotFound
-	}
-	return nil
+	return d, nil
 }
 
 // chanRow is a channel row; every channel query returns these columns.
 type chanRow = store.GetChannelRow
 
-func (s *Service) loadChannel(ctx context.Context, q *store.Queries, m Member, tayfa, channel id.ID, forUpdate bool) (chanRow, error) {
+// visible returns nil if the caller may see the channel.
+func visible(d Decision, row chanRow) error {
+	if row.Visibility == VisibilityStaff && !d.Allowed(ActionViewStaff) {
+		return apperr.ErrChannelNotFound
+	}
+	return nil
+}
+
+func (s *Service) loadChannel(ctx context.Context, q *store.Queries, m Decision, tayfa, channel id.ID, forUpdate bool) (chanRow, error) {
 	var (
 		row chanRow
 		err error
@@ -237,7 +220,7 @@ func (s *Service) loadChannel(ctx context.Context, q *store.Queries, m Member, t
 	case err != nil:
 		return chanRow{}, fmt.Errorf("kanal: %w", err)
 	}
-	if err := visible(m, row, s.now()); err != nil {
+	if err := visible(m, row); err != nil {
 		return chanRow{}, err
 	}
 	return row, nil
@@ -296,11 +279,11 @@ func (s *Service) List(ctx context.Context, caller, tayfa id.ID) ([]Channel, err
 	if err != nil {
 		return nil, err
 	}
-	if err := authorize(m, ActionView, s.now()); err != nil {
+	if err := authorize(m, ActionView); err != nil {
 		return nil, err
 	}
 	rows, err := store.New(s.cfg.Pool).ListChannels(ctx, store.ListChannelsParams{
-		UserID: caller.PG(), MaxUnread: MaxUnread, TayfaID: tayfa.PG(), IncludeStaff: Allowed(m, ActionViewStaff, s.now()),
+		UserID: caller.PG(), MaxUnread: MaxUnread, TayfaID: tayfa.PG(), IncludeStaff: m.Allowed(ActionViewStaff),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("kanallar: %w", err)
@@ -326,7 +309,7 @@ func (s *Service) Get(ctx context.Context, caller, tayfa, channel id.ID) (Channe
 	if err != nil {
 		return Channel{}, err
 	}
-	if err := authorize(m, ActionView, s.now()); err != nil {
+	if err := authorize(m, ActionView); err != nil {
 		return Channel{}, err
 	}
 	row, err := s.loadChannel(ctx, store.New(s.cfg.Pool), m, tayfa, channel, false)
@@ -355,7 +338,7 @@ func (s *Service) Create(ctx context.Context, caller, tayfa id.ID, in ChannelInp
 	if err != nil {
 		return Channel{}, err
 	}
-	if err := authorize(m, ActionManage, s.now()); err != nil {
+	if err := authorize(m, ActionManage); err != nil {
 		return Channel{}, err
 	}
 	var c Channel
@@ -402,7 +385,7 @@ func (s *Service) Update(ctx context.Context, caller, tayfa, channel id.ID, in C
 	if err != nil {
 		return Channel{}, err
 	}
-	if err := authorize(m, ActionManage, s.now()); err != nil {
+	if err := authorize(m, ActionManage); err != nil {
 		return Channel{}, err
 	}
 	var c Channel
@@ -450,7 +433,7 @@ func (s *Service) SetArchived(ctx context.Context, caller, tayfa, channel id.ID,
 	if err != nil {
 		return Channel{}, err
 	}
-	if err := authorize(m, ActionManage, s.now()); err != nil {
+	if err := authorize(m, ActionManage); err != nil {
 		return Channel{}, err
 	}
 	var c Channel

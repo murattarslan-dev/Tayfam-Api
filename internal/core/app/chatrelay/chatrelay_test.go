@@ -20,10 +20,15 @@ func ev(t *testing.T, typ string, actor id.ID, payload map[string]any) outbox.Ev
 	return outbox.Event{ID: id.New(), Type: typ, Actor: actor, Payload: b, OccurredAt: time.Now().UTC()}
 }
 
-// The list is the contract with chat (ADR-0009): only notification
-// requests and the purge.
+// The list is the contract with chat (ADR-0009): notification requests,
+// the purge, and the membership and tayfa state changes chat uses to drop
+// cached channel permissions (issue #81).
 func TestTypesAreExplicit(t *testing.T) {
-	want := []string{"notification.requested", "tayfa.purged"}
+	want := []string{
+		"notification.requested", "tayfa.purged", "membership.changed",
+		"tayfa.warned", "tayfa.archived", "tayfa.reactivated", "tayfa.deleted",
+		"tayfa.deletion_requested", "tayfa.deletion_cancelled",
+	}
 	if got := Types(); !slices.Equal(got, want) {
 		t.Fatalf("Types = %v", got)
 	}
@@ -119,5 +124,38 @@ func TestRequestRefusesUnknown(t *testing.T) {
 		if _, err := Request(e); err == nil {
 			t.Errorf("%s: hata yok", name)
 		}
+	}
+}
+
+// membership.changed carries only the member; the kind of change and the
+// actor's role do not reach chat.
+func TestMembershipAndStatusEvents(t *testing.T) {
+	tf, u, actor := id.New(), id.New(), id.New()
+	r, err := Request(ev(t, "membership.changed", actor, map[string]any{"tayfa_id": tf.String(), "user_id": u.String(), "change": "muted"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.GetTayfaId() != tf.String() || r.GetMembershipChanged().GetUserId() != u.String() {
+		t.Fatalf("üyelik = %v", r)
+	}
+	if _, err := Request(ev(t, "membership.changed", actor, map[string]any{"tayfa_id": tf.String()})); err == nil {
+		t.Fatal("kullanıcısız üyelik olayı kabul edildi")
+	}
+	for _, typ := range []string{"tayfa.warned", "tayfa.archived", "tayfa.reactivated", "tayfa.deleted"} {
+		r, err := Request(ev(t, typ, id.ID{}, map[string]any{"tayfa_id": tf.String(), "reason": "inactive"}))
+		if err != nil || r.GetTayfaId() != tf.String() || r.GetTayfaStatusChanged() == nil {
+			t.Fatalf("%s = %v, %v", typ, r, err)
+		}
+	}
+	// The tayfa package names the tayfa as the subject only.
+	e := ev(t, "tayfa.deletion_requested", actor, map[string]any{"deletion_scheduled_for": "2026-11-12T00:00:00Z"})
+	e.SubjectType, e.SubjectID = "tayfa", tf
+	r, err = Request(e)
+	if err != nil || r.GetTayfaId() != tf.String() || r.GetTayfaStatusChanged() == nil {
+		t.Fatalf("silme isteği = %v, %v", r, err)
+	}
+	// Without a tayfa the event cannot be applied.
+	if _, err := Request(ev(t, "tayfa.deletion_cancelled", actor, nil)); err == nil {
+		t.Fatal("tayfasız durum olayı kabul edildi")
 	}
 }
