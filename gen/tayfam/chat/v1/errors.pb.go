@@ -40,6 +40,13 @@ const (
 	// range, unknown enum value, bad page token). ErrorInfo metadata "field"
 	// holds the request field name; the rejected value is never included.
 	ErrorReason_ERROR_REASON_VALIDATION ErrorReason = 1
+	// NOT_FOUND. No such notification of the caller. Another user's
+	// notification is indistinguishable from a missing one.
+	ErrorReason_ERROR_REASON_NOTIFICATION_NOT_FOUND ErrorReason = 2
+	// NOT_FOUND. The tayfa does not exist or the caller is not an active
+	// member of it (core's answer). These cases are indistinguishable on
+	// purpose.
+	ErrorReason_ERROR_REASON_TAYFA_NOT_FOUND ErrorReason = 3
 )
 
 // Enum value maps for ErrorReason.
@@ -47,10 +54,14 @@ var (
 	ErrorReason_name = map[int32]string{
 		0: "ERROR_REASON_UNSPECIFIED",
 		1: "ERROR_REASON_VALIDATION",
+		2: "ERROR_REASON_NOTIFICATION_NOT_FOUND",
+		3: "ERROR_REASON_TAYFA_NOT_FOUND",
 	}
 	ErrorReason_value = map[string]int32{
-		"ERROR_REASON_UNSPECIFIED": 0,
-		"ERROR_REASON_VALIDATION":  1,
+		"ERROR_REASON_UNSPECIFIED":            0,
+		"ERROR_REASON_VALIDATION":             1,
+		"ERROR_REASON_NOTIFICATION_NOT_FOUND": 2,
+		"ERROR_REASON_TAYFA_NOT_FOUND":        3,
 	}
 )
 
@@ -85,10 +96,12 @@ var File_tayfam_chat_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*H\n" +
+	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\x93\x01\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
-	"\x17ERROR_REASON_VALIDATION\x10\x01B\xbd\x01\n" +
+	"\x17ERROR_REASON_VALIDATION\x10\x01\x12'\n" +
+	"#ERROR_REASON_NOTIFICATION_NOT_FOUND\x10\x02\x12 \n" +
+	"\x1cERROR_REASON_TAYFA_NOT_FOUND\x10\x03B\xbd\x01\n" +
 	"\x12com.tayfam.chat.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1;chatv1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Chat.V1\xca\x02\x0eTayfam\\Chat\\V1\xe2\x02\x1aTayfam\\Chat\\V1\\GPBMetadata\xea\x02\x10Tayfam::Chat::V1b\x06proto3"
 
 var (

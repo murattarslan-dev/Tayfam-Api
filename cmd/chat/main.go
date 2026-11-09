@@ -10,12 +10,15 @@ import (
 
 	chatdb "github.com/murattarslan-dev/tayfam-api/db/chat"
 	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
+	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/coreevents"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/coremembers"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/userevents"
 	grpcapi "github.com/murattarslan-dev/tayfam-api/internal/chat/transport/grpc"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/grpcx"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/service"
 )
 
@@ -76,9 +79,29 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
+	// Sessize alma için üyeliği core söyler (ADR-0009 senkron sorgular: chat
+	// → core GetMembership); çağrı kullanıcının kendi token'ını taşır.
+	coreAddr := c.Required("CORE_GRPC_ADDR")
+	if err := c.Err(); err != nil {
+		return err
+	}
+	coreConn, err := grpcx.NewClient(coreAddr, auth.ForwardToken()...)
+	if err != nil {
+		return err
+	}
+	notifications, err := notification.New(notification.Config{
+		Pool: pool, Log: rt.Log, Members: coremembers.New(corev1.NewMembershipServiceClient(coreConn)),
+	})
+	if err != nil {
+		return err
+	}
+
 	srv := rt.NewGRPCServer(guard.ServerOptions()...)
 	chatv1.RegisterUserEventServiceServer(srv, grpcapi.NewUserEventServer(userEvents, rt.Log))
 	chatv1.RegisterCoreEventServiceServer(srv, grpcapi.NewCoreEventServer(coreEvents, rt.Log))
+	chatv1.RegisterNotificationServiceServer(srv, grpcapi.NewNotificationServer(notifications, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
+	// 90 günden eski bildirimler (v14 "Saklama süreleri").
+	rt.AddWorker("notification-retention", notifications.RunRetention)
 	return nil
 }

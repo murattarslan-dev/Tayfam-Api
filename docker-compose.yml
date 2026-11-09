@@ -98,6 +98,7 @@ services:
     environment:
       <<: *env
       IDENTITY_GRPC_ADDR: identity:9090
+      CORE_GRPC_ADDR: core:9090
       DB_HOST: postgres
       DB_NAME: chat
       DB_USER: postgres

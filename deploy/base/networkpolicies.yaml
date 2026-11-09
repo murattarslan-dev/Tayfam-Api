@@ -283,6 +283,39 @@ spec:
       ports:
         - { protocol: TCP, port: 9090 }
 ---
+# chat → core: sessize almada üyelik kontrolü (GetMembership, ADR-0009).
+# Çağrı kullanıcının kendi token'ını taşır; core onu yeniden doğrular ve
+# yalnızca çağıranın kendi üyeliğini döndürür.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: chat-to-core
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: chat }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: core }
+      ports:
+        - { protocol: TCP, port: 9090 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: core-from-chat
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: core }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: chat }
+      ports:
+        - { protocol: TCP, port: 9090 }
+---
 # chat → API sunucusu: servis token'larını doğrulamak için cluster'ın açık
 # anahtarları (core-egress-kube-api ile aynı kural). chat'in ServiceAccount'unda
 # RBAC yetkisi yoktur.

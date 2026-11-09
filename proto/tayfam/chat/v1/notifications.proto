@@ -1,0 +1,145 @@
+syntax = "proto3";
+
+package tayfam.chat.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/chat/v1/notification_types.proto";
+
+// NotificationService is the caller's in-app notification center (data
+// model v14 "Bildirimler", issue #64).
+//
+// Authentication: the caller's access token (ADR-0004); every method works
+// on the caller's own notifications and preferences only. Service tokens are
+// refused.
+//
+// Notifications are requested by core, which chooses the recipients
+// (ADR-0009), and hold IDs only: the type, the tayfa, who did it and what it
+// is about. Titles, bodies, places and
+// names are never part of a notification; clients read the content from
+// core with the IDs, and core checks access again. Only active members of a
+// tayfa receive its notifications; the actor never receives their own.
+// Notifications are kept for 90 days.
+//
+// Muting (SetTayfaNotificationPreference) does not hide notifications from
+// the list; it is read when push notifications are sent.
+//
+// Paging: page_size 0 means 50; values above 100 are treated as 100;
+// negative values are ERROR_REASON_VALIDATION. page_token is opaque; a bad
+// token is ERROR_REASON_VALIDATION. An empty next_page_token means the last
+// page.
+service NotificationService {
+  // ListNotifications lists the caller's notifications, newest first.
+  rpc ListNotifications(ListNotificationsRequest) returns (ListNotificationsResponse);
+
+  // GetUnreadNotificationCount returns how many of the caller's
+  // notifications are unread, at most 1000.
+  rpc GetUnreadNotificationCount(GetUnreadNotificationCountRequest) returns (GetUnreadNotificationCountResponse);
+
+  // MarkNotificationRead marks one notification read. Marking it again
+  // keeps the first read time. ERROR_REASON_NOTIFICATION_NOT_FOUND when the
+  // caller has no such notification.
+  rpc MarkNotificationRead(MarkNotificationReadRequest) returns (MarkNotificationReadResponse);
+
+  // MarkAllNotificationsRead marks all of the caller's notifications read.
+  rpc MarkAllNotificationsRead(MarkAllNotificationsReadRequest) returns (MarkAllNotificationsReadResponse);
+
+  // ListNotificationPreferences lists the caller's muting preferences. A
+  // tayfa without a preference has level ALL.
+  rpc ListNotificationPreferences(ListNotificationPreferencesRequest) returns (ListNotificationPreferencesResponse);
+
+  // SetTayfaNotificationPreference sets how the caller hears about a tayfa
+  // they are an active member of (else ERROR_REASON_TAYFA_NOT_FOUND). chat
+  // asks core (MembershipService.GetMembership with the caller's token,
+  // ADR-0009); UNAVAILABLE when core cannot answer. Level
+  // MENTIONS or NONE may last until mute_until (at most a year ahead), then
+  // the tayfa is back to ALL. Level ALL without mute_until removes the
+  // preference; ALL with mute_until is ERROR_REASON_VALIDATION.
+  rpc SetTayfaNotificationPreference(SetTayfaNotificationPreferenceRequest) returns (SetTayfaNotificationPreferenceResponse);
+}
+
+message Notification {
+  string id = 1;
+  NotificationType type = 2;
+  // Empty when the notification is not about a tayfa.
+  string tayfa_id = 3;
+  // Who did it; empty for the system or a deleted account.
+  string actor_id = 4;
+  NotificationTargetType target_type = 5;
+  string target_id = 6;
+  // Set for ANSWER_RECEIVED: the answered question.
+  string question_id = 7;
+  bool read = 8;
+  google.protobuf.Timestamp create_time = 9;
+  // Set for HIKE_OVERDUE: the hiker who did not return.
+  string subject_user_id = 10;
+  // Set for TAYFA_WARNED.
+  TayfaWarningReason warning_reason = 11;
+}
+
+message ListNotificationsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListNotificationsResponse {
+  repeated Notification notifications = 1;
+  string next_page_token = 2;
+}
+
+message GetUnreadNotificationCountRequest {}
+
+message GetUnreadNotificationCountResponse {
+  int32 unread_count = 1;
+}
+
+message MarkNotificationReadRequest {
+  string notification_id = 1;
+}
+
+message MarkNotificationReadResponse {}
+
+message MarkAllNotificationsReadRequest {}
+
+message MarkAllNotificationsReadResponse {}
+
+enum NotificationLevel {
+  NOTIFICATION_LEVEL_UNSPECIFIED = 0;
+  NOTIFICATION_LEVEL_ALL = 1;
+  // Only notifications that mention the caller (when mentions exist).
+  NOTIFICATION_LEVEL_MENTIONS = 2;
+  NOTIFICATION_LEVEL_NONE = 3;
+}
+
+enum NotificationScopeType {
+  NOTIFICATION_SCOPE_TYPE_UNSPECIFIED = 0;
+  NOTIFICATION_SCOPE_TYPE_TAYFA = 1;
+  // Reserved for channels and direct conversations; not settable yet.
+  NOTIFICATION_SCOPE_TYPE_CHANNEL = 2;
+  NOTIFICATION_SCOPE_TYPE_DM_CONVERSATION = 3;
+}
+
+message NotificationPreference {
+  NotificationScopeType scope_type = 1;
+  string scope_id = 2;
+  NotificationLevel level = 3;
+  // Unset: no time limit.
+  google.protobuf.Timestamp mute_until = 4;
+  google.protobuf.Timestamp update_time = 5;
+}
+
+message ListNotificationPreferencesRequest {}
+
+message ListNotificationPreferencesResponse {
+  repeated NotificationPreference preferences = 1;
+}
+
+message SetTayfaNotificationPreferenceRequest {
+  string tayfa_id = 1;
+  NotificationLevel level = 2;
+  // Optional; only with MENTIONS or NONE.
+  google.protobuf.Timestamp mute_until = 3;
+}
+
+message SetTayfaNotificationPreferenceResponse {
+  NotificationPreference preference = 1;
+}
