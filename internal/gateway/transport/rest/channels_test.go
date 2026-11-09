@@ -201,6 +201,8 @@ func TestChannelErrors(t *testing.T) {
 		{chatErr(codes.PermissionDenied, chatv1.ErrorReason_ERROR_REASON_MUTED.String()), 403, "muted", ""},
 		{chatErr(codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_CHANNEL_ARCHIVED.String()), 409, "channel-archived", ""},
 		{chatErr(codes.AlreadyExists, chatv1.ErrorReason_ERROR_REASON_CHANNEL_NAME_TAKEN.String()), 409, "channel-name-taken", ""},
+		{chatErr(codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_TAYFA_READ_ONLY.String()), 409, "tayfa-read-only", ""},
+		{chatErr(codes.PermissionDenied, chatv1.ErrorReason_ERROR_REASON_ROLE_HIERARCHY.String()), 403, "role-hierarchy", ""},
 		{slowModeErr(map[string]string{"retry_after_seconds": "12"}), 429, "slow-mode", "12"},
 		// A bad or oversized value from chat is not passed on.
 		{slowModeErr(map[string]string{"retry_after_seconds": "1e9"}), 429, "slow-mode", ""},

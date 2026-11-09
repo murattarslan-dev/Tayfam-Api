@@ -115,6 +115,8 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_CHANNEL_ARCHIVED":   {http.StatusConflict, "channel-archived"},
 		"ERROR_REASON_CHANNEL_NAME_TAKEN": {http.StatusConflict, "channel-name-taken"},
 		"ERROR_REASON_SLOW_MODE":          {http.StatusTooManyRequests, "slow-mode"},
+		"ERROR_REASON_TAYFA_READ_ONLY":    {http.StatusConflict, "tayfa-read-only"},
+		"ERROR_REASON_ROLE_HIERARCHY":     {http.StatusForbidden, "role-hierarchy"},
 	},
 }
 

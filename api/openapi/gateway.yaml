@@ -2209,7 +2209,10 @@ paths:
       description: |
         Etkin üyesi olduğunuz tayfanın görebildiğiniz kanalları
         (`tayfa-not-found`). `staff` kanallarını yalnızca yönetici ve
-        moderatörler görür. Arşivlenmiş kanallar sondadır. `unread_count`
+        moderatörler görür. İzinleri core'un tek izin tablosu verir.
+        Askıdaki, arşivlenmiş ya da silinmeyi bekleyen tayfada kanallar salt
+        okunurdur: değişiklikler `tayfa-read-only` (409) alır; okuma ve
+        okundu işareti sürer. Arşivlenmiş kanallar sondadır. `unread_count`
         başkalarının silinmemiş mesajlarından okunmamış olanlardır; en
         fazla 100 döner, istemci "99+" gösterir.
       responses:
@@ -2313,6 +2316,7 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
     delete:
       operationId: unarchiveChannel
@@ -2415,9 +2419,11 @@ paths:
       summary: Mesajı siler
       description: |
         Kendi mesajınızı silerseniz metin hemen ve geri alınamaz biçimde
-        silinir. Yönetici ve moderatörler başkasının mesajını gizler; yönetici
-        30 gün içinde geri alabilir, sonra kalıcı silinir. Silinmiş mesajı
-        silmek bir şey değiştirmez.
+        silinir. Yönetici ve moderatörler başkasının mesajını gizler; yazarın
+        güncel rolü sizinkine eşit ya da yüksekse `role-hierarchy` (403;
+        tayfadan ayrılmış yazar sınırlamaz). Yönetici 30 gün içinde geri
+        alabilir, sonra kalıcı silinir. Silinmiş mesajı silmek bir şey
+        değiştirmez.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       responses:
@@ -2426,6 +2432,7 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
   /v1/tayfas/{tayfa_id}/channels/{channel_id}/messages/{message_id}/restoration:
@@ -2437,8 +2444,8 @@ paths:
       operationId: restoreChannelMessage
       summary: Moderasyonla gizlenen mesajı geri alır (yönetici)
       description: |
-        30 gün içinde. Yazarın kendi silmesi ve daha eskisi
-        `message-not-found` alır. Görünür mesajı geri almak bir şey
+        30 gün içinde, yazarın güncel rolünün üstündeyseniz (`role-hierarchy`).
+        Yazarın kendi silmesi ve daha eskisi `message-not-found` alır. Görünür mesajı geri almak bir şey
         değiştirmez. Her geri alma kayıt altına alınır.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
@@ -2452,6 +2459,7 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
   /v1/tayfas/{tayfa_id}/channels/{channel_id}/read:
@@ -4736,10 +4744,6 @@ components:
       properties:
         message_id: { type: string, format: uuid }
 
-security:
-  - bearer: []
-  - cookie: []
-
     # --- arkadaşlık, davet, profil, hesap (#71) ---
 
     ActivityVisibility:
@@ -5011,3 +5015,7 @@ security:
       required: [resolution]
       properties:
         resolution: { type: string, enum: [content_removed, member_sanctioned, dismissed] }
+
+security:
+  - bearer: []
+  - cookie: []
