@@ -524,6 +524,38 @@ func (q *Queries) AdminGetTayfa(ctx context.Context, id pgtype.UUID) (AdminGetTa
 	return i, err
 }
 
+const adminListJobRuns = `-- name: AdminListJobRuns :many
+SELECT job, finished_at, succeeded, changed, last_succeeded_at
+FROM job_runs
+ORDER BY job
+`
+
+func (q *Queries) AdminListJobRuns(ctx context.Context) ([]JobRun, error) {
+	rows, err := q.db.Query(ctx, adminListJobRuns)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []JobRun{}
+	for rows.Next() {
+		var i JobRun
+		if err := rows.Scan(
+			&i.Job,
+			&i.FinishedAt,
+			&i.Succeeded,
+			&i.Changed,
+			&i.LastSucceededAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListPlatformReports = `-- name: AdminListPlatformReports :many
 SELECT id, tayfa_id, target_type, target_id, subject_user_id, reporter_id, reason, description,
        priority, created_at, escalated_to_platform_at, platform_status, platform_decision, platform_handled_at
@@ -869,6 +901,40 @@ func (q *Queries) AdminTayfaStaffIDs(ctx context.Context, tayfaID pgtype.UUID) (
 		return nil, err
 	}
 	return items, nil
+}
+
+const adminTayfaStats = `-- name: AdminTayfaStats :one
+SELECT
+  count(*)::bigint AS total,
+  count(*) FILTER (WHERE suspended_at IS NULL AND status = 'active')::bigint AS active,
+  count(*) FILTER (WHERE suspended_at IS NOT NULL)::bigint AS suspended,
+  count(*) FILTER (WHERE status = 'warned')::bigint AS warned,
+  count(*) FILTER (WHERE status = 'archived')::bigint AS archived
+FROM tayfas
+WHERE deleted_at IS NULL
+`
+
+type AdminTayfaStatsRow struct {
+	Total     int64
+	Active    int64
+	Suspended int64
+	Warned    int64
+	Archived  int64
+}
+
+// Pano sayaçları (issue #110). Yalnızca sayılar; tayfa kimliği ya da adı
+// dönmez.
+func (q *Queries) AdminTayfaStats(ctx context.Context) (AdminTayfaStatsRow, error) {
+	row := q.db.QueryRow(ctx, adminTayfaStats)
+	var i AdminTayfaStatsRow
+	err := row.Scan(
+		&i.Total,
+		&i.Active,
+		&i.Suspended,
+		&i.Warned,
+		&i.Archived,
+	)
+	return i, err
 }
 
 const adminUnsuspendTayfa = `-- name: AdminUnsuspendTayfa :execrows

@@ -91,6 +91,9 @@ type CoreAdminClient = corev1.AdminServiceClient
 // UserAdminClient is identity's AdminUserService.
 type UserAdminClient = identityv1.AdminUserServiceClient
 
+// AuditAdminClient is identity's AdminAuditService (issue #110).
+type AuditAdminClient = identityv1.AdminAuditServiceClient
+
 // Config configures the admin router.
 type Config struct {
 	// Host is the panel's host name, e.g. admin.tayfam.app.
@@ -100,6 +103,7 @@ type Config struct {
 	Identity IdentityClient
 	Core     CoreAdminClient
 	Users    UserAdminClient
+	Audit    AuditAdminClient
 	// GoogleClientID is the OAuth client of the panel's Google sign-in. It
 	// must be one of identity's GOOGLE_CLIENT_IDS and list
 	// https://<Host>/auth/google/callback as a redirect URI. Not secret.
@@ -115,7 +119,7 @@ type Config struct {
 // NewHandler returns the admin router. Every field of cfg is required.
 func NewHandler(cfg Config) (http.Handler, error) {
 	if cfg.Host == "" || cfg.Access == nil || cfg.Admin == nil || cfg.Identity == nil || cfg.Core == nil ||
-		cfg.Users == nil || cfg.GoogleClientID == "" || cfg.Log == nil || cfg.SignInLimit == nil {
+		cfg.Users == nil || cfg.Audit == nil || cfg.GoogleClientID == "" || cfg.Log == nil || cfg.SignInLimit == nil {
 		return nil, errors.New("admin: eksik yapılandırma")
 	}
 	if cfg.Now == nil {
@@ -158,6 +162,7 @@ func NewHandler(cfg Config) (http.Handler, error) {
 	page("GET /sikayetler", h.reports)
 	page("GET /sikayetler/{id}", h.report)
 	change("POST /sikayetler/{id}/karar", h.decideReport)
+	page("GET /denetim", h.auditLog)
 	mux.HandleFunc("/", httpx.NotFound)
 	return httpx.Chain(mux, securityHeaders, h.requireAccess, h.sameOrigin, withCSRFSlot), nil
 }

@@ -86,6 +86,9 @@ service AdminUserService {
   // LiftSanction ends the user's active sanction; for a ban, user.unbanned
   // goes to core.
   rpc LiftSanction(LiftSanctionRequest) returns (LiftSanctionResponse);
+  // GetUserStats returns the panel dashboard's user counts (issue #110).
+  // Counts only: no user ID, name or other personal data.
+  rpc GetUserStats(GetUserStatsRequest) returns (GetUserStatsResponse);
 }
 
 enum SanctionType {
@@ -163,6 +166,83 @@ message LiftSanctionRequest {
 }
 
 message LiftSanctionResponse {}
+
+message GetUserStatsRequest {}
+
+message GetUserStatsResponse {
+  // Registered accounts that are not deleted.
+  int64 total_users = 1;
+  // Of those, accounts with a session refreshed in the last 30 days that is
+  // not revoked.
+  int64 active_users = 2;
+  // Accounts with an active platform sanction.
+  int64 suspended_users = 3;
+  int64 banned_users = 4;
+  // Account deletions (KVKK erasure requests): the personal data is cleared
+  // at once; the row is removed for good 30 days later by the retention
+  // job. pending: deleted, not yet removed. overdue: pending for more than
+  // 31 days, i.e. the retention job is behind. Data export requests are
+  // not implemented yet.
+  int64 deletions_pending = 5;
+  int64 deletions_overdue = 6;
+}
+
+// AdminAuditService is the panel's view of the platform audit log
+// (issue #110; Notion "Platform Yönetim Paneli → Denetim kaydı"). Only an
+// admin token is accepted and identity checks platform_admins again on
+// every call. It is a separate service from PlatformAuditService, which
+// accepts only tayfam-core's service token: auth.Guard keeps admin and
+// service methods in separate services.
+service AdminAuditService {
+  // ListPlatformAuditLogs lists audit entries newest first. Entries hold
+  // the action, IDs and the written reason only; no e-mail address, message
+  // text, location or token is ever written to the log (00006).
+  rpc ListPlatformAuditLogs(ListPlatformAuditLogsRequest) returns (ListPlatformAuditLogsResponse);
+}
+
+message ListPlatformAuditLogsRequest {
+  // 0 means 50; above 100 means 100; negative is ERROR_REASON_VALIDATION.
+  int32 page_size = 1;
+  // Opaque, from next_page_cursor of the same request; a cursor made for
+  // other filters is ERROR_REASON_VALIDATION. (Not named page_token: the
+  // panel contracts carry no field named token, TestPanelContractsCannotSee.)
+  string page_cursor = 2;
+  // Exact action, e.g. "tayfa.suspend". Optional.
+  string action = 3;
+  // user, tayfa, membership, report, moderation_term or subscription.
+  // Optional.
+  string target_type = 4;
+  // An ID the entry concerns: its target, or the tayfa, user or report in
+  // its metadata. Optional.
+  string related_id = 5;
+  // created_at >= start_time and < end_time. Optional.
+  google.protobuf.Timestamp start_time = 6;
+  google.protobuf.Timestamp end_time = 7;
+}
+
+message ListPlatformAuditLogsResponse {
+  repeated PlatformAuditEntry entries = 1;
+  // Empty on the last page.
+  string next_page_cursor = 2;
+}
+
+message PlatformAuditEntry {
+  string entry_id = 1;
+  google.protobuf.Timestamp create_time = 2;
+  // The platform administrator and their display name (empty once the
+  // account is deleted).
+  string actor_id = 3;
+  string actor_display_name = 4;
+  string action = 5;
+  string target_type = 6;
+  string target_id = 7;
+  // The written reason. Shown on the panel only.
+  string reason = 8;
+  // IDs from the entry's metadata, if any.
+  string tayfa_id = 9;
+  string user_id = 10;
+  string report_id = 11;
+}
 
 // PlatformAuditService receives core's platform panel actions for the
 // platform audit log (issue #104 stage 2). core writes each action and its

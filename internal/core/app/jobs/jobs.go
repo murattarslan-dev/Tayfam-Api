@@ -13,6 +13,9 @@
 //	retention       deletes resolved reports and audit records after a
 //	                year (#76)
 //
+// The outcome of every pass (finish time, success, rows changed) is written
+// to job_runs for the panel's dashboard (issue #110).
+//
 // There is no job queue. Each job is a Go ticker that scans the database
 // state, so after a restart the next run continues where the last one
 // stopped. Every run is idempotent: it only changes rows that are still in
@@ -239,12 +242,25 @@ func (s *Service) every(name string, interval time.Duration, pass func(context.C
 			case n > 0:
 				s.cfg.Log.InfoContext(ctx, "arka plan işi", slog.String("iş", name), slog.Int("adet", n))
 			}
+			s.recordRun(ctx, name, n, err)
 			select {
 			case <-ctx.Done():
 				return nil
 			case <-t.C:
 			}
 		}
+	}
+}
+
+// recordRun writes the outcome of a pass to job_runs for the panel's
+// dashboard (issue #110): finish time, success and rows changed; never the
+// error text. A failure to record is logged and does not stop the job.
+func (s *Service) recordRun(ctx context.Context, name string, changed int, runErr error) {
+	err := store.New(s.cfg.Pool).RecordJobRun(ctx, store.RecordJobRunParams{
+		Job: name, FinishedAt: ts(s.now()), Succeeded: runErr == nil, Changed: int64(max(changed, 0)),
+	})
+	if err != nil && ctx.Err() == nil {
+		s.cfg.Log.WarnContext(ctx, "iş çalışması kaydedilemedi", slog.String("iş", name), slog.String("hata", err.Error()))
 	}
 }
 

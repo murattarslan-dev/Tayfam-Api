@@ -246,6 +246,14 @@ type Invite struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type JobRun struct {
+	Job             string
+	FinishedAt      pgtype.Timestamptz
+	Succeeded       bool
+	Changed         int64
+	LastSucceededAt pgtype.Timestamptz
+}
+
 type Membership struct {
 	TayfaID         pgtype.UUID
 	UserID          pgtype.UUID

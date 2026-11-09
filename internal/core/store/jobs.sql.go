@@ -457,6 +457,37 @@ func (q *Queries) ReactivateWarnedTayfas(ctx context.Context, n int32) ([]pgtype
 	return items, nil
 }
 
+const recordJobRun = `-- name: RecordJobRun :exec
+INSERT INTO job_runs (job, finished_at, succeeded, changed, last_succeeded_at)
+VALUES ($1, $2, $3, $4,
+        CASE WHEN $3::boolean THEN $2::timestamptz END)
+ON CONFLICT (job) DO UPDATE
+SET finished_at = EXCLUDED.finished_at,
+    succeeded = EXCLUDED.succeeded,
+    changed = EXCLUDED.changed,
+    last_succeeded_at = COALESCE(EXCLUDED.last_succeeded_at, job_runs.last_succeeded_at)
+WHERE job_runs.finished_at < EXCLUDED.finished_at
+`
+
+type RecordJobRunParams struct {
+	Job        string
+	FinishedAt pgtype.Timestamptz
+	Succeeded  bool
+	Changed    int64
+}
+
+// Bir turun sonucu (issue #110, 00015). Başka bir pod'un daha yeni bitişi
+// ezilmez. Başarısız tur son başarılı zamanı korur.
+func (q *Queries) RecordJobRun(ctx context.Context, arg RecordJobRunParams) error {
+	_, err := q.db.Exec(ctx, recordJobRun,
+		arg.Job,
+		arg.FinishedAt,
+		arg.Succeeded,
+		arg.Changed,
+	)
+	return err
+}
+
 const softDeleteDueTayfas = `-- name: SoftDeleteDueTayfas :many
 
 UPDATE tayfas SET deleted_at = $1

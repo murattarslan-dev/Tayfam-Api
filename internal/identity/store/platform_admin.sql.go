@@ -11,6 +11,55 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adminUserStats = `-- name: AdminUserStats :one
+SELECT
+  (SELECT count(*) FROM users u
+   WHERE u.deleted_at IS NULL AND u.registered_at IS NOT NULL)::bigint AS total,
+  (SELECT count(*) FROM users u
+   WHERE u.deleted_at IS NULL AND u.registered_at IS NOT NULL
+     AND EXISTS (SELECT 1 FROM sessions s
+                 WHERE s.user_id = u.id AND s.revoked_at IS NULL AND s.last_refreshed_at >= $1))::bigint AS active,
+  (SELECT count(*) FROM platform_sanctions ps
+   WHERE ps.type = 'suspend' AND ps.lifted_at IS NULL AND ps.ends_at > now())::bigint AS suspended,
+  (SELECT count(*) FROM platform_sanctions ps
+   WHERE ps.type = 'ban' AND ps.lifted_at IS NULL)::bigint AS banned,
+  (SELECT count(*) FROM users u WHERE u.deleted_at IS NOT NULL)::bigint AS deletions_pending,
+  (SELECT count(*) FROM users u WHERE u.deleted_at < $2)::bigint AS deletions_overdue
+`
+
+type AdminUserStatsParams struct {
+	ActiveSince   pgtype.Timestamptz
+	OverdueBefore pgtype.Timestamptz
+}
+
+type AdminUserStatsRow struct {
+	Total            int64
+	Active           int64
+	Suspended        int64
+	Banned           int64
+	DeletionsPending int64
+	DeletionsOverdue int64
+}
+
+// Pano sayaçları (issue #110). Yalnızca sayılar. Aktif: son @active_since
+// sonrasında yenilenmiş, iptal edilmemiş oturumu olan kayıtlı hesap.
+// Silinen hesap (KVKK silme talebi): kişisel veri hemen temizlenir, satır
+// 30 gün sonra saklama işiyle kalıcı silinir; @overdue_before'dan eski
+// satır saklama işinin geride kaldığını gösterir.
+func (q *Queries) AdminUserStats(ctx context.Context, arg AdminUserStatsParams) (AdminUserStatsRow, error) {
+	row := q.db.QueryRow(ctx, adminUserStats, arg.ActiveSince, arg.OverdueBefore)
+	var i AdminUserStatsRow
+	err := row.Scan(
+		&i.Total,
+		&i.Active,
+		&i.Suspended,
+		&i.Banned,
+		&i.DeletionsPending,
+		&i.DeletionsOverdue,
+	)
+	return i, err
+}
+
 const createSanction = `-- name: CreateSanction :one
 INSERT INTO platform_sanctions (id, user_id, type, reason, starts_at, ends_at, created_by)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -293,6 +342,100 @@ func (q *Queries) ListActiveSanctionTypes(ctx context.Context, userIds []pgtype.
 	for rows.Next() {
 		var i ListActiveSanctionTypesRow
 		if err := rows.Scan(&i.UserID, &i.Type); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformAuditLogs = `-- name: ListPlatformAuditLogs :many
+SELECT l.id, l.created_at, l.actor_id, u.display_name AS actor_name, l.action,
+       l.target_type, l.target_id, l.reason,
+       COALESCE(l.metadata->>'tayfa_id', '')::text AS tayfa_id,
+       COALESCE(l.metadata->>'user_id', '')::text AS user_id,
+       COALESCE(l.metadata->>'report_id', '')::text AS report_id
+FROM platform_audit_logs l
+LEFT JOIN users u ON u.id = l.actor_id AND u.deleted_at IS NULL
+WHERE ($1::text IS NULL OR l.action = $1::text)
+  AND ($2::text IS NULL OR l.target_type = $2::text)
+  AND ($3::uuid IS NULL
+       OR l.target_id = $3::uuid
+       OR l.metadata->>'tayfa_id' = $3::uuid::text
+       OR l.metadata->>'user_id' = $3::uuid::text
+       OR l.metadata->>'report_id' = $3::uuid::text)
+  AND ($4::timestamptz IS NULL OR l.created_at >= $4::timestamptz)
+  AND ($5::timestamptz IS NULL OR l.created_at < $5::timestamptz)
+  AND (NOT $6::boolean
+       OR (l.created_at, l.id) < ($7::timestamptz, $8::uuid))
+ORDER BY l.created_at DESC, l.id DESC
+LIMIT $9
+`
+
+type ListPlatformAuditLogsParams struct {
+	Action         pgtype.Text
+	TargetType     pgtype.Text
+	RelatedID      pgtype.UUID
+	Since          pgtype.Timestamptz
+	Until          pgtype.Timestamptz
+	HasCursor      bool
+	AfterCreatedAt pgtype.Timestamptz
+	AfterID        pgtype.UUID
+	N              int32
+}
+
+type ListPlatformAuditLogsRow struct {
+	ID         pgtype.UUID
+	CreatedAt  pgtype.Timestamptz
+	ActorID    pgtype.UUID
+	ActorName  pgtype.Text
+	Action     string
+	TargetType pgtype.Text
+	TargetID   pgtype.UUID
+	Reason     string
+	TayfaID    string
+	UserID     string
+	ReportID   string
+}
+
+// Panelde denetim kaydı (issue #110). En yeni önce, imleçli. related_id
+// kaydın hedefi ya da metadata'daki tayfa, kullanıcı veya şikâyet
+// kimliğidir. Metadata'dan yalnızca bu üç kimlik okunur.
+func (q *Queries) ListPlatformAuditLogs(ctx context.Context, arg ListPlatformAuditLogsParams) ([]ListPlatformAuditLogsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformAuditLogs,
+		arg.Action,
+		arg.TargetType,
+		arg.RelatedID,
+		arg.Since,
+		arg.Until,
+		arg.HasCursor,
+		arg.AfterCreatedAt,
+		arg.AfterID,
+		arg.N,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPlatformAuditLogsRow{}
+	for rows.Next() {
+		var i ListPlatformAuditLogsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.ActorID,
+			&i.ActorName,
+			&i.Action,
+			&i.TargetType,
+			&i.TargetID,
+			&i.Reason,
+			&i.TayfaID,
+			&i.UserID,
+			&i.ReportID,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

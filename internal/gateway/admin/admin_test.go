@@ -77,6 +77,7 @@ type env struct {
 	logs     *bytes.Buffer
 	core     *fakeCore
 	users    *fakeUsers
+	audit    *fakeAudit
 	// signingKey signs further admin tokens (old sign-ins).
 	signingKey auth.SigningKey
 }
@@ -119,14 +120,14 @@ func setup(t *testing.T) *env {
 	e := &env{cluster: c, identity: &fakeIdentity{token: adminTok}, adminTok: adminTok, appTok: appTok, logs: &bytes.Buffer{},
 		signingKey: key}
 	shared := &calls{}
-	e.core, e.users = newFakeCore(shared), newFakeUsers(shared)
+	e.core, e.users, e.audit = newFakeCore(shared), newFakeUsers(shared), newFakeAudit(shared)
 	e.access = c.Token(t, satest.Spec{Alg: "RS256", Claims: map[string]any{
 		"iss": "https://" + team, "aud": []string{aud}, "sub": "cf-1", "email": accessTo, "type": "app",
 		"iat": now.Unix(), "exp": now.Add(8 * time.Hour).Unix(),
 	}})
 	e.h, err = NewHandler(Config{
 		Host: host, Access: av, Admin: adminV, Identity: e.identity,
-		Core: e.core, Users: e.users, GoogleClientID: googleClient,
+		Core: e.core, Users: e.users, Audit: e.audit, GoogleClientID: googleClient,
 		Log: slog.New(slog.NewJSONHandler(e.logs, nil)), SignInLimit: ratelimit.New(60, 60),
 	})
 	if err != nil {
@@ -344,7 +345,7 @@ func TestSignInRefusals(t *testing.T) {
 func TestSignInRateLimited(t *testing.T) {
 	e := setup(t)
 	e.h, _ = NewHandler(Config{Host: host, Access: mustAccess(t, e.cluster), Admin: noAdmin{}, Identity: e.identity,
-		Core: e.core, Users: e.users, GoogleClientID: googleClient, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), SignInLimit: ratelimit.New(1, 1)})
+		Core: e.core, Users: e.users, Audit: e.audit, GoogleClientID: googleClient, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), SignInLimit: ratelimit.New(1, 1)})
 	nonce := &http.Cookie{Name: NonceCookie, Value: strings.Repeat("n", 43)}
 	var last int
 	for range 3 {
@@ -461,7 +462,7 @@ func TestRoutesMatchContract(t *testing.T) {
 			t.Errorf("sözleşmedeki %s %s sunulmuyor (%d)", m[1], path, w.Code)
 		}
 	}
-	if ops != 25 {
+	if ops != 26 {
 		t.Fatalf("sözleşmede %d işlem bulundu", ops)
 	}
 }

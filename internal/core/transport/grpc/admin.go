@@ -330,3 +330,27 @@ func (s *AdminServer) DecideReport(ctx context.Context, req *corev1.DecideReport
 	}
 	return &corev1.DecideReportResponse{}, nil
 }
+
+// GetStats implements corev1.AdminServiceServer.
+func (s *AdminServer) GetStats(ctx context.Context, _ *corev1.GetStatsRequest) (*corev1.GetStatsResponse, error) {
+	c, err := s.claims(ctx)
+	if err != nil {
+		return nil, err
+	}
+	st, err := s.app.GetStats(ctx, c)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	out := &corev1.GetStatsResponse{
+		TotalTayfas: st.Total, ActiveTayfas: st.Active, SuspendedTayfas: st.Suspended,
+		WarnedTayfas: st.Warned, ArchivedTayfas: st.Archived,
+		JobRuns: make([]*corev1.JobRun, 0, len(st.Jobs)),
+	}
+	for _, j := range st.Jobs {
+		out.JobRuns = append(out.JobRuns, &corev1.JobRun{
+			Job: j.Job, FinishTime: timestamppb.New(j.FinishedAt), Succeeded: j.Succeeded, Changed: j.Changed,
+			LastSuccessTime: tsOrNil(j.LastSuccessAt),
+		})
+	}
+	return out, nil
+}

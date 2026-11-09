@@ -1,0 +1,61 @@
+{{define "content"}}
+<h1>Denetim kaydı</h1>
+<p class="hint">Panelden yapılan her işlem gerekçesiyle burada. Kayıt yalnızca eklenir; panelden silinemez, bir yıl saklanır. En yeni önce.</p>
+<form class="filters" method="get" action="/denetim">
+  <div>
+    <label for="islem">İşlem</label>
+    <select id="islem" name="islem">
+      <option value="">Tümü</option>
+      {{range .Data.Actions}}<option value="{{.Value}}"{{if eq .Value $.Data.Filter.Action}} selected{{end}}>{{.Label}}</option>{{end}}
+    </select>
+  </div>
+  <div>
+    <label for="tur">Hedef türü</label>
+    <select id="tur" name="tur">
+      <option value="">Tümü</option>
+      {{range .Data.Types}}<option value="{{.Value}}"{{if eq .Value $.Data.Filter.TargetType}} selected{{end}}>{{.Label}}</option>{{end}}
+    </select>
+  </div>
+  <div>
+    <label for="ilgili">İlgili kimlik</label>
+    <input type="text" id="ilgili" name="ilgili" value="{{.Data.Filter.Related}}" maxlength="36" pattern="[0-9a-fA-F-]{36}" placeholder="Tayfa, kullanıcı veya şikâyet kimliği">
+  </div>
+  <div>
+    <label for="baslangic">Başlangıç</label>
+    <input type="date" id="baslangic" name="baslangic" value="{{.Data.Filter.From}}">
+  </div>
+  <div>
+    <label for="bitis">Bitiş (dahil)</label>
+    <input type="date" id="bitis" name="bitis" value="{{.Data.Filter.To}}">
+  </div>
+  <div>
+    <button type="submit">Filtrele</button>
+  </div>
+</form>
+{{if .Data.Filtered}}<p><a href="/denetim">Filtreyi temizle</a></p>{{end}}
+{{if .Data.Entries}}
+<div class="table-wrap"><table>
+<thead><tr><th>Zaman</th><th>Yönetici</th><th>İşlem</th><th>Hedef</th><th>Gerekçe</th></tr></thead>
+<tbody>
+{{range .Data.Entries}}
+<tr>
+  <td>{{ts .CreateTime}}</td>
+  <td>{{if .ActorDisplayName}}{{.ActorDisplayName}}{{else}}<span class="ids">{{.ActorId}}</span>{{end}}</td>
+  <td>{{action .Action}}</td>
+  <td>
+    {{targetType .TargetType}}
+    {{if .TargetId}}<div class="ids">{{if eq .TargetType "tayfa"}}<a href="/tayfalar/{{.TargetId}}">{{.TargetId}}</a>{{else if eq .TargetType "user"}}<a href="/kullanicilar/{{.TargetId}}">{{.TargetId}}</a>{{else if eq .TargetType "report"}}<a href="/sikayetler/{{.TargetId}}">{{.TargetId}}</a>{{else}}{{.TargetId}}{{end}}</div>{{end}}
+    {{if and .TayfaId (ne .TayfaId .TargetId)}}<div class="ids">Tayfa: <a href="/tayfalar/{{.TayfaId}}">{{.TayfaId}}</a></div>{{end}}
+    {{if and .UserId (ne .UserId .TargetId)}}<div class="ids">Kullanıcı: <a href="/kullanicilar/{{.UserId}}">{{.UserId}}</a></div>{{end}}
+    {{if and .ReportId (ne .ReportId .TargetId)}}<div class="ids">Şikâyet: <a href="/sikayetler/{{.ReportId}}">{{.ReportId}}</a></div>{{end}}
+  </td>
+  <td class="reason">{{.Reason}}</td>
+</tr>
+{{end}}
+</tbody>
+</table></div>
+{{if .Data.Next}}<p><a href="{{.Data.Next}}">Daha eski kayıtlar</a></p>{{end}}
+{{else}}
+<p>Kayıt yok.</p>
+{{end}}
+{{end}}

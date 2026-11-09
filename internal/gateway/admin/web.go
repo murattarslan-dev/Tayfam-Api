@@ -69,7 +69,7 @@ const (
 
 func parseTemplates() (map[string]*template.Template, error) {
 	// The page templates; each is parsed with layout.html.
-	pageNames := []string{"login", "continue", "error", "dashboard", "tayfas", "tayfa", "users", "user", "reports", "report"}
+	pageNames := []string{"login", "continue", "error", "dashboard", "tayfas", "tayfa", "users", "user", "reports", "report", "audit"}
 	out := make(map[string]*template.Template, len(pageNames))
 	for _, name := range pageNames {
 		t, err := template.New("layout.html").Funcs(templateFuncs()).ParseFS(templateFS, "templates/layout.html", "templates/"+name+".html")
@@ -363,6 +363,10 @@ type dashboardData struct {
 	Queue         []*corev1.PlatformReport
 	SignedInAt    time.Time
 	ExpiresAt     time.Time
+	// Counts only (issue #110): core's tayfas and job runs, identity's
+	// users and account deletions.
+	Tayfas *corev1.GetStatsResponse
+	Users  *identityv1.GetUserStatsResponse
 }
 
 func (h *handlers) dashboard(w http.ResponseWriter, r *http.Request) {
@@ -374,7 +378,17 @@ func (h *handlers) dashboard(w http.ResponseWriter, r *http.Request) {
 		h.failedPage(w, r, err)
 		return
 	}
-	d := dashboardData{SignedInAt: s.claims.AuthTime, ExpiresAt: s.claims.ExpiresAt}
+	tayfas, err := h.cfg.Core.GetStats(ctx, &corev1.GetStatsRequest{})
+	if err != nil {
+		h.failedPage(w, r, err)
+		return
+	}
+	users, err := h.cfg.Users.GetUserStats(ctx, &identityv1.GetUserStatsRequest{})
+	if err != nil {
+		h.failedPage(w, r, err)
+		return
+	}
+	d := dashboardData{SignedInAt: s.claims.AuthTime, ExpiresAt: s.claims.ExpiresAt, Tayfas: tayfas, Users: users}
 	for _, rep := range resp.GetReports() {
 		if rep.GetResolvedOnPlatform() {
 			continue

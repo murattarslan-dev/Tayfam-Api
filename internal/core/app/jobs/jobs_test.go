@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"slices"
@@ -762,5 +763,43 @@ func TestWorkersStop(t *testing.T) {
 	}
 	if n := len(e.events(t, EventHikeOverdue)); n != 1 {
 		t.Errorf("hike.overdue = %d", n)
+	}
+}
+
+// TestRecordRun: every pass leaves its finish time, success and count in
+// job_runs (issue #110). An older finish (a slower pod) does not overwrite a
+// newer one, and a failed run keeps the last success.
+func TestRecordRun(t *testing.T) {
+	e := setup(t)
+	type row struct {
+		finished, lastOK time.Time
+		ok               bool
+		changed          int64
+	}
+	get := func() row {
+		t.Helper()
+		var r row
+		var lastOK pgtype.Timestamptz
+		must(t, e.pool.QueryRow(ctx, `SELECT finished_at, succeeded, changed, last_succeeded_at FROM job_runs WHERE job = $1`, JobTayfaCleanup).
+			Scan(&r.finished, &r.ok, &r.changed, &lastOK))
+		r.finished, r.lastOK = r.finished.UTC(), lastOK.Time.UTC()
+		return r
+	}
+	t0 := e.base.Truncate(time.Microsecond)
+
+	e.at(t, 0).recordRun(ctx, JobTayfaCleanup, 3, nil)
+	if r := get(); !r.finished.Equal(t0) || !r.ok || r.changed != 3 || !r.lastOK.Equal(t0) {
+		t.Fatalf("ilk çalışma = %+v", r)
+	}
+	e.at(t, time.Hour).recordRun(ctx, JobTayfaCleanup, 0, errors.New("bağlantı koptu"))
+	if r := get(); !r.finished.Equal(t0.Add(time.Hour)) || r.ok || r.changed != 0 || !r.lastOK.Equal(t0) {
+		t.Fatalf("başarısız çalışma = %+v", r)
+	}
+	e.at(t, 30*time.Minute).recordRun(ctx, JobTayfaCleanup, 9, nil)
+	if r := get(); !r.finished.Equal(t0.Add(time.Hour)) || r.changed != 0 {
+		t.Fatalf("eski bitiş yenisini ezdi: %+v", r)
+	}
+	if n := e.count(t, `SELECT count(*) FROM job_runs`); n != 1 {
+		t.Fatalf("satır sayısı %d", n)
 	}
 }

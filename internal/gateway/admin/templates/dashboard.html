@@ -4,6 +4,50 @@
   <div class="card stat"><div class="n">{{.Data.OpenReports}}</div><div class="l">Bekleyen platform şikâyeti</div></div>
   <div class="card stat"><div class="n">{{.Data.UrgentReports}}</div><div class="l">Öncelikli (18 yaş altı taraf veya çocuk/genç güvenliği)</div></div>
 </div>
+<h2>Kullanıcılar</h2>
+{{with .Data.Users}}
+<div class="stats">
+  <div class="card stat"><div class="n">{{.TotalUsers}}</div><div class="l">Toplam (kaydı tamamlanmış, silinmemiş)</div></div>
+  <div class="card stat"><div class="n">{{.ActiveUsers}}</div><div class="l">Aktif (son 30 günde oturumu yenilenen)</div></div>
+  <div class="card stat"><div class="n">{{.SuspendedUsers}}</div><div class="l">Platform askısında</div></div>
+  <div class="card stat"><div class="n">{{.BannedUsers}}</div><div class="l">Banlı</div></div>
+</div>
+<h2>KVKK talepleri</h2>
+<div class="stats">
+  <div class="card stat"><div class="n">{{.DeletionsPending}}</div><div class="l">Hesap silme: kişisel veri temizlendi, kalıcı silinmeyi bekliyor (30 gün)</div></div>
+  <div class="card stat{{if .DeletionsOverdue}} alert{{end}}"><div class="n">{{.DeletionsOverdue}}</div><div class="l">Hesap silme: 31 günü geçti (saklama işi geride)</div></div>
+</div>
+<p class="hint">Veri dışa aktarma talepleri henüz yok.</p>
+{{end}}
+<h2>Tayfalar</h2>
+{{with .Data.Tayfas}}
+<div class="stats">
+  <div class="card stat"><div class="n">{{.TotalTayfas}}</div><div class="l">Toplam (silinmemiş)</div></div>
+  <div class="card stat"><div class="n">{{.ActiveTayfas}}</div><div class="l">Aktif</div></div>
+  <div class="card stat"><div class="n">{{.SuspendedTayfas}}</div><div class="l">Askıda</div></div>
+  <div class="card stat"><div class="n">{{.WarnedTayfas}}</div><div class="l">Uyarıldı (hareketsiz)</div></div>
+  <div class="card stat"><div class="n">{{.ArchivedTayfas}}</div><div class="l">Arşivlendi</div></div>
+</div>
+<h2>Arka plan işleri</h2>
+{{if .JobRuns}}
+<div class="table-wrap"><table>
+<thead><tr><th>İş</th><th>Son çalışma</th><th>Sonuç</th><th>Değişen</th><th>Son başarılı</th></tr></thead>
+<tbody>
+{{range .JobRuns}}
+<tr>
+  <td>{{job .Job}}</td>
+  <td>{{ts .FinishTime}}</td>
+  <td>{{if .Succeeded}}Başarılı{{else}}<span class="tag danger">Başarısız</span>{{end}}</td>
+  <td>{{.Changed}}</td>
+  <td>{{ts .LastSuccessTime}}</td>
+</tr>
+{{end}}
+</tbody>
+</table></div>
+{{else}}
+<p>Henüz kayıtlı çalışma yok.</p>
+{{end}}
+{{end}}
 <h2>Kuyruğun başı</h2>
 {{if .Data.Queue}}
 {{template "reportTable" .Data.Queue}}

@@ -981,6 +981,418 @@ func (*LiftSanctionResponse) Descriptor() ([]byte, []int) {
 	return file_tayfam_identity_v1_admin_proto_rawDescGZIP(), []int{15}
 }
 
+type GetUserStatsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetUserStatsRequest) Reset() {
+	*x = GetUserStatsRequest{}
+	mi := &file_tayfam_identity_v1_admin_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetUserStatsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetUserStatsRequest) ProtoMessage() {}
+
+func (x *GetUserStatsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_identity_v1_admin_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetUserStatsRequest.ProtoReflect.Descriptor instead.
+func (*GetUserStatsRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_identity_v1_admin_proto_rawDescGZIP(), []int{16}
+}
+
+type GetUserStatsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Registered accounts that are not deleted.
+	TotalUsers int64 `protobuf:"varint,1,opt,name=total_users,json=totalUsers,proto3" json:"total_users,omitempty"`
+	// Of those, accounts with a session refreshed in the last 30 days that is
+	// not revoked.
+	ActiveUsers int64 `protobuf:"varint,2,opt,name=active_users,json=activeUsers,proto3" json:"active_users,omitempty"`
+	// Accounts with an active platform sanction.
+	SuspendedUsers int64 `protobuf:"varint,3,opt,name=suspended_users,json=suspendedUsers,proto3" json:"suspended_users,omitempty"`
+	BannedUsers    int64 `protobuf:"varint,4,opt,name=banned_users,json=bannedUsers,proto3" json:"banned_users,omitempty"`
+	// Account deletions (KVKK erasure requests): the personal data is cleared
+	// at once; the row is removed for good 30 days later by the retention
+	// job. pending: deleted, not yet removed. overdue: pending for more than
+	// 31 days, i.e. the retention job is behind. Data export requests are
+	// not implemented yet.
+	DeletionsPending int64 `protobuf:"varint,5,opt,name=deletions_pending,json=deletionsPending,proto3" json:"deletions_pending,omitempty"`
+	DeletionsOverdue int64 `protobuf:"varint,6,opt,name=deletions_overdue,json=deletionsOverdue,proto3" json:"deletions_overdue,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *GetUserStatsResponse) Reset() {
+	*x = GetUserStatsResponse{}
+	mi := &file_tayfam_identity_v1_admin_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetUserStatsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetUserStatsResponse) ProtoMessage() {}
+
+func (x *GetUserStatsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_identity_v1_admin_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetUserStatsResponse.ProtoReflect.Descriptor instead.
+func (*GetUserStatsResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_identity_v1_admin_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *GetUserStatsResponse) GetTotalUsers() int64 {
+	if x != nil {
+		return x.TotalUsers
+	}
+	return 0
+}
+
+func (x *GetUserStatsResponse) GetActiveUsers() int64 {
+	if x != nil {
+		return x.ActiveUsers
+	}
+	return 0
+}
+
+func (x *GetUserStatsResponse) GetSuspendedUsers() int64 {
+	if x != nil {
+		return x.SuspendedUsers
+	}
+	return 0
+}
+
+func (x *GetUserStatsResponse) GetBannedUsers() int64 {
+	if x != nil {
+		return x.BannedUsers
+	}
+	return 0
+}
+
+func (x *GetUserStatsResponse) GetDeletionsPending() int64 {
+	if x != nil {
+		return x.DeletionsPending
+	}
+	return 0
+}
+
+func (x *GetUserStatsResponse) GetDeletionsOverdue() int64 {
+	if x != nil {
+		return x.DeletionsOverdue
+	}
+	return 0
+}
+
+type ListPlatformAuditLogsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 0 means 50; above 100 means 100; negative is ERROR_REASON_VALIDATION.
+	PageSize int32 `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Opaque, from next_page_cursor of the same request; a cursor made for
+	// other filters is ERROR_REASON_VALIDATION. (Not named page_token: the
+	// panel contracts carry no field named token, TestPanelContractsCannotSee.)
+	PageCursor string `protobuf:"bytes,2,opt,name=page_cursor,json=pageCursor,proto3" json:"page_cursor,omitempty"`
+	// Exact action, e.g. "tayfa.suspend". Optional.
+	Action string `protobuf:"bytes,3,opt,name=action,proto3" json:"action,omitempty"`
+	// user, tayfa, membership, report, moderation_term or subscription.
+	// Optional.
+	TargetType string `protobuf:"bytes,4,opt,name=target_type,json=targetType,proto3" json:"target_type,omitempty"`
+	// An ID the entry concerns: its target, or the tayfa, user or report in
+	// its metadata. Optional.
+	RelatedId string `protobuf:"bytes,5,opt,name=related_id,json=relatedId,proto3" json:"related_id,omitempty"`
+	// created_at >= start_time and < end_time. Optional.
+	StartTime     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime       *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPlatformAuditLogsRequest) Reset() {
+	*x = ListPlatformAuditLogsRequest{}
+	mi := &file_tayfam_identity_v1_admin_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPlatformAuditLogsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPlatformAuditLogsRequest) ProtoMessage() {}
+
+func (x *ListPlatformAuditLogsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_identity_v1_admin_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPlatformAuditLogsRequest.ProtoReflect.Descriptor instead.
+func (*ListPlatformAuditLogsRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_identity_v1_admin_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ListPlatformAuditLogsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListPlatformAuditLogsRequest) GetPageCursor() string {
+	if x != nil {
+		return x.PageCursor
+	}
+	return ""
+}
+
+func (x *ListPlatformAuditLogsRequest) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *ListPlatformAuditLogsRequest) GetTargetType() string {
+	if x != nil {
+		return x.TargetType
+	}
+	return ""
+}
+
+func (x *ListPlatformAuditLogsRequest) GetRelatedId() string {
+	if x != nil {
+		return x.RelatedId
+	}
+	return ""
+}
+
+func (x *ListPlatformAuditLogsRequest) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
+	}
+	return nil
+}
+
+func (x *ListPlatformAuditLogsRequest) GetEndTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EndTime
+	}
+	return nil
+}
+
+type ListPlatformAuditLogsResponse struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Entries []*PlatformAuditEntry  `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	// Empty on the last page.
+	NextPageCursor string `protobuf:"bytes,2,opt,name=next_page_cursor,json=nextPageCursor,proto3" json:"next_page_cursor,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ListPlatformAuditLogsResponse) Reset() {
+	*x = ListPlatformAuditLogsResponse{}
+	mi := &file_tayfam_identity_v1_admin_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPlatformAuditLogsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPlatformAuditLogsResponse) ProtoMessage() {}
+
+func (x *ListPlatformAuditLogsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_identity_v1_admin_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPlatformAuditLogsResponse.ProtoReflect.Descriptor instead.
+func (*ListPlatformAuditLogsResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_identity_v1_admin_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ListPlatformAuditLogsResponse) GetEntries() []*PlatformAuditEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+func (x *ListPlatformAuditLogsResponse) GetNextPageCursor() string {
+	if x != nil {
+		return x.NextPageCursor
+	}
+	return ""
+}
+
+type PlatformAuditEntry struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	EntryId    string                 `protobuf:"bytes,1,opt,name=entry_id,json=entryId,proto3" json:"entry_id,omitempty"`
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// The platform administrator and their display name (empty once the
+	// account is deleted).
+	ActorId          string `protobuf:"bytes,3,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	ActorDisplayName string `protobuf:"bytes,4,opt,name=actor_display_name,json=actorDisplayName,proto3" json:"actor_display_name,omitempty"`
+	Action           string `protobuf:"bytes,5,opt,name=action,proto3" json:"action,omitempty"`
+	TargetType       string `protobuf:"bytes,6,opt,name=target_type,json=targetType,proto3" json:"target_type,omitempty"`
+	TargetId         string `protobuf:"bytes,7,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	// The written reason. Shown on the panel only.
+	Reason string `protobuf:"bytes,8,opt,name=reason,proto3" json:"reason,omitempty"`
+	// IDs from the entry's metadata, if any.
+	TayfaId       string `protobuf:"bytes,9,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	UserId        string `protobuf:"bytes,10,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	ReportId      string `protobuf:"bytes,11,opt,name=report_id,json=reportId,proto3" json:"report_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlatformAuditEntry) Reset() {
+	*x = PlatformAuditEntry{}
+	mi := &file_tayfam_identity_v1_admin_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlatformAuditEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlatformAuditEntry) ProtoMessage() {}
+
+func (x *PlatformAuditEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_identity_v1_admin_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlatformAuditEntry.ProtoReflect.Descriptor instead.
+func (*PlatformAuditEntry) Descriptor() ([]byte, []int) {
+	return file_tayfam_identity_v1_admin_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *PlatformAuditEntry) GetEntryId() string {
+	if x != nil {
+		return x.EntryId
+	}
+	return ""
+}
+
+func (x *PlatformAuditEntry) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *PlatformAuditEntry) GetActorId() string {
+	if x != nil {
+		return x.ActorId
+	}
+	return ""
+}
+
+func (x *PlatformAuditEntry) GetActorDisplayName() string {
+	if x != nil {
+		return x.ActorDisplayName
+	}
+	return ""
+}
+
+func (x *PlatformAuditEntry) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *PlatformAuditEntry) GetTargetType() string {
+	if x != nil {
+		return x.TargetType
+	}
+	return ""
+}
+
+func (x *PlatformAuditEntry) GetTargetId() string {
+	if x != nil {
+		return x.TargetId
+	}
+	return ""
+}
+
+func (x *PlatformAuditEntry) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *PlatformAuditEntry) GetTayfaId() string {
+	if x != nil {
+		return x.TayfaId
+	}
+	return ""
+}
+
+func (x *PlatformAuditEntry) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *PlatformAuditEntry) GetReportId() string {
+	if x != nil {
+		return x.ReportId
+	}
+	return ""
+}
+
 type RecordPlatformAuditRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// core's outbox event ID (UUIDv7); the audit entry's ID.
@@ -1009,7 +1421,7 @@ type RecordPlatformAuditRequest struct {
 
 func (x *RecordPlatformAuditRequest) Reset() {
 	*x = RecordPlatformAuditRequest{}
-	mi := &file_tayfam_identity_v1_admin_proto_msgTypes[16]
+	mi := &file_tayfam_identity_v1_admin_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1021,7 +1433,7 @@ func (x *RecordPlatformAuditRequest) String() string {
 func (*RecordPlatformAuditRequest) ProtoMessage() {}
 
 func (x *RecordPlatformAuditRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_admin_proto_msgTypes[16]
+	mi := &file_tayfam_identity_v1_admin_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1034,7 +1446,7 @@ func (x *RecordPlatformAuditRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordPlatformAuditRequest.ProtoReflect.Descriptor instead.
 func (*RecordPlatformAuditRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_admin_proto_rawDescGZIP(), []int{16}
+	return file_tayfam_identity_v1_admin_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *RecordPlatformAuditRequest) GetEventId() string {
@@ -1122,7 +1534,7 @@ type RecordPlatformAuditResponse struct {
 
 func (x *RecordPlatformAuditResponse) Reset() {
 	*x = RecordPlatformAuditResponse{}
-	mi := &file_tayfam_identity_v1_admin_proto_msgTypes[17]
+	mi := &file_tayfam_identity_v1_admin_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1134,7 +1546,7 @@ func (x *RecordPlatformAuditResponse) String() string {
 func (*RecordPlatformAuditResponse) ProtoMessage() {}
 
 func (x *RecordPlatformAuditResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_admin_proto_msgTypes[17]
+	mi := &file_tayfam_identity_v1_admin_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1147,7 +1559,7 @@ func (x *RecordPlatformAuditResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordPlatformAuditResponse.ProtoReflect.Descriptor instead.
 func (*RecordPlatformAuditResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_admin_proto_rawDescGZIP(), []int{17}
+	return file_tayfam_identity_v1_admin_proto_rawDescGZIP(), []int{22}
 }
 
 var File_tayfam_identity_v1_admin_proto protoreflect.FileDescriptor
@@ -1218,7 +1630,46 @@ const file_tayfam_identity_v1_admin_proto_rawDesc = "" +
 	"\x13LiftSanctionRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x16\n" +
-	"\x14LiftSanctionResponse\"\xf6\x02\n" +
+	"\x14LiftSanctionResponse\"\x15\n" +
+	"\x13GetUserStatsRequest\"\x80\x02\n" +
+	"\x14GetUserStatsResponse\x12\x1f\n" +
+	"\vtotal_users\x18\x01 \x01(\x03R\n" +
+	"totalUsers\x12!\n" +
+	"\factive_users\x18\x02 \x01(\x03R\vactiveUsers\x12'\n" +
+	"\x0fsuspended_users\x18\x03 \x01(\x03R\x0esuspendedUsers\x12!\n" +
+	"\fbanned_users\x18\x04 \x01(\x03R\vbannedUsers\x12+\n" +
+	"\x11deletions_pending\x18\x05 \x01(\x03R\x10deletionsPending\x12+\n" +
+	"\x11deletions_overdue\x18\x06 \x01(\x03R\x10deletionsOverdue\"\xa6\x02\n" +
+	"\x1cListPlatformAuditLogsRequest\x12\x1b\n" +
+	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1f\n" +
+	"\vpage_cursor\x18\x02 \x01(\tR\n" +
+	"pageCursor\x12\x16\n" +
+	"\x06action\x18\x03 \x01(\tR\x06action\x12\x1f\n" +
+	"\vtarget_type\x18\x04 \x01(\tR\n" +
+	"targetType\x12\x1d\n" +
+	"\n" +
+	"related_id\x18\x05 \x01(\tR\trelatedId\x129\n" +
+	"\n" +
+	"start_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
+	"\bend_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\"\x8b\x01\n" +
+	"\x1dListPlatformAuditLogsResponse\x12@\n" +
+	"\aentries\x18\x01 \x03(\v2&.tayfam.identity.v1.PlatformAuditEntryR\aentries\x12(\n" +
+	"\x10next_page_cursor\x18\x02 \x01(\tR\x0enextPageCursor\"\xf4\x02\n" +
+	"\x12PlatformAuditEntry\x12\x19\n" +
+	"\bentry_id\x18\x01 \x01(\tR\aentryId\x12;\n" +
+	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12\x19\n" +
+	"\bactor_id\x18\x03 \x01(\tR\aactorId\x12,\n" +
+	"\x12actor_display_name\x18\x04 \x01(\tR\x10actorDisplayName\x12\x16\n" +
+	"\x06action\x18\x05 \x01(\tR\x06action\x12\x1f\n" +
+	"\vtarget_type\x18\x06 \x01(\tR\n" +
+	"targetType\x12\x1b\n" +
+	"\ttarget_id\x18\a \x01(\tR\btargetId\x12\x16\n" +
+	"\x06reason\x18\b \x01(\tR\x06reason\x12\x19\n" +
+	"\btayfa_id\x18\t \x01(\tR\atayfaId\x12\x17\n" +
+	"\auser_id\x18\n" +
+	" \x01(\tR\x06userId\x12\x1b\n" +
+	"\treport_id\x18\v \x01(\tR\breportId\"\xf6\x02\n" +
 	"\x1aRecordPlatformAuditRequest\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x129\n" +
 	"\n" +
@@ -1241,13 +1692,16 @@ const file_tayfam_identity_v1_admin_proto_rawDesc = "" +
 	"\x11SANCTION_TYPE_BAN\x10\x022\xc9\x01\n" +
 	"\x10AdminAuthService\x12^\n" +
 	"\vAdminSignIn\x12&.tayfam.identity.v1.AdminSignInRequest\x1a'.tayfam.identity.v1.AdminSignInResponse\x12U\n" +
-	"\bGetAdmin\x12#.tayfam.identity.v1.GetAdminRequest\x1a$.tayfam.identity.v1.GetAdminResponse2\x81\x04\n" +
+	"\bGetAdmin\x12#.tayfam.identity.v1.GetAdminRequest\x1a$.tayfam.identity.v1.GetAdminResponse2\xe4\x04\n" +
 	"\x10AdminUserService\x12^\n" +
 	"\vSearchUsers\x12&.tayfam.identity.v1.SearchUsersRequest\x1a'.tayfam.identity.v1.SearchUsersResponse\x12R\n" +
 	"\aGetUser\x12\".tayfam.identity.v1.GetUserRequest\x1a#.tayfam.identity.v1.GetUserResponse\x12s\n" +
 	"\x12RevokeUserSessions\x12-.tayfam.identity.v1.RevokeUserSessionsRequest\x1a..tayfam.identity.v1.RevokeUserSessionsResponse\x12a\n" +
 	"\fSanctionUser\x12'.tayfam.identity.v1.SanctionUserRequest\x1a(.tayfam.identity.v1.SanctionUserResponse\x12a\n" +
-	"\fLiftSanction\x12'.tayfam.identity.v1.LiftSanctionRequest\x1a(.tayfam.identity.v1.LiftSanctionResponse2\x8e\x01\n" +
+	"\fLiftSanction\x12'.tayfam.identity.v1.LiftSanctionRequest\x1a(.tayfam.identity.v1.LiftSanctionResponse\x12a\n" +
+	"\fGetUserStats\x12'.tayfam.identity.v1.GetUserStatsRequest\x1a(.tayfam.identity.v1.GetUserStatsResponse2\x91\x01\n" +
+	"\x11AdminAuditService\x12|\n" +
+	"\x15ListPlatformAuditLogs\x120.tayfam.identity.v1.ListPlatformAuditLogsRequest\x1a1.tayfam.identity.v1.ListPlatformAuditLogsResponse2\x8e\x01\n" +
 	"\x14PlatformAuditService\x12v\n" +
 	"\x13RecordPlatformAudit\x12..tayfam.identity.v1.RecordPlatformAuditRequest\x1a/.tayfam.identity.v1.RecordPlatformAuditResponseB\xd8\x01\n" +
 	"\x16com.tayfam.identity.v1B\n" +
@@ -1266,67 +1720,80 @@ func file_tayfam_identity_v1_admin_proto_rawDescGZIP() []byte {
 }
 
 var file_tayfam_identity_v1_admin_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_tayfam_identity_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_tayfam_identity_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_tayfam_identity_v1_admin_proto_goTypes = []any{
-	(SanctionType)(0),                   // 0: tayfam.identity.v1.SanctionType
-	(*AdminSignInRequest)(nil),          // 1: tayfam.identity.v1.AdminSignInRequest
-	(*AdminSignInResponse)(nil),         // 2: tayfam.identity.v1.AdminSignInResponse
-	(*GetAdminRequest)(nil),             // 3: tayfam.identity.v1.GetAdminRequest
-	(*GetAdminResponse)(nil),            // 4: tayfam.identity.v1.GetAdminResponse
-	(*SearchUsersRequest)(nil),          // 5: tayfam.identity.v1.SearchUsersRequest
-	(*SearchUsersResponse)(nil),         // 6: tayfam.identity.v1.SearchUsersResponse
-	(*AdminUserSummary)(nil),            // 7: tayfam.identity.v1.AdminUserSummary
-	(*GetUserRequest)(nil),              // 8: tayfam.identity.v1.GetUserRequest
-	(*GetUserResponse)(nil),             // 9: tayfam.identity.v1.GetUserResponse
-	(*Sanction)(nil),                    // 10: tayfam.identity.v1.Sanction
-	(*RevokeUserSessionsRequest)(nil),   // 11: tayfam.identity.v1.RevokeUserSessionsRequest
-	(*RevokeUserSessionsResponse)(nil),  // 12: tayfam.identity.v1.RevokeUserSessionsResponse
-	(*SanctionUserRequest)(nil),         // 13: tayfam.identity.v1.SanctionUserRequest
-	(*SanctionUserResponse)(nil),        // 14: tayfam.identity.v1.SanctionUserResponse
-	(*LiftSanctionRequest)(nil),         // 15: tayfam.identity.v1.LiftSanctionRequest
-	(*LiftSanctionResponse)(nil),        // 16: tayfam.identity.v1.LiftSanctionResponse
-	(*RecordPlatformAuditRequest)(nil),  // 17: tayfam.identity.v1.RecordPlatformAuditRequest
-	(*RecordPlatformAuditResponse)(nil), // 18: tayfam.identity.v1.RecordPlatformAuditResponse
-	(*timestamppb.Timestamp)(nil),       // 19: google.protobuf.Timestamp
+	(SanctionType)(0),                     // 0: tayfam.identity.v1.SanctionType
+	(*AdminSignInRequest)(nil),            // 1: tayfam.identity.v1.AdminSignInRequest
+	(*AdminSignInResponse)(nil),           // 2: tayfam.identity.v1.AdminSignInResponse
+	(*GetAdminRequest)(nil),               // 3: tayfam.identity.v1.GetAdminRequest
+	(*GetAdminResponse)(nil),              // 4: tayfam.identity.v1.GetAdminResponse
+	(*SearchUsersRequest)(nil),            // 5: tayfam.identity.v1.SearchUsersRequest
+	(*SearchUsersResponse)(nil),           // 6: tayfam.identity.v1.SearchUsersResponse
+	(*AdminUserSummary)(nil),              // 7: tayfam.identity.v1.AdminUserSummary
+	(*GetUserRequest)(nil),                // 8: tayfam.identity.v1.GetUserRequest
+	(*GetUserResponse)(nil),               // 9: tayfam.identity.v1.GetUserResponse
+	(*Sanction)(nil),                      // 10: tayfam.identity.v1.Sanction
+	(*RevokeUserSessionsRequest)(nil),     // 11: tayfam.identity.v1.RevokeUserSessionsRequest
+	(*RevokeUserSessionsResponse)(nil),    // 12: tayfam.identity.v1.RevokeUserSessionsResponse
+	(*SanctionUserRequest)(nil),           // 13: tayfam.identity.v1.SanctionUserRequest
+	(*SanctionUserResponse)(nil),          // 14: tayfam.identity.v1.SanctionUserResponse
+	(*LiftSanctionRequest)(nil),           // 15: tayfam.identity.v1.LiftSanctionRequest
+	(*LiftSanctionResponse)(nil),          // 16: tayfam.identity.v1.LiftSanctionResponse
+	(*GetUserStatsRequest)(nil),           // 17: tayfam.identity.v1.GetUserStatsRequest
+	(*GetUserStatsResponse)(nil),          // 18: tayfam.identity.v1.GetUserStatsResponse
+	(*ListPlatformAuditLogsRequest)(nil),  // 19: tayfam.identity.v1.ListPlatformAuditLogsRequest
+	(*ListPlatformAuditLogsResponse)(nil), // 20: tayfam.identity.v1.ListPlatformAuditLogsResponse
+	(*PlatformAuditEntry)(nil),            // 21: tayfam.identity.v1.PlatformAuditEntry
+	(*RecordPlatformAuditRequest)(nil),    // 22: tayfam.identity.v1.RecordPlatformAuditRequest
+	(*RecordPlatformAuditResponse)(nil),   // 23: tayfam.identity.v1.RecordPlatformAuditResponse
+	(*timestamppb.Timestamp)(nil),         // 24: google.protobuf.Timestamp
 }
 var file_tayfam_identity_v1_admin_proto_depIdxs = []int32{
-	19, // 0: tayfam.identity.v1.AdminSignInResponse.expire_time:type_name -> google.protobuf.Timestamp
-	19, // 1: tayfam.identity.v1.AdminSignInResponse.auth_time:type_name -> google.protobuf.Timestamp
-	19, // 2: tayfam.identity.v1.GetAdminResponse.auth_time:type_name -> google.protobuf.Timestamp
-	19, // 3: tayfam.identity.v1.GetAdminResponse.expire_time:type_name -> google.protobuf.Timestamp
+	24, // 0: tayfam.identity.v1.AdminSignInResponse.expire_time:type_name -> google.protobuf.Timestamp
+	24, // 1: tayfam.identity.v1.AdminSignInResponse.auth_time:type_name -> google.protobuf.Timestamp
+	24, // 2: tayfam.identity.v1.GetAdminResponse.auth_time:type_name -> google.protobuf.Timestamp
+	24, // 3: tayfam.identity.v1.GetAdminResponse.expire_time:type_name -> google.protobuf.Timestamp
 	7,  // 4: tayfam.identity.v1.SearchUsersResponse.users:type_name -> tayfam.identity.v1.AdminUserSummary
 	0,  // 5: tayfam.identity.v1.AdminUserSummary.active_sanction:type_name -> tayfam.identity.v1.SanctionType
 	7,  // 6: tayfam.identity.v1.GetUserResponse.user:type_name -> tayfam.identity.v1.AdminUserSummary
-	19, // 7: tayfam.identity.v1.GetUserResponse.create_time:type_name -> google.protobuf.Timestamp
+	24, // 7: tayfam.identity.v1.GetUserResponse.create_time:type_name -> google.protobuf.Timestamp
 	10, // 8: tayfam.identity.v1.GetUserResponse.sanction:type_name -> tayfam.identity.v1.Sanction
 	0,  // 9: tayfam.identity.v1.Sanction.type:type_name -> tayfam.identity.v1.SanctionType
-	19, // 10: tayfam.identity.v1.Sanction.start_time:type_name -> google.protobuf.Timestamp
-	19, // 11: tayfam.identity.v1.Sanction.end_time:type_name -> google.protobuf.Timestamp
+	24, // 10: tayfam.identity.v1.Sanction.start_time:type_name -> google.protobuf.Timestamp
+	24, // 11: tayfam.identity.v1.Sanction.end_time:type_name -> google.protobuf.Timestamp
 	0,  // 12: tayfam.identity.v1.SanctionUserRequest.type:type_name -> tayfam.identity.v1.SanctionType
-	19, // 13: tayfam.identity.v1.SanctionUserRequest.end_time:type_name -> google.protobuf.Timestamp
+	24, // 13: tayfam.identity.v1.SanctionUserRequest.end_time:type_name -> google.protobuf.Timestamp
 	10, // 14: tayfam.identity.v1.SanctionUserResponse.sanction:type_name -> tayfam.identity.v1.Sanction
-	19, // 15: tayfam.identity.v1.RecordPlatformAuditRequest.occur_time:type_name -> google.protobuf.Timestamp
-	1,  // 16: tayfam.identity.v1.AdminAuthService.AdminSignIn:input_type -> tayfam.identity.v1.AdminSignInRequest
-	3,  // 17: tayfam.identity.v1.AdminAuthService.GetAdmin:input_type -> tayfam.identity.v1.GetAdminRequest
-	5,  // 18: tayfam.identity.v1.AdminUserService.SearchUsers:input_type -> tayfam.identity.v1.SearchUsersRequest
-	8,  // 19: tayfam.identity.v1.AdminUserService.GetUser:input_type -> tayfam.identity.v1.GetUserRequest
-	11, // 20: tayfam.identity.v1.AdminUserService.RevokeUserSessions:input_type -> tayfam.identity.v1.RevokeUserSessionsRequest
-	13, // 21: tayfam.identity.v1.AdminUserService.SanctionUser:input_type -> tayfam.identity.v1.SanctionUserRequest
-	15, // 22: tayfam.identity.v1.AdminUserService.LiftSanction:input_type -> tayfam.identity.v1.LiftSanctionRequest
-	17, // 23: tayfam.identity.v1.PlatformAuditService.RecordPlatformAudit:input_type -> tayfam.identity.v1.RecordPlatformAuditRequest
-	2,  // 24: tayfam.identity.v1.AdminAuthService.AdminSignIn:output_type -> tayfam.identity.v1.AdminSignInResponse
-	4,  // 25: tayfam.identity.v1.AdminAuthService.GetAdmin:output_type -> tayfam.identity.v1.GetAdminResponse
-	6,  // 26: tayfam.identity.v1.AdminUserService.SearchUsers:output_type -> tayfam.identity.v1.SearchUsersResponse
-	9,  // 27: tayfam.identity.v1.AdminUserService.GetUser:output_type -> tayfam.identity.v1.GetUserResponse
-	12, // 28: tayfam.identity.v1.AdminUserService.RevokeUserSessions:output_type -> tayfam.identity.v1.RevokeUserSessionsResponse
-	14, // 29: tayfam.identity.v1.AdminUserService.SanctionUser:output_type -> tayfam.identity.v1.SanctionUserResponse
-	16, // 30: tayfam.identity.v1.AdminUserService.LiftSanction:output_type -> tayfam.identity.v1.LiftSanctionResponse
-	18, // 31: tayfam.identity.v1.PlatformAuditService.RecordPlatformAudit:output_type -> tayfam.identity.v1.RecordPlatformAuditResponse
-	24, // [24:32] is the sub-list for method output_type
-	16, // [16:24] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	24, // 15: tayfam.identity.v1.ListPlatformAuditLogsRequest.start_time:type_name -> google.protobuf.Timestamp
+	24, // 16: tayfam.identity.v1.ListPlatformAuditLogsRequest.end_time:type_name -> google.protobuf.Timestamp
+	21, // 17: tayfam.identity.v1.ListPlatformAuditLogsResponse.entries:type_name -> tayfam.identity.v1.PlatformAuditEntry
+	24, // 18: tayfam.identity.v1.PlatformAuditEntry.create_time:type_name -> google.protobuf.Timestamp
+	24, // 19: tayfam.identity.v1.RecordPlatformAuditRequest.occur_time:type_name -> google.protobuf.Timestamp
+	1,  // 20: tayfam.identity.v1.AdminAuthService.AdminSignIn:input_type -> tayfam.identity.v1.AdminSignInRequest
+	3,  // 21: tayfam.identity.v1.AdminAuthService.GetAdmin:input_type -> tayfam.identity.v1.GetAdminRequest
+	5,  // 22: tayfam.identity.v1.AdminUserService.SearchUsers:input_type -> tayfam.identity.v1.SearchUsersRequest
+	8,  // 23: tayfam.identity.v1.AdminUserService.GetUser:input_type -> tayfam.identity.v1.GetUserRequest
+	11, // 24: tayfam.identity.v1.AdminUserService.RevokeUserSessions:input_type -> tayfam.identity.v1.RevokeUserSessionsRequest
+	13, // 25: tayfam.identity.v1.AdminUserService.SanctionUser:input_type -> tayfam.identity.v1.SanctionUserRequest
+	15, // 26: tayfam.identity.v1.AdminUserService.LiftSanction:input_type -> tayfam.identity.v1.LiftSanctionRequest
+	17, // 27: tayfam.identity.v1.AdminUserService.GetUserStats:input_type -> tayfam.identity.v1.GetUserStatsRequest
+	19, // 28: tayfam.identity.v1.AdminAuditService.ListPlatformAuditLogs:input_type -> tayfam.identity.v1.ListPlatformAuditLogsRequest
+	22, // 29: tayfam.identity.v1.PlatformAuditService.RecordPlatformAudit:input_type -> tayfam.identity.v1.RecordPlatformAuditRequest
+	2,  // 30: tayfam.identity.v1.AdminAuthService.AdminSignIn:output_type -> tayfam.identity.v1.AdminSignInResponse
+	4,  // 31: tayfam.identity.v1.AdminAuthService.GetAdmin:output_type -> tayfam.identity.v1.GetAdminResponse
+	6,  // 32: tayfam.identity.v1.AdminUserService.SearchUsers:output_type -> tayfam.identity.v1.SearchUsersResponse
+	9,  // 33: tayfam.identity.v1.AdminUserService.GetUser:output_type -> tayfam.identity.v1.GetUserResponse
+	12, // 34: tayfam.identity.v1.AdminUserService.RevokeUserSessions:output_type -> tayfam.identity.v1.RevokeUserSessionsResponse
+	14, // 35: tayfam.identity.v1.AdminUserService.SanctionUser:output_type -> tayfam.identity.v1.SanctionUserResponse
+	16, // 36: tayfam.identity.v1.AdminUserService.LiftSanction:output_type -> tayfam.identity.v1.LiftSanctionResponse
+	18, // 37: tayfam.identity.v1.AdminUserService.GetUserStats:output_type -> tayfam.identity.v1.GetUserStatsResponse
+	20, // 38: tayfam.identity.v1.AdminAuditService.ListPlatformAuditLogs:output_type -> tayfam.identity.v1.ListPlatformAuditLogsResponse
+	23, // 39: tayfam.identity.v1.PlatformAuditService.RecordPlatformAudit:output_type -> tayfam.identity.v1.RecordPlatformAuditResponse
+	30, // [30:40] is the sub-list for method output_type
+	20, // [20:30] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_identity_v1_admin_proto_init() }
@@ -1340,9 +1807,9 @@ func file_tayfam_identity_v1_admin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_identity_v1_admin_proto_rawDesc), len(file_tayfam_identity_v1_admin_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   18,
+			NumMessages:   23,
 			NumExtensions: 0,
-			NumServices:   3,
+			NumServices:   4,
 		},
 		GoTypes:           file_tayfam_identity_v1_admin_proto_goTypes,
 		DependencyIndexes: file_tayfam_identity_v1_admin_proto_depIdxs,

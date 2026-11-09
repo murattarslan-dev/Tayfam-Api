@@ -35,6 +35,7 @@ const (
 	xssName      = `<script>alert("x")</script><img src=x onerror=alert(1)>`
 	evidence     = "Şikâyet edenin kendi kopyası: kanıt metni"
 	goodReason   = "Topluluk kurallarına aykırı davranış"
+	auditReason  = "Tekrarlanan taciz şikâyetleri, denetim kaydı gerekçesi"
 	// hidden is a value that must never appear on a page: the e-mail
 	// address an administrator searched for.
 	hidden = "gizli.kisi@ornek.test"
@@ -161,6 +162,15 @@ func (f *fakeCore) GetReportedItem(ctx context.Context, in *corev1.GetReportedIt
 		TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_ANNOUNCEMENT, AuthorId: memberID, Title: f.tayfaName, Body: f.tayfaName}}, nil
 }
 
+func (f *fakeCore) GetStats(ctx context.Context, _ *corev1.GetStatsRequest, _ ...grpc.CallOption) (*corev1.GetStatsResponse, error) {
+	f.add(ctx, "GetStats")
+	return &corev1.GetStatsResponse{TotalTayfas: 41, ActiveTayfas: 37, SuspendedTayfas: 2, WarnedTayfas: 1, ArchivedTayfas: 1,
+		JobRuns: []*corev1.JobRun{
+			{Job: "tayfa-cleanup", FinishTime: timestamppb.Now(), Succeeded: true, Changed: 3, LastSuccessTime: timestamppb.Now()},
+			{Job: "purge", FinishTime: timestamppb.Now()},
+		}}, f.err["GetStats"]
+}
+
 func (f *fakeCore) DecideReport(ctx context.Context, _ *corev1.DecideReportRequest, _ ...grpc.CallOption) (*corev1.DecideReportResponse, error) {
 	f.add(ctx, "DecideReport")
 	return &corev1.DecideReportResponse{}, nil
@@ -208,6 +218,38 @@ func (f *fakeUsers) LiftSanction(ctx context.Context, _ *identityv1.LiftSanction
 	return &identityv1.LiftSanctionResponse{}, nil
 }
 
+func (f *fakeUsers) GetUserStats(ctx context.Context, _ *identityv1.GetUserStatsRequest, _ ...grpc.CallOption) (*identityv1.GetUserStatsResponse, error) {
+	f.add(ctx, "GetUserStats")
+	return &identityv1.GetUserStatsResponse{TotalUsers: 523, ActiveUsers: 311, SuspendedUsers: 4, BannedUsers: 2, DeletionsPending: 7, DeletionsOverdue: 1}, nil
+}
+
+type fakeAudit struct {
+	identityv1.AdminAuditServiceClient
+	*calls
+	reason string
+	next   string
+	last   *identityv1.ListPlatformAuditLogsRequest
+	err    error
+}
+
+func newFakeAudit(c *calls) *fakeAudit {
+	return &fakeAudit{calls: c, reason: auditReason}
+}
+
+func (f *fakeAudit) ListPlatformAuditLogs(ctx context.Context, in *identityv1.ListPlatformAuditLogsRequest, _ ...grpc.CallOption) (*identityv1.ListPlatformAuditLogsResponse, error) {
+	f.add(ctx, "ListPlatformAuditLogs")
+	f.last = in
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &identityv1.ListPlatformAuditLogsResponse{Entries: []*identityv1.PlatformAuditEntry{
+		{EntryId: reportID, CreateTime: timestamppb.Now(), ActorId: userID, ActorDisplayName: "Yönetici", Action: "tayfa.suspend",
+			TargetType: "tayfa", TargetId: tayfaID, Reason: f.reason, TayfaId: tayfaID},
+		{EntryId: dmReportID, CreateTime: timestamppb.Now(), ActorId: userID, Action: "membership.set_role",
+			TargetType: "tayfa", TargetId: tayfaID, Reason: goodReason, TayfaId: tayfaID, UserId: memberID},
+	}, NextPageCursor: f.next}, nil
+}
+
 func reasonErr(code codes.Code, reason string) error {
 	st, _ := status.New(code, "x").WithDetails(&errdetails.ErrorInfo{Reason: reason, Domain: "test"})
 	return st.Err()
@@ -248,6 +290,7 @@ func (e *env) resetCalls() { e.core.reset() }
 var getPages = []string{
 	"/", "/tayfalar", "/tayfalar?q=klasik", "/tayfalar/" + tayfaID, "/kullanicilar", "/kullanicilar/" + memberID,
 	"/sikayetler", "/sikayetler?tumu=1", "/sikayetler/" + reportID, "/sikayetler/" + dmReportID,
+	"/denetim", "/denetim?islem=tayfa.suspend&tur=tayfa&ilgili=" + tayfaID + "&baslangic=2026-11-01&bitis=2026-11-09",
 }
 
 // changes are every state-changing page request with a valid form.

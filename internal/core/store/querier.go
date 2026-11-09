@@ -44,6 +44,7 @@ type Querier interface {
 	AdminGetProfileName(ctx context.Context, userID pgtype.UUID) (pgtype.Text, error)
 	AdminGetQuestion(ctx context.Context, arg AdminGetQuestionParams) (AdminGetQuestionRow, error)
 	AdminGetTayfa(ctx context.Context, id pgtype.UUID) (AdminGetTayfaRow, error)
+	AdminListJobRuns(ctx context.Context) ([]JobRun, error)
 	// Platform kuyruğu: açıklar önce, içlerinde minor_involved ve child_safety
 	// önce, sonra yükselme sırasıyla.
 	AdminListPlatformReports(ctx context.Context, includeResolved bool) ([]AdminListPlatformReportsRow, error)
@@ -62,6 +63,9 @@ type Querier interface {
 	AdminSetMemberRole(ctx context.Context, arg AdminSetMemberRoleParams) (int64, error)
 	AdminSuspendTayfa(ctx context.Context, arg AdminSuspendTayfaParams) (int64, error)
 	AdminTayfaStaffIDs(ctx context.Context, tayfaID pgtype.UUID) ([]pgtype.UUID, error)
+	// Pano sayaçları (issue #110). Yalnızca sayılar; tayfa kimliği ya da adı
+	// dönmez.
+	AdminTayfaStats(ctx context.Context) (AdminTayfaStatsRow, error)
 	AdminUnsuspendTayfa(ctx context.Context, id pgtype.UUID) (int64, error)
 	// generated_until yalnızca ileri gider.
 	AdvanceEventSeries(ctx context.Context, arg AdvanceEventSeriesParams) error
@@ -560,6 +564,9 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// Uyarıdan sonra aktivite olan tayfa yeniden aktif olur.
 	ReactivateWarnedTayfas(ctx context.Context, n int32) ([]pgtype.UUID, error)
+	// Bir turun sonucu (issue #110, 00015). Başka bir pod'un daha yeni bitişi
+	// ezilmez. Başarısız tur son başarılı zamanı korur.
+	RecordJobRun(ctx context.Context, arg RecordJobRunParams) error
 	RemoveAnswerVote(ctx context.Context, arg RemoveAnswerVoteParams) (int64, error)
 	RequestTayfaDeletion(ctx context.Context, arg RequestTayfaDeletionParams) (int64, error)
 	ResolveReport(ctx context.Context, arg ResolveReportParams) (int64, error)

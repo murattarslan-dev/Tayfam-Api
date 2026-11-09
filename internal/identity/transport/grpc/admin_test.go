@@ -153,7 +153,7 @@ func TestIdentityGuardSeparatesTokens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g, err = g.WithAdmin(auth.AdminPolicy{Verifier: av, Services: []string{AdminAuthServiceName, AdminUserServiceName}})
+	g, err = g.WithAdmin(auth.AdminPolicy{Verifier: av, Services: AdminServiceNames()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,6 +186,7 @@ func TestIdentityGuardSeparatesTokens(t *testing.T) {
 	identityv1.RegisterAdminAuthServiceServer(srv, NewAdminAuthServer(&fakeAdmins{user: user}, discard()))
 	identityv1.RegisterAdminUserServiceServer(srv, NewAdminUserServer(&fakeUsers{}, discard()))
 	identityv1.RegisterPlatformAuditServiceServer(srv, NewPlatformAuditServer(&fakeAudits{}, discard()))
+	identityv1.RegisterAdminAuditServiceServer(srv, NewAdminAuditServer(&fakeAuditLog{}, discard()))
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
 	conn, err := grpc.NewClient("passthrough:///bufnet",
@@ -212,6 +213,15 @@ func TestIdentityGuardSeparatesTokens(t *testing.T) {
 		_, err := auditc.RecordPlatformAudit(ctx, &identityv1.RecordPlatformAuditRequest{})
 		return err
 	}
+	statsMethod := func(ctx context.Context) error {
+		_, err := usersc.GetUserStats(ctx, &identityv1.GetUserStatsRequest{})
+		return err
+	}
+	auditLogc := identityv1.NewAdminAuditServiceClient(conn)
+	auditLogMethod := func(ctx context.Context) error {
+		_, err := auditLogc.ListPlatformAuditLogs(ctx, &identityv1.ListPlatformAuditLogsRequest{})
+		return err
+	}
 	adminMethod := func(ctx context.Context) error {
 		_, err := adminc.GetAdmin(ctx, &identityv1.GetAdminRequest{})
 		return err
@@ -230,6 +240,14 @@ func TestIdentityGuardSeparatesTokens(t *testing.T) {
 		{"panel metodu: token yok", adminMethod, "", codes.Unauthenticated},
 		{"kullanıcı yönetimi: admin token'ı", userAdminMethod, adminTok, codes.OK},
 		{"kullanıcı yönetimi: uygulama token'ı", userAdminMethod, appTok, codes.Unauthenticated},
+		{"pano sayaçları: admin token'ı", statsMethod, adminTok, codes.OK},
+		{"pano sayaçları: uygulama token'ı", statsMethod, appTok, codes.Unauthenticated},
+		{"pano sayaçları: kayıt token'ı", statsMethod, regTok, codes.Unauthenticated},
+		{"pano sayaçları: token yok", statsMethod, "", codes.Unauthenticated},
+		{"denetim kaydı listesi: admin token'ı", auditLogMethod, adminTok, codes.OK},
+		{"denetim kaydı listesi: uygulama token'ı", auditLogMethod, appTok, codes.Unauthenticated},
+		{"denetim kaydı listesi: kayıt token'ı", auditLogMethod, regTok, codes.Unauthenticated},
+		{"denetim kaydı listesi: token yok", auditLogMethod, "", codes.Unauthenticated},
 		{"denetim servisi: admin token'ı", auditMethod, adminTok, codes.Unauthenticated},
 		{"denetim servisi: uygulama token'ı", auditMethod, appTok, codes.Unauthenticated},
 	} {

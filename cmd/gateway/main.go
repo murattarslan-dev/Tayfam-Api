@@ -200,6 +200,7 @@ func adminRouter(rt *service.Runtime, host string, identity, core *grpc.ClientCo
 		Identity:            identityv1.NewAdminAuthServiceClient(identity),
 		Core:                corev1.NewAdminServiceClient(core),
 		Users:               identityv1.NewAdminUserServiceClient(identity),
+		Audit:               identityv1.NewAdminAuditServiceClient(identity),
 		GoogleClientID:      googleClient,
 		Log:                 rt.Log,
 		TrustCFConnectingIP: trustCF,

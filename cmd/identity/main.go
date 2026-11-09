@@ -180,7 +180,7 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	guard, err = guard.WithAdmin(auth.AdminPolicy{Verifier: adminVerifier, Services: []string{grpcapi.AdminAuthServiceName, grpcapi.AdminUserServiceName}})
+	guard, err = guard.WithAdmin(auth.AdminPolicy{Verifier: adminVerifier, Services: grpcapi.AdminServiceNames()})
 	if err != nil {
 		return err
 	}
@@ -190,6 +190,7 @@ func setup(rt *service.Runtime) error {
 	identityv1.RegisterAdminAuthServiceServer(srv, grpcapi.NewAdminAuthServer(admins, rt.Log))
 	identityv1.RegisterAdminUserServiceServer(srv, grpcapi.NewAdminUserServer(admins, rt.Log))
 	identityv1.RegisterPlatformAuditServiceServer(srv, grpcapi.NewPlatformAuditServer(admins, rt.Log))
+	identityv1.RegisterAdminAuditServiceServer(srv, grpcapi.NewAdminAuditServer(admins, rt.Log))
 	identityv1.RegisterAuthServiceServer(srv, grpcapi.NewAuthServer(sessions, rt.Log))
 	identityv1.RegisterRegistrationServiceServer(srv, grpcapi.NewRegistrationServer(reg, rt.Log))
 	// Hesap ayarları, oturumlar, yeniden onay ve hesap silme yalnızca tam
