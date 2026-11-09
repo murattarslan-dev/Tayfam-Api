@@ -7,7 +7,10 @@
 // The messages are for logs only; callers see the ErrorReason.
 package apperr
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 // NotificationService errors.
 var (
@@ -32,3 +35,33 @@ func (e *ValidationError) Error() string { return "geçersiz alan: " + e.Field }
 
 // Validation returns a ValidationError for field.
 func Validation(field string) error { return &ValidationError{Field: field} }
+
+// ChannelService errors (issue #81).
+var (
+	// ErrChannelNotFound: no such channel in the tayfa, or a staff channel
+	// the caller may not see. The cases are indistinguishable on purpose.
+	ErrChannelNotFound = errors.New("kanal bulunamadı")
+	// ErrMessageNotFound: no such message in the channel, or a deletion that
+	// can no longer be restored.
+	ErrMessageNotFound = errors.New("mesaj bulunamadı")
+	// ErrPermissionDenied: the caller's role is too low for the action.
+	ErrPermissionDenied = errors.New("yetki yok")
+	// ErrMuted: the caller is muted in the tayfa and the action writes.
+	ErrMuted = errors.New("susturulmuş")
+	// ErrChannelArchived: the channel is archived (read-only).
+	ErrChannelArchived = errors.New("kanal arşivlenmiş")
+	// ErrChannelNameTaken: another channel of the tayfa that is not archived
+	// has the same name (Turkish case-insensitive).
+	ErrChannelNameTaken = errors.New("kanal adı kullanılıyor")
+	// ErrChannelsUnavailable: chat runs without a message key
+	// (CHAT_MESSAGE_KEYS); channels are off until the key is configured.
+	ErrChannelsUnavailable = errors.New("kanal mesajı anahtarı yok")
+)
+
+// SlowModeError: the channel's slow mode does not allow the caller another
+// message yet.
+type SlowModeError struct {
+	RetryAfter time.Duration
+}
+
+func (e *SlowModeError) Error() string { return "yavaş mod" }

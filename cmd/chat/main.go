@@ -7,10 +7,14 @@ package main
 
 import (
 	"context"
+	"log/slog"
+	"time"
 
 	chatdb "github.com/murattarslan-dev/tayfam-api/db/chat"
 	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/channel"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/channelcrypt"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/coreevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/coremembers"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
@@ -22,6 +26,9 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/service"
 )
 
+// membershipCacheTTL is how long core's membership answer is reused.
+const membershipCacheTTL = 5 * time.Second
+
 func main() {
 	service.MainWithMigrations("chat", chatdb.Migrations(), setup)
 }
@@ -31,8 +38,21 @@ func setup(rt *service.Runtime) error {
 	// Veritabanı parolası chat-db secret'ından (deploy/apps/<ortam>/secrets,
 	// SOPS). chat yalnızca kendi veritabanına bağlanır (ADR-0002).
 	dbCfg := db.LoadConfig(c)
+	// Kanal mesajı şifreleme anahtarı (chat-message-key secret'ı, SOPS;
+	// issue #81). prod'da zorunludur. local ve dev anahtarsız açılabilir:
+	// o zaman kanal metodları UNAVAILABLE döner, mesaj yazılmaz.
+	messageKeys := c.String("CHAT_MESSAGE_KEYS", "")
 	if err := c.Err(); err != nil {
 		return err
+	}
+	cipher, err := channelcrypt.Load(rt.Env, messageKeys)
+	if err != nil {
+		return err
+	}
+	if cipher != nil {
+		rt.Log.Info("kanal mesajı anahtarı yüklendi", slog.Int("active_version", int(cipher.ActiveVersion())))
+	} else {
+		rt.Log.Warn("CHAT_MESSAGE_KEYS yok; kanallar kapalı (UNAVAILABLE)")
 	}
 	pool, err := db.Open(context.Background(), dbCfg.URL())
 	if err != nil {
@@ -49,7 +69,8 @@ func setup(rt *service.Runtime) error {
 	}
 
 	// Hesap silinince bildirimler ve tercihler de silinir (ADR-0009).
-	userEvents, err := userevents.New(userevents.Config{Pool: pool, Cleanups: []userevents.Cleanup{notification.Cleanup}})
+	// Kanal mesajları kalır, yazar alanı boşalır; okunma kayıtları silinir.
+	userEvents, err := userevents.New(userevents.Config{Pool: pool, Cleanups: []userevents.Cleanup{notification.Cleanup, channel.Cleanup}})
 	if err != nil {
 		return err
 	}
@@ -89,9 +110,16 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	notifications, err := notification.New(notification.Config{
-		Pool: pool, Log: rt.Log, Members: coremembers.New(corev1.NewMembershipServiceClient(coreConn)),
-	})
+	// Kanal erişimi de core'un cevabıyla (rol, susturma). Cevap kısa süre
+	// önbellekte tutulur (ADR-0005); core'un membership.changed olayı chat'e
+	// henüz gelmediği için rol değişikliği ve susturma en geç bu sürede
+	// geçerli olur.
+	members := coremembers.NewCached(corev1.NewMembershipServiceClient(coreConn), membershipCacheTTL)
+	notifications, err := notification.New(notification.Config{Pool: pool, Log: rt.Log, Members: members})
+	if err != nil {
+		return err
+	}
+	channels, err := channel.New(channel.Config{Pool: pool, Log: rt.Log, Members: members, Cipher: cipher})
 	if err != nil {
 		return err
 	}
@@ -100,8 +128,11 @@ func setup(rt *service.Runtime) error {
 	chatv1.RegisterUserEventServiceServer(srv, grpcapi.NewUserEventServer(userEvents, rt.Log))
 	chatv1.RegisterCoreEventServiceServer(srv, grpcapi.NewCoreEventServer(coreEvents, rt.Log))
 	chatv1.RegisterNotificationServiceServer(srv, grpcapi.NewNotificationServer(notifications, rt.Log))
+	chatv1.RegisterChannelServiceServer(srv, grpcapi.NewChannelServer(channels, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
 	// 90 günden eski bildirimler (v14 "Saklama süreleri").
 	rt.AddWorker("notification-retention", notifications.RunRetention)
+	// Silinmiş kanal mesajları 30 gün sonra kalıcı silinir (v14).
+	rt.AddWorker("channel-message-purge", channels.RunPurge)
 	return nil
 }

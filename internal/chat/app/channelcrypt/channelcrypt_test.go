@@ -129,3 +129,20 @@ func TestParseKeysRejects(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadRequiresKeyInProd(t *testing.T) {
+	if _, err := Load("prod", " "); !errors.Is(err, ErrKeyRequired) {
+		t.Fatalf("prod anahtarsız: %v", err)
+	}
+	for _, env := range []string{"local", "dev"} {
+		if c, err := Load(env, ""); c != nil || err != nil {
+			t.Fatalf("%s anahtarsız: %v %v", env, c, err)
+		}
+	}
+	if c, err := Load("prod", "1:"+key(1)); c == nil || err != nil {
+		t.Fatalf("prod anahtarlı: %v", err)
+	}
+	if _, err := Load("dev", "bozuk"); err == nil {
+		t.Fatal("bozuk anahtar kabul edildi")
+	}
+}

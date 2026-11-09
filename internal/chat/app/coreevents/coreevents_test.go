@@ -73,6 +73,13 @@ func TestPurgeRemovesTayfaNotifications(t *testing.T) {
 	must(t, svc.Apply(ctx, announcement(tf, id.New(), u)))
 	must(t, svc.Apply(ctx, announcement(other, id.New(), u)))
 	must(t, store.New(pool).UpsertNotificationPreference(ctx, store.UpsertNotificationPreferenceParams{UserID: u.PG(), ScopeType: "tayfa", ScopeID: tf.PG(), Level: "none"}))
+	// One channel in each tayfa; only the purged tayfa's goes.
+	for _, tayfa := range []id.ID{tf, other} {
+		_, err := store.New(pool).CreateChannel(ctx, store.CreateChannelParams{
+			ID: id.New().PG(), TayfaID: tayfa.PG(), Name: "genel", NameNormalized: "genel", Visibility: "members",
+		})
+		must(t, err)
+	}
 
 	for range 2 {
 		must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, Purged: true}))
@@ -82,6 +89,12 @@ func TestPurgeRemovesTayfaNotifications(t *testing.T) {
 	}
 	if n := count(t, pool, `SELECT count(*) FROM notification_preferences`); n != 0 {
 		t.Fatal("tercih kaldı")
+	}
+	if n := count(t, pool, `SELECT count(*) FROM channels WHERE tayfa_id = $1`, tf.PG()); n != 0 {
+		t.Fatal("kanal kaldı")
+	}
+	if n := count(t, pool, `SELECT count(*) FROM channels WHERE tayfa_id = $1`, other.PG()); n != 1 {
+		t.Fatal("başka tayfanın kanalı silindi")
 	}
 }
 

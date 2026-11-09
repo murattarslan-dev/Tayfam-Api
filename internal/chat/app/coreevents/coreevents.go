@@ -1,6 +1,7 @@
 // Package coreevents applies core's outbox events to chat (ADR-0009, issue
 // #64): notification.requested becomes in-app notifications, tayfa.purged
-// removes what chat keeps about the tayfa. chat keeps no copy of core's
+// removes what chat keeps about the tayfa (notifications, preferences,
+// channels with their messages and read markers). chat keeps no copy of core's
 // memberships; core names the recipients.
 //
 // Events arrive at least once and may arrive out of order; applying one
@@ -15,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/channel"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -70,6 +72,10 @@ func (s *Service) Apply(ctx context.Context, e Event) error {
 		})
 	}
 	return pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
-		return notification.PurgeTayfa(ctx, store.New(tx), e.Tayfa)
+		q := store.New(tx)
+		if err := notification.PurgeTayfa(ctx, q, e.Tayfa); err != nil {
+			return err
+		}
+		return channel.PurgeTayfa(ctx, q, e.Tayfa)
 	})
 }

@@ -47,21 +47,56 @@ const (
 	// member of it (core's answer). These cases are indistinguishable on
 	// purpose.
 	ErrorReason_ERROR_REASON_TAYFA_NOT_FOUND ErrorReason = 3
+	// NOT_FOUND. No such channel in the tayfa, or a staff channel the caller
+	// may not see. These cases are indistinguishable on purpose.
+	ErrorReason_ERROR_REASON_CHANNEL_NOT_FOUND ErrorReason = 4
+	// NOT_FOUND. No such message in the channel, or a deletion that can no
+	// longer be restored (the author's own, or older than 30 days).
+	ErrorReason_ERROR_REASON_MESSAGE_NOT_FOUND ErrorReason = 5
+	// PERMISSION_DENIED. The caller's role in the tayfa is too low for the
+	// action.
+	ErrorReason_ERROR_REASON_PERMISSION_DENIED ErrorReason = 6
+	// PERMISSION_DENIED. The caller is muted in the tayfa; muted members read
+	// but do not write.
+	ErrorReason_ERROR_REASON_MUTED ErrorReason = 7
+	// FAILED_PRECONDITION. The channel is archived and takes no new messages.
+	ErrorReason_ERROR_REASON_CHANNEL_ARCHIVED ErrorReason = 8
+	// ALREADY_EXISTS. Another channel of the tayfa that is not archived has
+	// the same name (Turkish case-insensitive).
+	ErrorReason_ERROR_REASON_CHANNEL_NAME_TAKEN ErrorReason = 9
+	// RESOURCE_EXHAUSTED. The channel's slow mode does not allow the caller
+	// another message yet. ErrorInfo metadata "retry_after_seconds" holds the
+	// whole seconds to wait.
+	ErrorReason_ERROR_REASON_SLOW_MODE ErrorReason = 10
 )
 
 // Enum value maps for ErrorReason.
 var (
 	ErrorReason_name = map[int32]string{
-		0: "ERROR_REASON_UNSPECIFIED",
-		1: "ERROR_REASON_VALIDATION",
-		2: "ERROR_REASON_NOTIFICATION_NOT_FOUND",
-		3: "ERROR_REASON_TAYFA_NOT_FOUND",
+		0:  "ERROR_REASON_UNSPECIFIED",
+		1:  "ERROR_REASON_VALIDATION",
+		2:  "ERROR_REASON_NOTIFICATION_NOT_FOUND",
+		3:  "ERROR_REASON_TAYFA_NOT_FOUND",
+		4:  "ERROR_REASON_CHANNEL_NOT_FOUND",
+		5:  "ERROR_REASON_MESSAGE_NOT_FOUND",
+		6:  "ERROR_REASON_PERMISSION_DENIED",
+		7:  "ERROR_REASON_MUTED",
+		8:  "ERROR_REASON_CHANNEL_ARCHIVED",
+		9:  "ERROR_REASON_CHANNEL_NAME_TAKEN",
+		10: "ERROR_REASON_SLOW_MODE",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":            0,
 		"ERROR_REASON_VALIDATION":             1,
 		"ERROR_REASON_NOTIFICATION_NOT_FOUND": 2,
 		"ERROR_REASON_TAYFA_NOT_FOUND":        3,
+		"ERROR_REASON_CHANNEL_NOT_FOUND":      4,
+		"ERROR_REASON_MESSAGE_NOT_FOUND":      5,
+		"ERROR_REASON_PERMISSION_DENIED":      6,
+		"ERROR_REASON_MUTED":                  7,
+		"ERROR_REASON_CHANNEL_ARCHIVED":       8,
+		"ERROR_REASON_CHANNEL_NAME_TAKEN":     9,
+		"ERROR_REASON_SLOW_MODE":              10,
 	}
 )
 
@@ -96,12 +131,20 @@ var File_tayfam_chat_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\x93\x01\n" +
+	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\xfb\x02\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12'\n" +
 	"#ERROR_REASON_NOTIFICATION_NOT_FOUND\x10\x02\x12 \n" +
-	"\x1cERROR_REASON_TAYFA_NOT_FOUND\x10\x03B\xbd\x01\n" +
+	"\x1cERROR_REASON_TAYFA_NOT_FOUND\x10\x03\x12\"\n" +
+	"\x1eERROR_REASON_CHANNEL_NOT_FOUND\x10\x04\x12\"\n" +
+	"\x1eERROR_REASON_MESSAGE_NOT_FOUND\x10\x05\x12\"\n" +
+	"\x1eERROR_REASON_PERMISSION_DENIED\x10\x06\x12\x16\n" +
+	"\x12ERROR_REASON_MUTED\x10\a\x12!\n" +
+	"\x1dERROR_REASON_CHANNEL_ARCHIVED\x10\b\x12#\n" +
+	"\x1fERROR_REASON_CHANNEL_NAME_TAKEN\x10\t\x12\x1a\n" +
+	"\x16ERROR_REASON_SLOW_MODE\x10\n" +
+	"B\xbd\x01\n" +
 	"\x12com.tayfam.chat.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1;chatv1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Chat.V1\xca\x02\x0eTayfam\\Chat\\V1\xe2\x02\x1aTayfam\\Chat\\V1\\GPBMetadata\xea\x02\x10Tayfam::Chat::V1b\x06proto3"
 
 var (
