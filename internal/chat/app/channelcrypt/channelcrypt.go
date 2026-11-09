@@ -66,7 +66,7 @@ func ParseKeys(s string) (*Cipher, error) {
 		if !ok || err != nil || n < 1 || n > 255 {
 			return nil, errors.New("kanal mesajı anahtarı \"<1-255>:<base64>\" biçiminde olmalı")
 		}
-		ver := int16(n)
+		ver := int16(n) //nolint:gosec // n is 1–255, checked above
 		if _, dup := c.aeads[ver]; dup {
 			return nil, fmt.Errorf("kanal mesajı anahtar sürümü tekrar ediyor: %d", n)
 		}
