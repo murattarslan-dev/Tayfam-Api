@@ -79,6 +79,7 @@ func setup(rt *service.Runtime) error {
 			Tayfas:              corev1.NewTayfaServiceClient(conn),
 			Members:             corev1.NewMembershipServiceClient(conn),
 			Announcements:       corev1.NewAnnouncementServiceClient(conn),
+			Events:              corev1.NewEventServiceClient(conn),
 			Verifier:            v,
 			Log:                 rt.Log,
 			TrustCFConnectingIP: trustCF,
@@ -88,6 +89,9 @@ func setup(rt *service.Runtime) error {
 			// enough for many users behind one CGNAT address.
 			JoinCodeLimit: ratelimit.New(20, 10),
 			InviteLimit:   ratelimit.New(60, 20),
+			// Check-in at an event: many members may share one venue
+			// network; core also allows five attempts per event and user.
+			CheckInLimit: ratelimit.New(30, 30),
 		}
 	}
 	rt.AddHTTPServer("http", httpAddr, rest.NewRouter(deps))

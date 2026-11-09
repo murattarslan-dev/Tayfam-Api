@@ -67,6 +67,8 @@ type CoreDeps struct {
 	Members MembershipClient
 	// Announcements enables the announcement routes when set.
 	Announcements AnnouncementClient
+	// Events enables the event routes when set.
+	Events EventClient
 	// Verifier checks the user's token before anything reaches core. core
 	// checks it again itself (ADR-0011); this only keeps junk out early.
 	Verifier TokenVerifier
@@ -80,7 +82,10 @@ type CoreDeps struct {
 	JoinCodeLimit *ratelimit.Limiter
 	// InviteLimit is per client IP on invite previews and invite joins.
 	InviteLimit *ratelimit.Limiter
-	Now         func() time.Time
+	// CheckInLimit is per client IP on event check-ins; core also limits
+	// attempts per event and user. Required with Events.
+	CheckInLimit *ratelimit.Limiter
+	Now          func() time.Time
 }
 
 const (
@@ -129,6 +134,9 @@ func registerCore(mux *http.ServeMux, d CoreDeps) {
 	mux.HandleFunc("POST /v1/invite-joins", a(h.joinByInvite))
 	if d.Announcements != nil {
 		registerAnnouncements(mux, h)
+	}
+	if d.Events != nil {
+		registerEvents(mux, h)
 	}
 }
 
@@ -276,6 +284,8 @@ type tayfaUpdateBody struct {
 	Description *string   `json:"description"`
 	Interests   *[]string `json:"interests"`
 	JoinPolicy  *string   `json:"join_policy"`
+	// MembersCanCreateEvents lets every active member create events.
+	MembersCanCreateEvents *bool `json:"members_can_create_events"`
 }
 
 func (h coreHandlers) updateTayfa(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -317,6 +327,10 @@ func (h coreHandlers) updateTayfa(ctx context.Context, w http.ResponseWriter, r 
 		}
 		req.JoinPolicy = v
 		req.UpdateMask.Paths = append(req.UpdateMask.Paths, "join_policy")
+	}
+	if b.MembersCanCreateEvents != nil {
+		req.MembersCanCreateEvents = *b.MembersCanCreateEvents
+		req.UpdateMask.Paths = append(req.UpdateMask.Paths, "members_can_create_events")
 	}
 	if len(req.UpdateMask.Paths) == 0 {
 		badRequest(w, r)
