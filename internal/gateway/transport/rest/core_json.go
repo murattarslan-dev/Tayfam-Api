@@ -122,6 +122,8 @@ type tayfaJSON struct {
 	SuspendedAt *time.Time      `json:"suspended_at,omitempty"`
 	DeletionAt  *time.Time      `json:"deletion_at,omitempty"`
 	MemberCount int32           `json:"member_count"`
+	// MembersCanCreateEvents: every active member may create events.
+	MembersCanCreateEvents bool `json:"members_can_create_events"`
 	// Only core decides who gets it (admins); gateway passes it on as is.
 	JoinCode  string    `json:"join_code,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
@@ -140,7 +142,7 @@ func tayfaFrom(t *corev1.Tayfa) tayfaJSON {
 		Interests: eventTypes.names(t.GetInterests()), JoinPolicy: joinPolicies.name(t.GetJoinPolicy()),
 		Modules: mods, Status: tayfaStatuses.name(t.GetStatus()),
 		SuspendedAt: optTime(t.GetSuspendTime()), DeletionAt: optTime(t.GetDeletionTime()),
-		MemberCount: t.GetMemberCount(), JoinCode: t.GetJoinCode(),
+		MemberCount: t.GetMemberCount(), MembersCanCreateEvents: t.GetMembersCanCreateEvents(), JoinCode: t.GetJoinCode(),
 		CreatedAt: t.GetCreateTime().AsTime(), UpdatedAt: t.GetUpdateTime().AsTime(),
 	}
 }

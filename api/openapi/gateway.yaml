@@ -224,6 +224,8 @@ paths:
       description: |
         Yalnızca gövdede bulunan alanlar değişir; en az bir alan gerekir.
         `interests` gönderilirse ilgi alanlarının tamamını değiştirir.
+        `members_can_create_events` etkinlik açma iznini üyelere açar ya da
+        kapatır.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -805,6 +807,632 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Etkinlikler (core EventService) ---
+  #
+  # Ortak kurallar: tayfanın etkinlik modülü kapalıysa okumalar dahil her uç
+  # `module-disabled` alır. Bu tayfada olmayan ya da silinmiş etkinlik
+  # `event-not-found`. İptal edilmiş etkinlikteki değişiklik
+  # `event-cancelled`, bitmiş etkinlikteki `event-ended` alır.
+  #
+  # Konum: koordinatlar (WGS 84 derece) yalnızca istek gövdesinde taşınır,
+  # hiçbir zaman URL'de değil; gateway onları log'a, hata ayrıntısına ve
+  # erişim log'una yazmaz (ADR-0008).
+
+  /v1/tayfas/{tayfa_id}/events:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listUpcomingEvents
+      summary: Bitmemiş etkinlikler, başlangıç zamanına göre
+      description: |
+        Her etkin üyeye açıktır (susturulmuş üye de okur). İptal edilenler
+        de listededir. Türe özel ayrıntılar (`convoy`, `camp`, …) listede
+        dolmaz; tek etkinlik ucunu kullanın.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Etkinlikler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createEvent
+      summary: Etkinlik açar; açan kişi organizatördür
+      description: |
+        Moderatör ve yönetici; tayfada `members_can_create_events` açıksa
+        her etkin üye. Aynı `client_request_id` ile tekrar gönderim ilk
+        açılan etkinliği döndürür ve yeni etkinlik açmaz. `recurrence`
+        verilirse etkinlik tekrarlayan bir serinin ilkidir; sunucu sonraki
+        etkinlikleri sekiz hafta ileriye kadar kendisi açar.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventCreateRequest" }
+      responses:
+        "201":
+          description: Açılan etkinlik (ya da tekrar gönderimde ilk açılan)
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Event" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+    get:
+      operationId: getEvent
+      summary: Tek etkinlik, türe özel ayrıntılarıyla
+      description: |
+        Katılımcılara özel balık noktasında (`spot_visibility=participants`)
+        katılmayan üye `meeting_point` ve `meeting_point_name` almaz. Konvoy
+        plakaları yalnızca katılımcılara (`going`) ve organizatöre döner.
+      responses:
+        "200":
+          description: Etkinlik
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Event" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: updateEvent
+      summary: Etkinliği düzenler (organizatör, moderatör, yönetici)
+      description: |
+        Gövdede bulunan alanlar değişir; en az bir alan gerekir. Alanlar
+        gruplar halinde değişir:
+        - `starts_at` ve `ends_at` birlikte gönderilir.
+        - Yer: `mode`, `meeting_point_name`, `meeting_point`, `city`,
+          `district`, `online_url` birlikte değişir; bunlardan biri
+          gönderilirse `mode` zorunludur ve gönderilmeyenler boşalır.
+        - Türe özel ayrıntı (`convoy`, `camp`, …) tamamen değişir; araçlar
+          ve kamp listesi korunur.
+
+        Kapasiteyi artırmak bekleme listesindekileri sırayla `going` yapar.
+        Seriye ait bir etkinlikte `apply_to_series` `false` (varsayılan) ise
+        yalnızca bu etkinlik değişir ve seriden ayrılır (`series_override`);
+        `true` ise serinin başlamamış, düzenlenmemiş bütün etkinliklerini ve
+        ileride açılacakları değiştirir; seride zaman değişmez. Bitmiş seri
+        `event-series-ended` alır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventUpdateRequest" }
+      responses:
+        "200":
+          description: Güncel etkinlik
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Event" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/cancellation:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+    post:
+      operationId: cancelEvent
+      summary: Etkinliği iptal eder (organizatör, moderatör, yönetici)
+      description: |
+        Etkinlik silinmez; üyeler onu iptal zamanı ve sebebiyle görmeye devam
+        eder. Sonrasında katılım cevapları değişmez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventCancelRequest" }
+      responses:
+        "200":
+          description: İptal edilen etkinlik
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Event" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/calendar:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+    get:
+      operationId: exportEventCalendar
+      summary: Etkinliği takvime eklemek için iCalendar (.ics) dosyası
+      description: |
+        RFC 5545. `UID` etkinlik kimliğidir; dosya tekrar içe aktarılırsa
+        takvim kaydı güncellenir, iptal edilmiş etkinlik `STATUS:CANCELLED`
+        taşır. Zamanlar UTC'dir. Koordinat, katılımcı, organizatör ya da
+        plaka içermez; çevrimiçi etkinliğin linkini içerebilir, bu yüzden
+        yanıt önbelleğe alınmaz (`Cache-Control: private, no-store`). Hata
+        yanıtları `application/problem+json`'dur.
+      responses:
+        "200":
+          description: iCalendar dosyası
+          headers:
+            Content-Disposition:
+              description: '`attachment; filename="tayfam-<event_id>.ics"`'
+              schema: { type: string }
+            Cache-Control:
+              schema: { type: string, enum: ["private, no-store"] }
+          content:
+            text/calendar:
+              schema: { type: string }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/rsvp:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+    put:
+      operationId: setEventRsvp
+      summary: Etkinliğe katılım cevabınızı verir
+      description: |
+        Dolu etkinlikte `going` bekleme listesine (`waitlist`) düşer;
+        yanıttaki `status` kaydedilen cevaptır. Bir `going` cevabı
+        değişince bekleme listesinin en eskisi `going` olur. Aynı cevabı
+        tekrar vermek bir şey değiştirmez; bekleme listesindeyken `going`
+        sıranızı korur.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RsvpRequest" }
+      responses:
+        "200":
+          description: Kaydedilen cevap
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Rsvp" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/attendees:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+    get:
+      operationId: listEventAttendees
+      summary: Bir cevaptaki katılımcılar, eskiden yeniye
+      description: |
+        `status=waitlist` için sıra bekleme sırasıdır. `attendance`
+        doğrulanmış katılımı gösterir.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [going, maybe, not_going, waitlist]
+            default: going
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Katılımcılar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttendeeList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/attendees/{user_id}/attendance:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/UserID"
+    put:
+      operationId: confirmAttendance
+      summary: Organizatör düzeltmesi — katılımı ekler
+      description: |
+        Organizatör kendi etkinliği için, moderatör ve yönetici her etkinlik
+        için; iptal edilmemiş bir etkinliğin bitişinden sonraki yedi gün
+        içinde (`correction-closed`). Kimse kendi katılımını düzeltemez
+        (`permission-denied`). Kişi etkin üye olmalıdır (`member-not-found`).
+        Her düzeltme denetim kaydına yazılır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Katılım eklendi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: removeAttendance
+      summary: Organizatör düzeltmesi — sahte katılımı kaldırır
+      description: Ekleme ile aynı kurallar; kişinin katılım geçmişi kaydı silinir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Katılım kaldırıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/check-in:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+    post:
+      operationId: checkInToEvent
+      summary: Katılımınızı doğrular (konumla check-in ya da "Katıldım")
+      description: |
+        Pencere başlangıçtan 30 dakika önce açılır, bitişte kapanır
+        (`check-in-closed`); `going` cevabı gerekir (`event-not-going`).
+
+        Yüz yüze etkinlikte `location` zorunludur ve buluşma noktasına en
+        fazla 300 m olmalıdır (`check-in-too-far`; uzaklık hiçbir yanıtta
+        söylenmez). Etkinlik başına başarısızlar dahil en fazla beş deneme
+        sayılır (`check-in-attempts-exhausted`, core). Ayrıca IP başına
+        sınır vardır (`rate-limited`, gateway). Konum yalnızca uzaklık
+        kontrolünde kullanılır: saklanmaz, log'a yazılmaz, geri dönmez.
+
+        Çevrimiçi etkinlikte `location` gönderilmez; `going` cevabı
+        başlangıçtan önce verilmiş olmalıdır.
+
+        Başarılı check-in'den sonra tekrar denemek bir şey değiştirmez ve
+        deneme saymaz. Susturulmuş üye de check-in yapabilir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CheckInRequest" }
+      responses:
+        "200":
+          description: Katılım doğrulandı
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CheckIn" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/hike-start:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+    post:
+      operationId: startHike
+      summary: Yürüyüşe çıktığınızı kaydeder; katılım sayılır
+      description: |
+        Yalnızca yürüyüş etkinliğinde (`event-type-mismatch`). Check-in ile
+        aynı pencere ve `going` kuralı. Tekrar gönderim ilk çıkışı döndürür.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HikeStartRequest" }
+      responses:
+        "200":
+          description: Yürüyüş yoklaması
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HikeCheckin" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/hike-return:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+    post:
+      operationId: finishHike
+      summary: Yürüyüşten döndüğünüzü kaydeder
+      description: |
+        Bitişten sonra ve iptal edilmiş etkinlikte de çalışır. Önce çıkış
+        gerekir (`hike-not-started`). Tekrar gönderim ilk dönüşü döndürür.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HikeReturnRequest" }
+      responses:
+        "200":
+          description: Yürüyüş yoklaması
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HikeCheckin" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/camp-items:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+    post:
+      operationId: addCampItem
+      summary: Kamp listesine malzeme ekler (organizatör, moderatör, yönetici)
+      description: |
+        Yalnızca kamp etkinliğinde (`event-type-mismatch`); en fazla 200
+        malzeme (`event-limit`). Liste tek etkinlik yanıtındaki
+        `camp.items`'tadır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CampItemCreateRequest" }
+      responses:
+        "201":
+          description: Eklenen malzeme
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CampItem" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/camp-items/{item_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - name: item_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      operationId: removeCampItem
+      summary: Kamp listesinden malzeme çıkarır (organizatör, moderatör, yönetici)
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Malzeme çıkarıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/convoy-vehicles:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+    post:
+      operationId: addConvoyVehicle
+      summary: Konvoya aracınızı ekler; önceki aracınızın yerini alır
+      description: |
+        Yalnızca konvoy etkinliğinde (`event-type-mismatch`) ve `going`
+        cevabıyla (`event-not-going`). Araçlar tek etkinlik yanıtındaki
+        `convoy.vehicles`'tadır. Plaka kişisel veridir; isteğe bağlıdır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConvoyVehicleCreateRequest" }
+      responses:
+        "201":
+          description: Kaydedilen araç
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConvoyVehicle" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/convoy-vehicles/{vehicle_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - name: vehicle_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      operationId: removeConvoyVehicle
+      summary: Konvoydan araç çıkarır
+      description: Kendi aracınızı; organizatör, moderatör ve yönetici her aracı.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Araç çıkarıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/fishing-catches:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+    get:
+      operationId: listFishingCatches
+      summary: Av günlüğü, eskiden yeniye
+      description: |
+        Yalnızca balık etkinliğinde. Bir avın konumu avcıya, `tayfa`
+        görünürlüğünde noktayı görebilen herkese döner; diğerlerinde yoktur.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Avlar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FishingCatchList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: addFishingCatch
+      summary: Av günlüğüne av ekler
+      description: |
+        Katılımınız doğrulanmış olmalıdır (`not-attended`); bitişten sonraki
+        yedi güne kadar (`event-ended`). Avcı ve etkinlik başına en fazla 100
+        (`event-limit`). Aynı `client_request_id` ile tekrar gönderim ilk
+        avı döndürür. Konum isteğe bağlıdır; log'a yazılmaz.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FishingCatchCreateRequest" }
+      responses:
+        "201":
+          description: Eklenen av (ya da tekrar gönderimde ilk eklenen)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FishingCatch" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/fishing-catches/{catch_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - name: catch_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      operationId: removeFishingCatch
+      summary: Av günlüğünden av çıkarır
+      description: Kendi avınızı; moderatör ve yönetici herkesinkini.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Av çıkarıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/event-series/{series_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/SeriesID"
+    get:
+      operationId: getEventSeries
+      summary: Tekrarlayan serinin kuralı
+      description: Her etkin üyeye açıktır. Bilinmeyen seri `event-series-not-found`.
+      responses:
+        "200":
+          description: Seri
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventSeries" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/event-series/{series_id}/ending:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/SeriesID"
+    post:
+      operationId: endEventSeries
+      summary: Seriyi bitirir (seriyi açan, moderatör, yönetici)
+      description: |
+        Yeni etkinlik açılmaz; serinin başlamamış, planlı ve ayrıca
+        düzenlenmemiş etkinlikleri iptal edilir. Bitmiş seri
+        `event-series-ended` alır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Biten seri ve iptal edilen etkinlik sayısı
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventSeriesEnding" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /v1/tayfa-joins:
     post:
       operationId: joinByCode
@@ -914,6 +1542,16 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    EventID:
+      name: event_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    SeriesID:
+      name: series_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     AnnouncementID:
       name: announcement_id
       in: path
@@ -980,7 +1618,7 @@ components:
         # core: modüller ve duyurular
         - module-disabled
         - announcement-not-found
-        # core: etkinlikler (REST uçları #52)
+        # core: etkinlikler
         - event-not-found
         - event-cancelled
         - event-ended
@@ -988,7 +1626,7 @@ components:
         - event-item-not-found
         - event-limit
         - event-type-mismatch
-        # core: katılım doğrulama (REST uçları ayrı issue)
+        # core: katılım doğrulama, av günlüğü
         - check-in-closed
         - check-in-too-far
         - check-in-attempts-exhausted
@@ -1132,10 +1770,13 @@ components:
           uniqueItems: true
           items: { $ref: "#/components/schemas/EventType" }
         join_policy: { $ref: "#/components/schemas/JoinPolicy" }
+        members_can_create_events:
+          type: boolean
+          description: "`true`: her etkin üye etkinlik açabilir. `false`: yalnızca moderatör ve yönetici."
 
     Tayfa:
       type: object
-      required: [id, name, description, interests, join_policy, modules, status, member_count, created_at, updated_at]
+      required: [id, name, description, interests, join_policy, modules, status, member_count, members_can_create_events, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
@@ -1165,6 +1806,12 @@ components:
           format: date-time
           description: Silme bekliyorsa tayfanın silineceği zaman (salt okunur).
         member_count: { type: integer }
+        members_can_create_events:
+          type: boolean
+          description: |
+            `true` ise her etkin üye etkinlik açabilir; `false` (varsayılan)
+            ise yalnızca moderatör ve yönetici. Organizatör kendi etkinliğini
+            her zaman yönetir.
         join_code:
           type: string
           description: Yalnızca yöneticiye döner.
@@ -1360,10 +2007,6 @@ components:
           type: boolean
           description: Zaten etkin üyeyseniz ya da bekleyen isteğiniz varsa.
 
-security:
-  - bearer: []
-  - cookie: []
-
     Announcement:
       type: object
       required: [id, tayfa_id, title, body, pinned, created_at, updated_at]
@@ -1418,3 +2061,434 @@ security:
       properties:
         title: { type: string, minLength: 1, maxLength: 120 }
         body: { type: string, maxLength: 5000 }
+
+    # --- Etkinlikler ---
+
+    EventMode:
+      type: string
+      enum: [in_person, online]
+    RsvpStatus:
+      type: string
+      description: "`waitlist` yalnızca sunucu tarafından verilir (dolu etkinlikte `going`)."
+      enum: [going, maybe, not_going, waitlist]
+    AttendanceStatus:
+      type: string
+      description: "`attended`: doğrulandı. `no_show`: organizatör düzeltmesiyle kaldırıldı."
+      enum: [attended, no_show]
+    AttendanceMethod:
+      type: string
+      description: |
+        `location`: buluşma noktasına 300 m içinde check-in. `online`:
+        çevrimiçi etkinlikte "Katıldım". `hike_start`: yürüyüşe çıkış.
+        `organizer`: organizatör düzeltmesi.
+      enum: [location, online, hike_start, organizer]
+
+    LatLng:
+      type: object
+      required: [lat, lng]
+      additionalProperties: false
+      description: WGS 84 derece. Yalnızca gövdede taşınır; log'a yazılmaz.
+      properties:
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lng: { type: number, minimum: -180, maximum: 180 }
+
+    ConvoyDetails:
+      type: object
+      properties:
+        route:
+          type: array
+          description: Boş ya da 2–500 nokta.
+          items: { $ref: "#/components/schemas/LatLng" }
+        vehicles:
+          type: array
+          description: Yalnızca tek etkinlik yanıtında.
+          items: { $ref: "#/components/schemas/ConvoyVehicle" }
+    ConvoyDetailsInput:
+      type: object
+      additionalProperties: false
+      properties:
+        route:
+          type: array
+          maxItems: 500
+          description: Boş ya da 2–500 nokta.
+          items: { $ref: "#/components/schemas/LatLng" }
+    ConvoyVehicle:
+      type: object
+      required: [id, user_id, make]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        make: { type: string }
+        model: { type: string }
+        model_year: { type: integer, description: Verilmemişse yoktur. }
+        color: { type: string }
+        plate:
+          type: string
+          description: Yalnızca katılımcılara (`going`) ve organizatöre döner.
+    ConvoyVehicleCreateRequest:
+      type: object
+      required: [make]
+      additionalProperties: false
+      properties:
+        make: { type: string, minLength: 1, maxLength: 40 }
+        model: { type: string, maxLength: 40 }
+        model_year: { type: integer, description: "0 ya da 1900 – gelecek yıl." }
+        color: { type: string, maxLength: 30 }
+        plate:
+          type: string
+          maxLength: 16
+          description: İsteğe bağlı, kişisel veri. Harf, rakam ve tek boşluk; 2–16 karakter.
+
+    CampDetails:
+      type: object
+      properties:
+        site_name: { type: string }
+        has_water: { type: boolean, description: Bilinmiyorsa yoktur. }
+        has_toilet: { type: boolean, description: Bilinmiyorsa yoktur. }
+        notes: { type: string }
+        items:
+          type: array
+          description: Yalnızca tek etkinlik yanıtında.
+          items: { $ref: "#/components/schemas/CampItem" }
+    CampDetailsInput:
+      type: object
+      additionalProperties: false
+      properties:
+        site_name: { type: string, maxLength: 120 }
+        has_water: { type: boolean }
+        has_toilet: { type: boolean }
+        notes: { type: string, maxLength: 1000 }
+    CampItem:
+      type: object
+      required: [id, name, quantity]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        quantity: { type: integer }
+        assigned_user_id: { type: string, format: uuid, description: Getirecek kişi. }
+    CampItemCreateRequest:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 60 }
+        quantity: { type: integer, minimum: 0, maximum: 999, description: "0 ya da yok: 1." }
+        assigned_user_id: { type: string, format: uuid, description: Tayfanın etkin bir üyesi. }
+
+    HikeDetails:
+      type: object
+      properties:
+        difficulty: { type: integer, minimum: 0, maximum: 5, description: "0: verilmemiş." }
+        distance_km: { type: number, minimum: 0, maximum: 1000, description: "0: verilmemiş; iki ondalık." }
+        elevation_m: { type: integer, minimum: 0, maximum: 9000, description: "0: verilmemiş." }
+        expected_return_at: { type: string, format: date-time, description: Başlangıçtan sonra. }
+        return_grace_minutes: { type: integer, minimum: 0, maximum: 1440, description: "0: varsayılan 30." }
+    FishingDetails:
+      type: object
+      properties:
+        spot_visibility:
+          type: string
+          enum: [tayfa, participants]
+          description: |
+            `participants`: buluşma noktasını yalnızca organizatör, moderatör,
+            yönetici ve `going`/`maybe` cevabı verenler görür. Yoksa `tayfa`.
+    GamingDetails:
+      type: object
+      required: [game, platform]
+      properties:
+        game: { type: string, minLength: 1, maxLength: 60 }
+        platform: { type: string, enum: [pc, playstation, xbox, switch, mobile, other] }
+    SportsDetails:
+      type: object
+      required: [sport]
+      properties:
+        sport: { type: string, enum: [football, table_football, basketball, volleyball, tennis, table_tennis, other] }
+        venue_name: { type: string, maxLength: 120 }
+
+    Recurrence:
+      type: object
+      required: [rrule]
+      additionalProperties: false
+      properties:
+        rrule:
+          type: string
+          maxLength: 256
+          description: |
+            RFC 5545 RRULE alt kümesi: `FREQ=WEEKLY|MONTHLY`, `INTERVAL=1..52`,
+            `BYDAY` (aylıkta sıralı: `2SA`, `-1FR`), `COUNT=1..500` ya da
+            `UNTIL=YYYYMMDDTHHMMSSZ` (en fazla beş yıl), `WKST=MO`.
+            `starts_at` ilk tekrardır ve kurala uymalıdır.
+        time_zone:
+          type: string
+          maxLength: 64
+          description: IANA adı; boşsa `Europe/Istanbul`. Yerel saat yaz saatinde korunur.
+
+    Event:
+      type: object
+      required: [id, tayfa_id, type, mode, title, description, starts_at, ends_at, capacity, status, discoverable, going_count, maybe_count, waitlist_count, caller_can_manage, series_override, created_at, updated_at]
+      description: |
+        Bir etkin üyenin gördüğü etkinlik. Türe özel ayrıntı (`convoy`,
+        `camp`, `hike`, `fishing`, `gaming`, `sports`) yalnızca tek etkinlik
+        yanıtında ve en fazla biri dolu gelir.
+      properties:
+        id: { type: string, format: uuid }
+        tayfa_id: { type: string, format: uuid }
+        type: { $ref: "#/components/schemas/EventType" }
+        mode: { $ref: "#/components/schemas/EventMode" }
+        title: { type: string }
+        description: { type: string }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        meeting_point_name: { type: string }
+        meeting_point: { $ref: "#/components/schemas/LatLng" }
+        city: { type: string }
+        district: { type: string }
+        online_url: { type: string, description: Çevrimiçi etkinlikte. }
+        capacity: { type: integer, description: "0: sınırsız." }
+        status: { type: string, enum: [scheduled, cancelled] }
+        cancelled_at: { type: string, format: date-time }
+        cancel_reason: { type: string }
+        discoverable: { type: boolean }
+        created_by_user_id:
+          type: string
+          format: uuid
+          description: Organizatör; hesabı silindiyse yoktur.
+        going_count: { type: integer }
+        maybe_count: { type: integer }
+        waitlist_count: { type: integer }
+        caller_rsvp:
+          allOf: [{ $ref: "#/components/schemas/RsvpStatus" }]
+          description: Sizin cevabınız; cevap vermediyseniz yoktur.
+        caller_can_manage:
+          type: boolean
+          description: Düzenleyip iptal edebilir misiniz (istemcinin doğru işlemleri göstermesi için; sunucu her istekte yeniden kontrol eder).
+        caller_attendance:
+          allOf: [{ $ref: "#/components/schemas/AttendanceStatus" }]
+          description: Doğrulanmış katılımınız; yoksa yoktur.
+        series_id: { type: string, format: uuid, description: Tekrarlayan serinin etkinliğiyse. }
+        series_override: { type: boolean, description: Seriden ayrı düzenlendi; seri değişiklikleri ona dokunmaz. }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        convoy: { $ref: "#/components/schemas/ConvoyDetails" }
+        camp: { $ref: "#/components/schemas/CampDetails" }
+        hike: { $ref: "#/components/schemas/HikeDetails" }
+        fishing: { $ref: "#/components/schemas/FishingDetails" }
+        gaming: { $ref: "#/components/schemas/GamingDetails" }
+        sports: { $ref: "#/components/schemas/SportsDetails" }
+
+    EventList:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/Event" }
+        next_page_token: { type: string }
+
+    EventCreateRequest:
+      type: object
+      required: [type, mode, title, starts_at, ends_at, client_request_id]
+      additionalProperties: false
+      description: |
+        Yüz yüze: `meeting_point`, `city`, `district` zorunlu; `online_url`
+        boş. Çevrimiçi: `online_url` (https) zorunlu; yer alanları boş.
+        Türe özel ayrıntı en fazla bir tane ve türle aynı olur; `gaming` ve
+        `sports` için zorunlu, `general` için yoktur.
+      properties:
+        type: { $ref: "#/components/schemas/EventType" }
+        mode: { $ref: "#/components/schemas/EventMode" }
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: Baştaki ve sondaki boşluklar atıldıktan sonra 1–120 karakter.
+        description: { type: string, maxLength: 5000 }
+        starts_at: { type: string, format: date-time, description: Gelecekte, en fazla iki yıl ileri. }
+        ends_at: { type: string, format: date-time, description: Başlangıçtan sonra, en fazla 30 gün. }
+        meeting_point_name: { type: string, maxLength: 120 }
+        meeting_point: { $ref: "#/components/schemas/LatLng" }
+        city: { type: string, maxLength: 50 }
+        district: { type: string, maxLength: 50 }
+        online_url: { type: string, maxLength: 2048 }
+        capacity: { type: integer, minimum: 0, maximum: 10000, description: "0: sınırsız." }
+        discoverable: { type: boolean }
+        convoy: { $ref: "#/components/schemas/ConvoyDetailsInput" }
+        camp: { $ref: "#/components/schemas/CampDetailsInput" }
+        hike: { $ref: "#/components/schemas/HikeDetails" }
+        fishing: { $ref: "#/components/schemas/FishingDetails" }
+        gaming: { $ref: "#/components/schemas/GamingDetails" }
+        sports: { $ref: "#/components/schemas/SportsDetails" }
+        recurrence: { $ref: "#/components/schemas/Recurrence" }
+        client_request_id:
+          type: string
+          format: uuid
+          description: İstemcinin her açma denemesi için bir kez ürettiği, tekrar gönderimde aynen kullandığı UUID.
+
+    EventUpdateRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: Kurallar açmadakiyle aynıdır; tür değişmez.
+      properties:
+        title: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 5000 }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        mode: { $ref: "#/components/schemas/EventMode" }
+        meeting_point_name: { type: string, maxLength: 120 }
+        meeting_point: { $ref: "#/components/schemas/LatLng" }
+        city: { type: string, maxLength: 50 }
+        district: { type: string, maxLength: 50 }
+        online_url: { type: string, maxLength: 2048 }
+        capacity: { type: integer, minimum: 0, maximum: 10000 }
+        discoverable: { type: boolean }
+        convoy: { $ref: "#/components/schemas/ConvoyDetailsInput" }
+        camp: { $ref: "#/components/schemas/CampDetailsInput" }
+        hike: { $ref: "#/components/schemas/HikeDetails" }
+        fishing: { $ref: "#/components/schemas/FishingDetails" }
+        gaming: { $ref: "#/components/schemas/GamingDetails" }
+        sports: { $ref: "#/components/schemas/SportsDetails" }
+        apply_to_series:
+          type: boolean
+          description: "`true` yalnızca seriye ait etkinlikte geçerlidir; yoksa `false`."
+
+    EventCancelRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason: { type: string, maxLength: 500 }
+
+    RsvpRequest:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status: { type: string, enum: [going, maybe, not_going] }
+    Rsvp:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: "#/components/schemas/RsvpStatus" }
+
+    Attendee:
+      type: object
+      required: [user_id, status, updated_at]
+      properties:
+        user_id: { type: string, format: uuid }
+        status: { $ref: "#/components/schemas/RsvpStatus" }
+        updated_at:
+          type: string
+          format: date-time
+          description: Cevabın ya da katılımın son değiştiği zaman.
+        attendance:
+          allOf: [{ $ref: "#/components/schemas/AttendanceStatus" }]
+          description: Doğrulanmamışsa yoktur.
+        attendance_method: { $ref: "#/components/schemas/AttendanceMethod" }
+    AttendeeList:
+      type: object
+      required: [attendees]
+      properties:
+        attendees:
+          type: array
+          items: { $ref: "#/components/schemas/Attendee" }
+        next_page_token: { type: string }
+
+    CheckInRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        location:
+          allOf: [{ $ref: "#/components/schemas/LatLng" }]
+          description: Yüz yüze etkinlikte zorunlu, şu anki konumunuz; çevrimiçide gönderilmez. Saklanmaz, log'a yazılmaz.
+    CheckIn:
+      type: object
+      required: [attendance, method]
+      properties:
+        attendance: { $ref: "#/components/schemas/AttendanceStatus" }
+        method: { $ref: "#/components/schemas/AttendanceMethod" }
+
+    HikeStartRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        started_at:
+          type: string
+          format: date-time
+          description: İstemcinin çıkış zamanı; yoksa şimdi. Gelecekte değil, en fazla 48 saat önce.
+    HikeReturnRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        returned_at:
+          type: string
+          format: date-time
+          description: İstemcinin dönüş zamanı; yoksa şimdi. Çıkıştan önce olamaz.
+    HikeCheckin:
+      type: object
+      required: [started_at]
+      properties:
+        started_at: { type: string, format: date-time }
+        returned_at: { type: string, format: date-time, description: Dönülmediyse yoktur. }
+
+    FishingCatch:
+      type: object
+      required: [id, user_id, species, length_cm, visibility, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        species: { type: string }
+        length_cm: { type: number }
+        location:
+          allOf: [{ $ref: "#/components/schemas/LatLng" }]
+          description: Avcıya, `tayfa` görünürlüğünde noktayı görebilenlere döner.
+        visibility: { type: string, enum: [self, tayfa] }
+        created_at: { type: string, format: date-time }
+    FishingCatchCreateRequest:
+      type: object
+      required: [species, length_cm, client_request_id]
+      additionalProperties: false
+      properties:
+        species: { type: string, minLength: 1, maxLength: 60 }
+        length_cm: { type: number, exclusiveMinimum: 0, maximum: 1000, description: Bir ondalık. }
+        location: { $ref: "#/components/schemas/LatLng" }
+        visibility:
+          type: string
+          enum: [self, tayfa]
+          default: self
+          description: Konumu kim görür; av kendisi her etkin üyeye görünür.
+        client_request_id: { type: string, format: uuid }
+    FishingCatchList:
+      type: object
+      required: [catches]
+      properties:
+        catches:
+          type: array
+          items: { $ref: "#/components/schemas/FishingCatch" }
+        next_page_token: { type: string }
+
+    EventSeries:
+      type: object
+      required: [id, tayfa_id, rrule, time_zone, starts_at, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        tayfa_id: { type: string, format: uuid }
+        template_event_id:
+          type: string
+          format: uuid
+          description: Yeni tekrarların kopyalandığı etkinlik.
+        rrule: { type: string, description: Kanonik biçim. }
+        time_zone: { type: string }
+        starts_at: { type: string, format: date-time, description: İlk tekrar. }
+        ended_at: { type: string, format: date-time, description: Seri bitirildiyse. }
+        created_by_user_id: { type: string, format: uuid, description: Hesabı silindiyse yoktur. }
+        created_at: { type: string, format: date-time }
+    EventSeriesEnding:
+      type: object
+      required: [series, cancelled_count]
+      properties:
+        series: { $ref: "#/components/schemas/EventSeries" }
+        cancelled_count: { type: integer, description: İptal edilen yaklaşan etkinlik sayısı. }
+
+security:
+  - bearer: []
+  - cookie: []
