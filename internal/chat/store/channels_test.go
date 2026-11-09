@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -33,9 +34,25 @@ func newChannel(t *testing.T, q *Queries, tayfa id.ID, name, visibility string) 
 	return ch
 }
 
+// messageIDs hands out increasing message IDs: id.New alone does not order
+// IDs made in the same millisecond, and the paging tests need an order.
+type messageIDs struct {
+	mu   sync.Mutex
+	last id.ID
+}
+
+func (g *messageIDs) next() id.ID {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.last = id.After(g.last)
+	return g.last
+}
+
+var testMessageIDs = &messageIDs{}
+
 func newMessage(t *testing.T, q *Queries, ch, author id.ID) id.ID {
 	t.Helper()
-	m := id.New()
+	m := testMessageIDs.next()
 	row, err := q.CreateMessage(context.Background(), CreateMessageParams{
 		ID: m.PG(), ChannelID: ch.PG(), AuthorID: author.PG(), BodyEncrypted: sealed(1), KeyVersion: int2(1), ClientRequestID: id.New().PG(),
 	})
