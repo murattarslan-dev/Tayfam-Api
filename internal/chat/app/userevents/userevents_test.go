@@ -71,3 +71,48 @@ func TestValidation(t *testing.T) {
 		}
 	}
 }
+
+type fakeSessions struct {
+	sessions, users []id.ID
+	err             error
+}
+
+func (f *fakeSessions) EndSession(_ context.Context, s id.ID) error {
+	f.sessions = append(f.sessions, s)
+	return f.err
+}
+
+func (f *fakeSessions) EndUser(_ context.Context, u id.ID) error {
+	f.users = append(f.users, u)
+	return f.err
+}
+
+// session.revoked, user.sanctioned and user.deleted end the real-time
+// connections (issue #82).
+func TestSessionEvents(t *testing.T) {
+	pool := dbtest.New(t, chatdb.Migrations())
+	fs := &fakeSessions{}
+	svc, err := New(Config{Pool: pool, Sessions: fs})
+	must(t, err)
+	u, s := id.New(), id.New()
+	must(t, svc.Apply(ctx, Event{ID: id.New(), User: u, SessionRevoked: s}))
+	must(t, svc.Apply(ctx, Event{ID: id.New(), User: u, Sanctioned: true}))
+	must(t, svc.Apply(ctx, Event{ID: id.New(), User: u, Deleted: true}))
+	if len(fs.sessions) != 1 || fs.sessions[0] != s || len(fs.users) != 2 || fs.users[0] != u || fs.users[1] != u {
+		t.Fatalf("kapatılanlar: %v %v", fs.sessions, fs.users)
+	}
+	// A failure is returned, so the relay retries.
+	fs.err = errors.New("veritabanı")
+	if err := svc.Apply(ctx, Event{ID: id.New(), User: u, SessionRevoked: s}); err == nil {
+		t.Fatal("hata yutuldu")
+	}
+	for name, e := range map[string]Event{
+		"iki tür": {ID: id.New(), User: u, SessionRevoked: s, Sanctioned: true},
+		"tür yok": {ID: id.New(), User: u},
+	} {
+		var v *apperr.ValidationError
+		if err := svc.Apply(ctx, e); !errors.As(err, &v) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}

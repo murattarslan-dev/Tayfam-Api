@@ -74,6 +74,12 @@ spec:
               - { key: app.kubernetes.io/name, operator: In, values: [identity, core, chat] }
       ports:
         - { protocol: TCP, port: 9090 }
+    # WebSocket: GET /v1/realtime chat'in HTTP portuna aktarılır (ADR-0005).
+    - to:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: chat }
+      ports:
+        - { protocol: TCP, port: 8080 }
 ---
 # identity: gateway'den ve token doğrulamak için açık anahtar isteyen core ve
 # chat'ten gelen gRPC istekleri. core ayrıca şikâyet önceliği için IsMinor'ı
@@ -123,6 +129,24 @@ spec:
             matchLabels: { app.kubernetes.io/name: identity }
       ports:
         - { protocol: TCP, port: 9090 }
+---
+# chat WebSocket portu: yalnızca gateway'den (issue #82). Bağlantıyı bilet
+# açar; gateway kimlik bilgisi iletmez. core'un bu portta dinleyeni yoktur ve
+# bu kural ona uygulanmaz.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: chat-realtime
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: chat }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: gateway }
+      ports:
+        - { protocol: TCP, port: 8080 }
 ---
 # Postgres (CloudNativePG instance ve initdb pod'ları): yalnızca kendi
 # veritabanına bağlanan üç servisten 5432 ve operatörden durum portu (8000).

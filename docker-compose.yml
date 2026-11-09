@@ -21,6 +21,8 @@ services:
       IDENTITY_GRPC_ADDR: identity:9090
       CORE_GRPC_ADDR: core:9090
       CHAT_GRPC_ADDR: chat:9090
+      # WebSocket (GET /v1/realtime) chat'in HTTP portuna aktarılır.
+      CHAT_REALTIME_URL: http://chat:8080
       # Web istemcisi localhost'tan çalışır.
       CORS_ALLOWED_ORIGINS: http://localhost:3000
     ports:
@@ -102,6 +104,8 @@ services:
       # Kanal mesajı anahtarı; make up her seferinde yenisini üretir (eski
       # mesajlar okunamaz). Yoksa kanallar kapalıdır (UNAVAILABLE).
       CHAT_MESSAGE_KEYS: ${CHAT_MESSAGE_KEYS:-}
+      # WebSocket'i açabilecek web origin'leri (gateway ile aynı).
+      CORS_ALLOWED_ORIGINS: http://localhost:3000
       DB_HOST: postgres
       DB_NAME: chat
       DB_USER: postgres

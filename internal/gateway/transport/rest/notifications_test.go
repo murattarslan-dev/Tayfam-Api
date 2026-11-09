@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -85,7 +86,10 @@ func (f *fakeChat) SetTayfaNotificationPreference(ctx context.Context, in *chatv
 }
 
 func testChatDeps(f *fakeChat) ChatDeps {
-	return ChatDeps{Notifications: f, Channels: f, Verifier: fakeVerifier{}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	return ChatDeps{
+		Notifications: f, Channels: f, Realtime: f, RealtimeURL: &url.URL{Scheme: "http", Host: "127.0.0.1:1"},
+		Verifier: fakeVerifier{}, Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
 }
 
 func chatRouter(f *fakeChat) http.Handler {

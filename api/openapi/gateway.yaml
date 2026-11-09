@@ -3158,6 +3158,89 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  /v1/realtime/ticket:
+    post:
+      operationId: createRealtimeTicket
+      summary: Gerçek zamanlı bağlantı için tek kullanımlık bilet alır
+      description: |
+        WebSocket bağlantısı erişim token'ıyla değil bu biletle açılır
+        (ADR-0004, ADR-0005); böylece token URL'de taşınmaz ve web ile mobil
+        aynı yolu kullanır. Bilet **30 saniye** geçerlidir ve **tek bir**
+        bağlantı açar; aynı bileti ikinci kez kullanmak `invalid-ticket`
+        alır. Bilet oturuma bağlıdır: oturum kapatılınca bağlantı da kapanır.
+
+        Kullanılmamış en fazla 10 bilet olabilir (`rate-limited`). Kısa süre
+        önce kapatılmış bir oturum, erişim token'ı hâlâ geçerli olsa da bilet
+        alamaz (`unauthenticated`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "201":
+          description: Bilet
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RealtimeTicket" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/realtime:
+    get:
+      operationId: connectRealtime
+      summary: WebSocket bağlantısını açar
+      description: |
+        `GET /v1/realtime?ticket=<bilet>` ile WebSocket el sıkışması
+        (`Upgrade: websocket`). Bilet doğrulanınca `101 Switching Protocols`
+        döner. Bağlantı chat servisinde çalışır; gateway isteği olduğu gibi
+        aktarır, çerez ve `Authorization` başlığını iletmez.
+
+        **Origin:** Web istemcisinin `Origin` başlığı izinli web adreslerinden
+        biri olmalıdır (`forbidden-origin`). `Origin` göndermeyen yerel
+        (mobil) istemciler kabul edilir.
+
+        **Çerçeveler:** Yalnızca metin çerçevesi, JSON:
+        `{ "type": "...", "id": "...", "data": { ... } }`. Bir çerçeve en
+        fazla 64 KB'tır; büyüğü bağlantıyı 1009 ile kapatır. İkili çerçeve
+        1003 ile kapatır. İstemcinin gönderdiği `id` (en fazla 64 karakter)
+        cevapta aynen döner.
+
+        Sunucu çerçeveleri:
+        - `ready`: bağlantı hazır; `data.heartbeat_seconds` ping aralığıdır.
+        - `error`: `data.code` makine tarafından okunur: `invalid_frame`
+          (JSON veya alanlar hatalı), `unsupported_type` (bilinmeyen tür),
+          `rate_limited` (kullanıcı başına dakikada 60, en fazla 20'lik
+          ani gönderim; sınırı aşmayı sürdüren bağlantı 1008 ile kapanır).
+
+        Kanal aboneliği, mesaj gönderimi ve canlı olay çerçeveleri sonraki
+        adımda eklenir (issue #82). WebSocket yalnızca canlı iletim içindir:
+        yeniden bağlanan istemci kaçırdıklarını REST ile, son gördüğü
+        kimlikten itibaren çeker.
+
+        **Canlılık:** Sunucu 30 saniyede bir ping gönderir; 10 saniye içinde
+        pong gelmezse bağlantıyı kapatır. Okunmayan çerçeveler birikirse
+        (yavaş istemci) bağlantı kapanır.
+
+        **Kapatma kodları:** 1001 sunucu kapanıyor (yeniden bağlan), 4000
+        bağlantı süresi doldu (en fazla 1 saat; yeni biletle yeniden bağlan),
+        4001 oturum kapatıldı, hesap askıya alındı veya silindi (yeniden
+        bağlanma; yeniden giriş gerekir), 4002 yavaş istemci (yeniden bağlan,
+        eksikleri REST ile çek).
+
+        Kullanıcı başına en fazla 5 açık bağlantı vardır (`rate-limited`).
+      parameters:
+        - name: ticket
+          in: query
+          required: true
+          description: "`POST /v1/realtime/ticket` ile alınan bilet."
+          schema: { type: string, minLength: 43, maxLength: 43 }
+      responses:
+        "101": { description: WebSocket bağlantısı açıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
 components:
   securitySchemes:
     bearer: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -3364,6 +3447,9 @@ components:
         - channel-archived
         - channel-name-taken
         - slow-mode
+        # chat: gerçek zamanlı bağlantı (#82)
+        - invalid-ticket
+        - forbidden-origin
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
@@ -3390,6 +3476,13 @@ components:
           type: object
           additionalProperties: { type: string, enum: [ok, unavailable] }
         checked_at: { type: string, format: date-time }
+
+    RealtimeTicket:
+      type: object
+      required: [ticket, expires_at]
+      properties:
+        ticket: { type: string, description: Opak; olduğu gibi geri gönderilir. }
+        expires_at: { type: string, format: date-time }
 
     SignInRequest:
       type: object

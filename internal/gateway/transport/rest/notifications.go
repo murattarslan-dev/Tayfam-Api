@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"google.golang.org/grpc"
@@ -28,6 +29,10 @@ type ChatDeps struct {
 	Notifications NotificationClient
 	// Channels enables the channel routes when set.
 	Channels ChannelClient
+	// Realtime and RealtimeURL (chat's HTTP port) enable the ticket and
+	// WebSocket routes (issue #82).
+	Realtime    RealtimeClient
+	RealtimeURL *url.URL
 	// Verifier checks the user's token before anything reaches chat; chat
 	// checks it again itself (ADR-0011).
 	Verifier TokenVerifier

@@ -74,6 +74,9 @@ const (
 	// PERMISSION_DENIED. The message's author has the caller's role or a
 	// higher one (core's role hierarchy).
 	ErrorReason_ERROR_REASON_ROLE_HIERARCHY ErrorReason = 12
+	// RESOURCE_EXHAUSTED. The caller already has as many unused real-time
+	// tickets as allowed; they expire within 30 seconds.
+	ErrorReason_ERROR_REASON_TICKET_LIMIT ErrorReason = 13
 )
 
 // Enum value maps for ErrorReason.
@@ -92,6 +95,7 @@ var (
 		10: "ERROR_REASON_SLOW_MODE",
 		11: "ERROR_REASON_TAYFA_READ_ONLY",
 		12: "ERROR_REASON_ROLE_HIERARCHY",
+		13: "ERROR_REASON_TICKET_LIMIT",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":            0,
@@ -107,6 +111,7 @@ var (
 		"ERROR_REASON_SLOW_MODE":              10,
 		"ERROR_REASON_TAYFA_READ_ONLY":        11,
 		"ERROR_REASON_ROLE_HIERARCHY":         12,
+		"ERROR_REASON_TICKET_LIMIT":           13,
 	}
 )
 
@@ -141,7 +146,7 @@ var File_tayfam_chat_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\xbe\x03\n" +
+	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\xdd\x03\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12'\n" +
@@ -156,7 +161,8 @@ const file_tayfam_chat_v1_errors_proto_rawDesc = "" +
 	"\x16ERROR_REASON_SLOW_MODE\x10\n" +
 	"\x12 \n" +
 	"\x1cERROR_REASON_TAYFA_READ_ONLY\x10\v\x12\x1f\n" +
-	"\x1bERROR_REASON_ROLE_HIERARCHY\x10\fB\xbd\x01\n" +
+	"\x1bERROR_REASON_ROLE_HIERARCHY\x10\f\x12\x1d\n" +
+	"\x19ERROR_REASON_TICKET_LIMIT\x10\rB\xbd\x01\n" +
 	"\x12com.tayfam.chat.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1;chatv1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Chat.V1\xca\x02\x0eTayfam\\Chat\\V1\xe2\x02\x1aTayfam\\Chat\\V1\\GPBMetadata\xea\x02\x10Tayfam::Chat::V1b\x06proto3"
 
 var (

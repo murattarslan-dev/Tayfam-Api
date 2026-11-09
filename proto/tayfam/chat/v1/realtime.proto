@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package tayfam.chat.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// RealtimeService hands out the tickets that open a WebSocket connection
+// (ADR-0004 "WebSocket kimlik doğrulaması", ADR-0005 "Bağlantı", issue #82).
+//
+// Authentication: the caller's access token (ADR-0004). Service tokens are
+// refused.
+//
+// The connection itself is not gRPC: the client opens
+// GET /v1/realtime?ticket=... on the gateway, which passes it to chat's
+// HTTP port unchanged; chat checks the ticket. The access token never
+// travels in a URL.
+service RealtimeService {
+  // CreateRealtimeTicket returns a new ticket for the caller's session.
+  //
+  // A ticket is valid for 30 seconds and opens one connection: using it
+  // again, or after it expired, is refused. chat keeps only the SHA-256 of
+  // the ticket. A caller with 10 tickets that are still valid gets
+  // ERROR_REASON_TICKET_LIMIT. A session that was revoked a short while ago
+  // (session.revoked, user.sanctioned, user.deleted) gets
+  // UNAUTHENTICATED even while its access token is still valid.
+  rpc CreateRealtimeTicket(CreateRealtimeTicketRequest) returns (CreateRealtimeTicketResponse);
+}
+
+message CreateRealtimeTicketRequest {}
+
+message CreateRealtimeTicketResponse {
+  // Opaque, URL-safe; the client passes it as the ticket query parameter.
+  string ticket = 1;
+  google.protobuf.Timestamp expire_time = 2;
+}

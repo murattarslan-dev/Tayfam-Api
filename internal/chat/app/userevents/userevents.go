@@ -1,6 +1,7 @@
 // Package userevents applies identity's user events to chat (ADR-0009):
 // user.profile_updated keeps the profile copy current and user.deleted
-// removes the user's records from chat.
+// removes the user's records from chat. session.revoked, user.sanctioned
+// and user.deleted also end the user's real-time connections (issue #82).
 //
 // Events arrive at least once and may arrive out of order, so every apply is
 // idempotent: applying the same event again, or an older one after a newer,
@@ -29,9 +30,20 @@ type Event struct {
 	ID         id.ID // identity's outbox event ID (UUIDv7)
 	User       id.ID
 	OccurredAt time.Time
-	// Exactly one of the two.
+	// Exactly one of these.
 	Profile *Profile
 	Deleted bool
+	// SessionRevoked is the session of a session.revoked.
+	SessionRevoked id.ID
+	// Sanctioned: user.sanctioned closed every session of the user.
+	Sanctioned bool
+}
+
+// Sessions ends sessions in chat's real-time layer
+// (realtime.Sessions): their connections close and their tickets go.
+type Sessions interface {
+	EndSession(ctx context.Context, session id.ID) error
+	EndUser(ctx context.Context, user id.ID) error
 }
 
 // Profile is the public profile carried by user.profile_updated.
@@ -49,6 +61,9 @@ type Config struct {
 	Pool *pgxpool.Pool
 	// Cleanups run after the copies are removed; optional.
 	Cleanups []Cleanup
+	// Sessions ends connections; optional (without it session events are
+	// accepted and change nothing).
+	Sessions Sessions
 }
 
 // Service applies user events.
@@ -72,13 +87,43 @@ func (s *Service) Apply(ctx context.Context, e Event) error {
 	if e.User == (id.ID{}) {
 		return apperr.Validation("user_id")
 	}
-	switch {
-	case e.Profile != nil && !e.Deleted:
-		return s.applyProfile(ctx, e)
-	case e.Profile == nil && e.Deleted:
-		return s.applyDeleted(ctx, e)
+	kinds := 0
+	for _, set := range []bool{e.Profile != nil, e.Deleted, e.SessionRevoked != (id.ID{}), e.Sanctioned} {
+		if set {
+			kinds++
+		}
 	}
-	return apperr.Validation("event")
+	if kinds != 1 {
+		return apperr.Validation("event")
+	}
+	switch {
+	case e.Profile != nil:
+		return s.applyProfile(ctx, e)
+	case e.Deleted:
+		if err := s.applyDeleted(ctx, e); err != nil {
+			return err
+		}
+		return s.endUser(ctx, e.User)
+	case e.Sanctioned:
+		return s.endUser(ctx, e.User)
+	}
+	if s.cfg.Sessions == nil {
+		return nil
+	}
+	if err := s.cfg.Sessions.EndSession(ctx, e.SessionRevoked); err != nil {
+		return fmt.Errorf("oturum kapatılamadı: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) endUser(ctx context.Context, user id.ID) error {
+	if s.cfg.Sessions == nil {
+		return nil
+	}
+	if err := s.cfg.Sessions.EndUser(ctx, user); err != nil {
+		return fmt.Errorf("oturumlar kapatılamadı: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) applyProfile(ctx context.Context, e Event) error {
