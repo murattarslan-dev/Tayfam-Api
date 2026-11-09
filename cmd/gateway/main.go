@@ -86,6 +86,7 @@ func setup(rt *service.Runtime) error {
 			Social:              corev1.NewSocialServiceClient(conn),
 			Invitations:         corev1.NewMembershipServiceClient(conn),
 			Profiles:            corev1.NewProfileServiceClient(conn),
+			Reports:             corev1.NewReportServiceClient(conn),
 			Verifier:            v,
 			Log:                 rt.Log,
 			TrustCFConnectingIP: trustCF,

@@ -2716,6 +2716,160 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Şikâyetler ve tayfa moderasyon kuyruğu (core ReportService, issue #76) ---
+  /v1/tayfas/{tayfa_id}/reports:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    post:
+      operationId: createReport
+      summary: Tayfada bir üyeyi, tayfanın kendisini ya da bir içeriği şikâyet eder
+      description: |
+        Her etkin üye, susturulmuş olsa da, şikâyet edebilir. Hedef, sizin o
+        tayfada görebildiğiniz bir şey olmalıdır: başka bir etkin üye,
+        tayfanın kendisi (`target_id` = `tayfa_id`) ya da modülü açık,
+        görünür bir içerik. Diğer her durumda `report-target-not-found`
+        döner (hangi sebeple olduğu söylenmez). Kendinizi ya da kendi
+        içeriğinizi şikâyet edemezsiniz (`invalid-request`).
+
+        Aynı hedefi ikinci kez şikâyet etmek yeni kayıt açmaz; ilk şikâyetiniz
+        `200` ile döner. Yeni şikâyet `201` döner. 24 saatte en fazla 20
+        şikâyet (`report-limit`).
+
+        Şikâyet edenin kimliği şikâyet edilen kişiye hiçbir zaman gösterilmez;
+        tayfanın moderatörlerine ve yöneticilerine de gösterilmez. Tayfanın
+        kendisi ve `staff_conduct` şikâyetleri yalnızca platforma gider.
+        Kanal ve birebir mesaj şikâyetleri bu uçta değildir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReportCreateRequest" }
+      responses:
+        "200":
+          description: Bu hedefe daha önce yaptığınız şikâyet
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MyReport" }
+        "201":
+          description: Yeni şikâyet
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MyReport" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    get:
+      operationId: listTayfaReports
+      summary: Tayfanın moderasyon kuyruğu (moderatör, yönetici)
+      description: |
+        `status=open` (varsayılan): önce `minor_involved` öncelikliler, sonra
+        eskiden yeniye. `status=resolved`: son çözülen önce. Platforma özel
+        şikâyetler ve sizin hakkınızdaki şikâyetler listelenmez. Şikâyet
+        edenin kimliği yoktur; önceliğe göre kimsenin yaşı gösterilmez.
+        Susturulmuş moderatör de okur.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [open, resolved], default: open }
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Şikâyetler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationReportList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/reports/{report_id}/resolution:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/ReportID"
+    post:
+      operationId: resolveReport
+      summary: Kuyruktaki açık bir şikâyeti çözer (moderatör, yönetici)
+      description: |
+        Susturulmuşken yapılamaz (`muted`). Şikâyet edilen kişinin mevcut
+        rolü sizinkinden düşük olmalıdır (`role-hierarchy`). Çözüm, ilgili
+        içeriğin ya da üyeliğin kendi uçlarıyla önceden yapılmış işleme
+        bağlanır:
+        - `content_removed`: içerik artık görünmüyor (silinmiş; etkinlikte
+          iptal de sayılır). Üye ve tayfa şikâyetinde kullanılamaz.
+        - `member_sanctioned`: şikâyet edilen kişi şu anda susturulmuş ya da
+          banlı.
+        - `dismissed`: işlem yok.
+        İşlem yapılmamışsa `report-action-missing`; çözülmüş şikâyette
+        `report-already-resolved` döner. Şikâyet eden kişi hâlâ etkin üyeyse
+        aktörsüz `report_resolved` bildirimi alır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReportResolveRequest" }
+      responses:
+        "200":
+          description: Çözülen şikâyet
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationReport" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/reports:
+    get:
+      operationId: listMyReports
+      summary: Yaptığınız şikâyetler, yeniden eskiye
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Şikâyetleriniz
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MyReportList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/reports/{report_id}:
+    parameters:
+      - $ref: "#/components/parameters/ReportID"
+    get:
+      operationId: getMyReport
+      summary: Yaptığınız bir şikâyet
+      description: |
+        `report_resolved` bildiriminin hedefidir. Tayfadan ayrılmış olsanız da
+        döner. Başkasının şikâyeti `report-not-found` döner.
+      responses:
+        "200":
+          description: Şikâyet
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MyReport" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
 components:
   securitySchemes:
     bearer: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -2775,6 +2929,11 @@ components:
       schema: { type: string, format: uuid }
     TagID:
       name: tag_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ReportID:
+      name: report_id
       in: path
       required: true
       schema: { type: string, format: uuid }
@@ -4093,9 +4252,12 @@ components:
             arkadaşlık isteği; `target_id` isteyen kişi), `friend_accepted`
             (isteğiniz kabul edildi; `target_id` yeni arkadaşınız),
             `tayfa_invitation` (bir arkadaşınız sizi tayfaya davet etti;
-            hedef tayfa). İki arkadaşlık bildirimi bir tayfayla ilgili
-            değildir, `tayfa_id` yoktur. Tanınmayan değer `unknown`.
-          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, hike_overdue, friend_request, friend_accepted, tayfa_invitation, unknown]
+            hedef tayfa), `report_resolved` (şikâyetiniz çözüldü; hedef
+            `report`, `actor_id` hiçbir zaman yoktur; sonucu
+            `GET /v1/me/reports/{report_id}` verir). İki arkadaşlık bildirimi
+            bir tayfayla ilgili değildir, `tayfa_id` yoktur. Tanınmayan değer
+            `unknown`.
+          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, unknown]
         tayfa_id:
           type: string
           format: uuid
@@ -4108,8 +4270,9 @@ components:
           type: string
           description: |
             `membership` için `target_id` başvuran kullanıcının kimliğidir;
-            `user` için bir kullanıcının kimliği (profilini açın).
-          enum: [tayfa, membership, announcement, event, answer, user, unknown]
+            `user` için bir kullanıcının kimliği (profilini açın); `report`
+            için kendi şikâyetinizin kimliği.
+          enum: [tayfa, membership, announcement, event, answer, user, report, unknown]
         target_id: { type: string, format: uuid }
         question_id:
           type: string
@@ -4338,3 +4501,113 @@ security:
           type: array
           items: { $ref: "#/components/schemas/ActivityRecord" }
         next_page_token: { type: string }
+
+    ReportTargetType:
+      type: string
+      description: Kanal ve birebir mesajlar bu listede değildir.
+      enum: [user, tayfa, announcement, event, question, answer, poll, fishing_catch]
+
+    ReportReason:
+      type: string
+      description: |
+        Topluluk Kuralları'na göre. `child_safety` (çocuk/genç güvenliği)
+        kuyrukta öne geçer ve hemen platforma da gider; `staff_conduct`
+        (yönetici/moderatörün yetkisini kullanımı) yalnızca platforma gider.
+      enum: [harassment, hate_speech, violence, privacy, impersonation, illegal_trade, drugs, gambling, dangerous_activity, fake_event, sexual_content, child_safety, spam, copyright, staff_conduct, other]
+
+    ReportCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [target_type, target_id, reason]
+      properties:
+        target_type: { $ref: "#/components/schemas/ReportTargetType" }
+        target_id:
+          type: string
+          format: uuid
+          description: "`tayfa` için yoldaki `tayfa_id` ile aynı olmalıdır."
+        reason: { $ref: "#/components/schemas/ReportReason" }
+        description:
+          type: string
+          maxLength: 1000
+          description: İsteğe bağlı; baştaki ve sondaki boşluklar atılır. Satır sonu olabilir.
+
+    MyReport:
+      type: object
+      description: |
+        Şikâyet, şikâyet eden kişinin gördüğü haliyle. Hangi işlemin yapıldığı
+        ve kimin çözdüğü gösterilmez; yalnızca sonuç (`outcome`) vardır.
+      required: [id, tayfa_id, target_type, target_id, reason, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        tayfa_id: { type: string, format: uuid }
+        target_type: { $ref: "#/components/schemas/ReportTargetType" }
+        target_id: { type: string, format: uuid }
+        reason: { $ref: "#/components/schemas/ReportReason" }
+        description: { type: string }
+        status: { type: string, enum: [open, resolved] }
+        outcome:
+          type: string
+          description: Yalnızca çözülmüş şikâyette.
+          enum: [action_taken, dismissed]
+        created_at: { type: string, format: date-time }
+        resolved_at: { type: string, format: date-time }
+
+    MyReportList:
+      type: object
+      required: [reports]
+      properties:
+        reports:
+          type: array
+          items: { $ref: "#/components/schemas/MyReport" }
+        next_page_token: { type: string }
+
+    ModerationReport:
+      type: object
+      description: |
+        Şikâyet, tayfa moderatörünün gördüğü haliyle. Şikâyet edenin kimliği
+        için alan yoktur. `priority: minor_involved` taraflardan birinin 18
+        yaşından küçük olduğunu (ya da bilinmediğini) söyler; hangisi olduğu
+        ve kimsenin yaşı gösterilmez.
+      required: [id, tayfa_id, target_type, target_id, reason, priority, status, escalated, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        tayfa_id: { type: string, format: uuid }
+        target_type: { $ref: "#/components/schemas/ReportTargetType" }
+        target_id: { type: string, format: uuid }
+        subject_user_id:
+          type: string
+          format: uuid
+          description: Şikâyet edilen üye ya da içeriğin yazarı; hesap silindiyse yoktur.
+        reason: { $ref: "#/components/schemas/ReportReason" }
+        description: { type: string }
+        priority: { type: string, enum: [normal, minor_involved] }
+        status: { type: string, enum: [open, resolved] }
+        resolution:
+          type: string
+          description: Yalnızca çözülmüş şikâyette.
+          enum: [content_removed, member_sanctioned, dismissed]
+        handled_by_user_id:
+          type: string
+          format: uuid
+          description: Çözen moderatör; açıkken ya da hesap silindiyse yoktur.
+        escalated:
+          type: boolean
+          description: Şikâyet platforma da yükseldi (7 gün çözülmedi, çocuk güvenliği ya da öncelik).
+        created_at: { type: string, format: date-time }
+        resolved_at: { type: string, format: date-time }
+
+    ModerationReportList:
+      type: object
+      required: [reports]
+      properties:
+        reports:
+          type: array
+          items: { $ref: "#/components/schemas/ModerationReport" }
+        next_page_token: { type: string }
+
+    ReportResolveRequest:
+      type: object
+      additionalProperties: false
+      required: [resolution]
+      properties:
+        resolution: { type: string, enum: [content_removed, member_sanctioned, dismissed] }
