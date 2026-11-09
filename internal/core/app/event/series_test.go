@@ -336,8 +336,8 @@ func TestSeriesOverrideAndUpdate(t *testing.T) {
 	must(t, err)
 	for _, r := range e.seriesEvents(t, sid) {
 		eid := id.ID(r.ID.Bytes)
-		switch {
-		case eid == e2:
+		switch eid {
+		case e2:
 			if r.Title != "Sadece bu hafta" || r.Capacity.Int32 != 1 {
 				t.Errorf("tek düzenlenen örnek değişti: %q %d", r.Title, r.Capacity.Int32)
 			}

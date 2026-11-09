@@ -8,9 +8,7 @@ package main
 import (
 	"context"
 	"time"
-	// Series time zones are validated and expanded with the IANA database
-	// built into the binary, the same in every image (issue #51).
-	_ "time/tzdata"
+	_ "time/tzdata" // series time zones: the same IANA database in every image (issue #51)
 
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
