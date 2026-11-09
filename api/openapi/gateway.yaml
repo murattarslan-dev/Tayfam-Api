@@ -2380,6 +2380,11 @@ paths:
         modda erken gönderim `slow-mode` (429) ve `Retry-After` başlığını
         (saniye) alır; yönetici ve moderatörler muaftır. Mesaj düzenlenemez.
         Aynı kurallar WebSocket gönderiminde de geçerlidir.
+
+        Mesaj gönderimi kullanıcı başına hız sınırlıdır: kanal ve birebir
+        mesajlar, REST ve WebSocket tek sayaçtan sayılır (dakikada 30, kısa
+        patlama 10; tekrar gönderim de sayılır). Aşılınca `rate-limited`
+        (429). Yavaş mod ve mesaj isteği sınırı ayrıca geçerlidir.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -2399,7 +2404,9 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "429":
-          description: Yavaş mod (`slow-mode`)
+          description: |
+            Yavaş mod (`slow-mode`, `Retry-After` ile) ya da mesaj hız
+            sınırı (`rate-limited`, başlıksız).
           headers:
             Retry-After:
               description: Tekrar denemeden önce beklenecek saniye.
@@ -2500,9 +2507,15 @@ paths:
         ortak etkinlik geçmişi olanlar serbestçe yazışır; diğerleri **mesaj
         isteği** açar: alıcı cevap yazana ya da kabul edene kadar yalnızca
         bir mesaj (`message-request-pending`, 409; alıcı reddettiyse de aynı
-        cevap, ret size söylenmez). Günde en fazla 20 istek; ortak tayfaya 7
-        günden kısa süredir üyeyseniz 5 (`message-request-limit`, 429;
-        reddedilen istekler de sayılır).
+        cevap, ret size söylenmez; alıcı sizi reddedilenler listesinden
+        çıkarana kadar arkadaş olsanız bile yazamazsınız). Günde en fazla 20
+        istek; ortak tayfaya 7 günden kısa süredir üyeyseniz 5
+        (`message-request-limit`, 429; reddedilen istekler de sayılır).
+
+        Mesaj gönderimi kullanıcı başına hız sınırlıdır: kanal ve birebir
+        mesajlar, REST ve WebSocket tek sayaçtan sayılır (dakikada 30, kısa
+        patlama 10; tekrar gönderim de sayılır). Aşılınca `rate-limited`
+        (429). Yavaş mod ve mesaj isteği sınırı ayrıca geçerlidir.
 
         Metin 1–4000 karakter, yalnız boşluk olamaz; sekme ve satır sonu
         dışında kontrol karakteri içeremez. Aynı `client_request_id` ile
@@ -2675,13 +2688,60 @@ paths:
       operationId: declineMessageRequest
       summary: Size gelen mesaj isteğini reddeder
       description: |
-        Gönderen bunu öğrenmez ve yeniden yazamaz; konuşma sizin için
-        kaybolur. Sonra siz yazarsanız konuşma aktif açılır. Bekleyen
-        isteğiniz yoksa `message-request-not-found`.
+        Gönderen bunu öğrenmez ve siz onu reddedilenler listesinden
+        çıkarana kadar (`DELETE /v1/direct-messages/declined-requests/{conversation_id}`)
+        arkadaş olsanız bile yeniden yazamaz. Konuşma listenizden çıkar,
+        reddedilenler listesinde görünür. Sonra siz yazarsanız konuşma
+        aktif açılır. Bekleyen isteğiniz yoksa `message-request-not-found`.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       responses:
         "204": { description: Reddedildi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/direct-messages/declined-requests:
+    get:
+      operationId: listDeclinedRequests
+      summary: Reddettiğiniz mesaj istekleri (reddedilenler listesi)
+      description: |
+        En son reddedilen önce. Listeyi yalnızca siz görürsünüz; gönderen
+        ne reddi ne bu listeyi öğrenir. Hesabı silinmiş gönderenin isteği
+        listelenmez.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Reddedilen istekler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeclinedRequestList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/direct-messages/declined-requests/{conversation_id}:
+    parameters:
+      - $ref: "#/components/parameters/ConversationID"
+    delete:
+      operationId: removeDeclinedRequest
+      summary: Bir isteği reddedilenler listesinden çıkarır
+      description: |
+        Konuşma yeniden size gelen bekleyen istek olur
+        (`request_received`): cevap yazabilir, kabul edebilir ya da yeniden
+        reddedebilirsiniz. Gönderen yine yalnızca tek mesajını görür; kabul
+        edene kadar (ya da serbest yazışabilir hale gelene kadar, ör.
+        arkadaşlık) ikinci mesajı yazamaz. Gönderene bildirim gitmez.
+        Tarafı olmadığınız konuşma `conversation-not-found`; sizin
+        reddetmediğiniz konuşma (kendi isteğiniz dahil)
+        `message-request-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Listeden çıkarıldı }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
@@ -3456,7 +3516,10 @@ paths:
           `POST /v1/direct-messages` ile aynı fonksiyondan geçer; abonelik
           gerekmez. Hatalar: `direct_message_not_allowed`,
           `message_request_pending`, `message_request_limit`,
-          `invalid_request` (`data.field`), `unavailable`.
+          `rate_limited`, `invalid_request` (`data.field`), `unavailable`.
+          `send` ve `dm.send`, REST ile ortak mesaj hız sınırına tabidir
+          (kullanıcı başına dakikada 30, patlama 10): aşılınca o çerçeveye
+          `rate_limited` hatası döner, bağlantı açık kalır.
 
         Sunucu çerçeveleri:
         - `ready`: bağlantı hazır; `data.heartbeat_seconds` ping aralığı,
@@ -4926,8 +4989,8 @@ components:
             (size mesaj isteği) ve `dm_message` (yeni birebir mesaj;
             konuşma okunana kadar konuşma başına tek bildirim) yalnızca
             "yeni" bilgisi taşır: hedef `dm_conversation`, `actor_id` ve
-            `tayfa_id` yoktur, içerik de gönderen de yazılmaz. Tanınmayan
-            değer `unknown`.
+            `tayfa_id` yoktur, içerik de gönderen de yazılmaz; okunmamış
+            mesaj sayısını `unread_count` taşır. Tanınmayan değer `unknown`.
           enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, unknown]
         tayfa_id:
           type: string
@@ -4958,6 +5021,16 @@ components:
           type: string
           description: Yalnızca `tayfa_warned`.
           enum: [inactive, few_members, unknown]
+        unread_count:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: |
+            Yalnızca `dm_request` ve `dm_message`: konuşma başına tek bildirim
+            vardır; bu, bildirim son güncellendiğinde konuşmadaki okunmamış
+            mesaj sayınızdır (en fazla 100; istemci "99+" gösterir). Her yeni
+            mesajda güncellenir; konuşma okununca bildirim okundu olur ve
+            sonraki mesaj yeni bildirimi 1'den başlatır.
         read: { type: boolean }
         created_at: { type: string, format: date-time }
     NotificationList:
@@ -5145,6 +5218,25 @@ components:
         conversations:
           type: array
           items: { $ref: "#/components/schemas/Conversation" }
+        next_page_token: { type: string }
+    DeclinedRequest:
+      type: object
+      required: [conversation_id, sender_user_id, declined_at, created_at]
+      properties:
+        conversation_id: { type: string, format: uuid }
+        sender_user_id:
+          type: string
+          format: uuid
+          description: İsteği gönderen.
+        declined_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+    DeclinedRequestList:
+      type: object
+      required: [declined_requests]
+      properties:
+        declined_requests:
+          type: array
+          items: { $ref: "#/components/schemas/DeclinedRequest" }
         next_page_token: { type: string }
     DirectMessage:
       type: object

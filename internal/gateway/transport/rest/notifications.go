@@ -133,9 +133,12 @@ type notificationJSON struct {
 	// hike_overdue: the hiker.
 	SubjectUserID string `json:"subject_user_id,omitempty"`
 	// tayfa_warned only.
-	WarningReason string    `json:"warning_reason,omitempty"`
-	Read          bool      `json:"read"`
-	CreatedAt     time.Time `json:"created_at"`
+	WarningReason string `json:"warning_reason,omitempty"`
+	// dm_request and dm_message only: unread messages in the conversation
+	// (issue #101).
+	UnreadCount int32     `json:"unread_count,omitempty"`
+	Read        bool      `json:"read"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type notificationListJSON struct {
@@ -186,7 +189,7 @@ func (h chatHandlers) list(ctx context.Context, w http.ResponseWriter, r *http.R
 		out.Notifications = append(out.Notifications, notificationJSON{
 			ID: n.GetId(), Type: nameOr(notificationTypeNames, n.GetType()), TayfaID: n.GetTayfaId(), ActorID: n.GetActorId(),
 			TargetType: nameOr(notificationTargetNames, n.GetTargetType()), TargetID: n.GetTargetId(), QuestionID: n.GetQuestionId(),
-			SubjectUserID: n.GetSubjectUserId(), WarningReason: reason,
+			SubjectUserID: n.GetSubjectUserId(), WarningReason: reason, UnreadCount: n.GetUnreadCount(),
 			Read: n.GetRead(), CreatedAt: n.GetCreateTime().AsTime(),
 		})
 	}

@@ -21,6 +21,8 @@ type DirectMessageClient interface {
 	MarkConversationRead(ctx context.Context, in *chatv1.MarkConversationReadRequest, opts ...grpc.CallOption) (*chatv1.MarkConversationReadResponse, error)
 	AcceptMessageRequest(ctx context.Context, in *chatv1.AcceptMessageRequestRequest, opts ...grpc.CallOption) (*chatv1.AcceptMessageRequestResponse, error)
 	DeclineMessageRequest(ctx context.Context, in *chatv1.DeclineMessageRequestRequest, opts ...grpc.CallOption) (*chatv1.DeclineMessageRequestResponse, error)
+	ListDeclinedRequests(ctx context.Context, in *chatv1.ListDeclinedRequestsRequest, opts ...grpc.CallOption) (*chatv1.ListDeclinedRequestsResponse, error)
+	RemoveDeclinedRequest(ctx context.Context, in *chatv1.RemoveDeclinedRequestRequest, opts ...grpc.CallOption) (*chatv1.RemoveDeclinedRequestResponse, error)
 }
 
 func registerDirectMessages(mux *http.ServeMux, h chatHandlers) {
@@ -34,6 +36,9 @@ func registerDirectMessages(mux *http.ServeMux, h chatHandlers) {
 	mux.HandleFunc("PUT "+c+"/read", a(h.markConversationRead))
 	mux.HandleFunc("POST "+c+"/accept", a(h.acceptMessageRequest))
 	mux.HandleFunc("POST "+c+"/decline", a(h.declineMessageRequest))
+	// The caller's declined list (issue #101).
+	mux.HandleFunc("GET /v1/direct-messages/declined-requests", a(h.listDeclinedRequests))
+	mux.HandleFunc("DELETE /v1/direct-messages/declined-requests/{conversation_id}", a(h.removeDeclinedRequest))
 }
 
 var conversationStatusNames = map[chatv1.ConversationStatus]string{
@@ -235,6 +240,51 @@ func (h chatHandlers) declineMessageRequest(ctx context.Context, w http.Response
 		return
 	}
 	if _, err := h.d.DirectMessages.DeclineMessageRequest(ctx, &chatv1.DeclineMessageRequestRequest{ConversationId: cid}); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type declinedRequestJSON struct {
+	ConversationID string    `json:"conversation_id"`
+	SenderUserID   string    `json:"sender_user_id"`
+	DeclinedAt     time.Time `json:"declined_at"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+type declinedRequestListJSON struct {
+	DeclinedRequests []declinedRequestJSON `json:"declined_requests"`
+	NextPageToken    string                `json:"next_page_token,omitempty"`
+}
+
+func (h chatHandlers) listDeclinedRequests(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	size, token, ok := paging(w, r)
+	if !ok {
+		return
+	}
+	resp, err := h.d.DirectMessages.ListDeclinedRequests(ctx, &chatv1.ListDeclinedRequestsRequest{PageSize: size, PageToken: token})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := declinedRequestListJSON{DeclinedRequests: make([]declinedRequestJSON, 0, len(resp.GetDeclinedRequests())), NextPageToken: resp.GetNextPageToken()}
+	for _, d := range resp.GetDeclinedRequests() {
+		out.DeclinedRequests = append(out.DeclinedRequests, declinedRequestJSON{
+			ConversationID: d.GetConversationId(), SenderUserID: d.GetSenderUserId(),
+			DeclinedAt: d.GetDeclineTime().AsTime(), CreatedAt: d.GetCreateTime().AsTime(),
+		})
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (h chatHandlers) removeDeclinedRequest(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	cid, ok := pathUUID(w, r, "conversation_id")
+	if !ok {
+		return
+	}
+	if _, err := h.d.DirectMessages.RemoveDeclinedRequest(ctx, &chatv1.RemoveDeclinedRequestRequest{ConversationId: cid}); err != nil {
 		h.fail(w, r, err)
 		return
 	}
