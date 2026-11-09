@@ -24,19 +24,19 @@ func TestNewMatchesFormat(t *testing.T) {
 }
 
 func TestNormalize(t *testing.T) {
-	for in, want := range map[string]string{
-		"TYF-8K2M4Q":     "TYF-8K2M4Q",
-		"tyf-8k2m4q":     "TYF-8K2M4Q",
-		" 8k2m4q ":       "TYF-8K2M4Q",
-		"8K2M4Q":         "TYF-8K2M4Q",
-		"TYF-8K2M4O":     "", // O is not in the alphabet
-		"TYF-8K2M4":      "",
-		"TYF-8K2M4QQ":    "",
-		"":               "",
-		"TYF-":           "",
-		"XYZ-8K2M4Q":     "",
-		"TYF-8K2M4Q\n\t": "TYF-8K2M4Q",
+	for _, tc := range []struct{ in, want string }{
+		{"TYF-8K2M4Q", "TYF-8K2M4Q"},
+		{"tyf-8k2m4q", "TYF-8K2M4Q"},
+		{"\t8k2m4q\n", "TYF-8K2M4Q"}, // spaces around are dropped
+		{"8K2M4Q", "TYF-8K2M4Q"},
+		{"TYF-8K2M4O", ""}, // O is not in the alphabet
+		{"TYF-8K2M4", ""},
+		{"TYF-8K2M4QQ", ""},
+		{"", ""},
+		{"TYF-", ""},
+		{"XYZ-8K2M4Q", ""},
 	} {
+		in, want := tc.in, tc.want
 		got, ok := Normalize(in)
 		if got != want || ok != (want != "") {
 			t.Errorf("Normalize(%q) = %q, %v", in, got, ok)
