@@ -26,12 +26,21 @@ func newConversation(t *testing.T, q *Queries, a, b id.ID, status string, reques
 	t.Helper()
 	low, high := pair(a, b)
 	c := id.New()
+	// A declined conversation is a request first (declined_at, issue #101).
 	p := CreateConversationParams{ID: c.PG(), UserLowID: low.PG(), UserHighID: high.PG(), Status: status, LastMessageAt: at(last)}
+	if status == "declined" {
+		p.Status = "request"
+	}
 	if requestedBy != (id.ID{}) {
 		p.RequestedBy = requestedBy.PG()
 	}
 	if _, err := q.CreateConversation(context.Background(), p); err != nil {
 		t.Fatal(err)
+	}
+	if status == "declined" {
+		if _, err := q.DeclineConversation(context.Background(), DeclineConversationParams{ID: c.PG(), DeclinedAt: at(last)}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return c
 }
@@ -64,11 +73,10 @@ func TestConversationConstraints(t *testing.T) {
 		p          CreateConversationParams
 		constraint string
 	}{
-		"ters sıra":           {CreateConversationParams{UserLowID: high.PG(), UserHighID: low.PG(), Status: "active"}, "dm_conversations_order"},
-		"bilinmeyen":          {CreateConversationParams{UserLowID: id.New().PG(), UserHighID: id.New().PG(), Status: "open"}, "dm_conversations_status"},
-		"istek açansız":       {CreateConversationParams{UserLowID: low.PG(), UserHighID: id.New().PG(), Status: "request"}, "dm_conversations_request"},
-		"üçüncü kişi":         {CreateConversationParams{UserLowID: low.PG(), UserHighID: id.New().PG(), Status: "request", RequestedBy: id.New().PG()}, "dm_conversations_requested_by"},
-		"reddedilmiş açansız": {CreateConversationParams{UserLowID: low.PG(), UserHighID: id.New().PG(), Status: "declined"}, "dm_conversations_request"},
+		"ters sıra":     {CreateConversationParams{UserLowID: high.PG(), UserHighID: low.PG(), Status: "active"}, "dm_conversations_order"},
+		"bilinmeyen":    {CreateConversationParams{UserLowID: id.New().PG(), UserHighID: id.New().PG(), Status: "open"}, "dm_conversations_status"},
+		"istek açansız": {CreateConversationParams{UserLowID: low.PG(), UserHighID: id.New().PG(), Status: "request"}, "dm_conversations_request"},
+		"üçüncü kişi":   {CreateConversationParams{UserLowID: low.PG(), UserHighID: id.New().PG(), Status: "request", RequestedBy: id.New().PG()}, "dm_conversations_requested_by"},
 	} {
 		c.p.ID, c.p.LastMessageAt = id.New().PG(), at(now)
 		if c.p.UserLowID.Valid && c.p.UserHighID.Valid && c.constraint != "dm_conversations_order" {
@@ -79,6 +87,22 @@ func TestConversationConstraints(t *testing.T) {
 			}
 		}
 		if _, err := q.CreateConversation(ctx, c.p); !violates(err, c.constraint) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+
+	// Declined: only an opened request, always with its decline time (issue
+	// #101); no other state has one.
+	x, y := pair(id.New(), id.New())
+	for name, c := range map[string]struct {
+		sql        string
+		constraint string
+	}{
+		"reddedilmiş açansız":  {`INSERT INTO dm_conversations (id, user_low_id, user_high_id, status, declined_at, last_message_at) VALUES ($1, $2, $3, 'declined', now(), now())`, "dm_conversations_request"},
+		"reddedilmiş zamansız": {`INSERT INTO dm_conversations (id, user_low_id, user_high_id, status, requested_by, last_message_at) VALUES ($1, $2, $3, 'declined', $2, now())`, "dm_conversations_declined_at"},
+		"ret zamanlı istek":    {`INSERT INTO dm_conversations (id, user_low_id, user_high_id, status, requested_by, declined_at, last_message_at) VALUES ($1, $2, $3, 'request', $2, now(), now())`, "dm_conversations_declined_at"},
+	} {
+		if _, err := pool.Exec(ctx, c.sql, id.New().PG(), x.PG(), y.PG()); !violates(err, c.constraint) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
@@ -239,13 +263,13 @@ func TestRequestCountAndStatus(t *testing.T) {
 	if n := count(); n != 1 {
 		t.Fatalf("istek sayısı = %d", n)
 	}
-	if n, err := q.DeclineConversation(ctx, c1.PG()); err != nil || n != 1 {
+	if n, err := q.DeclineConversation(ctx, DeclineConversationParams{ID: c1.PG(), DeclinedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}); err != nil || n != 1 {
 		t.Fatalf("ret: %d %v", n, err)
 	}
 	if n := count(); n != 1 {
 		t.Fatalf("reddedilen istek sınırdan düştü: %d", n)
 	}
-	if n, _ := q.DeclineConversation(ctx, c1.PG()); n != 0 {
+	if n, _ := q.DeclineConversation(ctx, DeclineConversationParams{ID: c1.PG(), DeclinedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}); n != 0 {
 		t.Fatal("ret iki kez")
 	}
 	if n, err := q.AcceptConversation(ctx, AcceptConversationParams{ID: c1.PG(), AcceptedAt: at(now)}); err != nil || n != 1 {
@@ -320,5 +344,64 @@ func TestDirectMessageCleanupAndPurge(t *testing.T) {
 	}
 	if _, err := q.GetDirectMessage(ctx, GetDirectMessageParams{ConversationID: c.PG(), ID: recent.PG()}); err != nil {
 		t.Fatalf("yeni silinen gitti: %v", err)
+	}
+}
+
+// The declined list belongs to the decliner only; only they can restore a
+// request, and answering it clears the decline (issue #101).
+func TestDeclinedRequests(t *testing.T) {
+	pool, q := setup(t)
+	ctx := context.Background()
+	me, x, y, stranger := id.New(), id.New(), id.New(), id.New()
+	base := time.Now().UTC().Truncate(time.Microsecond)
+	fromX := newConversation(t, q, me, x, "declined", x, base)
+	fromY := newConversation(t, q, me, y, "declined", y, base.Add(time.Minute))
+	newConversation(t, q, me, stranger, "declined", me, base.Add(2*time.Minute)) // my request, declined
+	newConversation(t, q, x, y, "declined", x, base.Add(3*time.Minute))          // not mine
+
+	list := func(u id.ID, n int32) []ListDeclinedRequestsRow {
+		t.Helper()
+		rows, err := q.ListDeclinedRequests(ctx, ListDeclinedRequestsParams{UserID: u.PG(), N: n})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rows
+	}
+	rows := list(me, 10)
+	if len(rows) != 2 || id.ID(rows[0].ID.Bytes) != fromY || id.ID(rows[1].ID.Bytes) != fromX || id.ID(rows[0].RequestedBy.Bytes) != y {
+		t.Fatalf("liste = %+v", rows)
+	}
+	// x sent two declined requests and sees neither.
+	if rows := list(x, 10); len(rows) != 0 {
+		t.Fatalf("gönderenin listesi = %+v", rows)
+	}
+	page, err := q.ListDeclinedRequests(ctx, ListDeclinedRequestsParams{UserID: me.PG(), N: 10, AfterAt: rows[0].DeclinedAt, AfterID: rows[0].ID})
+	if err != nil || len(page) != 1 || id.ID(page[0].ID.Bytes) != fromX {
+		t.Fatalf("imleç = %+v %v", page, err)
+	}
+
+	// Only the decliner restores: not the sender, not a stranger.
+	for _, u := range []id.ID{x, stranger} {
+		if n, err := q.RestoreDeclinedRequest(ctx, RestoreDeclinedRequestParams{ID: fromX.PG(), UserID: u.PG()}); err != nil || n != 0 {
+			t.Fatalf("%s geri aldı: %d %v", u, n, err)
+		}
+	}
+	if n, err := q.RestoreDeclinedRequest(ctx, RestoreDeclinedRequestParams{ID: fromX.PG(), UserID: me.PG()}); err != nil || n != 1 {
+		t.Fatalf("geri alma: %d %v", n, err)
+	}
+	var status string
+	var declined pgtype.Timestamptz
+	if err := pool.QueryRow(ctx, `SELECT status, declined_at FROM dm_conversations WHERE id = $1`, fromX.PG()).Scan(&status, &declined); err != nil || status != "request" || declined.Valid {
+		t.Fatalf("geri alınan = %s %v %v", status, declined, err)
+	}
+	if n, _ := q.RestoreDeclinedRequest(ctx, RestoreDeclinedRequestParams{ID: fromX.PG(), UserID: me.PG()}); n != 0 {
+		t.Fatal("iki kez geri alındı")
+	}
+	// Writing to a declined request accepts it and clears the decline.
+	if n, err := q.AcceptConversation(ctx, AcceptConversationParams{ID: fromY.PG(), AcceptedAt: at(base)}); err != nil || n != 1 {
+		t.Fatalf("kabul: %d %v", n, err)
+	}
+	if rows := list(me, 10); len(rows) != 0 {
+		t.Fatalf("kabulden sonra liste = %+v", rows)
 	}
 }

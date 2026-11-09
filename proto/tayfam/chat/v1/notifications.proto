@@ -74,6 +74,12 @@ message Notification {
   string subject_user_id = 10;
   // Set for TAYFA_WARNED.
   TayfaWarningReason warning_reason = 11;
+  // Set for DM_REQUEST and DM_MESSAGE: there is one notice per
+  // conversation, and this is the caller's unread messages in it when the
+  // notice was last updated (1–100; the client shows 100 as "99+"). Each
+  // new message updates the waiting notice; reading the conversation marks
+  // it read, and the next message opens a new one.
+  int32 unread_count = 12;
 }
 
 message ListNotificationsRequest {

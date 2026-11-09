@@ -92,4 +92,9 @@ enum ErrorReason {
   // NOT_FOUND. No message request waits for the caller in this
   // conversation.
   ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND = 18;
+
+  // RESOURCE_EXHAUSTED. The caller sends messages too fast: one per-user
+  // limit for channel and direct messages, REST and WebSocket together
+  // (issue #101). Slow mode and the request limit apply on top.
+  ERROR_REASON_RATE_LIMITED = 19;
 }

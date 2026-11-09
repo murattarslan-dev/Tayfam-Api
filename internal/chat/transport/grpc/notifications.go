@@ -97,6 +97,7 @@ func (s *NotificationServer) ListNotifications(ctx context.Context, req *chatv1.
 			TargetType: toProto(listedTargets, n.TargetType), TargetId: n.Target.String(), QuestionId: idOrEmpty(n.Question),
 			Read: !n.ReadAt.IsZero(), CreateTime: timestamppb.New(n.CreatedAt),
 			SubjectUserId: idOrEmpty(n.Subject), WarningReason: toProto(warningReasons, n.Reason),
+			UnreadCount: n.Unread,
 		})
 	}
 	return out, nil

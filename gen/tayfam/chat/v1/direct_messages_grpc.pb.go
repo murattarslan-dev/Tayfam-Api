@@ -27,6 +27,8 @@ const (
 	DirectMessageService_MarkConversationRead_FullMethodName         = "/tayfam.chat.v1.DirectMessageService/MarkConversationRead"
 	DirectMessageService_AcceptMessageRequest_FullMethodName         = "/tayfam.chat.v1.DirectMessageService/AcceptMessageRequest"
 	DirectMessageService_DeclineMessageRequest_FullMethodName        = "/tayfam.chat.v1.DirectMessageService/DeclineMessageRequest"
+	DirectMessageService_ListDeclinedRequests_FullMethodName         = "/tayfam.chat.v1.DirectMessageService/ListDeclinedRequests"
+	DirectMessageService_RemoveDeclinedRequest_FullMethodName        = "/tayfam.chat.v1.DirectMessageService/RemoveDeclinedRequest"
 	DirectMessageService_VerifyDirectMessageForReport_FullMethodName = "/tayfam.chat.v1.DirectMessageService/VerifyDirectMessageForReport"
 )
 
@@ -78,11 +80,16 @@ type DirectMessageServiceClient interface {
 	// shared tayfa, else 20; ERROR_REASON_MESSAGE_REQUEST_LIMIT); declined
 	// requests still count.
 	//
+	// Sending is rate limited per user, together with channel messages and
+	// over the WebSocket (one counter: 30 a minute, bursts of 10;
+	// ERROR_REASON_RATE_LIMITED). Retries count too.
+	//
 	// Errors: ERROR_REASON_VALIDATION (recipient_user_id, the caller; body
 	// 1–4000 characters, not only white space, no control characters other
 	// than tab and line breaks; client_request_id; a client_request_id used
 	// for another conversation), ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED,
-	// ERROR_REASON_MESSAGE_REQUEST_PENDING, ERROR_REASON_MESSAGE_REQUEST_LIMIT.
+	// ERROR_REASON_MESSAGE_REQUEST_PENDING, ERROR_REASON_MESSAGE_REQUEST_LIMIT,
+	// ERROR_REASON_RATE_LIMITED.
 	SendDirectMessage(ctx context.Context, in *SendDirectMessageRequest, opts ...grpc.CallOption) (*SendDirectMessageResponse, error)
 	// ListConversations lists the caller's conversations, the latest message
 	// first, with the caller's unread count.
@@ -111,11 +118,26 @@ type DirectMessageServiceClient interface {
 	// such request waiting (for example their own request).
 	AcceptMessageRequest(ctx context.Context, in *AcceptMessageRequestRequest, opts ...grpc.CallOption) (*AcceptMessageRequestResponse, error)
 	// DeclineMessageRequest declines a request the caller received. The
-	// sender is not told, cannot write again and still sees the request as
-	// sent; for the caller the conversation disappears. Writing to the sender
-	// later reopens it as active. ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND
-	// otherwise.
+	// sender is not told, still sees the request as sent and cannot write
+	// again — even as a friend — until the caller removes it from their
+	// declined list (RemoveDeclinedRequest). For the caller the conversation
+	// leaves the conversation list and appears in ListDeclinedRequests.
+	// Writing to the sender later reopens it as active.
+	// ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND otherwise.
 	DeclineMessageRequest(ctx context.Context, in *DeclineMessageRequestRequest, opts ...grpc.CallOption) (*DeclineMessageRequestResponse, error)
+	// ListDeclinedRequests lists the requests the caller declined ("declined
+	// list", issue #101), the latest decline first. Only the decliner sees
+	// it; the sender never learns of the list. Requests whose sender's
+	// account was deleted are not listed. Paging as above.
+	ListDeclinedRequests(ctx context.Context, in *ListDeclinedRequestsRequest, opts ...grpc.CallOption) (*ListDeclinedRequestsResponse, error)
+	// RemoveDeclinedRequest takes a request off the caller's declined list:
+	// the conversation is a waiting request again (REQUEST_RECEIVED for the
+	// caller, who may accept, reply or decline it; the sender still has
+	// their one message and may write again once it is accepted, or freely
+	// if core says so). The sender is not told. Anyone else's conversation
+	// is ERROR_REASON_CONVERSATION_NOT_FOUND; a conversation that is not a
+	// request the caller declined is ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND.
+	RemoveDeclinedRequest(ctx context.Context, in *RemoveDeclinedRequestRequest, opts ...grpc.CallOption) (*RemoveDeclinedRequestResponse, error)
 	// VerifyDirectMessageForReport answers core's question when the caller
 	// reports a direct message (core ReportService.CreateReport with
 	// REPORT_TARGET_TYPE_DM_MESSAGE; ADR-0009): core forwards the reporter's
@@ -216,6 +238,26 @@ func (c *directMessageServiceClient) DeclineMessageRequest(ctx context.Context, 
 	return out, nil
 }
 
+func (c *directMessageServiceClient) ListDeclinedRequests(ctx context.Context, in *ListDeclinedRequestsRequest, opts ...grpc.CallOption) (*ListDeclinedRequestsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListDeclinedRequestsResponse)
+	err := c.cc.Invoke(ctx, DirectMessageService_ListDeclinedRequests_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *directMessageServiceClient) RemoveDeclinedRequest(ctx context.Context, in *RemoveDeclinedRequestRequest, opts ...grpc.CallOption) (*RemoveDeclinedRequestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveDeclinedRequestResponse)
+	err := c.cc.Invoke(ctx, DirectMessageService_RemoveDeclinedRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *directMessageServiceClient) VerifyDirectMessageForReport(ctx context.Context, in *VerifyDirectMessageForReportRequest, opts ...grpc.CallOption) (*VerifyDirectMessageForReportResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(VerifyDirectMessageForReportResponse)
@@ -274,11 +316,16 @@ type DirectMessageServiceServer interface {
 	// shared tayfa, else 20; ERROR_REASON_MESSAGE_REQUEST_LIMIT); declined
 	// requests still count.
 	//
+	// Sending is rate limited per user, together with channel messages and
+	// over the WebSocket (one counter: 30 a minute, bursts of 10;
+	// ERROR_REASON_RATE_LIMITED). Retries count too.
+	//
 	// Errors: ERROR_REASON_VALIDATION (recipient_user_id, the caller; body
 	// 1–4000 characters, not only white space, no control characters other
 	// than tab and line breaks; client_request_id; a client_request_id used
 	// for another conversation), ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED,
-	// ERROR_REASON_MESSAGE_REQUEST_PENDING, ERROR_REASON_MESSAGE_REQUEST_LIMIT.
+	// ERROR_REASON_MESSAGE_REQUEST_PENDING, ERROR_REASON_MESSAGE_REQUEST_LIMIT,
+	// ERROR_REASON_RATE_LIMITED.
 	SendDirectMessage(context.Context, *SendDirectMessageRequest) (*SendDirectMessageResponse, error)
 	// ListConversations lists the caller's conversations, the latest message
 	// first, with the caller's unread count.
@@ -307,11 +354,26 @@ type DirectMessageServiceServer interface {
 	// such request waiting (for example their own request).
 	AcceptMessageRequest(context.Context, *AcceptMessageRequestRequest) (*AcceptMessageRequestResponse, error)
 	// DeclineMessageRequest declines a request the caller received. The
-	// sender is not told, cannot write again and still sees the request as
-	// sent; for the caller the conversation disappears. Writing to the sender
-	// later reopens it as active. ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND
-	// otherwise.
+	// sender is not told, still sees the request as sent and cannot write
+	// again — even as a friend — until the caller removes it from their
+	// declined list (RemoveDeclinedRequest). For the caller the conversation
+	// leaves the conversation list and appears in ListDeclinedRequests.
+	// Writing to the sender later reopens it as active.
+	// ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND otherwise.
 	DeclineMessageRequest(context.Context, *DeclineMessageRequestRequest) (*DeclineMessageRequestResponse, error)
+	// ListDeclinedRequests lists the requests the caller declined ("declined
+	// list", issue #101), the latest decline first. Only the decliner sees
+	// it; the sender never learns of the list. Requests whose sender's
+	// account was deleted are not listed. Paging as above.
+	ListDeclinedRequests(context.Context, *ListDeclinedRequestsRequest) (*ListDeclinedRequestsResponse, error)
+	// RemoveDeclinedRequest takes a request off the caller's declined list:
+	// the conversation is a waiting request again (REQUEST_RECEIVED for the
+	// caller, who may accept, reply or decline it; the sender still has
+	// their one message and may write again once it is accepted, or freely
+	// if core says so). The sender is not told. Anyone else's conversation
+	// is ERROR_REASON_CONVERSATION_NOT_FOUND; a conversation that is not a
+	// request the caller declined is ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND.
+	RemoveDeclinedRequest(context.Context, *RemoveDeclinedRequestRequest) (*RemoveDeclinedRequestResponse, error)
 	// VerifyDirectMessageForReport answers core's question when the caller
 	// reports a direct message (core ReportService.CreateReport with
 	// REPORT_TARGET_TYPE_DM_MESSAGE; ADR-0009): core forwards the reporter's
@@ -355,6 +417,12 @@ func (UnimplementedDirectMessageServiceServer) AcceptMessageRequest(context.Cont
 }
 func (UnimplementedDirectMessageServiceServer) DeclineMessageRequest(context.Context, *DeclineMessageRequestRequest) (*DeclineMessageRequestResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeclineMessageRequest not implemented")
+}
+func (UnimplementedDirectMessageServiceServer) ListDeclinedRequests(context.Context, *ListDeclinedRequestsRequest) (*ListDeclinedRequestsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListDeclinedRequests not implemented")
+}
+func (UnimplementedDirectMessageServiceServer) RemoveDeclinedRequest(context.Context, *RemoveDeclinedRequestRequest) (*RemoveDeclinedRequestResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveDeclinedRequest not implemented")
 }
 func (UnimplementedDirectMessageServiceServer) VerifyDirectMessageForReport(context.Context, *VerifyDirectMessageForReportRequest) (*VerifyDirectMessageForReportResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method VerifyDirectMessageForReport not implemented")
@@ -524,6 +592,42 @@ func _DirectMessageService_DeclineMessageRequest_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DirectMessageService_ListDeclinedRequests_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListDeclinedRequestsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DirectMessageServiceServer).ListDeclinedRequests(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DirectMessageService_ListDeclinedRequests_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DirectMessageServiceServer).ListDeclinedRequests(ctx, req.(*ListDeclinedRequestsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DirectMessageService_RemoveDeclinedRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveDeclinedRequestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DirectMessageServiceServer).RemoveDeclinedRequest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DirectMessageService_RemoveDeclinedRequest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DirectMessageServiceServer).RemoveDeclinedRequest(ctx, req.(*RemoveDeclinedRequestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _DirectMessageService_VerifyDirectMessageForReport_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(VerifyDirectMessageForReportRequest)
 	if err := dec(in); err != nil {
@@ -580,6 +684,14 @@ var DirectMessageService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeclineMessageRequest",
 			Handler:    _DirectMessageService_DeclineMessageRequest_Handler,
+		},
+		{
+			MethodName: "ListDeclinedRequests",
+			Handler:    _DirectMessageService_ListDeclinedRequests_Handler,
+		},
+		{
+			MethodName: "RemoveDeclinedRequest",
+			Handler:    _DirectMessageService_RemoveDeclinedRequest_Handler,
 		},
 		{
 			MethodName: "VerifyDirectMessageForReport",

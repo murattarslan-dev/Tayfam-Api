@@ -59,8 +59,11 @@ type Notification struct {
 	Question   id.ID  // answer_received: the answered question
 	Subject    id.ID  // hike_overdue: the hiker who did not return
 	Reason     string // tayfa_warned: inactive or few_members
-	ReadAt     time.Time
-	CreatedAt  time.Time
+	// Unread: dm_request and dm_message only, the caller's unread messages
+	// in the conversation when the notice was last updated (1–100).
+	Unread    int32
+	ReadAt    time.Time
+	CreatedAt time.Time
 }
 
 // Preference is one muting preference of the caller.
@@ -150,6 +153,9 @@ func (s *Service) List(ctx context.Context, caller id.ID, size int32, token stri
 		}
 		if r.ReadAt.Valid {
 			v.ReadAt = r.ReadAt.Time.UTC()
+		}
+		if r.UnreadCount.Valid {
+			v.Unread = r.UnreadCount.Int32
 		}
 		var p struct {
 			QuestionID string `json:"question_id"`

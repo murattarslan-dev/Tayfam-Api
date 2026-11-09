@@ -112,10 +112,26 @@ func (r *recPub) take() []string {
 	return out
 }
 
+// fakeLimit stands in for the shared send rate: it records the keys and
+// refuses while deny is set.
+type fakeLimit struct {
+	mu   sync.Mutex
+	deny bool
+	keys []string
+}
+
+func (f *fakeLimit) Allow(key string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.keys = append(f.keys, key)
+	return !f.deny
+}
+
 type env struct {
 	svc   *Service
 	pool  *pgxpool.Pool
 	rules *fakeRules
+	limit *fakeLimit
 	pub   *recPub
 	now   time.Time
 	mu    sync.Mutex
@@ -124,9 +140,9 @@ type env struct {
 func setup(t *testing.T) *env {
 	t.Helper()
 	pool := dbtest.New(t, chatdb.Migrations())
-	e := &env{pool: pool, rules: &fakeRules{v: map[[2]id.ID]Verdict{}}, pub: &recPub{}, now: time.Now().UTC()}
+	e := &env{pool: pool, rules: &fakeRules{v: map[[2]id.ID]Verdict{}}, limit: &fakeLimit{}, pub: &recPub{}, now: time.Now().UTC()}
 	svc, err := New(Config{
-		Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Rules: e.rules,
+		Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Rules: e.rules, SendLimit: e.limit,
 		Cipher: channelcrypt.Ephemeral(), Publisher: e.pub,
 		Now: func() time.Time { e.mu.Lock(); defer e.mu.Unlock(); return e.now },
 	})
@@ -620,7 +636,7 @@ func TestPaging(t *testing.T) {
 
 func TestUnavailableWithoutKey(t *testing.T) {
 	pool := dbtest.New(t, chatdb.Migrations())
-	svc, err := New(Config{Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Rules: &fakeRules{}})
+	svc, err := New(Config{Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Rules: &fakeRules{}, SendLimit: &fakeLimit{}})
 	must(t, err)
 	a, b, c := id.New(), id.New(), id.New()
 	_, _, err = svc.Send(ctx, a, SendInput{Recipient: b, Body: "x", ClientRequestID: id.New()})
@@ -696,7 +712,7 @@ func TestVerifyForReport(t *testing.T) {
 		t.Errorf("silinmiş gönderen: %v", err)
 	}
 	// It works without the message key.
-	keyless, err := New(Config{Pool: e.pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Rules: e.rules})
+	keyless, err := New(Config{Pool: e.pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Rules: e.rules, SendLimit: e.limit})
 	must(t, err)
 	x, y := id.New(), id.New()
 	e.rules.set(x, y, Verdict{Decision: Active})

@@ -304,6 +304,11 @@ func TestReportResolvedHasNoActor(t *testing.T) {
 	if err := wrongTarget.Validate(); !errors.As(err, &v) {
 		t.Fatalf("yanlış hedefli report_resolved: %v", err)
 	}
+	counted := base
+	counted.Unread = 3
+	if err := counted.Validate(); !errors.As(err, &v) || v.Field != "unread_count" {
+		t.Fatalf("sayaçlı report_resolved: %v", err)
+	}
 	e.store(t, base)
 	n, _, err := e.svc.List(ctx, reporter, 0, "")
 	must(t, err)
@@ -312,9 +317,10 @@ func TestReportResolvedHasNoActor(t *testing.T) {
 	}
 }
 
-// A direct message notice is not about a tayfa and never names the sender.
+// A direct message notice is not about a tayfa, never names the sender and
+// carries the unread count (1–100; issue #101); no other type has one.
 func TestDirectNoticeRules(t *testing.T) {
-	ok := Request{Event: id.New(), Type: TypeDMRequest, TargetType: TargetDMConversation, Target: id.New(), Recipients: []id.ID{id.New()}}
+	ok := Request{Event: id.New(), Type: TypeDMRequest, TargetType: TargetDMConversation, Target: id.New(), Recipients: []id.ID{id.New()}, Unread: 1}
 	if err := ok.Validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -322,11 +328,39 @@ func TestDirectNoticeRules(t *testing.T) {
 		"gönderenli": func(r *Request) { r.Actor = id.New() },
 		"tayfalı":    func(r *Request) { r.Tayfa = id.New() },
 		"hedef":      func(r *Request) { r.TargetType = TargetUser },
+		"sayaçsız":   func(r *Request) { r.Unread = 0 },
+		"sınır üstü": func(r *Request) { r.Unread = MaxDirectUnread + 1 },
 	} {
 		r := ok
 		f(&r)
 		if err := r.Validate(); err == nil {
 			t.Errorf("%s kabul edildi", name)
+		}
+	}
+}
+
+// The list carries a direct message notice's unread count; other types
+// have none (issue #101).
+func TestListCarriesDirectUnreadCount(t *testing.T) {
+	e := setup(t)
+	u := id.New()
+	e.store(t, Request{Type: TypeAnnouncement, TargetType: TargetAnnouncement, Target: id.New(), Recipients: []id.ID{u}, Actor: id.New()})
+	dm := Request{Event: id.New(), Type: TypeDMMessage, TargetType: TargetDMConversation, Target: id.New(), Recipients: []id.ID{u}, Unread: 7}
+	must(t, pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error { return Store(ctx, store.New(tx), dm) }))
+	n, _, err := e.svc.List(ctx, u, 0, "")
+	must(t, err)
+	if len(n) != 2 || n[0].Type != TypeDMMessage || n[0].Unread != 7 || n[1].Unread != 0 {
+		t.Fatalf("liste = %+v", n)
+	}
+	// The database refuses a count on any other type, and none on a direct
+	// message notice.
+	for _, sql := range []string{
+		`UPDATE notifications SET unread_count = 1 WHERE type = 'announcement'`,
+		`UPDATE notifications SET unread_count = NULL WHERE type = 'dm_message'`,
+		`UPDATE notifications SET unread_count = 101 WHERE type = 'dm_message'`,
+	} {
+		if _, err := e.pool.Exec(ctx, sql); err == nil {
+			t.Errorf("kabul edildi: %s", sql)
 		}
 	}
 }

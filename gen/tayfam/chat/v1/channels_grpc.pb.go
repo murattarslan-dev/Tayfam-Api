@@ -105,8 +105,13 @@ type ChannelServiceClient interface {
 	// (also past slow mode); reusing it in another channel is
 	// ERROR_REASON_VALIDATION. The message ID is always the server's.
 	//
+	// Sending is rate limited per user, together with direct messages and
+	// over the WebSocket (one counter: 30 a minute, bursts of 10;
+	// ERROR_REASON_RATE_LIMITED, checked before slow mode). Retries count
+	// too.
+	//
 	// Errors: ERROR_REASON_MUTED, ERROR_REASON_CHANNEL_ARCHIVED,
-	// ERROR_REASON_SLOW_MODE.
+	// ERROR_REASON_SLOW_MODE, ERROR_REASON_RATE_LIMITED.
 	SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
 	// ListMessages returns messages of a channel. Without after_message_id
 	// the newest come first and next_page_token goes to older ones. With
@@ -321,8 +326,13 @@ type ChannelServiceServer interface {
 	// (also past slow mode); reusing it in another channel is
 	// ERROR_REASON_VALIDATION. The message ID is always the server's.
 	//
+	// Sending is rate limited per user, together with direct messages and
+	// over the WebSocket (one counter: 30 a minute, bursts of 10;
+	// ERROR_REASON_RATE_LIMITED, checked before slow mode). Retries count
+	// too.
+	//
 	// Errors: ERROR_REASON_MUTED, ERROR_REASON_CHANNEL_ARCHIVED,
-	// ERROR_REASON_SLOW_MODE.
+	// ERROR_REASON_SLOW_MODE, ERROR_REASON_RATE_LIMITED.
 	SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error)
 	// ListMessages returns messages of a channel. Without after_message_id
 	// the newest come first and next_page_token goes to older ones. With

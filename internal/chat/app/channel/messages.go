@@ -47,12 +47,20 @@ func (s *Service) view(r msgRow, m Decision, now time.Time) (Message, error) {
 // slow mode must allow it (moderators and admins are exempt). Sending again
 // with the same ClientRequestID returns the first message without checking
 // slow mode again; using it for another channel is a validation error.
+//
+// Before anything else the caller's message rate is checked: one per-user
+// limit for channel and direct messages over every transport
+// (Config.SendLimit, issue #101; apperr.ErrRateLimited). Retries count too;
+// slow mode applies on top.
 func (s *Service) Send(ctx context.Context, caller, tayfa, channel id.ID, in SendInput) (Message, error) {
 	switch {
 	case in.ClientRequestID == (id.ID{}):
 		return Message{}, invalid("client_request_id")
 	case !validBody(in.Body):
 		return Message{}, invalid("body")
+	}
+	if !s.cfg.SendLimit.Allow(caller.String()) {
+		return Message{}, apperr.ErrRateLimited
 	}
 	m, err := s.access(ctx, caller, tayfa)
 	if err != nil {

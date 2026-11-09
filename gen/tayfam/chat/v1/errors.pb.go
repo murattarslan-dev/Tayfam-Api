@@ -95,6 +95,10 @@ const (
 	// NOT_FOUND. No message request waits for the caller in this
 	// conversation.
 	ErrorReason_ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND ErrorReason = 18
+	// RESOURCE_EXHAUSTED. The caller sends messages too fast: one per-user
+	// limit for channel and direct messages, REST and WebSocket together
+	// (issue #101). Slow mode and the request limit apply on top.
+	ErrorReason_ERROR_REASON_RATE_LIMITED ErrorReason = 19
 )
 
 // Enum value maps for ErrorReason.
@@ -119,6 +123,7 @@ var (
 		16: "ERROR_REASON_MESSAGE_REQUEST_PENDING",
 		17: "ERROR_REASON_MESSAGE_REQUEST_LIMIT",
 		18: "ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND",
+		19: "ERROR_REASON_RATE_LIMITED",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                0,
@@ -140,6 +145,7 @@ var (
 		"ERROR_REASON_MESSAGE_REQUEST_PENDING":    16,
 		"ERROR_REASON_MESSAGE_REQUEST_LIMIT":      17,
 		"ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND":  18,
+		"ERROR_REASON_RATE_LIMITED":               19,
 	}
 )
 
@@ -174,7 +180,7 @@ var File_tayfam_chat_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\xb5\x05\n" +
+	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\xd4\x05\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12'\n" +
@@ -195,7 +201,8 @@ const file_tayfam_chat_v1_errors_proto_rawDesc = "" +
 	"'ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED\x10\x0f\x12(\n" +
 	"$ERROR_REASON_MESSAGE_REQUEST_PENDING\x10\x10\x12&\n" +
 	"\"ERROR_REASON_MESSAGE_REQUEST_LIMIT\x10\x11\x12*\n" +
-	"&ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND\x10\x12B\xbd\x01\n" +
+	"&ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND\x10\x12\x12\x1d\n" +
+	"\x19ERROR_REASON_RATE_LIMITED\x10\x13B\xbd\x01\n" +
 	"\x12com.tayfam.chat.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1;chatv1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Chat.V1\xca\x02\x0eTayfam\\Chat\\V1\xe2\x02\x1aTayfam\\Chat\\V1\\GPBMetadata\xea\x02\x10Tayfam::Chat::V1b\x06proto3"
 
 var (

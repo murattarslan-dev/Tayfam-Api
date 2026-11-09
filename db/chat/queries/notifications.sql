@@ -6,15 +6,16 @@
 -- yeni satır açılmaz. Hesabı silinmiş kullanıcıya (profil mezar taşı) satır
 -- açılmaz.
 -- name: CreateNotifications :execrows
-INSERT INTO notifications (id, user_id, tayfa_id, type, actor_id, target_type, target_id, payload, source_event_id)
-SELECT n.id, n.user_id, sqlc.narg(tayfa_id), @type, sqlc.narg(actor_id), @target_type, @target_id, @payload, @source_event_id
+INSERT INTO notifications (id, user_id, tayfa_id, type, actor_id, target_type, target_id, payload, source_event_id, unread_count)
+SELECT n.id, n.user_id, sqlc.narg(tayfa_id), @type, sqlc.narg(actor_id), @target_type, @target_id, @payload, @source_event_id, sqlc.narg(unread_count)::int
 FROM (SELECT unnest(@ids::uuid[]) AS id, unnest(@user_ids::uuid[]) AS user_id) AS n
 WHERE NOT EXISTS (SELECT 1 FROM user_profiles p WHERE p.user_id = n.user_id AND p.deleted_at IS NOT NULL)
 ON CONFLICT (source_event_id, user_id) DO NOTHING;
 
 -- En yeni önce; after_id verilirse ondan eskiler (UUIDv7 zaman sıralı).
+-- unread_count yalnızca birebir mesaj bildirimlerinde doludur.
 -- name: ListNotifications :many
-SELECT id, tayfa_id, type, actor_id, target_type, target_id, payload, read_at, created_at
+SELECT id, tayfa_id, type, actor_id, target_type, target_id, payload, read_at, created_at, unread_count
 FROM notifications
 WHERE user_id = @user_id AND (sqlc.narg(after_id)::uuid IS NULL OR id < sqlc.narg(after_id)::uuid)
 ORDER BY id DESC

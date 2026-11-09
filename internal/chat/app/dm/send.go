@@ -20,6 +20,8 @@ import (
 // and the WebSocket (ADR-0005, v7 "Kurallar hem REST hem WebSocket mesaj
 // gönderiminde aynı fonksiyonla kontrol edilir"):
 //
+//  0. the caller's message rate, shared with channel messages
+//     (apperr.ErrRateLimited; retries count too);
 //  1. a retry with the same ClientRequestID returns the first message;
 //  2. core decides, with the caller's token, whether the caller may write
 //     (Denied: apperr.ErrDirectMessageNotAllowed);
@@ -28,7 +30,8 @@ import (
 //     the caller refuses (apperr.ErrMessageRequestPending; the sender never
 //     learns of a decline), the recipient's reply accepts it;
 //  4. the message is stored encrypted, the caller's read marker moves to
-//     it, and the recipient gets a notice without content.
+//     it, and the recipient's notice (without content) carries their
+//     unread count.
 func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message, Conversation, error) {
 	switch {
 	case in.Recipient == (id.ID{}) || in.Recipient == caller:
@@ -40,6 +43,9 @@ func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message
 	}
 	if err := s.ready(); err != nil {
 		return Message{}, Conversation{}, err
+	}
+	if !s.cfg.SendLimit.Allow(caller.String()) {
+		return Message{}, Conversation{}, apperr.ErrRateLimited
 	}
 	q := store.New(s.cfg.Pool)
 	if m, c, ok, err := s.existing(ctx, q, caller, in.Recipient, in.ClientRequestID); ok || err != nil {
@@ -218,7 +224,9 @@ func (s *Service) applyState(ctx context.Context, q *store.Queries, c convRow, c
 		// One message until the recipient answers.
 		return false, apperr.ErrMessageRequestPending
 	case c.Status == stateDeclined && mine:
-		// The sender is never told about the decline.
+		// The sender is never told about the decline, and even core's
+		// Active (friends) does not undo it: only the decliner can (issue
+		// #101).
 		return false, apperr.ErrMessageRequestPending
 	}
 	// The recipient replies (or writes after declining), or the requester
@@ -230,26 +238,34 @@ func (s *Service) applyState(ctx context.Context, q *store.Queries, c convRow, c
 	return n == 1, nil
 }
 
-// notify writes the recipient's notice: dm_request for a new request,
-// otherwise dm_message unless an unread one for the conversation already
-// waits. The notice carries the conversation ID only; the message ID is
-// its source (one per message and recipient).
+// notify keeps the recipient's one notice for the conversation (issue
+// #101): a waiting (unread) notice gets the recipient's current unread
+// count; otherwise a new one is written, dm_request for a new request and
+// dm_message else, with that count. The notice carries the conversation ID
+// and the count only; the message ID is the new notice's source.
 func (s *Service) notify(ctx context.Context, q *store.Queries, c convRow, opened bool, recipient, message id.ID) (*notification.Request, error) {
 	convID := uuidOf(c.ID)
-	typ := notification.TypeDMMessage
-	if opened && c.Status == stateRequest {
-		typ = notification.TypeDMRequest
-	} else {
-		waiting, err := q.HasUnreadConversationNotification(ctx, store.HasUnreadConversationNotificationParams{UserID: recipient.PG(), ConversationID: convID.PG()})
-		if err != nil {
-			return nil, fmt.Errorf("bildirim: %w", err)
-		}
-		if waiting {
-			return nil, nil
-		}
+	n, err := q.CountUnreadDirectMessages(ctx, store.CountUnreadDirectMessagesParams{UserID: recipient.PG(), ConversationID: convID.PG()})
+	if err != nil {
+		return nil, fmt.Errorf("okunmamış: %w", err)
 	}
+	n = min(max(n, 1), notification.MaxDirectUnread) // the new message is unread
 	r := notification.Request{
-		Event: message, Type: typ, TargetType: notification.TargetDMConversation, Target: convID, Recipients: []id.ID{recipient},
+		Event: message, TargetType: notification.TargetDMConversation, Target: convID, Recipients: []id.ID{recipient}, Unread: n,
+	}
+	typ, err := q.UpdateConversationNotificationUnread(ctx, store.UpdateConversationNotificationUnreadParams{
+		UnreadCount: pgtype.Int4{Int32: n, Valid: true}, UserID: recipient.PG(), ConversationID: convID.PG(),
+	})
+	switch {
+	case err == nil:
+		r.Type = typ
+		return &r, nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return nil, fmt.Errorf("bildirim: %w", err)
+	}
+	r.Type = notification.TypeDMMessage
+	if opened && c.Status == stateRequest {
+		r.Type = notification.TypeDMRequest
 	}
 	if err := notification.Store(ctx, q, r); err != nil {
 		return nil, err

@@ -472,6 +472,17 @@ func TestSendErrors(t *testing.T) {
 	if d := send("x", id.New().String()); d.Code != "tayfa_read_only" {
 		t.Fatalf("salt okunur: %+v", d)
 	}
+	// The per-user message rate (issue #101; shared with REST, checked in
+	// the app layer) answers the frame and keeps the connection open.
+	e.ch.set(w.user, ch, apperr.ErrRateLimited)
+	if d := send("x", id.New().String()); d.Code != "rate_limited" {
+		t.Fatalf("hız sınırı: %+v", d)
+	}
+	e.ch.set(w.user, ch, nil)
+	write(t, c, `{"type":"send","id":"m2","data":{"tayfa_id":"`+tf.String()+`","channel_id":"`+ch.String()+`","body":"x","client_request_id":"`+id.New().String()+`"}}`)
+	if f := readFrame(t, c); f.Type == "error" {
+		t.Fatalf("bağlantı hız sınırından sonra çalışmıyor: %+v", f)
+	}
 }
 
 func TestFrames(t *testing.T) {
@@ -638,6 +649,7 @@ func TestDirectMessage(t *testing.T) {
 		apperr.ErrDirectMessageNotAllowed:   "direct_message_not_allowed",
 		apperr.ErrMessageRequestPending:     "message_request_pending",
 		apperr.ErrMessageRequestLimit:       "message_request_limit",
+		apperr.ErrRateLimited:               "rate_limited",
 		apperr.ErrDirectMessagesUnavailable: "unavailable",
 		apperr.Validation("body"):           "invalid_request",
 	} {

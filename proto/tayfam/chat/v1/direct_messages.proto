@@ -48,11 +48,16 @@ service DirectMessageService {
   // shared tayfa, else 20; ERROR_REASON_MESSAGE_REQUEST_LIMIT); declined
   // requests still count.
   //
+  // Sending is rate limited per user, together with channel messages and
+  // over the WebSocket (one counter: 30 a minute, bursts of 10;
+  // ERROR_REASON_RATE_LIMITED). Retries count too.
+  //
   // Errors: ERROR_REASON_VALIDATION (recipient_user_id, the caller; body
   // 1–4000 characters, not only white space, no control characters other
   // than tab and line breaks; client_request_id; a client_request_id used
   // for another conversation), ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED,
-  // ERROR_REASON_MESSAGE_REQUEST_PENDING, ERROR_REASON_MESSAGE_REQUEST_LIMIT.
+  // ERROR_REASON_MESSAGE_REQUEST_PENDING, ERROR_REASON_MESSAGE_REQUEST_LIMIT,
+  // ERROR_REASON_RATE_LIMITED.
   rpc SendDirectMessage(SendDirectMessageRequest) returns (SendDirectMessageResponse);
 
   // ListConversations lists the caller's conversations, the latest message
@@ -88,11 +93,28 @@ service DirectMessageService {
   rpc AcceptMessageRequest(AcceptMessageRequestRequest) returns (AcceptMessageRequestResponse);
 
   // DeclineMessageRequest declines a request the caller received. The
-  // sender is not told, cannot write again and still sees the request as
-  // sent; for the caller the conversation disappears. Writing to the sender
-  // later reopens it as active. ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND
-  // otherwise.
+  // sender is not told, still sees the request as sent and cannot write
+  // again — even as a friend — until the caller removes it from their
+  // declined list (RemoveDeclinedRequest). For the caller the conversation
+  // leaves the conversation list and appears in ListDeclinedRequests.
+  // Writing to the sender later reopens it as active.
+  // ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND otherwise.
   rpc DeclineMessageRequest(DeclineMessageRequestRequest) returns (DeclineMessageRequestResponse);
+
+  // ListDeclinedRequests lists the requests the caller declined ("declined
+  // list", issue #101), the latest decline first. Only the decliner sees
+  // it; the sender never learns of the list. Requests whose sender's
+  // account was deleted are not listed. Paging as above.
+  rpc ListDeclinedRequests(ListDeclinedRequestsRequest) returns (ListDeclinedRequestsResponse);
+
+  // RemoveDeclinedRequest takes a request off the caller's declined list:
+  // the conversation is a waiting request again (REQUEST_RECEIVED for the
+  // caller, who may accept, reply or decline it; the sender still has
+  // their one message and may write again once it is accepted, or freely
+  // if core says so). The sender is not told. Anyone else's conversation
+  // is ERROR_REASON_CONVERSATION_NOT_FOUND; a conversation that is not a
+  // request the caller declined is ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND.
+  rpc RemoveDeclinedRequest(RemoveDeclinedRequestRequest) returns (RemoveDeclinedRequestResponse);
 
   // VerifyDirectMessageForReport answers core's question when the caller
   // reports a direct message (core ReportService.CreateReport with
@@ -215,6 +237,31 @@ message DeclineMessageRequestRequest {
 }
 
 message DeclineMessageRequestResponse {}
+
+// DeclinedRequest is a request the caller declined.
+message DeclinedRequest {
+  string conversation_id = 1;
+  // Who sent the request.
+  string sender_user_id = 2;
+  google.protobuf.Timestamp decline_time = 3;
+  google.protobuf.Timestamp create_time = 4;
+}
+
+message ListDeclinedRequestsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListDeclinedRequestsResponse {
+  repeated DeclinedRequest declined_requests = 1;
+  string next_page_token = 2;
+}
+
+message RemoveDeclinedRequestRequest {
+  string conversation_id = 1;
+}
+
+message RemoveDeclinedRequestResponse {}
 
 message VerifyDirectMessageForReportRequest {
   string message_id = 1;
