@@ -208,7 +208,7 @@ func (f *fakeCache) ForgetTayfa(tayfa id.ID)  { f.forgotTayfa = append(f.forgotT
 // Membership and tayfa state changes only clear the channel permission
 // cache; nothing is stored (chat keeps no copy of memberships).
 func TestStateChangesClearCache(t *testing.T) {
-	pool := dbtest.New(t, chatdb.Migrations())
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
 	cache := &fakeCache{}
 	svc, err := New(Config{Pool: pool, Access: cache})
 	must(t, err)

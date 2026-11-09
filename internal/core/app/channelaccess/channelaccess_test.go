@@ -42,7 +42,7 @@ type fixture struct {
 
 func setup(t *testing.T) fixture {
 	t.Helper()
-	pool := dbtest.New(t, coredb.Migrations())
+	pool := dbtest.New(t, "core", coredb.Migrations())
 	svc, err := New(Config{Pool: pool})
 	must(t, err)
 	tayfas, err := tayfa.New(tayfa.Config{Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
