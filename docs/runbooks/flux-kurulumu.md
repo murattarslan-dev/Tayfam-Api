@@ -86,6 +86,30 @@ flux reconcile kustomization tayfam-dev
 | Pod'lar oluşmuyor, namespace olaylarında "violates PodSecurity" | Manifestte `restricted` profiline uymayan bir ayar var |
 | Servisler `Running` ama `/v1/status` bir servisi `unavailable` gösteriyor | NetworkPolicy: `deploy/base/networkpolicies.yaml` |
 | Kustomization `wait` zaman aşımı | `kubectl -n tayfam-dev get events --sort-by=.lastTimestamp` |
+| core/chat `migrate` init container'ı `database "core" does not exist` | Veritabanı oluşmamış; aşağıdaki "Veritabanı oluşmuyor" |
+
+### Veritabanı oluşmuyor (template1 yerel ayarı)
+
+Yeni bir cluster'da `kubectl -n tayfam-dev get databases.postgresql.cnpg.io`
+`APPLIED false` ve `new collation (C.UTF-8) is incompatible with the collation
+of the template database (C)` gösteriyorsa template1'i bir kez yeniden oluştur.
+template1 boş bir şablondur; mevcut veritabanlarına dokunulmaz.
+
+```bash
+kubectl -n tayfam-dev exec -i tayfam-pg-1 -c postgres -- psql -v ON_ERROR_STOP=1 <<'SQL'
+ALTER DATABASE template1 IS_TEMPLATE false;
+DROP DATABASE template1;
+CREATE DATABASE template1 WITH TEMPLATE template0 ENCODING 'UTF8'
+  LOCALE_PROVIDER icu ICU_LOCALE 'tr-TR' LOCALE 'C.UTF-8' IS_TEMPLATE true;
+SQL
+kubectl -n tayfam-dev delete databases.postgresql.cnpg.io tayfam-pg-core tayfam-pg-chat
+flux reconcile kustomization tayfam-dev --with-source
+kubectl -n tayfam-dev rollout restart deploy/core deploy/chat
+```
+
+Database kaynağını silmek veritabanını silmez (CNPG'de varsayılan
+`databaseReclaimPolicy: retain`); Flux kaynağı yeniden oluşturur ve CNPG
+yeniden dener.
 
 ## İmza doğrulaması (ADR-0011)
 
