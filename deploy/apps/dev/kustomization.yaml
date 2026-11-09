@@ -42,6 +42,15 @@ configMapGenerator:
       # Kayıtta onaylanan belgelerin sürümleri; metin değişince artar.
       - CONSENT_PRIVACY_NOTICE_VERSION=2026-11-08
       - CONSENT_TERMS_VERSION=2026-11-08
+      # Yönetim paneli (ADR-0008, issue #104): Cloudflare Access uygulaması
+      # "Tayfam Panel" (admin.tayfam.app). Gizli değildir; ikisi birlikte
+      # verilmezse panel kurulmaz ve admin host'u 404 döner.
+      - ADMIN_HOST=admin.tayfam.app
+      - CF_ACCESS_TEAM_DOMAIN=mio-app-pages.cloudflareaccess.com
+      # AUD tag gizli değildir (her Access JWT'sinin aud alanında görünür);
+      # gitleaks onu API anahtarı sanıyor.
+      - CF_ACCESS_AUD=d008112c2504d19f293d7859a3d99bd0abfc9d51419f78893a0dee81c2324578 # gitleaks:allow
+      - ADMIN_GOOGLE_CLIENT_ID=73439258394-uhd9m0b6mkc5k8eaoup6kgh57a49on4t.apps.googleusercontent.com
 
 images:
   - name: ghcr.io/murattarslan-dev/tayfam-gateway
