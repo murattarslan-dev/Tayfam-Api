@@ -12,16 +12,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	identitydb "github.com/murattarslan-dev/tayfam-api/db/identity"
+	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/birthdate"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/oidc"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/registration"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/session"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/userevents"
 	grpcapi "github.com/murattarslan-dev/tayfam-api/internal/identity/transport/grpc"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/grpcx"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/outbox"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/service"
 )
 
@@ -115,6 +121,37 @@ func setup(rt *service.Runtime) error {
 	identityv1.RegisterAuthServiceServer(srv, grpcapi.NewAuthServer(sessions, rt.Log))
 	identityv1.RegisterRegistrationServiceServer(srv, grpcapi.NewRegistrationServer(reg, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
+	return addRelay(rt, pool)
+}
+
+// addRelay starts the outbox relay that delivers user events to core with
+// identity's service token for core (ADR-0002, ADR-0013). Only a local
+// environment may run without it; events then wait in the outbox.
+func addRelay(rt *service.Runtime, pool *pgxpool.Pool) error {
+	coreToken, ok := rt.ServiceToken("core")
+	if !ok {
+		if err := rt.Config.Err(); err != nil {
+			return err
+		}
+		rt.Log.Warn("core servis token'ı yok; outbox relay kapalı (yalnızca yerel ortam)")
+		return nil
+	}
+	addr := rt.Config.Required("CORE_GRPC_ADDR")
+	if err := rt.Config.Err(); err != nil {
+		return err
+	}
+	conn, err := grpcx.NewClient(addr, auth.ServiceTokenFrom(coreToken)...)
+	if err != nil {
+		return err
+	}
+	relay, err := outbox.NewRelay(outbox.RelayConfig{
+		Pool: pool, Log: rt.Log,
+		Consumers: []outbox.Consumer{userevents.CoreConsumer(corev1.NewUserEventServiceClient(conn))},
+	})
+	if err != nil {
+		return err
+	}
+	rt.AddWorker("outbox", relay.Run)
 	return nil
 }
 

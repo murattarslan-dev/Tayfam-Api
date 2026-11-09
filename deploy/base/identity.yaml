@@ -12,12 +12,17 @@ spec:
     metadata:
       labels: { app.kubernetes.io/name: identity, app.kubernetes.io/part-of: tayfam }
     spec:
+      # Kendi ServiceAccount'u (ADR-0013). Kubernetes API'sinde hiçbir RBAC
+      # yetkisi yoktur; varsayılan token pod'a hiç bağlanmaz.
+      serviceAccountName: tayfam-identity
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 30
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
         runAsGroup: 65532
+        # Projected token ve CA dosyaları bu grupla okunur (defaultMode 0440).
+        fsGroup: 65532
         seccompProfile: { type: RuntimeDefault }
       # Migration'lar servis binary'sinin "migrate" alt komutuyla, servis
       # başlamadan önce çalışır; advisory lock aynı anda tek migration'ı
@@ -52,6 +57,10 @@ spec:
           env:
             - { name: OPS_ADDR, value: ":8081" }
             - { name: GRPC_ADDR, value: ":9090" }
+            # Outbox relay → core UserEventService (ADR-0002, ADR-0013). Token
+            # yalnızca core audience'ı için geçerli ve 10 dakikalık.
+            - { name: CORE_GRPC_ADDR, value: "core:9090" }
+            - { name: SERVICE_TOKEN_FILE_CORE, value: /var/run/secrets/tayfam/core/token }
             # Ortama özel secret (deploy/apps/<ortam>/secrets, SOPS ile şifreli).
             # Yalnızca identity okur; diğer servisler açık anahtarı gRPC'den alır.
             - name: AUTH_SIGNING_KEY
@@ -84,6 +93,28 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: core-token, mountPath: /var/run/secrets/tayfam/core, readOnly: true }
+      volumes:
+        # core'u çağırmak için servis token'ı: audience core.tayfam.internal,
+        # 10 dakika; kubelet süresi dolmadan yeniler. Başka hiçbir hedefte ve
+        # Kubernetes API'sinde geçmez.
+        - name: core-token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: core.tayfam.internal
+                  expirationSeconds: 600
+---
+# identity'nin kimliği (ADR-0013). Rol bağlanmaz.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tayfam-identity
+  labels: { app.kubernetes.io/name: identity, app.kubernetes.io/part-of: tayfam }
+automountServiceAccountToken: false
 ---
 # Yalnızca gRPC portu servis üzerinden açılır; ops portu (8081) sadece
 # kubelet probe'ları içindir ve servis üzerinden yayınlanmaz.

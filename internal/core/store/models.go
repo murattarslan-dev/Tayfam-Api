@@ -105,3 +105,12 @@ type TayfaModule struct {
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 }
+
+type UserProfile struct {
+	UserID         pgtype.UUID
+	DisplayName    pgtype.Text
+	AvatarUploadID pgtype.UUID
+	SourceEventID  pgtype.UUID
+	DeletedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}

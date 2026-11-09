@@ -192,3 +192,56 @@ spec:
             except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, 127.0.0.0/8]
       ports:
         - { protocol: TCP, port: 443 }
+---
+# identity → core: outbox relay UserEventService'i çağırır (ADR-0002,
+# ADR-0013). core yalnızca identity'nin ServiceAccount token'ını bu metodda
+# kabul eder; ağ izni ikinci katmandır.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: identity-to-core
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: identity }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: core }
+      ports:
+        - { protocol: TCP, port: 9090 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: core-from-identity
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: core }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: identity }
+      ports:
+        - { protocol: TCP, port: 9090 }
+---
+# core → API sunucusu: servis token'larını doğrulamak için cluster'ın açık
+# anahtarları (/openid/v1/jwks, ADR-0013). postgres kuralındaki yöntemle:
+# servis adresi (10.43.0.1:443, k3s varsayılanı) ve DNAT sonrası API server
+# portu (6443). core'un ServiceAccount'unda RBAC yetkisi yoktur.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: core-egress-kube-api
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: core }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: { cidr: 10.43.0.1/32 }
+      ports:
+        - { protocol: TCP, port: 443 }
+    - ports:
+        - { protocol: TCP, port: 6443 }

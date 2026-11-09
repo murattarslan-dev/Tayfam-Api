@@ -18,6 +18,11 @@ type Querier interface {
 	ApproveMembership(ctx context.Context, arg ApproveMembershipParams) (int64, error)
 	BanMembership(ctx context.Context, arg BanMembershipParams) (int64, error)
 	CancelTayfaDeletion(ctx context.Context, id pgtype.UUID) (int64, error)
+	ClearAuditActor(ctx context.Context, userID pgtype.UUID) error
+	ClearEventActor(ctx context.Context, userID pgtype.UUID) error
+	ClearInviteCreator(ctx context.Context, userID pgtype.UUID) error
+	ClearMembershipUserFields(ctx context.Context, userID pgtype.UUID) error
+	ClearTayfaUserFields(ctx context.Context, userID pgtype.UUID) error
 	CountActiveMembers(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
 	CountActiveMembersForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]CountActiveMembersForTayfasRow, error)
 	// Son yönetici kontrolü; çağıran tayfa satırını kilitlemiş olmalıdır.
@@ -35,6 +40,8 @@ type Querier interface {
 	// Üyelik değişiklikleri transaction içinde SetActor ya da SetSystemJob'dan
 	// sonra yapılır; aksi halde trigger reddeder.
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) error
+	CreateSystemAuditLog(ctx context.Context, arg CreateSystemAuditLogParams) error
+	CreateSystemDomainEvent(ctx context.Context, arg CreateSystemDomainEventParams) error
 	// Tayfa, kurucu üyelik, modüller ve ilgi alanları tek transaction'da
 	// yazılır; birleştirmeyi app katmanı yapar.
 	CreateTayfa(ctx context.Context, arg CreateTayfaParams) error
@@ -54,6 +61,7 @@ type Querier interface {
 	// Yazan işlemler tayfa satırını kilitleyerek okur; memberships trigger'ı da
 	// aynı satırı kilitlediği için üyelik değişiklikleriyle sırayla çalışır.
 	GetTayfaForUpdate(ctx context.Context, id pgtype.UUID) (GetTayfaForUpdateRow, error)
+	GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUserProfileRow, error)
 	// Davet geçerliyse kullanımı sayar; 0 satır: süresi dolmuş, iptal ya da
 	// tükenmiş.
 	IncrementInviteUse(ctx context.Context, id pgtype.UUID) (int64, error)
@@ -70,6 +78,12 @@ type Querier interface {
 	ListMembersPage(ctx context.Context, arg ListMembersPageParams) ([]ListMembersPageRow, error)
 	// Duruma göre üyeler; kullanıcı ID'sine göre sayfalanır.
 	ListMemberships(ctx context.Context, arg ListMembershipsParams) ([]ListMembershipsRow, error)
+	// Hesap silme (identity'nin user.deleted olayı, ADR-0009). Hepsi
+	// SetSystemJob('account_deletion') sonrası aynı transaction'da çalışır;
+	// memberships ve audit_logs trigger'ları yalnızca bu sistem işine izin
+	// verilen değişiklikleri kabul eder.
+	// Tayfalar kilitlenme olmaması için tayfa_id sırasıyla işlenir.
+	ListMembershipsOfUser(ctx context.Context, userID pgtype.UUID) ([]ListMembershipsOfUserRow, error)
 	ListModulesForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListModulesForTayfasRow, error)
 	// "Tayfalarım": kullanıcının aktif üyelikleri ve bekleyen başvuruları, en
 	// yeni üyelik kaydı önce; (created_at, tayfa_id) ile sayfalanır.
@@ -88,9 +102,17 @@ type Querier interface {
 	// Aynı kullanıcının eşzamanlı oluşturma istekleri sırayla işlenir; günlük
 	// sınır iki istekte birden aşılamaz. Kilit transaction bitince bırakılır.
 	LockTayfaCreation(ctx context.Context, lockKey string) error
+	// Silinmiş tayfalar dahil; tayfa satırını kilitler.
+	LockTayfaForSystem(ctx context.Context, id pgtype.UUID) (LockTayfaForSystemRow, error)
 	MuteMembership(ctx context.Context, arg MuteMembershipParams) (int64, error)
+	// Son yöneticinin halefi (veri modeli v14 "Son yönetici koruması"): en
+	// eski moderatör, yoksa en eski üye.
+	PickAdminSuccessor(ctx context.Context, arg PickAdminSuccessorParams) (pgtype.UUID, error)
 	RequestTayfaDeletion(ctx context.Context, arg RequestTayfaDeletionParams) (int64, error)
 	RevokeInvite(ctx context.Context, arg RevokeInviteParams) (int64, error)
+	// Kimse kalmayan tayfa sistem tarafından silme beklemesine alınır; talep
+	// eden kişi yoktur.
+	ScheduleTayfaDeletionBySystem(ctx context.Context, arg ScheduleTayfaDeletionBySystemParams) (int64, error)
 	// İşlemi yapan kullanıcıyı transaction'a bildirir; memberships trigger'ı rol
 	// hiyerarşisini buna göre doğrular (ADR-0004). Yalnızca transaction içinde
 	// anlamlıdır: değer transaction bitince silinir (set_config is_local = true).
@@ -101,8 +123,15 @@ type Querier interface {
 	SetSystemJob(ctx context.Context, job string) error
 	SetTayfaJoinCode(ctx context.Context, arg SetTayfaJoinCodeParams) (int64, error)
 	SetTayfaModule(ctx context.Context, arg SetTayfaModuleParams) error
+	// Hesap silindi: ad ve avatar temizlenir, satır mezar taşı olarak kalır.
+	// Tekrar uygulanınca sonuç değişmez.
+	TombstoneUserProfile(ctx context.Context, arg TombstoneUserProfileParams) error
 	UnmuteMembership(ctx context.Context, arg UnmuteMembershipParams) (int64, error)
 	UpdateTayfaSettings(ctx context.Context, arg UpdateTayfaSettingsParams) (int64, error)
+	// Profil kopyası (ADR-0009). Yalnızca UserEventService yazar.
+	// Daha yeni bir olay uygulanmışsa ya da profil silinmişse değişmez; etkilenen
+	// satır 0 olur.
+	UpsertUserProfile(ctx context.Context, arg UpsertUserProfileParams) (int64, error)
 }
 
 var _ Querier = (*Queries)(nil)

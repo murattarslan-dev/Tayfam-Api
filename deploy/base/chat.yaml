@@ -12,6 +12,8 @@ spec:
     metadata:
       labels: { app.kubernetes.io/name: chat, app.kubernetes.io/part-of: tayfam }
     spec:
+      # Kendi ServiceAccount'u (ADR-0013); rol bağlanmaz, token bağlanmaz.
+      serviceAccountName: tayfam-chat
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 30
       securityContext:
@@ -56,3 +58,11 @@ spec:
   selector: { app.kubernetes.io/name: chat }
   ports:
     - { name: grpc, port: 9090, targetPort: grpc, appProtocol: grpc }
+---
+# chat'in kimliği (ADR-0013). Rol bağlanmaz.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tayfam-chat
+  labels: { app.kubernetes.io/name: chat, app.kubernetes.io/part-of: tayfam }
+automountServiceAccountToken: false

@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// UserEventService receives identity's user events from identity's outbox
+// relay (ADR-0002, ADR-0009). It is a service-to-service API: no user can
+// call it.
+//
+// Authentication: only a Kubernetes service token (ADR-0013) with audience
+// core.tayfam.internal from the tayfam-identity ServiceAccount is accepted.
+// A user access token is refused (UNAUTHENTICATED); a service token from any
+// other ServiceAccount is PERMISSION_DENIED.
+//
+// Every method is idempotent: the relay delivers at least once, so the same
+// event may arrive more than once and events may arrive out of order (two
+// relays during a rolling update). Applying an event again leaves the same
+// result. Errors: ERROR_REASON_VALIDATION for a malformed request; any other
+// error is retried by the relay.
+service UserEventService {
+  // ApplyUserEvent applies one user event.
+  //
+  // profile_updated updates core's copy of the public profile (user_profiles)
+  // unless a newer event, or the user's deletion, was already applied.
+  //
+  // deleted removes the user's personal records from core: memberships are
+  // deleted (an active admin who was the tayfa's last admin is succeeded by
+  // the oldest moderator, else the oldest member), author and actor fields
+  // become NULL, and the profile copy is cleared and kept as a tombstone so
+  // a late profile_updated cannot bring it back. A tayfa left with no active
+  // member is scheduled for deletion after the usual 72-hour wait, by the
+  // system.
+  rpc ApplyUserEvent(ApplyUserEventRequest) returns (ApplyUserEventResponse);
+}
+
+message ApplyUserEventRequest {
+  // Outbox event ID in identity (UUIDv7). Later events have greater IDs.
+  string event_id = 1;
+  // The user the event is about (UUID).
+  string user_id = 2;
+  google.protobuf.Timestamp occurred_at = 3;
+
+  oneof event {
+    UserProfileUpdated profile_updated = 10;
+    UserDeleted deleted = 11;
+  }
+}
+
+// UserProfileUpdated carries the public profile only: what other users see
+// next to the user's content.
+message UserProfileUpdated {
+  // 1–40 characters.
+  string display_name = 1;
+  // Upload ID (UUID) of the avatar; empty when there is none.
+  string avatar_upload_id = 2;
+}
+
+// UserDeleted carries nothing but the fact.
+message UserDeleted {}
+
+message ApplyUserEventResponse {}
