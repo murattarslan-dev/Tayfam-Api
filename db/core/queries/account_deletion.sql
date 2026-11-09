@@ -104,3 +104,30 @@ UPDATE domain_events SET actor_id = NULL WHERE actor_id = @user_id;
 -- name: CreateSystemAuditLog :exec
 INSERT INTO audit_logs (id, tayfa_id, actor_id, action, target_type, target_id, metadata)
 VALUES (@id, @tayfa_id, NULL, @action, @target_type, @target_id, @metadata);
+
+-- Kişinin "geliyorum" dediği, bitmemiş ve iptal edilmemiş etkinlikler;
+-- kişinin yeri her birinde bekleme listesine geçer. Etkinlik satırları
+-- katılım akışıyla (SetRsvp) aynı kilitle, kimlik sırasıyla kilitlenir.
+-- name: LockUserGoingUpcomingEvents :many
+SELECT e.id, e.tayfa_id, e.capacity
+FROM event_rsvps r
+JOIN events e ON e.id = r.event_id
+WHERE r.user_id = @user_id AND r.status = 'going'
+  AND e.deleted_at IS NULL AND e.status = 'scheduled' AND e.ends_at > @now
+ORDER BY e.id
+FOR UPDATE OF e;
+
+-- Kalıcı katılım geçmişi kişiye aittir: hesapla birlikte silinir (v14
+-- "Kalıcı katılım geçmişi", user_id → CASCADE).
+-- name: DeleteUserActivityRecords :exec
+DELETE FROM user_activity_records WHERE user_id = @user_id;
+
+-- name: DeleteUserHikeCheckins :exec
+DELETE FROM event_hike_checkins WHERE user_id = @user_id;
+
+-- Av kayıtları konum içerebilir; kişiyle birlikte silinir.
+-- name: DeleteUserCatches :exec
+DELETE FROM fishing_catches WHERE user_id = @user_id;
+
+-- name: ClearCatchDeleter :exec
+UPDATE fishing_catches SET deleted_by = NULL WHERE deleted_by = @user_id;

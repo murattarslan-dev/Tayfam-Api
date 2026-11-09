@@ -648,6 +648,13 @@ func (e *env) callAll(user, tf, ev id.ID) map[string]error {
 	out["RemoveCampItem"] = e.svc.RemoveCampItem(ctx, user, tf, ev, id.New())
 	_, out["SetVehicle"] = e.svc.SetVehicle(ctx, user, tf, ev, VehicleInput{Make: "Ford"})
 	out["RemoveVehicle"] = e.svc.RemoveVehicle(ctx, user, tf, ev, id.New())
+	_, out["CheckIn"] = e.svc.CheckIn(ctx, user, tf, ev, izmir)
+	_, out["StartHike"] = e.svc.StartHike(ctx, user, tf, ev, time.Time{})
+	_, out["FinishHike"] = e.svc.FinishHike(ctx, user, tf, ev, time.Time{})
+	out["SetAttendance"] = e.svc.SetAttendance(ctx, user, tf, ev, id.New(), true)
+	_, out["AddCatch"] = e.svc.AddCatch(ctx, user, tf, ev, CatchInput{Species: "Levrek", LengthCm: 40, ClientRequestID: id.New().String()})
+	_, _, out["ListCatches"] = e.svc.ListCatches(ctx, user, tf, ev, 0, "")
+	out["RemoveCatch"] = e.svc.RemoveCatch(ctx, user, tf, ev, id.New())
 	return out
 }
 
@@ -701,6 +708,9 @@ func TestReadOnlyTayfa(t *testing.T) {
 		switch name {
 		case "Get", "ListUpcoming", "ListAttendees":
 			must(t, err)
+		case "ListCatches":
+			// A read: it gets past the read-only check to the type check.
+			wantErr(t, name, err, apperr.ErrEventTypeMismatch)
 		default:
 			wantErr(t, name, err, apperr.ErrTayfaReadOnly)
 		}

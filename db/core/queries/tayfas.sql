@@ -138,3 +138,11 @@ SELECT EXISTS (
   SELECT 1 FROM tayfa_modules
   WHERE tayfa_id = @tayfa_id AND module = @module AND enabled
 )::boolean AS enabled;
+
+-- Tayfa aktivitesi (pasif tayfa temizliğinin dayanağı, v14 "Tayfa
+-- yönetimi"). Yalnızca ileri gider; not_after = at - 1 saat verilir:
+-- sıcak satıra her yazmada yeni sürüm açılmaz, temizlik işi gün ölçeğinde
+-- çalışır.
+-- name: TouchTayfaActivity :execrows
+UPDATE tayfas SET last_activity_at = @at
+WHERE id = @id AND deleted_at IS NULL AND last_activity_at <= @not_after;

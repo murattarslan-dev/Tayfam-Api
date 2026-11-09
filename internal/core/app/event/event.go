@@ -113,6 +113,9 @@ type Event struct {
 	Going, Maybe, Waitlist int32
 	// CallerRSVP is the caller's answer; "" if none.
 	CallerRSVP string
+	// CallerAttendance is the caller's verified attendance:
+	// AttendanceUnknown without an answer.
+	CallerAttendance string
 	// CallerCanManage tells whether the caller may edit and cancel.
 	CallerCanManage bool
 	// Details are filled by Get only.
@@ -341,7 +344,7 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in Input) (Even
 			return err
 		}
 		b.add(EventCreated, eventID, map[string]any{"event_id": eventID.String(), "type": in.Type})
-		return nil
+		return txn.TouchTayfa(ctx, q, tayfa, c.now)
 	})
 	if err != nil {
 		return Event{}, err
@@ -459,6 +462,12 @@ func (s *Service) Update(ctx context.Context, user, tayfa, event id.ID, fields [
 			return err
 		}
 		b.add(EventUpdated, event, map[string]any{"event_id": event.String(), "fields": changed})
+		// Activity records are snapshots of the event (issue #50).
+		if set[FieldTitle] || set[FieldTime] || set[FieldLocation] {
+			if err := refreshActivity(ctx, q, tayfa, event, c.now); err != nil {
+				return err
+			}
+		}
 		if set[FieldCapacity] {
 			return promote(ctx, q, c, b, event, p.Capacity)
 		}

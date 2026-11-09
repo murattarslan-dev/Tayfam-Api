@@ -64,6 +64,28 @@ var (
 	ErrEventTypeMismatch = errors.New("etkinlik türü uymuyor")
 )
 
+// Attendance errors (issue #50). None of them carries the location that was
+// sent.
+var (
+	// ErrCheckInClosed: outside the check-in window (30 minutes before the
+	// start until the end).
+	ErrCheckInClosed = errors.New("check-in penceresi kapalı")
+	// ErrCheckInTooFar: the sent location is farther than the limit from
+	// the meeting point.
+	ErrCheckInTooFar = errors.New("buluşma noktasına uzak")
+	// ErrCheckInAttempts: the caller used all location attempts for the
+	// event.
+	ErrCheckInAttempts = errors.New("check-in deneme hakkı bitti")
+	// ErrCorrectionClosed: outside the organizer's correction window (the
+	// seven days after the end).
+	ErrCorrectionClosed = errors.New("düzeltme penceresi kapalı")
+	// ErrHikeNotStarted: a hike return without a start.
+	ErrHikeNotStarted = errors.New("yürüyüş başlamamış")
+	// ErrNotAttended: the action needs the caller's verified attendance
+	// (logging a fishing catch).
+	ErrNotAttended = errors.New("katılım doğrulanmamış")
+)
+
 // ValidationError reports a request field that failed validation. Field is
 // the request field name as written in the proto ("name", "update_mask");
 // the rejected value is never kept.

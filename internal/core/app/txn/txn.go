@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -96,6 +97,27 @@ func Event(ctx context.Context, q *store.Queries, typ string, tayfa, actor id.ID
 		if _, err := q.SetDomainEventTayfa(ctx, store.SetDomainEventTayfaParams{ID: eid.PG(), TayfaID: tayfa.PG()}); err != nil {
 			return fmt.Errorf("olayın tayfası: %w", err)
 		}
+	}
+	return nil
+}
+
+// activityStep is how often TouchTayfa moves tayfas.last_activity_at at
+// most: the inactivity cleanup works in days, and a tayfa row written on
+// every RSVP would only add row versions.
+const activityStep = time.Hour
+
+// TouchTayfa records activity in a tayfa (tayfas.last_activity_at), the
+// clock the inactive tayfa cleanup reads (data model v14 "Tayfa
+// yönetimi"). Announcements, event creation, RSVPs and check-ins call it in
+// their write transaction. It moves the clock forward only, at most once per
+// activityStep, and does not change the tayfa's update time.
+func TouchTayfa(ctx context.Context, q *store.Queries, tayfa id.ID, at time.Time) error {
+	at = at.UTC()
+	if _, err := q.TouchTayfaActivity(ctx, store.TouchTayfaActivityParams{
+		ID: tayfa.PG(), At: pgtype.Timestamptz{Time: at, Valid: true},
+		NotAfter: pgtype.Timestamptz{Time: at.Add(-activityStep), Valid: true},
+	}); err != nil {
+		return fmt.Errorf("tayfa aktivitesi: %w", err)
 	}
 	return nil
 }

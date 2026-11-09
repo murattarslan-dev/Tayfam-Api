@@ -111,8 +111,10 @@ func (s *Service) views(ctx context.Context, c caller, rows []store.GetEventRow)
 		byCount[k][r.Status] = int32(min(r.N, 1<<31-1)) //nolint:gosec // clamped
 	}
 	byMine := map[id.ID]string{}
+	attendance := map[id.ID]string{}
 	for _, r := range mine {
 		byMine[id.ID(r.EventID.Bytes)] = r.Status
+		attendance[id.ID(r.EventID.Bytes)] = r.Attendance
 	}
 	bySpot := map[id.ID]string{}
 	for _, r := range spots {
@@ -133,6 +135,10 @@ func (s *Service) views(ctx context.Context, c caller, rows []store.GetEventRow)
 			Discoverable: r.Discoverable, CreatedAt: r.CreatedAt.Time.UTC(), UpdatedAt: r.UpdatedAt.Time.UTC(),
 			Going: byCount[k][RSVPGoing], Maybe: byCount[k][RSVPMaybe], Waitlist: byCount[k][RSVPWaitlist],
 			CallerRSVP: byMine[k], CallerCanManage: c.canManage(r),
+			CallerAttendance: AttendanceUnknown,
+		}
+		if a, ok := attendance[k]; ok {
+			v.CallerAttendance = a
 		}
 		if r.MeetingLat.Valid && r.MeetingLng.Valid {
 			v.MeetingPoint = &Point{Lat: r.MeetingLat.Float64, Lng: r.MeetingLng.Float64}

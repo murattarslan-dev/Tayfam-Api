@@ -38,6 +38,11 @@ type fakeEvents struct {
 	vehicle  event.VehicleInput
 	assigned id.ID
 	view     event.Event
+	at       *event.Point
+	when     time.Time
+	target   id.ID
+	attended bool
+	catch    event.CatchInput
 }
 
 func (f *fakeEvents) rec(u, t, e id.ID) { f.calls++; f.user, f.tayfa, f.event = u, t, e }
@@ -93,6 +98,40 @@ func (f *fakeEvents) RemoveVehicle(_ context.Context, u, t, e, _ id.ID) error {
 	return f.err
 }
 
+func (f *fakeEvents) CheckIn(_ context.Context, u, t, e id.ID, at *event.Point) (event.Attendance, error) {
+	f.rec(u, t, e)
+	f.at = at
+	return event.Attendance{Status: event.AttendanceAttended, Method: event.MethodLocation}, f.err
+}
+func (f *fakeEvents) StartHike(_ context.Context, u, t, e id.ID, at time.Time) (event.HikeCheckin, error) {
+	f.rec(u, t, e)
+	f.when = at
+	return event.HikeCheckin{StartedAt: time.Now()}, f.err
+}
+func (f *fakeEvents) FinishHike(_ context.Context, u, t, e id.ID, at time.Time) (event.HikeCheckin, error) {
+	f.rec(u, t, e)
+	f.when = at
+	return event.HikeCheckin{StartedAt: time.Now().Add(-time.Hour), ReturnedAt: time.Now()}, f.err
+}
+func (f *fakeEvents) SetAttendance(_ context.Context, u, t, e, target id.ID, attended bool) error {
+	f.rec(u, t, e)
+	f.target, f.attended = target, attended
+	return f.err
+}
+func (f *fakeEvents) AddCatch(_ context.Context, u, t, e id.ID, in event.CatchInput) (event.Catch, error) {
+	f.rec(u, t, e)
+	f.catch = in
+	return event.Catch{ID: id.New(), UserID: u, Species: in.Species, LengthCm: in.LengthCm, Location: in.Location, Visibility: event.CatchTayfa}, f.err
+}
+func (f *fakeEvents) ListCatches(_ context.Context, u, t, e id.ID, _ int32, _ string) ([]event.Catch, string, error) {
+	f.rec(u, t, e)
+	return []event.Catch{{ID: id.New(), UserID: u, Species: "Levrek", LengthCm: 42.5, Visibility: event.CatchSelf}}, "", f.err
+}
+func (f *fakeEvents) RemoveCatch(_ context.Context, u, t, e, _ id.ID) error {
+	f.rec(u, t, e)
+	return f.err
+}
+
 func future() (*timestamppb.Timestamp, *timestamppb.Timestamp) {
 	s := time.Now().Add(24 * time.Hour)
 	return timestamppb.New(s), timestamppb.New(s.Add(time.Hour))
@@ -122,6 +161,13 @@ func callAllEvents(ctx context.Context, c corev1.EventServiceServer, tayfaID, ev
 	_, out["RemoveCampItem"] = c.RemoveCampItem(ctx, &corev1.RemoveCampItemRequest{TayfaId: tayfaID, EventId: eventID, ItemId: id.New().String()})
 	_, out["AddConvoyVehicle"] = c.AddConvoyVehicle(ctx, &corev1.AddConvoyVehicleRequest{TayfaId: tayfaID, EventId: eventID, Make: "Ford"})
 	_, out["RemoveConvoyVehicle"] = c.RemoveConvoyVehicle(ctx, &corev1.RemoveConvoyVehicleRequest{TayfaId: tayfaID, EventId: eventID, VehicleId: id.New().String()})
+	_, out["CheckIn"] = c.CheckIn(ctx, &corev1.CheckInRequest{TayfaId: tayfaID, EventId: eventID, Location: &corev1.LatLng{Lat: 38.42, Lng: 27.14}})
+	_, out["StartHike"] = c.StartHike(ctx, &corev1.StartHikeRequest{TayfaId: tayfaID, EventId: eventID})
+	_, out["FinishHike"] = c.FinishHike(ctx, &corev1.FinishHikeRequest{TayfaId: tayfaID, EventId: eventID})
+	_, out["SetAttendance"] = c.SetAttendance(ctx, &corev1.SetAttendanceRequest{TayfaId: tayfaID, EventId: eventID, UserId: id.New().String(), Attended: true})
+	_, out["AddFishingCatch"] = c.AddFishingCatch(ctx, &corev1.AddFishingCatchRequest{TayfaId: tayfaID, EventId: eventID, Species: "Levrek", LengthCm: 40, ClientRequestId: id.New().String()})
+	_, out["ListFishingCatches"] = c.ListFishingCatches(ctx, &corev1.ListFishingCatchesRequest{TayfaId: tayfaID, EventId: eventID})
+	_, out["RemoveFishingCatch"] = c.RemoveFishingCatch(ctx, &corev1.RemoveFishingCatchRequest{TayfaId: tayfaID, EventId: eventID, CatchId: id.New().String()})
 	return out
 }
 

@@ -25,6 +25,7 @@ type Querier interface {
 	ClearAuditActor(ctx context.Context, userID pgtype.UUID) error
 	// Malzeme listede kalır; üstlenen ve ekleyen boşalır.
 	ClearCampItemUserFields(ctx context.Context, userID pgtype.UUID) error
+	ClearCatchDeleter(ctx context.Context, userID pgtype.UUID) error
 	ClearEventActor(ctx context.Context, userID pgtype.UUID) error
 	ClearEventSeriesCreator(ctx context.Context, userID pgtype.UUID) error
 	// Etkinlikler kalır, organizatör ve iptal eden "Silinmiş kullanıcı" olur;
@@ -42,6 +43,8 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// Kamp malzemeleri
 	CountCampItems(ctx context.Context, eventID pgtype.UUID) (int64, error)
+	// Deneme yalnızca sınırın altındayken sayılır; 0 satır: sınır dolmuş.
+	CountCheckInAttempt(ctx context.Context, arg CountCheckInAttemptParams) (int64, error)
 	CountGoing(ctx context.Context, eventID pgtype.UUID) (int64, error)
 	// Son yönetici kontrolü; çağıran tayfa satırını kilitlemiş olmalıdır.
 	CountOtherActiveAdmins(ctx context.Context, arg CountOtherActiveAdminsParams) (int64, error)
@@ -51,6 +54,7 @@ type Querier interface {
 	// Kullanıcı başına günlük tayfa açma sınırı. Silinen tayfalar da sayılır;
 	// açıp silerek sınır aşılamaz.
 	CountTayfasCreatedSince(ctx context.Context, arg CountTayfasCreatedSinceParams) (int64, error)
+	CountUserCatches(ctx context.Context, arg CountUserCatchesParams) (int64, error)
 	// Duyurular (issue #48). Her sorgu tayfa_id ile sınırlıdır (IDOR); üyelik
 	// ve izin kontrolü app katmanındadır (access, authz).
 	CreateAnnouncement(ctx context.Context, arg CreateAnnouncementParams) error
@@ -58,6 +62,7 @@ type Querier interface {
 	// yazılmaz.
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error
 	CreateCampItem(ctx context.Context, arg CreateCampItemParams) error
+	CreateCatch(ctx context.Context, arg CreateCatchParams) error
 	// Etkinlikler (issue #49). Her sorgu tayfa_id ile ya da tayfa kapsamında
 	// yüklenmiş bir etkinliğin kimliğiyle çalışır (IDOR); yetki kontrolü app
 	// katmanındadır (authz).
@@ -72,15 +77,23 @@ type Querier interface {
 	// Tayfa, kurucu üyelik, modüller ve ilgi alanları tek transaction'da
 	// yazılır; birleştirmeyi app katmanı yapar.
 	CreateTayfa(ctx context.Context, arg CreateTayfaParams) error
+	DeleteActivityRecord(ctx context.Context, arg DeleteActivityRecordParams) (int64, error)
 	DeleteCampItem(ctx context.Context, arg DeleteCampItemParams) (int64, error)
+	DeleteCatch(ctx context.Context, arg DeleteCatchParams) (int64, error)
 	DeleteConvoyVehicle(ctx context.Context, arg DeleteConvoyVehicleParams) (int64, error)
 	// Ayrılma, çıkarma, başvuru reddi, ban kaldırma.
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (int64, error)
 	DeleteTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) error
+	// Kalıcı katılım geçmişi kişiye aittir: hesapla birlikte silinir (v14
+	// "Kalıcı katılım geçmişi", user_id → CASCADE).
+	DeleteUserActivityRecords(ctx context.Context, userID pgtype.UUID) error
+	// Av kayıtları konum içerebilir; kişiyle birlikte silinir.
+	DeleteUserCatches(ctx context.Context, userID pgtype.UUID) error
 	// "Geliyorum"dan vazgeçen kişinin aracı (ve plakası) kalmaz.
 	DeleteUserConvoyVehicle(ctx context.Context, arg DeleteUserConvoyVehicleParams) (int64, error)
 	// Araç (plaka dahil) kişisel veridir ve kişiye aittir: silinir.
 	DeleteUserConvoyVehicles(ctx context.Context, userID pgtype.UUID) error
+	DeleteUserHikeCheckins(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserRsvps(ctx context.Context, userID pgtype.UUID) error
 	// Yazarın kendi silmesi: başlık ve gövde hemen boşaltılır, geri alınamaz
 	// (v14 "Silinen içeriği geri alma").
@@ -90,6 +103,10 @@ type Querier interface {
 	GetAnnouncementByClientRequest(ctx context.Context, arg GetAnnouncementByClientRequestParams) (GetAnnouncementByClientRequestRow, error)
 	// Yazma işlemleri satırı kilitleyerek okur; silinmiş satır da döner.
 	GetAnnouncementForUpdate(ctx context.Context, arg GetAnnouncementForUpdateParams) (GetAnnouncementForUpdateRow, error)
+	GetCatch(ctx context.Context, arg GetCatchParams) (GetCatchRow, error)
+	// ---------------------------------------------------------------------------
+	// Av günlüğü
+	GetCatchByClientRequest(ctx context.Context, arg GetCatchByClientRequestParams) (GetCatchByClientRequestRow, error)
 	GetConvoyVehicleOwner(ctx context.Context, arg GetConvoyVehicleOwnerParams) (pgtype.UUID, error)
 	GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow, error)
 	// Tekrar gönderilen oluşturma isteği aynı etkinliği döndürür.
@@ -103,12 +120,21 @@ type Querier interface {
 	GetEventGaming(ctx context.Context, eventID pgtype.UUID) (GetEventGamingRow, error)
 	GetEventHike(ctx context.Context, eventID pgtype.UUID) (GetEventHikeRow, error)
 	GetEventSports(ctx context.Context, eventID pgtype.UUID) (GetEventSportsRow, error)
+	// ---------------------------------------------------------------------------
+	// Yürüyüş yoklaması
+	GetHikeCheckin(ctx context.Context, arg GetHikeCheckinParams) (GetHikeCheckinRow, error)
 	GetInvite(ctx context.Context, arg GetInviteParams) (GetInviteRow, error)
 	// Davet önizlemesi: kilitlemeden okur, link kullanılmaz. Silinmiş tayfanın
 	// daveti bulunmaz.
 	GetInviteByHash(ctx context.Context, tokenHash []byte) (GetInviteByHashRow, error)
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
 	GetRsvp(ctx context.Context, arg GetRsvpParams) (GetRsvpRow, error)
+	// Katılım doğrulama, organizatör düzeltmesi, yürüyüş yoklaması, kalıcı
+	// katılım geçmişi ve av günlüğü (issue #50). Etkinlik her zaman önce tayfa
+	// kapsamında yüklenip kilitlenir (GetEventForUpdate); buradaki sorgular o
+	// etkinliğin kimliğiyle çalışır. Check-in'de gönderilen konum hiçbir
+	// sorguya parametre olarak girmez.
+	GetRsvpForCheckIn(ctx context.Context, arg GetRsvpForCheckInParams) (GetRsvpForCheckInRow, error)
 	GetTayfa(ctx context.Context, id pgtype.UUID) (GetTayfaRow, error)
 	// Tekrar gönderilen oluşturma isteği aynı tayfayı döndürür.
 	GetTayfaByClientRequest(ctx context.Context, arg GetTayfaByClientRequestParams) (pgtype.UUID, error)
@@ -123,8 +149,14 @@ type Querier interface {
 	// Davet geçerliyse kullanımı sayar; 0 satır: süresi dolmuş, iptal ya da
 	// tükenmiş.
 	IncrementInviteUse(ctx context.Context, id pgtype.UUID) (int64, error)
+	// Organizatörün eklediği kişinin yanıtı yoksa "geliyorum" olarak açılır;
+	// etkinlik bitmiş olduğu için kapasiteyi etkilemez.
+	InsertAttendedRsvp(ctx context.Context, arg InsertAttendedRsvpParams) error
+	IsActiveMember(ctx context.Context, arg IsActiveMemberParams) (bool, error)
 	// Kapalı ya da kaydı olmayan modül kapalı sayılır (varsayılan "hayır").
 	IsTayfaModuleEnabled(ctx context.Context, arg IsTayfaModuleEnabledParams) (bool, error)
+	// Etkinlik düzenlenince anlık görüntüsü yenilenecek kayıtlar.
+	ListActivityRecordsOfEvent(ctx context.Context, eventID pgtype.UUID) ([]ListActivityRecordsOfEventRow, error)
 	// Sabitlenenler önce, yeniden eskiye. Sayfa, önceki sayfanın son satırından
 	// sonra başlar (pinned, created_at, id azalan).
 	ListAnnouncementsPage(ctx context.Context, arg ListAnnouncementsPageParams) ([]ListAnnouncementsPageRow, error)
@@ -133,6 +165,8 @@ type Querier interface {
 	ListAttendees(ctx context.Context, arg ListAttendeesParams) ([]ListAttendeesRow, error)
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error)
 	ListCampItems(ctx context.Context, eventID pgtype.UUID) ([]ListCampItemsRow, error)
+	// (created_at, id) ile sayfalanır.
+	ListCatches(ctx context.Context, arg ListCatchesParams) ([]ListCatchesRow, error)
 	ListConvoyVehicles(ctx context.Context, eventID pgtype.UUID) ([]ListConvoyVehiclesRow, error)
 	// Liste görünümünde mera gizliliği için.
 	ListFishingVisibility(ctx context.Context, eventIds []pgtype.UUID) ([]ListFishingVisibilityRow, error)
@@ -178,6 +212,12 @@ type Querier interface {
 	LockTayfaCreation(ctx context.Context, lockKey string) error
 	// Silinmiş tayfalar dahil; tayfa satırını kilitler.
 	LockTayfaForSystem(ctx context.Context, id pgtype.UUID) (LockTayfaForSystemRow, error)
+	// Kişinin "geliyorum" dediği, bitmemiş ve iptal edilmemiş etkinlikler;
+	// kişinin yeri her birinde bekleme listesine geçer. Etkinlik satırları
+	// katılım akışıyla (SetRsvp) aynı kilitle, kimlik sırasıyla kilitlenir.
+	LockUserGoingUpcomingEvents(ctx context.Context, arg LockUserGoingUpcomingEventsParams) ([]LockUserGoingUpcomingEventsRow, error)
+	MarkAttended(ctx context.Context, arg MarkAttendedParams) error
+	MarkNoShow(ctx context.Context, arg MarkNoShowParams) error
 	MuteMembership(ctx context.Context, arg MuteMembershipParams) (int64, error)
 	// Bekleme listesinin başı: en eski kayıt önce. Çağıran etkinlik satırını
 	// zaten kilitlemiştir; satır kilidi aynı kaydın iki kez terfisini de önler.
@@ -188,6 +228,7 @@ type Querier interface {
 	PromoteRsvp(ctx context.Context, arg PromoteRsvpParams) (int64, error)
 	RequestTayfaDeletion(ctx context.Context, arg RequestTayfaDeletionParams) (int64, error)
 	RestoreAnnouncement(ctx context.Context, arg RestoreAnnouncementParams) (int64, error)
+	ReturnHikeCheckin(ctx context.Context, arg ReturnHikeCheckinParams) (int64, error)
 	RevokeInvite(ctx context.Context, arg RevokeInviteParams) (int64, error)
 	// Kimse kalmayan tayfa sistem tarafından silme beklemesine alınır; talep
 	// eden kişi yoktur.
@@ -222,14 +263,23 @@ type Querier interface {
 	SetSystemJob(ctx context.Context, job string) error
 	SetTayfaJoinCode(ctx context.Context, arg SetTayfaJoinCodeParams) (int64, error)
 	SetTayfaModule(ctx context.Context, arg SetTayfaModuleParams) error
+	StartHikeCheckin(ctx context.Context, arg StartHikeCheckinParams) (int64, error)
 	// Hesap silindi: ad ve avatar temizlenir, satır mezar taşı olarak kalır.
 	// Tekrar uygulanınca sonuç değişmez.
 	TombstoneUserProfile(ctx context.Context, arg TombstoneUserProfileParams) error
+	// Tayfa aktivitesi (pasif tayfa temizliğinin dayanağı, v14 "Tayfa
+	// yönetimi"). Yalnızca ileri gider; not_after = at - 1 saat verilir:
+	// sıcak satıra her yazmada yeni sürüm açılmaz, temizlik işi gün ölçeğinde
+	// çalışır.
+	TouchTayfaActivity(ctx context.Context, arg TouchTayfaActivityParams) (int64, error)
 	UnmuteMembership(ctx context.Context, arg UnmuteMembershipParams) (int64, error)
 	UpdateAnnouncementContent(ctx context.Context, arg UpdateAnnouncementContentParams) (int64, error)
 	// Seri örneği elle düzenlenince seri güncellemeleri ona dokunmaz.
 	UpdateEvent(ctx context.Context, arg UpdateEventParams) (int64, error)
 	UpdateTayfaSettings(ctx context.Context, arg UpdateTayfaSettingsParams) (int64, error)
+	// ---------------------------------------------------------------------------
+	// Kalıcı katılım geçmişi
+	UpsertActivityRecord(ctx context.Context, arg UpsertActivityRecordParams) error
 	// Profil kopyası (ADR-0009). Yalnızca UserEventService yazar.
 	// Daha yeni bir olay uygulanmışsa ya da profil silinmişse değişmez; etkilenen
 	// satır 0 olur.

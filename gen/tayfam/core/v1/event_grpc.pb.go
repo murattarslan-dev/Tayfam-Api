@@ -30,6 +30,13 @@ const (
 	EventService_RemoveCampItem_FullMethodName      = "/tayfam.core.v1.EventService/RemoveCampItem"
 	EventService_AddConvoyVehicle_FullMethodName    = "/tayfam.core.v1.EventService/AddConvoyVehicle"
 	EventService_RemoveConvoyVehicle_FullMethodName = "/tayfam.core.v1.EventService/RemoveConvoyVehicle"
+	EventService_CheckIn_FullMethodName             = "/tayfam.core.v1.EventService/CheckIn"
+	EventService_StartHike_FullMethodName           = "/tayfam.core.v1.EventService/StartHike"
+	EventService_FinishHike_FullMethodName          = "/tayfam.core.v1.EventService/FinishHike"
+	EventService_SetAttendance_FullMethodName       = "/tayfam.core.v1.EventService/SetAttendance"
+	EventService_AddFishingCatch_FullMethodName     = "/tayfam.core.v1.EventService/AddFishingCatch"
+	EventService_ListFishingCatches_FullMethodName  = "/tayfam.core.v1.EventService/ListFishingCatches"
+	EventService_RemoveFishingCatch_FullMethodName  = "/tayfam.core.v1.EventService/RemoveFishingCatch"
 )
 
 // EventServiceClient is the client API for EventService service.
@@ -131,6 +138,69 @@ type EventServiceClient interface {
 	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
 	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
 	RemoveConvoyVehicle(ctx context.Context, in *RemoveConvoyVehicleRequest, opts ...grpc.CallOption) (*RemoveConvoyVehicleResponse, error)
+	// CheckIn verifies the caller's attendance. The window is from 30 minutes
+	// before the start until the end, and the caller must have answered
+	// GOING.
+	//   in person: location is the caller's current position; it must be
+	//     within 300 m of the meeting point. At most five attempts per event
+	//     count, failed ones included. The location is used for the distance
+	//     check only: it is never stored, logged or returned, and no error
+	//     says how far it was.
+	//   online: location must be unset ("Katıldım"), and the GOING answer
+	//     must have been given before the start.
+	// Checking in again after a success changes nothing and counts no
+	// attempt. Muted members may check in.
+	//
+	// Errors: common, ERROR_REASON_CHECK_IN_CLOSED,
+	// ERROR_REASON_EVENT_NOT_GOING, ERROR_REASON_CHECK_IN_TOO_FAR,
+	// ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED, ERROR_REASON_VALIDATION
+	// (location: set for an online event, unset or out of range for an
+	// in-person one).
+	CheckIn(ctx context.Context, in *CheckInRequest, opts ...grpc.CallOption) (*CheckInResponse, error)
+	// StartHike records that the caller set out on a hike; it counts as
+	// attendance (ATTENDANCE_METHOD_HIKE_START). Same window and GOING rule
+	// as CheckIn. A repeat returns the first start.
+	//
+	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+	// ERROR_REASON_CHECK_IN_CLOSED, ERROR_REASON_EVENT_NOT_GOING,
+	// ERROR_REASON_VALIDATION (start_time).
+	StartHike(ctx context.Context, in *StartHikeRequest, opts ...grpc.CallOption) (*StartHikeResponse, error)
+	// FinishHike records the caller's return. It also works after the end and
+	// on a cancelled event. A repeat returns the first return.
+	//
+	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+	// ERROR_REASON_HIKE_NOT_STARTED, ERROR_REASON_VALIDATION (return_time).
+	FinishHike(ctx context.Context, in *FinishHikeRequest, opts ...grpc.CallOption) (*FinishHikeResponse, error)
+	// SetAttendance is the organizer's correction: the organizer for their own
+	// event, moderators and admins for every event add a participant's
+	// attendance (ATTENDANCE_METHOD_ORGANIZER) or remove a fake one, within
+	// seven days after the end of an event that was not cancelled. Nobody
+	// corrects their own attendance (ERROR_REASON_PERMISSION_DENIED). Adding
+	// needs user_id to be an active member; removing deletes their activity
+	// record. Every correction is in the audit log.
+	//
+	// Errors: common, ERROR_REASON_CORRECTION_CLOSED,
+	// ERROR_REASON_MEMBER_NOT_FOUND, ERROR_REASON_VALIDATION (user_id).
+	SetAttendance(ctx context.Context, in *SetAttendanceRequest, opts ...grpc.CallOption) (*SetAttendanceResponse, error)
+	// AddFishingCatch logs a catch on a fishing event. The caller's attendance
+	// must be verified; catches are accepted until seven days after the end
+	// (ERROR_REASON_EVENT_ENDED afterwards). At most 100 per angler and event.
+	// A repeat with the same client_request_id returns the first catch.
+	//
+	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+	// ERROR_REASON_NOT_ATTENDED, ERROR_REASON_EVENT_LIMIT,
+	// ERROR_REASON_VALIDATION.
+	AddFishingCatch(ctx context.Context, in *AddFishingCatchRequest, opts ...grpc.CallOption) (*AddFishingCatchResponse, error)
+	// ListFishingCatches lists an event's catches, oldest first.
+	//
+	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH.
+	ListFishingCatches(ctx context.Context, in *ListFishingCatchesRequest, opts ...grpc.CallOption) (*ListFishingCatchesResponse, error)
+	// RemoveFishingCatch removes a catch: one's own, or anyone's for
+	// moderators and admins.
+	//
+	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+	RemoveFishingCatch(ctx context.Context, in *RemoveFishingCatchRequest, opts ...grpc.CallOption) (*RemoveFishingCatchResponse, error)
 }
 
 type eventServiceClient struct {
@@ -251,6 +321,76 @@ func (c *eventServiceClient) RemoveConvoyVehicle(ctx context.Context, in *Remove
 	return out, nil
 }
 
+func (c *eventServiceClient) CheckIn(ctx context.Context, in *CheckInRequest, opts ...grpc.CallOption) (*CheckInResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckInResponse)
+	err := c.cc.Invoke(ctx, EventService_CheckIn_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *eventServiceClient) StartHike(ctx context.Context, in *StartHikeRequest, opts ...grpc.CallOption) (*StartHikeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StartHikeResponse)
+	err := c.cc.Invoke(ctx, EventService_StartHike_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *eventServiceClient) FinishHike(ctx context.Context, in *FinishHikeRequest, opts ...grpc.CallOption) (*FinishHikeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FinishHikeResponse)
+	err := c.cc.Invoke(ctx, EventService_FinishHike_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *eventServiceClient) SetAttendance(ctx context.Context, in *SetAttendanceRequest, opts ...grpc.CallOption) (*SetAttendanceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetAttendanceResponse)
+	err := c.cc.Invoke(ctx, EventService_SetAttendance_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *eventServiceClient) AddFishingCatch(ctx context.Context, in *AddFishingCatchRequest, opts ...grpc.CallOption) (*AddFishingCatchResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddFishingCatchResponse)
+	err := c.cc.Invoke(ctx, EventService_AddFishingCatch_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *eventServiceClient) ListFishingCatches(ctx context.Context, in *ListFishingCatchesRequest, opts ...grpc.CallOption) (*ListFishingCatchesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListFishingCatchesResponse)
+	err := c.cc.Invoke(ctx, EventService_ListFishingCatches_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *eventServiceClient) RemoveFishingCatch(ctx context.Context, in *RemoveFishingCatchRequest, opts ...grpc.CallOption) (*RemoveFishingCatchResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveFishingCatchResponse)
+	err := c.cc.Invoke(ctx, EventService_RemoveFishingCatch_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // EventServiceServer is the server API for EventService service.
 // All implementations must embed UnimplementedEventServiceServer
 // for forward compatibility.
@@ -350,6 +490,69 @@ type EventServiceServer interface {
 	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
 	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
 	RemoveConvoyVehicle(context.Context, *RemoveConvoyVehicleRequest) (*RemoveConvoyVehicleResponse, error)
+	// CheckIn verifies the caller's attendance. The window is from 30 minutes
+	// before the start until the end, and the caller must have answered
+	// GOING.
+	//   in person: location is the caller's current position; it must be
+	//     within 300 m of the meeting point. At most five attempts per event
+	//     count, failed ones included. The location is used for the distance
+	//     check only: it is never stored, logged or returned, and no error
+	//     says how far it was.
+	//   online: location must be unset ("Katıldım"), and the GOING answer
+	//     must have been given before the start.
+	// Checking in again after a success changes nothing and counts no
+	// attempt. Muted members may check in.
+	//
+	// Errors: common, ERROR_REASON_CHECK_IN_CLOSED,
+	// ERROR_REASON_EVENT_NOT_GOING, ERROR_REASON_CHECK_IN_TOO_FAR,
+	// ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED, ERROR_REASON_VALIDATION
+	// (location: set for an online event, unset or out of range for an
+	// in-person one).
+	CheckIn(context.Context, *CheckInRequest) (*CheckInResponse, error)
+	// StartHike records that the caller set out on a hike; it counts as
+	// attendance (ATTENDANCE_METHOD_HIKE_START). Same window and GOING rule
+	// as CheckIn. A repeat returns the first start.
+	//
+	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+	// ERROR_REASON_CHECK_IN_CLOSED, ERROR_REASON_EVENT_NOT_GOING,
+	// ERROR_REASON_VALIDATION (start_time).
+	StartHike(context.Context, *StartHikeRequest) (*StartHikeResponse, error)
+	// FinishHike records the caller's return. It also works after the end and
+	// on a cancelled event. A repeat returns the first return.
+	//
+	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+	// ERROR_REASON_HIKE_NOT_STARTED, ERROR_REASON_VALIDATION (return_time).
+	FinishHike(context.Context, *FinishHikeRequest) (*FinishHikeResponse, error)
+	// SetAttendance is the organizer's correction: the organizer for their own
+	// event, moderators and admins for every event add a participant's
+	// attendance (ATTENDANCE_METHOD_ORGANIZER) or remove a fake one, within
+	// seven days after the end of an event that was not cancelled. Nobody
+	// corrects their own attendance (ERROR_REASON_PERMISSION_DENIED). Adding
+	// needs user_id to be an active member; removing deletes their activity
+	// record. Every correction is in the audit log.
+	//
+	// Errors: common, ERROR_REASON_CORRECTION_CLOSED,
+	// ERROR_REASON_MEMBER_NOT_FOUND, ERROR_REASON_VALIDATION (user_id).
+	SetAttendance(context.Context, *SetAttendanceRequest) (*SetAttendanceResponse, error)
+	// AddFishingCatch logs a catch on a fishing event. The caller's attendance
+	// must be verified; catches are accepted until seven days after the end
+	// (ERROR_REASON_EVENT_ENDED afterwards). At most 100 per angler and event.
+	// A repeat with the same client_request_id returns the first catch.
+	//
+	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+	// ERROR_REASON_NOT_ATTENDED, ERROR_REASON_EVENT_LIMIT,
+	// ERROR_REASON_VALIDATION.
+	AddFishingCatch(context.Context, *AddFishingCatchRequest) (*AddFishingCatchResponse, error)
+	// ListFishingCatches lists an event's catches, oldest first.
+	//
+	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH.
+	ListFishingCatches(context.Context, *ListFishingCatchesRequest) (*ListFishingCatchesResponse, error)
+	// RemoveFishingCatch removes a catch: one's own, or anyone's for
+	// moderators and admins.
+	//
+	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+	RemoveFishingCatch(context.Context, *RemoveFishingCatchRequest) (*RemoveFishingCatchResponse, error)
 	mustEmbedUnimplementedEventServiceServer()
 }
 
@@ -392,6 +595,27 @@ func (UnimplementedEventServiceServer) AddConvoyVehicle(context.Context, *AddCon
 }
 func (UnimplementedEventServiceServer) RemoveConvoyVehicle(context.Context, *RemoveConvoyVehicleRequest) (*RemoveConvoyVehicleResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RemoveConvoyVehicle not implemented")
+}
+func (UnimplementedEventServiceServer) CheckIn(context.Context, *CheckInRequest) (*CheckInResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckIn not implemented")
+}
+func (UnimplementedEventServiceServer) StartHike(context.Context, *StartHikeRequest) (*StartHikeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StartHike not implemented")
+}
+func (UnimplementedEventServiceServer) FinishHike(context.Context, *FinishHikeRequest) (*FinishHikeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method FinishHike not implemented")
+}
+func (UnimplementedEventServiceServer) SetAttendance(context.Context, *SetAttendanceRequest) (*SetAttendanceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetAttendance not implemented")
+}
+func (UnimplementedEventServiceServer) AddFishingCatch(context.Context, *AddFishingCatchRequest) (*AddFishingCatchResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddFishingCatch not implemented")
+}
+func (UnimplementedEventServiceServer) ListFishingCatches(context.Context, *ListFishingCatchesRequest) (*ListFishingCatchesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListFishingCatches not implemented")
+}
+func (UnimplementedEventServiceServer) RemoveFishingCatch(context.Context, *RemoveFishingCatchRequest) (*RemoveFishingCatchResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveFishingCatch not implemented")
 }
 func (UnimplementedEventServiceServer) mustEmbedUnimplementedEventServiceServer() {}
 func (UnimplementedEventServiceServer) testEmbeddedByValue()                      {}
@@ -612,6 +836,132 @@ func _EventService_RemoveConvoyVehicle_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _EventService_CheckIn_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckInRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).CheckIn(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_CheckIn_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).CheckIn(ctx, req.(*CheckInRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EventService_StartHike_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartHikeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).StartHike(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_StartHike_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).StartHike(ctx, req.(*StartHikeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EventService_FinishHike_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FinishHikeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).FinishHike(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_FinishHike_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).FinishHike(ctx, req.(*FinishHikeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EventService_SetAttendance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetAttendanceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).SetAttendance(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_SetAttendance_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).SetAttendance(ctx, req.(*SetAttendanceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EventService_AddFishingCatch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddFishingCatchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).AddFishingCatch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_AddFishingCatch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).AddFishingCatch(ctx, req.(*AddFishingCatchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EventService_ListFishingCatches_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListFishingCatchesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).ListFishingCatches(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_ListFishingCatches_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).ListFishingCatches(ctx, req.(*ListFishingCatchesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EventService_RemoveFishingCatch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveFishingCatchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).RemoveFishingCatch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_RemoveFishingCatch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).RemoveFishingCatch(ctx, req.(*RemoveFishingCatchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // EventService_ServiceDesc is the grpc.ServiceDesc for EventService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -662,6 +1012,34 @@ var EventService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveConvoyVehicle",
 			Handler:    _EventService_RemoveConvoyVehicle_Handler,
+		},
+		{
+			MethodName: "CheckIn",
+			Handler:    _EventService_CheckIn_Handler,
+		},
+		{
+			MethodName: "StartHike",
+			Handler:    _EventService_StartHike_Handler,
+		},
+		{
+			MethodName: "FinishHike",
+			Handler:    _EventService_FinishHike_Handler,
+		},
+		{
+			MethodName: "SetAttendance",
+			Handler:    _EventService_SetAttendance_Handler,
+		},
+		{
+			MethodName: "AddFishingCatch",
+			Handler:    _EventService_AddFishingCatch_Handler,
+		},
+		{
+			MethodName: "ListFishingCatches",
+			Handler:    _EventService_ListFishingCatches_Handler,
+		},
+		{
+			MethodName: "RemoveFishingCatch",
+			Handler:    _EventService_RemoveFishingCatch_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -90,6 +90,14 @@ Notion'daki tablolar geçerlidir; her servis kendi verisinin saklama işini
   e-posta, token, gizli anket oyları.
 - Kullanıcı konumu (check-in, yakındaki tayfalar) hiçbir log veya trace'e
   yazılmaz.
+- **Kullanıcı konumu ile paylaşılan yer ayrımı (2026-11-09):** Cihazın o
+  anki konumu (check-in, yakındaki tayfalar araması) yalnızca istek
+  sırasında kullanılır; veritabanına, log'a, denetim kaydına, olaylara ve
+  hata mesajlarına hiçbir zaman girmez. Kullanıcının bilerek girip
+  paylaştığı bir yer (etkinlik buluşma noktası, konvoy rotası, av yeri)
+  içeriktir ve saklanabilir; görünürlüğü içeriğin kendi kuralıyla sınırlanır
+  (av yeri `self` ise yalnızca sahibine döner) ve bu koordinatlar da log'a
+  ve denetim kaydına yazılmaz. CLAUDE.md kesin kural 3 bu ayrımla okunur.
 - IP adresleri yalnızca güvenlik amaçlı kayıtlarda (giriş, rate limit ihlali)
   tutulur.
 - OpenTelemetry Collector'da, kişisel veri taşıyabilecek alanları temizleyen

@@ -551,7 +551,7 @@ func (q *Queries) GetRsvp(ctx context.Context, arg GetRsvpParams) (GetRsvpRow, e
 }
 
 const listAttendees = `-- name: ListAttendees :many
-SELECT user_id, status, updated_at FROM event_rsvps
+SELECT user_id, status, attendance, attendance_method, updated_at FROM event_rsvps
 WHERE event_id = $1
   AND status = $2
   AND (updated_at, user_id) > ($3::timestamptz, $4::uuid)
@@ -568,9 +568,11 @@ type ListAttendeesParams struct {
 }
 
 type ListAttendeesRow struct {
-	UserID    pgtype.UUID
-	Status    string
-	UpdatedAt pgtype.Timestamptz
+	UserID           pgtype.UUID
+	Status           string
+	Attendance       string
+	AttendanceMethod pgtype.Text
+	UpdatedAt        pgtype.Timestamptz
 }
 
 // (updated_at, user_id) ile sayfalanır; bekleme listesinde bu sıra
@@ -590,7 +592,13 @@ func (q *Queries) ListAttendees(ctx context.Context, arg ListAttendeesParams) ([
 	items := []ListAttendeesRow{}
 	for rows.Next() {
 		var i ListAttendeesRow
-		if err := rows.Scan(&i.UserID, &i.Status, &i.UpdatedAt); err != nil {
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Status,
+			&i.Attendance,
+			&i.AttendanceMethod,
+			&i.UpdatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -815,7 +823,7 @@ func (q *Queries) ListUpcomingEvents(ctx context.Context, arg ListUpcomingEvents
 }
 
 const listUserRsvpsForEvents = `-- name: ListUserRsvpsForEvents :many
-SELECT event_id, status FROM event_rsvps
+SELECT event_id, status, attendance FROM event_rsvps
 WHERE user_id = $1 AND event_id = ANY($2::uuid[])
 `
 
@@ -825,8 +833,9 @@ type ListUserRsvpsForEventsParams struct {
 }
 
 type ListUserRsvpsForEventsRow struct {
-	EventID pgtype.UUID
-	Status  string
+	EventID    pgtype.UUID
+	Status     string
+	Attendance string
 }
 
 func (q *Queries) ListUserRsvpsForEvents(ctx context.Context, arg ListUserRsvpsForEventsParams) ([]ListUserRsvpsForEventsRow, error) {
@@ -838,7 +847,7 @@ func (q *Queries) ListUserRsvpsForEvents(ctx context.Context, arg ListUserRsvpsF
 	items := []ListUserRsvpsForEventsRow{}
 	for rows.Next() {
 		var i ListUserRsvpsForEventsRow
-		if err := rows.Scan(&i.EventID, &i.Status); err != nil {
+		if err := rows.Scan(&i.EventID, &i.Status, &i.Attendance); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

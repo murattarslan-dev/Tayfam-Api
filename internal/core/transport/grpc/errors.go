@@ -90,6 +90,18 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_EVENT_LIMIT, true
 	case errors.Is(err, apperr.ErrEventTypeMismatch):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_TYPE_MISMATCH, true
+	case errors.Is(err, apperr.ErrCheckInClosed):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_CHECK_IN_CLOSED, true
+	case errors.Is(err, apperr.ErrCheckInTooFar):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_CHECK_IN_TOO_FAR, true
+	case errors.Is(err, apperr.ErrCheckInAttempts):
+		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED, true
+	case errors.Is(err, apperr.ErrCorrectionClosed):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_CORRECTION_CLOSED, true
+	case errors.Is(err, apperr.ErrHikeNotStarted):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_HIKE_NOT_STARTED, true
+	case errors.Is(err, apperr.ErrNotAttended):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_NOT_ATTENDED, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

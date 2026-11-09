@@ -111,6 +111,82 @@ service EventService {
   // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
   // ERROR_REASON_EVENT_ITEM_NOT_FOUND.
   rpc RemoveConvoyVehicle(RemoveConvoyVehicleRequest) returns (RemoveConvoyVehicleResponse);
+
+  // Attendance (issue #50; data model v14 "Konumla check-in", "Online
+  // etkinlik", "Organizatör düzeltmesi", "Kalıcı katılım geçmişi",
+  // "Yürüyüşte beklenen dönüş"). A verified attendance writes the caller's
+  // permanent activity record (type, mode, title, city, district, start,
+  // duration; never a coordinate) in the same transaction.
+
+  // CheckIn verifies the caller's attendance. The window is from 30 minutes
+  // before the start until the end, and the caller must have answered
+  // GOING.
+  //   in person: location is the caller's current position; it must be
+  //     within 300 m of the meeting point. At most five attempts per event
+  //     count, failed ones included. The location is used for the distance
+  //     check only: it is never stored, logged or returned, and no error
+  //     says how far it was.
+  //   online: location must be unset ("Katıldım"), and the GOING answer
+  //     must have been given before the start.
+  // Checking in again after a success changes nothing and counts no
+  // attempt. Muted members may check in.
+  //
+  // Errors: common, ERROR_REASON_CHECK_IN_CLOSED,
+  // ERROR_REASON_EVENT_NOT_GOING, ERROR_REASON_CHECK_IN_TOO_FAR,
+  // ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED, ERROR_REASON_VALIDATION
+  // (location: set for an online event, unset or out of range for an
+  // in-person one).
+  rpc CheckIn(CheckInRequest) returns (CheckInResponse);
+
+  // StartHike records that the caller set out on a hike; it counts as
+  // attendance (ATTENDANCE_METHOD_HIKE_START). Same window and GOING rule
+  // as CheckIn. A repeat returns the first start.
+  //
+  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+  // ERROR_REASON_CHECK_IN_CLOSED, ERROR_REASON_EVENT_NOT_GOING,
+  // ERROR_REASON_VALIDATION (start_time).
+  rpc StartHike(StartHikeRequest) returns (StartHikeResponse);
+
+  // FinishHike records the caller's return. It also works after the end and
+  // on a cancelled event. A repeat returns the first return.
+  //
+  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+  // ERROR_REASON_HIKE_NOT_STARTED, ERROR_REASON_VALIDATION (return_time).
+  rpc FinishHike(FinishHikeRequest) returns (FinishHikeResponse);
+
+  // SetAttendance is the organizer's correction: the organizer for their own
+  // event, moderators and admins for every event add a participant's
+  // attendance (ATTENDANCE_METHOD_ORGANIZER) or remove a fake one, within
+  // seven days after the end of an event that was not cancelled. Nobody
+  // corrects their own attendance (ERROR_REASON_PERMISSION_DENIED). Adding
+  // needs user_id to be an active member; removing deletes their activity
+  // record. Every correction is in the audit log.
+  //
+  // Errors: common, ERROR_REASON_CORRECTION_CLOSED,
+  // ERROR_REASON_MEMBER_NOT_FOUND, ERROR_REASON_VALIDATION (user_id).
+  rpc SetAttendance(SetAttendanceRequest) returns (SetAttendanceResponse);
+
+  // AddFishingCatch logs a catch on a fishing event. The caller's attendance
+  // must be verified; catches are accepted until seven days after the end
+  // (ERROR_REASON_EVENT_ENDED afterwards). At most 100 per angler and event.
+  // A repeat with the same client_request_id returns the first catch.
+  //
+  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+  // ERROR_REASON_NOT_ATTENDED, ERROR_REASON_EVENT_LIMIT,
+  // ERROR_REASON_VALIDATION.
+  rpc AddFishingCatch(AddFishingCatchRequest) returns (AddFishingCatchResponse);
+
+  // ListFishingCatches lists an event's catches, oldest first.
+  //
+  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH.
+  rpc ListFishingCatches(ListFishingCatchesRequest) returns (ListFishingCatchesResponse);
+
+  // RemoveFishingCatch removes a catch: one's own, or anyone's for
+  // moderators and admins.
+  //
+  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+  // ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+  rpc RemoveFishingCatch(RemoveFishingCatchRequest) returns (RemoveFishingCatchResponse);
 }
 
 enum EventMode {
@@ -133,6 +209,39 @@ enum RsvpStatus {
   RSVP_STATUS_NOT_GOING = 3;
   // Asked for GOING while the event was full; set by the server only.
   RSVP_STATUS_WAITLIST = 4;
+}
+
+// A member's verified attendance of an event.
+enum AttendanceStatus {
+  // Not verified (yet).
+  ATTENDANCE_STATUS_UNSPECIFIED = 0;
+  ATTENDANCE_STATUS_ATTENDED = 1;
+  // Removed by the organizer's correction.
+  ATTENDANCE_STATUS_NO_SHOW = 2;
+}
+
+// How an attendance was verified.
+enum AttendanceMethod {
+  ATTENDANCE_METHOD_UNSPECIFIED = 0;
+  // Location check-in within 300 m of the meeting point.
+  ATTENDANCE_METHOD_LOCATION = 1;
+  // "Katıldım" on an online event.
+  ATTENDANCE_METHOD_ONLINE = 2;
+  // Set out on a hike (StartHike).
+  ATTENDANCE_METHOD_HIKE_START = 3;
+  // The organizer's correction (SetAttendance).
+  ATTENDANCE_METHOD_ORGANIZER = 4;
+}
+
+// Who gets a fishing catch's location. The catch itself (species, length)
+// is seen by every active member.
+enum CatchVisibility {
+  // On create: CATCH_VISIBILITY_SELF.
+  CATCH_VISIBILITY_UNSPECIFIED = 0;
+  // The angler only.
+  CATCH_VISIBILITY_SELF = 1;
+  // Everyone who may see the event's spot (SpotVisibility).
+  CATCH_VISIBILITY_TAYFA = 2;
 }
 
 // Who sees a fishing event's meeting point (the spot).
@@ -288,6 +397,8 @@ message Event {
   // Whether the caller may edit and cancel this event, so the client can
   // show the right actions. The server checks again on every call.
   bool caller_can_manage = 26;
+  // The caller's verified attendance; UNSPECIFIED until checked in.
+  AttendanceStatus caller_attendance = 27;
   // Set by GetEvent for every type except GENERAL; never by
   // ListUpcomingEvents.
   oneof details {
@@ -440,8 +551,10 @@ message ListAttendeesRequest {
 message Attendee {
   string user_id = 1;
   RsvpStatus status = 2;
-  // When the answer last changed.
+  // When the answer or the attendance last changed.
   google.protobuf.Timestamp update_time = 3;
+  AttendanceStatus attendance = 4;
+  AttendanceMethod attendance_method = 5;
 }
 
 message ListAttendeesResponse {
@@ -494,3 +607,111 @@ message RemoveConvoyVehicleRequest {
 }
 
 message RemoveConvoyVehicleResponse {}
+
+message CheckInRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  // In person: required, the caller's current position. Online: must be
+  // unset. Never stored or logged.
+  LatLng location = 3;
+}
+
+message CheckInResponse {
+  // ATTENDED.
+  AttendanceStatus attendance = 1;
+  AttendanceMethod method = 2;
+}
+
+// HikeCheckin is the caller's hike roll call. Times are the client's.
+message HikeCheckin {
+  google.protobuf.Timestamp start_time = 1;
+  // Unset while out.
+  google.protobuf.Timestamp return_time = 2;
+}
+
+message StartHikeRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  // The client's time of setting out; unset means now. Not in the future
+  // (a few minutes of clock skew are accepted), at most 48 hours ago.
+  google.protobuf.Timestamp start_time = 3;
+}
+
+message StartHikeResponse {
+  HikeCheckin checkin = 1;
+}
+
+message FinishHikeRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  // The client's time of return; unset means now. Same rules as
+  // start_time, and not before it.
+  google.protobuf.Timestamp return_time = 3;
+}
+
+message FinishHikeResponse {
+  HikeCheckin checkin = 1;
+}
+
+message SetAttendanceRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  // The participant; not the caller.
+  string user_id = 3;
+  // true: add the attendance; false: remove it.
+  bool attended = 4;
+}
+
+message SetAttendanceResponse {}
+
+message FishingCatch {
+  string id = 1;
+  string user_id = 2;
+  // 1–60 characters.
+  string species = 3;
+  // Above 0, at most 1000; one decimal.
+  double length_cm = 4;
+  // Optional. Returned to the angler, and for CATCH_VISIBILITY_TAYFA to
+  // everyone who may see the event's spot; unset for everyone else. Never
+  // logged.
+  LatLng location = 5;
+  CatchVisibility visibility = 6;
+  google.protobuf.Timestamp create_time = 7;
+}
+
+message AddFishingCatchRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  string species = 3;
+  double length_cm = 4;
+  // Optional.
+  LatLng location = 5;
+  CatchVisibility visibility = 6;
+  // Required. A UUID the client generates once per catch and reuses on
+  // retry.
+  string client_request_id = 7;
+}
+
+message AddFishingCatchResponse {
+  FishingCatch catch = 1;
+}
+
+message ListFishingCatchesRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListFishingCatchesResponse {
+  repeated FishingCatch catches = 1;
+  string next_page_token = 2;
+}
+
+message RemoveFishingCatchRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  string catch_id = 3;
+}
+
+message RemoveFishingCatchResponse {}

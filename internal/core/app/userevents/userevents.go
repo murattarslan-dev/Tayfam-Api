@@ -137,8 +137,10 @@ func validDisplayName(s string) bool {
 //   - a tayfa left without any active member is scheduled for deletion
 //     after tayfa.DeletionDelay, requested by nobody (the system);
 //   - author and actor fields pointing at the user become NULL; the user's
-//     event RSVPs and convoy vehicles (plates) are deleted. A deleted going
-//     RSVP does not promote the waitlist here;
+//     event RSVPs, convoy vehicles (plates), hike roll calls, fishing
+//     catches and activity records are deleted;
+//   - on every upcoming event the user was going to, the seat goes to the
+//     oldest waitlisted answer (rsvp.promoted), as when an answer changes;
 //   - the profile copy becomes a tombstone.
 //
 // Everything runs as the account_deletion system job, the only identity the
@@ -159,14 +161,26 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 				return err
 			}
 		}
+		// Locked before the RSVPs go, so the freed seats are given in this
+		// transaction.
+		going, err := q.LockUserGoingUpcomingEvents(ctx, store.LockUserGoingUpcomingEventsParams{UserID: e.User.PG(), Now: ts(now)})
+		if err != nil {
+			return fmt.Errorf("etkinlikler: %w", err)
+		}
 		for _, clear := range []func(context.Context, pgtype.UUID) error{
 			q.ClearTayfaUserFields, q.ClearInviteCreator, q.ClearMembershipUserFields,
 			q.ClearAnnouncementUserFields, q.ClearEventUserFields, q.ClearEventSeriesCreator,
 			q.ClearRsvpMarker, q.DeleteUserRsvps, q.DeleteUserConvoyVehicles, q.ClearCampItemUserFields,
+			q.DeleteUserHikeCheckins, q.DeleteUserCatches, q.ClearCatchDeleter, q.DeleteUserActivityRecords,
 			q.ClearAuditActor, q.ClearEventActor,
 		} {
 			if err := clear(ctx, e.User.PG()); err != nil {
 				return fmt.Errorf("yazar alanları: %w", err)
+			}
+		}
+		for _, ev := range going {
+			if err := promoteWaitlist(ctx, q, id.ID(ev.TayfaID.Bytes), id.ID(ev.ID.Bytes), ev.Capacity); err != nil {
+				return err
 			}
 		}
 		if err := q.TombstoneUserProfile(ctx, store.TombstoneUserProfileParams{UserID: e.User.PG(), SourceEventID: e.ID.PG()}); err != nil {
@@ -246,6 +260,49 @@ func (s *Service) promoteSuccessor(ctx context.Context, q *store.Queries, tf, us
 		slog.String("tayfa_id", tf.String()), slog.String("user_id", sid.String()))
 	return systemRecord(ctx, q, tf, "member."+changeRoleChanged, eventMembershipChanged, "membership", sid,
 		map[string]any{"tayfa_id": tf.String(), "user_id": sid.String(), "change": changeRoleChanged, "role": "admin", "reason": systemJob})
+}
+
+// promoteAll bounds one promotion round of an event without a capacity
+// (event capacities are at most 10000).
+const promoteAll = 10000
+
+// eventRSVPPromoted is the event app's rsvp.promoted (event.RSVPPromoted).
+const eventRSVPPromoted = "rsvp.promoted"
+
+// promoteWaitlist moves the oldest waitlisted answers of a locked event to
+// going while there is room, as the event app does when a going answer
+// changes (data model v14 "Bekleme listesi terfisi").
+func promoteWaitlist(ctx context.Context, q *store.Queries, tf, event id.ID, capacity pgtype.Int4) error {
+	free := int64(promoteAll)
+	if capacity.Valid {
+		n, err := q.CountGoing(ctx, event.PG())
+		if err != nil {
+			return fmt.Errorf("katılımcı sayısı: %w", err)
+		}
+		free = int64(capacity.Int32) - n
+	}
+	if free <= 0 {
+		return nil
+	}
+	users, err := q.NextWaitlisted(ctx, store.NextWaitlistedParams{EventID: event.PG(), N: int32(min(free, promoteAll))}) //nolint:gosec // bounded by promoteAll
+	if err != nil {
+		return fmt.Errorf("bekleme listesi: %w", err)
+	}
+	for _, u := range users {
+		n, err := q.PromoteRsvp(ctx, store.PromoteRsvpParams{EventID: event.PG(), UserID: u})
+		if err != nil {
+			return fmt.Errorf("terfi: %w", err)
+		}
+		if n != 1 {
+			continue
+		}
+		uid := id.ID(u.Bytes)
+		if err := systemRecord(ctx, q, tf, eventRSVPPromoted, eventRSVPPromoted, "event", event,
+			map[string]any{"tayfa_id": tf.String(), "event_id": event.String(), "user_id": uid.String()}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // systemRecord writes an audit record and an outbox event without an actor:

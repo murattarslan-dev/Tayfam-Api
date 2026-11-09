@@ -667,6 +667,29 @@ func (q *Queries) SetTayfaModule(ctx context.Context, arg SetTayfaModuleParams) 
 	return err
 }
 
+const touchTayfaActivity = `-- name: TouchTayfaActivity :execrows
+UPDATE tayfas SET last_activity_at = $1
+WHERE id = $2 AND deleted_at IS NULL AND last_activity_at <= $3
+`
+
+type TouchTayfaActivityParams struct {
+	At       pgtype.Timestamptz
+	ID       pgtype.UUID
+	NotAfter pgtype.Timestamptz
+}
+
+// Tayfa aktivitesi (pasif tayfa temizliğinin dayanağı, v14 "Tayfa
+// yönetimi"). Yalnızca ileri gider; not_after = at - 1 saat verilir:
+// sıcak satıra her yazmada yeni sürüm açılmaz, temizlik işi gün ölçeğinde
+// çalışır.
+func (q *Queries) TouchTayfaActivity(ctx context.Context, arg TouchTayfaActivityParams) (int64, error) {
+	result, err := q.db.Exec(ctx, touchTayfaActivity, arg.At, arg.ID, arg.NotAfter)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateTayfaSettings = `-- name: UpdateTayfaSettings :execrows
 UPDATE tayfas
 SET name = $1, name_normalized = $2,

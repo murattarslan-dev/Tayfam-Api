@@ -125,16 +125,34 @@ const (
 	// change.
 	ErrorReason_ERROR_REASON_EVENT_ENDED ErrorReason = 32
 	// FAILED_PRECONDITION. The action needs the caller's GOING answer (adding
-	// a convoy vehicle).
+	// a convoy vehicle, checking in; online check-in also needs it given
+	// before the start).
 	ErrorReason_ERROR_REASON_EVENT_NOT_GOING ErrorReason = 33
-	// NOT_FOUND. No camp item or convoy vehicle with this ID on this event
-	// that the caller may remove.
+	// NOT_FOUND. No camp item, convoy vehicle or fishing catch with this ID
+	// on this event that the caller may remove.
 	ErrorReason_ERROR_REASON_EVENT_ITEM_NOT_FOUND ErrorReason = 34
 	// RESOURCE_EXHAUSTED. The event's list is full (200 camp items).
 	ErrorReason_ERROR_REASON_EVENT_LIMIT ErrorReason = 35
 	// FAILED_PRECONDITION. The method is for another event type (for example
 	// AddCampItem on a convoy event).
 	ErrorReason_ERROR_REASON_EVENT_TYPE_MISMATCH ErrorReason = 36
+	// FAILED_PRECONDITION. Outside the check-in window: from 30 minutes
+	// before the start until the end.
+	ErrorReason_ERROR_REASON_CHECK_IN_CLOSED ErrorReason = 40
+	// FAILED_PRECONDITION. The sent location is farther than 300 m from the
+	// meeting point. The attempt counts; the distance is not returned.
+	ErrorReason_ERROR_REASON_CHECK_IN_TOO_FAR ErrorReason = 41
+	// RESOURCE_EXHAUSTED. The caller used all five location attempts for this
+	// event; the organizer can still add the attendance after the end.
+	ErrorReason_ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED ErrorReason = 42
+	// FAILED_PRECONDITION. Outside the organizer's correction window: the
+	// seven days after the end.
+	ErrorReason_ERROR_REASON_CORRECTION_CLOSED ErrorReason = 43
+	// FAILED_PRECONDITION. FinishHike without StartHike.
+	ErrorReason_ERROR_REASON_HIKE_NOT_STARTED ErrorReason = 44
+	// FAILED_PRECONDITION. The action needs the caller's verified attendance
+	// (AddFishingCatch).
+	ErrorReason_ERROR_REASON_NOT_ATTENDED ErrorReason = 45
 )
 
 // Enum value maps for ErrorReason.
@@ -171,39 +189,51 @@ var (
 		34: "ERROR_REASON_EVENT_ITEM_NOT_FOUND",
 		35: "ERROR_REASON_EVENT_LIMIT",
 		36: "ERROR_REASON_EVENT_TYPE_MISMATCH",
+		40: "ERROR_REASON_CHECK_IN_CLOSED",
+		41: "ERROR_REASON_CHECK_IN_TOO_FAR",
+		42: "ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED",
+		43: "ERROR_REASON_CORRECTION_CLOSED",
+		44: "ERROR_REASON_HIKE_NOT_STARTED",
+		45: "ERROR_REASON_NOT_ATTENDED",
 	}
 	ErrorReason_value = map[string]int32{
-		"ERROR_REASON_UNSPECIFIED":                0,
-		"ERROR_REASON_VALIDATION":                 1,
-		"ERROR_REASON_TAYFA_NOT_FOUND":            2,
-		"ERROR_REASON_PERMISSION_DENIED":          3,
-		"ERROR_REASON_MUTED":                      4,
-		"ERROR_REASON_TAYFA_READ_ONLY":            5,
-		"ERROR_REASON_TAYFA_CREATE_LIMIT":         6,
-		"ERROR_REASON_RATE_LIMITED":               7,
-		"ERROR_REASON_INVALID_JOIN_CODE":          8,
-		"ERROR_REASON_INVITE_INVALID":             9,
-		"ERROR_REASON_INVITE_EXPIRED":             10,
-		"ERROR_REASON_INVITE_REVOKED":             11,
-		"ERROR_REASON_INVITE_EXHAUSTED":           12,
-		"ERROR_REASON_INVITE_NOT_FOUND":           13,
-		"ERROR_REASON_ALREADY_MEMBER":             14,
-		"ERROR_REASON_ALREADY_PENDING":            15,
-		"ERROR_REASON_BANNED":                     16,
-		"ERROR_REASON_MEMBER_NOT_FOUND":           17,
-		"ERROR_REASON_ROLE_HIERARCHY":             18,
-		"ERROR_REASON_LAST_ADMIN":                 19,
-		"ERROR_REASON_DELETION_ALREADY_REQUESTED": 20,
-		"ERROR_REASON_DELETION_NOT_REQUESTED":     21,
-		"ERROR_REASON_MODULE_DISABLED":            22,
-		"ERROR_REASON_ANNOUNCEMENT_NOT_FOUND":     23,
-		"ERROR_REASON_EVENT_NOT_FOUND":            30,
-		"ERROR_REASON_EVENT_CANCELLED":            31,
-		"ERROR_REASON_EVENT_ENDED":                32,
-		"ERROR_REASON_EVENT_NOT_GOING":            33,
-		"ERROR_REASON_EVENT_ITEM_NOT_FOUND":       34,
-		"ERROR_REASON_EVENT_LIMIT":                35,
-		"ERROR_REASON_EVENT_TYPE_MISMATCH":        36,
+		"ERROR_REASON_UNSPECIFIED":                 0,
+		"ERROR_REASON_VALIDATION":                  1,
+		"ERROR_REASON_TAYFA_NOT_FOUND":             2,
+		"ERROR_REASON_PERMISSION_DENIED":           3,
+		"ERROR_REASON_MUTED":                       4,
+		"ERROR_REASON_TAYFA_READ_ONLY":             5,
+		"ERROR_REASON_TAYFA_CREATE_LIMIT":          6,
+		"ERROR_REASON_RATE_LIMITED":                7,
+		"ERROR_REASON_INVALID_JOIN_CODE":           8,
+		"ERROR_REASON_INVITE_INVALID":              9,
+		"ERROR_REASON_INVITE_EXPIRED":              10,
+		"ERROR_REASON_INVITE_REVOKED":              11,
+		"ERROR_REASON_INVITE_EXHAUSTED":            12,
+		"ERROR_REASON_INVITE_NOT_FOUND":            13,
+		"ERROR_REASON_ALREADY_MEMBER":              14,
+		"ERROR_REASON_ALREADY_PENDING":             15,
+		"ERROR_REASON_BANNED":                      16,
+		"ERROR_REASON_MEMBER_NOT_FOUND":            17,
+		"ERROR_REASON_ROLE_HIERARCHY":              18,
+		"ERROR_REASON_LAST_ADMIN":                  19,
+		"ERROR_REASON_DELETION_ALREADY_REQUESTED":  20,
+		"ERROR_REASON_DELETION_NOT_REQUESTED":      21,
+		"ERROR_REASON_MODULE_DISABLED":             22,
+		"ERROR_REASON_ANNOUNCEMENT_NOT_FOUND":      23,
+		"ERROR_REASON_EVENT_NOT_FOUND":             30,
+		"ERROR_REASON_EVENT_CANCELLED":             31,
+		"ERROR_REASON_EVENT_ENDED":                 32,
+		"ERROR_REASON_EVENT_NOT_GOING":             33,
+		"ERROR_REASON_EVENT_ITEM_NOT_FOUND":        34,
+		"ERROR_REASON_EVENT_LIMIT":                 35,
+		"ERROR_REASON_EVENT_TYPE_MISMATCH":         36,
+		"ERROR_REASON_CHECK_IN_CLOSED":             40,
+		"ERROR_REASON_CHECK_IN_TOO_FAR":            41,
+		"ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED": 42,
+		"ERROR_REASON_CORRECTION_CLOSED":           43,
+		"ERROR_REASON_HIKE_NOT_STARTED":            44,
+		"ERROR_REASON_NOT_ATTENDED":                45,
 	}
 )
 
@@ -238,7 +268,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xa6\b\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xff\t\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -271,7 +301,13 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\x1cERROR_REASON_EVENT_NOT_GOING\x10!\x12%\n" +
 	"!ERROR_REASON_EVENT_ITEM_NOT_FOUND\x10\"\x12\x1c\n" +
 	"\x18ERROR_REASON_EVENT_LIMIT\x10#\x12$\n" +
-	" ERROR_REASON_EVENT_TYPE_MISMATCH\x10$B\xbd\x01\n" +
+	" ERROR_REASON_EVENT_TYPE_MISMATCH\x10$\x12 \n" +
+	"\x1cERROR_REASON_CHECK_IN_CLOSED\x10(\x12!\n" +
+	"\x1dERROR_REASON_CHECK_IN_TOO_FAR\x10)\x12,\n" +
+	"(ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED\x10*\x12\"\n" +
+	"\x1eERROR_REASON_CORRECTION_CLOSED\x10+\x12!\n" +
+	"\x1dERROR_REASON_HIKE_NOT_STARTED\x10,\x12\x1d\n" +
+	"\x19ERROR_REASON_NOT_ATTENDED\x10-B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (
