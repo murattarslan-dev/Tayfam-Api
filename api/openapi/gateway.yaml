@@ -807,6 +807,373 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Soru-cevap (core QAService) ---
+  #
+  # Ortak kurallar: tayfanın soru-cevap modülü (`qa`) kapalıysa okumalar
+  # dahil her uç `module-disabled` alır. Bu tayfada olmayan ya da silinmiş
+  # soru `question-not-found`, cevap `answer-not-found`, etiket
+  # `tag-not-found` alır; silinen sorunun cevapları da bulunmaz. Soru ve
+  # cevabı her etkin üye yazar; susturulmuş üye yazamaz (`muted`), yalnızca
+  # kendi soru ve cevabını silebilir. Başkasının içeriğini moderatör ve
+  # yönetici, yazarın şu anki rolü kendisininkinden düşükse
+  # (`role-hierarchy`) düzenler ve siler. Kendi sildiğiniz içerik hemen
+  # boşaltılır; başkasının sildiği gizlenir ve yönetici 30 gün içinde geri
+  # alabilir.
+
+  /v1/tayfas/{tayfa_id}/questions:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listQuestions
+      summary: Soruları listeler ve arar
+      description: |
+        `q` yoksa yeniden eskiye; `q` varsa başlıkta ve gövdede Türkçe tam
+        metin arama yapar (İ/ı doğru: "IŞIK" "ışık"ı, "izmir" "İzmir"i
+        bulur) ve en ilgiliden başlar. `tag_id` ikisiyle de süzer. Arama
+        metni gateway'de ve core'da log'a yazılmaz; `next_page_token`
+        metni taşımaz ve yalnızca aynı `q` ve `tag_id` ile geçerlidir.
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Arama metni; en fazla 100 karakter, tek satır.
+          schema: { type: string, maxLength: 100 }
+        - name: tag_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Sorular
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuestionList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createQuestion
+      summary: Soru sorar
+      description: |
+        Etiketler adla verilir; tayfada büyük/küçük harf farkıyla (Türkçe
+        kurallarla) aynı adlı etiket varsa o kullanılır, yoksa açılır.
+        Tayfada en fazla 200 etiket olabilir (`tag-limit`). Aynı
+        `client_request_id` ile tekrar gönderilen istek yeni soru açmaz,
+        ilk soruyu döndürür.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuestionCreateRequest" }
+      responses:
+        "201":
+          description: Sorulan soru
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Question" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/questions/{question_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/QuestionID"
+    get:
+      operationId: getQuestion
+      summary: Tek bir soru
+      responses:
+        "200":
+          description: Soru
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Question" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: updateQuestion
+      summary: Soruyu düzenler (yazar ya da moderatör, yönetici)
+      description: |
+        Gövdede bulunan alanlar değişir; `tags` sorunun etiketlerini
+        tümüyle değiştirir (boş dizi hepsini kaldırır).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuestionUpdateRequest" }
+      responses:
+        "200":
+          description: Güncel soru
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Question" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteQuestion
+      summary: Soruyu siler (yazar ya da moderatör, yönetici)
+      description: |
+        Kendi sorunuzu silerseniz başlık, gövde ve etiketleri hemen
+        kaldırılır, geri alınamaz. Başkasınınkini silmek onu gizler. Silinen
+        sorunun cevapları da görünmez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Soru silindi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/questions/{question_id}/restoration:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/QuestionID"
+    post:
+      operationId: restoreQuestion
+      summary: Gizlenen soruyu geri alır (yönetici)
+      description: |
+        Moderatör ya da yöneticinin sildiği soru 30 gün içinde geri
+        alınabilir; yazarın şu anki rolü sizinkinden düşük olmalıdır.
+        Yazarın kendi sildiği ya da süresi geçen soru `question-not-found`
+        alır. Görünen bir soru için de başarılıdır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Geri alınan soru
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Question" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/questions/{question_id}/answers:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/QuestionID"
+    get:
+      operationId: listAnswers
+      summary: Sorunun cevapları
+      description: |
+        Faydalı oyu çoktan aza, eşitlikte eskiden yeniye. `voted`
+        çağıranın oyunu gösterir. Çözüm işaretleme yoktur.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Cevaplar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnswerList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createAnswer
+      summary: Soruyu cevaplar
+      description: |
+        Aynı `client_request_id` ile tekrar gönderilen istek ilk cevabı
+        döndürür. Soru sahibine bildirim gider (`answer_received`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnswerCreateRequest" }
+      responses:
+        "201":
+          description: Yazılan cevap
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Answer" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/answers/{answer_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/AnswerID"
+    patch:
+      operationId: updateAnswer
+      summary: Cevabı düzenler (yazar ya da moderatör, yönetici)
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnswerUpdateRequest" }
+      responses:
+        "200":
+          description: Güncel cevap
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Answer" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteAnswer
+      summary: Cevabı siler (yazar ya da moderatör, yönetici)
+      description: |
+        Kendi cevabınızı silerseniz metni ve oyları hemen kaldırılır, geri
+        alınamaz. Başkasınınkini silmek onu gizler (oylar korunur).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Cevap silindi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/answers/{answer_id}/restoration:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/AnswerID"
+    post:
+      operationId: restoreAnswer
+      summary: Gizlenen cevabı geri alır (yönetici)
+      description: |
+        Kurallar soruyu geri almadaki gibi; sorusu silinmiş cevap
+        `answer-not-found` alır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Geri alınan cevap
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Answer" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/answers/{answer_id}/vote:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/AnswerID"
+    put:
+      operationId: voteAnswer
+      summary: Cevaba faydalı oyu verir
+      description: |
+        Kişi başına bir oy; zaten verdiyseniz değişmez. Kendi cevabınıza oy
+        veremezsiniz (`own-answer-vote`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Güncel cevap
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Answer" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: unvoteAnswer
+      summary: Faydalı oyunu geri alır
+      description: Oy yoksa değişmez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Güncel cevap
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Answer" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/tags:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listTags
+      summary: Tayfanın etiketleri
+      description: Ada göre sıralı, en fazla 200; her etiketin görünen soru sayısıyla.
+      responses:
+        "200":
+          description: Etiketler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TagList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/tags/{tag_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/TagID"
+    delete:
+      operationId: deleteTag
+      summary: Etiketi kaldırır (moderatör, yönetici)
+      description: Etiket tayfadan ve tüm sorulardan kalkar; sorular kalır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Etiket kaldırıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   # --- Etkinlikler (core EventService) ---
   #
   # Ortak kurallar: tayfanın etkinlik modülü kapalıysa okumalar dahil her uç
@@ -1557,6 +1924,21 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    QuestionID:
+      name: question_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AnswerID:
+      name: answer_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TagID:
+      name: tag_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     PageSize:
       name: page_size
       in: query
@@ -2067,6 +2449,141 @@ components:
       properties:
         title: { type: string, minLength: 1, maxLength: 120 }
         body: { type: string, maxLength: 5000 }
+
+    # --- Soru-cevap ---
+
+    Tag:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, description: İlk yazıldığı haliyle 1–30 karakter. }
+        question_count:
+          type: integer
+          description: Yalnızca etiket listesinde; etiketi taşıyan görünen soru sayısı.
+
+    TagList:
+      type: object
+      required: [tags]
+      properties:
+        tags:
+          type: array
+          items: { $ref: "#/components/schemas/Tag" }
+
+    Question:
+      type: object
+      required: [id, tayfa_id, title, body, tags, answer_count, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        tayfa_id: { type: string, format: uuid }
+        author_user_id:
+          type: string
+          format: uuid
+          description: Yazarın hesabı silindiyse yoktur ("Silinmiş kullanıcı").
+        title: { type: string }
+        body: { type: string }
+        tags:
+          type: array
+          items: { $ref: "#/components/schemas/Tag" }
+        answer_count: { type: integer, description: Görünen cevap sayısı. }
+        created_at: { type: string, format: date-time }
+        updated_at:
+          type: string
+          format: date-time
+          description: Her düzenleme ve geri almada değişir.
+
+    QuestionList:
+      type: object
+      required: [questions]
+      properties:
+        questions:
+          type: array
+          items: { $ref: "#/components/schemas/Question" }
+        next_page_token: { type: string }
+
+    QuestionCreateRequest:
+      type: object
+      required: [title, client_request_id]
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+          minLength: 10
+          maxLength: 150
+          description: Baştaki ve sondaki boşluklar atıldıktan sonra 10–150 karakter, tek satır.
+        body:
+          type: string
+          maxLength: 10000
+          description: En fazla 10000 karakter; satır sonu olabilir.
+        tags:
+          type: array
+          maxItems: 5
+          description: Etiket adları; her biri 1–30 karakter, tek satır, iç boşluklar teke iner.
+          items: { type: string, minLength: 1, maxLength: 30 }
+        client_request_id:
+          type: string
+          format: uuid
+          description: İstemcinin her deneme için bir kez ürettiği, tekrar gönderimde aynen kullandığı UUID.
+
+    QuestionUpdateRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title: { type: string, minLength: 10, maxLength: 150 }
+        body: { type: string, maxLength: 10000 }
+        tags:
+          type: array
+          maxItems: 5
+          items: { type: string, minLength: 1, maxLength: 30 }
+
+    Answer:
+      type: object
+      required: [id, question_id, tayfa_id, body, vote_count, voted, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        question_id: { type: string, format: uuid }
+        tayfa_id: { type: string, format: uuid }
+        author_user_id:
+          type: string
+          format: uuid
+          description: Yazarın hesabı silindiyse yoktur ("Silinmiş kullanıcı").
+        body: { type: string }
+        vote_count: { type: integer, description: Faydalı oyu sayısı. }
+        voted: { type: boolean, description: Çağıran bu cevaba oy verdi mi. }
+        created_at: { type: string, format: date-time }
+        updated_at:
+          type: string
+          format: date-time
+          description: Her düzenleme ve geri almada değişir; oylar değiştirmez.
+
+    AnswerList:
+      type: object
+      required: [answers]
+      properties:
+        answers:
+          type: array
+          items: { $ref: "#/components/schemas/Answer" }
+        next_page_token: { type: string }
+
+    AnswerCreateRequest:
+      type: object
+      required: [body, client_request_id]
+      additionalProperties: false
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 10000
+          description: Boşluklar atıldıktan sonra 1–10000 karakter; satır sonu olabilir.
+        client_request_id: { type: string, format: uuid }
+
+    AnswerUpdateRequest:
+      type: object
+      required: [body]
+      additionalProperties: false
+      properties:
+        body: { type: string, minLength: 1, maxLength: 10000 }
 
     # --- Etkinlikler ---
 
