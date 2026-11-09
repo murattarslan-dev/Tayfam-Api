@@ -22,9 +22,12 @@ type NotificationClient interface {
 	SetTayfaNotificationPreference(ctx context.Context, in *chatv1.SetTayfaNotificationPreferenceRequest, opts ...grpc.CallOption) (*chatv1.SetTayfaNotificationPreferenceResponse, error)
 }
 
-// ChatDeps configures the notification routes (issue #64).
+// ChatDeps configures the notification (issue #64) and channel (issue #81)
+// routes.
 type ChatDeps struct {
 	Notifications NotificationClient
+	// Channels enables the channel routes when set.
+	Channels ChannelClient
 	// Verifier checks the user's token before anything reaches chat; chat
 	// checks it again itself (ADR-0011).
 	Verifier TokenVerifier

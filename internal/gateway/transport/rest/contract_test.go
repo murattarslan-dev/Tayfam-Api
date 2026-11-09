@@ -19,7 +19,7 @@ var pathParams = strings.NewReplacer(
 	"{vehicle_id}", vehicleID, "{catch_id}", catchID, "{series_id}", seriesID,
 	"{question_id}", questionID, "{answer_id}", answerID, "{tag_id}", tagID,
 	"{poll_id}", pollID, "{option_id}", optionID, "{notification_id}", notificationID,
-	"{session_id}", sessionID,
+	"{session_id}", sessionID, "{channel_id}", channelID, "{message_id}", messageID,
 )
 
 // TestRoutesMatchContract keeps the router and api/openapi/gateway.yaml in
@@ -122,5 +122,55 @@ func TestProblemTypesDocumented(t *testing.T) {
 		if !used[code] {
 			t.Errorf("sözleşmedeki %q hiçbir yerde kullanılmıyor", code)
 		}
+	}
+}
+
+// TestRefsResolve checks that every $ref in the contract points at a
+// component that exists under components.<section>. A schema written under
+// another top-level key (it happened once under security:) is not a
+// component, so its $refs would not resolve.
+func TestRefsResolve(t *testing.T) {
+	spec, err := os.ReadFile(specPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	topRe := regexp.MustCompile(`^([A-Za-z][A-Za-z0-9_-]*):`)
+	sectionRe := regexp.MustCompile(`^  ([A-Za-z][A-Za-z0-9_]*):\s*$`)
+	nameRe := regexp.MustCompile(`^    ([A-Za-z][A-Za-z0-9_]*):`)
+	defined := map[string]bool{}
+	top, section := "", ""
+	for line := range strings.SplitSeq(string(spec), "\n") {
+		if m := topRe.FindStringSubmatch(line); m != nil {
+			top, section = m[1], ""
+			continue
+		}
+		if top != "components" {
+			continue
+		}
+		if m := sectionRe.FindStringSubmatch(line); m != nil {
+			section = m[1]
+			continue
+		}
+		if m := nameRe.FindStringSubmatch(line); m != nil && section != "" {
+			defined[section+"/"+m[1]] = true
+		}
+	}
+	if !defined["schemas/Problem"] || !defined["parameters/TayfaID"] {
+		t.Fatalf("bileşenler ayrıştırılamadı: %d", len(defined))
+	}
+	refRe := regexp.MustCompile(`\$ref: "#/components/([A-Za-z]+)/([A-Za-z0-9_]+)"`)
+	refs := 0
+	for _, m := range refRe.FindAllStringSubmatch(string(spec), -1) {
+		refs++
+		if !defined[m[1]+"/"+m[2]] {
+			t.Errorf("çözülemeyen $ref: #/components/%s/%s", m[1], m[2])
+		}
+	}
+	if refs < 100 {
+		t.Fatalf("yalnızca %d $ref bulundu; ayrıştırma bozuk olabilir", refs)
+	}
+	// Every $ref has the quoted form checked above.
+	if n := strings.Count(string(spec), "$ref:"); n != refs {
+		t.Errorf("%d $ref'ten %d tanesi denetlenebilir biçimde", n, refs)
 	}
 }

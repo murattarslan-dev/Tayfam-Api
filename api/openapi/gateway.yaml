@@ -2200,6 +2200,293 @@ paths:
         "429": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  /v1/tayfas/{tayfa_id}/channels:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listChannels
+      summary: Tayfanın kanalları ve okunmamış sayılarınız
+      description: |
+        Etkin üyesi olduğunuz tayfanın görebildiğiniz kanalları
+        (`tayfa-not-found`). `staff` kanallarını yalnızca yönetici ve
+        moderatörler görür. İzinleri core'un tek izin tablosu verir.
+        Askıdaki, arşivlenmiş ya da silinmeyi bekleyen tayfada kanallar salt
+        okunurdur: değişiklikler `tayfa-read-only` (409) alır; okuma ve
+        okundu işareti sürer. Arşivlenmiş kanallar sondadır. `unread_count`
+        başkalarının silinmemiş mesajlarından okunmamış olanlardır; en
+        fazla 100 döner, istemci "99+" gösterir.
+      responses:
+        "200":
+          description: Kanallar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChannelList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createChannel
+      summary: Kanal açar (yönetici ve moderatör)
+      description: |
+        İsim 1–40 karakterdir; arşivlenmemiş kanallar arasında Türkçe büyük/
+        küçük harf duyarsız tekildir (`channel-name-taken`). Susturulmuş
+        yönetim kanal açamaz (`muted`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChannelCreateRequest" }
+      responses:
+        "201":
+          description: Kanal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Channel" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/channels/{channel_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/ChannelID"
+    get:
+      operationId: getChannel
+      summary: Bir kanal
+      description: |
+        Başka tayfanın kanalı ve üyeye `staff` kanalı, olmayan kanalla aynı
+        cevabı alır (`channel-not-found`).
+      responses:
+        "200":
+          description: Kanal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Channel" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: updateChannel
+      summary: Kanalın adını, görünürlüğünü ya da yavaş modunu değiştirir
+      description: Yalnızca gönderilen alanlar değişir; en az biri gerekir. Yönetici ve moderatör.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChannelUpdateRequest" }
+      responses:
+        "200":
+          description: Kanal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Channel" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/channels/{channel_id}/archive:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/ChannelID"
+    put:
+      operationId: archiveChannel
+      summary: Kanalı arşivler (salt okunur)
+      description: Arşivli kanala mesaj yazılamaz; okuma ve moderasyon sürer. Yönetici ve moderatör.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Kanal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Channel" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: unarchiveChannel
+      summary: Kanalı arşivden çıkarır
+      description: Arada aynı isimde kanal açıldıysa `channel-name-taken`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Kanal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Channel" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/channels/{channel_id}/messages:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/ChannelID"
+    get:
+      operationId: listChannelMessages
+      summary: Kanal mesajları
+      description: |
+        `after_message_id` yoksa en yeni önce, `next_page_token` eskiye
+        doğru gider. `after_message_id` (elinizdeki son mesaj) verilirse
+        ondan yeni mesajlar en eski önce gelir ve `next_page_token` yeniye
+        doğru gider: yeniden bağlanınca eksikler böyle tamamlanır (ADR-0005).
+        Silinen mesaj yerinde `deleted: true` ve metinsiz durur ("Bu mesaj
+        silindi").
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+        - name: after_message_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Mesajlar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChannelMessageList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: sendChannelMessage
+      summary: Kanala mesaj yazar
+      description: |
+        Metin 1–4000 karakter, yalnız boşluk olamaz; sekme ve satır sonu
+        dışında kontrol karakteri içeremez. Aynı `client_request_id` ile
+        tekrar gönderim ilk mesajı döndürür, yeni mesaj yazmaz (yavaş moda da
+        takılmaz); başka kanalda kullanılmış değer `invalid-request`.
+        Susturulmuşsanız `muted`, kanal arşivliyse `channel-archived`. Yavaş
+        modda erken gönderim `slow-mode` (429) ve `Retry-After` başlığını
+        (saniye) alır; yönetici ve moderatörler muaftır. Mesaj düzenlenemez.
+        Aynı kurallar WebSocket gönderiminde de geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChannelMessageCreateRequest" }
+      responses:
+        "201":
+          description: Mesaj (tekrar gönderimde ilk mesaj)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChannelMessage" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429":
+          description: Yavaş mod (`slow-mode`)
+          headers:
+            Retry-After:
+              description: Tekrar denemeden önce beklenecek saniye.
+              schema: { type: integer, minimum: 1, maximum: 3600 }
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/channels/{channel_id}/messages/{message_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/ChannelID"
+      - $ref: "#/components/parameters/MessageID"
+    delete:
+      operationId: deleteChannelMessage
+      summary: Mesajı siler
+      description: |
+        Kendi mesajınızı silerseniz metin hemen ve geri alınamaz biçimde
+        silinir. Yönetici ve moderatörler başkasının mesajını gizler; yazarın
+        güncel rolü sizinkine eşit ya da yüksekse `role-hierarchy` (403;
+        tayfadan ayrılmış yazar sınırlamaz). Yönetici 30 gün içinde geri
+        alabilir, sonra kalıcı silinir. Silinmiş mesajı silmek bir şey
+        değiştirmez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Silindi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/channels/{channel_id}/messages/{message_id}/restoration:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/ChannelID"
+      - $ref: "#/components/parameters/MessageID"
+    post:
+      operationId: restoreChannelMessage
+      summary: Moderasyonla gizlenen mesajı geri alır (yönetici)
+      description: |
+        30 gün içinde, yazarın güncel rolünün üstündeyseniz (`role-hierarchy`).
+        Yazarın kendi silmesi ve daha eskisi `message-not-found` alır. Görünür mesajı geri almak bir şey
+        değiştirmez. Her geri alma kayıt altına alınır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Mesaj
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChannelMessage" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/channels/{channel_id}/read:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/ChannelID"
+    put:
+      operationId: markChannelRead
+      summary: Kanalı bu mesaja kadar okundu işaretler
+      description: |
+        Okundu işareti yalnızca ileri gider; daha eski bir mesaj bir şey
+        değiştirmez. Mesaj bu kanalda olmalıdır (`message-not-found`).
+        Susturulmuş üyeler de işaretleyebilir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChannelReadRequest" }
+      responses:
+        "204": { description: Okundu }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /v1/notifications:
     get:
       operationId: listNotifications
@@ -2943,6 +3230,16 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    ChannelID:
+      name: channel_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    MessageID:
+      name: message_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     SessionID:
       name: session_id
       in: path
@@ -3061,6 +3358,12 @@ components:
         - session-not-found
         # chat: bildirimler (#64)
         - notification-not-found
+        # chat: kanallar (#81)
+        - channel-not-found
+        - message-not-found
+        - channel-archived
+        - channel-name-taken
+        - slow-mode
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
@@ -4335,9 +4638,111 @@ components:
           format: date-time
           description: Yalnızca `mentions` ya da `none` ile; en fazla bir yıl sonrası.
 
-security:
-  - bearer: []
-  - cookie: []
+    # --- Kanallar (#81) ---
+    ChannelVisibility:
+      type: string
+      description: "`members`: tüm etkin üyeler; `staff`: yalnızca yönetici ve moderatörler."
+      enum: [members, staff, unknown]
+    Channel:
+      type: object
+      required: [id, tayfa_id, name, visibility, slow_mode_seconds, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        tayfa_id: { type: string, format: uuid }
+        name: { type: string }
+        visibility: { $ref: "#/components/schemas/ChannelVisibility" }
+        slow_mode_seconds:
+          type: integer
+          minimum: 0
+          maximum: 3600
+          description: 0 kapalı. Yönetici ve moderatörler muaftır.
+        creator_user_id:
+          type: string
+          format: uuid
+          description: Açanın hesabı silindiyse yoktur.
+        archived_at:
+          type: string
+          format: date-time
+          description: Arşivliyse dolu (salt okunur).
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        unread_count:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Yalnızca listede. 100, "99+" demektir.
+        last_read_message_id:
+          type: string
+          format: uuid
+          description: Yalnızca listede; okundu işaretiniz yoksa yoktur.
+    ChannelList:
+      type: object
+      required: [channels]
+      properties:
+        channels:
+          type: array
+          items: { $ref: "#/components/schemas/Channel" }
+    ChannelCreateRequest:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 40 }
+        visibility:
+          type: string
+          enum: [members, staff]
+          default: members
+        slow_mode_seconds: { type: integer, minimum: 0, maximum: 3600, default: 0 }
+    ChannelUpdateRequest:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 40 }
+        visibility: { type: string, enum: [members, staff] }
+        slow_mode_seconds: { type: integer, minimum: 0, maximum: 3600 }
+    ChannelMessage:
+      type: object
+      required: [id, channel_id, deleted, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        channel_id: { type: string, format: uuid }
+        author_user_id:
+          type: string
+          format: uuid
+          description: Yazarın hesabı silindiyse yoktur ("Silinmiş kullanıcı").
+        body:
+          type: string
+          description: Silinmiş mesajda yoktur.
+        deleted: { type: boolean }
+        restorable:
+          type: boolean
+          description: Yalnızca yöneticilere; moderasyonla gizlenmiş ve hâlâ geri alınabilir.
+        created_at: { type: string, format: date-time }
+    ChannelMessageList:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/ChannelMessage" }
+        next_page_token: { type: string }
+    ChannelMessageCreateRequest:
+      type: object
+      required: [body, client_request_id]
+      additionalProperties: false
+      properties:
+        body: { type: string, minLength: 1, maxLength: 4000 }
+        client_request_id:
+          type: string
+          format: uuid
+          description: İstemcinin ürettiği tekrar gönderim anahtarı; mesaj kimliği sunucudadır.
+    ChannelReadRequest:
+      type: object
+      required: [message_id]
+      additionalProperties: false
+      properties:
+        message_id: { type: string, format: uuid }
 
     # --- arkadaşlık, davet, profil, hesap (#71) ---
 
@@ -4610,3 +5015,7 @@ security:
       required: [resolution]
       properties:
         resolution: { type: string, enum: [content_removed, member_sanctioned, dismissed] }
+
+security:
+  - bearer: []
+  - cookie: []

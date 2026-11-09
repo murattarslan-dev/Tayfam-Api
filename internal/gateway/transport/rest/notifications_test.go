@@ -85,7 +85,7 @@ func (f *fakeChat) SetTayfaNotificationPreference(ctx context.Context, in *chatv
 }
 
 func testChatDeps(f *fakeChat) ChatDeps {
-	return ChatDeps{Notifications: f, Verifier: fakeVerifier{}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	return ChatDeps{Notifications: f, Channels: f, Verifier: fakeVerifier{}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 }
 
 func chatRouter(f *fakeChat) http.Handler {
