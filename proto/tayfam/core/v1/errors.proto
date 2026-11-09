@@ -189,4 +189,34 @@ enum ErrorReason {
   // FAILED_PRECONDITION. ListPollVoters on an anonymous poll: nobody, admins
   // included, sees who voted for what.
   ERROR_REASON_POLL_ANONYMOUS = 72;
+
+  // Friendships, blocks and direct invitations (SocialService,
+  // MembershipService; issue #71).
+
+  // NOT_FOUND. No live user with this ID, or a block between the caller and
+  // the user in either direction. The two are deliberately the same: nobody
+  // learns that they were blocked.
+  ERROR_REASON_USER_NOT_FOUND = 90;
+  // RESOURCE_EXHAUSTED. The caller sent 20 friend requests in the last 24
+  // hours. Declined requests still count.
+  ERROR_REASON_FRIEND_REQUEST_LIMIT = 91;
+  // NOT_FOUND. No friend request from this user waiting for the caller.
+  ERROR_REASON_FRIEND_REQUEST_NOT_FOUND = 92;
+  // ALREADY_EXISTS. The users are already friends.
+  ERROR_REASON_ALREADY_FRIENDS = 93;
+  // ALREADY_EXISTS. The caller's friend request waits for an answer.
+  ERROR_REASON_FRIEND_REQUEST_PENDING = 94;
+  // FAILED_PRECONDITION. Only friends can be invited directly.
+  ERROR_REASON_NOT_FRIENDS = 95;
+  // RESOURCE_EXHAUSTED. The caller sent 10 direct invitations in the last 24
+  // hours, in any tayfa.
+  ERROR_REASON_DIRECT_INVITE_LIMIT = 96;
+  // NOT_FOUND. No unanswered direct invitation of this user in this tayfa.
+  ERROR_REASON_INVITATION_NOT_FOUND = 97;
+  // ALREADY_EXISTS. The user already has an unanswered invitation to this
+  // tayfa.
+  ERROR_REASON_ALREADY_INVITED = 98;
+  // FAILED_PRECONDITION. The user cannot be invited into this tayfa (for
+  // example banned, or a join request waits). Which reason is not said.
+  ERROR_REASON_INVITE_NOT_ALLOWED = 99;
 }

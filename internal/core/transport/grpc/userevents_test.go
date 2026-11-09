@@ -143,6 +143,8 @@ func TestApplyUserEventValidation(t *testing.T) {
 		"kullanıcı":     {EventId: eid, UserId: "", Event: profile("Ad", "")},
 		"olay türü yok": {EventId: eid, UserId: user},
 		"avatar":        {EventId: eid, UserId: user, Event: profile("Ad", "avatar")},
+		"görünürlük": {EventId: eid, UserId: user, Event: &corev1.ApplyUserEventRequest_ProfileUpdated{ProfileUpdated: &corev1.UserProfileUpdated{
+			DisplayName: "Ad", ActivityVisibility: corev1.ActivityVisibility(99)}}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := client.ApplyUserEvent(ctx, req); status.Code(err) != codes.InvalidArgument {
@@ -157,5 +159,22 @@ func TestApplyUserEventValidation(t *testing.T) {
 	got := app.got[len(app.got)-1]
 	if got.Profile == nil || got.Profile.DisplayName != "Deniz" || got.Profile.AvatarUploadID != avatar || got.Deleted || got.User.String() != user || got.ID.String() != eid {
 		t.Fatalf("olay = %+v", got)
+	}
+	if got.Profile.ActivityVisibility != "" {
+		t.Fatalf("belirtilmemiş görünürlük = %q", got.Profile.ActivityVisibility)
+	}
+	for pb, want := range map[corev1.ActivityVisibility]string{
+		corev1.ActivityVisibility_ACTIVITY_VISIBILITY_PRIVATE: userevents.VisibilityPrivate,
+		corev1.ActivityVisibility_ACTIVITY_VISIBILITY_TAYFA:   userevents.VisibilityTayfa,
+		corev1.ActivityVisibility_ACTIVITY_VISIBILITY_PUBLIC:  userevents.VisibilityPublic,
+	} {
+		req := &corev1.ApplyUserEventRequest{EventId: id.New().String(), UserId: user, Event: &corev1.ApplyUserEventRequest_ProfileUpdated{
+			ProfileUpdated: &corev1.UserProfileUpdated{DisplayName: "Deniz", ActivityVisibility: pb}}}
+		if _, err := client.ApplyUserEvent(ctx, req); err != nil {
+			t.Fatal(err)
+		}
+		if got := app.got[len(app.got)-1]; got.Profile.ActivityVisibility != want {
+			t.Fatalf("%v: %q", pb, got.Profile.ActivityVisibility)
+		}
 	}
 }

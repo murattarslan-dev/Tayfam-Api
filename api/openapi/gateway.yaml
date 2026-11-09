@@ -2357,6 +2357,17 @@ components:
         - poll-not-found
         - poll-closed
         - poll-anonymous
+        # core: arkadaşlık, engelleme, doğrudan davet (#71)
+        - user-not-found
+        - friend-request-limit
+        - friend-request-not-found
+        - already-friends
+        - friend-request-pending
+        - not-friends
+        - direct-invite-limit
+        - invitation-not-found
+        - already-invited
+        - invite-not-allowed
         # chat: bildirimler (#64)
         - notification-not-found
       content:
@@ -3491,8 +3502,13 @@ components:
             `tayfa_warned` (hareketsiz tayfa 7 gün içinde arşivlenecek;
             `warning_reason` var), `tayfa_archived`, `hike_overdue`
             (yürüyüşçü zamanında dönmedi; `subject_user_id` yürüyüşçüdür,
-            sessize alma bu bildirimi engellemez). Tanınmayan değer `unknown`.
-          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, hike_overdue, unknown]
+            sessize alma bu bildirimi engellemez), `friend_request` (size
+            arkadaşlık isteği; `target_id` isteyen kişi), `friend_accepted`
+            (isteğiniz kabul edildi; `target_id` yeni arkadaşınız),
+            `tayfa_invitation` (bir arkadaşınız sizi tayfaya davet etti;
+            hedef tayfa). İki arkadaşlık bildirimi bir tayfayla ilgili
+            değildir, `tayfa_id` yoktur. Tanınmayan değer `unknown`.
+          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, hike_overdue, friend_request, friend_accepted, tayfa_invitation, unknown]
         tayfa_id:
           type: string
           format: uuid
@@ -3504,8 +3520,9 @@ components:
         target_type:
           type: string
           description: |
-            `membership` için `target_id` başvuran kullanıcının kimliğidir.
-          enum: [tayfa, membership, announcement, event, answer, unknown]
+            `membership` için `target_id` başvuran kullanıcının kimliğidir;
+            `user` için bir kullanıcının kimliği (profilini açın).
+          enum: [tayfa, membership, announcement, event, answer, user, unknown]
         target_id: { type: string, format: uuid }
         question_id:
           type: string

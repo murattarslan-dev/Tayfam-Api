@@ -122,6 +122,26 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_POLL_CLOSED, true
 	case errors.Is(err, apperr.ErrPollAnonymous):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_POLL_ANONYMOUS, true
+	case errors.Is(err, apperr.ErrUserNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_USER_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrFriendRequestLimit):
+		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_FRIEND_REQUEST_LIMIT, true
+	case errors.Is(err, apperr.ErrFriendRequestNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_FRIEND_REQUEST_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrAlreadyFriends):
+		return codes.AlreadyExists, corev1.ErrorReason_ERROR_REASON_ALREADY_FRIENDS, true
+	case errors.Is(err, apperr.ErrFriendRequestPending):
+		return codes.AlreadyExists, corev1.ErrorReason_ERROR_REASON_FRIEND_REQUEST_PENDING, true
+	case errors.Is(err, apperr.ErrNotFriends):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_NOT_FRIENDS, true
+	case errors.Is(err, apperr.ErrDirectInviteLimit):
+		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_DIRECT_INVITE_LIMIT, true
+	case errors.Is(err, apperr.ErrInvitationNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_INVITATION_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrAlreadyInvited):
+		return codes.AlreadyExists, corev1.ErrorReason_ERROR_REASON_ALREADY_INVITED, true
+	case errors.Is(err, apperr.ErrInviteNotAllowed):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_INVITE_NOT_ALLOWED, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

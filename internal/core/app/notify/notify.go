@@ -8,7 +8,9 @@
 // the recipients. It never carries content text: no titles, bodies, places
 // or names. Recipients are active members only, never the actor, computed
 // in the same transaction as the change (Members, Staff, Participants,
-// Only). Large audiences are split over several events of at most
+// Only). The social notifications (issue #71) are the exception: their one
+// recipient is the person concerned (the friend, the invited user, who is
+// not a member yet), and the friend ones are not about a tayfa. Large audiences are split over several events of at most
 // MaxRecipients IDs each (the outbox payload is limited to 8 KiB), all in
 // the same transaction.
 //
@@ -50,6 +52,11 @@ const (
 	TypeTayfaWarned            = "tayfa_warned"
 	TypeTayfaArchived          = "tayfa_archived"
 	TypeHikeOverdue            = "hike_overdue"
+	// Social notifications (issue #71); each has one recipient. The two
+	// friend types are not about a tayfa (Request.Tayfa is zero).
+	TypeFriendRequest   = "friend_request"
+	TypeFriendAccepted  = "friend_accepted"
+	TypeTayfaInvitation = "tayfa_invitation"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -59,6 +66,7 @@ const (
 	TargetAnnouncement = "announcement"
 	TargetEvent        = "event"
 	TargetAnswer       = "answer"
+	TargetUser         = "user" // target ID: a user, whose profile the client opens
 )
 
 // Extra keys: further IDs or a classification, never text.
@@ -68,10 +76,15 @@ const (
 	ExtraReason     = "reason"      // tayfa_warned: inactive|few_members
 )
 
+// WithoutTayfa reports whether a notification type is not about a tayfa.
+func WithoutTayfa(typ string) bool {
+	return typ == TypeFriendRequest || typ == TypeFriendAccepted
+}
+
 // Request is one notification for many recipients.
 type Request struct {
 	Type       string
-	Tayfa      id.ID
+	Tayfa      id.ID // zero only for the types WithoutTayfa
 	Actor      id.ID // zero: the system
 	TargetType string
 	Target     id.ID
@@ -82,7 +95,7 @@ type Request struct {
 // most MaxRecipients each. No recipients, no event. q must run in the
 // change's transaction.
 func Write(ctx context.Context, q *store.Queries, r Request, recipients []id.ID) error {
-	if r.Type == "" || r.TargetType == "" || r.Target == (id.ID{}) || r.Tayfa == (id.ID{}) {
+	if r.Type == "" || r.TargetType == "" || r.Target == (id.ID{}) || (r.Tayfa == id.ID{}) != WithoutTayfa(r.Type) {
 		return errors.New("bildirim isteği eksik")
 	}
 	for k := range r.Extra {
@@ -97,9 +110,11 @@ func Write(ctx context.Context, q *store.Queries, r Request, recipients []id.ID)
 			ids[i] = u.String()
 		}
 		p := map[string]any{
-			"type": r.Type, "tayfa_id": r.Tayfa.String(),
-			"target_type": r.TargetType, "target_id": r.Target.String(),
+			"type": r.Type, "target_type": r.TargetType, "target_id": r.Target.String(),
 			"recipient_ids": ids,
+		}
+		if r.Tayfa != (id.ID{}) {
+			p["tayfa_id"] = r.Tayfa.String()
 		}
 		for k, v := range r.Extra {
 			p[k] = v

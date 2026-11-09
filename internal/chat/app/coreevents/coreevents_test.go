@@ -117,6 +117,15 @@ func TestValidation(t *testing.T) {
 			r.Type, r.TargetType = notification.TypeTayfaWarned, notification.TargetTayfa
 		}),
 		"duyuruda neden": req(func(r *notification.Request) { r.Reason = notification.ReasonInactive }),
+		"tayfasız duyuru": {ID: id.New(), Notification: &notification.Request{
+			Type: notification.TypeAnnouncement, TargetType: notification.TargetAnnouncement, Target: id.New(), Recipients: []id.ID{u},
+		}},
+		"tayfalı arkadaşlık": req(func(r *notification.Request) {
+			r.Type, r.TargetType = notification.TypeFriendRequest, notification.TargetUser
+		}),
+		"arkadaşlık hedefi": {ID: id.New(), Notification: &notification.Request{
+			Type: notification.TypeFriendAccepted, TargetType: notification.TargetTayfa, Target: id.New(), Recipients: []id.ID{u},
+		}},
 	} {
 		var v *apperr.ValidationError
 		if err := svc.Apply(ctx, e); !errors.As(err, &v) {
@@ -145,5 +154,28 @@ func TestAccountDeletionCleansNotifications(t *testing.T) {
 	must(t, svc.Apply(ctx, announcement(tf, other, u)))
 	if n := count(t, pool, `SELECT count(*) FROM notifications WHERE user_id = $1`, u.PG()); n != 0 {
 		t.Fatal("silinen hesaba yeni bildirim yazıldı")
+	}
+}
+
+// Friend notifications are stored without a tayfa; an invitation names its
+// tayfa (issue #71).
+func TestSocialNotifications(t *testing.T) {
+	svc, pool := setup(t)
+	requester, friend, tf := id.New(), id.New(), id.New()
+	for _, e := range []Event{
+		{ID: id.New(), Notification: &notification.Request{Type: notification.TypeFriendRequest, Actor: requester,
+			TargetType: notification.TargetUser, Target: requester, Recipients: []id.ID{friend}}},
+		{ID: id.New(), Notification: &notification.Request{Type: notification.TypeFriendAccepted, Actor: friend,
+			TargetType: notification.TargetUser, Target: friend, Recipients: []id.ID{requester}}},
+		{ID: id.New(), Tayfa: tf, Notification: &notification.Request{Type: notification.TypeTayfaInvitation, Actor: requester,
+			TargetType: notification.TargetTayfa, Target: tf, Recipients: []id.ID{friend}}},
+	} {
+		must(t, svc.Apply(ctx, e))
+	}
+	if n := count(t, pool, `SELECT count(*) FROM notifications WHERE tayfa_id IS NULL AND target_type = 'user' AND type IN ('friend_request', 'friend_accepted')`); n != 2 {
+		t.Fatalf("arkadaşlık bildirimleri = %d", n)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM notifications WHERE user_id = $1 AND tayfa_id = $2 AND type = 'tayfa_invitation'`, friend.PG(), tf.PG()); n != 1 {
+		t.Fatalf("davet bildirimi = %d", n)
 	}
 }

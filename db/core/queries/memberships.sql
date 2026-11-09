@@ -93,3 +93,34 @@ WHERE m.tayfa_id = @tayfa_id
   AND (m.created_at, m.user_id) > (@after_time::timestamptz, @after_user_id::uuid)
 ORDER BY m.created_at, m.user_id
 LIMIT @page_size;
+
+-- Doğrudan davetler (issue #71, v14 "Tayfaya davet").
+
+-- Kişiye gelen bekleyen davetler; silinmiş tayfalarınki görünmez. Davet
+-- edilen kişi henüz üye değildir; yalnızca tayfanın adını ve kimin davet
+-- ettiğini görür. (created_at, tayfa_id) ile sayfalanır, yeniden eskiye.
+-- name: ListMyInvitationsPage :many
+SELECT m.tayfa_id, t.name AS tayfa_name, m.invited_by_user_id, m.created_at
+FROM memberships m
+JOIN tayfas t ON t.id = m.tayfa_id AND t.deleted_at IS NULL
+WHERE m.user_id = @user_id AND m.status = 'invited'
+  AND (m.created_at, m.tayfa_id) < (@before_time::timestamptz, @before_tayfa_id::uuid)
+ORDER BY m.created_at DESC, m.tayfa_id DESC
+LIMIT @page_size;
+
+-- Hesap silme: kişinin gönderdiği, henüz cevaplanmamış davetler. Tayfalar
+-- kimlik sırasıyla işlenir (kilit sırası).
+-- name: ListInvitationsSentByUser :many
+SELECT tayfa_id, user_id
+FROM memberships
+WHERE invited_by_user_id = @user_id AND status = 'invited'
+ORDER BY tayfa_id, user_id;
+
+-- Tayfanın bekleyen davetleri (yönetici), yeniden eskiye.
+-- name: ListTayfaInvitationsPage :many
+SELECT m.user_id, m.invited_by_user_id, m.created_at
+FROM memberships m
+WHERE m.tayfa_id = @tayfa_id AND m.status = 'invited'
+  AND (m.created_at, m.user_id) < (@before_time::timestamptz, @before_user_id::uuid)
+ORDER BY m.created_at DESC, m.user_id DESC
+LIMIT @page_size;

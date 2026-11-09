@@ -39,6 +39,16 @@ enum NotificationType {
   // moderators, never the hiker (target: EVENT; subject_user_id is the
   // hiker). Muting does not apply to it.
   NOTIFICATION_TYPE_HIKE_OVERDUE = 12;
+  // Someone sent the recipient a friend request (target: USER, target_id is
+  // the requester). Not about a tayfa: tayfa_id is empty (issue #71).
+  NOTIFICATION_TYPE_FRIEND_REQUEST = 13;
+  // The recipient's friend request was accepted (target: USER, target_id is
+  // the new friend). Not about a tayfa.
+  NOTIFICATION_TYPE_FRIEND_ACCEPTED = 14;
+  // A friend invited the recipient into a tayfa (target: TAYFA). The
+  // recipient is not a member yet; the client answers with core's
+  // AcceptInvitation or DeclineInvitation.
+  NOTIFICATION_TYPE_TAYFA_INVITATION = 15;
 }
 
 enum NotificationTargetType {
@@ -49,6 +59,8 @@ enum NotificationTargetType {
   NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT = 3;
   NOTIFICATION_TARGET_TYPE_EVENT = 4;
   NOTIFICATION_TARGET_TYPE_ANSWER = 5;
+  // target_id is a user ID: that user's profile.
+  NOTIFICATION_TARGET_TYPE_USER = 6;
 }
 
 // Why an inactive tayfa was warned (core's cleanup job).

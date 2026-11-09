@@ -67,6 +67,30 @@ func TestRequest(t *testing.T) {
 		t.Fatalf("alarm = %v %v", r, err)
 	}
 
+	// Friend notifications carry no tayfa (issue #71).
+	r, err = Request(ev(t, "notification.requested", actor, map[string]any{
+		"type": "friend_request", "target_type": "user", "target_id": actor.String(), "recipient_ids": []string{u1.String()},
+	}))
+	if err != nil || r.GetTayfaId() != "" || r.GetNotificationRequested().GetType() != chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_REQUEST ||
+		r.GetNotificationRequested().GetTargetType() != chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_USER {
+		t.Fatalf("arkadaşlık = %v %v", r, err)
+	}
+	for typ, want := range map[string]chatv1.NotificationType{
+		"friend_accepted":  chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_ACCEPTED,
+		"tayfa_invitation": chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_INVITATION,
+	} {
+		target := "user"
+		if typ == "tayfa_invitation" {
+			target = "tayfa"
+		}
+		r, err := Request(ev(t, "notification.requested", actor, map[string]any{
+			"type": typ, "tayfa_id": tf.String(), "target_type": target, "target_id": tf.String(), "recipient_ids": []string{u1.String()},
+		}))
+		if err != nil || r.GetNotificationRequested().GetType() != want {
+			t.Fatalf("%s = %v %v", typ, r, err)
+		}
+	}
+
 	r, err = Request(ev(t, "tayfa.purged", id.ID{}, map[string]any{"tayfa_id": tf.String()}))
 	if err != nil || r.GetTayfaPurged() == nil || r.GetTayfaId() != tf.String() {
 		t.Fatalf("kalıcı silme = %v %v", r, err)

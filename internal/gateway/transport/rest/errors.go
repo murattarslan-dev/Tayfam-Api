@@ -81,6 +81,16 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_POLL_NOT_FOUND":              {http.StatusNotFound, "poll-not-found"},
 		"ERROR_REASON_POLL_CLOSED":                 {http.StatusConflict, "poll-closed"},
 		"ERROR_REASON_POLL_ANONYMOUS":              {http.StatusForbidden, "poll-anonymous"},
+		"ERROR_REASON_USER_NOT_FOUND":              {http.StatusNotFound, "user-not-found"},
+		"ERROR_REASON_FRIEND_REQUEST_LIMIT":        {http.StatusTooManyRequests, "friend-request-limit"},
+		"ERROR_REASON_FRIEND_REQUEST_NOT_FOUND":    {http.StatusNotFound, "friend-request-not-found"},
+		"ERROR_REASON_ALREADY_FRIENDS":             {http.StatusConflict, "already-friends"},
+		"ERROR_REASON_FRIEND_REQUEST_PENDING":      {http.StatusConflict, "friend-request-pending"},
+		"ERROR_REASON_NOT_FRIENDS":                 {http.StatusConflict, "not-friends"},
+		"ERROR_REASON_DIRECT_INVITE_LIMIT":         {http.StatusTooManyRequests, "direct-invite-limit"},
+		"ERROR_REASON_INVITATION_NOT_FOUND":        {http.StatusNotFound, "invitation-not-found"},
+		"ERROR_REASON_ALREADY_INVITED":             {http.StatusConflict, "already-invited"},
+		"ERROR_REASON_INVITE_NOT_ALLOWED":          {http.StatusConflict, "invite-not-allowed"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

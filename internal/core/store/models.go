@@ -225,6 +225,15 @@ type FishingCatch struct {
 	CreatedAt       pgtype.Timestamptz
 }
 
+type Friendship struct {
+	UserLowID   pgtype.UUID
+	UserHighID  pgtype.UUID
+	Status      string
+	RequestedBy pgtype.UUID
+	CreatedAt   pgtype.Timestamptz
+	AcceptedAt  pgtype.Timestamptz
+}
+
 type Invite struct {
 	ID        pgtype.UUID
 	TayfaID   pgtype.UUID
@@ -370,11 +379,18 @@ type UserActivityRecord struct {
 	UpdatedAt        pgtype.Timestamptz
 }
 
+type UserBlock struct {
+	BlockerID pgtype.UUID
+	BlockedID pgtype.UUID
+	CreatedAt pgtype.Timestamptz
+}
+
 type UserProfile struct {
-	UserID         pgtype.UUID
-	DisplayName    pgtype.Text
-	AvatarUploadID pgtype.UUID
-	SourceEventID  pgtype.UUID
-	DeletedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	UserID             pgtype.UUID
+	DisplayName        pgtype.Text
+	AvatarUploadID     pgtype.UUID
+	SourceEventID      pgtype.UUID
+	DeletedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	ActivityVisibility string
 }

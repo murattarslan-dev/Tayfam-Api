@@ -60,6 +60,16 @@ const (
 	// moderators, never the hiker (target: EVENT; subject_user_id is the
 	// hiker). Muting does not apply to it.
 	NotificationType_NOTIFICATION_TYPE_HIKE_OVERDUE NotificationType = 12
+	// Someone sent the recipient a friend request (target: USER, target_id is
+	// the requester). Not about a tayfa: tayfa_id is empty (issue #71).
+	NotificationType_NOTIFICATION_TYPE_FRIEND_REQUEST NotificationType = 13
+	// The recipient's friend request was accepted (target: USER, target_id is
+	// the new friend). Not about a tayfa.
+	NotificationType_NOTIFICATION_TYPE_FRIEND_ACCEPTED NotificationType = 14
+	// A friend invited the recipient into a tayfa (target: TAYFA). The
+	// recipient is not a member yet; the client answers with core's
+	// AcceptInvitation or DeclineInvitation.
+	NotificationType_NOTIFICATION_TYPE_TAYFA_INVITATION NotificationType = 15
 )
 
 // Enum value maps for NotificationType.
@@ -78,6 +88,9 @@ var (
 		10: "NOTIFICATION_TYPE_TAYFA_WARNED",
 		11: "NOTIFICATION_TYPE_TAYFA_ARCHIVED",
 		12: "NOTIFICATION_TYPE_HIKE_OVERDUE",
+		13: "NOTIFICATION_TYPE_FRIEND_REQUEST",
+		14: "NOTIFICATION_TYPE_FRIEND_ACCEPTED",
+		15: "NOTIFICATION_TYPE_TAYFA_INVITATION",
 	}
 	NotificationType_value = map[string]int32{
 		"NOTIFICATION_TYPE_UNSPECIFIED":              0,
@@ -93,6 +106,9 @@ var (
 		"NOTIFICATION_TYPE_TAYFA_WARNED":             10,
 		"NOTIFICATION_TYPE_TAYFA_ARCHIVED":           11,
 		"NOTIFICATION_TYPE_HIKE_OVERDUE":             12,
+		"NOTIFICATION_TYPE_FRIEND_REQUEST":           13,
+		"NOTIFICATION_TYPE_FRIEND_ACCEPTED":          14,
+		"NOTIFICATION_TYPE_TAYFA_INVITATION":         15,
 	}
 )
 
@@ -133,6 +149,8 @@ const (
 	NotificationTargetType_NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT NotificationTargetType = 3
 	NotificationTargetType_NOTIFICATION_TARGET_TYPE_EVENT        NotificationTargetType = 4
 	NotificationTargetType_NOTIFICATION_TARGET_TYPE_ANSWER       NotificationTargetType = 5
+	// target_id is a user ID: that user's profile.
+	NotificationTargetType_NOTIFICATION_TARGET_TYPE_USER NotificationTargetType = 6
 )
 
 // Enum value maps for NotificationTargetType.
@@ -144,6 +162,7 @@ var (
 		3: "NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT",
 		4: "NOTIFICATION_TARGET_TYPE_EVENT",
 		5: "NOTIFICATION_TARGET_TYPE_ANSWER",
+		6: "NOTIFICATION_TARGET_TYPE_USER",
 	}
 	NotificationTargetType_value = map[string]int32{
 		"NOTIFICATION_TARGET_TYPE_UNSPECIFIED":  0,
@@ -152,6 +171,7 @@ var (
 		"NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT": 3,
 		"NOTIFICATION_TARGET_TYPE_EVENT":        4,
 		"NOTIFICATION_TARGET_TYPE_ANSWER":       5,
+		"NOTIFICATION_TARGET_TYPE_USER":         6,
 	}
 )
 
@@ -238,7 +258,7 @@ var File_tayfam_chat_v1_notification_types_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\n" +
-	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xfd\x03\n" +
+	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xf2\x04\n" +
 	"\x10NotificationType\x12!\n" +
 	"\x1dNOTIFICATION_TYPE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fNOTIFICATION_TYPE_EVENT_CREATED\x10\x01\x12#\n" +
@@ -253,14 +273,18 @@ const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\x1eNOTIFICATION_TYPE_TAYFA_WARNED\x10\n" +
 	"\x12$\n" +
 	" NOTIFICATION_TYPE_TAYFA_ARCHIVED\x10\v\x12\"\n" +
-	"\x1eNOTIFICATION_TYPE_HIKE_OVERDUE\x10\f*\x83\x02\n" +
+	"\x1eNOTIFICATION_TYPE_HIKE_OVERDUE\x10\f\x12$\n" +
+	" NOTIFICATION_TYPE_FRIEND_REQUEST\x10\r\x12%\n" +
+	"!NOTIFICATION_TYPE_FRIEND_ACCEPTED\x10\x0e\x12&\n" +
+	"\"NOTIFICATION_TYPE_TAYFA_INVITATION\x10\x0f*\xa6\x02\n" +
 	"\x16NotificationTargetType\x12(\n" +
 	"$NOTIFICATION_TARGET_TYPE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eNOTIFICATION_TARGET_TYPE_TAYFA\x10\x01\x12'\n" +
 	"#NOTIFICATION_TARGET_TYPE_MEMBERSHIP\x10\x02\x12)\n" +
 	"%NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT\x10\x03\x12\"\n" +
 	"\x1eNOTIFICATION_TARGET_TYPE_EVENT\x10\x04\x12#\n" +
-	"\x1fNOTIFICATION_TARGET_TYPE_ANSWER\x10\x05*\x83\x01\n" +
+	"\x1fNOTIFICATION_TARGET_TYPE_ANSWER\x10\x05\x12!\n" +
+	"\x1dNOTIFICATION_TARGET_TYPE_USER\x10\x06*\x83\x01\n" +
 	"\x12TayfaWarningReason\x12$\n" +
 	" TAYFA_WARNING_REASON_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dTAYFA_WARNING_REASON_INACTIVE\x10\x01\x12$\n" +

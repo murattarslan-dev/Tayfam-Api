@@ -195,6 +195,8 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"answer_votes.user_id":           `SELECT count(*) FROM answer_votes WHERE user_id = $1`,
 		"polls":                          `SELECT count(*) FROM polls WHERE $1 IN (created_by, deleted_by)`,
 		"poll_votes.user_id":             `SELECT count(*) FROM poll_votes WHERE user_id = $1`,
+		"friendships":                    `SELECT count(*) FROM friendships WHERE $1 IN (user_low_id, user_high_id, requested_by)`,
+		"user_blocks":                    `SELECT count(*) FROM user_blocks WHERE $1 IN (blocker_id, blocked_id)`,
 		"user_profiles (kişisel)":        `SELECT count(*) FROM user_profiles WHERE user_id = $1 AND (display_name IS NOT NULL OR avatar_upload_id IS NOT NULL OR deleted_at IS NULL)`,
 	} {
 		if n := e.count(t, sql, u.PG()); n != 0 {
@@ -538,5 +540,99 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 	must(t, e.svc.Apply(ctx, Event{ID: id.New(), User: u, Deleted: true}))
 	if e.snapshot(t) != before || e.status(t, full, w1)+e.status(t, full, w2) != statuses {
 		t.Fatal("tekrar uygulama sonucu değiştirdi")
+	}
+}
+
+// TestDeletedRemovesSocialRecords (issue #71): friendships, requests, blocks
+// in both directions and the unanswered invitations the user sent go with
+// the account; invitations sent to the user go with their membership rows.
+func TestDeletedRemovesSocialRecords(t *testing.T) {
+	e := setup(t)
+	u, friend, requester, blocker, blocked, invitee, other := id.New(), id.New(), id.New(), id.New(), id.New(), id.New(), id.New()
+	pair := func(a, b id.ID) (id.ID, id.ID) {
+		if a.String() < b.String() {
+			return a, b
+		}
+		return b, a
+	}
+	for _, f := range []struct {
+		a, b   id.ID
+		status string
+	}{{u, friend, "accepted"}, {u, requester, "pending"}, {friend, other, "accepted"}} {
+		low, high := pair(f.a, f.b)
+		var acc any
+		if f.status == "accepted" {
+			acc = now
+		}
+		e.seed(t, `INSERT INTO friendships (user_low_id, user_high_id, status, requested_by, accepted_at) VALUES ($1, $2, $3, $4, $5)`,
+			low.PG(), high.PG(), f.status, f.b.PG(), acc)
+	}
+	e.seed(t, `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2), ($3, $4), ($5, $6)`,
+		u.PG(), blocked.PG(), blocker.PG(), u.PG(), other.PG(), friend.PG())
+
+	admin := id.New()
+	tf := e.tayfa(t, admin)
+	e.member(t, tf, admin, "admin", "active", now)
+	e.member(t, tf, u, "member", "active", now)
+	// u invited invitee and was invited elsewhere.
+	e.seed(t, `INSERT INTO memberships (tayfa_id, user_id, role, status, joined_via, invited_by_user_id) VALUES ($1, $2, 'member', 'invited', 'direct_invite', $3)`,
+		tf.PG(), invitee.PG(), u.PG())
+	tf2 := e.tayfa(t, admin)
+	e.member(t, tf2, admin, "admin", "active", now)
+	e.seed(t, `INSERT INTO memberships (tayfa_id, user_id, role, status, joined_via, invited_by_user_id) VALUES ($1, $2, 'member', 'invited', 'direct_invite', $3)`,
+		tf2.PG(), u.PG(), admin.PG())
+
+	ev := Event{ID: id.New(), User: u, Deleted: true}
+	must(t, e.svc.Apply(ctx, ev))
+	if refs := e.userRefs(t, u); len(refs) != 0 {
+		t.Fatalf("kalan kayıtlar: %v", refs)
+	}
+	if got := e.role(t, tf, invitee); got != "none" {
+		t.Fatalf("gönderilen davet = %s", got)
+	}
+	// Other people's records are untouched.
+	if n := e.count(t, `SELECT count(*) FROM friendships`); n != 1 {
+		t.Fatalf("başkalarının arkadaşlığı = %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM user_blocks`); n != 1 {
+		t.Fatalf("başkalarının engeli = %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'tayfa.invitation_cancelled' AND payload->>'user_id' = $1 AND actor_id IS NULL`, invitee.String()); n != 1 {
+		t.Fatalf("davet iptal olayı = %d", n)
+	}
+	before := e.snapshot(t)
+	must(t, e.svc.Apply(ctx, ev))
+	if e.snapshot(t) != before {
+		t.Fatal("tekrar uygulama durumu değiştirdi")
+	}
+}
+
+func TestProfileCarriesActivityVisibility(t *testing.T) {
+	e := setup(t)
+	u := id.New()
+	ev := eventIDs(3)
+	vis := func() string {
+		t.Helper()
+		var v string
+		must(t, e.pool.QueryRow(ctx, `SELECT activity_visibility FROM user_profiles WHERE user_id = $1`, u.PG()).Scan(&v))
+		return v
+	}
+	// A new copy without the field gets the default.
+	must(t, e.svc.Apply(ctx, profile(ev[0], u, "Ece")))
+	if v := vis(); v != VisibilityTayfa {
+		t.Fatalf("varsayılan = %s", v)
+	}
+	must(t, e.svc.Apply(ctx, Event{ID: ev[1], User: u, Profile: &Profile{DisplayName: "Ece", ActivityVisibility: VisibilityPrivate}}))
+	if v := vis(); v != VisibilityPrivate {
+		t.Fatalf("görünürlük = %s", v)
+	}
+	// An event without the field keeps the setting.
+	must(t, e.svc.Apply(ctx, profile(ev[2], u, "Ece Y")))
+	if v := vis(); v != VisibilityPrivate {
+		t.Fatalf("alansız olay ayarı değiştirdi: %s", v)
+	}
+	var verr *apperr.ValidationError
+	if err := e.svc.Apply(ctx, Event{ID: id.New(), User: u, Profile: &Profile{DisplayName: "Ece", ActivityVisibility: "friends"}}); !errors.As(err, &verr) {
+		t.Fatalf("geçersiz görünürlük: %v", err)
 	}
 }

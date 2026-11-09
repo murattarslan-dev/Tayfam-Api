@@ -105,6 +105,31 @@ func (f *fakeApp) GetMembership(_ context.Context, c, t, u id.ID) (membership.Me
 	return f.member(), f.err
 }
 
+func (f *fakeApp) InviteFriend(_ context.Context, c, t, u id.ID) (membership.Invitation, error) {
+	f.caller, f.tayfa, f.target = c, t, u
+	return membership.Invitation{TayfaID: t, TayfaName: "Kamp", UserID: u, InviterID: c, InvitedAt: time.Unix(1, 0).UTC()}, f.err
+}
+func (f *fakeApp) ListMyInvitations(_ context.Context, c id.ID, _ int32, _ string) (membership.Page[membership.Invitation], error) {
+	f.caller = c
+	return membership.Page[membership.Invitation]{Items: []membership.Invitation{{TayfaID: id.New(), UserID: c}}, Next: "sonraki"}, f.err
+}
+func (f *fakeApp) AcceptInvitation(_ context.Context, c, t id.ID) (membership.Member, error) {
+	f.caller, f.tayfa = c, t
+	return f.member(), f.err
+}
+func (f *fakeApp) DeclineInvitation(_ context.Context, c, t id.ID) error {
+	f.caller, f.tayfa = c, t
+	return f.err
+}
+func (f *fakeApp) ListInvitations(_ context.Context, c, t id.ID, _ int32, _ string) (membership.Page[membership.Invitation], error) {
+	f.caller, f.tayfa = c, t
+	return membership.Page[membership.Invitation]{Items: []membership.Invitation{{TayfaID: t, UserID: id.New()}}}, f.err
+}
+func (f *fakeApp) CancelInvitation(_ context.Context, c, t, u id.ID) error {
+	f.caller, f.tayfa, f.target = c, t, u
+	return f.err
+}
+
 func newServer(f *fakeApp) (*MembershipServer, *bytes.Buffer) {
 	var buf bytes.Buffer
 	return NewMembershipServer(f, slog.New(slog.NewJSONHandler(&buf, nil))), &buf

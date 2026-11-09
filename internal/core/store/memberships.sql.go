@@ -198,6 +198,40 @@ func (q *Queries) GetMembership(ctx context.Context, arg GetMembershipParams) (G
 	return i, err
 }
 
+const listInvitationsSentByUser = `-- name: ListInvitationsSentByUser :many
+SELECT tayfa_id, user_id
+FROM memberships
+WHERE invited_by_user_id = $1 AND status = 'invited'
+ORDER BY tayfa_id, user_id
+`
+
+type ListInvitationsSentByUserRow struct {
+	TayfaID pgtype.UUID
+	UserID  pgtype.UUID
+}
+
+// Hesap silme: kişinin gönderdiği, henüz cevaplanmamış davetler. Tayfalar
+// kimlik sırasıyla işlenir (kilit sırası).
+func (q *Queries) ListInvitationsSentByUser(ctx context.Context, userID pgtype.UUID) ([]ListInvitationsSentByUserRow, error) {
+	rows, err := q.db.Query(ctx, listInvitationsSentByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListInvitationsSentByUserRow{}
+	for rows.Next() {
+		var i ListInvitationsSentByUserRow
+		if err := rows.Scan(&i.TayfaID, &i.UserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMembersPage = `-- name: ListMembersPage :many
 SELECT m.user_id, m.role, m.status, m.muted_until, m.joined_at,
        COALESCE(m.joined_at, m.created_at)::timestamptz AS sort_time
@@ -337,6 +371,65 @@ func (q *Queries) ListMemberships(ctx context.Context, arg ListMembershipsParams
 	return items, nil
 }
 
+const listMyInvitationsPage = `-- name: ListMyInvitationsPage :many
+
+SELECT m.tayfa_id, t.name AS tayfa_name, m.invited_by_user_id, m.created_at
+FROM memberships m
+JOIN tayfas t ON t.id = m.tayfa_id AND t.deleted_at IS NULL
+WHERE m.user_id = $1 AND m.status = 'invited'
+  AND (m.created_at, m.tayfa_id) < ($2::timestamptz, $3::uuid)
+ORDER BY m.created_at DESC, m.tayfa_id DESC
+LIMIT $4
+`
+
+type ListMyInvitationsPageParams struct {
+	UserID        pgtype.UUID
+	BeforeTime    pgtype.Timestamptz
+	BeforeTayfaID pgtype.UUID
+	PageSize      int32
+}
+
+type ListMyInvitationsPageRow struct {
+	TayfaID         pgtype.UUID
+	TayfaName       string
+	InvitedByUserID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+}
+
+// Doğrudan davetler (issue #71, v14 "Tayfaya davet").
+// Kişiye gelen bekleyen davetler; silinmiş tayfalarınki görünmez. Davet
+// edilen kişi henüz üye değildir; yalnızca tayfanın adını ve kimin davet
+// ettiğini görür. (created_at, tayfa_id) ile sayfalanır, yeniden eskiye.
+func (q *Queries) ListMyInvitationsPage(ctx context.Context, arg ListMyInvitationsPageParams) ([]ListMyInvitationsPageRow, error) {
+	rows, err := q.db.Query(ctx, listMyInvitationsPage,
+		arg.UserID,
+		arg.BeforeTime,
+		arg.BeforeTayfaID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMyInvitationsPageRow{}
+	for rows.Next() {
+		var i ListMyInvitationsPageRow
+		if err := rows.Scan(
+			&i.TayfaID,
+			&i.TayfaName,
+			&i.InvitedByUserID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPendingPage = `-- name: ListPendingPage :many
 SELECT m.user_id, m.role, m.joined_via, m.invite_id,
        COALESCE(m.invited_by_user_id, i.created_by)::uuid AS inviter_user_id,
@@ -390,6 +483,54 @@ func (q *Queries) ListPendingPage(ctx context.Context, arg ListPendingPageParams
 			&i.InviterUserID,
 			&i.CreatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTayfaInvitationsPage = `-- name: ListTayfaInvitationsPage :many
+SELECT m.user_id, m.invited_by_user_id, m.created_at
+FROM memberships m
+WHERE m.tayfa_id = $1 AND m.status = 'invited'
+  AND (m.created_at, m.user_id) < ($2::timestamptz, $3::uuid)
+ORDER BY m.created_at DESC, m.user_id DESC
+LIMIT $4
+`
+
+type ListTayfaInvitationsPageParams struct {
+	TayfaID      pgtype.UUID
+	BeforeTime   pgtype.Timestamptz
+	BeforeUserID pgtype.UUID
+	PageSize     int32
+}
+
+type ListTayfaInvitationsPageRow struct {
+	UserID          pgtype.UUID
+	InvitedByUserID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+}
+
+// Tayfanın bekleyen davetleri (yönetici), yeniden eskiye.
+func (q *Queries) ListTayfaInvitationsPage(ctx context.Context, arg ListTayfaInvitationsPageParams) ([]ListTayfaInvitationsPageRow, error) {
+	rows, err := q.db.Query(ctx, listTayfaInvitationsPage,
+		arg.TayfaID,
+		arg.BeforeTime,
+		arg.BeforeUserID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTayfaInvitationsPageRow{}
+	for rows.Next() {
+		var i ListTayfaInvitationsPageRow
+		if err := rows.Scan(&i.UserID, &i.InvitedByUserID, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -11,6 +11,8 @@ import (
 )
 
 type Querier interface {
+	// Yalnızca isteği alan kabul eder.
+	AcceptFriendRequest(ctx context.Context, arg AcceptFriendRequestParams) (int64, error)
 	// Doğrudan davetin kabulü; status active ya da pending.
 	AcceptInvitation(ctx context.Context, arg AcceptInvitationParams) (int64, error)
 	// Oy ve sayaç aynı transaction'da: oy eklendiyse sayaç artar. Aynı kişinin
@@ -76,6 +78,9 @@ type Querier interface {
 	CountOtherActiveAdmins(ctx context.Context, arg CountOtherActiveAdminsParams) (int64, error)
 	// Oy veren kişi sayısı (çoklu seçimde bir kişi bir kez sayılır).
 	CountPollVoters(ctx context.Context, pollIds []pgtype.UUID) ([]CountPollVotersRow, error)
+	// Son 24 saatte gönderilen arkadaşlık isteği ya da doğrudan davet sayısı
+	// (günlük sınır). Satırın sonradan silinmesi sayımı değiştirmez.
+	CountRecentEventsByActor(ctx context.Context, arg CountRecentEventsByActorParams) (int64, error)
 	// ---------------------------------------------------------------------------
 	// Katılım
 	CountRsvpsForEvents(ctx context.Context, eventIds []pgtype.UUID) ([]CountRsvpsForEventsRow, error)
@@ -93,6 +98,7 @@ type Querier interface {
 	// Denetim kaydı yalnızca eklenir. metadata'ya kişisel veri ya da token
 	// yazılmaz.
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error
+	CreateBlock(ctx context.Context, arg CreateBlockParams) (int64, error)
 	CreateCampItem(ctx context.Context, arg CreateCampItemParams) error
 	CreateCatch(ctx context.Context, arg CreateCatchParams) error
 	// Etkinlikler (issue #49). Her sorgu tayfa_id ile ya da tayfa kapsamında
@@ -102,6 +108,8 @@ type Querier interface {
 	// Tekrarlayan etkinlik serileri (issue #51). Kullanıcı istekleri her sorguyu
 	// tayfa_id ile çalıştırır (IDOR); üretim işi seriyi kendi listesinden alır.
 	CreateEventSeries(ctx context.Context, arg CreateEventSeriesParams) error
+	// Satır varsa hiçbir şey yapmaz; etkilenen satır 0 olur.
+	CreateFriendRequest(ctx context.Context, arg CreateFriendRequestParams) (int64, error)
 	CreateInvite(ctx context.Context, arg CreateInviteParams) error
 	// Üyelik değişiklikleri transaction içinde SetActor ya da SetSystemJob'dan
 	// sonra yapılır; aksi halde trigger reddeder.
@@ -132,9 +140,12 @@ type Querier interface {
 	CreateTayfa(ctx context.Context, arg CreateTayfaParams) error
 	DeleteActivityRecord(ctx context.Context, arg DeleteActivityRecordParams) (int64, error)
 	DeleteAnswerVotes(ctx context.Context, answerID pgtype.UUID) error
+	DeleteBlock(ctx context.Context, arg DeleteBlockParams) (int64, error)
 	DeleteCampItem(ctx context.Context, arg DeleteCampItemParams) (int64, error)
 	DeleteCatch(ctx context.Context, arg DeleteCatchParams) (int64, error)
 	DeleteConvoyVehicle(ctx context.Context, arg DeleteConvoyVehicleParams) (int64, error)
+	// Arkadaşlığı bitirme, isteği geri çekme ya da reddetme.
+	DeleteFriendship(ctx context.Context, arg DeleteFriendshipParams) (int64, error)
 	// Ayrılma, çıkarma, başvuru reddi, ban kaldırma.
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (int64, error)
 	// Oy değiştirmek eski oyu siler (v14).
@@ -152,12 +163,16 @@ type Querier interface {
 	// oy sayıları aynı transaction'da düşer. Bir kişinin bir cevapta en fazla
 	// bir oyu olduğu için her cevap en fazla bir azalır.
 	DeleteUserAnswerVotes(ctx context.Context, userID pgtype.UUID) error
+	DeleteUserBlocks(ctx context.Context, userID pgtype.UUID) error
 	// Av kayıtları konum içerebilir; kişiyle birlikte silinir.
 	DeleteUserCatches(ctx context.Context, userID pgtype.UUID) error
 	// "Geliyorum"dan vazgeçen kişinin aracı (ve plakası) kalmaz.
 	DeleteUserConvoyVehicle(ctx context.Context, arg DeleteUserConvoyVehicleParams) (int64, error)
 	// Araç (plaka dahil) kişisel veridir ve kişiye aittir: silinir.
 	DeleteUserConvoyVehicles(ctx context.Context, userID pgtype.UUID) error
+	// Hesap silme (user.deleted): kişinin arkadaşlıkları, istekleri ve iki
+	// yöndeki engellemeleri.
+	DeleteUserFriendships(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserHikeCheckins(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserPollVotes(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserRsvps(ctx context.Context, userID pgtype.UUID) error
@@ -204,6 +219,10 @@ type Querier interface {
 	// etkinlikler).
 	GetEventSeriesForUpdate(ctx context.Context, arg GetEventSeriesForUpdateParams) (GetEventSeriesForUpdateRow, error)
 	GetEventSports(ctx context.Context, eventID pgtype.UUID) (GetEventSportsRow, error)
+	// Arkadaşlık ve engelleme (issue #71, veri modeli v14 "Arkadaşlık ve
+	// Davet (v11)"). friendships satırı iki kişi için tektir: user_low_id <
+	// user_high_id. Uygulama her sorguya düşük ve yüksek kimliği sıralı verir.
+	GetFriendship(ctx context.Context, arg GetFriendshipParams) (Friendship, error)
 	// ---------------------------------------------------------------------------
 	// Yürüyüş yoklaması
 	GetHikeCheckin(ctx context.Context, arg GetHikeCheckinParams) (GetHikeCheckinRow, error)
@@ -211,6 +230,8 @@ type Querier interface {
 	// Davet önizlemesi: kilitlemeden okur, link kullanılmaz. Silinmiş tayfanın
 	// daveti bulunmaz.
 	GetInviteByHash(ctx context.Context, tokenHash []byte) (GetInviteByHashRow, error)
+	// Profil kopyası olan, silinmemiş kullanıcı.
+	GetLiveUserProfile(ctx context.Context, userID pgtype.UUID) (GetLiveUserProfileRow, error)
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
 	GetPoll(ctx context.Context, arg GetPollParams) (GetPollRow, error)
 	// Yazma işlemleri anket satırını kilitleyerek okur.
@@ -250,6 +271,7 @@ type Querier interface {
 	// etkinlik bitmiş olduğu için kapasiteyi etkilemez.
 	InsertAttendedRsvp(ctx context.Context, arg InsertAttendedRsvpParams) error
 	IsActiveMember(ctx context.Context, arg IsActiveMemberParams) (bool, error)
+	IsBlockedEitherWay(ctx context.Context, arg IsBlockedEitherWayParams) (bool, error)
 	// Kapalı ya da kaydı olmayan modül kapalı sayılır (varsayılan "hayır").
 	IsTayfaModuleEnabled(ctx context.Context, arg IsTayfaModuleEnabledParams) (bool, error)
 	// Etkinlik düzenlenince anlık görüntüsü yenilenecek kayıtlar.
@@ -263,6 +285,9 @@ type Querier interface {
 	// terfi sırasıdır.
 	ListAttendees(ctx context.Context, arg ListAttendeesParams) ([]ListAttendeesRow, error)
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error)
+	// Kişinin engelledikleri (yalnızca kendisi görür); engellenen kişinin
+	// profili silinmiş olsa da kayıt listelenir ki kaldırılabilsin.
+	ListBlocksPage(ctx context.Context, arg ListBlocksPageParams) ([]ListBlocksPageRow, error)
 	ListCampItems(ctx context.Context, eventID pgtype.UUID) ([]ListCampItemsRow, error)
 	// (created_at, id) ile sayfalanır.
 	ListCatches(ctx context.Context, arg ListCatchesParams) ([]ListCatchesRow, error)
@@ -272,11 +297,18 @@ type Querier interface {
 	ListDueEventSeries(ctx context.Context, arg ListDueEventSeriesParams) ([]ListDueEventSeriesRow, error)
 	// Liste görünümünde mera gizliliği için.
 	ListFishingVisibility(ctx context.Context, eventIds []pgtype.UUID) ([]ListFishingVisibilityRow, error)
+	// Kişinin arkadaşları ve istekleri; karşı tarafın kimliğine göre sayfalanır.
+	// Silinmiş hesapların satırı hesap silmede gider; profili henüz gelmemiş
+	// kişi listede adsız görünmez, atlanır.
+	ListFriendshipsPage(ctx context.Context, arg ListFriendshipsPageParams) ([]ListFriendshipsPageRow, error)
 	// Alarmın alıcıları: organizatör (tayfada hâlâ aktif üyeyse) ve aktif
 	// yöneticiler ve moderatörler; dönmeyen kişinin kendisi hariç. Organizatör
 	// önce, sonra yönetici, sonra moderatör.
 	ListHikeAlertRecipients(ctx context.Context, arg ListHikeAlertRecipientsParams) ([]pgtype.UUID, error)
 	ListInterestsForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListInterestsForTayfasRow, error)
+	// Hesap silme: kişinin gönderdiği, henüz cevaplanmamış davetler. Tayfalar
+	// kimlik sırasıyla işlenir (kilit sırası).
+	ListInvitationsSentByUser(ctx context.Context, userID pgtype.UUID) ([]ListInvitationsSentByUserRow, error)
 	ListInvites(ctx context.Context, arg ListInvitesParams) ([]ListInvitesRow, error)
 	// Geçerli davetler (iptal edilmemiş, süresi dolmamış, tükenmemiş), yeniden
 	// eskiye. created_by verilirse yalnızca o kişinin açtıkları.
@@ -295,6 +327,11 @@ type Querier interface {
 	// Tayfalar kilitlenme olmaması için tayfa_id sırasıyla işlenir.
 	ListMembershipsOfUser(ctx context.Context, userID pgtype.UUID) ([]ListMembershipsOfUserRow, error)
 	ListModulesForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListModulesForTayfasRow, error)
+	// Doğrudan davetler (issue #71, v14 "Tayfaya davet").
+	// Kişiye gelen bekleyen davetler; silinmiş tayfalarınki görünmez. Davet
+	// edilen kişi henüz üye değildir; yalnızca tayfanın adını ve kimin davet
+	// ettiğini görür. (created_at, tayfa_id) ile sayfalanır, yeniden eskiye.
+	ListMyInvitationsPage(ctx context.Context, arg ListMyInvitationsPageParams) ([]ListMyInvitationsPageRow, error)
 	// "Tayfalarım": kullanıcının aktif üyelikleri ve bekleyen başvuruları, en
 	// yeni üyelik kaydı önce; (created_at, tayfa_id) ile sayfalanır.
 	ListMyTayfas(ctx context.Context, arg ListMyTayfasParams) ([]ListMyTayfasRow, error)
@@ -340,6 +377,8 @@ type Querier interface {
 	ListSeriesUpcomingEvents(ctx context.Context, arg ListSeriesUpcomingEventsParams) ([]pgtype.UUID, error)
 	ListTags(ctx context.Context, tayfaID pgtype.UUID) ([]ListTagsRow, error)
 	ListTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) ([]string, error)
+	// Tayfanın bekleyen davetleri (yönetici), yeniden eskiye.
+	ListTayfaInvitationsPage(ctx context.Context, arg ListTayfaInvitationsPageParams) ([]ListTayfaInvitationsPageRow, error)
 	ListTayfaModules(ctx context.Context, tayfaID pgtype.UUID) ([]ListTayfaModulesRow, error)
 	// Bildirim alıcıları: aktif yöneticiler ve moderatörler, yönetici önce.
 	ListTayfaStaffIDs(ctx context.Context, arg ListTayfaStaffIDsParams) ([]pgtype.UUID, error)
@@ -349,6 +388,11 @@ type Querier interface {
 	// Kullanıcının aktif üye olduğu tayfalar; tayfa ID'sine göre sayfalanır.
 	ListUserActiveTayfas(ctx context.Context, arg ListUserActiveTayfasParams) ([]ListUserActiveTayfasRow, error)
 	ListUserRsvpsForEvents(ctx context.Context, arg ListUserRsvpsForEventsParams) ([]ListUserRsvpsForEventsRow, error)
+	// İki kişi arasındaki istek, kabul ve engelleme sırayla işlenir (satır
+	// henüz yokken de).
+	LockFriendPair(ctx context.Context, arg LockFriendPairParams) error
+	// Aynı iki kişinin eşzamanlı istekleri sırayla işlenir.
+	LockFriendship(ctx context.Context, arg LockFriendshipParams) (Friendship, error)
 	// Kullanımda davet kilitlenir; süre, iptal ve kullanım sınırı aynı
 	// transaction'da kontrol edilir, eşzamanlı son kullanımdan yalnızca biri
 	// ilerler.
@@ -370,6 +414,9 @@ type Querier interface {
 	// kişinin yeri her birinde bekleme listesine geçer. Etkinlik satırları
 	// katılım akışıyla (SetRsvp) aynı kilitle, kimlik sırasıyla kilitlenir.
 	LockUserGoingUpcomingEvents(ctx context.Context, arg LockUserGoingUpcomingEventsParams) ([]LockUserGoingUpcomingEventsRow, error)
+	// Kişinin günlük sayımlarını sıraya sokar: aynı kişinin eşzamanlı istekleri
+	// sınırı birlikte aşamaz.
+	LockUserLimit(ctx context.Context, userID pgtype.UUID) error
 	MarkAttended(ctx context.Context, arg MarkAttendedParams) error
 	MarkHikeAlertSent(ctx context.Context, arg MarkHikeAlertSentParams) (int64, error)
 	MarkNoShow(ctx context.Context, arg MarkNoShowParams) error
@@ -487,6 +534,8 @@ type Querier interface {
 	// Profil kopyası (ADR-0009). Yalnızca UserEventService yazar.
 	// Daha yeni bir olay uygulanmışsa ya da profil silinmişse değişmez; etkilenen
 	// satır 0 olur.
+	// activity_visibility NULL ise (alanı taşımayan eski olay) mevcut değer
+	// kalır; yeni satırda varsayılan 'tayfa' olur.
 	UpsertUserProfile(ctx context.Context, arg UpsertUserProfileParams) (int64, error)
 	// Uyarı iki sebeple verilir:
 	//   inactive:    last_activity_at @inactive_before'dan eski (30 gün).

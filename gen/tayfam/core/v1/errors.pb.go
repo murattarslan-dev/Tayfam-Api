@@ -179,6 +179,32 @@ const (
 	// FAILED_PRECONDITION. ListPollVoters on an anonymous poll: nobody, admins
 	// included, sees who voted for what.
 	ErrorReason_ERROR_REASON_POLL_ANONYMOUS ErrorReason = 72
+	// NOT_FOUND. No live user with this ID, or a block between the caller and
+	// the user in either direction. The two are deliberately the same: nobody
+	// learns that they were blocked.
+	ErrorReason_ERROR_REASON_USER_NOT_FOUND ErrorReason = 90
+	// RESOURCE_EXHAUSTED. The caller sent 20 friend requests in the last 24
+	// hours. Declined requests still count.
+	ErrorReason_ERROR_REASON_FRIEND_REQUEST_LIMIT ErrorReason = 91
+	// NOT_FOUND. No friend request from this user waiting for the caller.
+	ErrorReason_ERROR_REASON_FRIEND_REQUEST_NOT_FOUND ErrorReason = 92
+	// ALREADY_EXISTS. The users are already friends.
+	ErrorReason_ERROR_REASON_ALREADY_FRIENDS ErrorReason = 93
+	// ALREADY_EXISTS. The caller's friend request waits for an answer.
+	ErrorReason_ERROR_REASON_FRIEND_REQUEST_PENDING ErrorReason = 94
+	// FAILED_PRECONDITION. Only friends can be invited directly.
+	ErrorReason_ERROR_REASON_NOT_FRIENDS ErrorReason = 95
+	// RESOURCE_EXHAUSTED. The caller sent 10 direct invitations in the last 24
+	// hours, in any tayfa.
+	ErrorReason_ERROR_REASON_DIRECT_INVITE_LIMIT ErrorReason = 96
+	// NOT_FOUND. No unanswered direct invitation of this user in this tayfa.
+	ErrorReason_ERROR_REASON_INVITATION_NOT_FOUND ErrorReason = 97
+	// ALREADY_EXISTS. The user already has an unanswered invitation to this
+	// tayfa.
+	ErrorReason_ERROR_REASON_ALREADY_INVITED ErrorReason = 98
+	// FAILED_PRECONDITION. The user cannot be invited into this tayfa (for
+	// example banned, or a join request waits). Which reason is not said.
+	ErrorReason_ERROR_REASON_INVITE_NOT_ALLOWED ErrorReason = 99
 )
 
 // Enum value maps for ErrorReason.
@@ -231,6 +257,16 @@ var (
 		70: "ERROR_REASON_POLL_NOT_FOUND",
 		71: "ERROR_REASON_POLL_CLOSED",
 		72: "ERROR_REASON_POLL_ANONYMOUS",
+		90: "ERROR_REASON_USER_NOT_FOUND",
+		91: "ERROR_REASON_FRIEND_REQUEST_LIMIT",
+		92: "ERROR_REASON_FRIEND_REQUEST_NOT_FOUND",
+		93: "ERROR_REASON_ALREADY_FRIENDS",
+		94: "ERROR_REASON_FRIEND_REQUEST_PENDING",
+		95: "ERROR_REASON_NOT_FRIENDS",
+		96: "ERROR_REASON_DIRECT_INVITE_LIMIT",
+		97: "ERROR_REASON_INVITATION_NOT_FOUND",
+		98: "ERROR_REASON_ALREADY_INVITED",
+		99: "ERROR_REASON_INVITE_NOT_ALLOWED",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                 0,
@@ -280,6 +316,16 @@ var (
 		"ERROR_REASON_POLL_NOT_FOUND":              70,
 		"ERROR_REASON_POLL_CLOSED":                 71,
 		"ERROR_REASON_POLL_ANONYMOUS":              72,
+		"ERROR_REASON_USER_NOT_FOUND":              90,
+		"ERROR_REASON_FRIEND_REQUEST_LIMIT":        91,
+		"ERROR_REASON_FRIEND_REQUEST_NOT_FOUND":    92,
+		"ERROR_REASON_ALREADY_FRIENDS":             93,
+		"ERROR_REASON_FRIEND_REQUEST_PENDING":      94,
+		"ERROR_REASON_NOT_FRIENDS":                 95,
+		"ERROR_REASON_DIRECT_INVITE_LIMIT":         96,
+		"ERROR_REASON_INVITATION_NOT_FOUND":        97,
+		"ERROR_REASON_ALREADY_INVITED":             98,
+		"ERROR_REASON_INVITE_NOT_ALLOWED":          99,
 	}
 )
 
@@ -314,7 +360,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xd3\f\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xc3\x0f\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -363,7 +409,17 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\x16ERROR_REASON_TAG_LIMIT\x10@\x12\x1f\n" +
 	"\x1bERROR_REASON_POLL_NOT_FOUND\x10F\x12\x1c\n" +
 	"\x18ERROR_REASON_POLL_CLOSED\x10G\x12\x1f\n" +
-	"\x1bERROR_REASON_POLL_ANONYMOUS\x10HB\xbd\x01\n" +
+	"\x1bERROR_REASON_POLL_ANONYMOUS\x10H\x12\x1f\n" +
+	"\x1bERROR_REASON_USER_NOT_FOUND\x10Z\x12%\n" +
+	"!ERROR_REASON_FRIEND_REQUEST_LIMIT\x10[\x12)\n" +
+	"%ERROR_REASON_FRIEND_REQUEST_NOT_FOUND\x10\\\x12 \n" +
+	"\x1cERROR_REASON_ALREADY_FRIENDS\x10]\x12'\n" +
+	"#ERROR_REASON_FRIEND_REQUEST_PENDING\x10^\x12\x1c\n" +
+	"\x18ERROR_REASON_NOT_FRIENDS\x10_\x12$\n" +
+	" ERROR_REASON_DIRECT_INVITE_LIMIT\x10`\x12%\n" +
+	"!ERROR_REASON_INVITATION_NOT_FOUND\x10a\x12 \n" +
+	"\x1cERROR_REASON_ALREADY_INVITED\x10b\x12#\n" +
+	"\x1fERROR_REASON_INVITE_NOT_ALLOWED\x10cB\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

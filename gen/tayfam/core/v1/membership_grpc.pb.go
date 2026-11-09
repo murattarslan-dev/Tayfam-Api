@@ -19,23 +19,29 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MembershipService_JoinByCode_FullMethodName       = "/tayfam.core.v1.MembershipService/JoinByCode"
-	MembershipService_CreateInviteLink_FullMethodName = "/tayfam.core.v1.MembershipService/CreateInviteLink"
-	MembershipService_ListInviteLinks_FullMethodName  = "/tayfam.core.v1.MembershipService/ListInviteLinks"
-	MembershipService_RevokeInviteLink_FullMethodName = "/tayfam.core.v1.MembershipService/RevokeInviteLink"
-	MembershipService_PreviewInvite_FullMethodName    = "/tayfam.core.v1.MembershipService/PreviewInvite"
-	MembershipService_JoinByInvite_FullMethodName     = "/tayfam.core.v1.MembershipService/JoinByInvite"
-	MembershipService_ListMembers_FullMethodName      = "/tayfam.core.v1.MembershipService/ListMembers"
-	MembershipService_ListPending_FullMethodName      = "/tayfam.core.v1.MembershipService/ListPending"
-	MembershipService_ApproveMember_FullMethodName    = "/tayfam.core.v1.MembershipService/ApproveMember"
-	MembershipService_RejectMember_FullMethodName     = "/tayfam.core.v1.MembershipService/RejectMember"
-	MembershipService_ChangeRole_FullMethodName       = "/tayfam.core.v1.MembershipService/ChangeRole"
-	MembershipService_MuteMember_FullMethodName       = "/tayfam.core.v1.MembershipService/MuteMember"
-	MembershipService_UnmuteMember_FullMethodName     = "/tayfam.core.v1.MembershipService/UnmuteMember"
-	MembershipService_BanMember_FullMethodName        = "/tayfam.core.v1.MembershipService/BanMember"
-	MembershipService_RemoveMember_FullMethodName     = "/tayfam.core.v1.MembershipService/RemoveMember"
-	MembershipService_LeaveTayfa_FullMethodName       = "/tayfam.core.v1.MembershipService/LeaveTayfa"
-	MembershipService_GetMembership_FullMethodName    = "/tayfam.core.v1.MembershipService/GetMembership"
+	MembershipService_JoinByCode_FullMethodName        = "/tayfam.core.v1.MembershipService/JoinByCode"
+	MembershipService_CreateInviteLink_FullMethodName  = "/tayfam.core.v1.MembershipService/CreateInviteLink"
+	MembershipService_ListInviteLinks_FullMethodName   = "/tayfam.core.v1.MembershipService/ListInviteLinks"
+	MembershipService_RevokeInviteLink_FullMethodName  = "/tayfam.core.v1.MembershipService/RevokeInviteLink"
+	MembershipService_PreviewInvite_FullMethodName     = "/tayfam.core.v1.MembershipService/PreviewInvite"
+	MembershipService_JoinByInvite_FullMethodName      = "/tayfam.core.v1.MembershipService/JoinByInvite"
+	MembershipService_ListMembers_FullMethodName       = "/tayfam.core.v1.MembershipService/ListMembers"
+	MembershipService_ListPending_FullMethodName       = "/tayfam.core.v1.MembershipService/ListPending"
+	MembershipService_ApproveMember_FullMethodName     = "/tayfam.core.v1.MembershipService/ApproveMember"
+	MembershipService_RejectMember_FullMethodName      = "/tayfam.core.v1.MembershipService/RejectMember"
+	MembershipService_ChangeRole_FullMethodName        = "/tayfam.core.v1.MembershipService/ChangeRole"
+	MembershipService_MuteMember_FullMethodName        = "/tayfam.core.v1.MembershipService/MuteMember"
+	MembershipService_UnmuteMember_FullMethodName      = "/tayfam.core.v1.MembershipService/UnmuteMember"
+	MembershipService_BanMember_FullMethodName         = "/tayfam.core.v1.MembershipService/BanMember"
+	MembershipService_RemoveMember_FullMethodName      = "/tayfam.core.v1.MembershipService/RemoveMember"
+	MembershipService_LeaveTayfa_FullMethodName        = "/tayfam.core.v1.MembershipService/LeaveTayfa"
+	MembershipService_GetMembership_FullMethodName     = "/tayfam.core.v1.MembershipService/GetMembership"
+	MembershipService_InviteFriend_FullMethodName      = "/tayfam.core.v1.MembershipService/InviteFriend"
+	MembershipService_ListMyInvitations_FullMethodName = "/tayfam.core.v1.MembershipService/ListMyInvitations"
+	MembershipService_AcceptInvitation_FullMethodName  = "/tayfam.core.v1.MembershipService/AcceptInvitation"
+	MembershipService_DeclineInvitation_FullMethodName = "/tayfam.core.v1.MembershipService/DeclineInvitation"
+	MembershipService_ListInvitations_FullMethodName   = "/tayfam.core.v1.MembershipService/ListInvitations"
+	MembershipService_CancelInvitation_FullMethodName  = "/tayfam.core.v1.MembershipService/CancelInvitation"
 )
 
 // MembershipServiceClient is the client API for MembershipService service.
@@ -213,6 +219,42 @@ type MembershipServiceClient interface {
 	// membership, or an unknown or deleted tayfa, is
 	// ERROR_REASON_TAYFA_NOT_FOUND.
 	GetMembership(ctx context.Context, in *GetMembershipRequest, opts ...grpc.CallOption) (*GetMembershipResponse, error)
+	// InviteFriend invites one of the caller's friends into the tayfa. Every
+	// active, unmuted member may invite; the tayfa must be writable. At most
+	// 10 invitations per inviter in 24 hours, in any tayfa (counted in the
+	// database). Emits tayfa.invited (IDs only) for the notification.
+	//
+	// Errors: the common tayfa errors, ERROR_REASON_USER_NOT_FOUND (unknown
+	// user, or a block between the two), ERROR_REASON_NOT_FRIENDS,
+	// ERROR_REASON_ALREADY_MEMBER, ERROR_REASON_ALREADY_INVITED,
+	// ERROR_REASON_INVITE_NOT_ALLOWED (banned there, or a join request waits;
+	// which one is not said), ERROR_REASON_DIRECT_INVITE_LIMIT.
+	InviteFriend(ctx context.Context, in *InviteFriendRequest, opts ...grpc.CallOption) (*InviteFriendResponse, error)
+	// ListMyInvitations lists the caller's unanswered invitations, newest
+	// first, with the tayfa's name. Invitations to deleted tayfas are left
+	// out.
+	ListMyInvitations(ctx context.Context, in *ListMyInvitationsRequest, opts ...grpc.CallOption) (*ListMyInvitationsResponse, error)
+	// AcceptInvitation answers the caller's own invitation. The membership
+	// becomes ACTIVE when the tayfa's join policy is OPEN or the inviter is,
+	// right now, an active moderator or admin; otherwise PENDING, for the
+	// moderators to approve. The caller is not an active member yet, so the
+	// common "not a member" rule does not apply: no invitation, or an unknown
+	// or deleted tayfa, is ERROR_REASON_INVITATION_NOT_FOUND.
+	//
+	// Errors: ERROR_REASON_INVITATION_NOT_FOUND, ERROR_REASON_TAYFA_READ_ONLY.
+	AcceptInvitation(ctx context.Context, in *AcceptInvitationRequest, opts ...grpc.CallOption) (*AcceptInvitationResponse, error)
+	// DeclineInvitation deletes the caller's own invitation. The inviter is
+	// not told.
+	//
+	// Errors: ERROR_REASON_INVITATION_NOT_FOUND.
+	DeclineInvitation(ctx context.Context, in *DeclineInvitationRequest, opts ...grpc.CallOption) (*DeclineInvitationResponse, error)
+	// ListInvitations lists the tayfa's unanswered invitations, newest first.
+	// Admins only.
+	ListInvitations(ctx context.Context, in *ListInvitationsRequest, opts ...grpc.CallOption) (*ListInvitationsResponse, error)
+	// CancelInvitation withdraws someone's unanswered invitation. Admins only.
+	//
+	// Errors: the common tayfa errors, ERROR_REASON_INVITATION_NOT_FOUND.
+	CancelInvitation(ctx context.Context, in *CancelInvitationRequest, opts ...grpc.CallOption) (*CancelInvitationResponse, error)
 }
 
 type membershipServiceClient struct {
@@ -387,6 +429,66 @@ func (c *membershipServiceClient) GetMembership(ctx context.Context, in *GetMemb
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetMembershipResponse)
 	err := c.cc.Invoke(ctx, MembershipService_GetMembership_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *membershipServiceClient) InviteFriend(ctx context.Context, in *InviteFriendRequest, opts ...grpc.CallOption) (*InviteFriendResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(InviteFriendResponse)
+	err := c.cc.Invoke(ctx, MembershipService_InviteFriend_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *membershipServiceClient) ListMyInvitations(ctx context.Context, in *ListMyInvitationsRequest, opts ...grpc.CallOption) (*ListMyInvitationsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListMyInvitationsResponse)
+	err := c.cc.Invoke(ctx, MembershipService_ListMyInvitations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *membershipServiceClient) AcceptInvitation(ctx context.Context, in *AcceptInvitationRequest, opts ...grpc.CallOption) (*AcceptInvitationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AcceptInvitationResponse)
+	err := c.cc.Invoke(ctx, MembershipService_AcceptInvitation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *membershipServiceClient) DeclineInvitation(ctx context.Context, in *DeclineInvitationRequest, opts ...grpc.CallOption) (*DeclineInvitationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeclineInvitationResponse)
+	err := c.cc.Invoke(ctx, MembershipService_DeclineInvitation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *membershipServiceClient) ListInvitations(ctx context.Context, in *ListInvitationsRequest, opts ...grpc.CallOption) (*ListInvitationsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListInvitationsResponse)
+	err := c.cc.Invoke(ctx, MembershipService_ListInvitations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *membershipServiceClient) CancelInvitation(ctx context.Context, in *CancelInvitationRequest, opts ...grpc.CallOption) (*CancelInvitationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CancelInvitationResponse)
+	err := c.cc.Invoke(ctx, MembershipService_CancelInvitation_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -568,6 +670,42 @@ type MembershipServiceServer interface {
 	// membership, or an unknown or deleted tayfa, is
 	// ERROR_REASON_TAYFA_NOT_FOUND.
 	GetMembership(context.Context, *GetMembershipRequest) (*GetMembershipResponse, error)
+	// InviteFriend invites one of the caller's friends into the tayfa. Every
+	// active, unmuted member may invite; the tayfa must be writable. At most
+	// 10 invitations per inviter in 24 hours, in any tayfa (counted in the
+	// database). Emits tayfa.invited (IDs only) for the notification.
+	//
+	// Errors: the common tayfa errors, ERROR_REASON_USER_NOT_FOUND (unknown
+	// user, or a block between the two), ERROR_REASON_NOT_FRIENDS,
+	// ERROR_REASON_ALREADY_MEMBER, ERROR_REASON_ALREADY_INVITED,
+	// ERROR_REASON_INVITE_NOT_ALLOWED (banned there, or a join request waits;
+	// which one is not said), ERROR_REASON_DIRECT_INVITE_LIMIT.
+	InviteFriend(context.Context, *InviteFriendRequest) (*InviteFriendResponse, error)
+	// ListMyInvitations lists the caller's unanswered invitations, newest
+	// first, with the tayfa's name. Invitations to deleted tayfas are left
+	// out.
+	ListMyInvitations(context.Context, *ListMyInvitationsRequest) (*ListMyInvitationsResponse, error)
+	// AcceptInvitation answers the caller's own invitation. The membership
+	// becomes ACTIVE when the tayfa's join policy is OPEN or the inviter is,
+	// right now, an active moderator or admin; otherwise PENDING, for the
+	// moderators to approve. The caller is not an active member yet, so the
+	// common "not a member" rule does not apply: no invitation, or an unknown
+	// or deleted tayfa, is ERROR_REASON_INVITATION_NOT_FOUND.
+	//
+	// Errors: ERROR_REASON_INVITATION_NOT_FOUND, ERROR_REASON_TAYFA_READ_ONLY.
+	AcceptInvitation(context.Context, *AcceptInvitationRequest) (*AcceptInvitationResponse, error)
+	// DeclineInvitation deletes the caller's own invitation. The inviter is
+	// not told.
+	//
+	// Errors: ERROR_REASON_INVITATION_NOT_FOUND.
+	DeclineInvitation(context.Context, *DeclineInvitationRequest) (*DeclineInvitationResponse, error)
+	// ListInvitations lists the tayfa's unanswered invitations, newest first.
+	// Admins only.
+	ListInvitations(context.Context, *ListInvitationsRequest) (*ListInvitationsResponse, error)
+	// CancelInvitation withdraws someone's unanswered invitation. Admins only.
+	//
+	// Errors: the common tayfa errors, ERROR_REASON_INVITATION_NOT_FOUND.
+	CancelInvitation(context.Context, *CancelInvitationRequest) (*CancelInvitationResponse, error)
 	mustEmbedUnimplementedMembershipServiceServer()
 }
 
@@ -628,6 +766,24 @@ func (UnimplementedMembershipServiceServer) LeaveTayfa(context.Context, *LeaveTa
 }
 func (UnimplementedMembershipServiceServer) GetMembership(context.Context, *GetMembershipRequest) (*GetMembershipResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetMembership not implemented")
+}
+func (UnimplementedMembershipServiceServer) InviteFriend(context.Context, *InviteFriendRequest) (*InviteFriendResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method InviteFriend not implemented")
+}
+func (UnimplementedMembershipServiceServer) ListMyInvitations(context.Context, *ListMyInvitationsRequest) (*ListMyInvitationsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListMyInvitations not implemented")
+}
+func (UnimplementedMembershipServiceServer) AcceptInvitation(context.Context, *AcceptInvitationRequest) (*AcceptInvitationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AcceptInvitation not implemented")
+}
+func (UnimplementedMembershipServiceServer) DeclineInvitation(context.Context, *DeclineInvitationRequest) (*DeclineInvitationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeclineInvitation not implemented")
+}
+func (UnimplementedMembershipServiceServer) ListInvitations(context.Context, *ListInvitationsRequest) (*ListInvitationsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListInvitations not implemented")
+}
+func (UnimplementedMembershipServiceServer) CancelInvitation(context.Context, *CancelInvitationRequest) (*CancelInvitationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CancelInvitation not implemented")
 }
 func (UnimplementedMembershipServiceServer) mustEmbedUnimplementedMembershipServiceServer() {}
 func (UnimplementedMembershipServiceServer) testEmbeddedByValue()                           {}
@@ -956,6 +1112,114 @@ func _MembershipService_GetMembership_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MembershipService_InviteFriend_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InviteFriendRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MembershipServiceServer).InviteFriend(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MembershipService_InviteFriend_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MembershipServiceServer).InviteFriend(ctx, req.(*InviteFriendRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MembershipService_ListMyInvitations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMyInvitationsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MembershipServiceServer).ListMyInvitations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MembershipService_ListMyInvitations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MembershipServiceServer).ListMyInvitations(ctx, req.(*ListMyInvitationsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MembershipService_AcceptInvitation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AcceptInvitationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MembershipServiceServer).AcceptInvitation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MembershipService_AcceptInvitation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MembershipServiceServer).AcceptInvitation(ctx, req.(*AcceptInvitationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MembershipService_DeclineInvitation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeclineInvitationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MembershipServiceServer).DeclineInvitation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MembershipService_DeclineInvitation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MembershipServiceServer).DeclineInvitation(ctx, req.(*DeclineInvitationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MembershipService_ListInvitations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListInvitationsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MembershipServiceServer).ListInvitations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MembershipService_ListInvitations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MembershipServiceServer).ListInvitations(ctx, req.(*ListInvitationsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MembershipService_CancelInvitation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelInvitationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MembershipServiceServer).CancelInvitation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MembershipService_CancelInvitation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MembershipServiceServer).CancelInvitation(ctx, req.(*CancelInvitationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MembershipService_ServiceDesc is the grpc.ServiceDesc for MembershipService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1030,6 +1294,30 @@ var MembershipService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetMembership",
 			Handler:    _MembershipService_GetMembership_Handler,
+		},
+		{
+			MethodName: "InviteFriend",
+			Handler:    _MembershipService_InviteFriend_Handler,
+		},
+		{
+			MethodName: "ListMyInvitations",
+			Handler:    _MembershipService_ListMyInvitations_Handler,
+		},
+		{
+			MethodName: "AcceptInvitation",
+			Handler:    _MembershipService_AcceptInvitation_Handler,
+		},
+		{
+			MethodName: "DeclineInvitation",
+			Handler:    _MembershipService_DeclineInvitation_Handler,
+		},
+		{
+			MethodName: "ListInvitations",
+			Handler:    _MembershipService_ListInvitations_Handler,
+		},
+		{
+			MethodName: "CancelInvitation",
+			Handler:    _MembershipService_CancelInvitation_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
