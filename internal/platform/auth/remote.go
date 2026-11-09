@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"fmt"
-	"sync"
 	"time"
 
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
@@ -27,66 +26,35 @@ const (
 type FetchFunc func(ctx context.Context) ([]PublicKey, time.Duration, error)
 
 // RemoteKeys is a KeySource that fetches public keys from identity and
-// caches them. It is safe for concurrent use.
+// caches them (keyCache rules). It is safe for concurrent use.
 type RemoteKeys struct {
-	fetch FetchFunc
-	now   func() time.Time
-
-	mu        sync.Mutex
-	keys      map[string]ed25519.PublicKey
-	expires   time.Time
-	lastFetch time.Time
+	cache keyCache[ed25519.PublicKey]
 }
 
 // NewRemoteKeys returns a RemoteKeys that loads keys with fetch on first use.
+// Keys with a malformed ID or length are dropped.
 func NewRemoteKeys(fetch FetchFunc) *RemoteKeys {
-	return &RemoteKeys{fetch: fetch, now: time.Now}
+	r := &RemoteKeys{}
+	r.cache.now = time.Now
+	r.cache.fetch = func(ctx context.Context) (map[string]ed25519.PublicKey, time.Duration, error) {
+		list, ttl, err := fetch(ctx)
+		if err != nil {
+			return nil, 0, err
+		}
+		keys := make(map[string]ed25519.PublicKey, len(list))
+		for _, k := range list {
+			if ValidKeyID(k.ID) && len(k.Key) == ed25519.PublicKeySize {
+				keys[k.ID] = k.Key
+			}
+		}
+		return keys, ttl, nil
+	}
+	return r
 }
 
 // PublicKey implements KeySource.
 func (r *RemoteKeys) PublicKey(ctx context.Context, kid string) (ed25519.PublicKey, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	now := r.now()
-	fresh := r.keys != nil && now.Before(r.expires)
-	if k, ok := r.keys[kid]; ok && fresh {
-		return k, nil
-	}
-	if fresh && now.Sub(r.lastFetch) < minRefetch {
-		return nil, ErrUnknownKey
-	}
-
-	if err := r.refresh(ctx, now); err != nil {
-		// identity is unreachable: keep using known keys for a short while.
-		if k, ok := r.keys[kid]; ok && now.Before(r.expires.Add(staleGrace)) {
-			return k, nil
-		}
-		return nil, err
-	}
-	if k, ok := r.keys[kid]; ok {
-		return k, nil
-	}
-	return nil, ErrUnknownKey
-}
-
-func (r *RemoteKeys) refresh(ctx context.Context, now time.Time) error {
-	r.lastFetch = now
-	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
-	defer cancel()
-	list, ttl, err := r.fetch(ctx)
-	if err != nil {
-		return fmt.Errorf("açık anahtarlar alınamadı: %w", err)
-	}
-	keys := make(map[string]ed25519.PublicKey, len(list))
-	for _, k := range list {
-		if ValidKeyID(k.ID) && len(k.Key) == ed25519.PublicKeySize {
-			keys[k.ID] = k.Key
-		}
-	}
-	r.keys = keys
-	r.expires = now.Add(min(max(ttl, minCacheTTL), maxCacheTTL))
-	return nil
+	return r.cache.get(ctx, kid)
 }
 
 // FetchFromIdentity returns a FetchFunc backed by identity's KeyService.

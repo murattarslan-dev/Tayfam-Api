@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -19,23 +20,43 @@ const (
 
 type callerKey struct{}
 
+type serviceCallerKey struct{}
+
 type caller struct {
 	claims Claims
 	token  string
 }
 
-// CallerFrom returns the verified caller of the current request.
+// CallerFrom returns the verified user of the current request. It is never
+// set on service methods.
 func CallerFrom(ctx context.Context) (Claims, bool) {
 	c, ok := ctx.Value(callerKey{}).(caller)
 	return c.claims, ok
 }
 
+// ServiceCallerFrom returns the verified calling service of a service method
+// (ADR-0013). It is never set on user methods.
+func ServiceCallerFrom(ctx context.Context) (ServiceClaims, bool) {
+	c, ok := ctx.Value(serviceCallerKey{}).(ServiceClaims)
+	return c, ok
+}
+
 // Guard enforces authentication on a gRPC server. Every method requires a
 // valid access token unless it is listed as public: a new method is
 // protected by default (ADR-0004, ADR-0011).
+//
+// Service methods (ADR-0013) are a separate path: the methods of the gRPC
+// services named in ServicePolicy.Services accept only service tokens, and
+// only from the ServiceAccounts listed for that exact method. A user token
+// never reaches a service method and a service token never reaches a user
+// method. A service method without a caller list is refused.
 type Guard struct {
 	v      *Verifier
 	public map[string]bool
+
+	sv              *ServiceVerifier
+	serviceServices map[string]bool
+	callers         map[string]map[string]bool // full method → allowed subjects
 }
 
 // NewGuard returns a Guard. publicMethods are full method names, e.g.
@@ -47,6 +68,72 @@ func NewGuard(v *Verifier, publicMethods ...string) *Guard {
 		p[m] = true
 	}
 	return &Guard{v: v, public: p}
+}
+
+// ServicePolicy lists the service methods of a server (ADR-0013).
+type ServicePolicy struct {
+	// Verifier checks service tokens. It may be nil only where there is no
+	// cluster (local development); every service method is then refused.
+	Verifier *ServiceVerifier
+	// Services are gRPC service names, e.g. "tayfam.core.v1.UserEventService",
+	// whose every method is a service method.
+	Services []string
+	// Callers maps a full method name to the ServiceAccounts allowed to call
+	// it.
+	Callers map[string][]ServiceAccount
+}
+
+// WithServices returns g with the service methods of p. It refuses a policy
+// that would mix the two paths: a public service method, a caller list for a
+// method outside p.Services, an empty or invalid caller.
+func (g *Guard) WithServices(p ServicePolicy) (*Guard, error) {
+	services := make(map[string]bool, len(p.Services))
+	for _, s := range p.Services {
+		if s == "" || strings.ContainsAny(s, "/ ") {
+			return nil, fmt.Errorf("geçersiz servis adı %q", s)
+		}
+		services[s] = true
+	}
+	for m := range g.public {
+		if services[serviceOf(m)] {
+			return nil, fmt.Errorf("%s hem açık hem servis metodu olamaz", m)
+		}
+	}
+	callers := make(map[string]map[string]bool, len(p.Callers))
+	for m, list := range p.Callers {
+		if !services[serviceOf(m)] {
+			return nil, fmt.Errorf("%s servis metodu olarak tanımlı bir serviste değil", m)
+		}
+		if len(list) == 0 {
+			return nil, fmt.Errorf("%s için izinli çağıran yok", m)
+		}
+		allowed := make(map[string]bool, len(list))
+		for _, sa := range list {
+			if !sa.Valid() {
+				return nil, fmt.Errorf("%s için geçersiz ServiceAccount", m)
+			}
+			allowed[sa.Subject()] = true
+		}
+		callers[m] = allowed
+	}
+	out := *g
+	out.sv = p.Verifier
+	out.serviceServices = services
+	out.callers = callers
+	return &out, nil
+}
+
+// serviceOf returns "pkg.Service" from "/pkg.Service/Method", or "".
+func serviceOf(fullMethod string) string {
+	rest, ok := strings.CutPrefix(fullMethod, "/")
+	if !ok {
+		return ""
+	}
+	svc, _, ok := strings.Cut(rest, "/")
+	if !ok {
+		return ""
+	}
+	return svc
 }
 
 // ServerOptions returns the interceptors to pass to grpcx.NewServer.
@@ -83,12 +170,13 @@ func (g *Guard) authenticate(ctx context.Context, method string) (context.Contex
 	if g.public[method] || strings.HasPrefix(method, healthPrefix) {
 		return ctx, nil
 	}
-	md, _ := metadata.FromIncomingContext(ctx)
-	vals := md.Get(authHeader)
-	if len(vals) != 1 || !strings.HasPrefix(vals[0], bearerPrefix) {
+	token, ok := bearerToken(ctx)
+	if !ok {
 		return nil, errUnauthenticated
 	}
-	token := vals[0][len(bearerPrefix):]
+	if g.serviceServices[serviceOf(method)] {
+		return g.authenticateService(ctx, method, token)
+	}
 	claims, err := g.v.Verify(ctx, token)
 	switch {
 	case errors.Is(err, ErrInvalidToken):
@@ -98,6 +186,40 @@ func (g *Guard) authenticate(ctx context.Context, method string) (context.Contex
 	}
 	return context.WithValue(ctx, callerKey{}, caller{claims: claims, token: token}), nil
 }
+
+// authenticateService checks a service method call. A token that does not
+// verify as a service token (a user token included) is Unauthenticated; a
+// valid service token from a ServiceAccount not listed for the method is
+// PermissionDenied. Neither says which check failed.
+func (g *Guard) authenticateService(ctx context.Context, method, token string) (context.Context, error) {
+	allowed := g.callers[method]
+	if g.sv == nil || len(allowed) == 0 {
+		return nil, errUnauthenticated
+	}
+	claims, err := g.sv.Verify(ctx, token)
+	switch {
+	case errors.Is(err, ErrInvalidToken):
+		return nil, errUnauthenticated
+	case err != nil:
+		return nil, status.Error(codes.Unavailable, "kimlik doğrulama şu anda yapılamıyor")
+	}
+	if !allowed[claims.Account.Subject()] {
+		return nil, errNotAllowed
+	}
+	return context.WithValue(ctx, serviceCallerKey{}, claims), nil
+}
+
+func bearerToken(ctx context.Context) (string, bool) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	vals := md.Get(authHeader)
+	if len(vals) != 1 || !strings.HasPrefix(vals[0], bearerPrefix) {
+		return "", false
+	}
+	return vals[0][len(bearerPrefix):], true
+}
+
+// errNotAllowed: a verified service that may not call this method.
+var errNotAllowed = status.Error(codes.PermissionDenied, "bu çağrıya izin yok")
 
 // errUnauthenticated carries no detail on which check failed.
 var errUnauthenticated = status.Error(codes.Unauthenticated, "kimlik doğrulanamadı")
@@ -145,4 +267,10 @@ func withToken(ctx context.Context) context.Context {
 // Guard after the token is verified.
 func WithCallerForTest(ctx context.Context, c Claims) context.Context {
 	return context.WithValue(ctx, callerKey{}, caller{claims: c})
+}
+
+// WithServiceCallerForTest returns ctx carrying c as the verified calling
+// service, as Guard would set it on a service method. Only tests may use it.
+func WithServiceCallerForTest(ctx context.Context, c ServiceClaims) context.Context {
+	return context.WithValue(ctx, serviceCallerKey{}, c)
 }
