@@ -40,6 +40,38 @@ type ChannelRead struct {
 	UpdatedAt         pgtype.Timestamptz
 }
 
+type DmConversation struct {
+	ID            pgtype.UUID
+	UserLowID     pgtype.UUID
+	UserHighID    pgtype.UUID
+	Status        string
+	RequestedBy   pgtype.UUID
+	AcceptedAt    pgtype.Timestamptz
+	LastMessageAt pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
+type DmConversationRead struct {
+	ConversationID    pgtype.UUID
+	UserID            pgtype.UUID
+	LastReadMessageID pgtype.UUID
+	ReadAt            pgtype.Timestamptz
+}
+
+type DmMessage struct {
+	ID              pgtype.UUID
+	ConversationID  pgtype.UUID
+	SenderID        pgtype.UUID
+	SenderDeviceID  pgtype.UUID
+	Encryption      string
+	BodyEncrypted   []byte
+	KeyVersion      pgtype.Int2
+	ClientRequestID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+}
+
 type DomainEvent struct {
 	ID          pgtype.UUID
 	Type        string
