@@ -193,6 +193,12 @@ const (
 	PollCloseAny
 	PollDeleteOwn
 	PollDeleteAny
+	// Direct invitations (issue #71, v14 "Tayfaya davet"). InviteDirect
+	// invites a friend into the tayfa (the caller checks the friendship and
+	// the daily limit); InviteDirectCancel withdraws anyone's unanswered
+	// invitation and lists them.
+	InviteDirect
+	InviteDirectCancel
 
 	actionEnd // sentinel; keep last
 )
@@ -259,6 +265,8 @@ var actionNames = [...]string{
 	PollCloseAny:         "poll.close_any",
 	PollDeleteOwn:        "poll.delete_own",
 	PollDeleteAny:        "poll.delete_any",
+	InviteDirect:         "invite.direct",
+	InviteDirectCancel:   "invite.direct_cancel",
 	actionEnd:            "",
 }
 
@@ -312,6 +320,9 @@ var permissions = map[Action]Role{
 	PollViewVoters: Member,
 	PollCloseOwn:   Member,
 	PollDeleteOwn:  Member,
+	// Every active member invites friends directly, like invite links (v14
+	// "Tayfaya davet"); a muted member cannot.
+	InviteDirect: Member,
 
 	// Moderation: moderator and above.
 	// Lowering one's own role; members have nothing to step down to.
@@ -357,8 +368,10 @@ var permissions = map[Action]Role{
 	TayfaRequestDeletion: Admin,
 	TayfaCancelDeletion:  Admin,
 	InviteRevokeAny:      Admin,
-	MemberChangeRole:     Admin,
-	AuditView:            Admin,
+	// "Yönetici her daveti ve davet linkini iptal edebilir" (v14).
+	InviteDirectCancel: Admin,
+	MemberChangeRole:   Admin,
+	AuditView:          Admin,
 	// Undoing a moderator's or admin's deletion (v14 "Silinen içeriği geri
 	// alma").
 	AnnouncementRestore: Admin,

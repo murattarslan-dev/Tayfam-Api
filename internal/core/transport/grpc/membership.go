@@ -33,6 +33,12 @@ type Memberships interface {
 	RemoveMember(ctx context.Context, caller, tayfa, target id.ID) error
 	LeaveTayfa(ctx context.Context, caller, tayfa id.ID) error
 	GetMembership(ctx context.Context, caller, tayfa, target id.ID) (membership.Member, error)
+	InviteFriend(ctx context.Context, caller, tayfa, target id.ID) (membership.Invitation, error)
+	ListMyInvitations(ctx context.Context, caller id.ID, size int32, token string) (membership.Page[membership.Invitation], error)
+	AcceptInvitation(ctx context.Context, caller, tayfa id.ID) (membership.Member, error)
+	DeclineInvitation(ctx context.Context, caller, tayfa id.ID) error
+	ListInvitations(ctx context.Context, caller, tayfa id.ID, size int32, token string) (membership.Page[membership.Invitation], error)
+	CancelInvitation(ctx context.Context, caller, tayfa, target id.ID) error
 }
 
 // MembershipServer implements corev1.MembershipServiceServer. Every method

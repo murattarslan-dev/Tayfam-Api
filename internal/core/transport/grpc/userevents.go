@@ -58,6 +58,17 @@ func (s *UserEventServer) ApplyUserEvent(ctx context.Context, req *corev1.ApplyU
 				return nil, validation("profile_updated.avatar_upload_id")
 			}
 		}
+		switch ev.ProfileUpdated.GetActivityVisibility() {
+		case corev1.ActivityVisibility_ACTIVITY_VISIBILITY_UNSPECIFIED:
+		case corev1.ActivityVisibility_ACTIVITY_VISIBILITY_PRIVATE:
+			p.ActivityVisibility = userevents.VisibilityPrivate
+		case corev1.ActivityVisibility_ACTIVITY_VISIBILITY_TAYFA:
+			p.ActivityVisibility = userevents.VisibilityTayfa
+		case corev1.ActivityVisibility_ACTIVITY_VISIBILITY_PUBLIC:
+			p.ActivityVisibility = userevents.VisibilityPublic
+		default:
+			return nil, validation("profile_updated.activity_visibility")
+		}
 		e.Profile = p
 	case *corev1.ApplyUserEventRequest_Deleted:
 		e.Deleted = true

@@ -94,6 +94,16 @@ func TestErrorStatus(t *testing.T) {
 		{apperr.ErrPollNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_POLL_NOT_FOUND},
 		{apperr.ErrPollClosed, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_POLL_CLOSED},
 		{apperr.ErrPollAnonymous, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_POLL_ANONYMOUS},
+		{apperr.ErrUserNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_USER_NOT_FOUND},
+		{apperr.ErrFriendRequestLimit, codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_FRIEND_REQUEST_LIMIT},
+		{apperr.ErrFriendRequestNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_FRIEND_REQUEST_NOT_FOUND},
+		{apperr.ErrAlreadyFriends, codes.AlreadyExists, corev1.ErrorReason_ERROR_REASON_ALREADY_FRIENDS},
+		{apperr.ErrFriendRequestPending, codes.AlreadyExists, corev1.ErrorReason_ERROR_REASON_FRIEND_REQUEST_PENDING},
+		{apperr.ErrNotFriends, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_NOT_FRIENDS},
+		{apperr.ErrDirectInviteLimit, codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_DIRECT_INVITE_LIMIT},
+		{apperr.ErrInvitationNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_INVITATION_NOT_FOUND},
+		{apperr.ErrAlreadyInvited, codes.AlreadyExists, corev1.ErrorReason_ERROR_REASON_ALREADY_INVITED},
+		{apperr.ErrInviteNotAllowed, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_INVITE_NOT_ALLOWED},
 		// Wrapped errors keep their reason.
 		{fmt.Errorf("katman: %w", apperr.ErrTayfaNotFound), codes.NotFound, corev1.ErrorReason_ERROR_REASON_TAYFA_NOT_FOUND},
 		// The memberships trigger, second line of defence.

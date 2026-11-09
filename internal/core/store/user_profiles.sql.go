@@ -63,11 +63,12 @@ func (q *Queries) TombstoneUserProfile(ctx context.Context, arg TombstoneUserPro
 
 const upsertUserProfile = `-- name: UpsertUserProfile :execrows
 
-INSERT INTO user_profiles (user_id, display_name, avatar_upload_id, source_event_id)
-VALUES ($1, $2, $3, $4)
+INSERT INTO user_profiles (user_id, display_name, avatar_upload_id, source_event_id, activity_visibility)
+VALUES ($1, $2, $3, $4, COALESCE($5::text, 'tayfa'))
 ON CONFLICT (user_id) DO UPDATE
 SET display_name = EXCLUDED.display_name,
     avatar_upload_id = EXCLUDED.avatar_upload_id,
+    activity_visibility = COALESCE($5::text, user_profiles.activity_visibility),
     source_event_id = EXCLUDED.source_event_id,
     updated_at = now()
 WHERE user_profiles.deleted_at IS NULL
@@ -75,21 +76,25 @@ WHERE user_profiles.deleted_at IS NULL
 `
 
 type UpsertUserProfileParams struct {
-	UserID         pgtype.UUID
-	DisplayName    pgtype.Text
-	AvatarUploadID pgtype.UUID
-	SourceEventID  pgtype.UUID
+	UserID             pgtype.UUID
+	DisplayName        pgtype.Text
+	AvatarUploadID     pgtype.UUID
+	SourceEventID      pgtype.UUID
+	ActivityVisibility pgtype.Text
 }
 
 // Profil kopyası (ADR-0009). Yalnızca UserEventService yazar.
 // Daha yeni bir olay uygulanmışsa ya da profil silinmişse değişmez; etkilenen
 // satır 0 olur.
+// activity_visibility NULL ise (alanı taşımayan eski olay) mevcut değer
+// kalır; yeni satırda varsayılan 'tayfa' olur.
 func (q *Queries) UpsertUserProfile(ctx context.Context, arg UpsertUserProfileParams) (int64, error) {
 	result, err := q.db.Exec(ctx, upsertUserProfile,
 		arg.UserID,
 		arg.DisplayName,
 		arg.AvatarUploadID,
 		arg.SourceEventID,
+		arg.ActivityVisibility,
 	)
 	if err != nil {
 		return 0, err

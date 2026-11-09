@@ -192,6 +192,52 @@ service MembershipService {
   // membership, or an unknown or deleted tayfa, is
   // ERROR_REASON_TAYFA_NOT_FOUND.
   rpc GetMembership(GetMembershipRequest) returns (GetMembershipResponse);
+
+  // Direct invitations (issue #71, data model v14 "Tayfaya davet"). An
+  // invitation is a membership with status INVITED: the invited user is not
+  // a member until they accept.
+
+  // InviteFriend invites one of the caller's friends into the tayfa. Every
+  // active, unmuted member may invite; the tayfa must be writable. At most
+  // 10 invitations per inviter in 24 hours, in any tayfa (counted in the
+  // database). Emits tayfa.invited (IDs only) for the notification.
+  //
+  // Errors: the common tayfa errors, ERROR_REASON_USER_NOT_FOUND (unknown
+  // user, or a block between the two), ERROR_REASON_NOT_FRIENDS,
+  // ERROR_REASON_ALREADY_MEMBER, ERROR_REASON_ALREADY_INVITED,
+  // ERROR_REASON_INVITE_NOT_ALLOWED (banned there, or a join request waits;
+  // which one is not said), ERROR_REASON_DIRECT_INVITE_LIMIT.
+  rpc InviteFriend(InviteFriendRequest) returns (InviteFriendResponse);
+
+  // ListMyInvitations lists the caller's unanswered invitations, newest
+  // first, with the tayfa's name. Invitations to deleted tayfas are left
+  // out.
+  rpc ListMyInvitations(ListMyInvitationsRequest) returns (ListMyInvitationsResponse);
+
+  // AcceptInvitation answers the caller's own invitation. The membership
+  // becomes ACTIVE when the tayfa's join policy is OPEN or the inviter is,
+  // right now, an active moderator or admin; otherwise PENDING, for the
+  // moderators to approve. The caller is not an active member yet, so the
+  // common "not a member" rule does not apply: no invitation, or an unknown
+  // or deleted tayfa, is ERROR_REASON_INVITATION_NOT_FOUND.
+  //
+  // Errors: ERROR_REASON_INVITATION_NOT_FOUND, ERROR_REASON_TAYFA_READ_ONLY.
+  rpc AcceptInvitation(AcceptInvitationRequest) returns (AcceptInvitationResponse);
+
+  // DeclineInvitation deletes the caller's own invitation. The inviter is
+  // not told.
+  //
+  // Errors: ERROR_REASON_INVITATION_NOT_FOUND.
+  rpc DeclineInvitation(DeclineInvitationRequest) returns (DeclineInvitationResponse);
+
+  // ListInvitations lists the tayfa's unanswered invitations, newest first.
+  // Admins only.
+  rpc ListInvitations(ListInvitationsRequest) returns (ListInvitationsResponse);
+
+  // CancelInvitation withdraws someone's unanswered invitation. Admins only.
+  //
+  // Errors: the common tayfa errors, ERROR_REASON_INVITATION_NOT_FOUND.
+  rpc CancelInvitation(CancelInvitationRequest) returns (CancelInvitationResponse);
 }
 
 // Role in a tayfa. The numbers are the hierarchy ranks (ADR-0004): a higher
@@ -205,8 +251,8 @@ enum Role {
 
 enum MembershipStatus {
   MEMBERSHIP_STATUS_UNSPECIFIED = 0;
-  // Directly invited by a friend; not a member until accepted. Not produced
-  // by any method of this version.
+  // Directly invited by a friend (InviteFriend); not a member until
+  // accepted.
   MEMBERSHIP_STATUS_INVITED = 1;
   // Asked to join; waits for a moderator or admin.
   MEMBERSHIP_STATUS_PENDING = 2;
@@ -437,3 +483,68 @@ message GetMembershipResponse {
   // The caller's membership in any status. mute_expire_time is filled.
   Membership membership = 1;
 }
+
+// Invitation is an unanswered direct invitation.
+message Invitation {
+  string tayfa_id = 1;
+  string tayfa_name = 2;
+  // The invited user.
+  string user_id = 3;
+  // Empty when the inviter's account was deleted.
+  string inviter_user_id = 4;
+  google.protobuf.Timestamp invite_time = 5;
+}
+
+message InviteFriendRequest {
+  string tayfa_id = 1;
+  // The friend to invite.
+  string user_id = 2;
+}
+
+message InviteFriendResponse {
+  Invitation invitation = 1;
+}
+
+message ListMyInvitationsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListMyInvitationsResponse {
+  repeated Invitation invitations = 1;
+  string next_page_token = 2;
+}
+
+message AcceptInvitationRequest {
+  string tayfa_id = 1;
+}
+
+message AcceptInvitationResponse {
+  // ACTIVE or PENDING.
+  Membership membership = 1;
+}
+
+message DeclineInvitationRequest {
+  string tayfa_id = 1;
+}
+
+message DeclineInvitationResponse {}
+
+message ListInvitationsRequest {
+  string tayfa_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListInvitationsResponse {
+  repeated Invitation invitations = 1;
+  string next_page_token = 2;
+}
+
+message CancelInvitationRequest {
+  string tayfa_id = 1;
+  // The invited user.
+  string user_id = 2;
+}
+
+message CancelInvitationResponse {}

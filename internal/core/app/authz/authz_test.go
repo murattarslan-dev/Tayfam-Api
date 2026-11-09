@@ -633,6 +633,26 @@ var expected = []struct {
 	{invited, PollDeleteAny, false},
 	{banned, PollDeleteAny, false},
 	{nonMember, PollDeleteAny, false},
+	// InviteDirect (issue #71): every active, unmuted member.
+	{admin, InviteDirect, true},
+	{moderator, InviteDirect, true},
+	{member, InviteDirect, true},
+	{mutedMember, InviteDirect, false},
+	{mutedModerator, InviteDirect, false},
+	{pending, InviteDirect, false},
+	{invited, InviteDirect, false},
+	{banned, InviteDirect, false},
+	{nonMember, InviteDirect, false},
+	// InviteDirectCancel: admins only.
+	{admin, InviteDirectCancel, true},
+	{moderator, InviteDirectCancel, false},
+	{member, InviteDirectCancel, false},
+	{mutedMember, InviteDirectCancel, false},
+	{mutedModerator, InviteDirectCancel, false},
+	{pending, InviteDirectCancel, false},
+	{invited, InviteDirectCancel, false},
+	{banned, InviteDirectCancel, false},
+	{nonMember, InviteDirectCancel, false},
 }
 
 func TestAllowedMatrix(t *testing.T) {

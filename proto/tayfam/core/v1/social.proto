@@ -1,0 +1,164 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// SocialService holds friendships and blocks (issue #71; data model v14
+// "Arkadaşlık ve Davet (v11)", "Mesaj İsteği Modeli (v7)"; ADR-0009).
+//
+// Every method needs the caller's access token; the caller is always the
+// verified token subject, and every list is the caller's own: nobody sees
+// another user's friends, requests or blocks. user_id fields are UUID
+// strings (ERROR_REASON_VALIDATION otherwise, also for the caller's own ID).
+//
+// A block in either direction makes the other user look unknown
+// (ERROR_REASON_USER_NOT_FOUND), the same as a user who does not exist:
+// nobody learns that they were blocked.
+//
+// Paging: page_size 0 means 50; values above 100 are treated as 100;
+// negative values are ERROR_REASON_VALIDATION. page_token is opaque and only
+// valid for the same method and request fields. An empty next_page_token
+// means the last page.
+service SocialService {
+  // SendFriendRequest asks user_id to be the caller's friend. If that user's
+  // request to the caller is already waiting, it is accepted instead
+  // (FRIEND_STATE_FRIENDS). At most 20 requests per caller in 24 hours,
+  // counted in the database; declined requests still count. Emits
+  // friend.requested or friend.accepted (IDs only) for the notification.
+  //
+  // Errors: ERROR_REASON_USER_NOT_FOUND, ERROR_REASON_ALREADY_FRIENDS,
+  // ERROR_REASON_FRIEND_REQUEST_PENDING, ERROR_REASON_FRIEND_REQUEST_LIMIT.
+  rpc SendFriendRequest(SendFriendRequestRequest) returns (SendFriendRequestResponse);
+  // AcceptFriendRequest accepts user_id's request waiting for the caller.
+  // Emits friend.accepted.
+  //
+  // Errors: ERROR_REASON_FRIEND_REQUEST_NOT_FOUND.
+  rpc AcceptFriendRequest(AcceptFriendRequestRequest) returns (AcceptFriendRequestResponse);
+  // RemoveFriendship deletes whatever there is between the caller and
+  // user_id: a friendship, the caller's request, or user_id's request
+  // (declining it). Nobody is told. Removing nothing succeeds.
+  rpc RemoveFriendship(RemoveFriendshipRequest) returns (RemoveFriendshipResponse);
+  // ListFriends lists the caller's friends.
+  rpc ListFriends(ListFriendsRequest) returns (ListFriendsResponse);
+  // ListFriendRequests lists requests waiting for the caller (INCOMING) or
+  // sent by the caller (OUTGOING).
+  rpc ListFriendRequests(ListFriendRequestsRequest) returns (ListFriendRequestsResponse);
+
+  // BlockUser blocks user_id. The friendship or waiting request between the
+  // two is deleted at once. Blocking again succeeds and changes nothing.
+  //
+  // Errors: ERROR_REASON_USER_NOT_FOUND (no such live user).
+  rpc BlockUser(BlockUserRequest) returns (BlockUserResponse);
+  // UnblockUser removes the caller's block. The friendship does not come
+  // back. Removing a block that is not there succeeds.
+  rpc UnblockUser(UnblockUserRequest) returns (UnblockUserResponse);
+  // ListBlockedUsers lists the users the caller blocked. Who blocked the
+  // caller is never listed.
+  rpc ListBlockedUsers(ListBlockedUsersRequest) returns (ListBlockedUsersResponse);
+}
+
+// FriendState is a friendship as the caller sees it.
+enum FriendState {
+  FRIEND_STATE_UNSPECIFIED = 0;
+  FRIEND_STATE_FRIENDS = 1;
+  // The other user's request waits for the caller.
+  FRIEND_STATE_INCOMING = 2;
+  // The caller's request waits for the other user.
+  FRIEND_STATE_OUTGOING = 3;
+}
+
+enum RequestDirection {
+  REQUEST_DIRECTION_UNSPECIFIED = 0;
+  REQUEST_DIRECTION_INCOMING = 1;
+  REQUEST_DIRECTION_OUTGOING = 2;
+}
+
+// Friend is another user in one of the caller's lists.
+message Friend {
+  string user_id = 1;
+  string display_name = 2;
+  // Upload ID (UUID); empty when there is none.
+  string avatar_upload_id = 3;
+  FriendState state = 4;
+  google.protobuf.Timestamp request_time = 5;
+  // Set when FRIEND_STATE_FRIENDS.
+  google.protobuf.Timestamp accept_time = 6;
+}
+
+message BlockedUser {
+  string user_id = 1;
+  // Empty when the user deleted their account.
+  string display_name = 2;
+  string avatar_upload_id = 3;
+  google.protobuf.Timestamp block_time = 4;
+}
+
+message SendFriendRequestRequest {
+  string user_id = 1;
+}
+
+message SendFriendRequestResponse {
+  // FRIEND_STATE_OUTGOING, or FRIEND_STATE_FRIENDS when the other user's
+  // request was waiting.
+  Friend friend = 1;
+}
+
+message AcceptFriendRequestRequest {
+  // The user who sent the request.
+  string user_id = 1;
+}
+
+message AcceptFriendRequestResponse {
+  Friend friend = 1;
+}
+
+message RemoveFriendshipRequest {
+  string user_id = 1;
+}
+
+message RemoveFriendshipResponse {}
+
+message ListFriendsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListFriendsResponse {
+  repeated Friend friends = 1;
+  string next_page_token = 2;
+}
+
+message ListFriendRequestsRequest {
+  // Required.
+  RequestDirection direction = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListFriendRequestsResponse {
+  repeated Friend requests = 1;
+  string next_page_token = 2;
+}
+
+message BlockUserRequest {
+  string user_id = 1;
+}
+
+message BlockUserResponse {}
+
+message UnblockUserRequest {
+  string user_id = 1;
+}
+
+message UnblockUserResponse {}
+
+message ListBlockedUsersRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListBlockedUsersResponse {
+  repeated BlockedUser users = 1;
+  string next_page_token = 2;
+}

@@ -312,8 +312,8 @@ func (s *Service) checkNotMember(ctx context.Context, q *store.Queries, tayfa, u
 	case authz.StatusActive:
 		return apperr.ErrAlreadyMember
 	default:
-		// pending, or a direct invitation waiting for an answer (not
-		// produced in this version).
+		// pending, or a direct invitation waiting for an answer: the
+		// invited user answers it with AcceptInvitation.
 		return apperr.ErrAlreadyPending
 	}
 }

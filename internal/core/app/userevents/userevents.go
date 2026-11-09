@@ -38,6 +38,8 @@ const (
 	eventMembershipChanged = "membership.changed"
 	changeAccountDeleted   = "account_deleted"
 	changeRoleChanged      = "role_changed"
+	// eventInvitationCancelled is membership.EventInvitationCancelled.
+	eventInvitationCancelled = "tayfa.invitation_cancelled"
 )
 
 // Event is one identity event about a user.
@@ -54,7 +56,17 @@ type Event struct {
 type Profile struct {
 	DisplayName    string
 	AvatarUploadID id.ID // zero: no avatar
+	// ActivityVisibility is who sees the user's attendance history on their
+	// profile; empty in older events, which keep the copy's current value.
+	ActivityVisibility string
 }
+
+// ActivityVisibility values (user_profiles_activity_visibility).
+const (
+	VisibilityPrivate = "private"
+	VisibilityTayfa   = "tayfa"
+	VisibilityPublic  = "public"
+)
 
 // Config wires a Service.
 type Config struct {
@@ -101,6 +113,14 @@ func (s *Service) applyProfile(ctx context.Context, e Event) error {
 	if !validDisplayName(name) {
 		return apperr.Validation("profile_updated.display_name")
 	}
+	vis := pgtype.Text{}
+	switch v := e.Profile.ActivityVisibility; v {
+	case "":
+	case VisibilityPrivate, VisibilityTayfa, VisibilityPublic:
+		vis = pgtype.Text{String: v, Valid: true}
+	default:
+		return apperr.Validation("profile_updated.activity_visibility")
+	}
 	avatar := pgtype.UUID{}
 	if e.Profile.AvatarUploadID != (id.ID{}) {
 		avatar = e.Profile.AvatarUploadID.PG()
@@ -109,7 +129,7 @@ func (s *Service) applyProfile(ctx context.Context, e Event) error {
 	// the expected result of a repeat, not an error.
 	if _, err := store.New(s.cfg.Pool).UpsertUserProfile(ctx, store.UpsertUserProfileParams{
 		UserID: e.User.PG(), DisplayName: pgtype.Text{String: name, Valid: true},
-		AvatarUploadID: avatar, SourceEventID: e.ID.PG(),
+		AvatarUploadID: avatar, SourceEventID: e.ID.PG(), ActivityVisibility: vis,
 	}); err != nil {
 		return fmt.Errorf("profil kopyası: %w", err)
 	}
@@ -142,6 +162,9 @@ func validDisplayName(s string) bool {
 //     convoy vehicles (plates), hike roll calls, fishing catches, activity
 //     records, helpful votes and poll votes are deleted, and the vote counts
 //     drop with them;
+//   - friendships, friend requests and blocks in both directions are
+//     deleted, and so are the direct invitations the user sent that are
+//     still unanswered (issue #71);
 //   - on every upcoming event the user was going to, the seat goes to the
 //     oldest waitlisted answer (rsvp.promoted), as when an answer changes;
 //   - the profile copy becomes a tombstone.
@@ -164,6 +187,23 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 				return err
 			}
 		}
+		// Direct invitations the user sent and nobody answered go with the
+		// account (issue #71): the inviter, whose role decided the outcome,
+		// is gone.
+		sent, err := q.ListInvitationsSentByUser(ctx, e.User.PG())
+		if err != nil {
+			return fmt.Errorf("gönderilen davetler: %w", err)
+		}
+		for _, inv := range sent {
+			tf, invitee := id.ID(inv.TayfaID.Bytes), id.ID(inv.UserID.Bytes)
+			if _, err := q.DeleteMembership(ctx, store.DeleteMembershipParams{TayfaID: inv.TayfaID, UserID: inv.UserID}); err != nil {
+				return fmt.Errorf("davet silme: %w", err)
+			}
+			if err := systemRecord(ctx, q, tf, "member.invitation_cancelled", eventInvitationCancelled, "membership", invitee,
+				map[string]any{"tayfa_id": tf.String(), "user_id": invitee.String(), "reason": systemJob}); err != nil {
+				return err
+			}
+		}
 		// Locked before the RSVPs go, so the freed seats are given in this
 		// transaction.
 		going, err := q.LockUserGoingUpcomingEvents(ctx, store.LockUserGoingUpcomingEventsParams{UserID: e.User.PG(), Now: ts(now)})
@@ -177,6 +217,7 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			q.DeleteUserHikeCheckins, q.DeleteUserCatches, q.ClearCatchDeleter, q.DeleteUserActivityRecords,
 			q.ClearQuestionUserFields, q.ClearAnswerUserFields, q.DeleteUserAnswerVotes,
 			q.ClearPollUserFields, q.DeleteUserPollVotes,
+			q.DeleteUserFriendships, q.DeleteUserBlocks,
 			q.ClearAuditActor, q.ClearEventActor,
 		} {
 			if err := clear(ctx, e.User.PG()); err != nil {

@@ -2357,6 +2357,17 @@ components:
         - poll-not-found
         - poll-closed
         - poll-anonymous
+        # core: arkadaşlık, engelleme, doğrudan davet (#71)
+        - user-not-found
+        - friend-request-limit
+        - friend-request-not-found
+        - already-friends
+        - friend-request-pending
+        - not-friends
+        - direct-invite-limit
+        - invitation-not-found
+        - already-invited
+        - invite-not-allowed
         # chat: bildirimler (#64)
         - notification-not-found
       content:

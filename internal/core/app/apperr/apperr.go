@@ -115,6 +115,33 @@ var (
 	ErrPollAnonymous = errors.New("anket gizli")
 )
 
+// Social errors (issue #71): friendships, blocks and direct invitations.
+var (
+	// ErrUserNotFound: no live user with this ID, or a block between the
+	// caller and the user (either way). The cases are deliberately the
+	// same, so nobody learns that they were blocked.
+	ErrUserNotFound = errors.New("kullanıcı bulunamadı")
+	// ErrFriendRequestLimit: the caller sent the most friend requests a day
+	// allows.
+	ErrFriendRequestLimit = errors.New("günlük arkadaşlık isteği sınırı")
+	// ErrFriendRequestNotFound: no friend request to answer.
+	ErrFriendRequestNotFound = errors.New("arkadaşlık isteği bulunamadı")
+	ErrAlreadyFriends        = errors.New("zaten arkadaş")
+	// ErrFriendRequestPending: the caller's request waits for an answer.
+	ErrFriendRequestPending = errors.New("arkadaşlık isteği bekliyor")
+	// ErrNotFriends: only friends can be invited directly.
+	ErrNotFriends = errors.New("arkadaş değil")
+	// ErrDirectInviteLimit: the caller sent the most direct invitations a
+	// day allows.
+	ErrDirectInviteLimit = errors.New("günlük davet sınırı")
+	// ErrInvitationNotFound: no unanswered direct invitation.
+	ErrInvitationNotFound = errors.New("davet bulunamadı")
+	ErrAlreadyInvited     = errors.New("zaten davet edilmiş")
+	// ErrInviteNotAllowed: the user cannot be invited into this tayfa (a
+	// ban, a waiting join request). Which one is not said.
+	ErrInviteNotAllowed = errors.New("davet edilemez")
+)
+
 // ValidationError reports a request field that failed validation. Field is
 // the request field name as written in the proto ("name", "update_mask");
 // the rejected value is never kept.
