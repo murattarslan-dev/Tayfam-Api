@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+{{/* htmx without eval, without running scripts from responses, without
+     inline styles, and without keeping page snapshots (personal data) in
+     localStorage. Error pages (4xx/5xx) are shown too, not dropped. */}}
+<meta name="htmx-config" content='{"historyCacheSize":0,"refreshOnHistoryMiss":true,"allowEval":false,"allowScriptTags":false,"includeIndicatorStyles":false,"selfRequestsOnly":true,"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"[45]..","swap":true,"error":true}]}'>
+{{block "head" .}}{{end}}
+<title>{{.Title}} · Tayfam yönetim</title>
+<link rel="stylesheet" href="/static/panel.css">
+<script src="{{htmx}}" defer></script>
+</head>
+<body hx-boost="true">
+<header class="top">
+  <span class="brand">tayfam yönetim</span>
+  {{if .Admin}}
+  <nav aria-label="Bölümler">
+    <a href="/" {{if eq .Nav "pano"}}aria-current="page"{{end}}>Pano</a>
+    <a href="/tayfalar" {{if eq .Nav "tayfalar"}}aria-current="page"{{end}}>Tayfalar</a>
+    <a href="/kullanicilar" {{if eq .Nav "kullanicilar"}}aria-current="page"{{end}}>Kullanıcılar</a>
+    <a href="/sikayetler" {{if eq .Nav "sikayetler"}}aria-current="page"{{end}}>Şikâyetler</a>
+  </nav>
+  <div class="who">
+    <span>{{.Admin}}</span>
+    <form method="post" action="/cikis">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <button type="submit">Çıkış</button>
+    </form>
+  </div>
+  {{end}}
+</header>
+<main>
+  {{if .Notice}}<div class="notice ok" role="status">{{.Notice}}</div>{{end}}
+  {{if .Error}}<div class="notice err" role="alert">{{.Error}}</div>{{end}}
+  {{block "content" .}}{{end}}
+</main>
+</body>
+</html>
+{{define "reauth"}}
+{{if .ReauthOK}}
+<p class="hint">Değişiklik yapabilirsiniz: son Google girişiniz {{when .ReauthUntil}} saatine kadar geçerli.</p>
+{{else}}
+<p class="hint">Değişiklik için son 5 dakika içinde yeniden giriş gerekir; işlemi gönderdiğinizde giriş sayfasına yönlendirilirsiniz.</p>
+{{end}}
+{{end}}
+{{define "reason"}}
+<label for="gerekce-{{.}}">Gerekçe (zorunlu, denetim kaydına yazılır)</label>
+<textarea id="gerekce-{{.}}" name="gerekce" required minlength="10" maxlength="1000"></textarea>
+{{end}}
+{{define "reportTable"}}
+<div class="table-wrap"><table>
+<thead><tr><th>Öncelik</th><th>Neden</th><th>Hedef</th><th>Yükseldi</th><th>Durum</th></tr></thead>
+<tbody>
+{{range .}}
+<tr>
+  <td>{{if urgent .}}<span class="tag danger">Öncelikli</span>{{else}}<span class="tag">Normal</span>{{end}}</td>
+  <td><a href="/sikayetler/{{.ReportId}}">{{label .Reason}}</a></td>
+  <td>{{label .TargetType}}</td>
+  <td>{{ts .EscalateTime}}</td>
+  <td>{{if .ResolvedOnPlatform}}{{label .Decision}}{{else}}Açık{{end}}</td>
+</tr>
+{{end}}
+</tbody>
+</table></div>
+{{end}}

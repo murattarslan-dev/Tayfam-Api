@@ -1,0 +1,51 @@
+{{define "content"}}
+{{with .Data.Report}}
+<h1>Şikâyet: {{label .Reason}}</h1>
+<div class="card">
+<dl class="meta">
+  <dt>Öncelik</dt><dd>{{if urgent .}}<span class="tag danger">Öncelikli</span> {{end}}{{label .Priority}}</dd>
+  <dt>Hedef</dt><dd>{{label .TargetType}}</dd>
+  {{if .TayfaId}}<dt>Tayfa</dt><dd><a href="/tayfalar/{{.TayfaId}}">Tayfa ayrıntısı</a></dd>{{end}}
+  <dt>Şikâyet edilen</dt><dd>{{if .SubjectUserId}}<a href="/kullanicilar/{{.SubjectUserId}}">Kullanıcı ayrıntısı</a>{{else}}—{{end}}</dd>
+  <dt>Şikâyet eden</dt><dd>{{if .ReporterId}}<a href="/kullanicilar/{{.ReporterId}}">Kullanıcı ayrıntısı</a>{{else}}—{{end}}</dd>
+  <dt>Açıklama</dt><dd>{{if .Description}}{{.Description}}{{else}}—{{end}}</dd>
+  <dt>Oluşturuldu</dt><dd>{{ts .CreateTime}}</dd>
+  <dt>Platforma yükseldi</dt><dd>{{ts .EscalateTime}}</dd>
+  <dt>Karar</dt><dd>{{if .ResolvedOnPlatform}}{{label .Decision}} ({{ts .DecideTime}}){{else}}Bekliyor{{end}}</dd>
+</dl>
+</div>
+{{end}}
+<h2>Şikâyet edilen öğe</h2>
+<p class="hint">Yalnızca bu öğe gösterilir; görüntüleme denetim kaydına yazılır.</p>
+{{with .Data.Item}}
+<div class="card">
+<dl class="meta">
+  <dt>Tür</dt><dd>{{label .TargetType}}</dd>
+  <dt>Yazar</dt><dd>{{if .AuthorId}}<a href="/kullanicilar/{{.AuthorId}}">Kullanıcı ayrıntısı</a>{{else}}—{{end}}</dd>
+  <dt>Oluşturuldu</dt><dd>{{ts .CreateTime}}</dd>
+  {{if .DeleteTime}}<dt>Silindi</dt><dd>{{ts .DeleteTime}}</dd>{{end}}
+  {{if .Title}}<dt>Başlık</dt><dd>{{.Title}}</dd>{{end}}
+</dl>
+{{if .Body}}<p class="item-body">{{.Body}}</p>{{end}}
+{{if .Options}}<ul>{{range .Options}}<li>{{.}}</li>{{end}}</ul>{{end}}
+</div>
+{{else}}
+<p>Öğe artık yok.</p>
+{{end}}
+{{if .Data.Decisions}}
+<h2>Karar</h2>
+<div class="card">
+{{template "reauth" .}}
+<form class="stack" method="post" action="/sikayetler/{{.Data.Report.ReportId}}/karar">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <label for="karar">Karar</label>
+  <select id="karar" name="karar" required>
+    {{range .Data.Decisions}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+  </select>
+  <p class="hint">Banla: kullanıcının tüm oturumları kapanır, girişi engellenir, içerikleri gizlenir (silinmez).</p>
+  {{template "reason" "karar"}}
+  <button type="submit" class="danger">Kararı kaydet</button>
+</form>
+</div>
+{{end}}
+{{end}}

@@ -142,7 +142,7 @@ func setup(rt *service.Runtime) error {
 		deps.Core.Accounts = identityv1.NewAccountServiceClient(conn)
 	}
 	adminHost := rt.Config.String("ADMIN_HOST", "admin.tayfam.app")
-	panel, err := adminRouter(rt, adminHost, conns["identity"], trustCF)
+	panel, err := adminRouter(rt, adminHost, conns["identity"], conns["core"], trustCF)
 	if err != nil {
 		return err
 	}
@@ -153,13 +153,16 @@ func setup(rt *service.Runtime) error {
 // adminRouter builds the platform administration panel's router (ADR-0008,
 // issue #104) from:
 //
-//	CF_ACCESS_TEAM_DOMAIN  Zero Trust team domain, <team>.cloudflareaccess.com
-//	CF_ACCESS_AUD          AUD tag of the admin.tayfam.app Access application
+//	CF_ACCESS_TEAM_DOMAIN   Zero Trust team domain, <team>.cloudflareaccess.com
+//	CF_ACCESS_AUD           AUD tag of the admin.tayfam.app Access application
+//	ADMIN_GOOGLE_CLIENT_ID  Google OAuth client of the panel's sign-in; one of
+//	                        identity's GOOGLE_CLIENT_IDS (required with the two above)
 //
-// Neither is secret. Without both, there is no panel: it returns nil and
-// the admin host answers 404, so the panel never runs without Cloudflare
-// Access in front of it. One without the other stops the service.
-func adminRouter(rt *service.Runtime, host string, identity *grpc.ClientConn, trustCF bool) (http.Handler, error) {
+// None is secret. Without the Access pair, there is no panel: it returns
+// nil and the admin host answers 404, so the panel never runs without
+// Cloudflare Access in front of it. One without the other stops the
+// service.
+func adminRouter(rt *service.Runtime, host string, identity, core *grpc.ClientConn, trustCF bool) (http.Handler, error) {
 	team := rt.Config.String("CF_ACCESS_TEAM_DOMAIN", "")
 	aud := rt.Config.String("CF_ACCESS_AUD", "")
 	if team == "" && aud == "" {
@@ -169,10 +172,11 @@ func adminRouter(rt *service.Runtime, host string, identity *grpc.ClientConn, tr
 	if team == "" || aud == "" {
 		return nil, errors.New("CF_ACCESS_TEAM_DOMAIN ve CF_ACCESS_AUD birlikte verilmeli")
 	}
-	if identity == nil {
-		return nil, errors.New("yönetim paneli IDENTITY_GRPC_ADDR gerektirir")
+	if identity == nil || core == nil {
+		return nil, errors.New("yönetim paneli IDENTITY_GRPC_ADDR ve CORE_GRPC_ADDR gerektirir")
 	}
 	issuer := rt.Config.Required("AUTH_ISSUER")
+	googleClient := rt.Config.Required("ADMIN_GOOGLE_CLIENT_ID")
 	if err := rt.Config.Err(); err != nil {
 		return nil, err
 	}
@@ -194,6 +198,9 @@ func adminRouter(rt *service.Runtime, host string, identity *grpc.ClientConn, tr
 	return admin.NewHandler(admin.Config{
 		Host: host, Access: access, Admin: adminV,
 		Identity:            identityv1.NewAdminAuthServiceClient(identity),
+		Core:                corev1.NewAdminServiceClient(core),
+		Users:               identityv1.NewAdminUserServiceClient(identity),
+		GoogleClientID:      googleClient,
 		Log:                 rt.Log,
 		TrustCFConnectingIP: trustCF,
 		// One person signs in a few times a day.

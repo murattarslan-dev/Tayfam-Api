@@ -1,0 +1,6 @@
+{{define "content"}}
+<h1>Şikâyetler</h1>
+<p class="hint">Platforma yükselen şikâyetler. Önce açık olanlar; bunların içinde önce 18 yaş altı taraf ve çocuk/genç güvenliği.</p>
+<p>{{if .Data.All}}<a href="/sikayetler">Yalnızca açık olanlar</a>{{else}}<a href="/sikayetler?tumu=1">Karara bağlananları da göster</a>{{end}}</p>
+{{if .Data.Reports}}{{template "reportTable" .Data.Reports}}{{else}}<p>Şikâyet yok.</p>{{end}}
+{{end}}

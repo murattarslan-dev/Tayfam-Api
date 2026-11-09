@@ -1,0 +1,31 @@
+{{define "content"}}
+<h1>Kullanıcılar</h1>
+{{/* POST: the query may be an e-mail address; it must not end up in a URL
+     and is not shown again on the page. */}}
+<form class="inline" method="post" action="/kullanicilar" role="search">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <label for="q" class="hint">Ad, referans kodu veya e-posta</label>
+  <input type="search" id="q" name="q" required minlength="2" maxlength="100" autocomplete="off">
+  <button type="submit">Ara</button>
+</form>
+<p class="hint">E-posta tam eşleşmeyle aranır ve sonuçlarda gösterilmez.</p>
+{{if .Data.Searched}}
+{{if .Data.Users}}
+<div class="table-wrap"><table>
+<thead><tr><th>Ad</th><th>Referans kodu</th><th>Hesap</th><th>Yaptırım</th></tr></thead>
+<tbody>
+{{range .Data.Users}}
+<tr>
+  <td><a href="/kullanicilar/{{.UserId}}">{{if .DisplayName}}{{.DisplayName}}{{else}}(adsız){{end}}</a></td>
+  <td>{{.ReferralCode}}</td>
+  <td>{{if .Deleted}}Silindi{{else if .Registered}}Kayıtlı{{else}}Kayıt tamamlanmadı{{end}}</td>
+  <td>{{label .ActiveSanction}}</td>
+</tr>
+{{end}}
+</tbody>
+</table></div>
+{{else}}
+<p>Sonuç yok.</p>
+{{end}}
+{{end}}
+{{end}}

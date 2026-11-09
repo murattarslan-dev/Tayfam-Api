@@ -1,0 +1,22 @@
+{{define "content"}}
+<h1>Pano</h1>
+<div class="stats">
+  <div class="card stat"><div class="n">{{.Data.OpenReports}}</div><div class="l">Bekleyen platform şikâyeti</div></div>
+  <div class="card stat"><div class="n">{{.Data.UrgentReports}}</div><div class="l">Öncelikli (18 yaş altı taraf veya çocuk/genç güvenliği)</div></div>
+</div>
+<h2>Kuyruğun başı</h2>
+{{if .Data.Queue}}
+{{template "reportTable" .Data.Queue}}
+<p><a href="/sikayetler">Tüm kuyruk</a></p>
+{{else}}
+<p>Bekleyen platform şikâyeti yok.</p>
+{{end}}
+<h2>Oturum</h2>
+<div class="card">
+<dl class="meta">
+  <dt>Google girişi</dt><dd>{{when .Data.SignedInAt}}</dd>
+  <dt>Oturum sonu</dt><dd>{{when .Data.ExpiresAt}}</dd>
+</dl>
+{{template "reauth" .}}
+</div>
+{{end}}

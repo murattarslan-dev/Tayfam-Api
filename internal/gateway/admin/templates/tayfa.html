@@ -1,0 +1,97 @@
+{{define "content"}}
+{{$csrf := .CSRF}}
+{{with .Data.Tayfa}}
+<h1>{{.Tayfa.Name}}</h1>
+<div class="card">
+<dl class="meta">
+  <dt>Durum</dt><dd>{{label .Tayfa.Status}}{{if .Tayfa.SuspendTime}} <span class="tag warn">Askıda ({{ts .Tayfa.SuspendTime}})</span>{{end}}{{if .Tayfa.DeleteTime}} <span class="tag danger">Silindi ({{ts .Tayfa.DeleteTime}})</span>{{end}}</dd>
+  {{if .SuspendReason}}<dt>Askı gerekçesi</dt><dd>{{.SuspendReason}}</dd>{{end}}
+  {{if .Tayfa.DeletionScheduledTime}}<dt>Silme talebi</dt><dd>{{ts .Tayfa.DeletionScheduledTime}}</dd>{{end}}
+  <dt>Açıklama</dt><dd>{{if .Description}}{{.Description}}{{else}}—{{end}}</dd>
+  <dt>Şehir</dt><dd>{{if .City}}{{.City}}{{if .District}} / {{.District}}{{end}}{{else}}—{{end}}</dd>
+  <dt>Üye sayısı</dt><dd>{{.Tayfa.MemberCount}}</dd>
+  <dt>Keşfet</dt><dd>{{if .Tayfa.Listed}}Görünür{{else}}Gizli{{end}}</dd>
+  <dt>Açıldı</dt><dd>{{ts .Tayfa.CreateTime}}</dd>
+  <dt>Açık platform şikâyeti</dt><dd>{{.OpenPlatformReports}}</dd>
+</dl>
+</div>
+{{end}}
+
+<h2>Üyeler ve roller</h2>
+<p class="hint">Tayfanın içeriği (duyuru, etkinlik, soru-cevap, kanal) panelde görünmez.</p>
+{{if .Data.Members}}
+<div class="table-wrap"><table>
+<thead><tr><th>Ad</th><th>Rol</th><th>Durum</th><th>Katıldı</th></tr></thead>
+<tbody>
+{{range .Data.Members}}
+<tr>
+  <td><a href="/kullanicilar/{{.UserId}}">{{if .DisplayName}}{{.DisplayName}}{{else}}Silinmiş kullanıcı{{end}}</a></td>
+  <td>{{label .Role}}</td>
+  <td>{{label .Status}}</td>
+  <td>{{ts .JoinTime}}</td>
+</tr>
+{{end}}
+</tbody>
+</table></div>
+{{else}}
+<p>Üye yok.</p>
+{{end}}
+
+{{if not .Data.Tayfa.Tayfa.DeleteTime}}
+{{$id := .Data.Tayfa.Tayfa.TayfaId}}
+<h2>İşlemler</h2>
+{{template "reauth" .}}
+
+<div class="card">
+<h3>Rol düzelt</h3>
+<p class="hint">Sahipsiz kalan tayfaya yönetici atamak veya kötüye kullanımdan sonra rolleri düzeltmek için. Yalnızca aktif üyeler.</p>
+<form class="stack" method="post" action="/tayfalar/{{$id}}/rol">
+  <input type="hidden" name="csrf" value="{{$csrf}}">
+  <label for="uye">Üye</label>
+  <select id="uye" name="uye" required>
+    {{range .Data.Members}}{{if activeMember .}}<option value="{{.UserId}}">{{if .DisplayName}}{{.DisplayName}}{{else}}Silinmiş kullanıcı{{end}} ({{label .Role}})</option>{{end}}{{end}}
+  </select>
+  <label for="rol">Yeni rol</label>
+  <select id="rol" name="rol" required>
+    <option value="uye">Üye</option>
+    <option value="moderator">Moderatör</option>
+    <option value="yonetici">Yönetici</option>
+  </select>
+  {{template "reason" "rol"}}
+  <button type="submit">Rolü değiştir</button>
+</form>
+</div>
+
+<div class="card">
+{{if .Data.Tayfa.Tayfa.SuspendTime}}
+<h3>Askıyı kaldır</h3>
+<form class="stack" method="post" action="/tayfalar/{{$id}}/aski-kaldir">
+  <input type="hidden" name="csrf" value="{{$csrf}}">
+  {{template "reason" "aski-kaldir"}}
+  <button type="submit">Askıyı kaldır</button>
+</form>
+{{else}}
+<h3>Askıya al</h3>
+<p class="hint">Tayfa salt okunur olur; yöneticileri ve moderatörleri bildirim alır, gerekçeyi tayfa ayrıntısında görür. Gerekçe en fazla 500 karakter.</p>
+<form class="stack" method="post" action="/tayfalar/{{$id}}/aski">
+  <input type="hidden" name="csrf" value="{{$csrf}}">
+  <label for="gerekce-aski">Gerekçe (zorunlu, tayfanın yöneticileri görür)</label>
+  <textarea id="gerekce-aski" name="gerekce" required minlength="10" maxlength="500"></textarea>
+  <button type="submit" class="danger">Askıya al</button>
+</form>
+{{end}}
+</div>
+
+<div class="card">
+<h3>Tayfayı sil</h3>
+<p class="hint">72 saatlik bekleme olmadan hemen silinir; 30 gün sonra kalıcı olarak temizlenir.</p>
+<form class="stack" method="post" action="/tayfalar/{{$id}}/sil">
+  <input type="hidden" name="csrf" value="{{$csrf}}">
+  {{template "reason" "sil"}}
+  <label for="onay">Onaylamak için "sil" yazın</label>
+  <input type="text" id="onay" name="onay" required pattern="sil" autocomplete="off">
+  <button type="submit" class="danger">Tayfayı sil</button>
+</form>
+</div>
+{{end}}
+{{end}}

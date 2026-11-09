@@ -75,3 +75,27 @@ yıldan eski satırları identity'nin saklama işi siler (ADR-0008).
 gateway, Access uygulamasının JWT'sini en fazla 24 saatlik oturum süresiyle
 kabul eder. Access uygulamasının "Session Duration" değeri 24 saati
 geçmemelidir; panel oturumuyla aynı olması için **8 saat** önerilir.
+
+**Cookie settings → SameSite** `None` (varsayılan) kalmalıdır. Panel
+girişinde Google, ID token'ı `admin.tayfam.app/auth/google/callback`'e
+siteler arası bir form POST'uyla gönderir (`response_mode=form_post`);
+`Lax` ya da `Strict` seçilirse tarayıcı `CF_Authorization` çerezini bu
+POST'ta göndermez, Access isteği giriş sayfasına çevirir ve panel girişi
+tamamlanmaz. Panelin kendi oturum çerezi her durumda `SameSite=Strict`'tir.
+
+## Google ile panel girişi
+
+Panel Google'ın yönlendirme akışını kullanır (OpenID Connect,
+`response_type=id_token`, `response_mode=form_post`); tarayıcıya Google'dan
+script yüklenmez ve istemci sırrı yoktur.
+
+- gateway: `ADMIN_GOOGLE_CLIENT_ID` = panelin Google OAuth istemci kimliği
+  (gizli değil). Aynı değer identity'nin `GOOGLE_CLIENT_IDS` listesinde
+  olmalıdır; identity ID token'ının `aud` alanını bu listeyle doğrular.
+- Google Cloud Console → APIs & Services → Credentials → bu Web istemcisi:
+  - **Authorized JavaScript origins:** `https://admin.tayfam.app`
+  - **Authorized redirect URIs:** `https://admin.tayfam.app/auth/google/callback`
+
+Uygulamanın mevcut Web istemcisi kullanılabilir; ayrı bir istemci açmak
+panel girişini uygulamadan ayırır ama identity'nin `GOOGLE_CLIENT_IDS`
+listesine bir değer daha ekler.

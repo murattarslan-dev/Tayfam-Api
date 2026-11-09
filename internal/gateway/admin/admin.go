@@ -1,7 +1,8 @@
 // Package admin is gateway's router for the platform administration panel
-// at admin.tayfam.app (ADR-0008, issue #104). Stage 1 is the access layer
-// only: the panel's pages (stage 3) and the admin services behind them
-// (stage 2) are added on top of it.
+// at admin.tayfam.app (ADR-0008, issue #104): the access layer (this file,
+// stage 1) and the server-rendered pages on top of it (web.go, login.go,
+// csrf.go; stage 3), which call core's AdminService and identity's
+// AdminUserService (stage 2) with the administrator's admin token.
 //
 // The panel is protected by seven independent layers (Notion "Platform
 // Yönetim Paneli"); gateway enforces these on every request:
@@ -32,6 +33,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"html/template"
 	"io"
 	"log/slog"
 	"mime"
@@ -44,6 +46,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/httpx"
@@ -82,6 +85,12 @@ type AdminVerifier interface {
 	Verify(ctx context.Context, token string) (auth.AdminClaims, error)
 }
 
+// CoreAdminClient is core's AdminService.
+type CoreAdminClient = corev1.AdminServiceClient
+
+// UserAdminClient is identity's AdminUserService.
+type UserAdminClient = identityv1.AdminUserServiceClient
+
 // Config configures the admin router.
 type Config struct {
 	// Host is the panel's host name, e.g. admin.tayfam.app.
@@ -89,7 +98,13 @@ type Config struct {
 	Access   AccessVerifier
 	Admin    AdminVerifier
 	Identity IdentityClient
-	Log      *slog.Logger
+	Core     CoreAdminClient
+	Users    UserAdminClient
+	// GoogleClientID is the OAuth client of the panel's Google sign-in. It
+	// must be one of identity's GOOGLE_CLIENT_IDS and list
+	// https://<Host>/auth/google/callback as a redirect URI. Not secret.
+	GoogleClientID string
+	Log            *slog.Logger
 	// SignInLimit limits sign-in attempts per client IP.
 	SignInLimit *ratelimit.Limiter
 	// TrustCFConnectingIP: see rest.AuthDeps.
@@ -99,20 +114,52 @@ type Config struct {
 
 // NewHandler returns the admin router. Every field of cfg is required.
 func NewHandler(cfg Config) (http.Handler, error) {
-	if cfg.Host == "" || cfg.Access == nil || cfg.Admin == nil || cfg.Identity == nil || cfg.Log == nil || cfg.SignInLimit == nil {
+	if cfg.Host == "" || cfg.Access == nil || cfg.Admin == nil || cfg.Identity == nil || cfg.Core == nil ||
+		cfg.Users == nil || cfg.GoogleClientID == "" || cfg.Log == nil || cfg.SignInLimit == nil {
 		return nil, errors.New("admin: eksik yapılandırma")
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	h := &handlers{cfg: cfg, origin: "https://" + cfg.Host}
+	pages, err := parseTemplates()
+	if err != nil {
+		return nil, err
+	}
+	h := &handlers{cfg: cfg, origin: "https://" + cfg.Host, pages: pages}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /auth/nonce", h.nonce)
 	mux.HandleFunc("POST /auth/sign-in", h.signIn)
 	mux.HandleFunc("POST /auth/sign-out", h.signOut)
 	mux.Handle("GET /auth/me", h.requireAdmin(http.HandlerFunc(h.me)))
+
+	// Pages (stage 3). Static files and the sign-in pages need no session;
+	// everything else goes through requirePage, and every POST through
+	// requireCSRF, except Google's callback, which has its own state check.
+	mux.Handle("GET /static/", staticHandler())
+	mux.HandleFunc("GET /giris", h.loginPage)
+	mux.HandleFunc("POST /giris/google", h.requireCSRF(h.startGoogle))
+	mux.HandleFunc("POST "+CallbackPath, h.googleCallback)
+	mux.HandleFunc("POST /cikis", h.requireCSRF(h.signOutPage))
+	page := func(pattern string, f http.HandlerFunc) { mux.Handle(pattern, h.requirePage(f)) }
+	change := func(pattern string, f http.HandlerFunc) { mux.Handle(pattern, h.requirePage(h.requireCSRF(f))) }
+	page("GET /{$}", h.dashboard)
+	page("GET /tayfalar", h.tayfas)
+	page("GET /tayfalar/{id}", h.tayfa)
+	change("POST /tayfalar/{id}/aski", h.suspendTayfa)
+	change("POST /tayfalar/{id}/aski-kaldir", h.unsuspendTayfa)
+	change("POST /tayfalar/{id}/sil", h.deleteTayfa)
+	change("POST /tayfalar/{id}/rol", h.setMemberRole)
+	page("GET /kullanicilar", h.users)
+	change("POST /kullanicilar", h.searchUsers)
+	page("GET /kullanicilar/{id}", h.user)
+	change("POST /kullanicilar/{id}/oturumlar", h.revokeSessions)
+	change("POST /kullanicilar/{id}/yaptirim", h.sanctionUser)
+	change("POST /kullanicilar/{id}/yaptirim-kaldir", h.liftSanction)
+	page("GET /sikayetler", h.reports)
+	page("GET /sikayetler/{id}", h.report)
+	change("POST /sikayetler/{id}/karar", h.decideReport)
 	mux.HandleFunc("/", httpx.NotFound)
-	return httpx.Chain(mux, securityHeaders, h.requireAccess, h.sameOrigin), nil
+	return httpx.Chain(mux, securityHeaders, h.requireAccess, h.sameOrigin, withCSRFSlot), nil
 }
 
 // Mux sends requests for the admin host to admin and every other request
@@ -145,6 +192,7 @@ func hostOf(r *http.Request) string {
 type handlers struct {
 	cfg    Config
 	origin string
+	pages  map[string]*template.Template
 }
 
 type accessKey struct{}
@@ -156,13 +204,20 @@ type adminCaller struct {
 	token  string
 }
 
+// ContentSecurityPolicy: scripts, styles, images and connections only from
+// the panel's own origin; no inline script or style, no eval, no frames.
+// Forms post only to the panel; the sign-in form's answer redirects to
+// Google's sign-in page, so form-action also lists that one address
+// (browsers apply form-action to redirects).
+const ContentSecurityPolicy = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; " +
+	"form-action 'self' " + GoogleAuthURL + "; frame-ancestors 'none'; base-uri 'none'"
+
 // securityHeaders: nothing on the panel may be framed, sniffed, cached or
-// loaded from elsewhere. Stage 3 widens the CSP to the panel's own scripts
-// and styles ('self'), never to other origins.
+// loaded from elsewhere.
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
-		h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+		h.Set("Content-Security-Policy", ContentSecurityPolicy)
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "no-referrer")
@@ -200,11 +255,14 @@ func (h *handlers) requireAccess(next http.Handler) http.Handler {
 }
 
 // sameOrigin refuses state-changing requests that do not come from the
-// panel's own pages. Browsers always send Origin on such requests.
+// panel's own pages. Browsers always send Origin on such requests. The one
+// exception is Google's form post to the sign-in callback, which is checked
+// with the state cookie instead (login.go).
 func (h *handlers) sameOrigin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet, http.MethodHead:
+		switch {
+		case r.Method == http.MethodGet || r.Method == http.MethodHead:
+		case r.Method == http.MethodPost && r.URL.Path == CallbackPath:
 		default:
 			site := r.Header.Get("Sec-Fetch-Site")
 			if r.Header.Get("Origin") != h.origin || (site != "" && site != "same-origin") {
