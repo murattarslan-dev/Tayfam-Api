@@ -604,7 +604,7 @@ func TestBanDecision(t *testing.T) {
 	e := setup(t)
 	path := "/sikayetler/" + reportID + "/karar"
 	v := url.Values{"gerekce": {goodReason}, "karar": {"ban"}}
-	if w := e.do(e.form(path, cloneValues(v))); w.Header().Get("Location") != "/sikayetler/"+reportID+"?sonuc=karar-verildi" {
+	if w := e.do(e.form(path, cloneValues(v))); w.Header().Get("Location") != "/sikayetler?sonuc=karar-verildi" {
 		t.Fatalf("%d %s", w.Code, w.Header().Get("Location"))
 	}
 	if got := strings.Join(e.upstreamCalls(), ","); got != "GetReportedItem,SanctionUser:SANCTION_TYPE_BAN,DecideReport" {

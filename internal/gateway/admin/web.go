@@ -760,7 +760,9 @@ func (h *handlers) report(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, http.StatusOK, "report", p)
 }
 
-// decideReport records the platform's decision. A ban is applied in
+// decideReport records the platform's decision. It reads the report again
+// (core records that as a viewing) so the decision is checked against the
+// report itself, not against form fields. A ban is applied in
 // identity first (SanctionUser), then recorded on the report in core; if
 // the second call fails the ban stands and the decision can be sent again
 // (an existing ban is then accepted).
@@ -802,7 +804,9 @@ func (h *handlers) decideReport(w http.ResponseWriter, r *http.Request) {
 		h.failed(w, r, back, err)
 		return
 	}
-	done(w, r, back, "sonuc", "karar-verildi")
+	// Back to the queue, not to the report: opening the report again would
+	// write one more viewing to the audit log.
+	done(w, r, "/sikayetler", "sonuc", "karar-verildi")
 }
 
 func (h *handlers) ban(ctx context.Context, rep *corev1.PlatformReport, reason string) error {
