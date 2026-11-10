@@ -189,6 +189,23 @@ type NotificationPreference struct {
 	UpdatedAt  pgtype.Timestamptz
 }
 
+type PushQueue struct {
+	NotificationID pgtype.UUID
+	Attempts       int16
+	NextAttemptAt  pgtype.Timestamptz
+	SessionIds     []pgtype.UUID
+	CreatedAt      pgtype.Timestamptz
+}
+
+type PushToken struct {
+	SessionID   pgtype.UUID
+	UserID      pgtype.UUID
+	Platform    string
+	Token       string
+	CreatedAt   pgtype.Timestamptz
+	RefreshedAt pgtype.Timestamptz
+}
+
 type UserE2eState struct {
 	UserID            pgtype.UUID
 	HistoryKeyVersion int16

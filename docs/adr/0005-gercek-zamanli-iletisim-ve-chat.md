@@ -20,6 +20,10 @@
   zarf kümesinin birebir eşleşmesi, eşleştirme ve anahtar yenileme durum
   makinesi, sınırlar, düz sürümden geçiş). Uygulama yalnızca mobildir
   (tayfam-app ADR-0011): web'e özgü maddeler (WebCrypto) geçersizdir.
+- **Revizyon:** 2026-11-10 (issue #134): "Bildirimler" bölümünün push
+  tarafı [ADR-0019](0019-push-bildirimleri.md) ile ayrıntılandı (token =
+  oturum, kayıtla aynı transaction'da açılan gönderim kuyruğu, metin yerine
+  çeviri anahtarı, yeniden deneme, saklama).
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md)
 
