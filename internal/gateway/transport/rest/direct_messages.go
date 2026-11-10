@@ -72,16 +72,22 @@ type directMessageJSON struct {
 	ConversationID string `json:"conversation_id"`
 	// Absent when the sender's account was deleted.
 	SenderUserID string `json:"sender_user_id,omitempty"`
-	// Absent when deleted.
-	Body      string    `json:"body,omitempty"`
-	Deleted   bool      `json:"deleted"`
-	CreatedAt time.Time `json:"created_at"`
+	// Absent when deleted, and always for an end-to-end message.
+	Body       string    `json:"body,omitempty"`
+	Deleted    bool      `json:"deleted"`
+	Encryption string    `json:"encryption"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+var messageEncryptionNames = map[chatv1.MessageEncryption]string{
+	chatv1.MessageEncryption_MESSAGE_ENCRYPTION_SERVER: "server",
+	chatv1.MessageEncryption_MESSAGE_ENCRYPTION_E2E:    "e2e",
 }
 
 func directMessageFrom(m *chatv1.DirectMessage) directMessageJSON {
 	return directMessageJSON{
 		ID: m.GetId(), ConversationID: m.GetConversationId(), SenderUserID: m.GetSenderUserId(), Body: m.GetBody(),
-		Deleted: m.GetDeleted(), CreatedAt: m.GetCreateTime().AsTime(),
+		Deleted: m.GetDeleted(), Encryption: nameOr(messageEncryptionNames, m.GetEncryption()), CreatedAt: m.GetCreateTime().AsTime(),
 	}
 }
 
@@ -104,22 +110,53 @@ type directMessageSendBody struct {
 	RecipientUserID string `json:"recipient_user_id"`
 	Body            string `json:"body"`
 	ClientRequestID string `json:"client_request_id"`
+	// End to end (issue #127): instead of Body.
+	Envelopes []outgoingEnvelopeJSON `json:"envelopes"`
+}
+
+type outgoingEnvelopeJSON struct {
+	DeviceID       string `json:"device_id"`
+	RegistrationID uint32 `json:"registration_id"`
+	Type           string `json:"type"`
+	Content        []byte `json:"content"`
+}
+
+// envelopesProto checks the envelopes' shape (chat checks them again) and
+// converts them; ok is false for a bad one.
+func envelopesProto(es []outgoingEnvelopeJSON) ([]*chatv1.OutgoingEnvelope, bool) {
+	if len(es) > 16 {
+		return nil, false
+	}
+	out := make([]*chatv1.OutgoingEnvelope, 0, len(es))
+	for _, e := range es {
+		t, ok := envelopeTypes[e.Type]
+		if !ok || !validUUID(e.DeviceID) || len(e.Content) == 0 || len(e.Content) > 64<<10 {
+			return nil, false
+		}
+		out = append(out, &chatv1.OutgoingEnvelope{DeviceId: e.DeviceID, RegistrationId: e.RegistrationID, Type: t, Content: e.Content})
+	}
+	return out, true
 }
 
 func (h chatHandlers) sendDirectMessage(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	var b directMessageSendBody
-	if !decodeLimit(w, r, &b, maxMessageBody) {
+	// Envelopes are larger than a text message (ADR-0018 item 3).
+	if !decodeLimit(w, r, &b, maxE2ESendBody) {
 		return
 	}
-	if !validUUID(b.RecipientUserID) || !messageBodyOK(b.Body) || !validUUID(b.ClientRequestID) {
+	envelopes, ok := envelopesProto(b.Envelopes)
+	plain := len(envelopes) == 0
+	if !ok || !validUUID(b.RecipientUserID) || !validUUID(b.ClientRequestID) ||
+		(plain && !messageBodyOK(b.Body)) || (!plain && b.Body != "") ||
+		(plain && r.ContentLength > maxMessageBody) {
 		badRequest(w, r)
 		return
 	}
 	resp, err := h.d.DirectMessages.SendDirectMessage(ctx, &chatv1.SendDirectMessageRequest{
-		RecipientUserId: b.RecipientUserID, Body: b.Body, ClientRequestId: b.ClientRequestID,
+		RecipientUserId: b.RecipientUserID, Body: b.Body, ClientRequestId: b.ClientRequestID, Envelopes: envelopes,
 	})
 	if err != nil {
-		h.fail(w, r, err)
+		h.failE2E(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, directMessageSentJSON{

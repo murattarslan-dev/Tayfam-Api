@@ -20,7 +20,7 @@ var pathParams = strings.NewReplacer(
 	"{question_id}", questionID, "{answer_id}", answerID, "{tag_id}", tagID,
 	"{poll_id}", pollID, "{option_id}", optionID, "{notification_id}", notificationID,
 	"{session_id}", sessionID, "{channel_id}", channelID, "{message_id}", messageID,
-	"{conversation_id}", conversationID,
+	"{conversation_id}", conversationID, "{link_request_id}", linkRequestID,
 )
 
 // TestRoutesMatchContract keeps the router and api/openapi/gateway.yaml in
@@ -69,7 +69,7 @@ func TestProblemTypesDocumented(t *testing.T) {
 	}
 	documented := map[string]bool{}
 	inList := false
-	itemRe := regexp.MustCompile(`^\s+- ([a-z][a-z-]*)$`)
+	itemRe := regexp.MustCompile(`^\s+- ([a-z][a-z0-9-]*)$`)
 	for line := range strings.SplitSeq(string(spec), "\n") {
 		if strings.TrimSpace(line) == "x-problem-types:" {
 			inList = true
