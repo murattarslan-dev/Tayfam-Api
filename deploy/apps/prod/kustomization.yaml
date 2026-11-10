@@ -49,7 +49,15 @@ configMapGenerator:
       # CF_ACCESS_TEAM_DOMAIN, CF_ACCESS_AUD ve ADMIN_GOOGLE_CLIENT_ID prod'un
       # Access uygulaması kurulunca birlikte eklenir (vds-kurulumu.md, adım g).
       # CF_ACCESS_* boşken gateway paneli hiç kurmaz, admin host'u 404 döner.
-      # İstemci sürümü (CLIENT_*, issue #114) dev'de birleşince eklenecek.
+      # İstemci sürümü (ADR-0016): platform başına desteklenen en düşük ve en
+      # son sürüm. Değişiklik yalnızca bu dosyayla ve yeni bir sürüm etiketiyle
+      # dağıtılır; geçersiz değer gateway'in başlamasını engeller.
+      - CLIENT_MIN_VERSION_ANDROID=0.1.0
+      - CLIENT_LATEST_VERSION_ANDROID=0.1.0
+      - CLIENT_MIN_VERSION_IOS=0.1.0
+      - CLIENT_LATEST_VERSION_IOS=0.1.0
+      - CLIENT_MIN_VERSION_WEB=0.1.0
+      - CLIENT_LATEST_VERSION_WEB=0.1.0
 
 # Sürüm etiketiyle çalışan prod iş akışı her satırı, etiketin gösterdiği
 # commit'in imzalı image digest'iyle değiştirir (scripts/pin-images.sh). Bu
