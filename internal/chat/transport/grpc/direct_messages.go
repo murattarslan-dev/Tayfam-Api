@@ -55,10 +55,15 @@ func conversationToProto(c dm.Conversation) *chatv1.Conversation {
 	}
 }
 
+var messageEncryptions = map[string]chatv1.MessageEncryption{
+	dm.EncryptionServer: chatv1.MessageEncryption_MESSAGE_ENCRYPTION_SERVER,
+	dm.EncryptionE2E:    chatv1.MessageEncryption_MESSAGE_ENCRYPTION_E2E,
+}
+
 func directMessageToProto(m dm.Message) *chatv1.DirectMessage {
 	return &chatv1.DirectMessage{
 		Id: m.ID.String(), ConversationId: m.ConversationID.String(), SenderUserId: idOrEmpty(m.SenderID),
-		Body: m.Body, Deleted: m.Deleted, CreateTime: timestamppb.New(m.CreatedAt),
+		Body: m.Body, Deleted: m.Deleted, CreateTime: timestamppb.New(m.CreatedAt), Encryption: messageEncryptions[m.Encryption],
 	}
 }
 
@@ -68,7 +73,25 @@ func (s *DirectMessageServer) SendDirectMessage(ctx context.Context, req *chatv1
 	if err != nil {
 		return nil, err
 	}
-	m, c, err := s.app.Send(ctx, caller, dm.SendInput{Recipient: v[0], Body: req.GetBody(), ClientRequestID: v[1]})
+	in := dm.SendInput{Recipient: v[0], Body: req.GetBody(), ClientRequestID: v[1]}
+	if es := req.GetEnvelopes(); len(es) > 0 {
+		// End to end (issue #127): the sending device is the session's.
+		c, err := callerSession(ctx)
+		if err != nil {
+			return nil, err
+		}
+		in.Session = c.Session
+		for _, e := range es {
+			d, ok := id.Parse(e.GetDeviceId())
+			if !ok {
+				return nil, validation("envelopes")
+			}
+			in.Envelopes = append(in.Envelopes, dm.OutgoingEnvelope{
+				Device: d, RegistrationID: e.GetRegistrationId(), Type: int(e.GetType()), Content: e.GetContent(),
+			})
+		}
+	}
+	m, c, err := s.app.Send(ctx, caller, in)
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -198,6 +199,11 @@ func (s *Service) Delete(ctx context.Context, caller, conversation, message id.I
 			return nil // erased concurrently
 		}
 		changed = true
+		// An end-to-end message's waiting envelopes and both parties'
+		// archive entries go with it (ADR-0018 item 3).
+		if err := keys.MessageDeleted(ctx, store.New(tx), message); err != nil {
+			return err
+		}
 		return record(ctx, tx, EventMessageDeleted, caller, "dm_message", message, map[string]any{"conversation_id": conversation.String()})
 	})
 	if err != nil {

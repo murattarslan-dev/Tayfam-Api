@@ -2573,8 +2573,27 @@ paths:
         dışında kontrol karakteri içeremez. Aynı `client_request_id` ile
         tekrar gönderim ilk mesajı döndürür; başka konuşmada kullanılmış
         değer `invalid-request`. Mesaj düzenlenemez. Düz sürümde mesajlar
-        sunucuda şifreli saklanır (uçtan uca şifreleme sonraki aşama).
-        Aynı kurallar WebSocket `dm.send` çerçevesinde de geçerlidir.
+        sunucuda şifreli saklanır. Aynı kurallar WebSocket `dm.send`
+        çerçevesinde de geçerlidir.
+
+        **Uçtan uca şifreleme (Signal; #127, ADR-0018):** `body` yerine
+        `envelopes` gönderilir: alıcının **tüm** cihazlarına ve sizin
+        **diğer tüm** cihazlarınıza birer zarf (en fazla 16). Gönderen
+        cihaz, token'ın oturumuna kayıtlı cihazdır
+        (`POST /v1/me/e2e/device`; yoksa `e2e-device-not-registered`, 409).
+        Küme birebir aynı olmalıdır: eksik, fazla, aynı cihaza iki zarf ya
+        da kayıt kimliği değişmiş cihaz `e2e-devices-changed` (409,
+        `missing_device_ids` ve `stale_device_ids` ile;
+        `E2EDevicesChangedProblem`) döner; cihaz listelerini tazeleyip
+        tekrar deneyin. Alıcının cihazı yoksa `e2e-recipient-unavailable`
+        (409). Sunucu zarfları açmaz; mesaj içeriksiz saklanır
+        (`encryption: e2e`, `body` yok). Zarflar hedef cihaza
+        `GET /v1/me/e2e/envelopes` ve WebSocket `dm.envelope` ile gider.
+        Zarflı gönderim yalnızca REST'tedir (WebSocket çerçevesi 64 KB).
+        Gövde en fazla 1,5 MiB.
+
+        **Geri düşüş yok:** sizin ya da alıcının E2E cihazı varsa `body`
+        ile gönderim `e2e-required` (409) alır.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -2647,6 +2666,8 @@ paths:
         önce; verilirse ondan yeniler en eski önce (yeniden bağlanınca
         eksikleri tamamlama, ADR-0005). Silinen mesaj yerinde
         `deleted: true` ve metinsiz durur ("Bu mesaj silindi").
+        `encryption: e2e` mesajın metni burada hiçbir zaman yoktur; içerik
+        zarfta ve arşivdedir (`…/archive`).
       parameters:
         - $ref: "#/components/parameters/PageSize"
         - $ref: "#/components/parameters/PageToken"
@@ -2675,6 +2696,8 @@ paths:
       description: |
         Metin hemen ve geri alınamaz biçimde silinir. Başkasının mesajı
         `message-not-found`. Silinmiş mesajı silmek bir şey değiştirmez.
+        Uçtan uca şifreli mesajın bekleyen zarfları ve iki tarafın arşiv
+        kayıtları da silinir.
         Engellemeden sonra da kendi mesajınızı silebilirsiniz.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
@@ -2922,6 +2945,493 @@ paths:
         "503": { $ref: "#/components/responses/Problem" }
 
   # --- Hesap, referans kodu (identity AccountService, #71) ---
+
+  # --- birebir mesajda uçtan uca şifreleme (#127, ADR-0018) ---
+  #
+  # Sunucu hiçbir kriptografi yapmaz: açık anahtarları, opak zarfları,
+  # şifreli arşivi ve eşleştirme mesajlarını saklar ve iletir. "Cihaz",
+  # token'ın oturumudur (ADR-0018 madde 1): oturum kapanınca (çıkış, başka
+  # cihazdan kapatma, yaptırım, hesap silme) cihaz, ön anahtarları ve
+  # bekleyen zarfları silinir. Bayt alanları standart base64'tür.
+  # Biçim: EC açık anahtar 33 bayt (0x05 ile başlar), Kyber açık anahtar
+  # 1569 bayt, imza 64 bayt, ön anahtar kimliği 0–16777215, kayıt kimliği
+  # 1–16380. Sunucu imza doğrulamaz.
+
+  /v1/me/e2e/device:
+    get:
+      operationId: getMyE2EDevice
+      summary: Bu oturumun E2E cihazı ve hesabın E2E durumu
+      description: |
+        Tek kullanımlık ön anahtar sayıları (`prekey_counts.low`: bir türden
+        10'dan az kaldı), geçmiş anahtarı sürümü, anahtar yenileme gerekip
+        gerekmediği ve eşleştirilmiş başka cihaz olup olmadığı (varsa QR
+        eşleştirme önerin). Cihaz yoksa `e2e-device-not-registered` (409).
+      responses:
+        "200":
+          description: Cihaz ve durum
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/E2EDeviceState" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: registerE2EDevice
+      summary: Bu oturumu E2E cihazı olarak kaydeder
+      description: |
+        Kimlik anahtarı, kayıt kimliği, imzalı ön anahtar ve son çare Kyber
+        ön anahtarı zorunlu (PQXDH); tek kullanımlık EC ve Kyber ön
+        anahtarları türüne göre en fazla 100. Hesap sıradaki cihaz
+        numarasını alır (1–127, Signal adresi) ve karşı taraflar için
+        `device_added` anahtar olayı yazılır. Hesap başına en fazla 5 cihaz
+        (`e2e-device-limit`, 409: eski bir oturumu kapatın). Aynı oturum aynı
+        anahtarlarla tekrar kaydolursa aynı cihaz döner; başka anahtarlarla
+        `e2e-device-already-registered` (409; önce `DELETE`). Kapatılmış
+        oturumun hâlâ geçerli token'ı kaydedemez (401). Gövde en fazla
+        512 KiB. Hız sınırı: anahtar işlemleri kullanıcı başına dakikada 30.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/E2EDeviceRegistration" }
+      responses:
+        "200":
+          description: Kayıtlı cihaz
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/E2EDeviceRegistered" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: unregisterE2EDevice
+      summary: Bu oturumun E2E cihazını kaldırır
+      description: |
+        Ön anahtarlar, bekleyen zarflar, anahtar paylaşımları ve eşleştirme
+        isteği de silinir; `device_removed` anahtar olayı yazılır.
+        Eşleştirilmiş cihazsa ve eşleştirilmiş başka cihaz kalırsa geçmiş
+        anahtarının yenilenmesi istenir. Cihaz yoksa bir şey değişmez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Kaldırıldı }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/e2e/device/prekeys:
+    post:
+      operationId: uploadE2EPreKeys
+      summary: Ön anahtar yükler
+      description: |
+        Verilirse imzalı ön anahtarı ve son çare Kyber ön anahtarını
+        değiştirir; tek kullanımlık ön anahtarları ekler (çağrı başına
+        türüne göre en fazla 100, cihazda türüne göre en fazla 200; var olan
+        kimlik değişmez). Gövde en fazla 512 KiB.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/E2EPreKeyUpload" }
+      responses:
+        "200":
+          description: Kalan sayılar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/E2EPreKeyCounts" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/users/{user_id}/e2e/devices:
+    parameters:
+      - $ref: "#/components/parameters/UserID"
+    get:
+      operationId: listE2EDevices
+      summary: Bir kullanıcının E2E cihazları (açık kimlik anahtarlarıyla)
+      description: |
+        Güvenlik kodu ve zarf adresleme için. Kullanıcının kendisi, onunla
+        görünür bir konuşması olan ya da ona yazabilecek kişi görür; diğerleri
+        `direct-message-not-allowed` (403).
+      responses:
+        "200":
+          description: Cihazlar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/E2EPublicDeviceList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/users/{user_id}/e2e/key-events:
+    parameters:
+      - $ref: "#/components/parameters/UserID"
+    get:
+      operationId: listE2EKeyEvents
+      summary: Bir kullanıcının anahtar olayları ("güvenlik kodu değişti")
+      description: |
+        En yeni önce; 90 gün tutulur. İzin cihaz listesiyle aynı.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Olaylar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/E2EKeyEventList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/users/{user_id}/e2e/prekey-bundles:
+    parameters:
+      - $ref: "#/components/parameters/UserID"
+    post:
+      operationId: claimE2EPreKeyBundles
+      summary: Ön anahtar paketlerini çeker (tek kullanımlık anahtarları tüketir)
+      description: |
+        Kullanıcının her cihazı (ya da yalnızca `device_ids`) için bir paket;
+        her cihazdan bir tek kullanımlık EC ve bir tek kullanımlık Kyber ön
+        anahtarı alınır ve silinir: aynı anahtar eşzamanlı çekmelerde de iki
+        kişiye verilmez. Tek kullanımlık Kyber kalmadıysa son çare Kyber
+        (`kyber_last_resort: true`), EC kalmadıysa paket EC'siz döner.
+        Bu oturumun kendi cihazı hiçbir zaman dönmez.
+
+        Yalnızca kendi diğer cihazlarınız için ya da o an bu kişiye mesaj
+        **gönderebiliyorsanız**: gönderimle aynı kurallar
+        (`direct-message-not-allowed` 403, `message-request-pending` 409,
+        `message-request-limit` 429). Hız sınırı: kullanıcı başına dakikada
+        20 (`rate-limited`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/E2EBundleRequest" }
+      responses:
+        "200":
+          description: Paketler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/E2EPreKeyBundleList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/e2e/envelopes:
+    get:
+      operationId: listE2EEnvelopes
+      summary: Bu cihazı bekleyen zarflar (en eski önce)
+      description: |
+        Teslim en az bir kezdir: zarf `id` ile tekilleştirilir, saklandıktan
+        sonra onaylanır. Onaylanmayan zarf 30 gün sonra silinir. Onaydan
+        sonra liste baştan çekilir.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Zarflar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/E2EEnvelopeList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/e2e/envelopes/ack:
+    post:
+      operationId: ackE2EEnvelopes
+      summary: Teslim alınan zarfları onaylar (siler)
+      description: |
+        Yalnızca bu cihazın zarfları silinir; başka cihazın ya da bilinmeyen
+        kimlikler yok sayılır. WebSocket `dm.envelope_ack` ile aynı.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/E2EEnvelopeAck" }
+      responses:
+        "204": { description: Onaylandı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/e2e/archive:
+    post:
+      operationId: putE2EArchiveEntries
+      summary: Geçmiş arşivine kayıt yazar
+      description: |
+        Her kayıt hesabın geçmiş anahtarıyla şifrelidir (sunucu çözemez).
+        Yalnızca eşleştirilmiş cihaz yazar (`e2e-not-paired`, 409);
+        `history_key_version` güncel olmalı (`e2e-history-key-stale`, 409).
+        Taraf olmadığınız ya da silinmiş mesajlar atlanır, var olan kayıt
+        değişmez; `accepted_message_ids` artık kaydınız olan mesajlardır.
+        Çağrı başına 1–50 kayıt, kayıt 1 B – 32 KiB; gövde en fazla 2,5 MiB.
+        Hız sınırı: kullanıcı başına dakikada 120.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/E2EArchiveWrite" }
+      responses:
+        "200":
+          description: Kabul edilenler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/E2EArchiveWritten" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteE2EArchive
+      summary: Tüm geçmiş arşivinizi siler
+      description: Karşı tarafların arşivi etkilenmez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Silindi }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/direct-messages/conversations/{conversation_id}/archive:
+    parameters:
+      - $ref: "#/components/parameters/ConversationID"
+    get:
+      operationId: listE2EArchiveEntries
+      summary: Bir konuşmanın geçmiş arşivi (sizin kayıtlarınız)
+      description: |
+        Mesaj listesiyle aynı sayfalama (`after_message_id`). Yalnızca
+        eşleştirilmiş cihaz okur (`e2e-not-paired`, 409). Her kayıt kendi
+        `key_version`'ıyla çözülür.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+        - name: after_message_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Kayıtlar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/E2EArchiveEntryList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteE2EConversationArchive
+      summary: Bir konuşmanın arşiv kayıtlarınızı siler
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Silindi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/e2e/history-key:
+    post:
+      operationId: claimE2EHistoryKey
+      summary: Yeni geçmiş anahtarını bildirir (ilk cihaz)
+      description: |
+        Hesabın eşleştirilmiş cihazı yoksa bu cihaz yeni bir geçmiş anahtarı
+        üretir ve bunu çağırır: sürüm bir artar, cihaz eşleştirilmiş olur.
+        Eski arşiv bu cihaz için okunamaz; kullanıcıya söyleyin.
+        Eşleştirilmiş başka cihaz varsa `e2e-paired-device-exists` (409; QR
+        ile eşleşin). Zaten eşleştirilmiş cihaz güncel sürümü alır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Geçmiş anahtarı sürümü
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/E2EHistoryKeyVersion" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/e2e/history-key/rotate:
+    post:
+      operationId: rotateE2EHistoryKey
+      summary: Geçmiş anahtarını yeniler
+      description: |
+        Eşleştirilmiş bir cihaz, yenileme gerektiğinde (eşleştirilmiş bir
+        cihaz kaldırıldı; `rotation_needed`) yeni anahtarı üretir ve
+        **diğer tüm** eşleştirilmiş cihazlara birer paylaşım gönderir
+        (paylaşım 1 B – 16 KiB). `history_key_version` güncel sürümün bir
+        fazlası olmalı (`e2e-history-key-stale`, 409); paylaşımlar kümesi
+        tutmazsa `e2e-devices-changed` (409). Alan cihazlara WebSocket
+        `e2e.history_key_shared` gider.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/E2EHistoryKeyRotation" }
+      responses:
+        "204": { description: Yenilendi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/e2e/history-key-shares:
+    get:
+      operationId: listE2EHistoryKeyShares
+      summary: Bu cihazı bekleyen geçmiş anahtarı paylaşımları
+      description: En eski önce, en fazla 100. Onaylanmayan 30 gün sonra silinir.
+      responses:
+        "200":
+          description: Paylaşımlar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/E2EHistoryKeyShareList" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/e2e/history-key-shares/ack:
+    post:
+      operationId: ackE2EHistoryKeyShares
+      summary: Alınan paylaşımları onaylar (siler)
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/E2EShareAck" }
+      responses:
+        "204": { description: Onaylandı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/e2e/link-requests:
+    post:
+      operationId: createE2ELinkRequest
+      summary: QR eşleştirme isteği açar (yeni cihaz)
+      description: |
+        Eşleştirilmemiş cihaz açar (eşleştirilmişse `e2e-already-paired`,
+        409). 10 dakika yaşar; cihazın önceki isteğinin yerine geçer. QR'ı
+        istemci üretir: istek kimliği, bu iş için üretilen açık anahtar ve
+        tek kullanımlık doğrulama kodu. Sunucu QR'ın hiçbir parçasını
+        saklamaz.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "201":
+          description: İstek
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/E2ELinkRequestCreated" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/e2e/link-requests/{link_request_id}:
+    parameters:
+      - $ref: "#/components/parameters/LinkRequestID"
+    get:
+      operationId: getE2ELinkRequest
+      summary: Bu cihazın eşleştirme isteği ve cevabı
+      description: |
+        Yalnızca isteği açan cihaz okur; başkasınınki ve süresi dolmuş
+        cevapsız istek `e2e-link-request-not-found` (404).
+      responses:
+        "200":
+          description: İstek
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/E2ELinkRequest" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/e2e/link-requests/{link_request_id}/answer:
+    parameters:
+      - $ref: "#/components/parameters/LinkRequestID"
+    post:
+      operationId: answerE2ELinkRequest
+      summary: Eşleştirme isteğini cevaplar (eşleştirilmiş cihaz)
+      description: |
+        QR'ı okutan, aynı hesabın eşleştirilmiş cihazı geçmiş anahtarlarını
+        yeni cihazın açık anahtarıyla şifreleyip gönderir (1 B – 16 KiB);
+        `history_key_version` güncel olmalı. Başka hesabın, süresi dolmuş,
+        cevaplanmış ya da bilinmeyen istek `e2e-link-request-not-found`
+        (404). Yeni cihaza WebSocket `e2e.link_answered` gider.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/E2ELinkAnswer" }
+      responses:
+        "204": { description: Cevaplandı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/e2e/link-requests/{link_request_id}/complete:
+    parameters:
+      - $ref: "#/components/parameters/LinkRequestID"
+    post:
+      operationId: completeE2ELinkRequest
+      summary: Eşleştirmeyi tamamlar (yeni cihaz)
+      description: |
+        Yeni cihaz cevabı çözdükten sonra çağırır: cihaz eşleştirilmiş olur,
+        istek silinir. Arada anahtar yenilendiyse `e2e-history-key-stale`
+        (409); yeni istek açın.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Eşleştirilmiş cihaz
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/E2EDevice" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
 
   /v1/me/account:
     get:
@@ -3569,9 +4079,15 @@ paths:
           gerekmez. Hatalar: `direct_message_not_allowed`,
           `message_request_pending`, `message_request_limit`,
           `rate_limited`, `invalid_request` (`data.field`), `unavailable`.
+          `e2e_required` (taraflardan birinin E2E cihazı var; zarflı
+          gönderim REST'tedir).
           `send` ve `dm.send`, REST ile ortak mesaj hız sınırına tabidir
           (kullanıcı başına dakikada 30, patlama 10): aşılınca o çerçeveye
           `rate_limited` hatası döner, bağlantı açık kalır.
+        - `dm.envelope_ack` `{envelope_ids}` (1–100) → `dm.envelope_acked`.
+          Bu bağlantının cihazına (oturumuna) ait teslim alınmış zarfları
+          siler (`POST /v1/me/e2e/envelopes/ack` ile aynı). Cihaz yoksa
+          `e2e_device_not_registered`.
 
         Sunucu çerçeveleri:
         - `ready`: bağlantı hazır; `data.heartbeat_seconds` ping aralığı,
@@ -3589,8 +4105,22 @@ paths:
         - `notification`: yeni bildirim `{type, tayfa_id, target_type,
           target_id}`; içerik yok, liste REST'ten çekilir.
         - `dm.message_created`: birebir mesaj `{id, conversation_id,
-          sender_user_id, body, created_at}`; konuşmanın iki tarafının tüm
-          bağlantılarına gider (gönderenin diğer cihazları dahil).
+          sender_user_id, body, encryption, created_at}`; konuşmanın iki
+          tarafının tüm bağlantılarına gider (gönderenin diğer cihazları
+          dahil). `encryption: e2e` ise `body` boştur; içerik cihaza
+          `dm.envelope` ile gelir.
+        - `dm.envelope`: yalnızca hedef cihazın (oturumun) bağlantılarına
+          giden uçtan uca zarf `{id, message_id, conversation_id,
+          sender_user_id, sender_device_id, sender_device_number, type
+          (whisper|prekey), content (base64), created_at}`. Teslim en az bir
+          kezdir: istemci `id` ile tekilleştirir, sakladıktan sonra
+          `dm.envelope_ack` gönderir. Bu çerçeve 64 KB'ı aşabilir.
+        - `e2e.prekeys_low`: cihazın tek kullanımlık ön anahtarları azaldı
+          `{ec, kyber}`; `POST /v1/me/e2e/device/prekeys` ile yükleyin.
+        - `e2e.link_answered`: cihazın eşleştirme isteği cevaplandı
+          `{link_request_id}`.
+        - `e2e.history_key_shared`: cihaz için yeni geçmiş anahtarı
+          paylaşımı var (`GET /v1/me/e2e/history-key-shares`).
         - `dm.message_deleted`: `{conversation_id, message_id}`.
         - `dm.conversation_accepted`: mesaj isteği kabul edildi
           `{conversation_id}`. Reddedilen istek gönderene bildirilmez.
@@ -3735,6 +4265,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    LinkRequestID:
+      name: link_request_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     SessionID:
       name: session_id
       in: path
@@ -3876,6 +4411,18 @@ components:
         - message-request-pending
         - message-request-limit
         - message-request-not-found
+        # chat: uçtan uca şifreleme (#127, ADR-0018)
+        - e2e-device-not-registered
+        - e2e-device-already-registered
+        - e2e-device-limit
+        - e2e-devices-changed
+        - e2e-recipient-unavailable
+        - e2e-required
+        - e2e-not-paired
+        - e2e-already-paired
+        - e2e-paired-device-exists
+        - e2e-history-key-stale
+        - e2e-link-request-not-found
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
@@ -5360,8 +5907,15 @@ components:
           description: Gönderenin hesabı silindiyse yoktur.
         body:
           type: string
-          description: Silinmiş mesajda yoktur.
+          description: Silinmiş ve uçtan uca şifreli mesajda yoktur.
         deleted: { type: boolean }
+        encryption:
+          type: string
+          enum: [server, e2e]
+          description: |
+            `server`: düz sürüm, metin sunucu anahtarıyla şifreli saklanır
+            (uçtan uca değildir; istemci bunu belirtir). `e2e`: içerik
+            yalnızca zarflarda ve arşivdedir.
         created_at: { type: string, format: date-time }
     DirectMessageList:
       type: object
@@ -5373,11 +5927,17 @@ components:
         next_page_token: { type: string }
     DirectMessageCreateRequest:
       type: object
-      required: [recipient_user_id, body, client_request_id]
+      description: "`body` ya da `envelopes`; ikisinden yalnızca biri."
+      required: [recipient_user_id, client_request_id]
       additionalProperties: false
       properties:
         recipient_user_id: { type: string, format: uuid }
         body: { type: string, minLength: 1, maxLength: 4000 }
+        envelopes:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items: { $ref: "#/components/schemas/OutgoingEnvelope" }
         client_request_id:
           type: string
           format: uuid
@@ -5388,6 +5948,342 @@ components:
       properties:
         message: { $ref: "#/components/schemas/DirectMessage" }
         conversation: { $ref: "#/components/schemas/Conversation" }
+
+    # --- birebir mesajda uçtan uca şifreleme (#127, ADR-0018) ---
+    # Bayt alanları standart base64'tür.
+
+    OutgoingEnvelope:
+      type: object
+      required: [device_id, registration_id, type, content]
+      additionalProperties: false
+      properties:
+        device_id: { type: string, format: uuid }
+        registration_id:
+          type: integer
+          minimum: 1
+          maximum: 16380
+          description: Gönderenin bu cihazla oturumundaki kayıt kimliği; değişmişse cihaz değişmiştir.
+        type:
+          type: string
+          enum: [whisper, prekey]
+          description: Signal CiphertextMessageType (2 whisper, 3 prekey).
+        content:
+          type: string
+          format: byte
+          description: Opak Signal mesajı, 1 B – 64 KiB.
+    E2EPreKey:
+      type: object
+      required: [key_id, public_key]
+      additionalProperties: false
+      properties:
+        key_id: { type: integer, minimum: 0, maximum: 16777215 }
+        public_key: { type: string, format: byte, description: "33 bayt, 0x05 ile başlar." }
+    E2ESignedPreKey:
+      type: object
+      required: [key_id, public_key, signature]
+      additionalProperties: false
+      properties:
+        key_id: { type: integer, minimum: 0, maximum: 16777215 }
+        public_key:
+          type: string
+          format: byte
+          description: EC imzalı ön anahtarda 33 bayt (0x05 ile), Kyber'de 1569 bayt.
+        signature: { type: string, format: byte, description: 64 bayt. }
+    E2EDevice:
+      type: object
+      required: [id, device_number, registration_id, identity_key, paired, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        device_number: { type: integer, minimum: 1, maximum: 127, description: Signal adresindeki cihaz numarası. }
+        registration_id: { type: integer }
+        identity_key: { type: string, format: byte }
+        paired:
+          type: boolean
+          description: Cihaz geçmiş anahtarını biliyor (arşive yazar ve okur).
+        created_at: { type: string, format: date-time }
+    E2EPreKeyCounts:
+      type: object
+      required: [ec, kyber, low]
+      properties:
+        ec: { type: integer }
+        kyber: { type: integer }
+        low: { type: boolean, description: Bir türden 10'dan az kaldı; yükleyin. }
+    E2EDeviceRegistration:
+      type: object
+      required: [registration_id, identity_key, signed_prekey, kyber_last_resort_prekey]
+      additionalProperties: false
+      properties:
+        registration_id: { type: integer, minimum: 1, maximum: 16380 }
+        identity_key: { type: string, format: byte, description: "33 bayt, 0x05 ile başlar." }
+        signed_prekey: { $ref: "#/components/schemas/E2ESignedPreKey" }
+        kyber_last_resort_prekey: { $ref: "#/components/schemas/E2ESignedPreKey" }
+        one_time_prekeys:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/E2EPreKey" }
+        kyber_prekeys:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/E2ESignedPreKey" }
+    E2EDeviceRegistered:
+      type: object
+      required: [device, prekey_counts]
+      properties:
+        device: { $ref: "#/components/schemas/E2EDevice" }
+        prekey_counts: { $ref: "#/components/schemas/E2EPreKeyCounts" }
+    E2EDeviceState:
+      type: object
+      required: [device, prekey_counts, history_key_version, rotation_needed, other_paired_device]
+      properties:
+        device: { $ref: "#/components/schemas/E2EDevice" }
+        prekey_counts: { $ref: "#/components/schemas/E2EPreKeyCounts" }
+        history_key_version:
+          type: integer
+          description: Hesabın geçmiş anahtarı sürümü; ilk cihaz anahtar alana kadar 0.
+        rotation_needed:
+          type: boolean
+          description: Eşleştirilmiş bir cihaz kaldırıldı; eşleştirilmiş bir cihaz anahtarı yenilemeli.
+        other_paired_device:
+          type: boolean
+          description: Hesabın eşleştirilmiş başka cihazı var (QR eşleştirme önerin).
+    E2EPreKeyUpload:
+      type: object
+      additionalProperties: false
+      properties:
+        signed_prekey: { $ref: "#/components/schemas/E2ESignedPreKey" }
+        kyber_last_resort_prekey: { $ref: "#/components/schemas/E2ESignedPreKey" }
+        one_time_prekeys:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/E2EPreKey" }
+        kyber_prekeys:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/E2ESignedPreKey" }
+    E2EPublicDevice:
+      type: object
+      required: [id, device_number, registration_id, identity_key, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        device_number: { type: integer }
+        registration_id: { type: integer }
+        identity_key: { type: string, format: byte }
+        created_at: { type: string, format: date-time }
+    E2EPublicDeviceList:
+      type: object
+      required: [devices]
+      properties:
+        devices:
+          type: array
+          items: { $ref: "#/components/schemas/E2EPublicDevice" }
+    E2EKeyEvent:
+      type: object
+      required: [id, device_id, device_number, type, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        device_id: { type: string, format: uuid }
+        device_number: { type: integer }
+        type:
+          type: string
+          enum: [device_added, device_removed, identity_changed]
+          description: "`identity_changed` yazılmaz (yeni kimlik anahtarı yeni cihazdır); ileriye dönük."
+        created_at: { type: string, format: date-time }
+    E2EKeyEventList:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/E2EKeyEvent" }
+        next_page_token: { type: string }
+    E2EBundleRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        device_ids:
+          type: array
+          maxItems: 5
+          description: Yalnızca bu cihazlar; boşsa tüm cihazlar.
+          items: { type: string, format: uuid }
+    E2EPreKeyBundle:
+      type: object
+      required: [device_id, device_number, registration_id, identity_key, signed_prekey, kyber_prekey, kyber_last_resort]
+      properties:
+        device_id: { type: string, format: uuid }
+        device_number: { type: integer }
+        registration_id: { type: integer }
+        identity_key: { type: string, format: byte }
+        signed_prekey: { $ref: "#/components/schemas/E2ESignedPreKey" }
+        one_time_prekey:
+          $ref: "#/components/schemas/E2EPreKey"
+        kyber_prekey: { $ref: "#/components/schemas/E2ESignedPreKey" }
+        kyber_last_resort: { type: boolean }
+    E2EPreKeyBundleList:
+      type: object
+      required: [bundles]
+      properties:
+        bundles:
+          type: array
+          items: { $ref: "#/components/schemas/E2EPreKeyBundle" }
+    E2EEnvelope:
+      type: object
+      required: [id, message_id, conversation_id, sender_user_id, sender_device_id, sender_device_number, type, content, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        message_id: { type: string, format: uuid }
+        conversation_id: { type: string, format: uuid }
+        sender_user_id: { type: string, format: uuid }
+        sender_device_id: { type: string, format: uuid }
+        sender_device_number: { type: integer }
+        type: { type: string, enum: [whisper, prekey] }
+        content: { type: string, format: byte }
+        created_at: { type: string, format: date-time }
+    E2EEnvelopeList:
+      type: object
+      required: [envelopes]
+      properties:
+        envelopes:
+          type: array
+          items: { $ref: "#/components/schemas/E2EEnvelope" }
+        next_page_token: { type: string }
+    E2EEnvelopeAck:
+      type: object
+      required: [envelope_ids]
+      additionalProperties: false
+      properties:
+        envelope_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { type: string, format: uuid }
+    E2EArchiveWrite:
+      type: object
+      required: [history_key_version, entries]
+      additionalProperties: false
+      properties:
+        history_key_version: { type: integer, minimum: 1, maximum: 32767 }
+        entries:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: object
+            required: [message_id, content]
+            additionalProperties: false
+            properties:
+              message_id: { type: string, format: uuid }
+              content: { type: string, format: byte, description: 1 B – 32 KiB. }
+    E2EArchiveWritten:
+      type: object
+      required: [accepted_message_ids]
+      properties:
+        accepted_message_ids:
+          type: array
+          items: { type: string, format: uuid }
+    E2EArchiveEntry:
+      type: object
+      required: [message_id, conversation_id, key_version, content, created_at]
+      properties:
+        message_id: { type: string, format: uuid }
+        conversation_id: { type: string, format: uuid }
+        key_version: { type: integer }
+        content: { type: string, format: byte }
+        created_at: { type: string, format: date-time }
+    E2EArchiveEntryList:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/E2EArchiveEntry" }
+        next_page_token: { type: string }
+    E2EHistoryKeyVersion:
+      type: object
+      required: [history_key_version]
+      properties:
+        history_key_version: { type: integer }
+    E2EHistoryKeyRotation:
+      type: object
+      required: [history_key_version, shares]
+      additionalProperties: false
+      properties:
+        history_key_version: { type: integer, minimum: 1, maximum: 32767 }
+        shares:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            required: [device_id, bundle]
+            additionalProperties: false
+            properties:
+              device_id: { type: string, format: uuid }
+              bundle: { type: string, format: byte, description: 1 B – 16 KiB. }
+    E2EHistoryKeyShare:
+      type: object
+      required: [id, sender_device_id, history_key_version, bundle, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        sender_device_id: { type: string, format: uuid }
+        history_key_version: { type: integer }
+        bundle: { type: string, format: byte }
+        created_at: { type: string, format: date-time }
+    E2EHistoryKeyShareList:
+      type: object
+      required: [shares]
+      properties:
+        shares:
+          type: array
+          items: { $ref: "#/components/schemas/E2EHistoryKeyShare" }
+    E2EShareAck:
+      type: object
+      required: [share_ids]
+      additionalProperties: false
+      properties:
+        share_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { type: string, format: uuid }
+    E2ELinkRequestCreated:
+      type: object
+      required: [link_request_id, expires_at]
+      properties:
+        link_request_id: { type: string, format: uuid }
+        expires_at: { type: string, format: date-time }
+    E2ELinkRequest:
+      type: object
+      required: [link_request_id, expires_at, answered]
+      properties:
+        link_request_id: { type: string, format: uuid }
+        expires_at: { type: string, format: date-time }
+        answered: { type: boolean }
+        answer: { type: string, format: byte, description: Cevaplanınca. }
+        history_key_version: { type: integer, description: Cevaplanınca. }
+        answered_by_device_id: { type: string, format: uuid, description: Cevaplanınca. }
+    E2ELinkAnswer:
+      type: object
+      required: [history_key_version, answer]
+      additionalProperties: false
+      properties:
+        history_key_version: { type: integer, minimum: 1, maximum: 32767 }
+        answer: { type: string, format: byte, description: 1 B – 16 KiB. }
+    E2EDevicesChangedProblem:
+      description: |
+        `e2e-devices-changed` (409) cevabının ek alanları; cihaz listelerini
+        tazeleyip tekrar deneyin.
+      allOf:
+        - $ref: "#/components/schemas/Problem"
+        - type: object
+          required: [missing_device_ids, stale_device_ids]
+          properties:
+            missing_device_ids:
+              type: array
+              description: Zarf (ya da paylaşım) eksik cihazlar.
+              items: { type: string, format: uuid }
+            stale_device_ids:
+              type: array
+              description: Artık olmayan, değişmiş ya da iki kez verilen cihazlar.
+              items: { type: string, format: uuid }
 
     # --- arkadaşlık, davet, profil, hesap (#71) ---
 

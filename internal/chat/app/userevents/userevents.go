@@ -46,6 +46,13 @@ type Sessions interface {
 	EndUser(ctx context.Context, user id.ID) error
 }
 
+// Devices ends end-to-end devices (keys.Service; issue #127, ADR-0018): a
+// device is a session, so it goes when its session does.
+type Devices interface {
+	SessionEnded(ctx context.Context, session id.ID) error
+	UserSanctioned(ctx context.Context, user id.ID, at time.Time) error
+}
+
 // Profile is the public profile carried by user.profile_updated.
 type Profile struct {
 	DisplayName    string
@@ -64,6 +71,9 @@ type Config struct {
 	// Sessions ends connections; optional (without it session events are
 	// accepted and change nothing).
 	Sessions Sessions
+	// Devices removes the end-to-end devices of ended sessions; optional.
+	// A deleted user's devices go with Cleanups (keys.Cleanup).
+	Devices Devices
 }
 
 // Service applies user events.
@@ -105,7 +115,17 @@ func (s *Service) Apply(ctx context.Context, e Event) error {
 		}
 		return s.endUser(ctx, e.User)
 	case e.Sanctioned:
+		if s.cfg.Devices != nil {
+			if err := s.cfg.Devices.UserSanctioned(ctx, e.User, e.OccurredAt); err != nil {
+				return fmt.Errorf("e2e cihazları: %w", err)
+			}
+		}
 		return s.endUser(ctx, e.User)
+	}
+	if s.cfg.Devices != nil {
+		if err := s.cfg.Devices.SessionEnded(ctx, e.SessionRevoked); err != nil {
+			return fmt.Errorf("e2e cihazı: %w", err)
+		}
 	}
 	if s.cfg.Sessions == nil {
 		return nil

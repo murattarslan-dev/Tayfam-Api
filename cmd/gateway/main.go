@@ -151,9 +151,11 @@ func setup(rt *service.Runtime) error {
 			Notifications:  chatv1.NewNotificationServiceClient(conn),
 			Channels:       chatv1.NewChannelServiceClient(conn),
 			DirectMessages: chatv1.NewDirectMessageServiceClient(conn),
-			RealtimeURL:    realtimeURL,
-			Verifier:       v,
-			Log:            rt.Log,
+			// Uçtan uca şifreleme (issue #127, ADR-0018).
+			E2E:         chatv1.NewE2EServiceClient(conn),
+			RealtimeURL: realtimeURL,
+			Verifier:    v,
+			Log:         rt.Log,
 		}
 	}
 	// Account settings live in identity but take the same user token

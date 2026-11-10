@@ -32,6 +32,8 @@ type ChatDeps struct {
 	// DirectMessages enables the direct message routes when set (issue
 	// #95).
 	DirectMessages DirectMessageClient
+	// E2E enables the end-to-end encryption routes when set (issue #127).
+	E2E E2EClient
 	// RealtimeURL (chat's HTTP port) enables the WebSocket route (issue
 	// #82).
 	RealtimeURL *url.URL

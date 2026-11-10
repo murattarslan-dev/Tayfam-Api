@@ -74,6 +74,9 @@ func NewRouter(d Deps) http.Handler {
 	if d.Chat.DirectMessages != nil && d.Chat.Verifier != nil {
 		registerDirectMessages(mux, chatHandlers{d: d.Chat})
 	}
+	if d.Chat.E2E != nil && d.Chat.Verifier != nil {
+		registerE2E(mux, chatHandlers{d: d.Chat})
+	}
 	if d.Chat.RealtimeURL != nil && d.Chat.Verifier != nil {
 		registerRealtime(mux, d.Chat)
 	}

@@ -61,6 +61,7 @@ import (
 
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/channelcrypt"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -154,6 +155,9 @@ type Publisher interface {
 	ConversationRead(to, reader, conversation, message id.ID)
 	// Notified: notifications were written for their recipients.
 	Notified(r notification.Request)
+	// Envelopes: end-to-end envelopes for their devices' connections
+	// (issue #127).
+	Envelopes(d []keys.Delivery)
 }
 
 type nopPublisher struct{}
@@ -163,6 +167,7 @@ func (nopPublisher) MessageDeleted([2]id.ID, id.ID, id.ID)       {}
 func (nopPublisher) ConversationAccepted([2]id.ID, id.ID)        {}
 func (nopPublisher) ConversationRead(id.ID, id.ID, id.ID, id.ID) {}
 func (nopPublisher) Notified(notification.Request)               {}
+func (nopPublisher) Envelopes([]keys.Delivery)                   {}
 
 // SendLimit is the per-user message rate shared by every send path:
 // channel and direct messages, REST and WebSocket (issue #101). Allow
@@ -229,11 +234,19 @@ type Message struct {
 	ID             id.ID
 	ConversationID id.ID
 	SenderID       id.ID // zero when the sender's account was deleted
-	// Body is empty for a deleted message ("Bu mesaj silindi").
-	Body      string
-	Deleted   bool
-	CreatedAt time.Time
+	// Body is empty for a deleted message ("Bu mesaj silindi") and for an
+	// end-to-end one (its content is in envelopes and archives only).
+	Body       string
+	Deleted    bool
+	Encryption string // EncryptionServer or EncryptionE2E
+	CreatedAt  time.Time
 }
+
+// Where a message's content is (dm_messages.encryption).
+const (
+	EncryptionServer = "server"
+	EncryptionE2E    = "e2e"
+)
 
 // SendInput is a message to send.
 type SendInput struct {
@@ -241,6 +254,11 @@ type SendInput struct {
 	Body      string
 	// ClientRequestID makes a retry return the first message (ADR-0005).
 	ClientRequestID id.ID
+	// End to end (issue #127, ADR-0018): instead of Body, one envelope
+	// per device of the recipient and per other device of the caller.
+	// Session is the caller's session, whose device sends.
+	Envelopes []OutgoingEnvelope
+	Session   id.ID
 }
 
 // ListInput selects a page of messages, as in channel.ListInput.
@@ -392,8 +410,11 @@ func record(ctx context.Context, tx pgx.Tx, typ string, actor id.ID, subjectType
 // messageOf converts a row; a body that does not decrypt is an error (wrong
 // key or a tampered row), never something to show.
 func (s *Service) messageOf(r msgRow) (Message, error) {
-	m := Message{ID: uuidOf(r.ID), ConversationID: uuidOf(r.ConversationID), SenderID: uuidOf(r.SenderID), CreatedAt: r.CreatedAt.Time.UTC()}
-	if r.DeletedAt.Valid || r.BodyEncrypted == nil {
+	m := Message{
+		ID: uuidOf(r.ID), ConversationID: uuidOf(r.ConversationID), SenderID: uuidOf(r.SenderID),
+		Encryption: r.Encryption, CreatedAt: r.CreatedAt.Time.UTC(),
+	}
+	if r.DeletedAt.Valid || r.BodyEncrypted == nil || r.Encryption == EncryptionE2E {
 		m.Deleted = r.DeletedAt.Valid
 		return m, nil
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	chatdb "github.com/murattarslan-dev/tayfam-api/db/chat"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
@@ -114,5 +115,37 @@ func TestSessionEvents(t *testing.T) {
 		if err := svc.Apply(ctx, e); !errors.As(err, &v) {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+}
+
+type fakeDevices struct {
+	sessions   []id.ID
+	sanctioned []id.ID
+	at         []time.Time
+}
+
+func (f *fakeDevices) SessionEnded(_ context.Context, s id.ID) error {
+	f.sessions = append(f.sessions, s)
+	return nil
+}
+
+func (f *fakeDevices) UserSanctioned(_ context.Context, u id.ID, at time.Time) error {
+	f.sanctioned, f.at = append(f.sanctioned, u), append(f.at, at)
+	return nil
+}
+
+// A device is a session (issue #127, ADR-0018): session.revoked removes the
+// session's end-to-end device, user.sanctioned every device of the user.
+func TestSessionEventsEndDevices(t *testing.T) {
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
+	d := &fakeDevices{}
+	svc, err := New(Config{Pool: pool, Devices: d})
+	must(t, err)
+	u, s := id.New(), id.New()
+	at := time.Unix(1700000000, 0).UTC()
+	must(t, svc.Apply(ctx, Event{ID: id.New(), User: u, SessionRevoked: s}))
+	must(t, svc.Apply(ctx, Event{ID: id.New(), User: u, Sanctioned: true, OccurredAt: at}))
+	if len(d.sessions) != 1 || d.sessions[0] != s || len(d.sanctioned) != 1 || d.sanctioned[0] != u || !d.at[0].Equal(at) {
+		t.Fatalf("cihazlar = %+v", d)
 	}
 }

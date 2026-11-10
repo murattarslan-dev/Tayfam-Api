@@ -136,6 +136,18 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND":  {http.StatusNotFound, "message-request-not-found"},
 		// Per-user message rate, channel and direct messages (issue #101).
 		"ERROR_REASON_RATE_LIMITED": {http.StatusTooManyRequests, "rate-limited"},
+		// End-to-end encryption (issue #127, ADR-0018).
+		"ERROR_REASON_E2E_DEVICE_NOT_REGISTERED":     {http.StatusConflict, "e2e-device-not-registered"},
+		"ERROR_REASON_E2E_DEVICE_ALREADY_REGISTERED": {http.StatusConflict, "e2e-device-already-registered"},
+		"ERROR_REASON_E2E_DEVICE_LIMIT":              {http.StatusConflict, "e2e-device-limit"},
+		"ERROR_REASON_E2E_DEVICES_CHANGED":           {http.StatusConflict, "e2e-devices-changed"},
+		"ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE":     {http.StatusConflict, "e2e-recipient-unavailable"},
+		"ERROR_REASON_E2E_REQUIRED":                  {http.StatusConflict, "e2e-required"},
+		"ERROR_REASON_E2E_NOT_PAIRED":                {http.StatusConflict, "e2e-not-paired"},
+		"ERROR_REASON_E2E_ALREADY_PAIRED":            {http.StatusConflict, "e2e-already-paired"},
+		"ERROR_REASON_E2E_PAIRED_DEVICE_EXISTS":      {http.StatusConflict, "e2e-paired-device-exists"},
+		"ERROR_REASON_E2E_HISTORY_KEY_STALE":         {http.StatusConflict, "e2e-history-key-stale"},
+		"ERROR_REASON_E2E_LINK_REQUEST_NOT_FOUND":    {http.StatusNotFound, "e2e-link-request-not-found"},
 	},
 }
 

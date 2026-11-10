@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math"
 	"strconv"
+	"strings"
 
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
@@ -15,6 +16,7 @@ import (
 
 	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -65,6 +67,26 @@ func reasonFor(err error) (code codes.Code, reason chatv1.ErrorReason, ok bool) 
 		return codes.NotFound, chatv1.ErrorReason_ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND, true
 	case errors.Is(err, apperr.ErrRateLimited):
 		return codes.ResourceExhausted, chatv1.ErrorReason_ERROR_REASON_RATE_LIMITED, true
+	case errors.Is(err, apperr.ErrE2EDeviceNotRegistered):
+		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_E2E_DEVICE_NOT_REGISTERED, true
+	case errors.Is(err, apperr.ErrE2EDeviceAlreadyRegistered):
+		return codes.AlreadyExists, chatv1.ErrorReason_ERROR_REASON_E2E_DEVICE_ALREADY_REGISTERED, true
+	case errors.Is(err, apperr.ErrE2EDeviceLimit):
+		return codes.ResourceExhausted, chatv1.ErrorReason_ERROR_REASON_E2E_DEVICE_LIMIT, true
+	case errors.Is(err, apperr.ErrE2ERecipientUnavailable):
+		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE, true
+	case errors.Is(err, apperr.ErrE2ERequired):
+		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_E2E_REQUIRED, true
+	case errors.Is(err, apperr.ErrE2ENotPaired):
+		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_E2E_NOT_PAIRED, true
+	case errors.Is(err, apperr.ErrE2EAlreadyPaired):
+		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_E2E_ALREADY_PAIRED, true
+	case errors.Is(err, apperr.ErrE2EPairedDeviceExists):
+		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_E2E_PAIRED_DEVICE_EXISTS, true
+	case errors.Is(err, apperr.ErrE2EHistoryKeyStale):
+		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_E2E_HISTORY_KEY_STALE, true
+	case errors.Is(err, apperr.ErrE2ELinkRequestNotFound):
+		return codes.NotFound, chatv1.ErrorReason_ERROR_REASON_E2E_LINK_REQUEST_NOT_FOUND, true
 	}
 	return codes.Unknown, chatv1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }
@@ -81,6 +103,16 @@ func errorStatus(ctx context.Context, log *slog.Logger, err error) error {
 		secs := int64(math.Ceil(slow.RetryAfter.Seconds()))
 		return reasonStatus(codes.ResourceExhausted, chatv1.ErrorReason_ERROR_REASON_SLOW_MODE,
 			map[string]string{"retry_after_seconds": strconv.FormatInt(max(secs, 1), 10)})
+	}
+	var changed *apperr.DevicesChangedError
+	if errors.As(err, &changed) {
+		return reasonStatus(codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_E2E_DEVICES_CHANGED, map[string]string{
+			"missing_device_ids": strings.Join(changed.Missing, ","), "stale_device_ids": strings.Join(changed.Stale, ","),
+		})
+	}
+	if errors.Is(err, apperr.ErrSessionEnded) {
+		// The session ended; its token may still be valid for a while.
+		return status.Error(codes.Unauthenticated, msgUnauthenticated)
 	}
 	if code, reason, ok := reasonFor(err); ok {
 		return reasonStatus(code, reason, nil)
@@ -123,4 +155,19 @@ func callerID(ctx context.Context) (id.ID, error) {
 		return id.ID{}, status.Error(codes.Unauthenticated, msgUnauthenticated)
 	}
 	return u, nil
+}
+
+// callerSession returns the verified caller with the session (sid) and
+// issue time of the token: an end-to-end device is the session (ADR-0018).
+func callerSession(ctx context.Context) (keys.Caller, error) {
+	c, ok := auth.CallerFrom(ctx)
+	if !ok {
+		return keys.Caller{}, status.Error(codes.Unauthenticated, msgUnauthenticated)
+	}
+	u, okU := id.Parse(c.Subject)
+	sid, okS := id.Parse(c.SessionID)
+	if !okU || !okS {
+		return keys.Caller{}, status.Error(codes.Unauthenticated, msgUnauthenticated)
+	}
+	return keys.Caller{User: u, Session: sid, IssuedAt: c.IssuedAt}, nil
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/dm"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -29,11 +30,14 @@ const (
 // DMData is a direct message in a frame. Body is the plain text; it goes
 // only to the two parties.
 type DMData struct {
-	ID             string    `json:"id"`
-	ConversationID string    `json:"conversation_id"`
-	SenderID       string    `json:"sender_user_id,omitempty"`
-	Body           string    `json:"body"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID             string `json:"id"`
+	ConversationID string `json:"conversation_id"`
+	SenderID       string `json:"sender_user_id,omitempty"`
+	// Body is empty for an end-to-end message: its content arrives as a
+	// dm.envelope to each device.
+	Body       string    `json:"body"`
+	Encryption string    `json:"encryption"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // DMDeletedData is an erased direct message.
@@ -57,7 +61,7 @@ type DMReadData struct {
 
 // DMFrom converts a direct message for a frame.
 func DMFrom(m dm.Message) DMData {
-	d := DMData{ID: m.ID.String(), ConversationID: m.ConversationID.String(), Body: m.Body, CreatedAt: m.CreatedAt}
+	d := DMData{ID: m.ID.String(), ConversationID: m.ConversationID.String(), Body: m.Body, Encryption: m.Encryption, CreatedAt: m.CreatedAt}
 	if m.SenderID != (id.ID{}) {
 		d.SenderID = m.SenderID.String()
 	}
@@ -114,3 +118,11 @@ func (p directPublisher) ConversationRead(to, reader, conversation, message id.I
 }
 
 func (p directPublisher) Notified(r notification.Request) { p.l.Notified(r) }
+
+// Envelopes delivers each end-to-end envelope to its device's connections
+// only (issue #127).
+func (p directPublisher) Envelopes(ds []keys.Delivery) {
+	for _, d := range ds {
+		p.l.cfg.Hub.sendToSession(d.Session, Event{Type: EventDMEnvelope, Data: EnvelopeFrom(d.Envelope)})
+	}
+}
