@@ -187,7 +187,7 @@ const createDirectMessage = `-- name: CreateDirectMessage :one
 INSERT INTO dm_messages (id, conversation_id, sender_id, body_encrypted, key_version, client_request_id)
 VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (sender_id, client_request_id) DO NOTHING
-RETURNING id, conversation_id, sender_id, body_encrypted, key_version, created_at, deleted_at
+RETURNING id, conversation_id, sender_id, encryption, body_encrypted, key_version, created_at, deleted_at
 `
 
 type CreateDirectMessageParams struct {
@@ -203,6 +203,7 @@ type CreateDirectMessageRow struct {
 	ID             pgtype.UUID
 	ConversationID pgtype.UUID
 	SenderID       pgtype.UUID
+	Encryption     string
 	BodyEncrypted  []byte
 	KeyVersion     pgtype.Int2
 	CreatedAt      pgtype.Timestamptz
@@ -224,6 +225,7 @@ func (q *Queries) CreateDirectMessage(ctx context.Context, arg CreateDirectMessa
 		&i.ID,
 		&i.ConversationID,
 		&i.SenderID,
+		&i.Encryption,
 		&i.BodyEncrypted,
 		&i.KeyVersion,
 		&i.CreatedAt,
@@ -458,7 +460,7 @@ func (q *Queries) GetConversationView(ctx context.Context, arg GetConversationVi
 }
 
 const getDirectMessage = `-- name: GetDirectMessage :one
-SELECT id, conversation_id, sender_id, body_encrypted, key_version, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, body_encrypted, key_version, created_at, deleted_at
 FROM dm_messages
 WHERE conversation_id = $1 AND id = $2
 `
@@ -472,6 +474,7 @@ type GetDirectMessageRow struct {
 	ID             pgtype.UUID
 	ConversationID pgtype.UUID
 	SenderID       pgtype.UUID
+	Encryption     string
 	BodyEncrypted  []byte
 	KeyVersion     pgtype.Int2
 	CreatedAt      pgtype.Timestamptz
@@ -485,6 +488,7 @@ func (q *Queries) GetDirectMessage(ctx context.Context, arg GetDirectMessagePara
 		&i.ID,
 		&i.ConversationID,
 		&i.SenderID,
+		&i.Encryption,
 		&i.BodyEncrypted,
 		&i.KeyVersion,
 		&i.CreatedAt,
@@ -495,7 +499,7 @@ func (q *Queries) GetDirectMessage(ctx context.Context, arg GetDirectMessagePara
 
 const getDirectMessageByRequest = `-- name: GetDirectMessageByRequest :one
 
-SELECT id, conversation_id, sender_id, body_encrypted, key_version, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, body_encrypted, key_version, created_at, deleted_at
 FROM dm_messages
 WHERE sender_id = $1 AND client_request_id = $2
 `
@@ -509,6 +513,7 @@ type GetDirectMessageByRequestRow struct {
 	ID             pgtype.UUID
 	ConversationID pgtype.UUID
 	SenderID       pgtype.UUID
+	Encryption     string
 	BodyEncrypted  []byte
 	KeyVersion     pgtype.Int2
 	CreatedAt      pgtype.Timestamptz
@@ -523,6 +528,7 @@ func (q *Queries) GetDirectMessageByRequest(ctx context.Context, arg GetDirectMe
 		&i.ID,
 		&i.ConversationID,
 		&i.SenderID,
+		&i.Encryption,
 		&i.BodyEncrypted,
 		&i.KeyVersion,
 		&i.CreatedAt,
@@ -704,7 +710,7 @@ func (q *Queries) ListDeclinedRequests(ctx context.Context, arg ListDeclinedRequ
 }
 
 const listDirectMessagesAfter = `-- name: ListDirectMessagesAfter :many
-SELECT id, conversation_id, sender_id, body_encrypted, key_version, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, body_encrypted, key_version, created_at, deleted_at
 FROM dm_messages
 WHERE conversation_id = $1 AND id > $2
 ORDER BY id
@@ -721,6 +727,7 @@ type ListDirectMessagesAfterRow struct {
 	ID             pgtype.UUID
 	ConversationID pgtype.UUID
 	SenderID       pgtype.UUID
+	Encryption     string
 	BodyEncrypted  []byte
 	KeyVersion     pgtype.Int2
 	CreatedAt      pgtype.Timestamptz
@@ -742,6 +749,7 @@ func (q *Queries) ListDirectMessagesAfter(ctx context.Context, arg ListDirectMes
 			&i.ID,
 			&i.ConversationID,
 			&i.SenderID,
+			&i.Encryption,
 			&i.BodyEncrypted,
 			&i.KeyVersion,
 			&i.CreatedAt,
@@ -758,7 +766,7 @@ func (q *Queries) ListDirectMessagesAfter(ctx context.Context, arg ListDirectMes
 }
 
 const listDirectMessagesBefore = `-- name: ListDirectMessagesBefore :many
-SELECT id, conversation_id, sender_id, body_encrypted, key_version, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, body_encrypted, key_version, created_at, deleted_at
 FROM dm_messages
 WHERE conversation_id = $1 AND ($2::uuid IS NULL OR id < $2::uuid)
 ORDER BY id DESC
@@ -775,6 +783,7 @@ type ListDirectMessagesBeforeRow struct {
 	ID             pgtype.UUID
 	ConversationID pgtype.UUID
 	SenderID       pgtype.UUID
+	Encryption     string
 	BodyEncrypted  []byte
 	KeyVersion     pgtype.Int2
 	CreatedAt      pgtype.Timestamptz
@@ -795,6 +804,7 @@ func (q *Queries) ListDirectMessagesBefore(ctx context.Context, arg ListDirectMe
 			&i.ID,
 			&i.ConversationID,
 			&i.SenderID,
+			&i.Encryption,
 			&i.BodyEncrypted,
 			&i.KeyVersion,
 			&i.CreatedAt,
