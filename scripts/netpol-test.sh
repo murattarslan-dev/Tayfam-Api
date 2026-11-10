@@ -106,8 +106,16 @@ run_inside "6) identity'nin içinden (Postgres'e, internete yalnızca 443, outbo
   KAPALI "http://gateway:8080/v1/status" \
   KAPALI "http://example.com"
 
+run_inside "7) chat'in içinden (Postgres'e, core'a, push için internete yalnızca 443; ADR-0019):" chat \
+  ACIK   "tcp://tayfam-pg-rw:5432" \
+  ACIK   "tcp://core:9090" \
+  ACIK   "tcp://fcm.googleapis.com:443" \
+  ACIK   "tcp://oauth2.googleapis.com:443" \
+  KAPALI "http://gateway:8080/v1/status" \
+  KAPALI "http://example.com"
+
 echo "Test container'ları temizleniyor..."
-kubectl -n "$NS" rollout restart deployment gateway cloudflared core identity > /dev/null
+kubectl -n "$NS" rollout restart deployment gateway cloudflared core identity chat > /dev/null
 
 if [ "$failed" -ne 0 ]; then
   echo "SONUÇ: NetworkPolicy testi BAŞARISIZ" >&2

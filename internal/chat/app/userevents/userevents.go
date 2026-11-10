@@ -1,7 +1,8 @@
 // Package userevents applies identity's user events to chat (ADR-0009):
 // user.profile_updated keeps the profile copy current and user.deleted
 // removes the user's records from chat. session.revoked, user.sanctioned
-// and user.deleted also end the user's real-time connections (issue #82).
+// and user.deleted also end the user's real-time connections (issue #82),
+// end-to-end devices (issue #127) and push tokens (issue #134).
 //
 // Events arrive at least once and may arrive out of order, so every apply is
 // idempotent: applying the same event again, or an older one after a newer,
@@ -74,6 +75,10 @@ type Config struct {
 	// Devices removes the end-to-end devices of ended sessions; optional.
 	// A deleted user's devices go with Cleanups (keys.Cleanup).
 	Devices Devices
+	// PushTokens removes the push tokens of ended sessions the same way
+	// (push.Service; issue #134, ADR-0019): a token is a session too.
+	// Optional; a deleted user's tokens go with Cleanups (push.Cleanup).
+	PushTokens Devices
 }
 
 // Service applies user events.
@@ -120,11 +125,21 @@ func (s *Service) Apply(ctx context.Context, e Event) error {
 				return fmt.Errorf("e2e cihazları: %w", err)
 			}
 		}
+		if s.cfg.PushTokens != nil {
+			if err := s.cfg.PushTokens.UserSanctioned(ctx, e.User, e.OccurredAt); err != nil {
+				return fmt.Errorf("push token'ları: %w", err)
+			}
+		}
 		return s.endUser(ctx, e.User)
 	}
 	if s.cfg.Devices != nil {
 		if err := s.cfg.Devices.SessionEnded(ctx, e.SessionRevoked); err != nil {
 			return fmt.Errorf("e2e cihazı: %w", err)
+		}
+	}
+	if s.cfg.PushTokens != nil {
+		if err := s.cfg.PushTokens.SessionEnded(ctx, e.SessionRevoked); err != nil {
+			return fmt.Errorf("push token'ı: %w", err)
 		}
 	}
 	if s.cfg.Sessions == nil {

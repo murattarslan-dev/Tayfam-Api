@@ -240,6 +240,28 @@ spec:
       ports:
         - { protocol: TCP, port: 443 }
 ---
+# chat → internet 443: push bildirimleri (FCM HTTP v1, fcm.googleapis.com)
+# ve servis hesabı ile erişim token'ı (oauth2.googleapis.com) (issue #134,
+# ADR-0019). NetworkPolicy alan adıyla sınırlayamaz (Google uçları
+# anycast); adresler chat'in FCM istemcisinde sabittir ve yönlendirme
+# izlenmez. Cluster içi ve özel adresler hariç; chat'ten başka servislere
+# bu kuralla çıkılamaz.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: chat-egress-internet
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: chat }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, 127.0.0.0/8]
+      ports:
+        - { protocol: TCP, port: 443 }
+---
 # identity → core: outbox relay UserEventService'i çağırır (ADR-0002,
 # ADR-0013). core yalnızca identity'nin ServiceAccount token'ını bu metodda
 # kabul eder; ağ izni ikinci katmandır.

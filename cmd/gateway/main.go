@@ -152,7 +152,9 @@ func setup(rt *service.Runtime) error {
 			Channels:       chatv1.NewChannelServiceClient(conn),
 			DirectMessages: chatv1.NewDirectMessageServiceClient(conn),
 			// Uçtan uca şifreleme (issue #127, ADR-0018).
-			E2E:         chatv1.NewE2EServiceClient(conn),
+			E2E: chatv1.NewE2EServiceClient(conn),
+			// Push token'ı (issue #134, ADR-0019).
+			Push:        chatv1.NewPushServiceClient(conn),
 			RealtimeURL: realtimeURL,
 			Verifier:    v,
 			Log:         rt.Log,

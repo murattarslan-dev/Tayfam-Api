@@ -215,3 +215,19 @@ func TestHubRunClosesEverythingOnShutdown(t *testing.T) {
 		t.Fatalf("kapanırken kabul: %v", err)
 	}
 }
+
+func TestHubOnline(t *testing.T) {
+	h, _ := newTestHub(t, 10, 5)
+	u := id.New()
+	if h.Online(u) {
+		t.Fatal("bağlantısız kullanıcı çevrimiçi")
+	}
+	m := mustAdmit(t, h, u, id.New(), &fakeConn{})
+	if !h.Online(u) || h.Online(id.New()) {
+		t.Fatal("çevrimiçi bilgisi yanlış")
+	}
+	m.Release()
+	if h.Online(u) {
+		t.Fatal("bağlantı kapandı, hâlâ çevrimiçi")
+	}
+}

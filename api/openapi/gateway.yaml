@@ -2944,6 +2944,66 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Push bildirimleri (#134, ADR-0019) ---
+  #
+  # Push token'ı oturuma bağlıdır: token'ı kaydeden erişim token'ının
+  # oturumu. Oturum kapanınca (çıkış, başka cihazdan kapatma, yaptırım,
+  # hesap silme) token silinir. Push, açık WebSocket bağlantınız yokken ve
+  # bildirim tercihleriniz izin veriyorsa gider; bildirim listesi her
+  # durumda eksiksizdir.
+  #
+  # Push metin taşımaz. Görünen başlık ve gövde istemcinin çeviri
+  # dosyasından gelir: Android `title_loc_key`/`body_loc_key`, iOS
+  # `title-loc-key`/`loc-key` = `push_<type>_title`, `push_<type>_body`
+  # (`<type>`: `NotificationType`). Çeviri argümanı yoktur. `data` yalnızca
+  # kimlik taşır: `notification_id`, `type`, `target_type`, `target_id`,
+  # varsa `tayfa_id`, `question_id` (answer_received), `subject_user_id`
+  # (hike_overdue), `reason` (tayfa_warned). Birebir mesaj push'u
+  # (`dm_message`, `dm_request`) yalnızca konuşmanın kimliğini taşır.
+  # Gruplama: Android `tag`, iOS `thread-id` = `target_id`. Android
+  # kanalları: `tayfam_messages`, `tayfam_alerts` (hike_overdue),
+  # `tayfam_general`.
+
+  /v1/me/push-token:
+    put:
+      operationId: putPushToken
+      summary: Bu oturumun push (FCM) token'ını kaydeder ya da yeniler
+      description: |
+        Uygulama her açılışta ve FCM token'ı yenilediğinde çağırır; 60 gün
+        yenilenmeyen token silinir. Oturum başına bir token: yeni değer
+        eskisinin yerine geçer. Aynı token başka bir oturumda kayıtlıysa
+        (cihazda başka hesapla giriş) oraya bağlı kayıt silinir. Hesap
+        başına en fazla 10 token (en eski yenilenen gider). Kapatılmış
+        oturumun hâlâ geçerli token'ı kaydedemez (401). Hız sınırı:
+        kullanıcı başına dakikada 10. Push sunucuda kapalıysa da kayıt
+        kabul edilir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PushTokenRegistration" }
+      responses:
+        "204": { description: Kaydedildi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deletePushToken
+      summary: Bu oturumun push token'ını siler
+      description: |
+        Çıkışta ya da kullanıcı cihazda bildirimleri kapatınca. Token yoksa
+        bir şey değişmez. Çıkışta oturum kapanınca token zaten silinir; bu
+        çağrı onu beklemeden yapar.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Silindi }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   # --- Hesap, referans kodu (identity AccountService, #71) ---
 
   # --- birebir mesajda uçtan uca şifreleme (#127, ADR-0018) ---
@@ -6008,6 +6068,18 @@ components:
         ec: { type: integer }
         kyber: { type: integer }
         low: { type: boolean, description: Bir türden 10'dan az kaldı; yükleyin. }
+    PushTokenRegistration:
+      type: object
+      required: [token, platform]
+      additionalProperties: false
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          pattern: "^[A-Za-z0-9:_.-]+$"
+          description: FCM kayıt token'ı. Log'a yazılmaz.
+        platform: { type: string, enum: [android, ios] }
     E2EDeviceRegistration:
       type: object
       required: [registration_id, identity_key, signed_prekey, kyber_last_resort_prekey]

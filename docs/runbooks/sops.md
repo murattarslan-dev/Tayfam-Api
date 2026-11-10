@@ -127,6 +127,21 @@ Birleştirdikten sonra `kubectl -n tayfam-dev rollout restart deploy/core`.
 Parola değiştikten sonra yeni bağlantılar eski parolayla açılamaz; restart
 geciktirilmez.
 
+## Push (FCM) servis hesabı
+
+`chat-fcm` isteğe bağlıdır (ADR-0019): yoksa chat push göndermeden çalışır.
+Firebase projesinde yalnızca "Firebase Cloud Messaging API Admin" rolü olan
+bir servis hesabı açılır, JSON anahtarı indirilir ve hemen şifrelenir
+(betik indirilen açık dosyayı siler):
+
+```sh
+./scripts/new-chat-fcm-secret.sh dev ~/Downloads/<anahtar>.json
+git add deploy/apps/dev/secrets/ deploy/apps/dev/kustomization.yaml
+```
+
+Birleştirdikten sonra `kubectl -n tayfam-dev rollout restart deploy/chat`;
+log'da "push açık (FCM)" görünür.
+
 ## Cloudflare Tunnel token'ı
 
 ```sh

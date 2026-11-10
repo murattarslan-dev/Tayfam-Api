@@ -54,6 +54,7 @@ if ./scripts/check-secret-refs.sh prod >/dev/null 2>&1; then fail "secret'sız p
 ./scripts/check-secret-refs.sh dev cloudflared-token >/dev/null || fail "dev secret'ları eksik görünüyor"
 
 # 7) prod'un tüm secret'ları (sahte) oluşunca liste yazılır ve kontrol geçer.
+#    chat-fcm (optional: true, ADR-0019) yokken de geçer.
 for n in identity-signing-key identity-db core-db chat-db identity-app-db core-app-db \
   chat-app-db identity-birthdate-key chat-message-key cloudflared-token; do
   fake "deploy/apps/prod/secrets/$n.sops.yaml" "$n" "$prod_rcpt"

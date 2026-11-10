@@ -149,3 +149,21 @@ func TestSessionEventsEndDevices(t *testing.T) {
 		t.Fatalf("cihazlar = %+v", d)
 	}
 }
+
+// A push token is a session too (issue #134, ADR-0019): the same events
+// remove it.
+func TestSessionEventsEndPushTokens(t *testing.T) {
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
+	d, p := &fakeDevices{}, &fakeDevices{}
+	svc, err := New(Config{Pool: pool, Devices: d, PushTokens: p})
+	must(t, err)
+	u, s := id.New(), id.New()
+	at := time.Unix(1700000000, 0).UTC()
+	must(t, svc.Apply(ctx, Event{ID: id.New(), User: u, SessionRevoked: s}))
+	must(t, svc.Apply(ctx, Event{ID: id.New(), User: u, Sanctioned: true, OccurredAt: at}))
+	for name, f := range map[string]*fakeDevices{"e2e": d, "push": p} {
+		if len(f.sessions) != 1 || f.sessions[0] != s || len(f.sanctioned) != 1 || f.sanctioned[0] != u || !f.at[0].Equal(at) {
+			t.Fatalf("%s = %+v", name, f)
+		}
+	}
+}

@@ -34,6 +34,8 @@ type ChatDeps struct {
 	DirectMessages DirectMessageClient
 	// E2E enables the end-to-end encryption routes when set (issue #127).
 	E2E E2EClient
+	// Push enables the push token routes when set (issue #134).
+	Push PushClient
 	// RealtimeURL (chat's HTTP port) enables the WebSocket route (issue
 	// #82).
 	RealtimeURL *url.URL
