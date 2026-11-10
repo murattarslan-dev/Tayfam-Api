@@ -19,6 +19,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/coreevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/coremembers"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/dm"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/realtime"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/userevents"
@@ -89,19 +90,6 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 
-	// Hesap silinince bildirimler ve tercihler de silinir (ADR-0009).
-	// Kanal mesajları kalır, yazar alanı boşalır; okunma kayıtları silinir.
-	// Birebir konuşmalarda silinen kişinin tarafı ve gönderen alanı boşalır
-	// (v14 "İlişkiler ve Silme Davranışı").
-	// Oturum iptali, yaptırım ve silme açık bağlantıları kapatır (ADR-0004).
-	userEvents, err := userevents.New(userevents.Config{
-		Pool:     pool,
-		Cleanups: []userevents.Cleanup{notification.Cleanup, channel.Cleanup, dm.Cleanup},
-		Sessions: hub,
-	})
-	if err != nil {
-		return err
-	}
 	// Kullanıcısız servis çağrıları (ADR-0013): olay tüketici servislerinin
 	// her metodu yalnızca servis token'ı kabul eder. UserEventService'i
 	// yalnızca identity'nin, CoreEventService'i yalnızca core'un
@@ -170,6 +158,36 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 	live.BindDirect(directMessages)
+	// Birebir mesajda uçtan uca şifreleme, sunucu tarafı (issue #127,
+	// ADR-0018): sunucu kriptografi yapmaz; açık anahtarları, zarfları,
+	// arşivi ve eşleştirme mesajlarını saklar ve iletir. Ön anahtar paketini
+	// yalnızca o an mesaj gönderebilecek kişi çeker (dm'in kuralları, core'a
+	// kullanıcının token'ıyla). Kullanıcı başına hız sınırları: paket çekme
+	// dakikada 20, anahtar işlemleri 30, arşiv yazma 120.
+	e2e, err := keys.New(keys.Config{
+		Pool: pool, Log: rt.Log, Contacts: directMessages, Publisher: live.Keys(),
+		Bundles: ratelimit.New(20, 10), KeyOps: ratelimit.New(30, 10), Archive: ratelimit.New(120, 60),
+	})
+	if err != nil {
+		return err
+	}
+	live.BindKeys(e2e)
+	// Hesap silinince bildirimler ve tercihler de silinir (ADR-0009).
+	// Kanal mesajları kalır, yazar alanı boşalır; okunma kayıtları silinir.
+	// Birebir konuşmalarda silinen kişinin tarafı ve gönderen alanı boşalır
+	// (v14 "İlişkiler ve Silme Davranışı"); E2E cihazları, arşivi ve
+	// bekleyen zarfları silinir (ADR-0018).
+	// Oturum iptali, yaptırım ve silme açık bağlantıları kapatır (ADR-0004);
+	// biten oturumun E2E cihazı da silinir (cihaz = oturum).
+	userEvents, err := userevents.New(userevents.Config{
+		Pool:     pool,
+		Cleanups: []userevents.Cleanup{notification.Cleanup, channel.Cleanup, dm.Cleanup, keys.Cleanup},
+		Sessions: hub,
+		Devices:  e2e,
+	})
+	if err != nil {
+		return err
+	}
 	// Bildirimlerin alıcılarını core seçer (ADR-0009); chat kaydı yazar.
 	// Üyelik ve tayfa durumu olayları yalnızca kanal izni önbelleğini
 	// temizler; chat üyelik kopyası tutmaz.
@@ -186,6 +204,7 @@ func setup(rt *service.Runtime) error {
 	chatv1.RegisterNotificationServiceServer(srv, grpcapi.NewNotificationServer(notifications, rt.Log))
 	chatv1.RegisterChannelServiceServer(srv, grpcapi.NewChannelServer(channels, rt.Log))
 	chatv1.RegisterDirectMessageServiceServer(srv, grpcapi.NewDirectMessageServer(directMessages, rt.Log))
+	chatv1.RegisterE2EServiceServer(srv, grpcapi.NewE2EServer(e2e, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
 
 	wsHandler, err := ws.New(ws.Config{
@@ -208,5 +227,8 @@ func setup(rt *service.Runtime) error {
 	// Silinmiş kanal mesajları 30 gün sonra kalıcı silinir (v14).
 	rt.AddWorker("channel-message-purge", channels.RunPurge)
 	rt.AddWorker("direct-message-purge", directMessages.RunPurge)
+	// Zarflar ve anahtar paylaşımları 30 gün, anahtar olayları 90 gün;
+	// 90 gün görünmeyen cihazlar silinir (ADR-0018 madde 9).
+	rt.AddWorker("e2e-retention", e2e.RunRetention)
 	return nil
 }

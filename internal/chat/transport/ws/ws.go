@@ -105,6 +105,7 @@ type Live interface {
 	Unsubscribe(m *realtime.Member, tayfa, ch id.ID) bool
 	Send(ctx context.Context, m *realtime.Member, tayfa, ch id.ID, in channel.SendInput) (channel.Message, error)
 	SendDirect(ctx context.Context, m *realtime.Member, in dm.SendInput) (dm.Message, dm.Conversation, error)
+	AckEnvelopes(ctx context.Context, m *realtime.Member, ids []id.ID) error
 }
 
 // Config wires a Handler.
@@ -436,6 +437,12 @@ type dmSendData struct {
 	ClientRequestID string `json:"client_request_id"`
 }
 
+// envelopeAckData acknowledges end-to-end envelopes of the connection's
+// device (issue #127).
+type envelopeAckData struct {
+	EnvelopeIDs []string `json:"envelope_ids"`
+}
+
 // dmSentData answers dm.send: the message and the conversation's status as
 // the sender sees it.
 type dmSentData struct {
@@ -481,6 +488,11 @@ func (c *conn) invalid(frameID, field string) {
 //	unsubscribe { tayfa_id, channel_id }  → unsubscribed (reason requested)
 //	send        { tayfa_id, channel_id, body, client_request_id } → sent
 //	dm.send     { recipient_user_id, body, client_request_id }     → dm.sent
+//	dm.envelope_ack { envelope_ids }                                → dm.envelope_acked
+//
+// End-to-end messages are sent over REST only (their envelopes exceed a
+// frame); the WebSocket delivers them (dm.envelope) and takes the
+// acknowledgements (ADR-0018 item 3).
 func (c *conn) handle(ctx context.Context, f frame) {
 	switch f.Type {
 	case "subscribe", "unsubscribe":
@@ -550,6 +562,26 @@ func (c *conn) handle(ctx context.Context, f frame) {
 			return
 		}
 		c.sendFrame("dm.sent", f.ID, dmSentData{DMData: realtime.DMFrom(msg), Status: dmStatuses[conv.Status]})
+	case "dm.envelope_ack":
+		var d envelopeAckData
+		if !decodeData(f.Data, &d) {
+			c.invalid(f.ID, "data")
+			return
+		}
+		list := make([]id.ID, 0, len(d.EnvelopeIDs))
+		for _, v := range d.EnvelopeIDs {
+			e, ok := id.Parse(v)
+			if !ok {
+				c.invalid(f.ID, "envelope_ids")
+				return
+			}
+			list = append(list, e)
+		}
+		if err := c.cfg.Live.AckEnvelopes(ctx, c.m, list); err != nil {
+			c.appError(ctx, f.ID, err)
+			return
+		}
+		c.sendFrame("dm.envelope_acked", f.ID, envelopeAckData{EnvelopeIDs: d.EnvelopeIDs})
 	default:
 		c.fail(f.ID, "unsupported_type")
 	}
@@ -589,6 +621,8 @@ func (c *conn) appError(ctx context.Context, frameID string, err error) {
 		{apperr.ErrMessageRequestLimit, "message_request_limit"},
 		{apperr.ErrRateLimited, "rate_limited"},
 		{apperr.ErrDirectMessagesUnavailable, "unavailable"},
+		{apperr.ErrE2EDeviceNotRegistered, "e2e_device_not_registered"},
+		{apperr.ErrE2ERequired, "e2e_required"},
 		{context.DeadlineExceeded, "unavailable"},
 	} {
 		if errors.Is(err, e.err) {

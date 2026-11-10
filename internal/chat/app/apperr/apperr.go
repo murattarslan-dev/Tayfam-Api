@@ -105,3 +105,39 @@ var (
 	// (CHAT_MESSAGE_KEYS); direct messages are off until it is configured.
 	ErrDirectMessagesUnavailable = errors.New("birebir mesaj anahtarı yok")
 )
+
+// End-to-end encryption errors (issue #127, ADR-0018; E2EService and
+// SendDirectMessage with envelopes).
+var (
+	// ErrE2EDeviceNotRegistered: the caller's session has no device.
+	ErrE2EDeviceNotRegistered = errors.New("e2e cihazı kayıtlı değil")
+	// ErrE2EDeviceAlreadyRegistered: the session has a device with other
+	// keys.
+	ErrE2EDeviceAlreadyRegistered = errors.New("oturumun başka anahtarlı cihazı var")
+	// ErrE2EDeviceLimit: the user has the most devices allowed.
+	ErrE2EDeviceLimit = errors.New("cihaz sınırı dolu")
+	// ErrE2ERecipientUnavailable: the recipient has no device.
+	ErrE2ERecipientUnavailable = errors.New("alıcının e2e cihazı yok")
+	// ErrE2ERequired: a plain message where a party has a device.
+	ErrE2ERequired = errors.New("uçtan uca şifreleme gerekli")
+	// ErrE2ENotPaired: the caller's device does not hold the history key.
+	ErrE2ENotPaired = errors.New("cihaz eşleştirilmemiş")
+	// ErrE2EAlreadyPaired: the caller's device holds the history key.
+	ErrE2EAlreadyPaired = errors.New("cihaz zaten eşleştirilmiş")
+	// ErrE2EPairedDeviceExists: another device of the user is paired.
+	ErrE2EPairedDeviceExists = errors.New("eşleştirilmiş başka cihaz var")
+	// ErrE2EHistoryKeyStale: not the current history key version.
+	ErrE2EHistoryKeyStale = errors.New("geçmiş anahtarı sürümü güncel değil")
+	// ErrE2ELinkRequestNotFound: no usable pairing request of the user.
+	ErrE2ELinkRequestNotFound = errors.New("eşleştirme isteği bulunamadı")
+)
+
+// DevicesChangedError: envelopes or key shares do not cover exactly the
+// current devices. Missing have none; Stale are gone or were replaced.
+// Device IDs only, never content.
+type DevicesChangedError struct {
+	Missing []string
+	Stale   []string
+}
+
+func (e *DevicesChangedError) Error() string { return "cihaz listesi değişti" }

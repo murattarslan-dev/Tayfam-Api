@@ -15,6 +15,7 @@ import (
 	chatdb "github.com/murattarslan-dev/tayfam-api/db/chat"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/channelcrypt"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
@@ -75,6 +76,8 @@ type recPub struct {
 	bodies []string
 	reads  []id.ID // receivers of read markers
 	notes  []notification.Request
+	// envelopes are the end-to-end deliveries (issue #127).
+	envelopes []keys.Delivery
 }
 
 func (r *recPub) add(ev string) {
@@ -102,6 +105,13 @@ func (r *recPub) Notified(n notification.Request) {
 	r.notes = append(r.notes, n)
 	r.mu.Unlock()
 	r.add("notified:" + n.Type)
+}
+
+func (r *recPub) Envelopes(ds []keys.Delivery) {
+	r.mu.Lock()
+	r.envelopes = append(r.envelopes, ds...)
+	r.mu.Unlock()
+	r.add("envelopes")
 }
 
 func (r *recPub) take() []string {

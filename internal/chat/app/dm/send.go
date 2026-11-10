@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -33,16 +34,24 @@ import (
 //     it, and the recipient's notice (without content) carries their
 //     unread count.
 func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message, Conversation, error) {
+	e2e := len(in.Envelopes) > 0
 	switch {
 	case in.Recipient == (id.ID{}) || in.Recipient == caller:
 		return Message{}, Conversation{}, invalid("recipient_user_id")
-	case !validBody(in.Body):
+	case e2e && in.Body != "", !e2e && !validBody(in.Body):
 		return Message{}, Conversation{}, invalid("body")
+	case e2e && !validEnvelopes(in.Envelopes):
+		return Message{}, Conversation{}, invalid("envelopes")
 	case in.ClientRequestID == (id.ID{}):
 		return Message{}, Conversation{}, invalid("client_request_id")
 	}
-	if err := s.ready(); err != nil {
-		return Message{}, Conversation{}, err
+	if !e2e {
+		// End-to-end messages need no server key (ADR-0018 item 10).
+		if err := s.ready(); err != nil {
+			return Message{}, Conversation{}, err
+		}
+	} else if in.Session == (id.ID{}) {
+		return Message{}, Conversation{}, apperr.ErrE2EDeviceNotRegistered
 	}
 	if !s.cfg.SendLimit.Allow(caller.String()) {
 		return Message{}, Conversation{}, apperr.ErrRateLimited
@@ -50,6 +59,17 @@ func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message
 	q := store.New(s.cfg.Pool)
 	if m, c, ok, err := s.existing(ctx, q, caller, in.Recipient, in.ClientRequestID); ok || err != nil {
 		return m, c, err
+	}
+	if !e2e {
+		// No downgrade: once a party has an end-to-end device, plain text
+		// is refused (ADR-0018 item 7).
+		has, err := q.AnyUserHasDevice(ctx, []pgtype.UUID{caller.PG(), in.Recipient.PG()})
+		if err != nil {
+			return Message{}, Conversation{}, fmt.Errorf("e2e cihazı: %w", err)
+		}
+		if has {
+			return Message{}, Conversation{}, apperr.ErrE2ERequired
+		}
 	}
 	v, err := s.cfg.Rules.Check(ctx, caller, in.Recipient)
 	if err != nil {
@@ -64,12 +84,25 @@ func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message
 	now := s.now()
 	msgID := s.ids.next()
 	var (
-		conv     convRow
-		accepted bool // a request became active
-		notice   *notification.Request
+		conv       convRow
+		accepted   bool // a request became active
+		notice     *notification.Request
+		deliveries []keys.Delivery
 	)
 	err = pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
 		q := store.New(tx)
+		var from keys.DeviceInfo
+		var targets []keys.DeviceInfo
+		if e2e {
+			// The envelopes must cover exactly the recipient's devices and
+			// the caller's other ones (ADR-0018 item 3).
+			if from, targets, err = keys.Recipients(ctx, q, keys.Caller{User: caller, Session: in.Session}, in.Recipient); err != nil {
+				return err
+			}
+			if err := keys.Match(targets, targetsOf(in.Envelopes)); err != nil {
+				return err
+			}
+		}
 		c, opened, err := s.conversationFor(ctx, q, caller, in.Recipient, v, now)
 		if err != nil {
 			return err
@@ -84,15 +117,28 @@ func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message
 			}
 		}
 		convID := uuidOf(c.ID)
-		sealed := s.cfg.Cipher.EncryptDirect(msgID, convID, in.Body)
-		if _, err := q.CreateDirectMessage(ctx, store.CreateDirectMessageParams{
-			ID: msgID.PG(), ConversationID: convID.PG(), SenderID: caller.PG(), BodyEncrypted: sealed.Data,
-			KeyVersion: pgtype.Int2{Int16: sealed.Version, Valid: true}, ClientRequestID: in.ClientRequestID.PG(),
-		}); err != nil {
+		if e2e {
+			_, err = q.CreateDirectMessageE2E(ctx, store.CreateDirectMessageE2EParams{
+				ID: msgID.PG(), ConversationID: convID.PG(), SenderID: caller.PG(), SenderDeviceID: from.ID.PG(),
+				ClientRequestID: in.ClientRequestID.PG(),
+			})
+		} else {
+			sealed := s.cfg.Cipher.EncryptDirect(msgID, convID, in.Body)
+			_, err = q.CreateDirectMessage(ctx, store.CreateDirectMessageParams{
+				ID: msgID.PG(), ConversationID: convID.PG(), SenderID: caller.PG(), BodyEncrypted: sealed.Data,
+				KeyVersion: pgtype.Int2{Int16: sealed.Version, Valid: true}, ClientRequestID: in.ClientRequestID.PG(),
+			})
+		}
+		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return errRetried // a concurrent retry won; nothing of this one is kept
 			}
 			return fmt.Errorf("mesaj yazılamadı: %w", err)
+		}
+		if e2e {
+			if deliveries, err = keys.StoreEnvelopes(ctx, q, msgID, convID, caller, from, targets, envelopesOf(in.Envelopes), now); err != nil {
+				return err
+			}
 		}
 		if err := q.TouchConversation(ctx, store.TouchConversationParams{ID: convID.PG(), At: ts(now)}); err != nil {
 			return fmt.Errorf("konuşma: %w", err)
@@ -122,7 +168,10 @@ func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message
 		return Message{}, Conversation{}, err
 	}
 	convID := uuidOf(conv.ID)
-	msg := Message{ID: msgID, ConversationID: convID, SenderID: caller, Body: in.Body, CreatedAt: now}
+	msg := Message{ID: msgID, ConversationID: convID, SenderID: caller, Body: in.Body, Encryption: EncryptionServer, CreatedAt: now}
+	if e2e {
+		msg.Encryption = EncryptionE2E
+	}
 	view, err := s.view(ctx, store.New(s.cfg.Pool), caller, convID)
 	if err != nil {
 		return Message{}, Conversation{}, err
@@ -132,6 +181,9 @@ func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message
 		s.cfg.Publisher.ConversationAccepted(ps, convID)
 	}
 	s.cfg.Publisher.MessageCreated(ps, msg)
+	if len(deliveries) > 0 {
+		s.cfg.Publisher.Envelopes(deliveries)
+	}
 	if notice != nil {
 		s.cfg.Publisher.Notified(*notice)
 	}
@@ -287,4 +339,41 @@ func markRead(ctx context.Context, q *store.Queries, user, conversation, message
 		return fmt.Errorf("bildirim okundu: %w", err)
 	}
 	return nil
+}
+
+// OutgoingEnvelope is one encrypted copy of an end-to-end message for one
+// device. The server never looks inside Content.
+type OutgoingEnvelope struct {
+	Device         id.ID
+	RegistrationID uint32
+	Type           int
+	Content        []byte
+}
+
+func validEnvelopes(es []OutgoingEnvelope) bool {
+	if len(es) > keys.MaxEnvelopes {
+		return false
+	}
+	for _, e := range es {
+		if e.Device == (id.ID{}) || !keys.ValidEnvelope(e.Type, e.Content) {
+			return false
+		}
+	}
+	return true
+}
+
+func targetsOf(es []OutgoingEnvelope) []keys.Target {
+	out := make([]keys.Target, 0, len(es))
+	for _, e := range es {
+		out = append(out, keys.Target{Device: e.Device, RegistrationID: e.RegistrationID})
+	}
+	return out
+}
+
+func envelopesOf(es []OutgoingEnvelope) map[id.ID]keys.Outgoing {
+	out := make(map[id.ID]keys.Outgoing, len(es))
+	for _, e := range es {
+		out[e.Device] = keys.Outgoing{Type: e.Type, Content: e.Content}
+	}
+	return out
 }

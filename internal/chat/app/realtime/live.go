@@ -106,7 +106,9 @@ type LiveConfig struct {
 	Channels Channels
 	// DirectMessages may be left nil and given with BindDirect.
 	DirectMessages DirectMessages
-	Log            *slog.Logger
+	// Keys may be left nil and given with BindKeys (issue #127).
+	Keys Acker
+	Log  *slog.Logger
 }
 
 // Live subscribes connections to channels, sends from them and delivers

@@ -321,6 +321,16 @@ func (h *Hub) sendToUser(user id.ID, e Event) {
 	}
 }
 
+// sendToSession delivers e to every connection of session (one device,
+// ADR-0018: device = session).
+func (h *Hub) sendToSession(session id.ID, e Event) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for m := range h.bySession[session] {
+		m.conn.Deliver(e)
+	}
+}
+
 // Ended reports whether the session (or the user) was ended less than
 // RevokedFor ago.
 func (h *Hub) Ended(user, session id.ID) bool {
