@@ -32,6 +32,9 @@ type Deps struct {
 	// Chat enables the notification and channel routes when their clients
 	// and the verifier are set.
 	Chat ChatDeps
+	// Client sets the supported client versions and the client-config
+	// route's rate limit (issue #114).
+	Client ClientDeps
 	// AllowedOrigins are the web origins allowed to call the API with
 	// credentials (CORS), such as https://tayfam.app.
 	AllowedOrigins []string
@@ -44,6 +47,7 @@ func NewRouter(d Deps) http.Handler {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/status", statusHandler(d))
+	registerClientConfig(mux, d.Client)
 	if d.Auth.Auth != nil && d.Auth.Registration != nil {
 		registerAuth(mux, d.Auth)
 	}
@@ -63,7 +67,8 @@ func NewRouter(d Deps) http.Handler {
 		registerRealtime(mux, d.Chat, d.AllowedOrigins)
 	}
 	mux.HandleFunc("/", httpx.NotFound)
-	return httpx.Chain(mux, cors(d.AllowedOrigins), requireClientHeader)
+	// cors runs first so that a refused web request can still be read.
+	return httpx.Chain(mux, cors(d.AllowedOrigins), requireSupportedClient(d.Client.Versions), requireClientHeader)
 }
 
 // StatusResponse is the body of GET /v1/status.

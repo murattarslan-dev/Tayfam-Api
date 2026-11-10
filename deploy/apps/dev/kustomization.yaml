@@ -51,6 +51,18 @@ configMapGenerator:
       # gitleaks onu API anahtarı sanıyor.
       - CF_ACCESS_AUD=d008112c2504d19f293d7859a3d99bd0abfc9d51419f78893a0dee81c2324578 # gitleaks:allow
       - ADMIN_GOOGLE_CLIENT_ID=73439258394-uhd9m0b6mkc5k8eaoup6kgh57a49on4t.apps.googleusercontent.com
+      # gateway: desteklenen istemci sürümleri (issue #114, ADR-0016).
+      # Altındaki sürüm client-outdated (426) alır; boş bırakılan en düşük
+      # sürüm o platformda zorlamayı kapatır. Değiştirmek kod değişikliği
+      # gerektirmez: değişiklik main'e girince configMap yeni adıyla
+      # (içerik hash'i) uygulanır ve onu kullanan pod'lar yeniden başlar.
+      # Geçersiz değer gateway'in başlamasını engeller.
+      - CLIENT_MIN_VERSION_ANDROID=0.1.0
+      - CLIENT_LATEST_VERSION_ANDROID=0.1.0
+      - CLIENT_MIN_VERSION_IOS=0.1.0
+      - CLIENT_LATEST_VERSION_IOS=0.1.0
+      - CLIENT_MIN_VERSION_WEB=0.1.0
+      - CLIENT_LATEST_VERSION_WEB=0.1.0
 
 images:
   - name: ghcr.io/murattarslan-dev/tayfam-gateway
