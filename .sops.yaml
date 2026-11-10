@@ -1,9 +1,23 @@
 # SOPS kuralları (ADR-0006). Yalnızca deploy/ altındaki *.sops.yaml dosyaları
 # şifrelenir ve yalnızca Secret değerleri (data, stringData) şifrelenir; isim
-# ve tür okunabilir kalır. Alıcı, platform sahibinin age açık anahtarıdır;
-# özel anahtar yalnızca onun bilgisayarında ve cluster'da (flux-system/sops-age)
-# bulunur.
+# ve tür okunabilir kalır. Alıcılar platform sahibinin age açık anahtarlarıdır;
+# özel anahtarlar yalnızca ilgili cluster'da (flux-system/sops-age) ve platform
+# sahibinde bulunur (dev: bilgisayarı, prod: parola yöneticisi;
+# docs/runbooks/sops.md).
+#
+# Her cluster'ın kendi age anahtarı vardır: dev'in anahtarı prod'u, prod'unki
+# dev'i çözemez. Kurallar ortam dizinine bağlıdır; başka bir dizin hiçbir
+# kurala uymaz ve sops şifrelemeyi reddeder.
 creation_rules:
-  - path_regex: ^deploy/apps/[^/]+/secrets/.*\.sops\.yaml$
+  # prod (VDS cluster'ı). Alıcı, platform sahibinin prod için ürettiği age
+  # açık anahtarıdır (gizli değil); docs/runbooks/vds-kurulumu.md adım e'de
+  # yer tutucunun yerine yazılır. Yer tutucu geçerli bir age anahtarı
+  # değildir: o adıma kadar sops prod dosyalarını şifrelemeyi reddeder
+  # ("unknown recipient type"), dev kuralı etkilenmez.
+  - path_regex: ^deploy/apps/prod/secrets/.*\.sops\.yaml$
+    encrypted_regex: ^(data|stringData)$
+    age: YER_TUTUCU_PROD_AGE_ACIK_ANAHTARI
+  # dev (ev cluster'ı).
+  - path_regex: ^deploy/apps/dev/secrets/.*\.sops\.yaml$
     encrypted_regex: ^(data|stringData)$
     age: age17wcaz766p6eyytnen3g40sh9zlrlsacvj5wuv06a0l3v0akrps5sdntdx6

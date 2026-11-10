@@ -1,0 +1,53 @@
+# prod ortamının kaynağı: prod iş akışının (.github/workflows/prod.yml) bir
+# vX.Y.Z etiketinden yayınladığı manifest artifact'ı
+# (oci://…/tayfam-deploy:prod). Cluster'a erişim yetkisi CI'da değil, yalnızca
+# burada, cluster içindedir (ADR-0006).
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: tayfam-deploy
+  namespace: flux-system
+spec:
+  interval: 5m
+  url: oci://ghcr.io/murattarslan-dev/tayfam-deploy
+  ref:
+    tag: prod
+  # Yalnızca bu reponun prod iş akışının bir vX.Y.Z etiketinden attığı cosign
+  # imzası kabul edilir (ADR-0011). main'deki CI'ın imzası (dev artifact'ı),
+  # başka bir iş akışının, daldan ya da başka biçimde etiketten atılan imza
+  # burada geçmez; "prod" etiketi başka bir artifact'a taşınsa bile uygulanmaz.
+  # Image'lar artifact içinde digest ile sabit olduğu için bu imzayla dolaylı
+  # olarak doğrulanır; prod iş akışı da o digest'lerin main CI'ınca imzalandığını
+  # yayınlamadan önce doğrular.
+  verify:
+    provider: cosign
+    matchOIDCIdentity:
+      - issuer: "^https://token\\.actions\\.githubusercontent\\.com$"
+        subject: "^https://github\\.com/murattarslan-dev/Tayfam-Api/\\.github/workflows/prod\\.yml@refs/tags/v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: tayfam-prod
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 5m
+  sourceRef:
+    kind: OCIRepository
+    name: tayfam-deploy
+  path: ./apps/prod
+  # Postgres cluster'ı CloudNativePG CRD'lerine ihtiyaç duyar.
+  dependsOn:
+    - name: infra
+  prune: true
+  wait: true
+  # Artifact'taki prod *.sops.yaml dosyaları burada, cluster içinde prod'un
+  # age anahtarıyla çözülür. Bu anahtar yalnızca bu secret'ta ve platform
+  # sahibinin parola yöneticisinde bulunur; dev'in anahtarı prod'u, prod'unki
+  # dev'i çözemez (ADR-0006).
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age

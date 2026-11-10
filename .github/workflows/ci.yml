@@ -65,7 +65,9 @@ jobs:
       - name: go test
         run: go test -race -count=1 -coverprofile=coverage.out ./...
       - name: Betik testleri
-        run: ./scripts/pin-images_test.sh
+        run: |
+          ./scripts/pin-images_test.sh
+          ./scripts/secrets_test.sh
 
   lint:
     name: Lint (servis sınırları ve gosec dahil)
@@ -216,8 +218,10 @@ jobs:
       - name: Kustomize derlemesi
         run: |
           kubectl kustomize deploy/apps/dev > /dev/null
+          kubectl kustomize deploy/apps/prod > /dev/null
           kubectl kustomize deploy/infra > /dev/null
           kubectl kustomize deploy/clusters/home > /dev/null
+          kubectl kustomize deploy/clusters/vds > /dev/null
 
   # main'deki her commit'ten sonra dev manifestlerini, o commit'in image'larına
   # digest ile sabitleyerek OCI artifact olarak yayınlar ve imzalar. Ev

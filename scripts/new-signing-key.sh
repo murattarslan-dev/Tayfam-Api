@@ -11,6 +11,7 @@
 # repoya commit edilebilir. Rotasyon: docs/runbooks/sops.md
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/secrets.sh
 
 env=${1:?kullanım: $0 <ortam> [kid]}
 kid=${2:-$(date -u +%Y-%m)}
@@ -40,8 +41,16 @@ printf '%s\n' \
   "  AUTH_SIGNING_KEY: \"$kid:$seed\"" |
   sops --encrypt --filename-override "$out" --input-type yaml --output-type yaml /dev/stdin > "$tmp"
 unset seed
+grep -q 'ENC\[AES256_GCM' "$tmp" || { echo "HATA: şifrelenmemiş görünüyor" >&2; exit 1; }
+# Başka bir ortamın age anahtarına şifrelenmişse yazılmaz (ADR-0006).
+check_own_recipient "$env" "$tmp"
 mv "$tmp" "$out"
 trap - EXIT
 
 grep -q 'ENC\[AES256_GCM' "$out" || { echo "HATA: dosya şifrelenmemiş görünüyor, commit etmeyin: $out" >&2; exit 1; }
 echo "yazıldı: $out (kid=$kid)"
+# Liste ayrı kustomization'daysa (prod) yeniden yazılır; dev'de liste
+# ortamın kustomization.yaml'ındadır.
+write_secret_list "$env" ||
+  grep -qxF "  - secrets/${out##*/}" "deploy/apps/$env/kustomization.yaml" ||
+  echo "deploy/apps/$env/kustomization.yaml'a (resources) ekleyin: secrets/${out##*/}"
