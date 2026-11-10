@@ -99,6 +99,42 @@ const (
 	// limit for channel and direct messages, REST and WebSocket together
 	// (issue #101). Slow mode and the request limit apply on top.
 	ErrorReason_ERROR_REASON_RATE_LIMITED ErrorReason = 19
+	// FAILED_PRECONDITION. The caller's session has no end-to-end device:
+	// register it first.
+	ErrorReason_ERROR_REASON_E2E_DEVICE_NOT_REGISTERED ErrorReason = 20
+	// ALREADY_EXISTS. The caller's session already has a device with another
+	// identity key or registration ID; unregister it first.
+	ErrorReason_ERROR_REASON_E2E_DEVICE_ALREADY_REGISTERED ErrorReason = 21
+	// RESOURCE_EXHAUSTED. The user has five devices; sign out an old session
+	// first.
+	ErrorReason_ERROR_REASON_E2E_DEVICE_LIMIT ErrorReason = 22
+	// FAILED_PRECONDITION. The envelopes or key shares do not cover exactly
+	// the current devices. ErrorInfo metadata "missing_device_ids" lists the
+	// devices without one, "stale_device_ids" the ones that are gone or were
+	// replaced (comma-separated device IDs; either may be empty). Refresh the
+	// device lists and retry.
+	ErrorReason_ERROR_REASON_E2E_DEVICES_CHANGED ErrorReason = 23
+	// FAILED_PRECONDITION. The recipient has no end-to-end device; nothing
+	// can be delivered to them.
+	ErrorReason_ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE ErrorReason = 24
+	// FAILED_PRECONDITION. A plain message (body) where the caller or the
+	// recipient has an end-to-end device: send envelopes instead.
+	ErrorReason_ERROR_REASON_E2E_REQUIRED ErrorReason = 25
+	// FAILED_PRECONDITION. The caller's device is not paired (does not hold
+	// the history key): archive access, answering a pairing request and
+	// rotating are for paired devices.
+	ErrorReason_ERROR_REASON_E2E_NOT_PAIRED ErrorReason = 26
+	// FAILED_PRECONDITION. Another device of the user is paired: pair by QR
+	// instead of claiming a new history key.
+	ErrorReason_ERROR_REASON_E2E_PAIRED_DEVICE_EXISTS ErrorReason = 27
+	// FAILED_PRECONDITION. The history key version is not the current one
+	// (it was rotated): fetch the key shares, or open a new pairing request.
+	ErrorReason_ERROR_REASON_E2E_HISTORY_KEY_STALE ErrorReason = 28
+	// NOT_FOUND. No such pairing request of the caller's user that can be
+	// used now (another user's, expired, already answered, or unknown).
+	ErrorReason_ERROR_REASON_E2E_LINK_REQUEST_NOT_FOUND ErrorReason = 29
+	// FAILED_PRECONDITION. The caller's device is paired already.
+	ErrorReason_ERROR_REASON_E2E_ALREADY_PAIRED ErrorReason = 30
 )
 
 // Enum value maps for ErrorReason.
@@ -124,28 +160,50 @@ var (
 		17: "ERROR_REASON_MESSAGE_REQUEST_LIMIT",
 		18: "ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND",
 		19: "ERROR_REASON_RATE_LIMITED",
+		20: "ERROR_REASON_E2E_DEVICE_NOT_REGISTERED",
+		21: "ERROR_REASON_E2E_DEVICE_ALREADY_REGISTERED",
+		22: "ERROR_REASON_E2E_DEVICE_LIMIT",
+		23: "ERROR_REASON_E2E_DEVICES_CHANGED",
+		24: "ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE",
+		25: "ERROR_REASON_E2E_REQUIRED",
+		26: "ERROR_REASON_E2E_NOT_PAIRED",
+		27: "ERROR_REASON_E2E_PAIRED_DEVICE_EXISTS",
+		28: "ERROR_REASON_E2E_HISTORY_KEY_STALE",
+		29: "ERROR_REASON_E2E_LINK_REQUEST_NOT_FOUND",
+		30: "ERROR_REASON_E2E_ALREADY_PAIRED",
 	}
 	ErrorReason_value = map[string]int32{
-		"ERROR_REASON_UNSPECIFIED":                0,
-		"ERROR_REASON_VALIDATION":                 1,
-		"ERROR_REASON_NOTIFICATION_NOT_FOUND":     2,
-		"ERROR_REASON_TAYFA_NOT_FOUND":            3,
-		"ERROR_REASON_CHANNEL_NOT_FOUND":          4,
-		"ERROR_REASON_MESSAGE_NOT_FOUND":          5,
-		"ERROR_REASON_PERMISSION_DENIED":          6,
-		"ERROR_REASON_MUTED":                      7,
-		"ERROR_REASON_CHANNEL_ARCHIVED":           8,
-		"ERROR_REASON_CHANNEL_NAME_TAKEN":         9,
-		"ERROR_REASON_SLOW_MODE":                  10,
-		"ERROR_REASON_TAYFA_READ_ONLY":            11,
-		"ERROR_REASON_ROLE_HIERARCHY":             12,
-		"ERROR_REASON_TICKET_LIMIT":               13,
-		"ERROR_REASON_CONVERSATION_NOT_FOUND":     14,
-		"ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED": 15,
-		"ERROR_REASON_MESSAGE_REQUEST_PENDING":    16,
-		"ERROR_REASON_MESSAGE_REQUEST_LIMIT":      17,
-		"ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND":  18,
-		"ERROR_REASON_RATE_LIMITED":               19,
+		"ERROR_REASON_UNSPECIFIED":                   0,
+		"ERROR_REASON_VALIDATION":                    1,
+		"ERROR_REASON_NOTIFICATION_NOT_FOUND":        2,
+		"ERROR_REASON_TAYFA_NOT_FOUND":               3,
+		"ERROR_REASON_CHANNEL_NOT_FOUND":             4,
+		"ERROR_REASON_MESSAGE_NOT_FOUND":             5,
+		"ERROR_REASON_PERMISSION_DENIED":             6,
+		"ERROR_REASON_MUTED":                         7,
+		"ERROR_REASON_CHANNEL_ARCHIVED":              8,
+		"ERROR_REASON_CHANNEL_NAME_TAKEN":            9,
+		"ERROR_REASON_SLOW_MODE":                     10,
+		"ERROR_REASON_TAYFA_READ_ONLY":               11,
+		"ERROR_REASON_ROLE_HIERARCHY":                12,
+		"ERROR_REASON_TICKET_LIMIT":                  13,
+		"ERROR_REASON_CONVERSATION_NOT_FOUND":        14,
+		"ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED":    15,
+		"ERROR_REASON_MESSAGE_REQUEST_PENDING":       16,
+		"ERROR_REASON_MESSAGE_REQUEST_LIMIT":         17,
+		"ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND":     18,
+		"ERROR_REASON_RATE_LIMITED":                  19,
+		"ERROR_REASON_E2E_DEVICE_NOT_REGISTERED":     20,
+		"ERROR_REASON_E2E_DEVICE_ALREADY_REGISTERED": 21,
+		"ERROR_REASON_E2E_DEVICE_LIMIT":              22,
+		"ERROR_REASON_E2E_DEVICES_CHANGED":           23,
+		"ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE":     24,
+		"ERROR_REASON_E2E_REQUIRED":                  25,
+		"ERROR_REASON_E2E_NOT_PAIRED":                26,
+		"ERROR_REASON_E2E_PAIRED_DEVICE_EXISTS":      27,
+		"ERROR_REASON_E2E_HISTORY_KEY_STALE":         28,
+		"ERROR_REASON_E2E_LINK_REQUEST_NOT_FOUND":    29,
+		"ERROR_REASON_E2E_ALREADY_PAIRED":            30,
 	}
 )
 
@@ -180,7 +238,7 @@ var File_tayfam_chat_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\xd4\x05\n" +
+	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\x8a\t\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12'\n" +
@@ -202,7 +260,18 @@ const file_tayfam_chat_v1_errors_proto_rawDesc = "" +
 	"$ERROR_REASON_MESSAGE_REQUEST_PENDING\x10\x10\x12&\n" +
 	"\"ERROR_REASON_MESSAGE_REQUEST_LIMIT\x10\x11\x12*\n" +
 	"&ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND\x10\x12\x12\x1d\n" +
-	"\x19ERROR_REASON_RATE_LIMITED\x10\x13B\xbd\x01\n" +
+	"\x19ERROR_REASON_RATE_LIMITED\x10\x13\x12*\n" +
+	"&ERROR_REASON_E2E_DEVICE_NOT_REGISTERED\x10\x14\x12.\n" +
+	"*ERROR_REASON_E2E_DEVICE_ALREADY_REGISTERED\x10\x15\x12!\n" +
+	"\x1dERROR_REASON_E2E_DEVICE_LIMIT\x10\x16\x12$\n" +
+	" ERROR_REASON_E2E_DEVICES_CHANGED\x10\x17\x12*\n" +
+	"&ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE\x10\x18\x12\x1d\n" +
+	"\x19ERROR_REASON_E2E_REQUIRED\x10\x19\x12\x1f\n" +
+	"\x1bERROR_REASON_E2E_NOT_PAIRED\x10\x1a\x12)\n" +
+	"%ERROR_REASON_E2E_PAIRED_DEVICE_EXISTS\x10\x1b\x12&\n" +
+	"\"ERROR_REASON_E2E_HISTORY_KEY_STALE\x10\x1c\x12+\n" +
+	"'ERROR_REASON_E2E_LINK_REQUEST_NOT_FOUND\x10\x1d\x12#\n" +
+	"\x1fERROR_REASON_E2E_ALREADY_PAIRED\x10\x1eB\xbd\x01\n" +
 	"\x12com.tayfam.chat.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1;chatv1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Chat.V1\xca\x02\x0eTayfam\\Chat\\V1\xe2\x02\x1aTayfam\\Chat\\V1\\GPBMetadata\xea\x02\x10Tayfam::Chat::V1b\x06proto3"
 
 var (

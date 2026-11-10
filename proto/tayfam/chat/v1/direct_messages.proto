@@ -3,6 +3,7 @@ syntax = "proto3";
 package tayfam.chat.v1;
 
 import "google/protobuf/timestamp.proto";
+import "tayfam/chat/v1/e2e.proto";
 
 // DirectMessageService runs one-to-one conversations, plain version (issue
 // #95; ADR-0005 "Direkt mesajlar", "Sonuçlar": plain direct messages first,
@@ -58,6 +59,20 @@ service DirectMessageService {
   // for another conversation), ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED,
   // ERROR_REASON_MESSAGE_REQUEST_PENDING, ERROR_REASON_MESSAGE_REQUEST_LIMIT,
   // ERROR_REASON_RATE_LIMITED.
+  //
+  // End-to-end encryption (issue #127, ADR-0018): instead of body the
+  // request carries envelopes, one per device of the recipient and one per
+  // other device of the caller, exactly (see OutgoingEnvelope; at most 16).
+  // The message is stored without content (encryption E2E); the envelopes
+  // are delivered to their devices (E2EService.ListEnvelopes, WebSocket
+  // dm.envelope) and deleted when acknowledged or after 30 days. The
+  // caller's session must have a device (ERROR_REASON_E2E_DEVICE_NOT_REGISTERED).
+  // Errors besides the above: ERROR_REASON_E2E_DEVICES_CHANGED,
+  // ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE; ERROR_REASON_VALIDATION for
+  // both or neither of body and envelopes, and for a bad envelope
+  // ("envelopes"). A plain body is refused with ERROR_REASON_E2E_REQUIRED
+  // when the caller or the recipient has an end-to-end device. End-to-end
+  // sending works without chat's message key.
   rpc SendDirectMessage(SendDirectMessageRequest) returns (SendDirectMessageResponse);
 
   // ListConversations lists the caller's conversations, the latest message
@@ -157,21 +172,37 @@ message Conversation {
   google.protobuf.Timestamp create_time = 8;
 }
 
+// MessageEncryption says where a direct message's content is.
+enum MessageEncryption {
+  MESSAGE_ENCRYPTION_UNSPECIFIED = 0;
+  // Plain version: body, encrypted at rest with the server's key (not end
+  // to end; clients label it so).
+  MESSAGE_ENCRYPTION_SERVER = 1;
+  // End to end: body is always empty; the content is in the envelopes and
+  // the archive (E2EService).
+  MESSAGE_ENCRYPTION_E2E = 2;
+}
+
 message DirectMessage {
   string id = 1;
   string conversation_id = 2;
   // Empty when the sender's account was deleted.
   string sender_user_id = 3;
-  // Empty for a deleted message ("Bu mesaj silindi").
+  // Empty for a deleted message ("Bu mesaj silindi") and for an end-to-end
+  // message.
   string body = 4;
   bool deleted = 5;
   google.protobuf.Timestamp create_time = 6;
+  MessageEncryption encryption = 7;
 }
 
 message SendDirectMessageRequest {
   string recipient_user_id = 1;
+  // Plain version; empty when envelopes are given.
   string body = 2;
   string client_request_id = 3;
+  // End to end (E2EService, e2e.proto).
+  repeated OutgoingEnvelope envelopes = 4;
 }
 
 message SendDirectMessageResponse {

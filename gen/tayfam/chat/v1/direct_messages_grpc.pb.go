@@ -90,6 +90,20 @@ type DirectMessageServiceClient interface {
 	// for another conversation), ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED,
 	// ERROR_REASON_MESSAGE_REQUEST_PENDING, ERROR_REASON_MESSAGE_REQUEST_LIMIT,
 	// ERROR_REASON_RATE_LIMITED.
+	//
+	// End-to-end encryption (issue #127, ADR-0018): instead of body the
+	// request carries envelopes, one per device of the recipient and one per
+	// other device of the caller, exactly (see OutgoingEnvelope; at most 16).
+	// The message is stored without content (encryption E2E); the envelopes
+	// are delivered to their devices (E2EService.ListEnvelopes, WebSocket
+	// dm.envelope) and deleted when acknowledged or after 30 days. The
+	// caller's session must have a device (ERROR_REASON_E2E_DEVICE_NOT_REGISTERED).
+	// Errors besides the above: ERROR_REASON_E2E_DEVICES_CHANGED,
+	// ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE; ERROR_REASON_VALIDATION for
+	// both or neither of body and envelopes, and for a bad envelope
+	// ("envelopes"). A plain body is refused with ERROR_REASON_E2E_REQUIRED
+	// when the caller or the recipient has an end-to-end device. End-to-end
+	// sending works without chat's message key.
 	SendDirectMessage(ctx context.Context, in *SendDirectMessageRequest, opts ...grpc.CallOption) (*SendDirectMessageResponse, error)
 	// ListConversations lists the caller's conversations, the latest message
 	// first, with the caller's unread count.
@@ -326,6 +340,20 @@ type DirectMessageServiceServer interface {
 	// for another conversation), ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED,
 	// ERROR_REASON_MESSAGE_REQUEST_PENDING, ERROR_REASON_MESSAGE_REQUEST_LIMIT,
 	// ERROR_REASON_RATE_LIMITED.
+	//
+	// End-to-end encryption (issue #127, ADR-0018): instead of body the
+	// request carries envelopes, one per device of the recipient and one per
+	// other device of the caller, exactly (see OutgoingEnvelope; at most 16).
+	// The message is stored without content (encryption E2E); the envelopes
+	// are delivered to their devices (E2EService.ListEnvelopes, WebSocket
+	// dm.envelope) and deleted when acknowledged or after 30 days. The
+	// caller's session must have a device (ERROR_REASON_E2E_DEVICE_NOT_REGISTERED).
+	// Errors besides the above: ERROR_REASON_E2E_DEVICES_CHANGED,
+	// ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE; ERROR_REASON_VALIDATION for
+	// both or neither of body and envelopes, and for a bad envelope
+	// ("envelopes"). A plain body is refused with ERROR_REASON_E2E_REQUIRED
+	// when the caller or the recipient has an end-to-end device. End-to-end
+	// sending works without chat's message key.
 	SendDirectMessage(context.Context, *SendDirectMessageRequest) (*SendDirectMessageResponse, error)
 	// ListConversations lists the caller's conversations, the latest message
 	// first, with the caller's unread count.
