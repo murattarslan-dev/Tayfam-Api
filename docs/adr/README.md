@@ -25,6 +25,7 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | [0015](0015-veritabani-rolleri.md) | Veritabanında sahip ve çalışma zamanı kullanıcısının ayrılması | Önerildi |
 | [0016](0016-desteklenen-istemci-surumu.md) | Desteklenen en düşük istemci sürümü | Önerildi |
 | [0017](0017-yalnizca-mobil-istemci.md) | Yalnızca mobil istemci; web derlemesi yalnızca prod dışında | Kabul edildi |
+| [0018](0018-birebir-mesaj-e2e-sunucu-tarafi.md) | Birebir mesajda uçtan uca şifreleme: sunucu tarafı | Önerildi |
 
 Ürün kararları (kavram modeli, özellikler, veri modeli, KVKK metni, platform
 yönetim paneli) Notion'daki "Tayfam — Proje Planı" sayfasındadır. ADR'ler bu

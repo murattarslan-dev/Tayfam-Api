@@ -14,6 +14,12 @@
 - **Revizyon:** 2026-11-09 (issue #95): "Direkt mesajlar: düz sürüm"
   bölümü eklendi (önce sunucu anahtarıyla şifreli birebir mesaj, E2E
   sonra) ve "Şikâyet" maddesi akışla tamamlandı.
+- **Revizyon:** 2026-11-10 (issue #127): E2E'nin sunucu tarafı
+  [ADR-0018](0018-birebir-mesaj-e2e-sunucu-tarafi.md) ile ayrıntılandı
+  (cihaz = oturum, ön anahtar paketinin yalnızca yazabilene verilmesi,
+  zarf kümesinin birebir eşleşmesi, eşleştirme ve anahtar yenileme durum
+  makinesi, sınırlar, düz sürümden geçiş). Uygulama yalnızca mobildir
+  (tayfam-app ADR-0011): web'e özgü maddeler (WebCrypto) geçersizdir.
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md)
 
@@ -146,7 +152,10 @@ Mesajlar sunucuda saklanır, böylece yeni cihazda geçmiş görünür.
   ve arşivdedir. **Sunucu `encryption = 'e2e'` mesajları çözemez.** Şema bu
   geçiş için değişmez; yalnızca zarf ve arşiv tabloları eklenir. Düz
   sürümde yazılmış eski mesajların ne olacağı (silme ya da istemcinin
-  arşive taşıması) E2E aşamasının kararıdır.
+  arşive taşıması) E2E aşamasının kararıdır. 2026-11-10: karar
+  [ADR-0018](0018-birebir-mesaj-e2e-sunucu-tarafi.md) "Düz sürümden
+  geçiş"tedir (E2E cihazı olan konuşmada düz gönderim reddedilir, eski
+  mesajlar etiketle kalır, kaldırılmaları pilot öncesi ayrı iş).
 - Kim kime yazabilir kuralı, istek akışı (tek mesaj, kabul, gönderene
   söylenmeyen ret), günlük istek sınırı, okundu bilgisi ve içeriksiz
   bildirimler düz sürümde de E2E'deki gibidir; E2E yalnızca içeriğin
@@ -195,8 +204,10 @@ arşivlerine kendi anahtarlarıyla yazar.
   `user_key_events`'e kayıt düşer; karşı tarafın istemcisi DM'de "Güvenlik kodu
   değişti" uyarısı gösterir. Güvenilen anahtarlar ve "doğrulandı" bilgisi
   yalnızca istemcide tutulur.
-- Web istemcisinde özel anahtarlar WebCrypto ile dışa aktarılamaz
-  (non-extractable) şekilde saklanır.
+- ~~Web istemcisinde özel anahtarlar WebCrypto ile dışa aktarılamaz
+  (non-extractable) şekilde saklanır.~~ 2026-11-10: web istemcisi yoktur
+  (tayfam-app ADR-0011); anahtarlar mobilde güvenli depodadır
+  (tayfam-app ADR-0010).
 
 ### Diğer canlı olaylar
 
