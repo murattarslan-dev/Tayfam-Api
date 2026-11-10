@@ -97,4 +97,54 @@ enum ErrorReason {
   // limit for channel and direct messages, REST and WebSocket together
   // (issue #101). Slow mode and the request limit apply on top.
   ERROR_REASON_RATE_LIMITED = 19;
+
+  // End-to-end encryption (E2EService, e2e.proto; SendDirectMessage with
+  // envelopes; issue #127, ADR-0018).
+
+  // FAILED_PRECONDITION. The caller's session has no end-to-end device:
+  // register it first.
+  ERROR_REASON_E2E_DEVICE_NOT_REGISTERED = 20;
+
+  // ALREADY_EXISTS. The caller's session already has a device with another
+  // identity key or registration ID; unregister it first.
+  ERROR_REASON_E2E_DEVICE_ALREADY_REGISTERED = 21;
+
+  // RESOURCE_EXHAUSTED. The user has five devices; sign out an old session
+  // first.
+  ERROR_REASON_E2E_DEVICE_LIMIT = 22;
+
+  // FAILED_PRECONDITION. The envelopes or key shares do not cover exactly
+  // the current devices. ErrorInfo metadata "missing_device_ids" lists the
+  // devices without one, "stale_device_ids" the ones that are gone or were
+  // replaced (comma-separated device IDs; either may be empty). Refresh the
+  // device lists and retry.
+  ERROR_REASON_E2E_DEVICES_CHANGED = 23;
+
+  // FAILED_PRECONDITION. The recipient has no end-to-end device; nothing
+  // can be delivered to them.
+  ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE = 24;
+
+  // FAILED_PRECONDITION. A plain message (body) where the caller or the
+  // recipient has an end-to-end device: send envelopes instead.
+  ERROR_REASON_E2E_REQUIRED = 25;
+
+  // FAILED_PRECONDITION. The caller's device is not paired (does not hold
+  // the history key): archive access, answering a pairing request and
+  // rotating are for paired devices.
+  ERROR_REASON_E2E_NOT_PAIRED = 26;
+
+  // FAILED_PRECONDITION. Another device of the user is paired: pair by QR
+  // instead of claiming a new history key.
+  ERROR_REASON_E2E_PAIRED_DEVICE_EXISTS = 27;
+
+  // FAILED_PRECONDITION. The history key version is not the current one
+  // (it was rotated): fetch the key shares, or open a new pairing request.
+  ERROR_REASON_E2E_HISTORY_KEY_STALE = 28;
+
+  // NOT_FOUND. No such pairing request of the caller's user that can be
+  // used now (another user's, expired, already answered, or unknown).
+  ERROR_REASON_E2E_LINK_REQUEST_NOT_FOUND = 29;
+
+  // FAILED_PRECONDITION. The caller's device is paired already.
+  ERROR_REASON_E2E_ALREADY_PAIRED = 30;
 }

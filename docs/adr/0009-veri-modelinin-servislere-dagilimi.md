@@ -7,6 +7,13 @@
   (gönderen token'dan), core → chat `VerifyDirectMessageForReport` ve
   birebir mesaj şikâyetinin `reports` tablosundaki yeri ("Birebir mesaj
   şikâyeti").
+- **Revizyon:** 2026-11-10 (issue #127): chat'in E2E tabloları
+  [ADR-0018](0018-birebir-mesaj-e2e-sunucu-tarafi.md)'ye göre:
+  `device_keys` identity'nin cihaz kimliği yerine oturuma (`session_id`)
+  bağlıdır; imzalı ön anahtar ayrı tablo değil `device_keys` satırındadır;
+  tek kullanımlık EC ve Kyber ön anahtarları `device_one_time_prekeys`'te;
+  ayrıca `user_e2e_state`, `e2e_ended_sessions`. `device.removed` olayı
+  yerine `session.revoked`, `user.sanctioned`, `user.deleted` kullanılır.
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0005](0005-gercek-zamanli-iletisim-ve-chat.md), [ADR-0008](0008-kvkk-ve-platform-yonetimi.md)
 - **Kaynak:** Notion: Veri Modeli (taslak v13) ve ER diyagramı
 
@@ -62,8 +69,9 @@ ele alır.
 - DM arşivi (ADR-0005, v13'e eklenir): `dm_archive_entries`,
   `history_key_shares`, `device_link_requests`
 - E2E anahtarları: `device_keys` (v13'teki `devices` tablosunun anahtar
-  alanları), `device_signed_prekeys`, `device_one_time_prekeys`,
-  `user_key_events`
+  alanları ve imzalı ön anahtarlar; 2026-11-10, ADR-0018),
+  `device_one_time_prekeys`, `user_key_events`, `user_e2e_state`,
+  `e2e_ended_sessions`
 - Bildirim: `notifications`, `notification_preferences`, `push_tokens`
 - Bağlantı: yok (`realtime_tickets` 2026-11-09'da kaldırıldı;
   [ADR-0014](0014-websocket-erisim-tokeniyla.md))

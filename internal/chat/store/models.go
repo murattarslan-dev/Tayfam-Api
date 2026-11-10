@@ -40,6 +40,55 @@ type ChannelRead struct {
 	UpdatedAt         pgtype.Timestamptz
 }
 
+type DeviceKey struct {
+	ID                    pgtype.UUID
+	UserID                pgtype.UUID
+	SessionID             pgtype.UUID
+	DeviceNumber          int16
+	RegistrationID        int32
+	IdentityKey           []byte
+	SignedPrekeyID        int32
+	SignedPrekey          []byte
+	SignedPrekeySignature []byte
+	KyberPrekeyID         int32
+	KyberPrekey           []byte
+	KyberPrekeySignature  []byte
+	PairedAt              pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	PrekeysUpdatedAt      pgtype.Timestamptz
+	LastSeenAt            pgtype.Timestamptz
+}
+
+type DeviceLinkRequest struct {
+	ID                 pgtype.UUID
+	UserID             pgtype.UUID
+	DeviceID           pgtype.UUID
+	ExpiresAt          pgtype.Timestamptz
+	Answer             []byte
+	HistoryKeyVersion  pgtype.Int2
+	AnsweredByDeviceID pgtype.UUID
+	AnsweredAt         pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+}
+
+type DeviceOneTimePrekey struct {
+	DeviceID  pgtype.UUID
+	Kind      string
+	KeyID     int32
+	PublicKey []byte
+	Signature []byte
+	CreatedAt pgtype.Timestamptz
+}
+
+type DmArchiveEntry struct {
+	UserID         pgtype.UUID
+	MessageID      pgtype.UUID
+	ConversationID pgtype.UUID
+	KeyVersion     int16
+	Ciphertext     []byte
+	CreatedAt      pgtype.Timestamptz
+}
+
 type DmConversation struct {
 	ID            pgtype.UUID
 	UserLowID     pgtype.UUID
@@ -58,6 +107,18 @@ type DmConversationRead struct {
 	UserID            pgtype.UUID
 	LastReadMessageID pgtype.UUID
 	ReadAt            pgtype.Timestamptz
+}
+
+type DmEnvelope struct {
+	ID                 pgtype.UUID
+	MessageID          pgtype.UUID
+	RecipientDeviceID  pgtype.UUID
+	SenderID           pgtype.UUID
+	SenderDeviceID     pgtype.UUID
+	SenderDeviceNumber int16
+	MessageType        int16
+	Ciphertext         []byte
+	CreatedAt          pgtype.Timestamptz
 }
 
 type DmMessage struct {
@@ -83,10 +144,25 @@ type DomainEvent struct {
 	OccurredAt  pgtype.Timestamptz
 }
 
+type E2eEndedSession struct {
+	SessionID pgtype.UUID
+	EndedAt   pgtype.Timestamptz
+}
+
 type EventConsumer struct {
 	ConsumerName string
 	LastEventID  pgtype.UUID
 	UpdatedAt    pgtype.Timestamptz
+}
+
+type HistoryKeyShare struct {
+	ID                pgtype.UUID
+	UserID            pgtype.UUID
+	RecipientDeviceID pgtype.UUID
+	SenderDeviceID    pgtype.UUID
+	HistoryKeyVersion int16
+	Bundle            []byte
+	CreatedAt         pgtype.Timestamptz
 }
 
 type Notification struct {
@@ -111,6 +187,25 @@ type NotificationPreference struct {
 	Level      string
 	MutedUntil pgtype.Timestamptz
 	UpdatedAt  pgtype.Timestamptz
+}
+
+type UserE2eState struct {
+	UserID            pgtype.UUID
+	HistoryKeyVersion int16
+	RotationNeeded    bool
+	LastDeviceNumber  int16
+	SessionsEndedAt   pgtype.Timestamptz
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
+type UserKeyEvent struct {
+	ID           pgtype.UUID
+	UserID       pgtype.UUID
+	DeviceID     pgtype.UUID
+	DeviceNumber int16
+	EventType    string
+	CreatedAt    pgtype.Timestamptz
 }
 
 type UserProfile struct {

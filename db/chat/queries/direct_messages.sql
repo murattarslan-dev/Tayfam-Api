@@ -128,7 +128,7 @@ WHERE c.id = @id AND (c.user_low_id = @user_id::uuid OR c.user_high_id = @user_i
 -- Mesajlar.
 
 -- name: GetDirectMessageByRequest :one
-SELECT id, conversation_id, sender_id, body_encrypted, key_version, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, body_encrypted, key_version, created_at, deleted_at
 FROM dm_messages
 WHERE sender_id = @sender_id AND client_request_id = @client_request_id;
 
@@ -137,11 +137,11 @@ WHERE sender_id = @sender_id AND client_request_id = @client_request_id;
 INSERT INTO dm_messages (id, conversation_id, sender_id, body_encrypted, key_version, client_request_id)
 VALUES (@id, @conversation_id, @sender_id, @body_encrypted, @key_version, @client_request_id)
 ON CONFLICT (sender_id, client_request_id) DO NOTHING
-RETURNING id, conversation_id, sender_id, body_encrypted, key_version, created_at, deleted_at;
+RETURNING id, conversation_id, sender_id, encryption, body_encrypted, key_version, created_at, deleted_at;
 
 -- En yeni önce; before_id verilirse ondan eskiler.
 -- name: ListDirectMessagesBefore :many
-SELECT id, conversation_id, sender_id, body_encrypted, key_version, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, body_encrypted, key_version, created_at, deleted_at
 FROM dm_messages
 WHERE conversation_id = @conversation_id AND (sqlc.narg(before_id)::uuid IS NULL OR id < sqlc.narg(before_id)::uuid)
 ORDER BY id DESC
@@ -150,14 +150,14 @@ LIMIT @n;
 -- En eski önce, after_id'den yeniler: kaçırılan mesajları tamamlama
 -- (ADR-0005).
 -- name: ListDirectMessagesAfter :many
-SELECT id, conversation_id, sender_id, body_encrypted, key_version, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, body_encrypted, key_version, created_at, deleted_at
 FROM dm_messages
 WHERE conversation_id = @conversation_id AND id > @after_id
 ORDER BY id
 LIMIT @n;
 
 -- name: GetDirectMessage :one
-SELECT id, conversation_id, sender_id, body_encrypted, key_version, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, body_encrypted, key_version, created_at, deleted_at
 FROM dm_messages
 WHERE conversation_id = @conversation_id AND id = @id;
 

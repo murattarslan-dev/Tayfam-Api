@@ -14,6 +14,18 @@ type Querier interface {
 	// İstek kabul edildi (alıcı kabul etti ya da cevap yazdı; reddettiği
 	// isteğe yazması da onu reddedilenlerden çıkarır).
 	AcceptConversation(ctx context.Context, arg AcceptConversationParams) (int64, error)
+	// Yalnızca çağıranın cihazına ait zarflar silinir.
+	AckEnvelopes(ctx context.Context, arg AckEnvelopesParams) (int64, error)
+	AckHistoryKeyShares(ctx context.Context, arg AckHistoryKeySharesParams) (int64, error)
+	// Yalnızca süresi geçmemiş, cevaplanmamış istek cevaplanır.
+	AnswerLinkRequest(ctx context.Context, arg AnswerLinkRequestParams) (int64, error)
+	// Düz gönderimde E2E zorunluluğu: taraflardan birinin cihazı var mı?
+	AnyUserHasDevice(ctx context.Context, userIds []pgtype.UUID) (bool, error)
+	// Yeni geçmiş anahtarı (ilk cihaz ya da yenileme): sürüm bir artar.
+	BumpHistoryKeyVersion(ctx context.Context, userID pgtype.UUID) (int16, error)
+	// Bir anahtar bir kez verilir: eşzamanlı çekmeler kilitli satırı atlar,
+	// seçilen satır aynı ifadede silinir. Kalmadıysa sonuç boştur.
+	ClaimOneTimePreKey(ctx context.Context, arg ClaimOneTimePreKeyParams) (ClaimOneTimePreKeyRow, error)
 	ClearChannelCreator(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silindi (user.deleted): içerik kalır, yazar "Silinmiş kullanıcı".
 	ClearChannelMessageAuthor(ctx context.Context, userID pgtype.UUID) error
@@ -25,6 +37,7 @@ type Querier interface {
 	ClearConversationLowSide(ctx context.Context, userID pgtype.UUID) error
 	ClearDirectMessageSender(ctx context.Context, userID pgtype.UUID) error
 	ClearNotificationActor(ctx context.Context, userID pgtype.UUID) error
+	CountOneTimePreKeys(ctx context.Context, deviceID pgtype.UUID) (CountOneTimePreKeysRow, error)
 	// Son 24 saatte istek olarak açılan konuşmalar (v7 günlük sınırı). Durumun
 	// sonradan değişmesi (kabul, ret) sayımı değiştirmez.
 	CountRecentRequests(ctx context.Context, arg CountRecentRequestsParams) (int64, error)
@@ -44,8 +57,13 @@ type Querier interface {
 	CreateChannel(ctx context.Context, arg CreateChannelParams) (CreateChannelRow, error)
 	// Satır varsa (eşzamanlı ilk mesaj) hiçbir şey yapmaz; sonuç boş döner.
 	CreateConversation(ctx context.Context, arg CreateConversationParams) (CreateConversationRow, error)
+	// Cihazlar.
+	CreateDevice(ctx context.Context, arg CreateDeviceParams) (CreateDeviceRow, error)
 	// Aynı (gönderen, client_request_id) varsa satır açılmaz ve sonuç boş döner.
 	CreateDirectMessage(ctx context.Context, arg CreateDirectMessageParams) (CreateDirectMessageRow, error)
+	// Zarflar.
+	CreateDirectMessageE2E(ctx context.Context, arg CreateDirectMessageE2EParams) (CreateDirectMessageE2ERow, error)
+	CreateLinkRequest(ctx context.Context, arg CreateLinkRequestParams) (CreateLinkRequestRow, error)
 	// Aynı (yazar, client_request_id) varsa satır açılmaz ve sonuç boş döner.
 	CreateMessage(ctx context.Context, arg CreateMessageParams) (CreateMessageRow, error)
 	// Uygulama içi bildirimler (issue #64). Alıcıları core seçer (ADR-0009);
@@ -58,6 +76,16 @@ type Querier interface {
 	// Alıcı isteği reddetti.
 	DeclineConversation(ctx context.Context, arg DeclineConversationParams) (int64, error)
 	DeleteAbandonedConversations(ctx context.Context) error
+	DeleteArchiveConversation(ctx context.Context, arg DeleteArchiveConversationParams) (int64, error)
+	DeleteDevice(ctx context.Context, arg DeleteDeviceParams) (DeleteDeviceRow, error)
+	DeleteDeviceBySession(ctx context.Context, sessionID pgtype.UUID) (DeleteDeviceBySessionRow, error)
+	// Eşleştirme istekleri.
+	DeleteDeviceLinkRequest(ctx context.Context, deviceID pgtype.UUID) error
+	DeleteE2EState(ctx context.Context, userID pgtype.UUID) error
+	DeleteEnvelopesFromSender(ctx context.Context, senderID pgtype.UUID) error
+	DeleteLinkRequest(ctx context.Context, arg DeleteLinkRequestParams) error
+	DeleteMessageArchive(ctx context.Context, messageID pgtype.UUID) error
+	DeleteMessageEnvelopes(ctx context.Context, messageID pgtype.UUID) error
 	DeleteNotificationPreference(ctx context.Context, arg DeleteNotificationPreferenceParams) error
 	// 90 gün saklama: en eski satırlardan bir parti.
 	DeleteOldNotifications(ctx context.Context, arg DeleteOldNotificationsParams) (int64, error)
@@ -66,11 +94,22 @@ type Querier interface {
 	DeleteTayfaNotificationPreferences(ctx context.Context, tayfaID pgtype.UUID) error
 	// Tayfa kalıcı silindi (tayfa.purged).
 	DeleteTayfaNotifications(ctx context.Context, tayfaID pgtype.UUID) error
+	DeleteUserArchive(ctx context.Context, userID pgtype.UUID) (int64, error)
 	DeleteUserChannelReads(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserConversationReads(ctx context.Context, userID pgtype.UUID) error
+	DeleteUserDevices(ctx context.Context, userID pgtype.UUID) ([]DeleteUserDevicesRow, error)
+	DeleteUserKeyEvents(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserNotificationPreferences(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silindi.
 	DeleteUserNotifications(ctx context.Context, userID pgtype.UUID) error
+	// Yaptırım: bu andan önce verilmiş token'lar cihaz kaydedemez.
+	EndUserSessions(ctx context.Context, arg EndUserSessionsParams) error
+	// Birebir mesajda uçtan uca şifreleme, sunucu tarafı (issue #127; ADR-0018;
+	// 00010_e2e.sql). Her sorgu cihazı ya kullanıcıyla ya da oturumla birlikte
+	// alır: bir kullanıcı yalnızca kendi cihazını, kendi zarflarını, kendi
+	// arşivini ve kendi eşleştirme isteklerini görür (IDOR).
+	// Kullanıcı durumu.
+	EnsureE2EState(ctx context.Context, userID pgtype.UUID) error
 	// Gönderenin kendi silmesi: metin hemen gider, geri alınamaz.
 	EraseDirectMessage(ctx context.Context, arg EraseDirectMessageParams) (int64, error)
 	// Yazarın kendi silmesi: metin hemen gider, geri alınamaz.
@@ -90,6 +129,8 @@ type Querier interface {
 	GetConversationRead(ctx context.Context, arg GetConversationReadParams) (GetConversationReadRow, error)
 	// Tek konuşma, listedeki sütunlarla (kişi taraf değilse boş).
 	GetConversationView(ctx context.Context, arg GetConversationViewParams) (GetConversationViewRow, error)
+	// Oturumun cihazı (çağıranın kendi cihazı).
+	GetDeviceBySession(ctx context.Context, arg GetDeviceBySessionParams) (GetDeviceBySessionRow, error)
 	GetDirectMessage(ctx context.Context, arg GetDirectMessageParams) (GetDirectMessageRow, error)
 	// Mesajlar.
 	GetDirectMessageByRequest(ctx context.Context, arg GetDirectMessageByRequestParams) (GetDirectMessageByRequestRow, error)
@@ -98,6 +139,8 @@ type Querier interface {
 	// mesaj da bulunur (taciz edip silen şikâyetten kaçamasın); reddedilmiş
 	// istek de (isteği reddeden şikâyet edebilsin).
 	GetDirectMessageForParty(ctx context.Context, arg GetDirectMessageForPartyParams) (GetDirectMessageForPartyRow, error)
+	GetE2EState(ctx context.Context, userID pgtype.UUID) (GetE2EStateRow, error)
+	GetLinkRequest(ctx context.Context, arg GetLinkRequestParams) (GetLinkRequestRow, error)
 	GetMessage(ctx context.Context, arg GetMessageParams) (GetMessageRow, error)
 	// Mesajlar.
 	// Tekrar gönderim: yazarın aynı client_request_id ile daha önce yazdığı
@@ -107,6 +150,25 @@ type Querier interface {
 	GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUserProfileRow, error)
 	// Moderatör veya yönetici silmesi: metin şifreli kalır, mesaj gizlenir.
 	HideMessage(ctx context.Context, arg HideMessageParams) (int64, error)
+	// Geçmiş arşivi.
+	// Kullanıcının taraf olduğu, silinmemiş mesajlar yazılır; diğerleri
+	// atlanır. Var olan kayıt değişmez (ilk yazan kazanır).
+	InsertArchiveEntries(ctx context.Context, arg InsertArchiveEntriesParams) error
+	// Tek kullanımlık ön anahtarlar.
+	// Var olan anahtar kimliği yeniden yüklenirse değişmez (tekrar deneme).
+	InsertECPreKeys(ctx context.Context, arg InsertECPreKeysParams) (int64, error)
+	InsertEnvelope(ctx context.Context, arg InsertEnvelopeParams) error
+	// Geçmiş anahtarı paylaşımları.
+	InsertHistoryKeyShare(ctx context.Context, arg InsertHistoryKeyShareParams) error
+	// Anahtar olayları ("güvenlik kodu değişti").
+	InsertKeyEvent(ctx context.Context, arg InsertKeyEventParams) error
+	InsertKyberPreKeys(ctx context.Context, arg InsertKyberPreKeysParams) (int64, error)
+	IsSessionEnded(ctx context.Context, sessionID pgtype.UUID) (bool, error)
+	// En eski önce, after_id'den yeniler.
+	ListArchiveAfter(ctx context.Context, arg ListArchiveAfterParams) ([]ListArchiveAfterRow, error)
+	// En yeni önce.
+	ListArchiveBefore(ctx context.Context, arg ListArchiveBeforeParams) ([]ListArchiveBeforeRow, error)
+	ListArchivedMessageIDs(ctx context.Context, arg ListArchivedMessageIDsParams) ([]pgtype.UUID, error)
 	// Tayfanın kanalları ve çağıranın okunmamış sayısı (en fazla max_unread;
 	// silinmiş ve kendi mesajları sayılmaz). include_staff false ise yalnızca
 	// members kanalları. Arşivlenmişler sonda.
@@ -128,6 +190,11 @@ type Querier interface {
 	ListDirectMessagesAfter(ctx context.Context, arg ListDirectMessagesAfterParams) ([]ListDirectMessagesAfterRow, error)
 	// En yeni önce; before_id verilirse ondan eskiler.
 	ListDirectMessagesBefore(ctx context.Context, arg ListDirectMessagesBeforeParams) ([]ListDirectMessagesBeforeRow, error)
+	// Cihazın bekleyen zarfları, en eski önce; imleç zarf kimliği.
+	ListEnvelopes(ctx context.Context, arg ListEnvelopesParams) ([]ListEnvelopesRow, error)
+	ListHistoryKeyShares(ctx context.Context, arg ListHistoryKeySharesParams) ([]ListHistoryKeySharesRow, error)
+	// En yeni önce; imleç olay kimliği.
+	ListKeyEvents(ctx context.Context, arg ListKeyEventsParams) ([]ListKeyEventsRow, error)
 	// En eski önce, after_id'den yeniler: kaçırılan mesajları tamamlama
 	// (ADR-0005).
 	ListMessagesAfter(ctx context.Context, arg ListMessagesAfterParams) ([]ListMessagesAfterRow, error)
@@ -138,8 +205,16 @@ type Querier interface {
 	// En yeni önce; after_id verilirse ondan eskiler (UUIDv7 zaman sıralı).
 	// unread_count yalnızca birebir mesaj bildirimlerinde doludur.
 	ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]ListNotificationsRow, error)
+	// 90 gün görünmeyen cihazlar.
+	ListUnseenDevices(ctx context.Context, arg ListUnseenDevicesParams) ([]ListUnseenDevicesRow, error)
+	// Kullanıcının cihazları, numaraya göre.
+	ListUserDevices(ctx context.Context, userID pgtype.UUID) ([]ListUserDevicesRow, error)
 	// Aynı iki kişinin eşzamanlı gönderimleri sırayla işlenir.
 	LockConversationByPair(ctx context.Context, arg LockConversationByPairParams) (LockConversationByPairRow, error)
+	LockDeviceBySession(ctx context.Context, arg LockDeviceBySessionParams) (LockDeviceBySessionRow, error)
+	// Aynı kullanıcının cihaz kaydı, eşleştirmesi ve anahtar yenilemesi sırayla
+	// işlenir.
+	LockE2EState(ctx context.Context, userID pgtype.UUID) (LockE2EStateRow, error)
 	// Kişinin günlük istek sayımını sıraya sokar: aynı kişinin eşzamanlı
 	// istekleri sınırı birlikte aşamaz.
 	LockRequestLimit(ctx context.Context, userID pgtype.UUID) error
@@ -154,26 +229,44 @@ type Querier interface {
 	MarkConversationRead(ctx context.Context, arg MarkConversationReadParams) error
 	// Zaten okunmuşsa okunma zamanı değişmez; başkasının bildirimi bulunmaz.
 	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (pgtype.UUID, error)
+	PairDevice(ctx context.Context, arg PairDeviceParams) (int64, error)
 	// Saklama ve silme.
 	// 30 gün: silinmiş mesajlardan bir parti kalıcı silinir.
 	PurgeDeletedDirectMessages(ctx context.Context, arg PurgeDeletedDirectMessagesParams) (int64, error)
 	// Saklama ve silme.
 	// 30 gün: silinmiş mesajlardan bir parti kalıcı silinir.
 	PurgeDeletedMessages(ctx context.Context, arg PurgeDeletedMessagesParams) (int64, error)
+	// Hesabı silinen ya da yaptırım alan ve cihazı kalmayan kullanıcının
+	// durumu, token'larının süresi çoktan dolduktan sonra (bir gün) silinir.
+	// Geçmiş anahtarı sürümü olan (arşivi olan) kullanıcınınki kalır.
+	PurgeEndedE2EStates(ctx context.Context, before pgtype.Timestamptz) (int64, error)
+	PurgeEndedSessions(ctx context.Context, before pgtype.Timestamptz) (int64, error)
+	PurgeEnvelopes(ctx context.Context, arg PurgeEnvelopesParams) (int64, error)
+	PurgeHistoryKeyShares(ctx context.Context, before pgtype.Timestamptz) (int64, error)
+	PurgeKeyEvents(ctx context.Context, before pgtype.Timestamptz) (int64, error)
+	PurgeLinkRequests(ctx context.Context, before pgtype.Timestamptz) (int64, error)
+	// Biten oturumlar.
+	RecordEndedSession(ctx context.Context, arg RecordEndedSessionParams) error
 	// Reddedeni listesinden çıkarır: konuşma bekleyen isteğe döner. Yalnızca
 	// reddeden taraf (istek açan değil) çıkarabilir; başkasınınki etkilenmez.
 	RestoreDeclinedRequest(ctx context.Context, arg RestoreDeclinedRequestParams) (int64, error)
 	RestoreMessage(ctx context.Context, arg RestoreMessageParams) (int64, error)
 	// archived_at NULL: arşivden çıkar.
 	SetChannelArchived(ctx context.Context, arg SetChannelArchivedParams) (SetChannelArchivedRow, error)
+	SetLastDeviceNumber(ctx context.Context, arg SetLastDeviceNumberParams) error
+	SetRotationNeeded(ctx context.Context, arg SetRotationNeededParams) error
 	// Hesap silindi: ad ve avatar temizlenir, satır mezar taşı olarak kalır.
 	// Tekrar uygulanınca sonuç değişmez.
 	TombstoneUserProfile(ctx context.Context, arg TombstoneUserProfileParams) error
 	TouchConversation(ctx context.Context, arg TouchConversationParams) error
+	// Görülme saatte en çok bir kez yazılır.
+	TouchDevice(ctx context.Context, arg TouchDeviceParams) error
 	UpdateChannel(ctx context.Context, arg UpdateChannelParams) (UpdateChannelRow, error)
 	// Bekleyen (okunmamış) konuşma bildiriminin sayacını günceller ve türünü
 	// döner; yoksa sonuç boştur (yeni bildirim açılır).
 	UpdateConversationNotificationUnread(ctx context.Context, arg UpdateConversationNotificationUnreadParams) (string, error)
+	UpdateKyberLastResortPreKey(ctx context.Context, arg UpdateKyberLastResortPreKeyParams) error
+	UpdateSignedPreKey(ctx context.Context, arg UpdateSignedPreKeyParams) error
 	UpsertNotificationPreference(ctx context.Context, arg UpsertNotificationPreferenceParams) error
 	// Profil kopyası (ADR-0009). Yalnızca identity'nin kullanıcı olaylarını
 	// uygulayan tüketici yazar.

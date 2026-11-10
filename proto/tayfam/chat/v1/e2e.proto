@@ -1,0 +1,501 @@
+syntax = "proto3";
+
+package tayfam.chat.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// E2EService is the server side of end-to-end encrypted direct messages
+// (issue #127; ADR-0018, ADR-0005 "Direkt mesajlar"). The protocol is
+// Signal (X3DH/PQXDH and the Double Ratchet); clients run it. The server
+// does no cryptography at all: it stores and relays public keys, opaque
+// envelopes, the user's archive (encrypted with their history key) and
+// pairing messages, checks formats and sizes, and decides who may fetch
+// what. Sending an end-to-end message is DirectMessageService's
+// SendDirectMessage with envelopes; this service holds everything else.
+//
+// Authentication: the caller's access token (ADR-0004, ADR-0011). Service
+// tokens are refused. Requests never name the acting user.
+//
+// Device = session (ADR-0018 item 1). "The caller's device" is the device
+// registered with the session (sid) of the caller's token. Methods that act
+// on it return ERROR_REASON_E2E_DEVICE_NOT_REGISTERED when the session has
+// none. A session that ended (sign-out, revoked elsewhere, sanction,
+// account deletion) loses its device, its waiting envelopes and key shares;
+// it cannot register a new one even while its access token is still valid
+// (UNAUTHENTICATED).
+//
+// Byte fields are opaque to the server and never appear in logs, events or
+// error messages. Formats the server checks (ERROR_REASON_VALIDATION with
+// the field name otherwise): an EC public key is 33 bytes starting with
+// 0x05; a Kyber public key is 1569 bytes (type byte and a Kyber-1024 or
+// ML-KEM-1024 key); a signature is 64 bytes; pre-key IDs are 0 to 16777215;
+// a registration ID is 1 to 16380.
+//
+// Rate limits per user (ERROR_REASON_RATE_LIMITED): fetching pre-key
+// bundles 20 a minute (bursts of 10); registering, uploading keys, pairing
+// and rotating 30 a minute (bursts of 10); archive writes 120 a minute
+// (bursts of 60).
+//
+// Paging as in DirectMessageService: page_size 0 means 50; values above
+// 100 are treated as 100; negative values and bad page tokens are
+// ERROR_REASON_VALIDATION. An empty next_page_token means the last page.
+service E2EService {
+  // RegisterDevice registers the caller's session as an end-to-end device
+  // with its keys. The user gets the next free device number (1 to 127,
+  // used in the Signal address) and a device_added key event. A user has at
+  // most five devices (ERROR_REASON_E2E_DEVICE_LIMIT: sign out an old
+  // session first). Registering the session again with the same identity
+  // key and registration ID returns the device (a retry; uploaded one-time
+  // pre-keys are added); with another one it is
+  // ERROR_REASON_E2E_DEVICE_ALREADY_REGISTERED (UnregisterDevice first).
+  // signed_prekey and kyber_last_resort_prekey are required; at most 100
+  // one-time pre-keys of each kind per call.
+  rpc RegisterDevice(RegisterDeviceRequest) returns (RegisterDeviceResponse);
+
+  // GetMyDevice returns the caller's device and the user's end-to-end
+  // state: pre-key counts (prekeys_low when fewer than 10 of a kind are
+  // left), the history key version, whether a rotation is needed, and
+  // whether another paired device exists (the client then offers QR
+  // pairing).
+  rpc GetMyDevice(GetMyDeviceRequest) returns (GetMyDeviceResponse);
+
+  // UnregisterDevice removes the caller's device with its pre-keys, waiting
+  // envelopes, key shares and pairing request, and writes a device_removed
+  // key event. Without a device it changes nothing.
+  rpc UnregisterDevice(UnregisterDeviceRequest) returns (UnregisterDeviceResponse);
+
+  // UploadPreKeys replaces the caller's signed pre-key and last-resort
+  // Kyber pre-key when given, and adds one-time pre-keys (at most 100 of
+  // each kind per call and 200 of each kind stored; IDs already stored are
+  // left as they are). Returns the counts.
+  rpc UploadPreKeys(UploadPreKeysRequest) returns (UploadPreKeysResponse);
+
+  // ListDevices lists a user's devices with their public identity keys
+  // (for safety numbers and to address envelopes). Allowed for the user
+  // themselves, for a party of a conversation with them, and for anyone
+  // core allows to write to them; otherwise
+  // ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED.
+  rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse);
+
+  // ListKeyEvents lists a user's key events, newest first, for the "safety
+  // code changed" notice. The same permission as ListDevices. Events are
+  // kept for 90 days.
+  rpc ListKeyEvents(ListKeyEventsRequest) returns (ListKeyEventsResponse);
+
+  // GetPreKeyBundles returns one pre-key bundle per device of user_id (or
+  // of the listed device_ids only), claiming one one-time EC and one
+  // one-time Kyber pre-key of each device: a one-time pre-key is handed out
+  // once, also to concurrent callers. Without a one-time Kyber pre-key the
+  // last-resort one is returned; without a one-time EC pre-key the bundle
+  // has none. A device whose one-time pre-keys fall below 10 is told so
+  // (WebSocket e2e.prekeys_low).
+  //
+  // Allowed for the caller's own other devices, and for a user the caller
+  // could send a message to right now: core does not refuse
+  // (ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED) and the conversation's state
+  // allows sending (ERROR_REASON_MESSAGE_REQUEST_PENDING,
+  // ERROR_REASON_MESSAGE_REQUEST_LIMIT), the same rules as
+  // SendDirectMessage. The caller's own device is never included. Unknown
+  // device_ids are left out.
+  rpc GetPreKeyBundles(GetPreKeyBundlesRequest) returns (GetPreKeyBundlesResponse);
+
+  // ListEnvelopes returns the envelopes waiting for the caller's device,
+  // oldest first. Delivery is at least once: the client drops envelopes it
+  // has seen (by ID) and acknowledges each one it has stored.
+  rpc ListEnvelopes(ListEnvelopesRequest) returns (ListEnvelopesResponse);
+
+  // AckEnvelopes deletes delivered envelopes of the caller's device (1 to
+  // 100 IDs). IDs of other devices or unknown ones are ignored. Also over
+  // the WebSocket (dm.envelope_ack).
+  rpc AckEnvelopes(AckEnvelopesRequest) returns (AckEnvelopesResponse);
+
+  // PutArchiveEntries writes the caller's archive entries (1 to 50), each
+  // encrypted with the user's history key of history_key_version, which
+  // must be the current one (ERROR_REASON_E2E_HISTORY_KEY_STALE). Only a
+  // paired device writes (ERROR_REASON_E2E_NOT_PAIRED). A message the
+  // caller is not a party of, or a deleted one, is skipped; an entry that
+  // exists stays as it is. accepted_message_ids are the given messages that
+  // now have an entry of the caller.
+  rpc PutArchiveEntries(PutArchiveEntriesRequest) returns (PutArchiveEntriesResponse);
+
+  // ListArchiveEntries returns the caller's archive entries of a
+  // conversation the caller sees, as ListDirectMessages pages messages:
+  // newest first, or with after_message_id the newer ones oldest first.
+  // Only a paired device reads (ERROR_REASON_E2E_NOT_PAIRED).
+  rpc ListArchiveEntries(ListArchiveEntriesRequest) returns (ListArchiveEntriesResponse);
+
+  // DeleteArchive deletes the caller's archive entries of one conversation,
+  // or all of them when conversation_id is empty. The other party's archive
+  // is untouched.
+  rpc DeleteArchive(DeleteArchiveRequest) returns (DeleteArchiveResponse);
+
+  // ClaimHistoryKey is called by an unpaired device that generated a new
+  // history key because the user has no paired device: the version goes up
+  // by one and the device becomes paired. Older archive entries stay
+  // unreadable to it. ERROR_REASON_E2E_PAIRED_DEVICE_EXISTS when another
+  // paired device exists (pair by QR instead). A device that is paired
+  // already gets the current version.
+  rpc ClaimHistoryKey(ClaimHistoryKeyRequest) returns (ClaimHistoryKeyResponse);
+
+  // CreateLinkRequest opens a pairing request for the caller's unpaired
+  // device (a paired one gets ERROR_REASON_E2E_ALREADY_PAIRED). It lives 10 minutes; a new one replaces
+  // the device's earlier one. The QR code the client shows carries the
+  // request ID, a public key the new device made for this and a one-time
+  // code; the server keeps none of them.
+  rpc CreateLinkRequest(CreateLinkRequestRequest) returns (CreateLinkRequestResponse);
+
+  // AnswerLinkRequest is called by a paired device of the same user after
+  // scanning the QR code: answer is the user's history keys encrypted to
+  // the new device's public key (opaque, 1 to 16384 bytes), and
+  // history_key_version must be the current one. Another user's, expired,
+  // answered or unknown requests are ERROR_REASON_E2E_LINK_REQUEST_NOT_FOUND.
+  // The new device is told over the WebSocket (e2e.link_answered).
+  rpc AnswerLinkRequest(AnswerLinkRequestRequest) returns (AnswerLinkRequestResponse);
+
+  // GetLinkRequest returns the caller's own pairing request with its
+  // answer, once answered.
+  rpc GetLinkRequest(GetLinkRequestRequest) returns (GetLinkRequestResponse);
+
+  // CompleteLinkRequest is called by the new device after it decrypted the
+  // answer: it becomes paired and the request is deleted. If the history
+  // key was rotated meanwhile it is ERROR_REASON_E2E_HISTORY_KEY_STALE and
+  // the device opens a new request.
+  rpc CompleteLinkRequest(CompleteLinkRequestRequest) returns (CompleteLinkRequestResponse);
+
+  // RotateHistoryKey is called by a paired device when a rotation is needed
+  // (a paired device was removed) or wanted: history_key_version must be
+  // the current one plus one, and shares must hold exactly one share for
+  // each other paired device of the user
+  // (ERROR_REASON_E2E_DEVICES_CHANGED otherwise). Each recipient is told
+  // over the WebSocket (e2e.history_key_shared).
+  rpc RotateHistoryKey(RotateHistoryKeyRequest) returns (RotateHistoryKeyResponse);
+
+  // ListHistoryKeyShares returns the shares waiting for the caller's
+  // device, oldest first (at most 100). Unacknowledged shares are deleted
+  // after 30 days.
+  rpc ListHistoryKeyShares(ListHistoryKeySharesRequest) returns (ListHistoryKeySharesResponse);
+
+  // AckHistoryKeyShares deletes received shares of the caller's device (1
+  // to 100 IDs); other IDs are ignored.
+  rpc AckHistoryKeyShares(AckHistoryKeySharesRequest) returns (AckHistoryKeySharesResponse);
+}
+
+// PreKey is a one-time EC pre-key (X3DH).
+message PreKey {
+  uint32 key_id = 1;
+  bytes public_key = 2;
+}
+
+// SignedPreKey is a signed EC pre-key or a Kyber pre-key (PQXDH), signed
+// with the device's identity key. The server does not check the signature.
+message SignedPreKey {
+  uint32 key_id = 1;
+  bytes public_key = 2;
+  bytes signature = 3;
+}
+
+// Device is the caller's own device.
+message Device {
+  string id = 1;
+  uint32 device_number = 2;
+  uint32 registration_id = 3;
+  bytes identity_key = 4;
+  bool paired = 5;
+  google.protobuf.Timestamp create_time = 6;
+}
+
+// PublicDevice is another user's (or the caller's) device as others see it.
+message PublicDevice {
+  string id = 1;
+  uint32 device_number = 2;
+  uint32 registration_id = 3;
+  bytes identity_key = 4;
+  google.protobuf.Timestamp create_time = 5;
+}
+
+// PreKeyCounts are the one-time pre-keys left on a device.
+message PreKeyCounts {
+  uint32 ec = 1;
+  uint32 kyber = 2;
+  // Fewer than 10 of a kind are left: upload more.
+  bool low = 3;
+}
+
+message RegisterDeviceRequest {
+  uint32 registration_id = 1;
+  bytes identity_key = 2;
+  SignedPreKey signed_prekey = 3;
+  SignedPreKey kyber_last_resort_prekey = 4;
+  repeated PreKey one_time_prekeys = 5;
+  repeated SignedPreKey kyber_prekeys = 6;
+}
+
+message RegisterDeviceResponse {
+  Device device = 1;
+  PreKeyCounts prekey_counts = 2;
+}
+
+message GetMyDeviceRequest {}
+
+message GetMyDeviceResponse {
+  Device device = 1;
+  PreKeyCounts prekey_counts = 2;
+  // 0 until the user's first device claims a history key.
+  uint32 history_key_version = 3;
+  // A paired device was removed: a paired device should rotate.
+  bool rotation_needed = 4;
+  // Another device of the user is paired (offer QR pairing).
+  bool other_paired_device = 5;
+}
+
+message UnregisterDeviceRequest {}
+
+message UnregisterDeviceResponse {}
+
+message UploadPreKeysRequest {
+  // Optional: replaces the current signed pre-key.
+  SignedPreKey signed_prekey = 1;
+  // Optional: replaces the current last-resort Kyber pre-key.
+  SignedPreKey kyber_last_resort_prekey = 2;
+  repeated PreKey one_time_prekeys = 3;
+  repeated SignedPreKey kyber_prekeys = 4;
+}
+
+message UploadPreKeysResponse {
+  PreKeyCounts prekey_counts = 1;
+}
+
+message ListDevicesRequest {
+  string user_id = 1;
+}
+
+message ListDevicesResponse {
+  repeated PublicDevice devices = 1;
+}
+
+// KeyEventType says what changed on a user's devices.
+enum KeyEventType {
+  KEY_EVENT_TYPE_UNSPECIFIED = 0;
+  KEY_EVENT_TYPE_DEVICE_ADDED = 1;
+  KEY_EVENT_TYPE_DEVICE_REMOVED = 2;
+  // Reserved by the data model; not written (a new identity key is a new
+  // device, ADR-0018).
+  KEY_EVENT_TYPE_IDENTITY_CHANGED = 3;
+}
+
+message KeyEvent {
+  string id = 1;
+  string device_id = 2;
+  uint32 device_number = 3;
+  KeyEventType type = 4;
+  google.protobuf.Timestamp create_time = 5;
+}
+
+message ListKeyEventsRequest {
+  string user_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListKeyEventsResponse {
+  repeated KeyEvent events = 1;
+  string next_page_token = 2;
+}
+
+// PreKeyBundle is what a sender needs to start a session with one device.
+message PreKeyBundle {
+  string device_id = 1;
+  uint32 device_number = 2;
+  uint32 registration_id = 3;
+  bytes identity_key = 4;
+  SignedPreKey signed_prekey = 5;
+  // Absent when the device has no one-time EC pre-key left.
+  PreKey one_time_prekey = 6;
+  // A one-time Kyber pre-key, or the last-resort one.
+  SignedPreKey kyber_prekey = 7;
+  bool kyber_last_resort = 8;
+}
+
+message GetPreKeyBundlesRequest {
+  string user_id = 1;
+  // Optional: only these devices of user_id (at most 5).
+  repeated string device_ids = 2;
+}
+
+message GetPreKeyBundlesResponse {
+  repeated PreKeyBundle bundles = 1;
+}
+
+// EnvelopeType is Signal's CiphertextMessageType.
+enum EnvelopeType {
+  ENVELOPE_TYPE_UNSPECIFIED = 0;
+  // A message of an established session (CiphertextMessageType 2).
+  ENVELOPE_TYPE_WHISPER = 2;
+  // A message that starts a session (CiphertextMessageType 3).
+  ENVELOPE_TYPE_PREKEY = 3;
+}
+
+// OutgoingEnvelope is one encrypted copy of a message for one device, in
+// SendDirectMessageRequest.
+message OutgoingEnvelope {
+  string device_id = 1;
+  // The registration ID the sender's session with the device has; a
+  // different one means the device was replaced
+  // (ERROR_REASON_E2E_DEVICES_CHANGED).
+  uint32 registration_id = 2;
+  EnvelopeType type = 3;
+  // 1 to 65536 bytes.
+  bytes content = 4;
+}
+
+// Envelope is an envelope waiting for the caller's device.
+message Envelope {
+  string id = 1;
+  string message_id = 2;
+  string conversation_id = 3;
+  string sender_user_id = 4;
+  string sender_device_id = 5;
+  uint32 sender_device_number = 6;
+  EnvelopeType type = 7;
+  bytes content = 8;
+  google.protobuf.Timestamp create_time = 9;
+}
+
+message ListEnvelopesRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListEnvelopesResponse {
+  repeated Envelope envelopes = 1;
+  string next_page_token = 2;
+}
+
+message AckEnvelopesRequest {
+  repeated string envelope_ids = 1;
+}
+
+message AckEnvelopesResponse {}
+
+// ArchiveEntry is one message in the caller's archive, encrypted with the
+// user's history key of key_version.
+message ArchiveEntry {
+  string message_id = 1;
+  string conversation_id = 2;
+  uint32 key_version = 3;
+  // 1 to 32768 bytes.
+  bytes content = 4;
+  google.protobuf.Timestamp create_time = 5;
+}
+
+// NewArchiveEntry is an entry to write.
+message NewArchiveEntry {
+  string message_id = 1;
+  bytes content = 2;
+}
+
+message PutArchiveEntriesRequest {
+  uint32 history_key_version = 1;
+  repeated NewArchiveEntry entries = 2;
+}
+
+message PutArchiveEntriesResponse {
+  repeated string accepted_message_ids = 1;
+}
+
+message ListArchiveEntriesRequest {
+  string conversation_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+  // Optional: the entries of messages newer than this one, oldest first.
+  string after_message_id = 4;
+}
+
+message ListArchiveEntriesResponse {
+  repeated ArchiveEntry entries = 1;
+  string next_page_token = 2;
+}
+
+message DeleteArchiveRequest {
+  // Optional: only this conversation.
+  string conversation_id = 1;
+}
+
+message DeleteArchiveResponse {}
+
+message ClaimHistoryKeyRequest {}
+
+message ClaimHistoryKeyResponse {
+  uint32 history_key_version = 1;
+}
+
+message CreateLinkRequestRequest {}
+
+message CreateLinkRequestResponse {
+  string link_request_id = 1;
+  google.protobuf.Timestamp expire_time = 2;
+}
+
+message AnswerLinkRequestRequest {
+  string link_request_id = 1;
+  uint32 history_key_version = 2;
+  bytes answer = 3;
+}
+
+message AnswerLinkRequestResponse {}
+
+message GetLinkRequestRequest {
+  string link_request_id = 1;
+}
+
+message GetLinkRequestResponse {
+  string link_request_id = 1;
+  google.protobuf.Timestamp expire_time = 2;
+  bool answered = 3;
+  // Set once answered.
+  bytes answer = 4;
+  uint32 history_key_version = 5;
+  string answered_by_device_id = 6;
+}
+
+message CompleteLinkRequestRequest {
+  string link_request_id = 1;
+}
+
+message CompleteLinkRequestResponse {
+  Device device = 1;
+}
+
+// HistoryKeyShareInput is a new history key for one paired device.
+message HistoryKeyShareInput {
+  string device_id = 1;
+  // Opaque, 1 to 16384 bytes.
+  bytes bundle = 2;
+}
+
+message RotateHistoryKeyRequest {
+  uint32 history_key_version = 1;
+  repeated HistoryKeyShareInput shares = 2;
+}
+
+message RotateHistoryKeyResponse {}
+
+message HistoryKeyShare {
+  string id = 1;
+  string sender_device_id = 2;
+  uint32 history_key_version = 3;
+  bytes bundle = 4;
+  google.protobuf.Timestamp create_time = 5;
+}
+
+message ListHistoryKeySharesRequest {}
+
+message ListHistoryKeySharesResponse {
+  repeated HistoryKeyShare shares = 1;
+}
+
+message AckHistoryKeySharesRequest {
+  repeated string share_ids = 1;
+}
+
+message AckHistoryKeySharesResponse {}
