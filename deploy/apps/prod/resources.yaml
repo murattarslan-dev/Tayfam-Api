@@ -1,0 +1,80 @@
+# prod istek ve limitleri: tek node'lu, 4 GB (en az) – 8 GB VDS (ADR-0006).
+# Bellek bütçesi 4 GB'a göredir: k3s + Flux (2 bileşen) + CloudNativePG
+# operatörü ~1–1,2 GB, aşağıdaki limitlerin toplamı ~2 GB; geri kalan işletim
+# sistemi ve sayfa önbelleği içindir. 8 GB'lık VDS'te önce Postgres büyütülür.
+# CPU limiti bilerek yok (kısıtlama gecikme getirir); istekler zamanlayıcı ve
+# bellek baskısında öncelik içindir.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+spec:
+  template:
+    spec:
+      containers:
+        - name: gateway
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { memory: 128Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identity
+spec:
+  template:
+    spec:
+      containers:
+        - name: identity
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core
+spec:
+  template:
+    spec:
+      containers:
+        - name: core
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat
+spec:
+  template:
+    spec:
+      containers:
+        # WebSocket bağlantıları bellekte tutulur.
+        - name: chat
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+---
+# CRD olduğu için kustomize bu yamayı JSON merge patch gibi uygular: haritalar
+# birleşir, burada yazılmayan parametreler base'den gelir.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: tayfam-pg
+spec:
+  postgresql:
+    parameters:
+      # Bellek limitinin ~%25'i; 8 GB'lık VDS'te 512MB / 1536MB / limit 2Gi.
+      shared_buffers: 256MB
+      effective_cache_size: 768MB
+      work_mem: 4MB
+      maintenance_work_mem: 64MB
+  storage:
+    # local-path; VDS diskinin (≥ 40 GB) yarısından azı. Büyütmek için
+    # yalnızca bu değer artırılır, küçültülemez.
+    size: 15Gi
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { memory: 1Gi }

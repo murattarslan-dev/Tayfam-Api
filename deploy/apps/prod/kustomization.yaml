@@ -1,0 +1,66 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# prod ortamı (Türkiye'deki KVM tabanlı VDS, ADR-0006 2. aşama). Yalnızca
+# vX.Y.Z git etiketleri dağıtılır: prod iş akışı image'ları etiketin
+# gösterdiği main commit'inin digest'lerine sabitler ve sonucu OCI artifact
+# olarak "prod" etiketiyle yayınlar. Kurulum: docs/runbooks/vds-kurulumu.md.
+namespace: tayfam-prod
+
+resources:
+  - namespace.yaml
+  - ../../base
+  # SOPS ile şifreli secret'lar; listeyi scripts/new-*.sh betikleri
+  # secrets/kustomization.yaml'a kendileri yazar. Dosyalar platform sahibinin
+  # bilgisayarında, prod'un kendi age anahtarıyla üretilir (ADR-0006);
+  # üretilene kadar liste boştur ve overlay yine derlenir.
+  - secrets
+
+patches:
+  # Tek node'lu 4–8 GB VDS'e göre istek ve limitler (base ev cluster'ına göre).
+  - path: resources.yaml
+
+configMapGenerator:
+  - name: tayfam-env
+    literals:
+      - TAYFAM_ENV=prod
+      - LOG_LEVEL=info
+      - SHUTDOWN_DRAIN_DELAY=5s
+      # Adlar dev ile aynıdır; token'ları imzalayan anahtarlar ayrıdır
+      # (secrets/identity-signing-key), dev token'ı prod'da doğrulanmaz.
+      - AUTH_ISSUER=tayfam-identity
+      - AUTH_AUDIENCE=tayfam-api
+      # Servis token'larının issuer'ı (ADR-0013): k3s'in varsayılan
+      # service-account-issuer değeri. VDS'te k3s bu ayar değiştirilmeden kurulur.
+      - SERVICE_TOKEN_ISSUER=https://kubernetes.default.svc.cluster.local
+      # gateway: istekler yalnızca cloudflared'den gelir (NetworkPolicy), bu
+      # yüzden Cloudflare'in istemci IP başlığına güvenilir.
+      - TRUST_CF_CONNECTING_IP=true
+      - CORS_ALLOWED_ORIGINS=https://tayfam.app
+      # identity: prod'un kendi Google OAuth client ID'leri (ADR-0006 ortam
+      # ayrımı; dev'in client'ı burada kullanılmaz). Gizli değildir. Değer
+      # platform sahibinin prod client'ı oluşturmasıyla girer
+      # (docs/runbooks/vds-kurulumu.md, adım h). Boşken identity
+      # "GOOGLE_CLIENT_IDS: zorunlu" hatasıyla başlamaz.
+      - GOOGLE_CLIENT_IDS=
+      # Kayıtta onaylanan belgelerin sürümleri; metin değişince artar.
+      - CONSENT_PRIVACY_NOTICE_VERSION=2026-11-08
+      - CONSENT_TERMS_VERSION=2026-11-08
+      # Yönetim paneli (admin.tayfam.app, ADR-0008) bilerek yok: ADMIN_HOST,
+      # CF_ACCESS_TEAM_DOMAIN, CF_ACCESS_AUD ve ADMIN_GOOGLE_CLIENT_ID prod'un
+      # Access uygulaması kurulunca birlikte eklenir (vds-kurulumu.md, adım g).
+      # CF_ACCESS_* boşken gateway paneli hiç kurmaz, admin host'u 404 döner.
+      # İstemci sürümü (CLIENT_*, issue #114) dev'de birleşince eklenecek.
+
+# Sürüm etiketiyle çalışan prod iş akışı her satırı, etiketin gösterdiği
+# commit'in imzalı image digest'iyle değiştirir (scripts/pin-images.sh). Bu
+# başlangıç değerleri bilerek var olmayan bir etikettir: prod, sabitlenmemiş
+# bir image'la çalışmaz (elle uygulanırsa pod'lar ImagePullBackOff'ta kalır).
+images:
+  - name: ghcr.io/murattarslan-dev/tayfam-gateway
+    newTag: surum-etiketi-bekleniyor
+  - name: ghcr.io/murattarslan-dev/tayfam-identity
+    newTag: surum-etiketi-bekleniyor
+  - name: ghcr.io/murattarslan-dev/tayfam-core
+    newTag: surum-etiketi-bekleniyor
+  - name: ghcr.io/murattarslan-dev/tayfam-chat
+    newTag: surum-etiketi-bekleniyor

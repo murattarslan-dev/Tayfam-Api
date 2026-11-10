@@ -16,6 +16,7 @@
 # sürüm o anahtarla yazılmış mesajlar için kalır.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/secrets.sh
 
 env=${1:?kullanım: $0 <ortam>}
 out="deploy/apps/$env/secrets/chat-message-key.sops.yaml"
@@ -44,6 +45,12 @@ printf '%s\n' \
   sops --encrypt --filename-override "$out" --input-type yaml --output-type yaml /dev/stdin > "$tmp"
 unset key
 grep -q 'ENC\[AES256_GCM' "$tmp" || { echo "HATA: şifrelenmemiş görünüyor" >&2; exit 1; }
+check_own_recipient "$env" "$tmp"
 mv "$tmp" "$out"
 trap - EXIT
 echo "yazıldı: $out"
+# Liste ayrı kustomization'daysa (prod) yeniden yazılır; dev'de liste
+# ortamın kustomization.yaml'ındadır ve orada yoksa elle eklenir.
+write_secret_list "$env" ||
+  grep -qxF "  - secrets/${out##*/}" "deploy/apps/$env/kustomization.yaml" ||
+  echo "deploy/apps/$env/kustomization.yaml'a (resources) ekleyin: secrets/${out##*/}"

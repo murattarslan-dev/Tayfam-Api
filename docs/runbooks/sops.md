@@ -14,7 +14,33 @@ yedekli) ve cluster'da (`flux-system/sops-age`) bulunur.
 - Açık değerler terminale yazdırılmaz. Kontrol gerektiğinde yalnızca anahtar
   kimliği (kid) gibi gizli olmayan kısımlar gösterilir.
 
+## Ortamlar ve alıcılar
+
+Her cluster'ın kendi age anahtarı vardır (ADR-0006). prod dağıtım PR'ından
+itibaren `.sops.yaml`'da
+`deploy/apps/dev/secrets/` dev'in, `deploy/apps/prod/secrets/` prod'un açık
+anahtarına şifrelenir; başka bir ortam dizini hiçbir kurala uymaz ve sops
+şifrelemeyi reddeder. Tüm `scripts/new-*.sh` betikleri ilk argüman olarak
+ortamı alır (`dev` | `prod`) ve şifreli dosyayı yazmadan önce, dosyanın başka
+bir ortamın secret'larında kullanılan bir anahtara şifrelenmediğini kontrol
+eder (`scripts/lib/secrets.sh`).
+
+- **dev:** özel anahtar platform sahibinin bilgisayarında
+  (`~/.config/sops/age/keys.txt`) ve ev cluster'ında; secret listesi
+  `deploy/apps/dev/kustomization.yaml`'dadır.
+- **prod:** özel anahtar yalnızca VDS cluster'ında (`flux-system/sops-age`)
+  ve parola yöneticisinde; `keys.txt`'ye eklenmez. Üretim için açık anahtar
+  yeter. Kurulum: [VDS kurulumu](vds-kurulumu.md), adım d–e. Secret listesi
+  `deploy/apps/prod/secrets/kustomization.yaml`'dadır ve betikler onu
+  kendileri yeniden yazar.
+- Bir ortamın secret'larının tam olduğunu kontrol etmek:
+  `./scripts/check-secret-refs.sh prod` (dev'de tunnel token'ı elle
+  oluşturulduğu için `./scripts/check-secret-refs.sh dev cloudflared-token`).
+
 ## İlk kurulum (bir kez, cluster başına)
+
+Aşağıdaki adımlar ev cluster'ı (dev) içindir; prod için
+[VDS kurulumu](vds-kurulumu.md) adım d.
 
 1. sops ve age kurulur (sürüm ve checksum'lar için bu dosyanın geçmişine veya
    kurulum notlarına bakın).
@@ -41,7 +67,7 @@ yedekli) ve cluster'da (`flux-system/sops-age`) bulunur.
 ### Üretme
 
 ```sh
-./scripts/new-signing-key.sh dev        # kid = yıl-ay, örn. 2026-11
+./scripts/new-signing-key.sh dev        # kid = yıl-ay, örn. 2026-11 (prod: ... prod)
 git add deploy/apps/dev/secrets/identity-signing-key.sops.yaml
 ```
 
@@ -100,6 +126,17 @@ FORCE=1 ./scripts/new-db-secrets.sh dev core:app     # ya da core:owner
 Birleştirdikten sonra `kubectl -n tayfam-dev rollout restart deploy/core`.
 Parola değiştikten sonra yeni bağlantılar eski parolayla açılamaz; restart
 geciktirilmez.
+
+## Cloudflare Tunnel token'ı
+
+```sh
+./scripts/new-tunnel-token.sh prod     # token istemde yapıştırılır, ekranda görünmez
+```
+
+prod'da token baştan SOPS'tadır. dev'de hâlâ elle oluşturulmuş
+`cloudflared-token` secret'ıdır; token yenilenirken (ADR-0011 madde 13) aynı
+betikle `dev` için şifreli dosya üretilir, `deploy/apps/dev/kustomization.yaml`'a
+eklenir ve birleştikten sonra elle oluşturulan secret silinir.
 
 ## age anahtarı kaybolursa
 

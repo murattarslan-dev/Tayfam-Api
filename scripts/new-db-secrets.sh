@@ -14,7 +14,8 @@
 #
 # Var olan dosyalara dokunulmaz; yalnızca eksik olan üretilir. FORCE=1 ile
 # yalnızca adı verilen dosyalar yeniden üretilir. Yeni dosya ortamın
-# kustomization.yaml'ına (resources) eklenir.
+# kustomization.yaml'ına (resources) eklenir; ortamın secrets/kustomization.yaml'ı
+# varsa (prod) liste orada yeniden yazılır.
 #
 # Her servis yalnızca kendi secret'larını okur; CloudNativePG aynı secret'la
 # o Postgres kullanıcısının parolasını ayarlar. Parolalar yalnızca bellekte
@@ -22,6 +23,7 @@
 # kabuk geçmişine yazılmaz.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/secrets.sh
 
 env=${1:?kullanım: $0 <ortam> [servis[:owner|:app]...]}
 shift
@@ -81,8 +83,14 @@ for target in "${targets[@]}"; do
     sops --encrypt --filename-override "$out" --input-type yaml --output-type yaml /dev/stdin > "$tmp"
   unset password
   grep -q 'ENC\[AES256_GCM' "$tmp" || { rm -f "$tmp"; echo "HATA: şifrelenmemiş görünüyor: $out" >&2; exit 1; }
+  check_own_recipient "$env" "$tmp" || { rm -f "$tmp"; exit 1; }
   mv "$tmp" "$out"
   echo "yazıldı: $out"
+
+  # Liste ayrı kustomization'daysa (prod) oradan yeniden yazılır.
+  if write_secret_list "$env"; then
+    continue
+  fi
 
   # Kustomization'a ekle (yoksa): son "- secrets/" satırının ardına.
   entry="  - secrets/$name.sops.yaml"

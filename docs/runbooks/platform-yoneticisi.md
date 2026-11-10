@@ -16,6 +16,10 @@ tamamlamış olmalıdır. Panel girişinde aynı Google hesabı kullanılır ve 
 hesabın doğrulanmış e-postası Cloudflare Access'e giriş yapılan e-postayla
 aynı olmalıdır.
 
+Komutlar `tayfam-dev` namespace'inde çalışır; prod için önce
+`export NS=tayfam-prod` (kubectl'in prod cluster'ını gösterdiği terminalde,
+[VDS kurulumu](vds-kurulumu.md) adım c).
+
 Kişinin referans kodunu (uygulamada Profil → Davet et, `TYF-XXXXXX`) not al.
 Komutta e-posta ya da kişisel veri geçmez; referans kodu yeterlidir.
 
@@ -23,7 +27,7 @@ Komutta e-posta ya da kişisel veri geçmez; referans kodu yeterlidir.
 
 ```sh
 REF=TYF-XXXXXX   # yönetici olacak kişinin referans kodu
-kubectl -n tayfam-dev exec -i tayfam-pg-1 -c postgres -- \
+kubectl -n "${NS:-tayfam-dev}" exec -i tayfam-pg-1 -c postgres -- \
   psql -v ON_ERROR_STOP=1 -v ref="$REF" -d identity <<'SQL'
 INSERT INTO platform_admins (user_id)
 SELECT id FROM users
@@ -44,7 +48,7 @@ Başka biri için referans koduyla eklemeyi kullan.
 
 ```sh
 EMAIL='<google-giris-epostan>'
-kubectl -n tayfam-dev exec -i tayfam-pg-1 -c postgres -- \
+kubectl -n "${NS:-tayfam-dev}" exec -i tayfam-pg-1 -c postgres -- \
   psql -v ON_ERROR_STOP=1 -v email="$EMAIL" -d identity <<'SQL'
 INSERT INTO platform_admins (user_id)
 SELECT u.id FROM users u
@@ -66,7 +70,7 @@ beklemek gerekmez.
 
 ```sh
 REF=TYF-XXXXXX
-kubectl -n tayfam-dev exec -i tayfam-pg-1 -c postgres -- \
+kubectl -n "${NS:-tayfam-dev}" exec -i tayfam-pg-1 -c postgres -- \
   psql -v ON_ERROR_STOP=1 -v ref="$REF" -d identity <<'SQL'
 DELETE FROM platform_admins
 WHERE user_id = (SELECT id FROM users WHERE ref_code = :'ref')
@@ -80,7 +84,7 @@ Hesap silinirse kullanıcı hemen yönetici sayılmaz; satır 30 gün sonra
 ## Listeleme
 
 ```sh
-kubectl -n tayfam-dev exec -i tayfam-pg-1 -c postgres -- \
+kubectl -n "${NS:-tayfam-dev}" exec -i tayfam-pg-1 -c postgres -- \
   psql -d identity -c 'SELECT user_id, granted_at, granted_by FROM platform_admins'
 ```
 
