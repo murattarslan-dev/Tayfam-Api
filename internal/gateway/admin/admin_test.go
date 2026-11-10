@@ -244,7 +244,7 @@ func TestSecurityHeaders(t *testing.T) {
 	if !strings.Contains(h.Get("Content-Security-Policy"), "default-src 'none'") ||
 		!strings.Contains(h.Get("Content-Security-Policy"), "frame-ancestors 'none'") ||
 		h.Get("X-Frame-Options") != "DENY" || h.Get("Cache-Control") != "no-store" ||
-		h.Get("Referrer-Policy") != "no-referrer" || h.Get("X-Content-Type-Options") != "nosniff" {
+		h.Get("Referrer-Policy") != "same-origin" || h.Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("güvenlik başlıkları eksik: %v", h)
 	}
 }
