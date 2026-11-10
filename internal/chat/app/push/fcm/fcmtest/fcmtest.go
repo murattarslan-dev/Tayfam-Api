@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -63,7 +64,8 @@ func (s *Server) Account(t testing.TB) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := json.Marshal(map[string]string{
+	// A test key generated above, not a credential.
+	b, err := json.Marshal(map[string]string{ //nolint:gosec // G101: field names, the key is generated per test
 		"type": "service_account", "project_id": Project, "private_key_id": "test-key",
 		"private_key":  string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})),
 		"client_email": "push@" + Project + ".iam.gserviceaccount.com",
@@ -133,7 +135,7 @@ func (s *Server) Hosts() map[string]int {
 }
 
 // AccessToken is the fake access token of the n-th grant (1-based).
-func AccessToken(n int) string { return "fake-access-" + string(rune('0'+n)) }
+func AccessToken(n int) string { return "fake-access-" + strconv.Itoa(n) }
 
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
