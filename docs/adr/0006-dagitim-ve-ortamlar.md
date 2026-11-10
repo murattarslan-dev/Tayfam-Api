@@ -6,6 +6,10 @@
   sunucusu Hyper-V VM yerine WSL2 (4 GB), alan adları tek seviye
   (`api-dev.tayfam.app`), cloudflared HTTP/2 kullanır, web istemcisi
   `tayfam.app`'tedir, ev cluster'ının gözlem verileri Grafana Cloud'a gider.
+- **Revizyon:** 2026-11-10, 2. aşamaya geçiş: prod Türkiye'deki bir KVM
+  VDS'e hazırlanıyor; yedekler pilot öncesi şart, `admin.tayfam.app` prod'a
+  taşındı, gözlem stack'i bellek yetmezse Grafana Cloud'da kalır (bkz.
+  "2. aşamaya geçiş").
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0001](0001-mikroservis-mimarisi.md), [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md)
 
@@ -157,6 +161,45 @@ Ortamlar hiçbir kaynağı paylaşmaz:
 - Günlük geliştirme için Docker Compose kullanılır: Postgres ve dört servis.
   Hızlı geri bildirim döngüsü sağlar.
 - Kubernetes'e özgü davranışlar dev cluster'ında denenir.
+
+### 2. aşamaya geçiş (revizyon 2026-11-10)
+
+- **Sunucu:** prod, Türkiye lokasyonlu, KVM tabanlı bir **VDS**'te çalışır
+  (sağlayıcı: Komuta; aylık 500 TL altı; ≥ 4 GB, tercihen 8 GB bellek,
+  2 vCPU, ≥ 40 GB SSD, Ubuntu 24.04 LTS). Bu ADR'deki "VPS" bu sunucudur.
+  Kurulum ve sertleştirme: `docs/runbooks/vds-kurulumu.md`. Makinede içeri
+  yalnızca SSH (yalnızca anahtarla, root ve parola girişi kapalı) açıktır;
+  Kubernetes API'si (6443) internete açılmaz, kubectl SSH tüneliyle çalışır.
+  `dev` evdeki WSL cluster'ında kalır.
+- **Gerçek kullanıcı yok:** pilot öncesinde prod bir süre deneme alanı
+  olarak kullanılır; kurallar (imzalı sürüm, ayrı anahtarlar, ortam ayrımı)
+  yine prod kurallarıdır.
+- **Yedekler pilot öncesi şarttır.** R2 henüz kurulu olmadığı için prod
+  Postgres'i **yedeksiz** başlar; disk veya sunucu kaybında veri geri gelmez.
+  Barman Cloud → R2 yedeği (ayrı bucket, yalnızca yedek yazabilen anahtar,
+  ADR-0011 madde 11) ve en az bir geri yükleme denemesi ilk gerçek kullanıcı
+  verisinden önce tamamlanır. Bu tamamlanmadan prod'a gerçek kullanıcı
+  alınmaz.
+- **Yönetim paneli prod'a aittir:** `admin.tayfam.app` rotası dev
+  tunnel'ından prod tunnel'ına taşınır; mevcut Cloudflare Access uygulaması
+  aynı adı korur. dev'de panel gerekirse ayrı ad ve ayrı Access uygulamasıyla
+  açılır.
+- **Gözlem:** VDS'te gözlem stack'i (Prometheus, Loki, Tempo, Grafana)
+  yalnızca bellek yeterse cluster içinde çalışır; yetmezse ev cluster'ındaki
+  gibi Grafana Cloud'un ücretsiz katmanı kullanılır (Collector ayarı).
+- **Gizli bilgiler:** prod'un age anahtarı platform sahibinin bilgisayarında
+  üretilip doğrudan cluster'a yüklenir; kalıcı kopyası yalnızca parola
+  yöneticisindedir (dev anahtarının durduğu WSL'e konmaz). `.sops.yaml`'da
+  her ortamın kendi kuralı ve alıcısı vardır; secret betikleri başka bir
+  ortamın anahtarına şifrelenmiş dosyayı yazmaz. prod'un Cloudflare Tunnel
+  token'ı baştan SOPS'tadır (`scripts/new-tunnel-token.sh`); dev'deki elle
+  oluşturulmuş secret rotasyonda taşınır.
+- **Sürüm:** `vX.Y.Z` etiketi yalnızca `main`'in birinci ebeveyn zincirindeki
+  bir commit'i gösterebilir. prod iş akışı yeniden derlemez: o commit'in
+  `main` CI'ında üretilip imzalanmış image'larını digest ile sabitler, prod
+  artifact'ını imzalar ve `prod` olarak etiketler. VDS'teki Flux yalnızca
+  prod iş akışının `refs/tags/v*` ile attığı imzayı kabul eder; dev artifact'ı
+  (`main` imzası) prod'da, prod artifact'ı dev'de uygulanmaz.
 
 ## Gerekçe
 
