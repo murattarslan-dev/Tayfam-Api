@@ -1,6 +1,6 @@
 # ADR-0016: Desteklenen en düşük istemci sürümü
 
-- **Durum:** Önerildi
+- **Durum:** Kabul edildi (platform sahibi, 2026-11-10)
 - **Tarih:** 2026-11-10
 - **Revizyon:** 2026-11-10, web istemcisi kaldırıldı
   ([ADR-0017](0017-yalnizca-mobil-istemci.md), issue #124): `web` platformu

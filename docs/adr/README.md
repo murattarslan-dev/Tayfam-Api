@@ -23,7 +23,7 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | [0013](0013-servis-kimligi.md) | Kullanıcısız servisler arası çağrılarda servis kimliği | Kabul edildi |
 | [0014](0014-websocket-erisim-tokeniyla.md) | WebSocket bağlantısı kullanıcının erişim token'ıyla | Kabul edildi |
 | [0015](0015-veritabani-rolleri.md) | Veritabanında sahip ve çalışma zamanı kullanıcısının ayrılması | Önerildi |
-| [0016](0016-desteklenen-istemci-surumu.md) | Desteklenen en düşük istemci sürümü | Önerildi |
+| [0016](0016-desteklenen-istemci-surumu.md) | Desteklenen en düşük istemci sürümü | Kabul edildi |
 | [0017](0017-yalnizca-mobil-istemci.md) | Yalnızca mobil istemci; web derlemesi yalnızca prod dışında | Kabul edildi |
 | [0018](0018-birebir-mesaj-e2e-sunucu-tarafi.md) | Birebir mesajda uçtan uca şifreleme: sunucu tarafı | Önerildi |
 
