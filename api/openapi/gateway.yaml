@@ -5428,8 +5428,8 @@ components:
           maxLength: 120
           description: Baştaki ve sondaki boşluklar atıldıktan sonra 1–120 karakter.
         description: { type: string, maxLength: 5000 }
-        starts_at: { type: string, format: date-time, description: Gelecekte, en fazla iki yıl ileri. }
-        ends_at: { type: string, format: date-time, description: Başlangıçtan sonra, en fazla 30 gün. }
+        starts_at: { type: string, format: date-time, description: "Gelecekte, en fazla iki yıl ileri." }
+        ends_at: { type: string, format: date-time, description: "Başlangıçtan sonra, en fazla 30 gün." }
         meeting_point_name: { type: string, maxLength: 120 }
         meeting_point: { $ref: "#/components/schemas/LatLng" }
         city: { type: string, maxLength: 50 }
