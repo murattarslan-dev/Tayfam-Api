@@ -206,7 +206,7 @@ func TestClientVersionEnforced(t *testing.T) {
 		t.Errorf("POST eski sürüm: %d", w.Code)
 	}
 	// Two headers are refused rather than one picked.
-	r := httptest.NewRequest("GET", "/v1/me/sessions", nil)
+	r := httptest.NewRequest(http.MethodGet, "/v1/me/sessions", nil)
 	r.Header.Set("Authorization", "Bearer USERTOKEN")
 	r.Header.Add(versionHeader, "android/1.0.0")
 	r.Header.Add(versionHeader, "android/2.0.0")
