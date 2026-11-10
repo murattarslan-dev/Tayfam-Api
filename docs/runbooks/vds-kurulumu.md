@@ -477,8 +477,8 @@ Prod ilk gerçek kullanıcı verisini almadan önce (ADR-0006, ADR-0010, ADR-001
       disk kaybında veri geri gelmez.
 - [ ] Yedekten geri yükleme en az bir kez denenmiş ve runbook'a yazılmış
       (ADR-0006, ADR-0011 ilke 7).
-- [ ] ADR-0010 "Pilot öncesi esneme" bölümü ve CLAUDE.md'deki karşılığı
-      kaldırılmış.
+- [ ] ADR-0010 "Pilot öncesi esneme": platform sahibinin ikinci bir emrine
+      kadar sürer (2026-11-10); pilotta sürüp sürmeyeceği onun kararıdır.
 - [ ] GitHub `prod` ortamında zorunlu onay ve `v*` etiket kural seti (adım i).
 - [ ] Gözlem kararı (cluster içi ya da Grafana Cloud) ve şüpheli olay
       bildirimleri (ADR-0011 madde 10).
