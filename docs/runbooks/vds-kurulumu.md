@@ -30,9 +30,9 @@ olarak kullanılır, ama kurallar prod kurallarıdır. **Postgres yedeği yoktur
 
 ## Ön koşullar
 
-- Prod ortam PR'ı (`deploy/apps/prod`, betikler, bu runbook) ve prod dağıtım
-  PR'ı (`.github/workflows/prod.yml`, `deploy/clusters/vds`, `.sops.yaml`)
-  `main`'de.
+- Prod ortam PR'ı (#121: `deploy/apps/prod`, betikler, bu runbook) ve prod
+  dağıtım PR'ı (#122: `.github/workflows/prod.yml`, `deploy/clusters/vds`,
+  `.sops.yaml`) `main`'de, bu sırayla.
 - Bilgisayarında (komutları çalıştırdığın terminal): `git`, `ssh`, `sops`,
   `age`, `kubectl`, `flux` (2.10.0, CI ile aynı), `nc`. Ev cluster'ının
   kurulu olduğu WSL'i kullanıyorsan bkz. adım d'deki not.
