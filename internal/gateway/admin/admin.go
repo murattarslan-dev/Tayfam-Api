@@ -225,7 +225,11 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("Content-Security-Policy", ContentSecurityPolicy)
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("Referrer-Policy", "no-referrer")
+		// same-origin, not no-referrer: under no-referrer browsers send
+		// "Origin: null" on the panel's own form posts and htmx requests,
+		// and sameOrigin refuses every one of them. same-origin still sends
+		// no Referer to any other site (Google included).
+		h.Set("Referrer-Policy", "same-origin")
 		h.Set("Cache-Control", "no-store")
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")
 		h.Set("Cross-Origin-Resource-Policy", "same-origin")
