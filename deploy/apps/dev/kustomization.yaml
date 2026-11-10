@@ -35,7 +35,11 @@ configMapGenerator:
       # gateway: istekler yalnızca cloudflared'den gelir (NetworkPolicy), bu
       # yüzden Cloudflare'in istemci IP başlığına güvenilir.
       - TRUST_CF_CONNECTING_IP=true
-      - CORS_ALLOWED_ORIGINS=https://tayfam.app
+      # Uygulamanın web geliştirme derlemesi yerel makineden dev API'ye
+      # bağlanır (ADR-0017): yalnızca bu kaynağa, çerezsiz CORS izni.
+      # Yalnızca http://localhost:<port> ya da http://127.0.0.1:<port>;
+      # başka bir değer gateway'in başlamasını engeller.
+      - WEB_DEV_ORIGINS=http://localhost:3000
       # identity: Google OAuth client ID'leri (gizli değildir). Web client
       # ID'si mobilde de "server client ID" olarak kullanılır.
       - GOOGLE_CLIENT_IDS=73439258394-uhd9m0b6mkc5k8eaoup6kgh57a49on4t.apps.googleusercontent.com
@@ -61,6 +65,7 @@ configMapGenerator:
       - CLIENT_LATEST_VERSION_ANDROID=0.1.0
       - CLIENT_MIN_VERSION_IOS=0.1.0
       - CLIENT_LATEST_VERSION_IOS=0.1.0
+      # web: yalnızca geliştirme derlemesi, yalnızca prod dışında (ADR-0017).
       - CLIENT_MIN_VERSION_WEB=0.1.0
       - CLIENT_LATEST_VERSION_WEB=0.1.0
 

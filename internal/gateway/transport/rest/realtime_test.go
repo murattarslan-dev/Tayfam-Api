@@ -49,7 +49,8 @@ func realtimeRouter(t *testing.T, upstream http.Handler) *httptest.Server {
 	d := testChatDeps(&fakeChat{})
 	d.RealtimeURL = u
 	d.Log = slog.New(slog.NewTextHandler(io.Discard, nil))
-	gw := httptest.NewServer(NewRouter(Deps{Version: "test", Chat: d, AllowedOrigins: []string{"https://tayfam.app"}}))
+	// A dev gateway: even the local web build's origin may not connect.
+	gw := httptest.NewServer(NewRouter(Deps{Version: "test", Chat: d, DevOrigins: []string{devOrigin}, WebClient: true}))
 	t.Cleanup(gw.Close)
 	return gw
 }
@@ -102,26 +103,6 @@ func TestRealtimeMobileToken(t *testing.T) {
 	}
 }
 
-// Web: the token comes from the cookie and goes on as a header; the cookie
-// itself does not reach chat.
-func TestRealtimeWebCookie(t *testing.T) {
-	up := &fakeRealtime{}
-	gw := realtimeRouter(t, up)
-	hdr := http.Header{}
-	hdr.Set("Origin", "https://tayfam.app")
-	hdr.Set("Cookie", "tayfam_at=USERTOKEN")
-	c, _, err := dialRealtime(t, gw, "", hdr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = c.CloseNow() }()
-	readReady(t, c)
-	r := up.last()
-	if r.Header.Get("Authorization") != "Bearer USERTOKEN" || r.Header.Get("Cookie") != "" || r.Header.Get("Origin") != "https://tayfam.app" {
-		t.Fatalf("chat'e giden başlıklar: %v", r.Header)
-	}
-}
-
 func TestRealtimeRefusesBeforeChat(t *testing.T) {
 	up := &fakeRealtime{}
 	gw := realtimeRouter(t, up)
@@ -136,13 +117,16 @@ func TestRealtimeRefusesBeforeChat(t *testing.T) {
 		hdr  http.Header
 		code int
 	}{
-		"yabancı origin":         {h("Origin", "https://kotu.example", "Authorization", "Bearer USERTOKEN"), http.StatusForbidden},
-		"çerezle origin'siz":     {h("Cookie", "tayfam_at=USERTOKEN"), http.StatusForbidden},
-		"çerezle yabancı origin": {h("Origin", "https://kotu.example", "Cookie", "tayfam_at=USERTOKEN"), http.StatusForbidden},
-		"token yok":              {h("Origin", "https://tayfam.app"), http.StatusUnauthorized},
-		"geçersiz token":         {h("Authorization", "Bearer BAD"), http.StatusUnauthorized},
-		"anahtar alınamadı":      {h("Authorization", "Bearer DOWN"), http.StatusServiceUnavailable},
-		"çok uzun token":         {h("Authorization", "Bearer "+strings.Repeat("a", maxAccessTokenBytes+1)), http.StatusUnauthorized},
+		// Any Origin is a browser; only the mobile apps connect (ADR-0017).
+		"yabancı origin":     {h("Origin", "https://kotu.example", "Authorization", "Bearer USERTOKEN"), http.StatusForbidden},
+		"geliştirme kaynağı": {h("Origin", devOrigin, "Authorization", "Bearer USERTOKEN"), http.StatusForbidden},
+		"eski web adresi":    {h("Origin", "https://tayfam.app", "Authorization", "Bearer USERTOKEN"), http.StatusForbidden},
+		"çerezle origin'li":  {h("Origin", "https://tayfam.app", "Cookie", "tayfam_at=USERTOKEN"), http.StatusForbidden},
+		"yalnızca çerez":     {h("Cookie", "tayfam_at=USERTOKEN"), http.StatusUnauthorized},
+		"token yok":          {h(), http.StatusUnauthorized},
+		"geçersiz token":     {h("Authorization", "Bearer BAD"), http.StatusUnauthorized},
+		"anahtar alınamadı":  {h("Authorization", "Bearer DOWN"), http.StatusServiceUnavailable},
+		"çok uzun token":     {h("Authorization", "Bearer "+strings.Repeat("a", maxAccessTokenBytes+1)), http.StatusUnauthorized},
 	} {
 		if _, code, err := dialRealtime(t, gw, "", tc.hdr); err == nil || code != tc.code {
 			t.Errorf("%s: %d %v", name, code, err)

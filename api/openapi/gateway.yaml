@@ -6,24 +6,37 @@ info:
   description: |
     gateway'in dışa açık uçları. İç servisler yalnızca gRPC konuşur.
 
-    **Kimlik:** Mobil istemciler erişim token'ını `Authorization: Bearer`
-    başlığıyla gönderir. Web istemcisinin token'ları JavaScript'in
-    erişemeyeceği çerezlerdedir (ADR-0004): `tayfam_at` (erişim) ve yolu
-    `/v1/auth/refresh` ile sınırlı `tayfam_rt` (refresh).
+    **İstemciler (ADR-0017):** Uygulama yalnızca Android ve iOS'ta
+    yayınlanır. Web derlemesi yalnızca yerel geliştirme içindir ve prod'da
+    hizmet almaz: `web` istemci adı, `web` platformlu giriş ve `web/...`
+    sürüm başlığı yalnızca prod dışında (local, dev) kabul edilir.
 
-    **CSRF:** Durum değiştiren her istek (POST, PUT, PATCH, DELETE)
-    `X-Tayfam-Client` başlığını taşır; değeri istemcinin adıdır (`android`,
-    `ios`, `web`). Tarayıcılar bu başlığı başka bir siteden gelen formlara
-    ekleyemez.
+    **Kimlik:** Token'lar her zaman yanıt gövdesinde döner; istemci erişim
+    token'ını `Authorization: Bearer` başlığıyla, refresh token'ı
+    `/v1/auth/refresh` gövdesinde gönderir. Uygulama API'si çerez yazmaz ve
+    çerez okumaz; çerezle gelen istek kimliksiz sayılır.
+
+    **CORS:** prod'da hiçbir `Origin` için CORS başlığı dönmez. Dev'de
+    yalnızca yerel geliştirme kaynağına (`http://localhost:<port>`)
+    kimlik bilgisi (`credentials`) olmadan izin verilir; izinli başlıklar
+    `Authorization`, `Content-Type`, `X-Tayfam-Client`,
+    `X-Tayfam-Client-Version`, `X-Request-Id`.
+
+    **İstemci başlığı:** Durum değiştiren her istek (POST, PUT, PATCH,
+    DELETE) `X-Tayfam-Client` başlığını taşır; değeri istemcinin adıdır
+    (`android`, `ios`; prod dışında `web`). Başlık yoksa ya da değer kabul
+    edilmiyorsa `missing-client-header` (400). Tarayıcı bu başlığı ancak
+    CORS ön isteğinden geçerek ekleyebilir.
 
     **İstemci sürümü (ADR-0016):** Uygulama her istekte
     `X-Tayfam-Client-Version: <platform>/<sürüm>` başlığını gönderir
-    (`android/1.4.2`; platform `android`, `ios`, `web`; sürüm Semantic
-    Versioning 2.0.0, `v` öneki yok). Sürüm platformun en düşük
+    (`android/1.4.2`; platform `android`, `ios`, prod dışında `web`; sürüm
+    Semantic Versioning 2.0.0, `v` öneki yok). Sürüm platformun en düşük
     desteklenen sürümünün altındaysa istek `client-outdated` (426) ile
-    reddedilir; WebSocket el sıkışması da. Bozuk başlık
-    `invalid-client-version` (400) alır. Başlıksız istek kabul edilir
-    (tarayıcı WebSocket'i, curl, health check). `GET /v1/status` ve
+    reddedilir; WebSocket el sıkışması da. Bozuk başlık ya da bu ortamda
+    hizmet verilmeyen platform (prod'da `web`) `invalid-client-version`
+    (400) alır. Başlıksız istek kabul edilir (curl, health check).
+    `GET /v1/status` ve
     `GET /v1/client-config` hiçbir zaman reddedilmez. Ön sürüm, sürümün
     kendisinden düşüktür (`1.2.0-rc.1` < `1.2.0`); derleme bilgisi
     (`+...`) karşılaştırmada sayılmaz.
@@ -96,8 +109,9 @@ paths:
       description: |
         Kullanıcı yoksa oluşturulur ve kayıt bekler (`registration_pending`).
         Bu durumdaki erişim token'ı yalnızca `/v1/registration` uçlarına
-        geçer (ADR-0012). `platform` `web` ise token'lar gövdede değil
-        çerezlerde döner. Platform genelinde askıdaki veya banlı hesap
+        geçer (ADR-0012). Token'lar gövdede döner; çerez yazılmaz.
+        `platform: web` yalnızca prod dışında kabul edilir; prod'da
+        `invalid-request` (400). Platform genelinde askıdaki veya banlı hesap
         `account-sanctioned` (403) alır; token yenileme de aynı cevabı verir.
       security: []
       parameters:
@@ -126,13 +140,12 @@ paths:
       description: |
         Refresh token her kullanımda yenilenir; eski token geçersiz olur.
         Kullanılmış bir token tekrar gelirse oturum tamamen kapanır.
-        Mobil istemci token'ı gövdede, web istemcisi `tayfam_rt` çerezinde
-        gönderir.
+        Refresh token yalnızca gövdede gelir; çerez okunmaz ve yazılmaz.
       security: []
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/RefreshRequest" }
@@ -153,7 +166,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       responses:
-        "204": { description: Oturum kapandı; web çerezleri silindi }
+        "204": { description: Oturum kapandı }
         "401": { $ref: "#/components/responses/Problem" }
 
   /v1/registration/requirements:
@@ -208,7 +221,7 @@ paths:
         hemen silinir; tüm cihazlardaki oturumlar kapanır, tayfalardan
         çıkılır. İçerikler kalır, yazarı "Silinmiş kullanıcı" görünür. Kayıt
         30 gün sonra tamamen silinir; geri alma yoktur. Aynı Google/Apple
-        hesabıyla sonraki giriş yeni bir hesap açar. Web çerezleri silinir.
+        hesabıyla sonraki giriş yeni bir hesap açar.
 
         Erişim token'ı iptal edilemez (ADR-0004): kalan ömrü boyunca (en
         fazla 15 dakika) hesap uçları onu reddeder, tayfa uçları üyelik
@@ -216,7 +229,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       responses:
-        "204": { description: Hesap silindi; web çerezleri silindi }
+        "204": { description: Hesap silindi }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
@@ -247,8 +260,8 @@ paths:
       description: |
         O cihazın refresh token'ı hemen geçersiz olur; erişim token'ı en
         fazla 15 dakika daha geçerli kalabilir (ADR-0004). Kendi oturumunuzu
-        kapatmak çıkış yapmaktır (çerezler silinmez; web için
-        `/v1/auth/sign-out` kullanılır). Başka kullanıcının, bilinmeyen ya da
+        kapatmak çıkış yapmaktır (istemci kendi oturumu için
+        `/v1/auth/sign-out` kullanır). Başka kullanıcının, bilinmeyen ya da
         zaten kapalı oturum aynı cevabı alır (`session-not-found`).
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
@@ -3513,20 +3526,20 @@ paths:
       description: |
         WebSocket el sıkışması (`Upgrade: websocket`), kullanıcının erişim
         token'ıyla (ADR-0014): mobil istemci `Authorization: Bearer` başlığı
-        koyar; web istemcisinde tarayıcı `tayfam_at` çerezini kendisi
-        gönderir. Token URL'de taşınmaz. Token geçerliyse `101 Switching
-        Protocols` döner. Bağlantı chat servisinde çalışır; gateway token'ı
-        doğrulayıp chat'e iletir (çerezi değil), chat yeniden doğrular.
+        koyar. Token URL'de taşınmaz; çerez kimlik yerine geçmez. Token
+        geçerliyse `101 Switching Protocols` döner. Bağlantı chat servisinde
+        çalışır; gateway token'ı doğrulayıp chat'e iletir, chat yeniden
+        doğrular.
 
         **Token ömrü:** Bağlantı en geç erişim token'ının süresi dolunca
         **4003 `token_expired`** ile kapanır (`ready.data.expires_at`).
-        İstemci token'ı yeniler (`POST /v1/auth/refresh`; web'de çerez
-        yenilenir) ve yeniden bağlanır, kaçırdıklarını REST ile çeker.
+        İstemci token'ı yeniler (`POST /v1/auth/refresh`) ve yeniden
+        bağlanır, kaçırdıklarını REST ile çeker.
 
-        **Origin:** Web istemcisinin `Origin` başlığı izinli web adreslerinden
-        biri olmalıdır (`forbidden-origin`). Çerezle gelen istek `Origin`
-        taşımak zorundadır. `Origin` göndermeyen yerel (mobil) istemciler
-        `Authorization` başlığıyla kabul edilir.
+        **Origin:** Yalnızca mobil uygulamalar bağlanır (ADR-0017). `Origin`
+        başlığı taşıyan (tarayıcıdan gelen) her istek, kaynağı ne olursa
+        olsun `forbidden-origin` (403) alır; web geliştirme derlemesi
+        WebSocket kurmaz.
 
         **Çerçeveler:** Yalnızca metin çerçevesi, JSON:
         `{ "type": "...", "id": "...", "data": { ... } }`. Bir çerçeve en
@@ -3605,9 +3618,7 @@ paths:
 
         **İstemci sürümü:** Mobil istemci el sıkışmasında
         `X-Tayfam-Client-Version` gönderir; eski sürüm bağlantı açılmadan
-        `client-outdated` (426) alır. Tarayıcılar WebSocket'e başlık
-        ekleyemediği için web istemcisi göndermez; web sürümü REST
-        isteklerinde denetlenir.
+        `client-outdated` (426) alır.
       parameters:
         - $ref: "#/components/parameters/ClientVersionHeader"
       responses:
@@ -3622,14 +3633,16 @@ paths:
 components:
   securitySchemes:
     bearer: { type: http, scheme: bearer, bearerFormat: JWT }
-    cookie: { type: apiKey, in: cookie, name: tayfam_at }
 
   parameters:
     ClientHeader:
       name: X-Tayfam-Client
       in: header
       required: true
-      description: CSRF koruması; durum değiştiren her istekte zorunlu.
+      description: |
+        İstemcinin adı; durum değiştiren her istekte zorunlu (ADR-0004,
+        ADR-0017). `web` yalnızca prod dışında (yerel web geliştirme
+        derlemesi) kabul edilir.
       schema: { type: string, enum: [android, ios, web] }
     ClientVersionHeader:
       name: X-Tayfam-Client-Version
@@ -3640,7 +3653,8 @@ components:
         Her işlemde kabul edilir; `GET /v1/status` ve
         `GET /v1/client-config` dışında platformun en düşük sürümünün
         altındaki istek `client-outdated` (426) alır. Başlık yoksa istek
-        kabul edilir.
+        kabul edilir. `web` platformu yalnızca prod dışında geçerlidir;
+        prod'da `invalid-client-version` (400).
       schema:
         type: string
         maxLength: 80
@@ -3895,11 +3909,13 @@ components:
       properties:
         platforms:
           type: object
-          required: [android, ios, web]
+          required: [android, ios]
           properties:
             android: { $ref: "#/components/schemas/PlatformVersions" }
             ios: { $ref: "#/components/schemas/PlatformVersions" }
-            web: { $ref: "#/components/schemas/PlatformVersions" }
+            web:
+              $ref: "#/components/schemas/PlatformVersions"
+              description: Yalnızca prod dışında; web geliştirme derlemesi (ADR-0017).
 
     PlatformVersions:
       type: object
@@ -3922,30 +3938,27 @@ components:
         provider: { type: string, enum: [google] }
         id_token: { type: string, maxLength: 8192 }
         nonce: { type: string, minLength: 16, maxLength: 256 }
-        platform: { type: string, enum: [android, ios, web] }
+        platform:
+          type: string
+          enum: [android, ios, web]
+          description: "`web` yalnızca prod dışında (ADR-0017)."
 
     RefreshRequest:
       type: object
+      required: [refresh_token]
       additionalProperties: false
       properties:
-        refresh_token:
-          type: string
-          maxLength: 64
-          description: Mobil istemciler için; web çerezi kullanır.
+        refresh_token: { type: string, maxLength: 64 }
 
     Session:
       type: object
-      required: [user_id, session_id, access_expires_at, refresh_expires_at, registration_pending]
+      required: [user_id, session_id, access_token, access_expires_at, refresh_token, refresh_expires_at, registration_pending]
       properties:
         user_id: { type: string, format: uuid }
         session_id: { type: string, format: uuid }
-        access_token:
-          type: string
-          description: Yalnızca mobil; web'de çerezdedir.
+        access_token: { type: string }
         access_expires_at: { type: string, format: date-time }
-        refresh_token:
-          type: string
-          description: Yalnızca mobil; web'de çerezdedir.
+        refresh_token: { type: string }
         refresh_expires_at: { type: string, format: date-time }
         registration_pending: { type: boolean }
         consent_required:
@@ -5663,4 +5676,3 @@ components:
 
 security:
   - bearer: []
-  - cookie: []

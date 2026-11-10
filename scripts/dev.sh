@@ -45,7 +45,7 @@ DB_NAME=$identity_db DB_USER=identity_app AUTH_SIGNING_KEY=$signing_key IDENTITY
 unset signing_key birthdate_key
 DB_NAME=$core_db DB_USER=core_app IDENTITY_GRPC_ADDR=127.0.0.1:9091 OPS_ADDR=127.0.0.1:8092 GRPC_ADDR=127.0.0.1:9092 ./bin/core & pids+=($!)
 DB_NAME=$chat_db DB_USER=chat_app CHAT_MESSAGE_KEYS=$message_key IDENTITY_GRPC_ADDR=127.0.0.1:9091 CORE_GRPC_ADDR=127.0.0.1:9092 OPS_ADDR=127.0.0.1:8093 GRPC_ADDR=127.0.0.1:9093 \
-  HTTP_ADDR=127.0.0.1:8094 CORS_ALLOWED_ORIGINS=http://localhost:3000 ./bin/chat & pids+=($!)
+  HTTP_ADDR=127.0.0.1:8094 ./bin/chat & pids+=($!)
 unset message_key
 
 OPS_ADDR=127.0.0.1:8081 HTTP_ADDR=127.0.0.1:8080 \
@@ -53,7 +53,7 @@ IDENTITY_GRPC_ADDR=127.0.0.1:9091 \
 CORE_GRPC_ADDR=127.0.0.1:9092 \
 CHAT_GRPC_ADDR=127.0.0.1:9093 \
 CHAT_REALTIME_URL=http://127.0.0.1:8094 \
-CORS_ALLOWED_ORIGINS=http://localhost:3000 \
+WEB_DEV_ORIGINS=http://localhost:3000 \
   ./bin/gateway & pids+=($!)
 
 echo "Servisler çalışıyor. Deneyin: curl http://localhost:8080/v1/status"

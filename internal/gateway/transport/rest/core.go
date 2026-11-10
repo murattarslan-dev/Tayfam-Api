@@ -183,18 +183,18 @@ func registerCore(mux *http.ServeMux, d CoreDeps) {
 // core and is bounded by upstreamWait.
 type coreHandler func(ctx context.Context, w http.ResponseWriter, r *http.Request)
 
-// authed verifies the access token (Bearer or the web cookie) and passes
+// authed verifies the access token (Authorization: Bearer) and passes
 // it on to core unchanged (auth.WithToken). core verifies it again.
 func (h coreHandlers) authed(next coreHandler) http.HandlerFunc {
 	return authenticated(h.d.Verifier, h.d.Log, next)
 }
 
-// authenticated verifies the access token (Bearer or the web cookie) and
-// passes it on unchanged (auth.WithToken) to the service next calls, which
+// authenticated verifies the access token (Authorization: Bearer; a cookie
+// authenticates nothing, ADR-0017) and passes it on unchanged (auth.WithToken) to the service next calls, which
 // verifies it again (ADR-0011).
 func authenticated(v TokenVerifier, log *slog.Logger, next coreHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		token, _ := bearer(r)
+		token := bearer(r)
 		if token == "" || len(token) > maxAccessTokenBytes {
 			httpx.WriteProblem(w, r, http.StatusUnauthorized, "unauthenticated", "Unauthorized", "")
 			return

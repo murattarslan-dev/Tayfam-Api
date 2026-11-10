@@ -180,3 +180,67 @@ func TestClientVersionsInvalidStopsService(t *testing.T) {
 		t.Errorf("en düşük tanımsızken: %d", code)
 	}
 }
+
+// TestDevOrigins: WEB_DEV_ORIGINS takes local development origins only,
+// exactly as a browser writes them, and nothing in prod (ADR-0017).
+func TestDevOrigins(t *testing.T) {
+	got, err := devOrigins("dev", " http://localhost:3000, http://127.0.0.1:3000 ,")
+	if err != nil || len(got) != 2 || got[0] != "http://localhost:3000" || got[1] != "http://127.0.0.1:3000" {
+		t.Fatalf("geçerli liste: %v %v", got, err)
+	}
+	for _, env := range []string{"local", "dev", "prod"} {
+		if got, err := devOrigins(env, ""); err != nil || len(got) != 0 {
+			t.Errorf("%s, boş: %v %v", env, got, err)
+		}
+	}
+	if _, err := devOrigins("prod", "http://localhost:3000"); err == nil {
+		t.Error("prod'da localhost kabul edildi")
+	}
+	for _, o := range []string{
+		"https://tayfam.app", "http://tayfam.app", "https://localhost:3000", "http://localhost",
+		"http://localhost:3000/", "http://localhost:3000/yol", "http://localhost:0", "http://localhost:65536",
+		"http://localhost:03000", "http://localhost:+3000", "http://localhost:3000.evil.example",
+		"http://evil.localhost:3000", "http://user@localhost:3000", "http://[::1]:3000", "*", "null",
+		"http://LOCALHOST:3000", "http://0.0.0.0:3000",
+	} {
+		if _, err := devOrigins("dev", o); err == nil {
+			t.Errorf("%q kabul edildi", o)
+		}
+	}
+}
+
+// TestWebDevOriginsFromEnv: a remote origin or any origin in prod stops
+// the gateway; a local one outside prod gets CORS without credentials.
+func TestWebDevOriginsFromEnv(t *testing.T) {
+	for name, env := range map[string]map[string]string{
+		"uzak kaynak":        {"WEB_DEV_ORIGINS": "https://tayfam.app"},
+		"prod'da localhost":  {"TAYFAM_ENV": "prod", "WEB_DEV_ORIGINS": "http://localhost:3000"},
+		"prod'da web sürümü": {"TAYFAM_ENV": "prod", "CLIENT_MIN_VERSION_WEB": "0.1.0"},
+		"prod'da web son":    {"TAYFAM_ENV": "prod", "CLIENT_LATEST_VERSION_WEB": "0.1.0"},
+	} {
+		if _, err := run(t, env); err == nil || !strings.Contains(err.Error(), "kurulum") {
+			t.Errorf("%s: başladı (%v)", name, err)
+		}
+	}
+	addr, err := run(t, map[string]string{"WEB_DEV_ORIGINS": "http://localhost:3000"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for origin, want := range map[string]string{"http://localhost:3000": "http://localhost:3000", "https://tayfam.app": ""} {
+		req, err := http.NewRequest(http.MethodOptions, "http://"+addr+"/v1/auth/sign-in", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Host = "api.tayfam.test"
+		req.Header.Set("Origin", origin)
+		req.Header.Set("Access-Control-Request-Method", "POST")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if got := resp.Header.Get("Access-Control-Allow-Origin"); got != want || resp.Header.Get("Access-Control-Allow-Credentials") != "" {
+			t.Errorf("%s: %q %q", origin, got, resp.Header.Get("Access-Control-Allow-Credentials"))
+		}
+	}
+}

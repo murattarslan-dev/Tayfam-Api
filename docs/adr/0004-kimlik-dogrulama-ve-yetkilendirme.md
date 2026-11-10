@@ -5,6 +5,14 @@
 - **Revizyon:** 2026-11-07, Notion'daki proje planı ve veri modeli v13 ile
   hizalandı: platform admin tasarımı ADR-0008'e taşındı, rol hiyerarşisi,
   rate limit ve token yeniden kullanım ayrıntıları eklendi.
+- **Revizyon:** 2026-11-10, web istemcisi kaldırıldı
+  ([ADR-0017](0017-yalnizca-mobil-istemci.md), issue #124): uygulama
+  yalnızca Android ve iOS'ta yayınlanır. HttpOnly çerezler ve çerezle kimlik
+  doğrulama kalktı; token'lar her zaman gövdede döner ve
+  `Authorization: Bearer` ile gelir. `X-Tayfam-Client` CSRF'in ikinci
+  katmanı olarak kalır, `web` değeri yalnızca prod dışında kabul edilir.
+  CORS prod'da yoktur. "İstemci tarafında saklama" bölümünün ve
+  "Sonuçlar"daki aynı site maddesinin yerine ADR-0017 geçti.
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0008](0008-kvkk-ve-platform-yonetimi.md)
 
@@ -13,7 +21,7 @@
 Tayfam'a yalnızca Google ve Apple ile giriş yapılır; şifre yoktur. Hedef,
 güvenlik önlemlerinin kullanıcıya görünmez olmasıdır: sık giriş isteme, davet
 kodu veya ek adımlar olmamalı. Mobil uygulama ve web istemcisi aynı API'yi
-kullanır. Kimlik bilgisinin sahibi identity servisidir; dış istekleri ise
+kullanır (2026-11-10: web istemcisi kaldırıldı, ADR-0017). Kimlik bilgisinin sahibi identity servisidir; dış istekleri ise
 gateway karşılar.
 
 ## Karar
@@ -78,6 +86,13 @@ Ek kurallar:
   süresi dolana kadar yayında kalır.
 
 ### İstemci tarafında saklama
+
+> 2026-11-10: Web maddelerinin yerine [ADR-0017](0017-yalnizca-mobil-istemci.md)
+> geçti. Web istemcisi yoktur; API çerez yazmaz ve okumaz, çerezle gelen
+> istek kimliksiz sayılır. `X-Tayfam-Client` durum değiştiren isteklerde
+> zorunlu kalır (`android`, `ios`; `web` yalnızca prod dışındaki yerel
+> geliştirme derlemesi için), ama artık birincil CSRF koruması değil
+> ikinci katmandır. Aşağıdaki web maddeleri tarihçe için duruyor.
 
 - **Mobil:** Token'lar işletim sisteminin güvenli deposunda tutulur
   (iOS Keychain, Android Keystore).
@@ -171,9 +186,11 @@ Ek kurallar:
 
 - identity bir sağlayıcı doğrulama katmanı, oturum tablosu ve anahtar yönetimi
   içerir.
-- Web istemcisi ile API'nin aynı site altında olması gerekir (örneğin
+- ~~Web istemcisi ile API'nin aynı site altında olması gerekir (örneğin
   web istemcisi `tayfam.app`, API `api.tayfam.app`); `SameSite` çerezleri
-  buna dayanır. gateway, web istemcisinin adresine CORS ile izin verir.
+  buna dayanır. gateway, web istemcisinin adresine CORS ile izin verir.~~
+  2026-11-10: geçersiz (ADR-0017). prod'da CORS yoktur; dev'de yalnızca
+  yerel geliştirme kaynağına kimlik bilgisi olmadan izin verilir.
 - Erişim token'ı iptal edilemez; oturum iptal edildiğinde veya kullanıcı
   banlandığında en fazla 15 dakika daha geçerli kalabilir. Açık WebSocket
   bağlantıları ise hemen kapatılır (ADR-0005).

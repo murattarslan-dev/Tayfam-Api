@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,23 +53,28 @@ func setup(rt *service.Runtime) error {
 		upstreams = append(upstreams, rest.Upstream{Name: t.name, Check: grpcx.HealthCheck(conn)})
 	}
 
-	// Web origins allowed to call the API with cookies (CORS), comma
-	// separated. Local development adds its own origin through the env.
-	origins := splitList(rt.Config.String("CORS_ALLOWED_ORIGINS", "https://tayfam.app"))
+	// The app ships on Android and iOS only; its web build is a local
+	// development aid and is served everywhere but prod (ADR-0017).
+	webClient := rt.Env != "prod"
+	origins, err := devOrigins(rt.Env, rt.Config.String("WEB_DEV_ORIGINS", ""))
+	if err != nil {
+		return err
+	}
 	// Cloudflare's client IP header is trusted only behind cloudflared.
 	trustCF := rt.Config.OneOf("TRUST_CF_CONNECTING_IP", "false", "true", "false") == "true"
 	if err := rt.Config.Err(); err != nil {
 		return err
 	}
-	versions, err := clientVersions(rt.Config)
+	versions, err := clientVersions(rt.Config, webClient)
 	if err != nil {
 		return err
 	}
 
 	deps := rest.Deps{
-		Version:        buildinfo.Version,
-		Upstreams:      upstreams,
-		AllowedOrigins: origins,
+		Version:    buildinfo.Version,
+		Upstreams:  upstreams,
+		DevOrigins: origins,
+		WebClient:  webClient,
 		Client: rest.ClientDeps{
 			Versions: versions,
 			// One call per app start; loose for many users behind one
@@ -232,21 +238,62 @@ func adminRouter(rt *service.Runtime, host string, identity, core *grpc.ClientCo
 //	                                  unset takes the minimum
 //
 // for ANDROID, IOS and WEB. A value that is not a semantic version, or a
-// latest below the minimum, stops the service.
-func clientVersions(c *config.Loader) (clientversion.Policy, error) {
+// latest below the minimum, stops the service. Without the web build
+// (prod, ADR-0017) a WEB value stops it too: it would configure a platform
+// that is not served.
+func clientVersions(c *config.Loader, webClient bool) (clientversion.Policy, error) {
 	raw := map[clientversion.Platform]clientversion.RawRange{}
 	for _, p := range clientversion.Platforms() {
 		suffix := strings.ToUpper(string(p))
-		raw[p] = clientversion.RawRange{
+		rr := clientversion.RawRange{
 			Min:    c.String("CLIENT_MIN_VERSION_"+suffix, ""),
 			Latest: c.String("CLIENT_LATEST_VERSION_"+suffix, ""),
 		}
+		if p == clientversion.Web && !webClient {
+			if rr != (clientversion.RawRange{}) {
+				return clientversion.Policy{}, errors.New("istemci sürümleri: prod'da web platformu yok; CLIENT_MIN_VERSION_WEB ve CLIENT_LATEST_VERSION_WEB boş olmalı (ADR-0017)")
+			}
+			continue
+		}
+		raw[p] = rr
 	}
 	p, err := clientversion.NewPolicy(raw)
 	if err != nil {
 		return clientversion.Policy{}, fmt.Errorf("istemci sürümleri: %w", err)
 	}
 	return p, nil
+}
+
+// devOrigins reads WEB_DEV_ORIGINS, the comma-separated origins the
+// local web build of the app is served from (ADR-0017). Each must be
+// exactly http://localhost:<port> or http://127.0.0.1:<port>, as a browser
+// writes the Origin header: a remote origin, https, a path or a missing
+// port stops the service rather than open CORS to it. prod serves no web
+// build, so there the list must be empty.
+func devOrigins(env, raw string) ([]string, error) {
+	list := splitList(raw)
+	if env == "prod" && len(list) > 0 {
+		return nil, errors.New("WEB_DEV_ORIGINS prod'da boş olmalı (ADR-0017)")
+	}
+	for _, o := range list {
+		if !isLocalOrigin(o) {
+			return nil, fmt.Errorf("WEB_DEV_ORIGINS: %q yerel geliştirme kaynağı değil; yalnızca http://localhost:<port> ya da http://127.0.0.1:<port> (ADR-0017)", o)
+		}
+	}
+	return list, nil
+}
+
+func isLocalOrigin(o string) bool {
+	rest, ok := strings.CutPrefix(o, "http://")
+	if !ok {
+		return false
+	}
+	host, port, ok := strings.Cut(rest, ":")
+	if !ok || (host != "localhost" && host != "127.0.0.1") {
+		return false
+	}
+	n, err := strconv.Atoi(port)
+	return err == nil && n >= 1 && n <= 65535 && strconv.Itoa(n) == port
 }
 
 func splitList(s string) []string {

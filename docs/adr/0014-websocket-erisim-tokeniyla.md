@@ -2,6 +2,13 @@
 
 - **Durum:** Kabul edildi
 - **Tarih:** 2026-11-09
+- **Revizyon:** 2026-11-10, web istemcisi kaldırıldı
+  ([ADR-0017](0017-yalnizca-mobil-istemci.md), issue #124): bağlantı
+  yalnızca mobilin `Authorization: Bearer` başlığıyla açılır; çerez yolu
+  kalktı. 5. maddenin yerine ADR-0017 geçti: `Origin` taşıyan her istek,
+  kaynağı ne olursa olsun gateway'de ve chat'te reddedilir
+  (`forbidden-origin`); chat'te izinli kaynak listesi yoktur. 1., 2. ve 4.
+  maddelerdeki ve "Sonuçlar"daki web/çerez ifadeleri tarihçe için duruyor.
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md) ("WebSocket kimlik doğrulaması" bölümünün yerine geçer), [ADR-0005](0005-gercek-zamanli-iletisim-ve-chat.md) ("Bağlantı" bölümünü değiştirir), [ADR-0009](0009-veri-modelinin-servislere-dagilimi.md), [ADR-0011](0011-guvenlik-ilkesi-ihlal-varsayimi.md), [ADR-0013](0013-servis-kimligi.md)
 
@@ -39,7 +46,8 @@ sorulamaz.
    İstemci token'ı yenileyip (mobil: refresh sonrası yeni başlık, web: yenilenen
    çerez) yeniden bağlanır ve kaçırdıklarını REST ile çeker. Ayrı bir yeniden
    kimlik doğrulama çerçevesi yoktur. Bağlantı ömrü böylece ≤ 15 dakikadır.
-5. **Çerezle bağlantıda Origin zorunludur.** Tarayıcılar WebSocket'te her zaman
+5. ~~**Çerezle bağlantıda Origin zorunludur.**~~ (2026-11-10: yerine
+   ADR-0017 geçti; `Origin` taşıyan her istek reddedilir.) Tarayıcılar WebSocket'te her zaman
    `Origin` gönderir; çerezle gelen ve `Origin` taşımayan ya da izinli listede
    olmayan istek reddedilir (siteler arası WebSocket ele geçirmesine karşı).
    `Origin`'siz istek yalnızca `Authorization` başlığıyla kabul edilir.

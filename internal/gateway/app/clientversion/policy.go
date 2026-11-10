@@ -48,6 +48,8 @@ type RawRange struct {
 // refuses nothing.
 type Policy struct {
 	ranges map[Platform]Range
+	// off are the platforms not served at all (Without).
+	off map[Platform]bool
 }
 
 // NewPolicy validates raw. An unset Min turns enforcement off for that
@@ -93,6 +95,28 @@ func NewPolicy(raw map[Platform]RawRange) (Policy, error) {
 // Range returns plat's configuration; the zero Range when unset.
 func (p Policy) Range(plat Platform) Range { return p.ranges[plat] }
 
+// Without returns a copy of p that does not serve plat: its header is
+// Invalid and Served leaves it out. prod serves no web build (ADR-0017).
+func (p Policy) Without(plat Platform) Policy {
+	off := make(map[Platform]bool, len(p.off)+1)
+	for k := range p.off {
+		off[k] = true
+	}
+	off[plat] = true
+	return Policy{ranges: p.ranges, off: off}
+}
+
+// Served returns the platforms p serves, in the order of Platforms.
+func (p Policy) Served() []Platform {
+	var out []Platform
+	for _, plat := range Platforms() {
+		if !p.off[plat] {
+			out = append(out, plat)
+		}
+	}
+	return out
+}
+
 // Decision is the outcome of Check.
 type Decision int
 
@@ -103,8 +127,8 @@ const (
 	// Missing: no header. The request is allowed (ADR-0016): browsers'
 	// WebSocket, curl and health checks cannot or do not send it.
 	Missing
-	// Invalid: a header that does not parse, an unknown platform or more
-	// than one header.
+	// Invalid: a header that does not parse, an unknown or unserved
+	// platform or more than one header.
 	Invalid
 	// Outdated: the build is below its platform's minimum.
 	Outdated
@@ -120,7 +144,7 @@ func (p Policy) Check(values []string) Decision {
 		return Invalid
 	}
 	plat, v, err := ParseHeader(values[0])
-	if err != nil {
+	if err != nil || p.off[plat] {
 		return Invalid
 	}
 	r := p.ranges[plat]

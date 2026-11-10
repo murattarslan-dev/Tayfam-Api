@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/murattarslan-dev/tayfam-api/internal/gateway/app/clientversion"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/health"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/httpx"
 )
@@ -35,9 +36,14 @@ type Deps struct {
 	// Client sets the supported client versions and the client-config
 	// route's rate limit (issue #114).
 	Client ClientDeps
-	// AllowedOrigins are the web origins allowed to call the API with
-	// credentials (CORS), such as https://tayfam.app.
-	AllowedOrigins []string
+	// DevOrigins are the local development origins
+	// (http://localhost:<port>) the web build of the app may call the API
+	// from, without credentials (CORS, ADR-0017). Always empty in prod.
+	DevOrigins []string
+	// WebClient serves the local web build of the app: X-Tayfam-Client
+	// web, sign-in with platform web and the web version header. Off in
+	// prod, the zero value (ADR-0017).
+	WebClient bool
 }
 
 // NewRouter returns the public API handler.
@@ -45,11 +51,16 @@ func NewRouter(d Deps) http.Handler {
 	if d.CheckTimeout <= 0 {
 		d.CheckTimeout = 2 * time.Second
 	}
+	if !d.WebClient {
+		// The web platform does not exist here: its version header is
+		// refused as invalid and client-config does not list it.
+		d.Client.Versions = d.Client.Versions.Without(clientversion.Web)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/status", statusHandler(d))
 	registerClientConfig(mux, d.Client)
 	if d.Auth.Auth != nil && d.Auth.Registration != nil {
-		registerAuth(mux, d.Auth)
+		registerAuth(mux, d.Auth, d.WebClient)
 	}
 	if d.Core.Tayfas != nil && d.Core.Members != nil && d.Core.Verifier != nil {
 		registerCore(mux, d.Core)
@@ -64,11 +75,11 @@ func NewRouter(d Deps) http.Handler {
 		registerDirectMessages(mux, chatHandlers{d: d.Chat})
 	}
 	if d.Chat.RealtimeURL != nil && d.Chat.Verifier != nil {
-		registerRealtime(mux, d.Chat, d.AllowedOrigins)
+		registerRealtime(mux, d.Chat)
 	}
 	mux.HandleFunc("/", httpx.NotFound)
-	// cors runs first so that a refused web request can still be read.
-	return httpx.Chain(mux, cors(d.AllowedOrigins), requireSupportedClient(d.Client.Versions), requireClientHeader)
+	// cors runs first so that the local web build can read a refusal.
+	return httpx.Chain(mux, cors(d.DevOrigins), requireSupportedClient(d.Client.Versions), requireClientHeader(d.WebClient))
 }
 
 // StatusResponse is the body of GET /v1/status.

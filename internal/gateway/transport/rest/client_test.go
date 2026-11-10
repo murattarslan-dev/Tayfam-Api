@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/gateway/app/clientversion"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/ratelimit"
@@ -45,14 +44,14 @@ func versionRouter(t *testing.T, burst int) http.Handler {
 			Auth: &fakeIdentity{}, Registration: &fakeIdentity{}, Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
 			TrustCFConnectingIP: true,
 			SignInLimit:         ratelimit.New(60, 100), RefreshLimit: ratelimit.New(60, 100),
-			Now: func() time.Time { return t0 },
 		},
 		Client: ClientDeps{
 			Versions:            testVersions(t),
 			ConfigLimit:         ratelimit.New(60, burst),
 			TrustCFConnectingIP: true,
 		},
-		AllowedOrigins: []string{"https://tayfam.app"},
+		// dev: the local web build is served.
+		DevOrigins: []string{devOrigin}, WebClient: true,
 	})
 }
 
@@ -91,10 +90,15 @@ func TestClientConfigOpen(t *testing.T) {
 		t.Errorf("geçersiz token ile: %d", w.Code)
 	}
 
-	// The zero policy reports all three platforms with no versions.
-	w = do(NewRouter(Deps{}), "GET", "/v1/client-config", "", nil)
+	// The zero policy reports the served platforms with no versions: web
+	// only where the web build is served, never in prod (ADR-0017).
+	w = do(NewRouter(Deps{WebClient: true}), "GET", "/v1/client-config", "", nil)
 	if w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != `{"platforms":{"android":{},"ios":{},"web":{}}}` {
 		t.Errorf("boş yapılandırma: %d %s", w.Code, w.Body)
+	}
+	w = do(NewRouter(Deps{}), "GET", "/v1/client-config", "", nil)
+	if w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != `{"platforms":{"android":{},"ios":{}}}` {
+		t.Errorf("prod, boş yapılandırma: %d %s", w.Code, w.Body)
 	}
 }
 
@@ -229,16 +233,16 @@ func TestClientVersionNeverRefused(t *testing.T) {
 		}
 	}
 	w := do(h, "OPTIONS", "/v1/me/sessions", "", map[string]string{
-		"Origin": "https://tayfam.app", "Access-Control-Request-Method": "GET",
+		"Origin": devOrigin, "Access-Control-Request-Method": "GET",
 		"Access-Control-Request-Headers": versionHeader,
 	})
 	if w.Code != http.StatusNoContent || !strings.Contains(w.Header().Get("Access-Control-Allow-Headers"), versionHeader) {
 		t.Errorf("preflight: %d %q", w.Code, w.Header().Get("Access-Control-Allow-Headers"))
 	}
-	// A refused web request still carries CORS headers, so the web app can
-	// read client-outdated.
-	w = do(h, "GET", "/v1/me/sessions", "", map[string]string{"Origin": "https://tayfam.app", versionHeader: "android/1.0.0"})
-	if w.Code != http.StatusUpgradeRequired || w.Header().Get("Access-Control-Allow-Origin") != "https://tayfam.app" {
+	// A refused request from the local web build still carries CORS
+	// headers, so it can read client-outdated.
+	w = do(h, "GET", "/v1/me/sessions", "", map[string]string{"Origin": devOrigin, versionHeader: "android/1.0.0"})
+	if w.Code != http.StatusUpgradeRequired || w.Header().Get("Access-Control-Allow-Origin") != devOrigin {
 		t.Errorf("web reddi: %d %q", w.Code, w.Header().Get("Access-Control-Allow-Origin"))
 	}
 }
@@ -254,7 +258,7 @@ func TestRealtimeClientVersion(t *testing.T) {
 	d := testChatDeps(&fakeChat{})
 	d.RealtimeURL = u
 	gw := httptest.NewServer(NewRouter(Deps{
-		Version: "test", Chat: d, AllowedOrigins: []string{"https://tayfam.app"},
+		Version: "test", Chat: d,
 		Client: ClientDeps{Versions: testVersions(t)},
 	}))
 	t.Cleanup(gw.Close)

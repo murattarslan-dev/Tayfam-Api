@@ -66,13 +66,14 @@ type PlatformVersions struct {
 	LatestVersion       string `json:"latest_version,omitempty"`
 }
 
-// registerClientConfig adds GET /v1/client-config, which takes no token:
+// registerClientConfig adds GET /v1/client-config, which takes no token
+// and lists the served platforms only (no web in prod, ADR-0017):
 // clients call it at start-up, before signing in. It returns only the
 // configured version numbers, the same for everyone; it reads nothing
 // per request but the client IP for its rate limit.
 func registerClientConfig(mux *http.ServeMux, d ClientDeps) {
 	res := ClientConfigResponse{Platforms: map[clientversion.Platform]PlatformVersions{}}
-	for _, p := range clientversion.Platforms() {
+	for _, p := range d.Versions.Served() {
 		r := d.Versions.Range(p)
 		res.Platforms[p] = PlatformVersions{MinSupportedVersion: r.Min.String(), LatestVersion: r.Latest.String()}
 	}

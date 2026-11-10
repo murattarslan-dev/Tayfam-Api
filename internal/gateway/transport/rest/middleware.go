@@ -9,28 +9,46 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/httpx"
 )
 
-var validClients = map[string]bool{"android": true, "ios": true, "web": true}
+// clientHeader names the client on state-changing requests (ADR-0004,
+// ADR-0017).
+const clientHeader = "X-Tayfam-Client"
 
-// requireClientHeader rejects state-changing requests without
-// X-Tayfam-Client (ADR-0004). Browsers cannot add custom headers to
-// cross-site form posts, so this blocks CSRF; a cross-origin fetch that adds
-// it must first pass the CORS preflight.
-func requireClientHeader(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-			if !validClients[r.Header.Get(clientHeader)] {
-				httpx.WriteProblem(w, r, http.StatusBadRequest, "missing-client-header", "Bad Request", "")
-				return
+// requireClientHeader refuses state-changing requests without
+// X-Tayfam-Client: android or ios, or web where the local web build is
+// served (webClient; never in prod). No credential travels in a cookie, so
+// a cross-site request carries none; the header stays as a second layer:
+// a browser can add it only after a CORS preflight, which only a local
+// development origin outside prod passes (ADR-0017).
+func requireClientHeader(webClient bool) httpx.Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+				switch r.Header.Get(clientHeader) {
+				case "android", "ios":
+				case "web":
+					if webClient {
+						break
+					}
+					fallthrough
+				default:
+					httpx.WriteProblem(w, r, http.StatusBadRequest, "missing-client-header", "Bad Request", "")
+					return
+				}
 			}
-		}
-		next.ServeHTTP(w, r)
-	})
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
-// cors allows credentialed requests from the listed origins only (the web
-// app at tayfam.app). Other origins get no CORS headers, so browsers block
-// them from reading responses.
+// corsAllowedHeaders are the request headers a development origin may send.
+var corsAllowedHeaders = strings.Join([]string{"Authorization", "Content-Type", clientHeader, clientversion.Header, httpx.RequestIDHeader}, ", ")
+
+// cors answers the local web build of the app (ADR-0017): only the listed
+// development origins (http://localhost:<port>; empty in prod) get CORS
+// headers, never with credentials: the token travels in the Authorization
+// header, there are no cookies. Any other origin gets no CORS header, so a
+// browser cannot read the response, and its preflight is refused.
 func cors(origins []string) httpx.Middleware {
 	allowed := make(map[string]bool, len(origins))
 	for _, o := range origins {
@@ -50,10 +68,9 @@ func cors(origins []string) httpx.Middleware {
 			}
 			h := w.Header()
 			h.Set("Access-Control-Allow-Origin", origin)
-			h.Set("Access-Control-Allow-Credentials", "true")
 			if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
 				h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE")
-				h.Set("Access-Control-Allow-Headers", strings.Join([]string{"Authorization", "Content-Type", clientHeader, clientversion.Header, httpx.RequestIDHeader}, ", "))
+				h.Set("Access-Control-Allow-Headers", corsAllowedHeaders)
 				h.Set("Access-Control-Max-Age", strconv.Itoa(600))
 				w.WriteHeader(http.StatusNoContent)
 				return

@@ -95,7 +95,7 @@ func testChatDeps(f *fakeChat) ChatDeps {
 }
 
 func chatRouter(f *fakeChat) http.Handler {
-	return NewRouter(Deps{Version: "test", Chat: testChatDeps(f), AllowedOrigins: []string{"https://tayfam.app"}})
+	return NewRouter(Deps{Version: "test", Chat: testChatDeps(f)})
 }
 
 func chatErr(code codes.Code, reason string) error {
