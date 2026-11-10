@@ -3,6 +3,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -14,9 +15,11 @@ import (
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/gateway/admin"
+	"github.com/murattarslan-dev/tayfam-api/internal/gateway/app/clientversion"
 	"github.com/murattarslan-dev/tayfam-api/internal/gateway/transport/rest"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/buildinfo"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/config"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/grpcx"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/ratelimit"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/service"
@@ -57,11 +60,22 @@ func setup(rt *service.Runtime) error {
 	if err := rt.Config.Err(); err != nil {
 		return err
 	}
+	versions, err := clientVersions(rt.Config)
+	if err != nil {
+		return err
+	}
 
 	deps := rest.Deps{
 		Version:        buildinfo.Version,
 		Upstreams:      upstreams,
 		AllowedOrigins: origins,
+		Client: rest.ClientDeps{
+			Versions: versions,
+			// One call per app start; loose for many users behind one
+			// CGNAT address (ADR-0004).
+			ConfigLimit:         ratelimit.New(60, 30),
+			TrustCFConnectingIP: trustCF,
+		},
 	}
 	if conn := conns["identity"]; conn != nil {
 		deps.Auth = rest.AuthDeps{
@@ -207,6 +221,32 @@ func adminRouter(rt *service.Runtime, host string, identity, core *grpc.ClientCo
 		// One person signs in a few times a day.
 		SignInLimit: ratelimit.New(5, 5),
 	})
+}
+
+// clientVersions reads each platform's supported builds (issue #114,
+// ADR-0016):
+//
+//	CLIENT_MIN_VERSION_<PLATFORM>     lowest build served; unset turns the
+//	                                  check off for that platform
+//	CLIENT_LATEST_VERSION_<PLATFORM>  newest build, reported to clients;
+//	                                  unset takes the minimum
+//
+// for ANDROID, IOS and WEB. A value that is not a semantic version, or a
+// latest below the minimum, stops the service.
+func clientVersions(c *config.Loader) (clientversion.Policy, error) {
+	raw := map[clientversion.Platform]clientversion.RawRange{}
+	for _, p := range clientversion.Platforms() {
+		suffix := strings.ToUpper(string(p))
+		raw[p] = clientversion.RawRange{
+			Min:    c.String("CLIENT_MIN_VERSION_"+suffix, ""),
+			Latest: c.String("CLIENT_LATEST_VERSION_"+suffix, ""),
+		}
+	}
+	p, err := clientversion.NewPolicy(raw)
+	if err != nil {
+		return clientversion.Policy{}, fmt.Errorf("istemci sürümleri: %w", err)
+	}
+	return p, nil
 }
 
 func splitList(s string) []string {
