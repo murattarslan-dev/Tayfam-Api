@@ -16,6 +16,18 @@ info:
     `ios`, `web`). Tarayıcılar bu başlığı başka bir siteden gelen formlara
     ekleyemez.
 
+    **İstemci sürümü (ADR-0016):** Uygulama her istekte
+    `X-Tayfam-Client-Version: <platform>/<sürüm>` başlığını gönderir
+    (`android/1.4.2`; platform `android`, `ios`, `web`; sürüm Semantic
+    Versioning 2.0.0, `v` öneki yok). Sürüm platformun en düşük
+    desteklenen sürümünün altındaysa istek `client-outdated` (426) ile
+    reddedilir; WebSocket el sıkışması da. Bozuk başlık
+    `invalid-client-version` (400) alır. Başlıksız istek kabul edilir
+    (tarayıcı WebSocket'i, curl, health check). `GET /v1/status` ve
+    `GET /v1/client-config` hiçbir zaman reddedilmez. Ön sürüm, sürümün
+    kendisinden düşüktür (`1.2.0-rc.1` < `1.2.0`); derleme bilgisi
+    (`+...`) karşılaştırmada sayılmaz.
+
     **Hatalar:** RFC 9457 `application/problem+json`. `type` alanı makine
     tarafından okunur: `https://tayfam.app/problems/<kod>`. `title` ve
     `detail` kullanıcıya gösterilmez; istemci kodu çeviri dosyasında arar.
@@ -50,6 +62,32 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Status" }
+
+  /v1/client-config:
+    get:
+      operationId: getClientConfig
+      summary: Desteklenen istemci sürümleri
+      description: |
+        Platform başına en düşük desteklenen ve en son sürüm (issue #114,
+        ADR-0016). İstemci açılışta, girişten önce çağırır; kendi sürümü
+        `min_supported_version`'ın altındaysa kullanıcıyı mağazaya
+        yönlendirir. Token istemez, kişisel veri döndürmez; herkese aynı
+        cevap. Bir platformda değer yapılandırılmamışsa alan yoktur
+        (`min_supported_version` yoksa o platformda zorlama yoktur). IP
+        başına hız sınırı vardır (`rate-limited`). Sürüm başlığına
+        bakılmaz; eski sürüm de bu ucu her zaman çağırabilir.
+      security: []
+      responses:
+        "200":
+          description: Sürümler
+          headers:
+            Cache-Control:
+              description: "`public, max-age=60`"
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientConfig" }
+        "429": { $ref: "#/components/responses/Problem" }
 
   /v1/auth/sign-in:
     post:
@@ -3564,11 +3602,20 @@ paths:
         yenile, yeniden bağlan).
 
         Kullanıcı başına en fazla 5 açık bağlantı vardır (`rate-limited`).
+
+        **İstemci sürümü:** Mobil istemci el sıkışmasında
+        `X-Tayfam-Client-Version` gönderir; eski sürüm bağlantı açılmadan
+        `client-outdated` (426) alır. Tarayıcılar WebSocket'e başlık
+        ekleyemediği için web istemcisi göndermez; web sürümü REST
+        isteklerinde denetlenir.
+      parameters:
+        - $ref: "#/components/parameters/ClientVersionHeader"
       responses:
         "101": { description: WebSocket bağlantısı açıldı }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
+        "426": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
@@ -3584,6 +3631,21 @@ components:
       required: true
       description: CSRF koruması; durum değiştiren her istekte zorunlu.
       schema: { type: string, enum: [android, ios, web] }
+    ClientVersionHeader:
+      name: X-Tayfam-Client-Version
+      in: header
+      required: false
+      description: |
+        İstemcinin platformu ve sürümü, `<platform>/<sürüm>` (ADR-0016).
+        Her işlemde kabul edilir; `GET /v1/status` ve
+        `GET /v1/client-config` dışında platformun en düşük sürümünün
+        altındaki istek `client-outdated` (426) alır. Başlık yoksa istek
+        kabul edilir.
+      schema:
+        type: string
+        maxLength: 80
+        pattern: '^(android|ios|web)/(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
+        examples: [android/1.4.2]
     TayfaID:
       name: tayfa_id
       in: path
@@ -3685,6 +3747,9 @@ components:
         # Genel
         - invalid-request
         - missing-client-header
+        # İstemci sürümü (#114, ADR-0016): 426 ve 400
+        - client-outdated
+        - invalid-client-version
         - unauthenticated
         - not-found
         - rate-limited
@@ -3823,6 +3888,31 @@ components:
           type: object
           additionalProperties: { type: string, enum: [ok, unavailable] }
         checked_at: { type: string, format: date-time }
+
+    ClientConfig:
+      type: object
+      required: [platforms]
+      properties:
+        platforms:
+          type: object
+          required: [android, ios, web]
+          properties:
+            android: { $ref: "#/components/schemas/PlatformVersions" }
+            ios: { $ref: "#/components/schemas/PlatformVersions" }
+            web: { $ref: "#/components/schemas/PlatformVersions" }
+
+    PlatformVersions:
+      type: object
+      description: Yapılandırılmamış alan yoktur.
+      properties:
+        min_supported_version:
+          type: string
+          description: Bunun altındaki sürümler `client-outdated` alır.
+          examples: ["1.2.0"]
+        latest_version:
+          type: string
+          description: Mağazadaki en son sürüm; yalnızca bilgi.
+          examples: ["1.5.0"]
 
     SignInRequest:
       type: object
