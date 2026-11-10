@@ -82,10 +82,24 @@ func (f *fakeIdentity) CompleteRegistration(ctx context.Context, in *identityv1.
 	return &identityv1.CompleteRegistrationResponse{}, nil
 }
 
+// devOrigin is the local web build's origin in tests (WEB_DEV_ORIGINS).
+const devOrigin = "http://localhost:3000"
+
+// newTestRouter is a dev gateway: the local web build is served from
+// devOrigin (ADR-0017).
 func newTestRouter(f *fakeIdentity) http.Handler { return newTestRouterBurst(f, 100) }
 
 func newTestRouterBurst(f *fakeIdentity, burst int) http.Handler {
-	return NewRouter(Deps{
+	d := authTestDeps(f, burst)
+	d.DevOrigins, d.WebClient = []string{devOrigin}, true
+	return NewRouter(d)
+}
+
+// newProdRouter is a prod gateway: no web build, no development origin.
+func newProdRouter(f *fakeIdentity) http.Handler { return NewRouter(authTestDeps(f, 100)) }
+
+func authTestDeps(f *fakeIdentity, burst int) Deps {
+	return Deps{
 		Core:    testCoreDeps(&fakeCore{}, burst),
 		Chat:    testChatDeps(&fakeChat{}),
 		Version: "test",
@@ -93,10 +107,8 @@ func newTestRouterBurst(f *fakeIdentity, burst int) http.Handler {
 			Auth: f, Registration: f, Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
 			TrustCFConnectingIP: true,
 			SignInLimit:         ratelimit.New(60, burst), RefreshLimit: ratelimit.New(60, burst),
-			Now: func() time.Time { return t0 },
 		},
-		AllowedOrigins: []string{"https://tayfam.app"},
-	})
+	}
 }
 
 func do(h http.Handler, method, path, body string, hdr map[string]string) *httptest.ResponseRecorder {
@@ -145,32 +157,52 @@ func TestSignInMobileReturnsTokensInBody(t *testing.T) {
 	}
 }
 
-func TestSignInWebUsesHttpOnlyCookies(t *testing.T) {
-	w := do(newTestRouter(&fakeIdentity{}), "POST", "/v1/auth/sign-in", signInBodyFor("web"), map[string]string{clientHeader: "web"})
+// TestSignInWebDevReturnsTokensInBody: outside prod the local web build
+// signs in like the mobile apps: tokens in the body, no cookie (ADR-0017).
+func TestSignInWebDevReturnsTokensInBody(t *testing.T) {
+	f := &fakeIdentity{}
+	w := do(newTestRouter(f), "POST", "/v1/auth/sign-in", signInBodyFor("web"), map[string]string{clientHeader: "web"})
 	if w.Code != 200 {
-		t.Fatalf("kod %d", w.Code)
+		t.Fatalf("kod %d: %s", w.Code, w.Body)
 	}
-	if strings.Contains(w.Body.String(), "ACCESS") || strings.Contains(w.Body.String(), "REFRESH") {
-		t.Fatal("web yanıt gövdesinde token var")
+	var b sessionBody
+	_ = json.Unmarshal(w.Body.Bytes(), &b)
+	if b.AccessToken != "ACCESS" || b.RefreshToken != "REFRESH" {
+		t.Fatalf("gövde = %+v", b)
 	}
-	cookies := map[string]*http.Cookie{}
-	for _, c := range w.Result().Cookies() {
-		cookies[c.Name] = c
+	if len(w.Result().Cookies()) != 0 || w.Header().Get("Set-Cookie") != "" {
+		t.Fatal("web yanıtında çerez var")
 	}
-	at, rt := cookies[accessCookie], cookies[refreshCookie]
-	if at == nil || rt == nil || at.Value != "ACCESS" || rt.Value != "REFRESH" {
-		t.Fatalf("çerezler = %v", cookies)
+	if f.gotSignIn.GetPlatform() != identityv1.Platform_PLATFORM_WEB {
+		t.Fatalf("identity'ye giden platform = %v", f.gotSignIn.GetPlatform())
 	}
-	for _, c := range []*http.Cookie{at, rt} {
-		if !c.HttpOnly || !c.Secure || c.SameSite != http.SameSiteLaxMode {
-			t.Fatalf("%s güvenli değil: %+v", c.Name, c)
-		}
+}
+
+// TestProdRefusesWebClient: prod serves no web build (ADR-0017). Sign-in
+// with platform web, X-Tayfam-Client: web and a web version header are
+// refused; client-config does not list web; the mobile apps are unaffected.
+func TestProdRefusesWebClient(t *testing.T) {
+	f := &fakeIdentity{}
+	h := newProdRouter(f)
+	w := do(h, "POST", "/v1/auth/sign-in", signInBodyFor("web"), map[string]string{clientHeader: "android"})
+	if w.Code != 400 || problemType(t, w) != "invalid-request" || f.gotSignIn != nil {
+		t.Fatalf("web girişi: %d %s", w.Code, problemType(t, w))
 	}
-	if at.Path != "/" || rt.Path != refreshPath {
-		t.Fatalf("yollar: %s %s", at.Path, rt.Path)
+	w = do(h, "POST", "/v1/auth/sign-in", signInBodyFor("android"), map[string]string{clientHeader: "web"})
+	if w.Code != 400 || problemType(t, w) != "missing-client-header" || f.gotSignIn != nil {
+		t.Fatalf("X-Tayfam-Client web: %d %s", w.Code, problemType(t, w))
 	}
-	if at.MaxAge != 900 {
-		t.Fatalf("erişim çerezi ömrü %d", at.MaxAge)
+	w = do(h, "GET", "/v1/me/sessions", "", map[string]string{"Authorization": "Bearer USERTOKEN", versionHeader: "web/1.0.0"})
+	if w.Code != 400 || problemType(t, w) != "invalid-client-version" {
+		t.Fatalf("web sürüm başlığı: %d %s", w.Code, problemType(t, w))
+	}
+	w = do(h, "GET", "/v1/client-config", "", nil)
+	if w.Code != 200 || strings.TrimSpace(w.Body.String()) != `{"platforms":{"android":{},"ios":{}}}` {
+		t.Fatalf("client-config: %d %s", w.Code, w.Body)
+	}
+	w = do(h, "POST", "/v1/auth/sign-in", signInBodyFor("ios"), map[string]string{clientHeader: "ios", versionHeader: "ios/1.0.0"})
+	if w.Code != 200 || f.gotSignIn.GetPlatform() != identityv1.Platform_PLATFORM_IOS {
+		t.Fatalf("mobil giriş: %d %s", w.Code, w.Body)
 	}
 }
 
@@ -250,31 +282,38 @@ func TestIdentityErrorsBecomeProblems(t *testing.T) {
 	}
 }
 
-func TestRefreshMobileAndWeb(t *testing.T) {
+// TestRefreshReadsBodyOnly: the refresh token comes in the body; the old
+// web cookie is ignored and no cookie is written or cleared (ADR-0017).
+func TestRefreshReadsBodyOnly(t *testing.T) {
 	f := &fakeIdentity{}
 	h := newTestRouter(f)
-	w := do(h, "POST", "/v1/auth/refresh", `{"refresh_token":"MOBIL"}`, map[string]string{clientHeader: "android"})
-	if w.Code != 200 || f.gotRefresh != "MOBIL" {
-		t.Fatalf("mobil: %d %q", w.Code, f.gotRefresh)
-	}
-	r := httptest.NewRequest(http.MethodPost, "/v1/auth/refresh", nil)
-	r.Header.Set(clientHeader, "web")
-	r.AddCookie(&http.Cookie{Name: refreshCookie, Value: "WEBRT"})
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, r)
-	if rec.Code != 200 || f.gotRefresh != "WEBRT" || strings.Contains(rec.Body.String(), "REFRESH") {
-		t.Fatalf("web: %d %q %s", rec.Code, f.gotRefresh, rec.Body)
+	w := do(h, "POST", "/v1/auth/refresh", `{"refresh_token":"MOBIL"}`, map[string]string{clientHeader: "android", "Cookie": "tayfam_rt=ESKI"})
+	var b sessionBody
+	_ = json.Unmarshal(w.Body.Bytes(), &b)
+	if w.Code != 200 || f.gotRefresh != "MOBIL" || b.RefreshToken != "REFRESH" || len(w.Result().Cookies()) != 0 {
+		t.Fatalf("gövdeyle: %d %q %s", w.Code, f.gotRefresh, w.Body)
 	}
 
-	// Geçersiz refresh'te web çerezleri silinir.
-	f.err = identityErr(codes.Unauthenticated, "ERROR_REASON_INVALID_REFRESH")
-	rec = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodPost, "/v1/auth/refresh", nil)
+	// Cookie only: not a refresh token.
+	f.gotRefresh = ""
+	r := httptest.NewRequest(http.MethodPost, "/v1/auth/refresh", nil)
 	r.Header.Set(clientHeader, "web")
-	r.AddCookie(&http.Cookie{Name: refreshCookie, Value: "WEBRT"})
+	r.AddCookie(&http.Cookie{Name: "tayfam_rt", Value: "WEBRT"})
+	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, r)
-	if rec.Code != 401 || len(rec.Result().Cookies()) != 2 || rec.Result().Cookies()[0].MaxAge >= 0 {
-		t.Fatalf("çerezler silinmedi: %d %v", rec.Code, rec.Result().Cookies())
+	if rec.Code == 200 || f.gotRefresh != "" || len(rec.Result().Cookies()) != 0 {
+		t.Fatalf("yalnızca çerez: %d %q", rec.Code, f.gotRefresh)
+	}
+	w = do(h, "POST", "/v1/auth/refresh", `{}`, map[string]string{clientHeader: "web", "Cookie": "tayfam_rt=WEBRT"})
+	if w.Code != 401 || problemType(t, w) != "invalid-refresh" || f.gotRefresh != "" {
+		t.Fatalf("boş gövde, çerez var: %d %s %q", w.Code, problemType(t, w), f.gotRefresh)
+	}
+
+	// An invalid refresh token clears nothing.
+	f.err = identityErr(codes.Unauthenticated, "ERROR_REASON_INVALID_REFRESH")
+	w = do(h, "POST", "/v1/auth/refresh", `{"refresh_token":"ESKI"}`, map[string]string{clientHeader: "android"})
+	if w.Code != 401 || len(w.Result().Cookies()) != 0 {
+		t.Fatalf("geçersiz refresh: %d %v", w.Code, w.Result().Cookies())
 	}
 }
 
@@ -293,13 +332,35 @@ func TestTokenForwarding(t *testing.T) {
 	if w := do(h, "GET", "/v1/registration/requirements", "", nil); w.Code != 401 {
 		t.Fatalf("token'sız: %d", w.Code)
 	}
-	r := httptest.NewRequest(http.MethodPost, "/v1/auth/sign-out", nil)
-	r.Header.Set(clientHeader, "web")
-	r.AddCookie(&http.Cookie{Name: accessCookie, Value: "COOKIETOKEN"})
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, r)
-	if rec.Code != 204 || f.gotToken != "COOKIETOKEN" || len(rec.Result().Cookies()) != 2 {
-		t.Fatalf("web çıkış: %d %q", rec.Code, f.gotToken)
+	w = do(h, "POST", "/v1/auth/sign-out", "", map[string]string{"Authorization": "Bearer TOKEN3", clientHeader: "web"})
+	if w.Code != 204 || f.gotToken != "TOKEN3" || len(w.Result().Cookies()) != 0 {
+		t.Fatalf("çıkış: %d %q %v", w.Code, f.gotToken, w.Result().Cookies())
+	}
+}
+
+// TestCookieAuthenticatesNothing: the former web cookie, alone, is no
+// credential on any route (ADR-0017): identity is not called and no
+// cookie is written or cleared.
+func TestCookieAuthenticatesNothing(t *testing.T) {
+	f := &fakeIdentity{}
+	h := newTestRouter(f)
+	for _, rt := range []struct{ method, path, body string }{
+		{"POST", "/v1/auth/sign-out", ""},
+		{"GET", "/v1/registration/requirements", ""},
+		{"POST", "/v1/registration", `{"birth_date":"1990-05-19","accepted_privacy_notice_version":"v","accepted_terms_version":"v"}`},
+	} {
+		r := httptest.NewRequest(rt.method, rt.path, strings.NewReader(rt.body))
+		if rt.body != "" {
+			r.Header.Set("Content-Type", "application/json")
+		}
+		r.Header.Set(clientHeader, "web")
+		r.Header.Set("Origin", devOrigin)
+		r.AddCookie(&http.Cookie{Name: "tayfam_at", Value: "COOKIETOKEN"})
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		if rec.Code != 401 || problemType(t, rec) != "unauthenticated" || f.gotToken != "" || len(rec.Result().Cookies()) != 0 {
+			t.Errorf("%s %s: %d %s %q", rt.method, rt.path, rec.Code, problemType(t, rec), f.gotToken)
+		}
 	}
 }
 
@@ -321,21 +382,62 @@ func TestSignInRateLimitedPerIP(t *testing.T) {
 	}
 }
 
+// TestCORS: outside prod only the configured development origin gets CORS
+// headers, never with credentials, and only for the listed request
+// headers (ADR-0017).
 func TestCORS(t *testing.T) {
 	h := newTestRouter(&fakeIdentity{})
-	pre := do(h, "OPTIONS", "/v1/auth/sign-in", "", map[string]string{"Origin": "https://tayfam.app", "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type,x-tayfam-client"})
-	if pre.Code != 204 || pre.Header().Get("Access-Control-Allow-Origin") != "https://tayfam.app" || pre.Header().Get("Access-Control-Allow-Credentials") != "true" {
+	pre := do(h, "OPTIONS", "/v1/auth/sign-in", "", map[string]string{"Origin": devOrigin, "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type,x-tayfam-client"})
+	if pre.Code != 204 || pre.Header().Get("Access-Control-Allow-Origin") != devOrigin {
 		t.Fatalf("preflight: %d %v", pre.Code, pre.Header())
 	}
-	if !strings.Contains(pre.Header().Get("Access-Control-Allow-Headers"), clientHeader) {
-		t.Fatal("X-Tayfam-Client izinli değil")
+	if pre.Header().Get("Access-Control-Allow-Credentials") != "" {
+		t.Fatal("Access-Control-Allow-Credentials yazıldı")
 	}
-	evil := do(h, "OPTIONS", "/v1/auth/sign-in", "", map[string]string{"Origin": "https://tayfam.app.evil.example", "Access-Control-Request-Method": "POST"})
-	if evil.Code != 403 || evil.Header().Get("Access-Control-Allow-Origin") != "" {
-		t.Fatalf("yabancı köken: %d %v", evil.Code, evil.Header())
+	want := "Authorization, Content-Type, X-Tayfam-Client, X-Tayfam-Client-Version, X-Request-Id"
+	if got := pre.Header().Get("Access-Control-Allow-Headers"); got != want {
+		t.Fatalf("izinli başlıklar = %q", got)
 	}
-	get := do(h, "GET", "/v1/status", "", map[string]string{"Origin": "https://evil.example"})
-	if get.Header().Get("Access-Control-Allow-Origin") != "" {
-		t.Fatal("yabancı kökene CORS başlığı verildi")
+	get := do(h, "GET", "/v1/status", "", map[string]string{"Origin": devOrigin})
+	if get.Header().Get("Access-Control-Allow-Origin") != devOrigin || get.Header().Get("Access-Control-Allow-Credentials") != "" {
+		t.Fatalf("GET: %v", get.Header())
 	}
+	for _, origin := range []string{"https://tayfam.app", "http://localhost:3001", "http://localhost:3000.evil.example", "https://evil.example", "null"} {
+		evil := do(h, "OPTIONS", "/v1/auth/sign-in", "", map[string]string{"Origin": origin, "Access-Control-Request-Method": "POST"})
+		if evil.Code != 403 || evil.Header().Get("Access-Control-Allow-Origin") != "" {
+			t.Errorf("%s preflight: %d %v", origin, evil.Code, evil.Header())
+		}
+		get := do(h, "GET", "/v1/status", "", map[string]string{"Origin": origin})
+		if get.Header().Get("Access-Control-Allow-Origin") != "" {
+			t.Errorf("%s kaynağına CORS başlığı verildi", origin)
+		}
+	}
+}
+
+// TestProdNoCORS: prod has no development origin, so no Origin gets a CORS
+// header (issue #124).
+func TestProdNoCORS(t *testing.T) {
+	h := newProdRouter(&fakeIdentity{})
+	for _, origin := range []string{devOrigin, "http://127.0.0.1:3000", "https://tayfam.app", "https://admin.tayfam.app", "https://evil.example"} {
+		pre := do(h, "OPTIONS", "/v1/auth/sign-in", "", map[string]string{"Origin": origin, "Access-Control-Request-Method": "POST"})
+		if pre.Code != 403 || corsHeaders(pre) != "" {
+			t.Errorf("%s preflight: %d %q", origin, pre.Code, corsHeaders(pre))
+		}
+		for _, path := range []string{"/v1/status", "/v1/client-config", "/v1/me/sessions"} {
+			if w := do(h, "GET", path, "", map[string]string{"Origin": origin}); corsHeaders(w) != "" {
+				t.Errorf("%s %s: %q", origin, path, corsHeaders(w))
+			}
+		}
+	}
+}
+
+// corsHeaders returns every Access-Control-* response header, joined.
+func corsHeaders(w *httptest.ResponseRecorder) string {
+	var out []string
+	for k, v := range w.Header() {
+		if strings.HasPrefix(k, "Access-Control-") {
+			out = append(out, k+"="+strings.Join(v, ","))
+		}
+	}
+	return strings.Join(out, ";")
 }

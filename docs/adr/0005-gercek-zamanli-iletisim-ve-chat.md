@@ -41,12 +41,14 @@ görünür.
 
 > 2026-11-09: bilet kaldırıldı, bağlantı kullanıcının erişim token'ıyla
 > açılır ([ADR-0014](0014-websocket-erisim-tokeniyla.md)).
+> 2026-11-10: web istemcisi yok ([ADR-0017](0017-yalnizca-mobil-istemci.md));
+> çerez yolu kalktı, `Origin` taşıyan istek reddedilir.
 
 - WebSocket bağlantısı `GET /v1/realtime` ile, kullanıcının erişim token'ıyla
-  açılır: mobilde `Authorization: Bearer` başlığı, web'de `tayfam_at` çerezi;
-  token URL'de taşınmaz. gateway Origin'i ve token'ı doğrular, isteği chat'e
-  aktarır (reverse proxy) ve token'ı `Authorization` başlığıyla iletir (çerezi
-  değil); chat token'ı kendisi yeniden doğrular.
+  açılır: mobilin `Authorization: Bearer` başlığı; token URL'de taşınmaz.
+  `Origin` taşıyan (tarayıcıdan gelen) istek reddedilir. gateway token'ı
+  doğrular, isteği chat'e aktarır (reverse proxy) ve token'ı `Authorization`
+  başlığıyla iletir; chat token'ı kendisi yeniden doğrular.
 - Token yalnızca bağlantının belleğinde tutulur. Abonelikte, gönderimde ve
   üyelik değişince yeniden denetimde core'a bu token'la sorulur.
 - Bağlantı en geç token'ın süresi dolunca kapanır (4003); istemci token'ı

@@ -21,14 +21,9 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/ratelimit"
 )
 
-// Cookie names for the web client (ADR-0004).
 const (
-	accessCookie  = "tayfam_at"
-	refreshCookie = "tayfam_rt"
-	refreshPath   = "/v1/auth/refresh"
-	clientHeader  = "X-Tayfam-Client"
-	maxBodyBytes  = 16 << 10
-	upstreamWait  = 10 * time.Second
+	maxBodyBytes = 16 << 10
+	upstreamWait = 10 * time.Second
 )
 
 // AuthClient is the part of identity's AuthService the gateway uses.
@@ -55,16 +50,17 @@ type AuthDeps struct {
 	TrustCFConnectingIP bool
 	SignInLimit         *ratelimit.Limiter
 	RefreshLimit        *ratelimit.Limiter
-	Now                 func() time.Time
 }
 
-type authHandlers struct{ d AuthDeps }
+type authHandlers struct {
+	d AuthDeps
+	// webClient accepts sign-in with platform web: the local web build,
+	// never in prod (ADR-0017).
+	webClient bool
+}
 
-func registerAuth(mux *http.ServeMux, d AuthDeps) {
-	if d.Now == nil {
-		d.Now = time.Now
-	}
-	h := authHandlers{d}
+func registerAuth(mux *http.ServeMux, d AuthDeps, webClient bool) {
+	h := authHandlers{d: d, webClient: webClient}
 	mux.HandleFunc("POST /v1/auth/sign-in", h.signIn)
 	mux.HandleFunc("POST /v1/auth/refresh", h.refresh)
 	mux.HandleFunc("POST /v1/auth/sign-out", h.signOut)
@@ -79,14 +75,14 @@ type signInBody struct {
 	Platform string `json:"platform"`
 }
 
-// sessionBody is the response of sign-in and refresh. Tokens are omitted
-// for the web client, which receives them as cookies.
+// sessionBody is the response of sign-in and refresh. The tokens are
+// always in the body; no cookie is set (ADR-0017).
 type sessionBody struct {
 	UserID              string    `json:"user_id"`
 	SessionID           string    `json:"session_id"`
-	AccessToken         string    `json:"access_token,omitempty"`
+	AccessToken         string    `json:"access_token"`
 	AccessExpiresAt     time.Time `json:"access_expires_at"`
-	RefreshToken        string    `json:"refresh_token,omitempty"`
+	RefreshToken        string    `json:"refresh_token"`
 	RefreshExpiresAt    time.Time `json:"refresh_expires_at"`
 	RegistrationPending bool      `json:"registration_pending"`
 	ConsentRequired     bool      `json:"consent_required"`
@@ -111,6 +107,9 @@ func (h authHandlers) signIn(w http.ResponseWriter, r *http.Request) {
 	}
 	provider, okP := providers[b.Provider]
 	platform, okPl := platforms[b.Platform]
+	if b.Platform == "web" && !h.webClient {
+		okPl = false
+	}
 	if !okP || !okPl || b.IDToken == "" || len(b.IDToken) > 8192 || len(b.Nonce) < 16 || len(b.Nonce) > 256 {
 		httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-request", "Bad Request", "")
 		return
@@ -122,7 +121,7 @@ func (h authHandlers) signIn(w http.ResponseWriter, r *http.Request) {
 		h.upstreamError(w, r, err)
 		return
 	}
-	h.writeSession(w, b.Platform == "web", resp.GetTokens())
+	h.writeSession(w, resp.GetTokens())
 }
 
 type refreshBody struct {
@@ -134,18 +133,12 @@ func (h authHandlers) refresh(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteProblem(w, r, http.StatusTooManyRequests, "rate-limited", "Too Many Requests", "")
 		return
 	}
-	// The web client sends the cookie; mobile clients send the body.
-	var token string
-	web := false
-	if c, err := r.Cookie(refreshCookie); err == nil && c.Value != "" {
-		token, web = c.Value, true
-	} else {
-		var b refreshBody
-		if !decode(w, r, &b) {
-			return
-		}
-		token = b.RefreshToken
+	// The refresh token comes in the body only; a cookie is ignored.
+	var b refreshBody
+	if !decode(w, r, &b) {
+		return
 	}
+	token := b.RefreshToken
 	if token == "" || len(token) > 64 {
 		httpx.WriteProblem(w, r, http.StatusUnauthorized, "invalid-refresh", "Unauthorized", "")
 		return
@@ -154,17 +147,14 @@ func (h authHandlers) refresh(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	resp, err := h.d.Auth.Refresh(ctx, &identityv1.RefreshRequest{RefreshToken: token})
 	if err != nil {
-		if web && status.Code(err) == codes.Unauthenticated {
-			h.clearCookies(w)
-		}
 		h.upstreamError(w, r, err)
 		return
 	}
-	h.writeSession(w, web, resp.GetTokens())
+	h.writeSession(w, resp.GetTokens())
 }
 
 func (h authHandlers) signOut(w http.ResponseWriter, r *http.Request) {
-	token, web := bearer(r)
+	token := bearer(r)
 	if token == "" {
 		httpx.WriteProblem(w, r, http.StatusUnauthorized, "unauthenticated", "Unauthorized", "")
 		return
@@ -172,9 +162,6 @@ func (h authHandlers) signOut(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), upstreamWait)
 	defer cancel()
 	_, err := h.d.Auth.SignOut(auth.WithToken(ctx, token), &identityv1.SignOutRequest{})
-	if web {
-		h.clearCookies(w)
-	}
 	if err != nil && status.Code(err) != codes.Unauthenticated {
 		h.upstreamError(w, r, err)
 		return
@@ -190,7 +177,7 @@ type requirementsBody struct {
 }
 
 func (h authHandlers) requirements(w http.ResponseWriter, r *http.Request) {
-	token, _ := bearer(r)
+	token := bearer(r)
 	if token == "" {
 		httpx.WriteProblem(w, r, http.StatusUnauthorized, "unauthenticated", "Unauthorized", "")
 		return
@@ -215,7 +202,7 @@ type registrationBody struct {
 }
 
 func (h authHandlers) completeRegistration(w http.ResponseWriter, r *http.Request) {
-	token, _ := bearer(r)
+	token := bearer(r)
 	if token == "" {
 		httpx.WriteProblem(w, r, http.StatusUnauthorized, "unauthenticated", "Unauthorized", "")
 		return
@@ -238,38 +225,16 @@ func (h authHandlers) completeRegistration(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h authHandlers) writeSession(w http.ResponseWriter, web bool, t *identityv1.Tokens) {
-	body := sessionBody{
+func (h authHandlers) writeSession(w http.ResponseWriter, t *identityv1.Tokens) {
+	writeJSON(w, http.StatusOK, sessionBody{
 		UserID: t.GetUserId(), SessionID: t.GetSessionId(),
+		AccessToken:         t.GetAccessToken(),
 		AccessExpiresAt:     t.GetAccessExpireTime().AsTime(),
+		RefreshToken:        t.GetRefreshToken(),
 		RefreshExpiresAt:    t.GetRefreshExpireTime().AsTime(),
 		RegistrationPending: t.GetRegistrationPending(),
 		ConsentRequired:     t.GetConsentRequired(),
-	}
-	if web {
-		now := h.d.Now()
-		http.SetCookie(w, h.cookie(accessCookie, t.GetAccessToken(), "/", body.AccessExpiresAt.Sub(now)))
-		http.SetCookie(w, h.cookie(refreshCookie, t.GetRefreshToken(), refreshPath, body.RefreshExpiresAt.Sub(now)))
-	} else {
-		body.AccessToken, body.RefreshToken = t.GetAccessToken(), t.GetRefreshToken()
-	}
-	writeJSON(w, http.StatusOK, body)
-}
-
-func (h authHandlers) cookie(name, value, path string, ttl time.Duration) *http.Cookie {
-	return &http.Cookie{
-		Name: name, Value: value, Path: path,
-		MaxAge: max(int(ttl.Seconds()), 1),
-		// Secure is always on: browsers accept Secure cookies on
-		// http://localhost too, so local development needs no exception.
-		HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode,
-	}
-}
-
-func (h authHandlers) clearCookies(w http.ResponseWriter) {
-	for _, c := range []struct{ name, path string }{{accessCookie, "/"}, {refreshCookie, refreshPath}} {
-		http.SetCookie(w, &http.Cookie{Name: c.name, Value: "", Path: c.path, MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
-	}
+	})
 }
 
 func (h authHandlers) upstreamError(w http.ResponseWriter, r *http.Request, err error) {
@@ -280,16 +245,14 @@ func (h authHandlers) clientIP(r *http.Request) string {
 	return clientIP(r, h.d.TrustCFConnectingIP)
 }
 
-// bearer returns the access token from the Authorization header or, for
-// the web client, the access cookie.
-func bearer(r *http.Request) (token string, web bool) {
+// bearer returns the access token from the Authorization header, the only
+// place it is read from: a cookie, whatever its name, authenticates
+// nothing (ADR-0017).
+func bearer(r *http.Request) string {
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
-		return strings.TrimSpace(h[len("Bearer "):]), false
+		return strings.TrimSpace(h[len("Bearer "):])
 	}
-	if c, err := r.Cookie(accessCookie); err == nil {
-		return c.Value, true
-	}
-	return "", false
+	return ""
 }
 
 // decode reads a small JSON body strictly: right content type, size limit,

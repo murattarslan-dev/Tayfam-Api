@@ -2,6 +2,13 @@
 
 - **Durum:** Önerildi
 - **Tarih:** 2026-11-10
+- **Revizyon:** 2026-11-10, web istemcisi kaldırıldı
+  ([ADR-0017](0017-yalnizca-mobil-istemci.md), issue #124): `web` platformu
+  yalnızca prod dışında (yerel geliştirme derlemesi) hizmet alır. prod'da
+  `web/<sürüm>` başlığı `invalid-client-version` (400) alır,
+  `GET /v1/client-config` `web`'i listelemez ve `CLIENT_*_WEB` verilirse
+  gateway başlamaz. Aşağıdaki web ve tarayıcı WebSocket'i ifadeleri bu
+  kurala göre okunur.
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0003](0003-kod-yapisi-ve-sozlesmeler.md), [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md), [ADR-0011](0011-guvenlik-ilkesi-ihlal-varsayimi.md), [ADR-0014](0014-websocket-erisim-tokeniyla.md); issue #114
 

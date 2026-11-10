@@ -86,27 +86,18 @@ func TestDeleteAccountRoute(t *testing.T) {
 		t.Fatalf("silme: %d %T %q", w.Code, got, token)
 	}
 	if len(w.Result().Cookies()) != 0 {
-		t.Fatal("mobil silmede çerez yazıldı")
+		t.Fatal("silmede çerez yazıldı")
 	}
 
-	// Web: cookies are cleared after deletion.
-	w = do(h, "DELETE", "/v1/me", "", map[string]string{"Cookie": accessCookie + "=WEBTOKEN", clientHeader: "web"})
-	if _, token, _ := f.last(); w.Code != http.StatusNoContent || token != "WEBTOKEN" {
-		t.Fatalf("web silme: %d", w.Code)
-	}
-	cleared := 0
-	for _, c := range w.Result().Cookies() {
-		if c.MaxAge < 0 {
-			cleared++
-		}
-	}
-	if cleared != 2 {
-		t.Fatalf("silinen çerez = %d", cleared)
+	// The former web cookie deletes nothing (ADR-0017).
+	w = do(h, "DELETE", "/v1/me", "", map[string]string{"Cookie": "tayfam_at=WEBTOKEN", clientHeader: "android"})
+	if _, _, n := f.last(); w.Code != http.StatusUnauthorized || n != 1 || len(w.Result().Cookies()) != 0 {
+		t.Fatalf("çerezle silme: %d (%d çağrı)", w.Code, n)
 	}
 
-	// Reauthentication required: 403, cookies kept (the user signs in again).
+	// Reauthentication required: 403 (the user signs in again).
 	f.err = identityErr(codes.PermissionDenied, "ERROR_REASON_REAUTHENTICATION_REQUIRED")
-	w = do(h, "DELETE", "/v1/me", "", map[string]string{"Cookie": accessCookie + "=WEBTOKEN", clientHeader: "web"})
+	w = as(h, "DELETE", "/v1/me", "")
 	if w.Code != http.StatusForbidden || problemType(t, w) != "reauthentication-required" || len(w.Result().Cookies()) != 0 {
 		t.Fatalf("yeniden doğrulama: %d %s", w.Code, w.Body)
 	}

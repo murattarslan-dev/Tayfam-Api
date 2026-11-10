@@ -6,7 +6,7 @@ Bu belge sisteme genel bir bakış sunar. Her başlığın gerekçesi ilgili ADR
 ## Genel görünüm
 
 ```
- Mobil / Web istemci
+ Mobil istemci (Android, iOS)
         │ HTTPS (REST, WebSocket)
         ▼
  Cloudflare ── Tunnel ──► cloudflared ──► gateway ──gRPC──► identity

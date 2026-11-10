@@ -18,34 +18,27 @@ import (
 type realtimeTokenKey struct{}
 
 type realtimeHandlers struct {
-	d       ChatDeps
-	origins map[string]bool
-	proxy   *httputil.ReverseProxy
+	d     ChatDeps
+	proxy *httputil.ReverseProxy
 }
 
 // registerRealtime adds the WebSocket route (issue #82; ADR-0005
-// "Bağlantı", ADR-0014). The connection is not terminated here: the
-// gateway checks the Origin and the user's access token (mobile:
-// Authorization header; web: the tayfam_at cookie) and passes the upgrade
-// to chat's HTTP port with that token in the Authorization header, never
-// the cookie. chat verifies the token again and runs the connection. The
-// gateway stays stateless.
-func registerRealtime(mux *http.ServeMux, d ChatDeps, origins []string) {
-	h := realtimeHandlers{d: d, origins: map[string]bool{}, proxy: newRealtimeProxy(d.RealtimeURL, d.Log)}
-	for _, o := range origins {
-		h.origins[o] = true
-	}
+// "Bağlantı", ADR-0014, ADR-0017). The connection is not terminated here:
+// the gateway checks the mobile client's access token (Authorization
+// header) and passes the upgrade to chat's HTTP port with that token in
+// the Authorization header. chat verifies the token again and runs the
+// connection. The gateway stays stateless.
+func registerRealtime(mux *http.ServeMux, d ChatDeps) {
+	h := realtimeHandlers{d: d, proxy: newRealtimeProxy(d.RealtimeURL, d.Log)}
 	mux.HandleFunc("GET /v1/realtime", h.connect)
 }
 
-// connect checks what it can, then proxies to chat. A token from the web
-// cookie needs an allowed Origin: browsers always send one with a
-// WebSocket, so a cross-site page cannot ride on the cookie
-// (cross-site WebSocket hijacking). chat checks the Origin again
-// (ADR-0011).
+// connect checks what it can, then proxies to chat. Only the mobile apps
+// connect, and they send no Origin; browsers always do, so a request with
+// an Origin is refused whatever it carries (ADR-0017). chat refuses it
+// again (ADR-0011).
 func (h realtimeHandlers) connect(w http.ResponseWriter, r *http.Request) {
-	origin := r.Header.Get("Origin")
-	if origin != "" && !h.origins[origin] {
+	if len(r.Header.Values("Origin")) > 0 {
 		httpx.WriteProblem(w, r, http.StatusForbidden, "forbidden-origin", "Forbidden", "")
 		return
 	}
@@ -53,13 +46,9 @@ func (h realtimeHandlers) connect(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-request", "Bad Request", "")
 		return
 	}
-	token, web := bearer(r)
+	token := bearer(r)
 	if token == "" || len(token) > maxAccessTokenBytes {
 		httpx.WriteProblem(w, r, http.StatusUnauthorized, "unauthenticated", "Unauthorized", "")
-		return
-	}
-	if web && origin == "" {
-		httpx.WriteProblem(w, r, http.StatusForbidden, "forbidden-origin", "Forbidden", "")
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), upstreamWait)
@@ -79,7 +68,7 @@ func (h realtimeHandlers) connect(w http.ResponseWriter, r *http.Request) {
 
 // newRealtimeProxy passes the upgrade to chat. Only what the handshake
 // needs goes on: cookies are dropped and the Authorization header is set to
-// the verified access token, whichever way it came. The query string is
+// the verified access token. The query string is
 // dropped (the route takes none). Errors are logged without the request.
 func newRealtimeProxy(target *url.URL, log *slog.Logger) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{

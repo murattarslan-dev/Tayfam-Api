@@ -357,7 +357,8 @@ ADR-0006 ortam ayrımı: prod dev'in client'ını kullanmaz.
    döneminde *Testing* + test kullanıcısı olarak kendi hesabın yeterli).
 2. *Credentials → Create credentials → OAuth client ID → Web application*,
    ad "Tayfam prod web":
-   - Authorized JavaScript origins: `https://tayfam.app`, `https://admin.tayfam.app`
+   - Authorized JavaScript origins: `https://admin.tayfam.app` (web
+     istemcisi yok, ADR-0017; `https://tayfam.app` gerekmez)
    - Authorized redirect URIs: `https://admin.tayfam.app/auth/google/callback`
 3. Client ID'yi (gizli değil; client secret kullanılmaz ve hiçbir yere
    yazılmaz) adım e'nin dalında `deploy/apps/prod/kustomization.yaml`'a yaz:

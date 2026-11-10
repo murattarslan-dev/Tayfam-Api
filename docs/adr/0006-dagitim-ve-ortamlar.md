@@ -10,6 +10,9 @@
   VDS'e hazırlanıyor; yedekler pilot öncesi şart, `admin.tayfam.app` prod'a
   taşındı, gözlem stack'i bellek yetmezse Grafana Cloud'da kalır (bkz.
   "2. aşamaya geçiş").
+- **Revizyon:** 2026-11-10, web istemcisi yok
+  ([ADR-0017](0017-yalnizca-mobil-istemci.md)): `tayfam.app` tanıtım ve
+  link karşılama sayfasıdır; web derlemesi yayınlanmaz.
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0001](0001-mikroservis-mimarisi.md), [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md)
 
@@ -61,8 +64,9 @@ başka bir node'a kod ve manifest değişmeden taşınabilmeli.
   ağında QUIC (UDP 7844) engellidir; VPS'te de aynı ayar kullanılır.
 - dev alan adı, gateway kurulduktan sonra Cloudflare Access ile korunur;
   yalnızca Murat ve test cihazları erişebilir.
-- Flutter web istemcisi Cloudflare Pages'te, `tayfam.app` adresinde
-  barındırılır; bu cluster'ın kapsamı dışındadır.
+- `tayfam.app` (tanıtım ve link karşılama sayfası) Cloudflare Pages'te
+  barındırılır; bu cluster'ın kapsamı dışındadır. Flutter web derlemesi
+  yayınlanmaz (ADR-0017).
 
 ### Postgres
 

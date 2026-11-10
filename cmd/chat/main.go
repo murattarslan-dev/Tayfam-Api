@@ -9,7 +9,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	chatdb "github.com/murattarslan-dev/tayfam-api/db/chat"
@@ -49,11 +48,10 @@ func setup(rt *service.Runtime) error {
 	// o zaman kanal metodları UNAVAILABLE döner, mesaj yazılmaz.
 	messageKeys := c.String("CHAT_MESSAGE_KEYS", "")
 	// WebSocket (issue #82): gateway GET /v1/realtime'ı kullanıcının erişim
-	// token'ıyla bu porta aktarır; chat token'ı yeniden doğrular. İzinli web
-	// origin'leri gateway'in CORS listesiyle aynıdır (tayfam-env).
+	// token'ıyla bu porta aktarır; chat token'ı yeniden doğrular. Origin
+	// taşıyan (tarayıcıdan gelen) istek reddedilir (ADR-0017).
 	// Bağlantılar bellektedir; chat tek kopya çalışır (ADR-0005 "Ölçekleme").
 	httpAddr := c.String("HTTP_ADDR", ":8080")
-	origins := splitList(c.String("CORS_ALLOWED_ORIGINS", "https://tayfam.app"))
 	maxConns := c.Int("REALTIME_MAX_CONNECTIONS", 2000)
 	if err := c.Err(); err != nil {
 		return err
@@ -191,7 +189,7 @@ func setup(rt *service.Runtime) error {
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
 
 	wsHandler, err := ws.New(ws.Config{
-		Verifier: v, Hub: hub, Live: live, Log: rt.Log, AllowedOrigins: origins,
+		Verifier: v, Hub: hub, Live: live, Log: rt.Log,
 		// Kullanıcı başına gelen çerçeve sınırı (ADR-0005 "gönderim hızı").
 		Frames: ratelimit.New(60, 20),
 	})
@@ -211,14 +209,4 @@ func setup(rt *service.Runtime) error {
 	rt.AddWorker("channel-message-purge", channels.RunPurge)
 	rt.AddWorker("direct-message-purge", directMessages.RunPurge)
 	return nil
-}
-
-func splitList(s string) []string {
-	var out []string
-	for v := range strings.SplitSeq(s, ",") {
-		if v = strings.TrimSpace(v); v != "" {
-			out = append(out, v)
-		}
-	}
-	return out
 }

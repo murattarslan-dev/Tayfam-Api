@@ -59,8 +59,8 @@ spec:
             - { name: OPS_ADDR, value: ":8081" }
             - { name: GRPC_ADDR, value: ":9090" }
             # WebSocket (issue #82): yalnızca gateway'den (NetworkPolicy
-            # chat-realtime). İzinli web origin'leri tayfam-env'deki
-            # CORS_ALLOWED_ORIGINS'tir. Bağlantılar bellektedir; replicas 1
+            # chat-realtime). Origin taşıyan (tarayıcıdan gelen) istek
+            # reddedilir (ADR-0017). Bağlantılar bellektedir; replicas 1
             # kalır (ADR-0005 "Ölçekleme").
             - { name: HTTP_ADDR, value: ":8080" }
             - { name: IDENTITY_GRPC_ADDR, value: "identity:9090" }

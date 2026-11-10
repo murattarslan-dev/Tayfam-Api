@@ -5,14 +5,15 @@
 // live in the app layer (realtime.Live, channel.Service).
 //
 // Authentication: the gateway passes the user's access token in the
-// Authorization header (from the client's own header, or from the web
-// cookie); chat verifies the signature itself (CLAUDE.md rule 8) and keeps
+// Authorization header, as the mobile client sent it; chat verifies the
+// signature itself (CLAUDE.md rule 8) and keeps
 // the token only in the connection's memory, to ask core with it. The
 // connection closes when the token expires (4003); the client reconnects
 // with a fresh one.
 //
-// Limits on every connection: the Origin header must be absent (native
-// clients) or one of the allowed web origins; a frame is at most
+// Limits on every connection: a request with an Origin header is refused
+// (only the mobile apps connect, and they send none; browsers always do;
+// ADR-0017); a frame is at most
 // MaxFrameBytes (larger closes with 1009); incoming frames are rate limited
 // per user (Frames; "rate_limited"), and sending a message also counts
 // against the per-user message rate the app layer shares with REST
@@ -112,10 +113,6 @@ type Config struct {
 	Hub      Hub
 	Live     Live
 	Log      *slog.Logger
-	// AllowedOrigins are the web origins that may open a connection, such
-	// as https://tayfam.app (the gateway's CORS list). A request without
-	// Origin (native clients) is allowed.
-	AllowedOrigins []string
 	// Frames limits incoming frames per user.
 	Frames *ratelimit.Limiter
 	Now    func() time.Time // optional, for tests
@@ -130,8 +127,7 @@ type Config struct {
 
 // Handler serves GET /v1/realtime.
 type Handler struct {
-	cfg     Config
-	origins map[string]bool
+	cfg Config
 }
 
 // New returns a Handler.
@@ -160,11 +156,7 @@ func New(cfg Config) (*Handler, error) {
 	if cfg.MaxFrameBytes <= 0 {
 		cfg.MaxFrameBytes = DefaultMaxFrameBytes
 	}
-	h := &Handler{cfg: cfg, origins: map[string]bool{}}
-	for _, o := range cfg.AllowedOrigins {
-		h.origins[o] = true
-	}
-	return h, nil
+	return &Handler{cfg: cfg}, nil
 }
 
 // Register adds the route to mux.
@@ -190,9 +182,11 @@ func bearer(r *http.Request) string {
 	return strings.TrimSpace(h[len("Bearer "):])
 }
 
-// ServeHTTP checks the Origin and the token, then upgrades.
+// ServeHTTP checks the Origin and the token, then upgrades. Any Origin is
+// refused: no browser may open a connection, whatever credentials it
+// carries (ADR-0017). The gateway refuses it too (ADR-0011).
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if o := r.Header.Get("Origin"); o != "" && !h.origins[o] {
+	if len(r.Header.Values("Origin")) > 0 {
 		httpx.WriteProblem(w, r, http.StatusForbidden, "forbidden-origin", "Forbidden", "")
 		return
 	}
@@ -236,13 +230,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer m.Release()
 	c.m = m
-	patterns := make([]string, 0, len(h.origins))
-	for o := range h.origins {
-		patterns = append(patterns, o)
-	}
 	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		// Checked above as well; the library checks again.
-		OriginPatterns: patterns,
+		// No OriginPatterns: the library refuses a cross-origin request
+		// too, should one get past the check above.
 		// No permessage-deflate: compression of attacker-influenced frames
 		// next to message bodies (CRIME/BREACH) and its memory cost are not
 		// worth it for small JSON frames.

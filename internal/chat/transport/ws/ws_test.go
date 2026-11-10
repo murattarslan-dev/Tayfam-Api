@@ -153,7 +153,7 @@ func newEnv(t *testing.T, mod func(*Config)) *env {
 	ver := &fakeVerifier{tokens: map[string]auth.Claims{}}
 	cfg := Config{
 		Verifier: ver, Hub: hub, Live: live, Log: log,
-		AllowedOrigins: []string{"https://tayfam.app"}, Frames: ratelimit.New(600, 100),
+		Frames: ratelimit.New(600, 100),
 	}
 	if mod != nil {
 		mod(&cfg)
@@ -211,7 +211,7 @@ func (e *env) dial(t *testing.T, token, origin string) (*websocket.Conn, int, er
 // connect opens a connection with w's token and reads the ready frame.
 func (e *env) connect(t *testing.T, w who) *websocket.Conn {
 	t.Helper()
-	c, _, err := e.dial(t, w.token, "https://tayfam.app")
+	c, _, err := e.dial(t, w.token, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,8 +281,12 @@ func ref(tf, ch id.ID) string {
 func TestRefusedBeforeUpgrade(t *testing.T) {
 	e := newEnv(t, nil)
 	w := e.token(id.New(), time.Hour)
-	if _, code, err := e.dial(t, w.token, "https://kotu.example"); err == nil || code != http.StatusForbidden {
-		t.Fatalf("yabancı origin: %d %v", code, err)
+	// Any Origin is refused, the app's former web address and localhost
+	// included: only the mobile apps connect (ADR-0017).
+	for _, origin := range []string{"https://kotu.example", "https://tayfam.app", "http://localhost:3000"} {
+		if _, code, err := e.dial(t, w.token, origin); err == nil || code != http.StatusForbidden {
+			t.Fatalf("origin %s: %d %v", origin, code, err)
+		}
 	}
 	if _, code, err := e.dial(t, "", ""); err == nil || code != http.StatusUnauthorized {
 		t.Fatalf("token yok: %d %v", code, err)

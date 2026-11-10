@@ -62,11 +62,6 @@ func (h coreHandlers) deleteAccount(ctx context.Context, w http.ResponseWriter, 
 		h.identityFail(w, r, err)
 		return
 	}
-	// The account and its sessions are gone; the web client's cookies go
-	// with them.
-	if _, web := bearer(r); web {
-		authHandlers{}.clearCookies(w)
-	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

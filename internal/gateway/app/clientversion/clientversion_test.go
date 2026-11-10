@@ -179,3 +179,38 @@ func TestCheck(t *testing.T) {
 		t.Errorf("boş politika: %v", got)
 	}
 }
+
+// TestWithout: a platform that is not served (web in prod, ADR-0017) is
+// Invalid whatever its version, and Served leaves it out; the original
+// policy is unchanged.
+func TestWithout(t *testing.T) {
+	p, err := NewPolicy(map[Platform]RawRange{Android: {Min: "1.2.0"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mobile := p.Without(Web)
+	for _, h := range []string{"web/0.0.1", "web/99.0.0"} {
+		if got := mobile.Check([]string{h}); got != Invalid {
+			t.Errorf("%s: %v, want Invalid", h, got)
+		}
+	}
+	if got := mobile.Check([]string{"android/1.2.0"}); got != Allowed {
+		t.Errorf("android: %v", got)
+	}
+	if got := mobile.Check(nil); got != Missing {
+		t.Errorf("başlık yok: %v", got)
+	}
+	if got := mobile.Served(); len(got) != 2 || got[0] != Android || got[1] != IOS {
+		t.Errorf("Served = %v", got)
+	}
+	if got := p.Check([]string{"web/0.0.1"}); got != Allowed {
+		t.Errorf("özgün politika değişti: %v", got)
+	}
+	if got := len(p.Served()); got != 3 {
+		t.Errorf("özgün politika platformları: %d", got)
+	}
+	var zero Policy
+	if got := zero.Without(Web).Check([]string{"web/1.0.0"}); got != Invalid {
+		t.Errorf("boş politika web: %v", got)
+	}
+}

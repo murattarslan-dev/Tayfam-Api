@@ -223,7 +223,7 @@ func testCoreDeps(f *fakeCore, burst int) CoreDeps {
 func coreRouter(f *fakeCore) http.Handler { return coreRouterWith(testCoreDeps(f, 100)) }
 
 func coreRouterWith(d CoreDeps) http.Handler {
-	return NewRouter(Deps{Version: "test", Core: d, AllowedOrigins: []string{"https://tayfam.app"}})
+	return NewRouter(Deps{Version: "test", Core: d})
 }
 
 // as sends a request as a signed-in mobile user.
@@ -282,12 +282,14 @@ func TestCoreTokenForwardedUnchanged(t *testing.T) {
 	if _, tok, _ := f.last(); tok != "MOBILTOKEN" {
 		t.Fatalf("iletilen token %q", tok)
 	}
+	// The former web cookie is no credential (ADR-0017): 401, core is not
+	// called.
 	r := httptest.NewRequest(http.MethodGet, "/v1/tayfas/"+tayfaID, nil)
-	r.AddCookie(&http.Cookie{Name: accessCookie, Value: "WEBTOKEN"})
+	r.AddCookie(&http.Cookie{Name: "tayfam_at", Value: "WEBTOKEN"})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, r)
-	if _, tok, _ := f.last(); rec.Code != 200 || tok != "WEBTOKEN" {
-		t.Fatalf("web: %d %q", rec.Code, tok)
+	if _, tok, n := f.last(); rec.Code != 401 || problemType(t, rec) != "unauthenticated" || tok != "MOBILTOKEN" || n != 1 {
+		t.Fatalf("çerezle: %d %q (%d çağrı)", rec.Code, tok, n)
 	}
 }
 
