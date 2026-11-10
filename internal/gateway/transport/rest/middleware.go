@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/murattarslan-dev/tayfam-api/internal/gateway/app/clientversion"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/httpx"
 )
 
@@ -52,7 +53,7 @@ func cors(origins []string) httpx.Middleware {
 			h.Set("Access-Control-Allow-Credentials", "true")
 			if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
 				h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE")
-				h.Set("Access-Control-Allow-Headers", strings.Join([]string{"Authorization", "Content-Type", clientHeader, httpx.RequestIDHeader}, ", "))
+				h.Set("Access-Control-Allow-Headers", strings.Join([]string{"Authorization", "Content-Type", clientHeader, clientversion.Header, httpx.RequestIDHeader}, ", "))
 				h.Set("Access-Control-Max-Age", strconv.Itoa(600))
 				w.WriteHeader(http.StatusNoContent)
 				return
