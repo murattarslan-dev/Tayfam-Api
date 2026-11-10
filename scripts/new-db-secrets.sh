@@ -49,6 +49,10 @@ for arg in "${args[@]}"; do
   esac
 done
 mkdir -p "$dir/secrets"
+# sops başarısız olursa (ör. ortamın .sops.yaml kuralı yok) yarım kalan geçici
+# dosya silinir; içinde açık değer olmaz ama dizinde kalıp commit edilmesin.
+tmp=""
+trap 'rm -f "$tmp"' EXIT
 
 for target in "${targets[@]}"; do
   svc=${target%%:*}
