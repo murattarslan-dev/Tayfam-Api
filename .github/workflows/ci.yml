@@ -11,9 +11,12 @@ on:
 permissions:
   contents: read
 
+# PR'larda yeni push eski çalışmayı iptal eder. main'de iptal edilmez: art
+# arda birleşen PR'larda öndekinin dev dağıtımı kaybolmasın; aynı gruptaki
+# çalışmalar sırayla biter ve en son yayınlanan paket en son commit'inkidir.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
