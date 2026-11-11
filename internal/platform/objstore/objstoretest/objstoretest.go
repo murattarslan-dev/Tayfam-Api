@@ -8,7 +8,7 @@ package objstoretest
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -146,8 +146,8 @@ func Do(t testing.TB, method, rawURL string, headers map[string]string, body []b
 
 // ETag is the ETag the server gives b.
 func ETag(b []byte) string {
-	sum := md5.Sum(b) //nolint:gosec // an ETag, as S3 computes it; not security
-	return `"` + hex.EncodeToString(sum[:]) + `"`
+	sum := sha256.Sum256(b)
+	return `"` + hex.EncodeToString(sum[:16]) + `"`
 }
 
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
