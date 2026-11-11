@@ -2088,8 +2088,9 @@ type UpdateEventRequest struct {
 	// (start_time and end_time together), "location" (mode,
 	// meeting_point_name, meeting_point, city, district and online_url
 	// together), "capacity", "discoverable", "details" (replaces the type
-	// details; vehicles and camp items stay). Any other path is
-	// ERROR_REASON_VALIDATION.
+	// details; vehicles and camp items stay), "cover_upload_id" (not with
+	// series = true: ERROR_REASON_VALIDATION, field "update_mask"). Any
+	// other path is ERROR_REASON_VALIDATION.
 	UpdateMask *fieldmaskpb.FieldMask `protobuf:"bytes,15,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	// Only for an event of a series (otherwise ERROR_REASON_VALIDATION, field
 	// "series"). false: only this event changes and it is marked

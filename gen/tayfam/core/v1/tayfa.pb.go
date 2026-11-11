@@ -896,8 +896,8 @@ type UpdateTayfaRequest struct {
 	// Must not be UNSPECIFIED when named in update_mask.
 	JoinPolicy JoinPolicy `protobuf:"varint,5,opt,name=join_policy,json=joinPolicy,proto3,enum=tayfam.core.v1.JoinPolicy" json:"join_policy,omitempty"`
 	// Required, non-empty. Allowed paths: "name", "description", "interests",
-	// "join_policy", "members_can_create_events". Any other path is
-	// ERROR_REASON_VALIDATION.
+	// "join_policy", "members_can_create_events", "cover_upload_id". Any
+	// other path is ERROR_REASON_VALIDATION.
 	UpdateMask *fieldmaskpb.FieldMask `protobuf:"bytes,6,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	// See Tayfa.members_can_create_events.
 	MembersCanCreateEvents bool `protobuf:"varint,7,opt,name=members_can_create_events,json=membersCanCreateEvents,proto3" json:"members_can_create_events,omitempty"`
