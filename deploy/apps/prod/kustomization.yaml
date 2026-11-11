@@ -40,12 +40,12 @@ configMapGenerator:
       - TRUST_CF_CONNECTING_IP=true
       # Web istemcisi yok (ADR-0017): WEB_DEV_ORIGINS prod'da bilerek yok;
       # verilirse gateway başlamaz. Hiçbir Origin'e CORS başlığı dönmez.
-      # identity: prod'un kendi Google OAuth client ID'leri (ADR-0006 ortam
-      # ayrımı; dev'in client'ı burada kullanılmaz). Gizli değildir. Değer
-      # platform sahibinin prod client'ı oluşturmasıyla girer
-      # (docs/runbooks/vds-kurulumu.md, adım h). Boşken identity
-      # "GOOGLE_CLIENT_IDS: zorunlu" hatasıyla başlamaz.
-      - GOOGLE_CLIENT_IDS=
+      # identity: Google OAuth client ID'leri (gizli değildir). Yayına kadar
+      # VDS dev olarak kullanıldığı için dev'in client'ı kullanılır (platform
+      # sahibi kararı, 2026-11-11); yayın öncesi anahtar yenilemesinde prod'un
+      # kendi client'ıyla değiştirilir (docs/runbooks/vds-kurulumu.md, adım h).
+      # Boşken identity "GOOGLE_CLIENT_IDS: zorunlu" hatasıyla başlamaz.
+      - GOOGLE_CLIENT_IDS=73439258394-uhd9m0b6mkc5k8eaoup6kgh57a49on4t.apps.googleusercontent.com
       # Kayıtta onaylanan belgelerin sürümleri; metin değişince artar.
       - CONSENT_PRIVACY_NOTICE_VERSION=2026-11-08
       - CONSENT_TERMS_VERSION=2026-11-08
