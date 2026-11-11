@@ -226,8 +226,8 @@ func TestNotificationErrors(t *testing.T) {
 }
 
 // Another user's conversation is answered like a missing one: chat's
-// CONVERSATION_NOT_FOUND becomes 404 conversation-not-found, nothing else
-// (issue #138).
+// CONVERSATION_NOT_FOUND becomes 404 conversation-not-found with no
+// upstream detail (issue #138).
 func TestConversationPreferenceErrors(t *testing.T) {
 	path := "/v1/notification-preferences/conversations/" + conversationID
 	for _, tc := range []struct {
@@ -246,8 +246,9 @@ func TestConversationPreferenceErrors(t *testing.T) {
 		if w.Code != tc.status || problemType(t, w) != tc.typ {
 			t.Errorf("%s %v: %d %s", tc.method, tc.err, w.Code, problemType(t, w))
 		}
-		if strings.Contains(w.Body.String(), conversationID) {
-			t.Errorf("%s: hata cevabı konuşma kimliğini taşıyor: %s", tc.method, w.Body)
+		// No upstream detail leaks (the instance is the caller's own path).
+		if strings.Contains(w.Body.String(), "istek reddedildi") || strings.Contains(w.Body.String(), "yok") {
+			t.Errorf("%s: hata cevabı iç ayrıntı taşıyor: %s", tc.method, w.Body)
 		}
 	}
 }
