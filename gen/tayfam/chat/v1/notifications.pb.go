@@ -872,8 +872,9 @@ func (x *SetTayfaNotificationPreferenceResponse) GetPreference() *NotificationPr
 type SetConversationNotificationPreferenceRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
-	Level          NotificationLevel      `protobuf:"varint,2,opt,name=level,proto3,enum=tayfam.chat.v1.NotificationLevel" json:"level,omitempty"`
-	// Optional; only with MENTIONS or NONE.
+	// ALL or NONE.
+	Level NotificationLevel `protobuf:"varint,2,opt,name=level,proto3,enum=tayfam.chat.v1.NotificationLevel" json:"level,omitempty"`
+	// Optional; only with NONE.
 	MuteUntil     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=mute_until,json=muteUntil,proto3" json:"mute_until,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

@@ -252,12 +252,16 @@ func (s *Service) SetTayfaPreference(ctx context.Context, caller, tayfa id.ID, l
 }
 
 // SetConversationPreference sets how the caller hears about a direct
-// conversation they see as a party (issue #138), with the rules of
-// SetTayfaPreference. Any other conversation, another user's included, is
-// apperr.ErrConversationNotFound and nothing is written. Direct message
-// notices are all personal (ADR-0019 item 3): mentions lets them through
-// like all.
+// conversation they see as a party (issue #138): level all or none,
+// optionally only until a time, with the rules of SetTayfaPreference. Level
+// mentions is refused: direct message notices are all personal, so it would
+// mean all (platform owner, 2026-11-11). Any other conversation, another
+// user's included, is apperr.ErrConversationNotFound and nothing is
+// written.
 func (s *Service) SetConversationPreference(ctx context.Context, caller, conversation id.ID, level string, until time.Time) (Preference, error) {
+	if level == LevelMentions {
+		return Preference{}, invalid("level")
+	}
 	return s.setPreference(ctx, caller, ScopeDMConversation, conversation, level, until, func() error {
 		ok, err := s.cfg.Conversations.SeesConversation(ctx, conversation, caller)
 		if err != nil {

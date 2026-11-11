@@ -284,7 +284,6 @@ func TestPreferences(t *testing.T) {
 		"none, yürüyüş alarmı":        {notification.TypeHikeOverdue, &pref{"none", 0}, true},
 		"mentions, yürüyüş alarmı":    {notification.TypeHikeOverdue, &pref{"mentions", time.Hour}, true},
 		"none, DM":                    {notification.TypeDMMessage, &pref{"none", 0}, false},
-		"mentions, DM":                {notification.TypeDMMessage, &pref{"mentions", 0}, true},
 		"none, DM isteği, süre geçti": {notification.TypeDMRequest, &pref{"none", -time.Minute}, true},
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -132,7 +132,7 @@ func TestNotificationRoutes(t *testing.T) {
 		{"DELETE", pref, "", 204, &chatv1.SetTayfaNotificationPreferenceRequest{TayfaId: tayfaID, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_ALL}},
 		{"PUT", convPref, `{"level":"none","mute_until":"2030-01-02T03:04:05Z"}`, 200, &chatv1.SetConversationNotificationPreferenceRequest{
 			ConversationId: conversationID, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_NONE, MuteUntil: &timestamppb.Timestamp{Seconds: 1893553445}}},
-		{"PUT", convPref, `{"level":"mentions"}`, 200, &chatv1.SetConversationNotificationPreferenceRequest{ConversationId: conversationID, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_MENTIONS}},
+		{"PUT", convPref, `{"level":"none"}`, 200, &chatv1.SetConversationNotificationPreferenceRequest{ConversationId: conversationID, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_NONE}},
 		{"DELETE", convPref, "", 204, &chatv1.SetConversationNotificationPreferenceRequest{ConversationId: conversationID, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_ALL}},
 	} {
 		w := as(h, tc.method, tc.path, tc.body)
@@ -179,19 +179,21 @@ func TestNotificationBadRequests(t *testing.T) {
 	pref := "/v1/notification-preferences/tayfas/" + tayfaID
 	convPref := "/v1/notification-preferences/conversations/" + conversationID
 	for name, tc := range map[string]struct{ method, path, body string }{
-		"bozuk bildirim id":  {"PUT", "/v1/notifications/x/read", ""},
-		"bozuk sayfa":        {"GET", "/v1/notifications?page_size=101", ""},
-		"bozuk tayfa":        {"PUT", "/v1/notification-preferences/tayfas/x", `{"level":"none"}`},
-		"seviye yok":         {"PUT", pref, `{}`},
-		"bilinmeyen seviye":  {"PUT", pref, `{"level":"loud"}`},
-		"bozuk süre":         {"PUT", pref, `{"level":"none","mute_until":"yarın"}`},
-		"başkası adına":      {"PUT", pref, `{"level":"none","user_id":"` + userID + `"}`},
-		"bozuk konuşma":      {"PUT", "/v1/notification-preferences/conversations/x", `{"level":"none"}`},
-		"bozuk konuşma sil":  {"DELETE", "/v1/notification-preferences/conversations/x", ""},
-		"konuşma seviyesiz":  {"PUT", convPref, `{}`},
-		"konuşma bilinmeyen": {"PUT", convPref, `{"level":"loud"}`},
-		"konuşma bozuk süre": {"PUT", convPref, `{"level":"none","mute_until":"yarın"}`},
-		"konuşma başkası":    {"PUT", convPref, `{"level":"none","user_id":"` + userID + `"}`},
+		"bozuk bildirim id":       {"PUT", "/v1/notifications/x/read", ""},
+		"bozuk sayfa":             {"GET", "/v1/notifications?page_size=101", ""},
+		"bozuk tayfa":             {"PUT", "/v1/notification-preferences/tayfas/x", `{"level":"none"}`},
+		"seviye yok":              {"PUT", pref, `{}`},
+		"bilinmeyen seviye":       {"PUT", pref, `{"level":"loud"}`},
+		"bozuk süre":              {"PUT", pref, `{"level":"none","mute_until":"yarın"}`},
+		"başkası adına":           {"PUT", pref, `{"level":"none","user_id":"` + userID + `"}`},
+		"bozuk konuşma":           {"PUT", "/v1/notification-preferences/conversations/x", `{"level":"none"}`},
+		"bozuk konuşma sil":       {"DELETE", "/v1/notification-preferences/conversations/x", ""},
+		"konuşma seviyesiz":       {"PUT", convPref, `{}`},
+		"konuşma bilinmeyen":      {"PUT", convPref, `{"level":"loud"}`},
+		"konuşma bozuk süre":      {"PUT", convPref, `{"level":"none","mute_until":"yarın"}`},
+		"konuşma başkası":         {"PUT", convPref, `{"level":"none","user_id":"` + userID + `"}`},
+		"konuşma mentions":        {"PUT", convPref, `{"level":"mentions"}`},
+		"konuşma mentions süreli": {"PUT", convPref, `{"level":"mentions","mute_until":"2030-01-02T03:04:05Z"}`},
 	} {
 		if w := as(h, tc.method, tc.path, tc.body); w.Code != 400 || problemType(t, w) != "invalid-request" {
 			t.Errorf("%s: %d %s", name, w.Code, problemType(t, w))

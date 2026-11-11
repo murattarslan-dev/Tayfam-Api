@@ -83,11 +83,13 @@ type NotificationServiceClient interface {
 	// DirectMessageService.GetConversation answers for); any other
 	// conversation, another user's included, is
 	// ERROR_REASON_CONVERSATION_NOT_FOUND, exactly like a missing one (issue
-	// #138). The rules of level and mute_until are those of
-	// SetTayfaNotificationPreference. Direct message notices are all personal
-	// (ADR-0019 item 3), so MENTIONS currently lets them all through, like
-	// ALL. The preference is removed when the conversation or the caller's
-	// account is deleted.
+	// #138). Levels are ALL and NONE only: direct message notices are all
+	// personal, so MENTIONS is ERROR_REASON_VALIDATION (platform owner,
+	// 2026-11-11). NONE may last until mute_until (at most a year ahead),
+	// then the conversation is back to ALL; ALL without mute_until removes the
+	// preference, ALL with mute_until is ERROR_REASON_VALIDATION. The
+	// preference is removed when the conversation or the caller's account is
+	// deleted.
 	SetConversationNotificationPreference(ctx context.Context, in *SetConversationNotificationPreferenceRequest, opts ...grpc.CallOption) (*SetConversationNotificationPreferenceResponse, error)
 }
 
@@ -224,11 +226,13 @@ type NotificationServiceServer interface {
 	// DirectMessageService.GetConversation answers for); any other
 	// conversation, another user's included, is
 	// ERROR_REASON_CONVERSATION_NOT_FOUND, exactly like a missing one (issue
-	// #138). The rules of level and mute_until are those of
-	// SetTayfaNotificationPreference. Direct message notices are all personal
-	// (ADR-0019 item 3), so MENTIONS currently lets them all through, like
-	// ALL. The preference is removed when the conversation or the caller's
-	// account is deleted.
+	// #138). Levels are ALL and NONE only: direct message notices are all
+	// personal, so MENTIONS is ERROR_REASON_VALIDATION (platform owner,
+	// 2026-11-11). NONE may last until mute_until (at most a year ahead),
+	// then the conversation is back to ALL; ALL without mute_until removes the
+	// preference, ALL with mute_until is ERROR_REASON_VALIDATION. The
+	// preference is removed when the conversation or the caller's account is
+	// deleted.
 	SetConversationNotificationPreference(context.Context, *SetConversationNotificationPreferenceRequest) (*SetConversationNotificationPreferenceResponse, error)
 	mustEmbedUnimplementedNotificationServiceServer()
 }

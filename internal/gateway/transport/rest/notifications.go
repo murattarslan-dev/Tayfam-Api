@@ -316,6 +316,12 @@ func (h chatHandlers) setConversationPreference(ctx context.Context, w http.Resp
 	if !ok {
 		return
 	}
+	// A direct conversation has no mentions level (platform owner,
+	// 2026-11-11); chat refuses it too.
+	if level == chatv1.NotificationLevel_NOTIFICATION_LEVEL_MENTIONS {
+		badRequest(w, r)
+		return
+	}
 	h.setConversation(ctx, w, r, &chatv1.SetConversationNotificationPreferenceRequest{ConversationId: id, Level: level, MuteUntil: until}, http.StatusOK)
 }
 

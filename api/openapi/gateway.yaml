@@ -2953,13 +2953,12 @@ paths:
       description: |
         Yalnızca tarafı olduğunuz ve gördüğünüz konuşma için (konuşmayı
         getiren uçla aynı kural); başka bir kullanıcının konuşması, olmayan
-        bir konuşmayla aynı cevabı alır (`conversation-not-found`). `level` ve
-        `mute_until` kuralları tayfa tercihiyle aynıdır: `mentions` ya da
+        bir konuşmayla aynı cevabı alır (`conversation-not-found`). Seviye
+        yalnızca `all` ya da `none` olabilir: birebir mesaj bildirimleri
+        kişisel olduğundan `mentions` anlamsızdır ve `invalid-request` döner.
         `none` isteğe bağlı olarak `mute_until`'e kadar sürer (en fazla bir
         yıl), sonra konuşma `all`'a döner; `all` ile `mute_until` verilemez;
-        `all` tercihi kaldırır. Birebir mesaj bildirimleri kişiseldir; bu
-        yüzden `mentions` bugün `all` gibi davranır (ADR-0019 madde 3).
-        Sessize alma bildirimleri listeden gizlemez; yalnızca anlık bildirim
+        `all` tercihi kaldırır. Sessize alma bildirimleri listeden gizlemez; yalnızca anlık bildirim
         (push) gitmez. Konuşma ya da hesabınız silinince tercih de silinir.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
@@ -2967,7 +2966,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/NotificationPreferenceRequest" }
+            schema: { $ref: "#/components/schemas/ConversationNotificationPreferenceRequest" }
       responses:
         "200":
           description: Tercih
@@ -6046,6 +6045,17 @@ components:
           type: string
           format: date-time
           description: Yalnızca `mentions` ya da `none` ile; en fazla bir yıl sonrası.
+    ConversationNotificationPreferenceRequest:
+      type: object
+      description: Birebir konuşma tercihi; `mentions` yoktur.
+      required: [level]
+      additionalProperties: false
+      properties:
+        level: { type: string, enum: [all, none] }
+        mute_until:
+          type: string
+          format: date-time
+          description: Yalnızca `none` ile; en fazla bir yıl sonrası.
 
     # --- Kanallar (#81) ---
     ChannelVisibility:

@@ -322,9 +322,9 @@ func TestConversationPreference(t *testing.T) {
 	}
 	// Changing it again replaces the row; a tayfa with the same ID is
 	// another scope.
-	_, err = e.svc.SetConversationPreference(ctx, u, conv, LevelMentions, time.Time{})
+	_, err = e.svc.SetConversationPreference(ctx, u, conv, LevelNone, time.Time{})
 	must(t, err)
-	if prefs, _ := e.svc.Preferences(ctx, u); len(prefs) != 1 || prefs[0].Level != LevelMentions || !prefs[0].MutedUntil.IsZero() {
+	if prefs, _ := e.svc.Preferences(ctx, u); len(prefs) != 1 || prefs[0].Level != LevelNone || !prefs[0].MutedUntil.IsZero() {
 		t.Fatalf("güncellenen tercih = %+v", prefs)
 	}
 	// Muted: the notice is still listed.
@@ -363,15 +363,29 @@ func TestConversationPreference(t *testing.T) {
 	}
 	// Validation comes before the party check: no existence leak.
 	for name, err := range map[string]error{
-		"seviye":         second(e.svc.SetConversationPreference(ctx, stranger, conv, "loud", time.Time{})),
-		"geçmiş":         second(e.svc.SetConversationPreference(ctx, u, conv, LevelNone, now.Add(-time.Minute))),
-		"çok uzak":       second(e.svc.SetConversationPreference(ctx, u, conv, LevelNone, now.Add(MaxMuteAhead+time.Hour))),
-		"all ile süreli": second(e.svc.SetConversationPreference(ctx, u, conv, LevelAll, until)),
+		"seviye": second(e.svc.SetConversationPreference(ctx, stranger, conv, "loud", time.Time{})),
+		// DMs have no mentions level (platform owner, 2026-11-11).
+		"mentions":          second(e.svc.SetConversationPreference(ctx, u, conv, LevelMentions, time.Time{})),
+		"mentions, süreli":  second(e.svc.SetConversationPreference(ctx, u, conv, LevelMentions, until)),
+		"mentions, yabancı": second(e.svc.SetConversationPreference(ctx, stranger, conv, LevelMentions, time.Time{})),
+		"geçmiş":            second(e.svc.SetConversationPreference(ctx, u, conv, LevelNone, now.Add(-time.Minute))),
+		"çok uzak":          second(e.svc.SetConversationPreference(ctx, u, conv, LevelNone, now.Add(MaxMuteAhead+time.Hour))),
+		"all ile süreli":    second(e.svc.SetConversationPreference(ctx, u, conv, LevelAll, until)),
 	} {
 		var v *apperr.ValidationError
 		if !errors.As(err, &v) {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+	if prefs, _ := e.svc.Preferences(ctx, u); len(prefs) != 1 || prefs[0].Level != LevelNone {
+		t.Fatalf("reddedilen mentions tercihi değiştirdi: %+v", prefs)
+	}
+	// The database refuses it too, and keeps it for tayfas.
+	if _, err := e.pool.Exec(ctx, `INSERT INTO notification_preferences (user_id, scope_type, scope_id, level) VALUES ($1, 'dm_conversation', $2, 'mentions')`, id.New().PG(), id.New().PG()); err == nil {
+		t.Fatal("veritabanı DM için mentions kabul etti")
+	}
+	if _, err := e.pool.Exec(ctx, `INSERT INTO notification_preferences (user_id, scope_type, scope_id, level) VALUES ($1, 'tayfa', $2, 'mentions')`, id.New().PG(), id.New().PG()); err != nil {
+		t.Fatalf("tayfa için mentions: %v", err)
 	}
 	// Back to all removes the row.
 	_, err = e.svc.SetConversationPreference(ctx, u, conv, LevelAll, time.Time{})

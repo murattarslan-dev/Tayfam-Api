@@ -208,6 +208,14 @@ func TestConversationNotificationPreference(t *testing.T) {
 		}
 	}
 
+	// MENTIONS reaches the app, which refuses it for a conversation.
+	app.convErr = apperr.Validation("level")
+	if _, err := client.SetConversationNotificationPreference(ctx, &chatv1.SetConversationNotificationPreferenceRequest{
+		ConversationId: conv.String(), Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_MENTIONS,
+	}); status.Code(err) != codes.InvalidArgument || app.level != notification.LevelMentions {
+		t.Fatalf("mentions: %v", err)
+	}
+
 	app.convErr = apperr.ErrConversationNotFound
 	_, err = client.SetConversationNotificationPreference(ctx, &chatv1.SetConversationNotificationPreferenceRequest{
 		ConversationId: id.New().String(), Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_NONE,

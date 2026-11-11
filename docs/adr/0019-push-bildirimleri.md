@@ -7,6 +7,11 @@
   İki değişiklik: `hike_overdue` alıcı bağlıyken de push alır (madde 2);
   chat'in internet çıkışı push açılana kadar eklenmez (madde 8, en az
   yetki).
+- **Revizyon:** 2026-11-11 (platform sahibi, sohbette; issue #138): birebir
+  konuşma tercihinde seviye yalnızca `all` ya da `none` olabilir
+  (`mentions` uçta ve veritabanında reddedilir). Madde 3'teki `mentions`
+  listesinde `dm_message` ve `dm_request` durur ama `dm_conversation`
+  kapsamında artık ulaşılmaz.
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0005](0005-gercek-zamanli-iletisim-ve-chat.md) (bu ADR "Bildirimler" bölümünü uygular), [ADR-0006](0006-dagitim-ve-ortamlar.md), [ADR-0009](0009-veri-modelinin-servislere-dagilimi.md) (`push_tokens`), [ADR-0011](0011-guvenlik-ilkesi-ihlal-varsayimi.md), [ADR-0015](0015-veritabani-rolleri.md), [ADR-0018](0018-birebir-mesaj-e2e-sunucu-tarafi.md) (cihaz = oturum); issue #134
 - **Kaynak:** Notion: Veri Modeli (taslak v14) "Bildirimler", "Senaryo Kuralları → Bildirimler"
