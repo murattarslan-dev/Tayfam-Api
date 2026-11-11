@@ -2893,7 +2893,7 @@ paths:
     get:
       operationId: listNotificationPreferences
       summary: Bildirim tercihleriniz (sessize alınanlar)
-      description: Tercihi olmayan tayfa için seviye `all`'dur.
+      description: Tercihi olmayan tayfa ya da konuşma için seviye `all`'dur.
       responses:
         "200":
           description: Tercihler
@@ -2935,6 +2935,51 @@ paths:
     delete:
       operationId: resetTayfaNotificationPreference
       summary: Tayfanın bildirim tercihini varsayılana (`all`) döndürür
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Varsayılana döndü }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/notification-preferences/conversations/{conversation_id}:
+    parameters:
+      - $ref: "#/components/parameters/ConversationID"
+    put:
+      operationId: setConversationNotificationPreference
+      summary: Bir birebir konuşmayı sessize alır ya da seviyesini değiştirir
+      description: |
+        Yalnızca tarafı olduğunuz ve gördüğünüz konuşma için (konuşmayı
+        getiren uçla aynı kural); başka bir kullanıcının konuşması, olmayan
+        bir konuşmayla aynı cevabı alır (`conversation-not-found`). Seviye
+        yalnızca `all` ya da `none` olabilir: birebir mesaj bildirimleri
+        kişisel olduğundan `mentions` anlamsızdır ve `invalid-request` döner.
+        `none` isteğe bağlı olarak `mute_until`'e kadar sürer (en fazla bir
+        yıl), sonra konuşma `all`'a döner; `all` ile `mute_until` verilemez;
+        `all` tercihi kaldırır. Sessize alma bildirimleri listeden gizlemez; yalnızca anlık bildirim
+        (push) gitmez. Konuşma ya da hesabınız silinince tercih de silinir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConversationNotificationPreferenceRequest" }
+      responses:
+        "200":
+          description: Tercih
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationPreference" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: resetConversationNotificationPreference
+      summary: Konuşmanın bildirim tercihini varsayılana (`all`) döndürür
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       responses:
@@ -6102,7 +6147,7 @@ components:
       properties:
         scope_type:
           type: string
-          description: Şimdilik yalnızca `tayfa`; kanal ve konuşma sonra gelir.
+          description: "`tayfa` ya da `dm_conversation` (birebir konuşma); kanal sonra gelir."
           enum: [tayfa, channel, dm_conversation, unknown]
         scope_id: { type: string, format: uuid }
         level: { type: string, enum: [all, mentions, none, unknown] }
@@ -6128,6 +6173,17 @@ components:
           type: string
           format: date-time
           description: Yalnızca `mentions` ya da `none` ile; en fazla bir yıl sonrası.
+    ConversationNotificationPreferenceRequest:
+      type: object
+      description: Birebir konuşma tercihi; `mentions` yoktur.
+      required: [level]
+      additionalProperties: false
+      properties:
+        level: { type: string, enum: [all, none] }
+        mute_until:
+          type: string
+          format: date-time
+          description: Yalnızca `none` ile; en fazla bir yıl sonrası.
 
     # --- Kanallar (#81) ---
     ChannelVisibility:

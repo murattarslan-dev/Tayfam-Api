@@ -250,5 +250,12 @@ UPDATE dm_messages SET sender_id = NULL WHERE sender_id = @user_id;
 -- name: DeleteUserConversationReads :exec
 DELETE FROM dm_conversation_reads WHERE user_id = @user_id;
 
+-- Konuşmanın bildirim tercihleri de gider (issue #138): scope_id çok
+-- biçimli olduğu için foreign key yoktur, silme burada aynı ifadededir.
 -- name: DeleteAbandonedConversations :exec
-DELETE FROM dm_conversations WHERE user_low_id IS NULL AND user_high_id IS NULL;
+WITH gone AS (
+  DELETE FROM dm_conversations WHERE user_low_id IS NULL AND user_high_id IS NULL
+  RETURNING id
+)
+DELETE FROM notification_preferences
+WHERE scope_type = 'dm_conversation' AND scope_id IN (SELECT id FROM gone);
