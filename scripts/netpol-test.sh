@@ -106,11 +106,19 @@ run_inside "6) identity'nin içinden (Postgres'e, internete yalnızca 443, outbo
   KAPALI "http://gateway:8080/v1/status" \
   KAPALI "http://example.com"
 
-run_inside "7) chat'in içinden (Postgres'e, core'a, push için internete yalnızca 443; ADR-0019):" chat \
+# chat'in internet çıkışı yalnızca push açıldıktan sonra, ortamın overlay'ine
+# eklenen chat-egress-internet kuralıyla vardır (ADR-0019 madde 8). Kural
+# yoksa Google uçları da kapalı beklenir.
+if kubectl -n "$NS" get networkpolicy chat-egress-internet >/dev/null 2>&1; then
+  push_want=ACIK; push_note="push açık: chat-egress-internet var"
+else
+  push_want=KAPALI; push_note="push kapalı: chat-egress-internet yok, internet kapalı"
+fi
+run_inside "7) chat'in içinden (Postgres'e, core'a; $push_note):" chat \
   ACIK   "tcp://tayfam-pg-rw:5432" \
   ACIK   "tcp://core:9090" \
-  ACIK   "tcp://fcm.googleapis.com:443" \
-  ACIK   "tcp://oauth2.googleapis.com:443" \
+  "$push_want" "tcp://fcm.googleapis.com:443" \
+  "$push_want" "tcp://oauth2.googleapis.com:443" \
   KAPALI "http://gateway:8080/v1/status" \
   KAPALI "http://example.com"
 

@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -60,6 +61,10 @@ func setup(rt *service.Runtime) error {
 	// chat-fcm secret'ından (SOPS). Yoksa push kapalıdır: servis başlar,
 	// token kaydı çalışır, gönderim yapılmaz.
 	fcmAccount := c.String("CHAT_FCM_SERVICE_ACCOUNT", "")
+	// Firebase kurulunca prod'da push zorunludur (ADR-0019 madde 7): prod
+	// overlay'i secret'la birlikte CHAT_FCM_REQUIRED=true verir; o zaman
+	// değer yoksa servis başlamaz.
+	fcmRequired := c.OneOf("CHAT_FCM_REQUIRED", "false", "true", "false") == "true"
 	if err := c.Err(); err != nil {
 		return err
 	}
@@ -85,7 +90,13 @@ func setup(rt *service.Runtime) error {
 		sender = client
 		rt.Log.Info("push açık (FCM)", slog.String("project_id", acct.ProjectID()))
 	} else {
+		if fcmRequired {
+			return errors.New("CHAT_FCM_REQUIRED=true ama CHAT_FCM_SERVICE_ACCOUNT yok")
+		}
 		rt.Log.Info("CHAT_FCM_SERVICE_ACCOUNT yok; push kapalı")
+	}
+	if rt.Env == "prod" && !fcmRequired {
+		rt.Log.Warn("prod'da CHAT_FCM_REQUIRED açık değil; Firebase kurulunca açılmalı (ADR-0019)")
 	}
 	pool, err := db.Open(context.Background(), dbCfg.URL())
 	if err != nil {

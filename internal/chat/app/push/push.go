@@ -10,7 +10,8 @@
 //
 // Every notification row written gets a push job in the same transaction
 // (a trigger on notifications; db/chat/migrations/00011_push.sql). The
-// worker here leases due jobs, skips users who are connected, applies the
+// worker here leases due jobs, skips users who are connected (except for
+// the hike_overdue safety alert), applies the
 // muting preferences and sends one message per token. A message carries
 // translation keys and IDs only, never text, names or places; direct
 // message pushes say only that there is something new.

@@ -98,9 +98,11 @@ spec:
             # Push (FCM HTTP v1; issue #134, ADR-0019): yalnızca FCM
             # gönderebilen servis hesabının JSON anahtarı. Secret yoksa push
             # kapalıdır, servis yine başlar (optional). Platform sahibi
-            # Firebase'i kurunca chat-fcm'i sops ile ekler
-            # (docs/runbooks/sops.md); prod'da zorunlu olması ADR-0019'da
-            # önerildi.
+            # Firebase'i kurunca chat-fcm'i sops ile ve aynı PR'da ortamın
+            # chat-egress-internet kuralını ekler; push kapalıyken chat'in
+            # internete çıkışı yoktur. prod'da zorunludur: prod overlay'i
+            # optional'ı kaldırıp CHAT_FCM_REQUIRED=true verir (ADR-0019,
+            # docs/runbooks/sops.md).
             - name: CHAT_FCM_SERVICE_ACCOUNT
               valueFrom:
                 secretKeyRef: { name: chat-fcm, key: service-account.json, optional: true }

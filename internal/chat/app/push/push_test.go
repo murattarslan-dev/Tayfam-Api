@@ -244,6 +244,20 @@ func TestPushOnlyWhenNotConnected(t *testing.T) {
 	if n := e.queued(t); n != 0 {
 		t.Fatalf("kuyrukta kaldı: %d", n)
 	}
+	// hike_overdue is a safety alert: it is pushed while connected too
+	// (ADR-0019 item 2, platform owner 2026-11-11), and nothing else is.
+	for _, typ := range []string{notification.TypeHikeOverdue, notification.TypeEventCancelled} {
+		r := notification.Request{Type: typ, Tayfa: e.tayfa, TargetType: notification.TargetEvent, Recipients: []id.ID{on}}
+		if typ == notification.TypeHikeOverdue {
+			r.Subject = id.New()
+		}
+		e.notify(t, r)
+	}
+	e.drain(t)
+	sent = e.fcm.Sent()
+	if len(sent) != 2 || sent[1]["token"] != "tok:on" || sent[1]["data"].(map[string]any)["type"] != notification.TypeHikeOverdue {
+		t.Fatalf("bağlıyken yalnızca yürüyüş alarmı gitmeli: %v", sent)
+	}
 }
 
 // Preferences stop the push, never the list; hike_overdue goes through
