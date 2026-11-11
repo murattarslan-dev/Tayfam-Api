@@ -67,7 +67,9 @@ func chunk(name string, payload []byte) []byte {
 	h := make([]byte, 8)
 	copy(h, name)
 	binary.LittleEndian.PutUint32(h[4:], uint32(len(payload))) //nolint:gosec // small test payloads
-	out := append(h, payload...)
+	out := make([]byte, 0, len(h)+len(payload)+1)
+	out = append(out, h...)
+	out = append(out, payload...)
 	if len(payload)%2 == 1 {
 		out = append(out, 0)
 	}
@@ -96,7 +98,7 @@ func WebP(w, h int, o WebPOptions) []byte {
 		}
 		x := make([]byte, 10)
 		x[0] = o.Flags
-		put24 := func(p []byte, v int) { p[0], p[1], p[2] = byte(v), byte(v>>8), byte(v>>16) }
+		put24 := func(p []byte, v int) { p[0], p[1], p[2] = byte(v), byte(v>>8), byte(v>>16) } //nolint:gosec // 24-bit fields
 		put24(x[4:], cw-1)
 		put24(x[7:], ch-1)
 		body = append(body, chunk("VP8X", x)...)

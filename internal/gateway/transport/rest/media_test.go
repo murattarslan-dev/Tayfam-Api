@@ -36,7 +36,7 @@ func (f *fakeCore) CreateUpload(ctx context.Context, in *corev1.CreateUploadRequ
 	}
 	for _, v := range in.GetVariants() {
 		out.Targets = append(out.Targets, &corev1.UploadTarget{
-			Kind: v.GetKind(), Method: "PUT", Url: "https://r2.example/put?X-Amz-Signature=c",
+			Kind: v.GetKind(), Method: http.MethodPut, Url: "https://r2.example/put?X-Amz-Signature=c",
 			Headers: map[string]string{"Content-Type": v.GetContentType(), "Content-Length": "1234"}, ExpireTime: timestamppb.New(t0),
 		})
 	}
