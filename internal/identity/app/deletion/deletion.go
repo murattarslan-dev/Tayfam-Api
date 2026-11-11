@@ -11,7 +11,8 @@
 //
 // In one transaction, the account's personal data is cleared at once (name,
 // avatar, encrypted birth date, referral code and referrer), its sign-in
-// identities, devices, sessions and refresh tokens are deleted, and
+// identities, devices, sessions, refresh tokens and data export requests
+// (with their keys; issue #144) are deleted, and
 // user.deleted is written to the outbox so core and chat remove their
 // records (userevents.Deleted). The users row stays for 30 days and is then
 // deleted by the retention job; consent records stay (no foreign key,
@@ -130,6 +131,12 @@ func (s *Service) Delete(ctx context.Context, c Caller) error {
 		}
 		if err := q.DeleteUserRefCodeLookups(ctx, c.User.PG()); err != nil {
 			return fmt.Errorf("arama kayıtları: %w", err)
+		}
+		// Data export requests and their keys go at once (ADR-0021): a
+		// file left in storage can no longer be opened; core deletes it
+		// with the user's files.
+		if err := q.DeleteUserDataExports(ctx, c.User.PG()); err != nil {
+			return fmt.Errorf("dışa aktarma talepleri: %w", err)
 		}
 		// Written last, see outbox.Write.
 		return userevents.Deleted(ctx, tx, c.User)

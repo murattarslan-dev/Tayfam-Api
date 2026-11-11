@@ -47,6 +47,12 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_UPLOAD_NOT_FOUND": {http.StatusNotFound, "upload-not-found"},
 		"ERROR_REASON_UPLOAD_NOT_READY": {http.StatusConflict, "upload-not-ready"},
 		"ERROR_REASON_UPLOAD_IN_USE":    {http.StatusConflict, "upload-in-use"},
+		// KVKK data export (issue #144).
+		"ERROR_REASON_DATA_EXPORT_NOT_FOUND":   {http.StatusNotFound, "data-export-not-found"},
+		"ERROR_REASON_DATA_EXPORT_IN_PROGRESS": {http.StatusConflict, "data-export-in-progress"},
+		"ERROR_REASON_DATA_EXPORT_LIMIT":       {http.StatusTooManyRequests, "data-export-limit"},
+		"ERROR_REASON_DATA_EXPORT_NOT_READY":   {http.StatusConflict, "data-export-not-ready"},
+		"ERROR_REASON_DATA_EXPORT_EXPIRED":     {http.StatusGone, "data-export-expired"},
 	},
 	// proto/tayfam/core/v1/errors.proto
 	"core.tayfam.app": {

@@ -91,3 +91,33 @@ func TestChatSessionRequestRejectsMalformed(t *testing.T) {
 		t.Fatal("core oturum olayını kabul etti")
 	}
 }
+
+// user.data_export_ready carries the request ID only and goes to chat only
+// (issue #144, ADR-0021).
+func TestDataExportReadyGoesToChatOnly(t *testing.T) {
+	pool := dbtest.New(t, "identity", identitydb.Migrations())
+	ctx := context.Background()
+	user, request := id.New(), id.New()
+	inTx(t, pool, func(tx pgx.Tx) error { return DataExportReady(ctx, tx, user, request) })
+	if n := count(t, pool, `SELECT count(*) FROM domain_events WHERE type = 'user.data_export_ready' AND subject_id = $1 AND actor_id IS NULL AND payload = jsonb_build_object('data_export_id', $2::text)`, user.PG(), request.String()); n != 1 {
+		t.Fatalf("olay sayısı %d", n)
+	}
+	core, chat := &fakeCore{}, &fakeChat{}
+	cc, hc := CoreConsumer(core), ChatConsumer(chat)
+	r, err := outbox.NewRelay(outbox.RelayConfig{Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Consumers: []outbox.Consumer{cc, hc}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, err := r.Step(ctx, cc); err != nil || n != 0 || len(core.got) != 0 {
+		t.Fatalf("core: n = %d, err = %v", n, err)
+	}
+	if n, err := r.Step(ctx, hc); err != nil || n != 1 || chat.got[0].GetDataExportReady().GetDataExportId() != request.String() || chat.got[0].GetUserId() != user.String() {
+		t.Fatalf("chat: n = %d, err = %v, got = %v", n, err, chat.got)
+	}
+	if err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error { return DataExportReady(ctx, tx, user, id.ID{}) }); err == nil {
+		t.Fatal("boş talep kimliği kabul edildi")
+	}
+	if _, err := chatRequest(outbox.Event{ID: id.New(), Type: TypeDataExportReady, SubjectType: subjectUser, SubjectID: user, Payload: []byte(`{"data_export_id":"x"}`)}); err == nil {
+		t.Fatal("geçersiz talep kimliği kabul edildi")
+	}
+}

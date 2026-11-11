@@ -28,6 +28,11 @@ type Querier interface {
 	CompleteRegistration(ctx context.Context, arg CompleteRegistrationParams) (int64, error)
 	CountRecentRefCodeLookups(ctx context.Context, arg CountRecentRefCodeLookupsParams) (int64, error)
 	CreateAuthIdentity(ctx context.Context, arg CreateAuthIdentityParams) error
+	// KVKK veri dışa aktarma talepleri (issue #144, ADR-0021). Kullanıcı
+	// uçlarındaki her okuma ve yazma çağıranın user_id'siyle sınırlıdır:
+	// başkasının talebi "yok" sayılır (IDOR). wrapped_key yalnızca indirme
+	// anında okunur; hiçbir log'a ve yanıta açık haliyle girmez.
+	CreateDataExportRequest(ctx context.Context, arg CreateDataExportRequestParams) (DataExportRequest, error)
 	CreateDevice(ctx context.Context, arg CreateDeviceParams) error
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateSanction(ctx context.Context, arg CreateSanctionParams) (CreateSanctionRow, error)
@@ -39,6 +44,8 @@ type Querier interface {
 	// Hesap silmede giriş kimlikleri hemen silinir; aynı Google/Apple hesabıyla
 	// sonraki giriş yeni bir hesap açar (veri modeli v14).
 	DeleteUserAuthIdentities(ctx context.Context, userID pgtype.UUID) error
+	// Hesap silme: talepler ve anahtarları hemen silinir.
+	DeleteUserDataExports(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silmede cihazlar hemen silinir; oturumlar ve refresh token'lar
 	// ON DELETE CASCADE ile gider (veri modeli v14 "İlişkiler ve Silme
 	// Davranışı").
@@ -49,9 +56,21 @@ type Querier interface {
 	// taşır; hesap silinince outbox'ta kalmazlar (veri azaltma, ADR-0011).
 	DeleteUserProfileEvents(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserRefCodeLookups(ctx context.Context, userID pgtype.UUID) error
+	// Saklama işi (ADR-0021): 7 günü dolan hazır talebin anahtarı ve dosya
+	// kaydı silinir (kripto-silme; dosyayı core siler).
+	ExpireDataExports(ctx context.Context, arg ExpireDataExportsParams) (int64, error)
+	ExportAuthIdentities(ctx context.Context, userID pgtype.UUID) ([]ExportAuthIdentitiesRow, error)
+	ExportConsents(ctx context.Context, userID pgtype.UUID) ([]ExportConsentsRow, error)
+	ExportDevices(ctx context.Context, userID pgtype.UUID) ([]ExportDevicesRow, error)
+	// Dışa aktarmanın identity bölümleri (docs/data-export-format.md). Doğum
+	// tarihi şifreli okunur ve uygulamada çözülür.
+	ExportUserProfile(ctx context.Context, id pgtype.UUID) (ExportUserProfileRow, error)
 	// Oturum 90 gün kullanılmazsa sona erer (ADR-0004); her yenilemede süre
 	// yeniden başlar.
 	ExtendSession(ctx context.Context, arg ExtendSessionParams) error
+	// Yarıda kalan talepler (identity yeniden başladı, token süresi doldu)
+	// başarısız sayılır; 30 günlük sınırı yemez.
+	FailStaleDataExports(ctx context.Context, arg FailStaleDataExportsParams) (int64, error)
 	// Kodla bulunan kişinin yalnızca kimliği, adı ve avatarı döner; kayıtlı ve
 	// silinmemiş hesaplar. Tayfaları, geçmişi ve arkadaşları buradan çıkmaz.
 	FindUserByRefCode(ctx context.Context, refCode pgtype.Text) (FindUserByRefCodeRow, error)
@@ -63,8 +82,10 @@ type Querier interface {
 	// created_at, hesap silmede yeniden kimlik doğrulama için girişin
 	// (sağlayıcı token'ının doğrulandığı an) zamanıdır; yenileme onu değiştirmez.
 	GetCallerSession(ctx context.Context, arg GetCallerSessionParams) (GetCallerSessionRow, error)
+	GetDataExportByClientRequest(ctx context.Context, arg GetDataExportByClientRequestParams) (DataExportRequest, error)
 	// Kullanıcının kaldırılmamış yaptırımı (süresi dolmuş askı dahil).
 	GetOpenSanction(ctx context.Context, userID pgtype.UUID) (GetOpenSanctionRow, error)
+	GetOwnDataExport(ctx context.Context, arg GetOwnDataExportParams) (DataExportRequest, error)
 	// Admin token'ı taşıyan her istekte: kullanıcı hâlâ yönetici mi? Satır
 	// silinince bütün admin token'ları bir sonraki istekte geçersiz olur.
 	GetPlatformAdmin(ctx context.Context, userID pgtype.UUID) (GetPlatformAdminRow, error)
@@ -78,17 +99,23 @@ type Querier interface {
 	GetUser(ctx context.Context, id pgtype.UUID) (GetUserRow, error)
 	GetUserForAdmin(ctx context.Context, userID pgtype.UUID) (GetUserForAdminRow, error)
 	HasActiveConsent(ctx context.Context, arg HasActiveConsentParams) (bool, error)
+	// Etkin (bekleyen ya da hazırlanan) talep.
+	HasActiveDataExport(ctx context.Context, userID pgtype.UUID) (bool, error)
 	// Yalnızca ekleme (00006 trigger'ı).
 	InsertPlatformAuditLog(ctx context.Context, arg InsertPlatformAuditLogParams) error
 	// core'un panel işlemlerinin denetim kaydı (PlatformAuditService). Kimlik
 	// core'un olay kimliğidir; aynı olay ikinci kez gelirse bir şey değişmez.
 	InsertPlatformAuditLogOnce(ctx context.Context, arg InsertPlatformAuditLogOnceParams) (int64, error)
+	// 30 günlük sınıra sayılan son talep; başarısız talepler sayılmaz.
+	LastCountedDataExport(ctx context.Context, userID pgtype.UUID) (pgtype.Timestamptz, error)
 	LiftSanction(ctx context.Context, arg LiftSanctionParams) (int64, error)
 	ListActiveSanctionTypes(ctx context.Context, userIds []pgtype.UUID) ([]ListActiveSanctionTypesRow, error)
 	// 18 yaş altı sorgusu (ADR-0012, issue #76). Yalnızca kaydı tamamlanmış ve
 	// silinmemiş hesapların şifreli doğum tarihi okunur; cevap yalnızca
 	// evet/hayır olarak servisten çıkar.
 	ListBirthDatesForMinorCheck(ctx context.Context, ids []pgtype.UUID) ([]ListBirthDatesForMinorCheckRow, error)
+	// Son 30 günün talepleri, yeni önce.
+	ListOwnDataExports(ctx context.Context, arg ListOwnDataExportsParams) ([]DataExportRequest, error)
 	// Panelde denetim kaydı (issue #110). En yeni önce, imleçli. related_id
 	// kaydın hedefi ya da metadata'daki tayfa, kullanıcı veya şikâyet
 	// kimliğidir. Metadata'dan yalnızca bu üç kimlik okunur.
@@ -109,7 +136,15 @@ type Querier interface {
 	// Kullanıcıyı kilitler (yaptırım ve oturum kapatma aynı kullanıcıda sırayla
 	// işlenir).
 	LockUserForAdmin(ctx context.Context, userID pgtype.UUID) (pgtype.UUID, error)
+	// İlk indirme zamanı kalır.
+	MarkDataExportDownloaded(ctx context.Context, arg MarkDataExportDownloadedParams) error
+	MarkDataExportFailed(ctx context.Context, arg MarkDataExportFailedParams) (int64, error)
+	MarkDataExportProcessing(ctx context.Context, arg MarkDataExportProcessingParams) (int64, error)
+	// Hazır: hesap silinmemişse ve talep hâlâ hazırlanıyorsa.
+	MarkDataExportReady(ctx context.Context, arg MarkDataExportReadyParams) (int64, error)
 	MarkRefreshTokenUsed(ctx context.Context, id pgtype.UUID) (int64, error)
+	// Satır 30 gün tutulur ("30 günde bir" sınırı); anahtarsız ve dosyasızdır.
+	PurgeDataExports(ctx context.Context, arg PurgeDataExportsParams) (int64, error)
 	// 30 gün önce silinmiş hesaplar kalıcı silinir. consent_records'un
 	// foreign key'i yoktur ve dokunulmaz (00002, hukukçu kararı bekleniyor).
 	PurgeDeletedUsers(ctx context.Context, arg PurgeDeletedUsersParams) (int64, error)

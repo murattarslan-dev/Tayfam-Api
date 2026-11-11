@@ -30,7 +30,10 @@ const (
 	// user's content (issue #104).
 	TypeBanned   = "user.banned"
 	TypeUnbanned = "user.unbanned"
-	subjectUser  = "user"
+	// TypeDataExportReady goes to chat, which writes the user's
+	// data_export_ready notification (issue #144, ADR-0021).
+	TypeDataExportReady = "user.data_export_ready"
+	subjectUser         = "user"
 )
 
 // Profile is the public profile carried by user.profile_updated: what other
@@ -134,6 +137,27 @@ func Unbanned(ctx context.Context, tx pgx.Tx, user id.ID) error {
 func writeEmpty(ctx context.Context, tx pgx.Tx, typ string, user id.ID) error {
 	if _, err := outbox.Write(ctx, tx, outbox.NewEvent{Type: typ, SubjectType: subjectUser, SubjectID: user}); err != nil {
 		return fmt.Errorf("%s olayı: %w", typ, err)
+	}
+	return nil
+}
+
+// ExportReady is the payload of user.data_export_ready: the request ID
+// only.
+type ExportReady struct {
+	DataExportID string `json:"data_export_id"`
+}
+
+// DataExportReady records that user's data export request is ready, in the
+// transaction that marks it so.
+func DataExportReady(ctx context.Context, tx pgx.Tx, user, request id.ID) error {
+	if request == (id.ID{}) {
+		return fmt.Errorf("dışa aktarma olayı: talep kimliği boş")
+	}
+	if _, err := outbox.Write(ctx, tx, outbox.NewEvent{
+		Type: TypeDataExportReady, SubjectType: subjectUser, SubjectID: user,
+		Payload: ExportReady{DataExportID: request.String()},
+	}); err != nil {
+		return fmt.Errorf("dışa aktarma olayı: %w", err)
 	}
 	return nil
 }

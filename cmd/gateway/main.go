@@ -166,6 +166,8 @@ func setup(rt *service.Runtime) error {
 	if conn := conns["identity"]; conn != nil && deps.Core.Verifier != nil {
 		deps.Core.Accounts = identityv1.NewAccountServiceClient(conn)
 		deps.Core.Avatars = identityv1.NewAccountServiceClient(conn)
+		// KVKK veri dışa aktarma (issue #144, ADR-0021).
+		deps.Core.DataExports = identityv1.NewDataExportServiceClient(conn)
 	}
 	adminHost := rt.Config.String("ADMIN_HOST", "admin.tayfam.app")
 	panel, err := adminRouter(rt, adminHost, conns["identity"], conns["core"], trustCF)

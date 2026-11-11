@@ -83,6 +83,14 @@ spec:
             - name: IDENTITY_BIRTHDATE_KEYS
               valueFrom:
                 secretKeyRef: { name: identity-birthdate-key, key: IDENTITY_BIRTHDATE_KEYS }
+            # KVKK veri dışa aktarma anahtarlarını saran sürümlü anahtar
+            # (ADR-0021). Secret yoksa dışa aktarma kapalıdır, servis yine
+            # başlar (optional); bozuksa başlamaz. R2 kimliği identity'de
+            # yoktur: şifreli dosyayı core'un imzaladığı linkle yükler
+            # (identity-egress-internet, 443). scripts/new-export-key.sh.
+            - name: IDENTITY_DATA_EXPORT_KEYS
+              valueFrom:
+                secretKeyRef: { name: identity-export-key, key: IDENTITY_DATA_EXPORT_KEYS, optional: true }
             # Çalışma zamanı kullanıcısı identity_app (ADR-0015); sahip
             # (identity-db) yalnızca migrate initContainer'ındadır.
             - { name: DB_HOST, value: tayfam-pg-rw }

@@ -22,6 +22,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/birthdate"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/consent"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/coremedia"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/dataexport"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/deletion"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/minor"
@@ -144,6 +145,10 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
+	exports, err := dataExports(rt, pool, cipher)
+	if err != nil {
+		return err
+	}
 
 	// identity kendi token'larını kendi açık anahtarlarıyla doğrular. Kayıt
 	// bekleyen kullanıcının token'ı (aud=tayfam-registration) yalnızca burada
@@ -215,12 +220,56 @@ func setup(rt *service.Runtime) error {
 		Accounts: accounts, Sessions: sessions, Consents: consents, Deletion: deleter,
 		APIAudience: audience, Log: rt.Log,
 	}))
+	// KVKK veri dışa aktarma (issue #144, ADR-0021): anahtar ya da core/chat
+	// adresi yoksa uçlar UNAVAILABLE döner, servis başlar.
+	identityv1.RegisterDataExportServiceServer(srv, grpcapi.NewDataExportServer(exports, audience, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
+	// Talep anında başlayan dışa aktarma işleri, birer birer.
+	rt.AddWorker("data-export", exports.Run)
 	// Saklama süreleri (refresh token 30 gün, oturum ve cihaz 90 gün,
 	// silinmiş hesap 30 gün; issue #75). Birden fazla pod'da çalışabilir:
 	// her DELETE koşulunu yeniden denetler.
 	rt.AddWorker("retention", retain.Run)
 	return addRelay(rt, pool)
+}
+
+// dataExports returns the KVKK data export service (issue #144, ADR-0021).
+// The wrapping key comes from the optional identity-export-key secret
+// (IDENTITY_DATA_EXPORT_KEYS); a malformed value stops the start. core and
+// chat are called with the requesting user's own token (auth.ForwardToken);
+// identity gets no storage credentials: core signs the links. Without the
+// key or the addresses export is off and its methods are UNAVAILABLE.
+func dataExports(rt *service.Runtime, pool *pgxpool.Pool, birth *birthdate.Cipher) (*dataexport.Service, error) {
+	c := rt.Config
+	raw := c.String("IDENTITY_DATA_EXPORT_KEYS", "")
+	coreAddr := c.String("CORE_GRPC_ADDR", "")
+	chatAddr := c.String("CHAT_GRPC_ADDR", "")
+	cfg := dataexport.Config{Pool: pool, Log: rt.Log, Birth: birth, AnyStorageHost: rt.Env == "local"}
+	switch {
+	case raw == "":
+		rt.Log.Info("IDENTITY_DATA_EXPORT_KEYS yok; veri dışa aktarma kapalı")
+	case coreAddr == "" || chatAddr == "":
+		rt.Log.Warn("CORE_GRPC_ADDR ya da CHAT_GRPC_ADDR yok; veri dışa aktarma kapalı")
+	default:
+		keys, err := dataexport.ParseKeys(raw)
+		if err != nil {
+			return nil, err
+		}
+		coreConn, err := grpcx.NewClient(coreAddr, auth.ForwardToken()...)
+		if err != nil {
+			return nil, err
+		}
+		chatConn, err := grpcx.NewClient(chatAddr, auth.ForwardToken()...)
+		if err != nil {
+			return nil, err
+		}
+		cfg.Keys = keys
+		cfg.Storage = dataexport.CoreStorage{C: corev1.NewMediaServiceClient(coreConn)}
+		cfg.Core = dataexport.CoreSource{C: corev1.NewExportServiceClient(coreConn)}
+		cfg.Chat = dataexport.ChatSource{C: chatv1.NewExportServiceClient(chatConn)}
+		rt.Log.Info("veri dışa aktarma açık")
+	}
+	return dataexport.New(cfg)
 }
 
 // addRelay starts the outbox relay that delivers user events to core and

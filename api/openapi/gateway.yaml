@@ -4222,6 +4222,118 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  /v1/me/data-exports:
+    post:
+      operationId: createDataExport
+      summary: KVKK veri dışa aktarma talebi açar (30 günde bir)
+      description: |
+        Verilerinizin bir kopyasını hazırlar (KVKK md. 11; ADR-0021).
+        Toplama hemen, **sizin erişim token'ınızla** başlar: talepten hemen
+        önce token'ı yenileyin; süresi bir dakikadan az kalmışsa `401` döner,
+        yenileyip tekrar deneyin. Yanıt `202` ve `pending` ya da
+        `processing` durumudur; hazır olunca `data_export_ready` bildirimi
+        gelir. Durumu `GET /v1/me/data-exports/{data_export_id}` ile de
+        yoklayabilirsiniz.
+
+        30 günde bir talep açılabilir (`429 data-export-limit`); başarısız
+        talepler sayılmaz. Aynı anda tek talep (`409 data-export-in-progress`).
+        Bir sonraki talep zamanı ve süren talep `GET /v1/me/data-exports`
+        yanıtındadır. Aynı `client_request_id` ile tekrar aynı talebi döner.
+
+        İçerik: profil (doğum tarihi dahil), giriş kimlikleri, cihazlar,
+        onaylar, üyelikler, katılımlar, yazdığınız içerikler (duyuru,
+        etkinlik, soru, cevap, kanal mesajları, av kayıtları), kendi anket
+        oylarınız (gizli anket dahil), arkadaşlıklar, engellemeler,
+        şikâyetleriniz ve yüklediğiniz dosyaların listesi. Birebir mesajlar
+        girmez (uçtan uca şifreli; uygulama cihazda dışa aktarır). Dosyaların
+        kendisi girmez; kendi dosyalarınızı `POST /v1/media/urls` ile
+        indirebilirsiniz. Alanlar: `docs/data-export-format.md`.
+
+        Depolama veya anahtar yapılandırılmamışsa `503 unavailable`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DataExportRequest" }
+      responses:
+        "202":
+          description: Talep açıldı ya da tekrar gönderimde mevcut talep
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DataExport" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    get:
+      operationId: listDataExports
+      summary: Son 30 günün dışa aktarma talepleri, yeniden eskiye
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Talepleriniz
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DataExportList" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/data-exports/{data_export_id}:
+    get:
+      operationId: getDataExport
+      summary: Bir dışa aktarma talebiniz
+      description: Başkasının talebi `404 data-export-not-found` döner.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+        - $ref: "#/components/parameters/DataExportID"
+      responses:
+        "200":
+          description: Talep
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DataExport" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/data-exports/{data_export_id}/download:
+    post:
+      operationId: downloadDataExport
+      summary: Hazır dışa aktarmanın indirme linki ve anahtarı
+      description: |
+        Son 10 dakika içinde sağlayıcıyla (Google/Apple) giriş yapılmış
+        olmalıdır (hesap silmedeki kural); yenilenmiş token yetmez, değilse
+        `403 reauthentication-required`. Link 5 dakika geçerlidir; dosya
+        şifrelidir ve `key` ile cihazda çözülür (`format: aes-256-gcm-v1`):
+        bayt 0 = `0x01`, bayt 1–12 nonce, kalanı AES-256-GCM şifreli metin
+        ve sondaki 16 baytlık etiket; ek veri (AAD) `tayfam/data-export/v1/`
+        ve talep kimliğinin 16 baytı. Çözülen içerik bir zip'tir. Link ve
+        anahtar saklanmaz, log'a yazılmaz; yanıt önbelleğe alınmaz.
+        Hazır değilse `409 data-export-not-ready`, 7 gün dolduysa
+        `410 data-export-expired`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+        - $ref: "#/components/parameters/DataExportID"
+      responses:
+        "200":
+          description: Link ve anahtar
+          headers:
+            Cache-Control:
+              schema: { type: string, enum: [no-store] }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DataExportDownload" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "410": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /v1/me/reports:
     get:
       operationId: listMyReports
@@ -4442,6 +4554,11 @@ components:
     bearer: { type: http, scheme: bearer, bearerFormat: JWT }
 
   parameters:
+    DataExportID:
+      name: data_export_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     UploadID:
       name: upload_id
       in: path
@@ -4684,6 +4801,12 @@ components:
         # identity: hesap yönetimi (#75)
         - reauthentication-required
         - session-not-found
+        # identity: veri dışa aktarma (#144)
+        - data-export-not-found
+        - data-export-in-progress
+        - data-export-limit
+        - data-export-not-ready
+        - data-export-expired
         # chat: bildirimler (#64)
         - notification-not-found
         # chat: kanallar (#81)
@@ -6463,6 +6586,65 @@ components:
         media:
           type: array
           items: { $ref: "#/components/schemas/MediaUrls" }
+    DataExportRequest:
+      type: object
+      required: [client_request_id]
+      additionalProperties: false
+      properties:
+        client_request_id: { type: string, format: uuid }
+    DataExport:
+      type: object
+      required: [id, status, requested_at]
+      properties:
+        id: { type: string, format: uuid }
+        status:
+          type: string
+          description: |
+            `pending` (sırada), `processing` (toplanıyor), `ready` (7 gün
+            indirilebilir), `expired` (dosya ve anahtar silindi), `failed`
+            (30 günlük sınıra sayılmaz; tekrar talep açılabilir).
+          enum: [pending, processing, ready, expired, failed, unknown]
+        failure_reason:
+          type: string
+          description: |
+            Yalnızca `failed`: `unavailable` (bir servise ya da depolamaya
+            ulaşılamadı), `too_large` (arşiv 16 MiB'ı geçti; talebiniz elle
+            yanıtlanır), `timeout` (zamanında bitmedi), `failed`.
+          enum: [unavailable, too_large, timeout, failed, unknown]
+        requested_at: { type: string, format: date-time }
+        ready_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        downloaded_at: { type: string, format: date-time }
+        size_bytes:
+          type: integer
+          format: int64
+          description: Şifreli dosyanın boyutu, `ready` iken.
+    DataExportList:
+      type: object
+      required: [data_exports]
+      properties:
+        data_exports:
+          type: array
+          items: { $ref: "#/components/schemas/DataExport" }
+        next_request_at:
+          type: string
+          format: date-time
+          description: Bir sonraki talebin açılabileceği an; yoksa şimdi açılabilir (süren talep yine engeller).
+    DataExportDownload:
+      type: object
+      required: [url, expires_at, key, size_bytes, format]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Şifreli dosyanın imzalı GET linki; `expires_at`'e kadar (5 dakika) taşıyan herkes indirebilir.
+        expires_at: { type: string, format: date-time }
+        key:
+          type: string
+          format: byte
+          description: 32 baytlık AES-256 anahtarı (base64).
+        size_bytes: { type: integer, format: int64 }
+        format: { type: string, enum: [aes-256-gcm-v1] }
     AvatarRequest:
       type: object
       required: [upload_id]
