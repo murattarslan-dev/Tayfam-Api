@@ -11,7 +11,6 @@ import (
 
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
@@ -59,5 +58,5 @@ func (m *Media) AttachAvatar(ctx context.Context, upload id.ID) error {
 			return account.ErrUploadInUse
 		}
 	}
-	return fmt.Errorf("%w: %s", account.ErrMediaUnavailable, codes.Code(st.Code()).String())
+	return fmt.Errorf("%w: %s", account.ErrMediaUnavailable, st.Code().String())
 }
