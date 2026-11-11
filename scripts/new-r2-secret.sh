@@ -10,6 +10,8 @@
 # anahtarı ve gizli anahtarı yalnızca bir kez gösterilir. Betik dördünü de
 # ekranda göstermeden okur (read -s), yalnızca bellekte tutar ve doğrudan
 # sops'a verir; açık halleri diske, terminale veya kabuk geçmişine yazılmaz.
+# Terminal yoksa (Tayfam Ops) dört değer stdin'den satır satır okunur.
+# core'un R2 çıkış kuralı da yazılır ve kustomization'a eklenir.
 #
 # Token yalnızca bu ortamın private bucket'ına "Object Read & Write" yetkili
 # olmalıdır (yedek anahtarı ayrıdır ve dosyaları okuyamaz; ADR-0011 madde
@@ -73,7 +75,7 @@ check_own_recipient "$env" "$tmp"
 mv "$tmp" "$out"
 trap - EXIT
 echo "yazıldı: $out"
-write_secret_list "$env" ||
-  grep -qxF "  - secrets/${out##*/}" "deploy/apps/$env/kustomization.yaml" ||
-  echo "deploy/apps/$env/kustomization.yaml'a (resources) ekleyin: secrets/${out##*/}"
-echo "Aynı PR'a deploy/apps/$env/core-egress-r2.yaml'ı da ekleyin (docs/runbooks/sops.md \"Dosyalar (R2)\")."
+add_secret_to_list "$env" "${out##*/}"
+# core'un R2'ye çıkışı aynı PR'a girer (docs/runbooks/sops.md "Dosyalar (R2)").
+write_manifest "$env" core-egress-r2
+add_list_item "deploy/apps/$env/kustomization.yaml" resources core-egress-r2.yaml

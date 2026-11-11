@@ -1,0 +1,17 @@
+{{define "export"}}{{template "head" .}}
+<p><a href="/?env={{.Env}}">← Ana sayfa</a></p>
+<h1>Dışa aktarma anahtarı</h1>
+{{if .Result}}
+{{template "result" .}}
+{{if .Result.OK}}{{template "next" (nextData .Env "identity" "veri dışa aktarma açık")}}{{end}}
+{{else}}
+{{template "notready" .}}
+<p>identity'nin KVKK veri dışa aktarma sarma anahtarı rastgele üretilir ve doğrudan şifrelenir; hiçbir yerde görünmez. Dışa aktarmanın çalışması için bu ortamda R2'nin de bağlı olması gerekir (docs/runbooks/sops.md, "Veri dışa aktarma anahtarı").</p>
+{{template "error" .}}
+<form method="post" action="/export" autocomplete="off">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  {{template "envpick" .}}
+  <button type="submit">Anahtarı üret</button>
+</form>
+{{end}}
+{{template "foot" .}}{{end}}

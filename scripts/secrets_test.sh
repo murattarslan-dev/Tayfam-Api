@@ -75,5 +75,67 @@ write_secret_list prod >/dev/null
 out=$(./scripts/check-secret-refs.sh prod 2>&1) && fail "eksik secret fark edilmedi"
 grep -q 'chat-message-key' <<<"$out" || fail "eksik secret adı yazılmadı"
 
+# 9) Ağ kuralları ve yamalar runbook'takiyle birebir aynıdır (Tayfam Ops ve
+#    betikler aynı içeriği yazar).
+runbook_yaml() { # runbook_yaml <metadata.name>: runbook'ta o adı taşıyan yaml bloğu
+  awk -v want="  name: $1" '
+    /^ *```yaml$/ { inb = 1; match($0, /^ */); ind = RLENGTH; buf = ""; hit = 0; next }
+    inb && /^ *```$/ { inb = 0; if (hit) { printf "%s", buf; exit } next }
+    inb { line = substr($0, ind + 1); buf = buf line "\n"; if (line == want) hit = 1 }
+  ' "$root/docs/runbooks/sops.md"
+}
+for m in core-egress-r2 chat-egress-internet chat-fcm-required; do
+  name=$m; [ "$m" = chat-fcm-required ] && name=chat
+  want=$(runbook_yaml "$name" | grep -v '^$' || true)
+  [ -n "$want" ] || fail "runbook'ta $m bloğu bulunamadı"
+  [ "$(manifest_body "$m")" = "$want" ] || fail "$m runbook'takinden farklı"
+done
+
+# 10) Dosyalar ve kustomization satırları yazılır; tekrar çalıştırmada
+#     hiçbir şey değişmez; overlay'ler derlenir.
+rm -rf "$tmp/deploy" && cp -r "$root/deploy" "$tmp/"
+for env in dev prod; do
+  k=deploy/apps/$env/kustomization.yaml
+  write_manifest "$env" core-egress-r2 >/dev/null
+  add_list_item "$k" resources core-egress-r2.yaml >/dev/null
+  write_manifest "$env" chat-egress-internet >/dev/null
+  add_list_item "$k" resources chat-egress-internet.yaml >/dev/null
+  cmp -s <(manifest_body core-egress-r2) "deploy/apps/$env/core-egress-r2.yaml" || fail "$env: core-egress-r2 dosyası farklı"
+  cp "$k" "$tmp/k-$env"
+  write_manifest "$env" core-egress-r2 >/dev/null || fail "$env: aynı içerikli dosya reddedildi"
+  add_list_item "$k" resources core-egress-r2.yaml >/dev/null
+  add_list_item "$k" resources chat-egress-internet.yaml >/dev/null
+  cmp -s "$tmp/k-$env" "$k" || fail "$env: kustomization idempotent değil"
+  [ "$(grep -cxF '  - core-egress-r2.yaml' "$k")" -eq 1 ] || fail "$env: satır tekrarlandı"
+done
+# dev: secret satırı listenin sonuna, kendi bloğunda eklenir.
+add_secret_to_list dev core-r2.sops.yaml >/dev/null
+grep -qxF '  - secrets/core-r2.sops.yaml' deploy/apps/dev/kustomization.yaml || fail "dev secret satırı eklenmedi"
+awk '/^resources:/ { r = 1; next } r && /^[^ ]/ { r = 0 } r && /core-r2.sops.yaml/ { ok = 1 } END { exit !ok }' \
+  deploy/apps/dev/kustomization.yaml || fail "dev secret satırı resources dışında"
+# prod: zorunluluk yaması patches'e eklenir.
+write_manifest prod chat-fcm-required >/dev/null
+add_list_item deploy/apps/prod/kustomization.yaml patches "path: chat-fcm-required.yaml" >/dev/null
+add_list_item deploy/apps/prod/kustomization.yaml patches "path: chat-fcm-required.yaml" >/dev/null
+[ "$(grep -cxF '  - path: chat-fcm-required.yaml' deploy/apps/prod/kustomization.yaml)" -eq 1 ] || fail "prod yaması eklenmedi ya da tekrarlandı"
+# Farklı içerikli dosyanın üzerine yazılmaz.
+echo "# elle değişti" >> deploy/apps/dev/core-egress-r2.yaml
+if write_manifest dev core-egress-r2 2>/dev/null; then fail "farklı içerikli dosyanın üzerine yazıldı"; fi
+grep -q 'elle değişti' deploy/apps/dev/core-egress-r2.yaml || fail "elle yapılan değişiklik silindi"
+sed -i '/elle değişti/d' deploy/apps/dev/core-egress-r2.yaml
+# "[]" ve hiç olmayan anahtar.
+printf 'kind: Kustomization\nresources: []\n' > "$tmp/k.yaml"
+add_list_item "$tmp/k.yaml" resources a.yaml >/dev/null
+add_list_item "$tmp/k.yaml" patches "path: b.yaml" >/dev/null
+[ "$(cat "$tmp/k.yaml")" = "$(printf 'kind: Kustomization\nresources:\n  - a.yaml\n\npatches:\n  - path: b.yaml')" ] || fail "boş liste/yeni anahtar yanlış yazıldı"
+build=(kustomize build); command -v kubectl >/dev/null && build=(kubectl kustomize)
+# core-r2 secret dosyası bu testte yok; overlay'in derlendiğini kontrol
+# etmek için satır listeden çıkarılır.
+sed -i '/secrets\/core-r2.sops.yaml/d' deploy/apps/dev/kustomization.yaml
+rendered=$("${build[@]}" deploy/apps/dev) || fail "dev derlenmedi"
+grep -q 'name: core-egress-r2' <<<"$rendered" || fail "dev'de core-egress-r2 yok"
+rendered=$("${build[@]}" deploy/apps/prod) || fail "prod derlenmedi"
+grep -q 'CHAT_FCM_REQUIRED' <<<"$rendered" || fail "prod'da chat-fcm-required yaması uygulanmadı"
+
 cd "$root"
 echo "secrets: tüm testler geçti"

@@ -5,6 +5,52 @@ cluster içinde çözülür (ADR-0006). age özel anahtarı yalnızca platform
 sahibinin bilgisayarında (`~/.config/sops/age/keys.txt`, parola yöneticisinde
 yedekli) ve cluster'da (`flux-system/sops-age`) bulunur.
 
+## Tayfam Ops ile (terminalsiz)
+
+R2'yi bağlama, push'u açma ve veri dışa aktarma anahtarı aşağıdaki
+betiklerle aynı işi yapan yerel bir arayüzle, terminal komutu yazmadan
+yapılabilir (issue #148). Araç yalnızca bu bilgisayarda (WSL) çalışır,
+yalnızca `127.0.0.1`'e bağlanır, dışarıya hiç istek yapmaz ve betikleri
+(`scripts/new-r2-secret.sh`, `new-chat-fcm-secret.sh`, `new-export-key.sh`)
+çağırır: değerler yalnızca bellekte tutulur ve betiğe stdin ile verilir.
+Push/PR yapmaz; dosyaları üretir ve klasörü Windows Gezgini'nde açar.
+
+**Bir kez kurulum (Windows'ta):**
+
+1. Gezgin'in sol panelinde *Linux* altında WSL dağıtımınızın adını ve
+   reponun yolunu (örn. `/home/<kullanıcı>/tayfam-api`) bulun.
+2. Repodaki `scripts/tayfam-ops.bat` dosyasını Masaüstü'ne kopyalayın, sağ
+   tık → *Düzenle* ile en üstteki iki satırı (`WSL_DISTRO`, `REPO_DIR`)
+   doldurup kaydedin. İsterseniz sağ tık → *Kısayol oluştur* ile görev
+   çubuğuna sabitleyin.
+3. WSL'de `go`, `make`, `sops`, `jq` ve `kubectl` (ya da `kustomize`)
+   kurulu olmalıdır; eksik olan aracın ana sayfasında yazar. age özel
+   anahtarı gerekmez (şifreleme `.sops.yaml`'daki açık anahtarla yapılır).
+
+**Kullanım:**
+
+1. `tayfam-ops.bat`'a çift tıklayın. Bir pencere açılır ve tarayıcı tek
+   kullanımlık bağlantıyla açılır (açılmazsa penceredeki bağlantıyı bir
+   kez kullanın; WSL'den: `make ops`).
+2. Ortamı (dev/prod) seçin ve kartlardan birini açın: **R2'yi bağla**,
+   **Push'u aç**, **Dışa aktarma anahtarı**. Panel adımları (bucket,
+   lifecycle, token; Firebase servis hesabı) aşağıdaki bölümlerdeki gibidir.
+3. Sonuç sayfasında üretilen/değişen dosyalar, `check-secret-refs.sh`
+   sonucu ve sonraki adım yazar. **Klasörü aç** ile `deploy/apps/<ortam>`
+   Gezgin'de açılır; listedeki dosyaları sohbete sürükleyin, PR'ı oturum
+   açar. Birleşince ilgili Deployment Headlamp'ten yeniden başlatılır.
+4. Push'ta indirdiğiniz JSON dosyasını Windows'ta silin (araç onu yalnızca
+   belleğe okur, Windows'taki kopyaya dokunmaz).
+5. İşiniz bitince pencereyi kapatın (araç bir saat istek gelmezse kendisi
+   de kapanır).
+
+prod, `.sops.yaml`'daki prod alıcısı yazılana kadar (VDS kurulumu adım e)
+kapalı görünür. Güvenlik: `Host` başlığı yalnızca `127.0.0.1:<port>` /
+`localhost:<port>`; bağlantıdaki token tek kullanımlıktır ve HttpOnly,
+SameSite=Strict çereze çevrilir; her POST'ta Origin ve CSRF kontrolü;
+`Content-Security-Policy: default-src 'self'`, sayfada script yok;
+`Cache-Control: no-store`; formlarda `autocomplete=off`.
+
 **Kurallar**
 
 - `AGE-SECRET-KEY-...` ile başlayan özel anahtar hiçbir yere yapıştırılmaz:
@@ -136,7 +182,9 @@ zorunluluk.
 
 1. Firebase projesinde yalnızca "Firebase Cloud Messaging API Admin" rolü
    olan bir servis hesabı açılır, JSON anahtarı indirilir ve hemen
-   şifrelenir (betik indirilen açık dosyayı siler):
+   şifrelenir (betik indirilen açık dosyayı siler; Tayfam Ops'ta "Push'u
+   aç"). Betik 2. ve 3. adımdaki dosyaları ve satırları da kendisi yazar
+   (varsa dokunmaz):
 
    ```sh
    ./scripts/new-chat-fcm-secret.sh dev ~/Downloads/<anahtar>.json
@@ -241,7 +289,9 @@ Platform sahibinin listesi (ortam başına bir kez; `<ortam>` = `dev` |
    token'ı ayrıdır ve bu bucket'a yetkisi yoktur (ADR-0011 madde 11).
    Panel *Access Key ID* ve *Secret Access Key*'i bir kez gösterir;
    sayfayı kapatmadan 4. adıma geçin.
-4. **Secret:** dört değer istemde yapıştırılır, ekranda görünmez:
+4. **Secret:** dört değer istemde yapıştırılır, ekranda görünmez (Tayfam
+   Ops'ta "R2'yi bağla"). Betik 5. adımdaki dosyayı ve satırları da
+   kendisi yazar:
 
    ```sh
    ./scripts/new-r2-secret.sh <ortam>
@@ -306,7 +356,8 @@ identity başlamaz. Dışa aktarmanın çalışması için ortamda dosyalar da
 identity'ye R2 anahtarı ya da yeni ağ kuralı **gerekmez**: dosyayı
 core'un imzaladığı linkle yükler (mevcut `identity-egress-internet`, 443).
 
-Platform sahibinin adımı (ortam başına bir kez):
+Platform sahibinin adımı (ortam başına bir kez; Tayfam Ops'ta "Dışa
+aktarma anahtarı"):
 
 ```sh
 ./scripts/new-export-key.sh dev      # ya da prod; anahtar ekrana yazılmaz

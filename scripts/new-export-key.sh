@@ -47,7 +47,5 @@ mv "$tmp" "$out"
 trap - EXIT
 echo "yazıldı: $out"
 # Liste ayrı kustomization'daysa (prod) yeniden yazılır; dev'de liste
-# ortamın kustomization.yaml'ındadır ve orada yoksa elle eklenir.
-write_secret_list "$env" ||
-  grep -qxF "  - secrets/${out##*/}" "deploy/apps/$env/kustomization.yaml" ||
-  echo "deploy/apps/$env/kustomization.yaml'a (resources) ekleyin: secrets/${out##*/}"
+# ortamın kustomization.yaml'ındadır ve satır oraya eklenir.
+add_secret_to_list "$env" "${out##*/}"
