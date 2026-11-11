@@ -128,6 +128,13 @@ func (s *TayfaServer) UpdateTayfa(ctx context.Context, req *corev1.UpdateTayfaRe
 			if in.JoinPolicy, ok = joinPolicyFromProto(req.GetJoinPolicy()); !ok {
 				return nil, validation("join_policy")
 			}
+		case tayfa.FieldCover:
+			if c := req.GetCoverUploadId(); c != "" {
+				var ok bool
+				if in.CoverUploadID, ok = id.Parse(c); !ok {
+					return nil, validation("cover_upload_id")
+				}
+			}
 		}
 	}
 	v, err := s.app.Update(ctx, user, t, in)
@@ -215,6 +222,7 @@ func tayfaToProto(v tayfa.View) *corev1.Tayfa {
 		JoinCode:               v.JoinCode,
 		MembersCanCreateEvents: v.MembersCanCreateEvents,
 		CreateTime:             timestamppb.New(v.CreatedAt), UpdateTime: timestamppb.New(v.UpdatedAt),
+		CoverUploadId: optionalID(v.CoverUploadID),
 	}
 	for _, i := range v.Interests {
 		out.Interests = append(out.Interests, interestToProto(i))

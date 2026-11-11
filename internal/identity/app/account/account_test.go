@@ -213,3 +213,80 @@ func TestSetActivityVisibility(t *testing.T) {
 		t.Fatalf("bilinmeyen: %v", err)
 	}
 }
+
+type fakeMedia struct {
+	err error
+	got []id.ID
+}
+
+func (f *fakeMedia) AttachAvatar(_ context.Context, upload id.ID) error {
+	f.got = append(f.got, upload)
+	return f.err
+}
+
+// The avatar is stored only after core attached the upload, and reaches
+// core and chat with user.profile_updated (issue #135).
+func TestAvatar(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	u, _ := e.registered(t, "Deniz")
+	media := &fakeMedia{}
+	svc, err := New(Config{Pool: e.pool, Media: media, Now: func() time.Time { return e.now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := func() []string {
+		t.Helper()
+		rows, err := e.pool.Query(ctx, `SELECT payload::text FROM domain_events WHERE type = 'user.profile_updated' AND subject_id = $1 ORDER BY id`, u.PG())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var out []string
+		for rows.Next() {
+			var s string
+			if err := rows.Scan(&s); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, s)
+		}
+		return out
+	}
+
+	// Without core: refused, nothing stored.
+	if err := e.svc.SetAvatar(ctx, u, id.New()); !errors.Is(err, ErrMediaUnavailable) {
+		t.Fatalf("core yok: %v", err)
+	}
+	// core refuses (another user's upload, not ready, ...): nothing stored.
+	media.err = ErrUploadNotFound
+	if err := svc.SetAvatar(ctx, u, id.New()); !errors.Is(err, ErrUploadNotFound) || len(events()) != 0 {
+		t.Fatalf("core reddi: %v %v", err, events())
+	}
+	media.err = nil
+	avatar := id.New()
+	if err := svc.SetAvatar(ctx, u, avatar); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := svc.Get(ctx, u); a.AvatarUploadID != avatar || media.got[len(media.got)-1] != avatar {
+		t.Fatalf("avatar = %v", a.AvatarUploadID)
+	}
+	if got := events(); len(got) != 1 || got[0] != `{"display_name": "Deniz", "avatar_upload_id": "`+avatar.String()+`", "activity_visibility": "tayfa"}` {
+		t.Fatalf("olaylar = %q", got)
+	}
+	// The same avatar again writes nothing.
+	if err := svc.SetAvatar(ctx, u, avatar); err != nil || len(events()) != 1 {
+		t.Fatalf("aynı avatar: %v %d", err, len(events()))
+	}
+	if err := svc.ClearAvatar(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := svc.Get(ctx, u); a.AvatarUploadID != (id.ID{}) {
+		t.Fatal("avatar kaldırılmalı")
+	}
+	if got := events(); len(got) != 2 || got[1] != `{"display_name": "Deniz", "activity_visibility": "tayfa"}` {
+		t.Fatalf("olaylar = %q", got)
+	}
+	if err := svc.SetAvatar(ctx, id.New(), avatar); !errors.Is(err, ErrUnknownUser) {
+		t.Fatalf("bilinmeyen: %v", err)
+	}
+}

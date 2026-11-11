@@ -146,6 +146,9 @@ func (s *Service) views(ctx context.Context, c caller, rows []store.GetEventRow)
 		if r.CancelledAt.Valid {
 			v.CancelledAt = r.CancelledAt.Time.UTC()
 		}
+		if r.CoverUploadID.Valid {
+			v.CoverUploadID = id.ID(r.CoverUploadID.Bytes)
+		}
 		if r.CreatedBy.Valid {
 			v.CreatedBy = id.ID(r.CreatedBy.Bytes)
 		}

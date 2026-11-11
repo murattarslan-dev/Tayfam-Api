@@ -296,6 +296,7 @@ type eventCreateBody struct {
 	eventDetailsInput
 	Recurrence      *recurrenceJSON `json:"recurrence"`
 	ClientRequestID string          `json:"client_request_id"`
+	CoverUploadID   string          `json:"cover_upload_id"`
 }
 
 func (h coreHandlers) createEvent(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -312,7 +313,8 @@ func (h coreHandlers) createEvent(ctx context.Context, w http.ResponseWriter, r 
 	det, okD := b.details()
 	if !okT || !okM || !okD || (det.typ != 0 && det.typ != typ) ||
 		!eventTitleOK(b.Title) || !eventDescOK(b.Description) || b.StartsAt.IsZero() || b.EndsAt.IsZero() ||
-		!pointOK(b.MeetingPoint) || !capacityOK(b.Capacity) || !validUUID(b.ClientRequestID) {
+		!pointOK(b.MeetingPoint) || !capacityOK(b.Capacity) || !validUUID(b.ClientRequestID) ||
+		(b.CoverUploadID != "" && !validUUID(b.CoverUploadID)) {
 		badRequest(w, r)
 		return
 	}
@@ -322,7 +324,7 @@ func (h coreHandlers) createEvent(ctx context.Context, w http.ResponseWriter, r 
 		MeetingPointName: b.MeetingPointName, MeetingPoint: b.MeetingPoint.proto(),
 		City: b.City, District: b.District, OnlineUrl: b.OnlineURL,
 		Capacity: b.Capacity, Discoverable: b.Discoverable,
-		ClientRequestId: b.ClientRequestID,
+		ClientRequestId: b.ClientRequestID, CoverUploadId: b.CoverUploadID,
 	}
 	det.setCreate(req)
 	if rc := b.Recurrence; rc != nil {
@@ -372,6 +374,8 @@ type eventUpdateBody struct {
 	Discoverable     *bool       `json:"discoverable"`
 	eventDetailsInput
 	ApplyToSeries bool `json:"apply_to_series"`
+	// CoverUploadID: "" removes the cover (issue #135).
+	CoverUploadID *string `json:"cover_upload_id"`
 }
 
 func deref[T any](p *T) T {
@@ -450,6 +454,14 @@ func (h coreHandlers) updateEvent(ctx context.Context, w http.ResponseWriter, r 
 	if det.typ != 0 {
 		det.setUpdate(req)
 		add("details")
+	}
+	if b.CoverUploadID != nil {
+		if *b.CoverUploadID != "" && !validUUID(*b.CoverUploadID) {
+			badRequest(w, r)
+			return
+		}
+		req.CoverUploadId = *b.CoverUploadID
+		add("cover_upload_id")
 	}
 	if len(req.UpdateMask.Paths) == 0 {
 		badRequest(w, r)
@@ -780,6 +792,7 @@ type fishingCatchBody struct {
 	Location        *latLngJSON `json:"location"`
 	Visibility      string      `json:"visibility"`
 	ClientRequestID string      `json:"client_request_id"`
+	PhotoUploadID   string      `json:"photo_upload_id"`
 }
 
 // addFishingCatch passes the catch's location to core in the body only,
@@ -795,13 +808,13 @@ func (h coreHandlers) addFishingCatch(ctx context.Context, w http.ResponseWriter
 	}
 	vis, okV := catchVisibilities.valueOrUnspecified(b.Visibility)
 	if n := runes(b.Species); !okV || n < 1 || n > catchSpeciesMax || !(b.LengthCm > 0 && b.LengthCm <= catchLengthMaxCm) ||
-		!pointOK(b.Location) || !validUUID(b.ClientRequestID) {
+		!pointOK(b.Location) || !validUUID(b.ClientRequestID) || (b.PhotoUploadID != "" && !validUUID(b.PhotoUploadID)) {
 		badRequest(w, r)
 		return
 	}
 	resp, err := h.d.Events.AddFishingCatch(ctx, &corev1.AddFishingCatchRequest{
 		TayfaId: id, EventId: eid, Species: b.Species, LengthCm: b.LengthCm,
-		Location: b.Location.proto(), Visibility: vis, ClientRequestId: b.ClientRequestID,
+		Location: b.Location.proto(), Visibility: vis, ClientRequestId: b.ClientRequestID, PhotoUploadId: b.PhotoUploadID,
 	})
 	if err != nil {
 		h.fail(w, r, err)

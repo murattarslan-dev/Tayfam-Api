@@ -131,6 +131,7 @@ Tüm tüketici metodları idempotenttir (ADR-0002).
 | identity → core, chat | `ExportUserData(user_id)` | KVKK veri dışa aktarma (ADR-0008) |
 | core → identity | `IsMinor(user_ids)` | Şikâyet önceliği; yalnızca evet/hayır döner (ADR-0012) |
 | identity → core | `GetRelationship(viewer_id, subject_id)` | Doğum günü görünürlüğü için arkadaşlık / ortak tayfa (ADR-0012) |
+| identity → core | `MediaService.AttachAvatar(upload_id)` | Avatar ayarlanırken yüklemenin çağıranın, hazır ve avatar olduğunu core doğrular ve bağlar; kullanıcının token'ı iletilir (ADR-0020, issue #135) |
 | gateway → hepsi | Uygulama ve panel uçları | ADR-0002, ADR-0008 |
 
 Sosyal ilişkiler (arkadaşlık, engelleme) core'dadır; böylece birebir mesaj izni

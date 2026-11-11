@@ -21,6 +21,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/account"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/birthdate"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/consent"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/coremedia"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/deletion"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/minor"
@@ -113,7 +114,21 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	accounts, err := account.New(account.Config{Pool: pool})
+	// Avatar (issue #135): core attaches the upload with the caller's own
+	// token (auth.ForwardToken); identity's service identity is not used.
+	// Without CORE_GRPC_ADDR (a local run without core) SetAvatar is
+	// UNAVAILABLE.
+	var avatars account.Media
+	if addr := rt.Config.String("CORE_GRPC_ADDR", ""); addr != "" {
+		conn, err := grpcx.NewClient(addr, auth.ForwardToken()...)
+		if err != nil {
+			return err
+		}
+		avatars = coremedia.New(corev1.NewMediaServiceClient(conn))
+	} else {
+		rt.Log.Warn("CORE_GRPC_ADDR yok; avatar ayarlanamaz (UNAVAILABLE)")
+	}
+	accounts, err := account.New(account.Config{Pool: pool, Media: avatars})
 	if err != nil {
 		return err
 	}

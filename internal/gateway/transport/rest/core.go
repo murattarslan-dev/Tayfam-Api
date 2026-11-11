@@ -84,6 +84,9 @@ type CoreDeps struct {
 	Reports ReportClient
 	// Media enables the upload and media link routes when set (issue #135).
 	Media MediaClient
+	// Avatars is identity's AccountService for the avatar; it enables
+	// PUT/DELETE /v1/me/avatar when set (issue #135).
+	Avatars AvatarClient
 	// Accounts is identity's AccountService; it enables the account,
 	// referral code, session, consent and account deletion routes when set. Its routes take the same verified user
 	// token as core's.
@@ -177,6 +180,9 @@ func registerCore(mux *http.ServeMux, d CoreDeps) {
 	}
 	if d.Media != nil {
 		registerMedia(mux, h)
+	}
+	if d.Avatars != nil {
+		registerAvatar(mux, h)
 	}
 	if d.Accounts != nil {
 		registerAccount(mux, h)
@@ -337,6 +343,9 @@ type tayfaUpdateBody struct {
 	JoinPolicy  *string   `json:"join_policy"`
 	// MembersCanCreateEvents lets every active member create events.
 	MembersCanCreateEvents *bool `json:"members_can_create_events"`
+	// CoverUploadID: a READY cover upload of the caller; "" removes the
+	// cover (issue #135).
+	CoverUploadID *string `json:"cover_upload_id"`
 }
 
 func (h coreHandlers) updateTayfa(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -382,6 +391,14 @@ func (h coreHandlers) updateTayfa(ctx context.Context, w http.ResponseWriter, r 
 	if b.MembersCanCreateEvents != nil {
 		req.MembersCanCreateEvents = *b.MembersCanCreateEvents
 		req.UpdateMask.Paths = append(req.UpdateMask.Paths, "members_can_create_events")
+	}
+	if b.CoverUploadID != nil {
+		if *b.CoverUploadID != "" && !validUUID(*b.CoverUploadID) {
+			badRequest(w, r)
+			return
+		}
+		req.CoverUploadId = *b.CoverUploadID
+		req.UpdateMask.Paths = append(req.UpdateMask.Paths, "cover_upload_id")
 	}
 	if len(req.UpdateMask.Paths) == 0 {
 		badRequest(w, r)

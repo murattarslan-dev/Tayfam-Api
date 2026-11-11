@@ -18,7 +18,6 @@ import (
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media/imaging/imagingtest"
-	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
@@ -96,12 +95,23 @@ func setup(t *testing.T, mut ...func(*Config)) *env {
 	}
 	svc, err := New(cfg)
 	must(t, err)
-	tayfas, err := tayfa.New(tayfa.Config{Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
-	must(t, err)
-	e := &env{svc: svc, pool: pool, s3: s3, logs: logs, clock: c, owner: id.New(), member: id.New(), stranger: id.New()}
-	v, err := tayfas.Create(ctx, e.owner, tayfa.CreateInput{Name: "Olta Tayfası", JoinPolicy: tayfa.JoinOpen, ClientRequestID: id.New().String()})
-	must(t, err)
-	e.tayfa = v.ID
+	e := &env{svc: svc, pool: pool, s3: s3, logs: logs, clock: c, owner: id.New(), member: id.New(), stranger: id.New(), tayfa: id.New()}
+	// The tayfa as the tayfa service writes it (its package imports this
+	// one): the row, the creator's admin membership and the modules.
+	must(t, txn.WithActor(ctx, pool, e.owner, func(_ pgx.Tx, q *store.Queries) error {
+		if err := q.CreateTayfa(ctx, store.CreateTayfaParams{
+			ID: e.tayfa.PG(), Name: "Olta Tayfası", NameNormalized: "olta tayfası", JoinCode: "MEDYA234",
+			JoinPolicy: "open", CreatedBy: e.owner.PG(), ClientRequestID: id.New().PG(),
+		}); err != nil {
+			return err
+		}
+		if err := q.SetTayfaModule(ctx, store.SetTayfaModuleParams{TayfaID: e.tayfa.PG(), Module: "events", Enabled: true}); err != nil {
+			return err
+		}
+		return q.CreateMembership(ctx, store.CreateMembershipParams{
+			TayfaID: e.tayfa.PG(), UserID: e.owner.PG(), Role: "admin", Status: "active", JoinedVia: "creator", JoinedAt: ts(time.Now()),
+		})
+	}))
 	must(t, txn.WithActor(ctx, pool, e.member, func(_ pgx.Tx, q *store.Queries) error {
 		return q.CreateMembership(ctx, store.CreateMembershipParams{
 			TayfaID: e.tayfa.PG(), UserID: e.member.PG(), Role: "member", Status: "active", JoinedVia: "code", JoinedAt: ts(time.Now()),

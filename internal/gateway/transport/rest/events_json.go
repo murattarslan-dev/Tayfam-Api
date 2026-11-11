@@ -189,6 +189,7 @@ type eventJSON struct {
 	CallerAttendance string    `json:"caller_attendance,omitempty"`
 	SeriesID         string    `json:"series_id,omitempty"`
 	SeriesOverride   bool      `json:"series_override"`
+	CoverUploadID    string    `json:"cover_upload_id,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 
@@ -213,7 +214,7 @@ func eventFrom(e *corev1.Event) eventJSON {
 		GoingCount: e.GetGoingCount(), MaybeCount: e.GetMaybeCount(), WaitlistCount: e.GetWaitlistCount(),
 		CallerRSVP: optName(rsvpStatuses, e.GetCallerRsvp()), CallerCanManage: e.GetCallerCanManage(),
 		CallerAttendance: optName(attendanceStatuses, e.GetCallerAttendance()),
-		SeriesID:         e.GetSeriesId(), SeriesOverride: e.GetSeriesOverride(),
+		SeriesID:         e.GetSeriesId(), SeriesOverride: e.GetSeriesOverride(), CoverUploadID: e.GetCoverUploadId(),
 		CreatedAt: e.GetCreateTime().AsTime(), UpdatedAt: e.GetUpdateTime().AsTime(),
 	}
 	switch d := e.GetDetails().(type) {
@@ -292,13 +293,15 @@ type fishingCatchJSON struct {
 	Location   *latLngJSON `json:"location,omitempty"`
 	Visibility string      `json:"visibility"`
 	CreatedAt  time.Time   `json:"created_at"`
+	// PhotoUploadID: links with POST /v1/media/urls (issue #135).
+	PhotoUploadID string `json:"photo_upload_id,omitempty"`
 }
 
 func fishingCatchFrom(c *corev1.FishingCatch) fishingCatchJSON {
 	return fishingCatchJSON{
 		ID: c.GetId(), UserID: c.GetUserId(), Species: c.GetSpecies(), LengthCm: c.GetLengthCm(),
 		Location: latLngFrom(c.GetLocation()), Visibility: catchVisibilities.name(c.GetVisibility()),
-		CreatedAt: c.GetCreateTime().AsTime(),
+		CreatedAt: c.GetCreateTime().AsTime(), PhotoUploadID: c.GetPhotoUploadId(),
 	}
 }
 

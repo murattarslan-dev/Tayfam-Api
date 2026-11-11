@@ -260,7 +260,7 @@ const getEvent = `-- name: GetEvent :one
 SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
-       created_by, created_at, updated_at
+       created_by, created_at, updated_at, cover_upload_id
 FROM events
 WHERE tayfa_id = $1 AND id = $2 AND deleted_at IS NULL
 `
@@ -295,6 +295,7 @@ type GetEventRow struct {
 	CreatedBy        pgtype.UUID
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
+	CoverUploadID    pgtype.UUID
 }
 
 func (q *Queries) GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow, error) {
@@ -325,6 +326,7 @@ func (q *Queries) GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CoverUploadID,
 	)
 	return i, err
 }
@@ -402,7 +404,7 @@ const getEventForUpdate = `-- name: GetEventForUpdate :one
 SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
-       created_by, created_at, updated_at
+       created_by, created_at, updated_at, cover_upload_id
 FROM events
 WHERE tayfa_id = $1 AND id = $2 AND deleted_at IS NULL
 FOR UPDATE
@@ -438,6 +440,7 @@ type GetEventForUpdateRow struct {
 	CreatedBy        pgtype.UUID
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
+	CoverUploadID    pgtype.UUID
 }
 
 // Katılım ve düzenleme aynı etkinlik satırını kilitleyerek okur; kapasite
@@ -470,6 +473,7 @@ func (q *Queries) GetEventForUpdate(ctx context.Context, arg GetEventForUpdatePa
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CoverUploadID,
 	)
 	return i, err
 }
@@ -730,7 +734,7 @@ const listUpcomingEvents = `-- name: ListUpcomingEvents :many
 SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
-       created_by, created_at, updated_at
+       created_by, created_at, updated_at, cover_upload_id
 FROM events
 WHERE tayfa_id = $1
   AND deleted_at IS NULL
@@ -773,6 +777,7 @@ type ListUpcomingEventsRow struct {
 	CreatedBy        pgtype.UUID
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
+	CoverUploadID    pgtype.UUID
 }
 
 // Bitmemiş etkinlikler, başlangıç zamanına göre; (starts_at, id) ile
@@ -817,6 +822,7 @@ func (q *Queries) ListUpcomingEvents(ctx context.Context, arg ListUpcomingEvents
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CoverUploadID,
 		); err != nil {
 			return nil, err
 		}

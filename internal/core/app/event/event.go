@@ -35,6 +35,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/access"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
@@ -59,9 +60,11 @@ const (
 	FieldCapacity     = "capacity"
 	FieldDiscoverable = "discoverable"
 	FieldDetails      = "details"
+	// FieldCover is the cover image (events.cover_upload_id, issue #135).
+	FieldCover = "cover_upload_id"
 )
 
-var updateFields = []string{FieldTitle, FieldDescription, FieldTime, FieldLocation, FieldCapacity, FieldDiscoverable, FieldDetails}
+var updateFields = []string{FieldTitle, FieldDescription, FieldTime, FieldLocation, FieldCapacity, FieldDiscoverable, FieldDetails, FieldCover}
 
 // Config wires a Service.
 type Config struct {
@@ -124,6 +127,8 @@ type Event struct {
 	SeriesOverride bool
 	// CallerCanManage tells whether the caller may edit and cancel.
 	CallerCanManage bool
+	// CoverUploadID is the cover image; zero when there is none.
+	CoverUploadID id.ID
 	// Details are filled by Get only.
 	Details Details
 }
@@ -146,6 +151,27 @@ type Input struct {
 	// Series, on update only, applies the change to the event's series
 	// (UpdateEventRequest.series).
 	Series bool
+	// CoverUploadID is the caller's own READY cover upload opened for the
+	// tayfa; on update zero removes the cover (issue #135).
+	CoverUploadID id.ID
+}
+
+// setCover attaches the caller's cover upload to the event (zero: removes
+// the cover) and writes the column, whose trigger checks the attachment
+// again; the previous cover goes to the delete queue.
+func setCover(ctx context.Context, q *store.Queries, c caller, tayfa, event, upload id.ID) error {
+	cover := pgtype.UUID{}
+	if upload != (id.ID{}) {
+		if err := media.Attach(ctx, q, c.user, upload, media.PurposeCover, tayfa,
+			media.Target{Type: media.TargetEvent, ID: event}, c.now); err != nil {
+			return err
+		}
+		cover = upload.PG()
+	}
+	if err := q.SetEventCover(ctx, store.SetEventCoverParams{ID: event.PG(), TayfaID: tayfa.PG(), CoverUploadID: cover}); err != nil {
+		return fmt.Errorf("kapak: %w", err)
+	}
+	return nil
 }
 
 // caller is the verified caller's standing in a tayfa, loaded inside the
@@ -417,6 +443,11 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in Input) (Even
 		if err := setDetails(ctx, q, eventID, details); err != nil {
 			return err
 		}
+		if in.CoverUploadID != (id.ID{}) {
+			if err := setCover(ctx, q, c, tayfa, eventID, in.CoverUploadID); err != nil {
+				return err
+			}
+		}
 		if err := audit(ctx, q, c, EventCreated, eventID, map[string]any{"type": in.Type}); err != nil {
 			return err
 		}
@@ -487,8 +518,8 @@ func (s *Service) Update(ctx context.Context, user, tayfa, event id.ID, fields [
 			return Event{}, err
 		}
 	}
-	if in.Series && set[FieldTime] {
-		// A series' times come from its rule.
+	if in.Series && (set[FieldTime] || set[FieldCover]) {
+		// A series' times come from its rule; an upload covers one event.
 		return Event{}, apperr.Validation("update_mask")
 	}
 	var changed []string
@@ -572,6 +603,11 @@ func (s *Service) Update(ctx context.Context, user, tayfa, event id.ID, fields [
 			return fmt.Errorf("etkinlik: %w", err)
 		} else if n != 1 {
 			return apperr.ErrEventNotFound
+		}
+		if set[FieldCover] {
+			if err := setCover(ctx, q, c, tayfa, event, in.CoverUploadID); err != nil {
+				return err
+			}
 		}
 		if err := audit(ctx, q, c, EventUpdated, event, map[string]any{"fields": changed}); err != nil {
 			return err

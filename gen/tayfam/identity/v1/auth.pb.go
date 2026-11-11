@@ -173,6 +173,14 @@ const (
 	ErrorReason_ERROR_REASON_SANCTION_CONFLICT ErrorReason = 17
 	// INVALID_ARGUMENT. Any other invalid field.
 	ErrorReason_ERROR_REASON_VALIDATION ErrorReason = 18
+	// Avatar (AccountService.SetAvatar, issue #135): core's answer about the
+	// upload, under identity's own reasons. NOT_FOUND: no such AVATAR upload
+	// of the caller.
+	ErrorReason_ERROR_REASON_UPLOAD_NOT_FOUND ErrorReason = 19
+	// FAILED_PRECONDITION. The upload is not processed (yet) or was rejected.
+	ErrorReason_ERROR_REASON_UPLOAD_NOT_READY ErrorReason = 20
+	// FAILED_PRECONDITION. The upload is attached to other content.
+	ErrorReason_ERROR_REASON_UPLOAD_IN_USE ErrorReason = 21
 )
 
 // Enum value maps for ErrorReason.
@@ -197,6 +205,9 @@ var (
 		16: "ERROR_REASON_USER_NOT_FOUND",
 		17: "ERROR_REASON_SANCTION_CONFLICT",
 		18: "ERROR_REASON_VALIDATION",
+		19: "ERROR_REASON_UPLOAD_NOT_FOUND",
+		20: "ERROR_REASON_UPLOAD_NOT_READY",
+		21: "ERROR_REASON_UPLOAD_IN_USE",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":               0,
@@ -218,6 +229,9 @@ var (
 		"ERROR_REASON_USER_NOT_FOUND":            16,
 		"ERROR_REASON_SANCTION_CONFLICT":         17,
 		"ERROR_REASON_VALIDATION":                18,
+		"ERROR_REASON_UPLOAD_NOT_FOUND":          19,
+		"ERROR_REASON_UPLOAD_NOT_READY":          20,
+		"ERROR_REASON_UPLOAD_IN_USE":             21,
 	}
 )
 
@@ -664,7 +678,7 @@ const file_tayfam_identity_v1_auth_proto_rawDesc = "" +
 	"\x14PLATFORM_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10PLATFORM_ANDROID\x10\x01\x12\x10\n" +
 	"\fPLATFORM_IOS\x10\x02\x12\x10\n" +
-	"\fPLATFORM_WEB\x10\x03*\xb1\x05\n" +
+	"\fPLATFORM_WEB\x10\x03*\x97\x06\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12$\n" +
 	" ERROR_REASON_INVALID_CREDENTIALS\x10\x01\x12%\n" +
@@ -685,7 +699,10 @@ const file_tayfam_identity_v1_auth_proto_rawDesc = "" +
 	"\x1cERROR_REASON_REASON_REQUIRED\x10\x0f\x12\x1f\n" +
 	"\x1bERROR_REASON_USER_NOT_FOUND\x10\x10\x12\"\n" +
 	"\x1eERROR_REASON_SANCTION_CONFLICT\x10\x11\x12\x1b\n" +
-	"\x17ERROR_REASON_VALIDATION\x10\x122\x86\x02\n" +
+	"\x17ERROR_REASON_VALIDATION\x10\x12\x12!\n" +
+	"\x1dERROR_REASON_UPLOAD_NOT_FOUND\x10\x13\x12!\n" +
+	"\x1dERROR_REASON_UPLOAD_NOT_READY\x10\x14\x12\x1e\n" +
+	"\x1aERROR_REASON_UPLOAD_IN_USE\x10\x152\x86\x02\n" +
 	"\vAuthService\x12O\n" +
 	"\x06SignIn\x12!.tayfam.identity.v1.SignInRequest\x1a\".tayfam.identity.v1.SignInResponse\x12R\n" +
 	"\aRefresh\x12\".tayfam.identity.v1.RefreshRequest\x1a#.tayfam.identity.v1.RefreshResponse\x12R\n" +

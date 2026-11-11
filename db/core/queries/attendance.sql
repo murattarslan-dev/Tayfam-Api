@@ -98,13 +98,13 @@ INSERT INTO fishing_catches (id, event_id, user_id, species, length_cm, lat, lng
 VALUES (@id, @event_id, @user_id, @species, sqlc.arg(length_cm)::float8, @lat, @lng, @visibility, @client_request_id);
 
 -- name: GetCatch :one
-SELECT id, user_id, species, length_cm::float8 AS length_cm, lat, lng, visibility, created_at
+SELECT id, user_id, species, length_cm::float8 AS length_cm, lat, lng, visibility, created_at, photo_upload_id
 FROM fishing_catches
 WHERE event_id = @event_id AND id = @id AND deleted_at IS NULL;
 
 -- (created_at, id) ile sayfalanır.
 -- name: ListCatches :many
-SELECT id, user_id, species, length_cm::float8 AS length_cm, lat, lng, visibility, created_at
+SELECT id, user_id, species, length_cm::float8 AS length_cm, lat, lng, visibility, created_at, photo_upload_id
 FROM fishing_catches
 WHERE event_id = @event_id
   AND deleted_at IS NULL

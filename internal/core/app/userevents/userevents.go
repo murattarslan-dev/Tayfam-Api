@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
@@ -159,13 +160,22 @@ func (s *Service) applyProfile(ctx context.Context, e Event) error {
 	}
 	// 0 rows: a newer event or the deletion was applied already. That is
 	// the expected result of a repeat, not an error.
-	if _, err := store.New(s.cfg.Pool).UpsertUserProfile(ctx, store.UpsertUserProfileParams{
-		UserID: e.User.PG(), DisplayName: pgtype.Text{String: name, Valid: true},
-		AvatarUploadID: avatar, SourceEventID: e.ID.PG(), ActivityVisibility: vis,
-	}); err != nil {
-		return fmt.Errorf("profil kopyası: %w", err)
-	}
-	return nil
+	return pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
+		q := store.New(tx)
+		n, err := q.UpsertUserProfile(ctx, store.UpsertUserProfileParams{
+			UserID: e.User.PG(), DisplayName: pgtype.Text{String: name, Valid: true},
+			AvatarUploadID: avatar, SourceEventID: e.ID.PG(), ActivityVisibility: vis,
+		})
+		if err != nil {
+			return fmt.Errorf("profil kopyası: %w", err)
+		}
+		if n == 0 {
+			return nil
+		}
+		// The avatar in this (newest) profile stays; the user's earlier
+		// attached avatars are deleted (issue #135, ADR-0020 item 3).
+		return media.UserProfileUpdated(ctx, q, e.User, e.Profile.AvatarUploadID)
+	})
 }
 
 // validDisplayName mirrors identity's rule (1–40 characters, no control
@@ -194,6 +204,8 @@ func validDisplayName(s string) bool {
 //     convoy vehicles (plates), hike roll calls, fishing catches, activity
 //     records, helpful votes and poll votes are deleted, and the vote counts
 //     drop with them;
+//   - the user's uploaded files are deleted; covers attached to a tayfa or
+//     event stay without an owner (issue #135);
 //   - friendships, friend requests and blocks in both directions are
 //     deleted, and so are the direct invitations the user sent that are
 //     still unanswered (issue #71);
@@ -269,7 +281,10 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 		if err := q.TombstoneUserProfile(ctx, store.TombstoneUserProfileParams{UserID: e.User.PG(), SourceEventID: e.ID.PG()}); err != nil {
 			return fmt.Errorf("profil kopyası: %w", err)
 		}
-		return nil
+		// The user's files go (removed from R2 by the media-cleanup
+		// worker); covers stay with their tayfa or event without an owner
+		// (issue #135).
+		return media.UserDeleted(ctx, q, e.User)
 	})
 }
 
