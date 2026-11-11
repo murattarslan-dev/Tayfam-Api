@@ -91,7 +91,7 @@ func coreRequest(e outbox.Event) (*corev1.ApplyUserEventRequest, error) {
 func ChatConsumer(client chatv1.UserEventServiceClient) outbox.Consumer {
 	return outbox.Consumer{
 		Name:  "chat",
-		Types: []string{TypeProfileUpdated, TypeDeleted, TypeSessionRevoked, TypeSanctioned},
+		Types: []string{TypeProfileUpdated, TypeDeleted, TypeSessionRevoked, TypeSanctioned, TypeDataExportReady},
 		Deliver: func(ctx context.Context, e outbox.Event) error {
 			req, err := chatRequest(e)
 			if err != nil {
@@ -113,6 +113,8 @@ func chatRequest(e outbox.Event) (*chatv1.ApplyUserEventRequest, error) {
 	switch e.Type {
 	case TypeSessionRevoked, TypeSanctioned:
 		return chatSessionRequest(e)
+	case TypeDataExportReady:
+		return chatExportRequest(e)
 	}
 	c, err := coreRequest(e)
 	if err != nil {
@@ -154,4 +156,23 @@ func chatSessionRequest(e outbox.Event) (*chatv1.ApplyUserEventRequest, error) {
 	}
 	req.Event = &chatv1.ApplyUserEventRequest_SessionRevoked{SessionRevoked: &chatv1.SessionRevoked{SessionId: sid.String()}}
 	return req, nil
+}
+
+// chatExportRequest converts user.data_export_ready.
+func chatExportRequest(e outbox.Event) (*chatv1.ApplyUserEventRequest, error) {
+	if e.SubjectType != subjectUser || e.SubjectID == (id.ID{}) {
+		return nil, errors.New("olayın konusu kullanıcı değil")
+	}
+	var p ExportReady
+	if err := json.Unmarshal(e.Payload, &p); err != nil {
+		return nil, errors.New("dışa aktarma olayı çözümlenemedi")
+	}
+	rid, ok := id.Parse(p.DataExportID)
+	if !ok {
+		return nil, errors.New("dışa aktarma olayında geçersiz talep kimliği")
+	}
+	return &chatv1.ApplyUserEventRequest{
+		EventId: e.ID.String(), UserId: e.SubjectID.String(), OccurredAt: timestamppb.New(e.OccurredAt),
+		Event: &chatv1.ApplyUserEventRequest_DataExportReady{DataExportReady: &chatv1.DataExportReady{DataExportId: rid.String()}},
+	}, nil
 }

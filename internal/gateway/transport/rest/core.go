@@ -87,6 +87,9 @@ type CoreDeps struct {
 	// Avatars is identity's AccountService for the avatar; it enables
 	// PUT/DELETE /v1/me/avatar when set (issue #135).
 	Avatars AvatarClient
+	// DataExports is identity's DataExportService; it enables the KVKK data
+	// export routes when set (issue #144).
+	DataExports DataExportClient
 	// Accounts is identity's AccountService; it enables the account,
 	// referral code, session, consent and account deletion routes when set. Its routes take the same verified user
 	// token as core's.
@@ -187,6 +190,9 @@ func registerCore(mux *http.ServeMux, d CoreDeps) {
 	if d.Accounts != nil {
 		registerAccount(mux, h)
 		registerAccountManagement(mux, h)
+	}
+	if d.DataExports != nil {
+		registerDataExports(mux, h)
 	}
 }
 

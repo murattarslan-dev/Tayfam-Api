@@ -393,8 +393,9 @@ sabittir (ADR-0019 madde 10 kalıbı).
 failure_reason?, requested_at, ready_at?, expires_at?, downloaded_at?,
 size_bytes?}`. Yeni problem türleri: `data-export-not-found`,
 `data-export-in-progress`, `data-export-limit`, `data-export-not-ready`,
-`data-export-expired`. Rate limit: kullanıcı başına bu uçlara dakikada 10
-istek (yoklama dahil).
+`data-export-expired`. Uçlara ayrı bir istek sınırı konmadı: talep açma
+30 günde bir, eşzamanlı tek talep ve indirme yeniden giriş istediği için
+iş kuralları yeterli sınırdır (uygulamada netleşti, 2026-11-11).
 
 **gRPC:**
 

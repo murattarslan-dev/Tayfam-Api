@@ -225,6 +225,12 @@ Platform sahibinin listesi (ortam başına bir kez; `<ortam>` = `dev` |
    kural kalır.) `incoming/` istemcinin yüklediği, henüz denetlenmemiş
    varyantların karantinasıdır; denetimden geçenler `media/` altına
    kopyalanır ve bu kurala girmez.
+
+   İkinci kural (KVKK veri dışa aktarma, ADR-0021): ad `exports-8d`, önek
+   `exports/`, *Delete objects* **8 gün** sonra. Şifreli dışa aktarma
+   dosyalarını core 7 gün dolunca kendisi siler; bu kural bir hata ya da
+   kesinti durumunda yedek temizliktir. Bucket ve token aynıdır; yeni
+   token gerekmez. R2'si zaten açık bir ortamda yalnızca bu kural eklenir.
 3. **API token'ı (en az yetki):** R2 → *Manage R2 API Tokens* → *Create
    API token*: ad `tayfam-<ortam>-core`, izin **Object Read & Write**,
    *Apply to specific buckets only* → yalnızca `tayfam-<ortam>-private`.
@@ -288,6 +294,34 @@ desteklenmeseydi tamamlama 503 dönerdi). Sonuç PR'a yazılır.
 
 Rotasyon: panelde yeni token → `FORCE=1 ./scripts/new-r2-secret.sh <ortam>`
 → birleştirme ve `rollout restart` → eski token panelde silinir.
+
+## Veri dışa aktarma anahtarı (identity-export-key)
+
+KVKK veri dışa aktarma dosyası (ADR-0021) talep başına rastgele bir
+anahtarla şifrelenir; o anahtar identity'nin veritabanında bu secret'taki
+sürümlü anahtarla **sarılı** durur. Secret isteğe bağlıdır: yoksa identity
+başlar, `/v1/me/data-exports` uçları `503 unavailable` döner; bozuksa
+identity başlamaz. Dışa aktarmanın çalışması için ortamda dosyalar da
+(yukarıdaki "Dosyalar (R2)", `exports-8d` kuralı dahil) açık olmalıdır.
+identity'ye R2 anahtarı ya da yeni ağ kuralı **gerekmez**: dosyayı
+core'un imzaladığı linkle yükler (mevcut `identity-egress-internet`, 443).
+
+Platform sahibinin adımı (ortam başına bir kez):
+
+```sh
+./scripts/new-export-key.sh dev      # ya da prod; anahtar ekrana yazılmaz
+git add deploy/apps/<ortam>/
+./scripts/check-secret-refs.sh <ortam>
+```
+
+Birleştirdikten sonra `kubectl -n tayfam-<ortam> rollout restart deploy/identity`;
+log'da "veri dışa aktarma açık" görünür.
+
+Rotasyon: `sops deploy/apps/<ortam>/secrets/identity-export-key.sops.yaml`
+ile değeri `1:<eski>,2:<yeni>` yapın (yeni değeri `head -c 32 /dev/urandom
+| base64 -w0` ile editörün içinden üretin; terminale yazdırmayın). Eski
+sürüm en az 7 gün kalır, sonra silinebilir. Anahtar kaybolursa yalnızca
+son 7 günün hazır dosyaları açılamaz.
 
 ## Cloudflare Tunnel token'ı
 
