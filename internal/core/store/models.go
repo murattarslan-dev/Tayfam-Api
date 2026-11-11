@@ -93,6 +93,7 @@ type Event struct {
 	DeletedBy        pgtype.UUID
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
+	CoverUploadID    pgtype.UUID
 }
 
 type EventCamp struct {
@@ -223,6 +224,7 @@ type FishingCatch struct {
 	DeletedAt       pgtype.Timestamptz
 	DeletedBy       pgtype.UUID
 	CreatedAt       pgtype.Timestamptz
+	PhotoUploadID   pgtype.UUID
 }
 
 type Friendship struct {
@@ -381,6 +383,7 @@ type Tayfa struct {
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	MembersCanCreateEvents bool
+	CoverUploadID          pgtype.UUID
 }
 
 type TayfaInterest struct {
@@ -395,6 +398,32 @@ type TayfaModule struct {
 	Enabled   bool
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
+}
+
+type Upload struct {
+	ID              pgtype.UUID
+	UserID          pgtype.UUID
+	TayfaID         pgtype.UUID
+	Purpose         string
+	Status          string
+	ContentType     string
+	SizeBytes       int64
+	R2Key           string
+	OutputType      pgtype.Text
+	StoredBytes     pgtype.Int8
+	Width           pgtype.Int4
+	Height          pgtype.Int4
+	RejectReason    pgtype.Text
+	Attempts        int32
+	RunAfter        pgtype.Timestamptz
+	AttachedType    pgtype.Text
+	AttachedID      pgtype.UUID
+	AttachedAt      pgtype.Timestamptz
+	ClientRequestID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	UploadedAt      pgtype.Timestamptz
+	ReadyAt         pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
 }
 
 type UserActivityRecord struct {

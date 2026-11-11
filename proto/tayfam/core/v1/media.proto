@@ -1,0 +1,236 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// MediaService holds uploaded images: avatars, fishing catch photos and
+// tayfa and event covers (issue #135; ADR-0007, data model v14 "Dosyalar",
+// "Yüklenen dosya takibi").
+//
+// Authentication: the caller's access token (ADR-0004, ADR-0011). Service
+// tokens are refused. Requests never name the acting user: the owner of a
+// new upload is always the caller.
+//
+// Flow, step 1: CreateUpload checks the purpose, the declared type and
+// size, the caller's quota and rate limit, and returns a PUT link to object
+// storage that works for 5 minutes, for that one object, that content type
+// and that exact size. The file never passes through our servers.
+//
+// Step 2: the client PUTs the file with exactly the returned headers.
+//
+// Step 3: CompleteUpload. core checks that the object exists with that
+// size and queues it for processing (UPLOAD_STATUS_UPLOADED).
+//
+// Step 4: a worker reads the first bytes for the real type (the declared
+// type and the file name are not trusted), decodes the image, drops every
+// piece of metadata (EXIF, GPS, XMP, ICC, comments), applies the EXIF
+// orientation and encodes two sizes: preview (longest side 400 px) and
+// full (longest side 1600 px). The raw file is deleted. The upload ends
+// READY or REJECTED. Clients poll GetUpload.
+//
+// Step 5: a READY upload is attached by the content that uses it: the
+// avatar (identity's AccountService.SetAvatar, which calls AttachAvatar
+// with the caller's token), a tayfa or event cover (cover_upload_id) or a
+// fishing catch photo (photo_upload_id). Only the owner can attach an
+// upload, only once and only for its purpose.
+//
+// Step 6: GetMediaUrls returns 1-hour GET links for the uploads the caller
+// may see; responses elsewhere carry upload IDs only.
+//
+// Cleanup: a PENDING upload is deleted after 24 hours, a READY upload that
+// nothing attached after 7 days, a REJECTED one after 24 hours. When the
+// content goes (a cover or photo replaced, a catch, event or tayfa deleted
+// for good, the avatar changed or the account deleted) its media is deleted
+// too.
+//
+// Without object storage configured (no R2 credentials) every method is
+// UNAVAILABLE without ErrorInfo; core runs anyway.
+//
+// Storage keys, signed links, the access key and the file's content or
+// metadata never appear in logs, events, metrics or error messages.
+service MediaService {
+  // CreateUpload opens an upload and returns its PUT link.
+  // content_type: JPEG and PNG today; WebP and HEIC are part of the
+  // contract but refused with ERROR_REASON_MEDIA_TYPE_UNSUPPORTED until the
+  // processor supports them (ADR-0007, revision 2026-11-11).
+  // size_bytes: 1 to 10 MiB (10485760), otherwise ERROR_REASON_VALIDATION
+  // (field size_bytes).
+  // tayfa_id: required for COVER and CATCH_PHOTO (the caller must be an
+  // ACTIVE member, ERROR_REASON_TAYFA_NOT_FOUND otherwise, and the tayfa
+  // must not be read-only); must be empty for AVATAR.
+  // client_request_id: required; a repeat returns the same upload with a
+  // fresh link while it is PENDING (same purpose, type and size, otherwise
+  // ERROR_REASON_VALIDATION on client_request_id).
+  // Limits: ERROR_REASON_UPLOAD_RATE_LIMITED (uploads per hour per user),
+  // ERROR_REASON_UPLOAD_QUOTA_EXCEEDED (stored bytes per user).
+  rpc CreateUpload(CreateUploadRequest) returns (CreateUploadResponse);
+
+  // CompleteUpload tells core that the PUT finished. The object must exist
+  // with the declared size: ERROR_REASON_UPLOAD_NOT_RECEIVED when it is not
+  // there yet (the client may retry while the link is valid; the upload
+  // stays PENDING). A size that differs rejects the upload. A repeat after
+  // the first success returns the upload unchanged. Only the owner may
+  // call it; any other upload is ERROR_REASON_UPLOAD_NOT_FOUND.
+  rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse);
+
+  // GetUpload returns the caller's own upload (its status, and links once
+  // READY). Another user's upload is ERROR_REASON_UPLOAD_NOT_FOUND.
+  rpc GetUpload(GetUploadRequest) returns (GetUploadResponse);
+
+  // GetMediaUrls returns GET links valid for 1 hour for each READY upload
+  // the caller may see; the others are left out without saying why
+  // (unknown, not ready, deleted or not visible are the same). Own uploads
+  // are always visible. An avatar is visible to every signed-in user,
+  // unless one of the two blocked the other, and not after the owner's
+  // account is deleted. A tayfa cover is visible to ACTIVE members of the
+  // tayfa (TayfaView). An event cover or a catch photo is visible to ACTIVE
+  // members who may see the event (EventView, events module on, event not
+  // deleted; the catch not deleted).
+  // 1 to 100 distinct upload IDs.
+  rpc GetMediaUrls(GetMediaUrlsRequest) returns (GetMediaUrlsResponse);
+
+  // AttachAvatar marks the caller's READY AVATAR upload as their avatar.
+  // identity calls it with the caller's own token before it stores the
+  // avatar (AccountService.SetAvatar; identity does not own media). Another
+  // user's upload, an unknown one or one of another purpose is
+  // ERROR_REASON_UPLOAD_NOT_FOUND; one not READY yet is
+  // ERROR_REASON_UPLOAD_NOT_READY; one attached elsewhere is
+  // ERROR_REASON_UPLOAD_IN_USE. A repeat succeeds. The previous avatar is
+  // deleted when identity's user.profile_updated with the new avatar
+  // reaches core.
+  rpc AttachAvatar(AttachAvatarRequest) returns (AttachAvatarResponse);
+}
+
+// UploadPurpose is what an upload is for (uploads.purpose). DATA_EXPORT
+// (KVKK) is written by the server only and never through this service.
+enum UploadPurpose {
+  UPLOAD_PURPOSE_UNSPECIFIED = 0;
+  UPLOAD_PURPOSE_AVATAR = 1;
+  UPLOAD_PURPOSE_CATCH_PHOTO = 2;
+  // A tayfa or event cover.
+  UPLOAD_PURPOSE_COVER = 3;
+}
+
+// UploadStatus is where an upload stands (uploads.status).
+enum UploadStatus {
+  UPLOAD_STATUS_UNSPECIFIED = 0;
+  // Waiting for the file (the PUT link is valid for 5 minutes).
+  UPLOAD_STATUS_PENDING = 1;
+  // Received; waiting for processing.
+  UPLOAD_STATUS_UPLOADED = 2;
+  UPLOAD_STATUS_PROCESSING = 3;
+  // Processed; may be attached and served.
+  UPLOAD_STATUS_READY = 4;
+  // Refused; see reject_reason. Deleted after 24 hours.
+  UPLOAD_STATUS_REJECTED = 5;
+}
+
+// UploadRejectReason says why an upload was refused.
+enum UploadRejectReason {
+  UPLOAD_REJECT_REASON_UNSPECIFIED = 0;
+  // The content is not an image of an accepted type, whatever its name or
+  // declared type said.
+  UPLOAD_REJECT_REASON_NOT_IMAGE = 1;
+  // An image whose real type is not accepted yet (WebP, HEIC).
+  UPLOAD_REJECT_REASON_UNSUPPORTED_TYPE = 2;
+  // Wider or taller than 10000 px or more than 25 megapixels.
+  UPLOAD_REJECT_REASON_TOO_LARGE = 3;
+  // An image of an accepted type that could not be decoded.
+  UPLOAD_REJECT_REASON_CORRUPT = 4;
+  // The stored object's size differs from the declared size.
+  UPLOAD_REJECT_REASON_SIZE_MISMATCH = 5;
+  // Processing failed several times for reasons outside the file.
+  UPLOAD_REJECT_REASON_FAILED = 6;
+}
+
+message Upload {
+  string id = 1;
+  UploadPurpose purpose = 2;
+  UploadStatus status = 3;
+  // Set when status is REJECTED.
+  UploadRejectReason reject_reason = 4;
+  // Set for COVER and CATCH_PHOTO.
+  string tayfa_id = 5;
+  // Declared size of the raw file.
+  int64 size_bytes = 6;
+  google.protobuf.Timestamp create_time = 7;
+  // Set when status is READY: the links (1 hour) and their expiry.
+  MediaUrls urls = 8;
+  // True once content uses the upload; a READY upload that is not attached
+  // within 7 days is deleted.
+  bool attached = 9;
+}
+
+// MediaUrls are GET links valid until expire_time (1 hour). They are
+// bearer links: anyone holding one can read the image until it expires, so
+// they are not logged or shared. Both images are JPEG today (WebP once the
+// processor supports it; read content_type).
+message MediaUrls {
+  string upload_id = 1;
+  // Longest side at most 400 px.
+  string preview_url = 2;
+  // Longest side at most 1600 px.
+  string full_url = 3;
+  // Media type of both images, such as "image/jpeg".
+  string content_type = 4;
+  // Size of the full image in pixels, after orientation.
+  int32 width = 5;
+  int32 height = 6;
+  google.protobuf.Timestamp expire_time = 7;
+}
+
+message CreateUploadRequest {
+  UploadPurpose purpose = 1;
+  // "image/jpeg", "image/png", "image/webp" or "image/heic".
+  string content_type = 2;
+  int64 size_bytes = 3;
+  // See CreateUpload.
+  string tayfa_id = 4;
+  // A UUID the client generates once per upload attempt.
+  string client_request_id = 5;
+}
+
+message CreateUploadResponse {
+  Upload upload = 1;
+  // HTTP method of the upload: always "PUT".
+  string upload_method = 2;
+  // Presigned URL. Works until upload_expire_time, for this object only.
+  string upload_url = 3;
+  // Headers the PUT must carry exactly as given (Content-Type and
+  // Content-Length are signed: another type or size is refused by the
+  // storage).
+  map<string, string> upload_headers = 4;
+  google.protobuf.Timestamp upload_expire_time = 5;
+}
+
+message CompleteUploadRequest {
+  string upload_id = 1;
+}
+
+message CompleteUploadResponse {
+  Upload upload = 1;
+}
+
+message GetUploadRequest {
+  string upload_id = 1;
+}
+
+message GetUploadResponse {
+  Upload upload = 1;
+}
+
+message GetMediaUrlsRequest {
+  repeated string upload_ids = 1;
+}
+
+message GetMediaUrlsResponse {
+  // In request order; uploads the caller may not see are left out.
+  repeated MediaUrls media = 1;
+}
+
+message AttachAvatarRequest {
+  string upload_id = 1;
+}
+
+message AttachAvatarResponse {}

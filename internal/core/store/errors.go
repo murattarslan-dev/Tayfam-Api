@@ -29,6 +29,10 @@ const (
 	// options, identity fields, the anonymous or multiple-choice setting
 	// after the first vote, an option edit).
 	CodePollFrozen = "TF071"
+	// CodeMediaRef: content was pointed at an upload that is not a READY
+	// upload of the right purpose attached to that content (uploads_check_ref,
+	// issue #135).
+	CodeMediaRef = "TF080"
 	// CodeUniqueViolation is Postgres' unique_violation.
 	CodeUniqueViolation = "23505"
 )

@@ -4450,6 +4450,14 @@ components:
         - report-limit
         - report-already-resolved
         - report-action-missing
+        # core: dosyalar (#135, ADR-0007, ADR-0020)
+        - upload-not-found
+        - upload-not-ready
+        - upload-in-use
+        - upload-not-received
+        - upload-rate-limited
+        - upload-quota-exceeded
+        - media-type-unsupported
         # identity: hesap ve referans kodu (#71; rate-limited yukarıda)
         - referral-code-not-found
         # identity: hesap yönetimi (#75)

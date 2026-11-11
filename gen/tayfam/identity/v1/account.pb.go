@@ -120,8 +120,10 @@ type GetAccountResponse struct {
 	// Such as "TYF-8K2M4Q"; the share link is tayfam.app/r/<code>.
 	ReferralCode       string             `protobuf:"bytes,1,opt,name=referral_code,json=referralCode,proto3" json:"referral_code,omitempty"`
 	ActivityVisibility ActivityVisibility `protobuf:"varint,2,opt,name=activity_visibility,json=activityVisibility,proto3,enum=tayfam.identity.v1.ActivityVisibility" json:"activity_visibility,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Upload ID (UUID) of the avatar; empty when there is none.
+	AvatarUploadId string `protobuf:"bytes,3,opt,name=avatar_upload_id,json=avatarUploadId,proto3" json:"avatar_upload_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GetAccountResponse) Reset() {
@@ -168,6 +170,173 @@ func (x *GetAccountResponse) GetActivityVisibility() ActivityVisibility {
 	return ActivityVisibility_ACTIVITY_VISIBILITY_UNSPECIFIED
 }
 
+func (x *GetAccountResponse) GetAvatarUploadId() string {
+	if x != nil {
+		return x.AvatarUploadId
+	}
+	return ""
+}
+
+type SetAvatarRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UploadId      string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetAvatarRequest) Reset() {
+	*x = SetAvatarRequest{}
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetAvatarRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetAvatarRequest) ProtoMessage() {}
+
+func (x *SetAvatarRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetAvatarRequest.ProtoReflect.Descriptor instead.
+func (*SetAvatarRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *SetAvatarRequest) GetUploadId() string {
+	if x != nil {
+		return x.UploadId
+	}
+	return ""
+}
+
+type SetAvatarResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	AvatarUploadId string                 `protobuf:"bytes,1,opt,name=avatar_upload_id,json=avatarUploadId,proto3" json:"avatar_upload_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SetAvatarResponse) Reset() {
+	*x = SetAvatarResponse{}
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetAvatarResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetAvatarResponse) ProtoMessage() {}
+
+func (x *SetAvatarResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetAvatarResponse.ProtoReflect.Descriptor instead.
+func (*SetAvatarResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *SetAvatarResponse) GetAvatarUploadId() string {
+	if x != nil {
+		return x.AvatarUploadId
+	}
+	return ""
+}
+
+type ClearAvatarRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClearAvatarRequest) Reset() {
+	*x = ClearAvatarRequest{}
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearAvatarRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearAvatarRequest) ProtoMessage() {}
+
+func (x *ClearAvatarRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearAvatarRequest.ProtoReflect.Descriptor instead.
+func (*ClearAvatarRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{4}
+}
+
+type ClearAvatarResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClearAvatarResponse) Reset() {
+	*x = ClearAvatarResponse{}
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearAvatarResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearAvatarResponse) ProtoMessage() {}
+
+func (x *ClearAvatarResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearAvatarResponse.ProtoReflect.Descriptor instead.
+func (*ClearAvatarResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{5}
+}
+
 type RotateReferralCodeRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -176,7 +345,7 @@ type RotateReferralCodeRequest struct {
 
 func (x *RotateReferralCodeRequest) Reset() {
 	*x = RotateReferralCodeRequest{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[2]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -188,7 +357,7 @@ func (x *RotateReferralCodeRequest) String() string {
 func (*RotateReferralCodeRequest) ProtoMessage() {}
 
 func (x *RotateReferralCodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[2]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -201,7 +370,7 @@ func (x *RotateReferralCodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RotateReferralCodeRequest.ProtoReflect.Descriptor instead.
 func (*RotateReferralCodeRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{2}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{6}
 }
 
 type RotateReferralCodeResponse struct {
@@ -213,7 +382,7 @@ type RotateReferralCodeResponse struct {
 
 func (x *RotateReferralCodeResponse) Reset() {
 	*x = RotateReferralCodeResponse{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[3]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -225,7 +394,7 @@ func (x *RotateReferralCodeResponse) String() string {
 func (*RotateReferralCodeResponse) ProtoMessage() {}
 
 func (x *RotateReferralCodeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[3]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -238,7 +407,7 @@ func (x *RotateReferralCodeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RotateReferralCodeResponse.ProtoReflect.Descriptor instead.
 func (*RotateReferralCodeResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{3}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *RotateReferralCodeResponse) GetReferralCode() string {
@@ -258,7 +427,7 @@ type FindUserByReferralCodeRequest struct {
 
 func (x *FindUserByReferralCodeRequest) Reset() {
 	*x = FindUserByReferralCodeRequest{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[4]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -270,7 +439,7 @@ func (x *FindUserByReferralCodeRequest) String() string {
 func (*FindUserByReferralCodeRequest) ProtoMessage() {}
 
 func (x *FindUserByReferralCodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[4]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -283,7 +452,7 @@ func (x *FindUserByReferralCodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FindUserByReferralCodeRequest.ProtoReflect.Descriptor instead.
 func (*FindUserByReferralCodeRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{4}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *FindUserByReferralCodeRequest) GetReferralCode() string {
@@ -305,7 +474,7 @@ type FindUserByReferralCodeResponse struct {
 
 func (x *FindUserByReferralCodeResponse) Reset() {
 	*x = FindUserByReferralCodeResponse{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[5]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -317,7 +486,7 @@ func (x *FindUserByReferralCodeResponse) String() string {
 func (*FindUserByReferralCodeResponse) ProtoMessage() {}
 
 func (x *FindUserByReferralCodeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[5]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -330,7 +499,7 @@ func (x *FindUserByReferralCodeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FindUserByReferralCodeResponse.ProtoReflect.Descriptor instead.
 func (*FindUserByReferralCodeResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{5}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *FindUserByReferralCodeResponse) GetUserId() string {
@@ -363,7 +532,7 @@ type SetActivityVisibilityRequest struct {
 
 func (x *SetActivityVisibilityRequest) Reset() {
 	*x = SetActivityVisibilityRequest{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[6]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -375,7 +544,7 @@ func (x *SetActivityVisibilityRequest) String() string {
 func (*SetActivityVisibilityRequest) ProtoMessage() {}
 
 func (x *SetActivityVisibilityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[6]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -388,7 +557,7 @@ func (x *SetActivityVisibilityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetActivityVisibilityRequest.ProtoReflect.Descriptor instead.
 func (*SetActivityVisibilityRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{6}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *SetActivityVisibilityRequest) GetActivityVisibility() ActivityVisibility {
@@ -407,7 +576,7 @@ type SetActivityVisibilityResponse struct {
 
 func (x *SetActivityVisibilityResponse) Reset() {
 	*x = SetActivityVisibilityResponse{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[7]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -419,7 +588,7 @@ func (x *SetActivityVisibilityResponse) String() string {
 func (*SetActivityVisibilityResponse) ProtoMessage() {}
 
 func (x *SetActivityVisibilityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[7]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -432,7 +601,7 @@ func (x *SetActivityVisibilityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetActivityVisibilityResponse.ProtoReflect.Descriptor instead.
 func (*SetActivityVisibilityResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{7}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SetActivityVisibilityResponse) GetActivityVisibility() ActivityVisibility {
@@ -450,7 +619,7 @@ type ListSessionsRequest struct {
 
 func (x *ListSessionsRequest) Reset() {
 	*x = ListSessionsRequest{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[8]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -462,7 +631,7 @@ func (x *ListSessionsRequest) String() string {
 func (*ListSessionsRequest) ProtoMessage() {}
 
 func (x *ListSessionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[8]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -475,7 +644,7 @@ func (x *ListSessionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSessionsRequest.ProtoReflect.Descriptor instead.
 func (*ListSessionsRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{8}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{12}
 }
 
 type Session struct {
@@ -493,7 +662,7 @@ type Session struct {
 
 func (x *Session) Reset() {
 	*x = Session{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[9]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -505,7 +674,7 @@ func (x *Session) String() string {
 func (*Session) ProtoMessage() {}
 
 func (x *Session) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[9]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -518,7 +687,7 @@ func (x *Session) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Session.ProtoReflect.Descriptor instead.
 func (*Session) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{9}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Session) GetSessionId() string {
@@ -566,7 +735,7 @@ type ListSessionsResponse struct {
 
 func (x *ListSessionsResponse) Reset() {
 	*x = ListSessionsResponse{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[10]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -578,7 +747,7 @@ func (x *ListSessionsResponse) String() string {
 func (*ListSessionsResponse) ProtoMessage() {}
 
 func (x *ListSessionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[10]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -591,7 +760,7 @@ func (x *ListSessionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSessionsResponse.ProtoReflect.Descriptor instead.
 func (*ListSessionsResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{10}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ListSessionsResponse) GetSessions() []*Session {
@@ -610,7 +779,7 @@ type RevokeSessionRequest struct {
 
 func (x *RevokeSessionRequest) Reset() {
 	*x = RevokeSessionRequest{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[11]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -622,7 +791,7 @@ func (x *RevokeSessionRequest) String() string {
 func (*RevokeSessionRequest) ProtoMessage() {}
 
 func (x *RevokeSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[11]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -635,7 +804,7 @@ func (x *RevokeSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeSessionRequest.ProtoReflect.Descriptor instead.
 func (*RevokeSessionRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{11}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *RevokeSessionRequest) GetSessionId() string {
@@ -653,7 +822,7 @@ type RevokeSessionResponse struct {
 
 func (x *RevokeSessionResponse) Reset() {
 	*x = RevokeSessionResponse{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[12]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -665,7 +834,7 @@ func (x *RevokeSessionResponse) String() string {
 func (*RevokeSessionResponse) ProtoMessage() {}
 
 func (x *RevokeSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[12]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -678,7 +847,7 @@ func (x *RevokeSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeSessionResponse.ProtoReflect.Descriptor instead.
 func (*RevokeSessionResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{12}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{16}
 }
 
 type RevokeOtherSessionsRequest struct {
@@ -689,7 +858,7 @@ type RevokeOtherSessionsRequest struct {
 
 func (x *RevokeOtherSessionsRequest) Reset() {
 	*x = RevokeOtherSessionsRequest{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[13]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -701,7 +870,7 @@ func (x *RevokeOtherSessionsRequest) String() string {
 func (*RevokeOtherSessionsRequest) ProtoMessage() {}
 
 func (x *RevokeOtherSessionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[13]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -714,7 +883,7 @@ func (x *RevokeOtherSessionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeOtherSessionsRequest.ProtoReflect.Descriptor instead.
 func (*RevokeOtherSessionsRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{13}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{17}
 }
 
 type RevokeOtherSessionsResponse struct {
@@ -726,7 +895,7 @@ type RevokeOtherSessionsResponse struct {
 
 func (x *RevokeOtherSessionsResponse) Reset() {
 	*x = RevokeOtherSessionsResponse{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[14]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -738,7 +907,7 @@ func (x *RevokeOtherSessionsResponse) String() string {
 func (*RevokeOtherSessionsResponse) ProtoMessage() {}
 
 func (x *RevokeOtherSessionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[14]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -751,7 +920,7 @@ func (x *RevokeOtherSessionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeOtherSessionsResponse.ProtoReflect.Descriptor instead.
 func (*RevokeOtherSessionsResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{14}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *RevokeOtherSessionsResponse) GetRevokedCount() int32 {
@@ -769,7 +938,7 @@ type GetConsentsRequest struct {
 
 func (x *GetConsentsRequest) Reset() {
 	*x = GetConsentsRequest{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[15]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -781,7 +950,7 @@ func (x *GetConsentsRequest) String() string {
 func (*GetConsentsRequest) ProtoMessage() {}
 
 func (x *GetConsentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[15]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -794,7 +963,7 @@ func (x *GetConsentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConsentsRequest.ProtoReflect.Descriptor instead.
 func (*GetConsentsRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{15}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{19}
 }
 
 type GetConsentsResponse struct {
@@ -808,7 +977,7 @@ type GetConsentsResponse struct {
 
 func (x *GetConsentsResponse) Reset() {
 	*x = GetConsentsResponse{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[16]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -820,7 +989,7 @@ func (x *GetConsentsResponse) String() string {
 func (*GetConsentsResponse) ProtoMessage() {}
 
 func (x *GetConsentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[16]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -833,7 +1002,7 @@ func (x *GetConsentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConsentsResponse.ProtoReflect.Descriptor instead.
 func (*GetConsentsResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{16}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GetConsentsResponse) GetPrivacyNoticeVersion() string {
@@ -868,7 +1037,7 @@ type AcceptConsentsRequest struct {
 
 func (x *AcceptConsentsRequest) Reset() {
 	*x = AcceptConsentsRequest{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[17]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -880,7 +1049,7 @@ func (x *AcceptConsentsRequest) String() string {
 func (*AcceptConsentsRequest) ProtoMessage() {}
 
 func (x *AcceptConsentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[17]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -893,7 +1062,7 @@ func (x *AcceptConsentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcceptConsentsRequest.ProtoReflect.Descriptor instead.
 func (*AcceptConsentsRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{17}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *AcceptConsentsRequest) GetPrivacyNoticeVersion() string {
@@ -918,7 +1087,7 @@ type AcceptConsentsResponse struct {
 
 func (x *AcceptConsentsResponse) Reset() {
 	*x = AcceptConsentsResponse{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[18]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -930,7 +1099,7 @@ func (x *AcceptConsentsResponse) String() string {
 func (*AcceptConsentsResponse) ProtoMessage() {}
 
 func (x *AcceptConsentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[18]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -943,7 +1112,7 @@ func (x *AcceptConsentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcceptConsentsResponse.ProtoReflect.Descriptor instead.
 func (*AcceptConsentsResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{18}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{22}
 }
 
 type DeleteAccountRequest struct {
@@ -954,7 +1123,7 @@ type DeleteAccountRequest struct {
 
 func (x *DeleteAccountRequest) Reset() {
 	*x = DeleteAccountRequest{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[19]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -966,7 +1135,7 @@ func (x *DeleteAccountRequest) String() string {
 func (*DeleteAccountRequest) ProtoMessage() {}
 
 func (x *DeleteAccountRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[19]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -979,7 +1148,7 @@ func (x *DeleteAccountRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteAccountRequest.ProtoReflect.Descriptor instead.
 func (*DeleteAccountRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{19}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{23}
 }
 
 type DeleteAccountResponse struct {
@@ -990,7 +1159,7 @@ type DeleteAccountResponse struct {
 
 func (x *DeleteAccountResponse) Reset() {
 	*x = DeleteAccountResponse{}
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[20]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1002,7 +1171,7 @@ func (x *DeleteAccountResponse) String() string {
 func (*DeleteAccountResponse) ProtoMessage() {}
 
 func (x *DeleteAccountResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_account_proto_msgTypes[20]
+	mi := &file_tayfam_identity_v1_account_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1015,7 +1184,7 @@ func (x *DeleteAccountResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteAccountResponse.ProtoReflect.Descriptor instead.
 func (*DeleteAccountResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{20}
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{24}
 }
 
 var File_tayfam_identity_v1_account_proto protoreflect.FileDescriptor
@@ -1023,10 +1192,17 @@ var File_tayfam_identity_v1_account_proto protoreflect.FileDescriptor
 const file_tayfam_identity_v1_account_proto_rawDesc = "" +
 	"\n" +
 	" tayfam/identity/v1/account.proto\x12\x12tayfam.identity.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dtayfam/identity/v1/auth.proto\"\x13\n" +
-	"\x11GetAccountRequest\"\x92\x01\n" +
+	"\x11GetAccountRequest\"\xbc\x01\n" +
 	"\x12GetAccountResponse\x12#\n" +
 	"\rreferral_code\x18\x01 \x01(\tR\freferralCode\x12W\n" +
-	"\x13activity_visibility\x18\x02 \x01(\x0e2&.tayfam.identity.v1.ActivityVisibilityR\x12activityVisibility\"\x1b\n" +
+	"\x13activity_visibility\x18\x02 \x01(\x0e2&.tayfam.identity.v1.ActivityVisibilityR\x12activityVisibility\x12(\n" +
+	"\x10avatar_upload_id\x18\x03 \x01(\tR\x0eavatarUploadId\"/\n" +
+	"\x10SetAvatarRequest\x12\x1b\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\"=\n" +
+	"\x11SetAvatarResponse\x12(\n" +
+	"\x10avatar_upload_id\x18\x01 \x01(\tR\x0eavatarUploadId\"\x14\n" +
+	"\x12ClearAvatarRequest\"\x15\n" +
+	"\x13ClearAvatarResponse\"\x1b\n" +
 	"\x19RotateReferralCodeRequest\"A\n" +
 	"\x1aRotateReferralCodeResponse\x12#\n" +
 	"\rreferral_code\x18\x01 \x01(\tR\freferralCode\"D\n" +
@@ -1073,13 +1249,16 @@ const file_tayfam_identity_v1_account_proto_rawDesc = "" +
 	"\x1fACTIVITY_VISIBILITY_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bACTIVITY_VISIBILITY_PRIVATE\x10\x01\x12\x1d\n" +
 	"\x19ACTIVITY_VISIBILITY_TAYFA\x10\x02\x12\x1e\n" +
-	"\x1aACTIVITY_VISIBILITY_PUBLIC\x10\x032\xd1\b\n" +
+	"\x1aACTIVITY_VISIBILITY_PUBLIC\x10\x032\x8b\n" +
+	"\n" +
 	"\x0eAccountService\x12[\n" +
 	"\n" +
 	"GetAccount\x12%.tayfam.identity.v1.GetAccountRequest\x1a&.tayfam.identity.v1.GetAccountResponse\x12s\n" +
 	"\x12RotateReferralCode\x12-.tayfam.identity.v1.RotateReferralCodeRequest\x1a..tayfam.identity.v1.RotateReferralCodeResponse\x12\x7f\n" +
 	"\x16FindUserByReferralCode\x121.tayfam.identity.v1.FindUserByReferralCodeRequest\x1a2.tayfam.identity.v1.FindUserByReferralCodeResponse\x12|\n" +
-	"\x15SetActivityVisibility\x120.tayfam.identity.v1.SetActivityVisibilityRequest\x1a1.tayfam.identity.v1.SetActivityVisibilityResponse\x12a\n" +
+	"\x15SetActivityVisibility\x120.tayfam.identity.v1.SetActivityVisibilityRequest\x1a1.tayfam.identity.v1.SetActivityVisibilityResponse\x12X\n" +
+	"\tSetAvatar\x12$.tayfam.identity.v1.SetAvatarRequest\x1a%.tayfam.identity.v1.SetAvatarResponse\x12^\n" +
+	"\vClearAvatar\x12&.tayfam.identity.v1.ClearAvatarRequest\x1a'.tayfam.identity.v1.ClearAvatarResponse\x12a\n" +
 	"\fListSessions\x12'.tayfam.identity.v1.ListSessionsRequest\x1a(.tayfam.identity.v1.ListSessionsResponse\x12d\n" +
 	"\rRevokeSession\x12(.tayfam.identity.v1.RevokeSessionRequest\x1a).tayfam.identity.v1.RevokeSessionResponse\x12v\n" +
 	"\x13RevokeOtherSessions\x12..tayfam.identity.v1.RevokeOtherSessionsRequest\x1a/.tayfam.identity.v1.RevokeOtherSessionsResponse\x12^\n" +
@@ -1101,63 +1280,71 @@ func file_tayfam_identity_v1_account_proto_rawDescGZIP() []byte {
 }
 
 var file_tayfam_identity_v1_account_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_tayfam_identity_v1_account_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_tayfam_identity_v1_account_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_tayfam_identity_v1_account_proto_goTypes = []any{
 	(ActivityVisibility)(0),                // 0: tayfam.identity.v1.ActivityVisibility
 	(*GetAccountRequest)(nil),              // 1: tayfam.identity.v1.GetAccountRequest
 	(*GetAccountResponse)(nil),             // 2: tayfam.identity.v1.GetAccountResponse
-	(*RotateReferralCodeRequest)(nil),      // 3: tayfam.identity.v1.RotateReferralCodeRequest
-	(*RotateReferralCodeResponse)(nil),     // 4: tayfam.identity.v1.RotateReferralCodeResponse
-	(*FindUserByReferralCodeRequest)(nil),  // 5: tayfam.identity.v1.FindUserByReferralCodeRequest
-	(*FindUserByReferralCodeResponse)(nil), // 6: tayfam.identity.v1.FindUserByReferralCodeResponse
-	(*SetActivityVisibilityRequest)(nil),   // 7: tayfam.identity.v1.SetActivityVisibilityRequest
-	(*SetActivityVisibilityResponse)(nil),  // 8: tayfam.identity.v1.SetActivityVisibilityResponse
-	(*ListSessionsRequest)(nil),            // 9: tayfam.identity.v1.ListSessionsRequest
-	(*Session)(nil),                        // 10: tayfam.identity.v1.Session
-	(*ListSessionsResponse)(nil),           // 11: tayfam.identity.v1.ListSessionsResponse
-	(*RevokeSessionRequest)(nil),           // 12: tayfam.identity.v1.RevokeSessionRequest
-	(*RevokeSessionResponse)(nil),          // 13: tayfam.identity.v1.RevokeSessionResponse
-	(*RevokeOtherSessionsRequest)(nil),     // 14: tayfam.identity.v1.RevokeOtherSessionsRequest
-	(*RevokeOtherSessionsResponse)(nil),    // 15: tayfam.identity.v1.RevokeOtherSessionsResponse
-	(*GetConsentsRequest)(nil),             // 16: tayfam.identity.v1.GetConsentsRequest
-	(*GetConsentsResponse)(nil),            // 17: tayfam.identity.v1.GetConsentsResponse
-	(*AcceptConsentsRequest)(nil),          // 18: tayfam.identity.v1.AcceptConsentsRequest
-	(*AcceptConsentsResponse)(nil),         // 19: tayfam.identity.v1.AcceptConsentsResponse
-	(*DeleteAccountRequest)(nil),           // 20: tayfam.identity.v1.DeleteAccountRequest
-	(*DeleteAccountResponse)(nil),          // 21: tayfam.identity.v1.DeleteAccountResponse
-	(Platform)(0),                          // 22: tayfam.identity.v1.Platform
-	(*timestamppb.Timestamp)(nil),          // 23: google.protobuf.Timestamp
+	(*SetAvatarRequest)(nil),               // 3: tayfam.identity.v1.SetAvatarRequest
+	(*SetAvatarResponse)(nil),              // 4: tayfam.identity.v1.SetAvatarResponse
+	(*ClearAvatarRequest)(nil),             // 5: tayfam.identity.v1.ClearAvatarRequest
+	(*ClearAvatarResponse)(nil),            // 6: tayfam.identity.v1.ClearAvatarResponse
+	(*RotateReferralCodeRequest)(nil),      // 7: tayfam.identity.v1.RotateReferralCodeRequest
+	(*RotateReferralCodeResponse)(nil),     // 8: tayfam.identity.v1.RotateReferralCodeResponse
+	(*FindUserByReferralCodeRequest)(nil),  // 9: tayfam.identity.v1.FindUserByReferralCodeRequest
+	(*FindUserByReferralCodeResponse)(nil), // 10: tayfam.identity.v1.FindUserByReferralCodeResponse
+	(*SetActivityVisibilityRequest)(nil),   // 11: tayfam.identity.v1.SetActivityVisibilityRequest
+	(*SetActivityVisibilityResponse)(nil),  // 12: tayfam.identity.v1.SetActivityVisibilityResponse
+	(*ListSessionsRequest)(nil),            // 13: tayfam.identity.v1.ListSessionsRequest
+	(*Session)(nil),                        // 14: tayfam.identity.v1.Session
+	(*ListSessionsResponse)(nil),           // 15: tayfam.identity.v1.ListSessionsResponse
+	(*RevokeSessionRequest)(nil),           // 16: tayfam.identity.v1.RevokeSessionRequest
+	(*RevokeSessionResponse)(nil),          // 17: tayfam.identity.v1.RevokeSessionResponse
+	(*RevokeOtherSessionsRequest)(nil),     // 18: tayfam.identity.v1.RevokeOtherSessionsRequest
+	(*RevokeOtherSessionsResponse)(nil),    // 19: tayfam.identity.v1.RevokeOtherSessionsResponse
+	(*GetConsentsRequest)(nil),             // 20: tayfam.identity.v1.GetConsentsRequest
+	(*GetConsentsResponse)(nil),            // 21: tayfam.identity.v1.GetConsentsResponse
+	(*AcceptConsentsRequest)(nil),          // 22: tayfam.identity.v1.AcceptConsentsRequest
+	(*AcceptConsentsResponse)(nil),         // 23: tayfam.identity.v1.AcceptConsentsResponse
+	(*DeleteAccountRequest)(nil),           // 24: tayfam.identity.v1.DeleteAccountRequest
+	(*DeleteAccountResponse)(nil),          // 25: tayfam.identity.v1.DeleteAccountResponse
+	(Platform)(0),                          // 26: tayfam.identity.v1.Platform
+	(*timestamppb.Timestamp)(nil),          // 27: google.protobuf.Timestamp
 }
 var file_tayfam_identity_v1_account_proto_depIdxs = []int32{
 	0,  // 0: tayfam.identity.v1.GetAccountResponse.activity_visibility:type_name -> tayfam.identity.v1.ActivityVisibility
 	0,  // 1: tayfam.identity.v1.SetActivityVisibilityRequest.activity_visibility:type_name -> tayfam.identity.v1.ActivityVisibility
 	0,  // 2: tayfam.identity.v1.SetActivityVisibilityResponse.activity_visibility:type_name -> tayfam.identity.v1.ActivityVisibility
-	22, // 3: tayfam.identity.v1.Session.platform:type_name -> tayfam.identity.v1.Platform
-	23, // 4: tayfam.identity.v1.Session.create_time:type_name -> google.protobuf.Timestamp
-	23, // 5: tayfam.identity.v1.Session.last_seen_time:type_name -> google.protobuf.Timestamp
-	10, // 6: tayfam.identity.v1.ListSessionsResponse.sessions:type_name -> tayfam.identity.v1.Session
+	26, // 3: tayfam.identity.v1.Session.platform:type_name -> tayfam.identity.v1.Platform
+	27, // 4: tayfam.identity.v1.Session.create_time:type_name -> google.protobuf.Timestamp
+	27, // 5: tayfam.identity.v1.Session.last_seen_time:type_name -> google.protobuf.Timestamp
+	14, // 6: tayfam.identity.v1.ListSessionsResponse.sessions:type_name -> tayfam.identity.v1.Session
 	1,  // 7: tayfam.identity.v1.AccountService.GetAccount:input_type -> tayfam.identity.v1.GetAccountRequest
-	3,  // 8: tayfam.identity.v1.AccountService.RotateReferralCode:input_type -> tayfam.identity.v1.RotateReferralCodeRequest
-	5,  // 9: tayfam.identity.v1.AccountService.FindUserByReferralCode:input_type -> tayfam.identity.v1.FindUserByReferralCodeRequest
-	7,  // 10: tayfam.identity.v1.AccountService.SetActivityVisibility:input_type -> tayfam.identity.v1.SetActivityVisibilityRequest
-	9,  // 11: tayfam.identity.v1.AccountService.ListSessions:input_type -> tayfam.identity.v1.ListSessionsRequest
-	12, // 12: tayfam.identity.v1.AccountService.RevokeSession:input_type -> tayfam.identity.v1.RevokeSessionRequest
-	14, // 13: tayfam.identity.v1.AccountService.RevokeOtherSessions:input_type -> tayfam.identity.v1.RevokeOtherSessionsRequest
-	16, // 14: tayfam.identity.v1.AccountService.GetConsents:input_type -> tayfam.identity.v1.GetConsentsRequest
-	18, // 15: tayfam.identity.v1.AccountService.AcceptConsents:input_type -> tayfam.identity.v1.AcceptConsentsRequest
-	20, // 16: tayfam.identity.v1.AccountService.DeleteAccount:input_type -> tayfam.identity.v1.DeleteAccountRequest
-	2,  // 17: tayfam.identity.v1.AccountService.GetAccount:output_type -> tayfam.identity.v1.GetAccountResponse
-	4,  // 18: tayfam.identity.v1.AccountService.RotateReferralCode:output_type -> tayfam.identity.v1.RotateReferralCodeResponse
-	6,  // 19: tayfam.identity.v1.AccountService.FindUserByReferralCode:output_type -> tayfam.identity.v1.FindUserByReferralCodeResponse
-	8,  // 20: tayfam.identity.v1.AccountService.SetActivityVisibility:output_type -> tayfam.identity.v1.SetActivityVisibilityResponse
-	11, // 21: tayfam.identity.v1.AccountService.ListSessions:output_type -> tayfam.identity.v1.ListSessionsResponse
-	13, // 22: tayfam.identity.v1.AccountService.RevokeSession:output_type -> tayfam.identity.v1.RevokeSessionResponse
-	15, // 23: tayfam.identity.v1.AccountService.RevokeOtherSessions:output_type -> tayfam.identity.v1.RevokeOtherSessionsResponse
-	17, // 24: tayfam.identity.v1.AccountService.GetConsents:output_type -> tayfam.identity.v1.GetConsentsResponse
-	19, // 25: tayfam.identity.v1.AccountService.AcceptConsents:output_type -> tayfam.identity.v1.AcceptConsentsResponse
-	21, // 26: tayfam.identity.v1.AccountService.DeleteAccount:output_type -> tayfam.identity.v1.DeleteAccountResponse
-	17, // [17:27] is the sub-list for method output_type
-	7,  // [7:17] is the sub-list for method input_type
+	7,  // 8: tayfam.identity.v1.AccountService.RotateReferralCode:input_type -> tayfam.identity.v1.RotateReferralCodeRequest
+	9,  // 9: tayfam.identity.v1.AccountService.FindUserByReferralCode:input_type -> tayfam.identity.v1.FindUserByReferralCodeRequest
+	11, // 10: tayfam.identity.v1.AccountService.SetActivityVisibility:input_type -> tayfam.identity.v1.SetActivityVisibilityRequest
+	3,  // 11: tayfam.identity.v1.AccountService.SetAvatar:input_type -> tayfam.identity.v1.SetAvatarRequest
+	5,  // 12: tayfam.identity.v1.AccountService.ClearAvatar:input_type -> tayfam.identity.v1.ClearAvatarRequest
+	13, // 13: tayfam.identity.v1.AccountService.ListSessions:input_type -> tayfam.identity.v1.ListSessionsRequest
+	16, // 14: tayfam.identity.v1.AccountService.RevokeSession:input_type -> tayfam.identity.v1.RevokeSessionRequest
+	18, // 15: tayfam.identity.v1.AccountService.RevokeOtherSessions:input_type -> tayfam.identity.v1.RevokeOtherSessionsRequest
+	20, // 16: tayfam.identity.v1.AccountService.GetConsents:input_type -> tayfam.identity.v1.GetConsentsRequest
+	22, // 17: tayfam.identity.v1.AccountService.AcceptConsents:input_type -> tayfam.identity.v1.AcceptConsentsRequest
+	24, // 18: tayfam.identity.v1.AccountService.DeleteAccount:input_type -> tayfam.identity.v1.DeleteAccountRequest
+	2,  // 19: tayfam.identity.v1.AccountService.GetAccount:output_type -> tayfam.identity.v1.GetAccountResponse
+	8,  // 20: tayfam.identity.v1.AccountService.RotateReferralCode:output_type -> tayfam.identity.v1.RotateReferralCodeResponse
+	10, // 21: tayfam.identity.v1.AccountService.FindUserByReferralCode:output_type -> tayfam.identity.v1.FindUserByReferralCodeResponse
+	12, // 22: tayfam.identity.v1.AccountService.SetActivityVisibility:output_type -> tayfam.identity.v1.SetActivityVisibilityResponse
+	4,  // 23: tayfam.identity.v1.AccountService.SetAvatar:output_type -> tayfam.identity.v1.SetAvatarResponse
+	6,  // 24: tayfam.identity.v1.AccountService.ClearAvatar:output_type -> tayfam.identity.v1.ClearAvatarResponse
+	15, // 25: tayfam.identity.v1.AccountService.ListSessions:output_type -> tayfam.identity.v1.ListSessionsResponse
+	17, // 26: tayfam.identity.v1.AccountService.RevokeSession:output_type -> tayfam.identity.v1.RevokeSessionResponse
+	19, // 27: tayfam.identity.v1.AccountService.RevokeOtherSessions:output_type -> tayfam.identity.v1.RevokeOtherSessionsResponse
+	21, // 28: tayfam.identity.v1.AccountService.GetConsents:output_type -> tayfam.identity.v1.GetConsentsResponse
+	23, // 29: tayfam.identity.v1.AccountService.AcceptConsents:output_type -> tayfam.identity.v1.AcceptConsentsResponse
+	25, // 30: tayfam.identity.v1.AccountService.DeleteAccount:output_type -> tayfam.identity.v1.DeleteAccountResponse
+	19, // [19:31] is the sub-list for method output_type
+	7,  // [7:19] is the sub-list for method input_type
 	7,  // [7:7] is the sub-list for extension type_name
 	7,  // [7:7] is the sub-list for extension extendee
 	0,  // [0:7] is the sub-list for field type_name
@@ -1175,7 +1362,7 @@ func file_tayfam_identity_v1_account_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_identity_v1_account_proto_rawDesc), len(file_tayfam_identity_v1_account_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   21,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

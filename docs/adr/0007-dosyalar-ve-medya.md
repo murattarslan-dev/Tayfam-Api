@@ -3,6 +3,9 @@
 - **Durum:** Kabul edildi
 - **Tarih:** 2026-11-07
 - **Karar veren:** Murat Tarslan
+- **Revizyon:** [ADR-0020](0020-goruntu-isleme-ve-medya-sunumu.md) (önerildi,
+  2026-11-11) "İşleme", "Sunma" ve "Bucket'lar" bölümlerini değiştirir:
+  görüntü işleme seçenekleri, toplu imzalı link ucu, Faz 2'ye kadar tek bucket.
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0006](0006-dagitim-ve-ortamlar.md)
 
 ## Bağlam

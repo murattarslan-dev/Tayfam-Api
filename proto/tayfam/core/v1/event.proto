@@ -447,6 +447,9 @@ message Event {
     GamingDetails gaming = 34;
     SportsDetails sports = 35;
   }
+  // The cover image (a READY COVER upload, MediaService); empty when there
+  // is none. Events a series generates have no cover of their own.
+  string cover_upload_id = 36;
 }
 
 message CreateEventRequest {
@@ -495,6 +498,11 @@ message CreateEventRequest {
   // creates the following events itself, eight weeks ahead, as ordinary
   // events (see Recurrence).
   Recurrence recurrence = 16;
+  // Optional: the caller's own READY COVER upload opened for this tayfa
+  // (ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,
+  // ERROR_REASON_UPLOAD_IN_USE). Only this event gets it, not the rest of a
+  // series.
+  string cover_upload_id = 17;
 }
 
 // Recurrence is how a series repeats (issue #51; data model v14
@@ -573,8 +581,9 @@ message UpdateEventRequest {
   // (start_time and end_time together), "location" (mode,
   // meeting_point_name, meeting_point, city, district and online_url
   // together), "capacity", "discoverable", "details" (replaces the type
-  // details; vehicles and camp items stay). Any other path is
-  // ERROR_REASON_VALIDATION.
+  // details; vehicles and camp items stay), "cover_upload_id" (not with
+  // series = true: ERROR_REASON_VALIDATION, field "update_mask"). Any
+  // other path is ERROR_REASON_VALIDATION.
   google.protobuf.FieldMask update_mask = 15;
   // Only for an event of a series (otherwise ERROR_REASON_VALIDATION, field
   // "series"). false: only this event changes and it is marked
@@ -586,6 +595,10 @@ message UpdateEventRequest {
   // expected_return_time keeps its distance from each event's start.
   // ERROR_REASON_EVENT_SERIES_ENDED if the series was ended.
   bool series = 16;
+  // With "cover_upload_id" in update_mask: same rules as
+  // CreateEventRequest.cover_upload_id; empty removes the cover. The
+  // previous cover is deleted.
+  string cover_upload_id = 17;
 }
 
 message UpdateEventResponse {
@@ -773,6 +786,9 @@ message FishingCatch {
   LatLng location = 5;
   CatchVisibility visibility = 6;
   google.protobuf.Timestamp create_time = 7;
+  // The photo (a READY CATCH_PHOTO upload, MediaService); empty when there
+  // is none. Seen by everyone who sees the catch.
+  string photo_upload_id = 8;
 }
 
 message AddFishingCatchRequest {
@@ -786,6 +802,12 @@ message AddFishingCatchRequest {
   // Required. A UUID the client generates once per catch and reuses on
   // retry.
   string client_request_id = 7;
+  // Optional: the caller's own READY CATCH_PHOTO upload opened for this
+  // tayfa (ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,
+  // ERROR_REASON_UPLOAD_IN_USE). The image was stripped of its metadata
+  // (GPS included) during processing; the catch's location stays in
+  // location and visibility.
+  string photo_upload_id = 8;
 }
 
 message AddFishingCatchResponse {

@@ -233,6 +233,27 @@ const (
 	// FAILED_PRECONDITION. The tayfa is already in the requested state
 	// (suspended, not suspended, deleted).
 	ErrorReason_ERROR_REASON_TAYFA_STATE_CONFLICT ErrorReason = 113
+	// Media (MediaService, issue #135). None of them says whose an upload is.
+	// NOT_FOUND. No upload with this ID that the caller owns (unknown,
+	// another user's, deleted, or of another purpose or tayfa than the
+	// content it is attached to).
+	ErrorReason_ERROR_REASON_UPLOAD_NOT_FOUND ErrorReason = 120
+	// FAILED_PRECONDITION. The upload is not READY (still being uploaded or
+	// processed, or rejected); poll GetUpload.
+	ErrorReason_ERROR_REASON_UPLOAD_NOT_READY ErrorReason = 121
+	// FAILED_PRECONDITION. The upload is already attached to other content;
+	// each upload is used once.
+	ErrorReason_ERROR_REASON_UPLOAD_IN_USE ErrorReason = 122
+	// FAILED_PRECONDITION. CompleteUpload found no object yet; finish the PUT
+	// and call again.
+	ErrorReason_ERROR_REASON_UPLOAD_NOT_RECEIVED ErrorReason = 123
+	// RESOURCE_EXHAUSTED. The caller opened the most uploads an hour allows.
+	ErrorReason_ERROR_REASON_UPLOAD_RATE_LIMITED ErrorReason = 124
+	// RESOURCE_EXHAUSTED. The caller's stored media would exceed the quota.
+	ErrorReason_ERROR_REASON_UPLOAD_QUOTA_EXCEEDED ErrorReason = 125
+	// INVALID_ARGUMENT. The declared content type is not accepted yet (WebP,
+	// HEIC); the client should convert the image to JPEG first.
+	ErrorReason_ERROR_REASON_MEDIA_TYPE_UNSUPPORTED ErrorReason = 126
 )
 
 // Enum value maps for ErrorReason.
@@ -304,6 +325,13 @@ var (
 		111: "ERROR_REASON_REASON_REQUIRED",
 		112: "ERROR_REASON_DECISION_NOT_APPLICABLE",
 		113: "ERROR_REASON_TAYFA_STATE_CONFLICT",
+		120: "ERROR_REASON_UPLOAD_NOT_FOUND",
+		121: "ERROR_REASON_UPLOAD_NOT_READY",
+		122: "ERROR_REASON_UPLOAD_IN_USE",
+		123: "ERROR_REASON_UPLOAD_NOT_RECEIVED",
+		124: "ERROR_REASON_UPLOAD_RATE_LIMITED",
+		125: "ERROR_REASON_UPLOAD_QUOTA_EXCEEDED",
+		126: "ERROR_REASON_MEDIA_TYPE_UNSUPPORTED",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                 0,
@@ -372,6 +400,13 @@ var (
 		"ERROR_REASON_REASON_REQUIRED":             111,
 		"ERROR_REASON_DECISION_NOT_APPLICABLE":     112,
 		"ERROR_REASON_TAYFA_STATE_CONFLICT":        113,
+		"ERROR_REASON_UPLOAD_NOT_FOUND":            120,
+		"ERROR_REASON_UPLOAD_NOT_READY":            121,
+		"ERROR_REASON_UPLOAD_IN_USE":               122,
+		"ERROR_REASON_UPLOAD_NOT_RECEIVED":         123,
+		"ERROR_REASON_UPLOAD_RATE_LIMITED":         124,
+		"ERROR_REASON_UPLOAD_QUOTA_EXCEEDED":       125,
+		"ERROR_REASON_MEDIA_TYPE_UNSUPPORTED":      126,
 	}
 )
 
@@ -406,7 +441,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xa0\x12\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xa3\x14\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -474,7 +509,14 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"&ERROR_REASON_REAUTHENTICATION_REQUIRED\x10n\x12 \n" +
 	"\x1cERROR_REASON_REASON_REQUIRED\x10o\x12(\n" +
 	"$ERROR_REASON_DECISION_NOT_APPLICABLE\x10p\x12%\n" +
-	"!ERROR_REASON_TAYFA_STATE_CONFLICT\x10qB\xbd\x01\n" +
+	"!ERROR_REASON_TAYFA_STATE_CONFLICT\x10q\x12!\n" +
+	"\x1dERROR_REASON_UPLOAD_NOT_FOUND\x10x\x12!\n" +
+	"\x1dERROR_REASON_UPLOAD_NOT_READY\x10y\x12\x1e\n" +
+	"\x1aERROR_REASON_UPLOAD_IN_USE\x10z\x12$\n" +
+	" ERROR_REASON_UPLOAD_NOT_RECEIVED\x10{\x12$\n" +
+	" ERROR_REASON_UPLOAD_RATE_LIMITED\x10|\x12&\n" +
+	"\"ERROR_REASON_UPLOAD_QUOTA_EXCEEDED\x10}\x12'\n" +
+	"#ERROR_REASON_MEDIA_TYPE_UNSUPPORTED\x10~B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (
