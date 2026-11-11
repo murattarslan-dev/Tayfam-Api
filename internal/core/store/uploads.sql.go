@@ -70,8 +70,8 @@ func (q *Queries) CountUploadsSince(ctx context.Context, arg CountUploadsSincePa
 
 const createUpload = `-- name: CreateUpload :one
 
-INSERT INTO uploads (id, user_id, tayfa_id, purpose, content_type, size_bytes, r2_key, client_request_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO uploads (id, user_id, tayfa_id, purpose, r2_key, preview_type, preview_bytes, full_type, full_bytes, client_request_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 ON CONFLICT (user_id, client_request_id) DO NOTHING
 RETURNING id
 `
@@ -81,9 +81,11 @@ type CreateUploadParams struct {
 	UserID          pgtype.UUID
 	TayfaID         pgtype.UUID
 	Purpose         string
-	ContentType     string
-	SizeBytes       int64
 	R2Key           string
+	PreviewType     string
+	PreviewBytes    int64
+	FullType        string
+	FullBytes       int64
 	ClientRequestID pgtype.UUID
 }
 
@@ -96,33 +98,16 @@ func (q *Queries) CreateUpload(ctx context.Context, arg CreateUploadParams) (pgt
 		arg.UserID,
 		arg.TayfaID,
 		arg.Purpose,
-		arg.ContentType,
-		arg.SizeBytes,
 		arg.R2Key,
+		arg.PreviewType,
+		arg.PreviewBytes,
+		arg.FullType,
+		arg.FullBytes,
 		arg.ClientRequestID,
 	)
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
-}
-
-const deferUpload = `-- name: DeferUpload :execrows
-UPDATE uploads SET run_after = $1
-WHERE id = $2 AND status = 'processing' AND attempts = $3
-`
-
-type DeferUploadParams struct {
-	RunAfter pgtype.Timestamptz
-	ID       pgtype.UUID
-	Attempts int32
-}
-
-func (q *Queries) DeferUpload(ctx context.Context, arg DeferUploadParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deferUpload, arg.RunAfter, arg.ID, arg.Attempts)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const deleteUploadRow = `-- name: DeleteUploadRow :execrows
@@ -221,40 +206,8 @@ func (q *Queries) ExpireUploads(ctx context.Context, arg ExpireUploadsParams) ([
 	return items, nil
 }
 
-const finishUpload = `-- name: FinishUpload :execrows
-UPDATE uploads SET status = 'ready', output_type = $1, stored_bytes = $2,
-    width = $3, height = $4, ready_at = $5, run_after = NULL
-WHERE id = $6 AND status = 'processing' AND attempts = $7
-`
-
-type FinishUploadParams struct {
-	OutputType  pgtype.Text
-	StoredBytes pgtype.Int8
-	Width       pgtype.Int4
-	Height      pgtype.Int4
-	Now         pgtype.Timestamptz
-	ID          pgtype.UUID
-	Attempts    int32
-}
-
-func (q *Queries) FinishUpload(ctx context.Context, arg FinishUploadParams) (int64, error) {
-	result, err := q.db.Exec(ctx, finishUpload,
-		arg.OutputType,
-		arg.StoredBytes,
-		arg.Width,
-		arg.Height,
-		arg.Now,
-		arg.ID,
-		arg.Attempts,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const getOwnUpload = `-- name: GetOwnUpload :one
-SELECT id, user_id, tayfa_id, purpose, status, content_type, size_bytes, r2_key, output_type, stored_bytes, width, height, reject_reason, attempts, run_after, attached_type, attached_id, attached_at, client_request_id, created_at, uploaded_at, ready_at, updated_at FROM uploads
+SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at FROM uploads
 WHERE id = $1 AND user_id = $2 AND status <> 'deleting'
 `
 
@@ -273,22 +226,19 @@ func (q *Queries) GetOwnUpload(ctx context.Context, arg GetOwnUploadParams) (Upl
 		&i.TayfaID,
 		&i.Purpose,
 		&i.Status,
-		&i.ContentType,
-		&i.SizeBytes,
 		&i.R2Key,
-		&i.OutputType,
-		&i.StoredBytes,
+		&i.PreviewType,
+		&i.PreviewBytes,
+		&i.FullType,
+		&i.FullBytes,
 		&i.Width,
 		&i.Height,
 		&i.RejectReason,
-		&i.Attempts,
-		&i.RunAfter,
 		&i.AttachedType,
 		&i.AttachedID,
 		&i.AttachedAt,
 		&i.ClientRequestID,
 		&i.CreatedAt,
-		&i.UploadedAt,
 		&i.ReadyAt,
 		&i.UpdatedAt,
 	)
@@ -296,7 +246,7 @@ func (q *Queries) GetOwnUpload(ctx context.Context, arg GetOwnUploadParams) (Upl
 }
 
 const getOwnUploadForUpdate = `-- name: GetOwnUploadForUpdate :one
-SELECT id, user_id, tayfa_id, purpose, status, content_type, size_bytes, r2_key, output_type, stored_bytes, width, height, reject_reason, attempts, run_after, attached_type, attached_id, attached_at, client_request_id, created_at, uploaded_at, ready_at, updated_at FROM uploads
+SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at FROM uploads
 WHERE id = $1 AND user_id = $2 AND status <> 'deleting'
 FOR UPDATE
 `
@@ -315,22 +265,19 @@ func (q *Queries) GetOwnUploadForUpdate(ctx context.Context, arg GetOwnUploadFor
 		&i.TayfaID,
 		&i.Purpose,
 		&i.Status,
-		&i.ContentType,
-		&i.SizeBytes,
 		&i.R2Key,
-		&i.OutputType,
-		&i.StoredBytes,
+		&i.PreviewType,
+		&i.PreviewBytes,
+		&i.FullType,
+		&i.FullBytes,
 		&i.Width,
 		&i.Height,
 		&i.RejectReason,
-		&i.Attempts,
-		&i.RunAfter,
 		&i.AttachedType,
 		&i.AttachedID,
 		&i.AttachedAt,
 		&i.ClientRequestID,
 		&i.CreatedAt,
-		&i.UploadedAt,
 		&i.ReadyAt,
 		&i.UpdatedAt,
 	)
@@ -338,7 +285,7 @@ func (q *Queries) GetOwnUploadForUpdate(ctx context.Context, arg GetOwnUploadFor
 }
 
 const getUploadByClientRequest = `-- name: GetUploadByClientRequest :one
-SELECT id, user_id, tayfa_id, purpose, status, content_type, size_bytes, r2_key, output_type, stored_bytes, width, height, reject_reason, attempts, run_after, attached_type, attached_id, attached_at, client_request_id, created_at, uploaded_at, ready_at, updated_at FROM uploads
+SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at FROM uploads
 WHERE user_id = $1 AND client_request_id = $2
 `
 
@@ -356,65 +303,21 @@ func (q *Queries) GetUploadByClientRequest(ctx context.Context, arg GetUploadByC
 		&i.TayfaID,
 		&i.Purpose,
 		&i.Status,
-		&i.ContentType,
-		&i.SizeBytes,
 		&i.R2Key,
-		&i.OutputType,
-		&i.StoredBytes,
+		&i.PreviewType,
+		&i.PreviewBytes,
+		&i.FullType,
+		&i.FullBytes,
 		&i.Width,
 		&i.Height,
 		&i.RejectReason,
-		&i.Attempts,
-		&i.RunAfter,
 		&i.AttachedType,
 		&i.AttachedID,
 		&i.AttachedAt,
 		&i.ClientRequestID,
 		&i.CreatedAt,
-		&i.UploadedAt,
 		&i.ReadyAt,
 		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const leaseUpload = `-- name: LeaseUpload :one
-UPDATE uploads u SET status = 'processing', attempts = u.attempts + 1, run_after = $1
-FROM (
-  SELECT q.id FROM uploads q
-  WHERE q.status IN ('uploaded', 'processing') AND q.run_after <= $2
-  ORDER BY q.run_after
-  LIMIT 1
-  FOR UPDATE SKIP LOCKED
-) c
-WHERE u.id = c.id
-RETURNING u.id, u.r2_key, u.size_bytes, u.attempts
-`
-
-type LeaseUploadParams struct {
-	LeaseUntil pgtype.Timestamptz
-	Now        pgtype.Timestamptz
-}
-
-type LeaseUploadRow struct {
-	ID        pgtype.UUID
-	R2Key     string
-	SizeBytes int64
-	Attempts  int32
-}
-
-// İşleme kuyruğu: zamanı gelen bir işi kiralar. Kira run_after'a yazılır;
-// işçi düşerse kira bitince iş yeniden görünür. Deneme sayısı kiralamada
-// artar ve sonraki yazmalarda fencing olarak kullanılır (süresi geçen
-// kiranın sahibi yazamaz).
-func (q *Queries) LeaseUpload(ctx context.Context, arg LeaseUploadParams) (LeaseUploadRow, error) {
-	row := q.db.QueryRow(ctx, leaseUpload, arg.LeaseUntil, arg.Now)
-	var i LeaseUploadRow
-	err := row.Scan(
-		&i.ID,
-		&i.R2Key,
-		&i.SizeBytes,
-		&i.Attempts,
 	)
 	return i, err
 }
@@ -452,7 +355,7 @@ func (q *Queries) ListDeletingUploads(ctx context.Context, n int32) ([]ListDelet
 }
 
 const listMediaForViewer = `-- name: ListMediaForViewer :many
-SELECT u.id, u.user_id, u.purpose, u.r2_key, u.output_type, u.width, u.height,
+SELECT u.id, u.user_id, u.purpose, u.r2_key, u.preview_type, u.full_type, u.width, u.height,
        u.attached_type, u.attached_id,
        c.tayfa_id AS content_tayfa_id,
        m.role AS member_role, m.status AS member_status, m.muted_until AS member_muted_until,
@@ -493,7 +396,8 @@ type ListMediaForViewerRow struct {
 	UserID           pgtype.UUID
 	Purpose          string
 	R2Key            string
-	OutputType       pgtype.Text
+	PreviewType      string
+	FullType         string
 	Width            pgtype.Int4
 	Height           pgtype.Int4
 	AttachedType     pgtype.Text
@@ -526,7 +430,8 @@ func (q *Queries) ListMediaForViewer(ctx context.Context, arg ListMediaForViewer
 			&i.UserID,
 			&i.Purpose,
 			&i.R2Key,
-			&i.OutputType,
+			&i.PreviewType,
+			&i.FullType,
 			&i.Width,
 			&i.Height,
 			&i.AttachedType,
@@ -561,18 +466,27 @@ func (q *Queries) LockUserUploads(ctx context.Context, userID string) error {
 	return err
 }
 
-const markUploadReceived = `-- name: MarkUploadReceived :execrows
-UPDATE uploads SET status = 'uploaded', uploaded_at = $1, run_after = $1
-WHERE id = $2 AND status = 'pending'
+const markUploadReady = `-- name: MarkUploadReady :execrows
+UPDATE uploads SET status = 'ready', width = $1, height = $2, ready_at = $3
+WHERE id = $4 AND status = 'pending'
 `
 
-type MarkUploadReceivedParams struct {
-	Now pgtype.Timestamptz
-	ID  pgtype.UUID
+type MarkUploadReadyParams struct {
+	Width  pgtype.Int4
+	Height pgtype.Int4
+	Now    pgtype.Timestamptz
+	ID     pgtype.UUID
 }
 
-func (q *Queries) MarkUploadReceived(ctx context.Context, arg MarkUploadReceivedParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markUploadReceived, arg.Now, arg.ID)
+// Denetimden geçti (ADR-0020). Yalnızca bekleyen kayıt; eşzamanlı ikinci
+// tamamlama bir şey değiştirmez.
+func (q *Queries) MarkUploadReady(ctx context.Context, arg MarkUploadReadyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markUploadReady,
+		arg.Width,
+		arg.Height,
+		arg.Now,
+		arg.ID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -591,25 +505,6 @@ type RejectPendingUploadParams struct {
 
 func (q *Queries) RejectPendingUpload(ctx context.Context, arg RejectPendingUploadParams) (int64, error) {
 	result, err := q.db.Exec(ctx, rejectPendingUpload, arg.RejectReason, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const rejectProcessingUpload = `-- name: RejectProcessingUpload :execrows
-UPDATE uploads SET status = 'rejected', reject_reason = $1, run_after = NULL
-WHERE id = $2 AND status = 'processing' AND attempts = $3
-`
-
-type RejectProcessingUploadParams struct {
-	RejectReason pgtype.Text
-	ID           pgtype.UUID
-	Attempts     int32
-}
-
-func (q *Queries) RejectProcessingUpload(ctx context.Context, arg RejectProcessingUploadParams) (int64, error) {
-	result, err := q.db.Exec(ctx, rejectProcessingUpload, arg.RejectReason, arg.ID, arg.Attempts)
 	if err != nil {
 		return 0, err
 	}
@@ -688,11 +583,11 @@ func (q *Queries) SetTayfaCover(ctx context.Context, arg SetTayfaCoverParams) er
 }
 
 const userStoredBytes = `-- name: UserStoredBytes :one
-SELECT COALESCE(sum(COALESCE(stored_bytes, size_bytes)), 0)::bigint FROM uploads
+SELECT COALESCE(sum(preview_bytes + full_bytes), 0)::bigint FROM uploads
 WHERE user_id = $1 AND status NOT IN ('rejected', 'deleting')
 `
 
-// Kota: işlenmiş dosyaların boyutu, işlenmemişlerin bildirilen ham boyutu.
+// Kota: iki varyantın bildirilen (ve imzayla zorlanan) boyutları.
 func (q *Queries) UserStoredBytes(ctx context.Context, userID pgtype.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, userStoredBytes, userID)
 	var column_1 int64

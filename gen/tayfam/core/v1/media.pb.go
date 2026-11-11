@@ -82,15 +82,12 @@ type UploadStatus int32
 
 const (
 	UploadStatus_UPLOAD_STATUS_UNSPECIFIED UploadStatus = 0
-	// Waiting for the file (the PUT link is valid for 5 minutes).
+	// Waiting for the variants and CompleteUpload (links valid 5 minutes).
 	UploadStatus_UPLOAD_STATUS_PENDING UploadStatus = 1
-	// Received; waiting for processing.
-	UploadStatus_UPLOAD_STATUS_UPLOADED   UploadStatus = 2
-	UploadStatus_UPLOAD_STATUS_PROCESSING UploadStatus = 3
-	// Processed; may be attached and served.
-	UploadStatus_UPLOAD_STATUS_READY UploadStatus = 4
+	// Checked; may be attached and served.
+	UploadStatus_UPLOAD_STATUS_READY UploadStatus = 2
 	// Refused; see reject_reason. Deleted after 24 hours.
-	UploadStatus_UPLOAD_STATUS_REJECTED UploadStatus = 5
+	UploadStatus_UPLOAD_STATUS_REJECTED UploadStatus = 3
 )
 
 // Enum value maps for UploadStatus.
@@ -98,18 +95,14 @@ var (
 	UploadStatus_name = map[int32]string{
 		0: "UPLOAD_STATUS_UNSPECIFIED",
 		1: "UPLOAD_STATUS_PENDING",
-		2: "UPLOAD_STATUS_UPLOADED",
-		3: "UPLOAD_STATUS_PROCESSING",
-		4: "UPLOAD_STATUS_READY",
-		5: "UPLOAD_STATUS_REJECTED",
+		2: "UPLOAD_STATUS_READY",
+		3: "UPLOAD_STATUS_REJECTED",
 	}
 	UploadStatus_value = map[string]int32{
 		"UPLOAD_STATUS_UNSPECIFIED": 0,
 		"UPLOAD_STATUS_PENDING":     1,
-		"UPLOAD_STATUS_UPLOADED":    2,
-		"UPLOAD_STATUS_PROCESSING":  3,
-		"UPLOAD_STATUS_READY":       4,
-		"UPLOAD_STATUS_REJECTED":    5,
+		"UPLOAD_STATUS_READY":       2,
+		"UPLOAD_STATUS_REJECTED":    3,
 	}
 )
 
@@ -145,19 +138,24 @@ type UploadRejectReason int32
 
 const (
 	UploadRejectReason_UPLOAD_REJECT_REASON_UNSPECIFIED UploadRejectReason = 0
-	// The content is not an image of an accepted type, whatever its name or
-	// declared type said.
+	// A variant is not a JPEG or WebP, or not of its declared type, whatever
+	// its name said, or its header is malformed.
 	UploadRejectReason_UPLOAD_REJECT_REASON_NOT_IMAGE UploadRejectReason = 1
-	// An image whose real type is not accepted yet (WebP, HEIC).
+	// An image of a type that is not accepted (PNG, HEIC, GIF, animated
+	// WebP): the client must convert it.
 	UploadRejectReason_UPLOAD_REJECT_REASON_UNSUPPORTED_TYPE UploadRejectReason = 2
-	// Wider or taller than 10000 px or more than 25 megapixels.
-	UploadRejectReason_UPLOAD_REJECT_REASON_TOO_LARGE UploadRejectReason = 3
-	// An image of an accepted type that could not be decoded.
-	UploadRejectReason_UPLOAD_REJECT_REASON_CORRUPT UploadRejectReason = 4
-	// The stored object's size differs from the declared size.
+	// A variant carries EXIF (with it GPS), XMP or Photoshop/IPTC metadata.
+	UploadRejectReason_UPLOAD_REJECT_REASON_METADATA_PRESENT UploadRejectReason = 3
+	// The header's dimensions differ from the declared ones, or the preview's
+	// aspect ratio differs from the full variant's by more than one pixel.
+	UploadRejectReason_UPLOAD_REJECT_REASON_DIMENSION_MISMATCH UploadRejectReason = 4
+	// A stored variant's size differs from its declared size.
 	UploadRejectReason_UPLOAD_REJECT_REASON_SIZE_MISMATCH UploadRejectReason = 5
-	// Processing failed several times for reasons outside the file.
-	UploadRejectReason_UPLOAD_REJECT_REASON_FAILED UploadRejectReason = 6
+	// A variant is larger than its limit: preview longest side over 400 px,
+	// full over 1600 px.
+	UploadRejectReason_UPLOAD_REJECT_REASON_TOO_LARGE UploadRejectReason = 6
+	// The check could not finish for reasons outside the files.
+	UploadRejectReason_UPLOAD_REJECT_REASON_FAILED UploadRejectReason = 7
 )
 
 // Enum value maps for UploadRejectReason.
@@ -166,19 +164,21 @@ var (
 		0: "UPLOAD_REJECT_REASON_UNSPECIFIED",
 		1: "UPLOAD_REJECT_REASON_NOT_IMAGE",
 		2: "UPLOAD_REJECT_REASON_UNSUPPORTED_TYPE",
-		3: "UPLOAD_REJECT_REASON_TOO_LARGE",
-		4: "UPLOAD_REJECT_REASON_CORRUPT",
+		3: "UPLOAD_REJECT_REASON_METADATA_PRESENT",
+		4: "UPLOAD_REJECT_REASON_DIMENSION_MISMATCH",
 		5: "UPLOAD_REJECT_REASON_SIZE_MISMATCH",
-		6: "UPLOAD_REJECT_REASON_FAILED",
+		6: "UPLOAD_REJECT_REASON_TOO_LARGE",
+		7: "UPLOAD_REJECT_REASON_FAILED",
 	}
 	UploadRejectReason_value = map[string]int32{
-		"UPLOAD_REJECT_REASON_UNSPECIFIED":      0,
-		"UPLOAD_REJECT_REASON_NOT_IMAGE":        1,
-		"UPLOAD_REJECT_REASON_UNSUPPORTED_TYPE": 2,
-		"UPLOAD_REJECT_REASON_TOO_LARGE":        3,
-		"UPLOAD_REJECT_REASON_CORRUPT":          4,
-		"UPLOAD_REJECT_REASON_SIZE_MISMATCH":    5,
-		"UPLOAD_REJECT_REASON_FAILED":           6,
+		"UPLOAD_REJECT_REASON_UNSPECIFIED":        0,
+		"UPLOAD_REJECT_REASON_NOT_IMAGE":          1,
+		"UPLOAD_REJECT_REASON_UNSUPPORTED_TYPE":   2,
+		"UPLOAD_REJECT_REASON_METADATA_PRESENT":   3,
+		"UPLOAD_REJECT_REASON_DIMENSION_MISMATCH": 4,
+		"UPLOAD_REJECT_REASON_SIZE_MISMATCH":      5,
+		"UPLOAD_REJECT_REASON_TOO_LARGE":          6,
+		"UPLOAD_REJECT_REASON_FAILED":             7,
 	}
 )
 
@@ -209,6 +209,58 @@ func (UploadRejectReason) EnumDescriptor() ([]byte, []int) {
 	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{2}
 }
 
+// VariantKind is one of the two encodings of an upload.
+type VariantKind int32
+
+const (
+	VariantKind_VARIANT_KIND_UNSPECIFIED VariantKind = 0
+	// Longest side at most 400 px.
+	VariantKind_VARIANT_KIND_PREVIEW VariantKind = 1
+	// Longest side at most 1600 px.
+	VariantKind_VARIANT_KIND_FULL VariantKind = 2
+)
+
+// Enum value maps for VariantKind.
+var (
+	VariantKind_name = map[int32]string{
+		0: "VARIANT_KIND_UNSPECIFIED",
+		1: "VARIANT_KIND_PREVIEW",
+		2: "VARIANT_KIND_FULL",
+	}
+	VariantKind_value = map[string]int32{
+		"VARIANT_KIND_UNSPECIFIED": 0,
+		"VARIANT_KIND_PREVIEW":     1,
+		"VARIANT_KIND_FULL":        2,
+	}
+)
+
+func (x VariantKind) Enum() *VariantKind {
+	p := new(VariantKind)
+	*p = x
+	return p
+}
+
+func (x VariantKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (VariantKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_tayfam_core_v1_media_proto_enumTypes[3].Descriptor()
+}
+
+func (VariantKind) Type() protoreflect.EnumType {
+	return &file_tayfam_core_v1_media_proto_enumTypes[3]
+}
+
+func (x VariantKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use VariantKind.Descriptor instead.
+func (VariantKind) EnumDescriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{3}
+}
+
 type Upload struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Id      string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -218,7 +270,7 @@ type Upload struct {
 	RejectReason UploadRejectReason `protobuf:"varint,4,opt,name=reject_reason,json=rejectReason,proto3,enum=tayfam.core.v1.UploadRejectReason" json:"reject_reason,omitempty"`
 	// Set for COVER and CATCH_PHOTO.
 	TayfaId string `protobuf:"bytes,5,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
-	// Declared size of the raw file.
+	// Declared sizes of both variants together.
 	SizeBytes  int64                  `protobuf:"varint,6,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
 	CreateTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	// Set when status is READY: the links (1 hour) and their expiry.
@@ -325,21 +377,19 @@ func (x *Upload) GetAttached() bool {
 
 // MediaUrls are GET links valid until expire_time (1 hour). They are
 // bearer links: anyone holding one can read the image until it expires, so
-// they are not logged or shared. Both images are JPEG today (WebP once the
-// processor supports it; read content_type).
+// they are not logged or shared.
 type MediaUrls struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	UploadId string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
-	// Longest side at most 400 px.
-	PreviewUrl string `protobuf:"bytes,2,opt,name=preview_url,json=previewUrl,proto3" json:"preview_url,omitempty"`
-	// Longest side at most 1600 px.
-	FullUrl string `protobuf:"bytes,3,opt,name=full_url,json=fullUrl,proto3" json:"full_url,omitempty"`
-	// Media type of both images, such as "image/jpeg".
-	ContentType string `protobuf:"bytes,4,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
-	// Size of the full image in pixels, after orientation.
-	Width         int32                  `protobuf:"varint,5,opt,name=width,proto3" json:"width,omitempty"`
-	Height        int32                  `protobuf:"varint,6,opt,name=height,proto3" json:"height,omitempty"`
-	ExpireTime    *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	UploadId   string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	PreviewUrl string                 `protobuf:"bytes,2,opt,name=preview_url,json=previewUrl,proto3" json:"preview_url,omitempty"`
+	// "image/jpeg" or "image/webp".
+	PreviewContentType string `protobuf:"bytes,3,opt,name=preview_content_type,json=previewContentType,proto3" json:"preview_content_type,omitempty"`
+	FullUrl            string `protobuf:"bytes,4,opt,name=full_url,json=fullUrl,proto3" json:"full_url,omitempty"`
+	FullContentType    string `protobuf:"bytes,5,opt,name=full_content_type,json=fullContentType,proto3" json:"full_content_type,omitempty"`
+	// Size of the full variant in pixels.
+	Width         int32                  `protobuf:"varint,6,opt,name=width,proto3" json:"width,omitempty"`
+	Height        int32                  `protobuf:"varint,7,opt,name=height,proto3" json:"height,omitempty"`
+	ExpireTime    *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -388,6 +438,13 @@ func (x *MediaUrls) GetPreviewUrl() string {
 	return ""
 }
 
+func (x *MediaUrls) GetPreviewContentType() string {
+	if x != nil {
+		return x.PreviewContentType
+	}
+	return ""
+}
+
 func (x *MediaUrls) GetFullUrl() string {
 	if x != nil {
 		return x.FullUrl
@@ -395,9 +452,9 @@ func (x *MediaUrls) GetFullUrl() string {
 	return ""
 }
 
-func (x *MediaUrls) GetContentType() string {
+func (x *MediaUrls) GetFullContentType() string {
 	if x != nil {
-		return x.ContentType
+		return x.FullContentType
 	}
 	return ""
 }
@@ -423,23 +480,167 @@ func (x *MediaUrls) GetExpireTime() *timestamppb.Timestamp {
 	return nil
 }
 
+// UploadVariant is a variant the client will PUT.
+type UploadVariant struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Kind  VariantKind            `protobuf:"varint,1,opt,name=kind,proto3,enum=tayfam.core.v1.VariantKind" json:"kind,omitempty"`
+	// "image/jpeg" or "image/webp".
+	ContentType string `protobuf:"bytes,2,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	// Exact size of the file, 1 to 10485760.
+	SizeBytes     int64 `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UploadVariant) Reset() {
+	*x = UploadVariant{}
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadVariant) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadVariant) ProtoMessage() {}
+
+func (x *UploadVariant) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadVariant.ProtoReflect.Descriptor instead.
+func (*UploadVariant) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *UploadVariant) GetKind() VariantKind {
+	if x != nil {
+		return x.Kind
+	}
+	return VariantKind_VARIANT_KIND_UNSPECIFIED
+}
+
+func (x *UploadVariant) GetContentType() string {
+	if x != nil {
+		return x.ContentType
+	}
+	return ""
+}
+
+func (x *UploadVariant) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+// UploadTarget is where to PUT one variant.
+type UploadTarget struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Kind  VariantKind            `protobuf:"varint,1,opt,name=kind,proto3,enum=tayfam.core.v1.VariantKind" json:"kind,omitempty"`
+	// Always "PUT".
+	Method string `protobuf:"bytes,2,opt,name=method,proto3" json:"method,omitempty"`
+	// Presigned URL. Works until expire_time, for this object only.
+	Url string `protobuf:"bytes,3,opt,name=url,proto3" json:"url,omitempty"`
+	// Headers the PUT must carry exactly as given (Content-Type and
+	// Content-Length are signed: another type or size is refused by the
+	// storage).
+	Headers       map[string]string      `protobuf:"bytes,4,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ExpireTime    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UploadTarget) Reset() {
+	*x = UploadTarget{}
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadTarget) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadTarget) ProtoMessage() {}
+
+func (x *UploadTarget) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadTarget.ProtoReflect.Descriptor instead.
+func (*UploadTarget) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *UploadTarget) GetKind() VariantKind {
+	if x != nil {
+		return x.Kind
+	}
+	return VariantKind_VARIANT_KIND_UNSPECIFIED
+}
+
+func (x *UploadTarget) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *UploadTarget) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *UploadTarget) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+func (x *UploadTarget) GetExpireTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpireTime
+	}
+	return nil
+}
+
 type CreateUploadRequest struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Purpose UploadPurpose          `protobuf:"varint,1,opt,name=purpose,proto3,enum=tayfam.core.v1.UploadPurpose" json:"purpose,omitempty"`
-	// "image/jpeg", "image/png", "image/webp" or "image/heic".
-	ContentType string `protobuf:"bytes,2,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
-	SizeBytes   int64  `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	// Exactly one PREVIEW and one FULL.
+	Variants []*UploadVariant `protobuf:"bytes,2,rep,name=variants,proto3" json:"variants,omitempty"`
 	// See CreateUpload.
-	TayfaId string `protobuf:"bytes,4,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	TayfaId string `protobuf:"bytes,3,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
 	// A UUID the client generates once per upload attempt.
-	ClientRequestId string `protobuf:"bytes,5,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
+	ClientRequestId string `protobuf:"bytes,4,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *CreateUploadRequest) Reset() {
 	*x = CreateUploadRequest{}
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[2]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -451,7 +652,7 @@ func (x *CreateUploadRequest) String() string {
 func (*CreateUploadRequest) ProtoMessage() {}
 
 func (x *CreateUploadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[2]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -464,7 +665,7 @@ func (x *CreateUploadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateUploadRequest.ProtoReflect.Descriptor instead.
 func (*CreateUploadRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{2}
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *CreateUploadRequest) GetPurpose() UploadPurpose {
@@ -474,18 +675,11 @@ func (x *CreateUploadRequest) GetPurpose() UploadPurpose {
 	return UploadPurpose_UPLOAD_PURPOSE_UNSPECIFIED
 }
 
-func (x *CreateUploadRequest) GetContentType() string {
+func (x *CreateUploadRequest) GetVariants() []*UploadVariant {
 	if x != nil {
-		return x.ContentType
+		return x.Variants
 	}
-	return ""
-}
-
-func (x *CreateUploadRequest) GetSizeBytes() int64 {
-	if x != nil {
-		return x.SizeBytes
-	}
-	return 0
+	return nil
 }
 
 func (x *CreateUploadRequest) GetTayfaId() string {
@@ -505,22 +699,16 @@ func (x *CreateUploadRequest) GetClientRequestId() string {
 type CreateUploadResponse struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Upload *Upload                `protobuf:"bytes,1,opt,name=upload,proto3" json:"upload,omitempty"`
-	// HTTP method of the upload: always "PUT".
-	UploadMethod string `protobuf:"bytes,2,opt,name=upload_method,json=uploadMethod,proto3" json:"upload_method,omitempty"`
-	// Presigned URL. Works until upload_expire_time, for this object only.
-	UploadUrl string `protobuf:"bytes,3,opt,name=upload_url,json=uploadUrl,proto3" json:"upload_url,omitempty"`
-	// Headers the PUT must carry exactly as given (Content-Type and
-	// Content-Length are signed: another type or size is refused by the
-	// storage).
-	UploadHeaders    map[string]string      `protobuf:"bytes,4,rep,name=upload_headers,json=uploadHeaders,proto3" json:"upload_headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	UploadExpireTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=upload_expire_time,json=uploadExpireTime,proto3" json:"upload_expire_time,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// One per variant while the upload is PENDING; empty when a repeated
+	// request finds it past PENDING.
+	Targets       []*UploadTarget `protobuf:"bytes,2,rep,name=targets,proto3" json:"targets,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateUploadResponse) Reset() {
 	*x = CreateUploadResponse{}
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[3]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -532,7 +720,7 @@ func (x *CreateUploadResponse) String() string {
 func (*CreateUploadResponse) ProtoMessage() {}
 
 func (x *CreateUploadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[3]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -545,7 +733,7 @@ func (x *CreateUploadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateUploadResponse.ProtoReflect.Descriptor instead.
 func (*CreateUploadResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{3}
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *CreateUploadResponse) GetUpload() *Upload {
@@ -555,44 +743,26 @@ func (x *CreateUploadResponse) GetUpload() *Upload {
 	return nil
 }
 
-func (x *CreateUploadResponse) GetUploadMethod() string {
+func (x *CreateUploadResponse) GetTargets() []*UploadTarget {
 	if x != nil {
-		return x.UploadMethod
-	}
-	return ""
-}
-
-func (x *CreateUploadResponse) GetUploadUrl() string {
-	if x != nil {
-		return x.UploadUrl
-	}
-	return ""
-}
-
-func (x *CreateUploadResponse) GetUploadHeaders() map[string]string {
-	if x != nil {
-		return x.UploadHeaders
-	}
-	return nil
-}
-
-func (x *CreateUploadResponse) GetUploadExpireTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.UploadExpireTime
+		return x.Targets
 	}
 	return nil
 }
 
 type CompleteUploadRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UploadId      string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	UploadId string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	// The full variant's size in pixels.
+	Width         int32 `protobuf:"varint,2,opt,name=width,proto3" json:"width,omitempty"`
+	Height        int32 `protobuf:"varint,3,opt,name=height,proto3" json:"height,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CompleteUploadRequest) Reset() {
 	*x = CompleteUploadRequest{}
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[4]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -604,7 +774,7 @@ func (x *CompleteUploadRequest) String() string {
 func (*CompleteUploadRequest) ProtoMessage() {}
 
 func (x *CompleteUploadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[4]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -617,7 +787,7 @@ func (x *CompleteUploadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteUploadRequest.ProtoReflect.Descriptor instead.
 func (*CompleteUploadRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{4}
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CompleteUploadRequest) GetUploadId() string {
@@ -625,6 +795,20 @@ func (x *CompleteUploadRequest) GetUploadId() string {
 		return x.UploadId
 	}
 	return ""
+}
+
+func (x *CompleteUploadRequest) GetWidth() int32 {
+	if x != nil {
+		return x.Width
+	}
+	return 0
+}
+
+func (x *CompleteUploadRequest) GetHeight() int32 {
+	if x != nil {
+		return x.Height
+	}
+	return 0
 }
 
 type CompleteUploadResponse struct {
@@ -636,7 +820,7 @@ type CompleteUploadResponse struct {
 
 func (x *CompleteUploadResponse) Reset() {
 	*x = CompleteUploadResponse{}
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[5]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -648,7 +832,7 @@ func (x *CompleteUploadResponse) String() string {
 func (*CompleteUploadResponse) ProtoMessage() {}
 
 func (x *CompleteUploadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[5]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -661,7 +845,7 @@ func (x *CompleteUploadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteUploadResponse.ProtoReflect.Descriptor instead.
 func (*CompleteUploadResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{5}
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CompleteUploadResponse) GetUpload() *Upload {
@@ -680,7 +864,7 @@ type GetUploadRequest struct {
 
 func (x *GetUploadRequest) Reset() {
 	*x = GetUploadRequest{}
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[6]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -692,7 +876,7 @@ func (x *GetUploadRequest) String() string {
 func (*GetUploadRequest) ProtoMessage() {}
 
 func (x *GetUploadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[6]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -705,7 +889,7 @@ func (x *GetUploadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUploadRequest.ProtoReflect.Descriptor instead.
 func (*GetUploadRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{6}
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetUploadRequest) GetUploadId() string {
@@ -724,7 +908,7 @@ type GetUploadResponse struct {
 
 func (x *GetUploadResponse) Reset() {
 	*x = GetUploadResponse{}
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[7]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -736,7 +920,7 @@ func (x *GetUploadResponse) String() string {
 func (*GetUploadResponse) ProtoMessage() {}
 
 func (x *GetUploadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[7]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -749,7 +933,7 @@ func (x *GetUploadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUploadResponse.ProtoReflect.Descriptor instead.
 func (*GetUploadResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{7}
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetUploadResponse) GetUpload() *Upload {
@@ -768,7 +952,7 @@ type GetMediaUrlsRequest struct {
 
 func (x *GetMediaUrlsRequest) Reset() {
 	*x = GetMediaUrlsRequest{}
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[8]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -780,7 +964,7 @@ func (x *GetMediaUrlsRequest) String() string {
 func (*GetMediaUrlsRequest) ProtoMessage() {}
 
 func (x *GetMediaUrlsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[8]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -793,7 +977,7 @@ func (x *GetMediaUrlsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMediaUrlsRequest.ProtoReflect.Descriptor instead.
 func (*GetMediaUrlsRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{8}
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetMediaUrlsRequest) GetUploadIds() []string {
@@ -813,7 +997,7 @@ type GetMediaUrlsResponse struct {
 
 func (x *GetMediaUrlsResponse) Reset() {
 	*x = GetMediaUrlsResponse{}
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[9]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -825,7 +1009,7 @@ func (x *GetMediaUrlsResponse) String() string {
 func (*GetMediaUrlsResponse) ProtoMessage() {}
 
 func (x *GetMediaUrlsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[9]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -838,7 +1022,7 @@ func (x *GetMediaUrlsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMediaUrlsResponse.ProtoReflect.Descriptor instead.
 func (*GetMediaUrlsResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{9}
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetMediaUrlsResponse) GetMedia() []*MediaUrls {
@@ -857,7 +1041,7 @@ type AttachAvatarRequest struct {
 
 func (x *AttachAvatarRequest) Reset() {
 	*x = AttachAvatarRequest{}
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[10]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -869,7 +1053,7 @@ func (x *AttachAvatarRequest) String() string {
 func (*AttachAvatarRequest) ProtoMessage() {}
 
 func (x *AttachAvatarRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[10]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -882,7 +1066,7 @@ func (x *AttachAvatarRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttachAvatarRequest.ProtoReflect.Descriptor instead.
 func (*AttachAvatarRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{10}
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *AttachAvatarRequest) GetUploadId() string {
@@ -900,7 +1084,7 @@ type AttachAvatarResponse struct {
 
 func (x *AttachAvatarResponse) Reset() {
 	*x = AttachAvatarResponse{}
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[11]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -912,7 +1096,7 @@ func (x *AttachAvatarResponse) String() string {
 func (*AttachAvatarResponse) ProtoMessage() {}
 
 func (x *AttachAvatarResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[11]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -925,7 +1109,7 @@ func (x *AttachAvatarResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttachAvatarResponse.ProtoReflect.Descriptor instead.
 func (*AttachAvatarResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{11}
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{13}
 }
 
 var File_tayfam_core_v1_media_proto protoreflect.FileDescriptor
@@ -944,36 +1128,45 @@ const file_tayfam_core_v1_media_proto_rawDesc = "" +
 	"\vcreate_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12-\n" +
 	"\x04urls\x18\b \x01(\v2\x19.tayfam.core.v1.MediaUrlsR\x04urls\x12\x1a\n" +
-	"\battached\x18\t \x01(\bR\battached\"\xf2\x01\n" +
+	"\battached\x18\t \x01(\bR\battached\"\xad\x02\n" +
 	"\tMediaUrls\x12\x1b\n" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x1f\n" +
 	"\vpreview_url\x18\x02 \x01(\tR\n" +
-	"previewUrl\x12\x19\n" +
-	"\bfull_url\x18\x03 \x01(\tR\afullUrl\x12!\n" +
-	"\fcontent_type\x18\x04 \x01(\tR\vcontentType\x12\x14\n" +
-	"\x05width\x18\x05 \x01(\x05R\x05width\x12\x16\n" +
-	"\x06height\x18\x06 \x01(\x05R\x06height\x12;\n" +
-	"\vexpire_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTime\"\xd7\x01\n" +
-	"\x13CreateUploadRequest\x127\n" +
-	"\apurpose\x18\x01 \x01(\x0e2\x1d.tayfam.core.v1.UploadPurposeR\apurpose\x12!\n" +
+	"previewUrl\x120\n" +
+	"\x14preview_content_type\x18\x03 \x01(\tR\x12previewContentType\x12\x19\n" +
+	"\bfull_url\x18\x04 \x01(\tR\afullUrl\x12*\n" +
+	"\x11full_content_type\x18\x05 \x01(\tR\x0ffullContentType\x12\x14\n" +
+	"\x05width\x18\x06 \x01(\x05R\x05width\x12\x16\n" +
+	"\x06height\x18\a \x01(\x05R\x06height\x12;\n" +
+	"\vexpire_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"expireTime\"\x82\x01\n" +
+	"\rUploadVariant\x12/\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x1b.tayfam.core.v1.VariantKindR\x04kind\x12!\n" +
 	"\fcontent_type\x18\x02 \x01(\tR\vcontentType\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\x03 \x01(\x03R\tsizeBytes\x12\x19\n" +
-	"\btayfa_id\x18\x04 \x01(\tR\atayfaId\x12*\n" +
-	"\x11client_request_id\x18\x05 \x01(\tR\x0fclientRequestId\"\xf6\x02\n" +
-	"\x14CreateUploadResponse\x12.\n" +
-	"\x06upload\x18\x01 \x01(\v2\x16.tayfam.core.v1.UploadR\x06upload\x12#\n" +
-	"\rupload_method\x18\x02 \x01(\tR\fuploadMethod\x12\x1d\n" +
-	"\n" +
-	"upload_url\x18\x03 \x01(\tR\tuploadUrl\x12^\n" +
-	"\x0eupload_headers\x18\x04 \x03(\v27.tayfam.core.v1.CreateUploadResponse.UploadHeadersEntryR\ruploadHeaders\x12H\n" +
-	"\x12upload_expire_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x10uploadExpireTime\x1a@\n" +
-	"\x12UploadHeadersEntry\x12\x10\n" +
+	"size_bytes\x18\x03 \x01(\x03R\tsizeBytes\"\xa7\x02\n" +
+	"\fUploadTarget\x12/\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x1b.tayfam.core.v1.VariantKindR\x04kind\x12\x16\n" +
+	"\x06method\x18\x02 \x01(\tR\x06method\x12\x10\n" +
+	"\x03url\x18\x03 \x01(\tR\x03url\x12C\n" +
+	"\aheaders\x18\x04 \x03(\v2).tayfam.core.v1.UploadTarget.HeadersEntryR\aheaders\x12;\n" +
+	"\vexpire_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"expireTime\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"4\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd0\x01\n" +
+	"\x13CreateUploadRequest\x127\n" +
+	"\apurpose\x18\x01 \x01(\x0e2\x1d.tayfam.core.v1.UploadPurposeR\apurpose\x129\n" +
+	"\bvariants\x18\x02 \x03(\v2\x1d.tayfam.core.v1.UploadVariantR\bvariants\x12\x19\n" +
+	"\btayfa_id\x18\x03 \x01(\tR\atayfaId\x12*\n" +
+	"\x11client_request_id\x18\x04 \x01(\tR\x0fclientRequestId\"~\n" +
+	"\x14CreateUploadResponse\x12.\n" +
+	"\x06upload\x18\x01 \x01(\v2\x16.tayfam.core.v1.UploadR\x06upload\x126\n" +
+	"\atargets\x18\x02 \x03(\v2\x1c.tayfam.core.v1.UploadTargetR\atargets\"b\n" +
 	"\x15CompleteUploadRequest\x12\x1b\n" +
-	"\tupload_id\x18\x01 \x01(\tR\buploadId\"H\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x14\n" +
+	"\x05width\x18\x02 \x01(\x05R\x05width\x12\x16\n" +
+	"\x06height\x18\x03 \x01(\x05R\x06height\"H\n" +
 	"\x16CompleteUploadResponse\x12.\n" +
 	"\x06upload\x18\x01 \x01(\v2\x16.tayfam.core.v1.UploadR\x06upload\"/\n" +
 	"\x10GetUploadRequest\x12\x1b\n" +
@@ -992,22 +1185,25 @@ const file_tayfam_core_v1_media_proto_rawDesc = "" +
 	"\x1aUPLOAD_PURPOSE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15UPLOAD_PURPOSE_AVATAR\x10\x01\x12\x1e\n" +
 	"\x1aUPLOAD_PURPOSE_CATCH_PHOTO\x10\x02\x12\x18\n" +
-	"\x14UPLOAD_PURPOSE_COVER\x10\x03*\xb7\x01\n" +
+	"\x14UPLOAD_PURPOSE_COVER\x10\x03*}\n" +
 	"\fUploadStatus\x12\x1d\n" +
 	"\x19UPLOAD_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
-	"\x15UPLOAD_STATUS_PENDING\x10\x01\x12\x1a\n" +
-	"\x16UPLOAD_STATUS_UPLOADED\x10\x02\x12\x1c\n" +
-	"\x18UPLOAD_STATUS_PROCESSING\x10\x03\x12\x17\n" +
-	"\x13UPLOAD_STATUS_READY\x10\x04\x12\x1a\n" +
-	"\x16UPLOAD_STATUS_REJECTED\x10\x05*\x98\x02\n" +
+	"\x15UPLOAD_STATUS_PENDING\x10\x01\x12\x17\n" +
+	"\x13UPLOAD_STATUS_READY\x10\x02\x12\x1a\n" +
+	"\x16UPLOAD_STATUS_REJECTED\x10\x03*\xce\x02\n" +
 	"\x12UploadRejectReason\x12$\n" +
 	" UPLOAD_REJECT_REASON_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eUPLOAD_REJECT_REASON_NOT_IMAGE\x10\x01\x12)\n" +
-	"%UPLOAD_REJECT_REASON_UNSUPPORTED_TYPE\x10\x02\x12\"\n" +
-	"\x1eUPLOAD_REJECT_REASON_TOO_LARGE\x10\x03\x12 \n" +
-	"\x1cUPLOAD_REJECT_REASON_CORRUPT\x10\x04\x12&\n" +
-	"\"UPLOAD_REJECT_REASON_SIZE_MISMATCH\x10\x05\x12\x1f\n" +
-	"\x1bUPLOAD_REJECT_REASON_FAILED\x10\x062\xd2\x03\n" +
+	"%UPLOAD_REJECT_REASON_UNSUPPORTED_TYPE\x10\x02\x12)\n" +
+	"%UPLOAD_REJECT_REASON_METADATA_PRESENT\x10\x03\x12+\n" +
+	"'UPLOAD_REJECT_REASON_DIMENSION_MISMATCH\x10\x04\x12&\n" +
+	"\"UPLOAD_REJECT_REASON_SIZE_MISMATCH\x10\x05\x12\"\n" +
+	"\x1eUPLOAD_REJECT_REASON_TOO_LARGE\x10\x06\x12\x1f\n" +
+	"\x1bUPLOAD_REJECT_REASON_FAILED\x10\a*\\\n" +
+	"\vVariantKind\x12\x1c\n" +
+	"\x18VARIANT_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14VARIANT_KIND_PREVIEW\x10\x01\x12\x15\n" +
+	"\x11VARIANT_KIND_FULL\x10\x022\xd2\x03\n" +
 	"\fMediaService\x12Y\n" +
 	"\fCreateUpload\x12#.tayfam.core.v1.CreateUploadRequest\x1a$.tayfam.core.v1.CreateUploadResponse\x12_\n" +
 	"\x0eCompleteUpload\x12%.tayfam.core.v1.CompleteUploadRequest\x1a&.tayfam.core.v1.CompleteUploadResponse\x12P\n" +
@@ -1029,56 +1225,63 @@ func file_tayfam_core_v1_media_proto_rawDescGZIP() []byte {
 	return file_tayfam_core_v1_media_proto_rawDescData
 }
 
-var file_tayfam_core_v1_media_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_tayfam_core_v1_media_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_tayfam_core_v1_media_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_tayfam_core_v1_media_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_tayfam_core_v1_media_proto_goTypes = []any{
 	(UploadPurpose)(0),             // 0: tayfam.core.v1.UploadPurpose
 	(UploadStatus)(0),              // 1: tayfam.core.v1.UploadStatus
 	(UploadRejectReason)(0),        // 2: tayfam.core.v1.UploadRejectReason
-	(*Upload)(nil),                 // 3: tayfam.core.v1.Upload
-	(*MediaUrls)(nil),              // 4: tayfam.core.v1.MediaUrls
-	(*CreateUploadRequest)(nil),    // 5: tayfam.core.v1.CreateUploadRequest
-	(*CreateUploadResponse)(nil),   // 6: tayfam.core.v1.CreateUploadResponse
-	(*CompleteUploadRequest)(nil),  // 7: tayfam.core.v1.CompleteUploadRequest
-	(*CompleteUploadResponse)(nil), // 8: tayfam.core.v1.CompleteUploadResponse
-	(*GetUploadRequest)(nil),       // 9: tayfam.core.v1.GetUploadRequest
-	(*GetUploadResponse)(nil),      // 10: tayfam.core.v1.GetUploadResponse
-	(*GetMediaUrlsRequest)(nil),    // 11: tayfam.core.v1.GetMediaUrlsRequest
-	(*GetMediaUrlsResponse)(nil),   // 12: tayfam.core.v1.GetMediaUrlsResponse
-	(*AttachAvatarRequest)(nil),    // 13: tayfam.core.v1.AttachAvatarRequest
-	(*AttachAvatarResponse)(nil),   // 14: tayfam.core.v1.AttachAvatarResponse
-	nil,                            // 15: tayfam.core.v1.CreateUploadResponse.UploadHeadersEntry
-	(*timestamppb.Timestamp)(nil),  // 16: google.protobuf.Timestamp
+	(VariantKind)(0),               // 3: tayfam.core.v1.VariantKind
+	(*Upload)(nil),                 // 4: tayfam.core.v1.Upload
+	(*MediaUrls)(nil),              // 5: tayfam.core.v1.MediaUrls
+	(*UploadVariant)(nil),          // 6: tayfam.core.v1.UploadVariant
+	(*UploadTarget)(nil),           // 7: tayfam.core.v1.UploadTarget
+	(*CreateUploadRequest)(nil),    // 8: tayfam.core.v1.CreateUploadRequest
+	(*CreateUploadResponse)(nil),   // 9: tayfam.core.v1.CreateUploadResponse
+	(*CompleteUploadRequest)(nil),  // 10: tayfam.core.v1.CompleteUploadRequest
+	(*CompleteUploadResponse)(nil), // 11: tayfam.core.v1.CompleteUploadResponse
+	(*GetUploadRequest)(nil),       // 12: tayfam.core.v1.GetUploadRequest
+	(*GetUploadResponse)(nil),      // 13: tayfam.core.v1.GetUploadResponse
+	(*GetMediaUrlsRequest)(nil),    // 14: tayfam.core.v1.GetMediaUrlsRequest
+	(*GetMediaUrlsResponse)(nil),   // 15: tayfam.core.v1.GetMediaUrlsResponse
+	(*AttachAvatarRequest)(nil),    // 16: tayfam.core.v1.AttachAvatarRequest
+	(*AttachAvatarResponse)(nil),   // 17: tayfam.core.v1.AttachAvatarResponse
+	nil,                            // 18: tayfam.core.v1.UploadTarget.HeadersEntry
+	(*timestamppb.Timestamp)(nil),  // 19: google.protobuf.Timestamp
 }
 var file_tayfam_core_v1_media_proto_depIdxs = []int32{
 	0,  // 0: tayfam.core.v1.Upload.purpose:type_name -> tayfam.core.v1.UploadPurpose
 	1,  // 1: tayfam.core.v1.Upload.status:type_name -> tayfam.core.v1.UploadStatus
 	2,  // 2: tayfam.core.v1.Upload.reject_reason:type_name -> tayfam.core.v1.UploadRejectReason
-	16, // 3: tayfam.core.v1.Upload.create_time:type_name -> google.protobuf.Timestamp
-	4,  // 4: tayfam.core.v1.Upload.urls:type_name -> tayfam.core.v1.MediaUrls
-	16, // 5: tayfam.core.v1.MediaUrls.expire_time:type_name -> google.protobuf.Timestamp
-	0,  // 6: tayfam.core.v1.CreateUploadRequest.purpose:type_name -> tayfam.core.v1.UploadPurpose
-	3,  // 7: tayfam.core.v1.CreateUploadResponse.upload:type_name -> tayfam.core.v1.Upload
-	15, // 8: tayfam.core.v1.CreateUploadResponse.upload_headers:type_name -> tayfam.core.v1.CreateUploadResponse.UploadHeadersEntry
-	16, // 9: tayfam.core.v1.CreateUploadResponse.upload_expire_time:type_name -> google.protobuf.Timestamp
-	3,  // 10: tayfam.core.v1.CompleteUploadResponse.upload:type_name -> tayfam.core.v1.Upload
-	3,  // 11: tayfam.core.v1.GetUploadResponse.upload:type_name -> tayfam.core.v1.Upload
-	4,  // 12: tayfam.core.v1.GetMediaUrlsResponse.media:type_name -> tayfam.core.v1.MediaUrls
-	5,  // 13: tayfam.core.v1.MediaService.CreateUpload:input_type -> tayfam.core.v1.CreateUploadRequest
-	7,  // 14: tayfam.core.v1.MediaService.CompleteUpload:input_type -> tayfam.core.v1.CompleteUploadRequest
-	9,  // 15: tayfam.core.v1.MediaService.GetUpload:input_type -> tayfam.core.v1.GetUploadRequest
-	11, // 16: tayfam.core.v1.MediaService.GetMediaUrls:input_type -> tayfam.core.v1.GetMediaUrlsRequest
-	13, // 17: tayfam.core.v1.MediaService.AttachAvatar:input_type -> tayfam.core.v1.AttachAvatarRequest
-	6,  // 18: tayfam.core.v1.MediaService.CreateUpload:output_type -> tayfam.core.v1.CreateUploadResponse
-	8,  // 19: tayfam.core.v1.MediaService.CompleteUpload:output_type -> tayfam.core.v1.CompleteUploadResponse
-	10, // 20: tayfam.core.v1.MediaService.GetUpload:output_type -> tayfam.core.v1.GetUploadResponse
-	12, // 21: tayfam.core.v1.MediaService.GetMediaUrls:output_type -> tayfam.core.v1.GetMediaUrlsResponse
-	14, // 22: tayfam.core.v1.MediaService.AttachAvatar:output_type -> tayfam.core.v1.AttachAvatarResponse
-	18, // [18:23] is the sub-list for method output_type
-	13, // [13:18] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	19, // 3: tayfam.core.v1.Upload.create_time:type_name -> google.protobuf.Timestamp
+	5,  // 4: tayfam.core.v1.Upload.urls:type_name -> tayfam.core.v1.MediaUrls
+	19, // 5: tayfam.core.v1.MediaUrls.expire_time:type_name -> google.protobuf.Timestamp
+	3,  // 6: tayfam.core.v1.UploadVariant.kind:type_name -> tayfam.core.v1.VariantKind
+	3,  // 7: tayfam.core.v1.UploadTarget.kind:type_name -> tayfam.core.v1.VariantKind
+	18, // 8: tayfam.core.v1.UploadTarget.headers:type_name -> tayfam.core.v1.UploadTarget.HeadersEntry
+	19, // 9: tayfam.core.v1.UploadTarget.expire_time:type_name -> google.protobuf.Timestamp
+	0,  // 10: tayfam.core.v1.CreateUploadRequest.purpose:type_name -> tayfam.core.v1.UploadPurpose
+	6,  // 11: tayfam.core.v1.CreateUploadRequest.variants:type_name -> tayfam.core.v1.UploadVariant
+	4,  // 12: tayfam.core.v1.CreateUploadResponse.upload:type_name -> tayfam.core.v1.Upload
+	7,  // 13: tayfam.core.v1.CreateUploadResponse.targets:type_name -> tayfam.core.v1.UploadTarget
+	4,  // 14: tayfam.core.v1.CompleteUploadResponse.upload:type_name -> tayfam.core.v1.Upload
+	4,  // 15: tayfam.core.v1.GetUploadResponse.upload:type_name -> tayfam.core.v1.Upload
+	5,  // 16: tayfam.core.v1.GetMediaUrlsResponse.media:type_name -> tayfam.core.v1.MediaUrls
+	8,  // 17: tayfam.core.v1.MediaService.CreateUpload:input_type -> tayfam.core.v1.CreateUploadRequest
+	10, // 18: tayfam.core.v1.MediaService.CompleteUpload:input_type -> tayfam.core.v1.CompleteUploadRequest
+	12, // 19: tayfam.core.v1.MediaService.GetUpload:input_type -> tayfam.core.v1.GetUploadRequest
+	14, // 20: tayfam.core.v1.MediaService.GetMediaUrls:input_type -> tayfam.core.v1.GetMediaUrlsRequest
+	16, // 21: tayfam.core.v1.MediaService.AttachAvatar:input_type -> tayfam.core.v1.AttachAvatarRequest
+	9,  // 22: tayfam.core.v1.MediaService.CreateUpload:output_type -> tayfam.core.v1.CreateUploadResponse
+	11, // 23: tayfam.core.v1.MediaService.CompleteUpload:output_type -> tayfam.core.v1.CompleteUploadResponse
+	13, // 24: tayfam.core.v1.MediaService.GetUpload:output_type -> tayfam.core.v1.GetUploadResponse
+	15, // 25: tayfam.core.v1.MediaService.GetMediaUrls:output_type -> tayfam.core.v1.GetMediaUrlsResponse
+	17, // 26: tayfam.core.v1.MediaService.AttachAvatar:output_type -> tayfam.core.v1.AttachAvatarResponse
+	22, // [22:27] is the sub-list for method output_type
+	17, // [17:22] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_media_proto_init() }
@@ -1091,8 +1294,8 @@ func file_tayfam_core_v1_media_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_media_proto_rawDesc), len(file_tayfam_core_v1_media_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   13,
+			NumEnums:      4,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

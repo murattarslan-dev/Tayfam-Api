@@ -4583,7 +4583,6 @@ components:
         - upload-not-received
         - upload-rate-limited
         - upload-quota-exceeded
-        - media-type-unsupported
         # identity: hesap ve referans kodu (#71; rate-limited yukarıda)
         - referral-code-not-found
         # identity: hesap yönetimi (#75)

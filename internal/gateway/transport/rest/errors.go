@@ -113,13 +113,12 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_DECISION_NOT_APPLICABLE":   {http.StatusConflict, "decision-not-applicable"},
 		"ERROR_REASON_TAYFA_STATE_CONFLICT":      {http.StatusConflict, "tayfa-state-conflict"},
 		// Media (MediaService, issue #135).
-		"ERROR_REASON_UPLOAD_NOT_FOUND":       {http.StatusNotFound, "upload-not-found"},
-		"ERROR_REASON_UPLOAD_NOT_READY":       {http.StatusConflict, "upload-not-ready"},
-		"ERROR_REASON_UPLOAD_IN_USE":          {http.StatusConflict, "upload-in-use"},
-		"ERROR_REASON_UPLOAD_NOT_RECEIVED":    {http.StatusConflict, "upload-not-received"},
-		"ERROR_REASON_UPLOAD_RATE_LIMITED":    {http.StatusTooManyRequests, "upload-rate-limited"},
-		"ERROR_REASON_UPLOAD_QUOTA_EXCEEDED":  {http.StatusConflict, "upload-quota-exceeded"},
-		"ERROR_REASON_MEDIA_TYPE_UNSUPPORTED": {http.StatusUnsupportedMediaType, "media-type-unsupported"},
+		"ERROR_REASON_UPLOAD_NOT_FOUND":      {http.StatusNotFound, "upload-not-found"},
+		"ERROR_REASON_UPLOAD_NOT_READY":      {http.StatusConflict, "upload-not-ready"},
+		"ERROR_REASON_UPLOAD_IN_USE":         {http.StatusConflict, "upload-in-use"},
+		"ERROR_REASON_UPLOAD_NOT_RECEIVED":   {http.StatusConflict, "upload-not-received"},
+		"ERROR_REASON_UPLOAD_RATE_LIMITED":   {http.StatusTooManyRequests, "upload-rate-limited"},
+		"ERROR_REASON_UPLOAD_QUOTA_EXCEEDED": {http.StatusConflict, "upload-quota-exceeded"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {
