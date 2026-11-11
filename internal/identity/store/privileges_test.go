@@ -26,8 +26,11 @@ var wantAppPrivileges = map[string]string{
 	"refresh_tokens":   "DELETE,INSERT,SELECT,UPDATE",
 	"ref_code_lookups": "DELETE,INSERT,SELECT",
 	"consent_records":  "INSERT,SELECT",
-	"domain_events":    "DELETE,INSERT,SELECT,UPDATE(actor_id)",
-	"event_consumers":  "INSERT,SELECT,UPDATE",
+	// Veri dışa aktarma talepleri (00009, issue #144): durum güncellenir,
+	// saklama işi ve hesap silme satırları siler.
+	"data_export_requests": "DELETE,INSERT,SELECT,UPDATE",
+	"domain_events":        "DELETE,INSERT,SELECT,UPDATE(actor_id)",
+	"event_consumers":      "INSERT,SELECT,UPDATE",
 
 	"platform_admins":     "SELECT",
 	"platform_audit_logs": "DELETE,INSERT,SELECT",

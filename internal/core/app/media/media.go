@@ -202,7 +202,7 @@ type URLs struct {
 func uploadOf(u store.Upload) Upload {
 	out := Upload{
 		ID: id.ID(u.ID.Bytes), Purpose: u.Purpose, Status: u.Status, RejectReason: u.RejectReason.String,
-		SizeBytes: u.PreviewBytes + u.FullBytes, CreatedAt: u.CreatedAt.Time.UTC(), Attached: u.AttachedID.Valid,
+		SizeBytes: u.PreviewBytes.Int64 + u.FullBytes.Int64, CreatedAt: u.CreatedAt.Time.UTC(), Attached: u.AttachedID.Valid,
 	}
 	if u.TayfaID.Valid {
 		out.TayfaID = id.ID(u.TayfaID.Bytes)

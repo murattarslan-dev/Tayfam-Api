@@ -407,10 +407,10 @@ type Upload struct {
 	Purpose         string
 	Status          string
 	R2Key           string
-	PreviewType     string
-	PreviewBytes    int64
-	FullType        string
-	FullBytes       int64
+	PreviewType     pgtype.Text
+	PreviewBytes    pgtype.Int8
+	FullType        pgtype.Text
+	FullBytes       pgtype.Int8
 	Width           pgtype.Int4
 	Height          pgtype.Int4
 	RejectReason    pgtype.Text
@@ -421,6 +421,8 @@ type Upload struct {
 	CreatedAt       pgtype.Timestamptz
 	ReadyAt         pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+	ExportBytes     pgtype.Int8
+	ExpiresAt       pgtype.Timestamptz
 }
 
 type UserActivityRecord struct {

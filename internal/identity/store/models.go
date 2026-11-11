@@ -27,6 +27,23 @@ type ConsentRecord struct {
 	WithdrawnAt     pgtype.Timestamptz
 }
 
+type DataExportRequest struct {
+	ID              pgtype.UUID
+	UserID          pgtype.UUID
+	Status          string
+	FailureReason   pgtype.Text
+	UploadID        pgtype.UUID
+	WrappedKey      []byte
+	SizeBytes       pgtype.Int8
+	ClientRequestID pgtype.UUID
+	RequestedAt     pgtype.Timestamptz
+	StartedAt       pgtype.Timestamptz
+	FinishedAt      pgtype.Timestamptz
+	ReadyAt         pgtype.Timestamptz
+	ExpiresAt       pgtype.Timestamptz
+	DownloadedAt    pgtype.Timestamptz
+}
+
 type Device struct {
 	ID         pgtype.UUID
 	UserID     pgtype.UUID

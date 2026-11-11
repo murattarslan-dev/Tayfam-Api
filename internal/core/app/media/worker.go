@@ -52,7 +52,7 @@ func (s *Service) Cleanup(ctx context.Context) (int, error) {
 	for {
 		expired, err := s.q.ExpireUploads(ctx, store.ExpireUploadsParams{
 			PendingBefore: ts(now.Add(-PendingLifetime)), RejectedBefore: ts(now.Add(-RejectedLifetime)),
-			UnattachedBefore: ts(now.Add(-UnattachedLifetime)), N: cleanupBatch,
+			UnattachedBefore: ts(now.Add(-UnattachedLifetime)), Now: ts(now), N: cleanupBatch,
 		})
 		if err != nil {
 			return 0, fmt.Errorf("süre dolumu: %w", err)

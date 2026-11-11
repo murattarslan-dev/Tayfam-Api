@@ -181,6 +181,18 @@ const (
 	ErrorReason_ERROR_REASON_UPLOAD_NOT_READY ErrorReason = 20
 	// FAILED_PRECONDITION. The upload is attached to other content.
 	ErrorReason_ERROR_REASON_UPLOAD_IN_USE ErrorReason = 21
+	// KVKK data export (DataExportService, issue #144). NOT_FOUND: no such
+	// request of the caller (another user's is the same).
+	ErrorReason_ERROR_REASON_DATA_EXPORT_NOT_FOUND ErrorReason = 22
+	// FAILED_PRECONDITION. Another request of the caller is being prepared.
+	ErrorReason_ERROR_REASON_DATA_EXPORT_IN_PROGRESS ErrorReason = 23
+	// RESOURCE_EXHAUSTED. One request in 30 days; failed ones do not count.
+	ErrorReason_ERROR_REASON_DATA_EXPORT_LIMIT ErrorReason = 24
+	// FAILED_PRECONDITION. The export is not ready (pending, processing or
+	// failed).
+	ErrorReason_ERROR_REASON_DATA_EXPORT_NOT_READY ErrorReason = 25
+	// FAILED_PRECONDITION. The 7 days are over; the file is deleted.
+	ErrorReason_ERROR_REASON_DATA_EXPORT_EXPIRED ErrorReason = 26
 )
 
 // Enum value maps for ErrorReason.
@@ -208,6 +220,11 @@ var (
 		19: "ERROR_REASON_UPLOAD_NOT_FOUND",
 		20: "ERROR_REASON_UPLOAD_NOT_READY",
 		21: "ERROR_REASON_UPLOAD_IN_USE",
+		22: "ERROR_REASON_DATA_EXPORT_NOT_FOUND",
+		23: "ERROR_REASON_DATA_EXPORT_IN_PROGRESS",
+		24: "ERROR_REASON_DATA_EXPORT_LIMIT",
+		25: "ERROR_REASON_DATA_EXPORT_NOT_READY",
+		26: "ERROR_REASON_DATA_EXPORT_EXPIRED",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":               0,
@@ -232,6 +249,11 @@ var (
 		"ERROR_REASON_UPLOAD_NOT_FOUND":          19,
 		"ERROR_REASON_UPLOAD_NOT_READY":          20,
 		"ERROR_REASON_UPLOAD_IN_USE":             21,
+		"ERROR_REASON_DATA_EXPORT_NOT_FOUND":     22,
+		"ERROR_REASON_DATA_EXPORT_IN_PROGRESS":   23,
+		"ERROR_REASON_DATA_EXPORT_LIMIT":         24,
+		"ERROR_REASON_DATA_EXPORT_NOT_READY":     25,
+		"ERROR_REASON_DATA_EXPORT_EXPIRED":       26,
 	}
 )
 
@@ -678,7 +700,7 @@ const file_tayfam_identity_v1_auth_proto_rawDesc = "" +
 	"\x14PLATFORM_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10PLATFORM_ANDROID\x10\x01\x12\x10\n" +
 	"\fPLATFORM_IOS\x10\x02\x12\x10\n" +
-	"\fPLATFORM_WEB\x10\x03*\x97\x06\n" +
+	"\fPLATFORM_WEB\x10\x03*\xdb\a\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12$\n" +
 	" ERROR_REASON_INVALID_CREDENTIALS\x10\x01\x12%\n" +
@@ -702,7 +724,12 @@ const file_tayfam_identity_v1_auth_proto_rawDesc = "" +
 	"\x17ERROR_REASON_VALIDATION\x10\x12\x12!\n" +
 	"\x1dERROR_REASON_UPLOAD_NOT_FOUND\x10\x13\x12!\n" +
 	"\x1dERROR_REASON_UPLOAD_NOT_READY\x10\x14\x12\x1e\n" +
-	"\x1aERROR_REASON_UPLOAD_IN_USE\x10\x152\x86\x02\n" +
+	"\x1aERROR_REASON_UPLOAD_IN_USE\x10\x15\x12&\n" +
+	"\"ERROR_REASON_DATA_EXPORT_NOT_FOUND\x10\x16\x12(\n" +
+	"$ERROR_REASON_DATA_EXPORT_IN_PROGRESS\x10\x17\x12\"\n" +
+	"\x1eERROR_REASON_DATA_EXPORT_LIMIT\x10\x18\x12&\n" +
+	"\"ERROR_REASON_DATA_EXPORT_NOT_READY\x10\x19\x12$\n" +
+	" ERROR_REASON_DATA_EXPORT_EXPIRED\x10\x1a2\x86\x02\n" +
 	"\vAuthService\x12O\n" +
 	"\x06SignIn\x12!.tayfam.identity.v1.SignInRequest\x1a\".tayfam.identity.v1.SignInResponse\x12R\n" +
 	"\aRefresh\x12\".tayfam.identity.v1.RefreshRequest\x1a#.tayfam.identity.v1.RefreshResponse\x12R\n" +

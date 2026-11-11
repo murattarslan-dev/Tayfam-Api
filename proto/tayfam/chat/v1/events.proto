@@ -33,6 +33,9 @@ service UserEventService {
   // actor) and keeps the profile copy as a tombstone, so a late event
   // cannot bring it back.
   //
+  // data_export_ready writes the data_export_ready notification for the
+  // user (issue #144, ADR-0021), once per event; none for a deleted user.
+  //
   // session_revoked, sanctioned and deleted also close the real-time
   // connections of the session (or of every session of the user), remove
   // its unused tickets and refuse new tickets for it until any access
@@ -52,6 +55,7 @@ message ApplyUserEventRequest {
     UserDeleted deleted = 11;
     SessionRevoked session_revoked = 12;
     UserSanctioned sanctioned = 13;
+    DataExportReady data_export_ready = 14;
   }
 }
 
@@ -78,6 +82,12 @@ message SessionRevoked {
 // session of the user (ADR-0004 "Platform yaptırımları"). Which sanction is
 // not said.
 message UserSanctioned {}
+
+// DataExportReady: the user's data export can be downloaded.
+message DataExportReady {
+  // identity's data export request (UUID).
+  string data_export_id = 1;
+}
 
 message ApplyUserEventResponse {}
 

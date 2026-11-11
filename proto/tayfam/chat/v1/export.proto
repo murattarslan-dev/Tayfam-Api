@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package tayfam.chat.v1;
+
+// ExportService returns the caller's own data for the KVKK data export
+// (issue #144, ADR-0008, ADR-0021).
+//
+// Authentication: the caller's access token. identity calls it with the
+// token of the user who asked for the export (auth.ForwardToken); the
+// gateway exposes it nowhere. The request names no user: only the verified
+// caller's data is returned. Direct messages are not part of it: their
+// end-to-end encrypted content is not readable on the server; the client
+// exports them on the device.
+service ExportService {
+  // ExportMyData streams the caller's records, section by section (see
+  // core's ExportService for the chunking rules). Without the channel
+  // message key the stream is UNAVAILABLE.
+  rpc ExportMyData(ExportMyDataRequest) returns (stream ExportMyDataResponse);
+}
+
+// ChatExportSection names a part of the export. The file name in the
+// archive is chat/<lower-case name without the prefix>.json.
+enum ChatExportSection {
+  CHAT_EXPORT_SECTION_UNSPECIFIED = 0;
+  // Channel messages the caller wrote, decrypted.
+  CHAT_EXPORT_SECTION_CHANNEL_MESSAGES = 1;
+  // The caller's muting preferences.
+  CHAT_EXPORT_SECTION_NOTIFICATION_PREFERENCES = 2;
+}
+
+message ExportMyDataRequest {}
+
+message ExportMyDataResponse {
+  ChatExportSection section = 1;
+  // One JSON object each.
+  repeated bytes records = 2;
+}

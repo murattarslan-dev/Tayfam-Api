@@ -6,6 +6,13 @@
   `platform_admins` kaydının runbook SQL'iyle eklenmesi, Access e-postası
   eşleşmesinin identity'de yapılması, denetim kaydının core outbox'ıyla
   tutarlılığı, rol düzeltme istisnası, platform banı.
+- **Revizyon:** 2026-11-11, veri dışa aktarma uygulanırken (issue #144,
+  [ADR-0021](0021-kvkk-veri-disa-aktarma.md); platform sahibi sohbette
+  kabul etti): toplama zamanlayıcıyla değil, **talep anında, kullanıcının
+  kendi token'ıyla** başlar; dosya core'un private R2'sine `exports/`
+  önekiyle, uygulama düzeyinde AES-256-GCM ile şifreli yazılır ve anahtar
+  identity'de sarılı durur; talep satırı 30 gün tutulur (anahtar ve dosya
+  7 gün).
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md), [ADR-0006](0006-dagitim-ve-ortamlar.md), [ADR-0009](0009-veri-modelinin-servislere-dagilimi.md)
 - **Kaynak:** Notion: Proje Planı (Güvenlik Tedbirleri), Platform Yönetim
@@ -51,6 +58,13 @@ sorumlusu gerçek kişi olarak Murat Tarslan'dır.
   silinir.
 - Birebir mesajlar sunucuda okunamadığı için sunucu dışa aktarımına girmez;
   istemci, şifreli arşivden cihazda dışa aktarma sunar.
+- **2026-11-11 (ADR-0021):** identity core ve chat'in `ExportMyData`
+  akışlarını kullanıcının kendi token'ıyla, talep anında çağırır (önceki
+  metin "`ExportUserData`" ve Notion'da "arka plan işi"). Dosya core'un
+  private bucket'ına (`exports/`) identity'nin şifrelediği haliyle, core'un
+  imzaladığı linkle yazılır; R2 kimliği yalnızca core'dadır. Şifre çözme
+  istemcidedir; indirme son 10 dakikada sağlayıcıyla açılmış oturum ister.
+  Ayrıntılar ve tehdit modeli ADR-0021'dedir.
 
 ### Onay ve yaş beyanı
 
@@ -82,7 +96,8 @@ Notion'daki tablolar geçerlidir; her servis kendi verisinin saklama işini
 | Kullanılmış veya süresi dolmuş refresh token'lar | 30 gün | identity |
 | Konvoy plakası | Etkinlikten 30 gün sonra temizlenir | core |
 | Teslim edilemeyen DM zarfları | 30 gün | chat |
-| Veri dışa aktarma dosyası | 7 gün | identity, R2 |
+| Veri dışa aktarma dosyası ve anahtarı | 7 gün (R2 lifecycle `exports/` 8 gün yedek) | identity, core, R2 |
+| Veri dışa aktarma talep satırı (anahtarsız) | 30 gün ("30 günde bir" sınırı için; ADR-0021) | identity |
 | Bekleyen yüklemeler | 24 saat | core, R2 |
 | Uygulama logları ve trace'ler | 30 gün | gözlem stack'i |
 | Postgres yedekleri | 30 gün | R2 |
@@ -222,8 +237,9 @@ meşru menfaat denge testi ve kullanım koşulları metni.
 
 - identity; onay, dışa aktarma, platform admin, yaptırım ve platform denetim
   kaydı tablolarını içerir.
-- Her servis, `user.deleted` olayını işleyen idempotent bir metod ve
-  `ExportUserData` metodu sunar.
+- Her servis, `user.deleted` olayını işleyen idempotent bir metod sunar;
+  core ve chat ayrıca çağıranın kendi verisini dönen `ExportMyData` akışını
+  sunar (ADR-0021).
 - Cloudflare'de `admin.tayfam.app` için bir Access uygulaması ve politikası
   tanımlanır.
 - Aydınlatma metni, yedeklerin 30 gün saklanması ve R2'deki kapak görsellerinin

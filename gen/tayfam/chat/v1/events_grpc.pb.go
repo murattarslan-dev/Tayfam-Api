@@ -40,6 +40,9 @@ type UserEventServiceClient interface {
 	// actor) and keeps the profile copy as a tombstone, so a late event
 	// cannot bring it back.
 	//
+	// data_export_ready writes the data_export_ready notification for the
+	// user (issue #144, ADR-0021), once per event; none for a deleted user.
+	//
 	// session_revoked, sanctioned and deleted also close the real-time
 	// connections of the session (or of every session of the user), remove
 	// its unused tickets and refuse new tickets for it until any access
@@ -82,6 +85,9 @@ type UserEventServiceServer interface {
 	// notification preferences; the user stays nowhere as a recipient or an
 	// actor) and keeps the profile copy as a tombstone, so a late event
 	// cannot bring it back.
+	//
+	// data_export_ready writes the data_export_ready notification for the
+	// user (issue #144, ADR-0021), once per event; none for a deleted user.
 	//
 	// session_revoked, sanctioned and deleted also close the real-time
 	// connections of the session (or of every session of the user), remove

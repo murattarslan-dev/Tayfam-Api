@@ -127,8 +127,8 @@ func (s *Service) CreateUpload(ctx context.Context, user id.ID, in CreateInput) 
 		switch {
 		case err == nil:
 			if prev.Purpose != in.Purpose || prev.TayfaID != optional(in.Tayfa) || prev.Status == statusDeleting ||
-				prev.PreviewType != preview.ContentType || prev.PreviewBytes != preview.SizeBytes ||
-				prev.FullType != full.ContentType || prev.FullBytes != full.SizeBytes {
+				prev.PreviewType.String != preview.ContentType || prev.PreviewBytes.Int64 != preview.SizeBytes ||
+				prev.FullType.String != full.ContentType || prev.FullBytes.Int64 != full.SizeBytes {
 				return apperr.Validation("client_request_id")
 			}
 			row = prev
@@ -176,7 +176,7 @@ func (s *Service) CreateUpload(ctx context.Context, user id.ID, in CreateInput) 
 		return out, nil
 	}
 	for _, v := range []VariantInput{
-		{KindPreview, row.PreviewType, row.PreviewBytes}, {KindFull, row.FullType, row.FullBytes},
+		{KindPreview, row.PreviewType.String, row.PreviewBytes.Int64}, {KindFull, row.FullType.String, row.FullBytes.Int64},
 	} {
 		link, err := s.cfg.Store.PresignPut(incomingKey(row.R2Key, v.Kind), v.ContentType, v.SizeBytes, UploadLinkTTL)
 		if err != nil {
@@ -311,11 +311,11 @@ func (s *Service) CompleteUpload(ctx context.Context, user, upload id.ID, width,
 // verify checks both variants and copies them out of quarantine, each
 // bound to the ETag that was checked.
 func (s *Service) verify(ctx context.Context, row store.Upload, width, height int) error {
-	preview, err := s.check(ctx, row.R2Key, KindPreview, row.PreviewType, row.PreviewBytes)
+	preview, err := s.check(ctx, row.R2Key, KindPreview, row.PreviewType.String, row.PreviewBytes.Int64)
 	if err != nil {
 		return err
 	}
-	full, err := s.check(ctx, row.R2Key, KindFull, row.FullType, row.FullBytes)
+	full, err := s.check(ctx, row.R2Key, KindFull, row.FullType.String, row.FullBytes.Int64)
 	if err != nil {
 		return err
 	}
@@ -362,7 +362,7 @@ func (s *Service) ownUpload(ctx context.Context, user, upload id.ID) (store.Uplo
 func (s *Service) withURLs(row store.Upload) (Upload, error) {
 	out := uploadOf(row)
 	if row.Status == StatusReady {
-		u, err := s.urls(row.ID, row.R2Key, row.PreviewType, row.FullType, row.Width, row.Height)
+		u, err := s.urls(row.ID, row.R2Key, row.PreviewType.String, row.FullType.String, row.Width, row.Height)
 		if err != nil {
 			return Upload{}, err
 		}

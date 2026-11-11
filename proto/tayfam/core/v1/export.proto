@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+// ExportService returns the caller's own data for the KVKK data export
+// (issue #144, ADR-0008, ADR-0021; data model v14 "Veri dışa aktarma").
+//
+// Authentication: the caller's access token. identity calls it with the
+// token of the user who asked for the export (auth.ForwardToken); the
+// gateway exposes it nowhere. The request names no user: only the verified
+// caller's data is returned, so nobody can ask for another user's data.
+service ExportService {
+  // ExportMyData streams the caller's records, section by section, each
+  // section in a stable order. Every chunk holds records of one section,
+  // at most about 1 MiB of JSON; a section may span several chunks and an
+  // empty section sends nothing. Each record is one JSON object; its
+  // fields are listed in docs/data-export-format.md (format version 1).
+  // Other users appear by ID only. The whole stream reads one consistent
+  // snapshot of core's database.
+  rpc ExportMyData(ExportMyDataRequest) returns (stream ExportMyDataResponse);
+}
+
+// CoreExportSection names a part of the export. The file name in the
+// archive is core/<lower-case name without the prefix>.json.
+enum CoreExportSection {
+  CORE_EXPORT_SECTION_UNSPECIFIED = 0;
+  // Tayfas the caller is or was in, with role and status.
+  CORE_EXPORT_SECTION_MEMBERSHIPS = 1;
+  // Answers to events (going, maybe, …) and attendance.
+  CORE_EXPORT_SECTION_EVENT_RSVPS = 2;
+  // Hike start and return times.
+  CORE_EXPORT_SECTION_HIKE_CHECKINS = 3;
+  // Convoy vehicles, plates included.
+  CORE_EXPORT_SECTION_CONVOY_VEHICLES = 4;
+  // The attendance history (user_activity_records).
+  CORE_EXPORT_SECTION_ACTIVITY_RECORDS = 5;
+  // Content the caller wrote.
+  CORE_EXPORT_SECTION_ANNOUNCEMENTS = 6;
+  CORE_EXPORT_SECTION_EVENTS = 7;
+  CORE_EXPORT_SECTION_QUESTIONS = 8;
+  CORE_EXPORT_SECTION_ANSWERS = 9;
+  // Answers the caller upvoted.
+  CORE_EXPORT_SECTION_ANSWER_VOTES = 10;
+  // Polls the caller created.
+  CORE_EXPORT_SECTION_POLLS = 11;
+  // The caller's own votes, anonymous polls included (v14: the only place
+  // an anonymous vote ever leaves the database).
+  CORE_EXPORT_SECTION_POLL_VOTES = 12;
+  // Fishing catches, the shared catch place included.
+  CORE_EXPORT_SECTION_FISHING_CATCHES = 13;
+  CORE_EXPORT_SECTION_FRIENDSHIPS = 14;
+  // Users the caller blocked.
+  CORE_EXPORT_SECTION_BLOCKS = 15;
+  // Reports the caller filed, the evidence they wrote included.
+  CORE_EXPORT_SECTION_REPORTS = 16;
+  // Files the caller uploaded: a list only, never the files (ADR-0021).
+  CORE_EXPORT_SECTION_UPLOADS = 17;
+}
+
+message ExportMyDataRequest {}
+
+message ExportMyDataResponse {
+  CoreExportSection section = 1;
+  // One JSON object each.
+  repeated bytes records = 2;
+}
