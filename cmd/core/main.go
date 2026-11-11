@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"time"
 	_ "time/tzdata" // series time zones: the same IANA database in every image (issue #51)
 
@@ -26,6 +27,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/identityadmin"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/identityminor"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/jobs"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/poll"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/profile"
@@ -38,6 +40,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/grpcx"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/objstore"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/outbox"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/ratelimit"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/service"
@@ -129,6 +132,11 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 
+	medias, err := mediaService(rt, pool)
+	if err != nil {
+		return err
+	}
+
 	background, err := jobs.New(jobs.Config{Pool: pool, Log: rt.Log})
 	if err != nil {
 		return err
@@ -187,7 +195,13 @@ func setup(rt *service.Runtime) error {
 	corev1.RegisterChannelAccessServiceServer(srv, grpcapi.NewChannelAccessServer(channelAccess, rt.Log))
 	// chat'in birebir mesaj kuralı (issue #95): gönderen çağıranın kendisi.
 	corev1.RegisterDirectMessageServiceServer(srv, grpcapi.NewDirectMessageServer(directMessages, rt.Log))
+	// Dosyalar (issue #135, ADR-0020): R2 yapılandırması yoksa uçlar
+	// UNAVAILABLE döner, işçiler boşta bekler.
+	corev1.RegisterMediaServiceServer(srv, grpcapi.NewMediaServer(medias, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
+	// Süresi dolan ya da içeriği silinen dosyaların R2'den silinmesi
+	// (birden fazla pod'da çalışabilir; her adım idempotent).
+	rt.AddWorker("media-cleanup", medias.RunCleanup)
 	// Tekrarlayan etkinliklerin önümüzdeki 8 haftalık örnekleri (issue #51).
 	// Birden fazla pod'da çalışabilir: tayfa ve seri satırı kilitlenir,
 	// örnekler (series_id, starts_at) ile tekildir.
@@ -201,6 +215,39 @@ func setup(rt *service.Runtime) error {
 		rt.AddWorker(w.Name, w.Run)
 	}
 	return addRelay(rt, pool)
+}
+
+// mediaService returns the media service (issue #135, ADR-0020). The R2
+// credentials come from the optional core-r2 secret; without them media is
+// off and core still starts (and has no internet egress: the core-egress-r2
+// NetworkPolicy is added to an environment together with its secret).
+// Partial or malformed values stop the start.
+func mediaService(rt *service.Runtime, pool *pgxpool.Pool) (*media.Service, error) {
+	c := rt.Config
+	perHour := c.Int("MEDIA_UPLOADS_PER_HOUR", media.DefaultUploadsPerHour)
+	quotaMiB := c.Int("MEDIA_QUOTA_MIB", media.DefaultQuotaBytes>>20)
+	r2, err := media.LoadR2(c, rt.Env)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.Err(); err != nil {
+		return nil, err
+	}
+	if perHour < 1 || quotaMiB < 1 {
+		return nil, errors.New("MEDIA_UPLOADS_PER_HOUR ve MEDIA_QUOTA_MIB pozitif olmalı")
+	}
+	cfg := media.Config{Pool: pool, Log: rt.Log, UploadsPerHour: perHour, QuotaBytes: int64(quotaMiB) << 20}
+	if r2 == nil {
+		rt.Log.Info("R2 yapılandırması yok; dosya yükleme kapalı")
+	} else {
+		client, err := objstore.New(*r2)
+		if err != nil {
+			return nil, err
+		}
+		cfg.Store = client
+		rt.Log.Info("dosya yükleme açık (R2)")
+	}
+	return media.New(cfg)
 }
 
 // platformAdmin returns the panel's service and the admin token verifier,

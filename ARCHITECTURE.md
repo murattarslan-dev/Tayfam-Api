@@ -60,8 +60,10 @@ protokolüyle uçtan uca şifrelidir; geçmiş, kullanıcının kendi anahtarıy
 
 - PostgreSQL (CloudNativePG), PostGIS, ICU `tr-TR`. Erişim pgx + sqlc,
   migration goose ([ADR-0003](docs/adr/0003-kod-yapisi-ve-sozlesmeler.md)).
-- Dosyalar R2'ye istemciden doğrudan, imzalı linkle yüklenir; core işler
-  (EXIF temizliği, WebP) ([ADR-0007](docs/adr/0007-dosyalar-ve-medya.md)).
+- Görüntüyü mobil istemci işler (metadata'sız iki varyant, JPEG/WebP) ve
+  R2'ye doğrudan, imzalı linkle yükler; core pikselleri çözmeden
+  başlıkları denetler ve görme yetkisi olana 1 saatlik imzalı linkle sunar ([ADR-0007](docs/adr/0007-dosyalar-ve-medya.md),
+  [ADR-0020](docs/adr/0020-goruntu-isleme-ve-medya-sunumu.md)).
 
 ## Dağıtım
 

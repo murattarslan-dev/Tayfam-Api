@@ -202,6 +202,93 @@ Birleştirdikten sonra `kubectl -n tayfam-<ortam> rollout restart deploy/chat`;
 log'da "push açık (FCM)" görünür. `NS=tayfam-<ortam> ./scripts/netpol-test.sh`
 7. bölümde Google uçlarını açık bekler.
 
+## Dosyalar (R2)
+
+`core-r2` isteğe bağlıdır (ADR-0020 madde 6): yoksa core dosya yükleme
+olmadan çalışır (`/v1/uploads` ve `/v1/media/urls` 503 döner) ve
+**internete hiç çıkamaz** (en az yetki). Dosyalar bir ortamda açılırken
+aynı PR'da iki şey eklenir: secret ve core'un R2'ye çıkışı. Ortamlar
+hiçbir kaynağı paylaşmaz (ADR-0006): dev ve prod için ayrı bucket, ayrı
+token.
+
+Platform sahibinin listesi (ortam başına bir kez; `<ortam>` = `dev` |
+`prod`):
+
+1. **Bucket:** Cloudflare panelinde R2 → *Create bucket*: ad
+   `tayfam-<ortam>-private`, konum *Automatic* (ya da *Eastern Europe*
+   ipucu). *Settings*'te *Public access* kapalı kalır, `r2.dev` alt alanı
+   açılmaz, özel alan adı bağlanmaz (dosyalar yalnızca imzalı linkle
+   okunur). CORS kuralı gerekmez (yalnızca mobil istemci, ADR-0017).
+2. **Lifecycle kuralı:** bucket → *Settings* → *Object lifecycle rules* →
+   *Add rule*: ad `incoming-24h`, önek `incoming/`, *Delete objects*
+   **1 gün** sonra. (Tamamlanmayan multipart yüklemeler için varsayılan
+   kural kalır.) `incoming/` istemcinin yüklediği, henüz denetlenmemiş
+   varyantların karantinasıdır; denetimden geçenler `media/` altına
+   kopyalanır ve bu kurala girmez.
+3. **API token'ı (en az yetki):** R2 → *Manage R2 API Tokens* → *Create
+   API token*: ad `tayfam-<ortam>-core`, izin **Object Read & Write**,
+   *Apply to specific buckets only* → yalnızca `tayfam-<ortam>-private`.
+   Süre: sınırsız ya da rotasyon takviminize göre. Mümkünse *Client IP
+   Address Filtering*'e cluster'ın çıkış IP'si (prod: VDS'in IP'si)
+   yazılır; token sızsa bile başka yerden kullanılamaz. *Admin Read &
+   Write* veya hesap düzeyinde token **kullanılmaz**; yedek (Barman)
+   token'ı ayrıdır ve bu bucket'a yetkisi yoktur (ADR-0011 madde 11).
+   Panel *Access Key ID* ve *Secret Access Key*'i bir kez gösterir;
+   sayfayı kapatmadan 4. adıma geçin.
+4. **Secret:** dört değer istemde yapıştırılır, ekranda görünmez:
+
+   ```sh
+   ./scripts/new-r2-secret.sh <ortam>
+   # Account ID (R2 sayfasının sağında), bucket adı, Access Key ID, Secret Access Key
+   ```
+
+5. **Ağ:** `deploy/apps/<ortam>/core-egress-r2.yaml` dosyası açılır ve
+   `deploy/apps/<ortam>/kustomization.yaml`'da `resources`'a
+   `- core-egress-r2.yaml` satırı eklenir:
+
+   ```yaml
+   # core → internet 443: Cloudflare R2 (S3 API, <hesap>.r2.cloudflarestorage.com)
+   # (ADR-0020 madde 6). Yalnızca core-r2 secret'ı olan ortamda bulunur.
+   # NetworkPolicy alan adıyla sınırlayamaz (R2 Cloudflare anycast'idir);
+   # adres core'da hesap kimliğinden kurulur, yapılandırma başka adres
+   # veremez ve yönlendirme izlenmez. Cluster içi ve özel adresler hariç.
+   apiVersion: networking.k8s.io/v1
+   kind: NetworkPolicy
+   metadata:
+     name: core-egress-r2
+   spec:
+     podSelector:
+       matchLabels: { app.kubernetes.io/name: core }
+     policyTypes: [Egress]
+     egress:
+       - to:
+           - ipBlock:
+               cidr: 0.0.0.0/0
+               except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, 127.0.0.0/8]
+         ports:
+           - { protocol: TCP, port: 443 }
+   ```
+
+```sh
+git add deploy/apps/<ortam>/
+./scripts/check-secret-refs.sh <ortam>     # dev: ... dev cloudflared-token
+```
+
+Birleştirdikten sonra `kubectl -n tayfam-<ortam> rollout restart deploy/core`;
+log'da "dosya yükleme açık (R2)" görünür. `NS=tayfam-<ortam> ./scripts/netpol-test.sh`
+5. bölümde 443 çıkışını açık bekler.
+
+**İlk kez açıldığında bir kez doğrulayın** (R2'nin imzalı başlıkları ve
+koşullu kopyalamayı uyguladığını): uygulamadan ya da `POST /v1/uploads`
+ile bir yükleme açın ve dönen linklerden birine **farklı boyutta** bir
+dosya gönderin; R2 `403` dönmelidir. Doğru dosyalarla `200` döner ve
+`POST /v1/uploads/{id}/complete` yüklemeyi `ready` yapar (core log'unda
+"yükleme hazır"; koşullu kopyalama, `x-amz-copy-source-if-match`,
+desteklenmeseydi tamamlama 503 dönerdi). Sonuç PR'a yazılır.
+
+Rotasyon: panelde yeni token → `FORCE=1 ./scripts/new-r2-secret.sh <ortam>`
+→ birleştirme ve `rollout restart` → eski token panelde silinir.
+
 ## Cloudflare Tunnel token'ı
 
 ```sh
