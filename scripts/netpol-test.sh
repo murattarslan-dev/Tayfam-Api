@@ -106,8 +106,24 @@ run_inside "6) identity'nin içinden (Postgres'e, internete yalnızca 443, outbo
   KAPALI "http://gateway:8080/v1/status" \
   KAPALI "http://example.com"
 
+# chat'in internet çıkışı yalnızca push açıldıktan sonra, ortamın overlay'ine
+# eklenen chat-egress-internet kuralıyla vardır (ADR-0019 madde 8). Kural
+# yoksa Google uçları da kapalı beklenir.
+if kubectl -n "$NS" get networkpolicy chat-egress-internet >/dev/null 2>&1; then
+  push_want=ACIK; push_note="push açık: chat-egress-internet var"
+else
+  push_want=KAPALI; push_note="push kapalı: chat-egress-internet yok, internet kapalı"
+fi
+run_inside "7) chat'in içinden (Postgres'e, core'a; $push_note):" chat \
+  ACIK   "tcp://tayfam-pg-rw:5432" \
+  ACIK   "tcp://core:9090" \
+  "$push_want" "tcp://fcm.googleapis.com:443" \
+  "$push_want" "tcp://oauth2.googleapis.com:443" \
+  KAPALI "http://gateway:8080/v1/status" \
+  KAPALI "http://example.com"
+
 echo "Test container'ları temizleniyor..."
-kubectl -n "$NS" rollout restart deployment gateway cloudflared core identity > /dev/null
+kubectl -n "$NS" rollout restart deployment gateway cloudflared core identity chat > /dev/null
 
 if [ "$failed" -ne 0 ]; then
   echo "SONUÇ: NetworkPolicy testi BAŞARISIZ" >&2

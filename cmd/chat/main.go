@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -21,6 +22,8 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/dm"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/push"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/push/fcm"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/realtime"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/userevents"
 	grpcapi "github.com/murattarslan-dev/tayfam-api/internal/chat/transport/grpc"
@@ -54,6 +57,14 @@ func setup(rt *service.Runtime) error {
 	// Bağlantılar bellektedir; chat tek kopya çalışır (ADR-0005 "Ölçekleme").
 	httpAddr := c.String("HTTP_ADDR", ":8080")
 	maxConns := c.Int("REALTIME_MAX_CONNECTIONS", 2000)
+	// Push (FCM HTTP v1; issue #134, ADR-0019): servis hesabı JSON'u
+	// chat-fcm secret'ından (SOPS). Yoksa push kapalıdır: servis başlar,
+	// token kaydı çalışır, gönderim yapılmaz.
+	fcmAccount := c.String("CHAT_FCM_SERVICE_ACCOUNT", "")
+	// Firebase kurulunca prod'da push zorunludur (ADR-0019 madde 7): prod
+	// overlay'i secret'la birlikte CHAT_FCM_REQUIRED=true verir; o zaman
+	// değer yoksa servis başlamaz.
+	fcmRequired := c.OneOf("CHAT_FCM_REQUIRED", "false", "true", "false") == "true"
 	if err := c.Err(); err != nil {
 		return err
 	}
@@ -65,6 +76,27 @@ func setup(rt *service.Runtime) error {
 		rt.Log.Info("kanal mesajı anahtarı yüklendi", slog.Int("active_version", int(cipher.ActiveVersion())))
 	} else {
 		rt.Log.Warn("CHAT_MESSAGE_KEYS yok; kanallar ve birebir mesajlar kapalı (UNAVAILABLE)")
+	}
+	var sender push.Sender
+	if fcmAccount != "" {
+		acct, err := fcm.ParseServiceAccount([]byte(fcmAccount))
+		if err != nil {
+			return err
+		}
+		client, err := fcm.New(fcm.Config{Account: acct})
+		if err != nil {
+			return err
+		}
+		sender = client
+		rt.Log.Info("push açık (FCM)", slog.String("project_id", acct.ProjectID()))
+	} else {
+		if fcmRequired {
+			return errors.New("CHAT_FCM_REQUIRED=true ama CHAT_FCM_SERVICE_ACCOUNT yok")
+		}
+		rt.Log.Info("CHAT_FCM_SERVICE_ACCOUNT yok; push kapalı")
+	}
+	if rt.Env == "prod" && !fcmRequired {
+		rt.Log.Warn("prod'da CHAT_FCM_REQUIRED açık değil; Firebase kurulunca açılmalı (ADR-0019)")
 	}
 	pool, err := db.Open(context.Background(), dbCfg.URL())
 	if err != nil {
@@ -172,18 +204,27 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 	live.BindKeys(e2e)
+	// Push token'ı oturuma bağlıdır (ADR-0019); kayıt kullanıcı başına
+	// dakikada 10 (patlama 5). Bağlı kullanıcıya push gitmez.
+	pushes, err := push.New(push.Config{
+		Pool: pool, Log: rt.Log, Sender: sender, Presence: hub, Register: ratelimit.New(10, 5),
+	})
+	if err != nil {
+		return err
+	}
 	// Hesap silinince bildirimler ve tercihler de silinir (ADR-0009).
 	// Kanal mesajları kalır, yazar alanı boşalır; okunma kayıtları silinir.
 	// Birebir konuşmalarda silinen kişinin tarafı ve gönderen alanı boşalır
 	// (v14 "İlişkiler ve Silme Davranışı"); E2E cihazları, arşivi ve
-	// bekleyen zarfları silinir (ADR-0018).
+	// bekleyen zarfları ve push token'ları silinir (ADR-0018, ADR-0019).
 	// Oturum iptali, yaptırım ve silme açık bağlantıları kapatır (ADR-0004);
-	// biten oturumun E2E cihazı da silinir (cihaz = oturum).
+	// biten oturumun E2E cihazı ve push token'ı da silinir (cihaz = oturum).
 	userEvents, err := userevents.New(userevents.Config{
-		Pool:     pool,
-		Cleanups: []userevents.Cleanup{notification.Cleanup, channel.Cleanup, dm.Cleanup, keys.Cleanup},
-		Sessions: hub,
-		Devices:  e2e,
+		Pool:       pool,
+		Cleanups:   []userevents.Cleanup{notification.Cleanup, channel.Cleanup, dm.Cleanup, keys.Cleanup, push.Cleanup},
+		Sessions:   hub,
+		Devices:    e2e,
+		PushTokens: pushes,
 	})
 	if err != nil {
 		return err
@@ -205,6 +246,7 @@ func setup(rt *service.Runtime) error {
 	chatv1.RegisterChannelServiceServer(srv, grpcapi.NewChannelServer(channels, rt.Log))
 	chatv1.RegisterDirectMessageServiceServer(srv, grpcapi.NewDirectMessageServer(directMessages, rt.Log))
 	chatv1.RegisterE2EServiceServer(srv, grpcapi.NewE2EServer(e2e, rt.Log))
+	chatv1.RegisterPushServiceServer(srv, grpcapi.NewPushServer(pushes, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
 
 	wsHandler, err := ws.New(ws.Config{
@@ -230,5 +272,10 @@ func setup(rt *service.Runtime) error {
 	// Zarflar ve anahtar paylaşımları 30 gün, anahtar olayları 90 gün;
 	// 90 gün görünmeyen cihazlar silinir (ADR-0018 madde 9).
 	rt.AddWorker("e2e-retention", e2e.RunRetention)
+	// Bildirim kaydıyla açılan push işleri (ADR-0019); push kapalıyken
+	// çalışmaz. 60 gün yenilenmeyen token'lar ve 24 saatten eski işler
+	// silinir.
+	rt.AddWorker("push-sender", pushes.Run)
+	rt.AddWorker("push-retention", pushes.RunRetention)
 	return nil
 }

@@ -77,6 +77,9 @@ func NewRouter(d Deps) http.Handler {
 	if d.Chat.E2E != nil && d.Chat.Verifier != nil {
 		registerE2E(mux, chatHandlers{d: d.Chat})
 	}
+	if d.Chat.Push != nil && d.Chat.Verifier != nil {
+		registerPush(mux, chatHandlers{d: d.Chat})
+	}
 	if d.Chat.RealtimeURL != nil && d.Chat.Verifier != nil {
 		registerRealtime(mux, d.Chat)
 	}

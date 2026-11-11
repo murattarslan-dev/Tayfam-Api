@@ -28,16 +28,24 @@ fi
 rendered=$("${build[@]}")
 
 # Başvurulan adlar: secretKeyRef, secretRef (envFrom), passwordSecret ve
-# initdb.secret bloklarının altındaki "name:" değerleri.
+# initdb.secret bloklarının altındaki "name:" değerleri. "optional: true"
+# taşıyan referans (ör. chat-fcm: yoksa push kapalıdır, ADR-0019) eksik
+# sayılmaz; secret tanımlanınca pod onu okur.
 referenced=$(awk '
+  function flush() {
+    if (depth >= 0 && !opt) printf "%s", names
+    depth = -1; names = ""; opt = 0
+  }
+  BEGIN { depth = -1 }
   {
     match($0, /^ */); ind = RLENGTH
     line = $0; sub(/^ *(- )?/, "", line)
   }
-  depth >= 0 && ind <= depth { depth = -1 }
-  depth >= 0 && line ~ /^name: / { sub(/^name: /, "", line); print line; next }
-  line ~ /^(secretKeyRef|secretRef|passwordSecret|secret):$/ { depth = ind }
-  BEGIN { depth = -1 }
+  depth >= 0 && ind <= depth { flush() }
+  depth >= 0 && line ~ /^name: / { sub(/^name: /, "", line); names = names line "\n"; next }
+  depth >= 0 && line ~ /^optional: *true$/ { opt = 1; next }
+  line ~ /^(secretKeyRef|secretRef|passwordSecret|secret):$/ { flush(); depth = ind }
+  END { flush() }
 ' <<<"$rendered" | tr -d "\"'" | sort -u)
 
 # Tanımlı Secret'lar: kind: Secret belgelerinin metadata.name'i.

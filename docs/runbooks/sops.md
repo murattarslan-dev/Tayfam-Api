@@ -127,6 +127,81 @@ Birleştirdikten sonra `kubectl -n tayfam-dev rollout restart deploy/core`.
 Parola değiştikten sonra yeni bağlantılar eski parolayla açılamaz; restart
 geciktirilmez.
 
+## Push (FCM) servis hesabı
+
+`chat-fcm` isteğe bağlıdır (ADR-0019): yoksa chat push göndermeden çalışır
+ve **internete hiç çıkamaz** (en az yetki). Push bir ortamda açılırken
+aynı PR'da üç şey eklenir: secret, chat'in internet çıkışı ve (prod'da)
+zorunluluk.
+
+1. Firebase projesinde yalnızca "Firebase Cloud Messaging API Admin" rolü
+   olan bir servis hesabı açılır, JSON anahtarı indirilir ve hemen
+   şifrelenir (betik indirilen açık dosyayı siler):
+
+   ```sh
+   ./scripts/new-chat-fcm-secret.sh dev ~/Downloads/<anahtar>.json
+   ```
+
+2. `deploy/apps/<ortam>/chat-egress-internet.yaml` dosyası açılır ve
+   `deploy/apps/<ortam>/kustomization.yaml`'da `resources`'a
+   `- chat-egress-internet.yaml` satırı eklenir:
+
+   ```yaml
+   # chat → internet 443: push (FCM HTTP v1, fcm.googleapis.com) ve servis
+   # hesabıyla erişim token'ı (oauth2.googleapis.com) (ADR-0019 madde 8).
+   # Yalnızca chat-fcm secret'ı olan ortamda bulunur. NetworkPolicy alan
+   # adıyla sınırlayamaz; adresler chat'in FCM istemcisinde sabittir ve
+   # yönlendirme izlenmez. Cluster içi ve özel adresler hariç.
+   apiVersion: networking.k8s.io/v1
+   kind: NetworkPolicy
+   metadata:
+     name: chat-egress-internet
+   spec:
+     podSelector:
+       matchLabels: { app.kubernetes.io/name: chat }
+     policyTypes: [Egress]
+     egress:
+       - to:
+           - ipBlock:
+               cidr: 0.0.0.0/0
+               except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, 127.0.0.0/8]
+         ports:
+           - { protocol: TCP, port: 443 }
+   ```
+
+3. **Yalnızca prod** (push prod'da zorunludur): `deploy/apps/prod/chat-fcm-required.yaml`
+   açılır ve `deploy/apps/prod/kustomization.yaml`'da `patches`'e
+   `- path: chat-fcm-required.yaml` eklenir. Secret artık isteğe bağlı
+   değildir (`check-secret-refs.sh prod` onu arar) ve chat değer yoksa
+   başlamaz:
+
+   ```yaml
+   apiVersion: apps/v1
+   kind: Deployment
+   metadata:
+     name: chat
+   spec:
+     template:
+       spec:
+         containers:
+           - name: chat
+             env:
+               - name: CHAT_FCM_REQUIRED
+                 value: "true"
+               - name: CHAT_FCM_SERVICE_ACCOUNT
+                 valueFrom:
+                   secretKeyRef: { name: chat-fcm, key: service-account.json, optional: false }
+   ```
+
+```sh
+git add deploy/apps/<ortam>/
+./scripts/check-secret-refs.sh <ortam>     # dev: ... dev cloudflared-token
+```
+
+Birleştirdikten sonra `kubectl -n tayfam-<ortam> rollout restart deploy/chat`;
+log'da "push açık (FCM)" görünür. `NS=tayfam-<ortam> ./scripts/netpol-test.sh`
+7. bölümde Google uçlarını açık bekler.
+
 ## Cloudflare Tunnel token'ı
 
 ```sh

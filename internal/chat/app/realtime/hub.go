@@ -331,6 +331,14 @@ func (h *Hub) sendToSession(session id.ID, e Event) {
 	}
 }
 
+// Online reports whether user has an open connection now. Push skips users
+// who are connected: they receive the notification live (ADR-0019).
+func (h *Hub) Online(user id.ID) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.byUser[user]) > 0
+}
+
 // Ended reports whether the session (or the user) was ended less than
 // RevokedFor ago.
 func (h *Hub) Ended(user, session id.ID) bool {
