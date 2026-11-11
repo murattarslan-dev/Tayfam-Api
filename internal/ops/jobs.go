@@ -143,24 +143,27 @@ func redact(out []byte, secrets [][]byte) string {
 }
 
 // snapshot hashes every regular file under dir (relative path → sha256).
+// Reads go through os.Root so that a symlink cannot lead outside dir.
 func snapshot(dir string) (map[string][32]byte, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot %s: %w", dir, err)
+	}
+	defer func() { _ = root.Close() }()
+	fsys := root.FS()
 	m := map[string][32]byte{}
-	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+	err = fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if !d.Type().IsRegular() || strings.HasSuffix(p, ".tmp") {
 			return nil
 		}
-		b, err := os.ReadFile(p) // #nosec G304 -- under deploy/apps/<env>
+		b, err := fs.ReadFile(fsys, p)
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(dir, p)
-		if err != nil {
-			return err
-		}
-		m[filepath.ToSlash(rel)] = sha256.Sum256(b)
+		m[p] = sha256.Sum256(b)
 		return nil
 	})
 	if err != nil {

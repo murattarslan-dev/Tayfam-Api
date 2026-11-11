@@ -169,7 +169,7 @@ func TestLaunchTokenIsOneTime(t *testing.T) {
 	for _, x := range rec.Result().Cookies() {
 		c = x
 	}
-	if c == nil || !c.HttpOnly || c.SameSite != http.SameSiteStrictMode || c.Path != "/" {
+	if c == nil || !c.HttpOnly || !c.Secure || c.SameSite != http.SameSiteStrictMode || c.Path != "/" {
 		t.Fatalf("cookie: %+v", c)
 	}
 	if strings.Contains(u.RawQuery, c.Value) {

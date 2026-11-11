@@ -153,7 +153,9 @@ func (s *Server) auth(next http.Handler) http.Handler {
 			if ok {
 				http.SetCookie(w, &http.Cookie{
 					Name: cookieName, Value: hex.EncodeToString(s.session), Path: "/",
-					HttpOnly: true, SameSite: http.SameSiteStrictMode,
+					// Browsers treat http://127.0.0.1 and http://localhost as
+					// secure contexts, so Secure cookies work there.
+					HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode,
 				})
 				http.Redirect(w, r, "/", http.StatusSeeOther)
 				return
