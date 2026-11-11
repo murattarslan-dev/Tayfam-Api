@@ -209,7 +209,6 @@ type Querier interface {
 	// r2_key hiçbir yanıta, log'a ve olaya girmez; yalnızca R2 istemcisine
 	// verilir.
 	CreateUpload(ctx context.Context, arg CreateUploadParams) (pgtype.UUID, error)
-	DeferUpload(ctx context.Context, arg DeferUploadParams) (int64, error)
 	DeleteActivityRecord(ctx context.Context, arg DeleteActivityRecordParams) (int64, error)
 	DeleteAnswerVotes(ctx context.Context, answerID pgtype.UUID) error
 	DeleteBlock(ctx context.Context, arg DeleteBlockParams) (int64, error)
@@ -279,7 +278,6 @@ type Querier interface {
 	// Verilen kullanıcılardan hâlâ etkin üye olanlar (tek alıcılı bildirimler
 	// ve arka plan işlerinin seçtiği alıcılar).
 	FilterNotifyActive(ctx context.Context, arg FilterNotifyActiveParams) ([]pgtype.UUID, error)
-	FinishUpload(ctx context.Context, arg FinishUploadParams) (int64, error)
 	GetAnnouncement(ctx context.Context, arg GetAnnouncementParams) (GetAnnouncementRow, error)
 	// Tekrar gönderilen yayınlama isteği aynı duyuruyu döndürür.
 	GetAnnouncementByClientRequest(ctx context.Context, arg GetAnnouncementByClientRequestParams) (GetAnnouncementByClientRequestRow, error)
@@ -395,11 +393,6 @@ type Querier interface {
 	IsBlockedEitherWay(ctx context.Context, arg IsBlockedEitherWayParams) (bool, error)
 	// Kapalı ya da kaydı olmayan modül kapalı sayılır (varsayılan "hayır").
 	IsTayfaModuleEnabled(ctx context.Context, arg IsTayfaModuleEnabledParams) (bool, error)
-	// İşleme kuyruğu: zamanı gelen bir işi kiralar. Kira run_after'a yazılır;
-	// işçi düşerse kira bitince iş yeniden görünür. Deneme sayısı kiralamada
-	// artar ve sonraki yazmalarda fencing olarak kullanılır (süresi geçen
-	// kiranın sahibi yazamaz).
-	LeaseUpload(ctx context.Context, arg LeaseUploadParams) (LeaseUploadRow, error)
 	// Kişinin katılım geçmişi, yeniden eskiye; started_at @not_after'dan yeni
 	// kayıtlar dönmez (14 günlük gecikme). Tayfa adı ve viewer_member yalnızca
 	// izleyici o tayfanın aktif üyesiyse doludur; uygulama diğer alanları da
@@ -574,10 +567,16 @@ type Querier interface {
 	// Kişinin günlük sayımlarını sıraya sokar: aynı kişinin eşzamanlı istekleri
 	// sınırı birlikte aşamaz.
 	LockUserLimit(ctx context.Context, userID pgtype.UUID) error
+	// Kullanıcının yükleme açmalarını sıraya koyar: sıklık sınırı ve kota
+	// kontrolü ile kaydın yazılması arasında eşzamanlı ikinci bir istek
+	// araya giremez. Transaction bitince bırakılır.
+	LockUserUploads(ctx context.Context, userID string) error
 	MarkAttended(ctx context.Context, arg MarkAttendedParams) error
 	MarkHikeAlertSent(ctx context.Context, arg MarkHikeAlertSentParams) (int64, error)
 	MarkNoShow(ctx context.Context, arg MarkNoShowParams) error
-	MarkUploadReceived(ctx context.Context, arg MarkUploadReceivedParams) (int64, error)
+	// Denetimden geçti (ADR-0020). Yalnızca bekleyen kayıt; eşzamanlı ikinci
+	// tamamlama bir şey değiştirmez.
+	MarkUploadReady(ctx context.Context, arg MarkUploadReadyParams) (int64, error)
 	MuteMembership(ctx context.Context, arg MuteMembershipParams) (int64, error)
 	// Bekleme listesinin başı: en eski kayıt önce. Çağıran etkinlik satırını
 	// zaten kilitlemiştir; satır kilidi aynı kaydın iki kez terfisini de önler.
@@ -609,7 +608,6 @@ type Querier interface {
 	// ezilmez. Başarısız tur son başarılı zamanı korur.
 	RecordJobRun(ctx context.Context, arg RecordJobRunParams) error
 	RejectPendingUpload(ctx context.Context, arg RejectPendingUploadParams) (int64, error)
-	RejectProcessingUpload(ctx context.Context, arg RejectProcessingUploadParams) (int64, error)
 	// Kullanıcının güncel avatarı dışındaki bağlı avatarları silinir
 	// (identity'nin user.profile_updated olayı). keep NULL: avatar kaldırıldı.
 	ReleaseOtherAvatars(ctx context.Context, arg ReleaseOtherAvatarsParams) (int64, error)
@@ -720,7 +718,7 @@ type Querier interface {
 	// activity_visibility NULL ise (alanı taşımayan eski olay) mevcut değer
 	// kalır; yeni satırda varsayılan 'tayfa' olur.
 	UpsertUserProfile(ctx context.Context, arg UpsertUserProfileParams) (int64, error)
-	// Kota: işlenmiş dosyaların boyutu, işlenmemişlerin bildirilen ham boyutu.
+	// Kota: iki varyantın bildirilen (ve imzayla zorlanan) boyutları.
 	UserStoredBytes(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// Uyarı iki sebeple verilir:
 	//   inactive:    last_activity_at @inactive_before'dan eski (30 gün).

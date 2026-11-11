@@ -3,8 +3,8 @@
 -- verilir.
 
 -- name: CreateUpload :one
-INSERT INTO uploads (id, user_id, tayfa_id, purpose, content_type, size_bytes, r2_key, client_request_id)
-VALUES (@id, @user_id, sqlc.narg(tayfa_id), @purpose, @content_type, @size_bytes, @r2_key, @client_request_id)
+INSERT INTO uploads (id, user_id, tayfa_id, purpose, r2_key, preview_type, preview_bytes, full_type, full_bytes, client_request_id)
+VALUES (@id, @user_id, sqlc.narg(tayfa_id), @purpose, @r2_key, @preview_type, @preview_bytes, @full_type, @full_bytes, @client_request_id)
 ON CONFLICT (user_id, client_request_id) DO NOTHING
 RETURNING id;
 
@@ -22,53 +22,32 @@ SELECT * FROM uploads
 WHERE id = @id AND user_id = @user_id AND status <> 'deleting'
 FOR UPDATE;
 
+-- Kullanıcının yükleme açmalarını sıraya koyar: sıklık sınırı ve kota
+-- kontrolü ile kaydın yazılması arasında eşzamanlı ikinci bir istek
+-- araya giremez. Transaction bitince bırakılır.
+-- name: LockUserUploads :exec
+SELECT pg_advisory_xact_lock(hashtextextended('uploads:' || @user_id::text, 0));
+
 -- Saatlik sıklık sınırı: son bir saatte açılan kayıtlar (silinenler
 -- sayılmaz; pending kayıtlar 24 saat durduğu için yeterli bir alt sınırdır).
 -- name: CountUploadsSince :one
 SELECT count(*) FROM uploads
 WHERE user_id = @user_id AND created_at > @since;
 
--- Kota: işlenmiş dosyaların boyutu, işlenmemişlerin bildirilen ham boyutu.
+-- Kota: iki varyantın bildirilen (ve imzayla zorlanan) boyutları.
 -- name: UserStoredBytes :one
-SELECT COALESCE(sum(COALESCE(stored_bytes, size_bytes)), 0)::bigint FROM uploads
+SELECT COALESCE(sum(preview_bytes + full_bytes), 0)::bigint FROM uploads
 WHERE user_id = @user_id AND status NOT IN ('rejected', 'deleting');
 
--- name: MarkUploadReceived :execrows
-UPDATE uploads SET status = 'uploaded', uploaded_at = @now, run_after = @now
+-- Denetimden geçti (ADR-0020). Yalnızca bekleyen kayıt; eşzamanlı ikinci
+-- tamamlama bir şey değiştirmez.
+-- name: MarkUploadReady :execrows
+UPDATE uploads SET status = 'ready', width = @width, height = @height, ready_at = @now
 WHERE id = @id AND status = 'pending';
 
 -- name: RejectPendingUpload :execrows
 UPDATE uploads SET status = 'rejected', reject_reason = @reject_reason
 WHERE id = @id AND status = 'pending';
-
--- İşleme kuyruğu: zamanı gelen bir işi kiralar. Kira run_after'a yazılır;
--- işçi düşerse kira bitince iş yeniden görünür. Deneme sayısı kiralamada
--- artar ve sonraki yazmalarda fencing olarak kullanılır (süresi geçen
--- kiranın sahibi yazamaz).
--- name: LeaseUpload :one
-UPDATE uploads u SET status = 'processing', attempts = u.attempts + 1, run_after = @lease_until
-FROM (
-  SELECT q.id FROM uploads q
-  WHERE q.status IN ('uploaded', 'processing') AND q.run_after <= @now
-  ORDER BY q.run_after
-  LIMIT 1
-  FOR UPDATE SKIP LOCKED
-) c
-WHERE u.id = c.id
-RETURNING u.id, u.r2_key, u.size_bytes, u.attempts;
-
--- name: DeferUpload :execrows
-UPDATE uploads SET run_after = @run_after
-WHERE id = @id AND status = 'processing' AND attempts = @attempts;
-
--- name: FinishUpload :execrows
-UPDATE uploads SET status = 'ready', output_type = @output_type, stored_bytes = @stored_bytes,
-    width = @width, height = @height, ready_at = @now, run_after = NULL
-WHERE id = @id AND status = 'processing' AND attempts = @attempts;
-
--- name: RejectProcessingUpload :execrows
-UPDATE uploads SET status = 'rejected', reject_reason = @reject_reason, run_after = NULL
-WHERE id = @id AND status = 'processing' AND attempts = @attempts;
 
 -- Bağlama: yalnızca sahibinin, hazır, amacı ve tayfası tutan, başka bir
 -- içeriğe bağlanmamış dosyası. Aynı hedefe yeniden bağlama bir şey
@@ -137,7 +116,7 @@ DELETE FROM uploads WHERE id = @id AND status = 'deleting';
 -- tayfası: tayfa kapağında tayfanın kendisi, etkinlik kapağında ve av
 -- fotoğrafında etkinliğin tayfası (silinmiş içerik ve tayfa bağlam vermez).
 -- name: ListMediaForViewer :many
-SELECT u.id, u.user_id, u.purpose, u.r2_key, u.output_type, u.width, u.height,
+SELECT u.id, u.user_id, u.purpose, u.r2_key, u.preview_type, u.full_type, u.width, u.height,
        u.attached_type, u.attached_id,
        c.tayfa_id AS content_tayfa_id,
        m.role AS member_role, m.status AS member_status, m.muted_until AS member_muted_until,

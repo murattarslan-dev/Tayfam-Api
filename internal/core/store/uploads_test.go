@@ -46,8 +46,8 @@ func newUpload(t *testing.T, q *Queries, owner id.ID, o uploadOpts) id.ID {
 		tayfa = o.tayfa.PG()
 	}
 	got, err := q.CreateUpload(context.Background(), CreateUploadParams{
-		ID: id.New().PG(), UserID: owner.PG(), TayfaID: tayfa, Purpose: o.purpose,
-		ContentType: "image/jpeg", SizeBytes: o.size, R2Key: r2Key(t), ClientRequestID: id.New().PG(),
+		ID: id.New().PG(), UserID: owner.PG(), TayfaID: tayfa, Purpose: o.purpose, R2Key: r2Key(t),
+		PreviewType: "image/webp", PreviewBytes: 100, FullType: "image/jpeg", FullBytes: o.size, ClientRequestID: id.New().PG(),
 	})
 	if err != nil {
 		t.Fatalf("yükleme açılamadı: %v", err)
@@ -55,24 +55,14 @@ func newUpload(t *testing.T, q *Queries, owner id.ID, o uploadOpts) id.ID {
 	return id.ID(got.Bytes)
 }
 
-// readyUpload takes an upload through the whole queue.
+// readyUpload opens an upload and marks it checked.
 func readyUpload(t *testing.T, q *Queries, owner id.ID, o uploadOpts) id.ID {
 	t.Helper()
-	ctx := context.Background()
 	u := newUpload(t, q, owner, o)
-	now := time.Now()
-	if n, err := q.MarkUploadReceived(ctx, MarkUploadReceivedParams{ID: u.PG(), Now: ts(now.Add(-time.Hour))}); err != nil || n != 1 {
-		t.Fatalf("alındı: %d %v", n, err)
-	}
-	l, err := q.LeaseUpload(ctx, LeaseUploadParams{Now: ts(now), LeaseUntil: ts(now.Add(time.Minute))})
-	if err != nil || id.ID(l.ID.Bytes) != u {
-		t.Fatalf("kiralama: %v", err)
-	}
-	if n, err := q.FinishUpload(ctx, FinishUploadParams{
-		ID: u.PG(), Attempts: l.Attempts, OutputType: text("image/jpeg"), StoredBytes: pgtype.Int8{Int64: 300, Valid: true},
-		Width: pgtype.Int4{Int32: 1600, Valid: true}, Height: pgtype.Int4{Int32: 1200, Valid: true}, Now: ts(now),
+	if n, err := q.MarkUploadReady(context.Background(), MarkUploadReadyParams{
+		ID: u.PG(), Width: pgtype.Int4{Int32: 1600, Valid: true}, Height: pgtype.Int4{Int32: 1200, Valid: true}, Now: ts(time.Now()),
 	}); err != nil || n != 1 {
-		t.Fatalf("bitirme: %d %v", n, err)
+		t.Fatalf("hazır: %d %v", n, err)
 	}
 	return u
 }
@@ -92,21 +82,23 @@ func TestUploadCreateAndConstraints(t *testing.T) {
 	owner := id.New()
 	tayfa := newTayfa(t, pool, owner, tayfaOpts{})
 
-	crid := id.New()
-	p := CreateUploadParams{
-		ID: id.New().PG(), UserID: owner.PG(), Purpose: "avatar", ContentType: "image/png",
-		SizeBytes: 10 << 20, R2Key: r2Key(t), ClientRequestID: crid.PG(),
+	base := func() CreateUploadParams {
+		return CreateUploadParams{
+			ID: id.New().PG(), UserID: owner.PG(), Purpose: "avatar", R2Key: r2Key(t),
+			PreviewType: "image/webp", PreviewBytes: 1, FullType: "image/jpeg", FullBytes: 10 << 20, ClientRequestID: id.New().PG(),
+		}
 	}
+	p := base()
 	if _, err := q.CreateUpload(ctx, p); err != nil {
 		t.Fatalf("10 MiB kabul edilmeli: %v", err)
 	}
 	// The same client_request_id opens nothing new.
-	again := p
-	again.ID, again.R2Key = id.New().PG(), r2Key(t)
+	again := base()
+	again.ClientRequestID = p.ClientRequestID
 	if _, err := q.CreateUpload(ctx, again); !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("tekrar gönderim yeni kayıt açmamalı: %v", err)
 	}
-	if got, err := q.GetUploadByClientRequest(ctx, GetUploadByClientRequestParams{UserID: owner.PG(), ClientRequestID: crid.PG()}); err != nil || got.ID != p.ID {
+	if got, err := q.GetUploadByClientRequest(ctx, GetUploadByClientRequestParams{UserID: owner.PG(), ClientRequestID: p.ClientRequestID}); err != nil || got.ID != p.ID {
 		t.Fatalf("ilk kayıt dönmeli: %v", err)
 	}
 
@@ -114,19 +106,17 @@ func TestUploadCreateAndConstraints(t *testing.T) {
 		mut  func(*CreateUploadParams)
 		cons string
 	}{
-		"boş dosya":         {func(p *CreateUploadParams) { p.SizeBytes = 0 }, "uploads_size_bytes"},
-		"10 MiB üstü":       {func(p *CreateUploadParams) { p.SizeBytes = 10<<20 + 1 }, "uploads_size_bytes"},
-		"bilinmeyen tür":    {func(p *CreateUploadParams) { p.ContentType = "image/gif" }, "uploads_content_type"},
+		"boş önizleme":      {func(p *CreateUploadParams) { p.PreviewBytes = 0 }, "uploads_bytes"},
+		"10 MiB üstü":       {func(p *CreateUploadParams) { p.FullBytes = 10<<20 + 1 }, "uploads_bytes"},
+		"png":               {func(p *CreateUploadParams) { p.FullType = "image/png" }, "uploads_types"},
+		"heic önizleme":     {func(p *CreateUploadParams) { p.PreviewType = "image/heic" }, "uploads_types"},
 		"bilinmeyen amaç":   {func(p *CreateUploadParams) { p.Purpose = "data_export" }, "uploads_purpose"},
 		"tahmin edilir ad":  {func(p *CreateUploadParams) { p.R2Key = "../media/x" }, "uploads_r2_key"},
 		"avatarda tayfa":    {func(p *CreateUploadParams) { p.TayfaID = tayfa.PG() }, "uploads_tayfa"},
 		"kapakta tayfa yok": {func(p *CreateUploadParams) { p.Purpose = "cover" }, "uploads_tayfa"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			p := CreateUploadParams{
-				ID: id.New().PG(), UserID: owner.PG(), Purpose: "avatar", ContentType: "image/jpeg",
-				SizeBytes: 100, R2Key: r2Key(t), ClientRequestID: id.New().PG(),
-			}
+			p := base()
 			tc.mut(&p)
 			_, err := q.CreateUpload(ctx, p)
 			if got := constraintOf(err); got != tc.cons {
@@ -136,71 +126,38 @@ func TestUploadCreateAndConstraints(t *testing.T) {
 	}
 }
 
-// The queue hands each job to one worker; a worker whose lease ran out
-// cannot write over the next one (attempts fences).
-func TestUploadQueueLease(t *testing.T) {
+// A pending upload becomes ready or rejected once; ready needs the size.
+func TestUploadReadyAndReject(t *testing.T) {
 	pool, q := setup(t)
 	ctx := context.Background()
 	owner := id.New()
 	a, b := newUpload(t, q, owner, uploadOpts{}), newUpload(t, q, owner, uploadOpts{})
-	now := time.Now()
-	for i, u := range []id.ID{a, b} {
-		if n, err := q.MarkUploadReceived(ctx, MarkUploadReceivedParams{ID: u.PG(), Now: ts(now.Add(time.Duration(i-10) * time.Second))}); err != nil || n != 1 {
-			t.Fatalf("alındı: %d %v", n, err)
-		}
+	size := func(w, h int32) MarkUploadReadyParams {
+		return MarkUploadReadyParams{ID: a.PG(), Width: pgtype.Int4{Int32: w, Valid: w > 0}, Height: pgtype.Int4{Int32: h, Valid: h > 0}, Now: ts(time.Now())}
 	}
-	// A pending upload cannot be received twice.
-	if n, _ := q.MarkUploadReceived(ctx, MarkUploadReceivedParams{ID: a.PG(), Now: ts(now)}); n != 0 {
-		t.Fatal("ikinci kez alındı yapılmamalı")
+	if _, err := q.MarkUploadReady(ctx, size(0, 0)); constraintOf(err) != "uploads_ready" {
+		t.Fatalf("ölçüsüz hazır olmamalı: %v", err)
 	}
-
-	tx1, err := pool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
+	if _, err := q.MarkUploadReady(ctx, size(1601, 10)); constraintOf(err) != "uploads_size" {
+		t.Fatalf("1600 px üstü: %v", err)
 	}
-	defer func() { _ = tx1.Rollback(ctx) }()
-	l1, err := New(tx1).LeaseUpload(ctx, LeaseUploadParams{Now: ts(now), LeaseUntil: ts(now.Add(time.Minute))})
-	if err != nil || id.ID(l1.ID.Bytes) != a {
-		t.Fatalf("ilk iş a olmalı: %v", err)
+	if n, err := q.MarkUploadReady(ctx, size(1600, 900)); err != nil || n != 1 {
+		t.Fatalf("hazır: %d %v", n, err)
 	}
-	// While tx1 holds a, another worker gets b.
-	l2, err := q.LeaseUpload(ctx, LeaseUploadParams{Now: ts(now), LeaseUntil: ts(now.Add(time.Minute))})
-	if err != nil || id.ID(l2.ID.Bytes) != b {
-		t.Fatalf("kilitli iş atlanmalı: %v", err)
+	if n, _ := q.MarkUploadReady(ctx, size(1600, 900)); n != 0 {
+		t.Fatal("ikinci kez hazır yapılmamalı")
 	}
-	if err := tx1.Commit(ctx); err != nil {
-		t.Fatal(err)
+	if n, _ := q.RejectPendingUpload(ctx, RejectPendingUploadParams{ID: a.PG(), RejectReason: text("metadata_present")}); n != 0 {
+		t.Fatal("hazır dosya reddedilmemeli")
 	}
-	// Nothing else is due.
-	if _, err := q.LeaseUpload(ctx, LeaseUploadParams{Now: ts(now), LeaseUntil: ts(now.Add(time.Minute))}); !errors.Is(err, pgx.ErrNoRows) {
-		t.Fatalf("kiralanmış iş yeniden verilmemeli: %v", err)
+	if _, err := q.RejectPendingUpload(ctx, RejectPendingUploadParams{ID: b.PG(), RejectReason: text("bilinmez")}); constraintOf(err) != "uploads_reject_reason" {
+		t.Fatalf("bilinmeyen sebep: %v", err)
 	}
-	// The lease of a runs out; the next worker takes it again.
-	l3, err := q.LeaseUpload(ctx, LeaseUploadParams{Now: ts(now.Add(2 * time.Minute)), LeaseUntil: ts(now.Add(3 * time.Minute))})
-	if err != nil || id.ID(l3.ID.Bytes) != a || l3.Attempts != 2 {
-		t.Fatalf("kira bitince iş yeniden görünmeli: %+v %v", l3, err)
+	if n, err := q.RejectPendingUpload(ctx, RejectPendingUploadParams{ID: b.PG(), RejectReason: text("metadata_present")}); err != nil || n != 1 {
+		t.Fatalf("ret: %d %v", n, err)
 	}
-	finish := func(attempts int32) int64 {
-		n, err := q.FinishUpload(ctx, FinishUploadParams{
-			ID: a.PG(), Attempts: attempts, OutputType: text("image/jpeg"), StoredBytes: pgtype.Int8{Int64: 10, Valid: true},
-			Width: pgtype.Int4{Int32: 10, Valid: true}, Height: pgtype.Int4{Int32: 10, Valid: true}, Now: ts(now),
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return n
-	}
-	if finish(l1.Attempts) != 0 {
-		t.Fatal("süresi geçen kira yazamamalı")
-	}
-	if finish(l3.Attempts) != 1 {
-		t.Fatal("güncel kira yazabilmeli")
-	}
-	if n, _ := q.RejectProcessingUpload(ctx, RejectProcessingUploadParams{ID: b.PG(), Attempts: l2.Attempts, RejectReason: text("not_image")}); n != 1 {
-		t.Fatal("reddedilmeli")
-	}
-	if s := uploadStatus(t, pool, b); s != "rejected" {
-		t.Fatalf("durum = %s", s)
+	if uploadStatus(t, pool, a) != "ready" || uploadStatus(t, pool, b) != "rejected" {
+		t.Fatal("durumlar")
 	}
 }
 
@@ -392,8 +349,8 @@ func TestExpireUploads(t *testing.T) {
 	owner := id.New()
 	pending := newUpload(t, q, owner, uploadOpts{size: 5000})
 	loose := readyUpload(t, q, owner, uploadOpts{})
-	if total, err := q.UserStoredBytes(ctx, owner.PG()); err != nil || total != 5000+300 {
-		t.Fatalf("kota: %d %v (bekleyen ham boyutla, hazır işlenmiş boyutla sayılır)", total, err)
+	if total, err := q.UserStoredBytes(ctx, owner.PG()); err != nil || total != 5000+100+1000+100 {
+		t.Fatalf("kota: %d %v (iki varyantın bildirilen boyutları)", total, err)
 	}
 	if n, err := q.CountUploadsSince(ctx, CountUploadsSinceParams{UserID: owner.PG(), Since: ts(time.Now().Add(-time.Hour))}); err != nil || n != 2 {
 		t.Fatalf("saatlik sayı: %d %v", n, err)
@@ -486,8 +443,8 @@ func TestAppRoleCannotRepointUploads(t *testing.T) {
 	for name, sql := range map[string]string{
 		"anahtar":  `UPDATE uploads SET r2_key = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' WHERE id = $1`,
 		"amaç":     `UPDATE uploads SET purpose = 'cover' WHERE id = $1`,
-		"boyut":    `UPDATE uploads SET size_bytes = 1 WHERE id = $1`,
-		"tür":      `UPDATE uploads SET content_type = 'image/png' WHERE id = $1`,
+		"boyut":    `UPDATE uploads SET full_bytes = 1 WHERE id = $1`,
+		"tür":      `UPDATE uploads SET preview_type = 'image/jpeg' WHERE id = $1`,
 		"tayfa":    `UPDATE uploads SET tayfa_id = id WHERE id = $1`,
 		"kimlik":   `UPDATE uploads SET id = gen_random_uuid() WHERE id = $1`,
 		"tekrarno": `UPDATE uploads SET client_request_id = id WHERE id = $1`,
