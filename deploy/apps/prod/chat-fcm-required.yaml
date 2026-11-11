@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat
+spec:
+  template:
+    spec:
+      containers:
+        - name: chat
+          env:
+            - name: CHAT_FCM_REQUIRED
+              value: "true"
+            - name: CHAT_FCM_SERVICE_ACCOUNT
+              valueFrom:
+                secretKeyRef: { name: chat-fcm, key: service-account.json, optional: false }

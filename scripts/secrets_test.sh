@@ -14,6 +14,16 @@ cd "$tmp"
 
 fail() { echo "BAŞARISIZ: $*" >&2; exit 1; }
 
+# Testler secret'sız bir prod'dan başlar: repodaki gerçek (şifreli) prod
+# secret'ları yalnızca bu geçici kopyadan çıkarılır ve liste boşaltılır.
+rm -f deploy/apps/prod/secrets/*.sops.yaml
+write_secret_list prod >/dev/null || fail "prod listesi boşaltılamadı"
+# R2/FCM açılmadan önceki prod: dış çıkış kuralları ve FCM zorunluluğu yok
+# (10. test bunları gerçek kopyada ayrıca sınar).
+rm -f deploy/apps/prod/{core-egress-r2,chat-egress-internet,chat-fcm-required}.yaml
+sed -i -e '/^  - core-egress-r2\.yaml$/d' -e '/^  - chat-egress-internet\.yaml$/d' \
+  -e '/^  - path: chat-fcm-required\.yaml$/d' deploy/apps/prod/kustomization.yaml
+
 # Gerçek dev dosyalarının alıcısı; açık anahtardır, gizli değildir.
 dev_rcpt=$(secret_recipients deploy/apps/dev/secrets/identity-db.sops.yaml)
 [ -n "$dev_rcpt" ] || fail "dev alıcısı okunamadı"
