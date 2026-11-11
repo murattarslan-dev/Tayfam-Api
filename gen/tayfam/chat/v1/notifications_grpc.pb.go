@@ -19,12 +19,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	NotificationService_ListNotifications_FullMethodName              = "/tayfam.chat.v1.NotificationService/ListNotifications"
-	NotificationService_GetUnreadNotificationCount_FullMethodName     = "/tayfam.chat.v1.NotificationService/GetUnreadNotificationCount"
-	NotificationService_MarkNotificationRead_FullMethodName           = "/tayfam.chat.v1.NotificationService/MarkNotificationRead"
-	NotificationService_MarkAllNotificationsRead_FullMethodName       = "/tayfam.chat.v1.NotificationService/MarkAllNotificationsRead"
-	NotificationService_ListNotificationPreferences_FullMethodName    = "/tayfam.chat.v1.NotificationService/ListNotificationPreferences"
-	NotificationService_SetTayfaNotificationPreference_FullMethodName = "/tayfam.chat.v1.NotificationService/SetTayfaNotificationPreference"
+	NotificationService_ListNotifications_FullMethodName                     = "/tayfam.chat.v1.NotificationService/ListNotifications"
+	NotificationService_GetUnreadNotificationCount_FullMethodName            = "/tayfam.chat.v1.NotificationService/GetUnreadNotificationCount"
+	NotificationService_MarkNotificationRead_FullMethodName                  = "/tayfam.chat.v1.NotificationService/MarkNotificationRead"
+	NotificationService_MarkAllNotificationsRead_FullMethodName              = "/tayfam.chat.v1.NotificationService/MarkAllNotificationsRead"
+	NotificationService_ListNotificationPreferences_FullMethodName           = "/tayfam.chat.v1.NotificationService/ListNotificationPreferences"
+	NotificationService_SetTayfaNotificationPreference_FullMethodName        = "/tayfam.chat.v1.NotificationService/SetTayfaNotificationPreference"
+	NotificationService_SetConversationNotificationPreference_FullMethodName = "/tayfam.chat.v1.NotificationService/SetConversationNotificationPreference"
 )
 
 // NotificationServiceClient is the client API for NotificationService service.
@@ -46,8 +47,9 @@ const (
 // tayfa receive its notifications; the actor never receives their own.
 // Notifications are kept for 90 days.
 //
-// Muting (SetTayfaNotificationPreference) does not hide notifications from
-// the list; it is read when push notifications are sent.
+// Muting (SetTayfaNotificationPreference, SetConversationNotificationPreference)
+// does not hide notifications from the list; it is read when push
+// notifications are sent (ADR-0019).
 //
 // Paging: page_size 0 means 50; values above 100 are treated as 100;
 // negative values are ERROR_REASON_VALIDATION. page_token is opaque; a bad
@@ -66,7 +68,7 @@ type NotificationServiceClient interface {
 	// MarkAllNotificationsRead marks all of the caller's notifications read.
 	MarkAllNotificationsRead(ctx context.Context, in *MarkAllNotificationsReadRequest, opts ...grpc.CallOption) (*MarkAllNotificationsReadResponse, error)
 	// ListNotificationPreferences lists the caller's muting preferences. A
-	// tayfa without a preference has level ALL.
+	// tayfa or conversation without a preference has level ALL.
 	ListNotificationPreferences(ctx context.Context, in *ListNotificationPreferencesRequest, opts ...grpc.CallOption) (*ListNotificationPreferencesResponse, error)
 	// SetTayfaNotificationPreference sets how the caller hears about a tayfa
 	// they are an active member of (else ERROR_REASON_TAYFA_NOT_FOUND). chat
@@ -76,6 +78,17 @@ type NotificationServiceClient interface {
 	// the tayfa is back to ALL. Level ALL without mute_until removes the
 	// preference; ALL with mute_until is ERROR_REASON_VALIDATION.
 	SetTayfaNotificationPreference(ctx context.Context, in *SetTayfaNotificationPreferenceRequest, opts ...grpc.CallOption) (*SetTayfaNotificationPreferenceResponse, error)
+	// SetConversationNotificationPreference sets how the caller hears about a
+	// direct conversation they see as a party (the same conversations
+	// DirectMessageService.GetConversation answers for); any other
+	// conversation, another user's included, is
+	// ERROR_REASON_CONVERSATION_NOT_FOUND, exactly like a missing one (issue
+	// #138). The rules of level and mute_until are those of
+	// SetTayfaNotificationPreference. Direct message notices are all personal
+	// (ADR-0019 item 3), so MENTIONS currently lets them all through, like
+	// ALL. The preference is removed when the conversation or the caller's
+	// account is deleted.
+	SetConversationNotificationPreference(ctx context.Context, in *SetConversationNotificationPreferenceRequest, opts ...grpc.CallOption) (*SetConversationNotificationPreferenceResponse, error)
 }
 
 type notificationServiceClient struct {
@@ -146,6 +159,16 @@ func (c *notificationServiceClient) SetTayfaNotificationPreference(ctx context.C
 	return out, nil
 }
 
+func (c *notificationServiceClient) SetConversationNotificationPreference(ctx context.Context, in *SetConversationNotificationPreferenceRequest, opts ...grpc.CallOption) (*SetConversationNotificationPreferenceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetConversationNotificationPreferenceResponse)
+	err := c.cc.Invoke(ctx, NotificationService_SetConversationNotificationPreference_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NotificationServiceServer is the server API for NotificationService service.
 // All implementations must embed UnimplementedNotificationServiceServer
 // for forward compatibility.
@@ -165,8 +188,9 @@ func (c *notificationServiceClient) SetTayfaNotificationPreference(ctx context.C
 // tayfa receive its notifications; the actor never receives their own.
 // Notifications are kept for 90 days.
 //
-// Muting (SetTayfaNotificationPreference) does not hide notifications from
-// the list; it is read when push notifications are sent.
+// Muting (SetTayfaNotificationPreference, SetConversationNotificationPreference)
+// does not hide notifications from the list; it is read when push
+// notifications are sent (ADR-0019).
 //
 // Paging: page_size 0 means 50; values above 100 are treated as 100;
 // negative values are ERROR_REASON_VALIDATION. page_token is opaque; a bad
@@ -185,7 +209,7 @@ type NotificationServiceServer interface {
 	// MarkAllNotificationsRead marks all of the caller's notifications read.
 	MarkAllNotificationsRead(context.Context, *MarkAllNotificationsReadRequest) (*MarkAllNotificationsReadResponse, error)
 	// ListNotificationPreferences lists the caller's muting preferences. A
-	// tayfa without a preference has level ALL.
+	// tayfa or conversation without a preference has level ALL.
 	ListNotificationPreferences(context.Context, *ListNotificationPreferencesRequest) (*ListNotificationPreferencesResponse, error)
 	// SetTayfaNotificationPreference sets how the caller hears about a tayfa
 	// they are an active member of (else ERROR_REASON_TAYFA_NOT_FOUND). chat
@@ -195,6 +219,17 @@ type NotificationServiceServer interface {
 	// the tayfa is back to ALL. Level ALL without mute_until removes the
 	// preference; ALL with mute_until is ERROR_REASON_VALIDATION.
 	SetTayfaNotificationPreference(context.Context, *SetTayfaNotificationPreferenceRequest) (*SetTayfaNotificationPreferenceResponse, error)
+	// SetConversationNotificationPreference sets how the caller hears about a
+	// direct conversation they see as a party (the same conversations
+	// DirectMessageService.GetConversation answers for); any other
+	// conversation, another user's included, is
+	// ERROR_REASON_CONVERSATION_NOT_FOUND, exactly like a missing one (issue
+	// #138). The rules of level and mute_until are those of
+	// SetTayfaNotificationPreference. Direct message notices are all personal
+	// (ADR-0019 item 3), so MENTIONS currently lets them all through, like
+	// ALL. The preference is removed when the conversation or the caller's
+	// account is deleted.
+	SetConversationNotificationPreference(context.Context, *SetConversationNotificationPreferenceRequest) (*SetConversationNotificationPreferenceResponse, error)
 	mustEmbedUnimplementedNotificationServiceServer()
 }
 
@@ -222,6 +257,9 @@ func (UnimplementedNotificationServiceServer) ListNotificationPreferences(contex
 }
 func (UnimplementedNotificationServiceServer) SetTayfaNotificationPreference(context.Context, *SetTayfaNotificationPreferenceRequest) (*SetTayfaNotificationPreferenceResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetTayfaNotificationPreference not implemented")
+}
+func (UnimplementedNotificationServiceServer) SetConversationNotificationPreference(context.Context, *SetConversationNotificationPreferenceRequest) (*SetConversationNotificationPreferenceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetConversationNotificationPreference not implemented")
 }
 func (UnimplementedNotificationServiceServer) mustEmbedUnimplementedNotificationServiceServer() {}
 func (UnimplementedNotificationServiceServer) testEmbeddedByValue()                             {}
@@ -352,6 +390,24 @@ func _NotificationService_SetTayfaNotificationPreference_Handler(srv interface{}
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NotificationService_SetConversationNotificationPreference_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetConversationNotificationPreferenceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NotificationServiceServer).SetConversationNotificationPreference(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NotificationService_SetConversationNotificationPreference_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NotificationServiceServer).SetConversationNotificationPreference(ctx, req.(*SetConversationNotificationPreferenceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // NotificationService_ServiceDesc is the grpc.ServiceDesc for NotificationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -382,6 +438,10 @@ var NotificationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetTayfaNotificationPreference",
 			Handler:    _NotificationService_SetTayfaNotificationPreference_Handler,
+		},
+		{
+			MethodName: "SetConversationNotificationPreference",
+			Handler:    _NotificationService_SetConversationNotificationPreference_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

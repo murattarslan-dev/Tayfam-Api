@@ -20,8 +20,9 @@ import "tayfam/chat/v1/notification_types.proto";
 // tayfa receive its notifications; the actor never receives their own.
 // Notifications are kept for 90 days.
 //
-// Muting (SetTayfaNotificationPreference) does not hide notifications from
-// the list; it is read when push notifications are sent.
+// Muting (SetTayfaNotificationPreference, SetConversationNotificationPreference)
+// does not hide notifications from the list; it is read when push
+// notifications are sent (ADR-0019).
 //
 // Paging: page_size 0 means 50; values above 100 are treated as 100;
 // negative values are ERROR_REASON_VALIDATION. page_token is opaque; a bad
@@ -44,7 +45,7 @@ service NotificationService {
   rpc MarkAllNotificationsRead(MarkAllNotificationsReadRequest) returns (MarkAllNotificationsReadResponse);
 
   // ListNotificationPreferences lists the caller's muting preferences. A
-  // tayfa without a preference has level ALL.
+  // tayfa or conversation without a preference has level ALL.
   rpc ListNotificationPreferences(ListNotificationPreferencesRequest) returns (ListNotificationPreferencesResponse);
 
   // SetTayfaNotificationPreference sets how the caller hears about a tayfa
@@ -55,6 +56,18 @@ service NotificationService {
   // the tayfa is back to ALL. Level ALL without mute_until removes the
   // preference; ALL with mute_until is ERROR_REASON_VALIDATION.
   rpc SetTayfaNotificationPreference(SetTayfaNotificationPreferenceRequest) returns (SetTayfaNotificationPreferenceResponse);
+
+  // SetConversationNotificationPreference sets how the caller hears about a
+  // direct conversation they see as a party (the same conversations
+  // DirectMessageService.GetConversation answers for); any other
+  // conversation, another user's included, is
+  // ERROR_REASON_CONVERSATION_NOT_FOUND, exactly like a missing one (issue
+  // #138). The rules of level and mute_until are those of
+  // SetTayfaNotificationPreference. Direct message notices are all personal
+  // (ADR-0019 item 3), so MENTIONS currently lets them all through, like
+  // ALL. The preference is removed when the conversation or the caller's
+  // account is deleted.
+  rpc SetConversationNotificationPreference(SetConversationNotificationPreferenceRequest) returns (SetConversationNotificationPreferenceResponse);
 }
 
 message Notification {
@@ -119,8 +132,9 @@ enum NotificationLevel {
 enum NotificationScopeType {
   NOTIFICATION_SCOPE_TYPE_UNSPECIFIED = 0;
   NOTIFICATION_SCOPE_TYPE_TAYFA = 1;
-  // Reserved for channels and direct conversations; not settable yet.
+  // Reserved for channels; not settable yet.
   NOTIFICATION_SCOPE_TYPE_CHANNEL = 2;
+  // A direct conversation (SetConversationNotificationPreference).
   NOTIFICATION_SCOPE_TYPE_DM_CONVERSATION = 3;
 }
 
@@ -147,5 +161,16 @@ message SetTayfaNotificationPreferenceRequest {
 }
 
 message SetTayfaNotificationPreferenceResponse {
+  NotificationPreference preference = 1;
+}
+
+message SetConversationNotificationPreferenceRequest {
+  string conversation_id = 1;
+  NotificationLevel level = 2;
+  // Optional; only with MENTIONS or NONE.
+  google.protobuf.Timestamp mute_until = 3;
+}
+
+message SetConversationNotificationPreferenceResponse {
   NotificationPreference preference = 1;
 }
