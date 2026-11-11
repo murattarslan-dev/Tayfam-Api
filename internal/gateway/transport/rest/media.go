@@ -22,15 +22,19 @@ type MediaClient interface {
 const (
 	// maxUploadBody fits the create request.
 	maxUploadBody = 1 << 10
+	// maxCompleteBody fits the size.
+	maxCompleteBody = 256
 	// maxMediaURLsBody fits 100 UUIDs.
 	maxMediaURLsBody = 8 << 10
 	maxMediaURLs     = 100
-	maxUploadBytes   = 10 << 20
+	maxVariantBytes  = 10 << 20
+	maxFullSide      = 1600
 )
 
-// registerMedia serves the upload and media link routes. The file itself
-// never passes through the gateway: the client PUTs it to the returned
-// link. Signed links are bearer secrets; the gateway never logs bodies.
+// registerMedia serves the upload and media link routes. The files never
+// pass through the gateway: the client PUTs each variant to its returned
+// link. No route takes a URL or storage key from the client. Signed links
+// are bearer secrets; the gateway never logs bodies.
 func registerMedia(mux *http.ServeMux, h coreHandlers) {
 	a := h.authed
 	mux.HandleFunc("POST /v1/uploads", a(h.createUpload))
@@ -45,28 +49,32 @@ var (
 		"cover": corev1.UploadPurpose_UPLOAD_PURPOSE_COVER,
 	})
 	uploadStatuses = newEnum(map[string]corev1.UploadStatus{
-		"pending": corev1.UploadStatus_UPLOAD_STATUS_PENDING, "uploaded": corev1.UploadStatus_UPLOAD_STATUS_UPLOADED,
-		"processing": corev1.UploadStatus_UPLOAD_STATUS_PROCESSING, "ready": corev1.UploadStatus_UPLOAD_STATUS_READY,
+		"pending": corev1.UploadStatus_UPLOAD_STATUS_PENDING, "ready": corev1.UploadStatus_UPLOAD_STATUS_READY,
 		"rejected": corev1.UploadStatus_UPLOAD_STATUS_REJECTED,
 	})
 	uploadRejectReasons = newEnum(map[string]corev1.UploadRejectReason{
-		"not_image":        corev1.UploadRejectReason_UPLOAD_REJECT_REASON_NOT_IMAGE,
-		"unsupported_type": corev1.UploadRejectReason_UPLOAD_REJECT_REASON_UNSUPPORTED_TYPE,
-		"too_large":        corev1.UploadRejectReason_UPLOAD_REJECT_REASON_TOO_LARGE,
-		"corrupt":          corev1.UploadRejectReason_UPLOAD_REJECT_REASON_CORRUPT,
-		"size_mismatch":    corev1.UploadRejectReason_UPLOAD_REJECT_REASON_SIZE_MISMATCH,
-		"failed":           corev1.UploadRejectReason_UPLOAD_REJECT_REASON_FAILED,
+		"not_image":          corev1.UploadRejectReason_UPLOAD_REJECT_REASON_NOT_IMAGE,
+		"unsupported_type":   corev1.UploadRejectReason_UPLOAD_REJECT_REASON_UNSUPPORTED_TYPE,
+		"metadata_present":   corev1.UploadRejectReason_UPLOAD_REJECT_REASON_METADATA_PRESENT,
+		"dimension_mismatch": corev1.UploadRejectReason_UPLOAD_REJECT_REASON_DIMENSION_MISMATCH,
+		"size_mismatch":      corev1.UploadRejectReason_UPLOAD_REJECT_REASON_SIZE_MISMATCH,
+		"too_large":          corev1.UploadRejectReason_UPLOAD_REJECT_REASON_TOO_LARGE,
+		"failed":             corev1.UploadRejectReason_UPLOAD_REJECT_REASON_FAILED,
+	})
+	variantKinds = newEnum(map[string]corev1.VariantKind{
+		"preview": corev1.VariantKind_VARIANT_KIND_PREVIEW, "full": corev1.VariantKind_VARIANT_KIND_FULL,
 	})
 )
 
 type mediaURLsJSON struct {
-	UploadID    string    `json:"upload_id"`
-	PreviewURL  string    `json:"preview_url"`
-	FullURL     string    `json:"full_url"`
-	ContentType string    `json:"content_type"`
-	Width       int32     `json:"width"`
-	Height      int32     `json:"height"`
-	ExpiresAt   time.Time `json:"expires_at"`
+	UploadID           string    `json:"upload_id"`
+	PreviewURL         string    `json:"preview_url"`
+	PreviewContentType string    `json:"preview_content_type"`
+	FullURL            string    `json:"full_url"`
+	FullContentType    string    `json:"full_content_type"`
+	Width              int32     `json:"width"`
+	Height             int32     `json:"height"`
+	ExpiresAt          time.Time `json:"expires_at"`
 }
 
 func mediaURLsFrom(m *corev1.MediaUrls) *mediaURLsJSON {
@@ -74,7 +82,8 @@ func mediaURLsFrom(m *corev1.MediaUrls) *mediaURLsJSON {
 		return nil
 	}
 	return &mediaURLsJSON{
-		UploadID: m.GetUploadId(), PreviewURL: m.GetPreviewUrl(), FullURL: m.GetFullUrl(), ContentType: m.GetContentType(),
+		UploadID: m.GetUploadId(), PreviewURL: m.GetPreviewUrl(), PreviewContentType: m.GetPreviewContentType(),
+		FullURL: m.GetFullUrl(), FullContentType: m.GetFullContentType(),
 		Width: m.GetWidth(), Height: m.GetHeight(), ExpiresAt: m.GetExpireTime().AsTime(),
 	}
 }
@@ -103,21 +112,31 @@ func uploadFrom(u *corev1.Upload) uploadJSON {
 	return out
 }
 
+type uploadVariantJSON struct {
+	Kind        string `json:"kind"`
+	ContentType string `json:"content_type"`
+	SizeBytes   int64  `json:"size_bytes"`
+}
+
 type uploadCreateBody struct {
-	Purpose         string `json:"purpose"`
-	ContentType     string `json:"content_type"`
-	SizeBytes       int64  `json:"size_bytes"`
-	TayfaID         string `json:"tayfa_id"`
-	ClientRequestID string `json:"client_request_id"`
+	Purpose         string              `json:"purpose"`
+	Variants        []uploadVariantJSON `json:"variants"`
+	TayfaID         string              `json:"tayfa_id"`
+	ClientRequestID string              `json:"client_request_id"`
+}
+
+type uploadTargetJSON struct {
+	Kind      string            `json:"kind"`
+	Method    string            `json:"method"`
+	URL       string            `json:"url"`
+	Headers   map[string]string `json:"headers"`
+	ExpiresAt time.Time         `json:"expires_at"`
 }
 
 type uploadCreatedJSON struct {
 	Upload uploadJSON `json:"upload"`
-	// Absent when a repeated request finds the upload past pending.
-	UploadMethod    string            `json:"upload_method,omitempty"`
-	UploadURL       string            `json:"upload_url,omitempty"`
-	UploadHeaders   map[string]string `json:"upload_headers,omitempty"`
-	UploadExpiresAt *time.Time        `json:"upload_expires_at,omitempty"`
+	// Empty when a repeated request finds the upload past pending.
+	Targets []uploadTargetJSON `json:"targets"`
 }
 
 func (h coreHandlers) createUpload(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -126,22 +145,30 @@ func (h coreHandlers) createUpload(ctx context.Context, w http.ResponseWriter, r
 		return
 	}
 	purpose, ok := uploadPurposes.value(b.Purpose)
-	if !ok || b.SizeBytes < 1 || b.SizeBytes > maxUploadBytes || len(b.ContentType) > 64 ||
-		!validUUID(b.ClientRequestID) || (b.TayfaID != "" && !validUUID(b.TayfaID)) {
+	if !ok || len(b.Variants) != 2 || !validUUID(b.ClientRequestID) || (b.TayfaID != "" && !validUUID(b.TayfaID)) {
 		badRequest(w, r)
 		return
 	}
-	resp, err := h.d.Media.CreateUpload(ctx, &corev1.CreateUploadRequest{
-		Purpose: purpose, ContentType: b.ContentType, SizeBytes: b.SizeBytes, TayfaId: b.TayfaID, ClientRequestId: b.ClientRequestID,
-	})
+	req := &corev1.CreateUploadRequest{Purpose: purpose, TayfaId: b.TayfaID, ClientRequestId: b.ClientRequestID}
+	for _, v := range b.Variants {
+		kind, ok := variantKinds.value(v.Kind)
+		if !ok || (v.ContentType != "image/jpeg" && v.ContentType != "image/webp") || v.SizeBytes < 1 || v.SizeBytes > maxVariantBytes {
+			badRequest(w, r)
+			return
+		}
+		req.Variants = append(req.Variants, &corev1.UploadVariant{Kind: kind, ContentType: v.ContentType, SizeBytes: v.SizeBytes})
+	}
+	resp, err := h.d.Media.CreateUpload(ctx, req)
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
-	out := uploadCreatedJSON{Upload: uploadFrom(resp.GetUpload())}
-	if resp.GetUploadUrl() != "" {
-		out.UploadMethod, out.UploadURL, out.UploadHeaders = resp.GetUploadMethod(), resp.GetUploadUrl(), resp.GetUploadHeaders()
-		out.UploadExpiresAt = optTime(resp.GetUploadExpireTime())
+	out := uploadCreatedJSON{Upload: uploadFrom(resp.GetUpload()), Targets: []uploadTargetJSON{}}
+	for _, t := range resp.GetTargets() {
+		out.Targets = append(out.Targets, uploadTargetJSON{
+			Kind: variantKinds.name(t.GetKind()), Method: t.GetMethod(), URL: t.GetUrl(), Headers: t.GetHeaders(),
+			ExpiresAt: t.GetExpireTime().AsTime(),
+		})
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusCreated, out)
@@ -165,12 +192,25 @@ func (h coreHandlers) getUpload(ctx context.Context, w http.ResponseWriter, r *h
 	writeJSON(w, http.StatusOK, uploadViewJSON{Upload: uploadFrom(resp.GetUpload())})
 }
 
+type uploadCompleteBody struct {
+	Width  int32 `json:"width"`
+	Height int32 `json:"height"`
+}
+
 func (h coreHandlers) completeUpload(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	u, ok := pathUUID(w, r, "upload_id")
 	if !ok {
 		return
 	}
-	resp, err := h.d.Media.CompleteUpload(ctx, &corev1.CompleteUploadRequest{UploadId: u})
+	var b uploadCompleteBody
+	if !decodeLimit(w, r, &b, maxCompleteBody) {
+		return
+	}
+	if b.Width < 1 || b.Width > maxFullSide || b.Height < 1 || b.Height > maxFullSide {
+		badRequest(w, r)
+		return
+	}
+	resp, err := h.d.Media.CompleteUpload(ctx, &corev1.CompleteUploadRequest{UploadId: u, Width: b.Width, Height: b.Height})
 	if err != nil {
 		h.fail(w, r, err)
 		return

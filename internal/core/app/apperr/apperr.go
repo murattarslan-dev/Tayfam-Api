@@ -186,14 +186,12 @@ var (
 	ErrUploadNotReady = errors.New("yükleme hazır değil")
 	// ErrUploadInUse: the upload is attached to other content.
 	ErrUploadInUse = errors.New("yükleme başka içerikte")
-	// ErrUploadNotReceived: CompleteUpload found no object.
+	// ErrUploadNotReceived: CompleteUpload found a variant not stored yet.
 	ErrUploadNotReceived = errors.New("dosya alınmadı")
 	// ErrUploadRateLimited: too many uploads in the last hour.
 	ErrUploadRateLimited = errors.New("yükleme sıklığı sınırı")
 	// ErrUploadQuotaExceeded: the user's stored media would exceed the quota.
 	ErrUploadQuotaExceeded = errors.New("yükleme kotası")
-	// ErrMediaTypeUnsupported: the declared type is not processed yet.
-	ErrMediaTypeUnsupported = errors.New("desteklenmeyen dosya türü")
 )
 
 // ValidationError reports a request field that failed validation. Field is

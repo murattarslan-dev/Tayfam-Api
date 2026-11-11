@@ -55,20 +55,36 @@ func TestClientRoundTrip(t *testing.T) {
 	s := objstoretest.New(t)
 	c := s.Client(t)
 	ctx := context.Background()
-	if _, err := c.Head(ctx, "media/x/full"); !errors.Is(err, objstore.ErrNotFound) {
+	if _, err := c.Head(ctx, "incoming/x/full"); !errors.Is(err, objstore.ErrNotFound) {
 		t.Fatalf("yok: %v", err)
 	}
-	if err := c.Put(ctx, "media/x/full", "image/jpeg", []byte("abc")); err != nil {
+	s.Put("incoming/x/full", objstoretest.Object{Body: []byte("abcdef"), ContentType: "image/jpeg"})
+	o, err := c.Head(ctx, "incoming/x/full")
+	if err != nil || o.Size != 6 || o.ETag != objstoretest.ETag([]byte("abcdef")) {
+		t.Fatalf("head: %+v %v", o, err)
+	}
+	if b, err := c.GetRange(ctx, "incoming/x/full", 3, o.ETag); err != nil || string(b) != "abc" {
+		t.Fatalf("aralık: %q %v", b, err)
+	}
+	if b, err := c.GetRange(ctx, "incoming/x/full", 100, o.ETag); err != nil || string(b) != "abcdef" {
+		t.Fatalf("küçük nesne: %q %v", b, err)
+	}
+	if err := c.Copy(ctx, "incoming/x/full", "media/x/full", o.ETag); err != nil {
 		t.Fatal(err)
 	}
-	if n, err := c.Head(ctx, "media/x/full"); err != nil || n != 3 {
-		t.Fatalf("head: %d %v", n, err)
+	if got, ok := s.Get("media/x/full"); !ok || string(got.Body) != "abcdef" || got.ContentType != "image/jpeg" {
+		t.Fatal("kopya")
 	}
-	if b, err := c.Get(ctx, "media/x/full", 3); err != nil || string(b) != "abc" {
-		t.Fatalf("get: %q %v", b, err)
+	// Replaced in between: neither the read nor the copy goes through.
+	s.Put("incoming/x/full", objstoretest.Object{Body: []byte("XXXXXX")})
+	if _, err := c.GetRange(ctx, "incoming/x/full", 3, o.ETag); !errors.Is(err, objstore.ErrChanged) {
+		t.Fatalf("değişen nesne okunmamalı: %v", err)
 	}
-	if _, err := c.Get(ctx, "media/x/full", 2); !errors.Is(err, objstore.ErrTooLarge) {
-		t.Fatalf("sınır: %v", err)
+	if err := c.Copy(ctx, "incoming/x/full", "media/x/full", o.ETag); !errors.Is(err, objstore.ErrChanged) {
+		t.Fatalf("değişen nesne kopyalanmamalı: %v", err)
+	}
+	if got, _ := s.Get("media/x/full"); string(got.Body) != "abcdef" {
+		t.Fatal("kopya değişmemeli")
 	}
 	g, err := c.PresignGet("media/x/full", time.Hour)
 	if err != nil {
@@ -92,7 +108,7 @@ func TestClientRoundTrip(t *testing.T) {
 	cfg.SecretAccessKey = "wrong"
 	bad, _ := objstore.New(cfg)
 	var se *objstore.StatusError
-	if err := bad.Put(ctx, "media/y", "image/jpeg", []byte("a")); !errors.As(err, &se) || se.Code != http.StatusForbidden {
+	if _, err := bad.Head(ctx, "incoming/x/full"); !errors.As(err, &se) || se.Code != http.StatusForbidden {
 		t.Fatalf("yanlış anahtar: %v", err)
 	}
 }
@@ -109,9 +125,10 @@ func TestErrorsCarryNoSecrets(t *testing.T) {
 	}
 	ctx := context.Background()
 	for _, err := range []error{
-		c.Put(ctx, "media/0123456789abcdef/full", "image/jpeg", []byte("a")),
+		c.Copy(ctx, "incoming/0123456789abcdef/full", "media/0123456789abcdef/full", `"e"`),
 		c.Delete(ctx, "media/0123456789abcdef/full"),
 		func() error { _, err := c.Head(ctx, "incoming/0123456789abcdef"); return err }(),
+		func() error { _, err := c.GetRange(ctx, "incoming/0123456789abcdef", 10, `"e"`); return err }(),
 	} {
 		if err == nil {
 			t.Fatal("hata bekleniyordu")

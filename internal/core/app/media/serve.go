@@ -55,7 +55,7 @@ func (s *Service) MediaURLs(ctx context.Context, viewer id.ID, ids []id.ID) ([]U
 		if !ok {
 			continue
 		}
-		links, err := s.urls(r.ID, r.R2Key, r.OutputType, r.Width, r.Height)
+		links, err := s.urls(r.ID, r.R2Key, r.PreviewType, r.FullType, r.Width, r.Height)
 		if err != nil {
 			return nil, err
 		}

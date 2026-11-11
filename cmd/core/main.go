@@ -199,10 +199,8 @@ func setup(rt *service.Runtime) error {
 	// UNAVAILABLE döner, işçiler boşta bekler.
 	corev1.RegisterMediaServiceServer(srv, grpcapi.NewMediaServer(medias, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
-	// Yüklenen dosyaların işlenmesi (FOR UPDATE SKIP LOCKED; birden fazla
-	// pod'da çalışabilir) ve süresi dolan ya da içeriği silinen dosyaların
-	// R2'den silinmesi.
-	rt.AddWorker("media-process", medias.RunProcessor)
+	// Süresi dolan ya da içeriği silinen dosyaların R2'den silinmesi
+	// (birden fazla pod'da çalışabilir; her adım idempotent).
 	rt.AddWorker("media-cleanup", medias.RunCleanup)
 	// Tekrarlayan etkinliklerin önümüzdeki 8 haftalık örnekleri (issue #51).
 	// Birden fazla pod'da çalışabilir: tayfa ve seri satırı kilitlenir,
