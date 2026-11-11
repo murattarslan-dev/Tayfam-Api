@@ -399,11 +399,26 @@ func (s *Service) RemoveDeclined(ctx context.Context, caller, conversation id.ID
 	})
 }
 
+// SeesConversation reports whether user sees conversation as a party, by
+// the rule of Get (notification.Conversations, issue #138): a conversation
+// of others, a missing one and a request the user declined are all false.
+// It works without the message key: it reads no message.
+func (s *Service) SeesConversation(ctx context.Context, conversation, user id.ID) (bool, error) {
+	_, err := load(ctx, store.New(s.cfg.Pool), user, conversation)
+	switch {
+	case errors.Is(err, apperr.ErrConversationNotFound):
+		return false, nil
+	case err != nil:
+		return false, err
+	}
+	return true, nil
+}
+
 // Cleanup removes a deleted user from direct messages inside the deletion's
 // transaction (userevents.Cleanup; v14 "İlişkiler ve Silme Davranışı"):
 // their side of each conversation, their requests and their sender fields
 // become empty, their read markers go; conversations whose both parties are
-// gone are deleted with their messages.
+// gone are deleted with their messages and notification preferences.
 func Cleanup(ctx context.Context, q *store.Queries, user id.ID) error {
 	for _, f := range []func(context.Context, pgtype.UUID) error{
 		q.ClearConversationLowSide, q.ClearConversationHighSide, q.ClearDirectMessageSender, q.DeleteUserConversationReads,

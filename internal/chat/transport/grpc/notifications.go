@@ -20,6 +20,7 @@ type Notifications interface {
 	MarkAllRead(ctx context.Context, caller id.ID) error
 	Preferences(ctx context.Context, caller id.ID) ([]notification.Preference, error)
 	SetTayfaPreference(ctx context.Context, caller, tayfa id.ID, level string, until time.Time) (notification.Preference, error)
+	SetConversationPreference(ctx context.Context, caller, conversation id.ID, level string, until time.Time) (notification.Preference, error)
 }
 
 // NotificationServer implements chatv1.NotificationServiceServer. Every
@@ -171,22 +172,54 @@ func (s *NotificationServer) SetTayfaNotificationPreference(ctx context.Context,
 	if !ok {
 		return nil, validation("tayfa_id")
 	}
-	level, ok := levels[req.GetLevel()]
-	if !ok {
-		return nil, validation("level")
-	}
-	var until time.Time
-	if req.GetMuteUntil() != nil {
-		if err := req.GetMuteUntil().CheckValid(); err != nil {
-			return nil, validation("mute_until")
-		}
-		until = req.GetMuteUntil().AsTime()
+	level, until, err := preferenceInput(req.GetLevel(), req.GetMuteUntil())
+	if err != nil {
+		return nil, err
 	}
 	p, err := s.app.SetTayfaPreference(ctx, caller, tayfa, level, until)
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}
 	return &chatv1.SetTayfaNotificationPreferenceResponse{Preference: preferenceToProto(p)}, nil
+}
+
+// SetConversationNotificationPreference implements
+// chatv1.NotificationServiceServer.
+func (s *NotificationServer) SetConversationNotificationPreference(ctx context.Context, req *chatv1.SetConversationNotificationPreferenceRequest) (*chatv1.SetConversationNotificationPreferenceResponse, error) {
+	caller, err := callerID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	conversation, ok := id.Parse(req.GetConversationId())
+	if !ok {
+		return nil, validation("conversation_id")
+	}
+	level, until, err := preferenceInput(req.GetLevel(), req.GetMuteUntil())
+	if err != nil {
+		return nil, err
+	}
+	p, err := s.app.SetConversationPreference(ctx, caller, conversation, level, until)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &chatv1.SetConversationNotificationPreferenceResponse{Preference: preferenceToProto(p)}, nil
+}
+
+// preferenceInput converts the level and the optional mute_until of a
+// preference request.
+func preferenceInput(l chatv1.NotificationLevel, mu *timestamppb.Timestamp) (string, time.Time, error) {
+	level, ok := levels[l]
+	if !ok {
+		return "", time.Time{}, validation("level")
+	}
+	var until time.Time
+	if mu != nil {
+		if err := mu.CheckValid(); err != nil {
+			return "", time.Time{}, validation("mute_until")
+		}
+		until = mu.AsTime()
+	}
+	return level, until, nil
 }
 
 func preferenceToProto(p notification.Preference) *chatv1.NotificationPreference {

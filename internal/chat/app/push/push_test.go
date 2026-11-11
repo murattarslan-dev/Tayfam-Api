@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -551,5 +552,96 @@ func TestNothingSecretIsLogged(t *testing.T) {
 		if strings.Contains(logs, bad) {
 			t.Fatalf("log %q içeriyor:\n%s", bad, logs)
 		}
+	}
+}
+
+// partyOf stands in for dm's party check of DM muting.
+type partyOf map[[2]id.ID]bool
+
+func (p partyOf) SeesConversation(_ context.Context, conversation, user id.ID) (bool, error) {
+	return p[[2]id.ID{conversation, user}], nil
+}
+
+type noMembers struct{}
+
+func (noMembers) IsActiveMember(context.Context, id.ID, id.ID) (bool, error) { return false, nil }
+
+// A conversation muted through the user endpoint (issue #138) gets no
+// push, only that conversation, only for that user, and only until
+// mute_until; its notices stay in the list (ADR-0005, ADR-0019 item 3).
+func TestDirectConversationMute(t *testing.T) {
+	e := setup(t, true)
+	u, peer, muted, open := id.New(), id.New(), id.New(), id.New()
+	prefs, err := notification.New(notification.Config{
+		Pool: e.pool, Log: slog.New(slog.NewJSONHandler(e.log, nil)), Members: noMembers{},
+		Conversations: partyOf{{muted, u}: true, {open, u}: true, {muted, peer}: true},
+	})
+	must(t, err)
+	must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:u"))
+	must(t, e.svc.Register(ctx, caller(peer), push.PlatformAndroid, "tok:peer"))
+	_, err = prefs.SetConversationPreference(ctx, u, muted, notification.LevelNone, time.Time{})
+	must(t, err)
+
+	dm := func(to, conv id.ID, typ string) {
+		t.Helper()
+		e.notify(t, notification.Request{Type: typ, TargetType: notification.TargetDMConversation, Target: conv, Recipients: []id.ID{to}, Unread: 1})
+	}
+	sentTo := func() []string {
+		t.Helper()
+		var out []string
+		for _, m := range e.fcm.Sent() {
+			out = append(out, m["token"].(string)+"/"+m["data"].(map[string]any)["target_id"].(string))
+		}
+		return out
+	}
+	dm(u, muted, notification.TypeDMMessage)
+	dm(u, muted, notification.TypeDMRequest)
+	dm(u, open, notification.TypeDMMessage)
+	dm(peer, muted, notification.TypeDMMessage) // the other party's own preference
+	e.drain(t)
+	got := sentTo()
+	slices.Sort(got)
+	want := []string{"tok:peer/" + muted.String(), "tok:u/" + open.String()}
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("gönderilen = %v, beklenen %v", got, want)
+	}
+	var n int
+	must(t, e.pool.QueryRow(ctx, `SELECT count(*) FROM notifications WHERE user_id = $1 AND target_id = $2`, u.PG(), muted.PG()).Scan(&n))
+	if n != 2 {
+		t.Fatalf("sessizdeki konuşmanın bildirimleri listede %d", n)
+	}
+	if n := e.queued(t); n != 0 {
+		t.Fatalf("kuyrukta kaldı: %d", n)
+	}
+
+	// Timed: muted until mute_until, then pushed again.
+	_, err = prefs.SetConversationPreference(ctx, u, muted, notification.LevelNone, time.Now().UTC().Add(time.Hour))
+	must(t, err)
+	dm(u, muted, notification.TypeDMMessage)
+	e.drain(t)
+	if len(e.fcm.Sent()) != 2 {
+		t.Fatalf("süreli sessizde push gitti: %v", sentTo())
+	}
+	e.now = e.now.Add(2 * time.Hour)
+	dm(u, muted, notification.TypeDMMessage)
+	e.drain(t)
+	if got := sentTo(); len(got) != 3 || got[2] != "tok:u/"+muted.String() {
+		t.Fatalf("süre bitince push gitmedi: %v", got)
+	}
+
+	// Back to all through the endpoint: pushed again.
+	_, err = prefs.SetConversationPreference(ctx, u, muted, notification.LevelNone, time.Time{})
+	must(t, err)
+	_, err = prefs.SetConversationPreference(ctx, u, muted, notification.LevelAll, time.Time{})
+	must(t, err)
+	dm(u, muted, notification.TypeDMMessage)
+	e.drain(t)
+	if got := sentTo(); len(got) != 4 || got[3] != "tok:u/"+muted.String() {
+		t.Fatalf("varsayılana dönünce push gitmedi: %v", got)
+	}
+	// Nothing personal in the logs: no conversation ID, no token.
+	if l := e.log.String(); strings.Contains(l, muted.String()) || strings.Contains(l, "tok:") {
+		t.Fatalf("log kişisel veri taşıyor: %s", l)
 	}
 }

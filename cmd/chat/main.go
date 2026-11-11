@@ -152,12 +152,6 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	notifications, err := notification.New(notification.Config{
-		Pool: pool, Log: rt.Log, Members: coremembers.New(corev1.NewMembershipServiceClient(coreConn)),
-	})
-	if err != nil {
-		return err
-	}
 	// Kanal izinlerini core'un tek izin tablosu verir (CLAUDE.md kural 5,
 	// ChannelAccessService), kullanıcının kendi token'ıyla. Cevap kısa süre
 	// önbellekte tutulur (ADR-0005); core'un membership.changed ve tayfa
@@ -190,6 +184,16 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 	live.BindDirect(directMessages)
+	// Tayfa sessize alınırken üyeliği core söyler; birebir konuşma sessize
+	// alınırken tarafı olup olmadığına chat kendi verisinden bakar (issue
+	// #138).
+	notifications, err := notification.New(notification.Config{
+		Pool: pool, Log: rt.Log, Members: coremembers.New(corev1.NewMembershipServiceClient(coreConn)),
+		Conversations: directMessages,
+	})
+	if err != nil {
+		return err
+	}
 	// Birebir mesajda uçtan uca şifreleme, sunucu tarafı (issue #127,
 	// ADR-0018): sunucu kriptografi yapmaz; açık anahtarları, zarfları,
 	// arşivi ve eşleştirme mesajlarını saklar ve iletir. Ön anahtar paketini

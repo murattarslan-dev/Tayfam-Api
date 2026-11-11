@@ -44,9 +44,13 @@ const (
 	LevelNone     = "none"
 )
 
-// ScopeTayfa is the only scope users can set until channels and direct
-// messages exist.
-const ScopeTayfa = "tayfa"
+// Scopes users can set (notification_preferences.scope_type). Channels
+// come later.
+const (
+	ScopeTayfa = "tayfa"
+	// ScopeDMConversation: a direct conversation of the user (issue #138).
+	ScopeDMConversation = "dm_conversation"
+)
 
 // Notification is one notification of the caller.
 type Notification struct {
@@ -82,12 +86,20 @@ type Memberships interface {
 	IsActiveMember(ctx context.Context, tayfa, user id.ID) (bool, error)
 }
 
+// Conversations answers whether a user sees a direct conversation as a
+// party: the same rule as reading the conversation (dm.Service). Another
+// user's conversation is "not found", exactly like a missing one (IDOR).
+type Conversations interface {
+	SeesConversation(ctx context.Context, conversation, user id.ID) (bool, error)
+}
+
 // Config wires a Service.
 type Config struct {
-	Pool    *pgxpool.Pool
-	Log     *slog.Logger
-	Members Memberships
-	Now     func() time.Time // optional, for tests
+	Pool          *pgxpool.Pool
+	Log           *slog.Logger
+	Members       Memberships
+	Conversations Conversations
+	Now           func() time.Time // optional, for tests
 }
 
 // Service serves the notification center.
@@ -97,7 +109,7 @@ type Service struct {
 
 // New returns a Service.
 func New(cfg Config) (*Service, error) {
-	if cfg.Pool == nil || cfg.Log == nil || cfg.Members == nil {
+	if cfg.Pool == nil || cfg.Log == nil || cfg.Members == nil || cfg.Conversations == nil {
 		return nil, errors.New("notification: eksik yapılandırma")
 	}
 	if cfg.Now == nil {
@@ -227,6 +239,40 @@ func (s *Service) Preferences(ctx context.Context, caller id.ID) ([]Preference, 
 // Muted notifications still appear in the list; the preference is read when
 // sending push notifications.
 func (s *Service) SetTayfaPreference(ctx context.Context, caller, tayfa id.ID, level string, until time.Time) (Preference, error) {
+	return s.setPreference(ctx, caller, ScopeTayfa, tayfa, level, until, func() error {
+		ok, err := s.cfg.Members.IsActiveMember(ctx, tayfa, caller)
+		if err != nil {
+			return fmt.Errorf("üyelik: %w", err)
+		}
+		if !ok {
+			return apperr.ErrTayfaNotFound
+		}
+		return nil
+	})
+}
+
+// SetConversationPreference sets how the caller hears about a direct
+// conversation they see as a party (issue #138), with the rules of
+// SetTayfaPreference. Any other conversation, another user's included, is
+// apperr.ErrConversationNotFound and nothing is written. Direct message
+// notices are all personal (ADR-0019 item 3): mentions lets them through
+// like all.
+func (s *Service) SetConversationPreference(ctx context.Context, caller, conversation id.ID, level string, until time.Time) (Preference, error) {
+	return s.setPreference(ctx, caller, ScopeDMConversation, conversation, level, until, func() error {
+		ok, err := s.cfg.Conversations.SeesConversation(ctx, conversation, caller)
+		if err != nil {
+			return fmt.Errorf("konuşma: %w", err)
+		}
+		if !ok {
+			return apperr.ErrConversationNotFound
+		}
+		return nil
+	})
+}
+
+// setPreference validates level and until, asks allowed whether the caller
+// may set a preference for scope, and writes it (level all: removes it).
+func (s *Service) setPreference(ctx context.Context, caller id.ID, scopeType string, scope id.ID, level string, until time.Time, allowed func() error) (Preference, error) {
 	if level != LevelAll && level != LevelMentions && level != LevelNone {
 		return Preference{}, invalid("level")
 	}
@@ -236,24 +282,21 @@ func (s *Service) SetTayfaPreference(ctx context.Context, caller, tayfa id.ID, l
 			return Preference{}, invalid("mute_until")
 		}
 	}
-	ok, err := s.cfg.Members.IsActiveMember(ctx, tayfa, caller)
-	if err != nil {
-		return Preference{}, fmt.Errorf("üyelik: %w", err)
+	if err := allowed(); err != nil {
+		return Preference{}, err
 	}
 	q := store.New(s.cfg.Pool)
-	if !ok {
-		return Preference{}, apperr.ErrTayfaNotFound
-	}
-	p := Preference{ScopeType: ScopeTayfa, Scope: tayfa, Level: level, MutedUntil: until.UTC(), UpdatedAt: now}
+	p := Preference{ScopeType: scopeType, Scope: scope, Level: level, MutedUntil: until.UTC(), UpdatedAt: now}
+	var err error
 	if level == LevelAll {
-		err = q.DeleteNotificationPreference(ctx, store.DeleteNotificationPreferenceParams{UserID: caller.PG(), ScopeType: ScopeTayfa, ScopeID: tayfa.PG()})
+		err = q.DeleteNotificationPreference(ctx, store.DeleteNotificationPreferenceParams{UserID: caller.PG(), ScopeType: scopeType, ScopeID: scope.PG()})
 	} else {
 		mu := pgtype.Timestamptz{}
 		if !until.IsZero() {
 			mu = ts(until.UTC())
 		}
 		err = q.UpsertNotificationPreference(ctx, store.UpsertNotificationPreferenceParams{
-			UserID: caller.PG(), ScopeType: ScopeTayfa, ScopeID: tayfa.PG(), Level: level, MutedUntil: mu,
+			UserID: caller.PG(), ScopeType: scopeType, ScopeID: scope.PG(), Level: level, MutedUntil: mu,
 		})
 	}
 	if err != nil {
