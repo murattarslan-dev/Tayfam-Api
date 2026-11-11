@@ -84,10 +84,12 @@ func wrapAAD(request, user id.ID) []byte {
 // Wrap seals dataKey for request of user.
 func (k *Keys) Wrap(request, user id.ID, dataKey []byte) []byte {
 	aead := k.aeads[k.active]
-	out := make([]byte, 1+aead.NonceSize(), WrappedKeySize)
-	out[0] = k.active
-	_, _ = rand.Read(out[1:]) // crypto/rand.Read never returns an error
-	return aead.Seal(out, out[1:], dataKey, wrapAAD(request, user))
+	nonce := make([]byte, aead.NonceSize())
+	_, _ = rand.Read(nonce) // crypto/rand.Read never returns an error
+	out := make([]byte, 0, WrappedKeySize)
+	out = append(out, k.active)
+	out = append(out, nonce...)
+	return aead.Seal(out, nonce, dataKey, wrapAAD(request, user))
 }
 
 // Unwrap reverses Wrap.
