@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -38,6 +39,9 @@ type Event struct {
 	SessionRevoked id.ID
 	// Sanctioned: user.sanctioned closed every session of the user.
 	Sanctioned bool
+	// DataExportReady is the request of a user.data_export_ready (issue
+	// #144): the user gets the data_export_ready notification.
+	DataExportReady id.ID
 }
 
 // Sessions ends sessions in chat's real-time layer
@@ -60,6 +64,12 @@ type Profile struct {
 	AvatarUploadID id.ID // zero: no avatar
 }
 
+// Notified tells connected clients about a new notification
+// (realtime.Live); it must not block.
+type Notified interface {
+	Notified(r notification.Request)
+}
+
 // Cleanup removes a deleted user's records that other packages own (the
 // notifications of issue #64), inside the deletion's transaction.
 type Cleanup func(ctx context.Context, q *store.Queries, user id.ID) error
@@ -79,6 +89,9 @@ type Config struct {
 	// (push.Service; issue #134, ADR-0019): a token is a session too.
 	// Optional; a deleted user's tokens go with Cleanups (push.Cleanup).
 	PushTokens Devices
+	// Live hears about notifications written for identity's events
+	// (data_export_ready); optional.
+	Live Notified
 }
 
 // Service applies user events.
@@ -103,7 +116,7 @@ func (s *Service) Apply(ctx context.Context, e Event) error {
 		return apperr.Validation("user_id")
 	}
 	kinds := 0
-	for _, set := range []bool{e.Profile != nil, e.Deleted, e.SessionRevoked != (id.ID{}), e.Sanctioned} {
+	for _, set := range []bool{e.Profile != nil, e.Deleted, e.SessionRevoked != (id.ID{}), e.Sanctioned, e.DataExportReady != (id.ID{})} {
 		if set {
 			kinds++
 		}
@@ -114,6 +127,8 @@ func (s *Service) Apply(ctx context.Context, e Event) error {
 	switch {
 	case e.Profile != nil:
 		return s.applyProfile(ctx, e)
+	case e.DataExportReady != (id.ID{}):
+		return s.applyDataExportReady(ctx, e)
 	case e.Deleted:
 		if err := s.applyDeleted(ctx, e); err != nil {
 			return err
@@ -211,4 +226,23 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 		}
 		return nil
 	})
+}
+
+// applyDataExportReady writes the data_export_ready notification for the
+// user, once per event; a deleted user gets none (notification.Store).
+func (s *Service) applyDataExportReady(ctx context.Context, e Event) error {
+	r := notification.Request{
+		Event: e.ID, Type: notification.TypeDataExportReady,
+		TargetType: notification.TargetDataExport, Target: e.DataExportReady,
+		Recipients: []id.ID{e.User},
+	}
+	if err := pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
+		return notification.Store(ctx, store.New(tx), r)
+	}); err != nil {
+		return err
+	}
+	if s.cfg.Live != nil {
+		s.cfg.Live.Notified(r)
+	}
+	return nil
 }

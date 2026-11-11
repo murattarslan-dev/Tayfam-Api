@@ -279,6 +279,33 @@ type Querier interface {
 	// içinde bağlanmamış görüntüler ile süresi dolan dışa aktarmalar silme
 	// kuyruğuna girer.
 	ExpireUploads(ctx context.Context, arg ExpireUploadsParams) ([]pgtype.UUID, error)
+	ExportActivityRecords(ctx context.Context, arg ExportActivityRecordsParams) ([]ExportActivityRecordsRow, error)
+	ExportAnnouncements(ctx context.Context, arg ExportAnnouncementsParams) ([]ExportAnnouncementsRow, error)
+	ExportAnswerVotes(ctx context.Context, arg ExportAnswerVotesParams) ([]ExportAnswerVotesRow, error)
+	ExportAnswers(ctx context.Context, arg ExportAnswersParams) ([]ExportAnswersRow, error)
+	ExportBlocks(ctx context.Context, arg ExportBlocksParams) ([]ExportBlocksRow, error)
+	ExportConvoyVehicles(ctx context.Context, arg ExportConvoyVehiclesParams) ([]ExportConvoyVehiclesRow, error)
+	ExportEventRSVPs(ctx context.Context, arg ExportEventRSVPsParams) ([]ExportEventRSVPsRow, error)
+	ExportEvents(ctx context.Context, arg ExportEventsParams) ([]ExportEventsRow, error)
+	ExportFishingCatches(ctx context.Context, arg ExportFishingCatchesParams) ([]ExportFishingCatchesRow, error)
+	ExportFriendships(ctx context.Context, arg ExportFriendshipsParams) ([]ExportFriendshipsRow, error)
+	ExportHikeCheckins(ctx context.Context, arg ExportHikeCheckinsParams) ([]ExportHikeCheckinsRow, error)
+	// KVKK veri dışa aktarma (issue #144, ADR-0021; alanlar
+	// docs/data-export-format.md). Her sorgu yalnızca @user_id'nin (doğrulanmış
+	// çağıran) kendi kayıtlarını, @after'dan büyük anahtarla, anahtar sırasıyla
+	// en çok @n satır döner. Diğer kullanıcılar yalnızca kimlikle yer alır.
+	// Kayıt JSON'u burada kurulur; uygulama yalnızca akıtır ve hiçbir alanı
+	// log'a yazmaz.
+	ExportMemberships(ctx context.Context, arg ExportMembershipsParams) ([]ExportMembershipsRow, error)
+	// Gizli anket dahil yalnızca kullanıcının kendi oyu (v14: gizli oyun
+	// veritabanından çıktığı tek yer kullanıcının kendi dışa aktarmasıdır).
+	ExportPollVotes(ctx context.Context, arg ExportPollVotesParams) ([]ExportPollVotesRow, error)
+	ExportPolls(ctx context.Context, arg ExportPollsParams) ([]ExportPollsRow, error)
+	ExportQuestions(ctx context.Context, arg ExportQuestionsParams) ([]ExportQuestionsRow, error)
+	// Şikâyeti işleyen, öncelik ve platform alanları girmez (ADR-0021 madde 7).
+	ExportReports(ctx context.Context, arg ExportReportsParams) ([]ExportReportsRow, error)
+	// Yalnızca liste; dosyalar ve dışa aktarma kayıtları girmez.
+	ExportUploads(ctx context.Context, arg ExportUploadsParams) ([]ExportUploadsRow, error)
 	// Verilen kullanıcılardan hâlâ etkin üye olanlar (tek alıcılı bildirimler
 	// ve arka plan işlerinin seçtiği alıcılar).
 	FilterNotifyActive(ctx context.Context, arg FilterNotifyActiveParams) ([]pgtype.UUID, error)

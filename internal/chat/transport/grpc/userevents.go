@@ -67,6 +67,10 @@ func (s *UserEventServer) ApplyUserEvent(ctx context.Context, req *chatv1.ApplyU
 		}
 	case *chatv1.ApplyUserEventRequest_Sanctioned:
 		e.Sanctioned = true
+	case *chatv1.ApplyUserEventRequest_DataExportReady:
+		if e.DataExportReady, ok = id.Parse(ev.DataExportReady.GetDataExportId()); !ok {
+			return nil, validation("data_export_ready.data_export_id")
+		}
 	default:
 		return nil, validation("event")
 	}

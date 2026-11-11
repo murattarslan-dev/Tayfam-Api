@@ -69,7 +69,7 @@ func (s *Service) Cleanup(ctx context.Context) (int, error) {
 		}
 		progress := 0
 		for _, r := range rows {
-			if err := s.deleteObjects(ctx, r.R2Key); err != nil {
+			if err := s.deleteObjects(ctx, r.R2Key, r.Purpose); err != nil {
 				s.cfg.Log.WarnContext(ctx, "medya nesneleri silinemedi", slog.String("upload_id", id.ID(r.ID.Bytes).String()), slog.String("err", err.Error()))
 				continue
 			}
@@ -89,10 +89,14 @@ func (s *Service) Cleanup(ctx context.Context) (int, error) {
 	return deleted, nil
 }
 
-func (s *Service) deleteObjects(ctx context.Context, key string) error {
-	for _, k := range []string{
+func (s *Service) deleteObjects(ctx context.Context, key, purpose string) error {
+	keys := []string{
 		incomingKey(key, KindPreview), incomingKey(key, KindFull), mediaKey(key, KindPreview), mediaKey(key, KindFull),
-	} {
+	}
+	if purpose == PurposeDataExport {
+		keys = []string{exportKey(key)}
+	}
+	for _, k := range keys {
 		if err := s.cfg.Store.Delete(ctx, k); err != nil {
 			return err
 		}

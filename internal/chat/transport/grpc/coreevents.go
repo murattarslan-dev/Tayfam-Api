@@ -76,11 +76,13 @@ var (
 		m := maps.Clone(notificationTypes)
 		m[chatv1.NotificationType_NOTIFICATION_TYPE_DM_REQUEST] = notification.TypeDMRequest
 		m[chatv1.NotificationType_NOTIFICATION_TYPE_DM_MESSAGE] = notification.TypeDMMessage
+		m[chatv1.NotificationType_NOTIFICATION_TYPE_DATA_EXPORT_READY] = notification.TypeDataExportReady
 		return m
 	}()
 	listedTargets = func() map[chatv1.NotificationTargetType]string {
 		m := maps.Clone(targetTypes)
 		m[chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_DM_CONVERSATION] = notification.TargetDMConversation
+		m[chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_DATA_EXPORT] = notification.TargetDataExport
 		return m
 	}()
 )

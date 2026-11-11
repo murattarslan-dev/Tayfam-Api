@@ -231,10 +231,14 @@ func TestDirectMessageErrors(t *testing.T) {
 	}
 }
 
-// Direct message notices are listed, but core cannot request them: they are
-// chat's own and never carry an actor.
+// Direct message notices and the data export notice are listed, but core
+// cannot request them: they are chat's and identity's own and never carry
+// an actor.
 func TestDirectNoticesListedNotRequested(t *testing.T) {
-	for _, typ := range []chatv1.NotificationType{chatv1.NotificationType_NOTIFICATION_TYPE_DM_REQUEST, chatv1.NotificationType_NOTIFICATION_TYPE_DM_MESSAGE} {
+	for _, typ := range []chatv1.NotificationType{
+		chatv1.NotificationType_NOTIFICATION_TYPE_DM_REQUEST, chatv1.NotificationType_NOTIFICATION_TYPE_DM_MESSAGE,
+		chatv1.NotificationType_NOTIFICATION_TYPE_DATA_EXPORT_READY,
+	} {
 		if _, ok := notificationTypes[typ]; ok {
 			t.Errorf("%s core'dan istenebiliyor", typ)
 		}
@@ -242,10 +246,14 @@ func TestDirectNoticesListedNotRequested(t *testing.T) {
 			t.Errorf("%s listelenmiyor", typ)
 		}
 	}
-	if _, ok := targetTypes[chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_DM_CONVERSATION]; ok {
-		t.Error("konuşma hedefi core'dan istenebiliyor")
+	for _, tt := range []chatv1.NotificationTargetType{
+		chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_DM_CONVERSATION, chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_DATA_EXPORT,
+	} {
+		if _, ok := targetTypes[tt]; ok {
+			t.Errorf("%s hedefi core'dan istenebiliyor", tt)
+		}
 	}
-	if len(listedTypes) != len(notificationTypes)+2 || len(listedTargets) != len(targetTypes)+1 {
+	if len(listedTypes) != len(notificationTypes)+3 || len(listedTargets) != len(targetTypes)+2 {
 		t.Error("liste eşlemesi eksik")
 	}
 }

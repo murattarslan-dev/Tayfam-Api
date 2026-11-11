@@ -109,6 +109,8 @@ var personal = map[string]bool{
 	notification.TypeReportResolved:  true,
 	notification.TypeDMMessage:       true,
 	notification.TypeDMRequest:       true,
+	// The user's own data export (ADR-0021, ADR-0019 item 3).
+	notification.TypeDataExportReady: true,
 }
 
 // scope returns the preference scope of a notification, or ok false when

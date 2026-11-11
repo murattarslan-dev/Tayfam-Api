@@ -92,6 +92,7 @@ var notificationTypeNames = map[chatv1.NotificationType]string{
 	chatv1.NotificationType_NOTIFICATION_TYPE_REPORT_RESOLVED:          "report_resolved",
 	chatv1.NotificationType_NOTIFICATION_TYPE_DM_REQUEST:               "dm_request",
 	chatv1.NotificationType_NOTIFICATION_TYPE_DM_MESSAGE:               "dm_message",
+	chatv1.NotificationType_NOTIFICATION_TYPE_DATA_EXPORT_READY:        "data_export_ready",
 }
 
 var warningReasonNames = map[chatv1.TayfaWarningReason]string{
@@ -108,6 +109,7 @@ var notificationTargetNames = map[chatv1.NotificationTargetType]string{
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_USER:            "user",
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_REPORT:          "report",
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_DM_CONVERSATION: "dm_conversation",
+	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_DATA_EXPORT:     "data_export",
 }
 
 var notificationLevelNames = map[chatv1.NotificationLevel]string{
