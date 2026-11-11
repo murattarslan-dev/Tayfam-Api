@@ -254,9 +254,16 @@ func (q *Queries) DeclineConversation(ctx context.Context, arg DeclineConversati
 }
 
 const deleteAbandonedConversations = `-- name: DeleteAbandonedConversations :exec
-DELETE FROM dm_conversations WHERE user_low_id IS NULL AND user_high_id IS NULL
+WITH gone AS (
+  DELETE FROM dm_conversations WHERE user_low_id IS NULL AND user_high_id IS NULL
+  RETURNING id
+)
+DELETE FROM notification_preferences
+WHERE scope_type = 'dm_conversation' AND scope_id IN (SELECT id FROM gone)
 `
 
+// Konuşmanın bildirim tercihleri de gider (issue #138): scope_id çok
+// biçimli olduğu için foreign key yoktur, silme burada aynı ifadededir.
 func (q *Queries) DeleteAbandonedConversations(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, deleteAbandonedConversations)
 	return err

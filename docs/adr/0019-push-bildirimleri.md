@@ -7,6 +7,11 @@
   İki değişiklik: `hike_overdue` alıcı bağlıyken de push alır (madde 2);
   chat'in internet çıkışı push açılana kadar eklenmez (madde 8, en az
   yetki).
+- **Revizyon:** 2026-11-11 (platform sahibi, sohbette; issue #138): birebir
+  konuşma tercihinde seviye yalnızca `all` ya da `none` olabilir
+  (`mentions` uçta ve veritabanında reddedilir). Madde 3'teki `mentions`
+  listesinde `dm_message` ve `dm_request` durur ama `dm_conversation`
+  kapsamında artık ulaşılmaz.
 - **Revizyon:** 2026-11-11 (issue #144, [ADR-0021](0021-kvkk-veri-disa-aktarma.md)):
   yeni bildirim türü `data_export_ready` (hedef `data_export`, tayfasız,
   aktörsüz); çeviri anahtarları `push_data_export_ready_title` /
