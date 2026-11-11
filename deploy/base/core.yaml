@@ -58,9 +58,6 @@ spec:
           env:
             - { name: OPS_ADDR, value: ":8081" }
             - { name: GRPC_ADDR, value: ":9090" }
-            # Bellek sınırının altında çöp toplayıcıyı sıkılaştırır (görüntü
-            # işleme; ADR-0020 madde 2).
-            - { name: GOMEMLIMIT, value: "320MiB" }
             - { name: IDENTITY_GRPC_ADDR, value: "identity:9090" }
             # Servis token'ı doğrulaması (ADR-0013): identity'nin outbox relay'i
             # UserEventService'i servis token'ıyla çağırır. İzinli çağıranlar
@@ -117,11 +114,9 @@ spec:
           readinessProbe:
             httpGet: { path: /readyz, port: ops }
             periodSeconds: 5
-          # Görüntü işleme aynı anda tek dosya çözer: en çok 25 megapiksel
-          # (PNG'de ~100 MiB), ADR-0020 madde 2.
           resources:
             requests: { cpu: 10m, memory: 32Mi }
-            limits: { memory: 384Mi }
+            limits: { memory: 128Mi }
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

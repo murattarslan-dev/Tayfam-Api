@@ -5,7 +5,7 @@
 //
 // Only the standard library is used: the signature is HMAC-SHA256
 // (crypto/hmac, crypto/sha256); this package writes the canonical request
-// text only. An SDK would bring dozens of modules for six requests.
+// text only. An SDK would bring dozens of modules for these requests.
 //
 // Nothing here logs. Errors carry the operation and the HTTP status only:
 // never the object key, a URL, a signature or the credentials. Presigned
@@ -53,7 +53,7 @@ type Config struct {
 	Region          string
 	AccessKeyID     string
 	SecretAccessKey string
-	// HTTP is the client for HEAD, GET, PUT and DELETE; nil means one with
+	// HTTP is the client for HEAD, GET, copy and DELETE; nil means one with
 	// a 30-second timeout. Redirects are never followed either way.
 	HTTP *http.Client
 	// Now is the clock; nil means time.Now.
@@ -164,33 +164,27 @@ func (c *Client) PresignGet(key string, ttl time.Duration) (Presigned, error) {
 	return Presigned{URL: u.String(), Expires: now.Add(ttl)}, nil
 }
 
-// do signs and sends a request. The transport error is unwrapped from
-// *url.Error so that the key in the URL never reaches an error message.
-func (c *Client) do(ctx context.Context, op, method, key, contentType string, body []byte) (*http.Response, error) {
+// do signs and sends a request without a body. hs are extra headers
+// (lower-case names), all signed. The transport error never reaches the
+// message: it names the address and the URL with the key.
+func (c *Client) do(ctx context.Context, op, method, key string, hs ...header) (*http.Response, error) {
 	if !validKey(key) {
 		return nil, fmt.Errorf("objstore: %s: geçersiz anahtar", op)
 	}
 	u := c.objectURL(key)
-	r, err := http.NewRequestWithContext(ctx, method, u.String(), bytes.NewReader(body))
+	r, err := http.NewRequestWithContext(ctx, method, u.String(), http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("objstore: %s: istek kurulamadı", op)
 	}
-	if body == nil {
-		r.Body, r.ContentLength = http.NoBody, 0
-	}
-	payload := emptyPayload
-	if len(body) > 0 {
-		payload = sha256Hex(body)
-	}
 	now := c.now().UTC()
+	signed := []header{{"host", u.Host}, {"x-amz-content-sha256", emptyPayload}, {"x-amz-date", now.Format(amzDateFormat)}}
 	r.Header.Set("X-Amz-Date", now.Format(amzDateFormat))
-	r.Header.Set("X-Amz-Content-Sha256", payload)
-	hs := []header{{"host", u.Host}, {"x-amz-content-sha256", payload}, {"x-amz-date", now.Format(amzDateFormat)}}
-	if contentType != "" {
-		r.Header.Set("Content-Type", contentType)
-		hs = append(hs, header{"content-type", contentType})
+	r.Header.Set("X-Amz-Content-Sha256", emptyPayload)
+	for _, h := range hs {
+		r.Header.Set(h.name, h.value)
+		signed = append(signed, h)
 	}
-	c.sig.authorize(r, hs, payload, now)
+	c.sig.authorize(r, signed, emptyPayload, now)
 	resp, err := c.http.Do(r)
 	if err != nil {
 		return nil, fmt.Errorf("objstore: %s: %w", op, transportError(err))
@@ -221,71 +215,99 @@ func drain(resp *http.Response) {
 	_ = resp.Body.Close()
 }
 
-// Head returns the size of key, or ErrNotFound.
-func (c *Client) Head(ctx context.Context, key string) (int64, error) {
-	resp, err := c.do(ctx, "head", http.MethodHead, key, "", nil)
+// Object is what HEAD says about an object.
+type Object struct {
+	Size int64
+	// ETag identifies this content; GetRange and Copy are bound to it.
+	ETag string
+}
+
+// ErrChanged means the object no longer has the ETag the request was bound
+// to: it was replaced in between.
+var ErrChanged = errors.New("objstore: nesne değişti")
+
+// Head returns the size and ETag of key, or ErrNotFound.
+func (c *Client) Head(ctx context.Context, key string) (Object, error) {
+	resp, err := c.do(ctx, "head", http.MethodHead, key)
 	if err != nil {
-		return 0, err
+		return Object{}, err
 	}
 	defer drain(resp)
 	switch resp.StatusCode {
 	case http.StatusOK:
-		if resp.ContentLength < 0 {
-			return 0, errors.New("objstore: head: boyut yok")
+		etag := resp.Header.Get("ETag")
+		if resp.ContentLength < 0 || etag == "" {
+			return Object{}, errors.New("objstore: head: boyut ya da etag yok")
 		}
-		return resp.ContentLength, nil
+		return Object{Size: resp.ContentLength, ETag: etag}, nil
 	case http.StatusNotFound:
-		return 0, ErrNotFound
+		return Object{}, ErrNotFound
 	}
-	return 0, &StatusError{Op: "head", Code: resp.StatusCode}
+	return Object{}, &StatusError{Op: "head", Code: resp.StatusCode}
 }
 
-// Get reads key, at most max bytes (ErrTooLarge beyond), or ErrNotFound.
-func (c *Client) Get(ctx context.Context, key string, max int64) ([]byte, error) {
-	resp, err := c.do(ctx, "get", http.MethodGet, key, "", nil)
+// GetRange reads the first n bytes of key (fewer when the object is
+// smaller), only while its ETag is etag (ErrChanged otherwise).
+func (c *Client) GetRange(ctx context.Context, key string, n int64, etag string) ([]byte, error) {
+	if n <= 0 || etag == "" {
+		return nil, errors.New("objstore: get: geçersiz aralık")
+	}
+	resp, err := c.do(ctx, "get", http.MethodGet, key,
+		header{"if-match", etag}, header{"range", "bytes=0-" + strconv.FormatInt(n-1, 10)})
 	if err != nil {
 		return nil, err
 	}
 	defer drain(resp)
 	switch resp.StatusCode {
-	case http.StatusOK:
+	case http.StatusOK, http.StatusPartialContent:
 	case http.StatusNotFound:
 		return nil, ErrNotFound
+	case http.StatusPreconditionFailed:
+		return nil, ErrChanged
 	default:
 		return nil, &StatusError{Op: "get", Code: resp.StatusCode}
 	}
-	if resp.ContentLength > max {
-		return nil, ErrTooLarge
-	}
-	b, err := io.ReadAll(io.LimitReader(resp.Body, max+1))
+	b, err := io.ReadAll(io.LimitReader(resp.Body, n))
 	if err != nil {
 		return nil, fmt.Errorf("objstore: get: okunamadı: %w", err)
-	}
-	if int64(len(b)) > max {
-		return nil, ErrTooLarge
 	}
 	return b, nil
 }
 
-// Put writes body to key with contentType.
-func (c *Client) Put(ctx context.Context, key, contentType string, body []byte) error {
-	if contentType == "" || len(body) == 0 {
-		return errors.New("objstore: put: tür ve içerik gerekli")
+// Copy copies src to dst inside the bucket, unchanged, only while src's
+// ETag is etag (ErrChanged otherwise). The service never writes object
+// content itself.
+func (c *Client) Copy(ctx context.Context, src, dst, etag string) error {
+	if !validKey(src) || etag == "" {
+		return errors.New("objstore: copy: geçersiz istek")
 	}
-	resp, err := c.do(ctx, "put", http.MethodPut, key, contentType, body)
+	resp, err := c.do(ctx, "copy", http.MethodPut, dst,
+		header{"x-amz-copy-source", "/" + uriEncode(c.bucket, false) + "/" + uriEncode(src, true)},
+		header{"x-amz-copy-source-if-match", etag})
 	if err != nil {
 		return err
 	}
 	defer drain(resp)
-	if resp.StatusCode != http.StatusOK {
-		return &StatusError{Op: "put", Code: resp.StatusCode}
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusNotFound:
+		return ErrNotFound
+	case http.StatusPreconditionFailed:
+		return ErrChanged
+	default:
+		return &StatusError{Op: "copy", Code: resp.StatusCode}
+	}
+	// S3 may answer 200 with an error document; only a result counts.
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if err != nil || !bytes.Contains(b, []byte("CopyObjectResult")) {
+		return &StatusError{Op: "copy", Code: resp.StatusCode}
 	}
 	return nil
 }
 
 // Delete removes key; a missing object is not an error.
 func (c *Client) Delete(ctx context.Context, key string) error {
-	resp, err := c.do(ctx, "delete", http.MethodDelete, key, "", nil)
+	resp, err := c.do(ctx, "delete", http.MethodDelete, key)
 	if err != nil {
 		return err
 	}

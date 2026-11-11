@@ -222,7 +222,9 @@ Platform sahibinin listesi (ortam başına bir kez; `<ortam>` = `dev` |
 2. **Lifecycle kuralı:** bucket → *Settings* → *Object lifecycle rules* →
    *Add rule*: ad `incoming-24h`, önek `incoming/`, *Delete objects*
    **1 gün** sonra. (Tamamlanmayan multipart yüklemeler için varsayılan
-   kural kalır.) İşlenen dosyalar `media/` altındadır ve bu kurala girmez.
+   kural kalır.) `incoming/` istemcinin yüklediği, henüz denetlenmemiş
+   varyantların karantinasıdır; denetimden geçenler `media/` altına
+   kopyalanır ve bu kurala girmez.
 3. **API token'ı (en az yetki):** R2 → *Manage R2 API Tokens* → *Create
    API token*: ad `tayfam-<ortam>-core`, izin **Object Read & Write**,
    *Apply to specific buckets only* → yalnızca `tayfam-<ortam>-private`.
@@ -276,10 +278,13 @@ Birleştirdikten sonra `kubectl -n tayfam-<ortam> rollout restart deploy/core`;
 log'da "dosya yükleme açık (R2)" görünür. `NS=tayfam-<ortam> ./scripts/netpol-test.sh`
 5. bölümde 443 çıkışını açık bekler.
 
-**İlk kez açıldığında bir kez doğrulayın** (R2'nin imzalı başlıkları
-uyguladığını): uygulamadan ya da `POST /v1/uploads` ile bir yükleme açın
-ve dönen linke **farklı boyutta** bir dosya gönderin; R2 `403` dönmelidir.
-Aynı link doğru dosyayla `200` döner. Sonuç PR'a yazılır.
+**İlk kez açıldığında bir kez doğrulayın** (R2'nin imzalı başlıkları ve
+koşullu kopyalamayı uyguladığını): uygulamadan ya da `POST /v1/uploads`
+ile bir yükleme açın ve dönen linklerden birine **farklı boyutta** bir
+dosya gönderin; R2 `403` dönmelidir. Doğru dosyalarla `200` döner ve
+`POST /v1/uploads/{id}/complete` yüklemeyi `ready` yapar (core log'unda
+"yükleme hazır"; koşullu kopyalama, `x-amz-copy-source-if-match`,
+desteklenmeseydi tamamlama 503 dönerdi). Sonuç PR'a yazılır.
 
 Rotasyon: panelde yeni token → `FORCE=1 ./scripts/new-r2-secret.sh <ortam>`
 → birleştirme ve `rollout restart` → eski token panelde silinir.

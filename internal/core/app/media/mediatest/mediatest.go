@@ -18,7 +18,7 @@ import (
 )
 
 // Ready opens an upload of owner for purpose (tayfa zero for avatars) and
-// takes it through the processing queue to READY.
+// marks it checked (READY).
 func Ready(t testing.TB, pool *pgxpool.Pool, owner id.ID, purpose string, tayfa id.ID) id.ID {
 	t.Helper()
 	ctx := context.Background()
@@ -33,26 +33,16 @@ func Ready(t testing.TB, pool *pgxpool.Pool, owner id.ID, purpose string, tayfa 
 	}
 	u := id.New()
 	if _, err := q.CreateUpload(ctx, store.CreateUploadParams{
-		ID: u.PG(), UserID: owner.PG(), TayfaID: tp, Purpose: purpose, ContentType: "image/jpeg",
-		SizeBytes: 1000, R2Key: hex.EncodeToString(b[:]), ClientRequestID: id.New().PG(),
+		ID: u.PG(), UserID: owner.PG(), TayfaID: tp, Purpose: purpose, R2Key: hex.EncodeToString(b[:]),
+		PreviewType: "image/webp", PreviewBytes: 100, FullType: "image/jpeg", FullBytes: 1000, ClientRequestID: id.New().PG(),
 	}); err != nil {
 		t.Fatalf("yükleme: %v", err)
 	}
-	ts := func(t time.Time) pgtype.Timestamptz { return pgtype.Timestamptz{Time: t, Valid: true} }
-	// Far in the past, so this upload is the one leased next.
-	if _, err := q.MarkUploadReceived(ctx, store.MarkUploadReceivedParams{ID: u.PG(), Now: ts(time.Unix(0, 0))}); err != nil {
-		t.Fatal(err)
-	}
-	l, err := q.LeaseUpload(ctx, store.LeaseUploadParams{Now: ts(time.Now()), LeaseUntil: ts(time.Now().Add(time.Minute))})
-	if err != nil || id.ID(l.ID.Bytes) != u {
-		t.Fatalf("kiralama: %v", err)
-	}
-	if n, err := q.FinishUpload(ctx, store.FinishUploadParams{
-		ID: u.PG(), Attempts: l.Attempts, OutputType: pgtype.Text{String: "image/jpeg", Valid: true},
-		StoredBytes: pgtype.Int8{Int64: 100, Valid: true}, Width: pgtype.Int4{Int32: 10, Valid: true},
-		Height: pgtype.Int4{Int32: 10, Valid: true}, Now: ts(time.Now()),
+	if n, err := q.MarkUploadReady(ctx, store.MarkUploadReadyParams{
+		ID: u.PG(), Width: pgtype.Int4{Int32: 10, Valid: true}, Height: pgtype.Int4{Int32: 10, Valid: true},
+		Now: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	}); err != nil || n != 1 {
-		t.Fatalf("bitirme: %v", err)
+		t.Fatalf("hazır: %v", err)
 	}
 	return u
 }

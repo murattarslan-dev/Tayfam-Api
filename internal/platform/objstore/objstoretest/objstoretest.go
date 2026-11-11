@@ -1,4 +1,5 @@
-// Package objstoretest is an in-memory S3-compatible server for tests. It
+// Package objstoretest is an in-memory S3-compatible server for tests
+// (PUT, HEAD, ranged GET with If-Match, conditional copy, DELETE). It
 // checks every request's SigV4 signature (objstore.VerifyRequest) as R2
 // would, including the signed content type and length of presigned
 // uploads, so tests prove that a link cannot be used for another key, type
@@ -7,6 +8,9 @@ package objstoretest
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -140,6 +144,12 @@ func Do(t testing.TB, method, rawURL string, headers map[string]string, body []b
 	return resp.StatusCode
 }
 
+// ETag is the ETag the server gives b.
+func ETag(b []byte) string {
+	sum := md5.Sum(b) //nolint:gosec // an ETag, as S3 computes it; not security
+	return `"` + hex.EncodeToString(sum[:]) + `"`
+}
+
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 32<<20))
 	if err != nil {
@@ -168,6 +178,20 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodPut:
+		if src := r.Header.Get("X-Amz-Copy-Source"); src != "" {
+			skey, ok := strings.CutPrefix(src, "/"+Bucket+"/")
+			o, found := s.objects[skey]
+			switch {
+			case !ok || !found:
+				w.WriteHeader(http.StatusNotFound)
+			case r.Header.Get("X-Amz-Copy-Source-If-Match") != ETag(o.Body):
+				w.WriteHeader(http.StatusPreconditionFailed)
+			default:
+				s.objects[key] = Object{Body: append([]byte(nil), o.Body...), ContentType: o.ContentType}
+				_, _ = io.WriteString(w, "<CopyObjectResult><ETag>"+ETag(o.Body)+"</ETag></CopyObjectResult>")
+			}
+			return
+		}
 		s.objects[key] = Object{Body: body, ContentType: r.Header.Get("Content-Type")}
 		w.WriteHeader(http.StatusOK)
 	case http.MethodHead, http.MethodGet:
@@ -176,11 +200,31 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
+		if m := r.Header.Get("If-Match"); m != "" && m != ETag(o.Body) {
+			w.WriteHeader(http.StatusPreconditionFailed)
+			return
+		}
+		out, code := o.Body, http.StatusOK
+		if rg := r.Header.Get("Range"); rg != "" {
+			var start, end int
+			if _, err := fmt.Sscanf(rg, "bytes=%d-%d", &start, &end); err != nil || start != 0 {
+				w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+				return
+			}
+			if end+1 < len(out) {
+				out = out[:end+1]
+			}
+			code = http.StatusPartialContent
+		}
 		w.Header().Set("Content-Type", o.ContentType)
-		w.Header().Set("Content-Length", strconv.Itoa(len(o.Body)))
-		w.WriteHeader(http.StatusOK)
+		w.Header().Set("ETag", ETag(o.Body))
+		w.Header().Set("Content-Length", strconv.Itoa(len(out)))
+		if r.Method == http.MethodHead {
+			w.Header().Set("Content-Length", strconv.Itoa(len(o.Body)))
+		}
+		w.WriteHeader(code)
 		if r.Method == http.MethodGet {
-			_, _ = w.Write(o.Body)
+			_, _ = w.Write(out)
 		}
 	case http.MethodDelete:
 		delete(s.objects, key)

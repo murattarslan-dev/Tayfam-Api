@@ -406,22 +406,19 @@ type Upload struct {
 	TayfaID         pgtype.UUID
 	Purpose         string
 	Status          string
-	ContentType     string
-	SizeBytes       int64
 	R2Key           string
-	OutputType      pgtype.Text
-	StoredBytes     pgtype.Int8
+	PreviewType     string
+	PreviewBytes    int64
+	FullType        string
+	FullBytes       int64
 	Width           pgtype.Int4
 	Height          pgtype.Int4
 	RejectReason    pgtype.Text
-	Attempts        int32
-	RunAfter        pgtype.Timestamptz
 	AttachedType    pgtype.Text
 	AttachedID      pgtype.UUID
 	AttachedAt      pgtype.Timestamptz
 	ClientRequestID pgtype.UUID
 	CreatedAt       pgtype.Timestamptz
-	UploadedAt      pgtype.Timestamptz
 	ReadyAt         pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 }

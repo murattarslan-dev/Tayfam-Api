@@ -38,11 +38,10 @@ spec:
   template:
     spec:
       containers:
-        # Görüntü işleme (ADR-0020): aynı anda tek dosya, en çok 25 MP.
         - name: core
           resources:
             requests: { cpu: 50m, memory: 64Mi }
-            limits: { memory: 384Mi }
+            limits: { memory: 256Mi }
 ---
 apiVersion: apps/v1
 kind: Deployment

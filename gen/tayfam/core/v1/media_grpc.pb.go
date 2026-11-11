@@ -31,41 +31,50 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // MediaService holds uploaded images: avatars, fishing catch photos and
-// tayfa and event covers (issue #135; ADR-0007, data model v14 "Dosyalar",
-// "Yüklenen dosya takibi").
+// tayfa and event covers (issue #135; ADR-0007, ADR-0020, data model v14
+// "Dosyalar", "Yüklenen dosya takibi").
 //
 // Authentication: the caller's access token (ADR-0004, ADR-0011). Service
 // tokens are refused. Requests never name the acting user: the owner of a
 // new upload is always the caller.
 //
-// Flow, step 1: CreateUpload checks the purpose, the declared type and
-// size, the caller's quota and rate limit, and returns a PUT link to object
-// storage that works for 5 minutes, for that one object, that content type
-// and that exact size. The file never passes through our servers.
+// The mobile client processes the image (ADR-0020): it reads the photo (HEIC
+// included), removes every piece of metadata (EXIF, GPS, XMP), applies the
+// orientation and encodes two variants as JPEG or WebP: preview (longest
+// side at most 400 px) and full (longest side at most 1600 px). The server
+// never decodes or re-encodes pixels; it checks headers only.
 //
-// Step 2: the client PUTs the file with exactly the returned headers.
+// Flow, step 1: CreateUpload declares the purpose and both variants (type
+// and exact size) and returns one presigned PUT per variant. The server
+// chooses the storage keys; a link works for 5 minutes, for that one object,
+// that content type and that exact size.
 //
-// Step 3: CompleteUpload. core checks that the object exists with that
-// size and queues it for processing (UPLOAD_STATUS_UPLOADED).
+// Step 2: the client PUTs each variant with exactly the returned headers.
+// The files never pass through our servers.
 //
-// Step 4: a worker reads the first bytes for the real type (the declared
-// type and the file name are not trusted), decodes the image, drops every
-// piece of metadata (EXIF, GPS, XMP, ICC, comments), applies the EXIF
-// orientation and encodes two sizes: preview (longest side 400 px) and
-// full (longest side 1600 px). The raw file is deleted. The upload ends
-// READY or REJECTED. Clients poll GetUpload.
+// Step 3: CompleteUpload with the full variant's width and height. core
+// checks both objects without decoding pixels: the stored size equals the
+// declared one; the first bytes are a JPEG or WebP of the declared type; the
+// header's dimensions match (full: the declared ones, longest side at most
+// 1600; preview: longest side at most 400 and the same aspect ratio within
+// one pixel of rounding); there is no EXIF (with it GPS), XMP or Photoshop
+// (IPTC) block, and in WebP no EXIF or XMP chunk or flag. Checked objects
+// are copied, unchanged, out of quarantine into storage the client cannot
+// write, so a link that is still valid cannot replace them. The upload ends
+// READY or REJECTED in the same call.
 //
-// Step 5: a READY upload is attached by the content that uses it: the
+// Step 4: a READY upload is attached by the content that uses it: the
 // avatar (identity's AccountService.SetAvatar, which calls AttachAvatar
 // with the caller's token), a tayfa or event cover (cover_upload_id) or a
 // fishing catch photo (photo_upload_id). Only the owner can attach an
 // upload, only once and only for its purpose.
 //
-// Step 6: GetMediaUrls returns 1-hour GET links for the uploads the caller
-// may see; responses elsewhere carry upload IDs only.
+// Step 5: GetMediaUrls returns 1-hour GET links for the uploads the caller
+// may see. Responses elsewhere carry upload IDs only; no API accepts a URL
+// or a storage key from a client.
 //
-// Cleanup: a PENDING upload is deleted after 24 hours, a READY upload that
-// nothing attached after 7 days, a REJECTED one after 24 hours. When the
+// Cleanup: a PENDING upload is deleted after 24 hours, a REJECTED one after
+// 24 hours, a READY upload that nothing attached after 7 days. When the
 // content goes (a cover or photo replaced, a catch, event or tayfa deleted
 // for good, the avatar changed or the account deleted) its media is deleted
 // too.
@@ -73,30 +82,30 @@ const (
 // Without object storage configured (no R2 credentials) every method is
 // UNAVAILABLE without ErrorInfo; core runs anyway.
 //
-// Storage keys, signed links, the access key and the file's content or
+// Storage keys, signed links, the access key and the files' content or
 // metadata never appear in logs, events, metrics or error messages.
 type MediaServiceClient interface {
-	// CreateUpload opens an upload and returns its PUT link.
-	// content_type: JPEG and PNG today; WebP and HEIC are part of the
-	// contract but refused with ERROR_REASON_MEDIA_TYPE_UNSUPPORTED until the
-	// processor supports them (ADR-0007, revision 2026-11-11).
-	// size_bytes: 1 to 10 MiB (10485760), otherwise ERROR_REASON_VALIDATION
-	// (field size_bytes).
+	// CreateUpload opens an upload and returns its PUT links.
+	// variants: exactly one PREVIEW and one FULL, each "image/jpeg" or
+	// "image/webp" and 1 to 10 MiB (10485760); otherwise
+	// ERROR_REASON_VALIDATION (field "variants").
 	// tayfa_id: required for COVER and CATCH_PHOTO (the caller must be an
 	// ACTIVE member, ERROR_REASON_TAYFA_NOT_FOUND otherwise, and the tayfa
 	// must not be read-only); must be empty for AVATAR.
-	// client_request_id: required; a repeat returns the same upload with a
-	// fresh link while it is PENDING (same purpose, type and size, otherwise
-	// ERROR_REASON_VALIDATION on client_request_id).
-	// Limits: ERROR_REASON_UPLOAD_RATE_LIMITED (uploads per hour per user),
-	// ERROR_REASON_UPLOAD_QUOTA_EXCEEDED (stored bytes per user).
+	// client_request_id: required; a repeat returns the same upload with
+	// fresh links while it is PENDING (the same purpose, tayfa and variants,
+	// otherwise ERROR_REASON_VALIDATION on client_request_id).
+	// Limits: ERROR_REASON_UPLOAD_RATE_LIMITED (30 uploads an hour per user),
+	// ERROR_REASON_UPLOAD_QUOTA_EXCEEDED (500 MiB of declared sizes per user).
 	CreateUpload(ctx context.Context, in *CreateUploadRequest, opts ...grpc.CallOption) (*CreateUploadResponse, error)
-	// CompleteUpload tells core that the PUT finished. The object must exist
-	// with the declared size: ERROR_REASON_UPLOAD_NOT_RECEIVED when it is not
-	// there yet (the client may retry while the link is valid; the upload
-	// stays PENDING). A size that differs rejects the upload. A repeat after
-	// the first success returns the upload unchanged. Only the owner may
-	// call it; any other upload is ERROR_REASON_UPLOAD_NOT_FOUND.
+	// CompleteUpload checks both variants (see the flow above) and makes the
+	// upload READY or REJECTED. width and height are the full variant's,
+	// 1 to 1600 (ERROR_REASON_VALIDATION otherwise). A variant that is not
+	// stored yet is ERROR_REASON_UPLOAD_NOT_RECEIVED and the upload stays
+	// PENDING (finish the PUT and call again while the link is valid). Storage
+	// trouble is UNAVAILABLE and the upload stays PENDING. A repeat after the
+	// upload left PENDING returns it unchanged. Only the owner may call it;
+	// any other upload is ERROR_REASON_UPLOAD_NOT_FOUND.
 	CompleteUpload(ctx context.Context, in *CompleteUploadRequest, opts ...grpc.CallOption) (*CompleteUploadResponse, error)
 	// GetUpload returns the caller's own upload (its status, and links once
 	// READY). Another user's upload is ERROR_REASON_UPLOAD_NOT_FOUND.
@@ -116,7 +125,7 @@ type MediaServiceClient interface {
 	// identity calls it with the caller's own token before it stores the
 	// avatar (AccountService.SetAvatar; identity does not own media). Another
 	// user's upload, an unknown one or one of another purpose is
-	// ERROR_REASON_UPLOAD_NOT_FOUND; one not READY yet is
+	// ERROR_REASON_UPLOAD_NOT_FOUND; one not READY is
 	// ERROR_REASON_UPLOAD_NOT_READY; one attached elsewhere is
 	// ERROR_REASON_UPLOAD_IN_USE. A repeat succeeds. The previous avatar is
 	// deleted when identity's user.profile_updated with the new avatar
@@ -187,41 +196,50 @@ func (c *mediaServiceClient) AttachAvatar(ctx context.Context, in *AttachAvatarR
 // for forward compatibility.
 //
 // MediaService holds uploaded images: avatars, fishing catch photos and
-// tayfa and event covers (issue #135; ADR-0007, data model v14 "Dosyalar",
-// "Yüklenen dosya takibi").
+// tayfa and event covers (issue #135; ADR-0007, ADR-0020, data model v14
+// "Dosyalar", "Yüklenen dosya takibi").
 //
 // Authentication: the caller's access token (ADR-0004, ADR-0011). Service
 // tokens are refused. Requests never name the acting user: the owner of a
 // new upload is always the caller.
 //
-// Flow, step 1: CreateUpload checks the purpose, the declared type and
-// size, the caller's quota and rate limit, and returns a PUT link to object
-// storage that works for 5 minutes, for that one object, that content type
-// and that exact size. The file never passes through our servers.
+// The mobile client processes the image (ADR-0020): it reads the photo (HEIC
+// included), removes every piece of metadata (EXIF, GPS, XMP), applies the
+// orientation and encodes two variants as JPEG or WebP: preview (longest
+// side at most 400 px) and full (longest side at most 1600 px). The server
+// never decodes or re-encodes pixels; it checks headers only.
 //
-// Step 2: the client PUTs the file with exactly the returned headers.
+// Flow, step 1: CreateUpload declares the purpose and both variants (type
+// and exact size) and returns one presigned PUT per variant. The server
+// chooses the storage keys; a link works for 5 minutes, for that one object,
+// that content type and that exact size.
 //
-// Step 3: CompleteUpload. core checks that the object exists with that
-// size and queues it for processing (UPLOAD_STATUS_UPLOADED).
+// Step 2: the client PUTs each variant with exactly the returned headers.
+// The files never pass through our servers.
 //
-// Step 4: a worker reads the first bytes for the real type (the declared
-// type and the file name are not trusted), decodes the image, drops every
-// piece of metadata (EXIF, GPS, XMP, ICC, comments), applies the EXIF
-// orientation and encodes two sizes: preview (longest side 400 px) and
-// full (longest side 1600 px). The raw file is deleted. The upload ends
-// READY or REJECTED. Clients poll GetUpload.
+// Step 3: CompleteUpload with the full variant's width and height. core
+// checks both objects without decoding pixels: the stored size equals the
+// declared one; the first bytes are a JPEG or WebP of the declared type; the
+// header's dimensions match (full: the declared ones, longest side at most
+// 1600; preview: longest side at most 400 and the same aspect ratio within
+// one pixel of rounding); there is no EXIF (with it GPS), XMP or Photoshop
+// (IPTC) block, and in WebP no EXIF or XMP chunk or flag. Checked objects
+// are copied, unchanged, out of quarantine into storage the client cannot
+// write, so a link that is still valid cannot replace them. The upload ends
+// READY or REJECTED in the same call.
 //
-// Step 5: a READY upload is attached by the content that uses it: the
+// Step 4: a READY upload is attached by the content that uses it: the
 // avatar (identity's AccountService.SetAvatar, which calls AttachAvatar
 // with the caller's token), a tayfa or event cover (cover_upload_id) or a
 // fishing catch photo (photo_upload_id). Only the owner can attach an
 // upload, only once and only for its purpose.
 //
-// Step 6: GetMediaUrls returns 1-hour GET links for the uploads the caller
-// may see; responses elsewhere carry upload IDs only.
+// Step 5: GetMediaUrls returns 1-hour GET links for the uploads the caller
+// may see. Responses elsewhere carry upload IDs only; no API accepts a URL
+// or a storage key from a client.
 //
-// Cleanup: a PENDING upload is deleted after 24 hours, a READY upload that
-// nothing attached after 7 days, a REJECTED one after 24 hours. When the
+// Cleanup: a PENDING upload is deleted after 24 hours, a REJECTED one after
+// 24 hours, a READY upload that nothing attached after 7 days. When the
 // content goes (a cover or photo replaced, a catch, event or tayfa deleted
 // for good, the avatar changed or the account deleted) its media is deleted
 // too.
@@ -229,30 +247,30 @@ func (c *mediaServiceClient) AttachAvatar(ctx context.Context, in *AttachAvatarR
 // Without object storage configured (no R2 credentials) every method is
 // UNAVAILABLE without ErrorInfo; core runs anyway.
 //
-// Storage keys, signed links, the access key and the file's content or
+// Storage keys, signed links, the access key and the files' content or
 // metadata never appear in logs, events, metrics or error messages.
 type MediaServiceServer interface {
-	// CreateUpload opens an upload and returns its PUT link.
-	// content_type: JPEG and PNG today; WebP and HEIC are part of the
-	// contract but refused with ERROR_REASON_MEDIA_TYPE_UNSUPPORTED until the
-	// processor supports them (ADR-0007, revision 2026-11-11).
-	// size_bytes: 1 to 10 MiB (10485760), otherwise ERROR_REASON_VALIDATION
-	// (field size_bytes).
+	// CreateUpload opens an upload and returns its PUT links.
+	// variants: exactly one PREVIEW and one FULL, each "image/jpeg" or
+	// "image/webp" and 1 to 10 MiB (10485760); otherwise
+	// ERROR_REASON_VALIDATION (field "variants").
 	// tayfa_id: required for COVER and CATCH_PHOTO (the caller must be an
 	// ACTIVE member, ERROR_REASON_TAYFA_NOT_FOUND otherwise, and the tayfa
 	// must not be read-only); must be empty for AVATAR.
-	// client_request_id: required; a repeat returns the same upload with a
-	// fresh link while it is PENDING (same purpose, type and size, otherwise
-	// ERROR_REASON_VALIDATION on client_request_id).
-	// Limits: ERROR_REASON_UPLOAD_RATE_LIMITED (uploads per hour per user),
-	// ERROR_REASON_UPLOAD_QUOTA_EXCEEDED (stored bytes per user).
+	// client_request_id: required; a repeat returns the same upload with
+	// fresh links while it is PENDING (the same purpose, tayfa and variants,
+	// otherwise ERROR_REASON_VALIDATION on client_request_id).
+	// Limits: ERROR_REASON_UPLOAD_RATE_LIMITED (30 uploads an hour per user),
+	// ERROR_REASON_UPLOAD_QUOTA_EXCEEDED (500 MiB of declared sizes per user).
 	CreateUpload(context.Context, *CreateUploadRequest) (*CreateUploadResponse, error)
-	// CompleteUpload tells core that the PUT finished. The object must exist
-	// with the declared size: ERROR_REASON_UPLOAD_NOT_RECEIVED when it is not
-	// there yet (the client may retry while the link is valid; the upload
-	// stays PENDING). A size that differs rejects the upload. A repeat after
-	// the first success returns the upload unchanged. Only the owner may
-	// call it; any other upload is ERROR_REASON_UPLOAD_NOT_FOUND.
+	// CompleteUpload checks both variants (see the flow above) and makes the
+	// upload READY or REJECTED. width and height are the full variant's,
+	// 1 to 1600 (ERROR_REASON_VALIDATION otherwise). A variant that is not
+	// stored yet is ERROR_REASON_UPLOAD_NOT_RECEIVED and the upload stays
+	// PENDING (finish the PUT and call again while the link is valid). Storage
+	// trouble is UNAVAILABLE and the upload stays PENDING. A repeat after the
+	// upload left PENDING returns it unchanged. Only the owner may call it;
+	// any other upload is ERROR_REASON_UPLOAD_NOT_FOUND.
 	CompleteUpload(context.Context, *CompleteUploadRequest) (*CompleteUploadResponse, error)
 	// GetUpload returns the caller's own upload (its status, and links once
 	// READY). Another user's upload is ERROR_REASON_UPLOAD_NOT_FOUND.
@@ -272,7 +290,7 @@ type MediaServiceServer interface {
 	// identity calls it with the caller's own token before it stores the
 	// avatar (AccountService.SetAvatar; identity does not own media). Another
 	// user's upload, an unknown one or one of another purpose is
-	// ERROR_REASON_UPLOAD_NOT_FOUND; one not READY yet is
+	// ERROR_REASON_UPLOAD_NOT_FOUND; one not READY is
 	// ERROR_REASON_UPLOAD_NOT_READY; one attached elsewhere is
 	// ERROR_REASON_UPLOAD_IN_USE. A repeat succeeds. The previous avatar is
 	// deleted when identity's user.profile_updated with the new avatar

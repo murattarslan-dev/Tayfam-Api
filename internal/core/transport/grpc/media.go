@@ -14,7 +14,7 @@ import (
 // Media is what MediaServer needs from the app layer (media.Service).
 type Media interface {
 	CreateUpload(ctx context.Context, user id.ID, in media.CreateInput) (media.Created, error)
-	CompleteUpload(ctx context.Context, user, upload id.ID) (media.Upload, error)
+	CompleteUpload(ctx context.Context, user, upload id.ID, width, height int) (media.Upload, error)
 	GetUpload(ctx context.Context, user, upload id.ID) (media.Upload, error)
 	MediaURLs(ctx context.Context, viewer id.ID, ids []id.ID) ([]media.URLs, error)
 	AttachAvatar(ctx context.Context, user, upload id.ID) error
@@ -41,20 +41,31 @@ var uploadPurposes = map[corev1.UploadPurpose]string{
 }
 
 var uploadStatuses = map[string]corev1.UploadStatus{
-	media.StatusPending:    corev1.UploadStatus_UPLOAD_STATUS_PENDING,
-	media.StatusUploaded:   corev1.UploadStatus_UPLOAD_STATUS_UPLOADED,
-	media.StatusProcessing: corev1.UploadStatus_UPLOAD_STATUS_PROCESSING,
-	media.StatusReady:      corev1.UploadStatus_UPLOAD_STATUS_READY,
-	media.StatusRejected:   corev1.UploadStatus_UPLOAD_STATUS_REJECTED,
+	media.StatusPending:  corev1.UploadStatus_UPLOAD_STATUS_PENDING,
+	media.StatusReady:    corev1.UploadStatus_UPLOAD_STATUS_READY,
+	media.StatusRejected: corev1.UploadStatus_UPLOAD_STATUS_REJECTED,
 }
 
 var rejectReasons = map[string]corev1.UploadRejectReason{
-	"not_image":        corev1.UploadRejectReason_UPLOAD_REJECT_REASON_NOT_IMAGE,
-	"unsupported_type": corev1.UploadRejectReason_UPLOAD_REJECT_REASON_UNSUPPORTED_TYPE,
-	"too_large":        corev1.UploadRejectReason_UPLOAD_REJECT_REASON_TOO_LARGE,
-	"corrupt":          corev1.UploadRejectReason_UPLOAD_REJECT_REASON_CORRUPT,
-	"size_mismatch":    corev1.UploadRejectReason_UPLOAD_REJECT_REASON_SIZE_MISMATCH,
-	"failed":           corev1.UploadRejectReason_UPLOAD_REJECT_REASON_FAILED,
+	"not_image":          corev1.UploadRejectReason_UPLOAD_REJECT_REASON_NOT_IMAGE,
+	"unsupported_type":   corev1.UploadRejectReason_UPLOAD_REJECT_REASON_UNSUPPORTED_TYPE,
+	"metadata_present":   corev1.UploadRejectReason_UPLOAD_REJECT_REASON_METADATA_PRESENT,
+	"dimension_mismatch": corev1.UploadRejectReason_UPLOAD_REJECT_REASON_DIMENSION_MISMATCH,
+	"size_mismatch":      corev1.UploadRejectReason_UPLOAD_REJECT_REASON_SIZE_MISMATCH,
+	"too_large":          corev1.UploadRejectReason_UPLOAD_REJECT_REASON_TOO_LARGE,
+	"failed":             corev1.UploadRejectReason_UPLOAD_REJECT_REASON_FAILED,
+}
+
+var variantKinds = map[corev1.VariantKind]string{
+	corev1.VariantKind_VARIANT_KIND_PREVIEW: media.KindPreview,
+	corev1.VariantKind_VARIANT_KIND_FULL:    media.KindFull,
+}
+
+func kindToProto(k string) corev1.VariantKind {
+	if k == media.KindPreview {
+		return corev1.VariantKind_VARIANT_KIND_PREVIEW
+	}
+	return corev1.VariantKind_VARIANT_KIND_FULL
 }
 
 func purposeToProto(p string) corev1.UploadPurpose {
@@ -80,7 +91,8 @@ func uploadToProto(u media.Upload) *corev1.Upload {
 
 func urlsToProto(u media.URLs) *corev1.MediaUrls {
 	return &corev1.MediaUrls{
-		UploadId: u.UploadID.String(), PreviewUrl: u.Preview, FullUrl: u.Full, ContentType: u.ContentType,
+		UploadId: u.UploadID.String(), PreviewUrl: u.Preview, PreviewContentType: u.PreviewContentType,
+		FullUrl: u.Full, FullContentType: u.FullContentType,
 		Width: int32(u.Width), Height: int32(u.Height), ExpireTime: timestamppb.New(u.Expires), //nolint:gosec // at most 1600
 	}
 }
@@ -119,9 +131,16 @@ func (s *MediaServer) CreateUpload(ctx context.Context, req *corev1.CreateUpload
 	if !ok {
 		return nil, validation("purpose")
 	}
-	in := media.CreateInput{
-		Purpose: purpose, ContentType: req.GetContentType(), SizeBytes: req.GetSizeBytes(),
-		ClientRequestID: req.GetClientRequestId(),
+	in := media.CreateInput{Purpose: purpose, ClientRequestID: req.GetClientRequestId()}
+	if len(req.GetVariants()) > 2 {
+		return nil, validation("variants")
+	}
+	for _, v := range req.GetVariants() {
+		kind, ok := variantKinds[v.GetKind()]
+		if !ok {
+			return nil, validation("variants")
+		}
+		in.Variants = append(in.Variants, media.VariantInput{Kind: kind, ContentType: v.GetContentType(), SizeBytes: v.GetSizeBytes()})
 	}
 	if req.GetTayfaId() != "" {
 		t, err := tayfaID(req.GetTayfaId())
@@ -135,9 +154,10 @@ func (s *MediaServer) CreateUpload(ctx context.Context, req *corev1.CreateUpload
 		return nil, errorStatus(ctx, s.log, err)
 	}
 	out := &corev1.CreateUploadResponse{Upload: uploadToProto(c.Upload)}
-	if c.Link.URL != "" {
-		out.UploadMethod, out.UploadUrl, out.UploadHeaders = "PUT", c.Link.URL, c.Link.Headers
-		out.UploadExpireTime = timestamppb.New(c.Link.Expires)
+	for _, l := range c.Links {
+		out.Targets = append(out.Targets, &corev1.UploadTarget{
+			Kind: kindToProto(l.Kind), Method: "PUT", Url: l.URL, Headers: l.Headers, ExpireTime: timestamppb.New(l.Expires),
+		})
 	}
 	return out, nil
 }
@@ -148,7 +168,7 @@ func (s *MediaServer) CompleteUpload(ctx context.Context, req *corev1.CompleteUp
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.app.CompleteUpload(ctx, u, up)
+	res, err := s.app.CompleteUpload(ctx, u, up, int(req.GetWidth()), int(req.GetHeight()))
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}

@@ -172,8 +172,6 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_UPLOAD_RATE_LIMITED, true
 	case errors.Is(err, apperr.ErrUploadQuotaExceeded):
 		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_UPLOAD_QUOTA_EXCEEDED, true
-	case errors.Is(err, apperr.ErrMediaTypeUnsupported):
-		return codes.InvalidArgument, corev1.ErrorReason_ERROR_REASON_MEDIA_TYPE_UNSUPPORTED, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }
