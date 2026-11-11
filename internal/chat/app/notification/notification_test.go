@@ -38,10 +38,21 @@ func (f *fakeMembers) IsActiveMember(_ context.Context, tayfa, user id.ID) (bool
 	return f.active[[2]id.ID{tayfa, user}], f.err
 }
 
+// fakeConversations stands in for dm's party check.
+type fakeConversations struct {
+	sees map[[2]id.ID]bool
+	err  error
+}
+
+func (f *fakeConversations) SeesConversation(_ context.Context, conversation, user id.ID) (bool, error) {
+	return f.sees[[2]id.ID{conversation, user}], f.err
+}
+
 type env struct {
 	pool    *pgxpool.Pool
 	svc     *Service
 	members *fakeMembers
+	convs   *fakeConversations
 	tayfa   id.ID
 }
 
@@ -49,9 +60,10 @@ func setup(t *testing.T) *env {
 	t.Helper()
 	pool := dbtest.New(t, "chat", chatdb.Migrations())
 	m := &fakeMembers{active: map[[2]id.ID]bool{}}
-	svc, err := New(Config{Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Members: m})
+	c := &fakeConversations{sees: map[[2]id.ID]bool{}}
+	svc, err := New(Config{Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Members: m, Conversations: c})
 	must(t, err)
-	return &env{pool: pool, svc: svc, members: m, tayfa: id.New()}
+	return &env{pool: pool, svc: svc, members: m, convs: c, tayfa: id.New()}
 }
 
 // store writes a notification request as chat's consumer does.
@@ -286,6 +298,109 @@ func TestTayfaPreference(t *testing.T) {
 }
 
 func second[T any](_ T, err error) error { return err }
+
+// A direct conversation is muted like a tayfa, by a party only: another
+// user's conversation is "not found" and nothing is written (IDOR, issue
+// #138). The notice stays in the list.
+func TestConversationPreference(t *testing.T) {
+	e := setup(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	e.svc.cfg.Now = func() time.Time { return now }
+	u, stranger, conv := id.New(), id.New(), id.New()
+	e.convs.sees[[2]id.ID{conv, u}] = true
+
+	until := now.Add(8 * time.Hour)
+	p, err := e.svc.SetConversationPreference(ctx, u, conv, LevelNone, until)
+	must(t, err)
+	if p.ScopeType != ScopeDMConversation || p.Scope != conv || p.Level != LevelNone || !p.MutedUntil.Equal(until) {
+		t.Fatalf("tercih = %+v", p)
+	}
+	prefs, err := e.svc.Preferences(ctx, u)
+	must(t, err)
+	if len(prefs) != 1 || prefs[0].ScopeType != ScopeDMConversation || prefs[0].Scope != conv || prefs[0].Level != LevelNone || !prefs[0].MutedUntil.Equal(until) {
+		t.Fatalf("tercihler = %+v", prefs)
+	}
+	// Changing it again replaces the row; a tayfa with the same ID is
+	// another scope.
+	_, err = e.svc.SetConversationPreference(ctx, u, conv, LevelNone, time.Time{})
+	must(t, err)
+	if prefs, _ := e.svc.Preferences(ctx, u); len(prefs) != 1 || prefs[0].Level != LevelNone || !prefs[0].MutedUntil.IsZero() {
+		t.Fatalf("güncellenen tercih = %+v", prefs)
+	}
+	// Muted: the notice is still listed.
+	notice := Request{Event: id.New(), Type: TypeDMMessage, TargetType: TargetDMConversation, Target: conv, Recipients: []id.ID{u}, Unread: 1}
+	must(t, pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error { return Store(ctx, store.New(tx), notice) }))
+	if list, _, _ := e.svc.List(ctx, u, 10, ""); len(list) != 1 || list[0].Target != conv {
+		t.Fatalf("sessizdeki DM bildirimi listede yok: %+v", list)
+	}
+
+	// Not a party (another user's conversation, a missing one or a request
+	// the stranger declined): CONVERSATION_NOT_FOUND, nothing written for
+	// anyone.
+	for _, c := range []id.ID{conv, id.New()} {
+		if _, err := e.svc.SetConversationPreference(ctx, stranger, c, LevelNone, time.Time{}); !errors.Is(err, apperr.ErrConversationNotFound) {
+			t.Fatalf("taraf olmayan: %v", err)
+		}
+		if _, err := e.svc.SetConversationPreference(ctx, stranger, c, LevelAll, time.Time{}); !errors.Is(err, apperr.ErrConversationNotFound) {
+			t.Fatalf("taraf olmayan sıfırlama: %v", err)
+		}
+	}
+	if prefs, _ := e.svc.Preferences(ctx, stranger); len(prefs) != 0 {
+		t.Fatal("taraf olmayanın tercihi yazıldı")
+	}
+	// The stranger's reset did not touch the party's row.
+	if prefs, _ := e.svc.Preferences(ctx, u); len(prefs) != 1 {
+		t.Fatal("başkasının sıfırlaması tarafın tercihini sildi")
+	}
+	// A failing check passes through and writes nothing.
+	e.convs.err = errors.New("veritabanı")
+	if _, err := e.svc.SetConversationPreference(ctx, u, conv, LevelAll, time.Time{}); err == nil || errors.Is(err, apperr.ErrConversationNotFound) {
+		t.Fatalf("kontrol hatası: %v", err)
+	}
+	e.convs.err = nil
+	if prefs, _ := e.svc.Preferences(ctx, u); len(prefs) != 1 {
+		t.Fatal("kontrol hatasında tercih değişti")
+	}
+	// Validation comes before the party check: no existence leak.
+	for name, err := range map[string]error{
+		"seviye": second(e.svc.SetConversationPreference(ctx, stranger, conv, "loud", time.Time{})),
+		// DMs have no mentions level (platform owner, 2026-11-11).
+		"mentions":          second(e.svc.SetConversationPreference(ctx, u, conv, LevelMentions, time.Time{})),
+		"mentions, süreli":  second(e.svc.SetConversationPreference(ctx, u, conv, LevelMentions, until)),
+		"mentions, yabancı": second(e.svc.SetConversationPreference(ctx, stranger, conv, LevelMentions, time.Time{})),
+		"geçmiş":            second(e.svc.SetConversationPreference(ctx, u, conv, LevelNone, now.Add(-time.Minute))),
+		"çok uzak":          second(e.svc.SetConversationPreference(ctx, u, conv, LevelNone, now.Add(MaxMuteAhead+time.Hour))),
+		"all ile süreli":    second(e.svc.SetConversationPreference(ctx, u, conv, LevelAll, until)),
+	} {
+		var v *apperr.ValidationError
+		if !errors.As(err, &v) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if prefs, _ := e.svc.Preferences(ctx, u); len(prefs) != 1 || prefs[0].Level != LevelNone {
+		t.Fatalf("reddedilen mentions tercihi değiştirdi: %+v", prefs)
+	}
+	// The database refuses it too, and keeps it for tayfas.
+	if _, err := e.pool.Exec(ctx, `INSERT INTO notification_preferences (user_id, scope_type, scope_id, level) VALUES ($1, 'dm_conversation', $2, 'mentions')`, id.New().PG(), id.New().PG()); err == nil {
+		t.Fatal("veritabanı DM için mentions kabul etti")
+	}
+	if _, err := e.pool.Exec(ctx, `INSERT INTO notification_preferences (user_id, scope_type, scope_id, level) VALUES ($1, 'tayfa', $2, 'mentions')`, id.New().PG(), id.New().PG()); err != nil {
+		t.Fatalf("tayfa için mentions: %v", err)
+	}
+	// Back to all removes the row.
+	_, err = e.svc.SetConversationPreference(ctx, u, conv, LevelAll, time.Time{})
+	must(t, err)
+	if prefs, _ := e.svc.Preferences(ctx, u); len(prefs) != 0 {
+		t.Fatal("varsayılana dönünce satır kaldı")
+	}
+	// Account deletion removes the user's DM preferences too.
+	_, err = e.svc.SetConversationPreference(ctx, u, conv, LevelNone, time.Time{})
+	must(t, err)
+	must(t, pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error { return Cleanup(ctx, store.New(tx), u) }))
+	if prefs, _ := e.svc.Preferences(ctx, u); len(prefs) != 0 {
+		t.Fatal("hesap silinince DM tercihi kaldı")
+	}
+}
 
 // TestReportResolvedHasNoActor: the reporter is never told who handled
 // their report (issue #76), so a report_resolved with an actor is refused.

@@ -27,9 +27,12 @@ import (
 
 type fakeNotifications struct {
 	caller id.ID
+	scope  id.ID
 	level  string
 	until  time.Time
 	list   []notification.Notification
+	// convErr is SetConversationPreference's answer.
+	convErr error
 }
 
 func (f *fakeNotifications) List(_ context.Context, caller id.ID, _ int32, _ string) ([]notification.Notification, string, error) {
@@ -60,6 +63,14 @@ func (f *fakeNotifications) Preferences(_ context.Context, caller id.ID) ([]noti
 func (f *fakeNotifications) SetTayfaPreference(_ context.Context, caller, tayfa id.ID, level string, until time.Time) (notification.Preference, error) {
 	f.caller, f.level, f.until = caller, level, until
 	return notification.Preference{ScopeType: notification.ScopeTayfa, Scope: tayfa, Level: level, MutedUntil: until}, nil
+}
+
+func (f *fakeNotifications) SetConversationPreference(_ context.Context, caller, conversation id.ID, level string, until time.Time) (notification.Preference, error) {
+	f.caller, f.scope, f.level, f.until = caller, conversation, level, until
+	if f.convErr != nil {
+		return notification.Preference{}, f.convErr
+	}
+	return notification.Preference{ScopeType: notification.ScopeDMConversation, Scope: conversation, Level: level, MutedUntil: until}, nil
 }
 
 func notificationConn(t *testing.T, c *satest.Cluster, app Notifications) (chatv1.NotificationServiceClient, *auth.Signer) {
@@ -155,5 +166,68 @@ func TestNotificationServiceCaller(t *testing.T) {
 	}
 	if _, err := client.SetTayfaNotificationPreference(ctx, &chatv1.SetTayfaNotificationPreferenceRequest{TayfaId: tf.String()}); status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("seviyesiz: %v", err)
+	}
+}
+
+// The conversation preference acts for the verified caller only; another
+// user's conversation is NOT_FOUND with the conversation reason, and the
+// request carries no user field to act for someone else (issue #138).
+func TestConversationNotificationPreference(t *testing.T) {
+	c := satest.New(t)
+	app := &fakeNotifications{}
+	client, signer := notificationConn(t, c, app)
+	user, conv := id.New(), id.New()
+	tok, _, err := signer.Issue(user.String(), id.New().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := auth.WithToken(context.Background(), tok)
+
+	until := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+	p, err := client.SetConversationNotificationPreference(ctx, &chatv1.SetConversationNotificationPreferenceRequest{
+		ConversationId: conv.String(), Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_NONE, MuteUntil: timestamppb.New(until),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := p.GetPreference()
+	if app.caller != user || app.scope != conv || app.level != notification.LevelNone || !app.until.Equal(until) ||
+		got.GetScopeType() != chatv1.NotificationScopeType_NOTIFICATION_SCOPE_TYPE_DM_CONVERSATION || got.GetScopeId() != conv.String() ||
+		!got.GetMuteUntil().AsTime().Equal(until) {
+		t.Fatalf("tercih = %v", p)
+	}
+
+	for name, req := range map[string]*chatv1.SetConversationNotificationPreferenceRequest{
+		"seviyesiz":     {ConversationId: conv.String()},
+		"bozuk kimlik":  {ConversationId: "x", Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_NONE},
+		"bozuk süre":    {ConversationId: conv.String(), Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_NONE, MuteUntil: &timestamppb.Timestamp{Nanos: -1}},
+		"bilinmeyen sv": {ConversationId: conv.String(), Level: chatv1.NotificationLevel(42)},
+	} {
+		if _, err := client.SetConversationNotificationPreference(ctx, req); status.Code(err) != codes.InvalidArgument {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+
+	// MENTIONS reaches the app, which refuses it for a conversation.
+	app.convErr = apperr.Validation("level")
+	if _, err := client.SetConversationNotificationPreference(ctx, &chatv1.SetConversationNotificationPreferenceRequest{
+		ConversationId: conv.String(), Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_MENTIONS,
+	}); status.Code(err) != codes.InvalidArgument || app.level != notification.LevelMentions {
+		t.Fatalf("mentions: %v", err)
+	}
+
+	app.convErr = apperr.ErrConversationNotFound
+	_, err = client.SetConversationNotificationPreference(ctx, &chatv1.SetConversationNotificationPreferenceRequest{
+		ConversationId: id.New().String(), Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_NONE,
+	})
+	if code, reason, _ := reasonOf(err); code != codes.NotFound || reason != chatv1.ErrorReason_ERROR_REASON_CONVERSATION_NOT_FOUND.String() {
+		t.Fatalf("başkasının konuşması: %v", err)
+	}
+
+	svcCtx := auth.WithToken(context.Background(), c.ServiceToken(t, coreSA, "chat.tayfam.internal"))
+	if _, err := client.SetConversationNotificationPreference(svcCtx, &chatv1.SetConversationNotificationPreferenceRequest{
+		ConversationId: conv.String(), Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_NONE,
+	}); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("servis token'ı: %v", err)
 	}
 }

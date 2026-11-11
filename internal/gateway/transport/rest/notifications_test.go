@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
@@ -87,6 +88,13 @@ func (f *fakeChat) SetTayfaNotificationPreference(ctx context.Context, in *chatv
 	}}, f.record(ctx, in)
 }
 
+func (f *fakeChat) SetConversationNotificationPreference(ctx context.Context, in *chatv1.SetConversationNotificationPreferenceRequest, _ ...grpc.CallOption) (*chatv1.SetConversationNotificationPreferenceResponse, error) {
+	return &chatv1.SetConversationNotificationPreferenceResponse{Preference: &chatv1.NotificationPreference{
+		ScopeType: chatv1.NotificationScopeType_NOTIFICATION_SCOPE_TYPE_DM_CONVERSATION, ScopeId: in.GetConversationId(), Level: in.GetLevel(),
+		MuteUntil: in.GetMuteUntil(), UpdateTime: timestamppb.New(t0),
+	}}, f.record(ctx, in)
+}
+
 func testChatDeps(f *fakeChat) ChatDeps {
 	return ChatDeps{
 		Notifications: f, Channels: f, DirectMessages: f, E2E: f, Push: f, RealtimeURL: &url.URL{Scheme: "http", Host: "127.0.0.1:1"},
@@ -107,6 +115,7 @@ func TestNotificationRoutes(t *testing.T) {
 	f := &fakeChat{}
 	h := chatRouter(f)
 	pref := "/v1/notification-preferences/tayfas/" + tayfaID
+	convPref := "/v1/notification-preferences/conversations/" + conversationID
 	for _, tc := range []struct {
 		method, path, body string
 		code               int
@@ -121,6 +130,10 @@ func TestNotificationRoutes(t *testing.T) {
 			TayfaId: tayfaID, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_NONE, MuteUntil: &timestamppb.Timestamp{Seconds: 1893553445}}},
 		{"PUT", pref, `{"level":"mentions"}`, 200, &chatv1.SetTayfaNotificationPreferenceRequest{TayfaId: tayfaID, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_MENTIONS}},
 		{"DELETE", pref, "", 204, &chatv1.SetTayfaNotificationPreferenceRequest{TayfaId: tayfaID, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_ALL}},
+		{"PUT", convPref, `{"level":"none","mute_until":"2030-01-02T03:04:05Z"}`, 200, &chatv1.SetConversationNotificationPreferenceRequest{
+			ConversationId: conversationID, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_NONE, MuteUntil: &timestamppb.Timestamp{Seconds: 1893553445}}},
+		{"PUT", convPref, `{"level":"none"}`, 200, &chatv1.SetConversationNotificationPreferenceRequest{ConversationId: conversationID, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_NONE}},
+		{"DELETE", convPref, "", 204, &chatv1.SetConversationNotificationPreferenceRequest{ConversationId: conversationID, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_ALL}},
 	} {
 		w := as(h, tc.method, tc.path, tc.body)
 		got, tok, _ := f.last()
@@ -145,6 +158,15 @@ func TestNotificationRoutes(t *testing.T) {
 	if c := decodeBody[unreadCountJSON](t, as(h, "GET", "/v1/notifications/unread-count", "")); c.UnreadCount != 12 {
 		t.Fatalf("okunmamış: %+v", c)
 	}
+	// The DM preference answers like the tayfa one, with its own scope.
+	w = as(h, "PUT", convPref, `{"level":"none","mute_until":"2030-01-02T03:04:05Z"}`)
+	cp := decodeBody[notificationPreferenceJSON](t, w)
+	if cp.ScopeType != "dm_conversation" || cp.ScopeID != conversationID || cp.Level != "none" || cp.MuteUntil == nil || !cp.MuteUntil.Equal(time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)) {
+		t.Fatalf("konuşma tercihi: %s", w.Body)
+	}
+	if w := as(h, "DELETE", convPref, ""); w.Code != 204 || w.Body.Len() != 0 {
+		t.Fatalf("konuşma tercihi sıfırlama: %d %s", w.Code, w.Body)
+	}
 	p := decodeBody[notificationPreferenceListJSON](t, as(h, "GET", "/v1/notification-preferences", ""))
 	if len(p.Preferences) != 1 || p.Preferences[0].Level != "none" || p.Preferences[0].ScopeType != "tayfa" || p.Preferences[0].MuteUntil != nil {
 		t.Fatalf("tercihler: %+v", p)
@@ -155,14 +177,23 @@ func TestNotificationBadRequests(t *testing.T) {
 	f := &fakeChat{}
 	h := chatRouter(f)
 	pref := "/v1/notification-preferences/tayfas/" + tayfaID
+	convPref := "/v1/notification-preferences/conversations/" + conversationID
 	for name, tc := range map[string]struct{ method, path, body string }{
-		"bozuk bildirim id": {"PUT", "/v1/notifications/x/read", ""},
-		"bozuk sayfa":       {"GET", "/v1/notifications?page_size=101", ""},
-		"bozuk tayfa":       {"PUT", "/v1/notification-preferences/tayfas/x", `{"level":"none"}`},
-		"seviye yok":        {"PUT", pref, `{}`},
-		"bilinmeyen seviye": {"PUT", pref, `{"level":"loud"}`},
-		"bozuk süre":        {"PUT", pref, `{"level":"none","mute_until":"yarın"}`},
-		"başkası adına":     {"PUT", pref, `{"level":"none","user_id":"` + userID + `"}`},
+		"bozuk bildirim id":       {"PUT", "/v1/notifications/x/read", ""},
+		"bozuk sayfa":             {"GET", "/v1/notifications?page_size=101", ""},
+		"bozuk tayfa":             {"PUT", "/v1/notification-preferences/tayfas/x", `{"level":"none"}`},
+		"seviye yok":              {"PUT", pref, `{}`},
+		"bilinmeyen seviye":       {"PUT", pref, `{"level":"loud"}`},
+		"bozuk süre":              {"PUT", pref, `{"level":"none","mute_until":"yarın"}`},
+		"başkası adına":           {"PUT", pref, `{"level":"none","user_id":"` + userID + `"}`},
+		"bozuk konuşma":           {"PUT", "/v1/notification-preferences/conversations/x", `{"level":"none"}`},
+		"bozuk konuşma sil":       {"DELETE", "/v1/notification-preferences/conversations/x", ""},
+		"konuşma seviyesiz":       {"PUT", convPref, `{}`},
+		"konuşma bilinmeyen":      {"PUT", convPref, `{"level":"loud"}`},
+		"konuşma bozuk süre":      {"PUT", convPref, `{"level":"none","mute_until":"yarın"}`},
+		"konuşma başkası":         {"PUT", convPref, `{"level":"none","user_id":"` + userID + `"}`},
+		"konuşma mentions":        {"PUT", convPref, `{"level":"mentions"}`},
+		"konuşma mentions süreli": {"PUT", convPref, `{"level":"mentions","mute_until":"2030-01-02T03:04:05Z"}`},
 	} {
 		if w := as(h, tc.method, tc.path, tc.body); w.Code != 400 || problemType(t, w) != "invalid-request" {
 			t.Errorf("%s: %d %s", name, w.Code, problemType(t, w))
@@ -192,6 +223,34 @@ func TestNotificationErrors(t *testing.T) {
 		w := as(chatRouter(f), "PUT", "/v1/notifications/"+notificationID+"/read", "")
 		if w.Code != tc.status || problemType(t, w) != tc.typ {
 			t.Errorf("%v: %d %s", tc.err, w.Code, problemType(t, w))
+		}
+	}
+}
+
+// Another user's conversation is answered like a missing one: chat's
+// CONVERSATION_NOT_FOUND becomes 404 conversation-not-found with no
+// upstream detail (issue #138).
+func TestConversationPreferenceErrors(t *testing.T) {
+	path := "/v1/notification-preferences/conversations/" + conversationID
+	for _, tc := range []struct {
+		method, body string
+		err          error
+		status       int
+		typ          string
+	}{
+		{"PUT", `{"level":"none"}`, chatErr(codes.NotFound, chatv1.ErrorReason_ERROR_REASON_CONVERSATION_NOT_FOUND.String()), 404, "conversation-not-found"},
+		{"DELETE", "", chatErr(codes.NotFound, chatv1.ErrorReason_ERROR_REASON_CONVERSATION_NOT_FOUND.String()), 404, "conversation-not-found"},
+		{"PUT", `{"level":"all","mute_until":"2030-01-02T03:04:05Z"}`, chatErr(codes.InvalidArgument, chatv1.ErrorReason_ERROR_REASON_VALIDATION.String()), 400, "invalid-request"},
+		{"PUT", `{"level":"none"}`, status.Error(codes.Unavailable, "yok"), 503, "unavailable"},
+	} {
+		f := &fakeChat{err: tc.err}
+		w := as(chatRouter(f), tc.method, path, tc.body)
+		if w.Code != tc.status || problemType(t, w) != tc.typ {
+			t.Errorf("%s %v: %d %s", tc.method, tc.err, w.Code, problemType(t, w))
+		}
+		// No upstream detail leaks (the instance is the caller's own path).
+		if strings.Contains(w.Body.String(), "istek reddedildi") || strings.Contains(w.Body.String(), "yok") {
+			t.Errorf("%s: hata cevabı iç ayrıntı taşıyor: %s", tc.method, w.Body)
 		}
 	}
 }

@@ -81,6 +81,8 @@ type Querier interface {
 	CreateNotifications(ctx context.Context, arg CreateNotificationsParams) (int64, error)
 	// Alıcı isteği reddetti.
 	DeclineConversation(ctx context.Context, arg DeclineConversationParams) (int64, error)
+	// Konuşmanın bildirim tercihleri de gider (issue #138): scope_id çok
+	// biçimli olduğu için foreign key yoktur, silme burada aynı ifadededir.
 	DeleteAbandonedConversations(ctx context.Context) error
 	DeleteArchiveConversation(ctx context.Context, arg DeleteArchiveConversationParams) (int64, error)
 	DeleteDevice(ctx context.Context, arg DeleteDeviceParams) (DeleteDeviceRow, error)
