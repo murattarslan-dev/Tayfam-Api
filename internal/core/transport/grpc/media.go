@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"log/slog"
+	"net/http"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -144,7 +145,7 @@ func (s *MediaServer) CreateUpload(ctx context.Context, req *corev1.CreateUpload
 	out := &corev1.CreateUploadResponse{Upload: uploadToProto(c.Upload)}
 	for _, l := range c.Links {
 		out.Targets = append(out.Targets, &corev1.UploadTarget{
-			Kind: kindToProto(l.Kind), Method: "PUT", Url: l.URL, Headers: l.Headers, ExpireTime: timestamppb.New(l.Expires),
+			Kind: kindToProto(l.Kind), Method: http.MethodPut, Url: l.URL, Headers: l.Headers, ExpireTime: timestamppb.New(l.Expires),
 		})
 	}
 	return out, nil

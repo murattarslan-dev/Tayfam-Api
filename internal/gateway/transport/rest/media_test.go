@@ -78,7 +78,7 @@ func TestCreateUpload(t *testing.T) {
 		t.Fatalf("%d %s", w.Code, w.Body)
 	}
 	got := decodeBody[uploadCreatedJSON](t, w)
-	if got.Upload.Status != "pending" || len(got.Targets) != 2 || got.Targets[0].Kind != "preview" || got.Targets[1].Method != "PUT" ||
+	if got.Upload.Status != "pending" || len(got.Targets) != 2 || got.Targets[0].Kind != "preview" || got.Targets[1].Method != http.MethodPut ||
 		got.Targets[1].Headers["Content-Length"] != "1234" || got.Targets[0].URL == "" {
 		t.Fatalf("yanıt: %+v", got)
 	}

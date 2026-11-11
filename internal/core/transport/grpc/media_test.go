@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -70,7 +71,7 @@ func TestMediaServer(t *testing.T) {
 	})
 	if err != nil || f.user != user || f.in.Purpose != media.PurposeCover || len(f.in.Variants) != 2 || f.in.Variants[1].Kind != media.KindFull ||
 		len(resp.GetTargets()) != 2 || resp.GetTargets()[1].GetKind() != corev1.VariantKind_VARIANT_KIND_FULL ||
-		resp.GetTargets()[0].GetMethod() != "PUT" || resp.GetTargets()[1].GetHeaders()["Content-Length"] != "2" ||
+		resp.GetTargets()[0].GetMethod() != http.MethodPut || resp.GetTargets()[1].GetHeaders()["Content-Length"] != "2" ||
 		resp.GetUpload().GetStatus() != corev1.UploadStatus_UPLOAD_STATUS_PENDING {
 		t.Fatalf("oluşturma: %v %v", resp, err)
 	}
