@@ -26,6 +26,11 @@ type Querier interface {
 	// Bir anahtar bir kez verilir: eşzamanlı çekmeler kilitli satırı atlar,
 	// seçilen satır aynı ifadede silinir. Kalmadıysa sonuç boştur.
 	ClaimOneTimePreKey(ctx context.Context, arg ClaimOneTimePreKeyParams) (ClaimOneTimePreKeyRow, error)
+	// Gönderim kuyruğu.
+	// Zamanı gelen işleri kiralar: deneme sayısı artar, iş kira süresi
+	// boyunca başka işçiye görünmez. İşçi düşerse iş kira bitince yeniden
+	// görünür. Bildirimin alanları birlikte döner.
+	ClaimPushJobs(ctx context.Context, arg ClaimPushJobsParams) ([]ClaimPushJobsRow, error)
 	ClearChannelCreator(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silindi (user.deleted): içerik kalır, yazar "Silinmiş kullanıcı".
 	ClearChannelMessageAuthor(ctx context.Context, userID pgtype.UUID) error
@@ -49,6 +54,7 @@ type Querier interface {
 	// okundu işaretinden sonraki mesajları (en fazla 100; liste ile aynı).
 	CountUnreadDirectMessages(ctx context.Context, arg CountUnreadDirectMessagesParams) (int32, error)
 	CountUnreadNotifications(ctx context.Context, arg CountUnreadNotificationsParams) (int64, error)
+	CountUserPushTokens(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// Tayfa kanalları ve kanal mesajları (issue #81). Her kanal sorgusu
 	// tayfa_id ile, her mesaj sorgusu tayfa kapsamında doğrulanmış bir
 	// channel_id ile çalışır (IDOR). Üyelik ve rol kontrolü uygulamada, core'un
@@ -83,12 +89,22 @@ type Querier interface {
 	DeleteDeviceLinkRequest(ctx context.Context, deviceID pgtype.UUID) error
 	DeleteE2EState(ctx context.Context, userID pgtype.UUID) error
 	DeleteEnvelopesFromSender(ctx context.Context, senderID pgtype.UUID) error
+	// FCM token'ı geçersiz dedi: yalnızca oturum hâlâ aynı token'la kayıtlıysa
+	// silinir (istemci bu arada yenilemiş olabilir).
+	DeleteInvalidPushToken(ctx context.Context, arg DeleteInvalidPushTokenParams) (int64, error)
 	DeleteLinkRequest(ctx context.Context, arg DeleteLinkRequestParams) error
 	DeleteMessageArchive(ctx context.Context, messageID pgtype.UUID) error
 	DeleteMessageEnvelopes(ctx context.Context, messageID pgtype.UUID) error
 	DeleteNotificationPreference(ctx context.Context, arg DeleteNotificationPreferenceParams) error
 	// 90 gün saklama: en eski satırlardan bir parti.
 	DeleteOldNotifications(ctx context.Context, arg DeleteOldNotificationsParams) (int64, error)
+	DeletePushJob(ctx context.Context, notificationID pgtype.UUID) error
+	// Çıkışta istemcinin isteği ve session.revoked.
+	DeletePushTokenBySession(ctx context.Context, sessionID pgtype.UUID) (int64, error)
+	// Aynı FCM token'ı başka bir oturumda (aynı cihazda başka hesap ya da eski
+	// oturum) kayıtlıysa o kayıt silinir: cihaz yalnızca son oturumun
+	// bildirimlerini alır.
+	DeletePushTokenElsewhere(ctx context.Context, arg DeletePushTokenElsewhereParams) error
 	// Tayfa kalıcı silindi (tayfa.purged): mesajlar ve okunma kayıtları CASCADE.
 	DeleteTayfaChannels(ctx context.Context, tayfaID pgtype.UUID) error
 	DeleteTayfaNotificationPreferences(ctx context.Context, tayfaID pgtype.UUID) error
@@ -102,6 +118,8 @@ type Querier interface {
 	DeleteUserNotificationPreferences(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silindi.
 	DeleteUserNotifications(ctx context.Context, userID pgtype.UUID) error
+	// Yaptırım ve hesap silme.
+	DeleteUserPushTokens(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// Yaptırım: bu andan önce verilmiş token'lar cihaz kaydedemez.
 	EndUserSessions(ctx context.Context, arg EndUserSessionsParams) error
 	// Birebir mesajda uçtan uca şifreleme, sunucu tarafı (issue #127; ADR-0018;
@@ -147,6 +165,8 @@ type Querier interface {
 	// mesaj (hangi kanalda olursa olsun; çağıran kanalı karşılaştırır).
 	GetMessageByRequest(ctx context.Context, arg GetMessageByRequestParams) (GetMessageByRequestRow, error)
 	GetMessageForUpdate(ctx context.Context, arg GetMessageForUpdateParams) (GetMessageForUpdateRow, error)
+	// Gönderimden önce okunan tercih (sessize alma; v14).
+	GetNotificationPreference(ctx context.Context, arg GetNotificationPreferenceParams) (GetNotificationPreferenceRow, error)
 	GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUserProfileRow, error)
 	// Moderatör veya yönetici silmesi: metin şifreli kalır, mesaj gizlenir.
 	HideMessage(ctx context.Context, arg HideMessageParams) (int64, error)
@@ -209,12 +229,24 @@ type Querier interface {
 	ListUnseenDevices(ctx context.Context, arg ListUnseenDevicesParams) ([]ListUnseenDevicesRow, error)
 	// Kullanıcının cihazları, numaraya göre.
 	ListUserDevices(ctx context.Context, userID pgtype.UUID) ([]ListUserDevicesRow, error)
+	// Gönderim için kullanıcının token'ları, en son yenilenen önce.
+	ListUserPushTokens(ctx context.Context, arg ListUserPushTokensParams) ([]ListUserPushTokensRow, error)
 	// Aynı iki kişinin eşzamanlı gönderimleri sırayla işlenir.
 	LockConversationByPair(ctx context.Context, arg LockConversationByPairParams) (LockConversationByPairRow, error)
 	LockDeviceBySession(ctx context.Context, arg LockDeviceBySessionParams) (LockDeviceBySessionRow, error)
 	// Aynı kullanıcının cihaz kaydı, eşleştirmesi ve anahtar yenilemesi sırayla
 	// işlenir.
 	LockE2EState(ctx context.Context, userID pgtype.UUID) (LockE2EStateRow, error)
+	// Push bildirimleri (issue #134, ADR-0019). Token oturuma bağlıdır; her
+	// yazma çağıranın oturumu (token'ın sid'i) ve kullanıcısıyla sınırlıdır.
+	// Token değeri hiçbir sorgunun hata mesajına girmez; sorgular yalnızca
+	// kimliklerle filtreler (token eşleşmesi hariç: aynı token başka oturumda
+	// kalmasın).
+	// Kayıt ile oturum bitişi ve yaptırım sırayla işlenir: kayıt önce
+	// kullanıcıyı, sonra oturumu kilitler; oturum bitişi oturumu, yaptırım
+	// kullanıcıyı kilitler. Böylece "bitti mi?" denetimi ile yazma arasında
+	// biten oturumun token'ı kalmaz.
+	LockPushKey(ctx context.Context, key pgtype.UUID) error
 	// Kişinin günlük istek sayımını sıraya sokar: aynı kişinin eşzamanlı
 	// istekleri sınırı birlikte aşamaz.
 	LockRequestLimit(ctx context.Context, userID pgtype.UUID) error
@@ -245,12 +277,18 @@ type Querier interface {
 	PurgeHistoryKeyShares(ctx context.Context, before pgtype.Timestamptz) (int64, error)
 	PurgeKeyEvents(ctx context.Context, before pgtype.Timestamptz) (int64, error)
 	PurgeLinkRequests(ctx context.Context, before pgtype.Timestamptz) (int64, error)
+	// Push kapalıyken ya da uzun kesintiden sonra kalan eski işler.
+	PurgeOldPushJobs(ctx context.Context, before pgtype.Timestamptz) (int64, error)
+	// 60 gün yenilenmeyen token'lar.
+	PurgeStalePushTokens(ctx context.Context, before pgtype.Timestamptz) (int64, error)
 	// Biten oturumlar.
 	RecordEndedSession(ctx context.Context, arg RecordEndedSessionParams) error
 	// Reddedeni listesinden çıkarır: konuşma bekleyen isteğe döner. Yalnızca
 	// reddeden taraf (istek açan değil) çıkarabilir; başkasınınki etkilenmez.
 	RestoreDeclinedRequest(ctx context.Context, arg RestoreDeclinedRequestParams) (int64, error)
 	RestoreMessage(ctx context.Context, arg RestoreMessageParams) (int64, error)
+	// Geçici hatadan sonra: yalnızca başarısız oturumlara, geri çekilerek.
+	RetryPushJob(ctx context.Context, arg RetryPushJobParams) error
 	// archived_at NULL: arşivden çıkar.
 	SetChannelArchived(ctx context.Context, arg SetChannelArchivedParams) (SetChannelArchivedRow, error)
 	SetLastDeviceNumber(ctx context.Context, arg SetLastDeviceNumberParams) error
@@ -261,6 +299,8 @@ type Querier interface {
 	TouchConversation(ctx context.Context, arg TouchConversationParams) error
 	// Görülme saatte en çok bir kez yazılır.
 	TouchDevice(ctx context.Context, arg TouchDeviceParams) error
+	// Kullanıcı başına en çok @keep token (en son yenilenenler) kalır.
+	TrimUserPushTokens(ctx context.Context, arg TrimUserPushTokensParams) (int64, error)
 	UpdateChannel(ctx context.Context, arg UpdateChannelParams) (UpdateChannelRow, error)
 	// Bekleyen (okunmamış) konuşma bildiriminin sayacını günceller ve türünü
 	// döner; yoksa sonuç boştur (yeni bildirim açılır).
@@ -268,6 +308,9 @@ type Querier interface {
 	UpdateKyberLastResortPreKey(ctx context.Context, arg UpdateKyberLastResortPreKeyParams) error
 	UpdateSignedPreKey(ctx context.Context, arg UpdateSignedPreKeyParams) error
 	UpsertNotificationPreference(ctx context.Context, arg UpsertNotificationPreferenceParams) error
+	// Oturumun token'ı (oturum başına bir). Oturum başka kullanıcıya ait
+	// olamaz; olursa satır değişmez.
+	UpsertPushToken(ctx context.Context, arg UpsertPushTokenParams) (int64, error)
 	// Profil kopyası (ADR-0009). Yalnızca identity'nin kullanıcı olaylarını
 	// uygulayan tüketici yazar.
 	// Daha yeni bir olay uygulanmışsa ya da profil silinmişse değişmez; etkilenen

@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package tayfam.chat.v1;
+
+// PushService registers the push (FCM) token of the caller's session
+// (issue #134; ADR-0019, ADR-0005 "Bildirimler").
+//
+// Authentication: the caller's access token (ADR-0004, ADR-0011). Service
+// tokens are refused. Requests never name the acting user.
+//
+// Token = session (ADR-0019 item 1, as ADR-0018's device = session): a
+// token belongs to the session (sid) of the caller's token, one per
+// session. When the session ends (sign-out, revoked elsewhere, sanction,
+// account deletion) the token is removed; a session that ended cannot
+// register one even while its access token is still valid
+// (UNAUTHENTICATED). A token not refreshed for 60 days is removed; clients
+// register it again on every start and when FCM rotates it.
+//
+// The token never appears in logs, events, metrics or error messages.
+// Rate limit: 10 registrations a minute per user (bursts of 5;
+// ERROR_REASON_RATE_LIMITED).
+service PushService {
+  // RegisterPushToken stores or replaces the push token of the caller's
+  // session and marks it fresh. The same token registered by another
+  // session (the device signed in with another account) moves to this one.
+  // A user keeps at most 10 tokens; the least recently refreshed go first.
+  // token: 1 to 1024 bytes of letters, digits and ":_-." (an FCM
+  // registration token); platform is required.
+  rpc RegisterPushToken(RegisterPushTokenRequest) returns (RegisterPushTokenResponse);
+
+  // UnregisterPushToken removes the push token of the caller's session (on
+  // sign-out, or when the user turns notifications off on the device).
+  // Without one it changes nothing.
+  rpc UnregisterPushToken(UnregisterPushTokenRequest) returns (UnregisterPushTokenResponse);
+}
+
+// PushPlatform is the device platform of a push token.
+enum PushPlatform {
+  PUSH_PLATFORM_UNSPECIFIED = 0;
+  PUSH_PLATFORM_ANDROID = 1;
+  PUSH_PLATFORM_IOS = 2;
+}
+
+message RegisterPushTokenRequest {
+  string token = 1;
+  PushPlatform platform = 2;
+}
+
+message RegisterPushTokenResponse {}
+
+message UnregisterPushTokenRequest {}
+
+message UnregisterPushTokenResponse {}

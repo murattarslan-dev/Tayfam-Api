@@ -87,7 +87,9 @@ Bunlar üç sorumluluk olduğu için bölünür:
 - identity `devices`: `id`, `user_id`, `platform`, `last_seen_at`. Cihazın
   varlığının tek kaynağıdır; `sessions.device_id` buna bağlıdır.
 - chat `device_keys`: `device_id`, `identity_key_public`, `registration_id`.
-- chat `push_tokens`: `device_id`, `push_token`.
+- chat `push_tokens`: `device_id`, `push_token`. 2026-11-10
+  ([ADR-0019](0019-push-bildirimleri.md)): `device_id` yerine `session_id`
+  (token = oturum, ADR-0018'deki cihaz = oturum ile aynı).
 
 identity bir cihazı silince (`device.removed`), chat o cihazın anahtarlarını,
 ön anahtarlarını, push token'ını ve bekleyen zarflarını siler ve
