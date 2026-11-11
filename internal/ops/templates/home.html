@@ -1,0 +1,20 @@
+{{define "home"}}{{template "head" .}}
+<h1>Secret işleri</h1>
+<p>Ortamı seçin, sonra yapmak istediğiniz işi açın. Değerler yalnızca bu bilgisayarda, doğrudan sops ile şifrelenir.</p>
+<nav class="tabs">
+  <a href="/?env=dev" {{if eq .Env "dev"}}aria-current="page"{{end}}>dev</a>
+  <a href="/?env=prod" {{if eq .Env "prod"}}aria-current="page"{{end}}>prod</a>
+</nav>
+{{template "notready" .}}
+<div class="cards">
+  <a class="card" href="/r2?env={{.Env}}"><h2>R2'yi bağla</h2><p>Dosya yükleme: core'un R2 erişim bilgisi ve R2 çıkış kuralı.</p></a>
+  <a class="card" href="/fcm?env={{.Env}}"><h2>Push'u aç</h2><p>Bildirimler: Firebase servis hesabı anahtarı ve chat'in internet çıkışı.</p></a>
+  <a class="card" href="/export?env={{.Env}}"><h2>Dışa aktarma anahtarı</h2><p>KVKK veri dışa aktarma için identity'nin sarma anahtarı.</p></a>
+</div>
+{{template "foot" .}}{{end}}
+
+{{define "denied"}}<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><title>Tayfam Ops</title><link rel="stylesheet" href="/static/style.css"></head>
+<body><main><h1>Erişim yok</h1>
+<p>Bu bağlantı geçersiz ya da daha önce kullanılmış. Tayfam Ops'u yeniden başlatın; tarayıcı yeni bağlantıyla açılır.</p></main></body></html>
+{{end}}

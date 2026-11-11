@@ -1,0 +1,19 @@
+{{define "fcm"}}{{template "head" .}}
+<p><a href="/?env={{.Env}}">← Ana sayfa</a></p>
+<h1>Push'u aç</h1>
+{{if .Result}}
+{{template "result" .}}
+<div class="box warn"><strong>İndirdiğiniz JSON dosyasını Windows'ta şimdi silin</strong> (Geri Dönüşüm Kutusu'ndan da). Araç dosyayı yalnızca belleğe okudu; Windows'taki kopyaya dokunmaz.</div>
+{{if .Result.OK}}{{template "next" (nextData .Env "chat" "push açık (FCM)")}}{{end}}
+{{else}}
+{{template "notready" .}}
+<p>Firebase projesinde yalnızca <em>Firebase Cloud Messaging API Admin</em> rolü olan bir servis hesabı açın ve JSON anahtarını indirin (docs/runbooks/sops.md, "Push (FCM)"). Dosya yalnızca belleğe okunur, diske yazılmaz.{{if eq .Env "prod"}} prod'da push zorunlu olur (<code>chat-fcm-required.yaml</code>).{{end}}</p>
+{{template "error" .}}
+<form method="post" action="/fcm" enctype="multipart/form-data" autocomplete="off">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  {{template "envpick" .}}
+  <label>Servis hesabı anahtarı (.json) <input type="file" name="key" accept=".json,application/json" required></label>
+  <button type="submit">Şifrele ve dosyaları yaz</button>
+</form>
+{{end}}
+{{template "foot" .}}{{end}}

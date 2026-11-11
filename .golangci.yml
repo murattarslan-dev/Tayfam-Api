@@ -92,6 +92,23 @@ linters:
               desc: diğer servislere gen/ altındaki gRPC client'larıyla erişilir
             - pkg: github.com/murattarslan-dev/tayfam-api/internal/core
               desc: diğer servislere gen/ altındaki gRPC client'larıyla erişilir
+        # Tayfam Ops (issue #148) yalnızca platform sahibinin bilgisayarında
+        # çalışan yerel araçtır: hiçbir servise ve veritabanına bağlanmaz.
+        ops:
+          files: ["**/internal/ops/**", "**/cmd/tayfam-ops/**"]
+          deny:
+            - pkg: github.com/murattarslan-dev/tayfam-api/db
+              desc: Tayfam Ops veritabanlarına bağlanmaz
+            - pkg: github.com/murattarslan-dev/tayfam-api/gen
+              desc: Tayfam Ops servislere bağlanmaz
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/gateway
+              desc: Tayfam Ops servis paketlerini import edemez
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/identity
+              desc: Tayfam Ops servis paketlerini import edemez
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/core
+              desc: Tayfam Ops servis paketlerini import edemez
+            - pkg: github.com/murattarslan-dev/tayfam-api/internal/chat
+              desc: Tayfam Ops servis paketlerini import edemez
   exclusions:
     rules:
       - path: _test\.go

@@ -1,0 +1,43 @@
+:root { --bg: #f7f7f5; --fg: #1d1d1b; --muted: #6b6b66; --card: #fff; --line: #ddddd6;
+  --accent: #1f5f8b; --ok: #e6f4ea; --okline: #3c8d50; --warn: #fff6e0; --warnline: #c48a00;
+  --err: #fdecea; --errline: #c0392b; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #161615; --fg: #ececea; --muted: #a0a09a; --card: #20201f; --line: #3a3a37;
+    --accent: #7fb6dd; --ok: #18301f; --warn: #33290f; --err: #3a1a17; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.top { display: flex; align-items: center; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--line); }
+.brand { font-weight: 700; color: var(--fg); text-decoration: none; }
+.env { padding: 2px 10px; border-radius: 99px; font-size: 13px; font-weight: 600; background: var(--ok); }
+.env-prod { background: var(--err); }
+main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+footer { max-width: 760px; margin: 0 auto; padding: 0 16px 32px; color: var(--muted); font-size: 14px; }
+a { color: var(--accent); }
+.tabs { display: flex; gap: 8px; margin: 16px 0; }
+.tabs a { padding: 6px 16px; border: 1px solid var(--line); border-radius: 8px; text-decoration: none; }
+.tabs a[aria-current] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.card { display: block; padding: 16px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 12px; color: var(--fg); text-decoration: none; }
+.card:hover, .card:focus { border-color: var(--accent); }
+.card h2 { margin: 0 0 4px; font-size: 18px; }
+.card p { margin: 0; color: var(--muted); font-size: 14px; }
+form { display: grid; gap: 12px; margin: 16px 0; }
+label { display: grid; gap: 4px; font-weight: 600; }
+label.check { display: flex; gap: 8px; font-weight: 400; }
+input[type=text], input:not([type]), input[type=password], input[type=file] { font: inherit; padding: 8px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--fg); width: 100%; }
+fieldset.envpick { border: 1px solid var(--line); border-radius: 8px; display: flex; gap: 16px; }
+fieldset.envpick label { display: flex; gap: 6px; font-weight: 400; }
+button { font: inherit; font-weight: 600; padding: 10px 16px; border: 0; border-radius: 8px;
+  background: var(--accent); color: var(--bg); cursor: pointer; justify-self: start; }
+.box { padding: 12px 16px; border-radius: 8px; border-left: 4px solid; margin: 12px 0; }
+.ok { background: var(--ok); border-color: var(--okline); }
+.warn { background: var(--warn); border-color: var(--warnline); }
+.err { background: var(--err); border-color: var(--errline); }
+.muted { color: var(--muted); }
+pre { white-space: pre-wrap; word-break: break-word; margin: 0; font-size: 14px; }
+details pre { padding: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
+ul.files code { font-size: 14px; }

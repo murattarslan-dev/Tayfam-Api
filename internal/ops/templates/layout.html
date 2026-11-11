@@ -1,0 +1,73 @@
+{{define "head"}}<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Tayfam Ops</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/{{with .}}?env={{.Env}}{{end}}">Tayfam Ops</a>
+  {{with .}}<span class="env env-{{.Env}}">{{.Env}}</span>{{end}}
+</header>
+<main>
+{{with .}}{{if .Missing}}<div class="box warn"><strong>Eksik araçlar:</strong> {{range $i, $m := .Missing}}{{if $i}}, {{end}}{{$m}}{{end}}. WSL'de kurulu olmalı (docs/runbooks/sops.md, İlk kurulum).</div>{{end}}{{end}}
+{{end}}
+
+{{define "foot"}}
+</main>
+<footer>Yalnızca bu bilgisayarda çalışır. İşiniz bitince araç penceresini kapatın.</footer>
+</body>
+</html>
+{{end}}
+
+{{define "envpick"}}
+<fieldset class="envpick">
+  <legend>Ortam</legend>
+  <label><input type="radio" name="env" value="dev" {{if eq .Env "dev"}}checked{{end}}> dev (ev cluster'ı)</label>
+  <label><input type="radio" name="env" value="prod" {{if eq .Env "prod"}}checked{{end}}> prod (VDS)</label>
+</fieldset>
+{{end}}
+
+{{define "notready"}}{{if not .Ready}}<div class="box warn">{{.Note}}</div>{{end}}{{end}}
+
+{{define "error"}}{{if .Error}}<div class="box err" role="alert">{{.Error}}</div>{{end}}{{end}}
+
+{{define "result"}}
+{{with .Result}}
+<section class="result">
+  {{if .OK}}<div class="box ok"><strong>Tamam.</strong> Dosyalar üretildi.</div>
+  {{else}}<div class="box err" role="alert"><strong>İşlem tamamlanmadı.</strong> Aşağıdaki çıktıya bakın; hiçbir değer ekrana yazılmaz.</div>{{end}}
+
+  <h3>Üretilen ya da değişen dosyalar</h3>
+  {{if .Changed}}<ul class="files">{{range .Changed}}<li><code>{{.}}</code></li>{{end}}</ul>
+  {{else}}<p class="muted">Değişen dosya yok.</p>{{end}}
+
+  {{if .RefsRun}}
+  <h3>Secret kontrolü (check-secret-refs)</h3>
+  <div class="box {{if .RefsOK}}ok{{else}}warn{{end}}"><pre>{{.RefsOutput}}</pre></div>
+  {{end}}
+
+  <details {{if not .OK}}open{{end}}><summary>Betik çıktısı</summary><pre>{{.Output}}</pre></details>
+
+  {{if .Changed}}
+  <form method="post" action="/open" autocomplete="off">
+    <input type="hidden" name="csrf" value="{{$.CSRF}}">
+    <input type="hidden" name="env" value="{{.Env}}">
+    <button type="submit">Klasörü aç</button>
+    <span class="muted">deploy/apps/{{.Env}} Windows Gezgini'nde açılır.</span>
+  </form>
+  {{end}}
+</section>
+{{end}}
+{{end}}
+
+{{define "next"}}
+<h3>Sonraki adım</h3>
+<ol>
+  <li>"Klasörü aç" ile açılan klasörden yukarıdaki dosyaları (alt klasördekiler dahil) sohbete sürükleyip bırakın ve hangi işlemi yaptığınızı yazın. PR'ı oturum açar; bu bilgisayardan push gerekmez.</li>
+  <li>PR birleşip Flux uyguladıktan sonra Headlamp'ten <code>tayfam-{{.Env}}</code> → Deployments → <code>{{.Deploy}}</code> → <em>Restart</em>. Log'da "{{.LogLine}}" görünür.</li>
+</ol>
+{{end}}

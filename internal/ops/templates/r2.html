@@ -1,0 +1,23 @@
+{{define "r2"}}{{template "head" .}}
+<p><a href="/?env={{.Env}}">← Ana sayfa</a></p>
+<h1>R2'yi bağla</h1>
+{{if .Result}}
+{{template "result" .}}
+{{if .Result.OK}}{{template "next" (nextData .Env "core" "dosya yükleme açık (R2)")}}
+<p class="muted">İlk açılışta bir kez doğrulama yapılır (docs/runbooks/sops.md, "Dosyalar (R2)" sonu).</p>{{end}}
+{{else}}
+{{template "notready" .}}
+<p>Önce Cloudflare panelinde bucket'ı (<code>tayfam-{{.Env}}-private</code>), lifecycle kurallarını ve yalnızca bu bucket'a <em>Object Read &amp; Write</em> yetkili API token'ını oluşturun (docs/runbooks/sops.md, "Dosyalar (R2)", adım 1–3). Panel gizli anahtarı bir kez gösterir; sayfayı kapatmadan buraya yapıştırın.</p>
+{{template "error" .}}
+<form method="post" action="/r2" autocomplete="off">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  {{template "envpick" .}}
+  <label>Account ID <input name="account" autocomplete="off" spellcheck="false" required></label>
+  <label>Bucket adı <input name="bucket" value="tayfam-{{.Env}}-private" autocomplete="off" spellcheck="false" required></label>
+  <label>Access Key ID <input type="password" name="key_id" autocomplete="off" spellcheck="false" required></label>
+  <label>Secret Access Key <input type="password" name="secret" autocomplete="new-password" spellcheck="false" required></label>
+  <label class="check"><input type="checkbox" name="rotate" value="1"> Rotasyon: var olan <code>core-r2</code> secret'ının üzerine yaz</label>
+  <button type="submit">Şifrele ve dosyaları yaz</button>
+</form>
+{{end}}
+{{template "foot" .}}{{end}}

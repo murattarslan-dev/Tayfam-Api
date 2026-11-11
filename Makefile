@@ -2,7 +2,7 @@ SERVICES := gateway identity core chat
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS  := -s -w -X github.com/murattarslan-dev/tayfam-api/internal/platform/buildinfo.Version=$(VERSION)
 
-.PHONY: build test lint check generate test-db run dev up down clean
+.PHONY: build test lint check generate test-db run dev up down clean ops
 
 ## build: tüm servisleri bin/ altına derler
 build:
@@ -45,6 +45,11 @@ run:
 ## dev: dört servisi Docker olmadan yerelde birlikte çalıştırır
 dev: build
 	./scripts/dev.sh
+
+## ops: Tayfam Ops, secret işleri için yerel arayüz (yalnızca 127.0.0.1;
+## docs/runbooks/sops.md "Tayfam Ops ile"). Windows'tan scripts/tayfam-ops.bat.
+ops:
+	go run ./cmd/tayfam-ops
 
 ## up / down: Docker Compose ile yerel ortam
 up:
