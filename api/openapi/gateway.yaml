@@ -4005,6 +4005,127 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- dosyalar (#135, ADR-0007, ADR-0020) ---
+  #
+  # Dosya sunucularımızdan geçmez: istemci yükleme ister, dönen imzalı
+  # linke (R2) dosyayı PUT eder, bittiğini bildirir; core dosyayı işler
+  # (gerçek tür ilk baytlardan, EXIF/GPS dahil tüm metadata silinir, yön
+  # düzeltilir, 400 ve 1600 px JPEG). Hazır dosya içeriğe bağlanır
+  # (avatar, kapak, av fotoğrafı) ve linkleri `POST /v1/media/urls` ile
+  # alınır. R2 yapılandırılmamışsa bu uçlar 503 `unavailable` döner.
+  # İmzalı linkler taşıyıcı sırlardır: log'a yazılmaz, paylaşılmaz.
+
+  /v1/uploads:
+    post:
+      operationId: createUpload
+      summary: Dosya yüklemesi açar ve imzalı PUT linkini döner
+      description: |
+        Link 5 dakika geçerlidir ve yalnızca bu dosya, bu tür ve bu boyut
+        içindir: `upload_headers`'taki `Content-Type` ve `Content-Length`
+        aynen gönderilmelidir; başka tür ya da boyutla R2 isteği reddeder.
+        Bugün yalnızca `image/jpeg` ve `image/png` işlenir; `image/webp` ve
+        `image/heic` 415 `media-type-unsupported` döner (istemci önce JPEG'e
+        çevirir). Kapak ve av fotoğrafında `tayfa_id` zorunludur (aktif üye
+        olunmalı, tayfa salt okunur olmamalı); avatarda verilmez. Aynı
+        `client_request_id` ile tekrar, kayıt `pending` iken aynı yüklemeyi
+        yeni bir linkle döner. Sınırlar: kullanıcı başına saatte 30 yükleme
+        (`upload-rate-limited`) ve 500 MiB toplam (`upload-quota-exceeded`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UploadCreateRequest" }
+      responses:
+        "201":
+          description: Yükleme açıldı
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UploadCreated" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "415": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/uploads/{upload_id}:
+    parameters:
+      - $ref: "#/components/parameters/UploadID"
+    get:
+      operationId: getUpload
+      summary: Kendi yüklemenizin durumu (hazırsa linkleriyle)
+      description: |
+        İşleme sürerken istemci bunu yoklar (ör. 1 sn aralıkla, en çok
+        30 sn). Başkasının yüklemesi `upload-not-found` döner.
+      responses:
+        "200":
+          description: Yükleme
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UploadView" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/uploads/{upload_id}/complete:
+    parameters:
+      - $ref: "#/components/parameters/UploadID"
+    post:
+      operationId: completeUpload
+      summary: PUT'un bittiğini bildirir; dosya işleme kuyruğuna girer
+      description: |
+        core nesnenin varlığını ve boyutunu kontrol eder. Nesne yoksa
+        `upload-not-received` (409): PUT'u bitirip link geçerliyken tekrar
+        çağırın. Boyut farklıysa yükleme `rejected` olur. Başarılı ilk
+        çağrıdan sonra tekrar çağrı yüklemeyi değiştirmeden döner.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Yükleme (genellikle `uploaded`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UploadView" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/media/urls:
+    post:
+      operationId: getMediaUrls
+      summary: Dosyaların 1 saat geçerli imzalı indirme linkleri
+      description: |
+        Yanıtlardaki `*_upload_id` alanlarını (avatar, kapak, av fotoğrafı)
+        toplu çözer; istemci linkleri süreleri dolana kadar önbellekte
+        tutar. Görülemeyen dosya nedeni söylenmeden atlanır (bilinmeyen,
+        hazır olmayan, silinmiş ve yetkisiz aynıdır). Kurallar: kendi
+        dosyanız her zaman; avatar oturum açmış herkese (iki taraftan biri
+        engellediyse ya da hesap silindiyse kimseye); tayfa kapağı aktif
+        üyelere; etkinlik kapağı ve av fotoğrafı etkinliği görebilen aktif
+        üyelere. 1–100 farklı kimlik; sıra korunur.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MediaUrlsRequest" }
+      responses:
+        "200":
+          description: Görülebilen dosyaların linkleri
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MediaUrlsList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /v1/me/reports:
     get:
       operationId: listMyReports
@@ -4225,6 +4346,11 @@ components:
     bearer: { type: http, scheme: bearer, bearerFormat: JWT }
 
   parameters:
+    UploadID:
+      name: upload_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     ClientHeader:
       name: X-Tayfam-Client
       in: header
@@ -6076,6 +6202,114 @@ components:
         ec: { type: integer }
         kyber: { type: integer }
         low: { type: boolean, description: Bir türden 10'dan az kaldı; yükleyin. }
+    UploadPurpose:
+      type: string
+      enum: [avatar, catch_photo, cover]
+      description: "`cover` tayfa ya da etkinlik kapağıdır."
+    UploadStatus:
+      type: string
+      enum: [pending, uploaded, processing, ready, rejected, unknown]
+      description: |
+        `pending` (PUT bekleniyor) → `uploaded` → `processing` → `ready` |
+        `rejected`. `unknown`: istemciden yeni bir sunucu değeri.
+    UploadRejectReason:
+      type: string
+      enum: [not_image, unsupported_type, too_large, corrupt, size_mismatch, failed, unknown]
+      description: |
+        `not_image`: içerik kabul edilen türde bir resim değil (adı ya da
+        bildirilen türü ne olursa olsun). `unsupported_type`: WebP/HEIC.
+        `too_large`: 10000 px'ten geniş/uzun ya da 25 megapikselden büyük.
+        `corrupt`: çözülemedi. `size_mismatch`: dosya bildirilen boyutta
+        değil. `failed`: dosyadan bağımsız nedenlerle işlenemedi.
+    UploadCreateRequest:
+      type: object
+      required: [purpose, content_type, size_bytes, client_request_id]
+      additionalProperties: false
+      properties:
+        purpose: { $ref: "#/components/schemas/UploadPurpose" }
+        content_type:
+          type: string
+          enum: [image/jpeg, image/png, image/webp, image/heic]
+        size_bytes: { type: integer, format: int64, minimum: 1, maximum: 10485760 }
+        tayfa_id:
+          type: string
+          format: uuid
+          description: "`cover` ve `catch_photo` için zorunlu; `avatar`'da verilmez."
+        client_request_id:
+          type: string
+          format: uuid
+          description: Her yükleme denemesi için bir kez üretilen, tekrar gönderimde aynen kullanılan UUID.
+    MediaUrls:
+      type: object
+      required: [upload_id, preview_url, full_url, content_type, width, height, expires_at]
+      properties:
+        upload_id: { type: string, format: uuid }
+        preview_url:
+          type: string
+          format: uri
+          description: En uzun kenarı 400 px. Taşıyıcı link; log'a yazılmaz.
+        full_url:
+          type: string
+          format: uri
+          description: En uzun kenarı 1600 px; küçük resim büyütülmez.
+        content_type:
+          type: string
+          description: İki dosyanın türü; bugün `image/jpeg` (ileride `image/webp`).
+        width: { type: integer, description: "Büyük dosyanın genişliği (yön düzeltilmiş)" }
+        height: { type: integer }
+        expires_at: { type: string, format: date-time, description: "Linklerin geçerliliği (1 saat)." }
+    Upload:
+      type: object
+      required: [id, purpose, status, size_bytes, created_at, attached]
+      properties:
+        id: { type: string, format: uuid }
+        purpose: { $ref: "#/components/schemas/UploadPurpose" }
+        status: { $ref: "#/components/schemas/UploadStatus" }
+        reject_reason: { $ref: "#/components/schemas/UploadRejectReason" }
+        tayfa_id: { type: string, format: uuid }
+        size_bytes: { type: integer, format: int64 }
+        created_at: { type: string, format: date-time }
+        attached:
+          type: boolean
+          description: Bir içerik dosyayı kullanıyor. Hazır ama 7 gün bağlanmayan dosya silinir.
+        urls:
+          allOf: [{ $ref: "#/components/schemas/MediaUrls" }]
+          description: Yalnızca `ready` iken.
+    UploadView:
+      type: object
+      required: [upload]
+      properties:
+        upload: { $ref: "#/components/schemas/Upload" }
+    UploadCreated:
+      type: object
+      required: [upload]
+      properties:
+        upload: { $ref: "#/components/schemas/Upload" }
+        upload_method: { type: string, enum: [PUT], description: "Tekrar gönderimde yükleme artık `pending` değilse yoktur (aşağıdakiler de)." }
+        upload_url: { type: string, format: uri, description: "R2'ye imzalı PUT linki. Taşıyıcı link; log'a yazılmaz." }
+        upload_headers:
+          type: object
+          additionalProperties: { type: string }
+          description: PUT'ta aynen gönderilecek başlıklar (`Content-Type`, `Content-Length`).
+        upload_expires_at: { type: string, format: date-time }
+    MediaUrlsRequest:
+      type: object
+      required: [upload_ids]
+      additionalProperties: false
+      properties:
+        upload_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { type: string, format: uuid }
+    MediaUrlsList:
+      type: object
+      required: [media]
+      properties:
+        media:
+          type: array
+          items: { $ref: "#/components/schemas/MediaUrls" }
     PushTokenRegistration:
       type: object
       required: [token, platform]

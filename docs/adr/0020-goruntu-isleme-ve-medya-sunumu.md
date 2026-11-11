@@ -48,7 +48,7 @@ ve libvips (govips, cgo) ile yeniden kodlamayı seçti. Uygulamaya geçerken ü�
 | cgo / image | yok / değişmez | var / distroless static'ten çıkar, büyür | yok / değişmez, binary ~10 MB büyür |
 | CI (`.github/`) | değişmez | `libvips-dev` kurulumu (platform sahibi) | değişmez |
 | Çözücü açığında | Go bellek güvenli; panik süreçten kaçmaz (recover) | süreçte bellek bozulması, DB ve R2 kimliğine erişim | WASM kum havuzunda kalır; süreç belleğine ve sistem çağrılarına erişemez |
-| Hız | yavaş ama bu ölçekte yeter (12 MP ~1 sn) | en hızlı | orta (~2–3x yerel) |
+| Hız | bu ölçekte yeter (12 MP: ~0,3 sn, ~35 MB; ölçüm `BenchmarkProcess12MP`) | en hızlı | orta (~2–3x yerel) |
 | Lisans | — | LGPL (dinamik) | libheif LGPL, WASM binary'ye gömülü; HEVC patent belirsizliği |
 
 **Uygulanan: A.** İstemci WebP ve HEIC'i yüklemeden önce JPEG'e çevirir
@@ -164,7 +164,7 @@ uygulama ve taşıma katmanlarını etkilemez.
 ### 7. Sınırlar
 
 Yapılandırmadan (`MEDIA_UPLOADS_PER_HOUR`, varsayılan 30;
-`MEDIA_QUOTA_BYTES`, varsayılan 500 MiB). Kota işlenmiş dosyaların
+`MEDIA_QUOTA_MIB`, varsayılan 500). Kota işlenmiş dosyaların
 boyutunu, işlenmemişlerin bildirilen ham boyutunu sayar; silinen ve
 reddedilenler sayılmaz. Sayaçlar veritabanındadır (birden çok pod'da
 doğru).

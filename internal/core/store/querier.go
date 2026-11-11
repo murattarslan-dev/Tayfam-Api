@@ -574,6 +574,10 @@ type Querier interface {
 	// Kişinin günlük sayımlarını sıraya sokar: aynı kişinin eşzamanlı istekleri
 	// sınırı birlikte aşamaz.
 	LockUserLimit(ctx context.Context, userID pgtype.UUID) error
+	// Kullanıcının yükleme açmalarını sıraya koyar: sıklık sınırı ve kota
+	// kontrolü ile kaydın yazılması arasında eşzamanlı ikinci bir istek
+	// araya giremez. Transaction bitince bırakılır.
+	LockUserUploads(ctx context.Context, userID string) error
 	MarkAttended(ctx context.Context, arg MarkAttendedParams) error
 	MarkHikeAlertSent(ctx context.Context, arg MarkHikeAlertSentParams) (int64, error)
 	MarkNoShow(ctx context.Context, arg MarkNoShowParams) error

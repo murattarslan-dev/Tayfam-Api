@@ -89,10 +89,20 @@ run_inside "4) cloudflared'in içinden:" cloudflared \
   KAPALI "tcp://chat:8080" \
   KAPALI "tcp://tayfam-pg-rw:5432"
 
-run_inside "5) core'un içinden (identity'ye açık anahtar için, Postgres'e, API sunucusuna JWKS için):" core \
+# core'un internet çıkışı yalnızca dosya yükleme açıldıktan sonra, ortamın
+# overlay'ine core-r2 secret'ıyla birlikte eklenen core-egress-r2 kuralıyla
+# vardır (ADR-0020 madde 6): yalnızca TCP 443. R2 uç adresleri Cloudflare
+# anycast'idir; deneme Cloudflare'in genel adresine yapılır.
+if kubectl -n "$NS" get networkpolicy core-egress-r2 >/dev/null 2>&1; then
+  r2_want=ACIK; r2_note="dosyalar açık: core-egress-r2 var"
+else
+  r2_want=KAPALI; r2_note="dosyalar kapalı: core-egress-r2 yok, internet kapalı"
+fi
+run_inside "5) core'un içinden (identity'ye açık anahtar için, Postgres'e, API sunucusuna JWKS için; $r2_note):" core \
   ACIK   "tcp://identity:9090" \
   ACIK   "tcp://tayfam-pg-rw:5432" \
   ACIK   "tcp://kubernetes.default.svc:443" \
+  "$r2_want" "tcp://www.cloudflare.com:443" \
   KAPALI "tcp://chat:9090" \
   KAPALI "tcp://chat:8080" \
   KAPALI "http://gateway:8080/v1/status" \

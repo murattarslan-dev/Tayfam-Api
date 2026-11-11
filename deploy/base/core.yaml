@@ -58,6 +58,9 @@ spec:
           env:
             - { name: OPS_ADDR, value: ":8081" }
             - { name: GRPC_ADDR, value: ":9090" }
+            # Bellek sınırının altında çöp toplayıcıyı sıkılaştırır (görüntü
+            # işleme; ADR-0020 madde 2).
+            - { name: GOMEMLIMIT, value: "320MiB" }
             - { name: IDENTITY_GRPC_ADDR, value: "identity:9090" }
             # Servis token'ı doğrulaması (ADR-0013): identity'nin outbox relay'i
             # UserEventService'i servis token'ıyla çağırır. İzinli çağıranlar
@@ -87,6 +90,24 @@ spec:
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef: { name: core-app-db, key: password }
+            # Dosyalar (Cloudflare R2; issue #135, ADR-0020): yalnızca o
+            # ortamın private bucket'ına nesne okuma/yazma yetkili API
+            # token'ı. Secret yoksa dosya yükleme kapalıdır, servis yine
+            # başlar (optional). core'un internete çıkışı da yoktur: platform
+            # sahibi core-r2'yi sops ile ve aynı PR'da ortamın core-egress-r2
+            # kuralını ekler (docs/runbooks/sops.md "Dosyalar (R2)").
+            - name: MEDIA_R2_ACCOUNT_ID
+              valueFrom:
+                secretKeyRef: { name: core-r2, key: account-id, optional: true }
+            - name: MEDIA_R2_BUCKET
+              valueFrom:
+                secretKeyRef: { name: core-r2, key: bucket, optional: true }
+            - name: MEDIA_R2_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef: { name: core-r2, key: access-key-id, optional: true }
+            - name: MEDIA_R2_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: core-r2, key: secret-access-key, optional: true }
           ports:
             - { name: grpc, containerPort: 9090 }
             - { name: ops, containerPort: 8081 }
@@ -96,9 +117,11 @@ spec:
           readinessProbe:
             httpGet: { path: /readyz, port: ops }
             periodSeconds: 5
+          # Görüntü işleme aynı anda tek dosya çözer: en çok 25 megapiksel
+          # (PNG'de ~100 MiB), ADR-0020 madde 2.
           resources:
             requests: { cpu: 10m, memory: 32Mi }
-            limits: { memory: 128Mi }
+            limits: { memory: 384Mi }
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

@@ -549,6 +549,18 @@ func (q *Queries) ListMediaForViewer(ctx context.Context, arg ListMediaForViewer
 	return items, nil
 }
 
+const lockUserUploads = `-- name: LockUserUploads :exec
+SELECT pg_advisory_xact_lock(hashtextextended('uploads:' || $1::text, 0))
+`
+
+// Kullanıcının yükleme açmalarını sıraya koyar: sıklık sınırı ve kota
+// kontrolü ile kaydın yazılması arasında eşzamanlı ikinci bir istek
+// araya giremez. Transaction bitince bırakılır.
+func (q *Queries) LockUserUploads(ctx context.Context, userID string) error {
+	_, err := q.db.Exec(ctx, lockUserUploads, userID)
+	return err
+}
+
 const markUploadReceived = `-- name: MarkUploadReceived :execrows
 UPDATE uploads SET status = 'uploaded', uploaded_at = $1, run_after = $1
 WHERE id = $2 AND status = 'pending'

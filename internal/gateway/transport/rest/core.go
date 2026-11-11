@@ -82,6 +82,8 @@ type CoreDeps struct {
 	// Reports enables the report and moderation queue routes when set
 	// (issue #76).
 	Reports ReportClient
+	// Media enables the upload and media link routes when set (issue #135).
+	Media MediaClient
 	// Accounts is identity's AccountService; it enables the account,
 	// referral code, session, consent and account deletion routes when set. Its routes take the same verified user
 	// token as core's.
@@ -172,6 +174,9 @@ func registerCore(mux *http.ServeMux, d CoreDeps) {
 	}
 	if d.Reports != nil {
 		registerReports(mux, h)
+	}
+	if d.Media != nil {
+		registerMedia(mux, h)
 	}
 	if d.Accounts != nil {
 		registerAccount(mux, h)

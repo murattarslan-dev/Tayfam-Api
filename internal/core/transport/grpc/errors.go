@@ -160,6 +160,20 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DECISION_NOT_APPLICABLE, true
 	case errors.Is(err, apperr.ErrTayfaStateConflict):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_TAYFA_STATE_CONFLICT, true
+	case errors.Is(err, apperr.ErrUploadNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_UPLOAD_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrUploadNotReady):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_UPLOAD_NOT_READY, true
+	case errors.Is(err, apperr.ErrUploadInUse):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_UPLOAD_IN_USE, true
+	case errors.Is(err, apperr.ErrUploadNotReceived):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_UPLOAD_NOT_RECEIVED, true
+	case errors.Is(err, apperr.ErrUploadRateLimited):
+		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_UPLOAD_RATE_LIMITED, true
+	case errors.Is(err, apperr.ErrUploadQuotaExceeded):
+		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_UPLOAD_QUOTA_EXCEEDED, true
+	case errors.Is(err, apperr.ErrMediaTypeUnsupported):
+		return codes.InvalidArgument, corev1.ErrorReason_ERROR_REASON_MEDIA_TYPE_UNSUPPORTED, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

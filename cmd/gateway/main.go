@@ -112,6 +112,7 @@ func setup(rt *service.Runtime) error {
 			Invitations:         corev1.NewMembershipServiceClient(conn),
 			Profiles:            corev1.NewProfileServiceClient(conn),
 			Reports:             corev1.NewReportServiceClient(conn),
+			Media:               corev1.NewMediaServiceClient(conn),
 			Verifier:            v,
 			Log:                 rt.Log,
 			TrustCFConnectingIP: trustCF,

@@ -22,6 +22,12 @@ SELECT * FROM uploads
 WHERE id = @id AND user_id = @user_id AND status <> 'deleting'
 FOR UPDATE;
 
+-- Kullanıcının yükleme açmalarını sıraya koyar: sıklık sınırı ve kota
+-- kontrolü ile kaydın yazılması arasında eşzamanlı ikinci bir istek
+-- araya giremez. Transaction bitince bırakılır.
+-- name: LockUserUploads :exec
+SELECT pg_advisory_xact_lock(hashtextextended('uploads:' || @user_id::text, 0));
+
 -- Saatlik sıklık sınırı: son bir saatte açılan kayıtlar (silinenler
 -- sayılmaz; pending kayıtlar 24 saat durduğu için yeterli bir alt sınırdır).
 -- name: CountUploadsSince :one

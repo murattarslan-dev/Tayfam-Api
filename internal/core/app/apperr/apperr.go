@@ -177,6 +177,25 @@ var (
 	ErrTayfaStateConflict = errors.New("tayfa zaten bu durumda")
 )
 
+// MediaService errors (issue #135). None of them says whose an upload is.
+var (
+	// ErrUploadNotFound: no upload with this ID that the caller owns, or one
+	// of another purpose or tayfa than the content it is attached to.
+	ErrUploadNotFound = errors.New("yükleme bulunamadı")
+	// ErrUploadNotReady: the upload is not processed (yet).
+	ErrUploadNotReady = errors.New("yükleme hazır değil")
+	// ErrUploadInUse: the upload is attached to other content.
+	ErrUploadInUse = errors.New("yükleme başka içerikte")
+	// ErrUploadNotReceived: CompleteUpload found no object.
+	ErrUploadNotReceived = errors.New("dosya alınmadı")
+	// ErrUploadRateLimited: too many uploads in the last hour.
+	ErrUploadRateLimited = errors.New("yükleme sıklığı sınırı")
+	// ErrUploadQuotaExceeded: the user's stored media would exceed the quota.
+	ErrUploadQuotaExceeded = errors.New("yükleme kotası")
+	// ErrMediaTypeUnsupported: the declared type is not processed yet.
+	ErrMediaTypeUnsupported = errors.New("desteklenmeyen dosya türü")
+)
+
 // ValidationError reports a request field that failed validation. Field is
 // the request field name as written in the proto ("name", "update_mask");
 // the rejected value is never kept.
