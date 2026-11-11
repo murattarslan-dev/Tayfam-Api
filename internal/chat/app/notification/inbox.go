@@ -54,6 +54,10 @@ const (
 	// content, not about a tayfa (ADR-0005, v14).
 	TypeDMRequest = "dm_request"
 	TypeDMMessage = "dm_message"
+	// TypeDataExportReady: the recipient's KVKK data export can be
+	// downloaded (issue #144, ADR-0021). identity asks for it with its
+	// user.data_export_ready event; no tayfa, no actor.
+	TypeDataExportReady = "data_export_ready"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -67,6 +71,9 @@ const (
 	TargetReport       = "report"
 	// TargetDMConversation: a conversation of the recipient.
 	TargetDMConversation = "dm_conversation"
+	// TargetDataExport: a data export request of the recipient
+	// (identity's DataExportService).
+	TargetDataExport = "data_export"
 )
 
 // Reasons of TypeTayfaWarned.
@@ -98,13 +105,15 @@ func targetOf(typ string) (string, bool) {
 		return TargetUser, true
 	case TypeDMRequest, TypeDMMessage:
 		return TargetDMConversation, true
+	case TypeDataExportReady:
+		return TargetDataExport, true
 	}
 	return "", false
 }
 
 // withoutTayfa reports whether a notification type is not about a tayfa.
 func withoutTayfa(typ string) bool {
-	return typ == TypeFriendRequest || typ == TypeFriendAccepted || IsDirect(typ)
+	return typ == TypeFriendRequest || typ == TypeFriendAccepted || typ == TypeDataExportReady || IsDirect(typ)
 }
 
 // IsDirect reports whether a notification type is about a direct message.
@@ -159,7 +168,7 @@ func (r Request) Validate() error {
 	}
 	// The reporter is never told who handled their report; a direct
 	// message notice does not say who wrote.
-	if (r.Type == TypeReportResolved || IsDirect(r.Type)) && r.Actor != (id.ID{}) {
+	if (r.Type == TypeReportResolved || r.Type == TypeDataExportReady || IsDirect(r.Type)) && r.Actor != (id.ID{}) {
 		return apperr.Validation("actor_id")
 	}
 	if IsDirect(r.Type) != (r.Unread > 0) || r.Unread > MaxDirectUnread {

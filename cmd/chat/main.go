@@ -20,6 +20,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/coreevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/coremembers"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/dm"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/export"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/push"
@@ -225,6 +226,9 @@ func setup(rt *service.Runtime) error {
 		Sessions:   hub,
 		Devices:    e2e,
 		PushTokens: pushes,
+		// identity'nin istediği bildirim (data_export_ready) bağlı
+		// istemciye canlı iletilir.
+		Live: live,
 	})
 	if err != nil {
 		return err
@@ -247,6 +251,14 @@ func setup(rt *service.Runtime) error {
 	chatv1.RegisterDirectMessageServiceServer(srv, grpcapi.NewDirectMessageServer(directMessages, rt.Log))
 	chatv1.RegisterE2EServiceServer(srv, grpcapi.NewE2EServer(e2e, rt.Log))
 	chatv1.RegisterPushServiceServer(srv, grpcapi.NewPushServer(pushes, rt.Log))
+	// KVKK veri dışa aktarma (issue #144, ADR-0021): çağıranın kendi kanal
+	// mesajları (çözülmüş) ve tercihleri; identity kullanıcının token'ıyla
+	// çağırır. Anahtar yoksa UNAVAILABLE.
+	exports, err := export.New(export.Config{Pool: pool, Cipher: cipher})
+	if err != nil {
+		return err
+	}
+	chatv1.RegisterExportServiceServer(srv, grpcapi.NewExportServer(exports, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
 
 	wsHandler, err := ws.New(ws.Config{

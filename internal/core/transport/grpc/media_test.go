@@ -54,6 +54,65 @@ func (f *fakeMedia) AttachAvatar(_ context.Context, u, _ id.ID) error {
 	return f.err
 }
 
+func (f *fakeMedia) ReserveExport(_ context.Context, u, request id.ID) (id.ID, error) {
+	f.user, f.ids = u, []id.ID{request}
+	return id.New(), f.err
+}
+
+func (f *fakeMedia) ExportUploadURL(_ context.Context, u, _ id.ID, size int64) (objstore.Presigned, error) {
+	f.user, f.w = u, int(size)
+	return objstore.Presigned{URL: "https://r2.example/e", Headers: map[string]string{"Content-Length": "100"}, Expires: time.Now()}, f.err
+}
+
+func (f *fakeMedia) CompleteExport(_ context.Context, u, _ id.ID) (time.Time, error) {
+	f.user = u
+	return time.Now().Add(7 * 24 * time.Hour), f.err
+}
+
+func (f *fakeMedia) ExportDownloadURL(_ context.Context, u, _ id.ID) (objstore.Presigned, error) {
+	f.user = u
+	return objstore.Presigned{URL: "https://r2.example/g", Expires: time.Now()}, f.err
+}
+
+// The export methods (issue #144) act for the verified caller only and
+// parse their IDs before the app layer.
+func TestMediaServerExport(t *testing.T) {
+	f := &fakeMedia{}
+	srv := NewMediaServer(f, discard)
+	if _, err := srv.ReserveExportUpload(context.Background(), &corev1.ReserveExportUploadRequest{DataExportId: id.New().String()}); codeOf(t, err) != codes.Unauthenticated {
+		t.Fatalf("token'sız: %v", err)
+	}
+	user := id.New()
+	ctx := callerCtx(user)
+	req := id.New()
+	r, err := srv.ReserveExportUpload(ctx, &corev1.ReserveExportUploadRequest{DataExportId: req.String()})
+	if err != nil || f.user != user || f.ids[0] != req || r.GetUploadId() == "" {
+		t.Fatalf("yuva: %v %v", r, err)
+	}
+	if _, err := srv.ReserveExportUpload(ctx, &corev1.ReserveExportUploadRequest{DataExportId: "x"}); codeOf(t, err) != codes.InvalidArgument {
+		t.Fatalf("bozuk talep: %v", err)
+	}
+	u, err := srv.GetExportUploadUrl(ctx, &corev1.GetExportUploadUrlRequest{UploadId: id.New().String(), SizeBytes: 100})
+	if err != nil || f.w != 100 || u.GetUrl() == "" || u.GetHeaders()["Content-Length"] != "100" {
+		t.Fatalf("yükleme linki: %v %v", u, err)
+	}
+	c, err := srv.CompleteExportUpload(ctx, &corev1.CompleteExportUploadRequest{UploadId: id.New().String()})
+	if err != nil || !c.GetExpireTime().AsTime().After(time.Now()) {
+		t.Fatalf("tamamlama: %v %v", c, err)
+	}
+	d, err := srv.GetExportDownloadUrl(ctx, &corev1.GetExportDownloadUrlRequest{UploadId: id.New().String()})
+	if err != nil || d.GetUrl() == "" {
+		t.Fatalf("indirme linki: %v %v", d, err)
+	}
+	if _, err := srv.GetExportDownloadUrl(ctx, &corev1.GetExportDownloadUrlRequest{UploadId: "x"}); codeOf(t, err) != codes.InvalidArgument {
+		t.Fatalf("bozuk kimlik: %v", err)
+	}
+	f.err = apperr.ErrUploadNotReady
+	if _, err := srv.GetExportDownloadUrl(ctx, &corev1.GetExportDownloadUrlRequest{UploadId: id.New().String()}); codeOf(t, err) != codes.FailedPrecondition {
+		t.Fatalf("hazır değil: %v", err)
+	}
+}
+
 func TestMediaServer(t *testing.T) {
 	f := &fakeMedia{}
 	srv := NewMediaServer(f, discard)

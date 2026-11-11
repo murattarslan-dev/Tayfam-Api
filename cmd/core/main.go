@@ -24,6 +24,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatrelay"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/directmessage"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/export"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/identityadmin"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/identityminor"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/jobs"
@@ -136,6 +137,12 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
+	// KVKK veri dışa aktarma (issue #144, ADR-0021): yalnızca çağıranın
+	// kendi verisi; identity kullanıcının token'ıyla çağırır.
+	exports, err := export.New(export.Config{Pool: pool})
+	if err != nil {
+		return err
+	}
 
 	background, err := jobs.New(jobs.Config{Pool: pool, Log: rt.Log})
 	if err != nil {
@@ -198,6 +205,7 @@ func setup(rt *service.Runtime) error {
 	// Dosyalar (issue #135, ADR-0020): R2 yapılandırması yoksa uçlar
 	// UNAVAILABLE döner, işçiler boşta bekler.
 	corev1.RegisterMediaServiceServer(srv, grpcapi.NewMediaServer(medias, rt.Log))
+	corev1.RegisterExportServiceServer(srv, grpcapi.NewExportServer(exports, rt.Log))
 	rt.AddGRPCServer("grpc", c.String("GRPC_ADDR", ":9090"), srv)
 	// Süresi dolan ya da içeriği silinen dosyaların R2'den silinmesi
 	// (birden fazla pod'da çalışabilir; her adım idempotent).

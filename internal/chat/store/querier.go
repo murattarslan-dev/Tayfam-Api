@@ -132,6 +132,12 @@ type Querier interface {
 	EraseDirectMessage(ctx context.Context, arg EraseDirectMessageParams) (int64, error)
 	// Yazarın kendi silmesi: metin hemen gider, geri alınamaz.
 	EraseMessage(ctx context.Context, arg EraseMessageParams) (int64, error)
+	// KVKK veri dışa aktarma (issue #144, ADR-0021; alanlar
+	// docs/data-export-format.md). Yalnızca @user_id'nin (doğrulanmış çağıran)
+	// kendi kayıtları, @after'dan büyük anahtarla, anahtar sırasıyla. Mesaj
+	// metni uygulamada çözülür ve hiçbir yere loglanmaz.
+	ExportChannelMessages(ctx context.Context, arg ExportChannelMessagesParams) ([]ExportChannelMessagesRow, error)
+	ExportNotificationPreferences(ctx context.Context, arg ExportNotificationPreferencesParams) ([]ExportNotificationPreferencesRow, error)
 	GetChannel(ctx context.Context, arg GetChannelParams) (GetChannelRow, error)
 	GetChannelForUpdate(ctx context.Context, arg GetChannelForUpdateParams) (GetChannelForUpdateRow, error)
 	GetChannelRead(ctx context.Context, arg GetChannelReadParams) (pgtype.UUID, error)

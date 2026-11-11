@@ -8,6 +8,7 @@ import (
 
 	chatdb "github.com/murattarslan-dev/tayfam-api/db/chat"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -165,5 +166,44 @@ func TestSessionEventsEndPushTokens(t *testing.T) {
 		if len(f.sessions) != 1 || f.sessions[0] != s || len(f.sanctioned) != 1 || f.sanctioned[0] != u || !f.at[0].Equal(at) {
 			t.Fatalf("%s = %+v", name, f)
 		}
+	}
+}
+
+type fakeLive struct{ got []notification.Request }
+
+func (f *fakeLive) Notified(r notification.Request) { f.got = append(f.got, r) }
+
+// identity's user.data_export_ready writes one data_export_ready
+// notification for the user (issue #144): no tayfa, no actor, once per
+// event; a deleted user gets none.
+func TestDataExportReady(t *testing.T) {
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
+	live := &fakeLive{}
+	svc, err := New(Config{Pool: pool, Live: live})
+	must(t, err)
+	u, request := id.New(), id.New()
+	e := Event{ID: id.New(), User: u, DataExportReady: request}
+	for range 2 {
+		must(t, svc.Apply(ctx, e))
+	}
+	rows, err := store.New(pool).ListNotifications(ctx, store.ListNotificationsParams{UserID: u.PG(), N: 10})
+	must(t, err)
+	if len(rows) != 1 || rows[0].Type != notification.TypeDataExportReady || rows[0].TargetType != notification.TargetDataExport ||
+		id.ID(rows[0].TargetID.Bytes) != request || rows[0].TayfaID.Valid || rows[0].ActorID.Valid {
+		t.Fatalf("bildirim: %+v", rows)
+	}
+	if len(live.got) != 2 || live.got[0].Recipients[0] != u {
+		t.Fatalf("canlı iletim: %+v", live.got)
+	}
+
+	gone := id.New()
+	must(t, svc.Apply(ctx, Event{ID: id.New(), User: gone, Deleted: true}))
+	must(t, svc.Apply(ctx, Event{ID: id.New(), User: gone, DataExportReady: id.New()}))
+	if rows, _ := store.New(pool).ListNotifications(ctx, store.ListNotificationsParams{UserID: gone.PG(), N: 10}); len(rows) != 0 {
+		t.Fatalf("silinen kullanıcıya bildirim yazılmamalı: %+v", rows)
+	}
+	var v *apperr.ValidationError
+	if err := svc.Apply(ctx, Event{ID: id.New(), User: u, DataExportReady: id.New(), Deleted: true}); !errors.As(err, &v) {
+		t.Fatalf("iki olay birden reddedilmeli: %v", err)
 	}
 }

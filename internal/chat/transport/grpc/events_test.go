@@ -230,3 +230,32 @@ func TestApplyCoreEventConversion(t *testing.T) {
 		})
 	}
 }
+
+// identity's data_export_ready reaches the app with the request ID; core
+// cannot ask for the data_export_ready type (it is not in core's list).
+func TestApplyUserEventDataExportReady(t *testing.T) {
+	c := satest.New(t)
+	app := &fakeApp{}
+	users, cores, _ := eventConn(t, c, app)
+	ctx := auth.WithToken(context.Background(), c.ServiceToken(t, identitySA, "chat.tayfam.internal"))
+	u, request := id.New(), id.New()
+	if _, err := users.ApplyUserEvent(ctx, &chatv1.ApplyUserEventRequest{EventId: id.New().String(), UserId: u.String(),
+		Event: &chatv1.ApplyUserEventRequest_DataExportReady{DataExportReady: &chatv1.DataExportReady{DataExportId: request.String()}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := app.user[len(app.user)-1]; got.User != u || got.DataExportReady != request {
+		t.Fatalf("olay = %+v", got)
+	}
+	if _, err := users.ApplyUserEvent(ctx, &chatv1.ApplyUserEventRequest{EventId: id.New().String(), UserId: u.String(),
+		Event: &chatv1.ApplyUserEventRequest_DataExportReady{DataExportReady: &chatv1.DataExportReady{DataExportId: "x"}}}); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("bozuk talep kimliği: %v", err)
+	}
+	coreCtx := auth.WithToken(context.Background(), c.ServiceToken(t, coreSA, "chat.tayfam.internal"))
+	if _, err := cores.ApplyCoreEvent(coreCtx, &chatv1.ApplyCoreEventRequest{EventId: id.New().String(),
+		Event: &chatv1.ApplyCoreEventRequest_NotificationRequested{NotificationRequested: &chatv1.NotificationRequested{
+			Type: chatv1.NotificationType_NOTIFICATION_TYPE_DATA_EXPORT_READY, TargetType: chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_DATA_EXPORT,
+			TargetId: request.String(), RecipientIds: []string{u.String()},
+		}}}); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("core data_export_ready isteyememeli: %v", err)
+	}
+}

@@ -4,12 +4,14 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/objstore"
 )
 
 // Media is what MediaServer needs from the app layer (media.Service).
@@ -19,6 +21,10 @@ type Media interface {
 	GetUpload(ctx context.Context, user, upload id.ID) (media.Upload, error)
 	MediaURLs(ctx context.Context, viewer id.ID, ids []id.ID) ([]media.URLs, error)
 	AttachAvatar(ctx context.Context, user, upload id.ID) error
+	ReserveExport(ctx context.Context, user, request id.ID) (id.ID, error)
+	ExportUploadURL(ctx context.Context, user, upload id.ID, size int64) (objstore.Presigned, error)
+	CompleteExport(ctx context.Context, user, upload id.ID) (time.Time, error)
+	ExportDownloadURL(ctx context.Context, user, upload id.ID) (objstore.Presigned, error)
 }
 
 // MediaServer implements corev1.MediaServiceServer. The owner and the
@@ -227,4 +233,63 @@ func (s *MediaServer) AttachAvatar(ctx context.Context, req *corev1.AttachAvatar
 		return nil, errorStatus(ctx, s.log, err)
 	}
 	return &corev1.AttachAvatarResponse{}, nil
+}
+
+// ReserveExportUpload implements corev1.MediaServiceServer (issue #144).
+// The owner is the verified caller; identity calls it with the caller's
+// own token.
+func (s *MediaServer) ReserveExportUpload(ctx context.Context, req *corev1.ReserveExportUploadRequest) (*corev1.ReserveExportUploadResponse, error) {
+	u, err := callerID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	request, ok := id.Parse(req.GetDataExportId())
+	if !ok {
+		return nil, validation("data_export_id")
+	}
+	up, err := s.app.ReserveExport(ctx, u, request)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.ReserveExportUploadResponse{UploadId: up.String()}, nil
+}
+
+// GetExportUploadUrl implements corev1.MediaServiceServer. The link is
+// returned to the caller only and never logged.
+func (s *MediaServer) GetExportUploadUrl(ctx context.Context, req *corev1.GetExportUploadUrlRequest) (*corev1.GetExportUploadUrlResponse, error) {
+	u, up, err := uploadArg(ctx, req.GetUploadId())
+	if err != nil {
+		return nil, err
+	}
+	link, err := s.app.ExportUploadURL(ctx, u, up, req.GetSizeBytes())
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.GetExportUploadUrlResponse{Url: link.URL, Headers: link.Headers, ExpireTime: timestamppb.New(link.Expires)}, nil
+}
+
+// CompleteExportUpload implements corev1.MediaServiceServer.
+func (s *MediaServer) CompleteExportUpload(ctx context.Context, req *corev1.CompleteExportUploadRequest) (*corev1.CompleteExportUploadResponse, error) {
+	u, up, err := uploadArg(ctx, req.GetUploadId())
+	if err != nil {
+		return nil, err
+	}
+	expires, err := s.app.CompleteExport(ctx, u, up)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.CompleteExportUploadResponse{ExpireTime: timestamppb.New(expires)}, nil
+}
+
+// GetExportDownloadUrl implements corev1.MediaServiceServer.
+func (s *MediaServer) GetExportDownloadUrl(ctx context.Context, req *corev1.GetExportDownloadUrlRequest) (*corev1.GetExportDownloadUrlResponse, error) {
+	u, up, err := uploadArg(ctx, req.GetUploadId())
+	if err != nil {
+		return nil, err
+	}
+	link, err := s.app.ExportDownloadURL(ctx, u, up)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.GetExportDownloadUrlResponse{Url: link.URL, ExpireTime: timestamppb.New(link.Expires)}, nil
 }

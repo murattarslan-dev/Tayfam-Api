@@ -5912,8 +5912,12 @@ components:
             konuşma okunana kadar konuşma başına tek bildirim) yalnızca
             "yeni" bilgisi taşır: hedef `dm_conversation`, `actor_id` ve
             `tayfa_id` yoktur, içerik de gönderen de yazılmaz; okunmamış
-            mesaj sayısını `unread_count` taşır. Tanınmayan değer `unknown`.
-          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, tayfa_suspended, tayfa_unsuspended, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, unknown]
+            mesaj sayısını `unread_count` taşır. `data_export_ready` (KVKK
+            veri dışa aktarmanız 7 gün indirilebilir; hedef `data_export`,
+            `tayfa_id` ve `actor_id` yoktur; push çeviri anahtarları
+            `push_data_export_ready_title` ve `push_data_export_ready_body`).
+            Tanınmayan değer `unknown`.
+          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, tayfa_suspended, tayfa_unsuspended, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, data_export_ready, unknown]
         tayfa_id:
           type: string
           format: uuid
@@ -5928,8 +5932,9 @@ components:
             `membership` için `target_id` başvuran kullanıcının kimliğidir;
             `user` için bir kullanıcının kimliği (profilini açın); `report`
             için kendi şikâyetinizin kimliği; `dm_conversation` için
-            konuşmanızın kimliği.
-          enum: [tayfa, membership, announcement, event, answer, user, report, dm_conversation, unknown]
+            konuşmanızın kimliği; `data_export` için kendi veri dışa
+            aktarma talebinizin kimliği (`GET /v1/me/data-exports/{data_export_id}`).
+          enum: [tayfa, membership, announcement, event, answer, user, report, dm_conversation, data_export, unknown]
         target_id: { type: string, format: uuid }
         question_id:
           type: string
