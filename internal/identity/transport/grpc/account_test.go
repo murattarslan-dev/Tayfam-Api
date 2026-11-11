@@ -25,6 +25,7 @@ type fakeAccounts struct {
 	code   string
 	vis    account.Visibility
 	found  account.Found
+	avatar id.ID
 }
 
 func (f *fakeAccounts) Get(_ context.Context, c id.ID) (account.Account, error) {
@@ -42,6 +43,16 @@ func (f *fakeAccounts) FindByReferralCode(_ context.Context, c id.ID, code strin
 func (f *fakeAccounts) SetActivityVisibility(_ context.Context, c id.ID, v account.Visibility) (account.Visibility, error) {
 	f.caller, f.vis = c, v
 	return v, f.err
+}
+
+func (f *fakeAccounts) SetAvatar(_ context.Context, c, u id.ID) error {
+	f.caller, f.avatar = c, u
+	return f.err
+}
+
+func (f *fakeAccounts) ClearAvatar(_ context.Context, c id.ID) error {
+	f.caller, f.avatar = c, id.ID{}
+	return f.err
 }
 
 func newAccountServer(f *fakeAccounts) *AccountServer {

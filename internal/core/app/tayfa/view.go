@@ -25,6 +25,7 @@ type viewRow struct {
 	MembersCanCreateEvents bool
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
+	CoverUploadID          pgtype.UUID
 	Member                 authz.Membership
 }
 
@@ -33,7 +34,7 @@ func fromTayfa(t access.Tayfa, m authz.Membership) viewRow {
 		ID: id.ID(t.ID.Bytes), Name: t.Name, Description: t.Description, JoinCode: t.JoinCode,
 		Status: t.Status, JoinPolicy: t.JoinPolicy, SuspendedAt: t.SuspendedAt,
 		DeletionScheduledFor: t.DeletionScheduledFor, MembersCanCreateEvents: t.MembersCanCreateEvents,
-		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, Member: m,
+		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, CoverUploadID: t.CoverUploadID, Member: m,
 	}
 }
 
@@ -90,6 +91,9 @@ func (s *Service) views(ctx context.Context, rows []viewRow) ([]View, error) {
 			MembersCanCreateEvents: r.MembersCanCreateEvents,
 			CreatedAt:              r.CreatedAt.Time.UTC(), UpdatedAt: r.UpdatedAt.Time.UTC(),
 			Interests: []string{},
+		}
+		if r.CoverUploadID.Valid {
+			v.CoverUploadID = id.ID(r.CoverUploadID.Bytes)
 		}
 		if r.SuspendedAt.Valid {
 			v.SuspendedAt = r.SuspendedAt.Time.UTC()

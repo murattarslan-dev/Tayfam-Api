@@ -42,6 +42,8 @@ const (
 	// FieldMembersCanCreateEvents is the event creation setting
 	// (tayfas.members_can_create_events).
 	FieldMembersCanCreateEvents = "members_can_create_events"
+	// FieldCover is the cover image (tayfas.cover_upload_id, issue #135).
+	FieldCover = "cover_upload_id"
 )
 
 // cleanName trims surrounding spaces and returns the name and its

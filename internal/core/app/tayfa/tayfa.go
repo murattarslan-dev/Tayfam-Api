@@ -24,6 +24,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/access"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
@@ -109,6 +110,8 @@ type View struct {
 	JoinCode  string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	// CoverUploadID is the cover image; zero when there is none.
+	CoverUploadID id.ID
 }
 
 // CreateInput is a create request.
@@ -252,10 +255,13 @@ type UpdateInput struct {
 	JoinPolicy  string
 	// MembersCanCreateEvents is the event creation setting.
 	MembersCanCreateEvents bool
+	// CoverUploadID is the caller's own READY cover upload opened for this
+	// tayfa; zero removes the cover (the old one is deleted).
+	CoverUploadID id.ID
 }
 
 // updateFields are the allowed update mask paths, in audit record order.
-var updateFields = []string{FieldName, FieldDescription, FieldInterests, FieldJoinPolicy, FieldMembersCanCreateEvents}
+var updateFields = []string{FieldName, FieldDescription, FieldInterests, FieldJoinPolicy, FieldMembersCanCreateEvents, FieldCover}
 
 // Update changes the tayfa's settings. Admin only.
 func (s *Service) Update(ctx context.Context, user, tayfa id.ID, in UpdateInput) (View, error) {
@@ -322,6 +328,21 @@ func (s *Service) Update(ctx context.Context, user, tayfa id.ID, in UpdateInput)
 			return fmt.Errorf("ayarlar: %w", err)
 		} else if n != 1 {
 			return apperr.ErrTayfaNotFound
+		}
+		if set[FieldCover] {
+			// The upload is attached first; the column's trigger checks
+			// the attachment again (uploads_check_ref).
+			cover := pgtype.UUID{}
+			if in.CoverUploadID != (id.ID{}) {
+				if err := media.Attach(ctx, q, user, in.CoverUploadID, media.PurposeCover, tayfa,
+					media.Target{Type: media.TargetTayfa, ID: tayfa}, s.now()); err != nil {
+					return err
+				}
+				cover = in.CoverUploadID.PG()
+			}
+			if err := q.SetTayfaCover(ctx, store.SetTayfaCoverParams{ID: tayfa.PG(), CoverUploadID: cover}); err != nil {
+				return fmt.Errorf("kapak: %w", err)
+			}
 		}
 		if set[FieldInterests] {
 			if err := q.DeleteTayfaInterests(ctx, tayfa.PG()); err != nil {

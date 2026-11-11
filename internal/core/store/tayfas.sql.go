@@ -137,7 +137,7 @@ const getTayfa = `-- name: GetTayfa :one
 SELECT id, name, name_normalized, description, join_code, status, visibility,
        join_policy, city, district, created_by, last_activity_at, suspended_at,
        deletion_requested_at, deletion_scheduled_for, members_can_create_events,
-       created_at, updated_at
+       created_at, updated_at, cover_upload_id
 FROM tayfas
 WHERE id = $1 AND deleted_at IS NULL
 `
@@ -161,6 +161,7 @@ type GetTayfaRow struct {
 	MembersCanCreateEvents bool
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
+	CoverUploadID          pgtype.UUID
 }
 
 func (q *Queries) GetTayfa(ctx context.Context, id pgtype.UUID) (GetTayfaRow, error) {
@@ -185,6 +186,7 @@ func (q *Queries) GetTayfa(ctx context.Context, id pgtype.UUID) (GetTayfaRow, er
 		&i.MembersCanCreateEvents,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CoverUploadID,
 	)
 	return i, err
 }
@@ -258,7 +260,7 @@ const getTayfaForUpdate = `-- name: GetTayfaForUpdate :one
 SELECT id, name, name_normalized, description, join_code, status, visibility,
        join_policy, city, district, created_by, last_activity_at, suspended_at,
        deletion_requested_at, deletion_scheduled_for, members_can_create_events,
-       created_at, updated_at
+       created_at, updated_at, cover_upload_id
 FROM tayfas
 WHERE id = $1 AND deleted_at IS NULL
 FOR NO KEY UPDATE
@@ -283,6 +285,7 @@ type GetTayfaForUpdateRow struct {
 	MembersCanCreateEvents bool
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
+	CoverUploadID          pgtype.UUID
 }
 
 // Yazan işlemler tayfa satırını kilitleyerek okur; memberships trigger'ı da
@@ -309,6 +312,7 @@ func (q *Queries) GetTayfaForUpdate(ctx context.Context, id pgtype.UUID) (GetTay
 		&i.MembersCanCreateEvents,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CoverUploadID,
 	)
 	return i, err
 }
@@ -397,7 +401,8 @@ func (q *Queries) ListModulesForTayfas(ctx context.Context, tayfaIds []pgtype.UU
 const listMyTayfas = `-- name: ListMyTayfas :many
 SELECT t.id, t.name, t.name_normalized, t.description, t.join_code, t.status,
        t.join_policy, t.suspended_at, t.deletion_scheduled_for,
-       t.members_can_create_events, t.created_at, t.updated_at, m.role, m.status AS membership_status, m.muted_until,
+       t.members_can_create_events, t.created_at, t.updated_at, t.cover_upload_id,
+       m.role, m.status AS membership_status, m.muted_until,
        m.created_at AS membership_created_at
 FROM memberships m
 JOIN tayfas t ON t.id = m.tayfa_id
@@ -429,6 +434,7 @@ type ListMyTayfasRow struct {
 	MembersCanCreateEvents bool
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
+	CoverUploadID          pgtype.UUID
 	Role                   string
 	MembershipStatus       string
 	MutedUntil             pgtype.Timestamptz
@@ -464,6 +470,7 @@ func (q *Queries) ListMyTayfas(ctx context.Context, arg ListMyTayfasParams) ([]L
 			&i.MembersCanCreateEvents,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CoverUploadID,
 			&i.Role,
 			&i.MembershipStatus,
 			&i.MutedUntil,

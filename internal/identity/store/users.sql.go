@@ -267,7 +267,6 @@ type SetActivityVisibilityParams struct {
 	ID                 pgtype.UUID
 }
 
-// Katılım geçmişinin kime görüneceği (v14 "Profil görünürlüğü").
 func (q *Queries) SetActivityVisibility(ctx context.Context, arg SetActivityVisibilityParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setActivityVisibility, arg.ActivityVisibility, arg.ID)
 	if err != nil {
@@ -323,6 +322,27 @@ type SetReferrerParams struct {
 // korur). Referans veren kayıtlı ve silinmemiş olmalıdır.
 func (q *Queries) SetReferrer(ctx context.Context, arg SetReferrerParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setReferrer, arg.ReferrerID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setUserAvatar = `-- name: SetUserAvatar :execrows
+UPDATE users SET avatar_upload_id = $1
+WHERE id = $2 AND registered_at IS NOT NULL AND deleted_at IS NULL
+`
+
+type SetUserAvatarParams struct {
+	AvatarUploadID pgtype.UUID
+	ID             pgtype.UUID
+}
+
+// Katılım geçmişinin kime görüneceği (v14 "Profil görünürlüğü").
+// Avatar (issue #135): core'un, çağıranın kendi token'ıyla doğruladığı
+// yükleme kimliği; NULL avatarı kaldırır.
+func (q *Queries) SetUserAvatar(ctx context.Context, arg SetUserAvatarParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setUserAvatar, arg.AvatarUploadID, arg.ID)
 	if err != nil {
 		return 0, err
 	}

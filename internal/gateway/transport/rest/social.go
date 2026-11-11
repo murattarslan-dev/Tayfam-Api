@@ -502,6 +502,7 @@ func (h coreHandlers) listActivity(ctx context.Context, w http.ResponseWriter, r
 type accountJSON struct {
 	ReferralCode       string `json:"referral_code"`
 	ActivityVisibility string `json:"activity_visibility"`
+	AvatarUploadID     string `json:"avatar_upload_id,omitempty"`
 }
 
 type accountPatchBody struct {
@@ -532,7 +533,10 @@ func (h coreHandlers) getAccount(ctx context.Context, w http.ResponseWriter, r *
 		h.identityFail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, accountJSON{ReferralCode: resp.GetReferralCode(), ActivityVisibility: identityVisibilities.name(resp.GetActivityVisibility())})
+	writeJSON(w, http.StatusOK, accountJSON{
+		ReferralCode: resp.GetReferralCode(), ActivityVisibility: identityVisibilities.name(resp.GetActivityVisibility()),
+		AvatarUploadID: resp.GetAvatarUploadId(),
+	})
 }
 
 func (h coreHandlers) updateAccount(ctx context.Context, w http.ResponseWriter, r *http.Request) {

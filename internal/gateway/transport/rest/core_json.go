@@ -128,6 +128,8 @@ type tayfaJSON struct {
 	JoinCode  string    `json:"join_code,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// CoverUploadID: links with POST /v1/media/urls (issue #135).
+	CoverUploadID string `json:"cover_upload_id,omitempty"`
 }
 
 func tayfaFrom(t *corev1.Tayfa) tayfaJSON {
@@ -144,6 +146,7 @@ func tayfaFrom(t *corev1.Tayfa) tayfaJSON {
 		SuspendedAt: optTime(t.GetSuspendTime()), DeletionAt: optTime(t.GetDeletionTime()),
 		MemberCount: t.GetMemberCount(), MembersCanCreateEvents: t.GetMembersCanCreateEvents(), JoinCode: t.GetJoinCode(),
 		CreatedAt: t.GetCreateTime().AsTime(), UpdatedAt: t.GetUpdateTime().AsTime(),
+		CoverUploadID: t.GetCoverUploadId(),
 	}
 }
 

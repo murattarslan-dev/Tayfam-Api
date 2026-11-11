@@ -90,9 +90,13 @@ func (s *EventServer) AddFishingCatch(ctx context.Context, req *corev1.AddFishin
 	if !ok {
 		return nil, validation("visibility")
 	}
+	photo, err := optionalUploadID(req.GetPhotoUploadId(), "photo_upload_id")
+	if err != nil {
+		return nil, err
+	}
 	c, err := s.app.AddCatch(ctx, user, t, e, event.CatchInput{
 		Species: req.GetSpecies(), LengthCm: req.GetLengthCm(), Location: at, Visibility: vis,
-		ClientRequestID: req.GetClientRequestId(),
+		ClientRequestID: req.GetClientRequestId(), PhotoUploadID: photo,
 	})
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
@@ -180,6 +184,7 @@ func catchToProto(c event.Catch) *corev1.FishingCatch {
 	out := &corev1.FishingCatch{
 		Id: c.ID.String(), UserId: c.UserID.String(), Species: c.Species, LengthCm: c.LengthCm,
 		Visibility: corev1.CatchVisibility_CATCH_VISIBILITY_SELF, CreateTime: timestamppb.New(c.CreatedAt),
+		PhotoUploadId: optionalID(c.PhotoUploadID),
 	}
 	if c.Visibility == event.CatchTayfa {
 		out.Visibility = corev1.CatchVisibility_CATCH_VISIBILITY_TAYFA

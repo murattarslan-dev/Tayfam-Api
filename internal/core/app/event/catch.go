@@ -12,6 +12,7 @@ import (
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -51,6 +52,8 @@ type Catch struct {
 	Location   *Point
 	Visibility string
 	CreatedAt  time.Time
+	// PhotoUploadID is the photo; zero when there is none (issue #135).
+	PhotoUploadID id.ID
 }
 
 // CatchInput is a new catch.
@@ -62,6 +65,10 @@ type CatchInput struct {
 	// Visibility "" means CatchSelf.
 	Visibility      string
 	ClientRequestID string
+	// PhotoUploadID is optional: the caller's own READY catch photo upload
+	// opened for the tayfa (issue #135). Its metadata (GPS included) was
+	// removed in processing; the catch's location stays in Location.
+	PhotoUploadID id.ID
 }
 
 func cleanCatch(in CatchInput) (CatchInput, error) {
@@ -163,7 +170,20 @@ func (s *Service) AddCatch(ctx context.Context, user, tayfa, event id.ID, in Cat
 		if err := q.CreateCatch(ctx, p); err != nil {
 			return fmt.Errorf("av kaydı: %w", err)
 		}
-		out = Catch{ID: cid, UserID: user, Species: in.Species, LengthCm: in.LengthCm, Location: in.Location, Visibility: in.Visibility, CreatedAt: c.now}
+		if in.PhotoUploadID != (id.ID{}) {
+			// Attached first; the column's trigger checks it again.
+			if err := media.Attach(ctx, q, user, in.PhotoUploadID, media.PurposeCatchPhoto, tayfa,
+				media.Target{Type: media.TargetFishingCatch, ID: cid}, c.now); err != nil {
+				return err
+			}
+			if err := q.SetCatchPhoto(ctx, store.SetCatchPhotoParams{ID: cid.PG(), PhotoUploadID: in.PhotoUploadID.PG()}); err != nil {
+				return fmt.Errorf("av fotoğrafı: %w", err)
+			}
+		}
+		out = Catch{
+			ID: cid, UserID: user, Species: in.Species, LengthCm: in.LengthCm, Location: in.Location,
+			Visibility: in.Visibility, CreatedAt: c.now, PhotoUploadID: in.PhotoUploadID,
+		}
 		meta := map[string]any{"catch_id": cid.String()}
 		if err := audit(ctx, q, c, CatchAdded, event, meta); err != nil {
 			return err
@@ -296,6 +316,9 @@ func catchOf(r store.GetCatchRow, withLocation bool) Catch {
 	}
 	if withLocation && r.Lat.Valid && r.Lng.Valid {
 		out.Location = &Point{Lat: r.Lat.Float64, Lng: r.Lng.Float64}
+	}
+	if r.PhotoUploadID.Valid {
+		out.PhotoUploadID = id.ID(r.PhotoUploadID.Bytes)
 	}
 	return out
 }

@@ -81,6 +81,12 @@ WHERE u.id = @id AND u.referred_at IS NULL AND u.id <> @referrer_id
   AND EXISTS (SELECT 1 FROM users r WHERE r.id = @referrer_id AND r.registered_at IS NOT NULL AND r.deleted_at IS NULL);
 
 -- Katılım geçmişinin kime görüneceği (v14 "Profil görünürlüğü").
+-- Avatar (issue #135): core'un, çağıranın kendi token'ıyla doğruladığı
+-- yükleme kimliği; NULL avatarı kaldırır.
+-- name: SetUserAvatar :execrows
+UPDATE users SET avatar_upload_id = sqlc.narg(avatar_upload_id)
+WHERE id = @id AND registered_at IS NOT NULL AND deleted_at IS NULL;
+
 -- name: SetActivityVisibility :execrows
 UPDATE users SET activity_visibility = @activity_visibility
 WHERE id = @id AND registered_at IS NOT NULL AND deleted_at IS NULL;

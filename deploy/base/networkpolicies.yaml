@@ -242,7 +242,9 @@ spec:
 ---
 # identity → core: outbox relay UserEventService'i çağırır (ADR-0002,
 # ADR-0013). core yalnızca identity'nin ServiceAccount token'ını bu metodda
-# kabul eder; ağ izni ikinci katmandır.
+# kabul eder; ağ izni ikinci katmandır. Avatar ayarlanırken identity
+# MediaService.AttachAvatar'ı kullanıcının kendi token'ıyla çağırır
+# (issue #135, ADR-0020); servis kimliği kullanılmaz.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

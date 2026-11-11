@@ -4138,6 +4138,45 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  /v1/me/avatar:
+    put:
+      operationId: putAvatar
+      summary: Hazır avatar yüklemenizi avatarınız yapar
+      description: |
+        `purpose: avatar` ile açılıp `ready` olmuş kendi yüklemeniz. identity
+        yüklemeyi core'a sizin token'ınızla doğrulatır: başkasının, hazır
+        olmayan ya da başka amaçlı yükleme `upload-not-found` /
+        `upload-not-ready` / `upload-in-use` döner. Eski avatar silinir.
+        Diğer kullanıcılar yeni avatarı kısa süre sonra görür (profil
+        kopyaları olayla güncellenir).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AvatarRequest" }
+      responses:
+        "200":
+          description: Avatar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AvatarView" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteAvatar
+      summary: Avatarı kaldırır (dosya silinir)
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Kaldırıldı }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /v1/me/reports:
     get:
       operationId: listMyReports
@@ -4834,6 +4873,11 @@ components:
       additionalProperties: false
       minProperties: 1
       properties:
+        cover_upload_id:
+          type: string
+          description: |
+            Kendi hazır `cover` yüklemeniz (bu tayfa için açılmış); `""` kapağı
+            kaldırır. Eski kapak silinir. Yönetici yetkisi gerekir.
         name: { type: string, minLength: 3, maxLength: 50 }
         description: { type: string, maxLength: 500 }
         interests:
@@ -4850,6 +4894,7 @@ components:
       type: object
       required: [id, name, description, interests, join_policy, modules, status, member_count, members_can_create_events, created_at, updated_at]
       properties:
+        cover_upload_id: { type: string, format: uuid, description: "Kapak; linkleri `POST /v1/media/urls`." }
         id: { type: string, format: uuid }
         name: { type: string }
         description: { type: string }
@@ -5561,6 +5606,7 @@ components:
         `camp`, `hike`, `fishing`, `gaming`, `sports`) yalnızca tek etkinlik
         yanıtında ve en fazla biri dolu gelir.
       properties:
+        cover_upload_id: { type: string, format: uuid, description: "Kapak; linkleri `POST /v1/media/urls`. Serinin ürettiği etkinliklerde yoktur." }
         id: { type: string, format: uuid }
         tayfa_id: { type: string, format: uuid }
         type: { $ref: "#/components/schemas/EventType" }
@@ -5625,6 +5671,7 @@ components:
         Türe özel ayrıntı en fazla bir tane ve türle aynı olur; `gaming` ve
         `sports` için zorunlu, `general` için yoktur.
       properties:
+        cover_upload_id: { type: string, format: uuid, description: "İsteğe bağlı: kendi hazır `cover` yüklemeniz (bu tayfa için açılmış). Yalnızca bu etkinliğe bağlanır." }
         type: { $ref: "#/components/schemas/EventType" }
         mode: { $ref: "#/components/schemas/EventMode" }
         title:
@@ -5660,6 +5707,11 @@ components:
       minProperties: 1
       description: Kurallar açmadakiyle aynıdır; tür değişmez.
       properties:
+        cover_upload_id:
+          type: string
+          description: |
+            Kendi hazır `cover` yüklemeniz; `""` kapağı kaldırır, eski kapak
+            silinir. `apply_to_series: true` ile verilemez.
         title: { type: string, minLength: 1, maxLength: 120 }
         description: { type: string, maxLength: 5000 }
         starts_at: { type: string, format: date-time }
@@ -5764,6 +5816,7 @@ components:
       type: object
       required: [id, user_id, species, length_cm, visibility, created_at]
       properties:
+        photo_upload_id: { type: string, format: uuid, description: "Fotoğraf; linkleri `POST /v1/media/urls`. Av kaydını gören her üye görür." }
         id: { type: string, format: uuid }
         user_id: { type: string, format: uuid }
         species: { type: string }
@@ -5778,6 +5831,13 @@ components:
       required: [species, length_cm, client_request_id]
       additionalProperties: false
       properties:
+        photo_upload_id:
+          type: string
+          format: uuid
+          description: |
+            İsteğe bağlı: kendi hazır `catch_photo` yüklemeniz (bu tayfa için).
+            Fotoğrafın konum bilgisi (EXIF/GPS) işlemede silinmiştir; avın
+            konumu yalnızca `location` ve `visibility` ile paylaşılır.
         species: { type: string, minLength: 1, maxLength: 60 }
         length_cm: { type: number, exclusiveMinimum: 0, maximum: 1000, description: Bir ondalık. }
         location: { $ref: "#/components/schemas/LatLng" }
@@ -6342,6 +6402,17 @@ components:
         media:
           type: array
           items: { $ref: "#/components/schemas/MediaUrls" }
+    AvatarRequest:
+      type: object
+      required: [upload_id]
+      additionalProperties: false
+      properties:
+        upload_id: { type: string, format: uuid }
+    AvatarView:
+      type: object
+      required: [avatar_upload_id]
+      properties:
+        avatar_upload_id: { type: string, format: uuid }
     PushTokenRegistration:
       type: object
       required: [token, platform]
@@ -6641,6 +6712,7 @@ components:
       type: object
       required: [referral_code, activity_visibility]
       properties:
+        avatar_upload_id: { type: string, format: uuid, description: "Avatar; linkleri `POST /v1/media/urls`." }
         referral_code:
           type: string
           description: Örn. `TYF-8K2M4Q`; paylaşım linki `tayfam.app/r/<kod>`.

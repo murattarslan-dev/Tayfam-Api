@@ -78,6 +78,14 @@ enum ErrorReason {
   ERROR_REASON_SANCTION_CONFLICT = 17;
   // INVALID_ARGUMENT. Any other invalid field.
   ERROR_REASON_VALIDATION = 18;
+  // Avatar (AccountService.SetAvatar, issue #135): core's answer about the
+  // upload, under identity's own reasons. NOT_FOUND: no such AVATAR upload
+  // of the caller.
+  ERROR_REASON_UPLOAD_NOT_FOUND = 19;
+  // FAILED_PRECONDITION. The upload is not processed (yet) or was rejected.
+  ERROR_REASON_UPLOAD_NOT_READY = 20;
+  // FAILED_PRECONDITION. The upload is attached to other content.
+  ERROR_REASON_UPLOAD_IN_USE = 21;
 }
 
 message SignInRequest {

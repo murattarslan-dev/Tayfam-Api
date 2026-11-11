@@ -38,7 +38,22 @@ var (
 	ErrCodeNotFound = errors.New("referans kodu bulunamadı")
 	// ErrInvalidVisibility: not one of the Visibility values.
 	ErrInvalidVisibility = errors.New("geçersiz görünürlük")
+
+	// Avatar errors (issue #135): core's answer about the upload.
+	ErrUploadNotFound = errors.New("yükleme bulunamadı")
+	ErrUploadNotReady = errors.New("yükleme hazır değil")
+	ErrUploadInUse    = errors.New("yükleme başka içerikte")
+	// ErrMediaUnavailable: core could not be asked, or media is off there.
+	ErrMediaUnavailable = errors.New("medya servisi yanıt vermedi")
 )
+
+// Media is core's MediaService as identity uses it: it attaches the
+// caller's avatar upload with the caller's own token (the context carries
+// it). It returns one of the Err* avatar errors above or
+// ErrMediaUnavailable.
+type Media interface {
+	AttachAvatar(ctx context.Context, upload id.ID) error
+}
 
 // Visibility is users.activity_visibility.
 type Visibility string
@@ -58,14 +73,18 @@ func (v Visibility) Valid() bool {
 // Config wires a Service.
 type Config struct {
 	Pool *pgxpool.Pool
-	Now  func() time.Time // optional, for tests
+	// Media is nil when core is not configured (a local run): SetAvatar is
+	// then ErrMediaUnavailable.
+	Media Media
+	Now   func() time.Time // optional, for tests
 }
 
 // Service implements the account settings.
 type Service struct {
-	pool *pgxpool.Pool
-	q    *store.Queries
-	now  func() time.Time
+	pool  *pgxpool.Pool
+	q     *store.Queries
+	media Media
+	now   func() time.Time
 }
 
 // New returns a Service.
@@ -76,13 +95,14 @@ func New(cfg Config) (*Service, error) {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	return &Service{pool: cfg.Pool, q: store.New(cfg.Pool), now: func() time.Time { return cfg.Now().UTC() }}, nil
+	return &Service{pool: cfg.Pool, q: store.New(cfg.Pool), media: cfg.Media, now: func() time.Time { return cfg.Now().UTC() }}, nil
 }
 
 // Account is the caller's own view.
 type Account struct {
 	ReferralCode       string
 	ActivityVisibility Visibility
+	AvatarUploadID     id.ID // zero: no avatar
 }
 
 // Get returns the caller's referral code and settings.
@@ -91,7 +111,70 @@ func (s *Service) Get(ctx context.Context, caller id.ID) (Account, error) {
 	if err != nil {
 		return Account{}, err
 	}
-	return Account{ReferralCode: u.RefCode.String, ActivityVisibility: Visibility(u.ActivityVisibility)}, nil
+	a := Account{ReferralCode: u.RefCode.String, ActivityVisibility: Visibility(u.ActivityVisibility)}
+	if u.AvatarUploadID.Valid {
+		a.AvatarUploadID = id.ID(u.AvatarUploadID.Bytes)
+	}
+	return a, nil
+}
+
+// SetAvatar makes the caller's READY avatar upload their avatar (issue
+// #135). identity does not own media: core attaches the upload first, with
+// the caller's own token, and refuses another user's, an unprocessed one or
+// one of another purpose. Then the avatar is stored and core and chat get
+// it with user.profile_updated; core deletes the previous avatar then.
+func (s *Service) SetAvatar(ctx context.Context, caller, upload id.ID) error {
+	if _, err := s.registered(ctx, s.q, caller); err != nil {
+		return err
+	}
+	if s.media == nil {
+		return ErrMediaUnavailable
+	}
+	if err := s.media.AttachAvatar(ctx, upload); err != nil {
+		return err
+	}
+	return s.setAvatar(ctx, caller, upload)
+}
+
+// ClearAvatar removes the caller's avatar; core deletes the image when
+// user.profile_updated reaches it. Without an avatar nothing changes.
+func (s *Service) ClearAvatar(ctx context.Context, caller id.ID) error {
+	return s.setAvatar(ctx, caller, id.ID{})
+}
+
+func (s *Service) setAvatar(ctx context.Context, caller, upload id.ID) error {
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := store.New(tx)
+		if _, err := q.LockRegisteredUser(ctx, caller.PG()); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrUnknownUser
+			}
+			return fmt.Errorf("kullanıcı kilidi: %w", err)
+		}
+		u, err := s.registered(ctx, q, caller)
+		if err != nil {
+			return err
+		}
+		next := pgtype.UUID{}
+		if upload != (id.ID{}) {
+			next = upload.PG()
+		}
+		if u.AvatarUploadID == next {
+			return nil
+		}
+		n, err := q.SetUserAvatar(ctx, store.SetUserAvatarParams{ID: caller.PG(), AvatarUploadID: next})
+		if err != nil {
+			return fmt.Errorf("avatar: %w", err)
+		}
+		if n != 1 {
+			return ErrUnknownUser
+		}
+		p := userevents.Profile{DisplayName: u.DisplayName.String, ActivityVisibility: u.ActivityVisibility}
+		if upload != (id.ID{}) {
+			p.AvatarUploadID = upload.String()
+		}
+		return userevents.ProfileUpdated(ctx, tx, caller, p)
+	})
 }
 
 // RotateReferralCode replaces the caller's referral code; the old one finds

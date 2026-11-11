@@ -43,6 +43,10 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_USER_NOT_FOUND":     {http.StatusNotFound, "user-not-found"},
 		"ERROR_REASON_SANCTION_CONFLICT":  {http.StatusConflict, "sanction-conflict"},
 		"ERROR_REASON_VALIDATION":         {http.StatusBadRequest, "invalid-request"},
+		// Avatar (issue #135): core's answer about the upload.
+		"ERROR_REASON_UPLOAD_NOT_FOUND": {http.StatusNotFound, "upload-not-found"},
+		"ERROR_REASON_UPLOAD_NOT_READY": {http.StatusConflict, "upload-not-ready"},
+		"ERROR_REASON_UPLOAD_IN_USE":    {http.StatusConflict, "upload-in-use"},
 	},
 	// proto/tayfam/core/v1/errors.proto
 	"core.tayfam.app": {

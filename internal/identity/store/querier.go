@@ -150,13 +150,16 @@ type Querier interface {
 	// e-posta ve oturum ayrıntısı dönmez.
 	SearchUsersByName(ctx context.Context, pattern string) ([]SearchUsersByNameRow, error)
 	SearchUsersByRefCode(ctx context.Context, refCode pgtype.Text) ([]SearchUsersByRefCodeRow, error)
-	// Katılım geçmişinin kime görüneceği (v14 "Profil görünürlüğü").
 	SetActivityVisibility(ctx context.Context, arg SetActivityVisibilityParams) (int64, error)
 	SetDisplayName(ctx context.Context, arg SetDisplayNameParams) error
 	SetRefCode(ctx context.Context, arg SetRefCodeParams) (int64, error)
 	// Referans kayıtta bir kez yazılır (trigger users_referral_once da
 	// korur). Referans veren kayıtlı ve silinmemiş olmalıdır.
 	SetReferrer(ctx context.Context, arg SetReferrerParams) (int64, error)
+	// Katılım geçmişinin kime görüneceği (v14 "Profil görünürlüğü").
+	// Avatar (issue #135): core'un, çağıranın kendi token'ıyla doğruladığı
+	// yükleme kimliği; NULL avatarı kaldırır.
+	SetUserAvatar(ctx context.Context, arg SetUserAvatarParams) (int64, error)
 	// Kişisel veriler hemen temizlenir; satır 30 gün sonra saklama işiyle
 	// kalıcı silinir. referred_at kalır (users_referral_once yeniden referans
 	// yazılmasını engeller).

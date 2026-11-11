@@ -21,6 +21,8 @@ type Accounts interface {
 	RotateReferralCode(ctx context.Context, caller id.ID) (string, error)
 	FindByReferralCode(ctx context.Context, caller id.ID, code string) (account.Found, error)
 	SetActivityVisibility(ctx context.Context, caller id.ID, v account.Visibility) (account.Visibility, error)
+	SetAvatar(ctx context.Context, caller, upload id.ID) error
+	ClearAvatar(ctx context.Context, caller id.ID) error
 }
 
 // AccountDeps wires an AccountServer.
@@ -81,7 +83,40 @@ func (s *AccountServer) GetAccount(ctx context.Context, _ *identityv1.GetAccount
 	if err != nil {
 		return nil, s.mapError(ctx, err)
 	}
-	return &identityv1.GetAccountResponse{ReferralCode: a.ReferralCode, ActivityVisibility: visibilityToPB[a.ActivityVisibility]}, nil
+	out := &identityv1.GetAccountResponse{ReferralCode: a.ReferralCode, ActivityVisibility: visibilityToPB[a.ActivityVisibility]}
+	if a.AvatarUploadID != (id.ID{}) {
+		out.AvatarUploadId = a.AvatarUploadID.String()
+	}
+	return out, nil
+}
+
+// SetAvatar implements identityv1.AccountServiceServer. The upload is
+// checked by core with the caller's own token (account.Media).
+func (s *AccountServer) SetAvatar(ctx context.Context, req *identityv1.SetAvatarRequest) (*identityv1.SetAvatarResponse, error) {
+	u, err := s.caller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	upload, ok := id.Parse(req.GetUploadId())
+	if !ok {
+		return nil, fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_VALIDATION)
+	}
+	if err := s.app.SetAvatar(ctx, u, upload); err != nil {
+		return nil, s.mapError(ctx, err)
+	}
+	return &identityv1.SetAvatarResponse{AvatarUploadId: upload.String()}, nil
+}
+
+// ClearAvatar implements identityv1.AccountServiceServer.
+func (s *AccountServer) ClearAvatar(ctx context.Context, _ *identityv1.ClearAvatarRequest) (*identityv1.ClearAvatarResponse, error) {
+	u, err := s.caller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.app.ClearAvatar(ctx, u); err != nil {
+		return nil, s.mapError(ctx, err)
+	}
+	return &identityv1.ClearAvatarResponse{}, nil
 }
 
 // RotateReferralCode implements identityv1.AccountServiceServer.
@@ -171,6 +206,15 @@ func (s *AccountServer) mapError(ctx context.Context, err error) error {
 		return fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_UNSPECIFIED)
 	case errors.Is(err, account.ErrUnknownUser):
 		return status.Error(codes.Unauthenticated, "kimlik doğrulanamadı")
+	case errors.Is(err, account.ErrUploadNotFound):
+		return fail(codes.NotFound, identityv1.ErrorReason_ERROR_REASON_UPLOAD_NOT_FOUND)
+	case errors.Is(err, account.ErrUploadNotReady):
+		return fail(codes.FailedPrecondition, identityv1.ErrorReason_ERROR_REASON_UPLOAD_NOT_READY)
+	case errors.Is(err, account.ErrUploadInUse):
+		return fail(codes.FailedPrecondition, identityv1.ErrorReason_ERROR_REASON_UPLOAD_IN_USE)
+	case errors.Is(err, account.ErrMediaUnavailable):
+		s.log.WarnContext(ctx, "avatar: core'a sorulamadı", slog.String("err", err.Error()))
+		return status.Error(codes.Unavailable, "istek reddedildi")
 	default:
 		s.log.ErrorContext(ctx, "hesap işlemi başarısız", slog.Any("err", err))
 		return status.Error(codes.Internal, "iç hata")

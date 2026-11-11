@@ -64,11 +64,11 @@ type AccountServiceClient interface {
 	// SetAvatar makes the caller's READY AVATAR upload (core's MediaService)
 	// their avatar. identity does not own media: it asks core with the
 	// caller's own token (MediaService.AttachAvatar), which checks that the
-	// upload is the caller's, READY and an avatar. core's refusals keep core's
-	// ErrorInfo (domain core.tayfam.app: UPLOAD_NOT_FOUND, UPLOAD_NOT_READY,
-	// UPLOAD_IN_USE); core unreachable is UNAVAILABLE. core and chat get the
-	// new avatar with user.profile_updated; core then deletes the previous
-	// one.
+	// upload is the caller's, READY and an avatar. core's refusals come back
+	// as identity's ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY
+	// and ERROR_REASON_UPLOAD_IN_USE; core unreachable or media off is
+	// UNAVAILABLE. core and chat get the new avatar with user.profile_updated;
+	// core then deletes the previous one.
 	SetAvatar(ctx context.Context, in *SetAvatarRequest, opts ...grpc.CallOption) (*SetAvatarResponse, error)
 	// ClearAvatar removes the caller's avatar; core deletes the image when
 	// user.profile_updated reaches it. Without an avatar it changes nothing.
@@ -259,11 +259,11 @@ type AccountServiceServer interface {
 	// SetAvatar makes the caller's READY AVATAR upload (core's MediaService)
 	// their avatar. identity does not own media: it asks core with the
 	// caller's own token (MediaService.AttachAvatar), which checks that the
-	// upload is the caller's, READY and an avatar. core's refusals keep core's
-	// ErrorInfo (domain core.tayfam.app: UPLOAD_NOT_FOUND, UPLOAD_NOT_READY,
-	// UPLOAD_IN_USE); core unreachable is UNAVAILABLE. core and chat get the
-	// new avatar with user.profile_updated; core then deletes the previous
-	// one.
+	// upload is the caller's, READY and an avatar. core's refusals come back
+	// as identity's ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY
+	// and ERROR_REASON_UPLOAD_IN_USE; core unreachable or media off is
+	// UNAVAILABLE. core and chat get the new avatar with user.profile_updated;
+	// core then deletes the previous one.
 	SetAvatar(context.Context, *SetAvatarRequest) (*SetAvatarResponse, error)
 	// ClearAvatar removes the caller's avatar; core deletes the image when
 	// user.profile_updated reaches it. Without an avatar it changes nothing.

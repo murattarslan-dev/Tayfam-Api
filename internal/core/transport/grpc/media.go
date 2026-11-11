@@ -98,6 +98,18 @@ func urlsToProto(u media.URLs) *corev1.MediaUrls {
 	}
 }
 
+// optionalUploadID parses an optional upload ID field ("" is zero).
+func optionalUploadID(s, field string) (id.ID, error) {
+	if s == "" {
+		return id.ID{}, nil
+	}
+	u, ok := id.Parse(s)
+	if !ok {
+		return id.ID{}, validation(field)
+	}
+	return u, nil
+}
+
 func uploadArg(ctx context.Context, s string) (id.ID, id.ID, error) {
 	u, err := callerID(ctx)
 	if err != nil {

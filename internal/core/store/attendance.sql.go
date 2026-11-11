@@ -122,7 +122,7 @@ func (q *Queries) DeleteCatch(ctx context.Context, arg DeleteCatchParams) (int64
 }
 
 const getCatch = `-- name: GetCatch :one
-SELECT id, user_id, species, length_cm::float8 AS length_cm, lat, lng, visibility, created_at
+SELECT id, user_id, species, length_cm::float8 AS length_cm, lat, lng, visibility, created_at, photo_upload_id
 FROM fishing_catches
 WHERE event_id = $1 AND id = $2 AND deleted_at IS NULL
 `
@@ -133,14 +133,15 @@ type GetCatchParams struct {
 }
 
 type GetCatchRow struct {
-	ID         pgtype.UUID
-	UserID     pgtype.UUID
-	Species    string
-	LengthCm   float64
-	Lat        pgtype.Float8
-	Lng        pgtype.Float8
-	Visibility string
-	CreatedAt  pgtype.Timestamptz
+	ID            pgtype.UUID
+	UserID        pgtype.UUID
+	Species       string
+	LengthCm      float64
+	Lat           pgtype.Float8
+	Lng           pgtype.Float8
+	Visibility    string
+	CreatedAt     pgtype.Timestamptz
+	PhotoUploadID pgtype.UUID
 }
 
 func (q *Queries) GetCatch(ctx context.Context, arg GetCatchParams) (GetCatchRow, error) {
@@ -155,6 +156,7 @@ func (q *Queries) GetCatch(ctx context.Context, arg GetCatchParams) (GetCatchRow
 		&i.Lng,
 		&i.Visibility,
 		&i.CreatedAt,
+		&i.PhotoUploadID,
 	)
 	return i, err
 }
@@ -333,7 +335,7 @@ func (q *Queries) ListActivityRecordsOfEvent(ctx context.Context, eventID pgtype
 }
 
 const listCatches = `-- name: ListCatches :many
-SELECT id, user_id, species, length_cm::float8 AS length_cm, lat, lng, visibility, created_at
+SELECT id, user_id, species, length_cm::float8 AS length_cm, lat, lng, visibility, created_at, photo_upload_id
 FROM fishing_catches
 WHERE event_id = $1
   AND deleted_at IS NULL
@@ -350,14 +352,15 @@ type ListCatchesParams struct {
 }
 
 type ListCatchesRow struct {
-	ID         pgtype.UUID
-	UserID     pgtype.UUID
-	Species    string
-	LengthCm   float64
-	Lat        pgtype.Float8
-	Lng        pgtype.Float8
-	Visibility string
-	CreatedAt  pgtype.Timestamptz
+	ID            pgtype.UUID
+	UserID        pgtype.UUID
+	Species       string
+	LengthCm      float64
+	Lat           pgtype.Float8
+	Lng           pgtype.Float8
+	Visibility    string
+	CreatedAt     pgtype.Timestamptz
+	PhotoUploadID pgtype.UUID
 }
 
 // (created_at, id) ile sayfalanır.
@@ -384,6 +387,7 @@ func (q *Queries) ListCatches(ctx context.Context, arg ListCatchesParams) ([]Lis
 			&i.Lng,
 			&i.Visibility,
 			&i.CreatedAt,
+			&i.PhotoUploadID,
 		); err != nil {
 			return nil, err
 		}

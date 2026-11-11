@@ -99,6 +99,9 @@ func (s *EventServer) CreateEvent(ctx context.Context, req *corev1.CreateEventRe
 	if r := req.GetRecurrence(); r != nil {
 		in.Recurrence = &event.Recurrence{RRule: r.GetRrule(), TimeZone: r.GetTimeZone()}
 	}
+	if in.CoverUploadID, err = optionalUploadID(req.GetCoverUploadId(), "cover_upload_id"); err != nil {
+		return nil, err
+	}
 	v, err := s.app.Create(ctx, user, t, in)
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
@@ -127,6 +130,10 @@ func (s *EventServer) UpdateEvent(ctx context.Context, req *corev1.UpdateEventRe
 			}
 		case event.FieldDetails:
 			if in.Details, err = detailsFromProto(req.GetConvoy(), req.GetCamp(), req.GetHike(), req.GetFishing(), req.GetGaming(), req.GetSports()); err != nil {
+				return nil, err
+			}
+		case event.FieldCover:
+			if in.CoverUploadID, err = optionalUploadID(req.GetCoverUploadId(), "cover_upload_id"); err != nil {
 				return nil, err
 			}
 		}
@@ -476,6 +483,7 @@ func eventToProto(v event.Event) *corev1.Event {
 		GoingCount: v.Going, MaybeCount: v.Maybe, WaitlistCount: v.Waitlist,
 		CallerRsvp: rsvpToProto(v.CallerRSVP), CallerCanManage: v.CallerCanManage,
 		CallerAttendance: attendanceToProto(v.CallerAttendance),
+		CoverUploadId:    optionalID(v.CoverUploadID),
 	}
 	switch v.Mode {
 	case event.ModeInPerson:
