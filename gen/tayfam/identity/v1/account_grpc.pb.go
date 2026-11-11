@@ -23,6 +23,8 @@ const (
 	AccountService_RotateReferralCode_FullMethodName     = "/tayfam.identity.v1.AccountService/RotateReferralCode"
 	AccountService_FindUserByReferralCode_FullMethodName = "/tayfam.identity.v1.AccountService/FindUserByReferralCode"
 	AccountService_SetActivityVisibility_FullMethodName  = "/tayfam.identity.v1.AccountService/SetActivityVisibility"
+	AccountService_SetAvatar_FullMethodName              = "/tayfam.identity.v1.AccountService/SetAvatar"
+	AccountService_ClearAvatar_FullMethodName            = "/tayfam.identity.v1.AccountService/ClearAvatar"
 	AccountService_ListSessions_FullMethodName           = "/tayfam.identity.v1.AccountService/ListSessions"
 	AccountService_RevokeSession_FullMethodName          = "/tayfam.identity.v1.AccountService/RevokeSession"
 	AccountService_RevokeOtherSessions_FullMethodName    = "/tayfam.identity.v1.AccountService/RevokeOtherSessions"
@@ -59,6 +61,18 @@ type AccountServiceClient interface {
 	// SetActivityVisibility changes who sees the caller's attendance history.
 	// core gets the new setting with the profile copy (user.profile_updated).
 	SetActivityVisibility(ctx context.Context, in *SetActivityVisibilityRequest, opts ...grpc.CallOption) (*SetActivityVisibilityResponse, error)
+	// SetAvatar makes the caller's READY AVATAR upload (core's MediaService)
+	// their avatar. identity does not own media: it asks core with the
+	// caller's own token (MediaService.AttachAvatar), which checks that the
+	// upload is the caller's, READY and an avatar. core's refusals keep core's
+	// ErrorInfo (domain core.tayfam.app: UPLOAD_NOT_FOUND, UPLOAD_NOT_READY,
+	// UPLOAD_IN_USE); core unreachable is UNAVAILABLE. core and chat get the
+	// new avatar with user.profile_updated; core then deletes the previous
+	// one.
+	SetAvatar(ctx context.Context, in *SetAvatarRequest, opts ...grpc.CallOption) (*SetAvatarResponse, error)
+	// ClearAvatar removes the caller's avatar; core deletes the image when
+	// user.profile_updated reaches it. Without an avatar it changes nothing.
+	ClearAvatar(ctx context.Context, in *ClearAvatarRequest, opts ...grpc.CallOption) (*ClearAvatarResponse, error)
 	// ListSessions returns the caller's open sessions, one per signed-in
 	// device. No IP address and no token is returned. The session methods
 	// refuse a token whose own session is ended (UNAUTHENTICATED), even before
@@ -128,6 +142,26 @@ func (c *accountServiceClient) SetActivityVisibility(ctx context.Context, in *Se
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SetActivityVisibilityResponse)
 	err := c.cc.Invoke(ctx, AccountService_SetActivityVisibility_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *accountServiceClient) SetAvatar(ctx context.Context, in *SetAvatarRequest, opts ...grpc.CallOption) (*SetAvatarResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetAvatarResponse)
+	err := c.cc.Invoke(ctx, AccountService_SetAvatar_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *accountServiceClient) ClearAvatar(ctx context.Context, in *ClearAvatarRequest, opts ...grpc.CallOption) (*ClearAvatarResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClearAvatarResponse)
+	err := c.cc.Invoke(ctx, AccountService_ClearAvatar_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -222,6 +256,18 @@ type AccountServiceServer interface {
 	// SetActivityVisibility changes who sees the caller's attendance history.
 	// core gets the new setting with the profile copy (user.profile_updated).
 	SetActivityVisibility(context.Context, *SetActivityVisibilityRequest) (*SetActivityVisibilityResponse, error)
+	// SetAvatar makes the caller's READY AVATAR upload (core's MediaService)
+	// their avatar. identity does not own media: it asks core with the
+	// caller's own token (MediaService.AttachAvatar), which checks that the
+	// upload is the caller's, READY and an avatar. core's refusals keep core's
+	// ErrorInfo (domain core.tayfam.app: UPLOAD_NOT_FOUND, UPLOAD_NOT_READY,
+	// UPLOAD_IN_USE); core unreachable is UNAVAILABLE. core and chat get the
+	// new avatar with user.profile_updated; core then deletes the previous
+	// one.
+	SetAvatar(context.Context, *SetAvatarRequest) (*SetAvatarResponse, error)
+	// ClearAvatar removes the caller's avatar; core deletes the image when
+	// user.profile_updated reaches it. Without an avatar it changes nothing.
+	ClearAvatar(context.Context, *ClearAvatarRequest) (*ClearAvatarResponse, error)
 	// ListSessions returns the caller's open sessions, one per signed-in
 	// device. No IP address and no token is returned. The session methods
 	// refuse a token whose own session is ended (UNAUTHENTICATED), even before
@@ -268,6 +314,12 @@ func (UnimplementedAccountServiceServer) FindUserByReferralCode(context.Context,
 }
 func (UnimplementedAccountServiceServer) SetActivityVisibility(context.Context, *SetActivityVisibilityRequest) (*SetActivityVisibilityResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetActivityVisibility not implemented")
+}
+func (UnimplementedAccountServiceServer) SetAvatar(context.Context, *SetAvatarRequest) (*SetAvatarResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetAvatar not implemented")
+}
+func (UnimplementedAccountServiceServer) ClearAvatar(context.Context, *ClearAvatarRequest) (*ClearAvatarResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ClearAvatar not implemented")
 }
 func (UnimplementedAccountServiceServer) ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListSessions not implemented")
@@ -376,6 +428,42 @@ func _AccountService_SetActivityVisibility_Handler(srv interface{}, ctx context.
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AccountServiceServer).SetActivityVisibility(ctx, req.(*SetActivityVisibilityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AccountService_SetAvatar_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetAvatarRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AccountServiceServer).SetAvatar(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AccountService_SetAvatar_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AccountServiceServer).SetAvatar(ctx, req.(*SetAvatarRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AccountService_ClearAvatar_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClearAvatarRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AccountServiceServer).ClearAvatar(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AccountService_ClearAvatar_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AccountServiceServer).ClearAvatar(ctx, req.(*ClearAvatarRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -510,6 +598,14 @@ var AccountService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetActivityVisibility",
 			Handler:    _AccountService_SetActivityVisibility_Handler,
+		},
+		{
+			MethodName: "SetAvatar",
+			Handler:    _AccountService_SetAvatar_Handler,
+		},
+		{
+			MethodName: "ClearAvatar",
+			Handler:    _AccountService_ClearAvatar_Handler,
 		},
 		{
 			MethodName: "ListSessions",

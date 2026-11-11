@@ -1170,7 +1170,10 @@ type Event struct {
 	//	*Event_Fishing
 	//	*Event_Gaming
 	//	*Event_Sports
-	Details       isEvent_Details `protobuf_oneof:"details"`
+	Details isEvent_Details `protobuf_oneof:"details"`
+	// The cover image (a READY COVER upload, MediaService); empty when there
+	// is none. Events a series generates have no cover of their own.
+	CoverUploadId string `protobuf:"bytes,36,opt,name=cover_upload_id,json=coverUploadId,proto3" json:"cover_upload_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1469,6 +1472,13 @@ func (x *Event) GetSports() *SportsDetails {
 	return nil
 }
 
+func (x *Event) GetCoverUploadId() string {
+	if x != nil {
+		return x.CoverUploadId
+	}
+	return ""
+}
+
 type isEvent_Details interface {
 	isEvent_Details()
 }
@@ -1557,7 +1567,12 @@ type CreateEventRequest struct {
 	// Optional: makes the event the first of a repeating series. The server
 	// creates the following events itself, eight weeks ahead, as ordinary
 	// events (see Recurrence).
-	Recurrence    *Recurrence `protobuf:"bytes,16,opt,name=recurrence,proto3" json:"recurrence,omitempty"`
+	Recurrence *Recurrence `protobuf:"bytes,16,opt,name=recurrence,proto3" json:"recurrence,omitempty"`
+	// Optional: the caller's own READY COVER upload opened for this tayfa
+	// (ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,
+	// ERROR_REASON_UPLOAD_IN_USE). Only this event gets it, not the rest of a
+	// series.
+	CoverUploadId string `protobuf:"bytes,17,opt,name=cover_upload_id,json=coverUploadId,proto3" json:"cover_upload_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1763,6 +1778,13 @@ func (x *CreateEventRequest) GetRecurrence() *Recurrence {
 		return x.Recurrence
 	}
 	return nil
+}
+
+func (x *CreateEventRequest) GetCoverUploadId() string {
+	if x != nil {
+		return x.CoverUploadId
+	}
+	return ""
 }
 
 type isCreateEventRequest_Details interface {
@@ -2066,8 +2088,9 @@ type UpdateEventRequest struct {
 	// (start_time and end_time together), "location" (mode,
 	// meeting_point_name, meeting_point, city, district and online_url
 	// together), "capacity", "discoverable", "details" (replaces the type
-	// details; vehicles and camp items stay). Any other path is
-	// ERROR_REASON_VALIDATION.
+	// details; vehicles and camp items stay), "cover_upload_id" (not with
+	// series = true: ERROR_REASON_VALIDATION, field "update_mask"). Any
+	// other path is ERROR_REASON_VALIDATION.
 	UpdateMask *fieldmaskpb.FieldMask `protobuf:"bytes,15,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	// Only for an event of a series (otherwise ERROR_REASON_VALIDATION, field
 	// "series"). false: only this event changes and it is marked
@@ -2078,7 +2101,11 @@ type UpdateEventRequest struct {
 	// series (ERROR_REASON_VALIDATION, field "update_mask"); hike details'
 	// expected_return_time keeps its distance from each event's start.
 	// ERROR_REASON_EVENT_SERIES_ENDED if the series was ended.
-	Series        bool `protobuf:"varint,16,opt,name=series,proto3" json:"series,omitempty"`
+	Series bool `protobuf:"varint,16,opt,name=series,proto3" json:"series,omitempty"`
+	// With "cover_upload_id" in update_mask: same rules as
+	// CreateEventRequest.cover_upload_id; empty removes the cover. The
+	// previous cover is deleted.
+	CoverUploadId string `protobuf:"bytes,17,opt,name=cover_upload_id,json=coverUploadId,proto3" json:"cover_upload_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2284,6 +2311,13 @@ func (x *UpdateEventRequest) GetSeries() bool {
 		return x.Series
 	}
 	return false
+}
+
+func (x *UpdateEventRequest) GetCoverUploadId() string {
+	if x != nil {
+		return x.CoverUploadId
+	}
+	return ""
 }
 
 type isUpdateEventRequest_Details interface {
@@ -3945,9 +3979,12 @@ type FishingCatch struct {
 	// Optional. Returned to the angler, and for CATCH_VISIBILITY_TAYFA to
 	// everyone who may see the event's spot; unset for everyone else. Never
 	// logged.
-	Location      *LatLng                `protobuf:"bytes,5,opt,name=location,proto3" json:"location,omitempty"`
-	Visibility    CatchVisibility        `protobuf:"varint,6,opt,name=visibility,proto3,enum=tayfam.core.v1.CatchVisibility" json:"visibility,omitempty"`
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	Location   *LatLng                `protobuf:"bytes,5,opt,name=location,proto3" json:"location,omitempty"`
+	Visibility CatchVisibility        `protobuf:"varint,6,opt,name=visibility,proto3,enum=tayfam.core.v1.CatchVisibility" json:"visibility,omitempty"`
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// The photo (a READY CATCH_PHOTO upload, MediaService); empty when there
+	// is none. Seen by everyone who sees the catch.
+	PhotoUploadId string `protobuf:"bytes,8,opt,name=photo_upload_id,json=photoUploadId,proto3" json:"photo_upload_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4031,6 +4068,13 @@ func (x *FishingCatch) GetCreateTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *FishingCatch) GetPhotoUploadId() string {
+	if x != nil {
+		return x.PhotoUploadId
+	}
+	return ""
+}
+
 type AddFishingCatchRequest struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	TayfaId  string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
@@ -4043,8 +4087,14 @@ type AddFishingCatchRequest struct {
 	// Required. A UUID the client generates once per catch and reuses on
 	// retry.
 	ClientRequestId string `protobuf:"bytes,7,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Optional: the caller's own READY CATCH_PHOTO upload opened for this
+	// tayfa (ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,
+	// ERROR_REASON_UPLOAD_IN_USE). The image was stripped of its metadata
+	// (GPS included) during processing; the catch's location stays in
+	// location and visibility.
+	PhotoUploadId string `protobuf:"bytes,8,opt,name=photo_upload_id,json=photoUploadId,proto3" json:"photo_upload_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AddFishingCatchRequest) Reset() {
@@ -4122,6 +4172,13 @@ func (x *AddFishingCatchRequest) GetVisibility() CatchVisibility {
 func (x *AddFishingCatchRequest) GetClientRequestId() string {
 	if x != nil {
 		return x.ClientRequestId
+	}
+	return ""
+}
+
+func (x *AddFishingCatchRequest) GetPhotoUploadId() string {
+	if x != nil {
+		return x.PhotoUploadId
 	}
 	return ""
 }
@@ -4746,7 +4803,7 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\rSportsDetails\x12+\n" +
 	"\x05sport\x18\x01 \x01(\x0e2\x15.tayfam.core.v1.SportR\x05sport\x12\x1d\n" +
 	"\n" +
-	"venue_name\x18\x02 \x01(\tR\tvenueName\"\xa3\f\n" +
+	"venue_name\x18\x02 \x01(\tR\tvenueName\"\xcb\f\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\btayfa_id\x18\x02 \x01(\tR\atayfaId\x12-\n" +
@@ -4792,8 +4849,9 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\x04hike\x18  \x01(\v2\x1b.tayfam.core.v1.HikeDetailsH\x00R\x04hike\x12:\n" +
 	"\afishing\x18! \x01(\v2\x1e.tayfam.core.v1.FishingDetailsH\x00R\afishing\x127\n" +
 	"\x06gaming\x18\" \x01(\v2\x1d.tayfam.core.v1.GamingDetailsH\x00R\x06gaming\x127\n" +
-	"\x06sports\x18# \x01(\v2\x1d.tayfam.core.v1.SportsDetailsH\x00R\x06sportsB\t\n" +
-	"\adetails\"\xf1\a\n" +
+	"\x06sports\x18# \x01(\v2\x1d.tayfam.core.v1.SportsDetailsH\x00R\x06sports\x12&\n" +
+	"\x0fcover_upload_id\x18$ \x01(\tR\rcoverUploadIdB\t\n" +
+	"\adetails\"\x99\b\n" +
 	"\x12CreateEventRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12-\n" +
 	"\x04type\x18\x02 \x01(\x0e2\x19.tayfam.core.v1.EventTypeR\x04type\x12-\n" +
@@ -4821,7 +4879,8 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\x11client_request_id\x18\x0f \x01(\tR\x0fclientRequestId\x12:\n" +
 	"\n" +
 	"recurrence\x18\x10 \x01(\v2\x1a.tayfam.core.v1.RecurrenceR\n" +
-	"recurrenceB\t\n" +
+	"recurrence\x12&\n" +
+	"\x0fcover_upload_id\x18\x11 \x01(\tR\rcoverUploadIdB\t\n" +
 	"\adetails\"?\n" +
 	"\n" +
 	"Recurrence\x12\x14\n" +
@@ -4841,7 +4900,7 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\vcreate_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\"B\n" +
 	"\x13CreateEventResponse\x12+\n" +
-	"\x05event\x18\x01 \x01(\v2\x15.tayfam.core.v1.EventR\x05event\"\xca\a\n" +
+	"\x05event\x18\x01 \x01(\v2\x15.tayfam.core.v1.EventR\x05event\"\xf2\a\n" +
 	"\x12UpdateEventRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x19\n" +
 	"\bevent_id\x18\x02 \x01(\tR\aeventId\x12\x14\n" +
@@ -4868,7 +4927,8 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\x06sports\x18\x19 \x01(\v2\x1d.tayfam.core.v1.SportsDetailsH\x00R\x06sports\x12;\n" +
 	"\vupdate_mask\x18\x0f \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
 	"updateMask\x12\x16\n" +
-	"\x06series\x18\x10 \x01(\bR\x06seriesB\t\n" +
+	"\x06series\x18\x10 \x01(\bR\x06series\x12&\n" +
+	"\x0fcover_upload_id\x18\x11 \x01(\tR\rcoverUploadIdB\t\n" +
 	"\adetails\"B\n" +
 	"\x13UpdateEventResponse\x12+\n" +
 	"\x05event\x18\x01 \x01(\v2\x15.tayfam.core.v1.EventR\x05event\"b\n" +
@@ -4979,7 +5039,7 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\bevent_id\x18\x02 \x01(\tR\aeventId\x12\x17\n" +
 	"\auser_id\x18\x03 \x01(\tR\x06userId\x12\x1a\n" +
 	"\battended\x18\x04 \x01(\bR\battended\"\x17\n" +
-	"\x15SetAttendanceResponse\"\xa0\x02\n" +
+	"\x15SetAttendanceResponse\"\xc8\x02\n" +
 	"\fFishingCatch\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x18\n" +
@@ -4990,7 +5050,8 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"visibility\x18\x06 \x01(\x0e2\x1f.tayfam.core.v1.CatchVisibilityR\n" +
 	"visibility\x12;\n" +
 	"\vcreate_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\xa6\x02\n" +
+	"createTime\x12&\n" +
+	"\x0fphoto_upload_id\x18\b \x01(\tR\rphotoUploadId\"\xce\x02\n" +
 	"\x16AddFishingCatchRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x19\n" +
 	"\bevent_id\x18\x02 \x01(\tR\aeventId\x12\x18\n" +
@@ -5000,7 +5061,8 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\n" +
 	"visibility\x18\x06 \x01(\x0e2\x1f.tayfam.core.v1.CatchVisibilityR\n" +
 	"visibility\x12*\n" +
-	"\x11client_request_id\x18\a \x01(\tR\x0fclientRequestId\"M\n" +
+	"\x11client_request_id\x18\a \x01(\tR\x0fclientRequestId\x12&\n" +
+	"\x0fphoto_upload_id\x18\b \x01(\tR\rphotoUploadId\"M\n" +
 	"\x17AddFishingCatchResponse\x122\n" +
 	"\x05catch\x18\x01 \x01(\v2\x1c.tayfam.core.v1.FishingCatchR\x05catch\"\x8d\x01\n" +
 	"\x19ListFishingCatchesRequest\x12\x19\n" +

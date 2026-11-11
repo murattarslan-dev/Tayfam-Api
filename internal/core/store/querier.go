@@ -77,6 +77,11 @@ type Querier interface {
 	// Uyarıdan sonra @warned_before'a kadar aktivite olmayan tayfa arşivlenir
 	// (salt okunur). Askıdaki ya da silme bekleyen tayfaya dokunulmaz.
 	ArchiveWarnedTayfas(ctx context.Context, arg ArchiveWarnedTayfasParams) ([]pgtype.UUID, error)
+	// Bağlama: yalnızca sahibinin, hazır, amacı ve tayfası tutan, başka bir
+	// içeriğe bağlanmamış dosyası. Aynı hedefe yeniden bağlama bir şey
+	// değiştirmez. Çağıran satırı önce GetOwnUploadForUpdate ile kilitler ve
+	// hatayı ayırt eder; bu koşul son savunma hattıdır.
+	AttachUpload(ctx context.Context, arg AttachUploadParams) (int64, error)
 	BanMembership(ctx context.Context, arg BanMembershipParams) (int64, error)
 	CancelEvent(ctx context.Context, arg CancelEventParams) (int64, error)
 	// Seri sonlandırılınca gelecekteki düzenlenmemiş örnekler iptal edilir.
@@ -144,6 +149,9 @@ type Querier interface {
 	// Kullanıcı başına günlük tayfa açma sınırı. Silinen tayfalar da sayılır;
 	// açıp silerek sınır aşılamaz.
 	CountTayfasCreatedSince(ctx context.Context, arg CountTayfasCreatedSinceParams) (int64, error)
+	// Saatlik sıklık sınırı: son bir saatte açılan kayıtlar (silinenler
+	// sayılmaz; pending kayıtlar 24 saat durduğu için yeterli bir alt sınırdır).
+	CountUploadsSince(ctx context.Context, arg CountUploadsSinceParams) (int64, error)
 	CountUserCatches(ctx context.Context, arg CountUserCatchesParams) (int64, error)
 	// Duyurular (issue #48). Her sorgu tayfa_id ile sınırlıdır (IDOR); üyelik
 	// ve izin kontrolü app katmanındadır (access, authz).
@@ -197,6 +205,10 @@ type Querier interface {
 	// Tayfa, kurucu üyelik, modüller ve ilgi alanları tek transaction'da
 	// yazılır; birleştirmeyi app katmanı yapar.
 	CreateTayfa(ctx context.Context, arg CreateTayfaParams) error
+	// Yüklenen dosyalar (issue #135; ADR-0007, ADR-0020; internal/core/app/media).
+	// r2_key hiçbir yanıta, log'a ve olaya girmez; yalnızca R2 istemcisine
+	// verilir.
+	CreateUpload(ctx context.Context, arg CreateUploadParams) (pgtype.UUID, error)
 	DeleteActivityRecord(ctx context.Context, arg DeleteActivityRecordParams) (int64, error)
 	DeleteAnswerVotes(ctx context.Context, answerID pgtype.UUID) error
 	DeleteBlock(ctx context.Context, arg DeleteBlockParams) (int64, error)
@@ -218,6 +230,9 @@ type Querier interface {
 	// Etiket silinince bağları CASCADE ile gider; sorular kalır.
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
 	DeleteTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) error
+	// R2'deki nesneleri silindikten sonra. İçerikteki referans ON DELETE SET
+	// NULL ile düşer.
+	DeleteUploadRow(ctx context.Context, id pgtype.UUID) (int64, error)
 	// Kalıcı katılım geçmişi kişiye aittir: hesapla birlikte silinir (v14
 	// "Kalıcı katılım geçmişi", user_id → CASCADE).
 	DeleteUserActivityRecords(ctx context.Context, userID pgtype.UUID) error
@@ -239,6 +254,10 @@ type Querier interface {
 	DeleteUserHikeCheckins(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserPollVotes(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserRsvps(ctx context.Context, userID pgtype.UUID) error
+	// Hesap silme (user.deleted): kullanıcının dosyaları silinir; bağlı kapak
+	// görselleri tayfanındır, yalnızca sahiplikleri kaldırılır.
+	DeleteUserUploads(ctx context.Context, userID pgtype.UUID) (int64, error)
+	DisownUserCovers(ctx context.Context, userID pgtype.UUID) (int64, error)
 	EndEventSeries(ctx context.Context, arg EndEventSeriesParams) (int64, error)
 	// Yazarın kendi silmesi: başlık ve gövde hemen boşaltılır, geri alınamaz
 	// (v14 "Silinen içeriği geri alma").
@@ -253,6 +272,9 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// 7 gün çözülmeyen şikâyetler platforma yükselir.
 	EscalateUnresolvedReports(ctx context.Context, arg EscalateUnresolvedReportsParams) ([]EscalateUnresolvedReportsRow, error)
+	// Temizlik: 24 saatte tamamlanmayan, 24 saattir reddedilmiş ve 7 gün
+	// içinde bağlanmamış dosyalar silme kuyruğuna girer.
+	ExpireUploads(ctx context.Context, arg ExpireUploadsParams) ([]pgtype.UUID, error)
 	// Verilen kullanıcılardan hâlâ etkin üye olanlar (tek alıcılı bildirimler
 	// ve arka plan işlerinin seçtiği alıcılar).
 	FilterNotifyActive(ctx context.Context, arg FilterNotifyActiveParams) ([]pgtype.UUID, error)
@@ -302,6 +324,9 @@ type Querier interface {
 	// (banlı kullanıcının profili gizlenir, silinmez; issue #104).
 	GetLiveUserProfile(ctx context.Context, userID pgtype.UUID) (GetLiveUserProfileRow, error)
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
+	// Sahibinin dosyası; başkasınınki bulunamaz (IDOR).
+	GetOwnUpload(ctx context.Context, arg GetOwnUploadParams) (Upload, error)
+	GetOwnUploadForUpdate(ctx context.Context, arg GetOwnUploadForUpdateParams) (Upload, error)
 	GetPoll(ctx context.Context, arg GetPollParams) (GetPollRow, error)
 	// Yazma işlemleri anket satırını kilitleyerek okur.
 	GetPollForUpdate(ctx context.Context, arg GetPollForUpdateParams) (GetPollForUpdateRow, error)
@@ -346,6 +371,7 @@ type Querier interface {
 	// Yazan işlemler tayfa satırını kilitleyerek okur; memberships trigger'ı da
 	// aynı satırı kilitlediği için üyelik değişiklikleriyle sırayla çalışır.
 	GetTayfaForUpdate(ctx context.Context, id pgtype.UUID) (GetTayfaForUpdateRow, error)
+	GetUploadByClientRequest(ctx context.Context, arg GetUploadByClientRequestParams) (Upload, error)
 	GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUserProfileRow, error)
 	HasMutualTayfa(ctx context.Context, arg HasMutualTayfaParams) (bool, error)
 	// Ortak etkinlik geçmişi: ikisinin de attended işaretlendiği, iptal
@@ -390,6 +416,7 @@ type Querier interface {
 	// (created_at, id) ile sayfalanır.
 	ListCatches(ctx context.Context, arg ListCatchesParams) ([]ListCatchesRow, error)
 	ListConvoyVehicles(ctx context.Context, eventID pgtype.UUID) ([]ListConvoyVehiclesRow, error)
+	ListDeletingUploads(ctx context.Context, n int32) ([]ListDeletingUploadsRow, error)
 	// Üretim sırası gelen seriler: bitmemiş, şablonu olan ve generated_until'ı
 	// verilen zamandan önce kalanlar.
 	ListDueEventSeries(ctx context.Context, arg ListDueEventSeriesParams) ([]ListDueEventSeriesRow, error)
@@ -412,6 +439,12 @@ type Querier interface {
 	// Geçerli davetler (iptal edilmemiş, süresi dolmamış, tükenmemiş), yeniden
 	// eskiye. created_by verilirse yalnızca o kişinin açtıkları.
 	ListLiveInvites(ctx context.Context, arg ListLiveInvitesParams) ([]ListLiveInvitesRow, error)
+	// Görüntüleme: istenen hazır dosyalar ve izleyicinin her birini görüp
+	// göremeyeceğine karar vermek için bağlam. Karar uygulama katmanında, core'un
+	// izin tablosuyla verilir (authz); burada yalnızca veri toplanır. İçeriğin
+	// tayfası: tayfa kapağında tayfanın kendisi, etkinlik kapağında ve av
+	// fotoğrafında etkinliğin tayfası (silinmiş içerik ve tayfa bağlam vermez).
+	ListMediaForViewer(ctx context.Context, arg ListMediaForViewerParams) ([]ListMediaForViewerRow, error)
 	// Üye listesi: önce rol (yönetici başta), sonra katılım zamanı, sonra
 	// kullanıcı ID'si. Katılmadan banlanan kişinin katılım zamanı yoktur; onun
 	// yerine başvuru zamanı kullanılır. Sayfa imleci (after_rank, after_time,
@@ -534,9 +567,16 @@ type Querier interface {
 	// Kişinin günlük sayımlarını sıraya sokar: aynı kişinin eşzamanlı istekleri
 	// sınırı birlikte aşamaz.
 	LockUserLimit(ctx context.Context, userID pgtype.UUID) error
+	// Kullanıcının yükleme açmalarını sıraya koyar: sıklık sınırı ve kota
+	// kontrolü ile kaydın yazılması arasında eşzamanlı ikinci bir istek
+	// araya giremez. Transaction bitince bırakılır.
+	LockUserUploads(ctx context.Context, userID string) error
 	MarkAttended(ctx context.Context, arg MarkAttendedParams) error
 	MarkHikeAlertSent(ctx context.Context, arg MarkHikeAlertSentParams) (int64, error)
 	MarkNoShow(ctx context.Context, arg MarkNoShowParams) error
+	// Denetimden geçti (ADR-0020). Yalnızca bekleyen kayıt; eşzamanlı ikinci
+	// tamamlama bir şey değiştirmez.
+	MarkUploadReady(ctx context.Context, arg MarkUploadReadyParams) (int64, error)
 	MuteMembership(ctx context.Context, arg MuteMembershipParams) (int64, error)
 	// Bekleme listesinin başı: en eski kayıt önce. Çağıran etkinlik satırını
 	// zaten kilitlemiştir; satır kilidi aynı kaydın iki kez terfisini de önler.
@@ -567,6 +607,10 @@ type Querier interface {
 	// Bir turun sonucu (issue #110, 00015). Başka bir pod'un daha yeni bitişi
 	// ezilmez. Başarısız tur son başarılı zamanı korur.
 	RecordJobRun(ctx context.Context, arg RecordJobRunParams) error
+	RejectPendingUpload(ctx context.Context, arg RejectPendingUploadParams) (int64, error)
+	// Kullanıcının güncel avatarı dışındaki bağlı avatarları silinir
+	// (identity'nin user.profile_updated olayı). keep NULL: avatar kaldırıldı.
+	ReleaseOtherAvatars(ctx context.Context, arg ReleaseOtherAvatarsParams) (int64, error)
 	RemoveAnswerVote(ctx context.Context, arg RemoveAnswerVoteParams) (int64, error)
 	RequestTayfaDeletion(ctx context.Context, arg RequestTayfaDeletionParams) (int64, error)
 	ResolveReport(ctx context.Context, arg ResolveReportParams) (int64, error)
@@ -590,6 +634,7 @@ type Querier interface {
 	// audit_logs saklama işi; trigger yalnızca bu ayarla ve 365 günden eski
 	// kayıtlar için silmeye izin verir.
 	SetAuditRetentionJob(ctx context.Context) error
+	SetCatchPhoto(ctx context.Context, arg SetCatchPhotoParams) error
 	// ---------------------------------------------------------------------------
 	// Konvoy araçları. Kişi başına bir araç; yeniden eklemek öncekinin yerine
 	// geçer.
@@ -604,6 +649,7 @@ type Querier interface {
 	// Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
 	// key yanlış türü reddeder.
 	SetEventConvoy(ctx context.Context, arg SetEventConvoyParams) error
+	SetEventCover(ctx context.Context, arg SetEventCoverParams) error
 	SetEventFishing(ctx context.Context, arg SetEventFishingParams) error
 	SetEventGaming(ctx context.Context, arg SetEventGamingParams) error
 	SetEventHike(ctx context.Context, arg SetEventHikeParams) error
@@ -615,6 +661,10 @@ type Querier interface {
 	// Kullanıcısız arka plan işi. Trigger'ın tanıdığı tek değer
 	// 'account_deletion'dır; başka bir değer işlemi hata ile durdurur.
 	SetSystemJob(ctx context.Context, job string) error
+	// İçeriğin dosyası. Kolonun trigger'ı (uploads_check_ref) dosyanın bu
+	// içeriğe bağlı ve hazır olduğunu yeniden doğrular; eski dosya
+	// uploads_release_ref ile silme kuyruğuna girer.
+	SetTayfaCover(ctx context.Context, arg SetTayfaCoverParams) error
 	SetTayfaJoinCode(ctx context.Context, arg SetTayfaJoinCodeParams) (int64, error)
 	SetTayfaModule(ctx context.Context, arg SetTayfaModuleParams) error
 	// Birebir mesaj kuralının girdileri (issue #95, veri modeli v14 "Mesaj
@@ -668,6 +718,8 @@ type Querier interface {
 	// activity_visibility NULL ise (alanı taşımayan eski olay) mevcut değer
 	// kalır; yeni satırda varsayılan 'tayfa' olur.
 	UpsertUserProfile(ctx context.Context, arg UpsertUserProfileParams) (int64, error)
+	// Kota: iki varyantın bildirilen (ve imzayla zorlanan) boyutları.
+	UserStoredBytes(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// Uyarı iki sebeple verilir:
 	//   inactive:    last_activity_at @inactive_before'dan eski (30 gün).
 	//   few_members: açılışından @created_before'a kadar (7 gün) geçmiş ve

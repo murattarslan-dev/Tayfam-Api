@@ -154,6 +154,9 @@ message Tayfa {
   // default) only moderators and admins can. Organizers always manage their
   // own events (data model v14, 2026-11-09).
   bool members_can_create_events = 14;
+  // The cover image (a READY COVER upload of this tayfa, MediaService);
+  // empty when there is none. Links: MediaService.GetMediaUrls.
+  string cover_upload_id = 15;
 }
 
 message CreateTayfaRequest {
@@ -219,11 +222,16 @@ message UpdateTayfaRequest {
   // Must not be UNSPECIFIED when named in update_mask.
   JoinPolicy join_policy = 5;
   // Required, non-empty. Allowed paths: "name", "description", "interests",
-  // "join_policy", "members_can_create_events". Any other path is
-  // ERROR_REASON_VALIDATION.
+  // "join_policy", "members_can_create_events", "cover_upload_id". Any
+  // other path is ERROR_REASON_VALIDATION.
   google.protobuf.FieldMask update_mask = 6;
   // See Tayfa.members_can_create_events.
   bool members_can_create_events = 7;
+  // With "cover_upload_id" in update_mask: the caller's own READY COVER
+  // upload opened for this tayfa (ERROR_REASON_UPLOAD_NOT_FOUND,
+  // ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE); empty
+  // removes the cover. The previous cover is deleted.
+  string cover_upload_id = 8;
 }
 
 message UpdateTayfaResponse {

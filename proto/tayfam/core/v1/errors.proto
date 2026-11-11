@@ -250,4 +250,22 @@ enum ErrorReason {
   // FAILED_PRECONDITION. The tayfa is already in the requested state
   // (suspended, not suspended, deleted).
   ERROR_REASON_TAYFA_STATE_CONFLICT = 113;
+  // Media (MediaService, issue #135). None of them says whose an upload is.
+  // NOT_FOUND. No upload with this ID that the caller owns (unknown,
+  // another user's, deleted, or of another purpose or tayfa than the
+  // content it is attached to).
+  ERROR_REASON_UPLOAD_NOT_FOUND = 120;
+  // FAILED_PRECONDITION. The upload is not READY (still being uploaded or
+  // processed, or rejected); poll GetUpload.
+  ERROR_REASON_UPLOAD_NOT_READY = 121;
+  // FAILED_PRECONDITION. The upload is already attached to other content;
+  // each upload is used once.
+  ERROR_REASON_UPLOAD_IN_USE = 122;
+  // FAILED_PRECONDITION. CompleteUpload found a variant not stored yet;
+  // finish the PUTs and call again.
+  ERROR_REASON_UPLOAD_NOT_RECEIVED = 123;
+  // RESOURCE_EXHAUSTED. The caller opened the most uploads an hour allows.
+  ERROR_REASON_UPLOAD_RATE_LIMITED = 124;
+  // RESOURCE_EXHAUSTED. The caller's stored media would exceed the quota.
+  ERROR_REASON_UPLOAD_QUOTA_EXCEEDED = 125;
 }

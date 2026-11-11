@@ -1,0 +1,273 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// MediaService holds uploaded images: avatars, fishing catch photos and
+// tayfa and event covers (issue #135; ADR-0007, ADR-0020, data model v14
+// "Dosyalar", "Yüklenen dosya takibi").
+//
+// Authentication: the caller's access token (ADR-0004, ADR-0011). Service
+// tokens are refused. Requests never name the acting user: the owner of a
+// new upload is always the caller.
+//
+// The mobile client processes the image (ADR-0020): it reads the photo (HEIC
+// included), removes every piece of metadata (EXIF, GPS, XMP), applies the
+// orientation and encodes two variants as JPEG or WebP: preview (longest
+// side at most 400 px) and full (longest side at most 1600 px). The server
+// never decodes or re-encodes pixels; it checks headers only.
+//
+// Flow, step 1: CreateUpload declares the purpose and both variants (type
+// and exact size) and returns one presigned PUT per variant. The server
+// chooses the storage keys; a link works for 5 minutes, for that one object,
+// that content type and that exact size.
+//
+// Step 2: the client PUTs each variant with exactly the returned headers.
+// The files never pass through our servers.
+//
+// Step 3: CompleteUpload with the full variant's width and height. core
+// checks both objects without decoding pixels: the stored size equals the
+// declared one; the first bytes are a JPEG or WebP of the declared type; the
+// header's dimensions match (full: the declared ones, longest side at most
+// 1600; preview: longest side at most 400 and the same aspect ratio within
+// one pixel of rounding); there is no EXIF (with it GPS), XMP or Photoshop
+// (IPTC) block, and in WebP no EXIF or XMP chunk or flag. Checked objects
+// are copied, unchanged, out of quarantine into storage the client cannot
+// write, so a link that is still valid cannot replace them. The upload ends
+// READY or REJECTED in the same call.
+//
+// Step 4: a READY upload is attached by the content that uses it: the
+// avatar (identity's AccountService.SetAvatar, which calls AttachAvatar
+// with the caller's token), a tayfa or event cover (cover_upload_id) or a
+// fishing catch photo (photo_upload_id). Only the owner can attach an
+// upload, only once and only for its purpose.
+//
+// Step 5: GetMediaUrls returns 1-hour GET links for the uploads the caller
+// may see. Responses elsewhere carry upload IDs only; no API accepts a URL
+// or a storage key from a client.
+//
+// Cleanup: a PENDING upload is deleted after 24 hours, a REJECTED one after
+// 24 hours, a READY upload that nothing attached after 7 days. When the
+// content goes (a cover or photo replaced, a catch, event or tayfa deleted
+// for good, the avatar changed or the account deleted) its media is deleted
+// too.
+//
+// Without object storage configured (no R2 credentials) every method is
+// UNAVAILABLE without ErrorInfo; core runs anyway.
+//
+// Storage keys, signed links, the access key and the files' content or
+// metadata never appear in logs, events, metrics or error messages.
+service MediaService {
+  // CreateUpload opens an upload and returns its PUT links.
+  // variants: exactly one PREVIEW and one FULL, each "image/jpeg" or
+  // "image/webp" and 1 to 10 MiB (10485760); otherwise
+  // ERROR_REASON_VALIDATION (field "variants").
+  // tayfa_id: required for COVER and CATCH_PHOTO (the caller must be an
+  // ACTIVE member, ERROR_REASON_TAYFA_NOT_FOUND otherwise, and the tayfa
+  // must not be read-only); must be empty for AVATAR.
+  // client_request_id: required; a repeat returns the same upload with
+  // fresh links while it is PENDING (the same purpose, tayfa and variants,
+  // otherwise ERROR_REASON_VALIDATION on client_request_id).
+  // Limits: ERROR_REASON_UPLOAD_RATE_LIMITED (30 uploads an hour per user),
+  // ERROR_REASON_UPLOAD_QUOTA_EXCEEDED (500 MiB of declared sizes per user).
+  rpc CreateUpload(CreateUploadRequest) returns (CreateUploadResponse);
+
+  // CompleteUpload checks both variants (see the flow above) and makes the
+  // upload READY or REJECTED. width and height are the full variant's,
+  // 1 to 1600 (ERROR_REASON_VALIDATION otherwise). A variant that is not
+  // stored yet is ERROR_REASON_UPLOAD_NOT_RECEIVED and the upload stays
+  // PENDING (finish the PUT and call again while the link is valid). Storage
+  // trouble is UNAVAILABLE and the upload stays PENDING. A repeat after the
+  // upload left PENDING returns it unchanged. Only the owner may call it;
+  // any other upload is ERROR_REASON_UPLOAD_NOT_FOUND.
+  rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse);
+
+  // GetUpload returns the caller's own upload (its status, and links once
+  // READY). Another user's upload is ERROR_REASON_UPLOAD_NOT_FOUND.
+  rpc GetUpload(GetUploadRequest) returns (GetUploadResponse);
+
+  // GetMediaUrls returns GET links valid for 1 hour for each READY upload
+  // the caller may see; the others are left out without saying why
+  // (unknown, not ready, deleted or not visible are the same). Own uploads
+  // are always visible. An avatar is visible to every signed-in user,
+  // unless one of the two blocked the other, and not after the owner's
+  // account is deleted. A tayfa cover is visible to ACTIVE members of the
+  // tayfa (TayfaView). An event cover or a catch photo is visible to ACTIVE
+  // members who may see the event (EventView, events module on, event not
+  // deleted; the catch not deleted).
+  // 1 to 100 distinct upload IDs.
+  rpc GetMediaUrls(GetMediaUrlsRequest) returns (GetMediaUrlsResponse);
+
+  // AttachAvatar marks the caller's READY AVATAR upload as their avatar.
+  // identity calls it with the caller's own token before it stores the
+  // avatar (AccountService.SetAvatar; identity does not own media). Another
+  // user's upload, an unknown one or one of another purpose is
+  // ERROR_REASON_UPLOAD_NOT_FOUND; one not READY is
+  // ERROR_REASON_UPLOAD_NOT_READY; one attached elsewhere is
+  // ERROR_REASON_UPLOAD_IN_USE. A repeat succeeds. The previous avatar is
+  // deleted when identity's user.profile_updated with the new avatar
+  // reaches core.
+  rpc AttachAvatar(AttachAvatarRequest) returns (AttachAvatarResponse);
+}
+
+// UploadPurpose is what an upload is for (uploads.purpose). DATA_EXPORT
+// (KVKK) is written by the server only and never through this service.
+enum UploadPurpose {
+  UPLOAD_PURPOSE_UNSPECIFIED = 0;
+  UPLOAD_PURPOSE_AVATAR = 1;
+  UPLOAD_PURPOSE_CATCH_PHOTO = 2;
+  // A tayfa or event cover.
+  UPLOAD_PURPOSE_COVER = 3;
+}
+
+// UploadStatus is where an upload stands (uploads.status).
+enum UploadStatus {
+  UPLOAD_STATUS_UNSPECIFIED = 0;
+  // Waiting for the variants and CompleteUpload (links valid 5 minutes).
+  UPLOAD_STATUS_PENDING = 1;
+  // Checked; may be attached and served.
+  UPLOAD_STATUS_READY = 2;
+  // Refused; see reject_reason. Deleted after 24 hours.
+  UPLOAD_STATUS_REJECTED = 3;
+}
+
+// UploadRejectReason says why an upload was refused.
+enum UploadRejectReason {
+  UPLOAD_REJECT_REASON_UNSPECIFIED = 0;
+  // A variant is not a JPEG or WebP, or not of its declared type, whatever
+  // its name said, or its header is malformed.
+  UPLOAD_REJECT_REASON_NOT_IMAGE = 1;
+  // An image of a type that is not accepted (PNG, HEIC, GIF, animated
+  // WebP): the client must convert it.
+  UPLOAD_REJECT_REASON_UNSUPPORTED_TYPE = 2;
+  // A variant carries EXIF (with it GPS), XMP or Photoshop/IPTC metadata.
+  UPLOAD_REJECT_REASON_METADATA_PRESENT = 3;
+  // The header's dimensions differ from the declared ones, or the preview's
+  // aspect ratio differs from the full variant's by more than one pixel.
+  UPLOAD_REJECT_REASON_DIMENSION_MISMATCH = 4;
+  // A stored variant's size differs from its declared size.
+  UPLOAD_REJECT_REASON_SIZE_MISMATCH = 5;
+  // A variant is larger than its limit: preview longest side over 400 px,
+  // full over 1600 px.
+  UPLOAD_REJECT_REASON_TOO_LARGE = 6;
+  // The check could not finish for reasons outside the files.
+  UPLOAD_REJECT_REASON_FAILED = 7;
+}
+
+// VariantKind is one of the two encodings of an upload.
+enum VariantKind {
+  VARIANT_KIND_UNSPECIFIED = 0;
+  // Longest side at most 400 px.
+  VARIANT_KIND_PREVIEW = 1;
+  // Longest side at most 1600 px.
+  VARIANT_KIND_FULL = 2;
+}
+
+message Upload {
+  string id = 1;
+  UploadPurpose purpose = 2;
+  UploadStatus status = 3;
+  // Set when status is REJECTED.
+  UploadRejectReason reject_reason = 4;
+  // Set for COVER and CATCH_PHOTO.
+  string tayfa_id = 5;
+  // Declared sizes of both variants together.
+  int64 size_bytes = 6;
+  google.protobuf.Timestamp create_time = 7;
+  // Set when status is READY: the links (1 hour) and their expiry.
+  MediaUrls urls = 8;
+  // True once content uses the upload; a READY upload that is not attached
+  // within 7 days is deleted.
+  bool attached = 9;
+}
+
+// MediaUrls are GET links valid until expire_time (1 hour). They are
+// bearer links: anyone holding one can read the image until it expires, so
+// they are not logged or shared.
+message MediaUrls {
+  string upload_id = 1;
+  string preview_url = 2;
+  // "image/jpeg" or "image/webp".
+  string preview_content_type = 3;
+  string full_url = 4;
+  string full_content_type = 5;
+  // Size of the full variant in pixels.
+  int32 width = 6;
+  int32 height = 7;
+  google.protobuf.Timestamp expire_time = 8;
+}
+
+// UploadVariant is a variant the client will PUT.
+message UploadVariant {
+  VariantKind kind = 1;
+  // "image/jpeg" or "image/webp".
+  string content_type = 2;
+  // Exact size of the file, 1 to 10485760.
+  int64 size_bytes = 3;
+}
+
+// UploadTarget is where to PUT one variant.
+message UploadTarget {
+  VariantKind kind = 1;
+  // Always "PUT".
+  string method = 2;
+  // Presigned URL. Works until expire_time, for this object only.
+  string url = 3;
+  // Headers the PUT must carry exactly as given (Content-Type and
+  // Content-Length are signed: another type or size is refused by the
+  // storage).
+  map<string, string> headers = 4;
+  google.protobuf.Timestamp expire_time = 5;
+}
+
+message CreateUploadRequest {
+  UploadPurpose purpose = 1;
+  // Exactly one PREVIEW and one FULL.
+  repeated UploadVariant variants = 2;
+  // See CreateUpload.
+  string tayfa_id = 3;
+  // A UUID the client generates once per upload attempt.
+  string client_request_id = 4;
+}
+
+message CreateUploadResponse {
+  Upload upload = 1;
+  // One per variant while the upload is PENDING; empty when a repeated
+  // request finds it past PENDING.
+  repeated UploadTarget targets = 2;
+}
+
+message CompleteUploadRequest {
+  string upload_id = 1;
+  // The full variant's size in pixels.
+  int32 width = 2;
+  int32 height = 3;
+}
+
+message CompleteUploadResponse {
+  Upload upload = 1;
+}
+
+message GetUploadRequest {
+  string upload_id = 1;
+}
+
+message GetUploadResponse {
+  Upload upload = 1;
+}
+
+message GetMediaUrlsRequest {
+  repeated string upload_ids = 1;
+}
+
+message GetMediaUrlsResponse {
+  // In request order; uploads the caller may not see are left out.
+  repeated MediaUrls media = 1;
+}
+
+message AttachAvatarRequest {
+  string upload_id = 1;
+}
+
+message AttachAvatarResponse {}
