@@ -14,10 +14,13 @@ resources:
   # bilgisayarında, prod'un kendi age anahtarıyla üretilir (ADR-0006);
   # üretilene kadar liste boştur ve overlay yine derlenir.
   - secrets
+  - core-egress-r2.yaml
+  - chat-egress-internet.yaml
 
 patches:
   # Tek node'lu 4–8 GB VDS'e göre istek ve limitler (base ev cluster'ına göre).
   - path: resources.yaml
+  - path: chat-fcm-required.yaml
 
 configMapGenerator:
   - name: tayfam-env
