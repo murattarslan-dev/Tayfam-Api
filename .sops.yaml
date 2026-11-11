@@ -16,7 +16,7 @@ creation_rules:
   # ("unknown recipient type"), dev kuralı etkilenmez.
   - path_regex: ^deploy/apps/prod/secrets/.*\.sops\.yaml$
     encrypted_regex: ^(data|stringData)$
-    age: YER_TUTUCU_PROD_AGE_ACIK_ANAHTARI
+    age: age1hf8kr45gud40xjypr0kv6qhsmetlget5nvj09yydqpt4wea6jfgsn0g2x8
   # dev (ev cluster'ı).
   - path_regex: ^deploy/apps/dev/secrets/.*\.sops\.yaml$
     encrypted_regex: ^(data|stringData)$
