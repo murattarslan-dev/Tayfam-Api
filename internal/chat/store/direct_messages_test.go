@@ -292,6 +292,13 @@ func TestDirectMessageCleanupAndPurge(t *testing.T) {
 	if err := q.MarkConversationRead(ctx, MarkConversationReadParams{ConversationID: c.PG(), UserID: gone.PG(), MessageID: m.PG(), ReadAt: at(now)}); err != nil {
 		t.Fatal(err)
 	}
+	// Muting preferences (issue #138): the abandoned conversation's go with
+	// it, the remaining one's stay.
+	for _, conv := range []id.ID{c, both} {
+		if err := q.UpsertNotificationPreference(ctx, UpsertNotificationPreferenceParams{UserID: other.PG(), ScopeType: "dm_conversation", ScopeID: conv.PG(), Level: "none"}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	cleanup := func(u id.ID) {
 		t.Helper()
 		for _, f := range []func(context.Context, pgtype.UUID) error{
@@ -329,6 +336,11 @@ func TestDirectMessageCleanupAndPurge(t *testing.T) {
 	var n int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM dm_messages WHERE conversation_id = $1`, both.PG()).Scan(&n); err != nil || n != 0 {
 		t.Fatalf("terk edilmiş konuşmanın mesajları: %d %v", n, err)
+	}
+	for conv, want := range map[id.ID]int{both: 0, c: 1} {
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM notification_preferences WHERE scope_type = 'dm_conversation' AND scope_id = $1`, conv.PG()).Scan(&n); err != nil || n != want {
+			t.Fatalf("konuşma tercihleri %v: %d %v (beklenen %d)", conv, n, err, want)
+		}
 	}
 
 	// Purge: only deleted messages older than the cutoff.

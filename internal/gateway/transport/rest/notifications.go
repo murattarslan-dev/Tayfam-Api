@@ -21,6 +21,7 @@ type NotificationClient interface {
 	MarkAllNotificationsRead(ctx context.Context, in *chatv1.MarkAllNotificationsReadRequest, opts ...grpc.CallOption) (*chatv1.MarkAllNotificationsReadResponse, error)
 	ListNotificationPreferences(ctx context.Context, in *chatv1.ListNotificationPreferencesRequest, opts ...grpc.CallOption) (*chatv1.ListNotificationPreferencesResponse, error)
 	SetTayfaNotificationPreference(ctx context.Context, in *chatv1.SetTayfaNotificationPreferenceRequest, opts ...grpc.CallOption) (*chatv1.SetTayfaNotificationPreferenceResponse, error)
+	SetConversationNotificationPreference(ctx context.Context, in *chatv1.SetConversationNotificationPreferenceRequest, opts ...grpc.CallOption) (*chatv1.SetConversationNotificationPreferenceResponse, error)
 }
 
 // ChatDeps configures the notification (issue #64) and channel (issue #81)
@@ -62,6 +63,8 @@ func registerNotifications(mux *http.ServeMux, d ChatDeps) {
 	mux.HandleFunc("GET /v1/notification-preferences", a(h.preferences))
 	mux.HandleFunc("PUT /v1/notification-preferences/tayfas/{tayfa_id}", a(h.setTayfaPreference))
 	mux.HandleFunc("DELETE /v1/notification-preferences/tayfas/{tayfa_id}", a(h.resetTayfaPreference))
+	mux.HandleFunc("PUT /v1/notification-preferences/conversations/{conversation_id}", a(h.setConversationPreference))
+	mux.HandleFunc("DELETE /v1/notification-preferences/conversations/{conversation_id}", a(h.resetConversationPreference))
 }
 
 func (h chatHandlers) fail(w http.ResponseWriter, r *http.Request, err error) {
@@ -252,14 +255,11 @@ type preferenceBody struct {
 	MuteUntil *time.Time `json:"mute_until"`
 }
 
-func (h chatHandlers) setTayfaPreference(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	id, ok := pathUUID(w, r, "tayfa_id")
-	if !ok {
-		return
-	}
+// preferenceInput reads a preference body; false: the answer is written.
+func preferenceInput(w http.ResponseWriter, r *http.Request) (chatv1.NotificationLevel, *timestamppb.Timestamp, bool) {
 	var b preferenceBody
 	if !decodeLimit(w, r, &b, maxPreferenceBody) {
-		return
+		return 0, nil, false
 	}
 	var level chatv1.NotificationLevel
 	for k, v := range notificationLevelNames {
@@ -269,13 +269,25 @@ func (h chatHandlers) setTayfaPreference(ctx context.Context, w http.ResponseWri
 	}
 	if level == chatv1.NotificationLevel_NOTIFICATION_LEVEL_UNSPECIFIED {
 		badRequest(w, r)
+		return 0, nil, false
+	}
+	var until *timestamppb.Timestamp
+	if b.MuteUntil != nil {
+		until = timestamppb.New(*b.MuteUntil)
+	}
+	return level, until, true
+}
+
+func (h chatHandlers) setTayfaPreference(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	id, ok := pathUUID(w, r, "tayfa_id")
+	if !ok {
 		return
 	}
-	req := &chatv1.SetTayfaNotificationPreferenceRequest{TayfaId: id, Level: level}
-	if b.MuteUntil != nil {
-		req.MuteUntil = timestamppb.New(*b.MuteUntil)
+	level, until, ok := preferenceInput(w, r)
+	if !ok {
+		return
 	}
-	h.setPreference(ctx, w, r, req, http.StatusOK)
+	h.setPreference(ctx, w, r, &chatv1.SetTayfaNotificationPreferenceRequest{TayfaId: id, Level: level, MuteUntil: until}, http.StatusOK)
 }
 
 func (h chatHandlers) resetTayfaPreference(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -292,9 +304,48 @@ func (h chatHandlers) setPreference(ctx context.Context, w http.ResponseWriter, 
 		h.fail(w, r, err)
 		return
 	}
+	writePreference(w, resp.GetPreference(), code)
+}
+
+func (h chatHandlers) setConversationPreference(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	id, ok := pathUUID(w, r, "conversation_id")
+	if !ok {
+		return
+	}
+	level, until, ok := preferenceInput(w, r)
+	if !ok {
+		return
+	}
+	// A direct conversation has no mentions level (platform owner,
+	// 2026-11-11); chat refuses it too.
+	if level == chatv1.NotificationLevel_NOTIFICATION_LEVEL_MENTIONS {
+		badRequest(w, r)
+		return
+	}
+	h.setConversation(ctx, w, r, &chatv1.SetConversationNotificationPreferenceRequest{ConversationId: id, Level: level, MuteUntil: until}, http.StatusOK)
+}
+
+func (h chatHandlers) resetConversationPreference(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	id, ok := pathUUID(w, r, "conversation_id")
+	if !ok {
+		return
+	}
+	h.setConversation(ctx, w, r, &chatv1.SetConversationNotificationPreferenceRequest{ConversationId: id, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_ALL}, http.StatusNoContent)
+}
+
+func (h chatHandlers) setConversation(ctx context.Context, w http.ResponseWriter, r *http.Request, req *chatv1.SetConversationNotificationPreferenceRequest, code int) {
+	resp, err := h.d.Notifications.SetConversationNotificationPreference(ctx, req)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writePreference(w, resp.GetPreference(), code)
+}
+
+func writePreference(w http.ResponseWriter, p *chatv1.NotificationPreference, code int) {
 	if code == http.StatusNoContent {
 		w.WriteHeader(code)
 		return
 	}
-	writeJSON(w, code, preferenceFrom(resp.GetPreference()))
+	writeJSON(w, code, preferenceFrom(p))
 }

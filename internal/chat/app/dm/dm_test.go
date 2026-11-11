@@ -731,3 +731,75 @@ func TestVerifyForReport(t *testing.T) {
 		t.Fatalf("anahtarsız: %v %v", s, err)
 	}
 }
+
+// SeesConversation is the party check of DM muting (issue #138): the same
+// rule as Get, so another user's conversation, a missing one and a request
+// the user declined are all "no".
+func TestSeesConversation(t *testing.T) {
+	e := setup(t)
+	a, b, stranger := id.New(), id.New(), id.New()
+	e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 20})
+	_, c := e.mustSend(t, a, b, "merhaba")
+	for _, tc := range []struct {
+		user, conv id.ID
+		want       bool
+	}{
+		{a, c.ID, true}, {b, c.ID, true}, {stranger, c.ID, false}, {a, id.New(), false},
+	} {
+		got, err := e.svc.SeesConversation(ctx, tc.conv, tc.user)
+		must(t, err)
+		if got != tc.want {
+			t.Errorf("%v görüyor mu = %v, beklenen %v", tc.user, got, tc.want)
+		}
+	}
+	// The decliner no longer sees the request; the sender still does.
+	must(t, e.svc.Decline(ctx, b, c.ID))
+	if ok, err := e.svc.SeesConversation(ctx, c.ID, b); err != nil || ok {
+		t.Fatalf("reddeden: %v %v", ok, err)
+	}
+	if ok, err := e.svc.SeesConversation(ctx, c.ID, a); err != nil || !ok {
+		t.Fatalf("gönderen: %v %v", ok, err)
+	}
+}
+
+// When both parties are gone the conversation goes with its notification
+// preferences; while one party remains, theirs stays (issue #138).
+func TestCleanupRemovesConversationPreferences(t *testing.T) {
+	e := setup(t)
+	a, b := id.New(), id.New()
+	e.rules.set(a, b, Verdict{Decision: Active})
+	_, c := e.mustSend(t, a, b, "selam")
+	other := id.New() // a tayfa with an unrelated preference
+	for _, row := range []struct {
+		user  id.ID
+		scope string
+		id    id.ID
+	}{{a, "dm_conversation", c.ID}, {b, "dm_conversation", c.ID}, {b, "tayfa", other}} {
+		_, err := e.pool.Exec(ctx, `INSERT INTO notification_preferences (user_id, scope_type, scope_id, level) VALUES ($1, $2, $3, 'none')`,
+			row.user.PG(), row.scope, row.id.PG())
+		must(t, err)
+	}
+	cleanup := func(u id.ID) {
+		t.Helper()
+		tx, err := e.pool.Begin(ctx)
+		must(t, err)
+		must(t, Cleanup(ctx, store.New(tx), u))
+		must(t, tx.Commit(ctx))
+	}
+	prefs := func() int {
+		return e.count(t, `SELECT count(*) FROM notification_preferences WHERE scope_type = 'dm_conversation' AND scope_id = $1`, c.ID.PG())
+	}
+	// The deleted user's own rows go with notification.Cleanup; dm keeps
+	// the conversation's while a party remains.
+	cleanup(a)
+	if n := prefs(); n != 2 {
+		t.Fatalf("bir taraf kalırken konuşma tercihleri = %d", n)
+	}
+	cleanup(b)
+	if n := prefs(); n != 0 {
+		t.Fatalf("terk edilen konuşmanın tercihleri kaldı: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM notification_preferences WHERE scope_type = 'tayfa' AND scope_id = $1`, other.PG()); n != 1 {
+		t.Fatal("ilgisiz tercih silindi")
+	}
+}
