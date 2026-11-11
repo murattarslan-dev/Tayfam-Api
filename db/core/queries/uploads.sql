@@ -4,22 +4,23 @@
 
 -- name: CreateUpload :one
 INSERT INTO uploads (id, user_id, tayfa_id, purpose, r2_key, preview_type, preview_bytes, full_type, full_bytes, client_request_id)
-VALUES (@id, @user_id, sqlc.narg(tayfa_id), @purpose, @r2_key, @preview_type, @preview_bytes, @full_type, @full_bytes, @client_request_id)
+VALUES (@id, @user_id, sqlc.narg(tayfa_id), @purpose, @r2_key, @preview_type::text, @preview_bytes::bigint, @full_type::text, @full_bytes::bigint, @client_request_id)
 ON CONFLICT (user_id, client_request_id) DO NOTHING
 RETURNING id;
 
 -- name: GetUploadByClientRequest :one
 SELECT * FROM uploads
-WHERE user_id = @user_id AND client_request_id = @client_request_id;
+WHERE user_id = @user_id AND client_request_id = @client_request_id AND purpose <> 'data_export';
 
--- Sahibinin dosyası; başkasınınki bulunamaz (IDOR).
+-- Sahibinin görüntüsü; başkasınınki bulunamaz (IDOR). Dışa aktarma
+-- dosyaları (data_export) görüntü yollarında hiç görünmez.
 -- name: GetOwnUpload :one
 SELECT * FROM uploads
-WHERE id = @id AND user_id = @user_id AND status <> 'deleting';
+WHERE id = @id AND user_id = @user_id AND status <> 'deleting' AND purpose <> 'data_export';
 
 -- name: GetOwnUploadForUpdate :one
 SELECT * FROM uploads
-WHERE id = @id AND user_id = @user_id AND status <> 'deleting'
+WHERE id = @id AND user_id = @user_id AND status <> 'deleting' AND purpose <> 'data_export'
 FOR UPDATE;
 
 -- Kullanıcının yükleme açmalarını sıraya koyar: sıklık sınırı ve kota
@@ -32,12 +33,12 @@ SELECT pg_advisory_xact_lock(hashtextextended('uploads:' || @user_id::text, 0));
 -- sayılmaz; pending kayıtlar 24 saat durduğu için yeterli bir alt sınırdır).
 -- name: CountUploadsSince :one
 SELECT count(*) FROM uploads
-WHERE user_id = @user_id AND created_at > @since;
+WHERE user_id = @user_id AND created_at > @since AND purpose <> 'data_export';
 
 -- Kota: iki varyantın bildirilen (ve imzayla zorlanan) boyutları.
 -- name: UserStoredBytes :one
 SELECT COALESCE(sum(preview_bytes + full_bytes), 0)::bigint FROM uploads
-WHERE user_id = @user_id AND status NOT IN ('rejected', 'deleting');
+WHERE user_id = @user_id AND status NOT IN ('rejected', 'deleting') AND purpose <> 'data_export';
 
 -- Denetimden geçti (ADR-0020). Yalnızca bekleyen kayıt; eşzamanlı ikinci
 -- tamamlama bir şey değiştirmez.
@@ -80,14 +81,16 @@ UPDATE uploads SET user_id = NULL
 WHERE user_id = @user_id AND purpose = 'cover' AND attached_type IS NOT NULL;
 
 -- Temizlik: 24 saatte tamamlanmayan, 24 saattir reddedilmiş ve 7 gün
--- içinde bağlanmamış dosyalar silme kuyruğuna girer.
+-- içinde bağlanmamış görüntüler ile süresi dolan dışa aktarmalar silme
+-- kuyruğuna girer.
 -- name: ExpireUploads :many
 UPDATE uploads SET status = 'deleting'
 WHERE id IN (
     SELECT q.id FROM uploads q
     WHERE (q.status = 'pending' AND q.created_at < @pending_before)
        OR (q.status = 'rejected' AND q.updated_at < @rejected_before)
-       OR (q.status = 'ready' AND q.attached_type IS NULL AND q.ready_at < @unattached_before)
+       OR (q.status = 'ready' AND q.purpose <> 'data_export' AND q.attached_type IS NULL AND q.ready_at < @unattached_before)
+       OR (q.status = 'ready' AND q.purpose = 'data_export' AND q.expires_at < @now)
     ORDER BY q.id
     LIMIT @n
     FOR UPDATE SKIP LOCKED
@@ -95,12 +98,13 @@ WHERE id IN (
   AND (
        (status = 'pending' AND created_at < @pending_before)
     OR (status = 'rejected' AND updated_at < @rejected_before)
-    OR (status = 'ready' AND attached_type IS NULL AND ready_at < @unattached_before)
+    OR (status = 'ready' AND purpose <> 'data_export' AND attached_type IS NULL AND ready_at < @unattached_before)
+    OR (status = 'ready' AND purpose = 'data_export' AND expires_at < @now)
   )
 RETURNING id;
 
 -- name: ListDeletingUploads :many
-SELECT id, r2_key FROM uploads
+SELECT id, r2_key, purpose FROM uploads
 WHERE status = 'deleting'
 ORDER BY updated_at, id
 LIMIT @n;
@@ -116,7 +120,7 @@ DELETE FROM uploads WHERE id = @id AND status = 'deleting';
 -- tayfası: tayfa kapağında tayfanın kendisi, etkinlik kapağında ve av
 -- fotoğrafında etkinliğin tayfası (silinmiş içerik ve tayfa bağlam vermez).
 -- name: ListMediaForViewer :many
-SELECT u.id, u.user_id, u.purpose, u.r2_key, u.preview_type, u.full_type, u.width, u.height,
+SELECT u.id, u.user_id, u.purpose, u.r2_key, u.preview_type::text AS preview_type, u.full_type::text AS full_type, u.width, u.height,
        u.attached_type, u.attached_id,
        c.tayfa_id AS content_tayfa_id,
        m.role AS member_role, m.status AS member_status, m.muted_until AS member_muted_until,
@@ -144,7 +148,7 @@ LEFT JOIN LATERAL (
 ) c ON true
 LEFT JOIN memberships m ON m.tayfa_id = c.tayfa_id AND m.user_id = @viewer_id
 LEFT JOIN tayfa_modules tm ON tm.tayfa_id = c.tayfa_id AND tm.module = 'events'
-WHERE u.id = ANY(@ids::uuid[]) AND u.status = 'ready';
+WHERE u.id = ANY(@ids::uuid[]) AND u.status = 'ready' AND u.purpose <> 'data_export';
 
 -- İçeriğin dosyası. Kolonun trigger'ı (uploads_check_ref) dosyanın bu
 -- içeriğe bağlı ve hazır olduğunu yeniden doğrular; eski dosya
@@ -160,3 +164,44 @@ WHERE id = @id AND tayfa_id = @tayfa_id AND deleted_at IS NULL;
 -- name: SetCatchPhoto :exec
 UPDATE fishing_catches SET photo_upload_id = sqlc.narg(photo_upload_id)
 WHERE id = @id AND deleted_at IS NULL;
+
+-- KVKK veri dışa aktarma dosyası (issue #144, ADR-0021). Yalnızca çağıranın
+-- kendi data_export kaydı; görüntü yolları bu kayıtları görmez.
+
+-- Yeni yuva açılmadan önce kullanıcının başka etkin dışa aktarması
+-- silinir: identity aynı anda tek talep yürütür, eskisi artıktır.
+-- name: ReleaseOtherExports :execrows
+UPDATE uploads SET status = 'deleting'
+WHERE user_id = @user_id AND purpose = 'data_export' AND status IN ('pending', 'ready')
+  AND client_request_id <> @client_request_id;
+
+-- name: CreateExportUpload :one
+INSERT INTO uploads (id, user_id, purpose, r2_key, client_request_id)
+VALUES (@id, @user_id, 'data_export', @r2_key, @client_request_id)
+ON CONFLICT (user_id, client_request_id) DO NOTHING
+RETURNING id;
+
+-- name: GetExportByClientRequest :one
+SELECT * FROM uploads
+WHERE user_id = @user_id AND client_request_id = @client_request_id AND purpose = 'data_export';
+
+-- name: GetOwnExport :one
+SELECT * FROM uploads
+WHERE id = @id AND user_id = @user_id AND purpose = 'data_export' AND status <> 'deleting';
+
+-- Boyut bir kez yazılır (trigger uploads_export_bytes_once); aynı boyut
+-- tekrar yazılabilir.
+-- name: SetExportBytes :execrows
+UPDATE uploads SET export_bytes = @export_bytes
+WHERE id = @id AND user_id = @user_id AND purpose = 'data_export' AND status = 'pending'
+  AND (export_bytes IS NULL OR export_bytes = @export_bytes);
+
+-- name: MarkExportReady :execrows
+UPDATE uploads SET status = 'ready', ready_at = @now, expires_at = @expires_at
+WHERE id = @id AND user_id = @user_id AND purpose = 'data_export' AND status = 'pending'
+  AND export_bytes IS NOT NULL;
+
+-- Yanlış boyutta yüklenmiş dışa aktarma silinir.
+-- name: DropExport :execrows
+UPDATE uploads SET status = 'deleting'
+WHERE id = @id AND user_id = @user_id AND purpose = 'data_export' AND status <> 'deleting';

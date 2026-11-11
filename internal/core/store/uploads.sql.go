@@ -51,7 +51,7 @@ func (q *Queries) AttachUpload(ctx context.Context, arg AttachUploadParams) (int
 
 const countUploadsSince = `-- name: CountUploadsSince :one
 SELECT count(*) FROM uploads
-WHERE user_id = $1 AND created_at > $2
+WHERE user_id = $1 AND created_at > $2 AND purpose <> 'data_export'
 `
 
 type CountUploadsSinceParams struct {
@@ -68,10 +68,36 @@ func (q *Queries) CountUploadsSince(ctx context.Context, arg CountUploadsSincePa
 	return count, err
 }
 
+const createExportUpload = `-- name: CreateExportUpload :one
+INSERT INTO uploads (id, user_id, purpose, r2_key, client_request_id)
+VALUES ($1, $2, 'data_export', $3, $4)
+ON CONFLICT (user_id, client_request_id) DO NOTHING
+RETURNING id
+`
+
+type CreateExportUploadParams struct {
+	ID              pgtype.UUID
+	UserID          pgtype.UUID
+	R2Key           string
+	ClientRequestID pgtype.UUID
+}
+
+func (q *Queries) CreateExportUpload(ctx context.Context, arg CreateExportUploadParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, createExportUpload,
+		arg.ID,
+		arg.UserID,
+		arg.R2Key,
+		arg.ClientRequestID,
+	)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createUpload = `-- name: CreateUpload :one
 
 INSERT INTO uploads (id, user_id, tayfa_id, purpose, r2_key, preview_type, preview_bytes, full_type, full_bytes, client_request_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+VALUES ($1, $2, $3, $4, $5, $6::text, $7::bigint, $8::text, $9::bigint, $10)
 ON CONFLICT (user_id, client_request_id) DO NOTHING
 RETURNING id
 `
@@ -153,21 +179,42 @@ func (q *Queries) DisownUserCovers(ctx context.Context, userID pgtype.UUID) (int
 	return result.RowsAffected(), nil
 }
 
+const dropExport = `-- name: DropExport :execrows
+UPDATE uploads SET status = 'deleting'
+WHERE id = $1 AND user_id = $2 AND purpose = 'data_export' AND status <> 'deleting'
+`
+
+type DropExportParams struct {
+	ID     pgtype.UUID
+	UserID pgtype.UUID
+}
+
+// Yanlış boyutta yüklenmiş dışa aktarma silinir.
+func (q *Queries) DropExport(ctx context.Context, arg DropExportParams) (int64, error) {
+	result, err := q.db.Exec(ctx, dropExport, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const expireUploads = `-- name: ExpireUploads :many
 UPDATE uploads SET status = 'deleting'
 WHERE id IN (
     SELECT q.id FROM uploads q
     WHERE (q.status = 'pending' AND q.created_at < $1)
        OR (q.status = 'rejected' AND q.updated_at < $2)
-       OR (q.status = 'ready' AND q.attached_type IS NULL AND q.ready_at < $3)
+       OR (q.status = 'ready' AND q.purpose <> 'data_export' AND q.attached_type IS NULL AND q.ready_at < $3)
+       OR (q.status = 'ready' AND q.purpose = 'data_export' AND q.expires_at < $4)
     ORDER BY q.id
-    LIMIT $4
+    LIMIT $5
     FOR UPDATE SKIP LOCKED
   )
   AND (
        (status = 'pending' AND created_at < $1)
     OR (status = 'rejected' AND updated_at < $2)
-    OR (status = 'ready' AND attached_type IS NULL AND ready_at < $3)
+    OR (status = 'ready' AND purpose <> 'data_export' AND attached_type IS NULL AND ready_at < $3)
+    OR (status = 'ready' AND purpose = 'data_export' AND expires_at < $4)
   )
 RETURNING id
 `
@@ -176,16 +223,19 @@ type ExpireUploadsParams struct {
 	PendingBefore    pgtype.Timestamptz
 	RejectedBefore   pgtype.Timestamptz
 	UnattachedBefore pgtype.Timestamptz
+	Now              pgtype.Timestamptz
 	N                int32
 }
 
 // Temizlik: 24 saatte tamamlanmayan, 24 saattir reddedilmiş ve 7 gün
-// içinde bağlanmamış dosyalar silme kuyruğuna girer.
+// içinde bağlanmamış görüntüler ile süresi dolan dışa aktarmalar silme
+// kuyruğuna girer.
 func (q *Queries) ExpireUploads(ctx context.Context, arg ExpireUploadsParams) ([]pgtype.UUID, error) {
 	rows, err := q.db.Query(ctx, expireUploads,
 		arg.PendingBefore,
 		arg.RejectedBefore,
 		arg.UnattachedBefore,
+		arg.Now,
 		arg.N,
 	)
 	if err != nil {
@@ -206,9 +256,89 @@ func (q *Queries) ExpireUploads(ctx context.Context, arg ExpireUploadsParams) ([
 	return items, nil
 }
 
+const getExportByClientRequest = `-- name: GetExportByClientRequest :one
+SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at, export_bytes, expires_at FROM uploads
+WHERE user_id = $1 AND client_request_id = $2 AND purpose = 'data_export'
+`
+
+type GetExportByClientRequestParams struct {
+	UserID          pgtype.UUID
+	ClientRequestID pgtype.UUID
+}
+
+func (q *Queries) GetExportByClientRequest(ctx context.Context, arg GetExportByClientRequestParams) (Upload, error) {
+	row := q.db.QueryRow(ctx, getExportByClientRequest, arg.UserID, arg.ClientRequestID)
+	var i Upload
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TayfaID,
+		&i.Purpose,
+		&i.Status,
+		&i.R2Key,
+		&i.PreviewType,
+		&i.PreviewBytes,
+		&i.FullType,
+		&i.FullBytes,
+		&i.Width,
+		&i.Height,
+		&i.RejectReason,
+		&i.AttachedType,
+		&i.AttachedID,
+		&i.AttachedAt,
+		&i.ClientRequestID,
+		&i.CreatedAt,
+		&i.ReadyAt,
+		&i.UpdatedAt,
+		&i.ExportBytes,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const getOwnExport = `-- name: GetOwnExport :one
+SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at, export_bytes, expires_at FROM uploads
+WHERE id = $1 AND user_id = $2 AND purpose = 'data_export' AND status <> 'deleting'
+`
+
+type GetOwnExportParams struct {
+	ID     pgtype.UUID
+	UserID pgtype.UUID
+}
+
+func (q *Queries) GetOwnExport(ctx context.Context, arg GetOwnExportParams) (Upload, error) {
+	row := q.db.QueryRow(ctx, getOwnExport, arg.ID, arg.UserID)
+	var i Upload
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TayfaID,
+		&i.Purpose,
+		&i.Status,
+		&i.R2Key,
+		&i.PreviewType,
+		&i.PreviewBytes,
+		&i.FullType,
+		&i.FullBytes,
+		&i.Width,
+		&i.Height,
+		&i.RejectReason,
+		&i.AttachedType,
+		&i.AttachedID,
+		&i.AttachedAt,
+		&i.ClientRequestID,
+		&i.CreatedAt,
+		&i.ReadyAt,
+		&i.UpdatedAt,
+		&i.ExportBytes,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
 const getOwnUpload = `-- name: GetOwnUpload :one
-SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at FROM uploads
-WHERE id = $1 AND user_id = $2 AND status <> 'deleting'
+SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at, export_bytes, expires_at FROM uploads
+WHERE id = $1 AND user_id = $2 AND status <> 'deleting' AND purpose <> 'data_export'
 `
 
 type GetOwnUploadParams struct {
@@ -216,7 +346,8 @@ type GetOwnUploadParams struct {
 	UserID pgtype.UUID
 }
 
-// Sahibinin dosyası; başkasınınki bulunamaz (IDOR).
+// Sahibinin görüntüsü; başkasınınki bulunamaz (IDOR). Dışa aktarma
+// dosyaları (data_export) görüntü yollarında hiç görünmez.
 func (q *Queries) GetOwnUpload(ctx context.Context, arg GetOwnUploadParams) (Upload, error) {
 	row := q.db.QueryRow(ctx, getOwnUpload, arg.ID, arg.UserID)
 	var i Upload
@@ -241,13 +372,15 @@ func (q *Queries) GetOwnUpload(ctx context.Context, arg GetOwnUploadParams) (Upl
 		&i.CreatedAt,
 		&i.ReadyAt,
 		&i.UpdatedAt,
+		&i.ExportBytes,
+		&i.ExpiresAt,
 	)
 	return i, err
 }
 
 const getOwnUploadForUpdate = `-- name: GetOwnUploadForUpdate :one
-SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at FROM uploads
-WHERE id = $1 AND user_id = $2 AND status <> 'deleting'
+SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at, export_bytes, expires_at FROM uploads
+WHERE id = $1 AND user_id = $2 AND status <> 'deleting' AND purpose <> 'data_export'
 FOR UPDATE
 `
 
@@ -280,13 +413,15 @@ func (q *Queries) GetOwnUploadForUpdate(ctx context.Context, arg GetOwnUploadFor
 		&i.CreatedAt,
 		&i.ReadyAt,
 		&i.UpdatedAt,
+		&i.ExportBytes,
+		&i.ExpiresAt,
 	)
 	return i, err
 }
 
 const getUploadByClientRequest = `-- name: GetUploadByClientRequest :one
-SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at FROM uploads
-WHERE user_id = $1 AND client_request_id = $2
+SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at, export_bytes, expires_at FROM uploads
+WHERE user_id = $1 AND client_request_id = $2 AND purpose <> 'data_export'
 `
 
 type GetUploadByClientRequestParams struct {
@@ -318,20 +453,23 @@ func (q *Queries) GetUploadByClientRequest(ctx context.Context, arg GetUploadByC
 		&i.CreatedAt,
 		&i.ReadyAt,
 		&i.UpdatedAt,
+		&i.ExportBytes,
+		&i.ExpiresAt,
 	)
 	return i, err
 }
 
 const listDeletingUploads = `-- name: ListDeletingUploads :many
-SELECT id, r2_key FROM uploads
+SELECT id, r2_key, purpose FROM uploads
 WHERE status = 'deleting'
 ORDER BY updated_at, id
 LIMIT $1
 `
 
 type ListDeletingUploadsRow struct {
-	ID    pgtype.UUID
-	R2Key string
+	ID      pgtype.UUID
+	R2Key   string
+	Purpose string
 }
 
 func (q *Queries) ListDeletingUploads(ctx context.Context, n int32) ([]ListDeletingUploadsRow, error) {
@@ -343,7 +481,7 @@ func (q *Queries) ListDeletingUploads(ctx context.Context, n int32) ([]ListDelet
 	items := []ListDeletingUploadsRow{}
 	for rows.Next() {
 		var i ListDeletingUploadsRow
-		if err := rows.Scan(&i.ID, &i.R2Key); err != nil {
+		if err := rows.Scan(&i.ID, &i.R2Key, &i.Purpose); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -355,7 +493,7 @@ func (q *Queries) ListDeletingUploads(ctx context.Context, n int32) ([]ListDelet
 }
 
 const listMediaForViewer = `-- name: ListMediaForViewer :many
-SELECT u.id, u.user_id, u.purpose, u.r2_key, u.preview_type, u.full_type, u.width, u.height,
+SELECT u.id, u.user_id, u.purpose, u.r2_key, u.preview_type::text AS preview_type, u.full_type::text AS full_type, u.width, u.height,
        u.attached_type, u.attached_id,
        c.tayfa_id AS content_tayfa_id,
        m.role AS member_role, m.status AS member_status, m.muted_until AS member_muted_until,
@@ -383,7 +521,7 @@ LEFT JOIN LATERAL (
 ) c ON true
 LEFT JOIN memberships m ON m.tayfa_id = c.tayfa_id AND m.user_id = $1
 LEFT JOIN tayfa_modules tm ON tm.tayfa_id = c.tayfa_id AND tm.module = 'events'
-WHERE u.id = ANY($2::uuid[]) AND u.status = 'ready'
+WHERE u.id = ANY($2::uuid[]) AND u.status = 'ready' AND u.purpose <> 'data_export'
 `
 
 type ListMediaForViewerParams struct {
@@ -466,6 +604,32 @@ func (q *Queries) LockUserUploads(ctx context.Context, userID string) error {
 	return err
 }
 
+const markExportReady = `-- name: MarkExportReady :execrows
+UPDATE uploads SET status = 'ready', ready_at = $1, expires_at = $2
+WHERE id = $3 AND user_id = $4 AND purpose = 'data_export' AND status = 'pending'
+  AND export_bytes IS NOT NULL
+`
+
+type MarkExportReadyParams struct {
+	Now       pgtype.Timestamptz
+	ExpiresAt pgtype.Timestamptz
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+}
+
+func (q *Queries) MarkExportReady(ctx context.Context, arg MarkExportReadyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markExportReady,
+		arg.Now,
+		arg.ExpiresAt,
+		arg.ID,
+		arg.UserID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const markUploadReady = `-- name: MarkUploadReady :execrows
 UPDATE uploads SET status = 'ready', width = $1, height = $2, ready_at = $3
 WHERE id = $4 AND status = 'pending'
@@ -533,6 +697,30 @@ func (q *Queries) ReleaseOtherAvatars(ctx context.Context, arg ReleaseOtherAvata
 	return result.RowsAffected(), nil
 }
 
+const releaseOtherExports = `-- name: ReleaseOtherExports :execrows
+
+UPDATE uploads SET status = 'deleting'
+WHERE user_id = $1 AND purpose = 'data_export' AND status IN ('pending', 'ready')
+  AND client_request_id <> $2
+`
+
+type ReleaseOtherExportsParams struct {
+	UserID          pgtype.UUID
+	ClientRequestID pgtype.UUID
+}
+
+// KVKK veri dışa aktarma dosyası (issue #144, ADR-0021). Yalnızca çağıranın
+// kendi data_export kaydı; görüntü yolları bu kayıtları görmez.
+// Yeni yuva açılmadan önce kullanıcının başka etkin dışa aktarması
+// silinir: identity aynı anda tek talep yürütür, eskisi artıktır.
+func (q *Queries) ReleaseOtherExports(ctx context.Context, arg ReleaseOtherExportsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseOtherExports, arg.UserID, arg.ClientRequestID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setCatchPhoto = `-- name: SetCatchPhoto :exec
 UPDATE fishing_catches SET photo_upload_id = $1
 WHERE id = $2 AND deleted_at IS NULL
@@ -564,6 +752,28 @@ func (q *Queries) SetEventCover(ctx context.Context, arg SetEventCoverParams) er
 	return err
 }
 
+const setExportBytes = `-- name: SetExportBytes :execrows
+UPDATE uploads SET export_bytes = $1
+WHERE id = $2 AND user_id = $3 AND purpose = 'data_export' AND status = 'pending'
+  AND (export_bytes IS NULL OR export_bytes = $1)
+`
+
+type SetExportBytesParams struct {
+	ExportBytes pgtype.Int8
+	ID          pgtype.UUID
+	UserID      pgtype.UUID
+}
+
+// Boyut bir kez yazılır (trigger uploads_export_bytes_once); aynı boyut
+// tekrar yazılabilir.
+func (q *Queries) SetExportBytes(ctx context.Context, arg SetExportBytesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setExportBytes, arg.ExportBytes, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setTayfaCover = `-- name: SetTayfaCover :exec
 UPDATE tayfas SET cover_upload_id = $1
 WHERE id = $2 AND deleted_at IS NULL
@@ -584,7 +794,7 @@ func (q *Queries) SetTayfaCover(ctx context.Context, arg SetTayfaCoverParams) er
 
 const userStoredBytes = `-- name: UserStoredBytes :one
 SELECT COALESCE(sum(preview_bytes + full_bytes), 0)::bigint FROM uploads
-WHERE user_id = $1 AND status NOT IN ('rejected', 'deleting')
+WHERE user_id = $1 AND status NOT IN ('rejected', 'deleting') AND purpose <> 'data_export'
 `
 
 // Kota: iki varyantın bildirilen (ve imzayla zorlanan) boyutları.

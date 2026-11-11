@@ -69,6 +69,10 @@ enum NotificationType {
   // The platform lifted the tayfa's suspension; for admins and moderators
   // (target: TAYFA).
   NOTIFICATION_TYPE_TAYFA_UNSUSPENDED = 20;
+  // The recipient's KVKK data export is ready to download for 7 days
+  // (target: DATA_EXPORT; issue #144, ADR-0021). identity asks for it; no
+  // tayfa, no actor.
+  NOTIFICATION_TYPE_DATA_EXPORT_READY = 21;
 }
 
 enum NotificationTargetType {
@@ -86,6 +90,9 @@ enum NotificationTargetType {
   // target_id is a conversation ID of the recipient
   // (DirectMessageService.GetConversation).
   NOTIFICATION_TARGET_TYPE_DM_CONVERSATION = 8;
+  // target_id is a data export request of the recipient (identity's
+  // DataExportService.GetDataExport).
+  NOTIFICATION_TARGET_TYPE_DATA_EXPORT = 9;
 }
 
 // Why an inactive tayfa was warned (core's cleanup job).

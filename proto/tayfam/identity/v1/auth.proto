@@ -86,6 +86,18 @@ enum ErrorReason {
   ERROR_REASON_UPLOAD_NOT_READY = 20;
   // FAILED_PRECONDITION. The upload is attached to other content.
   ERROR_REASON_UPLOAD_IN_USE = 21;
+  // KVKK data export (DataExportService, issue #144). NOT_FOUND: no such
+  // request of the caller (another user's is the same).
+  ERROR_REASON_DATA_EXPORT_NOT_FOUND = 22;
+  // FAILED_PRECONDITION. Another request of the caller is being prepared.
+  ERROR_REASON_DATA_EXPORT_IN_PROGRESS = 23;
+  // RESOURCE_EXHAUSTED. One request in 30 days; failed ones do not count.
+  ERROR_REASON_DATA_EXPORT_LIMIT = 24;
+  // FAILED_PRECONDITION. The export is not ready (pending, processing or
+  // failed).
+  ERROR_REASON_DATA_EXPORT_NOT_READY = 25;
+  // FAILED_PRECONDITION. The 7 days are over; the file is deleted.
+  ERROR_REASON_DATA_EXPORT_EXPIRED = 26;
 }
 
 message SignInRequest {

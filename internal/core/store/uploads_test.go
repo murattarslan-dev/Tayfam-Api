@@ -106,14 +106,15 @@ func TestUploadCreateAndConstraints(t *testing.T) {
 		mut  func(*CreateUploadParams)
 		cons string
 	}{
-		"boş önizleme":      {func(p *CreateUploadParams) { p.PreviewBytes = 0 }, "uploads_bytes"},
-		"10 MiB üstü":       {func(p *CreateUploadParams) { p.FullBytes = 10<<20 + 1 }, "uploads_bytes"},
-		"png":               {func(p *CreateUploadParams) { p.FullType = "image/png" }, "uploads_types"},
-		"heic önizleme":     {func(p *CreateUploadParams) { p.PreviewType = "image/heic" }, "uploads_types"},
-		"bilinmeyen amaç":   {func(p *CreateUploadParams) { p.Purpose = "data_export" }, "uploads_purpose"},
-		"tahmin edilir ad":  {func(p *CreateUploadParams) { p.R2Key = "../media/x" }, "uploads_r2_key"},
-		"avatarda tayfa":    {func(p *CreateUploadParams) { p.TayfaID = tayfa.PG() }, "uploads_tayfa"},
-		"kapakta tayfa yok": {func(p *CreateUploadParams) { p.Purpose = "cover" }, "uploads_tayfa"},
+		"boş önizleme":           {func(p *CreateUploadParams) { p.PreviewBytes = 0 }, "uploads_variants"},
+		"10 MiB üstü":            {func(p *CreateUploadParams) { p.FullBytes = 10<<20 + 1 }, "uploads_variants"},
+		"png":                    {func(p *CreateUploadParams) { p.FullType = "image/png" }, "uploads_variants"},
+		"heic önizleme":          {func(p *CreateUploadParams) { p.PreviewType = "image/heic" }, "uploads_variants"},
+		"bilinmeyen amaç":        {func(p *CreateUploadParams) { p.Purpose = "banner" }, "uploads_purpose"},
+		"varyantlı dışa aktarma": {func(p *CreateUploadParams) { p.Purpose = "data_export"; p.TayfaID = pgtype.UUID{} }, "uploads_variants"},
+		"tahmin edilir ad":       {func(p *CreateUploadParams) { p.R2Key = "../media/x" }, "uploads_r2_key"},
+		"avatarda tayfa":         {func(p *CreateUploadParams) { p.TayfaID = tayfa.PG() }, "uploads_tayfa"},
+		"kapakta tayfa yok":      {func(p *CreateUploadParams) { p.Purpose = "cover" }, "uploads_tayfa"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			p := base()

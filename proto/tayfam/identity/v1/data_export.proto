@@ -1,0 +1,132 @@
+syntax = "proto3";
+
+package tayfam.identity.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// DataExportService is the caller's KVKK data export (KVKK md. 11; issue
+// #144, ADR-0008, ADR-0021; data model v14 "Veri dışa aktarma").
+//
+// Every method needs a full access token; the caller always comes from it,
+// and only the caller's own requests are found: another user's request is
+// ERROR_REASON_DATA_EXPORT_NOT_FOUND, exactly like a missing one. Errors use
+// the ErrorReason values in auth.proto. Without the export key
+// (IDENTITY_DATA_EXPORT_KEYS) or core's object storage every method is
+// UNAVAILABLE without ErrorInfo.
+//
+// Flow: CreateDataExport starts collecting at once with the caller's own
+// token (core's and chat's ExportMyData), so the client refreshes its
+// access token right before it calls. The archive (JSON, zip) is encrypted
+// with a key of its own (AES-256-GCM) and stored in core's private object
+// storage; the key stays in identity. When it is READY the user gets the
+// data_export_ready notification. GetDataExportDownload returns a 5-minute
+// link together with the key; the client downloads and decrypts on the
+// device. The file and the key are deleted 7 days after READY.
+service DataExportService {
+  // CreateDataExport opens a request and starts it. client_request_id (a
+  // UUID) makes a repeat return the same request. One request in 30 days
+  // (ERROR_REASON_DATA_EXPORT_LIMIT; FAILED ones do not count), one at a
+  // time (ERROR_REASON_DATA_EXPORT_IN_PROGRESS).
+  rpc CreateDataExport(CreateDataExportRequest) returns (CreateDataExportResponse);
+
+  // ListDataExports returns the caller's requests of the last 30 days,
+  // newest first, and when the next one may be made.
+  rpc ListDataExports(ListDataExportsRequest) returns (ListDataExportsResponse);
+
+  // GetDataExport returns one of the caller's requests.
+  rpc GetDataExport(GetDataExportRequest) returns (GetDataExportResponse);
+
+  // GetDataExportDownload returns the download link (5 minutes) and the
+  // key of a READY export. It needs a sign-in with the provider in the last
+  // 10 minutes, as account deletion does
+  // (ERROR_REASON_REAUTHENTICATION_REQUIRED). Not READY is
+  // ERROR_REASON_DATA_EXPORT_NOT_READY; past its 7 days
+  // ERROR_REASON_DATA_EXPORT_EXPIRED.
+  rpc GetDataExportDownload(GetDataExportDownloadRequest) returns (GetDataExportDownloadResponse);
+}
+
+enum DataExportStatus {
+  DATA_EXPORT_STATUS_UNSPECIFIED = 0;
+  // Accepted, waiting for its turn.
+  DATA_EXPORT_STATUS_PENDING = 1;
+  // Being collected.
+  DATA_EXPORT_STATUS_PROCESSING = 2;
+  // Ready to download until expire_time.
+  DATA_EXPORT_STATUS_READY = 3;
+  // The 7 days are over; the file and the key are deleted.
+  DATA_EXPORT_STATUS_EXPIRED = 4;
+  // Not completed; see failure_reason. Does not count toward the limit.
+  DATA_EXPORT_STATUS_FAILED = 5;
+}
+
+enum DataExportFailureReason {
+  DATA_EXPORT_FAILURE_REASON_UNSPECIFIED = 0;
+  // A service or the object storage could not be reached.
+  DATA_EXPORT_FAILURE_REASON_UNAVAILABLE = 1;
+  // The archive is larger than 16 MiB; the platform answers it by hand.
+  DATA_EXPORT_FAILURE_REASON_TOO_LARGE = 2;
+  // It did not finish in time (the access token it runs with expired, or
+  // identity restarted).
+  DATA_EXPORT_FAILURE_REASON_TIMEOUT = 3;
+  DATA_EXPORT_FAILURE_REASON_FAILED = 4;
+}
+
+message DataExport {
+  string id = 1;
+  DataExportStatus status = 2;
+  // Set when status is FAILED.
+  DataExportFailureReason failure_reason = 3;
+  google.protobuf.Timestamp request_time = 4;
+  // Set once READY (and kept when EXPIRED).
+  google.protobuf.Timestamp ready_time = 5;
+  google.protobuf.Timestamp expire_time = 6;
+  // First time a download link was given.
+  google.protobuf.Timestamp download_time = 7;
+  // Size of the encrypted file, while READY.
+  int64 size_bytes = 8;
+}
+
+message CreateDataExportRequest {
+  // A UUID the client generates once per request.
+  string client_request_id = 1;
+}
+
+message CreateDataExportResponse {
+  DataExport data_export = 1;
+}
+
+message ListDataExportsRequest {}
+
+message ListDataExportsResponse {
+  repeated DataExport data_exports = 1;
+  // Earliest time a new request is accepted; unset when one may be made
+  // now (a request in progress still refuses a new one).
+  google.protobuf.Timestamp next_request_time = 2;
+}
+
+message GetDataExportRequest {
+  string data_export_id = 1;
+}
+
+message GetDataExportResponse {
+  DataExport data_export = 1;
+}
+
+message GetDataExportDownloadRequest {
+  string data_export_id = 1;
+}
+
+message GetDataExportDownloadResponse {
+  // GET link of the encrypted file, a bearer link until expire_time. Never
+  // logged.
+  string url = 1;
+  google.protobuf.Timestamp expire_time = 2;
+  // The 32-byte AES-256-GCM key. Never logged or stored by the client
+  // beyond the decryption.
+  bytes key = 3;
+  int64 size_bytes = 4;
+  // "aes-256-gcm-v1": version byte 0x01, 12-byte nonce, ciphertext with the
+  // 16-byte tag at the end; additional data "tayfam/data-export/v1/"
+  // followed by the 16 bytes of the request ID.
+  string format = 5;
+}

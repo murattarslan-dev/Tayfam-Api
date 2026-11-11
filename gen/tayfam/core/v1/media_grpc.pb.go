@@ -19,11 +19,15 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MediaService_CreateUpload_FullMethodName   = "/tayfam.core.v1.MediaService/CreateUpload"
-	MediaService_CompleteUpload_FullMethodName = "/tayfam.core.v1.MediaService/CompleteUpload"
-	MediaService_GetUpload_FullMethodName      = "/tayfam.core.v1.MediaService/GetUpload"
-	MediaService_GetMediaUrls_FullMethodName   = "/tayfam.core.v1.MediaService/GetMediaUrls"
-	MediaService_AttachAvatar_FullMethodName   = "/tayfam.core.v1.MediaService/AttachAvatar"
+	MediaService_CreateUpload_FullMethodName         = "/tayfam.core.v1.MediaService/CreateUpload"
+	MediaService_CompleteUpload_FullMethodName       = "/tayfam.core.v1.MediaService/CompleteUpload"
+	MediaService_GetUpload_FullMethodName            = "/tayfam.core.v1.MediaService/GetUpload"
+	MediaService_GetMediaUrls_FullMethodName         = "/tayfam.core.v1.MediaService/GetMediaUrls"
+	MediaService_AttachAvatar_FullMethodName         = "/tayfam.core.v1.MediaService/AttachAvatar"
+	MediaService_ReserveExportUpload_FullMethodName  = "/tayfam.core.v1.MediaService/ReserveExportUpload"
+	MediaService_GetExportUploadUrl_FullMethodName   = "/tayfam.core.v1.MediaService/GetExportUploadUrl"
+	MediaService_CompleteExportUpload_FullMethodName = "/tayfam.core.v1.MediaService/CompleteExportUpload"
+	MediaService_GetExportDownloadUrl_FullMethodName = "/tayfam.core.v1.MediaService/GetExportDownloadUrl"
 )
 
 // MediaServiceClient is the client API for MediaService service.
@@ -131,6 +135,27 @@ type MediaServiceClient interface {
 	// deleted when identity's user.profile_updated with the new avatar
 	// reaches core.
 	AttachAvatar(ctx context.Context, in *AttachAvatarRequest, opts ...grpc.CallOption) (*AttachAvatarResponse, error)
+	// ReserveExportUpload opens the caller's export slot for the identity
+	// request data_export_id (a UUID; a repeat returns the same upload). A
+	// user has at most one PENDING or READY export: an older one is deleted.
+	// Without object storage it is UNAVAILABLE, so identity can refuse the
+	// request at once.
+	ReserveExportUpload(ctx context.Context, in *ReserveExportUploadRequest, opts ...grpc.CallOption) (*ReserveExportUploadResponse, error)
+	// GetExportUploadUrl returns the presigned PUT (5 minutes) for the
+	// encrypted file of exactly size_bytes (30 to 16777245). The size is
+	// fixed by the first call; another size later is ERROR_REASON_VALIDATION.
+	// Only a PENDING export (ERROR_REASON_UPLOAD_NOT_FOUND otherwise).
+	GetExportUploadUrl(ctx context.Context, in *GetExportUploadUrlRequest, opts ...grpc.CallOption) (*GetExportUploadUrlResponse, error)
+	// CompleteExportUpload checks that the stored object has the declared
+	// size and makes the export READY for 7 days. Not stored yet is
+	// ERROR_REASON_UPLOAD_NOT_RECEIVED; a wrong size is
+	// ERROR_REASON_VALIDATION (the export is deleted). A repeat on a READY
+	// export returns its expiry.
+	CompleteExportUpload(ctx context.Context, in *CompleteExportUploadRequest, opts ...grpc.CallOption) (*CompleteExportUploadResponse, error)
+	// GetExportDownloadUrl returns a GET link valid for 5 minutes for the
+	// caller's READY, unexpired export. Not READY is
+	// ERROR_REASON_UPLOAD_NOT_READY.
+	GetExportDownloadUrl(ctx context.Context, in *GetExportDownloadUrlRequest, opts ...grpc.CallOption) (*GetExportDownloadUrlResponse, error)
 }
 
 type mediaServiceClient struct {
@@ -185,6 +210,46 @@ func (c *mediaServiceClient) AttachAvatar(ctx context.Context, in *AttachAvatarR
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AttachAvatarResponse)
 	err := c.cc.Invoke(ctx, MediaService_AttachAvatar_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mediaServiceClient) ReserveExportUpload(ctx context.Context, in *ReserveExportUploadRequest, opts ...grpc.CallOption) (*ReserveExportUploadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReserveExportUploadResponse)
+	err := c.cc.Invoke(ctx, MediaService_ReserveExportUpload_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mediaServiceClient) GetExportUploadUrl(ctx context.Context, in *GetExportUploadUrlRequest, opts ...grpc.CallOption) (*GetExportUploadUrlResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetExportUploadUrlResponse)
+	err := c.cc.Invoke(ctx, MediaService_GetExportUploadUrl_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mediaServiceClient) CompleteExportUpload(ctx context.Context, in *CompleteExportUploadRequest, opts ...grpc.CallOption) (*CompleteExportUploadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CompleteExportUploadResponse)
+	err := c.cc.Invoke(ctx, MediaService_CompleteExportUpload_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mediaServiceClient) GetExportDownloadUrl(ctx context.Context, in *GetExportDownloadUrlRequest, opts ...grpc.CallOption) (*GetExportDownloadUrlResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetExportDownloadUrlResponse)
+	err := c.cc.Invoke(ctx, MediaService_GetExportDownloadUrl_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -296,6 +361,27 @@ type MediaServiceServer interface {
 	// deleted when identity's user.profile_updated with the new avatar
 	// reaches core.
 	AttachAvatar(context.Context, *AttachAvatarRequest) (*AttachAvatarResponse, error)
+	// ReserveExportUpload opens the caller's export slot for the identity
+	// request data_export_id (a UUID; a repeat returns the same upload). A
+	// user has at most one PENDING or READY export: an older one is deleted.
+	// Without object storage it is UNAVAILABLE, so identity can refuse the
+	// request at once.
+	ReserveExportUpload(context.Context, *ReserveExportUploadRequest) (*ReserveExportUploadResponse, error)
+	// GetExportUploadUrl returns the presigned PUT (5 minutes) for the
+	// encrypted file of exactly size_bytes (30 to 16777245). The size is
+	// fixed by the first call; another size later is ERROR_REASON_VALIDATION.
+	// Only a PENDING export (ERROR_REASON_UPLOAD_NOT_FOUND otherwise).
+	GetExportUploadUrl(context.Context, *GetExportUploadUrlRequest) (*GetExportUploadUrlResponse, error)
+	// CompleteExportUpload checks that the stored object has the declared
+	// size and makes the export READY for 7 days. Not stored yet is
+	// ERROR_REASON_UPLOAD_NOT_RECEIVED; a wrong size is
+	// ERROR_REASON_VALIDATION (the export is deleted). A repeat on a READY
+	// export returns its expiry.
+	CompleteExportUpload(context.Context, *CompleteExportUploadRequest) (*CompleteExportUploadResponse, error)
+	// GetExportDownloadUrl returns a GET link valid for 5 minutes for the
+	// caller's READY, unexpired export. Not READY is
+	// ERROR_REASON_UPLOAD_NOT_READY.
+	GetExportDownloadUrl(context.Context, *GetExportDownloadUrlRequest) (*GetExportDownloadUrlResponse, error)
 	mustEmbedUnimplementedMediaServiceServer()
 }
 
@@ -320,6 +406,18 @@ func (UnimplementedMediaServiceServer) GetMediaUrls(context.Context, *GetMediaUr
 }
 func (UnimplementedMediaServiceServer) AttachAvatar(context.Context, *AttachAvatarRequest) (*AttachAvatarResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AttachAvatar not implemented")
+}
+func (UnimplementedMediaServiceServer) ReserveExportUpload(context.Context, *ReserveExportUploadRequest) (*ReserveExportUploadResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReserveExportUpload not implemented")
+}
+func (UnimplementedMediaServiceServer) GetExportUploadUrl(context.Context, *GetExportUploadUrlRequest) (*GetExportUploadUrlResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetExportUploadUrl not implemented")
+}
+func (UnimplementedMediaServiceServer) CompleteExportUpload(context.Context, *CompleteExportUploadRequest) (*CompleteExportUploadResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CompleteExportUpload not implemented")
+}
+func (UnimplementedMediaServiceServer) GetExportDownloadUrl(context.Context, *GetExportDownloadUrlRequest) (*GetExportDownloadUrlResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetExportDownloadUrl not implemented")
 }
 func (UnimplementedMediaServiceServer) mustEmbedUnimplementedMediaServiceServer() {}
 func (UnimplementedMediaServiceServer) testEmbeddedByValue()                      {}
@@ -432,6 +530,78 @@ func _MediaService_AttachAvatar_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MediaService_ReserveExportUpload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReserveExportUploadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MediaServiceServer).ReserveExportUpload(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MediaService_ReserveExportUpload_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MediaServiceServer).ReserveExportUpload(ctx, req.(*ReserveExportUploadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MediaService_GetExportUploadUrl_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetExportUploadUrlRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MediaServiceServer).GetExportUploadUrl(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MediaService_GetExportUploadUrl_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MediaServiceServer).GetExportUploadUrl(ctx, req.(*GetExportUploadUrlRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MediaService_CompleteExportUpload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CompleteExportUploadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MediaServiceServer).CompleteExportUpload(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MediaService_CompleteExportUpload_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MediaServiceServer).CompleteExportUpload(ctx, req.(*CompleteExportUploadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MediaService_GetExportDownloadUrl_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetExportDownloadUrlRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MediaServiceServer).GetExportDownloadUrl(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MediaService_GetExportDownloadUrl_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MediaServiceServer).GetExportDownloadUrl(ctx, req.(*GetExportDownloadUrlRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MediaService_ServiceDesc is the grpc.ServiceDesc for MediaService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -458,6 +628,22 @@ var MediaService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AttachAvatar",
 			Handler:    _MediaService_AttachAvatar_Handler,
+		},
+		{
+			MethodName: "ReserveExportUpload",
+			Handler:    _MediaService_ReserveExportUpload_Handler,
+		},
+		{
+			MethodName: "GetExportUploadUrl",
+			Handler:    _MediaService_GetExportUploadUrl_Handler,
+		},
+		{
+			MethodName: "CompleteExportUpload",
+			Handler:    _MediaService_CompleteExportUpload_Handler,
+		},
+		{
+			MethodName: "GetExportDownloadUrl",
+			Handler:    _MediaService_GetExportDownloadUrl_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

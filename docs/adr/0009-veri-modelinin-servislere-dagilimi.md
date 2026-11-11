@@ -14,6 +14,12 @@
   tek kullanımlık EC ve Kyber ön anahtarları `device_one_time_prekeys`'te;
   ayrıca `user_e2e_state`, `e2e_ended_sessions`. `device.removed` olayı
   yerine `session.revoked`, `user.sanctioned`, `user.deleted` kullanılır.
+- **Revizyon:** 2026-11-11 (issue #144, [ADR-0021](0021-kvkk-veri-disa-aktarma.md)):
+  `ExportUserData(user_id)` yerine kullanıcı kimliği almayan
+  `ExportMyData()` (sunucu akışlı; yalnızca doğrulanmış çağıranın verisi);
+  identity → core `MediaService` dışa aktarma metodları; identity → chat
+  `user.data_export_ready` (bildirim); `data_export_requests` ek
+  kolonları; `uploads.purpose = data_export`.
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0005](0005-gercek-zamanli-iletisim-ve-chat.md), [ADR-0008](0008-kvkk-ve-platform-yonetimi.md)
 - **Kaynak:** Notion: Veri Modeli (taslak v13) ve ER diyagramı
 
@@ -115,6 +121,7 @@ güncellenir. Kopyanın kısa süre eski kalması kabul edilir.
 | Üyelik değişiklikleri (rol, çıkarma, ban, susturma) | core `membership.changed` yayınlar; chat önbelleğini temizler, `staff` kanal aboneliklerini keser |
 | Tayfa uyarı, arşiv, silme bekleme | core `tayfa.warned`, `tayfa.archived`, `tayfa.reactivated`, `tayfa.deletion_requested`, `tayfa.deletion_cancelled` yayınlar (2026-11-09; önceki taslaktaki `tayfa.status_changed` yerine). chat bunları yalnızca önbelleğini temizlemek için kullanır; salt okunurluğu her işlemde core'a sorar (`AuthorizeChannelAction`) |
 | Oturum iptali, platform yaptırımı | identity `session.revoked`, `user.sanctioned` yayınlar; chat WebSocket bağlantılarını kapatır |
+| Veri dışa aktarma hazır | identity `user.data_export_ready` yayınlar (yalnızca chat); chat kullanıcıya `data_export_ready` bildirimini yazar (ADR-0021, 2026-11-11) |
 | Bildirim oluşturma | core ve identity `notification.requested` yayınlar; alıcıları yayınlayan servis kendi verisiyle hesaplar (core: aktif üyeler; bekleyen, banlı, ayrılmış ve aktör hariç), olay başına en fazla 150 alıcı. chat kaydı yazar ve push gönderir; chat'te üyelik kopyası tutulmaz (platform sahibi kararı, 2026-11-09) |
 
 Tüm tüketici metodları idempotenttir (ADR-0002).
@@ -128,7 +135,8 @@ Tüm tüketici metodları idempotenttir (ADR-0002).
 | chat → core | `CheckDirectMessage(recipient_id)` | Notion v7 kuralları: engelleme, arkadaşlık, ortak aktif tayfa, ortak etkinlik geçmişi. Gönderen her zaman iletilen kullanıcı token'ındaki kişidir (2026-11-09, issue #95; başkası adına sorulamaz). Sonuç yalnızca karar: yazamaz, istek (+ çağıranın günlük istek sınırı 5/20), aktif. Her mesajda sorulur, önbelleklenmez |
 | core → chat | `VerifyDirectMessageForReport(message_id)` | Birebir mesaj şikâyeti (2026-11-09, issue #95): şikâyet edenin token'ı iletilir; chat çağıranın o konuşmanın tarafı olduğunu doğrular, yalnızca konuşma ve gönderen kimliğini döner, içerik dönmez |
 | chat → core | `ListActiveMemberIDs(tayfa_id)` | Canlı olay dağıtımı (WebSocket, gerekirse). Bildirim alıcıları için kullanılmaz; onları core `notification.requested` ile verir |
-| identity → core, chat | `ExportUserData(user_id)` | KVKK veri dışa aktarma (ADR-0008) |
+| identity → core, chat | `ExportService.ExportMyData()` (sunucu akışlı) | KVKK veri dışa aktarma (ADR-0008, ADR-0021). Kullanıcının kendi token'ıyla, talep anında; metod kullanıcı kimliği almaz, yalnızca çağıranın kendi verisini döner (2026-11-11; önceki metin `ExportUserData(user_id)`) |
+| identity → core | `MediaService.ReserveExportUpload`, `GetExportUploadUrl`, `CompleteExportUpload`, `GetExportDownloadUrl` | Şifreli dışa aktarma dosyasının core'un R2'sine yazılması ve indirilmesi; yalnızca çağıranın kendi `data_export` yüklemesi (ADR-0021) |
 | core → identity | `IsMinor(user_ids)` | Şikâyet önceliği; yalnızca evet/hayır döner (ADR-0012) |
 | identity → core | `GetRelationship(viewer_id, subject_id)` | Doğum günü görünürlüğü için arkadaşlık / ortak tayfa (ADR-0012) |
 | identity → core | `MediaService.AttachAvatar(upload_id)` | Avatar ayarlanırken yüklemenin çağıranın, hazır ve avatar olduğunu core doğrular ve bağlar; kullanıcının token'ı iletilir (ADR-0020, issue #135) |

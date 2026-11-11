@@ -1,8 +1,9 @@
 # ADR-0021: KVKK veri dışa aktarma — toplama, şifreleme ve depolama
 
-- **Durum:** Önerildi
+- **Durum:** Kabul edildi (platform sahibi, 2026-11-11)
 - **Tarih:** 2026-11-11
-- **Karar veren:** Murat Tarslan (onay bekliyor)
+- **Karar veren:** Murat Tarslan (dokuz önerinin hepsi sohbette kabul
+  edildi, 2026-11-11)
 - **İlgili:** [ADR-0007](0007-dosyalar-ve-medya.md), [ADR-0008](0008-kvkk-ve-platform-yonetimi.md)
   ("Veri dışa aktarma"; bu ADR onu uygular ve aşağıda belirtilen yerlerde
   ayrıntılandırır), [ADR-0009](0009-veri-modelinin-servislere-dagilimi.md)
@@ -198,7 +199,7 @@ revizyonuyla aynı ilke). ADR-0009 uygulama PR'ında güncellenir.
 ### 4. Boyut, akış, zaman aşımı, tekrar deneme
 
 - **gRPC akışı:** core ve chat `ExportMyData`'yı **sunucu akışlı** RPC olarak
-  sunar (`stream ExportChunk`); `auth.ForwardToken` akış yolunu zaten taşır.
+  sunar (`stream ExportMyDataResponse`); `auth.ForwardToken` akış yolunu zaten taşır.
   Her parça bir bölümün (`section`, ör. `core/events`) en çok 1 MiB'lık JSON
   kayıtlarıdır; gRPC'nin 4 MB mesaj sınırına takılmaz. Sayfalı unary
   çağrılar her tablo için imleç sözleşmesi gerektirirdi; akış daha sade.
@@ -208,8 +209,8 @@ revizyonuyla aynı ilke). ADR-0009 uygulama PR'ında güncellenir.
 - **Yazım:** identity parçaları gelir gelmez `archive/zip` ile bellekteki
   tampona sıkıştırır (Deflate), sonra tamponu **yerinde** mühürler
   (`Seal(buf[:0], …)`); açık metnin ikinci bir kopyası tutulmaz.
-- **Üst sınır:** sıkıştırılmış zip en çok **16 MiB**
-  (`IDENTITY_DATA_EXPORT_MAX_MIB`). JSON 5–10 kat sıkıştığı için bu 80 MiB'ın
+- **Üst sınır:** sıkıştırılmış zip en çok **16 MiB** (sabit; veritabanı
+  CHECK'leri de aynı sınırı tutar). JSON 5–10 kat sıkıştığı için bu 80 MiB'ın
   üstünde JSON demektir; bir kullanıcının metin verisinin buna yaklaşması
   beklenmez. identity aynı anda **bir** dışa aktarma yürütür (semafor; diğerleri
   `pending`'de sırasını bekler), bellek sınırı 128 MiB'da kalır.
@@ -233,7 +234,8 @@ revizyonuyla aynı ilke). ADR-0009 uygulama PR'ında güncellenir.
 | identity'ye etkisi | Yok | identity'nin medyayı **okuması** gerekir (core'dan GET linki + indirme): identity bugün medya görmez | Uzun ömürlü linkler ADR-0020'nin 1 saat ilkesini bozar |
 | Kullanıcı erişimi | Kendi dosyaları ADR-0020'ye göre **her zaman** görünür: istemci "Fotoğraflarımı da indir" ile mevcut `POST /v1/media/urls`'ten link alıp indirir | Zip'te | Linkler 7 gün |
 
-**Öneri: A.** Zip'te `core/uploads.json`: kullanıcının yüklediği her dosya
+**Öneri: A.** (Kabul edildi; listenin KVKK md. 11 için yeterliliği **pilot
+öncesi hukukçuya sorulacak**.) Zip'te `core/uploads.json`: kullanıcının yüklediği her dosya
 için `upload_id`, amaç, bağlı olduğu içerik (`attached_type`, `attached_id`),
 ölçüler, oluşturma zamanı. Dosyalar EXIF'siz olarak zaten kullanıcının
 cihazından gelmiştir. İstemci isterse aynı ekranda kendi dosyalarını mevcut
@@ -360,7 +362,7 @@ sabittir (ADR-0019 madde 10 kalıbı).
 
 ### 11. Yapılandırma ve platform sahibinin işi
 
-- **identity:** `IDENTITY_DATA_EXPORT_KEY` (`identity-export-key` secret'ı,
+- **identity:** `IDENTITY_DATA_EXPORT_KEYS` (`identity-export-key` secret'ı,
   `<sürüm>:<base64 32 bayt>,…`, isteğe bağlı). Yoksa dışa aktarma kapalıdır:
   identity başlar, uçlar `503 unavailable` döner. Bozuksa identity başlamaz.
   Repo `scripts/new-export-key.sh`'i (`new-birthdate-key.sh` kalıbı) hazırlar.
@@ -382,8 +384,8 @@ sabittir (ADR-0019 madde 10 kalıbı).
 
 | Uç | Açıklama | Başarılı | Hatalar |
 |---|---|---|---|
-| `POST /v1/me/data-exports` | Talep aç, toplama hemen başlar. Gövde: `{client_request_id}` (tekrar gönderimde aynı talep döner) | `202` `DataExport` | `409 data-export-in-progress` (etkin talep var; gövdede `data.data_export_id`), `429 data-export-limit` (`data.available_at`: bir sonraki talep zamanı), `503 unavailable` |
-| `GET /v1/me/data-exports` | Son 30 günün talepleri, yeni önce | `200 {items: [DataExport]}` | — |
+| `POST /v1/me/data-exports` | Talep aç, toplama hemen başlar. Gövde: `{client_request_id}` (tekrar gönderimde aynı talep döner) | `202` `DataExport` | `409 data-export-in-progress` (etkin talep var), `429 data-export-limit`, `503 unavailable`. Hangi talebin sürdüğü ve bir sonraki talep zamanı listeden okunur |
+| `GET /v1/me/data-exports` | Son 30 günün talepleri, yeni önce | `200 {data_exports: [DataExport], next_request_at?}` | — |
 | `GET /v1/me/data-exports/{data_export_id}` | Tek talep (istemci `processing` iken yoklar) | `200 DataExport` | `404 data-export-not-found` (başkasının talebi de) |
 | `POST /v1/me/data-exports/{data_export_id}/download` | 5 dakikalık indirme linki ve anahtar | `200 {url, expires_at, key (base64), size_bytes, format: "aes-256-gcm-v1"}`, `Cache-Control: no-store` | `403 reauthentication-required`, `404 data-export-not-found`, `409 data-export-not-ready`, `410 data-export-expired`, `503 unavailable` |
 
@@ -400,15 +402,18 @@ istek (yoklama dahil).
   `ListDataExports`, `GetDataExport`, `GetDataExportDownload` (kullanıcı
   token'ı).
 - `tayfam.core.v1.MediaService` (kullanıcı token'ı; identity çağırır, gateway
-  uç açmaz): `ReserveExportUpload() → {upload_id}` (yuva ayırır; R2 yoksa
-  `UNAVAILABLE`, etkin yuva varsa `ERROR_REASON_UPLOAD_IN_USE`),
-  `GetExportUploadUrl(upload_id, size_bytes) → {put_url, expires_at}`,
+  uç açmaz): `ReserveExportUpload(data_export_id) → {upload_id}` (yuva
+  ayırır, tekrarında aynı yuva; R2 yoksa `UNAVAILABLE`; kullanıcının eski
+  etkin dışa aktarma yuvası silinir, çünkü identity aynı anda tek talep
+  yürütür), `GetExportUploadUrl(upload_id, size_bytes) → {url, headers,
+  expire_time}` (boyut bir kez yazılır, trigger),
   `CompleteExportUpload(upload_id) → {}` (HEAD ile boyut denetimi, `ready`,
   `expires_at`), `GetExportDownloadUrl(upload_id) → {url, expires_at}`
   (yalnızca sahibi, `ready`, süresi dolmamış).
 - `tayfam.core.v1.ExportService.ExportMyData(ExportMyDataRequest) returns
-  (stream ExportChunk)` ve aynısı `tayfam.chat.v1.ExportService`.
-  `ExportChunk {string section; repeated bytes records}`: her kayıt bir JSON
+  (stream ExportMyDataResponse)` ve aynısı `tayfam.chat.v1.ExportService`.
+  `ExportMyDataResponse {<Servis>ExportSection section; repeated bytes
+  records}`: her kayıt bir JSON
   nesnesi. Bölüm adları ve alanları sözleşmedir: proto'da sabit
   (`section` için enum) ve JSON alanları `docs/data-export-format.md`'de
   sürümlüdür. Bölüm başına tipli proto mesajı (onlarca mesaj) yerine JSON

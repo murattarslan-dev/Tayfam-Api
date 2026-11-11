@@ -51,7 +51,7 @@ var wantAppPrivileges = map[string]string{
 	"user_platform_bans":    "DELETE,INSERT,SELECT,UPDATE(banned_at,event_id)",
 	"job_runs":              "INSERT,SELECT,UPDATE(changed,finished_at,last_succeeded_at,succeeded)",
 	// Issue #135: the key, purpose, declared type and size never change.
-	"uploads": "DELETE,INSERT,SELECT,UPDATE(attached_at,attached_id,attached_type,height,ready_at,reject_reason,status,updated_at,user_id,width)",
+	"uploads": "DELETE,INSERT,SELECT,UPDATE(attached_at,attached_id,attached_type,expires_at,export_bytes,height,ready_at,reject_reason,status,updated_at,user_id,width)",
 }
 
 func TestAppRolePrivileges(t *testing.T) {

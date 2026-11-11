@@ -171,6 +171,7 @@ type Querier interface {
 	// Tekrarlayan etkinlik serileri (issue #51). Kullanıcı istekleri her sorguyu
 	// tayfa_id ile çalıştırır (IDOR); üretim işi seriyi kendi listesinden alır.
 	CreateEventSeries(ctx context.Context, arg CreateEventSeriesParams) error
+	CreateExportUpload(ctx context.Context, arg CreateExportUploadParams) (pgtype.UUID, error)
 	// Satır varsa hiçbir şey yapmaz; etkilenen satır 0 olur.
 	CreateFriendRequest(ctx context.Context, arg CreateFriendRequestParams) (int64, error)
 	CreateInvite(ctx context.Context, arg CreateInviteParams) error
@@ -258,6 +259,8 @@ type Querier interface {
 	// görselleri tayfanındır, yalnızca sahiplikleri kaldırılır.
 	DeleteUserUploads(ctx context.Context, userID pgtype.UUID) (int64, error)
 	DisownUserCovers(ctx context.Context, userID pgtype.UUID) (int64, error)
+	// Yanlış boyutta yüklenmiş dışa aktarma silinir.
+	DropExport(ctx context.Context, arg DropExportParams) (int64, error)
 	EndEventSeries(ctx context.Context, arg EndEventSeriesParams) (int64, error)
 	// Yazarın kendi silmesi: başlık ve gövde hemen boşaltılır, geri alınamaz
 	// (v14 "Silinen içeriği geri alma").
@@ -273,7 +276,8 @@ type Querier interface {
 	// 7 gün çözülmeyen şikâyetler platforma yükselir.
 	EscalateUnresolvedReports(ctx context.Context, arg EscalateUnresolvedReportsParams) ([]EscalateUnresolvedReportsRow, error)
 	// Temizlik: 24 saatte tamamlanmayan, 24 saattir reddedilmiş ve 7 gün
-	// içinde bağlanmamış dosyalar silme kuyruğuna girer.
+	// içinde bağlanmamış görüntüler ile süresi dolan dışa aktarmalar silme
+	// kuyruğuna girer.
 	ExpireUploads(ctx context.Context, arg ExpireUploadsParams) ([]pgtype.UUID, error)
 	// Verilen kullanıcılardan hâlâ etkin üye olanlar (tek alıcılı bildirimler
 	// ve arka plan işlerinin seçtiği alıcılar).
@@ -309,6 +313,7 @@ type Querier interface {
 	// etkinlikler).
 	GetEventSeriesForUpdate(ctx context.Context, arg GetEventSeriesForUpdateParams) (GetEventSeriesForUpdateRow, error)
 	GetEventSports(ctx context.Context, eventID pgtype.UUID) (GetEventSportsRow, error)
+	GetExportByClientRequest(ctx context.Context, arg GetExportByClientRequestParams) (Upload, error)
 	// Arkadaşlık ve engelleme (issue #71, veri modeli v14 "Arkadaşlık ve
 	// Davet (v11)"). friendships satırı iki kişi için tektir: user_low_id <
 	// user_high_id. Uygulama her sorguya düşük ve yüksek kimliği sıralı verir.
@@ -324,7 +329,9 @@ type Querier interface {
 	// (banlı kullanıcının profili gizlenir, silinmez; issue #104).
 	GetLiveUserProfile(ctx context.Context, userID pgtype.UUID) (GetLiveUserProfileRow, error)
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
-	// Sahibinin dosyası; başkasınınki bulunamaz (IDOR).
+	GetOwnExport(ctx context.Context, arg GetOwnExportParams) (Upload, error)
+	// Sahibinin görüntüsü; başkasınınki bulunamaz (IDOR). Dışa aktarma
+	// dosyaları (data_export) görüntü yollarında hiç görünmez.
 	GetOwnUpload(ctx context.Context, arg GetOwnUploadParams) (Upload, error)
 	GetOwnUploadForUpdate(ctx context.Context, arg GetOwnUploadForUpdateParams) (Upload, error)
 	GetPoll(ctx context.Context, arg GetPollParams) (GetPollRow, error)
@@ -572,6 +579,7 @@ type Querier interface {
 	// araya giremez. Transaction bitince bırakılır.
 	LockUserUploads(ctx context.Context, userID string) error
 	MarkAttended(ctx context.Context, arg MarkAttendedParams) error
+	MarkExportReady(ctx context.Context, arg MarkExportReadyParams) (int64, error)
 	MarkHikeAlertSent(ctx context.Context, arg MarkHikeAlertSentParams) (int64, error)
 	MarkNoShow(ctx context.Context, arg MarkNoShowParams) error
 	// Denetimden geçti (ADR-0020). Yalnızca bekleyen kayıt; eşzamanlı ikinci
@@ -611,6 +619,11 @@ type Querier interface {
 	// Kullanıcının güncel avatarı dışındaki bağlı avatarları silinir
 	// (identity'nin user.profile_updated olayı). keep NULL: avatar kaldırıldı.
 	ReleaseOtherAvatars(ctx context.Context, arg ReleaseOtherAvatarsParams) (int64, error)
+	// KVKK veri dışa aktarma dosyası (issue #144, ADR-0021). Yalnızca çağıranın
+	// kendi data_export kaydı; görüntü yolları bu kayıtları görmez.
+	// Yeni yuva açılmadan önce kullanıcının başka etkin dışa aktarması
+	// silinir: identity aynı anda tek talep yürütür, eskisi artıktır.
+	ReleaseOtherExports(ctx context.Context, arg ReleaseOtherExportsParams) (int64, error)
 	RemoveAnswerVote(ctx context.Context, arg RemoveAnswerVoteParams) (int64, error)
 	RequestTayfaDeletion(ctx context.Context, arg RequestTayfaDeletionParams) (int64, error)
 	ResolveReport(ctx context.Context, arg ResolveReportParams) (int64, error)
@@ -656,6 +669,9 @@ type Querier interface {
 	SetEventSeriesID(ctx context.Context, arg SetEventSeriesIDParams) (int64, error)
 	SetEventSeriesTemplate(ctx context.Context, arg SetEventSeriesTemplateParams) error
 	SetEventSports(ctx context.Context, arg SetEventSportsParams) error
+	// Boyut bir kez yazılır (trigger uploads_export_bytes_once); aynı boyut
+	// tekrar yazılabilir.
+	SetExportBytes(ctx context.Context, arg SetExportBytesParams) (int64, error)
 	SetMembershipRole(ctx context.Context, arg SetMembershipRoleParams) (int64, error)
 	SetRsvp(ctx context.Context, arg SetRsvpParams) error
 	// Kullanıcısız arka plan işi. Trigger'ın tanıdığı tek değer

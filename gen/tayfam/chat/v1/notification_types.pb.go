@@ -90,6 +90,10 @@ const (
 	// The platform lifted the tayfa's suspension; for admins and moderators
 	// (target: TAYFA).
 	NotificationType_NOTIFICATION_TYPE_TAYFA_UNSUSPENDED NotificationType = 20
+	// The recipient's KVKK data export is ready to download for 7 days
+	// (target: DATA_EXPORT; issue #144, ADR-0021). identity asks for it; no
+	// tayfa, no actor.
+	NotificationType_NOTIFICATION_TYPE_DATA_EXPORT_READY NotificationType = 21
 )
 
 // Enum value maps for NotificationType.
@@ -116,6 +120,7 @@ var (
 		18: "NOTIFICATION_TYPE_DM_MESSAGE",
 		19: "NOTIFICATION_TYPE_TAYFA_SUSPENDED",
 		20: "NOTIFICATION_TYPE_TAYFA_UNSUSPENDED",
+		21: "NOTIFICATION_TYPE_DATA_EXPORT_READY",
 	}
 	NotificationType_value = map[string]int32{
 		"NOTIFICATION_TYPE_UNSPECIFIED":              0,
@@ -139,6 +144,7 @@ var (
 		"NOTIFICATION_TYPE_DM_MESSAGE":               18,
 		"NOTIFICATION_TYPE_TAYFA_SUSPENDED":          19,
 		"NOTIFICATION_TYPE_TAYFA_UNSUSPENDED":        20,
+		"NOTIFICATION_TYPE_DATA_EXPORT_READY":        21,
 	}
 )
 
@@ -186,6 +192,9 @@ const (
 	// target_id is a conversation ID of the recipient
 	// (DirectMessageService.GetConversation).
 	NotificationTargetType_NOTIFICATION_TARGET_TYPE_DM_CONVERSATION NotificationTargetType = 8
+	// target_id is a data export request of the recipient (identity's
+	// DataExportService.GetDataExport).
+	NotificationTargetType_NOTIFICATION_TARGET_TYPE_DATA_EXPORT NotificationTargetType = 9
 )
 
 // Enum value maps for NotificationTargetType.
@@ -200,6 +209,7 @@ var (
 		6: "NOTIFICATION_TARGET_TYPE_USER",
 		7: "NOTIFICATION_TARGET_TYPE_REPORT",
 		8: "NOTIFICATION_TARGET_TYPE_DM_CONVERSATION",
+		9: "NOTIFICATION_TARGET_TYPE_DATA_EXPORT",
 	}
 	NotificationTargetType_value = map[string]int32{
 		"NOTIFICATION_TARGET_TYPE_UNSPECIFIED":     0,
@@ -211,6 +221,7 @@ var (
 		"NOTIFICATION_TARGET_TYPE_USER":            6,
 		"NOTIFICATION_TARGET_TYPE_REPORT":          7,
 		"NOTIFICATION_TARGET_TYPE_DM_CONVERSATION": 8,
+		"NOTIFICATION_TARGET_TYPE_DATA_EXPORT":     9,
 	}
 )
 
@@ -297,7 +308,7 @@ var File_tayfam_chat_v1_notification_types_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\n" +
-	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xad\x06\n" +
+	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xd6\x06\n" +
 	"\x10NotificationType\x12!\n" +
 	"\x1dNOTIFICATION_TYPE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fNOTIFICATION_TYPE_EVENT_CREATED\x10\x01\x12#\n" +
@@ -320,7 +331,8 @@ const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\x1cNOTIFICATION_TYPE_DM_REQUEST\x10\x11\x12 \n" +
 	"\x1cNOTIFICATION_TYPE_DM_MESSAGE\x10\x12\x12%\n" +
 	"!NOTIFICATION_TYPE_TAYFA_SUSPENDED\x10\x13\x12'\n" +
-	"#NOTIFICATION_TYPE_TAYFA_UNSUSPENDED\x10\x14*\xf9\x02\n" +
+	"#NOTIFICATION_TYPE_TAYFA_UNSUSPENDED\x10\x14\x12'\n" +
+	"#NOTIFICATION_TYPE_DATA_EXPORT_READY\x10\x15*\xa3\x03\n" +
 	"\x16NotificationTargetType\x12(\n" +
 	"$NOTIFICATION_TARGET_TYPE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eNOTIFICATION_TARGET_TYPE_TAYFA\x10\x01\x12'\n" +
@@ -330,7 +342,8 @@ const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\x1fNOTIFICATION_TARGET_TYPE_ANSWER\x10\x05\x12!\n" +
 	"\x1dNOTIFICATION_TARGET_TYPE_USER\x10\x06\x12#\n" +
 	"\x1fNOTIFICATION_TARGET_TYPE_REPORT\x10\a\x12,\n" +
-	"(NOTIFICATION_TARGET_TYPE_DM_CONVERSATION\x10\b*\x83\x01\n" +
+	"(NOTIFICATION_TARGET_TYPE_DM_CONVERSATION\x10\b\x12(\n" +
+	"$NOTIFICATION_TARGET_TYPE_DATA_EXPORT\x10\t*\x83\x01\n" +
 	"\x12TayfaWarningReason\x12$\n" +
 	" TAYFA_WARNING_REASON_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dTAYFA_WARNING_REASON_INACTIVE\x10\x01\x12$\n" +

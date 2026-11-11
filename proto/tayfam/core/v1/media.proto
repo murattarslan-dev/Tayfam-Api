@@ -109,10 +109,45 @@ service MediaService {
   // deleted when identity's user.profile_updated with the new avatar
   // reaches core.
   rpc AttachAvatar(AttachAvatarRequest) returns (AttachAvatarResponse);
+
+  // KVKK data export storage (issue #144, ADR-0021). identity calls these
+  // with the caller's own token while it builds the caller's export; the
+  // gateway exposes none of them. The file is encrypted by identity before
+  // it is stored; core never sees the key or the content. Every method
+  // works on the caller's own DATA_EXPORT upload only (another user's,
+  // another purpose or an unknown one is ERROR_REASON_UPLOAD_NOT_FOUND),
+  // and image methods (CompleteUpload, GetUpload, GetMediaUrls,
+  // AttachAvatar) never see a DATA_EXPORT upload.
+
+  // ReserveExportUpload opens the caller's export slot for the identity
+  // request data_export_id (a UUID; a repeat returns the same upload). A
+  // user has at most one PENDING or READY export: an older one is deleted.
+  // Without object storage it is UNAVAILABLE, so identity can refuse the
+  // request at once.
+  rpc ReserveExportUpload(ReserveExportUploadRequest) returns (ReserveExportUploadResponse);
+
+  // GetExportUploadUrl returns the presigned PUT (5 minutes) for the
+  // encrypted file of exactly size_bytes (30 to 16777245). The size is
+  // fixed by the first call; another size later is ERROR_REASON_VALIDATION.
+  // Only a PENDING export (ERROR_REASON_UPLOAD_NOT_FOUND otherwise).
+  rpc GetExportUploadUrl(GetExportUploadUrlRequest) returns (GetExportUploadUrlResponse);
+
+  // CompleteExportUpload checks that the stored object has the declared
+  // size and makes the export READY for 7 days. Not stored yet is
+  // ERROR_REASON_UPLOAD_NOT_RECEIVED; a wrong size is
+  // ERROR_REASON_VALIDATION (the export is deleted). A repeat on a READY
+  // export returns its expiry.
+  rpc CompleteExportUpload(CompleteExportUploadRequest) returns (CompleteExportUploadResponse);
+
+  // GetExportDownloadUrl returns a GET link valid for 5 minutes for the
+  // caller's READY, unexpired export. Not READY is
+  // ERROR_REASON_UPLOAD_NOT_READY.
+  rpc GetExportDownloadUrl(GetExportDownloadUrlRequest) returns (GetExportDownloadUrlResponse);
 }
 
-// UploadPurpose is what an upload is for (uploads.purpose). DATA_EXPORT
-// (KVKK) is written by the server only and never through this service.
+// UploadPurpose is what an upload is for (uploads.purpose). The KVKK data
+// export (uploads.purpose data_export) is not an image: it has no value
+// here and only the export methods above reach it.
 enum UploadPurpose {
   UPLOAD_PURPOSE_UNSPECIFIED = 0;
   UPLOAD_PURPOSE_AVATAR = 1;
@@ -271,3 +306,44 @@ message AttachAvatarRequest {
 }
 
 message AttachAvatarResponse {}
+
+message ReserveExportUploadRequest {
+  // identity's data export request (UUID).
+  string data_export_id = 1;
+}
+
+message ReserveExportUploadResponse {
+  string upload_id = 1;
+}
+
+message GetExportUploadUrlRequest {
+  string upload_id = 1;
+  // Exact size of the encrypted file.
+  int64 size_bytes = 2;
+}
+
+message GetExportUploadUrlResponse {
+  // Presigned URL; PUT with exactly these headers until expire_time.
+  string url = 1;
+  map<string, string> headers = 2;
+  google.protobuf.Timestamp expire_time = 3;
+}
+
+message CompleteExportUploadRequest {
+  string upload_id = 1;
+}
+
+message CompleteExportUploadResponse {
+  // When the export is deleted (7 days after it became READY).
+  google.protobuf.Timestamp expire_time = 1;
+}
+
+message GetExportDownloadUrlRequest {
+  string upload_id = 1;
+}
+
+message GetExportDownloadUrlResponse {
+  // A bearer link for 5 minutes; never logged.
+  string url = 1;
+  google.protobuf.Timestamp expire_time = 2;
+}
