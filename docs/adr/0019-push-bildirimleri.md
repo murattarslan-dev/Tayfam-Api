@@ -1,7 +1,12 @@
 # ADR-0019: Push bildirimleri (FCM)
 
-- **Durum:** Önerildi
+- **Durum:** Kabul edildi (platform sahibi, 2026-11-11)
 - **Tarih:** 2026-11-10
+- **Revizyon:** 2026-11-11 (platform sahibi, sohbette): öneriler kabul
+  edildi (60 gün token saklaması, `mentions` listesi, prod'da zorunlu FCM).
+  İki değişiklik: `hike_overdue` alıcı bağlıyken de push alır (madde 2);
+  chat'in internet çıkışı push açılana kadar eklenmez (madde 8, en az
+  yetki).
 - **Karar veren:** Murat Tarslan
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0005](0005-gercek-zamanli-iletisim-ve-chat.md) (bu ADR "Bildirimler" bölümünü uygular), [ADR-0006](0006-dagitim-ve-ortamlar.md), [ADR-0009](0009-veri-modelinin-servislere-dagilimi.md) (`push_tokens`), [ADR-0011](0011-guvenlik-ilkesi-ihlal-varsayimi.md), [ADR-0015](0015-veritabani-rolleri.md), [ADR-0018](0018-birebir-mesaj-e2e-sunucu-tarafi.md) (cihaz = oturum); issue #134
 - **Kaynak:** Notion: Veri Modeli (taslak v14) "Bildirimler", "Senaryo Kuralları → Bildirimler"
@@ -65,6 +70,10 @@ henüz yoktur.
   WebSocket bağlantısı varsa** push gitmez (bildirim zaten canlı iletildi);
   tercih susturuyorsa push gitmez (madde 3); token yoksa iş biter. Aksi
   halde kullanıcının token'larına (en çok 10) birer FCM mesajı gider.
+- **İstisna: `hike_overdue`** (yürüyüşten dönmeme, güvenlik uyarısı) alıcı
+  bağlıyken de push olarak gider: uygulama açık ama ekranda olmayabilir,
+  kullanıcı uyarıyı kaçırmamalıdır (platform sahibi, 2026-11-11). Tercih
+  de onu engellemez (madde 3).
 - Açık bağlantı bilgisi chat sürecinin belleğindedir (realtime hub); chat
   tek kopya çalışır (ADR-0005 "Ölçekleme"). İkinci kopyada bu bilgi
   LISTEN/NOTIFY ya da kısa ömürlü bir varlık tablosuyla paylaşılmalıdır.
@@ -81,8 +90,8 @@ henüz yoktur.
   satırdaki seviye. `none` push'u durdurur. `mentions` yalnızca alıcıya
   kişisel bildirimleri geçirir: `mention`, `answer_received` (kendi
   sorusu), `rsvp_promoted`, `join_approved`, `tayfa_invitation`,
-  `report_resolved`, `dm_message`, `dm_request` (**öneri**, platform
-  sahibine soru).
+  `report_resolved`, `dm_message`, `dm_request` (platform sahibi kabul
+  etti, 2026-11-11).
 - `hike_overdue` hiçbir tercihle engellenemez (v14).
 
 ### 4. İçerik: çeviri anahtarı ve kimlikler
@@ -150,22 +159,38 @@ istemcinin çeviri dosyasından gelir:
 - Değer yoksa push **kapalıdır**: servis başlar, bilgi log'u yazılır, token
   kaydı yine çalışır (istemci bilmek zorunda değildir), kuyruk 24 saatte
   temizlenir. Bozuk değer servisin başlamasını engeller.
-- **Öneri:** Firebase projesi kurulunca prod'da zorunlu olsun (prod
-  overlay'de `optional` kaldırılır ve `TAYFAM_ENV=prod` iken değer yoksa
-  servis başlamaz); dev'de isteğe bağlı kalsın. Platform sahibine soru.
+- **Karar (platform sahibi, 2026-11-11):** Firebase projesi kurulunca
+  prod'da FCM zorunludur; dev'de isteğe bağlı kalır. Uygulama, prod
+  secret'ı eklendiği PR'da yapılır (bugün prod'da secret yok, prod
+  kırılmaz): prod overlay'de `chat-fcm` referansından `optional`
+  kaldırılır ve `CHAT_FCM_REQUIRED=true` verilir. chat,
+  `CHAT_FCM_REQUIRED=true` iken değer yoksa başlamaz; ayrıca
+  `TAYFAM_ENV=prod` ve `CHAT_FCM_REQUIRED=true` olmadan açılırsa uyarı
+  log'u yazar. Adımlar `docs/runbooks/sops.md` "Push (FCM) servis
+  hesabı"ndadır.
 
 ### 8. Ağ
 
-`chat-egress-internet`: chat'ten internete yalnızca TCP 443; cluster içi ve
-özel adresler hariç (identity ve gateway kurallarıyla aynı daraltma).
-NetworkPolicy alan adıyla sınırlayamaz (Google uçları anycast); alan adı
-sınırı istemcidedir (madde 6).
+- **Push kapalıyken chat'in internete çıkışı yoktur** (en az yetki;
+  platform sahibi, 2026-11-11). `deploy/base`'de chat için internet kuralı
+  bulunmaz; FCM ve Google OAuth uçlarına çıkış, ortamın `chat-fcm`
+  secret'ının eklendiği PR'da **o ortamın** overlay'ine eklenen
+  `chat-egress-internet` NetworkPolicy'siyle açılır. Kopyalanabilir YAML ve
+  eklenecek dosyalar `docs/runbooks/sops.md` "Push (FCM) servis
+  hesabı"ndadır.
+- Kural: chat'ten internete yalnızca TCP 443; cluster içi ve özel adresler
+  hariç (identity ve gateway kurallarıyla aynı daraltma). NetworkPolicy
+  alan adıyla sınırlayamaz (Google uçları anycast); alan adı sınırı
+  istemcidedir (madde 6).
+- `scripts/netpol-test.sh` chat'in çıkışını politikanın varlığına göre
+  dener: politika yoksa internet kapalı, varsa yalnızca 443 açık
+  beklenir.
 
 ### 9. Saklama
 
 | Kayıt | Ne zaman silinir |
 |-------|------------------|
-| Push token'ı | Oturum bitince; çıkışta; FCM geçersiz deyince; **60 gün** yenilenmezse (öneri); hesap silinince |
+| Push token'ı | Oturum bitince; çıkışta; FCM geçersiz deyince; **60 gün** yenilenmezse; hesap silinince |
 | Gönderim işi | Gönderilince ya da vazgeçilince; 5 denemeden sonra; 24 saat sonra; bildirim silinince |
 
 Saatlik `push-retention` işi.
@@ -200,8 +225,11 @@ testle sabittir.
   `session_id` taşır; Notion veri modeli v14'e not düşülmelidir (platform
   sahibi).
 - Platform sahibinin işi: Firebase projesi, Android ve iOS uygulamaları,
-  APNs anahtarı, yalnızca FCM gönderebilen bir servis hesabı ve JSON'unun
-  sops ile `chat-fcm` secret'ına şifrelenmesi.
+  APNs anahtarı, yalnızca FCM gönderebilen bir servis hesabı, JSON'unun
+  sops ile `chat-fcm` secret'ına şifrelenmesi ve aynı PR'da o ortamın
+  `chat-egress-internet` kuralı (prod'da ayrıca zorunluluk).
+- DM sohbetini sessize alma ucu ayrı bir iştir; push tercihi
+  `dm_conversation` kapsamını şimdiden okur.
 - İstemci: çeviri dosyalarına `push_<type>_title/_body` anahtarları ve
   Android bildirim kanalları.
 
