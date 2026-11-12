@@ -222,7 +222,6 @@ jobs:
           kubectl kustomize deploy/infra > /dev/null
           kubectl kustomize deploy/clusters/home > /dev/null
           kubectl kustomize deploy/clusters/vds > /dev/null
-          kubectl kustomize deploy/hostops/vds > /dev/null
 
   # main'deki her commit'ten sonra dev manifestlerini, o commit'in image'larına
   # digest ile sabitleyerek OCI artifact olarak yayınlar ve imzalar. Ev

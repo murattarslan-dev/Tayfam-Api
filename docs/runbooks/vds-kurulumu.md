@@ -489,9 +489,8 @@ Prod ilk gerçek kullanıcı verisini almadan önce (ADR-0006, ADR-0010, ADR-001
 - [ ] **Yayına kadar geçerli gevşetmeler geri alınır** (ADR-0006 revizyon
       2026-11-12): `deploy/clusters/vds/tayfam-prod.yaml` tekrar `prod`
       etiketine ve `prod.yml` imzasına; `ci.yml` "Dev dağıtımı" adımındaki
-      `apps/prod` sabitlemesi kaldırılır; `deploy/hostops/` ve
-      `deploy/apps/prod/flux-vds.yaml`'daki `vds-hostops` silinir (bir sürüm
-      sonra `tayfam-hostops` namespace'inin silindiği doğrulanır).
+      `apps/prod` sabitlemesi kaldırılır. (`deploy/hostops` 2026-11-12'de
+      kaldırıldı; `kubectl get ns tayfam-hostops` NotFound olmalı.)
 - [ ] **Bütün prod anahtarları yenilenir:** age anahtarı (özel kısmı bu kez
       parola yöneticisine de yedeklenir), imzalama, veritabanı, doğum tarihi,
       mesaj, dışa aktarma anahtarları, tünel, R2 ve FCM; prod'a ayrı Google

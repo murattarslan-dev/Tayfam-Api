@@ -217,20 +217,23 @@ yayından sonra ayrı bir dev kurulur. Bu süre için:
 - **Cluster tanımları repodan uygulanır.** `apps/prod/flux-vds.yaml`'daki
   `vds-cluster` Kustomization'ı `deploy/clusters/vds`'i uygular; elle
   `kubectl apply` gerekmez.
-- **Node üzerindeki işler adı konmuş Job'larla yapılır.** `deploy/hostops/vds`
+- **Node üzerindeki işler adı konmuş Job'larla yapıldı (kapatıldı).** `deploy/hostops/vds`
   yalnızca `tayfam-hostops` namespace'inde (PSS `privileged`) çalışan,
   idempotent, ağsız Job'lar içerir; genel bir betik çalıştırma mekanizması
   yoktur. Gerekçe: sağlayıcıda konsol yok ve sunucu işleri için SSH bağımlılığı
   kaldırıldı. Kabul edilen risk: Flux zaten cluster-admin olduğundan repoya
   yazabilen sunucuda root olabiliyordu; bu düzen bunu yeni bir yetki olarak
-  eklemez, ancak kullanımını kolaylaştırır.
+  eklemez, ancak kullanımını kolaylaştırır. Telefon SSH anahtarı eklenince
+  (aynı gün) `deploy/hostops` ve `vds-hostops` kaldırıldı; node üzerindeki
+  işler yine SSH ile yapılır.
 - **Secret'lar sunucuda üretildi** (CLAUDE.md kural 6'dan sapma): bunlar bu
   sunucunun kendi secret'ları; sunucu ele geçirilirse zaten erişilebilirler.
 - Yayın öncesi bunların hepsi geri alınır ve bütün anahtarlar yenilenir
   (`docs/runbooks/vds-kurulumu.md`, "Pilot öncesi şartlar").
 - Ubuntu 26.04'te `kernel.apparmor_restrict_unprivileged_unconfined=0`
   gerekir (Postgres süreçleri arası sinyaller AppArmor tarafından
-  reddediliyordu); `deploy/hostops/vds/apparmor-sysctl.yaml` bunu kalıcı yapar.
+  reddediliyordu); ayar node'da `/etc/sysctl.d/60-tayfam-apparmor.conf` ile
+  kalıcıdır.
 
 ## Gerekçe
 
