@@ -232,7 +232,8 @@ yayından sonra ayrı bir dev kurulur. Bu süre için:
   (`docs/runbooks/vds-kurulumu.md`, "Pilot öncesi şartlar").
 - Ubuntu 26.04'te `kernel.apparmor_restrict_unprivileged_unconfined=0`
   gerekir (Postgres süreçleri arası sinyaller AppArmor tarafından
-  reddediliyordu); `deploy/hostops/vds/apparmor-sysctl.yaml` bunu kalıcı yapar.
+  reddediliyordu); ayar node'da `/etc/sysctl.d/60-tayfam-apparmor.conf` ile
+  kalıcıdır.
 
 ## Gerekçe
 
