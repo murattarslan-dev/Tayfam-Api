@@ -1,6 +1,6 @@
 # ADR-0022: Uygulama bütünlüğü (Play Integrity / App Attest) oturuma bağlanır
 
-- **Durum:** Önerildi
+- **Durum:** Kabul edildi (platform sahibi, 2026-11-12; PR #162'yi birleştirme yetkisiyle)
 - **Tarih:** 2026-11-12
 - **Karar veren:** Murat Tarslan (üç temel tercih sohbette verildi,
   2026-11-12: önce yalnızca kayıt, Android'de `MEETS_STRONG_INTEGRITY`,
@@ -147,9 +147,11 @@ Ortam başına `INTEGRITY_MODE` (`internal/platform/config`):
 | `report` | Kanıt çözülür, sonuç oturuma ve metriklere yazılır; **hiçbir istek reddedilmez.** |
 | `enforce` | `int` claim'i olmayan erişim token'ı gateway'de `integrity-required` (403) alır. |
 
-- **Başlangıç `report`** (platform sahibinin tercihi). Metrikler sonuç ve
-  neden başına sayılır (`passed`, `failed/device`, …); kullanıcı veya oturum
-  kimliği metriğe girmez. `enforce`'a geçiş, telemetriye bakılarak pilottan
+- **Başlangıç `report`** (platform sahibinin tercihi). Her denetim tek bir
+  sayım satırı olarak log'a yazılır (`bütünlük denetimi`: mod, platform,
+  durum, neden, lisans kararı); cluster'da metrik sistemi olmadığı için
+  sayım log'dan yapılır. Kullanıcı, oturum, token ve cihaz bilgisi bu satıra
+  girmez. `enforce`'a geçiş, telemetriye bakılarak pilottan
   önce ayrı bir kararla ve yalnızca configMap değişikliğiyle yapılır.
 - `enforce`'ta da şu uçlar `int` istemez: `getStatus`, `getClientConfig`,
   giriş, yenileme, kayıt ve onaylar, oturum listesi/kapatma, çıkış, hesap

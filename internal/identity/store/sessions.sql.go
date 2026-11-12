@@ -269,3 +269,30 @@ func (q *Queries) RevokeUserSessions(ctx context.Context, arg RevokeUserSessions
 	}
 	return items, nil
 }
+
+const setSessionIntegrity = `-- name: SetSessionIntegrity :exec
+UPDATE sessions
+SET integrity_status = $1, integrity_reason = $2,
+    integrity_checked_at = $3, integrity_passed_at = $4
+WHERE id = $5
+`
+
+type SetSessionIntegrityParams struct {
+	Status    string
+	Reason    pgtype.Text
+	CheckedAt pgtype.Timestamptz
+	PassedAt  pgtype.Timestamptz
+	ID        pgtype.UUID
+}
+
+// Oturumun bütünlük özeti (ADR-0022, issue #163).
+func (q *Queries) SetSessionIntegrity(ctx context.Context, arg SetSessionIntegrityParams) error {
+	_, err := q.db.Exec(ctx, setSessionIntegrity,
+		arg.Status,
+		arg.Reason,
+		arg.CheckedAt,
+		arg.PassedAt,
+		arg.ID,
+	)
+	return err
+}

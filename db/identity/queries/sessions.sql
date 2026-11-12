@@ -56,3 +56,10 @@ RETURNING id;
 SELECT id, created_at
 FROM sessions
 WHERE id = @id AND user_id = @user_id AND revoked_at IS NULL AND expires_at > @now;
+
+-- Oturumun bütünlük özeti (ADR-0022, issue #163).
+-- name: SetSessionIntegrity :exec
+UPDATE sessions
+SET integrity_status = @status, integrity_reason = sqlc.narg('reason'),
+    integrity_checked_at = sqlc.narg('checked_at'), integrity_passed_at = sqlc.narg('passed_at')
+WHERE id = @id;
