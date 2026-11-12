@@ -14,6 +14,7 @@ import (
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/report"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -512,12 +513,12 @@ func TestApproveRejectBanRemove(t *testing.T) {
 	wantErr(t, "aktif üyeyi reddetme", e.svc.RejectMember(ctx, mod, tf.id, member), apperr.ErrMemberNotFound)
 
 	// Bekleyen başvuru üye sayılır ve banlanabilir; kayıt korunur.
-	must(t, e.svc.BanMember(ctx, mod, tf.id, p3))
-	must(t, e.svc.BanMember(ctx, mod, tf.id, member))
+	must(t, e.svc.BanMember(ctx, mod, tf.id, p3, ""))
+	must(t, e.svc.BanMember(ctx, mod, tf.id, member, ""))
 	if e.status(t, tf.id, p3) != "banned/member" || e.status(t, tf.id, member) != "banned/member" {
 		t.Fatal("ban kaydı yok")
 	}
-	wantErr(t, "banlıyı tekrar banlama", e.svc.BanMember(ctx, mod, tf.id, member), apperr.ErrMemberNotFound)
+	wantErr(t, "banlıyı tekrar banlama", e.svc.BanMember(ctx, mod, tf.id, member, ""), apperr.ErrMemberNotFound)
 	wantErr(t, "banlıyı çıkarma", e.svc.RemoveMember(ctx, mod, tf.id, member), apperr.ErrMemberNotFound)
 
 	must(t, e.svc.RemoveMember(ctx, mod, tf.id, p1))
@@ -562,16 +563,16 @@ func TestRoleHierarchy(t *testing.T) {
 		"moderatör moderatörü susturamaz":          second(e.svc.MuteMember(ctx, mod, tf.id, mod2, soon)),
 		"moderatör yöneticiyi susturamaz":          second(e.svc.MuteMember(ctx, mod, tf.id, tf.admin, soon)),
 		"kendini susturamaz":                       second(e.svc.MuteMember(ctx, mod, tf.id, mod, soon)),
-		"moderatör moderatörü banlayamaz":          e.svc.BanMember(ctx, mod, tf.id, mod2),
+		"moderatör moderatörü banlayamaz":          e.svc.BanMember(ctx, mod, tf.id, mod2, ""),
 		"moderatör moderatörü çıkaramaz":           e.svc.RemoveMember(ctx, mod, tf.id, mod2),
-		"yönetici yöneticiyi banlayamaz":           e.svc.BanMember(ctx, tf.admin, tf.id, admin2),
+		"yönetici yöneticiyi banlayamaz":           e.svc.BanMember(ctx, tf.admin, tf.id, admin2, ""),
 		"yönetici yöneticinin rolünü değiştiremez": second(e.svc.ChangeRole(ctx, tf.admin, tf.id, admin2, authz.Member)),
 	} {
 		wantErr(t, name, err, apperr.ErrRoleHierarchy)
 	}
 	for name, err := range map[string]error{
 		"üye susturamaz":        second(e.svc.MuteMember(ctx, member, tf.id, member2, soon)),
-		"üye banlayamaz":        e.svc.BanMember(ctx, member, tf.id, member2),
+		"üye banlayamaz":        e.svc.BanMember(ctx, member, tf.id, member2, ""),
 		"moderatör rol veremez": second(e.svc.ChangeRole(ctx, mod, tf.id, member, authz.Moderator)),
 	} {
 		wantErr(t, name, err, apperr.ErrPermissionDenied)
@@ -734,7 +735,7 @@ func TestIDOR(t *testing.T) {
 			"ChangeRole":       second(e.svc.ChangeRole(ctx, outsider, b.id, bMember, authz.Moderator)),
 			"MuteMember":       second(e.svc.MuteMember(ctx, outsider, b.id, bMember, soon)),
 			"UnmuteMember":     second(e.svc.UnmuteMember(ctx, outsider, b.id, bMember)),
-			"BanMember":        e.svc.BanMember(ctx, outsider, b.id, bMember),
+			"BanMember":        e.svc.BanMember(ctx, outsider, b.id, bMember, ""),
 			"RemoveMember":     e.svc.RemoveMember(ctx, outsider, b.id, bMember),
 		} {
 			wantErr(t, name, err, apperr.ErrTayfaNotFound)
@@ -746,7 +747,7 @@ func TestIDOR(t *testing.T) {
 	// B'nin davetine A üzerinden ulaşılamaz.
 	wantErr(t, "başka tayfanın daveti", e.svc.RevokeInviteLink(ctx, a.admin, a.id, bInv.ID), apperr.ErrInviteNotFound)
 	// B'nin üyesine A üzerinden dokunulamaz.
-	wantErr(t, "başka tayfanın üyesi", e.svc.BanMember(ctx, a.admin, a.id, bMember), apperr.ErrMemberNotFound)
+	wantErr(t, "başka tayfanın üyesi", e.svc.BanMember(ctx, a.admin, a.id, bMember, ""), apperr.ErrMemberNotFound)
 	if e.status(t, b.id, bMember) != "active/member" || e.status(t, b.id, bPending) != "pending/member" {
 		t.Fatal("B'de değişiklik oldu")
 	}
@@ -863,10 +864,42 @@ func TestReadOnlyTayfa(t *testing.T) {
 
 	_, err := e.svc.ApproveMember(ctx, tf.admin, tf.id, pending)
 	wantErr(t, "onay", err, apperr.ErrTayfaReadOnly)
-	wantErr(t, "ban", e.svc.BanMember(ctx, tf.admin, tf.id, member), apperr.ErrTayfaReadOnly)
+	wantErr(t, "ban", e.svc.BanMember(ctx, tf.admin, tf.id, member, ""), apperr.ErrTayfaReadOnly)
 	_, err = e.svc.ChangeRole(ctx, tf.admin, tf.id, member, authz.Moderator)
 	wantErr(t, "rol", err, apperr.ErrTayfaReadOnly)
 	if _, err := e.svc.ListMembers(ctx, member, tf.id, "", 0, ""); err != nil {
 		t.Fatalf("okuma çalışmalı: %v", err)
+	}
+}
+
+// TestBanReason: the optional reason is a report reason other than
+// staff_conduct, kept in the audit log as a classification (issue #150).
+func TestBanReason(t *testing.T) {
+	e := setup(t)
+	tf := e.newTayfa(t, "open")
+	mod := e.seed(t, tf.id, authz.Moderator, authz.StatusActive)
+	withReason := e.seed(t, tf.id, authz.Member, authz.StatusActive)
+	without := e.seed(t, tf.id, authz.Member, authz.StatusActive)
+	untouched := e.seed(t, tf.id, authz.Member, authz.StatusActive)
+
+	for name, r := range map[string]report.Reason{"staff_conduct": report.ReasonStaffConduct, "bilinmeyen": "kural_disi"} {
+		var ve *apperr.ValidationError
+		if err := e.svc.BanMember(ctx, mod, tf.id, untouched, r); !errors.As(err, &ve) || ve.Field != "reason" {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	if s := e.status(t, tf.id, untouched); s != "active/member" {
+		t.Fatalf("geçersiz gerekçeyle banlandı: %s", s)
+	}
+
+	must(t, e.svc.BanMember(ctx, mod, tf.id, withReason, report.ReasonHarassment))
+	must(t, e.svc.BanMember(ctx, mod, tf.id, without, ""))
+	if n := e.count(t, `SELECT count(*) FROM audit_logs WHERE action = 'member.banned' AND target_id = $1
+		AND metadata ->> 'reason' = 'harassment' AND metadata ->> 'from_status' = 'active'`, withReason.PG()); n != 1 {
+		t.Fatalf("gerekçeli denetim kaydı = %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM audit_logs WHERE action = 'member.banned' AND target_id = $1
+		AND NOT metadata ? 'reason'`, without.PG()); n != 1 {
+		t.Fatalf("gerekçesiz denetim kaydı = %d", n)
 	}
 }

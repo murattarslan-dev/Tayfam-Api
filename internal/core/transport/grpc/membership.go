@@ -10,6 +10,7 @@ import (
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/report"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
@@ -29,7 +30,7 @@ type Memberships interface {
 	ChangeRole(ctx context.Context, caller, tayfa, target id.ID, role authz.Role) (membership.Member, error)
 	MuteMember(ctx context.Context, caller, tayfa, target id.ID, until time.Time) (membership.Member, error)
 	UnmuteMember(ctx context.Context, caller, tayfa, target id.ID) (membership.Member, error)
-	BanMember(ctx context.Context, caller, tayfa, target id.ID) error
+	BanMember(ctx context.Context, caller, tayfa, target id.ID, reason report.Reason) error
 	RemoveMember(ctx context.Context, caller, tayfa, target id.ID) error
 	LeaveTayfa(ctx context.Context, caller, tayfa id.ID) error
 	GetMembership(ctx context.Context, caller, tayfa, target id.ID) (membership.Member, error)
@@ -292,7 +293,14 @@ func (s *MembershipServer) BanMember(ctx context.Context, req *corev1.BanMemberR
 	if err != nil {
 		return nil, err
 	}
-	if err := s.app.BanMember(ctx, u, tayfa, target); err != nil {
+	var reason report.Reason
+	if r := req.GetReason(); r != corev1.ReportReason_REPORT_REASON_UNSPECIFIED {
+		var ok bool
+		if reason, ok = reportReasons[r]; !ok {
+			return nil, validation("reason")
+		}
+	}
+	if err := s.app.BanMember(ctx, u, tayfa, target, reason); err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}
 	return &corev1.BanMemberResponse{}, nil

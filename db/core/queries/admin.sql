@@ -21,10 +21,21 @@ SELECT t.id, t.name, t.status, t.visibility, t.created_at, t.suspended_at, t.del
 FROM tayfas t
 WHERE t.id = @id;
 
+-- Banlı üyede son banın gerekçesi denetim kaydından (issue #150; yalnızca
+-- sınıflandırma, serbest metin değil). 365 günlük saklamadan sonra boştur.
 -- name: AdminListTayfaMembers :many
-SELECT m.user_id, p.display_name, m.role, m.status, m.joined_at
+SELECT m.user_id, p.display_name, m.role, m.status, m.joined_at,
+       COALESCE(b.reason, '') AS ban_reason
 FROM memberships m
 LEFT JOIN user_profiles p ON p.user_id = m.user_id AND p.deleted_at IS NULL
+LEFT JOIN LATERAL (
+  SELECT (a.metadata ->> 'reason')::text AS reason
+  FROM audit_logs a
+  WHERE m.status = 'banned' AND a.tayfa_id = m.tayfa_id AND a.action = 'member.banned'
+    AND a.target_type = 'membership' AND a.target_id = m.user_id
+  ORDER BY a.created_at DESC, a.id DESC
+  LIMIT 1
+) b ON true
 WHERE m.tayfa_id = @tayfa_id
   AND (NOT @staff_only::boolean OR (m.status = 'active' AND m.role IN ('admin', 'moderator')))
 ORDER BY role_rank(m.role) DESC, m.joined_at NULLS LAST, m.user_id

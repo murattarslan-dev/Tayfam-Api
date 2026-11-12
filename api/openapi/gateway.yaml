@@ -652,9 +652,18 @@ paths:
     put:
       operationId: banMember
       summary: Etkin ya da bekleyen bir üyeyi banlar (moderatör, yönetici)
-      description: Banlanan kişi kodla ya da davetle tekrar katılamaz.
+      description: |
+        Banlanan kişi kodla ya da davetle tekrar katılamaz. Gövde isteğe
+        bağlıdır; gerekçe kapalı bir listeden seçilir, denetim kaydına ve
+        platform panelindeki üye listesine yazılır. Banlanan kişiye
+        gösterilmez.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BanRequest" }
       responses:
         "204": { description: Üye banlandı }
         "400": { $ref: "#/components/responses/Problem" }
@@ -7141,6 +7150,15 @@ components:
         diğerleri yalnızca tayfa ucuyla. Kanal mesajları bu listede değildir.
       enum: [user, tayfa, announcement, event, question, answer, poll, fishing_catch, dm_message]
 
+    BanRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          allOf: [{ $ref: "#/components/schemas/ReportReason" }]
+          description: |
+            İsteğe bağlı. Şikâyet nedenleriyle aynı liste; `staff_conduct`
+            kabul edilmez (`validation`, alan `reason`).
     ReportReason:
       type: string
       description: |

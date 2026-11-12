@@ -48,6 +48,8 @@ type Querier interface {
 	// Platform kuyruğu: açıklar önce, içlerinde minor_involved ve child_safety
 	// önce, sonra yükselme sırasıyla.
 	AdminListPlatformReports(ctx context.Context, includeResolved bool) ([]AdminListPlatformReportsRow, error)
+	// Banlı üyede son banın gerekçesi denetim kaydından (issue #150; yalnızca
+	// sınıflandırma, serbest metin değil). 365 günlük saklamadan sonra boştur.
 	AdminListTayfaMembers(ctx context.Context, arg AdminListTayfaMembersParams) ([]AdminListTayfaMembersRow, error)
 	AdminListUserTayfas(ctx context.Context, userID pgtype.UUID) ([]AdminListUserTayfasRow, error)
 	AdminLockPlatformReport(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)

@@ -614,12 +614,32 @@ func (h coreHandlers) unmute(ctx context.Context, w http.ResponseWriter, r *http
 	writeJSON(w, http.StatusOK, membershipFrom(resp.GetMembership()))
 }
 
+type banBody struct {
+	Reason string `json:"reason"`
+}
+
+// ban takes an optional body (issue #150): with no body there is no reason.
 func (h coreHandlers) ban(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	id, user, ok := pathTayfaUser(w, r)
 	if !ok {
 		return
 	}
-	if _, err := h.d.Members.BanMember(ctx, &corev1.BanMemberRequest{TayfaId: id, UserId: user}); err != nil {
+	req := &corev1.BanMemberRequest{TayfaId: id, UserId: user}
+	if r.ContentLength != 0 {
+		var b banBody
+		if !decode(w, r, &b) {
+			return
+		}
+		if b.Reason != "" {
+			reason, ok := reportReasons.value(b.Reason)
+			if !ok || reason == corev1.ReportReason_REPORT_REASON_STAFF_CONDUCT {
+				badRequest(w, r)
+				return
+			}
+			req.Reason = reason
+		}
+	}
+	if _, err := h.d.Members.BanMember(ctx, req); err != nil {
 		h.fail(w, r, err)
 		return
 	}

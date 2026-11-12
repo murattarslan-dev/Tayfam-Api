@@ -4,6 +4,7 @@ package tayfam.core.v1;
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/report.proto";
 
 // MembershipService handles joining a tayfa (join code, invite link), invite
 // links, join requests and moderation of members (ADR-0004, data model v14
@@ -166,9 +167,12 @@ service MembershipService {
   // BanMember bans an ACTIVE or PENDING member. The membership row is kept
   // with status BANNED so the user cannot join again by code or invite.
   // Moderator and admin, on lower roles only (a pending user counts as
-  // MEMBER).
+  // MEMBER). The optional reason is a classification only, recorded in the
+  // tayfa's audit log and shown to the platform owner; the banned user never
+  // sees it.
   //
-  // Errors: as UnmuteMember.
+  // Errors: as UnmuteMember; REPORT_REASON_STAFF_CONDUCT or an unknown
+  // reason is ERROR_REASON_VALIDATION (field "reason").
   rpc BanMember(BanMemberRequest) returns (BanMemberResponse);
 
   // RemoveMember removes an ACTIVE member; they may join again later.
@@ -456,6 +460,8 @@ message UnmuteMemberResponse {
 message BanMemberRequest {
   string tayfa_id = 1;
   string user_id = 2;
+  // Optional (UNSPECIFIED: none). Any ReportReason but STAFF_CONDUCT.
+  ReportReason reason = 3;
 }
 
 message BanMemberResponse {}

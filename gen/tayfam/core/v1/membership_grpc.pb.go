@@ -196,9 +196,12 @@ type MembershipServiceClient interface {
 	// BanMember bans an ACTIVE or PENDING member. The membership row is kept
 	// with status BANNED so the user cannot join again by code or invite.
 	// Moderator and admin, on lower roles only (a pending user counts as
-	// MEMBER).
+	// MEMBER). The optional reason is a classification only, recorded in the
+	// tayfa's audit log and shown to the platform owner; the banned user never
+	// sees it.
 	//
-	// Errors: as UnmuteMember.
+	// Errors: as UnmuteMember; REPORT_REASON_STAFF_CONDUCT or an unknown
+	// reason is ERROR_REASON_VALIDATION (field "reason").
 	BanMember(ctx context.Context, in *BanMemberRequest, opts ...grpc.CallOption) (*BanMemberResponse, error)
 	// RemoveMember removes an ACTIVE member; they may join again later.
 	// Moderator and admin, on lower roles only.
@@ -647,9 +650,12 @@ type MembershipServiceServer interface {
 	// BanMember bans an ACTIVE or PENDING member. The membership row is kept
 	// with status BANNED so the user cannot join again by code or invite.
 	// Moderator and admin, on lower roles only (a pending user counts as
-	// MEMBER).
+	// MEMBER). The optional reason is a classification only, recorded in the
+	// tayfa's audit log and shown to the platform owner; the banned user never
+	// sees it.
 	//
-	// Errors: as UnmuteMember.
+	// Errors: as UnmuteMember; REPORT_REASON_STAFF_CONDUCT or an unknown
+	// reason is ERROR_REASON_VALIDATION (field "reason").
 	BanMember(context.Context, *BanMemberRequest) (*BanMemberResponse, error)
 	// RemoveMember removes an ACTIVE member; they may join again later.
 	// Moderator and admin, on lower roles only.

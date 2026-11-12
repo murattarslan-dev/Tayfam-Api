@@ -30,6 +30,7 @@ const (
 	googleClient = "panel-test.apps.googleusercontent.com"
 	tayfaID      = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a60"
 	memberID     = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a61"
+	bannedID     = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a6f"
 	reportID     = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a62"
 	dmReportID   = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a63"
 	xssName      = `<script>alert("x")</script><img src=x onerror=alert(1)>`
@@ -107,6 +108,8 @@ func (f *fakeCore) ListTayfaMembers(ctx context.Context, _ *corev1.ListTayfaMemb
 	f.add(ctx, "ListTayfaMembers")
 	return &corev1.ListTayfaMembersResponse{Members: []*corev1.AdminMember{
 		{UserId: memberID, DisplayName: "Ayşe", Role: corev1.Role_ROLE_ADMIN, Status: corev1.MembershipStatus_MEMBERSHIP_STATUS_ACTIVE, JoinTime: timestamppb.Now()},
+		{UserId: bannedID, DisplayName: "Banlı", Role: corev1.Role_ROLE_MEMBER, Status: corev1.MembershipStatus_MEMBERSHIP_STATUS_BANNED,
+			BanReason: corev1.ReportReason_REPORT_REASON_HARASSMENT},
 	}}, nil
 }
 
@@ -383,6 +386,10 @@ func TestPagesWithAdminToken(t *testing.T) {
 	}
 	if e.identity.gotToken != e.adminTok {
 		t.Fatal("GetAdmin admin token'ını almadı")
+	}
+	// A banned member shows the ban's reason (issue #150).
+	if w := e.do(e.page("/tayfalar/" + tayfaID)); !strings.Contains(w.Body.String(), "Gerekçe: Taciz") {
+		t.Fatal("ban gerekçesi görünmüyor")
 	}
 }
 

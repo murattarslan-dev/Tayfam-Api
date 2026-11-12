@@ -40,6 +40,9 @@ type Member struct {
 	Role        string
 	Status      string
 	JoinedAt    time.Time
+	// BanReason is the latest ban's reason (a report reason) for a banned
+	// member; empty when none was given or the record has expired.
+	BanReason string
 }
 
 // TayfaDetail is GetTayfa's answer.
@@ -123,7 +126,10 @@ func (s *Service) members(ctx context.Context, tayfa id.ID, staffOnly bool) ([]M
 	}
 	out := make([]Member, len(rows))
 	for i, r := range rows {
-		out[i] = Member{User: idOf(r.UserID), DisplayName: r.DisplayName.String, Role: r.Role, Status: r.Status, JoinedAt: timeOf(r.JoinedAt)}
+		out[i] = Member{
+			User: idOf(r.UserID), DisplayName: r.DisplayName.String, Role: r.Role, Status: r.Status, JoinedAt: timeOf(r.JoinedAt),
+			BanReason: r.BanReason,
+		}
 	}
 	return out, nil
 }
