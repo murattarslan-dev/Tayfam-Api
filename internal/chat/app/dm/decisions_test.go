@@ -89,7 +89,7 @@ func TestDeclinedListPaging(t *testing.T) {
 	e := setup(t)
 	b := id.New()
 	var senders []id.ID
-	for i := range 3 {
+	for range 3 {
 		a := id.New()
 		senders = append(senders, a)
 		e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 20})
