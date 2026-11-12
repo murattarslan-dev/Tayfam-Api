@@ -208,7 +208,8 @@ Ortam başına `INTEGRITY_MODE` (`internal/platform/config`):
   (`prepareIntegrityToken`), girişte ve `integrity_check_after` geçtikten
   sonraki ilk yenilemede token alır.
 - **`MEETS_STRONG_INTEGRITY` bazı eski ya da uzun süredir güncelleme
-  almamış cihazları dışarıda bırakabilir.** `report` dönemindeki
+  almamış cihazları dışarıda bırakabilir** (Google'ın belgesine göre
+  Android 13 ve üstünde son bir yıl içinde güvenlik güncellemesi şart). `report` dönemindeki
   `failed/device` oranı yüksekse eşik `enforce`'tan önce yeniden
   değerlendirilir (örn. `MEETS_DEVICE_INTEGRITY`).
 - Play dışından kurulan, Play'in tanımadığı derlemeler (debug, yerel test)

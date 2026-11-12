@@ -3,6 +3,8 @@ package integrity
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +14,7 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/googleauth"
@@ -61,7 +64,8 @@ type PlayConfig struct {
 	// Package is the Android application ID.
 	Package string
 	// CertDigests are the SHA-256 digests of the app signing certificate
-	// (Play App Signing), base64url without padding, as Play reports them.
+	// (Play App Signing): base64url without padding, as Play reports them,
+	// or hex as Play Console shows them ("AB:CD:…", colons optional).
 	CertDigests []string
 	// DeviceLabel is the device level a session needs.
 	DeviceLabel string
@@ -88,11 +92,15 @@ func NewPlay(cfg PlayConfig) (*Play, error) {
 	case cfg.DeviceLabel != LabelBasic && cfg.DeviceLabel != LabelDevice && cfg.DeviceLabel != LabelStrong:
 		return nil, errors.New("integrity: geçersiz cihaz seviyesi")
 	}
+	digests := make([]string, 0, len(cfg.CertDigests))
 	for _, d := range cfg.CertDigests {
-		if !digestPattern.MatchString(d) {
+		n, ok := normalizeDigest(d)
+		if !ok {
 			return nil, errors.New("integrity: geçersiz imza sertifikası özeti")
 		}
+		digests = append(digests, n)
 	}
+	cfg.CertDigests = digests
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
@@ -202,6 +210,26 @@ func (p *Play) judge(pl payload, binding string) Result {
 	}
 	return Result{Status: StatusPassed}
 }
+
+// normalizeDigest returns a SHA-256 digest in Play's form (base64url, no
+// padding) from that form or from hex with optional colons.
+func normalizeDigest(d string) (string, bool) {
+	if digestPattern.MatchString(d) {
+		return d, true
+	}
+	h := strings.ReplaceAll(d, ":", "")
+	if len(h) != 2*sha256Size {
+		return "", false
+	}
+	b, err := hex.DecodeString(h)
+	if err != nil {
+		return "", false
+	}
+	return base64.RawURLEncoding.EncodeToString(b), true
+}
+
+// sha256Size is the length of a SHA-256 digest in bytes.
+const sha256Size = 32
 
 // millis reads an int64 that Google may write as a string or a number.
 func millis(raw json.RawMessage) (int64, bool) {

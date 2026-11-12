@@ -11,7 +11,7 @@ R2'yi bağlama, push'u açma ve veri dışa aktarma anahtarı aşağıdaki
 betiklerle aynı işi yapan yerel bir arayüzle, terminal komutu yazmadan
 yapılabilir (issue #148). Araç yalnızca bu bilgisayarda (WSL) çalışır,
 yalnızca `127.0.0.1`'e bağlanır, dışarıya hiç istek yapmaz ve betikleri
-(`scripts/new-r2-secret.sh`, `new-chat-fcm-secret.sh`, `new-export-key.sh`)
+(`scripts/new-r2-secret.sh`, `new-chat-fcm-secret.sh`, `new-integrity-secret.sh`, `new-export-key.sh`)
 çağırır: değerler yalnızca bellekte tutulur ve betiğe stdin ile verilir.
 Push/PR yapmaz; dosyaları üretir ve klasörü Windows Gezgini'nde açar.
 
@@ -33,7 +33,7 @@ Push/PR yapmaz; dosyaları üretir ve klasörü Windows Gezgini'nde açar.
    kullanımlık bağlantıyla açılır (açılmazsa penceredeki bağlantıyı bir
    kez kullanın; WSL'den: `make ops`).
 2. Ortamı (dev/prod) seçin ve kartlardan birini açın: **R2'yi bağla**,
-   **Push'u aç**, **Dışa aktarma anahtarı**. Panel adımları (bucket,
+   **Push'u aç**, **Uygulama bütünlüğü**, **Dışa aktarma anahtarı**. Panel adımları (bucket,
    lifecycle, token; Firebase servis hesabı) aşağıdaki bölümlerdeki gibidir.
 3. Sonuç sayfasında üretilen/değişen dosyalar, `check-secret-refs.sh`
    sonucu ve sonraki adım yazar. **Klasörü aç** ile `deploy/apps/<ortam>`
@@ -373,6 +373,77 @@ ile değeri `1:<eski>,2:<yeni>` yapın (yeni değeri `head -c 32 /dev/urandom
 | base64 -w0` ile editörün içinden üretin; terminale yazdırmayın). Eski
 sürüm en az 7 gün kalır, sonra silinebilir. Anahtar kaybolursa yalnızca
 son 7 günün hazır dosyaları açılamaz.
+
+## Uygulama bütünlüğü (identity-integrity)
+
+ADR-0022: identity oturumların resmi uygulamaya ait olduğunu Play
+Integrity ile doğrular. Secret isteğe bağlıdır: `INTEGRITY_MODE` tanımsız
+ya da `off` iken identity onsuz başlar. `report` ya da `enforce` iken
+secret, paket adı ve sertifika özeti zorunludur; biri eksikse identity
+**başlamaz** (sessizce denetimsiz çalışmak, çalışan bir denetim gibi
+görünürdü). identity'nin internet çıkışı zaten vardır
+(`identity-egress-internet`, 443); ağ kuralı eklenmez.
+
+Platform sahibinin adımları (ortam başına bir kez):
+
+1. **Play Console** → uygulama → **Protected with Play** → *Play
+   Integrity API* yanında **Get started** → **Link Cloud project**: Google
+   girişi ve Firebase için kullanılan mevcut Cloud projesini seçin
+   (bağlama API'yi o projede kendiliğinden açar).
+2. **Google Cloud** (aynı proje) → *IAM & Admin → Service Accounts →
+   Create*: ad `tayfam-integrity-<ortam>`. Rol atamayın: Google'ın belgesi
+   token çözmek için bir IAM rolü tanımlamıyor, bağlı projedeki hesap
+   yeterli görünüyor. Push'un servis hesabını (`tayfam-push-<ortam>`)
+   kullanmayın. *Keys → Add key → JSON* ile anahtarı indirin. (Denetimler
+   log'da sürekli `reason=unavailable` ile dönerse yetki eksik demektir;
+   oturum bakar.)
+3. Anahtarı hemen şifreleyin (Tayfam Ops'ta **Uygulama bütünlüğü**, ya da):
+
+   ```sh
+   ./scripts/new-integrity-secret.sh prod ~/Downloads/<anahtar>.json
+   ```
+
+   Betik indirilen açık dosyayı siler; Tayfam Ops'ta yüklediyseniz
+   Windows'taki kopyayı siz silin. Üretilen dosyayı sohbete bırakın, PR'ı
+   oturum açar.
+4. **Play Console** → **Protected with Play** → *Play Integrity API*
+   yanında **Manage** → **Change responses**: cihaz bütünlüğünde
+   **`MEETS_STRONG_INTEGRITY`**'yi açıp kaydedin (varsayılan yalnızca
+   `MEETS_DEVICE_INTEGRITY`'dir; değişiklik hemen, prod dahil geçerli
+   olur). Not: Android 13 ve üstünde STRONG, cihazın son bir yıl içinde
+   güvenlik güncellemesi almış olmasını da ister; `report` dönemindeki
+   `reason=device` oranı bunu gösterir.
+   Aynı uygulamada *App signing* (uygulama imzalama) sayfasından **app
+   signing key certificate → SHA-256 certificate fingerprint** değerini
+   kopyalayın (`AB:CD:…` biçimi olduğu gibi kabul edilir). Upload key'in
+   değil, app signing key'in özeti.
+5. Paket adını ve 4. adımdaki SHA-256 özetini sohbete yazın; ikisi de
+   gizli değildir. Oturum ortamın `tayfam-env`'ine şunları ekleyen PR'ı
+   açar:
+
+   ```yaml
+   - INTEGRITY_MODE=report
+   - INTEGRITY_ANDROID_PACKAGE=<paket adı>
+   - INTEGRITY_ANDROID_CERT_SHA256=<özet>
+   # isteğe bağlı; varsayılan MEETS_STRONG_INTEGRITY
+   # - INTEGRITY_ANDROID_DEVICE_LEVEL=MEETS_DEVICE_INTEGRITY
+   ```
+
+   **Sıra önemli:** secret PR'ı birleşip identity yeniden başlamadan
+   `INTEGRITY_MODE=report` yazılırsa identity başlamaz. İkisi aynı PR'da
+   da olabilir.
+
+Birleştikten sonra identity'yi yeniden başlatın; log'da
+`uygulama bütünlüğü açık` (mod `report`) görünür. Her denetim
+`bütünlük denetimi` satırıdır (platform, durum, neden; kimlik yok):
+`report` dönemindeki `reason=device` oranına bakılarak `enforce`'a geçiş
+ve eşik ayrıca kararlaştırılır (ADR-0022 §6). `enforce` gateway'de de aynı
+`INTEGRITY_MODE` değişkenini okur.
+
+Rotasyon: Google Cloud'da yeni JSON anahtarı üretin,
+`deploy/apps/<ortam>/secrets/identity-integrity.sops.yaml`'ı silip
+betiği yeniden çalıştırın; birleşip identity yeniden başlayınca eski
+anahtarı konsolda silin.
 
 ## Cloudflare Tunnel token'ı
 

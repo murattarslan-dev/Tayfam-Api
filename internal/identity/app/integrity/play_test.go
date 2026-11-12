@@ -83,12 +83,19 @@ func TestNewPlayRejectsConfig(t *testing.T) {
 	if _, err := integrity.NewPlay(good); err != nil {
 		t.Fatal(err)
 	}
+	// Play Console's hex form is accepted too (32 zero bytes = Cert).
+	hexForm := good
+	hexForm.CertDigests = []string{strings.TrimSuffix(strings.Repeat("00:", 32), ":")}
+	if _, err := integrity.NewPlay(hexForm); err != nil {
+		t.Fatalf("hex özet: %v", err)
+	}
 	for name, change := range map[string]func(*integrity.PlayConfig){
 		"token kaynağı yok": func(c *integrity.PlayConfig) { c.Tokens = nil },
 		"paket adı yok":     func(c *integrity.PlayConfig) { c.Package = "" },
 		"tek parçalı paket": func(c *integrity.PlayConfig) { c.Package = "tayfam" },
 		"sertifika yok":     func(c *integrity.PlayConfig) { c.CertDigests = nil },
 		"bozuk sertifika":   func(c *integrity.PlayConfig) { c.CertDigests = []string{"AA:BB"} },
+		"hex olmayan özet":  func(c *integrity.PlayConfig) { c.CertDigests = []string{strings.Repeat("ZZ", 32)} },
 		"bilinmeyen seviye": func(c *integrity.PlayConfig) { c.DeviceLabel = "MEETS_VIRTUAL_INTEGRITY" },
 	} {
 		cfg := good
