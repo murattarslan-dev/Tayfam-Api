@@ -50,10 +50,17 @@ configMapGenerator:
       # Kayıtta onaylanan belgelerin sürümleri; metin değişince artar.
       - CONSENT_PRIVACY_NOTICE_VERSION=2026-11-08
       - CONSENT_TERMS_VERSION=2026-11-08
-      # Yönetim paneli (admin.tayfam.app, ADR-0008) bilerek yok: ADMIN_HOST,
-      # CF_ACCESS_TEAM_DOMAIN, CF_ACCESS_AUD ve ADMIN_GOOGLE_CLIENT_ID prod'un
-      # Access uygulaması kurulunca birlikte eklenir (vds-kurulumu.md, adım g).
-      # CF_ACCESS_* boşken gateway paneli hiç kurmaz, admin host'u 404 döner.
+      # Yönetim paneli (admin.tayfam.app, ADR-0008; vds-kurulumu.md adım g.3,
+      # issue #173): panel 2026-11-12'den itibaren prod'da. Cloudflare Access
+      # uygulaması dev'deki "Tayfam Panel" (aynı host), Google web istemcisi
+      # GOOGLE_CLIENT_IDS'teki ile aynı. Hiçbiri gizli değildir; dördü birlikte
+      # verilmezse gateway paneli kurmaz ve admin host'u 404 döner.
+      - ADMIN_HOST=admin.tayfam.app
+      - CF_ACCESS_TEAM_DOMAIN=murattarslan-dev.cloudflareaccess.com
+      # AUD tag gizli değildir (her Access JWT'sinin aud alanında görünür);
+      # gitleaks onu API anahtarı sanıyor.
+      - CF_ACCESS_AUD=d008112c2504d19f293d7859a3d99bd0abfc9d51419f78893a0dee81c2324578 # gitleaks:allow
+      - ADMIN_GOOGLE_CLIENT_ID=73439258394-uhd9m0b6mkc5k8eaoup6kgh57a49on4t.apps.googleusercontent.com
       # İstemci sürümü (ADR-0016): platform başına desteklenen en düşük ve en
       # son sürüm. Değişiklik yalnızca bu dosyayla ve yeni bir sürüm etiketiyle
       # dağıtılır; geçersiz değer gateway'in başlamasını engeller.
