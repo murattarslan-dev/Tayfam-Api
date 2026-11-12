@@ -158,12 +158,36 @@ unattended-upgrade --dry-run 2>&1 | tail -3
 **Bilgisayarında, yeni bir terminalde** (root oturumu hâlâ açıkken):
 
 ```bash
-ssh tayfam-vds 'sudo -v && echo "giriş ve sudo tamam"'
+ssh -t tayfam-vds 'sudo -v && echo "giriş ve sudo tamam"'   # -t: sudo parola için terminal ister
 ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no "root@$VDS_IP" true
 # beklenen: "Permission denied (publickey)" — parola ve root girişi kapalı
 ```
 
 İkisi de beklendiği gibiyse root oturumunu kapat.
+
+**İkinci SSH anahtarı (zorunlu).** Sağlayıcıda konsol (VNC) yoksa tek anahtar
+tek erişim yoludur; bilgisayar yanında değilken sunucuya girilemez (2026-11-12
+yaşandı). İkinci bir cihazda (ör. telefonda Termux) ayrı, parolalı bir anahtar
+üret ve açık anahtarını ekle:
+
+```bash
+echo 'ssh-ed25519 AAAA... tayfam-telefon' >> ~/.ssh/authorized_keys
+```
+
+Bağlantı boşta koparsa istemcinin `~/.ssh/config`'ine `ServerAliveInterval 30`
+ekle; uzun işleri `tmux new -A -s kurulum` içinde çalıştır.
+
+**Ubuntu 26.04: AppArmor.** 26.04'te `kernel.apparmor_restrict_unprivileged_unconfined=1`
+iken container içinde sonradan başlatılan süreçler "yığılmış" bir AppArmor
+profili alır ve aynı container'daki süreçler arası sinyaller reddedilir
+(`dmesg`: `apparmor="DENIED" operation="signal"`); Postgres bağlantıları
+"authentication" aşamasında asılı kalır, CNPG initdb bitmez. Container'ların
+kendi profilleri değişmeden:
+
+```bash
+echo 'kernel.apparmor_restrict_unprivileged_unconfined = 0' | sudo tee /etc/sysctl.d/60-tayfam-apparmor.conf
+sudo sysctl --system | grep apparmor_restrict_unprivileged_unconfined   # = 0
+```
 
 ## c) k3s
 
@@ -186,6 +210,13 @@ sudo INSTALL_K3S_VERSION="$K3S_VERSION" \
 rm /tmp/k3s-install.sh
 sudo k3s secrets-encrypt status | head -2    # Encryption Status: Enabled
 sudo k3s kubectl get nodes -o wide          # Ready
+
+# Sunucuda sudo'suz kubectl/flux: k3s'in kubectl'i KUBECONFIG verilmezse
+# root'un /etc/rancher/k3s/k3s.yaml'ını okur ve "permission denied" verir.
+mkdir -p ~/.kube
+sudo install -m 600 -o "$USER" -g "$USER" /etc/rancher/k3s/k3s.yaml ~/.kube/config
+echo 'export KUBECONFIG=$HOME/.kube/config' >> ~/.bashrc && export KUBECONFIG=$HOME/.kube/config
+kubectl get nodes                           # sudo'suz, Ready
 # kubeconfig'i bilgisayarına almak için geçici, yalnızca senin okuyabildiğin kopya
 sudo install -m 600 -o "$USER" -g "$USER" /etc/rancher/k3s/k3s.yaml ~/k3s.yaml
 ```
@@ -239,8 +270,15 @@ age-keygen -o "$d/prod.agekey" 2>/dev/null
 export PROD_AGE_PUB=$(age-keygen -y "$d/prod.agekey")
 echo "prod age açık anahtarı: $PROD_AGE_PUB"           # açık anahtar, gizli değil
 kubectl create namespace flux-system --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n flux-system create secret generic sops-age --from-file=age.agekey="$d/prod.agekey"
+kubectl -n flux-system create secret generic sops-age --from-file=age.agekey="$d/prod.agekey" \
+  && kubectl -n flux-system get secret sops-age      # secret GERÇEKTEN oluştu mu?
 ```
+
+**Secret oluştuğu doğrulanmadan özel anahtarı silme.** Komutlar `&&` ile
+bağlı değilse kubectl'in hatası (ör. KUBECONFIG ayarsız) gözden kaçar, anahtar
+silinir ve o açık anahtara şifrelenen hiçbir secret çözülemez (2026-11-11
+yaşandı: bütün prod secret'ları yeniden üretildi). `get secret` hata verirse
+dur; anahtar `$d`'de durur.
 
 Şimdi `$d/prod.agekey` dosyasını parola yöneticine **dosya eki** olarak
 ekle (içeriği ekrana açmadan; ör. "Tayfam prod age anahtarı"). Sonra:
