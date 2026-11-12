@@ -101,9 +101,6 @@ var (
 	// ErrMessageRequestNotFound: no request waits for the caller in the
 	// conversation.
 	ErrMessageRequestNotFound = errors.New("mesaj isteği bulunamadı")
-	// ErrDirectMessagesUnavailable: chat runs without a message key
-	// (CHAT_MESSAGE_KEYS); direct messages are off until it is configured.
-	ErrDirectMessagesUnavailable = errors.New("birebir mesaj anahtarı yok")
 )
 
 // End-to-end encryption errors (issue #127, ADR-0018; E2EService and
@@ -118,8 +115,6 @@ var (
 	ErrE2EDeviceLimit = errors.New("cihaz sınırı dolu")
 	// ErrE2ERecipientUnavailable: the recipient has no device.
 	ErrE2ERecipientUnavailable = errors.New("alıcının e2e cihazı yok")
-	// ErrE2ERequired: a plain message where a party has a device.
-	ErrE2ERequired = errors.New("uçtan uca şifreleme gerekli")
 	// ErrE2ENotPaired: the caller's device does not hold the history key.
 	ErrE2ENotPaired = errors.New("cihaz eşleştirilmemiş")
 	// ErrE2EAlreadyPaired: the caller's device holds the history key.

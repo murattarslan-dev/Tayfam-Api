@@ -22,7 +22,7 @@ var wantAppPrivileges = map[string]string{
 	"event_consumers":          "INSERT,SELECT,UPDATE",
 	"domain_events":            "INSERT,SELECT",
 	"dm_conversations":         "DELETE,INSERT,SELECT,UPDATE(accepted_at,declined_at,last_message_at,requested_by,status,user_high_id,user_low_id)",
-	"dm_messages":              "DELETE,INSERT,SELECT,UPDATE(body_encrypted,deleted_at,key_version,sender_id)",
+	"dm_messages":              "DELETE,INSERT,SELECT,UPDATE(deleted_at,sender_id)",
 	"dm_conversation_reads":    "DELETE,INSERT,SELECT,UPDATE(last_read_message_id,read_at)",
 	// E2E (00010, ADR-0018): key material, envelopes and archive entries
 	// cannot be edited; a device keeps its identity, session and number.

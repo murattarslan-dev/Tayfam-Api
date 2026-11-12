@@ -36,11 +36,10 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// DirectMessageService runs one-to-one conversations, plain version (issue
-// #95; ADR-0005 "Direkt mesajlar", "Sonuçlar": plain direct messages first,
-// end-to-end encryption as the module's last step; data model v14 "Mesaj
-// İsteği Modeli (v7)", "Okunma bilgisi"). Real-time delivery is the
-// WebSocket (ADR-0014); sending there goes through the same function.
+// DirectMessageService runs one-to-one conversations (issue #95; ADR-0005
+// "Direkt mesajlar"; data model v14 "Mesaj İsteği Modeli (v7)", "Okunma
+// bilgisi"). Messages are end to end only (ADR-0018; the plain version was
+// removed in issue #151). Real-time delivery is the WebSocket (ADR-0014).
 //
 // Authentication: the caller's access token (ADR-0004, ADR-0011). Service
 // tokens are refused. Requests never name the acting user.
@@ -55,11 +54,10 @@ const (
 //     tayfa and no friendship refuse (ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED;
 //     which of them is never said); friends and users with shared event
 //     history write freely; everyone else opens a message request.
-//   - Message bodies are stored encrypted (AES-256-GCM, server key, the same
-//     as channel messages) until end-to-end encryption arrives. They never
-//     appear in logs, events, notifications or error messages.
-//   - UNAVAILABLE without ErrorInfo when core cannot answer, and when chat
-//     runs without its message key (only possible outside prod).
+//   - The server never holds a message's content: it is in the envelopes
+//     (one per device) and the archive only (E2EService). Logs, events and
+//     notifications carry IDs only.
+//   - UNAVAILABLE without ErrorInfo when core cannot answer.
 //   - IDs are UUID strings (ERROR_REASON_VALIDATION otherwise).
 //
 // Paging as in ChannelService: page_size 0 means 50; values above 100 are
@@ -84,26 +82,21 @@ type DirectMessageServiceClient interface {
 	// over the WebSocket (one counter: 30 a minute, bursts of 10;
 	// ERROR_REASON_RATE_LIMITED). Retries count too.
 	//
-	// Errors: ERROR_REASON_VALIDATION (recipient_user_id, the caller; body
-	// 1–4000 characters, not only white space, no control characters other
-	// than tab and line breaks; client_request_id; a client_request_id used
+	// The request carries envelopes (issue #127, ADR-0018), one per device of
+	// the recipient and one per other device of the caller, exactly (see
+	// OutgoingEnvelope; at most 16). The message is stored without content
+	// (encryption E2E); the envelopes are delivered to their devices
+	// (E2EService.ListEnvelopes, WebSocket dm.envelope) and deleted when
+	// acknowledged or after 30 days. The caller's session must have a device
+	// (ERROR_REASON_E2E_DEVICE_NOT_REGISTERED).
+	//
+	// Errors: ERROR_REASON_VALIDATION (recipient_user_id, the caller;
+	// envelopes: none, or a bad one; body: any non-empty value, the plain
+	// path is gone (issue #151); client_request_id; a client_request_id used
 	// for another conversation), ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED,
 	// ERROR_REASON_MESSAGE_REQUEST_PENDING, ERROR_REASON_MESSAGE_REQUEST_LIMIT,
-	// ERROR_REASON_RATE_LIMITED.
-	//
-	// End-to-end encryption (issue #127, ADR-0018): instead of body the
-	// request carries envelopes, one per device of the recipient and one per
-	// other device of the caller, exactly (see OutgoingEnvelope; at most 16).
-	// The message is stored without content (encryption E2E); the envelopes
-	// are delivered to their devices (E2EService.ListEnvelopes, WebSocket
-	// dm.envelope) and deleted when acknowledged or after 30 days. The
-	// caller's session must have a device (ERROR_REASON_E2E_DEVICE_NOT_REGISTERED).
-	// Errors besides the above: ERROR_REASON_E2E_DEVICES_CHANGED,
-	// ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE; ERROR_REASON_VALIDATION for
-	// both or neither of body and envelopes, and for a bad envelope
-	// ("envelopes"). A plain body is refused with ERROR_REASON_E2E_REQUIRED
-	// when the caller or the recipient has an end-to-end device. End-to-end
-	// sending works without chat's message key.
+	// ERROR_REASON_RATE_LIMITED, ERROR_REASON_E2E_DEVICE_NOT_REGISTERED,
+	// ERROR_REASON_E2E_DEVICES_CHANGED, ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE.
 	SendDirectMessage(ctx context.Context, in *SendDirectMessageRequest, opts ...grpc.CallOption) (*SendDirectMessageResponse, error)
 	// ListConversations lists the caller's conversations, the latest message
 	// first, with the caller's unread count.
@@ -113,10 +106,11 @@ type DirectMessageServiceClient interface {
 	// ListDirectMessages returns a page of a conversation's messages: without
 	// after_message_id the newest first, page_token continuing towards older
 	// ones; with it the newer ones oldest first (catching up after a
-	// reconnect, ADR-0005). Deleted messages stay in place without a body.
+	// reconnect, ADR-0005). Deleted messages stay in place, marked deleted.
 	ListDirectMessages(ctx context.Context, in *ListDirectMessagesRequest, opts ...grpc.CallOption) (*ListDirectMessagesResponse, error)
-	// DeleteDirectMessage deletes one of the caller's own messages: the body
-	// is erased at once and cannot be restored. Others' messages, and unknown
+	// DeleteDirectMessage deletes one of the caller's own messages: it shows
+	// as deleted at once, its waiting envelopes and archive entries go, and
+	// it cannot be restored. Others' messages, and unknown
 	// ones, are ERROR_REASON_MESSAGE_NOT_FOUND. Deleting again changes
 	// nothing. Messages cannot be edited.
 	DeleteDirectMessage(ctx context.Context, in *DeleteDirectMessageRequest, opts ...grpc.CallOption) (*DeleteDirectMessageResponse, error)
@@ -286,11 +280,10 @@ func (c *directMessageServiceClient) VerifyDirectMessageForReport(ctx context.Co
 // All implementations must embed UnimplementedDirectMessageServiceServer
 // for forward compatibility.
 //
-// DirectMessageService runs one-to-one conversations, plain version (issue
-// #95; ADR-0005 "Direkt mesajlar", "Sonuçlar": plain direct messages first,
-// end-to-end encryption as the module's last step; data model v14 "Mesaj
-// İsteği Modeli (v7)", "Okunma bilgisi"). Real-time delivery is the
-// WebSocket (ADR-0014); sending there goes through the same function.
+// DirectMessageService runs one-to-one conversations (issue #95; ADR-0005
+// "Direkt mesajlar"; data model v14 "Mesaj İsteği Modeli (v7)", "Okunma
+// bilgisi"). Messages are end to end only (ADR-0018; the plain version was
+// removed in issue #151). Real-time delivery is the WebSocket (ADR-0014).
 //
 // Authentication: the caller's access token (ADR-0004, ADR-0011). Service
 // tokens are refused. Requests never name the acting user.
@@ -305,11 +298,10 @@ func (c *directMessageServiceClient) VerifyDirectMessageForReport(ctx context.Co
 //     tayfa and no friendship refuse (ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED;
 //     which of them is never said); friends and users with shared event
 //     history write freely; everyone else opens a message request.
-//   - Message bodies are stored encrypted (AES-256-GCM, server key, the same
-//     as channel messages) until end-to-end encryption arrives. They never
-//     appear in logs, events, notifications or error messages.
-//   - UNAVAILABLE without ErrorInfo when core cannot answer, and when chat
-//     runs without its message key (only possible outside prod).
+//   - The server never holds a message's content: it is in the envelopes
+//     (one per device) and the archive only (E2EService). Logs, events and
+//     notifications carry IDs only.
+//   - UNAVAILABLE without ErrorInfo when core cannot answer.
 //   - IDs are UUID strings (ERROR_REASON_VALIDATION otherwise).
 //
 // Paging as in ChannelService: page_size 0 means 50; values above 100 are
@@ -334,26 +326,21 @@ type DirectMessageServiceServer interface {
 	// over the WebSocket (one counter: 30 a minute, bursts of 10;
 	// ERROR_REASON_RATE_LIMITED). Retries count too.
 	//
-	// Errors: ERROR_REASON_VALIDATION (recipient_user_id, the caller; body
-	// 1–4000 characters, not only white space, no control characters other
-	// than tab and line breaks; client_request_id; a client_request_id used
+	// The request carries envelopes (issue #127, ADR-0018), one per device of
+	// the recipient and one per other device of the caller, exactly (see
+	// OutgoingEnvelope; at most 16). The message is stored without content
+	// (encryption E2E); the envelopes are delivered to their devices
+	// (E2EService.ListEnvelopes, WebSocket dm.envelope) and deleted when
+	// acknowledged or after 30 days. The caller's session must have a device
+	// (ERROR_REASON_E2E_DEVICE_NOT_REGISTERED).
+	//
+	// Errors: ERROR_REASON_VALIDATION (recipient_user_id, the caller;
+	// envelopes: none, or a bad one; body: any non-empty value, the plain
+	// path is gone (issue #151); client_request_id; a client_request_id used
 	// for another conversation), ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED,
 	// ERROR_REASON_MESSAGE_REQUEST_PENDING, ERROR_REASON_MESSAGE_REQUEST_LIMIT,
-	// ERROR_REASON_RATE_LIMITED.
-	//
-	// End-to-end encryption (issue #127, ADR-0018): instead of body the
-	// request carries envelopes, one per device of the recipient and one per
-	// other device of the caller, exactly (see OutgoingEnvelope; at most 16).
-	// The message is stored without content (encryption E2E); the envelopes
-	// are delivered to their devices (E2EService.ListEnvelopes, WebSocket
-	// dm.envelope) and deleted when acknowledged or after 30 days. The
-	// caller's session must have a device (ERROR_REASON_E2E_DEVICE_NOT_REGISTERED).
-	// Errors besides the above: ERROR_REASON_E2E_DEVICES_CHANGED,
-	// ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE; ERROR_REASON_VALIDATION for
-	// both or neither of body and envelopes, and for a bad envelope
-	// ("envelopes"). A plain body is refused with ERROR_REASON_E2E_REQUIRED
-	// when the caller or the recipient has an end-to-end device. End-to-end
-	// sending works without chat's message key.
+	// ERROR_REASON_RATE_LIMITED, ERROR_REASON_E2E_DEVICE_NOT_REGISTERED,
+	// ERROR_REASON_E2E_DEVICES_CHANGED, ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE.
 	SendDirectMessage(context.Context, *SendDirectMessageRequest) (*SendDirectMessageResponse, error)
 	// ListConversations lists the caller's conversations, the latest message
 	// first, with the caller's unread count.
@@ -363,10 +350,11 @@ type DirectMessageServiceServer interface {
 	// ListDirectMessages returns a page of a conversation's messages: without
 	// after_message_id the newest first, page_token continuing towards older
 	// ones; with it the newer ones oldest first (catching up after a
-	// reconnect, ADR-0005). Deleted messages stay in place without a body.
+	// reconnect, ADR-0005). Deleted messages stay in place, marked deleted.
 	ListDirectMessages(context.Context, *ListDirectMessagesRequest) (*ListDirectMessagesResponse, error)
-	// DeleteDirectMessage deletes one of the caller's own messages: the body
-	// is erased at once and cannot be restored. Others' messages, and unknown
+	// DeleteDirectMessage deletes one of the caller's own messages: it shows
+	// as deleted at once, its waiting envelopes and archive entries go, and
+	// it cannot be restored. Others' messages, and unknown
 	// ones, are ERROR_REASON_MESSAGE_NOT_FOUND. Deleting again changes
 	// nothing. Messages cannot be edited.
 	DeleteDirectMessage(context.Context, *DeleteDirectMessageRequest) (*DeleteDirectMessageResponse, error)

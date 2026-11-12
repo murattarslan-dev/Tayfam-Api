@@ -66,9 +66,6 @@ func (s *Service) List(ctx context.Context, caller id.ID, size int32, token stri
 		}
 		p.AfterAt, p.AfterID = ts(at), after.PG()
 	}
-	if err := s.ready(); err != nil {
-		return nil, "", err
-	}
 	rows, err := store.New(s.cfg.Pool).ListConversationsPage(ctx, p)
 	if err != nil {
 		return nil, "", fmt.Errorf("konuşmalar: %w", err)
@@ -90,9 +87,6 @@ func (s *Service) List(ctx context.Context, caller id.ID, size int32, token stri
 
 // Get returns one of the caller's conversations.
 func (s *Service) Get(ctx context.Context, caller, conversation id.ID) (Conversation, error) {
-	if err := s.ready(); err != nil {
-		return Conversation{}, err
-	}
 	return s.view(ctx, store.New(s.cfg.Pool), caller, conversation)
 }
 
@@ -110,9 +104,6 @@ func (s *Service) Messages(ctx context.Context, caller, conversation id.ID, in L
 			return nil, "", invalid("page_token")
 		}
 		cursor = v
-	}
-	if err := s.ready(); err != nil {
-		return nil, "", err
 	}
 	q := store.New(s.cfg.Pool)
 	if _, err := load(ctx, q, caller, conversation); err != nil {
@@ -154,23 +145,16 @@ func (s *Service) Messages(ctx context.Context, caller, conversation id.ID, in L
 	}
 	out := make([]Message, 0, len(rows))
 	for _, r := range rows {
-		m, err := s.messageOf(r)
-		if err != nil {
-			return nil, "", err
-		}
-		out = append(out, m)
+		out = append(out, messageOf(r))
 	}
 	return out, next, nil
 }
 
-// Delete erases one of the caller's own messages: the body goes at once
-// and cannot be restored. Others' messages are "not found"; deleting again
-// changes nothing. Deleting needs no permission from core: one's own words
+// Delete erases one of the caller's own messages: it shows as deleted at
+// once and cannot be restored (its envelopes and archives go too). Others'
+// messages are "not found"; deleting again changes nothing. Deleting needs no permission from core: one's own words
 // can always be taken back, also after a block.
 func (s *Service) Delete(ctx context.Context, caller, conversation, message id.ID) error {
-	if err := s.ready(); err != nil {
-		return err
-	}
 	q := store.New(s.cfg.Pool)
 	c, err := load(ctx, q, caller, conversation)
 	if err != nil {
@@ -199,8 +183,8 @@ func (s *Service) Delete(ctx context.Context, caller, conversation, message id.I
 			return nil // erased concurrently
 		}
 		changed = true
-		// An end-to-end message's waiting envelopes and both parties'
-		// archive entries go with it (ADR-0018 item 3).
+		// The message's waiting envelopes and both parties' archive entries
+		// go with it (ADR-0018 item 3).
 		if err := keys.MessageDeleted(ctx, store.New(tx), message); err != nil {
 			return err
 		}
@@ -220,9 +204,6 @@ func (s *Service) Delete(ctx context.Context, caller, conversation, message id.I
 // active conversations only: a requester does not learn that the request
 // was read.
 func (s *Service) MarkRead(ctx context.Context, caller, conversation, message id.ID) error {
-	if err := s.ready(); err != nil {
-		return err
-	}
 	q := store.New(s.cfg.Pool)
 	c, err := load(ctx, q, caller, conversation)
 	if err != nil {
@@ -254,9 +235,6 @@ func (s *Service) MarkRead(ctx context.Context, caller, conversation, message id
 // conversation changes nothing; anything else is
 // apperr.ErrMessageRequestNotFound.
 func (s *Service) Accept(ctx context.Context, caller, conversation id.ID) (Conversation, error) {
-	if err := s.ready(); err != nil {
-		return Conversation{}, err
-	}
 	c, err := load(ctx, store.New(s.cfg.Pool), caller, conversation)
 	if err != nil {
 		return Conversation{}, err
@@ -294,9 +272,6 @@ func (s *Service) Accept(ctx context.Context, caller, conversation id.ID) (Conve
 // notices are marked read). Anything else is
 // apperr.ErrMessageRequestNotFound.
 func (s *Service) Decline(ctx context.Context, caller, conversation id.ID) error {
-	if err := s.ready(); err != nil {
-		return err
-	}
 	c, err := load(ctx, store.New(s.cfg.Pool), caller, conversation)
 	if err != nil {
 		return err
@@ -347,9 +322,6 @@ func (s *Service) Declined(ctx context.Context, caller id.ID, size int32, token 
 		}
 		p.AfterAt, p.AfterID = ts(at), after.PG()
 	}
-	if err := s.ready(); err != nil {
-		return nil, "", err
-	}
 	rows, err := store.New(s.cfg.Pool).ListDeclinedRequests(ctx, p)
 	if err != nil {
 		return nil, "", fmt.Errorf("reddedilenler: %w", err)
@@ -378,9 +350,6 @@ func (s *Service) Declined(ctx context.Context, caller id.ID, size int32, token 
 // apperr.ErrConversationNotFound; one that is not a request the caller
 // declined is apperr.ErrMessageRequestNotFound.
 func (s *Service) RemoveDeclined(ctx context.Context, caller, conversation id.ID) error {
-	if err := s.ready(); err != nil {
-		return err
-	}
 	if _, err := store.New(s.cfg.Pool).GetConversationForUser(ctx, store.GetConversationForUserParams{ID: conversation.PG(), UserID: caller.PG()}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return apperr.ErrConversationNotFound

@@ -93,36 +93,12 @@ func (f *fakeChannels) lastToken() string {
 	return f.tokens[len(f.tokens)-1]
 }
 
-// fakeDirect stands in for dm.Service: an error per sender, else the
-// message is published to both parties as dm.Service does after commit.
-type fakeDirect struct {
-	mu     sync.Mutex
-	deny   map[id.ID]error
-	tokens []string
-	pub    dm.Publisher
-}
-
-func (f *fakeDirect) Send(ctx context.Context, caller id.ID, in dm.SendInput) (dm.Message, dm.Conversation, error) {
-	f.mu.Lock()
-	f.tokens = append(f.tokens, tokenOf(ctx))
-	err := f.deny[caller]
-	f.mu.Unlock()
-	if err != nil {
-		return dm.Message{}, dm.Conversation{}, err
-	}
-	conv := id.New()
-	m := dm.Message{ID: id.New(), ConversationID: conv, SenderID: caller, Body: in.Body, CreatedAt: time.Now().UTC()}
-	f.pub.MessageCreated([2]id.ID{caller, in.Recipient}, m)
-	return m, dm.Conversation{ID: conv, Other: in.Recipient, Status: dm.StatusRequestSent}, nil
-}
-
 type env struct {
 	srv  *httptest.Server
 	ver  *fakeVerifier
 	hub  *realtime.Hub
 	live *realtime.Live
 	ch   *fakeChannels
-	dm   *fakeDirect
 }
 
 type who struct {
@@ -143,8 +119,6 @@ func newEnv(t *testing.T, mod func(*Config)) *env {
 	}
 	fc := &fakeChannels{deny: map[[2]id.ID]error{}, pub: live}
 	live.Bind(fc)
-	fd := &fakeDirect{deny: map[id.ID]error{}, pub: live.Direct()}
-	live.BindDirect(fd)
 	runCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { _ = live.Run(runCtx); close(done) }()
@@ -166,7 +140,7 @@ func newEnv(t *testing.T, mod func(*Config)) *env {
 	h.Register(mux)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return &env{srv: srv, ver: ver, hub: hub, live: live, ch: fc, dm: fd}
+	return &env{srv: srv, ver: ver, hub: hub, live: live, ch: fc}
 }
 
 // token issues a token for a new session of user, valid for ttl.
@@ -598,37 +572,28 @@ func TestFullSendBufferCloses(t *testing.T) {
 }
 
 // A direct message needs no subscription: both parties' connections get
-// it, the sender's other device too; strangers do not.
+// it, the sender's other device too; strangers do not. Sending is REST
+// only (issue #151): the plain dm.send frame is an unknown type.
 func TestDirectMessage(t *testing.T) {
 	e := newEnv(t, nil)
 	a, b, x := e.token(id.New(), time.Hour), e.token(id.New(), time.Hour), e.token(id.New(), time.Hour)
 	ca, cb, cx := e.connect(t, a), e.connect(t, b), e.connect(t, x)
 	ca2 := e.connect(t, e.token(a.user, time.Hour))
 
-	req := id.New().String()
-	write(t, ca, `{"type":"dm.send","id":"d1","data":{"recipient_user_id":"`+b.user.String()+`","body":"selam","client_request_id":"`+req+`"}}`)
-	// The sending connection hears the message like every connection of
-	// the parties, and gets its answer; in either order.
-	var sent dmSentData
-	f, g := readFrame(t, ca), readFrame(t, ca)
-	if f.Type != "dm.sent" {
-		f, g = g, f
+	write(t, ca, `{"type":"dm.send","id":"d1","data":{"recipient_user_id":"`+b.user.String()+`","body":"selam","client_request_id":"`+id.New().String()+`"}}`)
+	if d := errorOf(t, readFrame(t, ca)); d.Code != "unsupported_type" {
+		t.Fatalf("dm.send: %+v", d)
 	}
-	if g.Type != realtime.EventDMCreated {
-		t.Fatalf("gönderen: %+v", g)
-	}
-	_ = json.Unmarshal(f.Data, &sent)
-	if f.Type != "dm.sent" || f.ID != "d1" || sent.Body != "selam" || sent.SenderID != a.user.String() || sent.Status != "request_sent" {
-		t.Fatalf("gönderim: %+v %s", f, f.Data)
-	}
-	if e.dm.tokens[len(e.dm.tokens)-1] != a.token {
-		t.Fatal("birebir gönderim bağlantının token'ıyla yapılmadı")
-	}
-	for name, c := range map[string]*websocket.Conn{"alıcı": cb, "gönderenin diğer cihazı": ca2} {
+
+	// dm.Service publishes after a REST send.
+	m := dm.Message{ID: id.New(), ConversationID: id.New(), SenderID: a.user, Encryption: dm.EncryptionE2E, CreatedAt: time.Now().UTC()}
+	e.live.Direct().MessageCreated([2]id.ID{a.user, b.user}, m)
+	for name, c := range map[string]*websocket.Conn{"gönderen": ca, "alıcı": cb, "gönderenin diğer cihazı": ca2} {
 		f := readFrame(t, c)
 		var got realtime.DMData
 		_ = json.Unmarshal(f.Data, &got)
-		if f.Type != realtime.EventDMCreated || got.ID != sent.ID || got.Body != "selam" || got.ConversationID != sent.ConversationID {
+		if f.Type != realtime.EventDMCreated || got.ID != m.ID.String() || got.ConversationID != m.ConversationID.String() ||
+			got.SenderID != a.user.String() || got.Encryption != "e2e" || strings.Contains(string(f.Data), "body") {
 			t.Fatalf("%s: %+v %s", name, f, f.Data)
 		}
 	}
@@ -636,32 +601,5 @@ func TestDirectMessage(t *testing.T) {
 	write(t, cx, `{"type":"nope","id":"z"}`)
 	if f := readFrame(t, cx); f.Type != "error" || f.ID != "z" {
 		t.Fatalf("yabancı: %+v %s", f, f.Data)
-	}
-
-	dmSend := func(body, recipient, req string) errorData {
-		t.Helper()
-		write(t, ca, `{"type":"dm.send","id":"d","data":{"recipient_user_id":"`+recipient+`","body":"`+body+`","client_request_id":"`+req+`"}}`)
-		return errorOf(t, readFrame(t, ca))
-	}
-	if d := dmSend("x", "kötü", id.New().String()); d.Code != "invalid_request" || d.Field != "recipient_user_id" {
-		t.Fatalf("alıcı: %+v", d)
-	}
-	if d := dmSend("x", b.user.String(), "kötü"); d.Code != "invalid_request" || d.Field != "client_request_id" {
-		t.Fatalf("istek kimliği: %+v", d)
-	}
-	for err, code := range map[error]string{
-		apperr.ErrDirectMessageNotAllowed:   "direct_message_not_allowed",
-		apperr.ErrMessageRequestPending:     "message_request_pending",
-		apperr.ErrMessageRequestLimit:       "message_request_limit",
-		apperr.ErrRateLimited:               "rate_limited",
-		apperr.ErrDirectMessagesUnavailable: "unavailable",
-		apperr.Validation("body"):           "invalid_request",
-	} {
-		e.dm.mu.Lock()
-		e.dm.deny[a.user] = err
-		e.dm.mu.Unlock()
-		if d := dmSend("x", b.user.String(), id.New().String()); d.Code != code {
-			t.Errorf("%v: %+v", err, d)
-		}
 	}
 }

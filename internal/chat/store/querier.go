@@ -19,8 +19,6 @@ type Querier interface {
 	AckHistoryKeyShares(ctx context.Context, arg AckHistoryKeySharesParams) (int64, error)
 	// Yalnızca süresi geçmemiş, cevaplanmamış istek cevaplanır.
 	AnswerLinkRequest(ctx context.Context, arg AnswerLinkRequestParams) (int64, error)
-	// Düz gönderimde E2E zorunluluğu: taraflardan birinin cihazı var mı?
-	AnyUserHasDevice(ctx context.Context, userIds []pgtype.UUID) (bool, error)
 	// Yeni geçmiş anahtarı (ilk cihaz ya da yenileme): sürüm bir artar.
 	BumpHistoryKeyVersion(ctx context.Context, userID pgtype.UUID) (int16, error)
 	// Bir anahtar bir kez verilir: eşzamanlı çekmeler kilitli satırı atlar,
@@ -65,8 +63,6 @@ type Querier interface {
 	CreateConversation(ctx context.Context, arg CreateConversationParams) (CreateConversationRow, error)
 	// Cihazlar.
 	CreateDevice(ctx context.Context, arg CreateDeviceParams) (CreateDeviceRow, error)
-	// Aynı (gönderen, client_request_id) varsa satır açılmaz ve sonuç boş döner.
-	CreateDirectMessage(ctx context.Context, arg CreateDirectMessageParams) (CreateDirectMessageRow, error)
 	// Zarflar.
 	CreateDirectMessageE2E(ctx context.Context, arg CreateDirectMessageE2EParams) (CreateDirectMessageE2ERow, error)
 	CreateLinkRequest(ctx context.Context, arg CreateLinkRequestParams) (CreateLinkRequestRow, error)
@@ -130,7 +126,8 @@ type Querier interface {
 	// arşivini ve kendi eşleştirme isteklerini görür (IDOR).
 	// Kullanıcı durumu.
 	EnsureE2EState(ctx context.Context, userID pgtype.UUID) error
-	// Gönderenin kendi silmesi: metin hemen gider, geri alınamaz.
+	// Gönderenin kendi silmesi: mesaj silinmiş görünür, geri alınamaz.
+	// İçerik sunucuda hiç yoktur (yalnızca zarflarda ve arşivde, ADR-0018).
 	EraseDirectMessage(ctx context.Context, arg EraseDirectMessageParams) (int64, error)
 	// Yazarın kendi silmesi: metin hemen gider, geri alınamaz.
 	EraseMessage(ctx context.Context, arg EraseMessageParams) (int64, error)

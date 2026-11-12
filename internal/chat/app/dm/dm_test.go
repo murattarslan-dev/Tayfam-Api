@@ -14,7 +14,6 @@ import (
 
 	chatdb "github.com/murattarslan-dev/tayfam-api/db/chat"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
-	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/channelcrypt"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/store"
@@ -73,7 +72,6 @@ func (f *fakeRules) set(a, b id.ID, v Verdict) {
 type recPub struct {
 	mu     sync.Mutex
 	events []string
-	bodies []string
 	reads  []id.ID // receivers of read markers
 	notes  []notification.Request
 	// envelopes are the end-to-end deliveries (issue #127).
@@ -86,12 +84,7 @@ func (r *recPub) add(ev string) {
 	r.events = append(r.events, ev)
 }
 
-func (r *recPub) MessageCreated(_ [2]id.ID, m Message) {
-	r.mu.Lock()
-	r.bodies = append(r.bodies, m.Body)
-	r.mu.Unlock()
-	r.add("created")
-}
+func (r *recPub) MessageCreated([2]id.ID, Message)      { r.add("created") }
 func (r *recPub) MessageDeleted([2]id.ID, id.ID, id.ID) { r.add("deleted") }
 func (r *recPub) ConversationAccepted([2]id.ID, id.ID)  { r.add("accepted") }
 func (r *recPub) ConversationRead(to, _, _, _ id.ID) {
@@ -107,11 +100,11 @@ func (r *recPub) Notified(n notification.Request) {
 	r.add("notified:" + n.Type)
 }
 
+// Envelopes are recorded apart from the events: every send has them.
 func (r *recPub) Envelopes(ds []keys.Delivery) {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.envelopes = append(r.envelopes, ds...)
-	r.mu.Unlock()
-	r.add("envelopes")
 }
 
 func (r *recPub) take() []string {
@@ -139,26 +132,52 @@ func (f *fakeLimit) Allow(key string) bool {
 
 type env struct {
 	svc   *Service
+	keys  *keys.Service
 	pool  *pgxpool.Pool
 	rules *fakeRules
 	limit *fakeLimit
 	pub   *recPub
 	now   time.Time
 	mu    sync.Mutex
+
+	// Every message is end to end (issue #151): send registers a device
+	// for a user without one. devs are each user's devices in order.
+	devMu sync.Mutex
+	devs  map[id.ID][]testDevice
+	seed  byte
+}
+
+type testDevice struct {
+	c keys.Caller
+	d keys.Device
 }
 
 func setup(t *testing.T) *env {
 	t.Helper()
 	pool := dbtest.New(t, "chat", chatdb.Migrations())
-	e := &env{pool: pool, rules: &fakeRules{v: map[[2]id.ID]Verdict{}}, limit: &fakeLimit{}, pub: &recPub{}, now: time.Now().UTC()}
+	e := &env{
+		pool: pool, rules: &fakeRules{v: map[[2]id.ID]Verdict{}}, limit: &fakeLimit{}, pub: &recPub{}, now: time.Now().UTC(),
+		devs: map[id.ID][]testDevice{}, seed: 40,
+	}
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	svc, err := New(Config{
-		Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Rules: e.rules, SendLimit: e.limit,
-		Cipher: channelcrypt.Ephemeral(), Publisher: e.pub,
+		Pool: pool, Log: log, Rules: e.rules, SendLimit: e.limit, Publisher: e.pub,
 		Now: func() time.Time { e.mu.Lock(); defer e.mu.Unlock(); return e.now },
 	})
 	must(t, err)
 	e.svc = svc
+	e.keys = newKeys(t, e, log)
 	return e
+}
+
+func newKeys(t *testing.T, e *env, log *slog.Logger) *keys.Service {
+	t.Helper()
+	k, err := keys.New(keys.Config{
+		Pool: e.pool, Log: log, Contacts: e.svc, Bundles: allowAll{}, KeyOps: allowAll{}, Archive: allowAll{},
+		Now: e.svc.cfg.Now,
+	})
+	must(t, err)
+	return k
 }
 
 func (e *env) advance(d time.Duration) {
@@ -167,14 +186,47 @@ func (e *env) advance(d time.Duration) {
 	e.now = e.now.Add(d)
 }
 
-func (e *env) send(t *testing.T, from, to id.ID, body string) (Message, Conversation, error) {
+// input is an end-to-end message from from's first device to to: one
+// envelope per device of to and per other device of from. Users without a
+// device get one.
+func (e *env) input(t *testing.T, from, to id.ID) SendInput {
 	t.Helper()
-	return e.svc.Send(ctx, from, SendInput{Recipient: to, Body: body, ClientRequestID: id.New()})
+	sender := e.firstDevice(t, from)
+	e.firstDevice(t, to)
+	e.devMu.Lock()
+	defer e.devMu.Unlock()
+	var es []OutgoingEnvelope
+	for _, x := range e.devs[to] {
+		es = append(es, envelope(x.d, 1))
+	}
+	for _, x := range e.devs[from][1:] {
+		es = append(es, envelope(x.d, 1))
+	}
+	return SendInput{Recipient: to, ClientRequestID: id.New(), Envelopes: es, Session: sender.c.Session}
 }
 
-func (e *env) mustSend(t *testing.T, from, to id.ID, body string) (Message, Conversation) {
+func (e *env) firstDevice(t *testing.T, user id.ID) testDevice {
 	t.Helper()
-	m, c, err := e.send(t, from, to, body)
+	e.devMu.Lock()
+	if ds := e.devs[user]; len(ds) > 0 {
+		e.devMu.Unlock()
+		return ds[0]
+	}
+	e.seed++
+	seed := e.seed
+	e.devMu.Unlock()
+	c, d := e.device(t, user, seed)
+	return testDevice{c: c, d: d}
+}
+
+func (e *env) send(t *testing.T, from, to id.ID) (Message, Conversation, error) {
+	t.Helper()
+	return e.svc.Send(ctx, from, e.input(t, from, to))
+}
+
+func (e *env) mustSend(t *testing.T, from, to id.ID) (Message, Conversation) {
+	t.Helper()
+	m, c, err := e.send(t, from, to)
 	must(t, err)
 	return m, c
 }
@@ -195,8 +247,8 @@ func TestSendActive(t *testing.T) {
 	e := setup(t)
 	a, b := id.New(), id.New()
 	e.rules.set(a, b, Verdict{Decision: Active})
-	m, c := e.mustSend(t, a, b, "selam, gizli metin")
-	if m.Body != "selam, gizli metin" || m.SenderID != a || c.Status != StatusActive || c.Other != b || c.LastRead != m.ID || c.Unread != 0 {
+	m, c := e.mustSend(t, a, b)
+	if m.Encryption != EncryptionE2E || m.SenderID != a || c.Status != StatusActive || c.Other != b || c.LastRead != m.ID || c.Unread != 0 {
 		t.Fatalf("gönderim = %+v %+v", m, c)
 	}
 	if got := e.pub.take(); strings.Join(got, ",") != "created,notified:dm_message" {
@@ -213,7 +265,7 @@ func TestSendActive(t *testing.T) {
 	}
 	ms, _, err := e.svc.Messages(ctx, b, c.ID, ListInput{})
 	must(t, err)
-	if len(ms) != 1 || ms[0].Body != "selam, gizli metin" {
+	if len(ms) != 1 || ms[0].ID != m.ID || ms[0].Encryption != EncryptionE2E {
 		t.Fatalf("mesajlar = %+v", ms)
 	}
 	// Nobody else reaches the conversation.
@@ -223,26 +275,31 @@ func TestSendActive(t *testing.T) {
 	is(t, err, apperr.ErrConversationNotFound)
 }
 
-// The body is never stored, logged as an event or notified in plain text.
-func TestBodyStaysEncrypted(t *testing.T) {
+// The plain path is gone (issue #151): a message without envelopes is
+// refused, and the database has no place for a server-readable body.
+func TestNoPlainMessages(t *testing.T) {
 	e := setup(t)
 	a, b := id.New(), id.New()
-	e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 20})
-	const secret = "ÇokGizliİçerik-42"
-	_, c := e.mustSend(t, a, b, secret)
-	must(t, e.svc.Decline(ctx, b, c.ID))
 	e.rules.set(a, b, Verdict{Decision: Active})
-	for _, sql := range []string{
-		`SELECT count(*) FROM dm_messages WHERE position(convert_to($1, 'UTF8') in body_encrypted) > 0`,
-		`SELECT count(*) FROM domain_events WHERE payload::text LIKE '%' || $1 || '%'`,
-		`SELECT count(*) FROM notifications WHERE payload::text LIKE '%' || $1 || '%'`,
-	} {
-		if n := e.count(t, sql, secret); n != 0 {
-			t.Errorf("%s: %d", sql, n)
-		}
+	in := e.input(t, a, b)
+	in.Envelopes = nil
+	_, _, err := e.svc.Send(ctx, a, in)
+	var v *apperr.ValidationError
+	if !errors.As(err, &v) || v.Field != "envelopes" {
+		t.Fatalf("zarfsız: %v", err)
 	}
-	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type LIKE 'dm.%'`); n != 2 {
-		t.Fatalf("olaylar = %d", n)
+	m, c := e.mustSend(t, a, b)
+	if n := e.count(t, `SELECT count(*) FROM information_schema.columns WHERE table_name = 'dm_messages' AND column_name IN ('body_encrypted', 'key_version')`); n != 0 {
+		t.Fatal("dm_messages'ta metin kolonu var")
+	}
+	// The schema refuses a server-readable message even if a component
+	// tried to write one.
+	_, err = e.pool.Exec(ctx, `UPDATE dm_messages SET encryption = 'server' WHERE id = $1`, m.ID.PG())
+	if err == nil {
+		t.Fatal("encryption = server kabul edildi")
+	}
+	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type LIKE 'dm.%' AND payload::text LIKE '%' || $1 || '%'`, c.ID.String()); n != 1 {
+		t.Fatalf("olay = %d", n)
 	}
 }
 
@@ -250,7 +307,7 @@ func TestRequestFlow(t *testing.T) {
 	e := setup(t)
 	a, b := id.New(), id.New()
 	e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 20})
-	_, c := e.mustSend(t, a, b, "merhaba, tanışalım mı?")
+	_, c := e.mustSend(t, a, b)
 	if c.Status != StatusRequestSent {
 		t.Fatalf("gönderen durumu = %v", c.Status)
 	}
@@ -258,7 +315,7 @@ func TestRequestFlow(t *testing.T) {
 		t.Fatalf("yayın = %v", got)
 	}
 	// One message until the recipient answers.
-	_, _, err := e.send(t, a, b, "ikinci")
+	_, _, err := e.send(t, a, b)
 	is(t, err, apperr.ErrMessageRequestPending)
 	// The requester cannot accept their own request.
 	_, err = e.svc.Accept(ctx, a, c.ID)
@@ -284,14 +341,14 @@ func TestRequestFlow(t *testing.T) {
 	}
 
 	// The reply accepts.
-	_, rc = e.mustSend(t, b, a, "olur")
+	_, rc = e.mustSend(t, b, a)
 	if rc.Status != StatusActive {
 		t.Fatalf("cevap sonrası = %v", rc.Status)
 	}
 	if got := e.pub.take(); strings.Join(got, ",") != "accepted,created,notified:dm_message" {
 		t.Fatalf("yayın = %v", got)
 	}
-	e.mustSend(t, a, b, "harika")
+	e.mustSend(t, a, b)
 	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'dm.request_accepted'`); n != 1 {
 		t.Fatalf("kabul olayı = %d", n)
 	}
@@ -314,7 +371,7 @@ func TestAcceptExplicitly(t *testing.T) {
 	e := setup(t)
 	a, b := id.New(), id.New()
 	e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 20})
-	_, c := e.mustSend(t, a, b, "merhaba")
+	_, c := e.mustSend(t, a, b)
 	e.pub.take()
 	v, err := e.svc.Accept(ctx, b, c.ID)
 	must(t, err)
@@ -333,14 +390,14 @@ func TestAcceptExplicitly(t *testing.T) {
 	}
 	err = e.svc.Decline(ctx, b, c.ID)
 	is(t, err, apperr.ErrMessageRequestNotFound)
-	e.mustSend(t, a, b, "teşekkürler")
+	e.mustSend(t, a, b)
 }
 
 func TestDecline(t *testing.T) {
 	e := setup(t)
 	a, b := id.New(), id.New()
 	e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 20})
-	_, c := e.mustSend(t, a, b, "merhaba")
+	_, c := e.mustSend(t, a, b)
 	is(t, e.svc.Decline(ctx, a, c.ID), apperr.ErrMessageRequestNotFound)
 	must(t, e.svc.Decline(ctx, b, c.ID))
 	if n := e.notices(t, b, "dm_request"); n != 0 {
@@ -348,7 +405,7 @@ func TestDecline(t *testing.T) {
 	}
 	// The sender is never told: same answer as a waiting request, and the
 	// conversation still looks sent.
-	_, _, err := e.send(t, a, b, "neden cevap yok")
+	_, _, err := e.send(t, a, b)
 	is(t, err, apperr.ErrMessageRequestPending)
 	v, err := e.svc.Get(ctx, a, c.ID)
 	must(t, err)
@@ -357,7 +414,7 @@ func TestDecline(t *testing.T) {
 	}
 	// Becoming able to write freely does not undo a decline.
 	e.rules.set(a, b, Verdict{Decision: Active})
-	_, _, err = e.send(t, a, b, "arkadaş olduk")
+	_, _, err = e.send(t, a, b)
 	is(t, err, apperr.ErrMessageRequestPending)
 	// For the recipient it is gone.
 	_, err = e.svc.Get(ctx, b, c.ID)
@@ -369,11 +426,11 @@ func TestDecline(t *testing.T) {
 	}
 	is(t, e.svc.Decline(ctx, b, c.ID), apperr.ErrConversationNotFound)
 	// Writing later reopens it as active.
-	_, rc := e.mustSend(t, b, a, "kusura bakma, şimdi gördüm")
+	_, rc := e.mustSend(t, b, a)
 	if rc.Status != StatusActive || rc.ID != c.ID {
 		t.Fatalf("yeniden açılış = %+v", rc)
 	}
-	e.mustSend(t, a, b, "sorun değil")
+	e.mustSend(t, a, b)
 }
 
 // A requester who may now write freely (for example they became friends)
@@ -382,9 +439,9 @@ func TestRequestUpgradedByActiveVerdict(t *testing.T) {
 	e := setup(t)
 	a, b := id.New(), id.New()
 	e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 20})
-	_, c := e.mustSend(t, a, b, "merhaba")
+	_, c := e.mustSend(t, a, b)
 	e.rules.set(a, b, Verdict{Decision: Active})
-	_, v := e.mustSend(t, a, b, "artık arkadaşız")
+	_, v := e.mustSend(t, a, b)
 	if v.Status != StatusActive || v.ID != c.ID {
 		t.Fatalf("durum = %+v", v)
 	}
@@ -393,17 +450,17 @@ func TestRequestUpgradedByActiveVerdict(t *testing.T) {
 func TestDenied(t *testing.T) {
 	e := setup(t)
 	a, b := id.New(), id.New()
-	_, _, err := e.send(t, a, b, "merhaba")
+	_, _, err := e.send(t, a, b)
 	is(t, err, apperr.ErrDirectMessageNotAllowed)
 	// A block closes an active conversation too.
 	e.rules.set(a, b, Verdict{Decision: Active})
-	_, c := e.mustSend(t, a, b, "merhaba")
+	_, c := e.mustSend(t, a, b)
 	e.rules.set(a, b, Verdict{Decision: Denied})
-	_, _, err = e.send(t, b, a, "cevap")
+	_, _, err = e.send(t, b, a)
 	is(t, err, apperr.ErrDirectMessageNotAllowed)
 	// An unknown answer is a refusal.
 	e.rules.set(a, b, Verdict{})
-	_, _, err = e.send(t, a, b, "?")
+	_, _, err = e.send(t, a, b)
 	is(t, err, apperr.ErrDirectMessageNotAllowed)
 	if n := e.count(t, `SELECT count(*) FROM dm_messages WHERE conversation_id = $1`, c.ID.PG()); n != 1 {
 		t.Fatalf("mesaj sayısı = %d", n)
@@ -414,7 +471,7 @@ func TestDenied(t *testing.T) {
 	must(t, e.svc.Delete(ctx, a, c.ID, ms[0].ID))
 	// Core unreachable: unavailable, nothing written.
 	e.rules.err = apperr.ErrUnavailable
-	_, _, err = e.send(t, a, b, "?")
+	_, _, err = e.send(t, a, b)
 	is(t, err, apperr.ErrUnavailable)
 }
 
@@ -424,7 +481,7 @@ func TestRequestLimit(t *testing.T) {
 	for i := range 5 {
 		b := id.New()
 		e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 5})
-		_, c := e.mustSend(t, a, b, "merhaba")
+		_, c := e.mustSend(t, a, b)
 		if i == 0 {
 			must(t, e.svc.Decline(ctx, b, c.ID))
 		}
@@ -432,25 +489,25 @@ func TestRequestLimit(t *testing.T) {
 	// A declined request still counts; an active conversation does not.
 	b := id.New()
 	e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 5})
-	_, _, err := e.send(t, a, b, "merhaba")
+	_, _, err := e.send(t, a, b)
 	is(t, err, apperr.ErrMessageRequestLimit)
 	if n := e.count(t, `SELECT count(*) FROM dm_conversations WHERE requested_by = $1`, a.PG()); n != 5 {
 		t.Fatalf("istek sayısı = %d", n)
 	}
 	friend := id.New()
 	e.rules.set(a, friend, Verdict{Decision: Active})
-	e.mustSend(t, a, friend, "selam")
+	e.mustSend(t, a, friend)
 	// Core's higher limit for long-standing members.
 	e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 20})
-	e.mustSend(t, a, b, "merhaba")
+	e.mustSend(t, a, b)
 	// A missing or out-of-range limit falls back to the strict one.
 	c := id.New()
 	e.rules.set(a, c, Verdict{Decision: Request, RequestLimit: 0})
-	_, _, err = e.send(t, a, c, "merhaba")
+	_, _, err = e.send(t, a, c)
 	is(t, err, apperr.ErrMessageRequestLimit)
 	// The window is 24 hours.
 	e.advance(RequestWindow + time.Minute)
-	e.mustSend(t, a, c, "merhaba")
+	e.mustSend(t, a, c)
 }
 
 func TestRequestLimitUnderConcurrency(t *testing.T) {
@@ -461,8 +518,9 @@ func TestRequestLimitUnderConcurrency(t *testing.T) {
 	for range 10 {
 		b := id.New()
 		e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 5})
+		in := e.input(t, a, b)
 		wg.Go(func() {
-			_, _, err := e.send(t, a, b, "merhaba")
+			_, _, err := e.svc.Send(ctx, a, in)
 			errs <- err
 		})
 	}
@@ -486,16 +544,16 @@ func TestRetryAndValidation(t *testing.T) {
 	e := setup(t)
 	a, b := id.New(), id.New()
 	e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 20})
-	req := id.New()
-	m1, _, err := e.svc.Send(ctx, a, SendInput{Recipient: b, Body: "merhaba", ClientRequestID: req})
+	in := e.input(t, a, b)
+	m1, _, err := e.svc.Send(ctx, a, in)
 	must(t, err)
 	calls := e.rules.calls
 	e.pub.take()
 	// A retry returns the first message without asking core again and is
 	// not held to the one-message request rule.
-	m2, c, err := e.svc.Send(ctx, a, SendInput{Recipient: b, Body: "merhaba", ClientRequestID: req})
+	m2, c, err := e.svc.Send(ctx, a, in)
 	must(t, err)
-	if m2.ID != m1.ID || m2.Body != "merhaba" || c.Status != StatusRequestSent || e.rules.calls != calls {
+	if m2.ID != m1.ID || m2.Encryption != EncryptionE2E || c.Status != StatusRequestSent || e.rules.calls != calls {
 		t.Fatalf("tekrar = %+v %+v", m2, c)
 	}
 	if got := e.pub.take(); len(got) != 0 {
@@ -504,41 +562,42 @@ func TestRetryAndValidation(t *testing.T) {
 	// The same request ID towards someone else.
 	other := id.New()
 	e.rules.set(a, other, Verdict{Decision: Active})
-	_, _, err = e.svc.Send(ctx, a, SendInput{Recipient: other, Body: "x", ClientRequestID: req})
+	elsewhere := e.input(t, a, other)
+	elsewhere.ClientRequestID = in.ClientRequestID
+	_, _, err = e.svc.Send(ctx, a, elsewhere)
 	var v *apperr.ValidationError
 	if !errors.As(err, &v) || v.Field != "client_request_id" {
 		t.Fatalf("başka alıcı: %v", err)
 	}
-	for name, in := range map[string]SendInput{
-		"recipient_user_id": {Recipient: a, Body: "x", ClientRequestID: id.New()},
-		"body":              {Recipient: b, Body: "  \n ", ClientRequestID: id.New()},
-		"client_request_id": {Recipient: b, Body: "x"},
+	for _, x := range []struct {
+		field  string
+		change func(*SendInput)
+	}{
+		{"recipient_user_id", func(in *SendInput) { in.Recipient = a }},
+		{"recipient_user_id", func(in *SendInput) { in.Recipient = id.ID{} }},
+		{"envelopes", func(in *SendInput) { in.Envelopes = nil }},
+		{"envelopes", func(in *SendInput) { in.Envelopes[0].Type = 1 }},
+		{"client_request_id", func(in *SendInput) { in.ClientRequestID = id.ID{} }},
 	} {
+		in := e.input(t, a, b)
+		x.change(&in)
 		_, _, err := e.svc.Send(ctx, a, in)
-		if !errors.As(err, &v) || v.Field != name {
-			t.Errorf("%s: %v", name, err)
+		if !errors.As(err, &v) || v.Field != x.field {
+			t.Errorf("%s: %v", x.field, err)
 		}
 	}
-	for name, body := range map[string]string{
-		"çok uzun": strings.Repeat("ş", BodyMax+1),
-		"kontrol":  "a\x00b",
-		"geçersiz": string([]byte{0xff}),
-		"boş":      "",
-	} {
-		if _, _, err := e.send(t, a, other, body); !errors.As(err, &v) || v.Field != "body" {
-			t.Errorf("%s: %v", name, err)
-		}
-	}
-	if _, _, err := e.send(t, a, other, strings.Repeat("ş", BodyMax)); err != nil {
-		t.Fatalf("4000 karakter: %v", err)
-	}
+	// A session without a device cannot send.
+	noDevice := e.input(t, a, other)
+	noDevice.Session = id.ID{}
+	_, _, err = e.svc.Send(ctx, a, noDevice)
+	is(t, err, apperr.ErrE2EDeviceNotRegistered)
 }
 
 func TestDeleteAndPurge(t *testing.T) {
 	e := setup(t)
 	a, b := id.New(), id.New()
 	e.rules.set(a, b, Verdict{Decision: Active})
-	m, c := e.mustSend(t, a, b, "yanlışlıkla")
+	m, c := e.mustSend(t, a, b)
 	e.pub.take()
 	is(t, e.svc.Delete(ctx, b, c.ID, m.ID), apperr.ErrMessageNotFound)
 	is(t, e.svc.Delete(ctx, a, c.ID, id.New()), apperr.ErrMessageNotFound)
@@ -550,11 +609,11 @@ func TestDeleteAndPurge(t *testing.T) {
 	}
 	ms, _, err := e.svc.Messages(ctx, b, c.ID, ListInput{})
 	must(t, err)
-	if len(ms) != 1 || !ms[0].Deleted || ms[0].Body != "" {
+	if len(ms) != 1 || !ms[0].Deleted {
 		t.Fatalf("silinen = %+v", ms)
 	}
-	if n := e.count(t, `SELECT count(*) FROM dm_messages WHERE body_encrypted IS NOT NULL`); n != 0 {
-		t.Fatal("metin silinmedi")
+	if n := e.count(t, `SELECT count(*) FROM dm_envelopes WHERE message_id = $1`, m.ID.PG()); n != 0 {
+		t.Fatal("zarflar silinmedi")
 	}
 	if cs, _, _ := e.svc.List(ctx, b, 0, ""); cs[0].Unread != 0 {
 		t.Fatalf("silinen okunmamış sayıldı: %d", cs[0].Unread)
@@ -571,9 +630,9 @@ func TestNoticeDedupe(t *testing.T) {
 	e := setup(t)
 	a, b := id.New(), id.New()
 	e.rules.set(a, b, Verdict{Decision: Active})
-	_, c := e.mustSend(t, a, b, "1")
-	e.mustSend(t, a, b, "2")
-	m3, _ := e.mustSend(t, a, b, "3")
+	_, c := e.mustSend(t, a, b)
+	e.mustSend(t, a, b)
+	m3, _ := e.mustSend(t, a, b)
 	if n := e.notices(t, b, "dm_message"); n != 1 {
 		t.Fatalf("okunmamış bildirim = %d", n)
 	}
@@ -581,7 +640,7 @@ func TestNoticeDedupe(t *testing.T) {
 	if n := e.notices(t, b, "dm_message"); n != 0 {
 		t.Fatalf("okununca kalan bildirim = %d", n)
 	}
-	e.mustSend(t, a, b, "4")
+	e.mustSend(t, a, b)
 	if n := e.notices(t, b, "dm_message"); n != 1 {
 		t.Fatalf("yeni bildirim = %d", n)
 	}
@@ -600,7 +659,7 @@ func TestPaging(t *testing.T) {
 		o := id.New()
 		others = append(others, o)
 		e.rules.set(me, o, Verdict{Decision: Active})
-		e.mustSend(t, me, o, "selam")
+		e.mustSend(t, me, o)
 		e.advance(time.Second)
 	}
 	var seen []id.ID
@@ -629,7 +688,7 @@ func TestPaging(t *testing.T) {
 	var ids []id.ID
 	var conv id.ID
 	for range 5 {
-		m, c := e.mustSend(t, me, o, "m")
+		m, c := e.mustSend(t, me, o)
 		ids, conv = append(ids, m.ID), c.ID
 	}
 	page, next, err := e.svc.Messages(ctx, o, conv, ListInput{PageSize: 2})
@@ -644,31 +703,11 @@ func TestPaging(t *testing.T) {
 	}
 }
 
-func TestUnavailableWithoutKey(t *testing.T) {
-	pool := dbtest.New(t, "chat", chatdb.Migrations())
-	svc, err := New(Config{Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Rules: &fakeRules{}, SendLimit: &fakeLimit{}})
-	must(t, err)
-	a, b, c := id.New(), id.New(), id.New()
-	_, _, err = svc.Send(ctx, a, SendInput{Recipient: b, Body: "x", ClientRequestID: id.New()})
-	is(t, err, apperr.ErrDirectMessagesUnavailable)
-	_, _, err = svc.List(ctx, a, 0, "")
-	is(t, err, apperr.ErrDirectMessagesUnavailable)
-	_, err = svc.Get(ctx, a, c)
-	is(t, err, apperr.ErrDirectMessagesUnavailable)
-	_, _, err = svc.Messages(ctx, a, c, ListInput{})
-	is(t, err, apperr.ErrDirectMessagesUnavailable)
-	is(t, svc.Delete(ctx, a, c, b), apperr.ErrDirectMessagesUnavailable)
-	is(t, svc.MarkRead(ctx, a, c, b), apperr.ErrDirectMessagesUnavailable)
-	_, err = svc.Accept(ctx, a, c)
-	is(t, err, apperr.ErrDirectMessagesUnavailable)
-	is(t, svc.Decline(ctx, a, c), apperr.ErrDirectMessagesUnavailable)
-}
-
 func TestCleanup(t *testing.T) {
 	e := setup(t)
 	gone, stays := id.New(), id.New()
 	e.rules.set(gone, stays, Verdict{Decision: Active})
-	m, c := e.mustSend(t, gone, stays, "veda")
+	m, c := e.mustSend(t, gone, stays)
 	must(t, e.svc.MarkRead(ctx, stays, c.ID, m.ID))
 	tx, err := e.pool.Begin(ctx)
 	must(t, err)
@@ -681,7 +720,7 @@ func TestCleanup(t *testing.T) {
 	}
 	ms, _, err := e.svc.Messages(ctx, stays, c.ID, ListInput{})
 	must(t, err)
-	if len(ms) != 1 || ms[0].SenderID != (id.ID{}) || ms[0].Body != "veda" {
+	if len(ms) != 1 || ms[0].SenderID != (id.ID{}) || ms[0].ID != m.ID {
 		t.Fatalf("mesaj = %+v", ms)
 	}
 	if n := e.count(t, `SELECT count(*) FROM dm_conversation_reads WHERE user_id = $1`, gone.PG()); n != 0 {
@@ -695,7 +734,7 @@ func TestVerifyForReport(t *testing.T) {
 	e := setup(t)
 	a, b := id.New(), id.New()
 	e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 20})
-	m, c := e.mustSend(t, a, b, "taciz")
+	m, c := e.mustSend(t, a, b)
 	conv, sender, err := e.svc.VerifyForReport(ctx, b, m.ID)
 	if err != nil || conv != c.ID || sender != a {
 		t.Fatalf("doğrulama = %v %v %v", conv, sender, err)
@@ -726,7 +765,7 @@ func TestVerifyForReport(t *testing.T) {
 	must(t, err)
 	x, y := id.New(), id.New()
 	e.rules.set(x, y, Verdict{Decision: Active})
-	m2, _ := e.mustSend(t, x, y, "x")
+	m2, _ := e.mustSend(t, x, y)
 	if _, s, err := keyless.VerifyForReport(ctx, y, m2.ID); err != nil || s != x {
 		t.Fatalf("anahtarsız: %v %v", s, err)
 	}
@@ -739,7 +778,7 @@ func TestSeesConversation(t *testing.T) {
 	e := setup(t)
 	a, b, stranger := id.New(), id.New(), id.New()
 	e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 20})
-	_, c := e.mustSend(t, a, b, "merhaba")
+	_, c := e.mustSend(t, a, b)
 	for _, tc := range []struct {
 		user, conv id.ID
 		want       bool
@@ -768,7 +807,7 @@ func TestCleanupRemovesConversationPreferences(t *testing.T) {
 	e := setup(t)
 	a, b := id.New(), id.New()
 	e.rules.set(a, b, Verdict{Decision: Active})
-	_, c := e.mustSend(t, a, b, "selam")
+	_, c := e.mustSend(t, a, b)
 	other := id.New() // a tayfa with an unrelated preference
 	for _, row := range []struct {
 		user  id.ID

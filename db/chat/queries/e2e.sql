@@ -96,10 +96,6 @@ FROM device_keys
 WHERE user_id = @user_id
 ORDER BY device_number;
 
--- Düz gönderimde E2E zorunluluğu: taraflardan birinin cihazı var mı?
--- name: AnyUserHasDevice :one
-SELECT EXISTS (SELECT 1 FROM device_keys WHERE user_id = ANY (@user_ids::uuid[]));
-
 -- name: DeleteDevice :one
 DELETE FROM device_keys WHERE id = @id AND user_id = @user_id
 RETURNING id, user_id, device_number, paired_at;
@@ -195,7 +191,7 @@ DELETE FROM user_key_events WHERE user_id = @user_id;
 INSERT INTO dm_messages (id, conversation_id, sender_id, sender_device_id, encryption, client_request_id)
 VALUES (@id, @conversation_id, @sender_id, @sender_device_id, 'e2e', @client_request_id)
 ON CONFLICT (sender_id, client_request_id) DO NOTHING
-RETURNING id, conversation_id, sender_id, encryption, body_encrypted, key_version, created_at, deleted_at;
+RETURNING id, conversation_id, sender_id, encryption, created_at, deleted_at;
 
 -- name: InsertEnvelope :exec
 INSERT INTO dm_envelopes (id, message_id, recipient_device_id, sender_id, sender_device_id, sender_device_number, message_type, ciphertext, created_at)

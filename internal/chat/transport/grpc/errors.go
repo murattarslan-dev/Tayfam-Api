@@ -75,8 +75,6 @@ func reasonFor(err error) (code codes.Code, reason chatv1.ErrorReason, ok bool) 
 		return codes.ResourceExhausted, chatv1.ErrorReason_ERROR_REASON_E2E_DEVICE_LIMIT, true
 	case errors.Is(err, apperr.ErrE2ERecipientUnavailable):
 		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE, true
-	case errors.Is(err, apperr.ErrE2ERequired):
-		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_E2E_REQUIRED, true
 	case errors.Is(err, apperr.ErrE2ENotPaired):
 		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_E2E_NOT_PAIRED, true
 	case errors.Is(err, apperr.ErrE2EAlreadyPaired):
@@ -118,7 +116,7 @@ func errorStatus(ctx context.Context, log *slog.Logger, err error) error {
 		return reasonStatus(code, reason, nil)
 	}
 	switch {
-	case errors.Is(err, apperr.ErrUnavailable), errors.Is(err, apperr.ErrChannelsUnavailable), errors.Is(err, apperr.ErrDirectMessagesUnavailable):
+	case errors.Is(err, apperr.ErrUnavailable), errors.Is(err, apperr.ErrChannelsUnavailable):
 		return status.Error(codes.Unavailable, msgRejected)
 	case errors.Is(err, context.Canceled):
 		return status.Error(codes.Canceled, msgRejected)

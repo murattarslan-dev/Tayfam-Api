@@ -46,21 +46,16 @@ func (l *lockedBuffer) String() string {
 
 type e2eEnv struct {
 	*env
-	keys *keys.Service
 	logs *lockedBuffer
 }
 
+// setupE2E is setup with every service logging to e.logs.
 func setupE2E(t *testing.T) *e2eEnv {
 	t.Helper()
 	e := &e2eEnv{env: setup(t), logs: &lockedBuffer{}}
 	log := slog.New(slog.NewJSONHandler(e.logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	e.svc.cfg.Log = log
-	k, err := keys.New(keys.Config{
-		Pool: e.pool, Log: log, Contacts: e.svc, Bundles: allowAll{}, KeyOps: allowAll{}, Archive: allowAll{},
-		Now: e.svc.cfg.Now,
-	})
-	must(t, err)
-	e.keys = k
+	e.keys = newKeys(t, e.env, log)
 	return e
 }
 
@@ -72,7 +67,7 @@ var secret = []byte("GIZLI-ZARF-ICERIGI-0123456789ABCDEF")
 func secretContent(n byte) []byte { return append(append([]byte{}, secret...), n) }
 
 // device registers a new session of user as a device.
-func (e *e2eEnv) device(t *testing.T, user id.ID, seed byte) (keys.Caller, keys.Device) {
+func (e *env) device(t *testing.T, user id.ID, seed byte) (keys.Caller, keys.Device) {
 	t.Helper()
 	c := keys.Caller{User: user, Session: id.New(), IssuedAt: e.now}
 	in := keys.RegisterInput{
@@ -83,6 +78,9 @@ func (e *e2eEnv) device(t *testing.T, user id.ID, seed byte) (keys.Caller, keys.
 	}
 	d, _, err := e.keys.Register(ctx, c, in)
 	must(t, err)
+	e.devMu.Lock()
+	e.devs[user] = append(e.devs[user], testDevice{c: c, d: d})
+	e.devMu.Unlock()
 	return c, d
 }
 
@@ -105,11 +103,11 @@ func TestSendE2E(t *testing.T) {
 	req := id.New()
 	m, c, err := e.sendE2E(ca, b, req, envelope(db, 1), envelope(da2, 2))
 	must(t, err)
-	if m.Encryption != EncryptionE2E || m.Body != "" || c.Status != StatusActive {
+	if m.Encryption != EncryptionE2E || c.Status != StatusActive {
 		t.Fatalf("mesaj = %+v %+v", m, c)
 	}
-	// The server keeps no content: no body, no key version.
-	if n := e.count(t, `SELECT count(*) FROM dm_messages WHERE id = $1 AND encryption = 'e2e' AND body_encrypted IS NULL AND key_version IS NULL AND sender_device_id IS NOT NULL`, m.ID.PG()); n != 1 {
+	// The server keeps no content.
+	if n := e.count(t, `SELECT count(*) FROM dm_messages WHERE id = $1 AND encryption = 'e2e' AND sender_device_id IS NOT NULL`, m.ID.PG()); n != 1 {
 		t.Fatal("e2e mesaj satırı içerik taşıyor")
 	}
 	// Each device gets its own envelope, byte for byte; the sending device
@@ -136,13 +134,13 @@ func TestSendE2E(t *testing.T) {
 	if len(sessions) != 2 || !sessions[cb.Session] || !sessions[ca2.Session] {
 		t.Fatalf("canlı teslim = %v", sessions)
 	}
-	// The recipient's notice and unread count work as for plain messages.
+	// The recipient gets a notice and an unread count.
 	if e.notices(t, b, "dm_message") != 1 {
 		t.Fatal("bildirim yok")
 	}
 	page, _, err := e.svc.Messages(ctx, b, c.ID, ListInput{})
 	must(t, err)
-	if len(page) != 1 || page[0].Body != "" || page[0].Encryption != EncryptionE2E {
+	if len(page) != 1 || page[0].ID != m.ID || page[0].Encryption != EncryptionE2E {
 		t.Fatalf("liste = %+v", page)
 	}
 	// A retry returns the first message and writes no envelope.
@@ -207,20 +205,14 @@ func TestSendE2EDeviceSet(t *testing.T) {
 	// A session without a device cannot send end to end.
 	_, _, err = e.sendE2E(keys.Caller{User: a, Session: id.New()}, b, id.New(), envelope(db, 1), envelope(da2, 2))
 	is(t, err, apperr.ErrE2EDeviceNotRegistered)
-	// No downgrade: plain text is refused once a party has a device.
-	_, _, err = e.send(t, a, b, "düz metin")
-	is(t, err, apperr.ErrE2ERequired)
-	_, _, err = e.send(t, c, a, "düz metin")
-	is(t, err, apperr.ErrE2ERequired)
-
-	for name, in := range map[string]SendInput{
-		"body":      {Recipient: b, Body: "x", Envelopes: []OutgoingEnvelope{envelope(db, 1)}, Session: ca.Session, ClientRequestID: id.New()},
-		"envelopes": {Recipient: b, Envelopes: []OutgoingEnvelope{{Device: db.ID, Type: 1, Content: []byte{1}}}, Session: ca.Session, ClientRequestID: id.New()},
+	for _, in := range []SendInput{
+		{Recipient: b, Session: ca.Session, ClientRequestID: id.New()},
+		{Recipient: b, Envelopes: []OutgoingEnvelope{{Device: db.ID, Type: 1, Content: []byte{1}}}, Session: ca.Session, ClientRequestID: id.New()},
 	} {
 		_, _, err := e.svc.Send(ctx, a, in)
 		var v *apperr.ValidationError
-		if !errors.As(err, &v) || v.Field != name {
-			t.Fatalf("%s: %v", name, err)
+		if !errors.As(err, &v) || v.Field != "envelopes" {
+			t.Fatalf("%+v: %v", in, err)
 		}
 	}
 	big := envelope(db, 1)
@@ -232,10 +224,9 @@ func TestSendE2EDeviceSet(t *testing.T) {
 	}
 }
 
-// End-to-end messages need no server key.
-func TestSendE2EWithoutMessageKey(t *testing.T) {
+// The request rules hold for end-to-end messages.
+func TestSendE2ERequest(t *testing.T) {
 	e := setupE2E(t)
-	e.svc.cfg.Cipher = nil
 	a, b := id.New(), id.New()
 	e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 5})
 	ca, _ := e.device(t, a, 1)
@@ -245,7 +236,6 @@ func TestSendE2EWithoutMessageKey(t *testing.T) {
 	if c.Status != StatusRequestSent {
 		t.Fatalf("istek = %+v", c)
 	}
-	// The request rules hold for end-to-end messages too.
 	_, _, err = e.sendE2E(ca, b, id.New(), envelope(db, 2))
 	is(t, err, apperr.ErrMessageRequestPending)
 }

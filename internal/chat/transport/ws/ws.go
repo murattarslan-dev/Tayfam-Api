@@ -44,7 +44,6 @@ import (
 
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/channel"
-	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/dm"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/realtime"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/httpx"
@@ -104,7 +103,6 @@ type Live interface {
 	Subscribe(ctx context.Context, m *realtime.Member, tayfa, ch id.ID) error
 	Unsubscribe(m *realtime.Member, tayfa, ch id.ID) bool
 	Send(ctx context.Context, m *realtime.Member, tayfa, ch id.ID, in channel.SendInput) (channel.Message, error)
-	SendDirect(ctx context.Context, m *realtime.Member, in dm.SendInput) (dm.Message, dm.Conversation, error)
 	AckEnvelopes(ctx context.Context, m *realtime.Member, ids []id.ID) error
 }
 
@@ -431,30 +429,10 @@ type sendData struct {
 	ClientRequestID string `json:"client_request_id"`
 }
 
-type dmSendData struct {
-	RecipientUserID string `json:"recipient_user_id"`
-	Body            string `json:"body"`
-	ClientRequestID string `json:"client_request_id"`
-}
-
 // envelopeAckData acknowledges end-to-end envelopes of the connection's
 // device (issue #127).
 type envelopeAckData struct {
 	EnvelopeIDs []string `json:"envelope_ids"`
-}
-
-// dmSentData answers dm.send: the message and the conversation's status as
-// the sender sees it.
-type dmSentData struct {
-	realtime.DMData
-	Status string `json:"conversation_status"`
-}
-
-// dmStatuses are the conversation statuses in frames (the REST names).
-var dmStatuses = map[dm.Status]string{
-	dm.StatusActive:          "active",
-	dm.StatusRequestSent:     "request_sent",
-	dm.StatusRequestReceived: "request_received",
 }
 
 func decodeData(raw json.RawMessage, v any) bool {
@@ -487,12 +465,12 @@ func (c *conn) invalid(frameID, field string) {
 //	subscribe   { tayfa_id, channel_id }  → subscribed
 //	unsubscribe { tayfa_id, channel_id }  → unsubscribed (reason requested)
 //	send        { tayfa_id, channel_id, body, client_request_id } → sent
-//	dm.send     { recipient_user_id, body, client_request_id }     → dm.sent
 //	dm.envelope_ack { envelope_ids }                                → dm.envelope_acked
 //
-// End-to-end messages are sent over REST only (their envelopes exceed a
-// frame); the WebSocket delivers them (dm.envelope) and takes the
-// acknowledgements (ADR-0018 item 3).
+// Direct messages are end to end and sent over REST only (their envelopes
+// exceed a frame); the WebSocket delivers them (dm.envelope) and takes the
+// acknowledgements (ADR-0018 item 3). The plain dm.send frame is gone
+// (issue #151): it is an unknown type now.
 func (c *conn) handle(ctx context.Context, f frame) {
 	switch f.Type {
 	case "subscribe", "unsubscribe":
@@ -540,28 +518,6 @@ func (c *conn) handle(ctx context.Context, f frame) {
 			return
 		}
 		c.sendFrame("sent", f.ID, realtime.MessageFrom(tayfa, msg))
-	case "dm.send":
-		var d dmSendData
-		if !decodeData(f.Data, &d) {
-			c.invalid(f.ID, "data")
-			return
-		}
-		recipient, ok := id.Parse(d.RecipientUserID)
-		if !ok {
-			c.invalid(f.ID, "recipient_user_id")
-			return
-		}
-		req, ok := id.Parse(d.ClientRequestID)
-		if !ok {
-			c.invalid(f.ID, "client_request_id")
-			return
-		}
-		msg, conv, err := c.cfg.Live.SendDirect(ctx, c.m, dm.SendInput{Recipient: recipient, Body: d.Body, ClientRequestID: req})
-		if err != nil {
-			c.appError(ctx, f.ID, err)
-			return
-		}
-		c.sendFrame("dm.sent", f.ID, dmSentData{DMData: realtime.DMFrom(msg), Status: dmStatuses[conv.Status]})
 	case "dm.envelope_ack":
 		var d envelopeAckData
 		if !decodeData(f.Data, &d) {
@@ -620,9 +576,7 @@ func (c *conn) appError(ctx context.Context, frameID string, err error) {
 		{apperr.ErrMessageRequestPending, "message_request_pending"},
 		{apperr.ErrMessageRequestLimit, "message_request_limit"},
 		{apperr.ErrRateLimited, "rate_limited"},
-		{apperr.ErrDirectMessagesUnavailable, "unavailable"},
 		{apperr.ErrE2EDeviceNotRegistered, "e2e_device_not_registered"},
-		{apperr.ErrE2ERequired, "e2e_required"},
 		{context.DeadlineExceeded, "unavailable"},
 	} {
 		if errors.Is(err, e.err) {

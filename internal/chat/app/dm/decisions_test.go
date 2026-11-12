@@ -18,13 +18,13 @@ func TestDeclinedList(t *testing.T) {
 	e := setup(t)
 	a, b, c := id.New(), id.New(), id.New()
 	e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 20})
-	_, conv := e.mustSend(t, a, b, "merhaba")
+	_, conv := e.mustSend(t, a, b)
 	must(t, e.svc.Decline(ctx, b, conv.ID))
 	e.pub.take()
 
 	// Even as friends the sender cannot write before the removal.
 	e.rules.set(a, b, Verdict{Decision: Active})
-	_, _, err := e.send(t, a, b, "arkadaş olduk")
+	_, _, err := e.send(t, a, b)
 	is(t, err, apperr.ErrMessageRequestPending)
 
 	list, next, err := e.svc.Declined(ctx, b, 0, "")
@@ -74,11 +74,11 @@ func TestDeclinedList(t *testing.T) {
 	}
 	// Still one message for a requester without free writing...
 	e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 20})
-	_, _, err = e.send(t, a, b, "tekrar")
+	_, _, err = e.send(t, a, b)
 	is(t, err, apperr.ErrMessageRequestPending)
 	// ...and a friend writes freely again.
 	e.rules.set(a, b, Verdict{Decision: Active})
-	if _, v := e.mustSend(t, a, b, "şimdi oldu"); v.Status != StatusActive || v.ID != conv.ID {
+	if _, v := e.mustSend(t, a, b); v.Status != StatusActive || v.ID != conv.ID {
 		t.Fatalf("yeniden yazma = %+v", v)
 	}
 	// An active conversation is not a declined request.
@@ -93,7 +93,7 @@ func TestDeclinedListPaging(t *testing.T) {
 		a := id.New()
 		senders = append(senders, a)
 		e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 20})
-		_, c := e.mustSend(t, a, b, "merhaba "+string(rune('a'+i)))
+		_, c := e.mustSend(t, a, b)
 		must(t, e.svc.Decline(ctx, b, c.ID))
 		e.advance(time.Second)
 	}
@@ -121,9 +121,9 @@ func TestNoticeUnreadCount(t *testing.T) {
 	e := setup(t)
 	a, b := id.New(), id.New()
 	e.rules.set(a, b, Verdict{Decision: Active})
-	_, c := e.mustSend(t, a, b, "1")
-	e.mustSend(t, a, b, "2")
-	m3, _ := e.mustSend(t, a, b, "3")
+	_, c := e.mustSend(t, a, b)
+	e.mustSend(t, a, b)
+	m3, _ := e.mustSend(t, a, b)
 	unread := func() []int {
 		t.Helper()
 		rows, err := e.pool.Query(ctx, `SELECT unread_count FROM notifications WHERE user_id = $1 AND target_id = $2 AND read_at IS NULL ORDER BY id`, b.PG(), c.ID.PG())
@@ -149,12 +149,12 @@ func TestNoticeUnreadCount(t *testing.T) {
 		t.Fatalf("yayın sayaçları = %v", counts)
 	}
 	// The recipient's own reply does not count as unread for them.
-	e.mustSend(t, b, a, "cevap")
+	e.mustSend(t, b, a)
 	if got := unread(); len(got) != 0 {
 		t.Fatalf("yazınca okunmadı: %v", got)
 	}
 	must(t, e.svc.MarkRead(ctx, b, c.ID, m3.ID))
-	e.mustSend(t, a, b, "4")
+	e.mustSend(t, a, b)
 	if got := unread(); len(got) != 1 || got[0] != 1 {
 		t.Fatalf("sıfırlanan sayaç = %v", got)
 	}
@@ -177,11 +177,11 @@ func TestNoticeUnreadCountCap(t *testing.T) {
 	e := setup(t)
 	a, b := id.New(), id.New()
 	e.rules.set(a, b, Verdict{Decision: Active})
-	_, c := e.mustSend(t, a, b, "ilk")
-	_, err := e.pool.Exec(ctx, `INSERT INTO dm_messages (id, conversation_id, sender_id, body_encrypted, key_version, client_request_id)
-		SELECT gen_random_uuid(), $1, $2, decode(repeat('00', 40), 'hex'), 1, gen_random_uuid() FROM generate_series(1, 120)`, c.ID.PG(), a.PG())
+	_, c := e.mustSend(t, a, b)
+	_, err := e.pool.Exec(ctx, `INSERT INTO dm_messages (id, conversation_id, sender_id, sender_device_id, client_request_id)
+		SELECT gen_random_uuid(), $1, $2, gen_random_uuid(), gen_random_uuid() FROM generate_series(1, 120)`, c.ID.PG(), a.PG())
 	must(t, err)
-	e.mustSend(t, a, b, "son")
+	e.mustSend(t, a, b)
 	if n := e.count(t, `SELECT unread_count FROM notifications WHERE user_id = $1 AND read_at IS NULL`, b.PG()); n != notification.MaxDirectUnread {
 		t.Fatalf("üst sınır = %d", n)
 	}
@@ -193,9 +193,9 @@ func TestRequestNoticeCounts(t *testing.T) {
 	e := setup(t)
 	a, b := id.New(), id.New()
 	e.rules.set(a, b, Verdict{Decision: Request, RequestLimit: 20})
-	e.mustSend(t, a, b, "merhaba")
+	e.mustSend(t, a, b)
 	e.rules.set(a, b, Verdict{Decision: Active})
-	e.mustSend(t, a, b, "arkadaş olduk")
+	e.mustSend(t, a, b)
 	if n := e.count(t, `SELECT count(*) FROM notifications WHERE user_id = $1`, b.PG()); n != 1 {
 		t.Fatalf("bildirim = %d", n)
 	}
@@ -213,10 +213,10 @@ func TestSendRateLimited(t *testing.T) {
 	e := setup(t)
 	a, b := id.New(), id.New()
 	e.rules.set(a, b, Verdict{Decision: Active})
-	e.mustSend(t, a, b, "1")
+	e.mustSend(t, a, b)
 	e.limit.deny = true
 	calls := e.rules.calls
-	_, _, err := e.send(t, a, b, "2")
+	_, _, err := e.send(t, a, b)
 	is(t, err, apperr.ErrRateLimited)
 	if e.rules.calls != calls {
 		t.Fatal("hız sınırında core'a soruldu")
@@ -226,7 +226,7 @@ func TestSendRateLimited(t *testing.T) {
 	}
 	// Validation comes first: a bad request is not counted.
 	before := len(e.limit.keys)
-	_, _, err = e.send(t, a, b, "")
+	_, _, err = e.send(t, a, b)
 	if !errors.As(err, new(*apperr.ValidationError)) || len(e.limit.keys) != before {
 		t.Fatalf("geçersiz istek sayıldı: %v", err)
 	}

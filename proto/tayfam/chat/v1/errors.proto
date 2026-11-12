@@ -124,9 +124,9 @@ enum ErrorReason {
   // can be delivered to them.
   ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE = 24;
 
-  // FAILED_PRECONDITION. A plain message (body) where the caller or the
-  // recipient has an end-to-end device: send envelopes instead.
-  ERROR_REASON_E2E_REQUIRED = 25;
+  // Not sent since the plain direct message path was removed (issue #151):
+  // a plain body is ERROR_REASON_VALIDATION.
+  ERROR_REASON_E2E_REQUIRED = 25 [deprecated = true];
 
   // FAILED_PRECONDITION. The caller's device is not paired (does not hold
   // the history key): archive access, answering a pairing request and

@@ -183,57 +183,6 @@ func (q *Queries) CreateConversation(ctx context.Context, arg CreateConversation
 	return i, err
 }
 
-const createDirectMessage = `-- name: CreateDirectMessage :one
-INSERT INTO dm_messages (id, conversation_id, sender_id, body_encrypted, key_version, client_request_id)
-VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (sender_id, client_request_id) DO NOTHING
-RETURNING id, conversation_id, sender_id, encryption, body_encrypted, key_version, created_at, deleted_at
-`
-
-type CreateDirectMessageParams struct {
-	ID              pgtype.UUID
-	ConversationID  pgtype.UUID
-	SenderID        pgtype.UUID
-	BodyEncrypted   []byte
-	KeyVersion      pgtype.Int2
-	ClientRequestID pgtype.UUID
-}
-
-type CreateDirectMessageRow struct {
-	ID             pgtype.UUID
-	ConversationID pgtype.UUID
-	SenderID       pgtype.UUID
-	Encryption     string
-	BodyEncrypted  []byte
-	KeyVersion     pgtype.Int2
-	CreatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-}
-
-// Aynı (gönderen, client_request_id) varsa satır açılmaz ve sonuç boş döner.
-func (q *Queries) CreateDirectMessage(ctx context.Context, arg CreateDirectMessageParams) (CreateDirectMessageRow, error) {
-	row := q.db.QueryRow(ctx, createDirectMessage,
-		arg.ID,
-		arg.ConversationID,
-		arg.SenderID,
-		arg.BodyEncrypted,
-		arg.KeyVersion,
-		arg.ClientRequestID,
-	)
-	var i CreateDirectMessageRow
-	err := row.Scan(
-		&i.ID,
-		&i.ConversationID,
-		&i.SenderID,
-		&i.Encryption,
-		&i.BodyEncrypted,
-		&i.KeyVersion,
-		&i.CreatedAt,
-		&i.DeletedAt,
-	)
-	return i, err
-}
-
 const declineConversation = `-- name: DeclineConversation :execrows
 UPDATE dm_conversations SET status = 'declined', declined_at = $1
 WHERE id = $2 AND status = 'request'
@@ -280,7 +229,7 @@ func (q *Queries) DeleteUserConversationReads(ctx context.Context, userID pgtype
 
 const eraseDirectMessage = `-- name: EraseDirectMessage :execrows
 UPDATE dm_messages
-SET body_encrypted = NULL, key_version = NULL, deleted_at = $1
+SET deleted_at = $1
 WHERE conversation_id = $2 AND id = $3 AND sender_id = $4 AND deleted_at IS NULL
 `
 
@@ -291,7 +240,8 @@ type EraseDirectMessageParams struct {
 	SenderID       pgtype.UUID
 }
 
-// Gönderenin kendi silmesi: metin hemen gider, geri alınamaz.
+// Gönderenin kendi silmesi: mesaj silinmiş görünür, geri alınamaz.
+// İçerik sunucuda hiç yoktur (yalnızca zarflarda ve arşivde, ADR-0018).
 func (q *Queries) EraseDirectMessage(ctx context.Context, arg EraseDirectMessageParams) (int64, error) {
 	result, err := q.db.Exec(ctx, eraseDirectMessage,
 		arg.DeletedAt,
@@ -467,7 +417,7 @@ func (q *Queries) GetConversationView(ctx context.Context, arg GetConversationVi
 }
 
 const getDirectMessage = `-- name: GetDirectMessage :one
-SELECT id, conversation_id, sender_id, encryption, body_encrypted, key_version, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at
 FROM dm_messages
 WHERE conversation_id = $1 AND id = $2
 `
@@ -482,8 +432,6 @@ type GetDirectMessageRow struct {
 	ConversationID pgtype.UUID
 	SenderID       pgtype.UUID
 	Encryption     string
-	BodyEncrypted  []byte
-	KeyVersion     pgtype.Int2
 	CreatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 }
@@ -496,8 +444,6 @@ func (q *Queries) GetDirectMessage(ctx context.Context, arg GetDirectMessagePara
 		&i.ConversationID,
 		&i.SenderID,
 		&i.Encryption,
-		&i.BodyEncrypted,
-		&i.KeyVersion,
 		&i.CreatedAt,
 		&i.DeletedAt,
 	)
@@ -506,7 +452,7 @@ func (q *Queries) GetDirectMessage(ctx context.Context, arg GetDirectMessagePara
 
 const getDirectMessageByRequest = `-- name: GetDirectMessageByRequest :one
 
-SELECT id, conversation_id, sender_id, encryption, body_encrypted, key_version, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at
 FROM dm_messages
 WHERE sender_id = $1 AND client_request_id = $2
 `
@@ -521,8 +467,6 @@ type GetDirectMessageByRequestRow struct {
 	ConversationID pgtype.UUID
 	SenderID       pgtype.UUID
 	Encryption     string
-	BodyEncrypted  []byte
-	KeyVersion     pgtype.Int2
 	CreatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 }
@@ -536,8 +480,6 @@ func (q *Queries) GetDirectMessageByRequest(ctx context.Context, arg GetDirectMe
 		&i.ConversationID,
 		&i.SenderID,
 		&i.Encryption,
-		&i.BodyEncrypted,
-		&i.KeyVersion,
 		&i.CreatedAt,
 		&i.DeletedAt,
 	)
@@ -717,7 +659,7 @@ func (q *Queries) ListDeclinedRequests(ctx context.Context, arg ListDeclinedRequ
 }
 
 const listDirectMessagesAfter = `-- name: ListDirectMessagesAfter :many
-SELECT id, conversation_id, sender_id, encryption, body_encrypted, key_version, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at
 FROM dm_messages
 WHERE conversation_id = $1 AND id > $2
 ORDER BY id
@@ -735,8 +677,6 @@ type ListDirectMessagesAfterRow struct {
 	ConversationID pgtype.UUID
 	SenderID       pgtype.UUID
 	Encryption     string
-	BodyEncrypted  []byte
-	KeyVersion     pgtype.Int2
 	CreatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 }
@@ -757,8 +697,6 @@ func (q *Queries) ListDirectMessagesAfter(ctx context.Context, arg ListDirectMes
 			&i.ConversationID,
 			&i.SenderID,
 			&i.Encryption,
-			&i.BodyEncrypted,
-			&i.KeyVersion,
 			&i.CreatedAt,
 			&i.DeletedAt,
 		); err != nil {
@@ -773,7 +711,7 @@ func (q *Queries) ListDirectMessagesAfter(ctx context.Context, arg ListDirectMes
 }
 
 const listDirectMessagesBefore = `-- name: ListDirectMessagesBefore :many
-SELECT id, conversation_id, sender_id, encryption, body_encrypted, key_version, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at
 FROM dm_messages
 WHERE conversation_id = $1 AND ($2::uuid IS NULL OR id < $2::uuid)
 ORDER BY id DESC
@@ -791,8 +729,6 @@ type ListDirectMessagesBeforeRow struct {
 	ConversationID pgtype.UUID
 	SenderID       pgtype.UUID
 	Encryption     string
-	BodyEncrypted  []byte
-	KeyVersion     pgtype.Int2
 	CreatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 }
@@ -812,8 +748,6 @@ func (q *Queries) ListDirectMessagesBefore(ctx context.Context, arg ListDirectMe
 			&i.ConversationID,
 			&i.SenderID,
 			&i.Encryption,
-			&i.BodyEncrypted,
-			&i.KeyVersion,
 			&i.CreatedAt,
 			&i.DeletedAt,
 		); err != nil {

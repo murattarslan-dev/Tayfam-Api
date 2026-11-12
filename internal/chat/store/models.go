@@ -127,8 +127,6 @@ type DmMessage struct {
 	SenderID        pgtype.UUID
 	SenderDeviceID  pgtype.UUID
 	Encryption      string
-	BodyEncrypted   []byte
-	KeyVersion      pgtype.Int2
 	ClientRequestID pgtype.UUID
 	CreatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz

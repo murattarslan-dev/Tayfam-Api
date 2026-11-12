@@ -160,6 +160,8 @@ Mesajlar sunucuda saklanır, böylece yeni cihazda geçmiş görünür.
   [ADR-0018](0018-birebir-mesaj-e2e-sunucu-tarafi.md) "Düz sürümden
   geçiş"tedir (E2E cihazı olan konuşmada düz gönderim reddedilir, eski
   mesajlar etiketle kalır, kaldırılmaları pilot öncesi ayrı iş).
+  2026-11-12 (issue #151): düz yol ve düz mesajlar kaldırıldı; birebir
+  mesaj yalnızca uçtan uca şifrelidir (ADR-0018 §7).
 - Kim kime yazabilir kuralı, istek akışı (tek mesaj, kabul, gönderene
   söylenmeyen ret), günlük istek sınırı, okundu bilgisi ve içeriksiz
   bildirimler düz sürümde de E2E'deki gibidir; E2E yalnızca içeriğin

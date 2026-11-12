@@ -117,8 +117,10 @@ const (
 	// FAILED_PRECONDITION. The recipient has no end-to-end device; nothing
 	// can be delivered to them.
 	ErrorReason_ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE ErrorReason = 24
-	// FAILED_PRECONDITION. A plain message (body) where the caller or the
-	// recipient has an end-to-end device: send envelopes instead.
+	// Not sent since the plain direct message path was removed (issue #151):
+	// a plain body is ERROR_REASON_VALIDATION.
+	//
+	// Deprecated: Marked as deprecated in tayfam/chat/v1/errors.proto.
 	ErrorReason_ERROR_REASON_E2E_REQUIRED ErrorReason = 25
 	// FAILED_PRECONDITION. The caller's device is not paired (does not hold
 	// the history key): archive access, answering a pairing request and
@@ -238,7 +240,7 @@ var File_tayfam_chat_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\x8a\t\n" +
+	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\x8e\t\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12'\n" +
@@ -265,8 +267,8 @@ const file_tayfam_chat_v1_errors_proto_rawDesc = "" +
 	"*ERROR_REASON_E2E_DEVICE_ALREADY_REGISTERED\x10\x15\x12!\n" +
 	"\x1dERROR_REASON_E2E_DEVICE_LIMIT\x10\x16\x12$\n" +
 	" ERROR_REASON_E2E_DEVICES_CHANGED\x10\x17\x12*\n" +
-	"&ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE\x10\x18\x12\x1d\n" +
-	"\x19ERROR_REASON_E2E_REQUIRED\x10\x19\x12\x1f\n" +
+	"&ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE\x10\x18\x12!\n" +
+	"\x19ERROR_REASON_E2E_REQUIRED\x10\x19\x1a\x02\b\x01\x12\x1f\n" +
 	"\x1bERROR_REASON_E2E_NOT_PAIRED\x10\x1a\x12)\n" +
 	"%ERROR_REASON_E2E_PAIRED_DEVICE_EXISTS\x10\x1b\x12&\n" +
 	"\"ERROR_REASON_E2E_HISTORY_KEY_STALE\x10\x1c\x12+\n" +

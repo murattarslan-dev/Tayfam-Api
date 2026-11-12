@@ -1,4 +1,4 @@
-// Package dm runs one-to-one conversations, plain version
+// Package dm runs one-to-one conversations
 // (DirectMessageService, proto/tayfam/chat/v1/direct_messages.proto; issue
 // #95; ADR-0005 "Direkt mesajlar", "Sonuçlar"; data model v14 "Mesaj İsteği
 // Modeli (v7)", "Okunma bilgisi").
@@ -31,16 +31,12 @@
 // The recipient has one notice per conversation; it carries their unread
 // count, updated with every message until the conversation is read.
 //
-// Message bodies exist in plain text only in memory: they are encrypted with
-// the channel message key (channelcrypt.EncryptDirect, AAD message +
-// conversation + table) before they reach the database and are never
-// written to logs, events, notifications or error messages. Events and
+// Messages are end to end only (ADR-0018; issue #151 removed the plain
+// path): the server stores a message row without content and one Signal
+// envelope per device (package keys). It never sees, stores or logs a
+// direct message's text and needs no message key for them. Events and
 // notifications carry IDs only; a direct message notice does not even name
 // the sender (ADR-0005 "Bildirimler").
-//
-// Without a message key (CHAT_MESSAGE_KEYS unset; never in prod) every user
-// method returns apperr.ErrDirectMessagesUnavailable. Cleanup and the purge
-// job need no key.
 package dm
 
 import (
@@ -49,18 +45,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
-	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/channelcrypt"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/store"
@@ -70,7 +62,6 @@ import (
 
 // Limits (v14; the same CHECKs are in the database).
 const (
-	BodyMax = 4000
 	// MaxUnread caps unread counts; the client shows 100 as "99+".
 	MaxUnread = 100
 	// RequestWindow is the window of the daily request limit.
@@ -144,7 +135,7 @@ type Rules interface {
 // them at once (ADR-0005: the WebSocket carries live delivery only).
 // Methods must not block.
 type Publisher interface {
-	// MessageCreated: a new message (not a retry), with its plain body, for
+	// MessageCreated: a new message (not a retry), without content, for
 	// the two parties' connections.
 	MessageCreated(parties [2]id.ID, m Message)
 	// MessageDeleted: a message was erased.
@@ -184,9 +175,6 @@ type Config struct {
 	// SendLimit is the per-user send rate (required: there is no unlimited
 	// sending).
 	SendLimit SendLimit
-	// Cipher encrypts message bodies. nil turns the user methods off
-	// (apperr.ErrDirectMessagesUnavailable); only local and dev may run so.
-	Cipher    *channelcrypt.Cipher
 	Publisher Publisher        // optional
 	Now       func() time.Time // optional, for tests
 }
@@ -229,34 +217,28 @@ type Conversation struct {
 	CreatedAt     time.Time
 }
 
-// Message is a direct message.
+// Message is a direct message. It carries no content: that is in the
+// envelopes and archives only (ADR-0018).
 type Message struct {
 	ID             id.ID
 	ConversationID id.ID
 	SenderID       id.ID // zero when the sender's account was deleted
-	// Body is empty for a deleted message ("Bu mesaj silindi") and for an
-	// end-to-end one (its content is in envelopes and archives only).
-	Body       string
-	Deleted    bool
-	Encryption string // EncryptionServer or EncryptionE2E
-	CreatedAt  time.Time
+	Deleted        bool  // "Bu mesaj silindi"
+	Encryption     string
+	CreatedAt      time.Time
 }
 
-// Where a message's content is (dm_messages.encryption).
-const (
-	EncryptionServer = "server"
-	EncryptionE2E    = "e2e"
-)
+// EncryptionE2E is the only value of dm_messages.encryption (issue #151).
+const EncryptionE2E = "e2e"
 
 // SendInput is a message to send.
 type SendInput struct {
 	Recipient id.ID
-	Body      string
 	// ClientRequestID makes a retry return the first message (ADR-0005).
 	ClientRequestID id.ID
-	// End to end (issue #127, ADR-0018): instead of Body, one envelope
-	// per device of the recipient and per other device of the caller.
-	// Session is the caller's session, whose device sends.
+	// Envelopes are one per device of the recipient and per other device
+	// of the caller (issue #127, ADR-0018). Session is the caller's
+	// session, whose device sends.
 	Envelopes []OutgoingEnvelope
 	Session   id.ID
 }
@@ -269,28 +251,6 @@ type ListInput struct {
 }
 
 func invalid(field string) error { return apperr.Validation(field) }
-
-func (s *Service) ready() error {
-	if s.cfg.Cipher == nil {
-		return apperr.ErrDirectMessagesUnavailable
-	}
-	return nil
-}
-
-// validBody checks a message body as channel messages are checked: valid
-// UTF-8, 1–4000 characters, not only white space, no control characters
-// other than tab and line breaks.
-func validBody(s string) bool {
-	if len(s) > BodyMax*4 || !utf8.ValidString(s) || utf8.RuneCountInString(s) > BodyMax || strings.TrimSpace(s) == "" {
-		return false
-	}
-	for _, r := range s {
-		if unicode.IsControl(r) && r != '\n' && r != '\t' && r != '\r' {
-			return false
-		}
-	}
-	return true
-}
 
 // pair returns a and b in conversation order (user_low_id < user_high_id,
 // the byte order Postgres compares uuids in).
@@ -407,23 +367,12 @@ func record(ctx context.Context, tx pgx.Tx, typ string, actor id.ID, subjectType
 	return nil
 }
 
-// messageOf converts a row; a body that does not decrypt is an error (wrong
-// key or a tampered row), never something to show.
-func (s *Service) messageOf(r msgRow) (Message, error) {
-	m := Message{
+// messageOf converts a row.
+func messageOf(r msgRow) Message {
+	return Message{
 		ID: uuidOf(r.ID), ConversationID: uuidOf(r.ConversationID), SenderID: uuidOf(r.SenderID),
-		Encryption: r.Encryption, CreatedAt: r.CreatedAt.Time.UTC(),
+		Deleted: r.DeletedAt.Valid, Encryption: r.Encryption, CreatedAt: r.CreatedAt.Time.UTC(),
 	}
-	if r.DeletedAt.Valid || r.BodyEncrypted == nil || r.Encryption == EncryptionE2E {
-		m.Deleted = r.DeletedAt.Valid
-		return m, nil
-	}
-	body, err := s.cfg.Cipher.DecryptDirect(m.ID, m.ConversationID, channelcrypt.Sealed{Version: r.KeyVersion.Int16, Data: r.BodyEncrypted})
-	if err != nil {
-		return Message{}, fmt.Errorf("mesaj %s: %w", m.ID, err)
-	}
-	m.Body = body
-	return m, nil
 }
 
 // messageIDs hands out strictly increasing message IDs in this process
