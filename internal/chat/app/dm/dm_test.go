@@ -294,9 +294,13 @@ func TestNoPlainMessages(t *testing.T) {
 	}
 	// The schema refuses a server-readable message even if a component
 	// tried to write one.
-	_, err = e.pool.Exec(ctx, `UPDATE dm_messages SET encryption = 'server' WHERE id = $1`, m.ID.PG())
-	if err == nil {
-		t.Fatal("encryption = server kabul edildi")
+	_, err = e.pool.Exec(ctx, `INSERT INTO dm_messages (id, conversation_id, sender_id, client_request_id, encryption) VALUES ($1, $2, $3, $4, 'server')`,
+		id.New().PG(), c.ID.PG(), a.PG(), id.New().PG())
+	if err == nil || !strings.Contains(err.Error(), "dm_messages_encryption") {
+		t.Fatalf("encryption = server: %v", err)
+	}
+	if ms, _, err := e.svc.Messages(ctx, b, c.ID, ListInput{}); err != nil || len(ms) != 1 || ms[0].ID != m.ID {
+		t.Fatalf("mesajlar = %+v %v", ms, err)
 	}
 	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type LIKE 'dm.%' AND payload::text LIKE '%' || $1 || '%'`, c.ID.String()); n != 1 {
 		t.Fatalf("olay = %d", n)

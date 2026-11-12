@@ -226,7 +226,9 @@ func TestSendRateLimited(t *testing.T) {
 	}
 	// Validation comes first: a bad request is not counted.
 	before := len(e.limit.keys)
-	_, _, err = e.send(t, a, b)
+	bad := e.input(t, a, b)
+	bad.Envelopes = nil
+	_, _, err = e.svc.Send(ctx, a, bad)
 	if !errors.As(err, new(*apperr.ValidationError)) || len(e.limit.keys) != before {
 		t.Fatalf("geçersiz istek sayıldı: %v", err)
 	}

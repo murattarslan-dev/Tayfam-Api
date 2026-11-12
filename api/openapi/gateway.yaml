@@ -4842,7 +4842,7 @@ components:
         - e2e-device-limit
         - e2e-devices-changed
         - e2e-recipient-unavailable
-        - e2e-required  # #151'den beri dönmez (düz DM yolu kalktı)
+        - e2e-required
         - e2e-not-paired
         - e2e-already-paired
         - e2e-paired-device-exists

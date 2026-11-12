@@ -251,10 +251,12 @@ func TestE2EMessageHasNoBody(t *testing.T) {
 	if r.Encryption != "e2e" {
 		t.Fatalf("e2e mesajı: %+v", r)
 	}
-	_, err = pool.Exec(ctx, `UPDATE dm_messages SET encryption = 'server' WHERE id = $1`, m.PG())
+	_, err = pool.Exec(ctx, `INSERT INTO dm_messages (id, conversation_id, sender_id, client_request_id, encryption) VALUES ($1, $2, $3, $4, 'server')`,
+		testMessageIDs.next().PG(), conv.PG(), a.PG(), id.New().PG())
 	wantConstraint(t, err, "dm_messages_encryption")
-	if _, err := pool.Exec(ctx, `UPDATE dm_messages SET body_encrypted = '\x00' WHERE id = $1`, m.PG()); err == nil {
-		t.Fatal("body_encrypted kolonu var")
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM information_schema.columns WHERE table_name = 'dm_messages' AND column_name IN ('body_encrypted', 'key_version')`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("metin kolonu: %d %v", n, err)
 	}
 }
 
