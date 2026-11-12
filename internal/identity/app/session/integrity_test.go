@@ -129,7 +129,8 @@ func TestIntegrityLifecycle(t *testing.T) {
 func TestIntegrityReportNeverRefuses(t *testing.T) {
 	e, f := setupIntegrity(t)
 	tok := e.signInWith(t, "sub-2", integrity.Proof{})
-	if tok.AccessToken == "" || tok.IntegrityPassed || !tok.IntegrityCheckAfter.Equal(e.now) {
+	// A checked session that did not pass is asked again after RetryFailed.
+	if tok.AccessToken == "" || tok.IntegrityPassed || !tok.IntegrityCheckAfter.Equal(e.now.Add(integrity.RetryFailed)) {
 		t.Fatalf("kanıtsız giriş: %+v", tok)
 	}
 	if s := e.integrityOf(t, tok.SessionID); s.status != "unverified" || s.reason.String != "missing" || !s.checked.Valid {
