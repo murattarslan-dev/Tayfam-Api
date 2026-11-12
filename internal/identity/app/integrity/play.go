@@ -157,12 +157,12 @@ func (p *Play) decode(ctx context.Context, token string) (payload, Result, bool)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxBody))
-	switch {
-	case resp.StatusCode == http.StatusOK:
-	case resp.StatusCode == http.StatusBadRequest:
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusBadRequest:
 		// Google could not read the token: not a real one, or garbled.
 		return payload{}, Result{Status: StatusFailed, Reason: ReasonMalformed}, false
-	case resp.StatusCode == http.StatusUnauthorized:
+	case http.StatusUnauthorized:
 		p.cfg.Tokens.Forget(access)
 		return payload{}, unavailable, false
 	default:
