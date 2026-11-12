@@ -277,7 +277,6 @@ func TestE2EErrors(t *testing.T) {
 		{apperr.ErrE2EDeviceAlreadyRegistered, codes.AlreadyExists, "ERROR_REASON_E2E_DEVICE_ALREADY_REGISTERED"},
 		{apperr.ErrE2EDeviceLimit, codes.ResourceExhausted, "ERROR_REASON_E2E_DEVICE_LIMIT"},
 		{apperr.ErrE2ERecipientUnavailable, codes.FailedPrecondition, "ERROR_REASON_E2E_RECIPIENT_UNAVAILABLE"},
-		{apperr.ErrE2ERequired, codes.FailedPrecondition, "ERROR_REASON_E2E_REQUIRED"},
 		{apperr.ErrE2ENotPaired, codes.FailedPrecondition, "ERROR_REASON_E2E_NOT_PAIRED"},
 		{apperr.ErrE2EAlreadyPaired, codes.FailedPrecondition, "ERROR_REASON_E2E_ALREADY_PAIRED"},
 		{apperr.ErrE2EPairedDeviceExists, codes.FailedPrecondition, "ERROR_REASON_E2E_PAIRED_DEVICE_EXISTS"},

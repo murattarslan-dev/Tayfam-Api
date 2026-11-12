@@ -4,9 +4,8 @@
 // Bodies are encrypted in the application with AES-256-GCM from the standard
 // library (CLAUDE.md rule 4); the database, its backups and anyone reading
 // them without the key see only ciphertext. The server can decrypt, which
-// moderation needs. Direct messages use the same key in their plain
-// version (EncryptDirect, issue #95) until end-to-end encryption replaces
-// it (ADR-0005).
+// moderation needs. Direct messages are end to end (ADR-0018) and never
+// pass through here (issue #151).
 //
 // Keys are versioned ("1:<base64>,2:<base64>", CHAT_MESSAGE_KEYS). New
 // bodies use the highest version; the version is stored next to the
@@ -113,15 +112,12 @@ func newAEAD(key []byte) (cipher.AEAD, error) {
 // ActiveVersion is the key version new bodies are encrypted with.
 func (c *Cipher) ActiveVersion() int16 { return c.active }
 
-// AAD prefixes: a body is bound to its table as well as its row, so a
-// channel ciphertext copied into dm_messages (or back) does not decrypt.
-const (
-	channelPrefix = "tayfam/chat/channel_messages.body/"
-	directPrefix  = "tayfam/chat/dm_messages.body/"
-)
+// channelPrefix binds a body to its table as well as its row. (Direct
+// messages used "tayfam/chat/dm_messages.body/" until issue #151; that
+// prefix must not be reused.)
+const channelPrefix = "tayfam/chat/channel_messages.body/"
 
-// aad binds a body to its table, its message and its container (channel or
-// conversation).
+// aad binds a body to its table, its message and its channel.
 func aad(prefix string, message, container id.ID) []byte {
 	out := make([]byte, 0, len(prefix)+2*len(message))
 	out = append(out, prefix...)
@@ -138,19 +134,6 @@ func (c *Cipher) Encrypt(message, channel id.ID, body string) Sealed {
 // another message or channel, with an unknown key, or was modified.
 func (c *Cipher) Decrypt(message, channel id.ID, s Sealed) (string, error) {
 	return c.open(aad(channelPrefix, message, channel), s)
-}
-
-// EncryptDirect seals a direct message body (plain version, issue #95) for
-// the message in conversation with the active key. Until end-to-end
-// encryption arrives, direct messages use the same key as channels.
-func (c *Cipher) EncryptDirect(message, conversation id.ID, body string) Sealed {
-	return c.seal(aad(directPrefix, message, conversation), body)
-}
-
-// DecryptDirect reverses EncryptDirect; ErrDecrypt for another message,
-// conversation or table, an unknown key, or modified data.
-func (c *Cipher) DecryptDirect(message, conversation id.ID, s Sealed) (string, error) {
-	return c.open(aad(directPrefix, message, conversation), s)
 }
 
 func (c *Cipher) seal(ad []byte, body string) Sealed {

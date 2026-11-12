@@ -78,18 +78,6 @@ func (q *Queries) AnswerLinkRequest(ctx context.Context, arg AnswerLinkRequestPa
 	return result.RowsAffected(), nil
 }
 
-const anyUserHasDevice = `-- name: AnyUserHasDevice :one
-SELECT EXISTS (SELECT 1 FROM device_keys WHERE user_id = ANY ($1::uuid[]))
-`
-
-// Düz gönderimde E2E zorunluluğu: taraflardan birinin cihazı var mı?
-func (q *Queries) AnyUserHasDevice(ctx context.Context, userIds []pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, anyUserHasDevice, userIds)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const bumpHistoryKeyVersion = `-- name: BumpHistoryKeyVersion :one
 UPDATE user_e2e_state SET history_key_version = history_key_version + 1, rotation_needed = false
 WHERE user_id = $1
@@ -247,7 +235,7 @@ const createDirectMessageE2E = `-- name: CreateDirectMessageE2E :one
 INSERT INTO dm_messages (id, conversation_id, sender_id, sender_device_id, encryption, client_request_id)
 VALUES ($1, $2, $3, $4, 'e2e', $5)
 ON CONFLICT (sender_id, client_request_id) DO NOTHING
-RETURNING id, conversation_id, sender_id, encryption, body_encrypted, key_version, created_at, deleted_at
+RETURNING id, conversation_id, sender_id, encryption, created_at, deleted_at
 `
 
 type CreateDirectMessageE2EParams struct {
@@ -263,8 +251,6 @@ type CreateDirectMessageE2ERow struct {
 	ConversationID pgtype.UUID
 	SenderID       pgtype.UUID
 	Encryption     string
-	BodyEncrypted  []byte
-	KeyVersion     pgtype.Int2
 	CreatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 }
@@ -284,8 +270,6 @@ func (q *Queries) CreateDirectMessageE2E(ctx context.Context, arg CreateDirectMe
 		&i.ConversationID,
 		&i.SenderID,
 		&i.Encryption,
-		&i.BodyEncrypted,
-		&i.KeyVersion,
 		&i.CreatedAt,
 		&i.DeletedAt,
 	)

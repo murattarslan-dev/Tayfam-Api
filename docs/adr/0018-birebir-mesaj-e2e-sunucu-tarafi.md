@@ -107,9 +107,9 @@ türü baytı) ve yetkiyi denetler, saklar ve iletir.
 ### 3. Zarflar
 
 - Birebir mesaj gönderimi tek yoldur (`SendDirectMessage`, ADR-0005 "Mesaj
-  protokolü"): istek ya düz metin (`body`, düz sürüm) ya da zarflar
-  (`envelopes`) taşır. Zarflı mesaj `dm_messages`'a
-  `encryption = 'e2e'`, `body_encrypted = NULL` ve gönderen cihazla yazılır;
+  protokolü"): istek zarflar (`envelopes`) taşır (düz metin `body` yolu
+  #151 ile kalktı, §7). Mesaj `dm_messages`'a içeriksiz,
+  `encryption = 'e2e'` ve gönderen cihazla yazılır;
   kim kime yazabilir, istek akışı, günlük sınır, okundu bilgisi, içeriksiz
   bildirim ve şikâyet akışı aynen geçerlidir.
 - Gönderen cihaz alıcının **tüm** cihazları ve kendi kullanıcısının
@@ -145,7 +145,6 @@ türü baytı) ve yetkiyi denetler, saklar ve iletir.
   `ERROR_REASON_E2E_HISTORY_KEY_STALE`). Mesaj, kullanıcının taraf olduğu
   ve silinmemiş bir mesaj olmalıdır; olmayanlar sessizce atlanır, cevap
   kabul edilenleri listeler. Kayıt 1 B – 32 KiB, çağrı başına en fazla 50.
-  Düz sürüm mesajları da arşive yazılabilir (istemcinin taşıması için).
 - Arşiv kullanıcı silene (konuşma bazında ya da tümü) veya hesap silinene
   kadar tutulur; mesaj kalıcı silinince (30 gün) kaydı da gider.
 - **İlk cihaz:** kullanıcının eşleştirilmiş cihazı yoksa cihaz yeni bir
@@ -188,16 +187,27 @@ türü baytı) ve yetkiyi denetler, saklar ve iletir.
 
 ### 7. Düz sürümden geçiş
 
-- Kullanıcının veya karşı tarafın kayıtlı E2E cihazı varsa düz metinli
-  gönderim reddedilir (`ERROR_REASON_E2E_REQUIRED`): E2E'ye geçmiş bir
-  konuşma sessizce düz metne inemez. İki taraf da eski istemcideyse düz
-  sürüm çalışmaya devam eder (geçiş dönemi).
-- Düz sürümde yazılmış mesajlar silinmez; `encryption = server` ile
-  döner, istemci "uçtan uca şifreli değil" etiketiyle gösterir ve
-  isterse arşive taşıyabilir. **Öneri:** pilot öncesi gerçek kullanıcı
-  verisi olmadığı için, E2E'li istemci en düşük desteklenen sürüm olunca
-  (ADR-0016) düz gönderim yolu ve `CHAT_MESSAGE_KEYS` ile şifreli kalan
-  birebir mesajlar ayrı bir iş ile kaldırılır (platform sahibine soru).
+- Geçiş dönemi (2026-11-10 – 2026-11-12): kullanıcının veya karşı tarafın
+  kayıtlı E2E cihazı varsa düz metinli gönderim reddedildi
+  (`ERROR_REASON_E2E_REQUIRED`); düz sürümde yazılmış mesajlar
+  `encryption = server` ile döndü.
+- **Düz yol kaldırıldı** (platform sahibinin kararı 2026-11-11, issue
+  #151; istemcinin E2E'si 2026-11-12'de tamamlandı, pilot öncesi gerçek
+  kullanıcı verisi yok):
+  - `SendDirectMessage` zarfsız isteği ve dolu `body`'yi
+    `ERROR_REASON_VALIDATION` ile reddeder; REST'te `body` bilinmeyen
+    alandır. WebSocket'in `dm.send` çerçevesi kalktı (gönderim yalnızca
+    REST'tedir). `ERROR_REASON_E2E_REQUIRED` artık dönmez.
+  - chat migration 00014 `encryption = 'server'` mesajları siler,
+    `body_encrypted` ve `key_version` kolonlarını düşürür ve
+    `encryption`'ı yalnızca `'e2e'`ye kısıtlar. Sunucunun birebir mesaj
+    metni tutacağı bir yer kalmadı; bir bileşen ele geçirilse de şema
+    sunucu tarafından okunabilir birebir mesajı kabul etmez (ADR-0011).
+  - Birebir mesaj servisi `CHAT_MESSAGE_KEYS`'e bağlı değildir; anahtar
+    yalnızca kanal mesajları içindir.
+  - Proto alanları (`body`, `MESSAGE_ENCRYPTION_SERVER`,
+    `ERROR_REASON_E2E_REQUIRED`) `buf breaking` için silinmez,
+    `deprecated` işaretlidir.
 
 ### 8. Sınırlar
 
@@ -306,4 +316,5 @@ Kimlik anahtarı ve kayıt kimliği hiçbir zaman güncellenemez.
   REST zaten tekrar denenebilir yoldur.
 - **Düz sürüm mesajlarını hemen silmek:** pilot öncesi kayıp yok, ama
   geliştirme ortamında istemci E2E'yi bitirene kadar birebir mesaj
-  çalışmaz hale gelirdi. Ayrı işe bırakıldı.
+  çalışmaz hale gelirdi. Ayrı işe bırakıldı; istemci E2E'yi bitirince
+  #151 ile yapıldı (§7).

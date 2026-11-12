@@ -29,7 +29,7 @@ type DirectMessages interface {
 // DirectMessageServer implements chatv1.DirectMessageServiceServer (issue
 // #95). Every method acts for the caller of the verified access token
 // only; the token is forwarded to core for the write rule. It never logs
-// request fields: a message body must not reach any log.
+// request fields.
 type DirectMessageServer struct {
 	chatv1.UnimplementedDirectMessageServiceServer
 	app DirectMessages
@@ -56,14 +56,13 @@ func conversationToProto(c dm.Conversation) *chatv1.Conversation {
 }
 
 var messageEncryptions = map[string]chatv1.MessageEncryption{
-	dm.EncryptionServer: chatv1.MessageEncryption_MESSAGE_ENCRYPTION_SERVER,
-	dm.EncryptionE2E:    chatv1.MessageEncryption_MESSAGE_ENCRYPTION_E2E,
+	dm.EncryptionE2E: chatv1.MessageEncryption_MESSAGE_ENCRYPTION_E2E,
 }
 
 func directMessageToProto(m dm.Message) *chatv1.DirectMessage {
 	return &chatv1.DirectMessage{
 		Id: m.ID.String(), ConversationId: m.ConversationID.String(), SenderUserId: idOrEmpty(m.SenderID),
-		Body: m.Body, Deleted: m.Deleted, CreateTime: timestamppb.New(m.CreatedAt), Encryption: messageEncryptions[m.Encryption],
+		Deleted: m.Deleted, CreateTime: timestamppb.New(m.CreatedAt), Encryption: messageEncryptions[m.Encryption],
 	}
 }
 
@@ -73,23 +72,25 @@ func (s *DirectMessageServer) SendDirectMessage(ctx context.Context, req *chatv1
 	if err != nil {
 		return nil, err
 	}
-	in := dm.SendInput{Recipient: v[0], Body: req.GetBody(), ClientRequestID: v[1]}
-	if es := req.GetEnvelopes(); len(es) > 0 {
-		// End to end (issue #127): the sending device is the session's.
-		c, err := callerSession(ctx)
-		if err != nil {
-			return nil, err
+	// The plain path is gone (issue #151): a body is refused, never
+	// stored or passed on.
+	if req.GetBody() != "" { //nolint:staticcheck // the deprecated field is read only to refuse it
+		return nil, validation("body")
+	}
+	// The sending device is the session's (issue #127).
+	session, err := callerSession(ctx)
+	if err != nil {
+		return nil, err
+	}
+	in := dm.SendInput{Recipient: v[0], ClientRequestID: v[1], Session: session.Session}
+	for _, e := range req.GetEnvelopes() {
+		d, ok := id.Parse(e.GetDeviceId())
+		if !ok {
+			return nil, validation("envelopes")
 		}
-		in.Session = c.Session
-		for _, e := range es {
-			d, ok := id.Parse(e.GetDeviceId())
-			if !ok {
-				return nil, validation("envelopes")
-			}
-			in.Envelopes = append(in.Envelopes, dm.OutgoingEnvelope{
-				Device: d, RegistrationID: e.GetRegistrationId(), Type: int(e.GetType()), Content: e.GetContent(),
-			})
-		}
+		in.Envelopes = append(in.Envelopes, dm.OutgoingEnvelope{
+			Device: d, RegistrationID: e.GetRegistrationId(), Type: int(e.GetType()), Content: e.GetContent(),
+		})
 	}
 	m, c, err := s.app.Send(ctx, caller, in)
 	if err != nil {

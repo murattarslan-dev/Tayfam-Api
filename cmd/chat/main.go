@@ -172,19 +172,18 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 	live.Bind(channels)
-	// Birebir mesajlar (issue #95, düz sürüm): kim kime yazabilir core'a
-	// her mesajda, kullanıcının kendi token'ıyla sorulur (CheckDirectMessage).
-	// Metin kanal mesajlarıyla aynı anahtarla şifreli saklanır; anahtar
-	// yoksa DM metodları da UNAVAILABLE döner. REST ve WebSocket gönderimi
-	// aynı fonksiyondan geçer.
+	// Birebir mesajlar (issue #95): kim kime yazabilir core'a her mesajda,
+	// kullanıcının kendi token'ıyla sorulur (CheckDirectMessage). Mesajlar
+	// yalnızca uçtan uca şifrelidir (ADR-0018, issue #151): sunucu metin
+	// tutmaz, mesaj anahtarına da ihtiyaç duymaz. Gönderim yalnızca REST
+	// üzerindendir; WebSocket zarfları teslim eder.
 	directMessages, err := dm.New(dm.Config{
 		Pool: pool, Log: rt.Log, Rules: coremembers.NewDirectMessageRules(corev1.NewDirectMessageServiceClient(coreConn)),
-		SendLimit: sendLimit, Cipher: cipher, Publisher: live.Direct(),
+		SendLimit: sendLimit, Publisher: live.Direct(),
 	})
 	if err != nil {
 		return err
 	}
-	live.BindDirect(directMessages)
 	// Tayfa sessize alınırken üyeliği core söyler; birebir konuşma sessize
 	// alınırken tarafı olup olmadığına chat kendi verisinden bakar (issue
 	// #138).

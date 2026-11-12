@@ -104,8 +104,6 @@ func MessageFrom(tayfa id.ID, m channel.Message) MessageData {
 type LiveConfig struct {
 	Hub      *Hub
 	Channels Channels
-	// DirectMessages may be left nil and given with BindDirect.
-	DirectMessages DirectMessages
 	// Keys may be left nil and given with BindKeys (issue #127).
 	Keys Acker
 	Log  *slog.Logger

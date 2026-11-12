@@ -23,12 +23,22 @@ func testConversation() *chatv1.Conversation {
 	}
 }
 
-func testDirectMessage(body string) *chatv1.DirectMessage {
-	return &chatv1.DirectMessage{Id: messageID, ConversationId: conversationID, SenderUserId: userID, Body: body, CreateTime: timestamppb.New(t0)}
+func testDirectMessage() *chatv1.DirectMessage {
+	return &chatv1.DirectMessage{
+		Id: messageID, ConversationId: conversationID, SenderUserId: userID, CreateTime: timestamppb.New(t0),
+		Encryption: chatv1.MessageEncryption_MESSAGE_ENCRYPTION_E2E,
+	}
+}
+
+// dmEnvelopes is one envelope in a send request's JSON.
+const dmEnvelopes = `[{"device_id":"` + deviceID + `","registration_id":9,"type":"prekey","content":"AQI="}]`
+
+func dmSendBody(extra string) string {
+	return `{"recipient_user_id":"` + userID + `","client_request_id":"` + requestID + `","envelopes":` + dmEnvelopes + extra + `}`
 }
 
 func (f *fakeChat) SendDirectMessage(ctx context.Context, in *chatv1.SendDirectMessageRequest, _ ...grpc.CallOption) (*chatv1.SendDirectMessageResponse, error) {
-	return &chatv1.SendDirectMessageResponse{Message: testDirectMessage(in.GetBody()), Conversation: testConversation()}, f.record(ctx, in)
+	return &chatv1.SendDirectMessageResponse{Message: testDirectMessage(), Conversation: testConversation()}, f.record(ctx, in)
 }
 
 func (f *fakeChat) ListConversations(ctx context.Context, in *chatv1.ListConversationsRequest, _ ...grpc.CallOption) (*chatv1.ListConversationsResponse, error) {
@@ -43,7 +53,7 @@ func (f *fakeChat) GetConversation(ctx context.Context, in *chatv1.GetConversati
 
 func (f *fakeChat) ListDirectMessages(ctx context.Context, in *chatv1.ListDirectMessagesRequest, _ ...grpc.CallOption) (*chatv1.ListDirectMessagesResponse, error) {
 	return &chatv1.ListDirectMessagesResponse{Messages: []*chatv1.DirectMessage{
-		testDirectMessage("selam"), {Id: messageID, ConversationId: conversationID, Deleted: true, CreateTime: timestamppb.New(t0)},
+		testDirectMessage(), {Id: messageID, ConversationId: conversationID, Deleted: true, CreateTime: timestamppb.New(t0)},
 	}}, f.record(ctx, in)
 }
 
@@ -84,8 +94,10 @@ func TestDirectMessageRoutes(t *testing.T) {
 		code               int
 		want               proto.Message
 	}{
-		{"POST", "/v1/direct-messages", `{"recipient_user_id":"` + userID + `","body":"Kordon'da mısın?","client_request_id":"` + requestID + `"}`, 201,
-			&chatv1.SendDirectMessageRequest{RecipientUserId: userID, Body: "Kordon'da mısın?", ClientRequestId: requestID}},
+		{"POST", "/v1/direct-messages", dmSendBody(""), 201, &chatv1.SendDirectMessageRequest{
+			RecipientUserId: userID, ClientRequestId: requestID,
+			Envelopes: []*chatv1.OutgoingEnvelope{{DeviceId: deviceID, RegistrationId: 9, Type: chatv1.EnvelopeType_ENVELOPE_TYPE_PREKEY, Content: []byte{1, 2}}},
+		}},
 		{"GET", "/v1/direct-messages/conversations?page_size=10&page_token=P", "", 200, &chatv1.ListConversationsRequest{PageSize: 10, PageToken: "P"}},
 		{"GET", c, "", 200, &chatv1.GetConversationRequest{ConversationId: conversationID}},
 		{"GET", c + "/messages?page_size=20", "", 200, &chatv1.ListDirectMessagesRequest{ConversationId: conversationID, PageSize: 20}},
@@ -104,8 +116,8 @@ func TestDirectMessageRoutes(t *testing.T) {
 		}
 	}
 
-	sent := decodeBody[directMessageSentJSON](t, as(h, "POST", "/v1/direct-messages", `{"recipient_user_id":"`+userID+`","body":"selam","client_request_id":"`+requestID+`"}`))
-	if sent.Message.Body != "selam" || sent.Message.SenderUserID != userID || sent.Conversation.Status != "request_received" || sent.Conversation.UnreadCount != 3 {
+	sent := decodeBody[directMessageSentJSON](t, as(h, "POST", "/v1/direct-messages", dmSendBody("")))
+	if sent.Message.Encryption != "e2e" || sent.Message.SenderUserID != userID || sent.Conversation.Status != "request_received" || sent.Conversation.UnreadCount != 3 {
 		t.Fatalf("gönderim: %+v", sent)
 	}
 	l := decodeBody[conversationListJSON](t, as(h, "GET", "/v1/direct-messages/conversations", ""))
@@ -115,12 +127,13 @@ func TestDirectMessageRoutes(t *testing.T) {
 	}
 	w := as(h, "GET", c+"/messages", "")
 	m := decodeBody[directMessageListJSON](t, w)
-	if len(m.Messages) != 2 || m.Messages[0].Body != "selam" || !m.Messages[1].Deleted || m.Messages[1].Body != "" || m.Messages[1].SenderUserID != "" ||
+	if len(m.Messages) != 2 || m.Messages[0].Encryption != "e2e" || !m.Messages[1].Deleted || m.Messages[1].SenderUserID != "" ||
 		w.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("mesajlar: %+v %v", m, w.Header())
 	}
-	if strings.Count(w.Body.String(), `"body"`) != 1 {
-		t.Fatalf("boş alanlar: %s", w.Body)
+	// There is no body field any more (issue #151).
+	if strings.Contains(w.Body.String(), `"body"`) {
+		t.Fatalf("metin alanı: %s", w.Body)
 	}
 	if a := decodeBody[conversationJSON](t, as(h, "POST", c+"/accept", "")); a.Status != "active" {
 		t.Fatalf("kabul: %+v", a)
@@ -137,17 +150,17 @@ func TestDirectMessageBadRequests(t *testing.T) {
 	f := &fakeChat{}
 	h := chatRouter(f)
 	c := "/v1/direct-messages/conversations/" + conversationID
-	send := func(extra string) string {
-		return `{"recipient_user_id":"` + userID + `","body":"x","client_request_id":"` + requestID + `"` + extra + `}`
-	}
+	send := dmSendBody
 	for name, tc := range map[string]struct{ method, path, body string }{
 		"bozuk konuşma":      {"GET", "/v1/direct-messages/conversations/x", ""},
 		"bozuk mesaj":        {"DELETE", c + "/messages/x", ""},
-		"alıcı yok":          {"POST", "/v1/direct-messages", `{"body":"x","client_request_id":"` + requestID + `"}`},
-		"bozuk alıcı":        {"POST", "/v1/direct-messages", `{"recipient_user_id":"x","body":"x","client_request_id":"` + requestID + `"}`},
-		"boş mesaj":          {"POST", "/v1/direct-messages", `{"recipient_user_id":"` + userID + `","body":"","client_request_id":"` + requestID + `"}`},
-		"uzun mesaj":         {"POST", "/v1/direct-messages", `{"recipient_user_id":"` + userID + `","body":"` + strings.Repeat("a", 4001) + `","client_request_id":"` + requestID + `"}`},
-		"istek kimliği yok":  {"POST", "/v1/direct-messages", `{"recipient_user_id":"` + userID + `","body":"x"}`},
+		"alıcı yok":          {"POST", "/v1/direct-messages", `{"client_request_id":"` + requestID + `","envelopes":` + dmEnvelopes + `}`},
+		"bozuk alıcı":        {"POST", "/v1/direct-messages", `{"recipient_user_id":"x","client_request_id":"` + requestID + `","envelopes":` + dmEnvelopes + `}`},
+		"zarf yok":           {"POST", "/v1/direct-messages", `{"recipient_user_id":"` + userID + `","client_request_id":"` + requestID + `"}`},
+		"boş zarf listesi":   {"POST", "/v1/direct-messages", `{"recipient_user_id":"` + userID + `","client_request_id":"` + requestID + `","envelopes":[]}`},
+		"düz metin":          {"POST", "/v1/direct-messages", `{"recipient_user_id":"` + userID + `","body":"x","client_request_id":"` + requestID + `"}`},
+		"metin ve zarf":      {"POST", "/v1/direct-messages", send(`,"body":"x"`)},
+		"istek kimliği yok":  {"POST", "/v1/direct-messages", `{"recipient_user_id":"` + userID + `","envelopes":` + dmEnvelopes + `}`},
 		"gönderen alanı":     {"POST", "/v1/direct-messages", send(`,"sender_user_id":"` + userID + `"`)},
 		"bozuk after":        {"GET", c + "/messages?after_message_id=x", ""},
 		"bozuk sayfa":        {"GET", "/v1/direct-messages/conversations?page_size=x", ""},
@@ -185,7 +198,7 @@ func TestDirectMessageBadRequests(t *testing.T) {
 }
 
 func TestDirectMessageErrors(t *testing.T) {
-	body := `{"recipient_user_id":"` + userID + `","body":"x","client_request_id":"` + requestID + `"}`
+	body := dmSendBody("")
 	for _, tc := range []struct {
 		err    error
 		status int

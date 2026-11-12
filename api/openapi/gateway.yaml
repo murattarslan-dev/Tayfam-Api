@@ -2587,15 +2587,14 @@ paths:
         patlama 10; tekrar gönderim de sayılır). Aşılınca `rate-limited`
         (429). Yavaş mod ve mesaj isteği sınırı ayrıca geçerlidir.
 
-        Metin 1–4000 karakter, yalnız boşluk olamaz; sekme ve satır sonu
-        dışında kontrol karakteri içeremez. Aynı `client_request_id` ile
-        tekrar gönderim ilk mesajı döndürür; başka konuşmada kullanılmış
-        değer `invalid-request`. Mesaj düzenlenemez. Düz sürümde mesajlar
-        sunucuda şifreli saklanır. Aynı kurallar WebSocket `dm.send`
-        çerçevesinde de geçerlidir.
+        Aynı `client_request_id` ile tekrar gönderim ilk mesajı döndürür;
+        başka konuşmada kullanılmış değer `invalid-request`. Mesaj
+        düzenlenemez.
 
-        **Uçtan uca şifreleme (Signal; #127, ADR-0018):** `body` yerine
-        `envelopes` gönderilir: alıcının **tüm** cihazlarına ve sizin
+        **Yalnızca uçtan uca şifreli (Signal; #127, ADR-0018):** düz metinli
+        gönderim yolu kaldırıldı (#151); istekte `body` alanı
+        `invalid-request` (400) alır. `envelopes` gönderilir: alıcının
+        **tüm** cihazlarına ve sizin
         **diğer tüm** cihazlarınıza birer zarf (en fazla 16). Gönderen
         cihaz, token'ın oturumuna kayıtlı cihazdır
         (`POST /v1/me/e2e/device`; yoksa `e2e-device-not-registered`, 409).
@@ -2605,13 +2604,10 @@ paths:
         `E2EDevicesChangedProblem`) döner; cihaz listelerini tazeleyip
         tekrar deneyin. Alıcının cihazı yoksa `e2e-recipient-unavailable`
         (409). Sunucu zarfları açmaz; mesaj içeriksiz saklanır
-        (`encryption: e2e`, `body` yok). Zarflar hedef cihaza
+        (`encryption: e2e`). Zarflar hedef cihaza
         `GET /v1/me/e2e/envelopes` ve WebSocket `dm.envelope` ile gider.
-        Zarflı gönderim yalnızca REST'tedir (WebSocket çerçevesi 64 KB).
+        Gönderim yalnızca REST'tedir (WebSocket çerçevesi 64 KB).
         Gövde en fazla 1,5 MiB.
-
-        **Geri düşüş yok:** sizin ya da alıcının E2E cihazı varsa `body`
-        ile gönderim `e2e-required` (409) alır.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -4483,18 +4479,12 @@ paths:
           okunur tayfa (`tayfa_read_only`), yetki (`permission_denied`),
           boyut (`invalid_request`, `data.field: body`). Aynı
           `client_request_id` ile tekrar gönderim ilk mesajı döner.
-        - `dm.send` `{recipient_user_id, body, client_request_id}` →
-          `dm.sent` (birebir mesaj ve `conversation_status`: `active`,
-          `request_sent`, `request_received`). REST'teki
-          `POST /v1/direct-messages` ile aynı fonksiyondan geçer; abonelik
-          gerekmez. Hatalar: `direct_message_not_allowed`,
-          `message_request_pending`, `message_request_limit`,
-          `rate_limited`, `invalid_request` (`data.field`), `unavailable`.
-          `e2e_required` (taraflardan birinin E2E cihazı var; zarflı
-          gönderim REST'tedir).
-          `send` ve `dm.send`, REST ile ortak mesaj hız sınırına tabidir
-          (kullanıcı başına dakikada 30, patlama 10): aşılınca o çerçeveye
+          `send`, REST ile ortak mesaj hız sınırına tabidir (kullanıcı
+          başına dakikada 30, patlama 10): aşılınca o çerçeveye
           `rate_limited` hatası döner, bağlantı açık kalır.
+        - Birebir mesaj WebSocket'ten gönderilmez (`dm.send` kaldırıldı,
+          #151; `unsupported_type` alır): `POST /v1/direct-messages`
+          kullanılır.
         - `dm.envelope_ack` `{envelope_ids}` (1–100) → `dm.envelope_acked`.
           Bu bağlantının cihazına (oturumuna) ait teslim alınmış zarfları
           siler (`POST /v1/me/e2e/envelopes/ack` ile aynı). Cihaz yoksa
@@ -4516,10 +4506,9 @@ paths:
         - `notification`: yeni bildirim `{type, tayfa_id, target_type,
           target_id}`; içerik yok, liste REST'ten çekilir.
         - `dm.message_created`: birebir mesaj `{id, conversation_id,
-          sender_user_id, body, encryption, created_at}`; konuşmanın iki
+          sender_user_id, encryption, created_at}`; konuşmanın iki
           tarafının tüm bağlantılarına gider (gönderenin diğer cihazları
-          dahil). `encryption: e2e` ise `body` boştur; içerik cihaza
-          `dm.envelope` ile gelir.
+          dahil). İçerik taşımaz; içerik cihaza `dm.envelope` ile gelir.
         - `dm.envelope`: yalnızca hedef cihazın (oturumun) bağlantılarına
           giden uçtan uca zarf `{id, message_id, conversation_id,
           sender_user_id, sender_device_id, sender_device_number, type
@@ -6418,17 +6407,13 @@ components:
           type: string
           format: uuid
           description: Gönderenin hesabı silindiyse yoktur.
-        body:
-          type: string
-          description: Silinmiş ve uçtan uca şifreli mesajda yoktur.
         deleted: { type: boolean }
         encryption:
           type: string
-          enum: [server, e2e]
+          enum: [e2e]
           description: |
-            `server`: düz sürüm, metin sunucu anahtarıyla şifreli saklanır
-            (uçtan uca değildir; istemci bunu belirtir). `e2e`: içerik
-            yalnızca zarflarda ve arşivdedir.
+            Her mesaj uçtan uca şifrelidir; içerik yalnızca zarflarda ve
+            arşivdedir (`server` değeri #151 ile kalktı).
         created_at: { type: string, format: date-time }
     DirectMessageList:
       type: object
@@ -6440,12 +6425,11 @@ components:
         next_page_token: { type: string }
     DirectMessageCreateRequest:
       type: object
-      description: "`body` ya da `envelopes`; ikisinden yalnızca biri."
-      required: [recipient_user_id, client_request_id]
+      description: Düz metin (`body`) kabul edilmez (#151).
+      required: [recipient_user_id, client_request_id, envelopes]
       additionalProperties: false
       properties:
         recipient_user_id: { type: string, format: uuid }
-        body: { type: string, minLength: 1, maxLength: 4000 }
         envelopes:
           type: array
           minItems: 1

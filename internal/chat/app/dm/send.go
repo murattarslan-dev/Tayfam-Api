@@ -30,27 +30,22 @@ import (
 //     daily limit) or its state applied: a waiting or declined request of
 //     the caller refuses (apperr.ErrMessageRequestPending; the sender never
 //     learns of a decline), the recipient's reply accepts it;
-//  4. the message is stored encrypted, the caller's read marker moves to
+//  4. the message row (no content: it is end to end, ADR-0018) and one
+//     envelope per device are stored, the caller's read marker moves to
 //     it, and the recipient's notice (without content) carries their
 //     unread count.
+//
+// There is no plain path (issue #151): a message without envelopes is a
+// validation error, and the server never holds a direct message's text.
 func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message, Conversation, error) {
-	e2e := len(in.Envelopes) > 0
 	switch {
 	case in.Recipient == (id.ID{}) || in.Recipient == caller:
 		return Message{}, Conversation{}, invalid("recipient_user_id")
-	case e2e && in.Body != "", !e2e && !validBody(in.Body):
-		return Message{}, Conversation{}, invalid("body")
-	case e2e && !validEnvelopes(in.Envelopes):
+	case len(in.Envelopes) == 0 || !validEnvelopes(in.Envelopes):
 		return Message{}, Conversation{}, invalid("envelopes")
 	case in.ClientRequestID == (id.ID{}):
 		return Message{}, Conversation{}, invalid("client_request_id")
-	}
-	if !e2e {
-		// End-to-end messages need no server key (ADR-0018 item 10).
-		if err := s.ready(); err != nil {
-			return Message{}, Conversation{}, err
-		}
-	} else if in.Session == (id.ID{}) {
+	case in.Session == (id.ID{}):
 		return Message{}, Conversation{}, apperr.ErrE2EDeviceNotRegistered
 	}
 	if !s.cfg.SendLimit.Allow(caller.String()) {
@@ -59,17 +54,6 @@ func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message
 	q := store.New(s.cfg.Pool)
 	if m, c, ok, err := s.existing(ctx, q, caller, in.Recipient, in.ClientRequestID); ok || err != nil {
 		return m, c, err
-	}
-	if !e2e {
-		// No downgrade: once a party has an end-to-end device, plain text
-		// is refused (ADR-0018 item 7).
-		has, err := q.AnyUserHasDevice(ctx, []pgtype.UUID{caller.PG(), in.Recipient.PG()})
-		if err != nil {
-			return Message{}, Conversation{}, fmt.Errorf("e2e cihazı: %w", err)
-		}
-		if has {
-			return Message{}, Conversation{}, apperr.ErrE2ERequired
-		}
 	}
 	v, err := s.cfg.Rules.Check(ctx, caller, in.Recipient)
 	if err != nil {
@@ -91,17 +75,14 @@ func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message
 	)
 	err = pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
 		q := store.New(tx)
-		var from keys.DeviceInfo
-		var targets []keys.DeviceInfo
-		if e2e {
-			// The envelopes must cover exactly the recipient's devices and
-			// the caller's other ones (ADR-0018 item 3).
-			if from, targets, err = keys.Recipients(ctx, q, keys.Caller{User: caller, Session: in.Session}, in.Recipient); err != nil {
-				return err
-			}
-			if err := keys.Match(targets, targetsOf(in.Envelopes)); err != nil {
-				return err
-			}
+		// The envelopes must cover exactly the recipient's devices and the
+		// caller's other ones (ADR-0018 item 3).
+		from, targets, err := keys.Recipients(ctx, q, keys.Caller{User: caller, Session: in.Session}, in.Recipient)
+		if err != nil {
+			return err
+		}
+		if err := keys.Match(targets, targetsOf(in.Envelopes)); err != nil {
+			return err
 		}
 		c, opened, err := s.conversationFor(ctx, q, caller, in.Recipient, v, now)
 		if err != nil {
@@ -117,28 +98,18 @@ func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message
 			}
 		}
 		convID := uuidOf(c.ID)
-		if e2e {
-			_, err = q.CreateDirectMessageE2E(ctx, store.CreateDirectMessageE2EParams{
-				ID: msgID.PG(), ConversationID: convID.PG(), SenderID: caller.PG(), SenderDeviceID: from.ID.PG(),
-				ClientRequestID: in.ClientRequestID.PG(),
-			})
-		} else {
-			sealed := s.cfg.Cipher.EncryptDirect(msgID, convID, in.Body)
-			_, err = q.CreateDirectMessage(ctx, store.CreateDirectMessageParams{
-				ID: msgID.PG(), ConversationID: convID.PG(), SenderID: caller.PG(), BodyEncrypted: sealed.Data,
-				KeyVersion: pgtype.Int2{Int16: sealed.Version, Valid: true}, ClientRequestID: in.ClientRequestID.PG(),
-			})
-		}
+		_, err = q.CreateDirectMessageE2E(ctx, store.CreateDirectMessageE2EParams{
+			ID: msgID.PG(), ConversationID: convID.PG(), SenderID: caller.PG(), SenderDeviceID: from.ID.PG(),
+			ClientRequestID: in.ClientRequestID.PG(),
+		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return errRetried // a concurrent retry won; nothing of this one is kept
 			}
 			return fmt.Errorf("mesaj yazılamadı: %w", err)
 		}
-		if e2e {
-			if deliveries, err = keys.StoreEnvelopes(ctx, q, msgID, convID, caller, from, targets, envelopesOf(in.Envelopes), now); err != nil {
-				return err
-			}
+		if deliveries, err = keys.StoreEnvelopes(ctx, q, msgID, convID, caller, from, targets, envelopesOf(in.Envelopes), now); err != nil {
+			return err
 		}
 		if err := q.TouchConversation(ctx, store.TouchConversationParams{ID: convID.PG(), At: ts(now)}); err != nil {
 			return fmt.Errorf("konuşma: %w", err)
@@ -168,10 +139,7 @@ func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message
 		return Message{}, Conversation{}, err
 	}
 	convID := uuidOf(conv.ID)
-	msg := Message{ID: msgID, ConversationID: convID, SenderID: caller, Body: in.Body, Encryption: EncryptionServer, CreatedAt: now}
-	if e2e {
-		msg.Encryption = EncryptionE2E
-	}
+	msg := Message{ID: msgID, ConversationID: convID, SenderID: caller, Encryption: EncryptionE2E, CreatedAt: now}
 	view, err := s.view(ctx, store.New(s.cfg.Pool), caller, convID)
 	if err != nil {
 		return Message{}, Conversation{}, err
@@ -208,10 +176,7 @@ func (s *Service) existing(ctx context.Context, q *store.Queries, caller, recipi
 	if err != nil || other(c.UserLowID, c.UserHighID, caller) != recipient {
 		return Message{}, Conversation{}, false, invalid("client_request_id")
 	}
-	m, err := s.messageOf(msgRow(r))
-	if err != nil {
-		return Message{}, Conversation{}, false, err
-	}
+	m := messageOf(msgRow(r))
 	view, err := s.view(ctx, q, caller, uuidOf(c.ID))
 	if err != nil {
 		return Message{}, Conversation{}, false, err

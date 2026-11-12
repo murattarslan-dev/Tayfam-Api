@@ -48,8 +48,8 @@ func newConversation(t *testing.T, q *Queries, a, b id.ID, status string, reques
 func newDirectMessage(t *testing.T, q *Queries, conv, sender id.ID) id.ID {
 	t.Helper()
 	m := testMessageIDs.next()
-	if _, err := q.CreateDirectMessage(context.Background(), CreateDirectMessageParams{
-		ID: m.PG(), ConversationID: conv.PG(), SenderID: sender.PG(), BodyEncrypted: sealed(2), KeyVersion: int2(1), ClientRequestID: id.New().PG(),
+	if _, err := q.CreateDirectMessageE2E(context.Background(), CreateDirectMessageE2EParams{
+		ID: m.PG(), ConversationID: conv.PG(), SenderID: sender.PG(), SenderDeviceID: id.New().PG(), ClientRequestID: id.New().PG(),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -112,18 +112,15 @@ func TestConversationConstraints(t *testing.T) {
 		sql        string
 		constraint string
 	}{
-		"silinmemiş metinsiz":    {`INSERT INTO dm_messages (id, conversation_id, sender_id, client_request_id) VALUES ($1, $2, $3, $4)`, "dm_messages_body"},
-		"e2e metinli":            {`INSERT INTO dm_messages (id, conversation_id, sender_id, client_request_id, encryption, body_encrypted, key_version) VALUES ($1, $2, $3, $4, 'e2e', '\x00000000000000000000000000000000000000000000000000000000ff', 1)`, "dm_messages_body"},
-		"sunucu şifreli cihazlı": {`INSERT INTO dm_messages (id, conversation_id, sender_id, client_request_id, body_encrypted, key_version, sender_device_id) VALUES ($1, $2, $3, $4, '\x00000000000000000000000000000000000000000000000000000000ff', 1, $3)`, "dm_messages_device"},
-		"kısa metin":             {`INSERT INTO dm_messages (id, conversation_id, sender_id, client_request_id, body_encrypted, key_version) VALUES ($1, $2, $3, $4, '\x00', 1)`, "dm_messages_body_len"},
-		"sürümsüz":               {`INSERT INTO dm_messages (id, conversation_id, sender_id, client_request_id, body_encrypted) VALUES ($1, $2, $3, $4, '\x00000000000000000000000000000000000000000000000000000000ff')`, "dm_messages_key"},
+		// The plain version is gone (issue #151): only e2e.
+		"sunucu şifreli": {`INSERT INTO dm_messages (id, conversation_id, sender_id, client_request_id, encryption) VALUES ($1, $2, $3, $4, 'server')`, "dm_messages_encryption"},
 	} {
 		if _, err := pool.Exec(ctx, c.sql, id.New().PG(), conv.PG(), id.New().PG(), id.New().PG()); !violates(err, c.constraint) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	// E2E: no body on the server, a sending device (the later stage).
-	if _, err := pool.Exec(ctx, `INSERT INTO dm_messages (id, conversation_id, sender_id, client_request_id, encryption, sender_device_id) VALUES ($1, $2, $3, $4, 'e2e', $5)`,
+	// E2E is the default: no body on the server, a sending device.
+	if _, err := pool.Exec(ctx, `INSERT INTO dm_messages (id, conversation_id, sender_id, client_request_id, sender_device_id) VALUES ($1, $2, $3, $4, $5)`,
 		id.New().PG(), conv.PG(), id.New().PG(), id.New().PG(), id.New().PG()); err != nil {
 		t.Fatalf("e2e mesaj: %v", err)
 	}
@@ -136,12 +133,12 @@ func TestDirectMessageIdempotentAndErase(t *testing.T) {
 	conv := newConversation(t, q, a, b, "active", id.ID{}, time.Now())
 	req := id.New()
 	m := testMessageIDs.next()
-	p := CreateDirectMessageParams{ID: m.PG(), ConversationID: conv.PG(), SenderID: a.PG(), BodyEncrypted: sealed(3), KeyVersion: int2(1), ClientRequestID: req.PG()}
-	if _, err := q.CreateDirectMessage(ctx, p); err != nil {
+	p := CreateDirectMessageE2EParams{ID: m.PG(), ConversationID: conv.PG(), SenderID: a.PG(), SenderDeviceID: id.New().PG(), ClientRequestID: req.PG()}
+	if _, err := q.CreateDirectMessageE2E(ctx, p); err != nil {
 		t.Fatal(err)
 	}
 	p.ID = testMessageIDs.next().PG()
-	if _, err := q.CreateDirectMessage(ctx, p); !errors.Is(err, pgx.ErrNoRows) {
+	if _, err := q.CreateDirectMessageE2E(ctx, p); !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("tekrar gönderim: %v", err)
 	}
 	r, err := q.GetDirectMessageByRequest(ctx, GetDirectMessageByRequestParams{SenderID: a.PG(), ClientRequestID: req.PG()})
@@ -151,7 +148,7 @@ func TestDirectMessageIdempotentAndErase(t *testing.T) {
 	if n, _ := q.CountSenderMessages(ctx, CountSenderMessagesParams{ConversationID: conv.PG(), SenderID: a.PG()}); n != 1 {
 		t.Fatalf("gönderen mesaj sayısı = %d", n)
 	}
-	// Only the sender erases; the body goes at once.
+	// Only the sender erases.
 	if n, err := q.EraseDirectMessage(ctx, EraseDirectMessageParams{DeletedAt: at(time.Now()), ConversationID: conv.PG(), ID: m.PG(), SenderID: b.PG()}); err != nil || n != 0 {
 		t.Fatalf("başkası sildi: %d %v", n, err)
 	}
@@ -159,7 +156,7 @@ func TestDirectMessageIdempotentAndErase(t *testing.T) {
 		t.Fatalf("gönderen sildi: %d %v", n, err)
 	}
 	got, err := q.GetDirectMessage(ctx, GetDirectMessageParams{ConversationID: conv.PG(), ID: m.PG()})
-	if err != nil || got.BodyEncrypted != nil || got.KeyVersion.Valid || !got.DeletedAt.Valid {
+	if err != nil || !got.DeletedAt.Valid {
 		t.Fatalf("silinen mesaj = %+v %v", got, err)
 	}
 	// Deleted messages still count against the one-message request.
@@ -321,7 +318,7 @@ func TestDirectMessageCleanupAndPurge(t *testing.T) {
 		t.Fatalf("taraf temizlenmedi: %v %v %v", lowNull, highNull, reqNull)
 	}
 	got, err := q.GetDirectMessage(ctx, GetDirectMessageParams{ConversationID: c.PG(), ID: m.PG()})
-	if err != nil || got.SenderID.Valid || got.BodyEncrypted == nil {
+	if err != nil || got.SenderID.Valid || got.DeletedAt.Valid {
 		t.Fatalf("mesaj: %+v %v", got, err)
 	}
 	if _, err := q.GetConversationRead(ctx, GetConversationReadParams{ConversationID: c.PG(), UserID: gone.PG()}); !errors.Is(err, pgx.ErrNoRows) {

@@ -84,11 +84,12 @@ type MessageEncryption int32
 
 const (
 	MessageEncryption_MESSAGE_ENCRYPTION_UNSPECIFIED MessageEncryption = 0
-	// Plain version: body, encrypted at rest with the server's key (not end
-	// to end; clients label it so).
+	// Removed with the plain version (issue #151); never sent.
+	//
+	// Deprecated: Marked as deprecated in tayfam/chat/v1/direct_messages.proto.
 	MessageEncryption_MESSAGE_ENCRYPTION_SERVER MessageEncryption = 1
-	// End to end: body is always empty; the content is in the envelopes and
-	// the archive (E2EService).
+	// End to end: the content is in the envelopes and the archive
+	// (E2EService). Every message is so.
 	MessageEncryption_MESSAGE_ENCRYPTION_E2E MessageEncryption = 2
 )
 
@@ -245,8 +246,9 @@ type DirectMessage struct {
 	ConversationId string                 `protobuf:"bytes,2,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
 	// Empty when the sender's account was deleted.
 	SenderUserId string `protobuf:"bytes,3,opt,name=sender_user_id,json=senderUserId,proto3" json:"sender_user_id,omitempty"`
-	// Empty for a deleted message ("Bu mesaj silindi") and for an end-to-end
-	// message.
+	// Removed with the plain version (issue #151); always empty.
+	//
+	// Deprecated: Marked as deprecated in tayfam/chat/v1/direct_messages.proto.
 	Body          string                 `protobuf:"bytes,4,opt,name=body,proto3" json:"body,omitempty"`
 	Deleted       bool                   `protobuf:"varint,5,opt,name=deleted,proto3" json:"deleted,omitempty"`
 	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
@@ -306,6 +308,7 @@ func (x *DirectMessage) GetSenderUserId() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in tayfam/chat/v1/direct_messages.proto.
 func (x *DirectMessage) GetBody() string {
 	if x != nil {
 		return x.Body
@@ -337,7 +340,10 @@ func (x *DirectMessage) GetEncryption() MessageEncryption {
 type SendDirectMessageRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	RecipientUserId string                 `protobuf:"bytes,1,opt,name=recipient_user_id,json=recipientUserId,proto3" json:"recipient_user_id,omitempty"`
-	// Plain version; empty when envelopes are given.
+	// Removed with the plain version (issue #151): any non-empty value is
+	// ERROR_REASON_VALIDATION.
+	//
+	// Deprecated: Marked as deprecated in tayfam/chat/v1/direct_messages.proto.
 	Body            string `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
 	ClientRequestId string `protobuf:"bytes,3,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
 	// End to end (E2EService, e2e.proto).
@@ -383,6 +389,7 @@ func (x *SendDirectMessageRequest) GetRecipientUserId() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in tayfam/chat/v1/direct_messages.proto.
 func (x *SendDirectMessageRequest) GetBody() string {
 	if x != nil {
 		return x.Body
@@ -1477,21 +1484,21 @@ const file_tayfam_chat_v1_direct_messages_proto_rawDesc = "" +
 	"\x19peer_last_read_message_id\x18\x06 \x01(\tR\x15peerLastReadMessageId\x12F\n" +
 	"\x11last_message_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x0flastMessageTime\x12;\n" +
 	"\vcreate_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\x9c\x02\n" +
+	"createTime\"\xa0\x02\n" +
 	"\rDirectMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0fconversation_id\x18\x02 \x01(\tR\x0econversationId\x12$\n" +
-	"\x0esender_user_id\x18\x03 \x01(\tR\fsenderUserId\x12\x12\n" +
-	"\x04body\x18\x04 \x01(\tR\x04body\x12\x18\n" +
+	"\x0esender_user_id\x18\x03 \x01(\tR\fsenderUserId\x12\x16\n" +
+	"\x04body\x18\x04 \x01(\tB\x02\x18\x01R\x04body\x12\x18\n" +
 	"\adeleted\x18\x05 \x01(\bR\adeleted\x12;\n" +
 	"\vcreate_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12A\n" +
 	"\n" +
 	"encryption\x18\a \x01(\x0e2!.tayfam.chat.v1.MessageEncryptionR\n" +
-	"encryption\"\xc6\x01\n" +
+	"encryption\"\xca\x01\n" +
 	"\x18SendDirectMessageRequest\x12*\n" +
-	"\x11recipient_user_id\x18\x01 \x01(\tR\x0frecipientUserId\x12\x12\n" +
-	"\x04body\x18\x02 \x01(\tR\x04body\x12*\n" +
+	"\x11recipient_user_id\x18\x01 \x01(\tR\x0frecipientUserId\x12\x16\n" +
+	"\x04body\x18\x02 \x01(\tB\x02\x18\x01R\x04body\x12*\n" +
 	"\x11client_request_id\x18\x03 \x01(\tR\x0fclientRequestId\x12>\n" +
 	"\tenvelopes\x18\x04 \x03(\v2 .tayfam.chat.v1.OutgoingEnvelopeR\tenvelopes\"\x96\x01\n" +
 	"\x19SendDirectMessageResponse\x127\n" +
@@ -1560,10 +1567,10 @@ const file_tayfam_chat_v1_direct_messages_proto_rawDesc = "" +
 	"\x1fCONVERSATION_STATUS_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aCONVERSATION_STATUS_ACTIVE\x10\x01\x12$\n" +
 	" CONVERSATION_STATUS_REQUEST_SENT\x10\x02\x12(\n" +
-	"$CONVERSATION_STATUS_REQUEST_RECEIVED\x10\x03*r\n" +
+	"$CONVERSATION_STATUS_REQUEST_RECEIVED\x10\x03*v\n" +
 	"\x11MessageEncryption\x12\"\n" +
-	"\x1eMESSAGE_ENCRYPTION_UNSPECIFIED\x10\x00\x12\x1d\n" +
-	"\x19MESSAGE_ENCRYPTION_SERVER\x10\x01\x12\x1a\n" +
+	"\x1eMESSAGE_ENCRYPTION_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x19MESSAGE_ENCRYPTION_SERVER\x10\x01\x1a\x02\b\x01\x12\x1a\n" +
 	"\x16MESSAGE_ENCRYPTION_E2E\x10\x022\xfc\t\n" +
 	"\x14DirectMessageService\x12h\n" +
 	"\x11SendDirectMessage\x12(.tayfam.chat.v1.SendDirectMessageRequest\x1a).tayfam.chat.v1.SendDirectMessageResponse\x12h\n" +

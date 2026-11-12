@@ -38,7 +38,7 @@ type fakeDirect struct {
 func (f *fakeDirect) Send(_ context.Context, caller id.ID, in dm.SendInput) (dm.Message, dm.Conversation, error) {
 	f.caller, f.send = caller, in
 	c := id.New()
-	return dm.Message{ID: id.New(), ConversationID: c, SenderID: caller, Body: in.Body},
+	return dm.Message{ID: id.New(), ConversationID: c, SenderID: caller, Encryption: dm.EncryptionE2E},
 		dm.Conversation{ID: c, Other: in.Recipient, Status: dm.StatusRequestSent}, f.err
 }
 
@@ -134,20 +134,29 @@ func TestDirectMessageServiceConverts(t *testing.T) {
 	if _, err := client.ListConversations(context.Background(), &chatv1.ListConversationsRequest{}); status.Code(err) != codes.Unauthenticated {
 		t.Fatalf("token yok: %v", err)
 	}
-	sent, err := client.SendDirectMessage(ctx, &chatv1.SendDirectMessageRequest{RecipientUserId: to.String(), Body: "merhaba", ClientRequestId: req.String()})
-	if err != nil || app.caller != user || app.send.Recipient != to || app.send.Body != "merhaba" || app.send.ClientRequestID != req ||
-		sent.GetMessage().GetSenderUserId() != user.String() || sent.GetConversation().GetStatus() != chatv1.ConversationStatus_CONVERSATION_STATUS_REQUEST_SENT ||
+	envelopes := []*chatv1.OutgoingEnvelope{{DeviceId: id.New().String(), RegistrationId: 3, Type: chatv1.EnvelopeType_ENVELOPE_TYPE_PREKEY, Content: []byte{1}}}
+	sent, err := client.SendDirectMessage(ctx, &chatv1.SendDirectMessageRequest{RecipientUserId: to.String(), ClientRequestId: req.String(), Envelopes: envelopes})
+	if err != nil || app.caller != user || app.send.Recipient != to || app.send.ClientRequestID != req || app.send.Session == (id.ID{}) || len(app.send.Envelopes) != 1 ||
+		sent.GetMessage().GetSenderUserId() != user.String() || sent.GetMessage().GetEncryption() != chatv1.MessageEncryption_MESSAGE_ENCRYPTION_E2E ||
+		sent.GetConversation().GetStatus() != chatv1.ConversationStatus_CONVERSATION_STATUS_REQUEST_SENT ||
 		sent.GetConversation().GetOtherUserId() != to.String() {
 		t.Fatalf("gönderim = %v, %v", sent, err)
 	}
+	// The plain path is gone (issue #151): a body is refused and never
+	// reaches the app layer.
+	app.send = dm.SendInput{}
 	for name, r := range map[string]*chatv1.SendDirectMessageRequest{
 		"recipient_user_id": {RecipientUserId: "x", ClientRequestId: req.String()},
 		"client_request_id": {RecipientUserId: to.String()},
+		"body":              {RecipientUserId: to.String(), ClientRequestId: req.String(), Body: "merhaba", Envelopes: envelopes}, //nolint:staticcheck // the deprecated field must be refused
 	} {
 		_, err := client.SendDirectMessage(ctx, r)
 		if code, reason, meta := reasonOf(err); code != codes.InvalidArgument || reason != "ERROR_REASON_VALIDATION" || meta["field"] != name {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+	if app.send.Recipient != (id.ID{}) {
+		t.Fatalf("geçersiz istek uygulamaya ulaştı: %+v", app.send)
 	}
 	list, err := client.ListConversations(ctx, &chatv1.ListConversationsRequest{PageSize: 3, PageToken: "t"})
 	if err != nil || app.size != 3 || app.token != "t" || list.GetNextPageToken() != "sonraki" ||
@@ -199,7 +208,10 @@ func TestDirectMessageErrors(t *testing.T) {
 	logs := &bytes.Buffer{}
 	app := &fakeDirect{}
 	client, ctx, _ := directConn(t, app, logs)
-	r := &chatv1.SendDirectMessageRequest{RecipientUserId: id.New().String(), Body: "GizliDMGövdesi", ClientRequestId: id.New().String()}
+	r := &chatv1.SendDirectMessageRequest{
+		RecipientUserId: id.New().String(), ClientRequestId: id.New().String(),
+		Envelopes: []*chatv1.OutgoingEnvelope{{DeviceId: id.New().String(), RegistrationId: 3, Type: chatv1.EnvelopeType_ENVELOPE_TYPE_PREKEY, Content: []byte("GizliDMZarfı")}},
+	}
 	for _, tc := range []struct {
 		err    error
 		code   codes.Code
@@ -212,7 +224,6 @@ func TestDirectMessageErrors(t *testing.T) {
 		{apperr.ErrMessageRequestNotFound, codes.NotFound, "ERROR_REASON_MESSAGE_REQUEST_NOT_FOUND"},
 		{apperr.ErrRateLimited, codes.ResourceExhausted, "ERROR_REASON_RATE_LIMITED"},
 		{apperr.ErrMessageNotFound, codes.NotFound, "ERROR_REASON_MESSAGE_NOT_FOUND"},
-		{apperr.ErrDirectMessagesUnavailable, codes.Unavailable, ""},
 		{apperr.ErrUnavailable, codes.Unavailable, ""},
 	} {
 		app.err = tc.err
@@ -226,7 +237,7 @@ func TestDirectMessageErrors(t *testing.T) {
 	if status.Code(err) != codes.Internal || strings.Contains(status.Convert(err).Message(), "test") {
 		t.Fatalf("iç hata: %v", err)
 	}
-	if strings.Contains(logs.String(), "GizliDMGövdesi") {
+	if strings.Contains(logs.String(), "GizliDMZarf") {
 		t.Fatal("log mesaj metni içeriyor")
 	}
 }

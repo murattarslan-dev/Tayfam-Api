@@ -72,21 +72,19 @@ type directMessageJSON struct {
 	ConversationID string `json:"conversation_id"`
 	// Absent when the sender's account was deleted.
 	SenderUserID string `json:"sender_user_id,omitempty"`
-	// Absent when deleted, and always for an end-to-end message.
-	Body       string    `json:"body,omitempty"`
+	// There is no body: the content is in the envelopes only (issue #151).
 	Deleted    bool      `json:"deleted"`
 	Encryption string    `json:"encryption"`
 	CreatedAt  time.Time `json:"created_at"`
 }
 
 var messageEncryptionNames = map[chatv1.MessageEncryption]string{
-	chatv1.MessageEncryption_MESSAGE_ENCRYPTION_SERVER: "server",
-	chatv1.MessageEncryption_MESSAGE_ENCRYPTION_E2E:    "e2e",
+	chatv1.MessageEncryption_MESSAGE_ENCRYPTION_E2E: "e2e",
 }
 
 func directMessageFrom(m *chatv1.DirectMessage) directMessageJSON {
 	return directMessageJSON{
-		ID: m.GetId(), ConversationID: m.GetConversationId(), SenderUserID: m.GetSenderUserId(), Body: m.GetBody(),
+		ID: m.GetId(), ConversationID: m.GetConversationId(), SenderUserID: m.GetSenderUserId(),
 		Deleted: m.GetDeleted(), Encryption: nameOr(messageEncryptionNames, m.GetEncryption()), CreatedAt: m.GetCreateTime().AsTime(),
 	}
 }
@@ -106,12 +104,12 @@ type directMessageSentJSON struct {
 	Conversation conversationJSON  `json:"conversation"`
 }
 
+// directMessageSendBody has no body field: a plain message is an unknown
+// field and so a bad request (issue #151, ADR-0018 §7).
 type directMessageSendBody struct {
-	RecipientUserID string `json:"recipient_user_id"`
-	Body            string `json:"body"`
-	ClientRequestID string `json:"client_request_id"`
-	// End to end (issue #127): instead of Body.
-	Envelopes []outgoingEnvelopeJSON `json:"envelopes"`
+	RecipientUserID string                 `json:"recipient_user_id"`
+	ClientRequestID string                 `json:"client_request_id"`
+	Envelopes       []outgoingEnvelopeJSON `json:"envelopes"`
 }
 
 type outgoingEnvelopeJSON struct {
@@ -145,15 +143,12 @@ func (h chatHandlers) sendDirectMessage(ctx context.Context, w http.ResponseWrit
 		return
 	}
 	envelopes, ok := envelopesProto(b.Envelopes)
-	plain := len(envelopes) == 0
-	if !ok || !validUUID(b.RecipientUserID) || !validUUID(b.ClientRequestID) ||
-		(plain && !messageBodyOK(b.Body)) || (!plain && b.Body != "") ||
-		(plain && r.ContentLength > maxMessageBody) {
+	if !ok || len(envelopes) == 0 || !validUUID(b.RecipientUserID) || !validUUID(b.ClientRequestID) {
 		badRequest(w, r)
 		return
 	}
 	resp, err := h.d.DirectMessages.SendDirectMessage(ctx, &chatv1.SendDirectMessageRequest{
-		RecipientUserId: b.RecipientUserID, Body: b.Body, ClientRequestId: b.ClientRequestID, Envelopes: envelopes,
+		RecipientUserId: b.RecipientUserID, ClientRequestId: b.ClientRequestID, Envelopes: envelopes,
 	})
 	if err != nil {
 		h.failE2E(w, r, err)

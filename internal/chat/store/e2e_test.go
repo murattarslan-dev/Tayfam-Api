@@ -233,8 +233,8 @@ func TestE2EConstraints(t *testing.T) {
 	})
 }
 
-// An end-to-end message never has a body on the server: it cannot decrypt
-// what it does not hold (ADR-0005, dm_messages_body).
+// A direct message never has a body on the server: there is no column for
+// one, and encryption is e2e only (issue #151, dm_messages_encryption).
 func TestE2EMessageHasNoBody(t *testing.T) {
 	pool, q := setup(t)
 	ctx := context.Background()
@@ -248,11 +248,16 @@ func TestE2EMessageHasNoBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Encryption != "e2e" || r.BodyEncrypted != nil || r.KeyVersion.Valid {
+	if r.Encryption != "e2e" {
 		t.Fatalf("e2e mesajı: %+v", r)
 	}
-	_, err = pool.Exec(ctx, `UPDATE dm_messages SET body_encrypted = '\x00', key_version = 1 WHERE id = $1`, m.PG())
-	wantConstraint(t, err, "dm_messages_body")
+	_, err = pool.Exec(ctx, `INSERT INTO dm_messages (id, conversation_id, sender_id, client_request_id, encryption) VALUES ($1, $2, $3, $4, 'server')`,
+		testMessageIDs.next().PG(), conv.PG(), a.PG(), id.New().PG())
+	wantConstraint(t, err, "dm_messages_encryption")
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM information_schema.columns WHERE table_name = 'dm_messages' AND column_name IN ('body_encrypted', 'key_version')`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("metin kolonu: %d %v", n, err)
+	}
 }
 
 func newEnvelope(t *testing.T, q *Queries, message, device, sender id.ID) id.ID {
