@@ -90,17 +90,22 @@ spec:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { memory: 768Mi }
 ---
-# Veritabanları template1'den oluşturulur. CNPG'nin initdb'si template1'i
-# yerel ayar C ile bırakır; bu yüzden yeni cluster'da template1 bir kez ICU
-# tr-TR / C.UTF-8 ile yeniden oluşturulmalıdır (docs/runbooks/flux-kurulumu.md,
-# "Veritabanı oluşmuyor"). Aksi halde Database kaynağı "new collation
-# (C.UTF-8) is incompatible with the collation of the template database (C)"
-# hatasıyla uygulanmaz. (template: template0 burada yazılamaz: kustomize'ın
-# image dönüştürücüsü spec.template'i pod şablonu sanıp hata veriyor.)
+# core ve chat veritabanları template1'den oluşturulur. CNPG'nin initdb'si
+# template1'i (ve identity'yi) ICU tr-TR + LC_COLLATE/LC_CTYPE C ile kurar;
+# veritabanları da aynı ayarla istenir ki template1 ile uyumlu olsun ve yeni
+# bir cluster'da elle template1 düzeltmesi gerekmesin (eski çözüm:
+# docs/runbooks/flux-kurulumu.md, "Veritabanı oluşmuyor"). Sıralama ve harf
+# dönüşümü ICU tr-TR ile yapılır; LC_COLLATE/LC_CTYPE C, identity ile aynıdır.
+# Bu alanlar CNPG'de değiştirilemez; force, Flux'ın kaynağı silip yeniden
+# oluşturmasını sağlar (veritabanı silinmez: databaseReclaimPolicy retain).
+# (template: template0 burada yazılamaz: kustomize'ın image dönüştürücüsü
+# spec.template'i pod şablonu sanıp hata veriyor.)
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
 metadata:
   name: tayfam-pg-core
+  annotations:
+    kustomize.toolkit.fluxcd.io/force: Enabled
 spec:
   cluster: { name: tayfam-pg }
   name: core
@@ -109,7 +114,7 @@ spec:
   encoding: UTF8
   localeProvider: icu
   icuLocale: tr-TR
-  locale: C.UTF-8
+  locale: C
   # Konum sorguları (veri modeli v14) yalnızca core'da.
   extensions:
     - { name: postgis, ensure: present }
@@ -118,6 +123,8 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Database
 metadata:
   name: tayfam-pg-chat
+  annotations:
+    kustomize.toolkit.fluxcd.io/force: Enabled
 spec:
   cluster: { name: tayfam-pg }
   name: chat
@@ -126,4 +133,4 @@ spec:
   encoding: UTF8
   localeProvider: icu
   icuLocale: tr-TR
-  locale: C.UTF-8
+  locale: C
