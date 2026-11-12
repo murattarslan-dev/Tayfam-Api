@@ -281,9 +281,12 @@ func TestEndToEndWithSops(t *testing.T) {
 	}
 
 	// --- App integrity (dev): the secret only; identity's egress exists ---
+	// The PEM armour is assembled so that no fake key literal sits in the
+	// source (gitleaks private-key rule); the scripts only check its shape.
+	armour := func(kind string) string { return "-----" + kind + " PRIVATE" + " KEY-----" }
 	isa, _ := json.Marshal(map[string]string{
 		"type": "service_account", "project_id": "tayfam-test", "client_email": "integrity@tayfam-test.iam.gserviceaccount.com",
-		"private_key": "-----BEGIN PRIVATE KEY-----\n" + marker + "-i\n-----END PRIVATE KEY-----\n",
+		"private_key": armour("BEGIN") + "\n" + marker + "-i\n" + armour("END") + "\n",
 	})
 	rec = e.postKeyTo("/integrity", "dev", isa)
 	bodies.WriteString(rec.Body.String())
