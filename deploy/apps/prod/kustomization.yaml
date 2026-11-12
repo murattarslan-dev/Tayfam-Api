@@ -61,6 +61,15 @@ configMapGenerator:
       # gitleaks onu API anahtarı sanıyor.
       - CF_ACCESS_AUD=d008112c2504d19f293d7859a3d99bd0abfc9d51419f78893a0dee81c2324578 # gitleaks:allow
       - ADMIN_GOOGLE_CLIENT_ID=73439258394-uhd9m0b6mkc5k8eaoup6kgh57a49on4t.apps.googleusercontent.com
+      # Uygulama bütünlüğü (ADR-0022): başlangıç "yalnızca kayıt" (report);
+      # hiçbir istek reddedilmez, sonuçlar oturuma ve sayım log'una yazılır.
+      # Servis hesabı secret'ı identity-integrity (tayfam-integrity-prod).
+      # Sertifika özeti Play App Signing anahtarınındır (Play Console'dan,
+      # platform sahibi 2026-11-12); gizli değildir. Cihaz seviyesi varsayılan
+      # MEETS_STRONG_INTEGRITY. enforce'a geçiş ayrı bir kararla.
+      - INTEGRITY_MODE=report
+      - INTEGRITY_ANDROID_PACKAGE=com.murattarslan.tayfam
+      - INTEGRITY_ANDROID_CERT_SHA256=03:E1:0B:5F:2C:DC:33:73:59:10:8A:BE:5F:B9:8B:7E:B1:56:83:49:C5:BD:AE:8B:E6:4A:0E:23:18:BC:C6:67
       # İstemci sürümü (ADR-0016): platform başına desteklenen en düşük ve en
       # son sürüm. Değişiklik yalnızca bu dosyayla ve yeni bir sürüm etiketiyle
       # dağıtılır; geçersiz değer gateway'in başlamasını engeller.
