@@ -44,6 +44,8 @@ type env struct {
 	api   *auth.Verifier
 	reg   *auth.Verifier
 	clock *time.Time
+	// cfg is the service's configuration, for tests that need a variant.
+	cfg Config
 }
 
 func setup(t *testing.T) *env {
@@ -71,14 +73,15 @@ func setup(t *testing.T) *env {
 		return v
 	}
 	e.api, e.reg = verifier(AudienceAPI), verifier(AudienceRegistration)
-	e.svc, err = New(Config{
+	e.cfg = Config{
 		Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Verifiers:    map[string]oidc.Verifier{"google": fakeGoogle{}},
 		API:          signer(AudienceAPI),
 		Registration: signer(AudienceRegistration),
 		Documents:    testDocs,
 		Now:          clock,
-	})
+	}
+	e.svc, err = New(e.cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,11 +160,11 @@ func TestSignInRejects(t *testing.T) {
 		in   SignInInput
 		want error
 	}{
-		"geçersiz token":       {SignInInput{"google", "bozuk", "n", "android"}, ErrInvalidCredentials},
-		"yanlış nonce":         {SignInInput{"google", "ok:x", "baska", "android"}, ErrInvalidCredentials},
-		"bilinmeyen sağlayıcı": {SignInInput{"facebook", "ok:x", "n", "android"}, ErrUnsupportedProvider},
-		"bilinmeyen platform":  {SignInInput{"google", "ok:x", "n", "symbian"}, ErrInvalidCredentials},
-		"sağlayıcı erişilemez": {SignInInput{"google", "down", "n", "android"}, ErrUnavailable},
+		"geçersiz token":       {SignInInput{Provider: "google", IDToken: "bozuk", Nonce: "n", Platform: "android"}, ErrInvalidCredentials},
+		"yanlış nonce":         {SignInInput{Provider: "google", IDToken: "ok:x", Nonce: "baska", Platform: "android"}, ErrInvalidCredentials},
+		"bilinmeyen sağlayıcı": {SignInInput{Provider: "facebook", IDToken: "ok:x", Nonce: "n", Platform: "android"}, ErrUnsupportedProvider},
+		"bilinmeyen platform":  {SignInInput{Provider: "google", IDToken: "ok:x", Nonce: "n", Platform: "symbian"}, ErrInvalidCredentials},
+		"sağlayıcı erişilemez": {SignInInput{Provider: "google", IDToken: "down", Nonce: "n", Platform: "android"}, ErrUnavailable},
 	} {
 		if _, err := e.svc.SignIn(ctx, tc.in); !errors.Is(err, tc.want) {
 			t.Errorf("%s: err = %v, %v bekleniyordu", name, err, tc.want)
@@ -175,7 +178,7 @@ func TestAgeBlockedCannotSignIn(t *testing.T) {
 	if _, err := store.New(e.pool).BlockRegistrationForAge(context.Background(), tok.UserID.PG()); err != nil {
 		t.Fatal(err)
 	}
-	_, err := e.svc.SignIn(context.Background(), SignInInput{"google", "ok:sub-genc", "n", "android"})
+	_, err := e.svc.SignIn(context.Background(), SignInInput{Provider: "google", IDToken: "ok:sub-genc", Nonce: "n", Platform: "android"})
 	if !errors.Is(err, ErrAgeBlocked) {
 		t.Fatalf("err = %v", err)
 	}
@@ -277,7 +280,7 @@ func TestConcurrentFirstSignInCreatesOneUser(t *testing.T) {
 	errs := make([]error, 8)
 	for i := range ids {
 		wg.Go(func() {
-			tok, err := e.svc.SignIn(context.Background(), SignInInput{"google", "ok:yaris", "n", "web"})
+			tok, err := e.svc.SignIn(context.Background(), SignInInput{Provider: "google", IDToken: "ok:yaris", Nonce: "n", Platform: "web"})
 			ids[i], errs[i] = tok.UserID, err
 		})
 	}

@@ -113,14 +113,18 @@ type RefreshToken struct {
 }
 
 type Session struct {
-	ID              pgtype.UUID
-	UserID          pgtype.UUID
-	DeviceID        pgtype.UUID
-	CreatedAt       pgtype.Timestamptz
-	LastRefreshedAt pgtype.Timestamptz
-	ExpiresAt       pgtype.Timestamptz
-	RevokedAt       pgtype.Timestamptz
-	RevokedReason   pgtype.Text
+	ID                 pgtype.UUID
+	UserID             pgtype.UUID
+	DeviceID           pgtype.UUID
+	CreatedAt          pgtype.Timestamptz
+	LastRefreshedAt    pgtype.Timestamptz
+	ExpiresAt          pgtype.Timestamptz
+	RevokedAt          pgtype.Timestamptz
+	RevokedReason      pgtype.Text
+	IntegrityStatus    string
+	IntegrityReason    pgtype.Text
+	IntegrityCheckedAt pgtype.Timestamptz
+	IntegrityPassedAt  pgtype.Timestamptz
 }
 
 type User struct {

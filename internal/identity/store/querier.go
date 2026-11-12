@@ -143,6 +143,10 @@ type Querier interface {
 	// Hazır: hesap silinmemişse ve talep hâlâ hazırlanıyorsa.
 	MarkDataExportReady(ctx context.Context, arg MarkDataExportReadyParams) (int64, error)
 	MarkRefreshTokenUsed(ctx context.Context, id pgtype.UUID) (int64, error)
+	// Yenilemeden önce, kilitsiz: oturumun bütünlük denetimi gerekiyor mu ve
+	// cihaz hangi platformda (ADR-0022). Google'a transaction dışında gidilir;
+	// karar transaction'da kilitli satırla yeniden verilir.
+	PeekRefreshIntegrity(ctx context.Context, tokenHash []byte) (PeekRefreshIntegrityRow, error)
 	// Satır 30 gün tutulur ("30 günde bir" sınırı); anahtarsız ve dosyasızdır.
 	PurgeDataExports(ctx context.Context, arg PurgeDataExportsParams) (int64, error)
 	// 30 gün önce silinmiş hesaplar kalıcı silinir. consent_records'un
@@ -191,6 +195,8 @@ type Querier interface {
 	// Referans kayıtta bir kez yazılır (trigger users_referral_once da
 	// korur). Referans veren kayıtlı ve silinmemiş olmalıdır.
 	SetReferrer(ctx context.Context, arg SetReferrerParams) (int64, error)
+	// Oturumun bütünlük özeti (ADR-0022, issue #163).
+	SetSessionIntegrity(ctx context.Context, arg SetSessionIntegrityParams) error
 	// Katılım geçmişinin kime görüneceği (v14 "Profil görünürlüğü").
 	// Avatar (issue #135): core'un, çağıranın kendi token'ıyla doğruladığı
 	// yükleme kimliği; NULL avatarı kaldırır.

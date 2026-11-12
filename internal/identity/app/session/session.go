@@ -28,6 +28,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/consent"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/integrity"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/oidc"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/userevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/store"
@@ -100,6 +101,12 @@ type Tokens struct {
 	// current version of the privacy notice or terms. The client shows the
 	// new texts and calls AccountService.AcceptConsents (v14 "Onay kaydı").
 	ConsentRequired bool
+	// IntegrityPassed: the session passed its last integrity check
+	// (ADR-0022); the access token's claim (issue #164).
+	IntegrityPassed bool
+	// IntegrityCheckAfter is when the client should next send an integrity
+	// proof with a refresh; zero when integrity checks are off.
+	IntegrityCheckAfter time.Time
 }
 
 // Config wires a Service.
@@ -114,6 +121,9 @@ type Config struct {
 	// Documents are the current text versions; a registered user who has
 	// not accepted them gets Tokens.ConsentRequired.
 	Documents consent.Documents
+	// Integrity checks that sessions belong to the official app (ADR-0022);
+	// nil is off.
+	Integrity *integrity.Checker
 	Now       func() time.Time
 }
 
@@ -140,6 +150,9 @@ type SignInInput struct {
 	IDToken  string
 	Nonce    string
 	Platform string
+	// Integrity is the optional proof that the official app signs in
+	// (ADR-0022), bound to Nonce.
+	Integrity integrity.Proof
 }
 
 // SignIn verifies the provider token, finds or creates the user and opens a
@@ -160,12 +173,18 @@ func (s *Service) SignIn(ctx context.Context, in SignInInput) (Tokens, error) {
 	if err != nil {
 		return Tokens{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
+	// The integrity check runs after the ID token is verified (a bad sign-in
+	// spends no quota) and outside the transaction (it asks Google).
+	var check *integrity.Result
+	if s.cfg.Integrity.Enabled() {
+		check = s.cfg.Integrity.Check(ctx, in.Platform, in.Integrity, integrity.SignInBinding(in.Nonce))
+	}
 
 	// Two first sign-ins of the same account can race to create it; the
 	// loser hits the unique key and retries, finding the winner's account.
 	var t Tokens
 	for attempt := 0; ; attempt++ {
-		t, err = s.signInTx(ctx, ident, in.Platform)
+		t, err = s.signInTx(ctx, ident, in.Platform, check)
 		var pgErr *pgconn.PgError
 		if attempt == 0 && errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			continue
@@ -183,7 +202,7 @@ func (s *Service) SignIn(ctx context.Context, in SignInInput) (Tokens, error) {
 	return t, nil
 }
 
-func (s *Service) signInTx(ctx context.Context, ident oidc.Identity, platform string) (Tokens, error) {
+func (s *Service) signInTx(ctx context.Context, ident oidc.Identity, platform string, check *integrity.Result) (Tokens, error) {
 	var t Tokens
 	err := pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
@@ -240,17 +259,30 @@ func (s *Service) signInTx(ctx context.Context, ident oidc.Identity, platform st
 			return fmt.Errorf("refresh token: %w", err)
 		}
 		t, err = s.issue(ctx, q, userID, sessionID, user.RegisteredAt.Valid, refresh, expires)
-		return err
+		if err != nil {
+			return err
+		}
+		return s.applyIntegrity(ctx, q, sessionID, integrity.State{Status: integrity.StatusUnverified}, check, &t)
 	})
 	return t, err
 }
 
 // Refresh exchanges a refresh token for a new access and refresh token.
 func (s *Service) Refresh(ctx context.Context, refreshToken string) (Tokens, error) {
+	return s.RefreshWithProof(ctx, refreshToken, integrity.Proof{})
+}
+
+// RefreshWithProof is Refresh with an integrity proof bound to refreshToken
+// (ADR-0022). The proof is checked only when the session is due
+// (Tokens.IntegrityCheckAfter); a due session without a proof is recorded
+// as such. Nothing is refused for integrity here: enforcement is gateway's
+// (issue #164).
+func (s *Service) RefreshWithProof(ctx context.Context, refreshToken string, proof integrity.Proof) (Tokens, error) {
 	hash, ok := hashRefreshToken(refreshToken)
 	if !ok {
 		return Tokens{}, ErrInvalidRefresh
 	}
+	check := s.refreshCheck(ctx, hash, refreshToken, proof)
 	var (
 		t       Tokens
 		revoked id.ID
@@ -317,7 +349,15 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (Tokens, err
 		}
 		userID, _ := id.FromPG(row.UserID)
 		t, err = s.issue(ctx, q, userID, sessionID, user.RegisteredAt.Valid, refresh, expires)
-		return err
+		if err != nil {
+			return err
+		}
+		prev := stateOf(row.IntegrityStatus, row.IntegrityReason, row.IntegrityCheckedAt, row.IntegrityPassedAt)
+		if check != nil && !prev.Due(now) {
+			// Another refresh checked the session in the meantime.
+			check = nil
+		}
+		return s.applyIntegrity(ctx, q, sessionID, prev, check, &t)
 	})
 	if revoked != (id.ID{}) {
 		s.cfg.Log.WarnContext(ctx, "kullanılmış refresh token tekrar geldi; oturum iptal edildi",
@@ -529,3 +569,69 @@ func hashRefreshToken(token string) ([]byte, bool) {
 
 func ts(t time.Time) pgtype.Timestamptz { return pgtype.Timestamptz{Time: t, Valid: true} }
 func text(s string) pgtype.Text         { return pgtype.Text{String: s, Valid: true} }
+
+// refreshCheck runs the integrity check of a refresh before its transaction
+// (it may ask Google), if the session is due. nil means no check.
+func (s *Service) refreshCheck(ctx context.Context, hash []byte, refreshToken string, proof integrity.Proof) *integrity.Result {
+	if !s.cfg.Integrity.Enabled() {
+		return nil
+	}
+	row, err := s.q.PeekRefreshIntegrity(ctx, hash)
+	if err != nil {
+		// An unknown, used or revoked token: the transaction answers it.
+		return nil
+	}
+	prev := stateOf(row.IntegrityStatus, row.IntegrityReason, row.IntegrityCheckedAt, row.IntegrityPassedAt)
+	if !prev.Due(s.cfg.Now()) {
+		return nil
+	}
+	return s.cfg.Integrity.Check(ctx, row.Platform, proof, integrity.RefreshBinding(refreshToken))
+}
+
+// applyIntegrity stores the session's next integrity state, when a check
+// ran, and puts it on t. With checks off it does nothing.
+func (s *Service) applyIntegrity(ctx context.Context, q *store.Queries, session id.ID, prev integrity.State, check *integrity.Result, t *Tokens) error {
+	if !s.cfg.Integrity.Enabled() {
+		return nil
+	}
+	now := s.cfg.Now()
+	next := integrity.Next(prev, check, now)
+	if check != nil {
+		if err := q.SetSessionIntegrity(ctx, store.SetSessionIntegrityParams{
+			ID: session.PG(), Status: string(next.Status), Reason: optText(string(next.Reason)),
+			CheckedAt: optTS(next.CheckedAt), PassedAt: optTS(next.PassedAt),
+		}); err != nil {
+			return fmt.Errorf("oturum bütünlüğü: %w", err)
+		}
+	}
+	t.IntegrityPassed = next.Passed()
+	t.IntegrityCheckAfter = next.CheckAfter(now)
+	return nil
+}
+
+// stateOf reads a session's stored integrity state.
+func stateOf(status string, reason pgtype.Text, checked, passed pgtype.Timestamptz) integrity.State {
+	st := integrity.State{Status: integrity.Status(status), Reason: integrity.Reason(reason.String)}
+	if checked.Valid {
+		st.CheckedAt = checked.Time.UTC()
+	}
+	if passed.Valid {
+		st.PassedAt = passed.Time.UTC()
+	}
+	return st
+}
+
+// optText is NULL for "" (a passed or never checked session has no reason).
+func optText(v string) pgtype.Text {
+	if v == "" {
+		return pgtype.Text{}
+	}
+	return text(v)
+}
+
+func optTS(t time.Time) pgtype.Timestamptz {
+	if t.IsZero() {
+		return pgtype.Timestamptz{}
+	}
+	return ts(t)
+}

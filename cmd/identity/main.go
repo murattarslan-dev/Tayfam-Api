@@ -24,6 +24,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/coremedia"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/dataexport"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/deletion"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/integrity"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/minor"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/oidc"
@@ -35,6 +36,7 @@ import (
 	grpcapi "github.com/murattarslan-dev/tayfam-api/internal/identity/transport/grpc"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/googleauth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/grpcx"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/outbox"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/service"
@@ -101,12 +103,17 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
+	checker, err := integrityChecker(rt)
+	if err != nil {
+		return err
+	}
 	sessions, err := session.New(session.Config{
 		Pool: pool, Log: rt.Log,
 		Verifiers:    map[string]oidc.Verifier{"google": google},
 		API:          apiSigner,
 		Registration: regSigner,
 		Documents:    docs,
+		Integrity:    checker,
 	})
 	if err != nil {
 		return err
@@ -324,4 +331,44 @@ func splitList(s string) []string {
 		}
 	}
 	return out
+}
+
+// integrityChecker builds the app integrity check (ADR-0022, issue #163).
+// INTEGRITY_MODE is off unless set; report and enforce need the Play
+// Integrity service account (secret, SOPS) and the app's package name and
+// signing certificate digests (not secret). A wrong value stops the service:
+// running unchecked by mistake would look like a working check.
+func integrityChecker(rt *service.Runtime) (*integrity.Checker, error) {
+	c := rt.Config
+	mode := integrity.Mode(c.OneOf("INTEGRITY_MODE", "off", "off", "report", "enforce"))
+	if err := c.Err(); err != nil {
+		return nil, err
+	}
+	if mode == integrity.ModeOff {
+		rt.Log.Info("uygulama bütünlüğü kapalı (INTEGRITY_MODE=off)")
+		return integrity.NewChecker(integrity.Config{Mode: mode, Log: rt.Log})
+	}
+	account := c.Required("INTEGRITY_SERVICE_ACCOUNT")
+	pkg := c.Required("INTEGRITY_ANDROID_PACKAGE")
+	certs := splitList(c.Required("INTEGRITY_ANDROID_CERT_SHA256"))
+	label := c.OneOf("INTEGRITY_ANDROID_DEVICE_LEVEL", integrity.LabelStrong, integrity.LabelBasic, integrity.LabelDevice, integrity.LabelStrong)
+	if err := c.Err(); err != nil {
+		return nil, err
+	}
+	acct, err := googleauth.ParseServiceAccount([]byte(account))
+	if err != nil {
+		return nil, err
+	}
+	tokens, err := googleauth.New(googleauth.Config{Account: acct, Scope: integrity.PlayScope})
+	if err != nil {
+		return nil, err
+	}
+	play, err := integrity.NewPlay(integrity.PlayConfig{Tokens: tokens, Package: pkg, CertDigests: certs, DeviceLabel: label})
+	if err != nil {
+		return nil, err
+	}
+	rt.Log.Info("uygulama bütünlüğü açık",
+		slog.String("mode", string(mode)), slog.String("project_id", acct.ProjectID()),
+		slog.String("device_level", label))
+	return integrity.NewChecker(integrity.Config{Mode: mode, Play: play, Log: rt.Log})
 }

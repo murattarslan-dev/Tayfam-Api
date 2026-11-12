@@ -46,7 +46,8 @@ func (q *Queries) ExtendSession(ctx context.Context, arg ExtendSessionParams) er
 
 const lockRefreshToken = `-- name: LockRefreshToken :one
 SELECT rt.id, rt.session_id, rt.used_at,
-       s.user_id, s.device_id, s.expires_at, s.revoked_at
+       s.user_id, s.device_id, s.expires_at, s.revoked_at,
+       s.integrity_status, s.integrity_reason, s.integrity_checked_at, s.integrity_passed_at
 FROM refresh_tokens rt
 JOIN sessions s ON s.id = rt.session_id
 WHERE rt.token_hash = $1
@@ -54,13 +55,17 @@ FOR UPDATE OF rt, s
 `
 
 type LockRefreshTokenRow struct {
-	ID        pgtype.UUID
-	SessionID pgtype.UUID
-	UsedAt    pgtype.Timestamptz
-	UserID    pgtype.UUID
-	DeviceID  pgtype.UUID
-	ExpiresAt pgtype.Timestamptz
-	RevokedAt pgtype.Timestamptz
+	ID                 pgtype.UUID
+	SessionID          pgtype.UUID
+	UsedAt             pgtype.Timestamptz
+	UserID             pgtype.UUID
+	DeviceID           pgtype.UUID
+	ExpiresAt          pgtype.Timestamptz
+	RevokedAt          pgtype.Timestamptz
+	IntegrityStatus    string
+	IntegrityReason    pgtype.Text
+	IntegrityCheckedAt pgtype.Timestamptz
+	IntegrityPassedAt  pgtype.Timestamptz
 }
 
 // Yenilemede token ve oturumu birlikte kilitler; aynı token'la eşzamanlı iki
@@ -76,6 +81,10 @@ func (q *Queries) LockRefreshToken(ctx context.Context, tokenHash []byte) (LockR
 		&i.DeviceID,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.IntegrityStatus,
+		&i.IntegrityReason,
+		&i.IntegrityCheckedAt,
+		&i.IntegrityPassedAt,
 	)
 	return i, err
 }
@@ -91,4 +100,36 @@ func (q *Queries) MarkRefreshTokenUsed(ctx context.Context, id pgtype.UUID) (int
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const peekRefreshIntegrity = `-- name: PeekRefreshIntegrity :one
+SELECT s.integrity_status, s.integrity_reason, s.integrity_checked_at, s.integrity_passed_at, d.platform
+FROM refresh_tokens rt
+JOIN sessions s ON s.id = rt.session_id
+JOIN devices d ON d.id = s.device_id
+WHERE rt.token_hash = $1 AND rt.used_at IS NULL AND s.revoked_at IS NULL
+`
+
+type PeekRefreshIntegrityRow struct {
+	IntegrityStatus    string
+	IntegrityReason    pgtype.Text
+	IntegrityCheckedAt pgtype.Timestamptz
+	IntegrityPassedAt  pgtype.Timestamptz
+	Platform           string
+}
+
+// Yenilemeden önce, kilitsiz: oturumun bütünlük denetimi gerekiyor mu ve
+// cihaz hangi platformda (ADR-0022). Google'a transaction dışında gidilir;
+// karar transaction'da kilitli satırla yeniden verilir.
+func (q *Queries) PeekRefreshIntegrity(ctx context.Context, tokenHash []byte) (PeekRefreshIntegrityRow, error) {
+	row := q.db.QueryRow(ctx, peekRefreshIntegrity, tokenHash)
+	var i PeekRefreshIntegrityRow
+	err := row.Scan(
+		&i.IntegrityStatus,
+		&i.IntegrityReason,
+		&i.IntegrityCheckedAt,
+		&i.IntegrityPassedAt,
+		&i.Platform,
+	)
+	return i, err
 }
