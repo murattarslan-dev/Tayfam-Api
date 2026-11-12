@@ -244,10 +244,16 @@ func TestEndToEndWithSops(t *testing.T) {
 	}
 
 	// --- Push (prod): secret list, egress and the required patch ---
+	// The fake keys' PEM armour is assembled so that no armour line sits in
+	// the source: gitleaks' private-key rule matches from a BEGIN armour
+	// line to any later closing armour in the file (main's scan reads the
+	// whole tree). The scripts only check the shape; the value is a random
+	// marker, not a key.
+	armour := func(kind string) string { return "-----" + kind + " PRIVATE KEY" + "-----" }
 	marker := "FAKEKEY" + randHex(t, 20)
 	sa, _ := json.Marshal(map[string]string{
 		"type": "service_account", "project_id": "tayfam-test", "client_email": "push@tayfam-test.iam.gserviceaccount.com",
-		"private_key": "-----BEGIN PRIVATE KEY-----\n" + marker + "\n-----END PRIVATE KEY-----\n",
+		"private_key": armour("BEGIN") + "\n" + marker + "\n" + armour("END") + "\n",
 	})
 	pretty := append(bytes.ReplaceAll(sa, []byte(","), []byte(",\n  ")), '\n')
 	rec = e.postKey("prod", pretty)
@@ -281,9 +287,6 @@ func TestEndToEndWithSops(t *testing.T) {
 	}
 
 	// --- App integrity (dev): the secret only; identity's egress exists ---
-	// The PEM armour is assembled so that no fake key literal sits in the
-	// source (gitleaks private-key rule); the scripts only check its shape.
-	armour := func(kind string) string { return "-----" + kind + " PRIVATE" + " KEY-----" }
 	isa, _ := json.Marshal(map[string]string{
 		"type": "service_account", "project_id": "tayfam-test", "client_email": "integrity@tayfam-test.iam.gserviceaccount.com",
 		"private_key": armour("BEGIN") + "\n" + marker + "-i\n" + armour("END") + "\n",
