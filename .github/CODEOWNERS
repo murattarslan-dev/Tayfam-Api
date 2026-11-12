@@ -10,10 +10,15 @@
 # Yetki kontrolleri
 /internal/core/app/tayfa/               @murattarslan-dev
 /internal/core/app/authz/               @murattarslan-dev
+# Dosyaların görme kuralları ve imzalı linkler (ADR-0020)
+/internal/core/app/media/               @murattarslan-dev
 
 # E2E ve DM arşivi
 /internal/chat/app/dm/                  @murattarslan-dev
 /internal/chat/app/keys/                @murattarslan-dev
+
+# Push gönderimi ve FCM kimliği (ADR-0019)
+/internal/chat/app/push/                @murattarslan-dev
 
 # Platform yönetim paneli
 /internal/gateway/admin/                @murattarslan-dev
@@ -34,6 +39,11 @@
 /scripts/new-db-secrets.sh @murattarslan-dev
 /scripts/new-birthdate-key.sh @murattarslan-dev
 /scripts/new-chat-message-key.sh @murattarslan-dev
+/scripts/new-chat-fcm-secret.sh @murattarslan-dev
+/scripts/new-export-key.sh @murattarslan-dev
+/scripts/new-r2-secret.sh @murattarslan-dev
+/scripts/new-tunnel-token.sh @murattarslan-dev
+/scripts/lib/secrets.sh @murattarslan-dev
 
 # Cluster çapında altyapı (operatörler, CRD'ler)
 /deploy/infra/ @murattarslan-dev
