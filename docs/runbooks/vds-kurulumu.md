@@ -486,3 +486,15 @@ Prod ilk gerçek kullanıcı verisini almadan önce (ADR-0006, ADR-0010, ADR-001
 - [ ] Google OAuth consent screen *In production* ve doğrulama; hukuki
       yapılacaklar (ADR-0008).
 - [ ] VDS'in sağlayıcı paneli ve Cloudflare hesabında 2FA (ADR-0011 madde 2).
+- [ ] **Yayına kadar geçerli gevşetmeler geri alınır** (ADR-0006 revizyon
+      2026-11-12): `deploy/clusters/vds/tayfam-prod.yaml` tekrar `prod`
+      etiketine ve `prod.yml` imzasına; `ci.yml` "Dev dağıtımı" adımındaki
+      `apps/prod` sabitlemesi kaldırılır; `deploy/hostops/` ve
+      `deploy/apps/prod/flux-vds.yaml`'daki `vds-hostops` silinir (bir sürüm
+      sonra `tayfam-hostops` namespace'inin silindiği doğrulanır).
+- [ ] **Bütün prod anahtarları yenilenir:** age anahtarı (özel kısmı bu kez
+      parola yöneticisine de yedeklenir), imzalama, veritabanı, doğum tarihi,
+      mesaj, dışa aktarma anahtarları, tünel, R2 ve FCM; prod'a ayrı Google
+      OAuth client'ı (`GOOGLE_CLIENT_IDS`). Test verisi silinir.
+- [ ] Sağlayıcıda konsol (VNC) yok: en az iki ayrı cihazda SSH anahtarı ve
+      sağlayıcıdan snapshot/kurtarma seçeneği netleşmiş olmalı.

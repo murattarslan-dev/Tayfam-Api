@@ -1,0 +1,13 @@
+# VDS'in kendisinde (node üzerinde) yapılması gereken, adı konmuş tek seferlik
+# işler. Yalnızca yayına kadar (ADR-0006 revizyon 2026-11-12): sunucu dev olarak
+# kullanılırken SSH'a bağlanmadan bakım yapmak için. Her iş ayrı, idempotent bir
+# Job'dur; genel bir "betik çalıştır" mekanizması yoktur. Yayın öncesi bu dizin
+# ve deploy/apps/prod/flux-vds.yaml'daki vds-hostops kaldırılır
+# (docs/runbooks/vds-kurulumu.md, "Pilot öncesi şartlar").
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: tayfam-hostops
+resources:
+  - namespace.yaml
+  - networkpolicy.yaml
+  - apparmor-sysctl.yaml

@@ -1,0 +1,39 @@
+# Yayına kadar VDS'i SSH'sız işletmek için (ADR-0006 revizyon 2026-11-12):
+#   vds-cluster  deploy/clusters/vds'i repodan uygular: Flux kaynağı ve
+#                Kustomization tanımları elle kubectl apply gerektirmez.
+#                prune: false; bu nesne silinirse Flux'ın kendi tanımları
+#                silinmesin.
+#   vds-hostops  deploy/hostops/vds: node üzerinde adı konmuş bakım işleri.
+# Bu dosyadaki nesneler kustomize tarafından tayfam-prod namespace'ine konur;
+# kaynak flux-system'deki OCIRepository'dir.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: vds-cluster
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 3m
+  sourceRef:
+    kind: OCIRepository
+    name: tayfam-deploy
+    namespace: flux-system
+  path: ./clusters/vds
+  prune: false
+  wait: false
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: vds-hostops
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 3m
+  sourceRef:
+    kind: OCIRepository
+    name: tayfam-deploy
+    namespace: flux-system
+  path: ./hostops/vds
+  prune: true
+  wait: true

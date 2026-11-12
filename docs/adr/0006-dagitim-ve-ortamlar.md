@@ -205,6 +205,33 @@ Ortamlar hiçbir kaynağı paylaşmaz:
   prod iş akışının `refs/tags/v*` ile attığı imzayı kabul eder; dev artifact'ı
   (`main` imzası) prod'da, prod artifact'ı dev'de uygulanmaz.
 
+### Yayına kadar VDS'in dev olarak kullanılması (revizyon 2026-11-12)
+
+Platform sahibinin kararı (2026-11-11/12): ev bilgisayarı gün içinde kapalı
+olduğu için VDS prod olarak kuruldu, yayına kadar dev olarak kullanılır;
+yayından sonra ayrı bir dev kurulur. Bu süre için:
+
+- **VDS main'i izler.** `deploy/clusters/vds` CI'ın main'de yayınladığı ve
+  imzaladığı `dev` artifact'ını kullanır; `ci.yml` bu artifact'ta
+  `apps/prod`'u da o commit'in image'larına sabitler. Etiketli sürüm gerekmez.
+- **Cluster tanımları repodan uygulanır.** `apps/prod/flux-vds.yaml`'daki
+  `vds-cluster` Kustomization'ı `deploy/clusters/vds`'i uygular; elle
+  `kubectl apply` gerekmez.
+- **Node üzerindeki işler adı konmuş Job'larla yapılır.** `deploy/hostops/vds`
+  yalnızca `tayfam-hostops` namespace'inde (PSS `privileged`) çalışan,
+  idempotent, ağsız Job'lar içerir; genel bir betik çalıştırma mekanizması
+  yoktur. Gerekçe: sağlayıcıda konsol yok ve sunucu işleri için SSH bağımlılığı
+  kaldırıldı. Kabul edilen risk: Flux zaten cluster-admin olduğundan repoya
+  yazabilen sunucuda root olabiliyordu; bu düzen bunu yeni bir yetki olarak
+  eklemez, ancak kullanımını kolaylaştırır.
+- **Secret'lar sunucuda üretildi** (CLAUDE.md kural 6'dan sapma): bunlar bu
+  sunucunun kendi secret'ları; sunucu ele geçirilirse zaten erişilebilirler.
+- Yayın öncesi bunların hepsi geri alınır ve bütün anahtarlar yenilenir
+  (`docs/runbooks/vds-kurulumu.md`, "Pilot öncesi şartlar").
+- Ubuntu 26.04'te `kernel.apparmor_restrict_unprivileged_unconfined=0`
+  gerekir (Postgres süreçleri arası sinyaller AppArmor tarafından
+  reddediliyordu); `deploy/hostops/vds/apparmor-sysctl.yaml` bunu kalıcı yapar.
+
 ## Gerekçe
 
 - Ev bilgisayarıyla başlamak, öğrenme aşamasında maliyeti sıfıra yakın tutar.

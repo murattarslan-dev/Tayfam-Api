@@ -1,0 +1,45 @@
+# Ubuntu 26.04'te kernel.apparmor_restrict_unprivileged_unconfined=1 iken
+# container içinde sonradan başlatılan süreçler "yığılmış" AppArmor profili
+# alıyor ve aynı container'daki süreçler arası sinyaller (SIGURG, SIGTERM)
+# reddediliyor; Postgres bağlantıları "authentication" aşamasında asılı
+# kalıyor (2026-11-12, dmesg: apparmor="DENIED" operation="signal").
+# Bu iş ayarı kalıcı yazar ve hemen uygular. Container'ların kendi AppArmor
+# profilleri değişmez. İmaj: node'da zaten bulunan, digest ile sabit Postgres
+# imajı (bash ve coreutils için; yeni imaj çekilmez).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: apparmor-sysctl
+  annotations:
+    # Job şablonu değiştirilemez; değişince Flux silip yeniden oluşturur.
+    kustomize.toolkit.fluxcd.io/force: Enabled
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/hostname: tayfam-prod
+      automountServiceAccountToken: false
+      containers:
+        - name: sysctl
+          image: ghcr.io/cloudnative-pg/postgis:18.6-3.7.0-202611030856-standard-trixie@sha256:adb255e84c710de32b5c04fefdfe549336ced2775d7060a3a1973561f18cc7de
+          command: ["/bin/bash", "-euc"]
+          args:
+            - |
+              printf '%s\n' '# Tayfam: deploy/hostops/vds/apparmor-sysctl.yaml' \
+                'kernel.apparmor_restrict_unprivileged_unconfined = 0' \
+                > /host-sysctl/60-tayfam-apparmor.conf
+              echo 0 > /proc/sys/kernel/apparmor_restrict_unprivileged_unconfined
+              echo "kernel.apparmor_restrict_unprivileged_unconfined=$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_unconfined)"
+          securityContext:
+            privileged: true
+            runAsUser: 0
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 64Mi }
+          volumeMounts:
+            - { name: sysctl-d, mountPath: /host-sysctl }
+      volumes:
+        - name: sysctl-d
+          hostPath: { path: /etc/sysctl.d, type: Directory }

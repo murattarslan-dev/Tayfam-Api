@@ -1,0 +1,10 @@
+# Yetkili (privileged) pod'lara izin veren tek namespace. Uygulama pod'ları
+# burada çalışmaz; tayfam-prod "restricted" kalır.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tayfam-hostops
+  labels:
+    app.kubernetes.io/part-of: tayfam
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: privileged

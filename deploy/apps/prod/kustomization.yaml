@@ -16,6 +16,7 @@ resources:
   - secrets
   - core-egress-r2.yaml
   - chat-egress-internet.yaml
+  - flux-vds.yaml
 
 patches:
   # Tek node'lu 4–8 GB VDS'e göre istek ve limitler (base ev cluster'ına göre).
