@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -36,6 +37,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/report"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -787,7 +789,17 @@ func (s *Service) UnmuteMember(ctx context.Context, caller, tayfa, target id.ID)
 
 // BanMember bans an active or pending member of a lower role (a pending user
 // counts as member). The row is kept so the user cannot join again.
-func (s *Service) BanMember(ctx context.Context, caller, tayfa, target id.ID) error {
+//
+// reason is optional: a report reason other than staff_conduct, recorded in
+// the audit log as a classification (issue #150). It is never free text.
+func (s *Service) BanMember(ctx context.Context, caller, tayfa, target id.ID, reason report.Reason) error {
+	if reason != "" && (reason == report.ReasonStaffConduct || !slices.Contains(report.Reasons(), reason)) {
+		return apperr.Validation("reason")
+	}
+	meta := map[string]any{}
+	if reason != "" {
+		meta["reason"] = string(reason)
+	}
 	return s.moderate(ctx, caller, tayfa, target, authz.MemberBan, func(q *store.Queries, tm store.GetMembershipRow, actorRole authz.Role) error {
 		if tm.Status != string(authz.StatusActive) && tm.Status != string(authz.StatusPending) {
 			return apperr.ErrMemberNotFound
@@ -802,7 +814,8 @@ func (s *Service) BanMember(ctx context.Context, caller, tayfa, target id.ID) er
 		if n != 1 {
 			return apperr.ErrMemberNotFound
 		}
-		return s.membershipChanged(ctx, q, tayfa, caller, target, changeBanned, map[string]any{"from_status": tm.Status})
+		meta["from_status"] = tm.Status
+		return s.membershipChanged(ctx, q, tayfa, caller, target, changeBanned, meta)
 	})
 }
 

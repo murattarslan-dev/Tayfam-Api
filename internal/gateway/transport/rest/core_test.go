@@ -85,7 +85,8 @@ func testTayfa() *corev1.Tayfa {
 			{Module: corev1.Module_MODULE_POLLS, Enabled: true},
 		},
 		Status: corev1.TayfaStatus_TAYFA_STATUS_ACTIVE, MemberCount: 1, JoinCode: "K7M2P9QX",
-		CreateTime: timestamppb.New(t0), UpdateTime: timestamppb.New(t0),
+		PendingJoinRequestCount: new(int32(3)),
+		CreateTime:              timestamppb.New(t0), UpdateTime: timestamppb.New(t0),
 	}
 }
 
@@ -335,7 +336,8 @@ func TestCreateTayfa(t *testing.T) {
 	}
 	b := decodeBody[tayfaJSON](t, w)
 	if b.ID != tayfaID || b.JoinPolicy != "approval" || !slices.Equal(b.Interests, []string{"convoy", "camp"}) ||
-		b.Status != "active" || b.JoinCode != "K7M2P9QX" || !b.CreatedAt.Equal(t0) {
+		b.Status != "active" || b.JoinCode != "K7M2P9QX" || !b.CreatedAt.Equal(t0) ||
+		b.PendingJoinRequestCount == nil || *b.PendingJoinRequestCount != 3 {
 		t.Fatalf("gövde = %+v", b)
 	}
 	if len(b.Modules) != 4 || !b.Modules["events"] || b.Modules["qa"] {
@@ -548,6 +550,9 @@ func TestMemberManagement(t *testing.T) {
 		{"PUT", base + "/members/" + userID + "/mute", `{"muted_until":"` + until.Format(time.RFC3339) + `"}`, 200, &corev1.MuteMemberRequest{TayfaId: tayfaID, UserId: userID, ExpireTime: timestamppb.New(until)}},
 		{"DELETE", base + "/members/" + userID + "/mute", "", 200, &corev1.UnmuteMemberRequest{TayfaId: tayfaID, UserId: userID}},
 		{"PUT", base + "/members/" + userID + "/ban", "", 204, &corev1.BanMemberRequest{TayfaId: tayfaID, UserId: userID}},
+		{"PUT", base + "/members/" + userID + "/ban", `{"reason":"harassment"}`, 204,
+			&corev1.BanMemberRequest{TayfaId: tayfaID, UserId: userID, Reason: corev1.ReportReason_REPORT_REASON_HARASSMENT}},
+		{"PUT", base + "/members/" + userID + "/ban", `{}`, 204, &corev1.BanMemberRequest{TayfaId: tayfaID, UserId: userID}},
 		{"GET", base + "/join-requests?page_size=10", "", 200, &corev1.ListPendingRequest{TayfaId: tayfaID, PageSize: 10}},
 		{"POST", base + "/join-requests/" + userID + "/approval", "", 200, &corev1.ApproveMemberRequest{TayfaId: tayfaID, UserId: userID}},
 		{"DELETE", base + "/join-requests/" + userID, "", 204, &corev1.RejectMemberRequest{TayfaId: tayfaID, UserId: userID}},
@@ -727,5 +732,26 @@ func TestUnknownEnumValuesFromNewerCore(t *testing.T) {
 	v := decodeBody[tayfaViewJSON](t, w)
 	if v.Tayfa.Status != "unknown" || v.Tayfa.Interests[2] != "unknown" || len(v.Tayfa.Modules) != 4 {
 		t.Fatalf("bilinmeyen değerler: %+v", v.Tayfa)
+	}
+}
+
+// TestBanReasonRejected: the reason is a closed list without staff_conduct,
+// and the body takes nothing else (issue #150).
+func TestBanReasonRejected(t *testing.T) {
+	f := &fakeCore{}
+	h := coreRouter(f)
+	path := "/v1/tayfas/" + tayfaID + "/members/" + userID + "/ban"
+	for name, body := range map[string]string{
+		"staff_conduct": `{"reason":"staff_conduct"}`,
+		"bilinmeyen":    `{"reason":"kotu_davranis"}`,
+		"serbest metin": `{"reason":"harassment","note":"ayrıntı"}`,
+		"bozuk json":    `{"reason":`,
+	} {
+		if w := as(h, "PUT", path, body); w.Code != 400 || problemType(t, w) != "invalid-request" {
+			t.Errorf("%s: %d %s", name, w.Code, problemType(t, w))
+		}
+	}
+	if got, _, _ := f.last(); got != nil {
+		t.Fatalf("core çağrıldı: %v", got)
 	}
 }

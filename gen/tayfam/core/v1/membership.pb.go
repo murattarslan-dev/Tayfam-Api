@@ -1785,9 +1785,11 @@ func (x *UnmuteMemberResponse) GetMembership() *Membership {
 }
 
 type BanMemberRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TayfaId       string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
-	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	TayfaId string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	UserId  string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// Optional (UNSPECIFIED: none). Any ReportReason but STAFF_CONDUCT.
+	Reason        ReportReason `protobuf:"varint,3,opt,name=reason,proto3,enum=tayfam.core.v1.ReportReason" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1834,6 +1836,13 @@ func (x *BanMemberRequest) GetUserId() string {
 		return x.UserId
 	}
 	return ""
+}
+
+func (x *BanMemberRequest) GetReason() ReportReason {
+	if x != nil {
+		return x.Reason
+	}
+	return ReportReason_REPORT_REASON_UNSPECIFIED
 }
 
 type BanMemberResponse struct {
@@ -2792,7 +2801,7 @@ var File_tayfam_core_v1_membership_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_membership_proto_rawDesc = "" +
 	"\n" +
-	"\x1ftayfam/core/v1/membership.proto\x12\x0etayfam.core.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa3\x02\n" +
+	"\x1ftayfam/core/v1/membership.proto\x12\x0etayfam.core.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1btayfam/core/v1/report.proto\"\xa3\x02\n" +
 	"\n" +
 	"Membership\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x17\n" +
@@ -2907,10 +2916,11 @@ const file_tayfam_core_v1_membership_proto_rawDesc = "" +
 	"\x14UnmuteMemberResponse\x12:\n" +
 	"\n" +
 	"membership\x18\x01 \x01(\v2\x1a.tayfam.core.v1.MembershipR\n" +
-	"membership\"F\n" +
+	"membership\"|\n" +
 	"\x10BanMemberRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\tR\x06userId\"\x13\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x124\n" +
+	"\x06reason\x18\x03 \x01(\x0e2\x1c.tayfam.core.v1.ReportReasonR\x06reason\"\x13\n" +
 	"\x11BanMemberResponse\"I\n" +
 	"\x13RemoveMemberRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x17\n" +
@@ -3090,6 +3100,7 @@ var file_tayfam_core_v1_membership_proto_goTypes = []any{
 	(*CancelInvitationResponse)(nil),  // 52: tayfam.core.v1.CancelInvitationResponse
 	(*timestamppb.Timestamp)(nil),     // 53: google.protobuf.Timestamp
 	(*durationpb.Duration)(nil),       // 54: google.protobuf.Duration
+	(ReportReason)(0),                 // 55: tayfam.core.v1.ReportReason
 }
 var file_tayfam_core_v1_membership_proto_depIdxs = []int32{
 	0,  // 0: tayfam.core.v1.Membership.role:type_name -> tayfam.core.v1.Role
@@ -3116,63 +3127,64 @@ var file_tayfam_core_v1_membership_proto_depIdxs = []int32{
 	53, // 21: tayfam.core.v1.MuteMemberRequest.expire_time:type_name -> google.protobuf.Timestamp
 	3,  // 22: tayfam.core.v1.MuteMemberResponse.membership:type_name -> tayfam.core.v1.Membership
 	3,  // 23: tayfam.core.v1.UnmuteMemberResponse.membership:type_name -> tayfam.core.v1.Membership
-	3,  // 24: tayfam.core.v1.GetMembershipResponse.membership:type_name -> tayfam.core.v1.Membership
-	53, // 25: tayfam.core.v1.Invitation.invite_time:type_name -> google.protobuf.Timestamp
-	40, // 26: tayfam.core.v1.InviteFriendResponse.invitation:type_name -> tayfam.core.v1.Invitation
-	40, // 27: tayfam.core.v1.ListMyInvitationsResponse.invitations:type_name -> tayfam.core.v1.Invitation
-	3,  // 28: tayfam.core.v1.AcceptInvitationResponse.membership:type_name -> tayfam.core.v1.Membership
-	40, // 29: tayfam.core.v1.ListInvitationsResponse.invitations:type_name -> tayfam.core.v1.Invitation
-	6,  // 30: tayfam.core.v1.MembershipService.JoinByCode:input_type -> tayfam.core.v1.JoinByCodeRequest
-	8,  // 31: tayfam.core.v1.MembershipService.CreateInviteLink:input_type -> tayfam.core.v1.CreateInviteLinkRequest
-	10, // 32: tayfam.core.v1.MembershipService.ListInviteLinks:input_type -> tayfam.core.v1.ListInviteLinksRequest
-	12, // 33: tayfam.core.v1.MembershipService.RevokeInviteLink:input_type -> tayfam.core.v1.RevokeInviteLinkRequest
-	14, // 34: tayfam.core.v1.MembershipService.PreviewInvite:input_type -> tayfam.core.v1.PreviewInviteRequest
-	16, // 35: tayfam.core.v1.MembershipService.JoinByInvite:input_type -> tayfam.core.v1.JoinByInviteRequest
-	18, // 36: tayfam.core.v1.MembershipService.ListMembers:input_type -> tayfam.core.v1.ListMembersRequest
-	20, // 37: tayfam.core.v1.MembershipService.ListPending:input_type -> tayfam.core.v1.ListPendingRequest
-	22, // 38: tayfam.core.v1.MembershipService.ApproveMember:input_type -> tayfam.core.v1.ApproveMemberRequest
-	24, // 39: tayfam.core.v1.MembershipService.RejectMember:input_type -> tayfam.core.v1.RejectMemberRequest
-	26, // 40: tayfam.core.v1.MembershipService.ChangeRole:input_type -> tayfam.core.v1.ChangeRoleRequest
-	28, // 41: tayfam.core.v1.MembershipService.MuteMember:input_type -> tayfam.core.v1.MuteMemberRequest
-	30, // 42: tayfam.core.v1.MembershipService.UnmuteMember:input_type -> tayfam.core.v1.UnmuteMemberRequest
-	32, // 43: tayfam.core.v1.MembershipService.BanMember:input_type -> tayfam.core.v1.BanMemberRequest
-	34, // 44: tayfam.core.v1.MembershipService.RemoveMember:input_type -> tayfam.core.v1.RemoveMemberRequest
-	36, // 45: tayfam.core.v1.MembershipService.LeaveTayfa:input_type -> tayfam.core.v1.LeaveTayfaRequest
-	38, // 46: tayfam.core.v1.MembershipService.GetMembership:input_type -> tayfam.core.v1.GetMembershipRequest
-	41, // 47: tayfam.core.v1.MembershipService.InviteFriend:input_type -> tayfam.core.v1.InviteFriendRequest
-	43, // 48: tayfam.core.v1.MembershipService.ListMyInvitations:input_type -> tayfam.core.v1.ListMyInvitationsRequest
-	45, // 49: tayfam.core.v1.MembershipService.AcceptInvitation:input_type -> tayfam.core.v1.AcceptInvitationRequest
-	47, // 50: tayfam.core.v1.MembershipService.DeclineInvitation:input_type -> tayfam.core.v1.DeclineInvitationRequest
-	49, // 51: tayfam.core.v1.MembershipService.ListInvitations:input_type -> tayfam.core.v1.ListInvitationsRequest
-	51, // 52: tayfam.core.v1.MembershipService.CancelInvitation:input_type -> tayfam.core.v1.CancelInvitationRequest
-	7,  // 53: tayfam.core.v1.MembershipService.JoinByCode:output_type -> tayfam.core.v1.JoinByCodeResponse
-	9,  // 54: tayfam.core.v1.MembershipService.CreateInviteLink:output_type -> tayfam.core.v1.CreateInviteLinkResponse
-	11, // 55: tayfam.core.v1.MembershipService.ListInviteLinks:output_type -> tayfam.core.v1.ListInviteLinksResponse
-	13, // 56: tayfam.core.v1.MembershipService.RevokeInviteLink:output_type -> tayfam.core.v1.RevokeInviteLinkResponse
-	15, // 57: tayfam.core.v1.MembershipService.PreviewInvite:output_type -> tayfam.core.v1.PreviewInviteResponse
-	17, // 58: tayfam.core.v1.MembershipService.JoinByInvite:output_type -> tayfam.core.v1.JoinByInviteResponse
-	19, // 59: tayfam.core.v1.MembershipService.ListMembers:output_type -> tayfam.core.v1.ListMembersResponse
-	21, // 60: tayfam.core.v1.MembershipService.ListPending:output_type -> tayfam.core.v1.ListPendingResponse
-	23, // 61: tayfam.core.v1.MembershipService.ApproveMember:output_type -> tayfam.core.v1.ApproveMemberResponse
-	25, // 62: tayfam.core.v1.MembershipService.RejectMember:output_type -> tayfam.core.v1.RejectMemberResponse
-	27, // 63: tayfam.core.v1.MembershipService.ChangeRole:output_type -> tayfam.core.v1.ChangeRoleResponse
-	29, // 64: tayfam.core.v1.MembershipService.MuteMember:output_type -> tayfam.core.v1.MuteMemberResponse
-	31, // 65: tayfam.core.v1.MembershipService.UnmuteMember:output_type -> tayfam.core.v1.UnmuteMemberResponse
-	33, // 66: tayfam.core.v1.MembershipService.BanMember:output_type -> tayfam.core.v1.BanMemberResponse
-	35, // 67: tayfam.core.v1.MembershipService.RemoveMember:output_type -> tayfam.core.v1.RemoveMemberResponse
-	37, // 68: tayfam.core.v1.MembershipService.LeaveTayfa:output_type -> tayfam.core.v1.LeaveTayfaResponse
-	39, // 69: tayfam.core.v1.MembershipService.GetMembership:output_type -> tayfam.core.v1.GetMembershipResponse
-	42, // 70: tayfam.core.v1.MembershipService.InviteFriend:output_type -> tayfam.core.v1.InviteFriendResponse
-	44, // 71: tayfam.core.v1.MembershipService.ListMyInvitations:output_type -> tayfam.core.v1.ListMyInvitationsResponse
-	46, // 72: tayfam.core.v1.MembershipService.AcceptInvitation:output_type -> tayfam.core.v1.AcceptInvitationResponse
-	48, // 73: tayfam.core.v1.MembershipService.DeclineInvitation:output_type -> tayfam.core.v1.DeclineInvitationResponse
-	50, // 74: tayfam.core.v1.MembershipService.ListInvitations:output_type -> tayfam.core.v1.ListInvitationsResponse
-	52, // 75: tayfam.core.v1.MembershipService.CancelInvitation:output_type -> tayfam.core.v1.CancelInvitationResponse
-	53, // [53:76] is the sub-list for method output_type
-	30, // [30:53] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	55, // 24: tayfam.core.v1.BanMemberRequest.reason:type_name -> tayfam.core.v1.ReportReason
+	3,  // 25: tayfam.core.v1.GetMembershipResponse.membership:type_name -> tayfam.core.v1.Membership
+	53, // 26: tayfam.core.v1.Invitation.invite_time:type_name -> google.protobuf.Timestamp
+	40, // 27: tayfam.core.v1.InviteFriendResponse.invitation:type_name -> tayfam.core.v1.Invitation
+	40, // 28: tayfam.core.v1.ListMyInvitationsResponse.invitations:type_name -> tayfam.core.v1.Invitation
+	3,  // 29: tayfam.core.v1.AcceptInvitationResponse.membership:type_name -> tayfam.core.v1.Membership
+	40, // 30: tayfam.core.v1.ListInvitationsResponse.invitations:type_name -> tayfam.core.v1.Invitation
+	6,  // 31: tayfam.core.v1.MembershipService.JoinByCode:input_type -> tayfam.core.v1.JoinByCodeRequest
+	8,  // 32: tayfam.core.v1.MembershipService.CreateInviteLink:input_type -> tayfam.core.v1.CreateInviteLinkRequest
+	10, // 33: tayfam.core.v1.MembershipService.ListInviteLinks:input_type -> tayfam.core.v1.ListInviteLinksRequest
+	12, // 34: tayfam.core.v1.MembershipService.RevokeInviteLink:input_type -> tayfam.core.v1.RevokeInviteLinkRequest
+	14, // 35: tayfam.core.v1.MembershipService.PreviewInvite:input_type -> tayfam.core.v1.PreviewInviteRequest
+	16, // 36: tayfam.core.v1.MembershipService.JoinByInvite:input_type -> tayfam.core.v1.JoinByInviteRequest
+	18, // 37: tayfam.core.v1.MembershipService.ListMembers:input_type -> tayfam.core.v1.ListMembersRequest
+	20, // 38: tayfam.core.v1.MembershipService.ListPending:input_type -> tayfam.core.v1.ListPendingRequest
+	22, // 39: tayfam.core.v1.MembershipService.ApproveMember:input_type -> tayfam.core.v1.ApproveMemberRequest
+	24, // 40: tayfam.core.v1.MembershipService.RejectMember:input_type -> tayfam.core.v1.RejectMemberRequest
+	26, // 41: tayfam.core.v1.MembershipService.ChangeRole:input_type -> tayfam.core.v1.ChangeRoleRequest
+	28, // 42: tayfam.core.v1.MembershipService.MuteMember:input_type -> tayfam.core.v1.MuteMemberRequest
+	30, // 43: tayfam.core.v1.MembershipService.UnmuteMember:input_type -> tayfam.core.v1.UnmuteMemberRequest
+	32, // 44: tayfam.core.v1.MembershipService.BanMember:input_type -> tayfam.core.v1.BanMemberRequest
+	34, // 45: tayfam.core.v1.MembershipService.RemoveMember:input_type -> tayfam.core.v1.RemoveMemberRequest
+	36, // 46: tayfam.core.v1.MembershipService.LeaveTayfa:input_type -> tayfam.core.v1.LeaveTayfaRequest
+	38, // 47: tayfam.core.v1.MembershipService.GetMembership:input_type -> tayfam.core.v1.GetMembershipRequest
+	41, // 48: tayfam.core.v1.MembershipService.InviteFriend:input_type -> tayfam.core.v1.InviteFriendRequest
+	43, // 49: tayfam.core.v1.MembershipService.ListMyInvitations:input_type -> tayfam.core.v1.ListMyInvitationsRequest
+	45, // 50: tayfam.core.v1.MembershipService.AcceptInvitation:input_type -> tayfam.core.v1.AcceptInvitationRequest
+	47, // 51: tayfam.core.v1.MembershipService.DeclineInvitation:input_type -> tayfam.core.v1.DeclineInvitationRequest
+	49, // 52: tayfam.core.v1.MembershipService.ListInvitations:input_type -> tayfam.core.v1.ListInvitationsRequest
+	51, // 53: tayfam.core.v1.MembershipService.CancelInvitation:input_type -> tayfam.core.v1.CancelInvitationRequest
+	7,  // 54: tayfam.core.v1.MembershipService.JoinByCode:output_type -> tayfam.core.v1.JoinByCodeResponse
+	9,  // 55: tayfam.core.v1.MembershipService.CreateInviteLink:output_type -> tayfam.core.v1.CreateInviteLinkResponse
+	11, // 56: tayfam.core.v1.MembershipService.ListInviteLinks:output_type -> tayfam.core.v1.ListInviteLinksResponse
+	13, // 57: tayfam.core.v1.MembershipService.RevokeInviteLink:output_type -> tayfam.core.v1.RevokeInviteLinkResponse
+	15, // 58: tayfam.core.v1.MembershipService.PreviewInvite:output_type -> tayfam.core.v1.PreviewInviteResponse
+	17, // 59: tayfam.core.v1.MembershipService.JoinByInvite:output_type -> tayfam.core.v1.JoinByInviteResponse
+	19, // 60: tayfam.core.v1.MembershipService.ListMembers:output_type -> tayfam.core.v1.ListMembersResponse
+	21, // 61: tayfam.core.v1.MembershipService.ListPending:output_type -> tayfam.core.v1.ListPendingResponse
+	23, // 62: tayfam.core.v1.MembershipService.ApproveMember:output_type -> tayfam.core.v1.ApproveMemberResponse
+	25, // 63: tayfam.core.v1.MembershipService.RejectMember:output_type -> tayfam.core.v1.RejectMemberResponse
+	27, // 64: tayfam.core.v1.MembershipService.ChangeRole:output_type -> tayfam.core.v1.ChangeRoleResponse
+	29, // 65: tayfam.core.v1.MembershipService.MuteMember:output_type -> tayfam.core.v1.MuteMemberResponse
+	31, // 66: tayfam.core.v1.MembershipService.UnmuteMember:output_type -> tayfam.core.v1.UnmuteMemberResponse
+	33, // 67: tayfam.core.v1.MembershipService.BanMember:output_type -> tayfam.core.v1.BanMemberResponse
+	35, // 68: tayfam.core.v1.MembershipService.RemoveMember:output_type -> tayfam.core.v1.RemoveMemberResponse
+	37, // 69: tayfam.core.v1.MembershipService.LeaveTayfa:output_type -> tayfam.core.v1.LeaveTayfaResponse
+	39, // 70: tayfam.core.v1.MembershipService.GetMembership:output_type -> tayfam.core.v1.GetMembershipResponse
+	42, // 71: tayfam.core.v1.MembershipService.InviteFriend:output_type -> tayfam.core.v1.InviteFriendResponse
+	44, // 72: tayfam.core.v1.MembershipService.ListMyInvitations:output_type -> tayfam.core.v1.ListMyInvitationsResponse
+	46, // 73: tayfam.core.v1.MembershipService.AcceptInvitation:output_type -> tayfam.core.v1.AcceptInvitationResponse
+	48, // 74: tayfam.core.v1.MembershipService.DeclineInvitation:output_type -> tayfam.core.v1.DeclineInvitationResponse
+	50, // 75: tayfam.core.v1.MembershipService.ListInvitations:output_type -> tayfam.core.v1.ListInvitationsResponse
+	52, // 76: tayfam.core.v1.MembershipService.CancelInvitation:output_type -> tayfam.core.v1.CancelInvitationResponse
+	54, // [54:77] is the sub-list for method output_type
+	31, // [31:54] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_membership_proto_init() }
@@ -3180,6 +3192,7 @@ func file_tayfam_core_v1_membership_proto_init() {
 	if File_tayfam_core_v1_membership_proto != nil {
 		return
 	}
+	file_tayfam_core_v1_report_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

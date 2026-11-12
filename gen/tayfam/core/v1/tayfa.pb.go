@@ -336,8 +336,11 @@ type Tayfa struct {
 	// The cover image (a READY COVER upload of this tayfa, MediaService);
 	// empty when there is none. Links: MediaService.GetMediaUrls.
 	CoverUploadId string `protobuf:"bytes,15,opt,name=cover_upload_id,json=coverUploadId,proto3" json:"cover_upload_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// PENDING join requests; set only for callers who may approve them
+	// (moderator, admin), unset for everyone else.
+	PendingJoinRequestCount *int32 `protobuf:"varint,16,opt,name=pending_join_request_count,json=pendingJoinRequestCount,proto3,oneof" json:"pending_join_request_count,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *Tayfa) Reset() {
@@ -473,6 +476,13 @@ func (x *Tayfa) GetCoverUploadId() string {
 		return x.CoverUploadId
 	}
 	return ""
+}
+
+func (x *Tayfa) GetPendingJoinRequestCount() int32 {
+	if x != nil && x.PendingJoinRequestCount != nil {
+		return *x.PendingJoinRequestCount
+	}
+	return 0
 }
 
 type CreateTayfaRequest struct {
@@ -1402,7 +1412,7 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\x1atayfam/core/v1/tayfa.proto\x12\x0etayfam.core.v1\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1ftayfam/core/v1/membership.proto\"W\n" +
 	"\vModuleState\x12.\n" +
 	"\x06module\x18\x01 \x01(\x0e2\x16.tayfam.core.v1.ModuleR\x06module\x12\x18\n" +
-	"\aenabled\x18\x02 \x01(\bR\aenabled\"\xcc\x05\n" +
+	"\aenabled\x18\x02 \x01(\bR\aenabled\"\xad\x06\n" +
 	"\x05Tayfa\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1422,7 +1432,9 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\vupdate_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"updateTime\x129\n" +
 	"\x19members_can_create_events\x18\x0e \x01(\bR\x16membersCanCreateEvents\x12&\n" +
-	"\x0fcover_upload_id\x18\x0f \x01(\tR\rcoverUploadId\"\xec\x01\n" +
+	"\x0fcover_upload_id\x18\x0f \x01(\tR\rcoverUploadId\x12@\n" +
+	"\x1apending_join_request_count\x18\x10 \x01(\x05H\x00R\x17pendingJoinRequestCount\x88\x01\x01B\x1d\n" +
+	"\x1b_pending_join_request_count\"\xec\x01\n" +
 	"\x12CreateTayfaRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x127\n" +
@@ -1614,6 +1626,7 @@ func file_tayfam_core_v1_tayfa_proto_init() {
 		return
 	}
 	file_tayfam_core_v1_membership_proto_init()
+	file_tayfam_core_v1_tayfa_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

@@ -122,8 +122,12 @@ type GetAccountResponse struct {
 	ActivityVisibility ActivityVisibility `protobuf:"varint,2,opt,name=activity_visibility,json=activityVisibility,proto3,enum=tayfam.identity.v1.ActivityVisibility" json:"activity_visibility,omitempty"`
 	// Upload ID (UUID) of the avatar; empty when there is none.
 	AvatarUploadId string `protobuf:"bytes,3,opt,name=avatar_upload_id,json=avatarUploadId,proto3" json:"avatar_upload_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The caller's own user ID (from the verified token).
+	UserId string `protobuf:"bytes,4,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// The caller's display name.
+	DisplayName   string `protobuf:"bytes,5,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetAccountResponse) Reset() {
@@ -173,6 +177,20 @@ func (x *GetAccountResponse) GetActivityVisibility() ActivityVisibility {
 func (x *GetAccountResponse) GetAvatarUploadId() string {
 	if x != nil {
 		return x.AvatarUploadId
+	}
+	return ""
+}
+
+func (x *GetAccountResponse) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *GetAccountResponse) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
 	}
 	return ""
 }
@@ -1192,11 +1210,13 @@ var File_tayfam_identity_v1_account_proto protoreflect.FileDescriptor
 const file_tayfam_identity_v1_account_proto_rawDesc = "" +
 	"\n" +
 	" tayfam/identity/v1/account.proto\x12\x12tayfam.identity.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dtayfam/identity/v1/auth.proto\"\x13\n" +
-	"\x11GetAccountRequest\"\xbc\x01\n" +
+	"\x11GetAccountRequest\"\xf8\x01\n" +
 	"\x12GetAccountResponse\x12#\n" +
 	"\rreferral_code\x18\x01 \x01(\tR\freferralCode\x12W\n" +
 	"\x13activity_visibility\x18\x02 \x01(\x0e2&.tayfam.identity.v1.ActivityVisibilityR\x12activityVisibility\x12(\n" +
-	"\x10avatar_upload_id\x18\x03 \x01(\tR\x0eavatarUploadId\"/\n" +
+	"\x10avatar_upload_id\x18\x03 \x01(\tR\x0eavatarUploadId\x12\x17\n" +
+	"\auser_id\x18\x04 \x01(\tR\x06userId\x12!\n" +
+	"\fdisplay_name\x18\x05 \x01(\tR\vdisplayName\"/\n" +
 	"\x10SetAvatarRequest\x12\x1b\n" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\"=\n" +
 	"\x11SetAvatarResponse\x12(\n" +

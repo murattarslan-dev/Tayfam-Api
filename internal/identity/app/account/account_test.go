@@ -160,7 +160,7 @@ func TestRotateReferralCode(t *testing.T) {
 		t.Fatalf("yeni kod: %+v %v", f, err)
 	}
 	a, err := e.svc.Get(ctx, owner)
-	if err != nil || a.ReferralCode != code || a.ActivityVisibility != VisibilityTayfa {
+	if err != nil || a.ReferralCode != code || a.ActivityVisibility != VisibilityTayfa || a.UserID != owner || a.DisplayName != "Kod Sahibi" {
 		t.Fatalf("hesap = %+v %v", a, err)
 	}
 	if _, err := e.svc.RotateReferralCode(ctx, id.New()); !errors.Is(err, ErrUnknownUser) {

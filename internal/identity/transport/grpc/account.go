@@ -83,7 +83,10 @@ func (s *AccountServer) GetAccount(ctx context.Context, _ *identityv1.GetAccount
 	if err != nil {
 		return nil, s.mapError(ctx, err)
 	}
-	out := &identityv1.GetAccountResponse{ReferralCode: a.ReferralCode, ActivityVisibility: visibilityToPB[a.ActivityVisibility]}
+	out := &identityv1.GetAccountResponse{
+		UserId: a.UserID.String(), DisplayName: a.DisplayName,
+		ReferralCode: a.ReferralCode, ActivityVisibility: visibilityToPB[a.ActivityVisibility],
+	}
 	if a.AvatarUploadID != (id.ID{}) {
 		out.AvatarUploadId = a.AvatarUploadID.String()
 	}

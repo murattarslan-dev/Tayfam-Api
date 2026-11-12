@@ -257,6 +257,52 @@ func TestCreate(t *testing.T) {
 	}
 }
 
+// TestCreateRepeat: a repeat with the same client_request_id by the same
+// user returns the first poll and records nothing (issue #150).
+func TestCreateRepeat(t *testing.T) {
+	e := setup(t)
+	c := e.crew(t)
+	ctx := context.Background()
+	crid := id.New().String()
+	in := CreateInput{Question: "Kamp nerede?", Options: []string{"Göl", "Orman"}, ClientRequestID: crid}
+	first, err := e.svc.Create(ctx, c.member, c.tayfa, in)
+	must(t, err)
+	again, err := e.svc.Create(ctx, c.member, c.tayfa, in)
+	if err != nil || again.ID != first.ID {
+		t.Fatalf("tekrar = %+v %v", again, err)
+	}
+	if n := e.count(t, "SELECT count(*) FROM polls WHERE tayfa_id = $1", c.tayfa.PG()); n != 1 {
+		t.Fatalf("anket sayısı = %d", n)
+	}
+	if n := e.count(t, "SELECT count(*) FROM audit_logs WHERE action = 'poll.created'"); n != 1 {
+		t.Fatalf("denetim = %d", n)
+	}
+	if n := e.count(t, "SELECT count(*) FROM domain_events WHERE type = 'poll.created'"); n != 1 {
+		t.Fatalf("olay = %d", n)
+	}
+	// Another user may use the same value; it is per creator.
+	if v, err := e.svc.Create(ctx, c.member2, c.tayfa, in); err != nil || v.ID == first.ID {
+		t.Fatalf("başka kişi: %+v %v", v, err)
+	}
+	// Without a value every request opens a new poll.
+	a := e.open(t, c, c.member, CreateInput{})
+	b := e.open(t, c, c.member, CreateInput{})
+	if a.ID == b.ID {
+		t.Fatal("kimliksiz istekler aynı anketi döndürdü")
+	}
+	// The same value in another tayfa, or after the poll was deleted, is a
+	// validation error, not a second poll.
+	other := e.crew(t)
+	e.join(t, other.tayfa, c.member, authz.StatusActive)
+	_, err = e.svc.Create(ctx, c.member, other.tayfa, in)
+	field(t, "başka tayfa", err, "client_request_id")
+	must(t, e.svc.Delete(ctx, c.member, c.tayfa, first.ID))
+	_, err = e.svc.Create(ctx, c.member, c.tayfa, in)
+	field(t, "silinmiş", err, "client_request_id")
+	_, err = e.svc.Create(ctx, c.member, c.tayfa, CreateInput{Question: "Soru", Options: []string{"A", "B"}, ClientRequestID: "abc"})
+	field(t, "bozuk", err, "client_request_id")
+}
+
 func TestCreateValidation(t *testing.T) {
 	e := setup(t)
 	c := e.crew(t)

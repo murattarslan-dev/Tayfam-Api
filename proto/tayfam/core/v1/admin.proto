@@ -104,6 +104,9 @@ message AdminMember {
   Role role = 3;
   MembershipStatus status = 4;
   google.protobuf.Timestamp join_time = 5;
+  // Set for a BANNED member whose ban recorded a reason: the reason of the
+  // latest ban in the tayfa's audit log.
+  ReportReason ban_reason = 6;
 }
 
 message AdminServiceGetTayfaResponse {

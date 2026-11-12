@@ -621,9 +621,18 @@ func (q *Queries) AdminListPlatformReports(ctx context.Context, includeResolved 
 }
 
 const adminListTayfaMembers = `-- name: AdminListTayfaMembers :many
-SELECT m.user_id, p.display_name, m.role, m.status, m.joined_at
+SELECT m.user_id, p.display_name, m.role, m.status, m.joined_at,
+       COALESCE(b.reason, '') AS ban_reason
 FROM memberships m
 LEFT JOIN user_profiles p ON p.user_id = m.user_id AND p.deleted_at IS NULL
+LEFT JOIN LATERAL (
+  SELECT (a.metadata ->> 'reason')::text AS reason
+  FROM audit_logs a
+  WHERE m.status = 'banned' AND a.tayfa_id = m.tayfa_id AND a.action = 'member.banned'
+    AND a.target_type = 'membership' AND a.target_id = m.user_id
+  ORDER BY a.created_at DESC, a.id DESC
+  LIMIT 1
+) b ON true
 WHERE m.tayfa_id = $1
   AND (NOT $2::boolean OR (m.status = 'active' AND m.role IN ('admin', 'moderator')))
 ORDER BY role_rank(m.role) DESC, m.joined_at NULLS LAST, m.user_id
@@ -641,8 +650,11 @@ type AdminListTayfaMembersRow struct {
 	Role        string
 	Status      string
 	JoinedAt    pgtype.Timestamptz
+	BanReason   string
 }
 
+// Banlı üyede son banın gerekçesi denetim kaydından (issue #150; yalnızca
+// sınıflandırma, serbest metin değil). 365 günlük saklamadan sonra boştur.
 func (q *Queries) AdminListTayfaMembers(ctx context.Context, arg AdminListTayfaMembersParams) ([]AdminListTayfaMembersRow, error) {
 	rows, err := q.db.Query(ctx, adminListTayfaMembers, arg.TayfaID, arg.StaffOnly)
 	if err != nil {
@@ -658,6 +670,7 @@ func (q *Queries) AdminListTayfaMembers(ctx context.Context, arg AdminListTayfaM
 			&i.Role,
 			&i.Status,
 			&i.JoinedAt,
+			&i.BanReason,
 		); err != nil {
 			return nil, err
 		}

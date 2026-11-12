@@ -38,8 +38,9 @@ func fromTayfa(t access.Tayfa, m authz.Membership) viewRow {
 	}
 }
 
-// views builds the full views of rows with three batched queries. The join
-// code is filled only for callers allowed to rotate it.
+// views builds the full views of rows with batched queries. The join code
+// is filled only for callers allowed to rotate it, the pending join request
+// count only for callers allowed to approve requests.
 func (s *Service) views(ctx context.Context, rows []viewRow) ([]View, error) {
 	if len(rows) == 0 {
 		return nil, nil
@@ -83,6 +84,25 @@ func (s *Service) views(ctx context.Context, rows []viewRow) ([]View, error) {
 	}
 
 	now := s.now()
+	// Pending requests are counted only for the tayfas whose count the
+	// caller may see.
+	var approvable []pgtype.UUID
+	for _, r := range rows {
+		if authz.Allowed(r.Member, authz.MemberApprove, now) {
+			approvable = append(approvable, r.ID.PG())
+		}
+	}
+	byPending := map[id.ID]int64{}
+	if len(approvable) > 0 {
+		pending, err := s.q.CountPendingMembersForTayfas(ctx, approvable)
+		if err != nil {
+			return nil, fmt.Errorf("bekleyen istekler: %w", err)
+		}
+		for _, r := range pending {
+			byPending[id.ID(r.TayfaID.Bytes)] = r.PendingCount
+		}
+	}
+
 	out := make([]View, len(rows))
 	for i, r := range rows {
 		v := View{
@@ -112,6 +132,10 @@ func (s *Service) views(ctx context.Context, rows []viewRow) ([]View, error) {
 		}
 		if authz.Allowed(r.Member, authz.TayfaRotateJoinCode, now) {
 			v.JoinCode = r.JoinCode
+		}
+		if authz.Allowed(r.Member, authz.MemberApprove, now) {
+			n := byPending[r.ID]
+			v.PendingJoinRequests = &n
 		}
 		out[i] = v
 	}

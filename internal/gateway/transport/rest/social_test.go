@@ -85,7 +85,10 @@ func (f *fakeCore) ListUserActivity(ctx context.Context, in *corev1.ListUserActi
 }
 
 func (f *fakeCore) GetAccount(ctx context.Context, in *identityv1.GetAccountRequest, _ ...grpc.CallOption) (*identityv1.GetAccountResponse, error) {
-	return &identityv1.GetAccountResponse{ReferralCode: "TYF-8K2M4Q", ActivityVisibility: identityv1.ActivityVisibility_ACTIVITY_VISIBILITY_TAYFA}, f.record(ctx, in)
+	return &identityv1.GetAccountResponse{
+		UserId: userID, DisplayName: "Deniz",
+		ReferralCode: "TYF-8K2M4Q", ActivityVisibility: identityv1.ActivityVisibility_ACTIVITY_VISIBILITY_TAYFA,
+	}, f.record(ctx, in)
 }
 func (f *fakeCore) RotateReferralCode(ctx context.Context, in *identityv1.RotateReferralCodeRequest, _ ...grpc.CallOption) (*identityv1.RotateReferralCodeResponse, error) {
 	return &identityv1.RotateReferralCodeResponse{ReferralCode: "TYF-2222AB"}, f.record(ctx, in)
@@ -231,7 +234,8 @@ func TestAccountRoutes(t *testing.T) {
 	f := &fakeCore{}
 	h := coreRouter(f)
 	w := as(h, "GET", "/v1/me/account", "")
-	if v := decodeBody[accountJSON](t, w); w.Code != 200 || v.ReferralCode != "TYF-8K2M4Q" || v.ActivityVisibility != "tayfa" {
+	if v := decodeBody[accountJSON](t, w); w.Code != 200 || v.ReferralCode != "TYF-8K2M4Q" || v.ActivityVisibility != "tayfa" ||
+		v.UserID != userID || v.DisplayName != "Deniz" {
 		t.Fatalf("hesap: %d %+v", w.Code, v)
 	}
 	w = as(h, "PATCH", "/v1/me/account", `{"activity_visibility":"private"}`)

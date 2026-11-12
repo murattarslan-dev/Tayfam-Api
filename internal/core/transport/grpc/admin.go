@@ -70,6 +70,7 @@ func adminMemberPB(m admin.Member) *corev1.AdminMember {
 	return &corev1.AdminMember{
 		UserId: m.User.String(), DisplayName: m.DisplayName, Role: roleStringToProto(m.Role),
 		Status: statusToProto(authz.Status(m.Status)), JoinTime: tsOrNil(m.JoinedAt),
+		BanReason: toProto(reportReasons, report.Reason(m.BanReason)),
 	}
 }
 

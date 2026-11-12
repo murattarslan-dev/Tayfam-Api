@@ -30,7 +30,7 @@ type fakeAccounts struct {
 
 func (f *fakeAccounts) Get(_ context.Context, c id.ID) (account.Account, error) {
 	f.caller = c
-	return account.Account{ReferralCode: "TYF-8K2M4Q", ActivityVisibility: account.VisibilityPublic}, f.err
+	return account.Account{UserID: c, DisplayName: "Deniz", ReferralCode: "TYF-8K2M4Q", ActivityVisibility: account.VisibilityPublic}, f.err
 }
 func (f *fakeAccounts) RotateReferralCode(_ context.Context, c id.ID) (string, error) {
 	f.caller = c
@@ -99,7 +99,8 @@ func TestAccountMethods(t *testing.T) {
 	ctx := fullCtx(u)
 
 	a, err := srv.GetAccount(ctx, &identityv1.GetAccountRequest{})
-	if err != nil || a.GetReferralCode() != "TYF-8K2M4Q" || a.GetActivityVisibility() != identityv1.ActivityVisibility_ACTIVITY_VISIBILITY_PUBLIC || f.caller != u {
+	if err != nil || a.GetReferralCode() != "TYF-8K2M4Q" || a.GetActivityVisibility() != identityv1.ActivityVisibility_ACTIVITY_VISIBILITY_PUBLIC || f.caller != u ||
+		a.GetUserId() != u.String() || a.GetDisplayName() != "Deniz" {
 		t.Fatalf("hesap = %v %v", a, err)
 	}
 	r, err := srv.FindUserByReferralCode(ctx, &identityv1.FindUserByReferralCodeRequest{ReferralCode: "8k2m4q"})

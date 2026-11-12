@@ -28,7 +28,7 @@
 <tr>
   <td><a href="/kullanicilar/{{.UserId}}">{{if .DisplayName}}{{.DisplayName}}{{else}}Silinmiş kullanıcı{{end}}</a></td>
   <td>{{label .Role}}</td>
-  <td>{{label .Status}}</td>
+  <td>{{label .Status}}{{if .BanReason}} <span class="tag warn">Gerekçe: {{label .BanReason}}</span>{{end}}</td>
   <td>{{ts .JoinTime}}</td>
 </tr>
 {{end}}

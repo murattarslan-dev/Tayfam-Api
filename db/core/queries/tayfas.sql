@@ -133,6 +133,12 @@ SELECT tayfa_id, count(*) AS member_count FROM memberships
 WHERE tayfa_id = ANY(@tayfa_ids::uuid[]) AND status = 'active'
 GROUP BY tayfa_id;
 
+-- Onay bekleyen katılım istekleri (issue #150); memberships_pending_idx.
+-- name: CountPendingMembersForTayfas :many
+SELECT tayfa_id, count(*) AS pending_count FROM memberships
+WHERE tayfa_id = ANY(@tayfa_ids::uuid[]) AND status = 'pending'
+GROUP BY tayfa_id;
+
 -- Kapalı ya da kaydı olmayan modül kapalı sayılır (varsayılan "hayır").
 -- name: IsTayfaModuleEnabled :one
 SELECT EXISTS (

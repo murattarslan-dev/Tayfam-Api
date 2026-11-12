@@ -177,7 +177,7 @@ func TestTayfaServerConverts(t *testing.T) {
 		ID: id.New(), Name: "Tayfa", Interests: []string{"camp", "general"}, JoinPolicy: "open", Status: "archived",
 		Modules:     []tayfa.ModuleState{{Module: "announcements", Enabled: true}, {Module: "events"}, {Module: "qa", Enabled: true}, {Module: "polls"}},
 		MemberCount: 3, JoinCode: "ABCDEFGH", DeletionAt: time.Now(), CreatedAt: time.Now(), UpdatedAt: time.Now(),
-		MembersCanCreateEvents: true,
+		MembersCanCreateEvents: true, PendingJoinRequests: new(int64(4)),
 	}
 	f := &fakeTayfas{view: view}
 	srv := NewTayfaServer(f, discard)
@@ -193,7 +193,8 @@ func TestTayfaServerConverts(t *testing.T) {
 		p.GetJoinPolicy() != corev1.JoinPolicy_JOIN_POLICY_OPEN || p.GetStatus() != corev1.TayfaStatus_TAYFA_STATUS_ARCHIVED ||
 		len(p.GetInterests()) != 2 || p.GetInterests()[1] != corev1.EventType_EVENT_TYPE_GENERAL ||
 		len(p.GetModules()) != 4 || p.GetModules()[2].GetModule() != corev1.Module_MODULE_QA || !p.GetModules()[2].GetEnabled() ||
-		p.GetMemberCount() != 3 || p.GetSuspendTime() != nil || p.GetDeletionTime() == nil || !p.GetMembersCanCreateEvents() {
+		p.GetMemberCount() != 3 || p.GetSuspendTime() != nil || p.GetDeletionTime() == nil || !p.GetMembersCanCreateEvents() ||
+		p.PendingJoinRequestCount == nil || p.GetPendingJoinRequestCount() != 4 {
 		t.Fatalf("dönüştürme = %v", resp)
 	}
 

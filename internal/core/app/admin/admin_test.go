@@ -404,7 +404,7 @@ func TestPanelCannotSee(t *testing.T) {
 		"Item.TargetType", "Item.Target", "Item.Author", "Item.Title", "Item.Body", "Item.Options", "Item.CreatedAt", "Item.DeletedAt",
 		"TayfaDetail.TayfaSummary", "TayfaDetail.Description", "TayfaDetail.City", "TayfaDetail.District", "TayfaDetail.SuspendReason", "TayfaDetail.Staff", "TayfaDetail.OpenPlatformReports",
 		"TayfaSummary.ID", "TayfaSummary.Name", "TayfaSummary.Status", "TayfaSummary.Listed", "TayfaSummary.MemberCount", "TayfaSummary.CreatedAt", "TayfaSummary.SuspendedAt", "TayfaSummary.DeletedAt", "TayfaSummary.DeletionScheduledAt",
-		"Member.User", "Member.DisplayName", "Member.Role", "Member.Status", "Member.JoinedAt",
+		"Member.User", "Member.DisplayName", "Member.Role", "Member.Status", "Member.JoinedAt", "Member.BanReason",
 		"Report.ID", "Report.Tayfa", "Report.TargetType", "Report.Target", "Report.Subject", "Report.Reporter", "Report.Reason", "Report.Description", "Report.Priority", "Report.CreatedAt", "Report.EscalatedAt", "Report.Resolved", "Report.Decision", "Report.DecidedAt", "Report.evidenceText", "Report.tayfaResolved",
 	}
 	if !slices.Equal(fields, want) {
@@ -432,4 +432,35 @@ func readQueries() (string, error) {
 		out.WriteString(line + "\n")
 	}
 	return out.String(), nil
+}
+
+// TestMemberBanReason: a banned member shows the reason of the latest ban
+// from the tayfa's audit log (issue #150); others show none.
+func TestMemberBanReason(t *testing.T) {
+	e := setup(t)
+	c := e.crew(t)
+	ban := func(meta map[string]any) {
+		must(t, txn.WithActor(ctx, e.pool, c.admin, func(_ pgx.Tx, q *store.Queries) error {
+			if _, err := q.BanMembership(ctx, store.BanMembershipParams{TayfaID: c.tayfa.PG(), UserID: c.member.PG()}); err != nil {
+				return err
+			}
+			return txn.Audit(ctx, q, c.tayfa, c.admin, "member.banned", txn.Target{Type: "membership", ID: c.member}, meta)
+		}))
+	}
+	ban(map[string]any{"reason": "spam", "from_status": "active"})
+	// Another tayfa's ban of the same person does not leak in.
+	other := e.crew(t)
+	must(t, txn.WithActor(ctx, e.pool, other.admin, func(_ pgx.Tx, q *store.Queries) error {
+		return txn.Audit(ctx, q, other.tayfa, other.admin, "member.banned", txn.Target{Type: "membership", ID: c.member}, map[string]any{"reason": "drugs"})
+	}))
+
+	ms, err := e.svc.ListTayfaMembers(ctx, e.claims, c.tayfa)
+	must(t, err)
+	got := map[id.ID]string{}
+	for _, m := range ms {
+		got[m.User] = m.BanReason
+	}
+	if got[c.member] != "spam" || got[c.mod] != "" || got[c.admin] != "" {
+		t.Fatalf("gerekçeler = %v", got)
+	}
 }

@@ -18,6 +18,7 @@ import (
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/report"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -31,6 +32,8 @@ type fakeApp struct {
 	role   authz.Role
 	status authz.Status
 	ttl    time.Duration
+	// banReason is the reason the last BanMember passed on.
+	banReason report.Reason
 }
 
 func (f *fakeApp) member() membership.Member {
@@ -88,8 +91,8 @@ func (f *fakeApp) UnmuteMember(_ context.Context, c, t, u id.ID) (membership.Mem
 	f.caller, f.tayfa, f.target = c, t, u
 	return f.member(), f.err
 }
-func (f *fakeApp) BanMember(_ context.Context, c, t, u id.ID) error {
-	f.caller, f.tayfa, f.target = c, t, u
+func (f *fakeApp) BanMember(_ context.Context, c, t, u id.ID, r report.Reason) error {
+	f.caller, f.tayfa, f.target, f.banReason = c, t, u, r
 	return f.err
 }
 func (f *fakeApp) RemoveMember(_ context.Context, c, t, u id.ID) error {
@@ -159,6 +162,17 @@ func TestCallerComesFromToken(t *testing.T) {
 	}
 	if f.caller != u || f.tayfa != tayfa || f.target != target {
 		t.Fatalf("caller=%v tayfa=%v target=%v", f.caller, f.tayfa, f.target)
+	}
+	if f.banReason != "" {
+		t.Fatalf("gerekçesiz ban: %q", f.banReason)
+	}
+	// The reason maps to the report reason; STAFF_CONDUCT goes to the app
+	// layer, which refuses it; an unknown value is refused here.
+	if _, err := srv.BanMember(ctx, &corev1.BanMemberRequest{TayfaId: tayfa.String(), UserId: target.String(), Reason: corev1.ReportReason_REPORT_REASON_SPAM}); err != nil || f.banReason != report.ReasonSpam {
+		t.Fatalf("gerekçe: %q %v", f.banReason, err)
+	}
+	if _, err := srv.BanMember(ctx, &corev1.BanMemberRequest{TayfaId: tayfa.String(), UserId: target.String(), Reason: corev1.ReportReason(999)}); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("bilinmeyen gerekçe: %v", err)
 	}
 	if _, err := srv.JoinByCode(context.Background(), &corev1.JoinByCodeRequest{Code: "ABCDEFGH"}); status.Code(err) != codes.Unauthenticated {
 		t.Fatalf("token'sız: %v", err)

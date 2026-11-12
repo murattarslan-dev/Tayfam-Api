@@ -149,6 +149,11 @@ message CreatePollRequest {
   google.protobuf.Timestamp close_time = 6;
   // Optional; an event of the same tayfa.
   string event_id = 7;
+  // Optional. A UUID the client generates once per create attempt and
+  // reuses on retry (offline write protection): a repeat by the same caller
+  // returns the first poll and records nothing. Reusing it in another tayfa
+  // or after that poll was deleted is ERROR_REASON_VALIDATION.
+  string client_request_id = 8;
 }
 
 message CreatePollResponse {

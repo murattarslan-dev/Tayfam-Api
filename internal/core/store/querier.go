@@ -48,6 +48,8 @@ type Querier interface {
 	// Platform kuyruğu: açıklar önce, içlerinde minor_involved ve child_safety
 	// önce, sonra yükselme sırasıyla.
 	AdminListPlatformReports(ctx context.Context, includeResolved bool) ([]AdminListPlatformReportsRow, error)
+	// Banlı üyede son banın gerekçesi denetim kaydından (issue #150; yalnızca
+	// sınıflandırma, serbest metin değil). 365 günlük saklamadan sonra boştur.
 	AdminListTayfaMembers(ctx context.Context, arg AdminListTayfaMembersParams) ([]AdminListTayfaMembersRow, error)
 	AdminListUserTayfas(ctx context.Context, userID pgtype.UUID) ([]AdminListUserTayfasRow, error)
 	AdminLockPlatformReport(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
@@ -134,6 +136,8 @@ type Querier interface {
 	CountGoing(ctx context.Context, eventID pgtype.UUID) (int64, error)
 	// Son yönetici kontrolü; çağıran tayfa satırını kilitlemiş olmalıdır.
 	CountOtherActiveAdmins(ctx context.Context, arg CountOtherActiveAdminsParams) (int64, error)
+	// Onay bekleyen katılım istekleri (issue #150); memberships_pending_idx.
+	CountPendingMembersForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]CountPendingMembersForTayfasRow, error)
 	// Oy veren kişi sayısı (çoklu seçimde bir kişi bir kez sayılır).
 	CountPollVoters(ctx context.Context, pollIds []pgtype.UUID) ([]CountPollVotersRow, error)
 	// Son 24 saatte gönderilen arkadaşlık isteği ya da doğrudan davet sayısı
@@ -362,6 +366,8 @@ type Querier interface {
 	GetOwnUpload(ctx context.Context, arg GetOwnUploadParams) (Upload, error)
 	GetOwnUploadForUpdate(ctx context.Context, arg GetOwnUploadForUpdateParams) (Upload, error)
 	GetPoll(ctx context.Context, arg GetPollParams) (GetPollRow, error)
+	// Tekrar gönderilen oluşturma isteği aynı anketi döndürür (issue #150).
+	GetPollByClientRequest(ctx context.Context, arg GetPollByClientRequestParams) (GetPollByClientRequestRow, error)
 	// Yazma işlemleri anket satırını kilitleyerek okur.
 	GetPollForUpdate(ctx context.Context, arg GetPollForUpdateParams) (GetPollForUpdateRow, error)
 	GetQuestion(ctx context.Context, arg GetQuestionParams) (GetQuestionRow, error)
