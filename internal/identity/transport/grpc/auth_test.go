@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/integrity"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/session"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -21,15 +22,18 @@ import (
 type fakeSessions struct {
 	err       error
 	gotIn     session.SignInInput
+	gotProof  integrity.Proof
 	signedOut id.ID
+	checkAt   time.Time
 }
 
 func (f *fakeSessions) SignIn(_ context.Context, in session.SignInInput) (session.Tokens, error) {
 	f.gotIn = in
-	return session.Tokens{UserID: id.New(), SessionID: id.New(), AccessToken: "a", RefreshToken: "r", AccessExpiresAt: time.Unix(1, 0), RegistrationPending: true}, f.err
+	return session.Tokens{UserID: id.New(), SessionID: id.New(), AccessToken: "a", RefreshToken: "r", AccessExpiresAt: time.Unix(1, 0), RegistrationPending: true, IntegrityCheckAfter: f.checkAt}, f.err
 }
-func (f *fakeSessions) Refresh(context.Context, string) (session.Tokens, error) {
-	return session.Tokens{}, f.err
+func (f *fakeSessions) RefreshWithProof(_ context.Context, _ string, p integrity.Proof) (session.Tokens, error) {
+	f.gotProof = p
+	return session.Tokens{IntegrityCheckAfter: f.checkAt}, f.err
 }
 func (f *fakeSessions) SignOut(_ context.Context, sid id.ID) error { f.signedOut = sid; return f.err }
 
@@ -116,5 +120,36 @@ func TestSignOutRequiresCaller(t *testing.T) {
 	}
 	if f.signedOut != (id.ID{}) {
 		t.Fatal("token'sız istek bir oturumu kapattı")
+	}
+}
+
+// TestIntegrityPassesThrough: the proof reaches the session layer as is and
+// the next check time comes back; an oversized token is refused before
+// (ADR-0022).
+func TestIntegrityPassesThrough(t *testing.T) {
+	at := time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC)
+	f := &fakeSessions{checkAt: at}
+	srv := newServer(f)
+	ctx := context.Background()
+	in, err := srv.SignIn(ctx, &identityv1.SignInRequest{
+		Provider: identityv1.Provider_PROVIDER_GOOGLE, IdToken: "tok", Nonce: "n", Platform: identityv1.Platform_PLATFORM_ANDROID,
+		IntegrityToken: "play-token",
+	})
+	if err != nil || f.gotIn.Integrity.Android != "play-token" || !in.GetTokens().GetIntegrityCheckAfter().AsTime().Equal(at) {
+		t.Fatalf("giriş: %v %+v %v", in, f.gotIn.Integrity, err)
+	}
+	r, err := srv.Refresh(ctx, &identityv1.RefreshRequest{RefreshToken: "x", IntegrityToken: "play-token-2"})
+	if err != nil || f.gotProof.Android != "play-token-2" || !r.GetTokens().GetIntegrityCheckAfter().AsTime().Equal(at) {
+		t.Fatalf("yenileme: %v %+v %v", r, f.gotProof, err)
+	}
+	long := string(make([]byte, integrity.MaxPlayToken+1))
+	if _, err := srv.Refresh(ctx, &identityv1.RefreshRequest{RefreshToken: "x", IntegrityToken: long}); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("uzun token: %v", err)
+	}
+	// With checks off there is no next check time.
+	f.checkAt = time.Time{}
+	r, _ = srv.Refresh(ctx, &identityv1.RefreshRequest{RefreshToken: "x"})
+	if r.GetTokens().GetIntegrityCheckAfter() != nil {
+		t.Fatal("kapalıyken zaman döndü")
 	}
 }

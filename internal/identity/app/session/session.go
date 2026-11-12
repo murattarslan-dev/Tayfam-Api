@@ -258,11 +258,12 @@ func (s *Service) signInTx(ctx context.Context, ident oidc.Identity, platform st
 		if err := q.CreateRefreshToken(ctx, store.CreateRefreshTokenParams{ID: id.New().PG(), SessionID: sessionID.PG(), TokenHash: hash}); err != nil {
 			return fmt.Errorf("refresh token: %w", err)
 		}
-		t, err = s.issue(ctx, q, userID, sessionID, user.RegisteredAt.Valid, refresh, expires)
+		integ, err := s.applyIntegrity(ctx, q, sessionID, integrity.State{Status: integrity.StatusUnverified}, check)
 		if err != nil {
 			return err
 		}
-		return s.applyIntegrity(ctx, q, sessionID, integrity.State{Status: integrity.StatusUnverified}, check, &t)
+		t, err = s.issue(ctx, q, userID, sessionID, user.RegisteredAt.Valid, refresh, expires, integ)
+		return err
 	})
 	return t, err
 }
@@ -348,16 +349,17 @@ func (s *Service) RefreshWithProof(ctx context.Context, refreshToken string, pro
 			return fmt.Errorf("cihaz: %w", err)
 		}
 		userID, _ := id.FromPG(row.UserID)
-		t, err = s.issue(ctx, q, userID, sessionID, user.RegisteredAt.Valid, refresh, expires)
-		if err != nil {
-			return err
-		}
 		prev := stateOf(row.IntegrityStatus, row.IntegrityReason, row.IntegrityCheckedAt, row.IntegrityPassedAt)
 		if check != nil && !prev.Due(now) {
 			// Another refresh checked the session in the meantime.
 			check = nil
 		}
-		return s.applyIntegrity(ctx, q, sessionID, prev, check, &t)
+		integ, err := s.applyIntegrity(ctx, q, sessionID, prev, check)
+		if err != nil {
+			return err
+		}
+		t, err = s.issue(ctx, q, userID, sessionID, user.RegisteredAt.Valid, refresh, expires, integ)
+		return err
 	})
 	if revoked != (id.ID{}) {
 		s.cfg.Log.WarnContext(ctx, "kullanılmış refresh token tekrar geldi; oturum iptal edildi",
@@ -395,7 +397,7 @@ func (s *Service) SignOut(ctx context.Context, sessionID id.ID) error {
 	return nil
 }
 
-func (s *Service) issue(ctx context.Context, q *store.Queries, user, session id.ID, registered bool, refresh string, refreshExpires time.Time) (Tokens, error) {
+func (s *Service) issue(ctx context.Context, q *store.Queries, user, session id.ID, registered bool, refresh string, refreshExpires time.Time, integ integrityInfo) (Tokens, error) {
 	signer := s.cfg.Registration
 	var consentRequired bool
 	if registered {
@@ -405,7 +407,7 @@ func (s *Service) issue(ctx context.Context, q *store.Queries, user, session id.
 			return Tokens{}, err
 		}
 	}
-	access, exp, err := signer.Issue(user.String(), session.String())
+	access, exp, err := signer.IssueWith(user.String(), session.String(), auth.IssueOptions{Integrity: integ.passed})
 	if err != nil {
 		return Tokens{}, fmt.Errorf("erişim token'ı: %w", err)
 	}
@@ -415,6 +417,8 @@ func (s *Service) issue(ctx context.Context, q *store.Queries, user, session id.
 		RefreshToken: refresh, RefreshExpiresAt: refreshExpires,
 		RegistrationPending: !registered,
 		ConsentRequired:     consentRequired,
+		IntegrityPassed:     integ.passed,
+		IntegrityCheckAfter: integ.checkAfter,
 	}, nil
 }
 
@@ -588,11 +592,17 @@ func (s *Service) refreshCheck(ctx context.Context, hash []byte, refreshToken st
 	return s.cfg.Integrity.Check(ctx, row.Platform, proof, integrity.RefreshBinding(refreshToken))
 }
 
+// integrityInfo is what a session's integrity puts on its tokens.
+type integrityInfo struct {
+	passed     bool
+	checkAfter time.Time // zero while checks are off
+}
+
 // applyIntegrity stores the session's next integrity state, when a check
-// ran, and puts it on t. With checks off it does nothing.
-func (s *Service) applyIntegrity(ctx context.Context, q *store.Queries, session id.ID, prev integrity.State, check *integrity.Result, t *Tokens) error {
+// ran, and returns what the tokens carry. With checks off it does nothing.
+func (s *Service) applyIntegrity(ctx context.Context, q *store.Queries, session id.ID, prev integrity.State, check *integrity.Result) (integrityInfo, error) {
 	if !s.cfg.Integrity.Enabled() {
-		return nil
+		return integrityInfo{}, nil
 	}
 	now := s.cfg.Now()
 	next := integrity.Next(prev, check, now)
@@ -601,12 +611,10 @@ func (s *Service) applyIntegrity(ctx context.Context, q *store.Queries, session 
 			ID: session.PG(), Status: string(next.Status), Reason: optText(string(next.Reason)),
 			CheckedAt: optTS(next.CheckedAt), PassedAt: optTS(next.PassedAt),
 		}); err != nil {
-			return fmt.Errorf("oturum bütünlüğü: %w", err)
+			return integrityInfo{}, fmt.Errorf("oturum bütünlüğü: %w", err)
 		}
 	}
-	t.IntegrityPassed = next.Passed()
-	t.IntegrityCheckAfter = next.CheckAfter(now)
-	return nil
+	return integrityInfo{passed: next.Passed(), checkAfter: next.CheckAfter(now)}, nil
 }
 
 // stateOf reads a session's stored integrity state.

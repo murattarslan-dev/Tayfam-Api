@@ -77,6 +77,18 @@ func NewSigner(cfg SignerConfig) (*Signer, error) {
 // Issue returns a signed access token for userID in sessionID and its
 // expiry time.
 func (s *Signer) Issue(userID, sessionID string) (string, time.Time, error) {
+	return s.IssueWith(userID, sessionID, IssueOptions{})
+}
+
+// IssueOptions are optional claims of an access token.
+type IssueOptions struct {
+	// Integrity sets the "int" claim: the session passed its app integrity
+	// check (ADR-0022).
+	Integrity bool
+}
+
+// IssueWith is Issue with optional claims.
+func (s *Signer) IssueWith(userID, sessionID string, o IssueOptions) (string, time.Time, error) {
 	if !validID(userID) || !validID(sessionID) {
 		return "", time.Time{}, errors.New("kullanıcı ve oturum kimliği zorunlu")
 	}
@@ -85,7 +97,7 @@ func (s *Signer) Issue(userID, sessionID string) (string, time.Time, error) {
 	tok, err := sign(s.cfg.Key.private, s.cfg.Key.ID, Claims{
 		Subject: userID, SessionID: sessionID,
 		Issuer: s.cfg.Issuer, Audience: s.cfg.Audience,
-		IssuedAt: now, ExpiresAt: exp,
+		IssuedAt: now, ExpiresAt: exp, Integrity: o.Integrity,
 	})
 	if err != nil {
 		return "", time.Time{}, err

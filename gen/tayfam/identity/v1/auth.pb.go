@@ -290,10 +290,13 @@ type SignInRequest struct {
 	// ID token from the provider SDK. Never logged.
 	IdToken string `protobuf:"bytes,2,opt,name=id_token,json=idToken,proto3" json:"id_token,omitempty"`
 	// Nonce the client passed to the provider SDK (ADR-0004).
-	Nonce         string   `protobuf:"bytes,3,opt,name=nonce,proto3" json:"nonce,omitempty"`
-	Platform      Platform `protobuf:"varint,4,opt,name=platform,proto3,enum=tayfam.identity.v1.Platform" json:"platform,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Nonce    string   `protobuf:"bytes,3,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	Platform Platform `protobuf:"varint,4,opt,name=platform,proto3,enum=tayfam.identity.v1.Platform" json:"platform,omitempty"`
+	// Optional Play Integrity standard request token (Android), its
+	// requestHash bound to nonce (ADR-0022 §2). At most 16 KiB. Never logged.
+	IntegrityToken string `protobuf:"bytes,5,opt,name=integrity_token,json=integrityToken,proto3" json:"integrity_token,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SignInRequest) Reset() {
@@ -354,6 +357,13 @@ func (x *SignInRequest) GetPlatform() Platform {
 	return Platform_PLATFORM_UNSPECIFIED
 }
 
+func (x *SignInRequest) GetIntegrityToken() string {
+	if x != nil {
+		return x.IntegrityToken
+	}
+	return ""
+}
+
 type SignInResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tokens        *Tokens                `protobuf:"bytes,1,opt,name=tokens,proto3" json:"tokens,omitempty"`
@@ -401,9 +411,13 @@ func (x *SignInResponse) GetTokens() *Tokens {
 type RefreshRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Never logged.
-	RefreshToken  string `protobuf:"bytes,1,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	RefreshToken string `protobuf:"bytes,1,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
+	// Optional Play Integrity token, its requestHash bound to refresh_token
+	// (ADR-0022 §2). Sent once Tokens.integrity_check_after has passed;
+	// otherwise ignored. At most 16 KiB. Never logged.
+	IntegrityToken string `protobuf:"bytes,2,opt,name=integrity_token,json=integrityToken,proto3" json:"integrity_token,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *RefreshRequest) Reset() {
@@ -439,6 +453,13 @@ func (*RefreshRequest) Descriptor() ([]byte, []int) {
 func (x *RefreshRequest) GetRefreshToken() string {
 	if x != nil {
 		return x.RefreshToken
+	}
+	return ""
+}
+
+func (x *RefreshRequest) GetIntegrityToken() string {
+	if x != nil {
+		return x.IntegrityToken
 	}
 	return ""
 }
@@ -574,8 +595,11 @@ type Tokens struct {
 	// version of the privacy notice or terms (data model v14 "Onay kaydı").
 	// The client shows the new texts and calls AccountService.AcceptConsents.
 	ConsentRequired bool `protobuf:"varint,8,opt,name=consent_required,json=consentRequired,proto3" json:"consent_required,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// When the client should next send an integrity proof with a refresh
+	// (ADR-0022 §1); unset while integrity checks are off.
+	IntegrityCheckAfter *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=integrity_check_after,json=integrityCheckAfter,proto3" json:"integrity_check_after,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *Tokens) Reset() {
@@ -664,24 +688,33 @@ func (x *Tokens) GetConsentRequired() bool {
 	return false
 }
 
+func (x *Tokens) GetIntegrityCheckAfter() *timestamppb.Timestamp {
+	if x != nil {
+		return x.IntegrityCheckAfter
+	}
+	return nil
+}
+
 var File_tayfam_identity_v1_auth_proto protoreflect.FileDescriptor
 
 const file_tayfam_identity_v1_auth_proto_rawDesc = "" +
 	"\n" +
-	"\x1dtayfam/identity/v1/auth.proto\x12\x12tayfam.identity.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb4\x01\n" +
+	"\x1dtayfam/identity/v1/auth.proto\x12\x12tayfam.identity.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xdd\x01\n" +
 	"\rSignInRequest\x128\n" +
 	"\bprovider\x18\x01 \x01(\x0e2\x1c.tayfam.identity.v1.ProviderR\bprovider\x12\x19\n" +
 	"\bid_token\x18\x02 \x01(\tR\aidToken\x12\x14\n" +
 	"\x05nonce\x18\x03 \x01(\tR\x05nonce\x128\n" +
-	"\bplatform\x18\x04 \x01(\x0e2\x1c.tayfam.identity.v1.PlatformR\bplatform\"D\n" +
+	"\bplatform\x18\x04 \x01(\x0e2\x1c.tayfam.identity.v1.PlatformR\bplatform\x12'\n" +
+	"\x0fintegrity_token\x18\x05 \x01(\tR\x0eintegrityToken\"D\n" +
 	"\x0eSignInResponse\x122\n" +
-	"\x06tokens\x18\x01 \x01(\v2\x1a.tayfam.identity.v1.TokensR\x06tokens\"5\n" +
+	"\x06tokens\x18\x01 \x01(\v2\x1a.tayfam.identity.v1.TokensR\x06tokens\"^\n" +
 	"\x0eRefreshRequest\x12#\n" +
-	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\"E\n" +
+	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\x12'\n" +
+	"\x0fintegrity_token\x18\x02 \x01(\tR\x0eintegrityToken\"E\n" +
 	"\x0fRefreshResponse\x122\n" +
 	"\x06tokens\x18\x01 \x01(\v2\x1a.tayfam.identity.v1.TokensR\x06tokens\"\x10\n" +
 	"\x0eSignOutRequest\"\x11\n" +
-	"\x0fSignOutResponse\"\xfc\x02\n" +
+	"\x0fSignOutResponse\"\xcc\x03\n" +
 	"\x06Tokens\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1d\n" +
 	"\n" +
@@ -691,7 +724,8 @@ const file_tayfam_identity_v1_auth_proto_rawDesc = "" +
 	"\rrefresh_token\x18\x05 \x01(\tR\frefreshToken\x12J\n" +
 	"\x13refresh_expire_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x11refreshExpireTime\x121\n" +
 	"\x14registration_pending\x18\a \x01(\bR\x13registrationPending\x12)\n" +
-	"\x10consent_required\x18\b \x01(\bR\x0fconsentRequired*M\n" +
+	"\x10consent_required\x18\b \x01(\bR\x0fconsentRequired\x12N\n" +
+	"\x15integrity_check_after\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x13integrityCheckAfter*M\n" +
 	"\bProvider\x12\x18\n" +
 	"\x14PROVIDER_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fPROVIDER_GOOGLE\x10\x01\x12\x12\n" +
@@ -770,17 +804,18 @@ var file_tayfam_identity_v1_auth_proto_depIdxs = []int32{
 	9,  // 3: tayfam.identity.v1.RefreshResponse.tokens:type_name -> tayfam.identity.v1.Tokens
 	10, // 4: tayfam.identity.v1.Tokens.access_expire_time:type_name -> google.protobuf.Timestamp
 	10, // 5: tayfam.identity.v1.Tokens.refresh_expire_time:type_name -> google.protobuf.Timestamp
-	3,  // 6: tayfam.identity.v1.AuthService.SignIn:input_type -> tayfam.identity.v1.SignInRequest
-	5,  // 7: tayfam.identity.v1.AuthService.Refresh:input_type -> tayfam.identity.v1.RefreshRequest
-	7,  // 8: tayfam.identity.v1.AuthService.SignOut:input_type -> tayfam.identity.v1.SignOutRequest
-	4,  // 9: tayfam.identity.v1.AuthService.SignIn:output_type -> tayfam.identity.v1.SignInResponse
-	6,  // 10: tayfam.identity.v1.AuthService.Refresh:output_type -> tayfam.identity.v1.RefreshResponse
-	8,  // 11: tayfam.identity.v1.AuthService.SignOut:output_type -> tayfam.identity.v1.SignOutResponse
-	9,  // [9:12] is the sub-list for method output_type
-	6,  // [6:9] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	10, // 6: tayfam.identity.v1.Tokens.integrity_check_after:type_name -> google.protobuf.Timestamp
+	3,  // 7: tayfam.identity.v1.AuthService.SignIn:input_type -> tayfam.identity.v1.SignInRequest
+	5,  // 8: tayfam.identity.v1.AuthService.Refresh:input_type -> tayfam.identity.v1.RefreshRequest
+	7,  // 9: tayfam.identity.v1.AuthService.SignOut:input_type -> tayfam.identity.v1.SignOutRequest
+	4,  // 10: tayfam.identity.v1.AuthService.SignIn:output_type -> tayfam.identity.v1.SignInResponse
+	6,  // 11: tayfam.identity.v1.AuthService.Refresh:output_type -> tayfam.identity.v1.RefreshResponse
+	8,  // 12: tayfam.identity.v1.AuthService.SignOut:output_type -> tayfam.identity.v1.SignOutResponse
+	10, // [10:13] is the sub-list for method output_type
+	7,  // [7:10] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_identity_v1_auth_proto_init() }

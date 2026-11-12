@@ -168,7 +168,9 @@ Ortam başına `INTEGRITY_MODE` (`internal/platform/config`):
 
 - `SignInRequest` ve `RefreshRequest`'e isteğe bağlı alanlar:
   `integrity_token` (Android) ve `app_attest` (`key_id`, `attestation` ya da
-  `assertion`; iOS). Kanıtsız istek `report` modunda kabul edilir ve
+  `assertion`; iOS). 2026-11-12 (issue #164): `integrity_token` eklendi;
+  `app_attest` iOS doğrulayıcısıyla birlikte eklenir, kullanılmayan alan
+  sözleşmeye önden girmez. Kanıtsız istek `report` modunda kabul edilir ve
   `missing` olarak sayılır.
 - `Session` cevabına `integrity_check_after` (zaman) eklenir.
 - Problem türü `integrity-required` (403) eklenir.

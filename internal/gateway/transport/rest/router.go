@@ -44,6 +44,8 @@ type Deps struct {
 	// web, sign-in with platform web and the web version header. Off in
 	// prod, the zero value (ADR-0017).
 	WebClient bool
+	// Integrity enforces the app integrity claim (ADR-0022); off by default.
+	Integrity IntegrityDeps
 }
 
 // NewRouter returns the public API handler.
@@ -85,7 +87,8 @@ func NewRouter(d Deps) http.Handler {
 	}
 	mux.HandleFunc("/", httpx.NotFound)
 	// cors runs first so that the local web build can read a refusal.
-	return httpx.Chain(mux, cors(d.DevOrigins), requireSupportedClient(d.Client.Versions), requireClientHeader(d.WebClient))
+	return httpx.Chain(mux, cors(d.DevOrigins), requireSupportedClient(d.Client.Versions), requireClientHeader(d.WebClient),
+		requireIntegrity(mux, d.Integrity))
 }
 
 // StatusResponse is the body of GET /v1/status.

@@ -53,6 +53,10 @@ type Claims struct {
 	IssuedAt  time.Time
 	ExpiresAt time.Time
 	KeyID     string
+	// Integrity: the session passed its app integrity check (claim "int",
+	// ADR-0022). Gateway reads it in enforce mode; nothing else decides on
+	// it.
+	Integrity bool
 }
 
 type header struct {
@@ -68,6 +72,9 @@ type payload struct {
 	Sid string `json:"sid"`
 	Iat int64  `json:"iat"`
 	Exp int64  `json:"exp"`
+	// Int is written only when true, so a token without it is exactly the
+	// token issued before the claim existed (ADR-0022).
+	Int bool `json:"int,omitempty"`
 }
 
 var b64 = base64.RawURLEncoding
@@ -76,7 +83,7 @@ var b64 = base64.RawURLEncoding
 func sign(key ed25519.PrivateKey, kid string, c Claims) (string, error) {
 	return signJWS(key, kid, typAccess, payload{
 		Iss: c.Issuer, Aud: c.Audience, Sub: c.Subject, Sid: c.SessionID,
-		Iat: c.IssuedAt.Unix(), Exp: c.ExpiresAt.Unix(),
+		Iat: c.IssuedAt.Unix(), Exp: c.ExpiresAt.Unix(), Int: c.Integrity,
 	})
 }
 
