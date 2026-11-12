@@ -66,20 +66,21 @@ func (q *Queries) CountPollVoters(ctx context.Context, pollIds []pgtype.UUID) ([
 
 const createPoll = `-- name: CreatePoll :exec
 
-INSERT INTO polls (id, tayfa_id, event_id, created_by, question, anonymous, multiple_choice, closes_at, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO polls (id, tayfa_id, event_id, created_by, question, anonymous, multiple_choice, closes_at, created_at, client_request_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 `
 
 type CreatePollParams struct {
-	ID             pgtype.UUID
-	TayfaID        pgtype.UUID
-	EventID        pgtype.UUID
-	CreatedBy      pgtype.UUID
-	Question       string
-	Anonymous      bool
-	MultipleChoice bool
-	ClosesAt       pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
+	ID              pgtype.UUID
+	TayfaID         pgtype.UUID
+	EventID         pgtype.UUID
+	CreatedBy       pgtype.UUID
+	Question        string
+	Anonymous       bool
+	MultipleChoice  bool
+	ClosesAt        pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	ClientRequestID pgtype.UUID
 }
 
 // Anketler (issue #60). Her sorgu tayfa_id ile sınırlıdır (IDOR); üyelik ve
@@ -101,6 +102,7 @@ func (q *Queries) CreatePoll(ctx context.Context, arg CreatePollParams) error {
 		arg.MultipleChoice,
 		arg.ClosesAt,
 		arg.CreatedAt,
+		arg.ClientRequestID,
 	)
 	return err
 }
@@ -242,6 +244,31 @@ func (q *Queries) GetPoll(ctx context.Context, arg GetPollParams) (GetPollRow, e
 		&i.ClosedAt,
 		&i.CreatedAt,
 	)
+	return i, err
+}
+
+const getPollByClientRequest = `-- name: GetPollByClientRequest :one
+SELECT id, tayfa_id, deleted_at
+FROM polls
+WHERE created_by = $1 AND client_request_id = $2
+`
+
+type GetPollByClientRequestParams struct {
+	CreatedBy       pgtype.UUID
+	ClientRequestID pgtype.UUID
+}
+
+type GetPollByClientRequestRow struct {
+	ID        pgtype.UUID
+	TayfaID   pgtype.UUID
+	DeletedAt pgtype.Timestamptz
+}
+
+// Tekrar gönderilen oluşturma isteği aynı anketi döndürür (issue #150).
+func (q *Queries) GetPollByClientRequest(ctx context.Context, arg GetPollByClientRequestParams) (GetPollByClientRequestRow, error) {
+	row := q.db.QueryRow(ctx, getPollByClientRequest, arg.CreatedBy, arg.ClientRequestID)
+	var i GetPollByClientRequestRow
+	err := row.Scan(&i.ID, &i.TayfaID, &i.DeletedAt)
 	return i, err
 }
 

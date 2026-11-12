@@ -70,6 +70,7 @@ func (s *PollServer) CreatePoll(ctx context.Context, req *corev1.CreatePollReque
 	v, err := s.app.Create(ctx, user, t, poll.CreateInput{
 		Question: req.GetQuestion(), Options: req.GetOptions(), Anonymous: req.GetAnonymous(),
 		MultipleChoice: req.GetMultipleChoice(), ClosesAt: closes, EventID: req.GetEventId(),
+		ClientRequestID: req.GetClientRequestId(),
 	})
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)

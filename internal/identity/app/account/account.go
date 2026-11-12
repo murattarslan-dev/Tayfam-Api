@@ -100,18 +100,24 @@ func New(cfg Config) (*Service, error) {
 
 // Account is the caller's own view.
 type Account struct {
+	UserID             id.ID
+	DisplayName        string
 	ReferralCode       string
 	ActivityVisibility Visibility
 	AvatarUploadID     id.ID // zero: no avatar
 }
 
-// Get returns the caller's referral code and settings.
+// Get returns the caller's own ID, display name, referral code and
+// settings.
 func (s *Service) Get(ctx context.Context, caller id.ID) (Account, error) {
 	u, err := s.registered(ctx, s.q, caller)
 	if err != nil {
 		return Account{}, err
 	}
-	a := Account{ReferralCode: u.RefCode.String, ActivityVisibility: Visibility(u.ActivityVisibility)}
+	a := Account{
+		UserID: id.ID(u.ID.Bytes), DisplayName: u.DisplayName.String,
+		ReferralCode: u.RefCode.String, ActivityVisibility: Visibility(u.ActivityVisibility),
+	}
 	if u.AvatarUploadID.Valid {
 		a.AvatarUploadID = id.ID(u.AvatarUploadID.Bytes)
 	}

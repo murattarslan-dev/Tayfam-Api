@@ -73,6 +73,38 @@ func (q *Queries) CountActiveMembersForTayfas(ctx context.Context, tayfaIds []pg
 	return items, nil
 }
 
+const countPendingMembersForTayfas = `-- name: CountPendingMembersForTayfas :many
+SELECT tayfa_id, count(*) AS pending_count FROM memberships
+WHERE tayfa_id = ANY($1::uuid[]) AND status = 'pending'
+GROUP BY tayfa_id
+`
+
+type CountPendingMembersForTayfasRow struct {
+	TayfaID      pgtype.UUID
+	PendingCount int64
+}
+
+// Onay bekleyen katılım istekleri (issue #150); memberships_pending_idx.
+func (q *Queries) CountPendingMembersForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]CountPendingMembersForTayfasRow, error) {
+	rows, err := q.db.Query(ctx, countPendingMembersForTayfas, tayfaIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountPendingMembersForTayfasRow{}
+	for rows.Next() {
+		var i CountPendingMembersForTayfasRow
+		if err := rows.Scan(&i.TayfaID, &i.PendingCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countTayfasCreatedSince = `-- name: CountTayfasCreatedSince :one
 SELECT count(*) FROM tayfas
 WHERE created_by = $1 AND created_at > $2

@@ -224,6 +224,10 @@ func tayfaToProto(v tayfa.View) *corev1.Tayfa {
 		CreateTime:             timestamppb.New(v.CreatedAt), UpdateTime: timestamppb.New(v.UpdatedAt),
 		CoverUploadId: optionalID(v.CoverUploadID),
 	}
+	if v.PendingJoinRequests != nil {
+		n := int32(min(*v.PendingJoinRequests, 1<<31-1)) //nolint:gosec // clamped above
+		out.PendingJoinRequestCount = &n
+	}
 	for _, i := range v.Interests {
 		out.Interests = append(out.Interests, interestToProto(i))
 	}

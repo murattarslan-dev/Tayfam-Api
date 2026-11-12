@@ -85,7 +85,8 @@ func testTayfa() *corev1.Tayfa {
 			{Module: corev1.Module_MODULE_POLLS, Enabled: true},
 		},
 		Status: corev1.TayfaStatus_TAYFA_STATUS_ACTIVE, MemberCount: 1, JoinCode: "K7M2P9QX",
-		CreateTime: timestamppb.New(t0), UpdateTime: timestamppb.New(t0),
+		PendingJoinRequestCount: new(int32(3)),
+		CreateTime:              timestamppb.New(t0), UpdateTime: timestamppb.New(t0),
 	}
 }
 
@@ -335,7 +336,8 @@ func TestCreateTayfa(t *testing.T) {
 	}
 	b := decodeBody[tayfaJSON](t, w)
 	if b.ID != tayfaID || b.JoinPolicy != "approval" || !slices.Equal(b.Interests, []string{"convoy", "camp"}) ||
-		b.Status != "active" || b.JoinCode != "K7M2P9QX" || !b.CreatedAt.Equal(t0) {
+		b.Status != "active" || b.JoinCode != "K7M2P9QX" || !b.CreatedAt.Equal(t0) ||
+		b.PendingJoinRequestCount == nil || *b.PendingJoinRequestCount != 3 {
 		t.Fatalf("gövde = %+v", b)
 	}
 	if len(b.Modules) != 4 || !b.Modules["events"] || b.Modules["qa"] {

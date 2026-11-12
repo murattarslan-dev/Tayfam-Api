@@ -157,6 +157,9 @@ message Tayfa {
   // The cover image (a READY COVER upload of this tayfa, MediaService);
   // empty when there is none. Links: MediaService.GetMediaUrls.
   string cover_upload_id = 15;
+  // PENDING join requests; set only for callers who may approve them
+  // (moderator, admin), unset for everyone else.
+  optional int32 pending_join_request_count = 16;
 }
 
 message CreateTayfaRequest {

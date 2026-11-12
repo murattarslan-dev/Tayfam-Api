@@ -304,3 +304,17 @@ func TestActivityPaging(t *testing.T) {
 		t.Fatalf("başka profilin imleci: %v", err)
 	}
 }
+
+// TestProfileNameWithoutRelation: the name and avatar come back for anyone
+// not blocked, with no shared tayfa or friendship. Notifications carry IDs
+// only (a friend request, a direct invite), and the client takes the name
+// from here (issue #150).
+func TestProfileNameWithoutRelation(t *testing.T) {
+	e := setup(t)
+	stranger, viewer := e.user(t, VisibilityPrivate), e.user(t, VisibilityPrivate)
+	p, err := e.svc.GetProfile(ctx, viewer, stranger)
+	if err != nil || p.DisplayName != "Kişi" || p.UserID != stranger || p.Self || p.Friend != "" ||
+		len(p.MutualTayfas) != 0 || p.ActivityVisible {
+		t.Fatalf("profil = %+v %v", p, err)
+	}
+}

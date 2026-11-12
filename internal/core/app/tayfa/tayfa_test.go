@@ -692,3 +692,57 @@ func TestMembersCanCreateEventsSetting(t *testing.T) {
 		t.Fatalf("liste = %+v", list)
 	}
 }
+
+// TestPendingJoinRequestCount: only callers who may approve requests
+// (moderator, admin) see the count, in Get and ListMine alike (issue #150).
+func TestPendingJoinRequestCount(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	tayfa, admin := e.create(t, JoinApproval)
+	mod := e.member(t, tayfa, admin, authz.Moderator)
+	member := e.member(t, tayfa, admin, authz.Member)
+	e.join(t, tayfa, id.New(), authz.StatusPending)
+	e.join(t, tayfa, id.New(), authz.StatusPending)
+	// Another tayfa's requests are not counted here.
+	other, _ := e.create(t, JoinApproval)
+	e.join(t, other, id.New(), authz.StatusPending)
+
+	for name, u := range map[string]id.ID{"yönetici": admin, "moderatör": mod} {
+		v, _, err := e.svc.Get(ctx, u, tayfa)
+		if err != nil || v.PendingJoinRequests == nil || *v.PendingJoinRequests != 2 {
+			t.Fatalf("%s: %v %v", name, v.PendingJoinRequests, err)
+		}
+	}
+	v, _, err := e.svc.Get(ctx, member, tayfa)
+	if err != nil || v.PendingJoinRequests != nil {
+		t.Fatalf("üye sayıyı gördü: %v %v", v.PendingJoinRequests, err)
+	}
+
+	// ListMine: the moderator of one tayfa and a plain member of another.
+	plain, _ := e.create(t, JoinOpen)
+	e.join(t, plain, mod, authz.StatusActive)
+	list, _, err := e.svc.ListMine(ctx, mod, 0, "")
+	must(t, err)
+	if len(list) != 2 {
+		t.Fatalf("liste = %d", len(list))
+	}
+	for _, g := range list {
+		switch g.TayfaID {
+		case tayfa:
+			if g.Tayfa == nil || g.Tayfa.PendingJoinRequests == nil || *g.Tayfa.PendingJoinRequests != 2 {
+				t.Fatalf("moderatör olduğu tayfa: %+v", g.Tayfa)
+			}
+		case plain:
+			if g.Tayfa == nil || g.Tayfa.PendingJoinRequests != nil {
+				t.Fatalf("üye olduğu tayfa: %+v", g.Tayfa)
+			}
+		}
+	}
+
+	// None waiting: zero, not absent.
+	empty, emptyAdmin := e.create(t, JoinApproval)
+	v, _, err = e.svc.Get(ctx, emptyAdmin, empty)
+	if err != nil || v.PendingJoinRequests == nil || *v.PendingJoinRequests != 0 {
+		t.Fatalf("bekleyen yok: %v %v", v.PendingJoinRequests, err)
+	}
+}

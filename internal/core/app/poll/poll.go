@@ -144,9 +144,12 @@ type CreateInput struct {
 	ClosesAt time.Time
 	// EventID is optional: an event of the same tayfa.
 	EventID string
+	// ClientRequestID is optional: a UUID the client reuses on retry.
+	ClientRequestID string
 }
 
-// Create opens a poll by user.
+// Create opens a poll by user. A repeat with the same ClientRequestID by the
+// same user returns the first poll and records nothing.
 func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in CreateInput) (View, error) {
 	question, err := cleanLine(in.Question, QuestionMax, "question")
 	if err != nil {
@@ -163,11 +166,34 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in CreateInput)
 			return View{}, apperr.Validation("event_id")
 		}
 	}
+	crid := pgtype.UUID{}
+	if in.ClientRequestID != "" {
+		r, ok := id.Parse(in.ClientRequestID)
+		if !ok {
+			return View{}, apperr.Validation("client_request_id")
+		}
+		crid = r.PG()
+	}
 
 	var v View
 	err = s.write(ctx, user, tayfa, func(q *store.Queries, c caller) error {
 		if err := c.authorize(authz.PollCreate); err != nil {
 			return err
+		}
+		if crid.Valid {
+			prev, err := q.GetPollByClientRequest(ctx, store.GetPollByClientRequestParams{CreatedBy: user.PG(), ClientRequestID: crid})
+			switch {
+			case err == nil:
+				// The same request again: only valid for the same, still
+				// visible poll in the same tayfa.
+				if id.ID(prev.TayfaID.Bytes) != tayfa || prev.DeletedAt.Valid {
+					return apperr.Validation("client_request_id")
+				}
+				v, err = get(ctx, q, user, tayfa, id.ID(prev.ID.Bytes), c.now)
+				return err
+			case !errors.Is(err, pgx.ErrNoRows):
+				return fmt.Errorf("tekrar gönderim: %w", err)
+			}
 		}
 		closes := pgtype.Timestamptz{}
 		if !in.ClosesAt.IsZero() {
@@ -192,6 +218,7 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in CreateInput)
 		if err := q.CreatePoll(ctx, store.CreatePollParams{
 			ID: pid.PG(), TayfaID: tayfa.PG(), EventID: eventID, CreatedBy: user.PG(), Question: question,
 			Anonymous: in.Anonymous, MultipleChoice: in.MultipleChoice, ClosesAt: closes, CreatedAt: ts(c.now),
+			ClientRequestID: crid,
 		}); err != nil {
 			return fmt.Errorf("anket: %w", err)
 		}

@@ -8,8 +8,14 @@
 -- başına toplamdır.
 
 -- name: CreatePoll :exec
-INSERT INTO polls (id, tayfa_id, event_id, created_by, question, anonymous, multiple_choice, closes_at, created_at)
-VALUES (@id, @tayfa_id, sqlc.narg('event_id'), @created_by, @question, @anonymous, @multiple_choice, sqlc.narg('closes_at'), @created_at);
+INSERT INTO polls (id, tayfa_id, event_id, created_by, question, anonymous, multiple_choice, closes_at, created_at, client_request_id)
+VALUES (@id, @tayfa_id, sqlc.narg('event_id'), @created_by, @question, @anonymous, @multiple_choice, sqlc.narg('closes_at'), @created_at, sqlc.narg('client_request_id'));
+
+-- Tekrar gönderilen oluşturma isteği aynı anketi döndürür (issue #150).
+-- name: GetPollByClientRequest :one
+SELECT id, tayfa_id, deleted_at
+FROM polls
+WHERE created_by = @created_by AND client_request_id = @client_request_id;
 
 -- name: CreatePollOption :exec
 INSERT INTO poll_options (id, poll_id, text, position)

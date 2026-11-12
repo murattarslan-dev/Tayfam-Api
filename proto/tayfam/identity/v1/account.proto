@@ -15,7 +15,8 @@ import "tayfam/identity/v1/auth.proto";
 // always comes from the verified token. Errors use the ErrorReason values in
 // auth.proto.
 service AccountService {
-  // GetAccount returns the caller's referral code and settings.
+  // GetAccount returns the caller's own ID, display name, referral code
+  // and settings.
   rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
   // RotateReferralCode gives the caller a new referral code. The old code,
   // and every link that carries it, finds nobody from then on.
@@ -92,6 +93,10 @@ message GetAccountResponse {
   ActivityVisibility activity_visibility = 2;
   // Upload ID (UUID) of the avatar; empty when there is none.
   string avatar_upload_id = 3;
+  // The caller's own user ID (from the verified token).
+  string user_id = 4;
+  // The caller's display name.
+  string display_name = 5;
 }
 
 message SetAvatarRequest {

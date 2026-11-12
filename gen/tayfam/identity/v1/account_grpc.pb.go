@@ -47,7 +47,8 @@ const (
 // always comes from the verified token. Errors use the ErrorReason values in
 // auth.proto.
 type AccountServiceClient interface {
-	// GetAccount returns the caller's referral code and settings.
+	// GetAccount returns the caller's own ID, display name, referral code
+	// and settings.
 	GetAccount(ctx context.Context, in *GetAccountRequest, opts ...grpc.CallOption) (*GetAccountResponse, error)
 	// RotateReferralCode gives the caller a new referral code. The old code,
 	// and every link that carries it, finds nobody from then on.
@@ -242,7 +243,8 @@ func (c *accountServiceClient) DeleteAccount(ctx context.Context, in *DeleteAcco
 // always comes from the verified token. Errors use the ErrorReason values in
 // auth.proto.
 type AccountServiceServer interface {
-	// GetAccount returns the caller's referral code and settings.
+	// GetAccount returns the caller's own ID, display name, referral code
+	// and settings.
 	GetAccount(context.Context, *GetAccountRequest) (*GetAccountResponse, error)
 	// RotateReferralCode gives the caller a new referral code. The old code,
 	// and every link that carries it, finds nobody from then on.

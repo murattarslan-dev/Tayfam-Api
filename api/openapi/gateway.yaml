@@ -3541,7 +3541,7 @@ paths:
   /v1/me/account:
     get:
       operationId: getAccount
-      summary: Kendi referans kodunuz ve katılım geçmişi görünürlüğünüz
+      summary: Kendi kimliğiniz, adınız, referans kodunuz ve katılım geçmişi görünürlüğünüz
       responses:
         "200":
           description: Hesap ayarları
@@ -3891,9 +3891,13 @@ paths:
       operationId: getUserProfile
       summary: Bir kullanıcının profili (ad, avatar, ortak tayfalar)
       description: |
+        Ad ve avatar, ortak tayfanız ya da arkadaşlığınız olmasa da her
+        kullanıcı için döner; bildirimlerdeki `actor_id` ve `target_id`
+        (ör. `friend_request`, `tayfa_invitation`) kişinin adı bu uçtan
+        alınır. Bildirimler isim taşımaz.
         Ortak tayfalar yalnızca ikinizin de etkin üyesi olduğu tayfalardır.
-        Engel varsa (iki yönden biri) `user-not-found`, var olmayan kullanıcıyla
-        aynı cevap.
+        Engel varsa (iki yönden biri) ya da hesap silinmişse `user-not-found`,
+        var olmayan kullanıcıyla aynı cevap.
       responses:
         "200":
           description: Profil
@@ -5100,6 +5104,13 @@ components:
         join_code:
           type: string
           description: Yalnızca yöneticiye döner.
+        pending_join_request_count:
+          type: integer
+          format: int32
+          minimum: 0
+          description: |
+            Onay bekleyen katılım istekleri; yalnızca istekleri onaylayabilen
+            moderatör ve yöneticiye döner, diğerlerinde alan yoktur.
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 
@@ -5576,6 +5587,15 @@ components:
           type: string
           format: uuid
           description: İsteğe bağlı; aynı tayfanın etkinliği.
+        client_request_id:
+          type: string
+          format: uuid
+          description: |
+            İsteğe bağlı. İstemcinin her oluşturma denemesi için bir kez
+            ürettiği, tekrar gönderimde aynen kullandığı UUID; aynı kişiden
+            tekrar gelirse ilk anket döner, ikinci anket açılmaz. Başka bir
+            tayfada ya da o anket silindikten sonra tekrar kullanılırsa
+            `validation` (alan `client_request_id`).
 
     PollVoteRequest:
       type: object
@@ -6093,7 +6113,9 @@ components:
         actor_id:
           type: string
           format: uuid
-          description: İşlemi yapan; sistem ya da silinmiş hesapsa yoktur.
+          description: |
+            İşlemi yapan; sistem ya da silinmiş hesapsa yoktur. Adı
+            `GET /v1/users/{user_id}/profile` verir (ortak tayfa gerekmez).
         target_type:
           type: string
           description: |
@@ -6953,8 +6975,10 @@ components:
       enum: [private, tayfa, public]
     Account:
       type: object
-      required: [referral_code, activity_visibility]
+      required: [user_id, display_name, referral_code, activity_visibility]
       properties:
+        user_id: { type: string, format: uuid, description: Kendi kullanıcı kimliğiniz. }
+        display_name: { type: string, description: Kendi görünen adınız. }
         avatar_upload_id: { type: string, format: uuid, description: "Avatar; linkleri `POST /v1/media/urls`." }
         referral_code:
           type: string

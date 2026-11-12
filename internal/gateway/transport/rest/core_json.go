@@ -125,9 +125,11 @@ type tayfaJSON struct {
 	// MembersCanCreateEvents: every active member may create events.
 	MembersCanCreateEvents bool `json:"members_can_create_events"`
 	// Only core decides who gets it (admins); gateway passes it on as is.
-	JoinCode  string    `json:"join_code,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	JoinCode string `json:"join_code,omitempty"`
+	// Only core decides who gets it (moderators, admins); absent otherwise.
+	PendingJoinRequestCount *int32    `json:"pending_join_request_count,omitempty"`
+	CreatedAt               time.Time `json:"created_at"`
+	UpdatedAt               time.Time `json:"updated_at"`
 	// CoverUploadID: links with POST /v1/media/urls (issue #135).
 	CoverUploadID string `json:"cover_upload_id,omitempty"`
 }
@@ -146,7 +148,7 @@ func tayfaFrom(t *corev1.Tayfa) tayfaJSON {
 		SuspendedAt: optTime(t.GetSuspendTime()), DeletionAt: optTime(t.GetDeletionTime()),
 		MemberCount: t.GetMemberCount(), MembersCanCreateEvents: t.GetMembersCanCreateEvents(), JoinCode: t.GetJoinCode(),
 		CreatedAt: t.GetCreateTime().AsTime(), UpdatedAt: t.GetUpdateTime().AsTime(),
-		CoverUploadID: t.GetCoverUploadId(),
+		CoverUploadID: t.GetCoverUploadId(), PendingJoinRequestCount: t.PendingJoinRequestCount,
 	}
 }
 

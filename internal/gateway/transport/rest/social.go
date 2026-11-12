@@ -500,6 +500,8 @@ func (h coreHandlers) listActivity(ctx context.Context, w http.ResponseWriter, r
 // --- Account (identity) ---
 
 type accountJSON struct {
+	UserID             string `json:"user_id"`
+	DisplayName        string `json:"display_name"`
 	ReferralCode       string `json:"referral_code"`
 	ActivityVisibility string `json:"activity_visibility"`
 	AvatarUploadID     string `json:"avatar_upload_id,omitempty"`
@@ -534,6 +536,7 @@ func (h coreHandlers) getAccount(ctx context.Context, w http.ResponseWriter, r *
 		return
 	}
 	writeJSON(w, http.StatusOK, accountJSON{
+		UserID: resp.GetUserId(), DisplayName: resp.GetDisplayName(),
 		ReferralCode: resp.GetReferralCode(), ActivityVisibility: identityVisibilities.name(resp.GetActivityVisibility()),
 		AvatarUploadID: resp.GetAvatarUploadId(),
 	})

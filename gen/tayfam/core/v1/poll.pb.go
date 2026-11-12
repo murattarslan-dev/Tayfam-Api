@@ -266,9 +266,14 @@ type CreatePollRequest struct {
 	// Optional; in the future, at most 365 days ahead.
 	CloseTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
 	// Optional; an event of the same tayfa.
-	EventId       string `protobuf:"bytes,7,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	EventId string `protobuf:"bytes,7,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	// Optional. A UUID the client generates once per create attempt and
+	// reuses on retry (offline write protection): a repeat by the same caller
+	// returns the first poll and records nothing. Reusing it in another tayfa
+	// or after that poll was deleted is ERROR_REASON_VALIDATION.
+	ClientRequestId string `protobuf:"bytes,8,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *CreatePollRequest) Reset() {
@@ -346,6 +351,13 @@ func (x *CreatePollRequest) GetCloseTime() *timestamppb.Timestamp {
 func (x *CreatePollRequest) GetEventId() string {
 	if x != nil {
 		return x.EventId
+	}
+	return ""
+}
+
+func (x *CreatePollRequest) GetClientRequestId() string {
+	if x != nil {
+		return x.ClientRequestId
 	}
 	return ""
 }
@@ -1206,7 +1218,7 @@ const file_tayfam_core_v1_poll_proto_rawDesc = "" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12\x1a\n" +
 	"\bposition\x18\x03 \x01(\x05R\bposition\x12\x1d\n" +
 	"\n" +
-	"vote_count\x18\x04 \x01(\x03R\tvoteCount\"\x81\x02\n" +
+	"vote_count\x18\x04 \x01(\x03R\tvoteCount\"\xad\x02\n" +
 	"\x11CreatePollRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x1a\n" +
 	"\bquestion\x18\x02 \x01(\tR\bquestion\x12\x18\n" +
@@ -1215,7 +1227,8 @@ const file_tayfam_core_v1_poll_proto_rawDesc = "" +
 	"\x0fmultiple_choice\x18\x05 \x01(\bR\x0emultipleChoice\x129\n" +
 	"\n" +
 	"close_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\x12\x19\n" +
-	"\bevent_id\x18\a \x01(\tR\aeventId\">\n" +
+	"\bevent_id\x18\a \x01(\tR\aeventId\x12*\n" +
+	"\x11client_request_id\x18\b \x01(\tR\x0fclientRequestId\">\n" +
 	"\x12CreatePollResponse\x12(\n" +
 	"\x04poll\x18\x01 \x01(\v2\x14.tayfam.core.v1.PollR\x04poll\"D\n" +
 	"\x0eGetPollRequest\x12\x19\n" +

@@ -107,9 +107,12 @@ type View struct {
 	DeletionAt  time.Time
 	MemberCount int64
 	// JoinCode is set only for callers allowed to rotate it.
-	JoinCode  string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	JoinCode string
+	// PendingJoinRequests is set only for callers allowed to approve join
+	// requests (moderator, admin); nil for everyone else.
+	PendingJoinRequests *int64
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 	// CoverUploadID is the cover image; zero when there is none.
 	CoverUploadID id.ID
 }

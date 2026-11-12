@@ -273,18 +273,19 @@ type Membership struct {
 }
 
 type Poll struct {
-	ID             pgtype.UUID
-	TayfaID        pgtype.UUID
-	EventID        pgtype.UUID
-	CreatedBy      pgtype.UUID
-	Question       string
-	Anonymous      bool
-	MultipleChoice bool
-	ClosesAt       pgtype.Timestamptz
-	ClosedAt       pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	DeletedBy      pgtype.UUID
+	ID              pgtype.UUID
+	TayfaID         pgtype.UUID
+	EventID         pgtype.UUID
+	CreatedBy       pgtype.UUID
+	Question        string
+	Anonymous       bool
+	MultipleChoice  bool
+	ClosesAt        pgtype.Timestamptz
+	ClosedAt        pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	DeletedBy       pgtype.UUID
+	ClientRequestID pgtype.UUID
 }
 
 type PollOption struct {

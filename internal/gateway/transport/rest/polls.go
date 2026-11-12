@@ -155,6 +155,8 @@ type pollCreateBody struct {
 	MultipleChoice bool       `json:"multiple_choice"`
 	ClosesAt       *time.Time `json:"closes_at"`
 	EventID        string     `json:"event_id"`
+	// ClientRequestID is optional (issue #150): a retry returns the first poll.
+	ClientRequestID string `json:"client_request_id"`
 }
 
 func (h coreHandlers) createPoll(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -167,7 +169,7 @@ func (h coreHandlers) createPoll(ctx context.Context, w http.ResponseWriter, r *
 		return
 	}
 	if !lineOK(b.Question, pollQuestionMax) || len(b.Options) < pollOptionsMin || len(b.Options) > pollOptionsMax ||
-		(b.EventID != "" && !validUUID(b.EventID)) {
+		(b.EventID != "" && !validUUID(b.EventID)) || (b.ClientRequestID != "" && !validUUID(b.ClientRequestID)) {
 		badRequest(w, r)
 		return
 	}
@@ -179,7 +181,7 @@ func (h coreHandlers) createPoll(ctx context.Context, w http.ResponseWriter, r *
 	}
 	req := &corev1.CreatePollRequest{
 		TayfaId: id, Question: b.Question, Options: b.Options, Anonymous: b.Anonymous,
-		MultipleChoice: b.MultipleChoice, EventId: b.EventID,
+		MultipleChoice: b.MultipleChoice, EventId: b.EventID, ClientRequestId: b.ClientRequestID,
 	}
 	if b.ClosesAt != nil {
 		req.CloseTime = timestamppb.New(*b.ClosesAt)
