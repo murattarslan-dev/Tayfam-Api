@@ -698,9 +698,12 @@ func TestMembersCanCreateEventsSetting(t *testing.T) {
 func TestPendingJoinRequestCount(t *testing.T) {
 	e := setup(t)
 	ctx := context.Background()
-	tayfa, admin := e.create(t, JoinApproval)
+	// Members join an open tayfa as active; then requests need approval.
+	tayfa, admin := e.create(t, JoinOpen)
 	mod := e.member(t, tayfa, admin, authz.Moderator)
 	member := e.member(t, tayfa, admin, authz.Member)
+	_, err := e.svc.Update(ctx, admin, tayfa, UpdateInput{Fields: []string{FieldJoinPolicy}, JoinPolicy: JoinApproval})
+	must(t, err)
 	e.join(t, tayfa, id.New(), authz.StatusPending)
 	e.join(t, tayfa, id.New(), authz.StatusPending)
 	// Another tayfa's requests are not counted here.
