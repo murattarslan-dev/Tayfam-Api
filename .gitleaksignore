@@ -1,9 +1,0 @@
-# gitleaks'in bilinen yanlış alarmları (parmak izi: commit:dosya:kural:satır).
-# Yalnızca o commit'teki o bulguyu susturur; yeni bir bulgu yine CI'ı kırar.
-#
-# internal/ops/e2e_test.go'daki sahte servis hesabı anahtarı: değer test
-# başına rastgele bir işarettir, gerçek bir sır değildir (PR #168, #169).
-# #169'da kural, silinen eski satırdaki PEM başlığını eklenen satırla
-# birleştirerek yine eşleştirdi.
-cec1ab025d3b065257c77a19eac88bcafdaee70e:internal/ops/e2e_test.go:private-key:250
-0601b4643893c59c4da0196eb38c913a646689d2:internal/ops/e2e_test.go:private-key:250
