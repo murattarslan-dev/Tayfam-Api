@@ -94,6 +94,10 @@ func (e *testEnv) postForm(path string, form url.Values) *httptest.ResponseRecor
 }
 
 func (e *testEnv) postKey(env string, key []byte) *httptest.ResponseRecorder {
+	return e.postKeyTo("/fcm", env, key)
+}
+
+func (e *testEnv) postKeyTo(path, env string, key []byte) *httptest.ResponseRecorder {
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
 	_ = mw.WriteField("csrf", e.csrf())
@@ -101,7 +105,7 @@ func (e *testEnv) postKey(env string, key []byte) *httptest.ResponseRecorder {
 	fw, _ := mw.CreateFormFile("key", "anahtar.json")
 	_, _ = fw.Write(key)
 	_ = mw.Close()
-	req := httptest.NewRequest(http.MethodPost, "/fcm", &body)
+	req := httptest.NewRequest(http.MethodPost, path, &body)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	req.Header.Set("Origin", e.origin())
 	req.AddCookie(e.cookie)
@@ -148,7 +152,7 @@ func TestHostHeaderChecked(t *testing.T) {
 
 func TestLaunchTokenIsOneTime(t *testing.T) {
 	e := newTestEnv(t, "")
-	for _, p := range []string{"/", "/r2", "/fcm", "/export", "/?t=00", "/?t=" + strings.Repeat("ab", 32)} {
+	for _, p := range []string{"/", "/r2", "/fcm", "/integrity", "/export", "/?t=00", "/?t=" + strings.Repeat("ab", 32)} {
 		if rec := e.do(httptest.NewRequest(http.MethodGet, p, nil)); rec.Code != http.StatusForbidden {
 			t.Errorf("GET %s without session: %d", p, rec.Code)
 		}

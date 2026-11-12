@@ -91,6 +91,14 @@ spec:
             - name: IDENTITY_DATA_EXPORT_KEYS
               valueFrom:
                 secretKeyRef: { name: identity-export-key, key: IDENTITY_DATA_EXPORT_KEYS, optional: true }
+            # Uygulama bütünlüğü (ADR-0022, issue #165): yalnızca Play
+            # Integrity yetkili servis hesabının JSON anahtarı. Secret yoksa
+            # ve INTEGRITY_MODE off ise servis yine başlar (optional);
+            # INTEGRITY_MODE report ya da enforce iken secret zorunludur,
+            # yoksa identity başlamaz (sessizce denetimsiz çalışmaz).
+            - name: INTEGRITY_SERVICE_ACCOUNT
+              valueFrom:
+                secretKeyRef: { name: identity-integrity, key: service-account.json, optional: true }
             # Çalışma zamanı kullanıcısı identity_app (ADR-0015); sahip
             # (identity-db) yalnızca migrate initContainer'ındadır.
             - { name: DB_HOST, value: tayfam-pg-rw }

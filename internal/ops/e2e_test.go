@@ -280,6 +280,27 @@ func TestEndToEndWithSops(t *testing.T) {
 		t.Errorf("fcm result page:\n%s", rec.Body.String())
 	}
 
+	// --- App integrity (dev): the secret only; identity's egress exists ---
+	isa, _ := json.Marshal(map[string]string{
+		"type": "service_account", "project_id": "tayfam-test", "client_email": "integrity@tayfam-test.iam.gserviceaccount.com",
+		"private_key": "-----BEGIN PRIVATE KEY-----\n" + marker + "-i\n-----END PRIVATE KEY-----\n",
+	})
+	rec = e.postKeyTo("/integrity", "dev", isa)
+	bodies.WriteString(rec.Body.String())
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Tamam") {
+		t.Fatalf("integrity: %d\n%s", rec.Code, rec.Body.String())
+	}
+	got = decrypt(t, filepath.Join(dev, "secrets", "identity-integrity.sops.yaml"), "service-account.json")
+	if !strings.Contains(got, marker+"-i") {
+		t.Error("identity-integrity: decrypted key differs")
+	}
+	if !strings.Contains(readFile(t, filepath.Join(dev, "secrets", "kustomization.yaml")), "  - identity-integrity.sops.yaml\n") {
+		t.Error("dev secret list lacks identity-integrity")
+	}
+	if !strings.Contains(rec.Body.String(), "INTEGRITY_MODE") || !strings.Contains(rec.Body.String(), "Windows'ta şimdi silin") {
+		t.Errorf("integrity result page:\n%s", rec.Body.String())
+	}
+
 	// --- Export key (dev) ---
 	rec = e.postForm("/export", url.Values{"csrf": {e.csrf()}, "env": {"dev"}})
 	bodies.WriteString(rec.Body.String())
