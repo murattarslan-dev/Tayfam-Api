@@ -114,6 +114,6 @@ func (v *Verifier) Verify(ctx context.Context, token string) (Claims, error) {
 	}
 	return Claims{
 		Subject: c.Sub, SessionID: c.Sid, Issuer: c.Iss, Audience: c.Aud,
-		IssuedAt: iat, ExpiresAt: exp, KeyID: p.header.Kid,
+		IssuedAt: iat, ExpiresAt: exp, KeyID: p.header.Kid, Integrity: c.Int,
 	}, nil
 }

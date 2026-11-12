@@ -32,6 +32,10 @@ type fakeIdentity struct {
 	gotReg     *identityv1.CompleteRegistrationRequest
 	// consentRequired is returned in Tokens (account_test.go).
 	consentRequired bool
+	// gotRefreshReq is the last refresh request; checkAfter is returned
+	// in Tokens (integrity_test.go).
+	gotRefreshReq *identityv1.RefreshRequest
+	checkAfter    *timestamppb.Timestamp
 }
 
 func (f *fakeIdentity) tokens() *identityv1.Tokens {
@@ -41,6 +45,7 @@ func (f *fakeIdentity) tokens() *identityv1.Tokens {
 		RefreshExpireTime:   timestamppb.New(t0.Add(90 * 24 * time.Hour)),
 		RegistrationPending: true,
 		ConsentRequired:     f.consentRequired,
+		IntegrityCheckAfter: f.checkAfter,
 	}
 }
 
@@ -60,7 +65,7 @@ func (f *fakeIdentity) SignIn(_ context.Context, in *identityv1.SignInRequest, _
 	return &identityv1.SignInResponse{Tokens: f.tokens()}, nil
 }
 func (f *fakeIdentity) Refresh(_ context.Context, in *identityv1.RefreshRequest, _ ...grpc.CallOption) (*identityv1.RefreshResponse, error) {
-	f.gotRefresh = in.GetRefreshToken()
+	f.gotRefresh, f.gotRefreshReq = in.GetRefreshToken(), in
 	if f.err != nil {
 		return nil, f.err
 	}

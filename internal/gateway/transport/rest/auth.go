@@ -24,6 +24,10 @@ import (
 const (
 	maxBodyBytes = 16 << 10
 	upstreamWait = 10 * time.Second
+	// maxIntegrityToken bounds a Play Integrity token (ADR-0022); sign-in
+	// and refresh bodies that may carry one get maxAuthBodyBytes.
+	maxIntegrityToken = 16 << 10
+	maxAuthBodyBytes  = 32 << 10
 )
 
 // AuthClient is the part of identity's AuthService the gateway uses.
@@ -73,6 +77,8 @@ type signInBody struct {
 	IDToken  string `json:"id_token"`
 	Nonce    string `json:"nonce"`
 	Platform string `json:"platform"`
+	// IntegrityToken is the optional Play Integrity proof (ADR-0022).
+	IntegrityToken string `json:"integrity_token"`
 }
 
 // sessionBody is the response of sign-in and refresh. The tokens are
@@ -86,6 +92,9 @@ type sessionBody struct {
 	RefreshExpiresAt    time.Time `json:"refresh_expires_at"`
 	RegistrationPending bool      `json:"registration_pending"`
 	ConsentRequired     bool      `json:"consent_required"`
+	// IntegrityCheckAfter: send integrity_token with the first refresh
+	// after it (ADR-0022); absent while checks are off.
+	IntegrityCheckAfter *time.Time `json:"integrity_check_after,omitempty"`
 }
 
 var providers = map[string]identityv1.Provider{"google": identityv1.Provider_PROVIDER_GOOGLE}
@@ -102,7 +111,7 @@ func (h authHandlers) signIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b signInBody
-	if !decode(w, r, &b) {
+	if !decodeLimit(w, r, &b, maxAuthBodyBytes) {
 		return
 	}
 	provider, okP := providers[b.Provider]
@@ -110,13 +119,16 @@ func (h authHandlers) signIn(w http.ResponseWriter, r *http.Request) {
 	if b.Platform == "web" && !h.webClient {
 		okPl = false
 	}
-	if !okP || !okPl || b.IDToken == "" || len(b.IDToken) > 8192 || len(b.Nonce) < 16 || len(b.Nonce) > 256 {
+	if !okP || !okPl || b.IDToken == "" || len(b.IDToken) > 8192 || len(b.Nonce) < 16 || len(b.Nonce) > 256 ||
+		len(b.IntegrityToken) > maxIntegrityToken {
 		httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-request", "Bad Request", "")
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), upstreamWait)
 	defer cancel()
-	resp, err := h.d.Auth.SignIn(ctx, &identityv1.SignInRequest{Provider: provider, IdToken: b.IDToken, Nonce: b.Nonce, Platform: platform})
+	resp, err := h.d.Auth.SignIn(ctx, &identityv1.SignInRequest{
+		Provider: provider, IdToken: b.IDToken, Nonce: b.Nonce, Platform: platform, IntegrityToken: b.IntegrityToken,
+	})
 	if err != nil {
 		h.upstreamError(w, r, err)
 		return
@@ -125,7 +137,8 @@ func (h authHandlers) signIn(w http.ResponseWriter, r *http.Request) {
 }
 
 type refreshBody struct {
-	RefreshToken string `json:"refresh_token"`
+	RefreshToken   string `json:"refresh_token"`
+	IntegrityToken string `json:"integrity_token"`
 }
 
 func (h authHandlers) refresh(w http.ResponseWriter, r *http.Request) {
@@ -135,7 +148,11 @@ func (h authHandlers) refresh(w http.ResponseWriter, r *http.Request) {
 	}
 	// The refresh token comes in the body only; a cookie is ignored.
 	var b refreshBody
-	if !decode(w, r, &b) {
+	if !decodeLimit(w, r, &b, maxAuthBodyBytes) {
+		return
+	}
+	if len(b.IntegrityToken) > maxIntegrityToken {
+		httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-request", "Bad Request", "")
 		return
 	}
 	token := b.RefreshToken
@@ -145,7 +162,7 @@ func (h authHandlers) refresh(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), upstreamWait)
 	defer cancel()
-	resp, err := h.d.Auth.Refresh(ctx, &identityv1.RefreshRequest{RefreshToken: token})
+	resp, err := h.d.Auth.Refresh(ctx, &identityv1.RefreshRequest{RefreshToken: token, IntegrityToken: b.IntegrityToken})
 	if err != nil {
 		h.upstreamError(w, r, err)
 		return
@@ -234,6 +251,7 @@ func (h authHandlers) writeSession(w http.ResponseWriter, t *identityv1.Tokens) 
 		RefreshExpiresAt:    t.GetRefreshExpireTime().AsTime(),
 		RegistrationPending: t.GetRegistrationPending(),
 		ConsentRequired:     t.GetConsentRequired(),
+		IntegrityCheckAfter: optTime(t.GetIntegrityCheckAfter()),
 	})
 }
 

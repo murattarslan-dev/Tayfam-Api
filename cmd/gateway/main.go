@@ -161,6 +161,21 @@ func setup(rt *service.Runtime) error {
 			Log:         rt.Log,
 		}
 	}
+	// Uygulama bütünlüğü (ADR-0022, issue #164): yalnızca enforce modunda
+	// doğrulamadan geçmemiş oturumun token'ı reddedilir. identity ile aynı
+	// INTEGRITY_MODE değişkeni (tayfam-env).
+	integrityMode := rt.Config.OneOf("INTEGRITY_MODE", "off", "off", "report", "enforce")
+	if err := rt.Config.Err(); err != nil {
+		return err
+	}
+	if integrityMode == "enforce" {
+		v, err := rt.IdentityVerifier()
+		if err != nil {
+			return err
+		}
+		deps.Integrity = rest.IntegrityDeps{Enforce: true, Verifier: v}
+		rt.Log.Info("uygulama bütünlüğü zorlanıyor (INTEGRITY_MODE=enforce)")
+	}
 	// Account settings live in identity but take the same user token
 	// check as core's routes (identity checks it again itself).
 	if conn := conns["identity"]; conn != nil && deps.Core.Verifier != nil {

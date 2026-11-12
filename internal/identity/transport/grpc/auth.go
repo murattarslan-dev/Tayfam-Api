@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/integrity"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/session"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -22,7 +23,7 @@ const errorDomain = "identity.tayfam.app"
 // Sessions is what AuthServer needs from the app layer.
 type Sessions interface {
 	SignIn(ctx context.Context, in session.SignInInput) (session.Tokens, error)
-	Refresh(ctx context.Context, refreshToken string) (session.Tokens, error)
+	RefreshWithProof(ctx context.Context, refreshToken string, proof integrity.Proof) (session.Tokens, error)
 	SignOut(ctx context.Context, sessionID id.ID) error
 }
 
@@ -63,11 +64,12 @@ func (s *AuthServer) SignIn(ctx context.Context, req *identityv1.SignInRequest) 
 		return nil, fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_UNSUPPORTED_PROVIDER)
 	}
 	platform := platforms[req.GetPlatform()]
-	if platform == "" || len(req.GetIdToken()) > maxIDToken || len(req.GetNonce()) > maxNonce {
+	if platform == "" || len(req.GetIdToken()) > maxIDToken || len(req.GetNonce()) > maxNonce || len(req.GetIntegrityToken()) > integrity.MaxPlayToken {
 		return nil, fail(codes.Unauthenticated, identityv1.ErrorReason_ERROR_REASON_INVALID_CREDENTIALS)
 	}
 	t, err := s.sessions.SignIn(ctx, session.SignInInput{
 		Provider: provider, IDToken: req.GetIdToken(), Nonce: req.GetNonce(), Platform: platform,
+		Integrity: integrity.Proof{Android: req.GetIntegrityToken()},
 	})
 	if err != nil {
 		return nil, s.mapError(ctx, err)
@@ -80,7 +82,10 @@ func (s *AuthServer) Refresh(ctx context.Context, req *identityv1.RefreshRequest
 	if len(req.GetRefreshToken()) > maxRefresh {
 		return nil, fail(codes.Unauthenticated, identityv1.ErrorReason_ERROR_REASON_INVALID_REFRESH)
 	}
-	t, err := s.sessions.Refresh(ctx, req.GetRefreshToken())
+	if len(req.GetIntegrityToken()) > integrity.MaxPlayToken {
+		return nil, status.Error(codes.InvalidArgument, "bütünlük token'ı çok uzun")
+	}
+	t, err := s.sessions.RefreshWithProof(ctx, req.GetRefreshToken(), integrity.Proof{Android: req.GetIntegrityToken()})
 	if err != nil {
 		return nil, s.mapError(ctx, err)
 	}
@@ -142,7 +147,7 @@ func fail(code codes.Code, reason identityv1.ErrorReason) error {
 }
 
 func tokens(t session.Tokens) *identityv1.Tokens {
-	return &identityv1.Tokens{
+	out := &identityv1.Tokens{
 		UserId:              t.UserID.String(),
 		SessionId:           t.SessionID.String(),
 		AccessToken:         t.AccessToken,
@@ -152,4 +157,8 @@ func tokens(t session.Tokens) *identityv1.Tokens {
 		RegistrationPending: t.RegistrationPending,
 		ConsentRequired:     t.ConsentRequired,
 	}
+	if !t.IntegrityCheckAfter.IsZero() {
+		out.IntegrityCheckAfter = timestamppb.New(t.IntegrityCheckAfter)
+	}
+	return out
 }

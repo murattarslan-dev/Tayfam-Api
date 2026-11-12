@@ -263,3 +263,41 @@ func TestVerifierAlsoAccept(t *testing.T) {
 		t.Fatal("boş audience kabul edildi")
 	}
 }
+
+// TestIntegrityClaim: "int" travels only when true, so a token without it
+// is byte for byte the token of a session that has not passed, and of the
+// time before the claim existed (ADR-0022).
+func TestIntegrityClaim(t *testing.T) {
+	key := testKey(t, "k1")
+	s, v := newPair(t, key, t0, nil)
+	plain, _, err := s.Issue(testUser, testSession)
+	if err != nil {
+		t.Fatal(err)
+	}
+	passed, _, err := s.IssueWith(testUser, testSession, IssueOptions{Integrity: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c, err := v.Verify(context.Background(), plain); err != nil || c.Integrity {
+		t.Fatalf("claim'siz: %+v %v", c, err)
+	}
+	if c, err := v.Verify(context.Background(), passed); err != nil || !c.Integrity {
+		t.Fatalf("claim'li: %+v %v", c, err)
+	}
+	payload := func(tok string) string {
+		b, err := b64.DecodeString(strings.Split(tok, ".")[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	if strings.Contains(payload(plain), `"int"`) || !strings.Contains(payload(passed), `"int":true`) {
+		t.Fatalf("içerik: %s / %s", payload(plain), payload(passed))
+	}
+	// A forged "int" without a valid signature is still refused.
+	parts := strings.Split(plain, ".")
+	forged := parts[0] + "." + b64.EncodeToString([]byte(strings.Replace(payload(plain), "}", `,"int":true}`, 1))) + "." + parts[2]
+	if _, err := v.Verify(context.Background(), forged); !errors.Is(err, ErrInvalidToken) {
+		t.Fatalf("sahte claim: %v", err)
+	}
+}

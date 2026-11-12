@@ -41,6 +41,15 @@ info:
     kendisinden düşüktür (`1.2.0-rc.1` < `1.2.0`); derleme bilgisi
     (`+...`) karşılaştırmada sayılmaz.
 
+    **Uygulama bütünlüğü (ADR-0022):** Oturum girişte ve 24 saatte bir
+    Play Integrity ile doğrulanır (`integrity_token`, `integrity_check_after`).
+    Ortam `enforce` modundaysa doğrulamadan geçmemiş oturumun erişim
+    token'ı `integrity-required` (403) alır; WebSocket el sıkışması da.
+    Muaf uçlar: giriş, yenileme, çıkış, kayıt, onaylar, oturum listesi ve
+    kapatma, hesap silme, KVKK veri dışa aktarma, `GET /v1/status`,
+    `GET /v1/client-config`. `report` ve `off` modunda bu yüzden hiçbir
+    istek reddedilmez.
+
     **Hatalar:** RFC 9457 `application/problem+json`. `type` alanı makine
     tarafından okunur: `https://tayfam.app/problems/<kod>`. `title` ve
     `detail` kullanıcıya gösterilmez; istemci kodu çeviri dosyasında arar.
@@ -4711,6 +4720,8 @@ components:
         # İstemci sürümü (#114, ADR-0016): 426 ve 400
         - client-outdated
         - invalid-client-version
+        # Uygulama bütünlüğü (ADR-0022, #164): 403
+        - integrity-required
         - unauthenticated
         - not-found
         - rate-limited
@@ -4914,6 +4925,13 @@ components:
           type: string
           enum: [android, ios, web]
           description: "`web` yalnızca prod dışında (ADR-0017)."
+        integrity_token:
+          type: string
+          maxLength: 16384
+          description: |
+            İsteğe bağlı, Android: Play Integrity standard request token'ı
+            (ADR-0022). `requestHash` = base64url(SHA-256("tayfam-integrity/v1/sign-in\n" + nonce)),
+            dolgusuz.
 
     RefreshRequest:
       type: object
@@ -4921,6 +4939,15 @@ components:
       additionalProperties: false
       properties:
         refresh_token: { type: string, maxLength: 64 }
+        integrity_token:
+          type: string
+          maxLength: 16384
+          description: |
+            İsteğe bağlı, Android: Play Integrity token'ı; yalnızca
+            `integrity_check_after` geçtiyse gönderilir, öncesinde yok
+            sayılır (ADR-0022). `requestHash` =
+            base64url(SHA-256("tayfam-integrity/v1/refresh\n" + SHA-256(refresh_token))), dolgusuz;
+            iç özet ham bayttır.
 
     Session:
       type: object
@@ -4939,6 +4966,12 @@ components:
             Kayıtlı kullanıcı aydınlatma metninin veya kullanım koşullarının
             güncel sürümünü onaylamamış. İstemci `/v1/me/consents` ile
             yeni metinleri gösterip onay alır.
+        integrity_check_after:
+          type: string
+          format: date-time
+          description: |
+            Bu zamandan sonraki ilk yenilemede `integrity_token` gönderilir
+            (ADR-0022). Bütünlük denetimi kapalıyken alan yoktur.
 
     RegistrationRequirements:
       type: object

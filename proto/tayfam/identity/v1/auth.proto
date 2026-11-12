@@ -107,6 +107,9 @@ message SignInRequest {
   // Nonce the client passed to the provider SDK (ADR-0004).
   string nonce = 3;
   Platform platform = 4;
+  // Optional Play Integrity standard request token (Android), its
+  // requestHash bound to nonce (ADR-0022 §2). At most 16 KiB. Never logged.
+  string integrity_token = 5;
 }
 
 message SignInResponse {
@@ -116,6 +119,10 @@ message SignInResponse {
 message RefreshRequest {
   // Never logged.
   string refresh_token = 1;
+  // Optional Play Integrity token, its requestHash bound to refresh_token
+  // (ADR-0022 §2). Sent once Tokens.integrity_check_after has passed;
+  // otherwise ignored. At most 16 KiB. Never logged.
+  string integrity_token = 2;
 }
 
 message RefreshResponse {
@@ -140,4 +147,7 @@ message Tokens {
   // version of the privacy notice or terms (data model v14 "Onay kaydı").
   // The client shows the new texts and calls AccountService.AcceptConsents.
   bool consent_required = 8;
+  // When the client should next send an integrity proof with a refresh
+  // (ADR-0022 §1); unset while integrity checks are off.
+  google.protobuf.Timestamp integrity_check_after = 9;
 }
