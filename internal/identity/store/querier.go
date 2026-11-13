@@ -99,6 +99,8 @@ type Querier interface {
 	// Silinmiş, kaydı tamamlanmamış veya yaş nedeniyle reddedilmiş hesap
 	// yönetici sayılmaz.
 	GetPlatformAdminByIdentity(ctx context.Context, arg GetPlatformAdminByIdentityParams) (GetPlatformAdminByIdentityRow, error)
+	// Profil ayrıntıları (issue #185): yalnızca kayıtlı, silinmemiş hesap.
+	GetProfileDetails(ctx context.Context, id pgtype.UUID) (GetProfileDetailsRow, error)
 	GetUser(ctx context.Context, id pgtype.UUID) (GetUserRow, error)
 	GetUserForAdmin(ctx context.Context, userID pgtype.UUID) (GetUserForAdminRow, error)
 	HasActiveConsent(ctx context.Context, arg HasActiveConsentParams) (bool, error)
@@ -194,6 +196,9 @@ type Querier interface {
 	SearchUsersByName(ctx context.Context, pattern string) ([]SearchUsersByNameRow, error)
 	SearchUsersByRefCode(ctx context.Context, refCode pgtype.Text) ([]SearchUsersByRefCodeRow, error)
 	SetActivityVisibility(ctx context.Context, arg SetActivityVisibilityParams) (int64, error)
+	// Doğum günü görünürlüğü (issue #185): hidden / birthday / full. Kitle
+	// (birth_date_audience) bugün yalnızca friends'tir ve değiştirilmez.
+	SetBirthDateVisibility(ctx context.Context, arg SetBirthDateVisibilityParams) (int64, error)
 	SetDisplayName(ctx context.Context, arg SetDisplayNameParams) error
 	SetRefCode(ctx context.Context, arg SetRefCodeParams) (int64, error)
 	// Referans kayıtta bir kez yazılır (trigger users_referral_once da

@@ -76,6 +76,22 @@ func (v Visibility) Valid() bool {
 	return v == VisibilityPrivate || v == VisibilityTayfa || v == VisibilityPublic
 }
 
+// BirthdayVisibility is users.birth_date_visibility: how much of the birth
+// date the user's friends see (issue #185). Nobody else sees any of it.
+type BirthdayVisibility string
+
+// BirthdayVisibility values (users_birth_date_visibility CHECK).
+const (
+	BirthdayHidden   BirthdayVisibility = "hidden"
+	BirthdayDayMonth BirthdayVisibility = "birthday" // the default
+	BirthdayFull     BirthdayVisibility = "full"
+)
+
+// Valid reports whether v is one of the values.
+func (v BirthdayVisibility) Valid() bool {
+	return v == BirthdayHidden || v == BirthdayDayMonth || v == BirthdayFull
+}
+
 // Config wires a Service.
 type Config struct {
 	Pool *pgxpool.Pool
@@ -110,6 +126,7 @@ type Account struct {
 	DisplayName        string
 	ReferralCode       string
 	ActivityVisibility Visibility
+	BirthdayVisibility BirthdayVisibility
 	AvatarUploadID     id.ID // zero: no avatar
 }
 
@@ -123,6 +140,7 @@ func (s *Service) Get(ctx context.Context, caller id.ID) (Account, error) {
 	a := Account{
 		UserID: id.ID(u.ID.Bytes), DisplayName: u.DisplayName.String,
 		ReferralCode: u.RefCode.String, ActivityVisibility: Visibility(u.ActivityVisibility),
+		BirthdayVisibility: BirthdayVisibility(u.BirthDateVisibility),
 	}
 	if u.AvatarUploadID.Valid {
 		a.AvatarUploadID = id.ID(u.AvatarUploadID.Bytes)
@@ -298,6 +316,9 @@ type Changes struct {
 	// (package displayname); blank is ErrInvalidDisplayName.
 	DisplayName        *string
 	ActivityVisibility *Visibility
+	// BirthdayVisibility changes no profile copy: the birth date reaches
+	// other users only through the profile package.
+	BirthdayVisibility *BirthdayVisibility
 }
 
 // Update applies c in one transaction: every field is checked before
@@ -317,6 +338,9 @@ func (s *Service) Update(ctx context.Context, caller id.ID, c Changes) error {
 		}
 	}
 	if c.ActivityVisibility != nil && !c.ActivityVisibility.Valid() {
+		return ErrInvalidVisibility
+	}
+	if c.BirthdayVisibility != nil && !c.BirthdayVisibility.Valid() {
 		return ErrInvalidVisibility
 	}
 	var limited bool
@@ -364,6 +388,15 @@ func (s *Service) Update(ctx context.Context, caller id.ID, c Changes) error {
 				return ErrUnknownUser
 			}
 			profile.ActivityVisibility, changed = string(*c.ActivityVisibility), true
+		}
+		if c.BirthdayVisibility != nil && BirthdayVisibility(u.BirthDateVisibility) != *c.BirthdayVisibility {
+			n, err := q.SetBirthDateVisibility(ctx, store.SetBirthDateVisibilityParams{ID: caller.PG(), BirthDateVisibility: string(*c.BirthdayVisibility)})
+			if err != nil {
+				return fmt.Errorf("doğum günü görünürlüğü: %w", err)
+			}
+			if n != 1 {
+				return ErrUnknownUser
+			}
 		}
 		if !changed {
 			return nil

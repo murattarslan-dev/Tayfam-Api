@@ -3583,6 +3583,10 @@ paths:
         **Katılım geçmişi görünürlüğü:** `private`: yalnızca siz. `tayfa`
         (varsayılan): arkadaşlar tümünü, ortak tayfa üyeleri son 14 gün
         hariç. `public`: arkadaşlar tümünü, diğer herkes son 14 gün hariç.
+
+        **Doğum günü görünürlüğü** (`birthday_visibility`, issue #185):
+        yalnızca arkadaşlarınıza ne kadarının görüneceği; doğum tarihinin
+        kendisi değişmez.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -3925,6 +3929,12 @@ paths:
         Ortak tayfalar yalnızca ikinizin de etkin üyesi olduğu tayfalardır.
         Engel varsa (iki yönden biri) ya da hesap silinmişse `user-not-found`,
         var olmayan kullanıcıyla aynı cevap.
+
+        **Doğum günü** (`birthday`, issue #185) yalnızca arkadaşlara ve
+        kişinin ayarına göre döner (`Account.birthday_visibility`): `birthday`
+        gün ve ay, `full` ayrıca yıl ve yaş, `hidden` hiçbir şey. Kendi
+        profilinizde her zaman tam tarihi ve yaşı görürsünüz. Alan o an
+        alınamazsa profil onsuz döner.
       responses:
         "200":
           description: Profil
@@ -7012,9 +7022,16 @@ components:
       type: string
       description: Katılım geçmişinin kime görüneceği.
       enum: [private, tayfa, public]
+    BirthdayVisibility:
+      type: string
+      description: |
+        Doğum gününüzün arkadaşlarınıza ne kadarının görüneceği (issue #185).
+        Arkadaşınız olmayan hiç kimse görmez. `hidden`: kimse. `birthday`
+        (varsayılan): gün ve ay. `full`: tarih ve yaş.
+      enum: [hidden, birthday, full]
     Account:
       type: object
-      required: [user_id, display_name, referral_code, activity_visibility]
+      required: [user_id, display_name, referral_code, activity_visibility, birthday_visibility]
       properties:
         user_id: { type: string, format: uuid, description: Kendi kullanıcı kimliğiniz. }
         display_name: { type: string, description: Kendi görünen adınız. }
@@ -7023,6 +7040,7 @@ components:
           type: string
           description: Örn. `TYF-8K2M4Q`; paylaşım linki `tayfam.app/r/<kod>`.
         activity_visibility: { $ref: "#/components/schemas/ActivityVisibility" }
+        birthday_visibility: { $ref: "#/components/schemas/BirthdayVisibility" }
     AccountUpdate:
       type: object
       description: En az bir alan bulunur; olmayan alan değişmez.
@@ -7037,6 +7055,7 @@ components:
             Yeni görünen ad; boşluklar tekleştirilip kırpıldıktan sonra 1–40
             karakter. 24 saatte en fazla 3 değişiklik.
         activity_visibility: { $ref: "#/components/schemas/ActivityVisibility" }
+        birthday_visibility: { $ref: "#/components/schemas/BirthdayVisibility" }
     ReferralCode:
       type: object
       required: [referral_code]
@@ -7152,6 +7171,22 @@ components:
           description: Katılım geçmişinden size bir şey gösterilip gösterilemeyeceği.
         activity_visibility:
           $ref: "#/components/schemas/ActivityVisibility"
+        birthday:
+          $ref: "#/components/schemas/Birthday"
+    Birthday:
+      type: object
+      description: |
+        Doğum gününün gösterilen kısmı. Yalnızca arkadaşlara ve ayar izin
+        verdiğinde (kendi profilinizde her zaman) döner; yoksa alan da
+        yoktur.
+      required: [month, day]
+      properties:
+        month: { type: integer, minimum: 1, maximum: 12 }
+        day: { type: integer, minimum: 1, maximum: 31 }
+        year: { type: integer, description: "Yalnızca `full` ayarında ve kendi profilinizde." }
+        age:
+          type: integer
+          description: "Bugünkü yaş (Türkiye saatiyle); `year` ile birlikte."
     ActivityRecord:
       type: object
       required: [event_type, mode, started_at, tayfa_member]

@@ -71,6 +71,18 @@ var visibilityFromPB = map[identityv1.ActivityVisibility]account.Visibility{
 	identityv1.ActivityVisibility_ACTIVITY_VISIBILITY_PUBLIC:  account.VisibilityPublic,
 }
 
+var birthdayToPB = map[account.BirthdayVisibility]identityv1.BirthdayVisibility{
+	account.BirthdayHidden:   identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_HIDDEN,
+	account.BirthdayDayMonth: identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_BIRTHDAY,
+	account.BirthdayFull:     identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_FULL,
+}
+
+var birthdayFromPB = map[identityv1.BirthdayVisibility]account.BirthdayVisibility{
+	identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_HIDDEN:   account.BirthdayHidden,
+	identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_BIRTHDAY: account.BirthdayDayMonth,
+	identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_FULL:     account.BirthdayFull,
+}
+
 // maxReferralCode bounds the code before any work; a code is 10 characters.
 const maxReferralCode = 32
 
@@ -92,6 +104,7 @@ func (s *AccountServer) account(ctx context.Context, u id.ID) (*identityv1.GetAc
 	out := &identityv1.GetAccountResponse{
 		UserId: a.UserID.String(), DisplayName: a.DisplayName,
 		ReferralCode: a.ReferralCode, ActivityVisibility: visibilityToPB[a.ActivityVisibility],
+		BirthdayVisibility: birthdayToPB[a.BirthdayVisibility],
 	}
 	if a.AvatarUploadID != (id.ID{}) {
 		out.AvatarUploadId = a.AvatarUploadID.String()
@@ -202,6 +215,13 @@ func (s *AccountServer) UpdateAccount(ctx context.Context, req *identityv1.Updat
 			return nil, fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_VALIDATION)
 		}
 		c.ActivityVisibility = &vis
+	}
+	if v := req.GetBirthdayVisibility(); v != identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_UNSPECIFIED {
+		vis, ok := birthdayFromPB[v]
+		if !ok {
+			return nil, fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_VALIDATION)
+		}
+		c.BirthdayVisibility = &vis
 	}
 	if err := s.app.Update(ctx, u, c); err != nil {
 		return nil, s.mapError(ctx, err)

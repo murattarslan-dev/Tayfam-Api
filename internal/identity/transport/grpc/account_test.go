@@ -36,7 +36,7 @@ func (f *fakeAccounts) Update(_ context.Context, c id.ID, ch account.Changes) er
 
 func (f *fakeAccounts) Get(_ context.Context, c id.ID) (account.Account, error) {
 	f.caller = c
-	return account.Account{UserID: c, DisplayName: "Deniz", ReferralCode: "TYF-8K2M4Q", ActivityVisibility: account.VisibilityPublic}, f.err
+	return account.Account{UserID: c, DisplayName: "Deniz", ReferralCode: "TYF-8K2M4Q", ActivityVisibility: account.VisibilityPublic, BirthdayVisibility: account.BirthdayFull}, f.err
 }
 func (f *fakeAccounts) RotateReferralCode(_ context.Context, c id.ID) (string, error) {
 	f.caller = c
@@ -107,7 +107,7 @@ func TestAccountMethods(t *testing.T) {
 
 	a, err := srv.GetAccount(ctx, &identityv1.GetAccountRequest{})
 	if err != nil || a.GetReferralCode() != "TYF-8K2M4Q" || a.GetActivityVisibility() != identityv1.ActivityVisibility_ACTIVITY_VISIBILITY_PUBLIC || f.caller != u ||
-		a.GetUserId() != u.String() || a.GetDisplayName() != "Deniz" {
+		a.GetUserId() != u.String() || a.GetDisplayName() != "Deniz" || a.GetBirthdayVisibility() != identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_FULL {
 		t.Fatalf("hesap = %v %v", a, err)
 	}
 	r, err := srv.FindUserByReferralCode(ctx, &identityv1.FindUserByReferralCodeRequest{ReferralCode: "8k2m4q"})
@@ -141,6 +141,13 @@ func TestUpdateAccount(t *testing.T) {
 		t.Fatalf("güncelleme = %v %v %+v", resp, err, f.update)
 	}
 
+	f = &fakeAccounts{}
+	if _, err := newAccountServer(f).UpdateAccount(ctx, &identityv1.UpdateAccountRequest{
+		BirthdayVisibility: identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_HIDDEN,
+	}); err != nil || *f.update.BirthdayVisibility != account.BirthdayHidden || f.update.ActivityVisibility != nil {
+		t.Fatalf("doğum günü görünürlüğü = %v %+v", err, f.update)
+	}
+
 	// Unset fields stay unset: nothing changes but the account is returned.
 	f = &fakeAccounts{}
 	if _, err := newAccountServer(f).UpdateAccount(ctx, &identityv1.UpdateAccountRequest{}); err != nil ||
@@ -157,6 +164,10 @@ func TestUpdateAccount(t *testing.T) {
 	_, err = newAccountServer(f).UpdateAccount(ctx, &identityv1.UpdateAccountRequest{ActivityVisibility: identityv1.ActivityVisibility(99)})
 	if status.Code(err) != codes.InvalidArgument || f.update != nil {
 		t.Fatalf("bilinmeyen görünürlük: %v", err)
+	}
+	_, err = newAccountServer(f).UpdateAccount(ctx, &identityv1.UpdateAccountRequest{BirthdayVisibility: identityv1.BirthdayVisibility(99)})
+	if status.Code(err) != codes.InvalidArgument || f.update != nil {
+		t.Fatalf("bilinmeyen doğum günü görünürlüğü: %v", err)
 	}
 
 	for _, tc := range []struct {

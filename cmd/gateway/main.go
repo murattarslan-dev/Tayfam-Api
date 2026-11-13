@@ -183,6 +183,8 @@ func setup(rt *service.Runtime) error {
 		deps.Core.Avatars = identityv1.NewAccountServiceClient(conn)
 		// KVKK veri dışa aktarma (issue #144, ADR-0021).
 		deps.Core.DataExports = identityv1.NewDataExportServiceClient(conn)
+		// Profil ayrıntıları (doğum günü, issue #185).
+		deps.Core.ProfileDetails = identityv1.NewProfileServiceClient(conn)
 	}
 	adminHost := rt.Config.String("ADMIN_HOST", "admin.tayfam.app")
 	panel, err := adminRouter(rt, adminHost, conns["identity"], conns["core"], trustCF)

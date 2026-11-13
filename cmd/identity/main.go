@@ -25,6 +25,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/birthdate"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/consent"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/coremedia"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/corerelation"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/dataexport"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/deletion"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/integrity"
@@ -32,6 +33,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/minor"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/oidc"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/platformadmin"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/profile"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/registration"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/retention"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/session"
@@ -41,6 +43,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/googleauth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/grpcx"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/outbox"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/service"
 )
@@ -136,15 +139,23 @@ func setup(rt *service.Runtime) error {
 	// token (auth.ForwardToken); identity's service identity is not used.
 	// Without CORE_GRPC_ADDR (a local run without core) SetAvatar is
 	// UNAVAILABLE.
+	// The profile details (issue #185) ask core the same way how the caller
+	// stands to the profile's user; without core they are UNAVAILABLE.
 	var avatars account.Media
+	var relations profile.Relations = unavailableRelations{}
 	if addr := rt.Config.String("CORE_GRPC_ADDR", ""); addr != "" {
 		conn, err := grpcx.NewClient(addr, auth.ForwardToken()...)
 		if err != nil {
 			return err
 		}
 		avatars = coremedia.New(corev1.NewMediaServiceClient(conn))
+		relations = corerelation.New(corev1.NewProfileServiceClient(conn))
 	} else {
-		rt.Log.Warn("CORE_GRPC_ADDR yok; avatar ayarlanamaz (UNAVAILABLE)")
+		rt.Log.Warn("CORE_GRPC_ADDR yok; avatar ayarlanamaz ve profil ayrıntıları gösterilemez (UNAVAILABLE)")
+	}
+	profiles, err := profile.New(profile.Config{Pool: pool, Cipher: cipher, Relations: relations})
+	if err != nil {
+		return err
 	}
 	accounts, err := account.New(account.Config{Pool: pool, Media: avatars})
 	if err != nil {
@@ -237,6 +248,9 @@ func setup(rt *service.Runtime) error {
 		Accounts: accounts, Sessions: sessions, Consents: consents, Deletion: deleter,
 		APIAudience: audience, Log: rt.Log,
 	}))
+	// Profil ayrıntıları (doğum günü, issue #185) yalnızca tam erişim
+	// token'ıyla; ilişki core'a çağıranın token'ıyla sorulur.
+	identityv1.RegisterProfileServiceServer(srv, grpcapi.NewProfileServer(profiles, audience, rt.Log))
 	// KVKK veri dışa aktarma (issue #144, ADR-0021): anahtar ya da core/chat
 	// adresi yoksa uçlar UNAVAILABLE döner, servis başlar.
 	identityv1.RegisterDataExportServiceServer(srv, grpcapi.NewDataExportServer(exports, audience, rt.Log))
@@ -381,4 +395,12 @@ func integrityChecker(rt *service.Runtime) (*integrity.Checker, error) {
 		slog.String("mode", string(mode)), slog.String("project_id", acct.ProjectID()),
 		slog.String("device_level", label))
 	return integrity.NewChecker(integrity.Config{Mode: mode, Play: play, Log: rt.Log})
+}
+
+// unavailableRelations stands in for core when CORE_GRPC_ADDR is not set
+// (a local run without core): every profile detail is UNAVAILABLE.
+type unavailableRelations struct{}
+
+func (unavailableRelations) Relation(context.Context, id.ID) (profile.Relation, error) {
+	return profile.Relation{}, profile.ErrUnavailable
 }

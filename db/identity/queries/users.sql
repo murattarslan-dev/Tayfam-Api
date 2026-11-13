@@ -133,3 +133,15 @@ INSERT INTO display_name_changes (id, user_id, changed_at) VALUES (@id, @user_id
 
 -- name: DeleteUserDisplayNameChanges :exec
 DELETE FROM display_name_changes WHERE user_id = @user_id;
+
+-- Doğum günü görünürlüğü (issue #185): hidden / birthday / full. Kitle
+-- (birth_date_audience) bugün yalnızca friends'tir ve değiştirilmez.
+-- name: SetBirthDateVisibility :execrows
+UPDATE users SET birth_date_visibility = @birth_date_visibility
+WHERE id = @id AND registered_at IS NOT NULL AND deleted_at IS NULL;
+
+-- Profil ayrıntıları (issue #185): yalnızca kayıtlı, silinmemiş hesap.
+-- name: GetProfileDetails :one
+SELECT id, birth_date_enc, birth_date_visibility
+FROM users
+WHERE id = @id AND registered_at IS NOT NULL AND deleted_at IS NULL;

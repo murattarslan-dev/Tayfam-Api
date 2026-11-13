@@ -426,3 +426,30 @@ func TestDisplayNameLimitUnderConcurrency(t *testing.T) {
 		t.Fatalf("başarılı değişiklik = %d", ok)
 	}
 }
+
+// TestUpdateBirthdayVisibility (issue #185): the default is day and month;
+// the setting changes no profile copy (the date never leaves identity
+// with user.profile_updated).
+func TestUpdateBirthdayVisibility(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	u, _ := e.registered(t, "Deniz")
+	if a, err := e.svc.Get(ctx, u); err != nil || a.BirthdayVisibility != BirthdayDayMonth {
+		t.Fatalf("varsayılan = %+v %v", a, err)
+	}
+	bad := BirthdayVisibility("public")
+	if err := e.svc.Update(ctx, u, Changes{BirthdayVisibility: &bad}); !errors.Is(err, ErrInvalidVisibility) {
+		t.Fatalf("geçersiz: %v", err)
+	}
+	for _, v := range []BirthdayVisibility{BirthdayFull, BirthdayHidden, BirthdayDayMonth} {
+		if err := e.svc.Update(ctx, u, Changes{BirthdayVisibility: &v}); err != nil {
+			t.Fatal(err)
+		}
+		if a, _ := e.svc.Get(ctx, u); a.BirthdayVisibility != v {
+			t.Fatalf("görünürlük = %s, istenen %s", a.BirthdayVisibility, v)
+		}
+	}
+	if got := e.profileEvents(t, u); len(got) != 0 {
+		t.Fatalf("profil olayı yazıldı: %q", got)
+	}
+}

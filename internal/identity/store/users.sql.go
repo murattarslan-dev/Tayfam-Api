@@ -182,6 +182,26 @@ func (q *Queries) FindUserByRefCode(ctx context.Context, refCode pgtype.Text) (F
 	return i, err
 }
 
+const getProfileDetails = `-- name: GetProfileDetails :one
+SELECT id, birth_date_enc, birth_date_visibility
+FROM users
+WHERE id = $1 AND registered_at IS NOT NULL AND deleted_at IS NULL
+`
+
+type GetProfileDetailsRow struct {
+	ID                  pgtype.UUID
+	BirthDateEnc        []byte
+	BirthDateVisibility string
+}
+
+// Profil ayrıntıları (issue #185): yalnızca kayıtlı, silinmemiş hesap.
+func (q *Queries) GetProfileDetails(ctx context.Context, id pgtype.UUID) (GetProfileDetailsRow, error) {
+	row := q.db.QueryRow(ctx, getProfileDetails, id)
+	var i GetProfileDetailsRow
+	err := row.Scan(&i.ID, &i.BirthDateEnc, &i.BirthDateVisibility)
+	return i, err
+}
+
 const getUser = `-- name: GetUser :one
 SELECT id, display_name, avatar_upload_id, locale, birth_date_enc,
        birth_date_visibility, birth_date_audience, activity_visibility,
@@ -324,6 +344,26 @@ type SetActivityVisibilityParams struct {
 
 func (q *Queries) SetActivityVisibility(ctx context.Context, arg SetActivityVisibilityParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setActivityVisibility, arg.ActivityVisibility, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setBirthDateVisibility = `-- name: SetBirthDateVisibility :execrows
+UPDATE users SET birth_date_visibility = $1
+WHERE id = $2 AND registered_at IS NOT NULL AND deleted_at IS NULL
+`
+
+type SetBirthDateVisibilityParams struct {
+	BirthDateVisibility string
+	ID                  pgtype.UUID
+}
+
+// Doğum günü görünürlüğü (issue #185): hidden / birthday / full. Kitle
+// (birth_date_audience) bugün yalnızca friends'tir ve değiştirilmez.
+func (q *Queries) SetBirthDateVisibility(ctx context.Context, arg SetBirthDateVisibilityParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setBirthDateVisibility, arg.BirthDateVisibility, arg.ID)
 	if err != nil {
 		return 0, err
 	}

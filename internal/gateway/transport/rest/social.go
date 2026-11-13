@@ -2,10 +2,12 @@ package rest
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
@@ -46,6 +48,11 @@ type InvitationClient interface {
 type ProfileClient interface {
 	GetUserProfile(ctx context.Context, in *corev1.GetUserProfileRequest, opts ...grpc.CallOption) (*corev1.GetUserProfileResponse, error)
 	ListUserActivity(ctx context.Context, in *corev1.ListUserActivityRequest, opts ...grpc.CallOption) (*corev1.ListUserActivityResponse, error)
+}
+
+// ProfileDetailsClient is identity's ProfileService.
+type ProfileDetailsClient interface {
+	GetProfileDetails(ctx context.Context, in *identityv1.GetProfileDetailsRequest, opts ...grpc.CallOption) (*identityv1.GetProfileDetailsResponse, error)
 }
 
 // AccountClient is identity's AccountService.
@@ -205,6 +212,15 @@ type profileJSON struct {
 	ActivityVisible bool              `json:"activity_visible"`
 	// Only on one's own profile.
 	ActivityVisibility string `json:"activity_visibility,omitempty"`
+	// From identity (issue #185); absent unless the caller may see it.
+	Birthday *birthdayJSON `json:"birthday,omitempty"`
+}
+
+type birthdayJSON struct {
+	Month int32 `json:"month"`
+	Day   int32 `json:"day"`
+	Year  int32 `json:"year,omitempty"`
+	Age   int32 `json:"age,omitempty"`
 }
 
 type activityJSON struct {
@@ -469,7 +485,26 @@ func (h coreHandlers) getProfile(ctx context.Context, w http.ResponseWriter, r *
 	for _, t := range p.GetMutualTayfas() {
 		out.MutualTayfas = append(out.MutualTayfas, mutualTayfaJSON{ID: t.GetTayfaId(), Name: t.GetName()})
 	}
+	h.addProfileDetails(ctx, r, u, &out)
 	writeJSON(w, http.StatusOK, out)
+}
+
+// addProfileDetails adds what identity shows the caller (issue #185).
+// identity decides who sees what, asking core itself; gateway passes no
+// relationship. When identity does not answer the profile is shown
+// without the details rather than not at all.
+func (h coreHandlers) addProfileDetails(ctx context.Context, r *http.Request, user string, out *profileJSON) {
+	if h.d.ProfileDetails == nil {
+		return
+	}
+	d, err := h.d.ProfileDetails.GetProfileDetails(ctx, &identityv1.GetProfileDetailsRequest{UserId: user})
+	if err != nil {
+		h.d.Log.WarnContext(r.Context(), "profil ayrıntıları alınamadı", slog.String("code", status.Code(err).String()))
+		return
+	}
+	if b := d.GetBirthday(); b != nil {
+		out.Birthday = &birthdayJSON{Month: b.GetMonth(), Day: b.GetDay(), Year: b.GetYear(), Age: b.GetAge()}
+	}
 }
 
 func (h coreHandlers) listActivity(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -505,14 +540,22 @@ type accountJSON struct {
 	DisplayName        string `json:"display_name"`
 	ReferralCode       string `json:"referral_code"`
 	ActivityVisibility string `json:"activity_visibility"`
+	BirthdayVisibility string `json:"birthday_visibility"`
 	AvatarUploadID     string `json:"avatar_upload_id,omitempty"`
 }
+
+var birthdayVisibilities = newEnum(map[string]identityv1.BirthdayVisibility{
+	"hidden":   identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_HIDDEN,
+	"birthday": identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_BIRTHDAY,
+	"full":     identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_FULL,
+})
 
 // accountPatchBody is AccountUpdate: every field is optional, absent
 // fields stay as they are, and at least one must be present.
 type accountPatchBody struct {
 	DisplayName        *string `json:"display_name"`
 	ActivityVisibility *string `json:"activity_visibility"`
+	BirthdayVisibility *string `json:"birthday_visibility"`
 }
 
 // maxDisplayNameBytes bounds the name before it reaches identity, which
@@ -550,7 +593,8 @@ func accountFrom(a *identityv1.GetAccountResponse) accountJSON {
 	return accountJSON{
 		UserID: a.GetUserId(), DisplayName: a.GetDisplayName(),
 		ReferralCode: a.GetReferralCode(), ActivityVisibility: identityVisibilities.name(a.GetActivityVisibility()),
-		AvatarUploadID: a.GetAvatarUploadId(),
+		BirthdayVisibility: birthdayVisibilities.name(a.GetBirthdayVisibility()),
+		AvatarUploadID:     a.GetAvatarUploadId(),
 	}
 }
 
@@ -561,7 +605,7 @@ func (h coreHandlers) updateAccount(ctx context.Context, w http.ResponseWriter, 
 	if !decode(w, r, &b) {
 		return
 	}
-	if b.DisplayName == nil && b.ActivityVisibility == nil {
+	if b.DisplayName == nil && b.ActivityVisibility == nil && b.BirthdayVisibility == nil {
 		badRequest(w, r)
 		return
 	}
@@ -580,6 +624,14 @@ func (h coreHandlers) updateAccount(ctx context.Context, w http.ResponseWriter, 
 			return
 		}
 		req.ActivityVisibility = v
+	}
+	if b.BirthdayVisibility != nil {
+		v, ok := birthdayVisibilities.value(*b.BirthdayVisibility)
+		if !ok {
+			badRequest(w, r)
+			return
+		}
+		req.BirthdayVisibility = v
 	}
 	resp, err := h.d.Accounts.UpdateAccount(ctx, req)
 	if err != nil {

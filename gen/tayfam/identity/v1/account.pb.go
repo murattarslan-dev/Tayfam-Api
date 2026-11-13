@@ -79,6 +79,63 @@ func (ActivityVisibility) EnumDescriptor() ([]byte, []int) {
 	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{0}
 }
 
+// BirthdayVisibility is how much of the birth date the user's friends see
+// (issue #185; Notion Proje Planı §4 item 8). Nobody else ever sees it.
+type BirthdayVisibility int32
+
+const (
+	BirthdayVisibility_BIRTHDAY_VISIBILITY_UNSPECIFIED BirthdayVisibility = 0
+	// Nobody.
+	BirthdayVisibility_BIRTHDAY_VISIBILITY_HIDDEN BirthdayVisibility = 1
+	// Day and month only. The default.
+	BirthdayVisibility_BIRTHDAY_VISIBILITY_BIRTHDAY BirthdayVisibility = 2
+	// The date and the age.
+	BirthdayVisibility_BIRTHDAY_VISIBILITY_FULL BirthdayVisibility = 3
+)
+
+// Enum value maps for BirthdayVisibility.
+var (
+	BirthdayVisibility_name = map[int32]string{
+		0: "BIRTHDAY_VISIBILITY_UNSPECIFIED",
+		1: "BIRTHDAY_VISIBILITY_HIDDEN",
+		2: "BIRTHDAY_VISIBILITY_BIRTHDAY",
+		3: "BIRTHDAY_VISIBILITY_FULL",
+	}
+	BirthdayVisibility_value = map[string]int32{
+		"BIRTHDAY_VISIBILITY_UNSPECIFIED": 0,
+		"BIRTHDAY_VISIBILITY_HIDDEN":      1,
+		"BIRTHDAY_VISIBILITY_BIRTHDAY":    2,
+		"BIRTHDAY_VISIBILITY_FULL":        3,
+	}
+)
+
+func (x BirthdayVisibility) Enum() *BirthdayVisibility {
+	p := new(BirthdayVisibility)
+	*p = x
+	return p
+}
+
+func (x BirthdayVisibility) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BirthdayVisibility) Descriptor() protoreflect.EnumDescriptor {
+	return file_tayfam_identity_v1_account_proto_enumTypes[1].Descriptor()
+}
+
+func (BirthdayVisibility) Type() protoreflect.EnumType {
+	return &file_tayfam_identity_v1_account_proto_enumTypes[1]
+}
+
+func (x BirthdayVisibility) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BirthdayVisibility.Descriptor instead.
+func (BirthdayVisibility) EnumDescriptor() ([]byte, []int) {
+	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{1}
+}
+
 type GetAccountRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -125,9 +182,10 @@ type GetAccountResponse struct {
 	// The caller's own user ID (from the verified token).
 	UserId string `protobuf:"bytes,4,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	// The caller's display name.
-	DisplayName   string `protobuf:"bytes,5,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	DisplayName        string             `protobuf:"bytes,5,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	BirthdayVisibility BirthdayVisibility `protobuf:"varint,6,opt,name=birthday_visibility,json=birthdayVisibility,proto3,enum=tayfam.identity.v1.BirthdayVisibility" json:"birthday_visibility,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *GetAccountResponse) Reset() {
@@ -193,6 +251,13 @@ func (x *GetAccountResponse) GetDisplayName() string {
 		return x.DisplayName
 	}
 	return ""
+}
+
+func (x *GetAccountResponse) GetBirthdayVisibility() BirthdayVisibility {
+	if x != nil {
+		return x.BirthdayVisibility
+	}
+	return BirthdayVisibility_BIRTHDAY_VISIBILITY_UNSPECIFIED
 }
 
 type SetAvatarRequest struct {
@@ -635,6 +700,9 @@ type UpdateAccountRequest struct {
 	DisplayName *string `protobuf:"bytes,1,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
 	// UNSPECIFIED: unchanged.
 	ActivityVisibility ActivityVisibility `protobuf:"varint,2,opt,name=activity_visibility,json=activityVisibility,proto3,enum=tayfam.identity.v1.ActivityVisibility" json:"activity_visibility,omitempty"`
+	// UNSPECIFIED: unchanged. Changes no profile copy: the birth date never
+	// leaves identity but through ProfileService.GetProfileDetails.
+	BirthdayVisibility BirthdayVisibility `protobuf:"varint,3,opt,name=birthday_visibility,json=birthdayVisibility,proto3,enum=tayfam.identity.v1.BirthdayVisibility" json:"birthday_visibility,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -681,6 +749,13 @@ func (x *UpdateAccountRequest) GetActivityVisibility() ActivityVisibility {
 		return x.ActivityVisibility
 	}
 	return ActivityVisibility_ACTIVITY_VISIBILITY_UNSPECIFIED
+}
+
+func (x *UpdateAccountRequest) GetBirthdayVisibility() BirthdayVisibility {
+	if x != nil {
+		return x.BirthdayVisibility
+	}
+	return BirthdayVisibility_BIRTHDAY_VISIBILITY_UNSPECIFIED
 }
 
 type UpdateAccountResponse struct {
@@ -1308,13 +1383,14 @@ var File_tayfam_identity_v1_account_proto protoreflect.FileDescriptor
 const file_tayfam_identity_v1_account_proto_rawDesc = "" +
 	"\n" +
 	" tayfam/identity/v1/account.proto\x12\x12tayfam.identity.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dtayfam/identity/v1/auth.proto\"\x13\n" +
-	"\x11GetAccountRequest\"\xf8\x01\n" +
+	"\x11GetAccountRequest\"\xd1\x02\n" +
 	"\x12GetAccountResponse\x12#\n" +
 	"\rreferral_code\x18\x01 \x01(\tR\freferralCode\x12W\n" +
 	"\x13activity_visibility\x18\x02 \x01(\x0e2&.tayfam.identity.v1.ActivityVisibilityR\x12activityVisibility\x12(\n" +
 	"\x10avatar_upload_id\x18\x03 \x01(\tR\x0eavatarUploadId\x12\x17\n" +
 	"\auser_id\x18\x04 \x01(\tR\x06userId\x12!\n" +
-	"\fdisplay_name\x18\x05 \x01(\tR\vdisplayName\"/\n" +
+	"\fdisplay_name\x18\x05 \x01(\tR\vdisplayName\x12W\n" +
+	"\x13birthday_visibility\x18\x06 \x01(\x0e2&.tayfam.identity.v1.BirthdayVisibilityR\x12birthdayVisibility\"/\n" +
 	"\x10SetAvatarRequest\x12\x1b\n" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\"=\n" +
 	"\x11SetAvatarResponse\x12(\n" +
@@ -1333,10 +1409,11 @@ const file_tayfam_identity_v1_account_proto_rawDesc = "" +
 	"\x1cSetActivityVisibilityRequest\x12W\n" +
 	"\x13activity_visibility\x18\x01 \x01(\x0e2&.tayfam.identity.v1.ActivityVisibilityR\x12activityVisibility\"x\n" +
 	"\x1dSetActivityVisibilityResponse\x12W\n" +
-	"\x13activity_visibility\x18\x01 \x01(\x0e2&.tayfam.identity.v1.ActivityVisibilityR\x12activityVisibility\"\xa8\x01\n" +
+	"\x13activity_visibility\x18\x01 \x01(\x0e2&.tayfam.identity.v1.ActivityVisibilityR\x12activityVisibility\"\x81\x02\n" +
 	"\x14UpdateAccountRequest\x12&\n" +
 	"\fdisplay_name\x18\x01 \x01(\tH\x00R\vdisplayName\x88\x01\x01\x12W\n" +
-	"\x13activity_visibility\x18\x02 \x01(\x0e2&.tayfam.identity.v1.ActivityVisibilityR\x12activityVisibilityB\x0f\n" +
+	"\x13activity_visibility\x18\x02 \x01(\x0e2&.tayfam.identity.v1.ActivityVisibilityR\x12activityVisibility\x12W\n" +
+	"\x13birthday_visibility\x18\x03 \x01(\x0e2&.tayfam.identity.v1.BirthdayVisibilityR\x12birthdayVisibilityB\x0f\n" +
 	"\r_display_name\"Y\n" +
 	"\x15UpdateAccountResponse\x12@\n" +
 	"\aaccount\x18\x01 \x01(\v2&.tayfam.identity.v1.GetAccountResponseR\aaccount\"\x15\n" +
@@ -1373,7 +1450,12 @@ const file_tayfam_identity_v1_account_proto_rawDesc = "" +
 	"\x1fACTIVITY_VISIBILITY_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bACTIVITY_VISIBILITY_PRIVATE\x10\x01\x12\x1d\n" +
 	"\x19ACTIVITY_VISIBILITY_TAYFA\x10\x02\x12\x1e\n" +
-	"\x1aACTIVITY_VISIBILITY_PUBLIC\x10\x032\xf1\n" +
+	"\x1aACTIVITY_VISIBILITY_PUBLIC\x10\x03*\x99\x01\n" +
+	"\x12BirthdayVisibility\x12#\n" +
+	"\x1fBIRTHDAY_VISIBILITY_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aBIRTHDAY_VISIBILITY_HIDDEN\x10\x01\x12 \n" +
+	"\x1cBIRTHDAY_VISIBILITY_BIRTHDAY\x10\x02\x12\x1c\n" +
+	"\x18BIRTHDAY_VISIBILITY_FULL\x10\x032\xf1\n" +
 	"\n" +
 	"\x0eAccountService\x12[\n" +
 	"\n" +
@@ -1404,81 +1486,84 @@ func file_tayfam_identity_v1_account_proto_rawDescGZIP() []byte {
 	return file_tayfam_identity_v1_account_proto_rawDescData
 }
 
-var file_tayfam_identity_v1_account_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_tayfam_identity_v1_account_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_tayfam_identity_v1_account_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_tayfam_identity_v1_account_proto_goTypes = []any{
 	(ActivityVisibility)(0),                // 0: tayfam.identity.v1.ActivityVisibility
-	(*GetAccountRequest)(nil),              // 1: tayfam.identity.v1.GetAccountRequest
-	(*GetAccountResponse)(nil),             // 2: tayfam.identity.v1.GetAccountResponse
-	(*SetAvatarRequest)(nil),               // 3: tayfam.identity.v1.SetAvatarRequest
-	(*SetAvatarResponse)(nil),              // 4: tayfam.identity.v1.SetAvatarResponse
-	(*ClearAvatarRequest)(nil),             // 5: tayfam.identity.v1.ClearAvatarRequest
-	(*ClearAvatarResponse)(nil),            // 6: tayfam.identity.v1.ClearAvatarResponse
-	(*RotateReferralCodeRequest)(nil),      // 7: tayfam.identity.v1.RotateReferralCodeRequest
-	(*RotateReferralCodeResponse)(nil),     // 8: tayfam.identity.v1.RotateReferralCodeResponse
-	(*FindUserByReferralCodeRequest)(nil),  // 9: tayfam.identity.v1.FindUserByReferralCodeRequest
-	(*FindUserByReferralCodeResponse)(nil), // 10: tayfam.identity.v1.FindUserByReferralCodeResponse
-	(*SetActivityVisibilityRequest)(nil),   // 11: tayfam.identity.v1.SetActivityVisibilityRequest
-	(*SetActivityVisibilityResponse)(nil),  // 12: tayfam.identity.v1.SetActivityVisibilityResponse
-	(*UpdateAccountRequest)(nil),           // 13: tayfam.identity.v1.UpdateAccountRequest
-	(*UpdateAccountResponse)(nil),          // 14: tayfam.identity.v1.UpdateAccountResponse
-	(*ListSessionsRequest)(nil),            // 15: tayfam.identity.v1.ListSessionsRequest
-	(*Session)(nil),                        // 16: tayfam.identity.v1.Session
-	(*ListSessionsResponse)(nil),           // 17: tayfam.identity.v1.ListSessionsResponse
-	(*RevokeSessionRequest)(nil),           // 18: tayfam.identity.v1.RevokeSessionRequest
-	(*RevokeSessionResponse)(nil),          // 19: tayfam.identity.v1.RevokeSessionResponse
-	(*RevokeOtherSessionsRequest)(nil),     // 20: tayfam.identity.v1.RevokeOtherSessionsRequest
-	(*RevokeOtherSessionsResponse)(nil),    // 21: tayfam.identity.v1.RevokeOtherSessionsResponse
-	(*GetConsentsRequest)(nil),             // 22: tayfam.identity.v1.GetConsentsRequest
-	(*GetConsentsResponse)(nil),            // 23: tayfam.identity.v1.GetConsentsResponse
-	(*AcceptConsentsRequest)(nil),          // 24: tayfam.identity.v1.AcceptConsentsRequest
-	(*AcceptConsentsResponse)(nil),         // 25: tayfam.identity.v1.AcceptConsentsResponse
-	(*DeleteAccountRequest)(nil),           // 26: tayfam.identity.v1.DeleteAccountRequest
-	(*DeleteAccountResponse)(nil),          // 27: tayfam.identity.v1.DeleteAccountResponse
-	(Platform)(0),                          // 28: tayfam.identity.v1.Platform
-	(*timestamppb.Timestamp)(nil),          // 29: google.protobuf.Timestamp
+	(BirthdayVisibility)(0),                // 1: tayfam.identity.v1.BirthdayVisibility
+	(*GetAccountRequest)(nil),              // 2: tayfam.identity.v1.GetAccountRequest
+	(*GetAccountResponse)(nil),             // 3: tayfam.identity.v1.GetAccountResponse
+	(*SetAvatarRequest)(nil),               // 4: tayfam.identity.v1.SetAvatarRequest
+	(*SetAvatarResponse)(nil),              // 5: tayfam.identity.v1.SetAvatarResponse
+	(*ClearAvatarRequest)(nil),             // 6: tayfam.identity.v1.ClearAvatarRequest
+	(*ClearAvatarResponse)(nil),            // 7: tayfam.identity.v1.ClearAvatarResponse
+	(*RotateReferralCodeRequest)(nil),      // 8: tayfam.identity.v1.RotateReferralCodeRequest
+	(*RotateReferralCodeResponse)(nil),     // 9: tayfam.identity.v1.RotateReferralCodeResponse
+	(*FindUserByReferralCodeRequest)(nil),  // 10: tayfam.identity.v1.FindUserByReferralCodeRequest
+	(*FindUserByReferralCodeResponse)(nil), // 11: tayfam.identity.v1.FindUserByReferralCodeResponse
+	(*SetActivityVisibilityRequest)(nil),   // 12: tayfam.identity.v1.SetActivityVisibilityRequest
+	(*SetActivityVisibilityResponse)(nil),  // 13: tayfam.identity.v1.SetActivityVisibilityResponse
+	(*UpdateAccountRequest)(nil),           // 14: tayfam.identity.v1.UpdateAccountRequest
+	(*UpdateAccountResponse)(nil),          // 15: tayfam.identity.v1.UpdateAccountResponse
+	(*ListSessionsRequest)(nil),            // 16: tayfam.identity.v1.ListSessionsRequest
+	(*Session)(nil),                        // 17: tayfam.identity.v1.Session
+	(*ListSessionsResponse)(nil),           // 18: tayfam.identity.v1.ListSessionsResponse
+	(*RevokeSessionRequest)(nil),           // 19: tayfam.identity.v1.RevokeSessionRequest
+	(*RevokeSessionResponse)(nil),          // 20: tayfam.identity.v1.RevokeSessionResponse
+	(*RevokeOtherSessionsRequest)(nil),     // 21: tayfam.identity.v1.RevokeOtherSessionsRequest
+	(*RevokeOtherSessionsResponse)(nil),    // 22: tayfam.identity.v1.RevokeOtherSessionsResponse
+	(*GetConsentsRequest)(nil),             // 23: tayfam.identity.v1.GetConsentsRequest
+	(*GetConsentsResponse)(nil),            // 24: tayfam.identity.v1.GetConsentsResponse
+	(*AcceptConsentsRequest)(nil),          // 25: tayfam.identity.v1.AcceptConsentsRequest
+	(*AcceptConsentsResponse)(nil),         // 26: tayfam.identity.v1.AcceptConsentsResponse
+	(*DeleteAccountRequest)(nil),           // 27: tayfam.identity.v1.DeleteAccountRequest
+	(*DeleteAccountResponse)(nil),          // 28: tayfam.identity.v1.DeleteAccountResponse
+	(Platform)(0),                          // 29: tayfam.identity.v1.Platform
+	(*timestamppb.Timestamp)(nil),          // 30: google.protobuf.Timestamp
 }
 var file_tayfam_identity_v1_account_proto_depIdxs = []int32{
 	0,  // 0: tayfam.identity.v1.GetAccountResponse.activity_visibility:type_name -> tayfam.identity.v1.ActivityVisibility
-	0,  // 1: tayfam.identity.v1.SetActivityVisibilityRequest.activity_visibility:type_name -> tayfam.identity.v1.ActivityVisibility
-	0,  // 2: tayfam.identity.v1.SetActivityVisibilityResponse.activity_visibility:type_name -> tayfam.identity.v1.ActivityVisibility
-	0,  // 3: tayfam.identity.v1.UpdateAccountRequest.activity_visibility:type_name -> tayfam.identity.v1.ActivityVisibility
-	2,  // 4: tayfam.identity.v1.UpdateAccountResponse.account:type_name -> tayfam.identity.v1.GetAccountResponse
-	28, // 5: tayfam.identity.v1.Session.platform:type_name -> tayfam.identity.v1.Platform
-	29, // 6: tayfam.identity.v1.Session.create_time:type_name -> google.protobuf.Timestamp
-	29, // 7: tayfam.identity.v1.Session.last_seen_time:type_name -> google.protobuf.Timestamp
-	16, // 8: tayfam.identity.v1.ListSessionsResponse.sessions:type_name -> tayfam.identity.v1.Session
-	1,  // 9: tayfam.identity.v1.AccountService.GetAccount:input_type -> tayfam.identity.v1.GetAccountRequest
-	7,  // 10: tayfam.identity.v1.AccountService.RotateReferralCode:input_type -> tayfam.identity.v1.RotateReferralCodeRequest
-	9,  // 11: tayfam.identity.v1.AccountService.FindUserByReferralCode:input_type -> tayfam.identity.v1.FindUserByReferralCodeRequest
-	11, // 12: tayfam.identity.v1.AccountService.SetActivityVisibility:input_type -> tayfam.identity.v1.SetActivityVisibilityRequest
-	13, // 13: tayfam.identity.v1.AccountService.UpdateAccount:input_type -> tayfam.identity.v1.UpdateAccountRequest
-	3,  // 14: tayfam.identity.v1.AccountService.SetAvatar:input_type -> tayfam.identity.v1.SetAvatarRequest
-	5,  // 15: tayfam.identity.v1.AccountService.ClearAvatar:input_type -> tayfam.identity.v1.ClearAvatarRequest
-	15, // 16: tayfam.identity.v1.AccountService.ListSessions:input_type -> tayfam.identity.v1.ListSessionsRequest
-	18, // 17: tayfam.identity.v1.AccountService.RevokeSession:input_type -> tayfam.identity.v1.RevokeSessionRequest
-	20, // 18: tayfam.identity.v1.AccountService.RevokeOtherSessions:input_type -> tayfam.identity.v1.RevokeOtherSessionsRequest
-	22, // 19: tayfam.identity.v1.AccountService.GetConsents:input_type -> tayfam.identity.v1.GetConsentsRequest
-	24, // 20: tayfam.identity.v1.AccountService.AcceptConsents:input_type -> tayfam.identity.v1.AcceptConsentsRequest
-	26, // 21: tayfam.identity.v1.AccountService.DeleteAccount:input_type -> tayfam.identity.v1.DeleteAccountRequest
-	2,  // 22: tayfam.identity.v1.AccountService.GetAccount:output_type -> tayfam.identity.v1.GetAccountResponse
-	8,  // 23: tayfam.identity.v1.AccountService.RotateReferralCode:output_type -> tayfam.identity.v1.RotateReferralCodeResponse
-	10, // 24: tayfam.identity.v1.AccountService.FindUserByReferralCode:output_type -> tayfam.identity.v1.FindUserByReferralCodeResponse
-	12, // 25: tayfam.identity.v1.AccountService.SetActivityVisibility:output_type -> tayfam.identity.v1.SetActivityVisibilityResponse
-	14, // 26: tayfam.identity.v1.AccountService.UpdateAccount:output_type -> tayfam.identity.v1.UpdateAccountResponse
-	4,  // 27: tayfam.identity.v1.AccountService.SetAvatar:output_type -> tayfam.identity.v1.SetAvatarResponse
-	6,  // 28: tayfam.identity.v1.AccountService.ClearAvatar:output_type -> tayfam.identity.v1.ClearAvatarResponse
-	17, // 29: tayfam.identity.v1.AccountService.ListSessions:output_type -> tayfam.identity.v1.ListSessionsResponse
-	19, // 30: tayfam.identity.v1.AccountService.RevokeSession:output_type -> tayfam.identity.v1.RevokeSessionResponse
-	21, // 31: tayfam.identity.v1.AccountService.RevokeOtherSessions:output_type -> tayfam.identity.v1.RevokeOtherSessionsResponse
-	23, // 32: tayfam.identity.v1.AccountService.GetConsents:output_type -> tayfam.identity.v1.GetConsentsResponse
-	25, // 33: tayfam.identity.v1.AccountService.AcceptConsents:output_type -> tayfam.identity.v1.AcceptConsentsResponse
-	27, // 34: tayfam.identity.v1.AccountService.DeleteAccount:output_type -> tayfam.identity.v1.DeleteAccountResponse
-	22, // [22:35] is the sub-list for method output_type
-	9,  // [9:22] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	1,  // 1: tayfam.identity.v1.GetAccountResponse.birthday_visibility:type_name -> tayfam.identity.v1.BirthdayVisibility
+	0,  // 2: tayfam.identity.v1.SetActivityVisibilityRequest.activity_visibility:type_name -> tayfam.identity.v1.ActivityVisibility
+	0,  // 3: tayfam.identity.v1.SetActivityVisibilityResponse.activity_visibility:type_name -> tayfam.identity.v1.ActivityVisibility
+	0,  // 4: tayfam.identity.v1.UpdateAccountRequest.activity_visibility:type_name -> tayfam.identity.v1.ActivityVisibility
+	1,  // 5: tayfam.identity.v1.UpdateAccountRequest.birthday_visibility:type_name -> tayfam.identity.v1.BirthdayVisibility
+	3,  // 6: tayfam.identity.v1.UpdateAccountResponse.account:type_name -> tayfam.identity.v1.GetAccountResponse
+	29, // 7: tayfam.identity.v1.Session.platform:type_name -> tayfam.identity.v1.Platform
+	30, // 8: tayfam.identity.v1.Session.create_time:type_name -> google.protobuf.Timestamp
+	30, // 9: tayfam.identity.v1.Session.last_seen_time:type_name -> google.protobuf.Timestamp
+	17, // 10: tayfam.identity.v1.ListSessionsResponse.sessions:type_name -> tayfam.identity.v1.Session
+	2,  // 11: tayfam.identity.v1.AccountService.GetAccount:input_type -> tayfam.identity.v1.GetAccountRequest
+	8,  // 12: tayfam.identity.v1.AccountService.RotateReferralCode:input_type -> tayfam.identity.v1.RotateReferralCodeRequest
+	10, // 13: tayfam.identity.v1.AccountService.FindUserByReferralCode:input_type -> tayfam.identity.v1.FindUserByReferralCodeRequest
+	12, // 14: tayfam.identity.v1.AccountService.SetActivityVisibility:input_type -> tayfam.identity.v1.SetActivityVisibilityRequest
+	14, // 15: tayfam.identity.v1.AccountService.UpdateAccount:input_type -> tayfam.identity.v1.UpdateAccountRequest
+	4,  // 16: tayfam.identity.v1.AccountService.SetAvatar:input_type -> tayfam.identity.v1.SetAvatarRequest
+	6,  // 17: tayfam.identity.v1.AccountService.ClearAvatar:input_type -> tayfam.identity.v1.ClearAvatarRequest
+	16, // 18: tayfam.identity.v1.AccountService.ListSessions:input_type -> tayfam.identity.v1.ListSessionsRequest
+	19, // 19: tayfam.identity.v1.AccountService.RevokeSession:input_type -> tayfam.identity.v1.RevokeSessionRequest
+	21, // 20: tayfam.identity.v1.AccountService.RevokeOtherSessions:input_type -> tayfam.identity.v1.RevokeOtherSessionsRequest
+	23, // 21: tayfam.identity.v1.AccountService.GetConsents:input_type -> tayfam.identity.v1.GetConsentsRequest
+	25, // 22: tayfam.identity.v1.AccountService.AcceptConsents:input_type -> tayfam.identity.v1.AcceptConsentsRequest
+	27, // 23: tayfam.identity.v1.AccountService.DeleteAccount:input_type -> tayfam.identity.v1.DeleteAccountRequest
+	3,  // 24: tayfam.identity.v1.AccountService.GetAccount:output_type -> tayfam.identity.v1.GetAccountResponse
+	9,  // 25: tayfam.identity.v1.AccountService.RotateReferralCode:output_type -> tayfam.identity.v1.RotateReferralCodeResponse
+	11, // 26: tayfam.identity.v1.AccountService.FindUserByReferralCode:output_type -> tayfam.identity.v1.FindUserByReferralCodeResponse
+	13, // 27: tayfam.identity.v1.AccountService.SetActivityVisibility:output_type -> tayfam.identity.v1.SetActivityVisibilityResponse
+	15, // 28: tayfam.identity.v1.AccountService.UpdateAccount:output_type -> tayfam.identity.v1.UpdateAccountResponse
+	5,  // 29: tayfam.identity.v1.AccountService.SetAvatar:output_type -> tayfam.identity.v1.SetAvatarResponse
+	7,  // 30: tayfam.identity.v1.AccountService.ClearAvatar:output_type -> tayfam.identity.v1.ClearAvatarResponse
+	18, // 31: tayfam.identity.v1.AccountService.ListSessions:output_type -> tayfam.identity.v1.ListSessionsResponse
+	20, // 32: tayfam.identity.v1.AccountService.RevokeSession:output_type -> tayfam.identity.v1.RevokeSessionResponse
+	22, // 33: tayfam.identity.v1.AccountService.RevokeOtherSessions:output_type -> tayfam.identity.v1.RevokeOtherSessionsResponse
+	24, // 34: tayfam.identity.v1.AccountService.GetConsents:output_type -> tayfam.identity.v1.GetConsentsResponse
+	26, // 35: tayfam.identity.v1.AccountService.AcceptConsents:output_type -> tayfam.identity.v1.AcceptConsentsResponse
+	28, // 36: tayfam.identity.v1.AccountService.DeleteAccount:output_type -> tayfam.identity.v1.DeleteAccountResponse
+	24, // [24:37] is the sub-list for method output_type
+	11, // [11:24] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_identity_v1_account_proto_init() }
@@ -1493,7 +1578,7 @@ func file_tayfam_identity_v1_account_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_identity_v1_account_proto_rawDesc), len(file_tayfam_identity_v1_account_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,

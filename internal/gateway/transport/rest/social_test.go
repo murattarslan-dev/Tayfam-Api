@@ -9,6 +9,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
@@ -104,6 +105,10 @@ func (f *fakeCore) UpdateAccount(ctx context.Context, in *identityv1.UpdateAccou
 	a := &identityv1.GetAccountResponse{
 		UserId: userID, DisplayName: "Deniz",
 		ReferralCode: "TYF-8K2M4Q", ActivityVisibility: identityv1.ActivityVisibility_ACTIVITY_VISIBILITY_TAYFA,
+		BirthdayVisibility: identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_BIRTHDAY,
+	}
+	if in.GetBirthdayVisibility() != identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_UNSPECIFIED {
+		a.BirthdayVisibility = in.GetBirthdayVisibility()
 	}
 	if in.DisplayName != nil {
 		a.DisplayName = in.GetDisplayName()
@@ -175,6 +180,7 @@ func TestSocialRoutesValidateInput(t *testing.T) {
 		{"GET", "/v1/users/" + userID + "/activity?page_size=101", ""},
 		{"PATCH", "/v1/me/account", `{"activity_visibility":"friends"}`},
 		{"PATCH", "/v1/me/account", `{}`},
+		{"PATCH", "/v1/me/account", `{"birthday_visibility":"day_month"}`},
 		{"PATCH", "/v1/me/account", `{"activity_visibility":null}`},
 		{"PATCH", "/v1/me/account", `{"display_name":"` + strings.Repeat("a", 513) + `"}`},
 		{"PATCH", "/v1/me/account", `{"display_name":"Ece","nickname":"x"}`},
@@ -248,6 +254,57 @@ func TestProfileRoutes(t *testing.T) {
 	}
 }
 
+type fakeDetails struct {
+	resp  *identityv1.GetProfileDetailsResponse
+	err   error
+	got   string
+	token string
+}
+
+func (f *fakeDetails) GetProfileDetails(ctx context.Context, in *identityv1.GetProfileDetailsRequest, _ ...grpc.CallOption) (*identityv1.GetProfileDetailsResponse, error) {
+	f.got, f.token = in.GetUserId(), tokenFrom(ctx)
+	return f.resp, f.err
+}
+
+// TestProfileDetails (issue #185): identity's details are added as
+// identity returns them; gateway passes only the profile's user and the
+// caller's token. Without identity the profile is shown without them.
+func TestProfileDetails(t *testing.T) {
+	with := func(d *fakeDetails) http.Handler {
+		deps := testCoreDeps(&fakeCore{}, 100)
+		deps.ProfileDetails = d
+		return coreRouterWith(deps)
+	}
+	d := &fakeDetails{resp: &identityv1.GetProfileDetailsResponse{Birthday: &identityv1.Birthday{Month: 3, Day: 4}}}
+	w := as(with(d), "GET", "/v1/users/"+userID+"/profile", "")
+	v := decodeBody[profileJSON](t, w)
+	if w.Code != 200 || v.Birthday == nil || *v.Birthday != (birthdayJSON{Month: 3, Day: 4}) || d.got != userID || d.token != "USERTOKEN" ||
+		strings.Contains(w.Body.String(), `"year"`) || strings.Contains(w.Body.String(), `"age"`) {
+		t.Fatalf("gün/ay: %d %s", w.Code, w.Body)
+	}
+	d = &fakeDetails{resp: &identityv1.GetProfileDetailsResponse{Birthday: &identityv1.Birthday{Month: 3, Day: 4, Year: 2008, Age: 18}}}
+	w = as(with(d), "GET", "/v1/users/"+userID+"/profile", "")
+	if v := decodeBody[profileJSON](t, w); w.Code != 200 || v.Birthday == nil || v.Birthday.Year != 2008 || v.Birthday.Age != 18 {
+		t.Fatalf("tam: %d %s", w.Code, w.Body)
+	}
+	for name, d := range map[string]*fakeDetails{
+		"gizli":        {resp: &identityv1.GetProfileDetailsResponse{}},
+		"identity yok": {err: status.Error(codes.Unavailable, "x")},
+	} {
+		w := as(with(d), "GET", "/v1/users/"+userID+"/profile", "")
+		if w.Code != 200 || strings.Contains(w.Body.String(), "birthday") {
+			t.Errorf("%s: %d %s", name, w.Code, w.Body)
+		}
+	}
+	// core refuses (block, unknown user): identity is not asked.
+	d = &fakeDetails{resp: &identityv1.GetProfileDetailsResponse{Birthday: &identityv1.Birthday{Month: 3, Day: 4}}}
+	deps := testCoreDeps(&fakeCore{err: coreErr(codes.NotFound, "ERROR_REASON_USER_NOT_FOUND")}, 100)
+	deps.ProfileDetails = d
+	if w := as(coreRouterWith(deps), "GET", "/v1/users/"+userID+"/profile", ""); w.Code != http.StatusNotFound || d.got != "" {
+		t.Fatalf("engel: %d %q", w.Code, d.got)
+	}
+}
+
 func TestAccountRoutes(t *testing.T) {
 	f := &fakeCore{}
 	h := coreRouter(f)
@@ -258,7 +315,7 @@ func TestAccountRoutes(t *testing.T) {
 	}
 	w = as(h, "PATCH", "/v1/me/account", `{"activity_visibility":"private"}`)
 	got, _, _ := f.last()
-	if v := decodeBody[accountJSON](t, w); w.Code != 200 || v.ActivityVisibility != "private" ||
+	if v := decodeBody[accountJSON](t, w); w.Code != 200 || v.ActivityVisibility != "private" || v.BirthdayVisibility != "birthday" ||
 		got.(*identityv1.UpdateAccountRequest).DisplayName != nil {
 		t.Fatalf("güncelleme: %d %+v", w.Code, v)
 	}
@@ -269,6 +326,12 @@ func TestAccountRoutes(t *testing.T) {
 		got.(*identityv1.UpdateAccountRequest).GetDisplayName() != " Ece  Su " ||
 		got.(*identityv1.UpdateAccountRequest).GetActivityVisibility() != identityv1.ActivityVisibility_ACTIVITY_VISIBILITY_UNSPECIFIED {
 		t.Fatalf("ad: %d %+v", w.Code, v)
+	}
+	w = as(h, "PATCH", "/v1/me/account", `{"birthday_visibility":"full"}`)
+	got, _, _ = f.last()
+	if v := decodeBody[accountJSON](t, w); w.Code != 200 || v.BirthdayVisibility != "full" ||
+		got.(*identityv1.UpdateAccountRequest).GetBirthdayVisibility() != identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_FULL {
+		t.Fatalf("doğum günü: %d %+v", w.Code, v)
 	}
 	for reason, want := range map[string]struct {
 		code int

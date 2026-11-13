@@ -94,6 +94,18 @@ enum ActivityVisibility {
   ACTIVITY_VISIBILITY_PUBLIC = 3;
 }
 
+// BirthdayVisibility is how much of the birth date the user's friends see
+// (issue #185; Notion Proje Planı §4 item 8). Nobody else ever sees it.
+enum BirthdayVisibility {
+  BIRTHDAY_VISIBILITY_UNSPECIFIED = 0;
+  // Nobody.
+  BIRTHDAY_VISIBILITY_HIDDEN = 1;
+  // Day and month only. The default.
+  BIRTHDAY_VISIBILITY_BIRTHDAY = 2;
+  // The date and the age.
+  BIRTHDAY_VISIBILITY_FULL = 3;
+}
+
 message GetAccountRequest {}
 
 message GetAccountResponse {
@@ -106,6 +118,7 @@ message GetAccountResponse {
   string user_id = 4;
   // The caller's display name.
   string display_name = 5;
+  BirthdayVisibility birthday_visibility = 6;
 }
 
 message SetAvatarRequest {
@@ -151,6 +164,9 @@ message UpdateAccountRequest {
   optional string display_name = 1;
   // UNSPECIFIED: unchanged.
   ActivityVisibility activity_visibility = 2;
+  // UNSPECIFIED: unchanged. Changes no profile copy: the birth date never
+  // leaves identity but through ProfileService.GetProfileDetails.
+  BirthdayVisibility birthday_visibility = 3;
 }
 
 message UpdateAccountResponse {
