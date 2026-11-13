@@ -17,8 +17,9 @@ backend'idir.
 
 - Mimari özet: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 - Kararlar ve gerekçeleri: [`docs/adr/`](docs/adr/README.md)
-- Ürün kararları ve veri modeli (v14): Notion'daki "Tayfam — Proje Planı".
-  Veri modelinin servislere dağılımı ADR-0009'dadır.
+- Ürün kararları ve veri modeli (v15): Notion'daki "Tayfam — Proje Planı" ve
+  alt sayfası "Veri Modeli (v15)". Veri modelinin servislere dağılımı
+  ADR-0009'dadır; v14 Notion'da arşiv olarak durur.
 
 ## Kararlar ve Notion
 
@@ -34,8 +35,8 @@ güvenliği). Mimari kararların kaynağı `docs/adr/`'dir.
 - **Çelişkiyi sakla değil, söyle.** Notion ile ADR veya kod çelişiyorsa ya da
   Notion'daki karardan sapmak gerekiyorsa bunu açıkça belirt ve platform
   sahibine sor. Sapma kabul edilirse hem ADR'ye hem Notion'daki ilgili sayfaya
-  yazılır (örnek: ADR-0012'deki şifreli doğum tarihi, veri modeli v14'te not
-  olarak duruyor).
+  yazılır (örnek: ADR-0012'deki şifreli doğum tarihi v14'te not olarak
+  duruyordu, v15'te şemaya işlendi).
 - **Yeni kararı yaz.** Platform sahibiyle birlikte yeni bir karar alınırsa
   aynı oturumda Notion'daki ilgili sayfaya işlenir (ürün kararı) ve gerekiyorsa
   ADR eklenir veya güncellenir (mimari karar). Notion'daki proje planının yol
@@ -141,7 +142,7 @@ docs/runbooks/              işletim adımları
 - **ID'ler** UUIDv7'dir ve sunucuda üretilir. İstemcinin ürettiği değer yalnızca
   `client_request_id` olarak tekrar gönderim korumasında kullanılır.
 - **Girdi doğrulama** hem Go'da hem veritabanında (`CHECK`) yapılır. Uzunluk
-  sınırları veri modeli v13'teki tablodadır.
+  sınırları veri modeli v15'teki tablolardadır.
 - **Türkçe metin.** Tekillik gereken isimlerde `name_normalized` alanı
   `strings.ToLowerSpecial(unicode.TurkishCase, …)` ile üretilir.
 - **SQL** elle yazılır ve sqlc ile üretilir; string birleştirerek sorgu
