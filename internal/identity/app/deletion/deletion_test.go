@@ -138,6 +138,13 @@ func TestDeleteAccount(t *testing.T) {
 	if _, err := e.pool.Exec(ctx, `INSERT INTO display_name_changes (id, user_id) VALUES ($1, $2)`, id.New().PG(), tok.UserID.PG()); err != nil {
 		t.Fatal(err)
 	}
+	// So are the profile completion fields (issue #186).
+	if _, err := e.pool.Exec(ctx, `INSERT INTO profile_details (user_id, team) VALUES ($1, 'Bursaspor')`, tok.UserID.PG()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.pool.Exec(ctx, `INSERT INTO user_social_accounts (user_id, platform, username) VALUES ($1, 'x', 'ece')`, tok.UserID.PG()); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := e.svc.Delete(ctx, c); err != nil {
 		t.Fatal(err)
@@ -155,6 +162,8 @@ func TestDeleteAccount(t *testing.T) {
 		"oturum":         `SELECT count(*) FROM sessions WHERE user_id = $1`,
 		"refresh token":  `SELECT count(*) FROM refresh_tokens rt JOIN sessions s ON s.id = rt.session_id WHERE s.user_id = $1`,
 		"ad değişikliği": `SELECT count(*) FROM display_name_changes WHERE user_id = $1`,
+		"profil alanı":   `SELECT count(*) FROM profile_details WHERE user_id = $1`,
+		"sosyal hesap":   `SELECT count(*) FROM user_social_accounts WHERE user_id = $1`,
 	} {
 		if n := e.count(t, sql, u); n != 0 {
 			t.Errorf("%s kaldı: %d", name, n)

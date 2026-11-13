@@ -143,7 +143,12 @@ func (x *Birthday) GetAge() int32 {
 type GetProfileDetailsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Absent unless the caller may see it.
-	Birthday      *Birthday `protobuf:"bytes,1,opt,name=birthday,proto3" json:"birthday,omitempty"`
+	Birthday *Birthday `protobuf:"bytes,1,opt,name=birthday,proto3" json:"birthday,omitempty"`
+	// By the user's AboutVisibility: friends see all of it, members of a
+	// shared tayfa all but social_accounts (FRIENDS_AND_MUTUAL only), the
+	// user all of their own. Absent when nothing is shown. Which fields were
+	// declined is never told.
+	About         *ProfileFields `protobuf:"bytes,2,opt,name=about,proto3" json:"about,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -185,20 +190,28 @@ func (x *GetProfileDetailsResponse) GetBirthday() *Birthday {
 	return nil
 }
 
+func (x *GetProfileDetailsResponse) GetAbout() *ProfileFields {
+	if x != nil {
+		return x.About
+	}
+	return nil
+}
+
 var File_tayfam_identity_v1_profile_proto protoreflect.FileDescriptor
 
 const file_tayfam_identity_v1_profile_proto_rawDesc = "" +
 	"\n" +
-	" tayfam/identity/v1/profile.proto\x12\x12tayfam.identity.v1\"3\n" +
+	" tayfam/identity/v1/profile.proto\x12\x12tayfam.identity.v1\x1a'tayfam/identity/v1/profile_fields.proto\"3\n" +
 	"\x18GetProfileDetailsRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\"X\n" +
 	"\bBirthday\x12\x14\n" +
 	"\x05month\x18\x01 \x01(\x05R\x05month\x12\x10\n" +
 	"\x03day\x18\x02 \x01(\x05R\x03day\x12\x12\n" +
 	"\x04year\x18\x03 \x01(\x05R\x04year\x12\x10\n" +
-	"\x03age\x18\x04 \x01(\x05R\x03age\"U\n" +
+	"\x03age\x18\x04 \x01(\x05R\x03age\"\x8e\x01\n" +
 	"\x19GetProfileDetailsResponse\x128\n" +
-	"\bbirthday\x18\x01 \x01(\v2\x1c.tayfam.identity.v1.BirthdayR\bbirthday2\x82\x01\n" +
+	"\bbirthday\x18\x01 \x01(\v2\x1c.tayfam.identity.v1.BirthdayR\bbirthday\x127\n" +
+	"\x05about\x18\x02 \x01(\v2!.tayfam.identity.v1.ProfileFieldsR\x05about2\x82\x01\n" +
 	"\x0eProfileService\x12p\n" +
 	"\x11GetProfileDetails\x12,.tayfam.identity.v1.GetProfileDetailsRequest\x1a-.tayfam.identity.v1.GetProfileDetailsResponseB\xda\x01\n" +
 	"\x16com.tayfam.identity.v1B\fProfileProtoP\x01ZHgithub.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1;identityv1\xa2\x02\x03TIX\xaa\x02\x12Tayfam.Identity.V1\xca\x02\x12Tayfam\\Identity\\V1\xe2\x02\x1eTayfam\\Identity\\V1\\GPBMetadata\xea\x02\x14Tayfam::Identity::V1b\x06proto3"
@@ -220,16 +233,18 @@ var file_tayfam_identity_v1_profile_proto_goTypes = []any{
 	(*GetProfileDetailsRequest)(nil),  // 0: tayfam.identity.v1.GetProfileDetailsRequest
 	(*Birthday)(nil),                  // 1: tayfam.identity.v1.Birthday
 	(*GetProfileDetailsResponse)(nil), // 2: tayfam.identity.v1.GetProfileDetailsResponse
+	(*ProfileFields)(nil),             // 3: tayfam.identity.v1.ProfileFields
 }
 var file_tayfam_identity_v1_profile_proto_depIdxs = []int32{
 	1, // 0: tayfam.identity.v1.GetProfileDetailsResponse.birthday:type_name -> tayfam.identity.v1.Birthday
-	0, // 1: tayfam.identity.v1.ProfileService.GetProfileDetails:input_type -> tayfam.identity.v1.GetProfileDetailsRequest
-	2, // 2: tayfam.identity.v1.ProfileService.GetProfileDetails:output_type -> tayfam.identity.v1.GetProfileDetailsResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	3, // 1: tayfam.identity.v1.GetProfileDetailsResponse.about:type_name -> tayfam.identity.v1.ProfileFields
+	0, // 2: tayfam.identity.v1.ProfileService.GetProfileDetails:input_type -> tayfam.identity.v1.GetProfileDetailsRequest
+	2, // 3: tayfam.identity.v1.ProfileService.GetProfileDetails:output_type -> tayfam.identity.v1.GetProfileDetailsResponse
+	3, // [3:4] is the sub-list for method output_type
+	2, // [2:3] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_identity_v1_profile_proto_init() }
@@ -237,6 +252,7 @@ func file_tayfam_identity_v1_profile_proto_init() {
 	if File_tayfam_identity_v1_profile_proto != nil {
 		return
 	}
+	file_tayfam_identity_v1_profile_fields_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

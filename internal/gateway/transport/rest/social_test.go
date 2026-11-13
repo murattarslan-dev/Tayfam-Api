@@ -2,6 +2,7 @@ package rest
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -117,6 +118,10 @@ func (f *fakeCore) UpdateAccount(ctx context.Context, in *identityv1.UpdateAccou
 		a.ActivityVisibility = in.GetActivityVisibility()
 	}
 	return &identityv1.UpdateAccountResponse{Account: a}, f.record(ctx, in)
+}
+
+func (f *fakeCore) SnoozeProfilePrompt(ctx context.Context, in *identityv1.SnoozeProfilePromptRequest, _ ...grpc.CallOption) (*identityv1.SnoozeProfilePromptResponse, error) {
+	return &identityv1.SnoozeProfilePromptResponse{}, f.record(ctx, in)
 }
 
 // --- tests ---
@@ -282,8 +287,17 @@ func TestProfileDetails(t *testing.T) {
 		strings.Contains(w.Body.String(), `"year"`) || strings.Contains(w.Body.String(), `"age"`) {
 		t.Fatalf("gün/ay: %d %s", w.Code, w.Body)
 	}
-	d = &fakeDetails{resp: &identityv1.GetProfileDetailsResponse{Birthday: &identityv1.Birthday{Month: 3, Day: 4, Year: 2008, Age: 18}}}
+	d = &fakeDetails{resp: &identityv1.GetProfileDetailsResponse{
+		Birthday: &identityv1.Birthday{Month: 3, Day: 4, Year: 2008, Age: 18},
+		About: &identityv1.ProfileFields{Team: "Bursaspor", SocialAccounts: []*identityv1.SocialAccount{
+			{Platform: identityv1.SocialPlatform_SOCIAL_PLATFORM_INSTAGRAM, Username: "ece.su"},
+		}},
+	}}
 	w = as(with(d), "GET", "/v1/users/"+userID+"/profile", "")
+	if !strings.Contains(w.Body.String(), `"team":"Bursaspor"`) || !strings.Contains(w.Body.String(), `"social_accounts":[{"platform":"instagram","username":"ece.su"}]`) ||
+		strings.Contains(w.Body.String(), `"interests"`) {
+		t.Fatalf("hakkında: %s", w.Body)
+	}
 	if v := decodeBody[profileJSON](t, w); w.Code != 200 || v.Birthday == nil || v.Birthday.Year != 2008 || v.Birthday.Age != 18 {
 		t.Fatalf("tam: %d %s", w.Code, w.Body)
 	}
@@ -302,6 +316,75 @@ func TestProfileDetails(t *testing.T) {
 	deps.ProfileDetails = d
 	if w := as(coreRouterWith(deps), "GET", "/v1/users/"+userID+"/profile", ""); w.Code != http.StatusNotFound || d.got != "" {
 		t.Fatalf("engel: %d %q", w.Code, d.got)
+	}
+}
+
+// TestProfileFieldRoutes (issue #186): names map to identity's enums,
+// unknown names and oversized input never leave gateway; identity's
+// refusal is invalid-request.
+func TestProfileFieldRoutes(t *testing.T) {
+	f := &fakeCore{}
+	h := coreRouter(f)
+	w := as(h, "PATCH", "/v1/me/account", `{"interests":["hike","camp"],"team":"Bursaspor","languages":[],
+		"social_accounts":[{"platform":"x","username":"ece"}],"declined_profile_fields":["about"],"about_visibility":"friends"}`)
+	got, _, _ := f.last()
+	req := got.(*identityv1.UpdateAccountRequest)
+	p := req.GetProfile()
+	if w.Code != 200 || len(p.GetInterests().GetValues()) != 2 || p.GetTeam() != "Bursaspor" || p.Languages == nil ||
+		p.GetSocialAccounts().GetValues()[0].GetPlatform() != identityv1.SocialPlatform_SOCIAL_PLATFORM_X ||
+		p.GetDeclined().GetValues()[0] != identityv1.ProfileField_PROFILE_FIELD_ABOUT || p.About != nil ||
+		req.GetAboutVisibility() != identityv1.AboutVisibility_ABOUT_VISIBILITY_FRIENDS || req.DisplayName != nil {
+		t.Fatalf("profil alanları: %d %v", w.Code, req)
+	}
+	// Visibility alone sends no profile update.
+	_ = as(h, "PATCH", "/v1/me/account", `{"about_visibility":"none"}`)
+	got, _, _ = f.last()
+	if got.(*identityv1.UpdateAccountRequest).Profile != nil {
+		t.Fatal("yalnız görünürlük profil güncellemesi gönderdi")
+	}
+	n0 := func() int { _, _, n := f.last(); return n }()
+	for _, body := range []string{
+		`{"interests":["chess"]}`,
+		`{"interests":["hike","hike"]}`,
+		`{"social_accounts":[{"platform":"facebook","username":"ece"}]}`,
+		`{"declined_profile_fields":["birth_date"]}`,
+		`{"about_visibility":"public"}`,
+		`{"about":"` + strings.Repeat("a", 2049) + `"}`,
+		`{"languages":["` + strings.Repeat(`tr","`, 16) + `tr"]}`,
+	} {
+		if w := as(h, "PATCH", "/v1/me/account", body); w.Code != http.StatusBadRequest {
+			t.Errorf("%s: %d", body, w.Code)
+		}
+	}
+	if _, _, n := f.last(); n != n0 {
+		t.Fatal("geçersiz istek identity'ye ulaştı")
+	}
+	w = as(coreRouter(&fakeCore{err: identityErr(codes.InvalidArgument, "ERROR_REASON_VALIDATION")}), "PATCH", "/v1/me/account", `{"social_accounts":[{"platform":"x","username":"https://evil.example"}]}`)
+	if w.Code != http.StatusBadRequest || problemType(t, w) != "invalid-request" {
+		t.Fatalf("identity reddi: %d %s", w.Code, problemType(t, w))
+	}
+	w = as(h, "POST", "/v1/me/profile-prompt/snooze", "")
+	got, tok, _ := f.last()
+	if _, ok := got.(*identityv1.SnoozeProfilePromptRequest); w.Code != http.StatusNoContent || !ok || tok != "USERTOKEN" {
+		t.Fatalf("erteleme: %d %v", w.Code, got)
+	}
+}
+
+func TestAccountProfileJSON(t *testing.T) {
+	a := accountFrom(&identityv1.GetAccountResponse{
+		Profile:               &identityv1.ProfileFields{Team: "Bursaspor", Interests: []identityv1.ProfileInterest{identityv1.ProfileInterest_PROFILE_INTEREST_HIKE}},
+		DeclinedProfileFields: []identityv1.ProfileField{identityv1.ProfileField_PROFILE_FIELD_ABOUT},
+		AboutVisibility:       identityv1.AboutVisibility_ABOUT_VISIBILITY_FRIENDS_AND_MUTUAL, ProfileCompletionPending: true,
+	})
+	b, err := json.Marshal(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"team":"Bursaspor"`, `"interests":["hike"]`, `"languages":[]`, `"social_accounts":[]`,
+		`"declined_profile_fields":["about"]`, `"about_visibility":"friends_and_mutual"`, `"profile_completion_pending":true`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("%s yok: %s", want, b)
+		}
 	}
 }
 

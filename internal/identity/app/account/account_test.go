@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	identitydb "github.com/murattarslan-dev/tayfam-api/db/identity"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/profilefields"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/refcode"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -451,5 +452,94 @@ func TestUpdateBirthdayVisibility(t *testing.T) {
 	}
 	if got := e.profileEvents(t, u); len(got) != 0 {
 		t.Fatalf("profil olayı yazıldı: %q", got)
+	}
+}
+
+// TestProfileCompletion (issue #186): fields are saved and cleaned, an
+// invalid one changes nothing, declined answers a field, the form is due
+// until every field is answered, a snooze holds it back 7 days, and a
+// newer field list voids the snooze.
+func TestProfileCompletion(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	u, _ := e.registered(t, "Deniz")
+	pending := func() bool {
+		t.Helper()
+		a, err := e.svc.Get(ctx, u)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a.ProfileCompletionPending
+	}
+	a, _ := e.svc.Get(ctx, u)
+	if !a.ProfileCompletionPending || a.AboutVisibility != profilefields.VisibleFriendsAndMutual {
+		t.Fatalf("yeni hesap: %+v", a)
+	}
+
+	team, url := "  Bursa   spor ", []profilefields.SocialAccount{{Platform: "instagram", Username: "https://evil.example/x"}}
+	if err := e.svc.Update(ctx, u, Changes{Profile: profilefields.Update{Team: &team, SocialAccounts: &url}}); !errors.Is(err, ErrInvalidProfile) {
+		t.Fatalf("URL: %v", err)
+	}
+	if a, _ := e.svc.Get(ctx, u); a.Profile.Team != "" {
+		t.Fatal("geçersiz istek takımı yazdı")
+	}
+
+	social := []profilefields.SocialAccount{{Platform: "x", Username: "@deniz"}}
+	interests := []string{"camp"}
+	vis := profilefields.VisibleFriends
+	if err := e.svc.Update(ctx, u, Changes{
+		Profile:         profilefields.Update{Team: &team, SocialAccounts: &social, Interests: &interests},
+		AboutVisibility: &vis,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	a, _ = e.svc.Get(ctx, u)
+	if a.Profile.Team != "Bursa spor" || a.Profile.SocialAccounts[0].Username != "deniz" || a.AboutVisibility != profilefields.VisibleFriends || !a.ProfileCompletionPending {
+		t.Fatalf("kayıt: %+v", a)
+	}
+	// Profile fields reach no other service.
+	if got := e.profileEvents(t, u); len(got) != 0 {
+		t.Fatalf("profil olayı yazıldı: %q", got)
+	}
+
+	// Snooze: 7 days.
+	if err := e.svc.SnoozeProfilePrompt(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	if pending() {
+		t.Fatal("ertelemeden sonra form istendi")
+	}
+	start := e.now
+	e.now = start.Add(profilefields.SnoozeFor - time.Second)
+	if pending() {
+		t.Fatal("7 gün dolmadan form istendi")
+	}
+	e.now = start.Add(profilefields.SnoozeFor)
+	if !pending() {
+		t.Fatal("7 gün sonra form istenmedi")
+	}
+	// A snooze under an older field list does not hold.
+	e.now = start
+	if err := e.svc.SnoozeProfilePrompt(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.pool.Exec(ctx, `UPDATE profile_details SET prompt_fields_version = $2 WHERE user_id = $1`, u.PG(), profilefields.FieldsVersion-1); err != nil {
+		t.Fatal(err)
+	}
+	if !pending() {
+		t.Fatal("eski sürümdeki erteleme formu tuttu")
+	}
+
+	// Declining the rest answers every field.
+	declined := []string{"about", "occupation", "languages"}
+	if err := e.svc.Update(ctx, u, Changes{Profile: profilefields.Update{Declined: &declined}}); err != nil {
+		t.Fatal(err)
+	}
+	if pending() {
+		t.Fatal("bütün alanlar cevaplandı ama form istendi")
+	}
+	bad := profilefields.AboutVisibility("public")
+	if err := e.svc.Update(ctx, u, Changes{AboutVisibility: &bad}); !errors.Is(err, ErrInvalidVisibility) {
+		t.Fatalf("geçersiz görünürlük: %v", err)
 	}
 }

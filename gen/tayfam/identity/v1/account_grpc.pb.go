@@ -24,6 +24,7 @@ const (
 	AccountService_FindUserByReferralCode_FullMethodName = "/tayfam.identity.v1.AccountService/FindUserByReferralCode"
 	AccountService_SetActivityVisibility_FullMethodName  = "/tayfam.identity.v1.AccountService/SetActivityVisibility"
 	AccountService_UpdateAccount_FullMethodName          = "/tayfam.identity.v1.AccountService/UpdateAccount"
+	AccountService_SnoozeProfilePrompt_FullMethodName    = "/tayfam.identity.v1.AccountService/SnoozeProfilePrompt"
 	AccountService_SetAvatar_FullMethodName              = "/tayfam.identity.v1.AccountService/SetAvatar"
 	AccountService_ClearAvatar_FullMethodName            = "/tayfam.identity.v1.AccountService/ClearAvatar"
 	AccountService_ListSessions_FullMethodName           = "/tayfam.identity.v1.AccountService/ListSessions"
@@ -72,6 +73,10 @@ type AccountServiceClient interface {
 	// counted. A new name or activity visibility reaches core and chat with
 	// user.profile_updated. Returns the account as GetAccount does.
 	UpdateAccount(ctx context.Context, in *UpdateAccountRequest, opts ...grpc.CallOption) (*UpdateAccountResponse, error)
+	// SnoozeProfilePrompt is "Daha sonra doldur" of the profile completion
+	// form (issue #186): profile_completion_pending stays false for 7 days,
+	// unless fields are added to the form meanwhile.
+	SnoozeProfilePrompt(ctx context.Context, in *SnoozeProfilePromptRequest, opts ...grpc.CallOption) (*SnoozeProfilePromptResponse, error)
 	// SetAvatar makes the caller's READY AVATAR upload (core's MediaService)
 	// their avatar. identity does not own media: it asks core with the
 	// caller's own token (MediaService.AttachAvatar), which checks that the
@@ -163,6 +168,16 @@ func (c *accountServiceClient) UpdateAccount(ctx context.Context, in *UpdateAcco
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(UpdateAccountResponse)
 	err := c.cc.Invoke(ctx, AccountService_UpdateAccount_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *accountServiceClient) SnoozeProfilePrompt(ctx context.Context, in *SnoozeProfilePromptRequest, opts ...grpc.CallOption) (*SnoozeProfilePromptResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SnoozeProfilePromptResponse)
+	err := c.cc.Invoke(ctx, AccountService_SnoozeProfilePrompt_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -287,6 +302,10 @@ type AccountServiceServer interface {
 	// counted. A new name or activity visibility reaches core and chat with
 	// user.profile_updated. Returns the account as GetAccount does.
 	UpdateAccount(context.Context, *UpdateAccountRequest) (*UpdateAccountResponse, error)
+	// SnoozeProfilePrompt is "Daha sonra doldur" of the profile completion
+	// form (issue #186): profile_completion_pending stays false for 7 days,
+	// unless fields are added to the form meanwhile.
+	SnoozeProfilePrompt(context.Context, *SnoozeProfilePromptRequest) (*SnoozeProfilePromptResponse, error)
 	// SetAvatar makes the caller's READY AVATAR upload (core's MediaService)
 	// their avatar. identity does not own media: it asks core with the
 	// caller's own token (MediaService.AttachAvatar), which checks that the
@@ -348,6 +367,9 @@ func (UnimplementedAccountServiceServer) SetActivityVisibility(context.Context, 
 }
 func (UnimplementedAccountServiceServer) UpdateAccount(context.Context, *UpdateAccountRequest) (*UpdateAccountResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateAccount not implemented")
+}
+func (UnimplementedAccountServiceServer) SnoozeProfilePrompt(context.Context, *SnoozeProfilePromptRequest) (*SnoozeProfilePromptResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SnoozeProfilePrompt not implemented")
 }
 func (UnimplementedAccountServiceServer) SetAvatar(context.Context, *SetAvatarRequest) (*SetAvatarResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetAvatar not implemented")
@@ -480,6 +502,24 @@ func _AccountService_UpdateAccount_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AccountServiceServer).UpdateAccount(ctx, req.(*UpdateAccountRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AccountService_SnoozeProfilePrompt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SnoozeProfilePromptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AccountServiceServer).SnoozeProfilePrompt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AccountService_SnoozeProfilePrompt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AccountServiceServer).SnoozeProfilePrompt(ctx, req.(*SnoozeProfilePromptRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -654,6 +694,10 @@ var AccountService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateAccount",
 			Handler:    _AccountService_UpdateAccount_Handler,
+		},
+		{
+			MethodName: "SnoozeProfilePrompt",
+			Handler:    _AccountService_SnoozeProfilePrompt_Handler,
 		},
 		{
 			MethodName: "SetAvatar",

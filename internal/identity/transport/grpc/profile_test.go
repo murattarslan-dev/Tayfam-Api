@@ -13,6 +13,7 @@ import (
 
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/profile"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/profilefields"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -79,5 +80,19 @@ func TestProfileNeedsFullToken(t *testing.T) {
 	}
 	if f.viewer != (id.ID{}) {
 		t.Fatal("uygulama katmanı çağrıldı")
+	}
+}
+
+func TestGetProfileDetailsAbout(t *testing.T) {
+	f := &fakeProfiles{d: profile.Details{About: &profile.About{
+		Interests: []string{"camp", "hike"}, Team: "Bursaspor", Languages: []string{"tr"},
+		SocialAccounts: []profilefields.SocialAccount{{Platform: "youtube", Username: "ece-su"}},
+	}}}
+	resp, err := newProfileServer(f).GetProfileDetails(fullCtx(id.New()), &identityv1.GetProfileDetailsRequest{UserId: id.New().String()})
+	a := resp.GetAbout()
+	if err != nil || len(a.GetInterests()) != 2 || a.GetInterests()[1] != identityv1.ProfileInterest_PROFILE_INTEREST_HIKE ||
+		a.GetTeam() != "Bursaspor" || a.GetLanguages()[0] != "tr" ||
+		a.GetSocialAccounts()[0].GetPlatform() != identityv1.SocialPlatform_SOCIAL_PLATFORM_YOUTUBE || resp.Birthday != nil {
+		t.Fatalf("hakkında = %v %v", resp, err)
 	}
 }

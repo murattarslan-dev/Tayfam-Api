@@ -4,6 +4,7 @@ package tayfam.identity.v1;
 
 import "google/protobuf/timestamp.proto";
 import "tayfam/identity/v1/auth.proto";
+import "tayfam/identity/v1/profile_fields.proto";
 
 // AccountService holds the caller's own account settings that identity owns:
 // the referral code and who sees the attendance history (data model v14
@@ -39,6 +40,10 @@ service AccountService {
   // counted. A new name or activity visibility reaches core and chat with
   // user.profile_updated. Returns the account as GetAccount does.
   rpc UpdateAccount(UpdateAccountRequest) returns (UpdateAccountResponse);
+  // SnoozeProfilePrompt is "Daha sonra doldur" of the profile completion
+  // form (issue #186): profile_completion_pending stays false for 7 days,
+  // unless fields are added to the form meanwhile.
+  rpc SnoozeProfilePrompt(SnoozeProfilePromptRequest) returns (SnoozeProfilePromptResponse);
 
   // SetAvatar makes the caller's READY AVATAR upload (core's MediaService)
   // their avatar. identity does not own media: it asks core with the
@@ -119,7 +124,17 @@ message GetAccountResponse {
   // The caller's display name.
   string display_name = 5;
   BirthdayVisibility birthday_visibility = 6;
+  // The profile completion form (issue #186).
+  ProfileFields profile = 7;
+  repeated ProfileField declined_profile_fields = 8;
+  AboutVisibility about_visibility = 9;
+  // A field is unanswered and no snooze holds the form back.
+  bool profile_completion_pending = 10;
 }
+
+message SnoozeProfilePromptRequest {}
+
+message SnoozeProfilePromptResponse {}
 
 message SetAvatarRequest {
   string upload_id = 1;
@@ -167,6 +182,10 @@ message UpdateAccountRequest {
   // UNSPECIFIED: unchanged. Changes no profile copy: the birth date never
   // leaves identity but through ProfileService.GetProfileDetails.
   BirthdayVisibility birthday_visibility = 3;
+  // Unset: unchanged (issue #186). Changes no profile copy.
+  ProfileUpdate profile = 4;
+  // UNSPECIFIED: unchanged.
+  AboutVisibility about_visibility = 5;
 }
 
 message UpdateAccountResponse {

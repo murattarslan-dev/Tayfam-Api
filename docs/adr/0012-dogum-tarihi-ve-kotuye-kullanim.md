@@ -173,6 +173,19 @@ tutulmalıdır.
 - Profil alanları için "cevaplanmadı / cevaplandı / paylaşmak istemiyorum"
   durumu tutulur; "paylaşmak istemiyorum" alanı cevaplanmış sayar. "Daha
   sonra doldur" seçimi ve tekrar gösterme zamanı istemci tarafında kalır.
+- **Güncelleme (2026-11-13, platform sahibi; issue #186):** "Daha sonra
+  doldur" artık **sunucuda** tutulur ve cihazlar arası tutarlıdır: erteleme
+  7 gün sürer, forma yeni alan eklenince (`profilefields.FieldsVersion`
+  artınca) geçersiz olur; istemci yalnızca
+  `Account.profile_completion_pending`'e bakar. Alanlar (ilgi alanları,
+  hakkımda, meslek, takım, diller, sosyal medya kullanıcı adı) identity'nin
+  `profile_details` ve `user_social_accounts` tablolarındadır; core ve
+  chat'in profil kopyalarına gitmez. Başka kullanıcılara yalnızca
+  identity'nin `ProfileService`'i, kullanıcının `about_visibility` ayarına
+  göre gösterir (ilişki core'a çağıranın token'ıyla sorulur, doğum günüyle
+  aynı yol); sosyal medya hesabı ayar ne olursa olsun en fazla arkadaşlara
+  görünür. Hangi alanın reddedildiği başkasına söylenmez. Alanlar KVKK veri
+  dışa aktarmasında vardır, hesap silmede hemen silinir.
 
 ### Hukuki açık noktalar
 

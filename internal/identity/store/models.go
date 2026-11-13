@@ -104,6 +104,20 @@ type PlatformSanction struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type ProfileDetail struct {
+	UserID              pgtype.UUID
+	Interests           []string
+	About               pgtype.Text
+	Occupation          pgtype.Text
+	Team                pgtype.Text
+	Languages           []string
+	DeclinedFields      []string
+	AboutVisibility     string
+	PromptSnoozedUntil  pgtype.Timestamptz
+	PromptFieldsVersion int32
+	UpdatedAt           pgtype.Timestamptz
+}
+
 type RefCodeLookup struct {
 	ID         pgtype.UUID
 	UserID     pgtype.UUID
@@ -151,4 +165,10 @@ type User struct {
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
+}
+
+type UserSocialAccount struct {
+	UserID   pgtype.UUID
+	Platform string
+	Username string
 }

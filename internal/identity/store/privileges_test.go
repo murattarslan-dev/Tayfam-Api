@@ -23,6 +23,8 @@ var wantAppPrivileges = map[string]string{
 	"auth_identities":      "DELETE,INSERT,SELECT,UPDATE",
 	"devices":              "DELETE,INSERT,SELECT,UPDATE",
 	"display_name_changes": "DELETE,INSERT,SELECT",
+	"profile_details":      "DELETE,INSERT,SELECT,UPDATE",
+	"user_social_accounts": "DELETE,INSERT,SELECT",
 	"sessions":             "DELETE,INSERT,SELECT,UPDATE",
 	"refresh_tokens":       "DELETE,INSERT,SELECT,UPDATE",
 	"ref_code_lookups":     "DELETE,INSERT,SELECT",

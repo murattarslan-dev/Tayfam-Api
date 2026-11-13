@@ -34,6 +34,11 @@ func (f *fakeAccounts) Update(_ context.Context, c id.ID, ch account.Changes) er
 	return f.err
 }
 
+func (f *fakeAccounts) SnoozeProfilePrompt(_ context.Context, c id.ID) error {
+	f.caller = c
+	return f.err
+}
+
 func (f *fakeAccounts) Get(_ context.Context, c id.ID) (account.Account, error) {
 	f.caller = c
 	return account.Account{UserID: c, DisplayName: "Deniz", ReferralCode: "TYF-8K2M4Q", ActivityVisibility: account.VisibilityPublic, BirthdayVisibility: account.BirthdayFull}, f.err
@@ -189,6 +194,49 @@ func TestUpdateAccount(t *testing.T) {
 		if st.Code() != tc.code || reason != tc.reason {
 			t.Errorf("%v: %v %q", tc.err, st.Code(), reason)
 		}
+	}
+}
+
+// TestUpdateProfileFields (issue #186): enums become the stored names,
+// unknown values and oversized input never reach the app layer.
+func TestUpdateProfileFields(t *testing.T) {
+	u := id.New()
+	ctx := fullCtx(u)
+	f := &fakeAccounts{}
+	_, err := newAccountServer(f).UpdateAccount(ctx, &identityv1.UpdateAccountRequest{
+		AboutVisibility: identityv1.AboutVisibility_ABOUT_VISIBILITY_FRIENDS,
+		Profile: &identityv1.ProfileUpdate{
+			Interests:      &identityv1.InterestList{Values: []identityv1.ProfileInterest{identityv1.ProfileInterest_PROFILE_INTEREST_HIKE}},
+			Team:           ptr("Bursaspor"),
+			Languages:      &identityv1.LanguageList{},
+			SocialAccounts: &identityv1.SocialAccountList{Values: []*identityv1.SocialAccount{{Platform: identityv1.SocialPlatform_SOCIAL_PLATFORM_X, Username: "ece"}}},
+			Declined:       &identityv1.ProfileFieldList{Values: []identityv1.ProfileField{identityv1.ProfileField_PROFILE_FIELD_ABOUT}},
+		},
+	})
+	p := f.update.Profile
+	if err != nil || *f.update.AboutVisibility != "friends" || (*p.Interests)[0] != "hike" || *p.Team != "Bursaspor" ||
+		p.About != nil || len(*p.Languages) != 0 || (*p.SocialAccounts)[0].Platform != "x" || (*p.Declined)[0] != "about" {
+		t.Fatalf("güncelleme = %v %+v", err, f.update)
+	}
+	for name, req := range map[string]*identityv1.UpdateAccountRequest{
+		"bilinmeyen ilgi":       {Profile: &identityv1.ProfileUpdate{Interests: &identityv1.InterestList{Values: []identityv1.ProfileInterest{99}}}},
+		"belirsiz platform":     {Profile: &identityv1.ProfileUpdate{SocialAccounts: &identityv1.SocialAccountList{Values: []*identityv1.SocialAccount{{Username: "ece"}}}}},
+		"bilinmeyen alan":       {Profile: &identityv1.ProfileUpdate{Declined: &identityv1.ProfileFieldList{Values: []identityv1.ProfileField{0}}}},
+		"bilinmeyen görünürlük": {AboutVisibility: 99},
+		"çok uzun metin":        {Profile: &identityv1.ProfileUpdate{About: ptr(string(make([]byte, 4097)))}},
+	} {
+		f := &fakeAccounts{}
+		if _, err := newAccountServer(f).UpdateAccount(ctx, req); status.Code(err) != codes.InvalidArgument || f.update != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	_, err = newAccountServer(&fakeAccounts{err: account.ErrInvalidProfile}).UpdateAccount(ctx, &identityv1.UpdateAccountRequest{Profile: &identityv1.ProfileUpdate{Team: ptr("x")}})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("geçersiz alan: %v", err)
+	}
+	f = &fakeAccounts{}
+	if _, err := newAccountServer(f).SnoozeProfilePrompt(ctx, &identityv1.SnoozeProfilePromptRequest{}); err != nil || f.caller != u {
+		t.Fatalf("erteleme: %v", err)
 	}
 }
 

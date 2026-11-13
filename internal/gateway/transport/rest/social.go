@@ -61,6 +61,7 @@ type AccountClient interface {
 	RotateReferralCode(ctx context.Context, in *identityv1.RotateReferralCodeRequest, opts ...grpc.CallOption) (*identityv1.RotateReferralCodeResponse, error)
 	FindUserByReferralCode(ctx context.Context, in *identityv1.FindUserByReferralCodeRequest, opts ...grpc.CallOption) (*identityv1.FindUserByReferralCodeResponse, error)
 	UpdateAccount(ctx context.Context, in *identityv1.UpdateAccountRequest, opts ...grpc.CallOption) (*identityv1.UpdateAccountResponse, error)
+	SnoozeProfilePrompt(ctx context.Context, in *identityv1.SnoozeProfilePromptRequest, opts ...grpc.CallOption) (*identityv1.SnoozeProfilePromptResponse, error)
 	// Sessions, consents and account deletion (issue #75, account.go).
 	ListSessions(ctx context.Context, in *identityv1.ListSessionsRequest, opts ...grpc.CallOption) (*identityv1.ListSessionsResponse, error)
 	RevokeSession(ctx context.Context, in *identityv1.RevokeSessionRequest, opts ...grpc.CallOption) (*identityv1.RevokeSessionResponse, error)
@@ -105,6 +106,7 @@ func registerAccount(mux *http.ServeMux, h coreHandlers) {
 	a := h.authed
 	mux.HandleFunc("GET /v1/me/account", a(h.getAccount))
 	mux.HandleFunc("PATCH /v1/me/account", a(h.updateAccount))
+	mux.HandleFunc("POST /v1/me/profile-prompt/snooze", a(h.snoozeProfilePrompt))
 	mux.HandleFunc("POST /v1/me/referral-code", a(h.rotateReferralCode))
 	mux.HandleFunc("POST /v1/referral-lookups", a(h.lookupReferralCode))
 }
@@ -212,8 +214,10 @@ type profileJSON struct {
 	ActivityVisible bool              `json:"activity_visible"`
 	// Only on one's own profile.
 	ActivityVisibility string `json:"activity_visibility,omitempty"`
-	// From identity (issue #185); absent unless the caller may see it.
+	// From identity (issue #185, #186); absent unless the caller may see
+	// them.
 	Birthday *birthdayJSON `json:"birthday,omitempty"`
+	aboutJSON
 }
 
 type birthdayJSON struct {
@@ -505,6 +509,9 @@ func (h coreHandlers) addProfileDetails(ctx context.Context, r *http.Request, us
 	if b := d.GetBirthday(); b != nil {
 		out.Birthday = &birthdayJSON{Month: b.GetMonth(), Day: b.GetDay(), Year: b.GetYear(), Age: b.GetAge()}
 	}
+	if a := d.GetAbout(); a != nil {
+		out.aboutJSON = aboutFrom(a)
+	}
 }
 
 func (h coreHandlers) listActivity(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -542,6 +549,7 @@ type accountJSON struct {
 	ActivityVisibility string `json:"activity_visibility"`
 	BirthdayVisibility string `json:"birthday_visibility"`
 	AvatarUploadID     string `json:"avatar_upload_id,omitempty"`
+	accountProfileJSON
 }
 
 var birthdayVisibilities = newEnum(map[string]identityv1.BirthdayVisibility{
@@ -556,6 +564,7 @@ type accountPatchBody struct {
 	DisplayName        *string `json:"display_name"`
 	ActivityVisibility *string `json:"activity_visibility"`
 	BirthdayVisibility *string `json:"birthday_visibility"`
+	profilePatch
 }
 
 // maxDisplayNameBytes bounds the name before it reaches identity, which
@@ -595,6 +604,7 @@ func accountFrom(a *identityv1.GetAccountResponse) accountJSON {
 		ReferralCode: a.GetReferralCode(), ActivityVisibility: identityVisibilities.name(a.GetActivityVisibility()),
 		BirthdayVisibility: birthdayVisibilities.name(a.GetBirthdayVisibility()),
 		AvatarUploadID:     a.GetAvatarUploadId(),
+		accountProfileJSON: accountProfileFrom(a),
 	}
 }
 
@@ -605,7 +615,7 @@ func (h coreHandlers) updateAccount(ctx context.Context, w http.ResponseWriter, 
 	if !decode(w, r, &b) {
 		return
 	}
-	if b.DisplayName == nil && b.ActivityVisibility == nil && b.BirthdayVisibility == nil {
+	if b.DisplayName == nil && b.ActivityVisibility == nil && b.BirthdayVisibility == nil && b.empty() {
 		badRequest(w, r)
 		return
 	}
@@ -632,6 +642,10 @@ func (h coreHandlers) updateAccount(ctx context.Context, w http.ResponseWriter, 
 			return
 		}
 		req.BirthdayVisibility = v
+	}
+	if !b.apply(req) {
+		badRequest(w, r)
+		return
 	}
 	resp, err := h.d.Accounts.UpdateAccount(ctx, req)
 	if err != nil {

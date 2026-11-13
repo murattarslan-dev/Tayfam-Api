@@ -27,7 +27,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // ProfileService shows the profile details identity owns to another user:
-// the birthday (issue #185). The rest of the profile (name, avatar,
+// the birthday (issue #185) and the profile completion fields (issue #186). The rest of the profile (name, avatar,
 // friendship, mutual tayfas, attendance history) is core's ProfileService.
 //
 // Every method needs a full access token; the viewer is always the verified
@@ -66,7 +66,7 @@ func (c *profileServiceClient) GetProfileDetails(ctx context.Context, in *GetPro
 // for forward compatibility.
 //
 // ProfileService shows the profile details identity owns to another user:
-// the birthday (issue #185). The rest of the profile (name, avatar,
+// the birthday (issue #185) and the profile completion fields (issue #186). The rest of the profile (name, avatar,
 // friendship, mutual tayfas, attendance history) is core's ProfileService.
 //
 // Every method needs a full access token; the viewer is always the verified

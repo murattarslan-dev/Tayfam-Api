@@ -68,5 +68,8 @@ func profileDetailsToPB(d profile.Details) *identityv1.GetProfileDetailsResponse
 		// A decrypted, validated date: month 1–12, day 1–31, year 1900–now.
 		out.Birthday = &identityv1.Birthday{Month: int32(b.Month), Day: int32(b.Day), Year: int32(b.Year), Age: int32(b.Age)} //nolint:gosec // bounded calendar values
 	}
+	if a := d.About; a != nil {
+		out.About = profileFieldsToPB(a.Interests, a.About, a.Occupation, a.Team, a.Languages, a.SocialAccounts)
+	}
 	return out
 }

@@ -170,3 +170,87 @@ func TestRelationMustMatchCaller(t *testing.T) {
 		t.Fatalf("uyuşmayan ilişki: %+v %v", d, err)
 	}
 }
+
+// TestAboutVisibility (issue #186): every setting against every
+// relationship; social accounts never reach anyone but friends.
+func TestAboutVisibility(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	owner := e.user(t)
+	if _, err := e.pool.Exec(ctx, `INSERT INTO profile_details (user_id, team, interests, declined_fields) VALUES ($1, 'Bursaspor', '{hike}', '{about}')`, owner.PG()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.pool.Exec(ctx, `INSERT INTO user_social_accounts (user_id, platform, username) VALUES ($1, 'instagram', 'ece.su')`, owner.PG()); err != nil {
+		t.Fatal(err)
+	}
+	const (
+		none = iota
+		noSocial
+		all
+	)
+	relations := map[string]Relation{
+		"kendisi":           {Self: true},
+		"arkadaş":           {Friend: true},
+		"arkadaş+ortak":     {Friend: true, Mutual: true},
+		"ortak tayfa üyesi": {Mutual: true},
+		"yabancı":           {},
+	}
+	want := map[string]map[string]int{
+		"friends_and_mutual": {"kendisi": all, "arkadaş": all, "arkadaş+ortak": all, "ortak tayfa üyesi": noSocial},
+		"friends":            {"kendisi": all, "arkadaş": all, "arkadaş+ortak": all},
+		"none":               {"kendisi": all},
+	}
+	for vis, byRel := range want {
+		if _, err := e.pool.Exec(ctx, `UPDATE profile_details SET about_visibility = $2 WHERE user_id = $1`, owner.PG(), vis); err != nil {
+			t.Fatal(err)
+		}
+		for relName, rel := range relations {
+			e.rel.rel, e.rel.err = rel, nil
+			who := id.New()
+			if rel.Self {
+				who = owner
+			}
+			d, err := e.svc.Get(ctx, who, owner)
+			if err != nil {
+				t.Fatalf("%s/%s: %v", vis, relName, err)
+			}
+			got := none
+			if a := d.About; a != nil {
+				if a.Team != "Bursaspor" || len(a.Interests) != 1 || a.About != "" {
+					t.Fatalf("%s/%s: alanlar %+v", vis, relName, a)
+				}
+				got = noSocial
+				if len(a.SocialAccounts) == 1 && a.SocialAccounts[0].Username == "ece.su" {
+					got = all
+				}
+			}
+			if got != byRel[relName] {
+				t.Errorf("%s/%s: %d, istenen %d", vis, relName, got, byRel[relName])
+			}
+		}
+	}
+	// A block (core's USER_NOT_FOUND) shows nothing whatever the setting.
+	e.rel.rel, e.rel.err = Relation{Friend: true}, ErrUserNotFound
+	if d, err := e.svc.Get(ctx, id.New(), owner); !errors.Is(err, ErrUserNotFound) || d.About != nil {
+		t.Fatalf("engelli: %+v %v", d, err)
+	}
+}
+
+// TestAboutDefaultsAndEmpty: without a row the default setting applies and
+// nothing is shown; the default shows a friend and a tayfa mate.
+func TestAboutDefaultsAndEmpty(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	owner := e.user(t)
+	e.rel.rel = Relation{Friend: true}
+	if d, err := e.svc.Get(ctx, id.New(), owner); err != nil || d.About != nil {
+		t.Fatalf("boş profil: %+v %v", d.About, err)
+	}
+	if _, err := e.pool.Exec(ctx, `INSERT INTO profile_details (user_id, occupation) VALUES ($1, 'Rehber')`, owner.PG()); err != nil {
+		t.Fatal(err)
+	}
+	e.rel.rel = Relation{Mutual: true}
+	if d, err := e.svc.Get(ctx, id.New(), owner); err != nil || d.About == nil || d.About.Occupation != "Rehber" {
+		t.Fatalf("varsayılan görünürlük: %+v %v", d.About, err)
+	}
+}

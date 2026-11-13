@@ -43,6 +43,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/birthdate"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/profilefields"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/userevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -625,6 +626,25 @@ func textPtr(t pgtype.Text) *string {
 	return &t.String
 }
 
+type exportSocial struct {
+	Platform string `json:"platform"`
+	Username string `json:"username"`
+}
+
+func nonNilStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
+func timePtr(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}
+
 // identitySections writes identity's own data (docs/data-export-format.md).
 func (s *Service) identitySections(ctx context.Context, a *archive, user id.ID) error {
 	u, err := s.q.ExportUserProfile(ctx, user.PG())
@@ -640,25 +660,47 @@ func (s *Service) identitySections(ctx context.Context, a *archive, user id.ID) 
 		v := d.String()
 		birth = &v
 	}
+	// Profile completion fields (issue #186).
+	pf, err := profilefields.Load(ctx, s.q, user)
+	if err != nil {
+		return err
+	}
+	social := make([]exportSocial, 0, len(pf.Values.SocialAccounts))
+	for _, a := range pf.Values.SocialAccounts {
+		social = append(social, exportSocial{Platform: a.Platform, Username: a.Username})
+	}
 	profile, err := jsonRecord(struct {
-		UserID              string     `json:"user_id"`
-		DisplayName         *string    `json:"display_name"`
-		AvatarUploadID      *string    `json:"avatar_upload_id"`
-		Locale              string     `json:"locale"`
-		BirthDate           *string    `json:"birth_date"`
-		BirthDateVisibility string     `json:"birth_date_visibility"`
-		BirthDateAudience   string     `json:"birth_date_audience"`
-		ActivityVisibility  string     `json:"activity_visibility"`
-		RefCode             *string    `json:"ref_code"`
-		ReferredByUserID    *string    `json:"referred_by_user_id"`
-		ReferredAt          *time.Time `json:"referred_at"`
-		RegisteredAt        *time.Time `json:"registered_at"`
-		CreatedAt           time.Time  `json:"created_at"`
+		UserID                    string         `json:"user_id"`
+		DisplayName               *string        `json:"display_name"`
+		AvatarUploadID            *string        `json:"avatar_upload_id"`
+		Locale                    string         `json:"locale"`
+		BirthDate                 *string        `json:"birth_date"`
+		BirthDateVisibility       string         `json:"birth_date_visibility"`
+		BirthDateAudience         string         `json:"birth_date_audience"`
+		ActivityVisibility        string         `json:"activity_visibility"`
+		RefCode                   *string        `json:"ref_code"`
+		ReferredByUserID          *string        `json:"referred_by_user_id"`
+		ReferredAt                *time.Time     `json:"referred_at"`
+		RegisteredAt              *time.Time     `json:"registered_at"`
+		CreatedAt                 time.Time      `json:"created_at"`
+		Interests                 []string       `json:"interests"`
+		About                     string         `json:"about,omitempty"`
+		Occupation                string         `json:"occupation,omitempty"`
+		Team                      string         `json:"team,omitempty"`
+		Languages                 []string       `json:"languages"`
+		SocialAccounts            []exportSocial `json:"social_accounts"`
+		DeclinedFields            []string       `json:"declined_profile_fields"`
+		AboutVisibility           string         `json:"about_visibility"`
+		ProfilePromptSnoozedUntil *time.Time     `json:"profile_prompt_snoozed_until"`
 	}{
 		UserID: user.String(), DisplayName: textPtr(u.DisplayName), AvatarUploadID: uuidPtr(u.AvatarUploadID),
 		Locale: u.Locale, BirthDate: birth, BirthDateVisibility: u.BirthDateVisibility, BirthDateAudience: u.BirthDateAudience,
 		ActivityVisibility: u.ActivityVisibility, RefCode: textPtr(u.RefCode), ReferredByUserID: uuidPtr(u.ReferredByUserID),
 		ReferredAt: tsPtr(u.ReferredAt), RegisteredAt: tsPtr(u.RegisteredAt), CreatedAt: u.CreatedAt.Time.UTC(),
+		Interests: nonNilStrings(pf.Values.Interests), About: pf.Values.About, Occupation: pf.Values.Occupation,
+		Team: pf.Values.Team, Languages: nonNilStrings(pf.Values.Languages), SocialAccounts: social,
+		DeclinedFields: nonNilStrings(pf.Values.Declined), AboutVisibility: string(pf.Visibility),
+		ProfilePromptSnoozedUntil: timePtr(pf.Snooze.Until),
 	})
 	if err != nil {
 		return err

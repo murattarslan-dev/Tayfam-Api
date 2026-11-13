@@ -3587,6 +3587,19 @@ paths:
         **Doğum günü görünürlüğü** (`birthday_visibility`, issue #185):
         yalnızca arkadaşlarınıza ne kadarının görüneceği; doğum tarihinin
         kendisi değişmez.
+
+        **Profil tamamlama formu** (issue #186): `interests`, `about`,
+        `occupation`, `team`, `languages`, `social_accounts` isteğe bağlıdır;
+        gönderilen alan değişir, boş değer (`""`, `[]`) alanı temizler.
+        Metinlerdeki boşluklar tekleştirilip kırpılır, sosyal medya
+        kullanıcı adındaki `@` atılır; kural dışı değer `invalid-request`
+        (400) alır ve hiçbir alan yazılmaz. `declined_profile_fields`
+        gönderilirse "Paylaşmak istemiyorum" denen alanların tamamını
+        değiştirir; reddedilen alanın değeri silinir, alan cevaplanmış
+        sayılır. Aynı istekte hem değer verip hem reddetmek
+        `invalid-request`'tir; daha önce reddedilmiş alana değer vermek onu
+        listeden çıkarır. `about_visibility` bu alanları kimin göreceğidir.
+        Bu alanlar başka servislere ve bildirimlere gitmez.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -3603,6 +3616,22 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/profile-prompt/snooze:
+    post:
+      operationId: snoozeProfilePrompt
+      summary: Profil tamamlama formunu 7 gün erteler ("Daha sonra doldur")
+      description: |
+        `Account.profile_completion_pending` 7 gün `false` döner (issue
+        #186). Erteleme sunucuda tutulur, cihazlar arası tutarlıdır. Bu
+        sürede forma yeni bir alan eklenirse erteleme geçersiz olur ve form
+        yeniden istenir. Tekrar çağırmak süreyi şimdiden başlatır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Ertelendi }
+        "401": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
   /v1/me/referral-code:
@@ -3929,6 +3958,15 @@ paths:
         Ortak tayfalar yalnızca ikinizin de etkin üyesi olduğu tayfalardır.
         Engel varsa (iki yönden biri) ya da hesap silinmişse `user-not-found`,
         var olmayan kullanıcıyla aynı cevap.
+
+        **Tanıtım alanları** (`interests`, `about`, `occupation`, `team`,
+        `languages`, `social_accounts`; issue #186) kişinin
+        `about_visibility` ayarına göre döner: `friends_and_mutual`
+        arkadaşlara ve ortak tayfa üyelerine, `friends` yalnızca
+        arkadaşlara, `none` kimseye. `social_accounts` ayar ne olursa olsun
+        yalnızca arkadaşlara döner. Boş ya da reddedilmiş alan yoktur;
+        hangisinin reddedildiği gösterilmez. Kendi profilinizde hepsini
+        görürsünüz.
 
         **Doğum günü** (`birthday`, issue #185) yalnızca arkadaşlara ve
         kişinin ayarına göre döner (`Account.birthday_visibility`): `birthday`
@@ -7022,6 +7060,31 @@ components:
       type: string
       description: Katılım geçmişinin kime görüneceği.
       enum: [private, tayfa, public]
+    AboutVisibility:
+      type: string
+      description: |
+        Profil tamamlama formundaki alanları kimin göreceği (issue #186).
+        `friends_and_mutual` (varsayılan): arkadaşlar ve ortak tayfa
+        üyeleri. `friends`: yalnızca arkadaşlar. `none`: kimse. Sosyal
+        medya hesapları her durumda en fazla arkadaşlara görünür.
+      enum: [friends_and_mutual, friends, none]
+    ProfileField:
+      type: string
+      description: Profil tamamlama formunun bir alanı.
+      enum: [interests, about, occupation, team, languages, social_accounts]
+    SocialAccount:
+      type: object
+      description: |
+        Yalnızca kullanıcı adı; bağlantıyı istemci platformun bilinen
+        adresinden kurar. URL kabul edilmez. Kurallar: `instagram`
+        `^[A-Za-z0-9._]{1,30}$`, `x` `^[A-Za-z0-9_]{1,15}$`, `tiktok`
+        `^[A-Za-z0-9._]{2,24}$`, `youtube` `^[A-Za-z0-9._-]{3,30}$` (baştaki
+        `@` atılır). Platform başına bir hesap.
+      required: [platform, username]
+      additionalProperties: false
+      properties:
+        platform: { type: string, enum: [instagram, x, tiktok, youtube] }
+        username: { type: string, maxLength: 31 }
     BirthdayVisibility:
       type: string
       description: |
@@ -7031,7 +7094,18 @@ components:
       enum: [hidden, birthday, full]
     Account:
       type: object
-      required: [user_id, display_name, referral_code, activity_visibility, birthday_visibility]
+      required:
+        - user_id
+        - display_name
+        - referral_code
+        - activity_visibility
+        - birthday_visibility
+        - interests
+        - languages
+        - social_accounts
+        - declined_profile_fields
+        - about_visibility
+        - profile_completion_pending
       properties:
         user_id: { type: string, format: uuid, description: Kendi kullanıcı kimliğiniz. }
         display_name: { type: string, description: Kendi görünen adınız. }
@@ -7041,6 +7115,28 @@ components:
           description: Örn. `TYF-8K2M4Q`; paylaşım linki `tayfam.app/r/<kod>`.
         activity_visibility: { $ref: "#/components/schemas/ActivityVisibility" }
         birthday_visibility: { $ref: "#/components/schemas/BirthdayVisibility" }
+        interests:
+          type: array
+          items: { $ref: "#/components/schemas/EventType" }
+        about: { type: string, description: Boşsa alan yoktur. }
+        occupation: { type: string, description: Boşsa alan yoktur. }
+        team: { type: string, description: Boşsa alan yoktur. }
+        languages:
+          type: array
+          items: { type: string }
+        social_accounts:
+          type: array
+          items: { $ref: "#/components/schemas/SocialAccount" }
+        declined_profile_fields:
+          type: array
+          description: '"Paylaşmak istemiyorum" denen alanlar; cevaplanmış sayılır.'
+          items: { $ref: "#/components/schemas/ProfileField" }
+        about_visibility: { $ref: "#/components/schemas/AboutVisibility" }
+        profile_completion_pending:
+          type: boolean
+          description: |
+            Profil tamamlama formu gösterilmeli: cevaplanmamış (boş ve
+            reddedilmemiş) bir alan var ve geçerli bir erteleme yok.
     AccountUpdate:
       type: object
       description: En az bir alan bulunur; olmayan alan değişmez.
@@ -7056,6 +7152,40 @@ components:
             karakter. 24 saatte en fazla 3 değişiklik.
         activity_visibility: { $ref: "#/components/schemas/ActivityVisibility" }
         birthday_visibility: { $ref: "#/components/schemas/BirthdayVisibility" }
+        interests:
+          type: array
+          description: Etkinlik türlerinden tekrarsız çoklu seçim.
+          maxItems: 7
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/EventType" }
+        about:
+          type: string
+          maxLength: 160
+          description: Hakkımda; kırpıldıktan sonra en fazla 160 karakter, satır sonu olabilir. `""` temizler.
+        occupation:
+          type: string
+          maxLength: 60
+          description: Meslek / uğraş; tek satır, en fazla 60 karakter. `""` temizler.
+        team:
+          type: string
+          maxLength: 60
+          description: Tutulan takım; tek satır, en fazla 60 karakter. `""` temizler.
+        languages:
+          type: array
+          description: ISO 639-1 kodları (`tr`, `en`), en fazla 5, tekrarsız.
+          maxItems: 5
+          items: { type: string, pattern: "^[a-z]{2}$" }
+        social_accounts:
+          type: array
+          description: Tamamı değişir; platform başına bir hesap.
+          maxItems: 4
+          items: { $ref: "#/components/schemas/SocialAccount" }
+        declined_profile_fields:
+          type: array
+          description: Gönderilirse "Paylaşmak istemiyorum" listesinin tamamı olur.
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/ProfileField" }
+        about_visibility: { $ref: "#/components/schemas/AboutVisibility" }
     ReferralCode:
       type: object
       required: [referral_code]
@@ -7173,6 +7303,19 @@ components:
           $ref: "#/components/schemas/ActivityVisibility"
         birthday:
           $ref: "#/components/schemas/Birthday"
+        interests:
+          type: array
+          items: { $ref: "#/components/schemas/EventType" }
+        about: { type: string }
+        occupation: { type: string }
+        team: { type: string }
+        languages:
+          type: array
+          items: { type: string, pattern: "^[a-z]{2}$" }
+        social_accounts:
+          type: array
+          description: Yalnızca arkadaşlara (ve kendinize) döner.
+          items: { $ref: "#/components/schemas/SocialAccount" }
     Birthday:
       type: object
       description: |
