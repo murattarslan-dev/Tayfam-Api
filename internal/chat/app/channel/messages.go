@@ -78,7 +78,7 @@ func (s *Service) Send(ctx context.Context, caller, tayfa, channel id.ID, in Sen
 	if err := authorize(m, ActionPost); err != nil {
 		return Message{}, err
 	}
-	if ch.ArchivedAt.Valid {
+	if archivedNow(ch, s.now()) {
 		return Message{}, apperr.ErrChannelArchived
 	}
 	if ch.SlowModeSeconds > 0 && !m.Allowed(ActionSkipSlowMode) {
@@ -430,6 +430,7 @@ func (s *Service) MarkRead(ctx context.Context, caller, tayfa, channel, message 
 func Cleanup(ctx context.Context, q *store.Queries, user id.ID) error {
 	for _, f := range []func(context.Context, pgtype.UUID) error{
 		q.ClearChannelMessageAuthor, q.ClearChannelMessageDeletedBy, q.ClearChannelCreator, q.DeleteUserChannelReads,
+		q.DeleteUserChannelMembers, // selected-member channels (issue #183)
 	} {
 		if err := f(ctx, user.PG()); err != nil {
 			return fmt.Errorf("kanal temizliği: %w", err)
@@ -464,8 +465,10 @@ func (s *Service) PurgeDeleted(ctx context.Context) (int64, error) {
 	}
 }
 
-// RunPurge runs PurgeDeleted every hour until ctx is done. Running it in
-// more than one pod is harmless.
+// RunPurge runs PurgeDeleted, and ArchiveDue for event channels (issue
+// #183), every hour until ctx is done. Running it in more than one pod is
+// harmless. An event channel is read-only from its planned archive time
+// whether or not this has run yet.
 func (s *Service) RunPurge(ctx context.Context) error {
 	t := time.NewTicker(purgeEvery)
 	defer t.Stop()
@@ -474,6 +477,11 @@ func (s *Service) RunPurge(ctx context.Context) error {
 			s.cfg.Log.WarnContext(ctx, "silinmiş kanal mesajları silinemedi", slog.String("hata", err.Error()))
 		} else if n > 0 {
 			s.cfg.Log.InfoContext(ctx, "silinmiş kanal mesajları kalıcı silindi", slog.Int64("adet", n))
+		}
+		if n, err := s.ArchiveDue(ctx); err != nil && ctx.Err() == nil {
+			s.cfg.Log.WarnContext(ctx, "etkinlik kanalları arşivlenemedi", slog.String("hata", err.Error()))
+		} else if n > 0 {
+			s.cfg.Log.InfoContext(ctx, "etkinlik kanalları arşivlendi", slog.Int64("adet", n))
 		}
 		select {
 		case <-ctx.Done():

@@ -89,6 +89,12 @@ type Querier interface {
 	// Seri sonlandırılınca gelecekteki düzenlenmemiş örnekler iptal edilir.
 	CancelSeriesUpcomingEvents(ctx context.Context, arg CancelSeriesUpcomingEventsParams) ([]pgtype.UUID, error)
 	CancelTayfaDeletion(ctx context.Context, id pgtype.UUID) (int64, error)
+	// Etkinlik ve seçili üye kanalları (issue #183, ADR-0024). chat bu
+	// sorguların cevabını çağıranın token'ıyla sorar; katılımın kopyası chat'te
+	// tutulmaz. Kitle yalnızca etkin üyelerden oluşur.
+	// Etkinlikler, çağıranın cevabıyla. Başka tayfanın ya da silinmiş etkinlik
+	// satırı dönmez.
+	ChannelEvents(ctx context.Context, arg ChannelEventsParams) ([]ChannelEventsRow, error)
 	// Duyurular kalır, yazar "Silinmiş kullanıcı" olur (v14 "İlişkiler ve
 	// Silme Davranışı").
 	ClearAnnouncementUserFields(ctx context.Context, userID pgtype.UUID) error
@@ -279,6 +285,9 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// 7 gün çözülmeyen şikâyetler platforma yükselir.
 	EscalateUnresolvedReports(ctx context.Context, arg EscalateUnresolvedReportsParams) ([]EscalateUnresolvedReportsRow, error)
+	// Her etkinlik için gidecekler ve organizatör (etkin üyeler, her biri bir
+	// kez); kanalı açan Go'da eklenir.
+	EventAudienceCounts(ctx context.Context, arg EventAudienceCountsParams) ([]EventAudienceCountsRow, error)
 	// Temizlik: 24 saatte tamamlanmayan, 24 saattir reddedilmiş ve 7 gün
 	// içinde bağlanmamış görüntüler ile süresi dolan dışa aktarmalar silme
 	// kuyruğuna girer.
@@ -310,6 +319,7 @@ type Querier interface {
 	ExportReports(ctx context.Context, arg ExportReportsParams) ([]ExportReportsRow, error)
 	// Yalnızca liste; dosyalar ve dışa aktarma kayıtları girmez.
 	ExportUploads(ctx context.Context, arg ExportUploadsParams) ([]ExportUploadsRow, error)
+	FilterActiveMembers(ctx context.Context, arg FilterActiveMembersParams) ([]pgtype.UUID, error)
 	// Verilen kullanıcılardan hâlâ etkin üye olanlar (tek alıcılı bildirimler
 	// ve arka plan işlerinin seçtiği alıcılar).
 	FilterNotifyActive(ctx context.Context, arg FilterNotifyActiveParams) ([]pgtype.UUID, error)
@@ -413,6 +423,8 @@ type Querier interface {
 	GetTayfaForUpdate(ctx context.Context, id pgtype.UUID) (GetTayfaForUpdateRow, error)
 	GetUploadByClientRequest(ctx context.Context, arg GetUploadByClientRequestParams) (Upload, error)
 	GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUserProfileRow, error)
+	// Kanalı açanlardan hangileri o etkinliğe gidiyor.
+	GoingAmong(ctx context.Context, arg GoingAmongParams) ([]GoingAmongRow, error)
 	HasMutualTayfa(ctx context.Context, arg HasMutualTayfaParams) (bool, error)
 	// Ortak etkinlik geçmişi: ikisinin de attended işaretlendiği, iptal
 	// edilmemiş, silinmemiş ve bitmiş en az bir etkinlik (hangi tayfada
@@ -460,6 +472,9 @@ type Querier interface {
 	// Üretim sırası gelen seriler: bitmemiş, şablonu olan ve generated_until'ı
 	// verilen zamandan önce kalanlar.
 	ListDueEventSeries(ctx context.Context, arg ListDueEventSeriesParams) ([]ListDueEventSeriesRow, error)
+	// Etkinlik kanalının kitlesi (gidecekler ve organizatör; kanalı açan Go'da
+	// eklenir), kullanıcı kimliğine göre sıralı, imleçten sonrası.
+	ListEventAudience(ctx context.Context, arg ListEventAudienceParams) ([]pgtype.UUID, error)
 	// Liste görünümünde mera gizliliği için.
 	ListFishingVisibility(ctx context.Context, eventIds []pgtype.UUID) ([]ListFishingVisibilityRow, error)
 	// Kişinin arkadaşları ve istekleri; karşı tarafın kimliğine göre sayfalanır.

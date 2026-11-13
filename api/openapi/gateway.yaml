@@ -2285,6 +2285,20 @@ paths:
         okundu işareti sürer. Arşivlenmiş kanallar sondadır. `unread_count`
         başkalarının silinmemiş mesajlarından okunmamış olanlardır; en
         fazla 100 döner, istemci "99+" gösterir.
+
+        **Kanal kitlesi (issue #183, ADR-0024):** `event` ve `selected`
+        kanallarını yalnızca kitlesindekiler görür; yönetici ve moderatörler
+        rolleriyle bu kanallara girmez, kitlesinde değillerse görmezler
+        (`channel-not-found`).
+        - `event`: kanalı açan, etkinliğin organizatörü ve etkinliğe
+          `going` diyenler. Cevabını değiştiren çıkar; bekleme listesi,
+          `maybe` ve `not_going` kanalda değildir. Etkinliğin bitişinden ya
+          da iptal anından 7 gün sonra arşivlenir; `archive_at` bu zamanı
+          baştan söyler ("Kanal N gün sonra kapanacak" bandı).
+        - `selected`: kanalı açan ve seçtiği üyeler.
+        Sonradan giren eski mesajları da görür; çıkan ya da çıkarılan
+        kanalı ve mesajlarını artık göremez, WebSocket aboneliği hemen
+        kesilir; çıkarılana bildirim gitmez.
       responses:
         "200":
           description: Kanallar
@@ -2297,11 +2311,24 @@ paths:
         "503": { $ref: "#/components/responses/Problem" }
     post:
       operationId: createChannel
-      summary: Kanal açar (yönetici ve moderatör)
+      summary: Kanal açar (yönetici ve moderatör; etkinlik kanalını etkinliği yöneten de)
       description: |
         İsim 1–40 karakterdir; arşivlenmemiş kanallar arasında Türkçe büyük/
         küçük harf duyarsız tekildir (`channel-name-taken`). Susturulmuş
         yönetim kanal açamaz (`muted`).
+
+        **Etkinlik kanalı** (`visibility: event`, issue #183): `event_id`
+        zorunludur (başka türde gönderilmez, `invalid-request`). Yönetici,
+        moderatör ya da etkinliği yönetebilen kişi (`caller_can_manage`)
+        açar; diğerleri `permission-denied`. Görmediğiniz etkinlik
+        `event-not-found`. Bir etkinliğin aynı anda tek açık kanalı olur
+        (`event-channel-exists`, 409). Bitişinin ya da iptalinin üzerinden 7
+        gün geçmiş etkinliğe kanal açılmaz (`event-ended`, 409).
+
+        **Seçili üye kanalı** (`visibility: selected`): yönetici ve
+        moderatör açar. `member_user_ids` (en fazla 100) ilk üyelerdir;
+        hepsi tayfanın etkin üyesi olmalıdır (`not-tayfa-member`, 400; hiçbiri
+        eklenmez). Açan kişi her zaman içeridedir.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -2562,6 +2589,87 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/channels/{channel_id}/members:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/ChannelID"
+    get:
+      operationId: listChannelMembers
+      summary: Etkinlik ya da seçili üye kanalının kitlesi
+      description: |
+        Kullanıcı kimliğine göre sıralı (issue #183). Yalnızca kitlesindeki
+        kişi görür. `event` kanalında kanalı açan, organizatör ve `going`
+        diyenler; `selected` kanalında açan ve eklenenler. `members` ve
+        `staff` kanallarında `invalid-request` (tayfanın üye listesi
+        geçerlidir). Adlar `GET /v1/users/{user_id}/profile` ile alınır.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Kitle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChannelMemberList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: addChannelMembers
+      summary: Seçili üye kanalına üye ekler (yalnızca kanalı açan)
+      description: |
+        Yalnızca `selected` kanalında ve yalnızca kanalı açan kişi
+        (`permission-denied`); yönetim de değiştiremez. 1–100 kullanıcı;
+        hepsi tayfanın etkin üyesi olmalıdır (`not-tayfa-member`, hiçbiri
+        eklenmez). Zaten içeride olan bir şey değiştirmez. Etkinlik
+        kanalının kitlesi yalnızca katılım cevabından gelir
+        (`invalid-request`). Arşivli kanal `channel-archived`; susturulmuş
+        kişi `muted`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChannelMembersAddRequest" }
+      responses:
+        "200":
+          description: Güncel kanal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Channel" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/channels/{channel_id}/members/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/ChannelID"
+      - $ref: "#/components/parameters/UserID"
+    delete:
+      operationId: removeChannelMember
+      summary: Seçili üye kanalından üye çıkarır (yalnızca kanalı açan)
+      description: |
+        Çıkarılan kişi kanalı ve mesajlarını artık göremez, WebSocket
+        aboneliği hemen kesilir; kendisine bildirim gitmez. Kanalı açan
+        kendini çıkaramaz (`invalid-request`). İçeride olmayan kişiyi
+        çıkarmak bir şey değiştirmez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Çıkarıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
   /v1/direct-messages:
@@ -4908,6 +5016,10 @@ components:
         - message-not-found
         - channel-archived
         - channel-name-taken
+        # Etkinlik ve seçili üye kanalları (issue #183)
+        - event-channel-exists
+        - not-tayfa-member
+        - event-ended
         - slow-mode
         # chat: gerçek zamanlı bağlantı (#82)
         - forbidden-origin
@@ -6322,8 +6434,13 @@ components:
     # --- Kanallar (#81) ---
     ChannelVisibility:
       type: string
-      description: "`members`: tüm etkin üyeler; `staff`: yalnızca yönetici ve moderatörler."
-      enum: [members, staff, unknown]
+      description: |
+        `members`: tüm etkin üyeler; `staff`: yalnızca yönetici ve
+        moderatörler; `event`: kanalı açan, etkinliğin organizatörü ve
+        etkinliğe gelenler; `selected`: kanalı açan ve seçtikleri (issue
+        #183). `event` ve `selected` sonradan başka türe, başka tür de
+        bunlara çevrilemez.
+      enum: [members, staff, event, selected, unknown]
     Channel:
       type: object
       required: [id, tayfa_id, name, visibility, slow_mode_seconds, created_at, updated_at]
@@ -6356,6 +6473,21 @@ components:
           type: string
           format: uuid
           description: Yalnızca listede; okundu işaretiniz yoksa yoktur.
+        event_id:
+          type: string
+          format: uuid
+          description: Yalnızca `event` kanalında.
+        member_count:
+          type: integer
+          minimum: 0
+          description: Yalnızca `event` ve `selected` kanalında; kitlenin büyüklüğü.
+        archive_at:
+          type: string
+          format: date-time
+          description: |
+            Yalnızca `event` kanalında: planlanan arşiv zamanı (etkinliğin
+            bitişi ya da iptal anı + 7 gün). İstemci kalan süreyi bundan
+            hesaplar. Bu zaman gelince `archived_at` dolar.
     ChannelList:
       type: object
       required: [channels]
@@ -6371,16 +6503,46 @@ components:
         name: { type: string, minLength: 1, maxLength: 40 }
         visibility:
           type: string
-          enum: [members, staff]
+          enum: [members, staff, event, selected]
           default: members
         slow_mode_seconds: { type: integer, minimum: 0, maximum: 3600, default: 0 }
+        event_id:
+          type: string
+          format: uuid
+          description: Yalnızca ve zorunlu olarak `event` kanalında.
+        member_user_ids:
+          type: array
+          description: Yalnızca `selected` kanalında; açan dışındaki ilk üyeler.
+          maxItems: 100
+          items: { type: string, format: uuid }
+    ChannelMemberList:
+      type: object
+      required: [user_ids]
+      properties:
+        user_ids:
+          type: array
+          items: { type: string, format: uuid }
+        next_page_token: { type: string }
+    ChannelMembersAddRequest:
+      type: object
+      required: [user_ids]
+      additionalProperties: false
+      properties:
+        user_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { type: string, format: uuid }
     ChannelUpdateRequest:
       type: object
       minProperties: 1
       additionalProperties: false
       properties:
         name: { type: string, minLength: 1, maxLength: 40 }
-        visibility: { type: string, enum: [members, staff] }
+        visibility:
+          type: string
+          enum: [members, staff]
+          description: "`event` ve `selected` kanalının türü değişmez (`invalid-request`)."
         slow_mode_seconds: { type: integer, minimum: 0, maximum: 3600 }
     ChannelMessage:
       type: object

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -292,5 +293,78 @@ func TestLiveHearsChanges(t *testing.T) {
 	}
 	if len(live.calls) != len(want) {
 		t.Fatalf("geçersiz olay iletildi: %v", live.calls)
+	}
+}
+
+// TestEventChannelEvents (issue #183): an answer change only clears the
+// user's cached permissions and rechecks their subscriptions; a schedule
+// change moves the planned archive time of the event's open channel, newer
+// information only; a membership that ended takes the user out of the
+// tayfa's selected-member channels.
+func TestEventChannelEvents(t *testing.T) {
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
+	cache := &fakeCache{}
+	live := &fakeLive{cache: cache}
+	svc, err := New(Config{Pool: pool, Access: cache, Live: live})
+	must(t, err)
+	tf, u, ev := id.New(), id.New(), id.New()
+
+	must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, Attendance: &Attendance{Event: ev, User: u}}))
+	if len(cache.forgot) != 1 || cache.forgot[0] != [2]id.ID{tf, u} || len(live.calls) != 1 || live.calls[0] != "member" {
+		t.Fatalf("katılım: %+v %v", cache, live.calls)
+	}
+
+	// An event channel opened when the event was to end on day 2.
+	ch := id.New()
+	day := time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)
+	_, err = pool.Exec(ctx, `INSERT INTO channels (id, tayfa_id, name, name_normalized, visibility, created_by, event_id, archive_at, archive_source_at)
+		VALUES ($1, $2, 'Etkinlik', 'etkinlik', 'event', $3, $4, $5, $6)`, ch.PG(), tf.PG(), u.PG(), ev.PG(), day.AddDate(0, 0, 9), day)
+	must(t, err)
+	archiveAt := func() time.Time {
+		var at time.Time
+		must(t, pool.QueryRow(ctx, `SELECT archive_at FROM channels WHERE id = $1`, ch.PG()).Scan(&at))
+		return at.UTC()
+	}
+	moved := day.AddDate(0, 0, 5)
+	must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, OccurredAt: day.Add(time.Hour), Schedule: &Schedule{Event: ev, End: moved}}))
+	if got := archiveAt(); !got.Equal(moved.AddDate(0, 0, 7)) {
+		t.Fatalf("taşınan bitiş = %v", got)
+	}
+	// Older news, delivered late, changes nothing; the same news again
+	// neither.
+	must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, OccurredAt: day.Add(time.Minute), Schedule: &Schedule{Event: ev, End: day}}))
+	must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, OccurredAt: day.Add(time.Hour), Schedule: &Schedule{Event: ev, End: day}}))
+	if got := archiveAt(); !got.Equal(moved.AddDate(0, 0, 7)) {
+		t.Fatalf("eski bilgi uygulandı: %v", got)
+	}
+
+	// A selected channel the user is in.
+	sel := id.New()
+	_, err = pool.Exec(ctx, `INSERT INTO channels (id, tayfa_id, name, name_normalized, visibility, created_by) VALUES ($1, $2, 'Seçili', 'seçili', 'selected', $3)`, sel.PG(), tf.PG(), id.New().PG())
+	must(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2)`, sel.PG(), u.PG())
+	must(t, err)
+	must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, MemberChanged: u}))
+	if n := count(t, pool, `SELECT count(*) FROM channel_members WHERE user_id = $1`, u.PG()); n != 1 {
+		t.Fatal("susturma gibi bir değişiklik kanal üyeliğini sildi")
+	}
+	for range 2 {
+		must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, MemberChanged: u, MemberEnded: true}))
+	}
+	if n := count(t, pool, `SELECT count(*) FROM channel_members WHERE user_id = $1`, u.PG()); n != 0 {
+		t.Fatal("ayrılan üye seçili kanalda kaldı")
+	}
+
+	for name, e := range map[string]Event{
+		"etkinliksiz katılım": {ID: id.New(), Tayfa: tf, Attendance: &Attendance{User: u}},
+		"zamansız takvim":     {ID: id.New(), Tayfa: tf, OccurredAt: day, Schedule: &Schedule{Event: ev}},
+		"olay zamanı yok":     {ID: id.New(), Tayfa: tf, Schedule: &Schedule{Event: ev, End: day}},
+		"tayfasız katılım":    {ID: id.New(), Attendance: &Attendance{Event: ev, User: u}},
+		"iki tür":             {ID: id.New(), Tayfa: tf, StatusChanged: true, Attendance: &Attendance{Event: ev, User: u}},
+	} {
+		var v *apperr.ValidationError
+		if err := svc.Apply(ctx, e); !errors.As(err, &v) {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }

@@ -17,6 +17,7 @@ import (
 type fakeChannelAccess struct {
 	caller, tayfa, target id.ID
 	action                authz.Action
+	chans                 []channelaccess.EventChannel
 	d                     channelaccess.Decision
 	err                   error
 }
@@ -24,6 +25,71 @@ type fakeChannelAccess struct {
 func (f *fakeChannelAccess) Authorize(_ context.Context, caller, tayfa id.ID, a authz.Action, target id.ID) (channelaccess.Decision, error) {
 	f.caller, f.tayfa, f.action, f.target = caller, tayfa, a, target
 	return f.d, f.err
+}
+
+func (f *fakeChannelAccess) EventChannels(_ context.Context, caller, tayfa id.ID, chans []channelaccess.EventChannel) ([]channelaccess.EventAccess, error) {
+	f.caller, f.tayfa, f.chans = caller, tayfa, chans
+	out := []channelaccess.EventAccess{}
+	for _, c := range chans {
+		out = append(out, channelaccess.EventAccess{EventChannel: c, Member: true, End: time.Unix(100, 0), MemberCount: 4})
+	}
+	return out, f.err
+}
+
+func (f *fakeChannelAccess) EventAudience(_ context.Context, caller, tayfa id.ID, ch channelaccess.EventChannel, size int32, token string) ([]id.ID, string, error) {
+	f.caller, f.tayfa, f.chans = caller, tayfa, []channelaccess.EventChannel{ch}
+	return []id.ID{caller}, "devam", f.err
+}
+
+func (f *fakeChannelAccess) ActiveMembers(_ context.Context, caller, tayfa id.ID, users []id.ID) ([]id.ID, error) {
+	f.caller, f.tayfa = caller, tayfa
+	return users[:1], f.err
+}
+
+// TestEventChannelAccessServer (issue #183): IDs are parsed, the caller
+// comes from the token, the answer is passed through.
+func TestEventChannelAccessServer(t *testing.T) {
+	user, tf, ev, opener := id.New(), id.New(), id.New(), id.New()
+	f := &fakeChannelAccess{}
+	srv := NewChannelAccessServer(f, discard)
+	if _, err := srv.GetEventChannelAccess(context.Background(), &corev1.GetEventChannelAccessRequest{}); func() codes.Code { c, _ := infoOf(t, err); return c }() != codes.Unauthenticated {
+		t.Fatalf("token'sız: %v", err)
+	}
+	ctx := callerCtx(user)
+	resp, err := srv.GetEventChannelAccess(ctx, &corev1.GetEventChannelAccessRequest{TayfaId: tf.String(), Channels: []*corev1.EventChannelRef{
+		{EventId: ev.String(), OpenerUserId: opener.String()}, {EventId: ev.String()},
+	}})
+	if err != nil || f.caller != user || f.tayfa != tf || len(f.chans) != 2 || f.chans[0].Opener != opener || f.chans[1].Opener != (id.ID{}) ||
+		len(resp.GetChannels()) != 2 || !resp.GetChannels()[0].GetMember() || resp.GetChannels()[0].GetMemberCount() != 4 ||
+		resp.GetChannels()[1].GetOpenerUserId() != "" {
+		t.Fatalf("erişim = %v %v", resp, err)
+	}
+	for name, req := range map[string]*corev1.GetEventChannelAccessRequest{
+		"boş":         {TayfaId: tf.String()},
+		"bozuk olay":  {TayfaId: tf.String(), Channels: []*corev1.EventChannelRef{{EventId: "x"}}},
+		"bozuk açan":  {TayfaId: tf.String(), Channels: []*corev1.EventChannelRef{{EventId: ev.String(), OpenerUserId: "x"}}},
+		"101 kanal":   {TayfaId: tf.String(), Channels: make([]*corev1.EventChannelRef, 101)},
+		"bozuk tayfa": {TayfaId: "x", Channels: []*corev1.EventChannelRef{{EventId: ev.String()}}},
+	} {
+		if _, err := srv.GetEventChannelAccess(ctx, req); func() codes.Code { c, _ := infoOf(t, err); return c }() != codes.InvalidArgument {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	lr, err := srv.ListEventChannelMembers(ctx, &corev1.ListEventChannelMembersRequest{TayfaId: tf.String(), EventId: ev.String(), OpenerUserId: opener.String()})
+	if err != nil || len(lr.GetUserIds()) != 1 || lr.GetUserIds()[0] != user.String() || lr.GetNextPageToken() != "devam" {
+		t.Fatalf("liste = %v %v", lr, err)
+	}
+	fr, err := srv.FilterActiveMembers(ctx, &corev1.FilterActiveMembersRequest{TayfaId: tf.String(), UserIds: []string{opener.String(), ev.String()}})
+	if err != nil || len(fr.GetUserIds()) != 1 || fr.GetUserIds()[0] != opener.String() {
+		t.Fatalf("süzme = %v %v", fr, err)
+	}
+	if _, err := srv.FilterActiveMembers(ctx, &corev1.FilterActiveMembersRequest{TayfaId: tf.String(), UserIds: []string{"x"}}); func() codes.Code { c, _ := infoOf(t, err); return c }() != codes.InvalidArgument {
+		t.Fatalf("bozuk kimlik: %v", err)
+	}
+	f.err = apperr.ErrEventNotFound
+	if _, err := srv.ListEventChannelMembers(ctx, &corev1.ListEventChannelMembersRequest{TayfaId: tf.String(), EventId: ev.String()}); func() codes.Code { c, _ := infoOf(t, err); return c }() != codes.NotFound {
+		t.Fatalf("bilinmeyen etkinlik: %v", err)
+	}
 }
 
 // Every channel action of authz has a contract value, and back.

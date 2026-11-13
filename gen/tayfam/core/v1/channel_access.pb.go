@@ -365,6 +365,480 @@ func (x *AuthorizeChannelActionResponse) GetTayfaReadOnly() bool {
 	return false
 }
 
+// EventChannelRef is one event channel chat asks about.
+type EventChannelRef struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	EventId string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	// The user who opened the channel; empty when the account was deleted.
+	OpenerUserId  string `protobuf:"bytes,2,opt,name=opener_user_id,json=openerUserId,proto3" json:"opener_user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EventChannelRef) Reset() {
+	*x = EventChannelRef{}
+	mi := &file_tayfam_core_v1_channel_access_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EventChannelRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EventChannelRef) ProtoMessage() {}
+
+func (x *EventChannelRef) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_channel_access_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EventChannelRef.ProtoReflect.Descriptor instead.
+func (*EventChannelRef) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_channel_access_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *EventChannelRef) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+func (x *EventChannelRef) GetOpenerUserId() string {
+	if x != nil {
+		return x.OpenerUserId
+	}
+	return ""
+}
+
+type GetEventChannelAccessRequest struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	TayfaId string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	// 1–100 channels (ERROR_REASON_VALIDATION otherwise).
+	Channels      []*EventChannelRef `protobuf:"bytes,2,rep,name=channels,proto3" json:"channels,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEventChannelAccessRequest) Reset() {
+	*x = GetEventChannelAccessRequest{}
+	mi := &file_tayfam_core_v1_channel_access_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEventChannelAccessRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEventChannelAccessRequest) ProtoMessage() {}
+
+func (x *GetEventChannelAccessRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_channel_access_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEventChannelAccessRequest.ProtoReflect.Descriptor instead.
+func (*GetEventChannelAccessRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_channel_access_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GetEventChannelAccessRequest) GetTayfaId() string {
+	if x != nil {
+		return x.TayfaId
+	}
+	return ""
+}
+
+func (x *GetEventChannelAccessRequest) GetChannels() []*EventChannelRef {
+	if x != nil {
+		return x.Channels
+	}
+	return nil
+}
+
+type EventChannelAccess struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	EventId      string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	OpenerUserId string                 `protobuf:"bytes,2,opt,name=opener_user_id,json=openerUserId,proto3" json:"opener_user_id,omitempty"`
+	// The caller answered GOING, organizes the event or opened the channel.
+	Member bool `protobuf:"varint,3,opt,name=member,proto3" json:"member,omitempty"`
+	// The caller may open a channel for the event: a moderator or an admin,
+	// or someone who may manage the event; not while muted or while the tayfa
+	// is read-only.
+	CanOpenChannel bool `protobuf:"varint,4,opt,name=can_open_channel,json=canOpenChannel,proto3" json:"can_open_channel,omitempty"`
+	// The event's end, or the moment it was cancelled.
+	EndTime   *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	Cancelled bool                   `protobuf:"varint,6,opt,name=cancelled,proto3" json:"cancelled,omitempty"`
+	// Organizer, opener (while an active member) and GOING members, each
+	// once.
+	MemberCount   int32 `protobuf:"varint,7,opt,name=member_count,json=memberCount,proto3" json:"member_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EventChannelAccess) Reset() {
+	*x = EventChannelAccess{}
+	mi := &file_tayfam_core_v1_channel_access_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EventChannelAccess) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EventChannelAccess) ProtoMessage() {}
+
+func (x *EventChannelAccess) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_channel_access_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EventChannelAccess.ProtoReflect.Descriptor instead.
+func (*EventChannelAccess) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_channel_access_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *EventChannelAccess) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+func (x *EventChannelAccess) GetOpenerUserId() string {
+	if x != nil {
+		return x.OpenerUserId
+	}
+	return ""
+}
+
+func (x *EventChannelAccess) GetMember() bool {
+	if x != nil {
+		return x.Member
+	}
+	return false
+}
+
+func (x *EventChannelAccess) GetCanOpenChannel() bool {
+	if x != nil {
+		return x.CanOpenChannel
+	}
+	return false
+}
+
+func (x *EventChannelAccess) GetEndTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EndTime
+	}
+	return nil
+}
+
+func (x *EventChannelAccess) GetCancelled() bool {
+	if x != nil {
+		return x.Cancelled
+	}
+	return false
+}
+
+func (x *EventChannelAccess) GetMemberCount() int32 {
+	if x != nil {
+		return x.MemberCount
+	}
+	return 0
+}
+
+type GetEventChannelAccessResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Channels      []*EventChannelAccess  `protobuf:"bytes,1,rep,name=channels,proto3" json:"channels,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEventChannelAccessResponse) Reset() {
+	*x = GetEventChannelAccessResponse{}
+	mi := &file_tayfam_core_v1_channel_access_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEventChannelAccessResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEventChannelAccessResponse) ProtoMessage() {}
+
+func (x *GetEventChannelAccessResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_channel_access_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEventChannelAccessResponse.ProtoReflect.Descriptor instead.
+func (*GetEventChannelAccessResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_channel_access_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *GetEventChannelAccessResponse) GetChannels() []*EventChannelAccess {
+	if x != nil {
+		return x.Channels
+	}
+	return nil
+}
+
+type ListEventChannelMembersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TayfaId       string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	EventId       string                 `protobuf:"bytes,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	OpenerUserId  string                 `protobuf:"bytes,3,opt,name=opener_user_id,json=openerUserId,proto3" json:"opener_user_id,omitempty"`
+	PageSize      int32                  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string                 `protobuf:"bytes,5,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListEventChannelMembersRequest) Reset() {
+	*x = ListEventChannelMembersRequest{}
+	mi := &file_tayfam_core_v1_channel_access_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListEventChannelMembersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListEventChannelMembersRequest) ProtoMessage() {}
+
+func (x *ListEventChannelMembersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_channel_access_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListEventChannelMembersRequest.ProtoReflect.Descriptor instead.
+func (*ListEventChannelMembersRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_channel_access_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ListEventChannelMembersRequest) GetTayfaId() string {
+	if x != nil {
+		return x.TayfaId
+	}
+	return ""
+}
+
+func (x *ListEventChannelMembersRequest) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+func (x *ListEventChannelMembersRequest) GetOpenerUserId() string {
+	if x != nil {
+		return x.OpenerUserId
+	}
+	return ""
+}
+
+func (x *ListEventChannelMembersRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListEventChannelMembersRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListEventChannelMembersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserIds       []string               `protobuf:"bytes,1,rep,name=user_ids,json=userIds,proto3" json:"user_ids,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListEventChannelMembersResponse) Reset() {
+	*x = ListEventChannelMembersResponse{}
+	mi := &file_tayfam_core_v1_channel_access_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListEventChannelMembersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListEventChannelMembersResponse) ProtoMessage() {}
+
+func (x *ListEventChannelMembersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_channel_access_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListEventChannelMembersResponse.ProtoReflect.Descriptor instead.
+func (*ListEventChannelMembersResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_channel_access_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ListEventChannelMembersResponse) GetUserIds() []string {
+	if x != nil {
+		return x.UserIds
+	}
+	return nil
+}
+
+func (x *ListEventChannelMembersResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+type FilterActiveMembersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TayfaId       string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	UserIds       []string               `protobuf:"bytes,2,rep,name=user_ids,json=userIds,proto3" json:"user_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FilterActiveMembersRequest) Reset() {
+	*x = FilterActiveMembersRequest{}
+	mi := &file_tayfam_core_v1_channel_access_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FilterActiveMembersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FilterActiveMembersRequest) ProtoMessage() {}
+
+func (x *FilterActiveMembersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_channel_access_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FilterActiveMembersRequest.ProtoReflect.Descriptor instead.
+func (*FilterActiveMembersRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_channel_access_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *FilterActiveMembersRequest) GetTayfaId() string {
+	if x != nil {
+		return x.TayfaId
+	}
+	return ""
+}
+
+func (x *FilterActiveMembersRequest) GetUserIds() []string {
+	if x != nil {
+		return x.UserIds
+	}
+	return nil
+}
+
+type FilterActiveMembersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserIds       []string               `protobuf:"bytes,1,rep,name=user_ids,json=userIds,proto3" json:"user_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FilterActiveMembersResponse) Reset() {
+	*x = FilterActiveMembersResponse{}
+	mi := &file_tayfam_core_v1_channel_access_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FilterActiveMembersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FilterActiveMembersResponse) ProtoMessage() {}
+
+func (x *FilterActiveMembersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_channel_access_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FilterActiveMembersResponse.ProtoReflect.Descriptor instead.
+func (*FilterActiveMembersResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_channel_access_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *FilterActiveMembersResponse) GetUserIds() []string {
+	if x != nil {
+		return x.UserIds
+	}
+	return nil
+}
+
 var File_tayfam_core_v1_channel_access_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_channel_access_proto_rawDesc = "" +
@@ -383,7 +857,38 @@ const file_tayfam_core_v1_channel_access_proto_rawDesc = "" +
 	"\tdecisions\x18\x03 \x03(\v2%.tayfam.core.v1.ChannelActionDecisionR\tdecisions\x12(\n" +
 	"\x04role\x18\x04 \x01(\x0e2\x14.tayfam.core.v1.RoleR\x04role\x12D\n" +
 	"\x10mute_expire_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x0emuteExpireTime\x12&\n" +
-	"\x0ftayfa_read_only\x18\x06 \x01(\bR\rtayfaReadOnly*\xb4\x02\n" +
+	"\x0ftayfa_read_only\x18\x06 \x01(\bR\rtayfaReadOnly\"R\n" +
+	"\x0fEventChannelRef\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12$\n" +
+	"\x0eopener_user_id\x18\x02 \x01(\tR\fopenerUserId\"v\n" +
+	"\x1cGetEventChannelAccessRequest\x12\x19\n" +
+	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12;\n" +
+	"\bchannels\x18\x02 \x03(\v2\x1f.tayfam.core.v1.EventChannelRefR\bchannels\"\x8f\x02\n" +
+	"\x12EventChannelAccess\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12$\n" +
+	"\x0eopener_user_id\x18\x02 \x01(\tR\fopenerUserId\x12\x16\n" +
+	"\x06member\x18\x03 \x01(\bR\x06member\x12(\n" +
+	"\x10can_open_channel\x18\x04 \x01(\bR\x0ecanOpenChannel\x125\n" +
+	"\bend_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12\x1c\n" +
+	"\tcancelled\x18\x06 \x01(\bR\tcancelled\x12!\n" +
+	"\fmember_count\x18\a \x01(\x05R\vmemberCount\"_\n" +
+	"\x1dGetEventChannelAccessResponse\x12>\n" +
+	"\bchannels\x18\x01 \x03(\v2\".tayfam.core.v1.EventChannelAccessR\bchannels\"\xb8\x01\n" +
+	"\x1eListEventChannelMembersRequest\x12\x19\n" +
+	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x19\n" +
+	"\bevent_id\x18\x02 \x01(\tR\aeventId\x12$\n" +
+	"\x0eopener_user_id\x18\x03 \x01(\tR\fopenerUserId\x12\x1b\n" +
+	"\tpage_size\x18\x04 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x05 \x01(\tR\tpageToken\"d\n" +
+	"\x1fListEventChannelMembersResponse\x12\x19\n" +
+	"\buser_ids\x18\x01 \x03(\tR\auserIds\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"R\n" +
+	"\x1aFilterActiveMembersRequest\x12\x19\n" +
+	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x19\n" +
+	"\buser_ids\x18\x02 \x03(\tR\auserIds\"8\n" +
+	"\x1bFilterActiveMembersResponse\x12\x19\n" +
+	"\buser_ids\x18\x01 \x03(\tR\auserIds*\xb4\x02\n" +
 	"\rChannelAction\x12\x1e\n" +
 	"\x1aCHANNEL_ACTION_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13CHANNEL_ACTION_VIEW\x10\x01\x12\x1d\n" +
@@ -400,9 +905,12 @@ const file_tayfam_core_v1_channel_access_proto_rawDesc = "" +
 	"\x13CHANNEL_DENIAL_ROLE\x10\x01\x12\x18\n" +
 	"\x14CHANNEL_DENIAL_MUTED\x10\x02\x12\x1c\n" +
 	"\x18CHANNEL_DENIAL_READ_ONLY\x10\x03\x12\x1c\n" +
-	"\x18CHANNEL_DENIAL_HIERARCHY\x10\x042\x8f\x01\n" +
+	"\x18CHANNEL_DENIAL_HIERARCHY\x10\x042\xf1\x03\n" +
 	"\x14ChannelAccessService\x12w\n" +
-	"\x16AuthorizeChannelAction\x12-.tayfam.core.v1.AuthorizeChannelActionRequest\x1a..tayfam.core.v1.AuthorizeChannelActionResponseB\xc4\x01\n" +
+	"\x16AuthorizeChannelAction\x12-.tayfam.core.v1.AuthorizeChannelActionRequest\x1a..tayfam.core.v1.AuthorizeChannelActionResponse\x12t\n" +
+	"\x15GetEventChannelAccess\x12,.tayfam.core.v1.GetEventChannelAccessRequest\x1a-.tayfam.core.v1.GetEventChannelAccessResponse\x12z\n" +
+	"\x17ListEventChannelMembers\x12..tayfam.core.v1.ListEventChannelMembersRequest\x1a/.tayfam.core.v1.ListEventChannelMembersResponse\x12n\n" +
+	"\x13FilterActiveMembers\x12*.tayfam.core.v1.FilterActiveMembersRequest\x1a+.tayfam.core.v1.FilterActiveMembersResponseB\xc4\x01\n" +
 	"\x12com.tayfam.core.v1B\x12ChannelAccessProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (
@@ -418,31 +926,48 @@ func file_tayfam_core_v1_channel_access_proto_rawDescGZIP() []byte {
 }
 
 var file_tayfam_core_v1_channel_access_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_tayfam_core_v1_channel_access_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_tayfam_core_v1_channel_access_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_tayfam_core_v1_channel_access_proto_goTypes = []any{
-	(ChannelAction)(0),                     // 0: tayfam.core.v1.ChannelAction
-	(ChannelDenial)(0),                     // 1: tayfam.core.v1.ChannelDenial
-	(*ChannelActionDecision)(nil),          // 2: tayfam.core.v1.ChannelActionDecision
-	(*AuthorizeChannelActionRequest)(nil),  // 3: tayfam.core.v1.AuthorizeChannelActionRequest
-	(*AuthorizeChannelActionResponse)(nil), // 4: tayfam.core.v1.AuthorizeChannelActionResponse
-	(Role)(0),                              // 5: tayfam.core.v1.Role
-	(*timestamppb.Timestamp)(nil),          // 6: google.protobuf.Timestamp
+	(ChannelAction)(0),                      // 0: tayfam.core.v1.ChannelAction
+	(ChannelDenial)(0),                      // 1: tayfam.core.v1.ChannelDenial
+	(*ChannelActionDecision)(nil),           // 2: tayfam.core.v1.ChannelActionDecision
+	(*AuthorizeChannelActionRequest)(nil),   // 3: tayfam.core.v1.AuthorizeChannelActionRequest
+	(*AuthorizeChannelActionResponse)(nil),  // 4: tayfam.core.v1.AuthorizeChannelActionResponse
+	(*EventChannelRef)(nil),                 // 5: tayfam.core.v1.EventChannelRef
+	(*GetEventChannelAccessRequest)(nil),    // 6: tayfam.core.v1.GetEventChannelAccessRequest
+	(*EventChannelAccess)(nil),              // 7: tayfam.core.v1.EventChannelAccess
+	(*GetEventChannelAccessResponse)(nil),   // 8: tayfam.core.v1.GetEventChannelAccessResponse
+	(*ListEventChannelMembersRequest)(nil),  // 9: tayfam.core.v1.ListEventChannelMembersRequest
+	(*ListEventChannelMembersResponse)(nil), // 10: tayfam.core.v1.ListEventChannelMembersResponse
+	(*FilterActiveMembersRequest)(nil),      // 11: tayfam.core.v1.FilterActiveMembersRequest
+	(*FilterActiveMembersResponse)(nil),     // 12: tayfam.core.v1.FilterActiveMembersResponse
+	(Role)(0),                               // 13: tayfam.core.v1.Role
+	(*timestamppb.Timestamp)(nil),           // 14: google.protobuf.Timestamp
 }
 var file_tayfam_core_v1_channel_access_proto_depIdxs = []int32{
-	0, // 0: tayfam.core.v1.ChannelActionDecision.action:type_name -> tayfam.core.v1.ChannelAction
-	1, // 1: tayfam.core.v1.ChannelActionDecision.denial:type_name -> tayfam.core.v1.ChannelDenial
-	0, // 2: tayfam.core.v1.AuthorizeChannelActionRequest.action:type_name -> tayfam.core.v1.ChannelAction
-	1, // 3: tayfam.core.v1.AuthorizeChannelActionResponse.denial:type_name -> tayfam.core.v1.ChannelDenial
-	2, // 4: tayfam.core.v1.AuthorizeChannelActionResponse.decisions:type_name -> tayfam.core.v1.ChannelActionDecision
-	5, // 5: tayfam.core.v1.AuthorizeChannelActionResponse.role:type_name -> tayfam.core.v1.Role
-	6, // 6: tayfam.core.v1.AuthorizeChannelActionResponse.mute_expire_time:type_name -> google.protobuf.Timestamp
-	3, // 7: tayfam.core.v1.ChannelAccessService.AuthorizeChannelAction:input_type -> tayfam.core.v1.AuthorizeChannelActionRequest
-	4, // 8: tayfam.core.v1.ChannelAccessService.AuthorizeChannelAction:output_type -> tayfam.core.v1.AuthorizeChannelActionResponse
-	8, // [8:9] is the sub-list for method output_type
-	7, // [7:8] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	0,  // 0: tayfam.core.v1.ChannelActionDecision.action:type_name -> tayfam.core.v1.ChannelAction
+	1,  // 1: tayfam.core.v1.ChannelActionDecision.denial:type_name -> tayfam.core.v1.ChannelDenial
+	0,  // 2: tayfam.core.v1.AuthorizeChannelActionRequest.action:type_name -> tayfam.core.v1.ChannelAction
+	1,  // 3: tayfam.core.v1.AuthorizeChannelActionResponse.denial:type_name -> tayfam.core.v1.ChannelDenial
+	2,  // 4: tayfam.core.v1.AuthorizeChannelActionResponse.decisions:type_name -> tayfam.core.v1.ChannelActionDecision
+	13, // 5: tayfam.core.v1.AuthorizeChannelActionResponse.role:type_name -> tayfam.core.v1.Role
+	14, // 6: tayfam.core.v1.AuthorizeChannelActionResponse.mute_expire_time:type_name -> google.protobuf.Timestamp
+	5,  // 7: tayfam.core.v1.GetEventChannelAccessRequest.channels:type_name -> tayfam.core.v1.EventChannelRef
+	14, // 8: tayfam.core.v1.EventChannelAccess.end_time:type_name -> google.protobuf.Timestamp
+	7,  // 9: tayfam.core.v1.GetEventChannelAccessResponse.channels:type_name -> tayfam.core.v1.EventChannelAccess
+	3,  // 10: tayfam.core.v1.ChannelAccessService.AuthorizeChannelAction:input_type -> tayfam.core.v1.AuthorizeChannelActionRequest
+	6,  // 11: tayfam.core.v1.ChannelAccessService.GetEventChannelAccess:input_type -> tayfam.core.v1.GetEventChannelAccessRequest
+	9,  // 12: tayfam.core.v1.ChannelAccessService.ListEventChannelMembers:input_type -> tayfam.core.v1.ListEventChannelMembersRequest
+	11, // 13: tayfam.core.v1.ChannelAccessService.FilterActiveMembers:input_type -> tayfam.core.v1.FilterActiveMembersRequest
+	4,  // 14: tayfam.core.v1.ChannelAccessService.AuthorizeChannelAction:output_type -> tayfam.core.v1.AuthorizeChannelActionResponse
+	8,  // 15: tayfam.core.v1.ChannelAccessService.GetEventChannelAccess:output_type -> tayfam.core.v1.GetEventChannelAccessResponse
+	10, // 16: tayfam.core.v1.ChannelAccessService.ListEventChannelMembers:output_type -> tayfam.core.v1.ListEventChannelMembersResponse
+	12, // 17: tayfam.core.v1.ChannelAccessService.FilterActiveMembers:output_type -> tayfam.core.v1.FilterActiveMembersResponse
+	14, // [14:18] is the sub-list for method output_type
+	10, // [10:14] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_channel_access_proto_init() }
@@ -457,7 +982,7 @@ func file_tayfam_core_v1_channel_access_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_channel_access_proto_rawDesc), len(file_tayfam_core_v1_channel_access_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   3,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

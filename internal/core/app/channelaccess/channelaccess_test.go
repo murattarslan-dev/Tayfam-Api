@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
@@ -38,6 +39,9 @@ type fixture struct {
 	admin, admin2, mod, mod2, member, muted  id.ID
 	pending, banned, nonMember, formerMember id.ID
 	as                                       func(actor id.ID, fn func(q *store.Queries) error)
+	pool                                     *pgxpool.Pool
+	// join adds another active plain member.
+	join func(t *testing.T) id.ID
 }
 
 func setup(t *testing.T) fixture {
@@ -47,7 +51,7 @@ func setup(t *testing.T) fixture {
 	must(t, err)
 	tayfas, err := tayfa.New(tayfa.Config{Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	must(t, err)
-	f := fixture{svc: svc, admin: id.New(), nonMember: id.New()}
+	f := fixture{svc: svc, admin: id.New(), nonMember: id.New(), pool: pool}
 	f.as = func(actor id.ID, fn func(q *store.Queries) error) {
 		t.Helper()
 		must(t, txn.WithActor(ctx, pool, actor, func(_ pgx.Tx, q *store.Queries) error { return fn(q) }))
@@ -90,6 +94,7 @@ func setup(t *testing.T) fixture {
 		return err
 	})
 	f.formerMember = id.New() // never joined: content of someone no longer here
+	f.join = func(*testing.T) id.ID { return join(authz.StatusActive, authz.Member) }
 	return f
 }
 

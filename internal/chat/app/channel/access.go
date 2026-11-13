@@ -44,6 +44,8 @@ type Decision struct {
 	// All is the answer for every action without a target. An action
 	// missing here is refused.
 	All map[Action]Denial
+	// caller is the user the answer is about (set by Service.access).
+	caller id.ID
 }
 
 // Allowed reports whether a (without a target) is allowed.

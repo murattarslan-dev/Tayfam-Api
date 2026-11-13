@@ -23,6 +23,9 @@ type Channels interface {
 	Delete(ctx context.Context, caller, tayfa, ch, message id.ID) error
 	Restore(ctx context.Context, caller, tayfa, ch, message id.ID) (channel.Message, error)
 	MarkRead(ctx context.Context, caller, tayfa, ch, message id.ID) error
+	Members(ctx context.Context, caller, tayfa, ch id.ID, size int32, token string) (channel.MemberPage, error)
+	AddMembers(ctx context.Context, caller, tayfa, ch id.ID, users []id.ID) (channel.Channel, error)
+	RemoveMember(ctx context.Context, caller, tayfa, ch, user id.ID) error
 }
 
 // ChannelServer implements chatv1.ChannelServiceServer. Every method acts
@@ -42,6 +45,9 @@ func NewChannelServer(app Channels, log *slog.Logger) *ChannelServer {
 var visibilities = map[chatv1.ChannelVisibility]string{
 	chatv1.ChannelVisibility_CHANNEL_VISIBILITY_MEMBERS: channel.VisibilityMembers,
 	chatv1.ChannelVisibility_CHANNEL_VISIBILITY_STAFF:   channel.VisibilityStaff,
+	// Issue #183.
+	chatv1.ChannelVisibility_CHANNEL_VISIBILITY_EVENT:    channel.VisibilityEvent,
+	chatv1.ChannelVisibility_CHANNEL_VISIBILITY_SELECTED: channel.VisibilitySelected,
 }
 
 // ids parses the caller and the request's UUID fields, in order; names are
@@ -74,7 +80,32 @@ func channelToProto(c channel.Channel) *chatv1.Channel {
 	if !c.ArchivedAt.IsZero() {
 		out.ArchiveTime = timestamppb.New(c.ArchivedAt)
 	}
+	if c.EventID != (id.ID{}) {
+		out.EventId = c.EventID.String()
+	}
+	if !c.PlannedArchiveAt.IsZero() {
+		out.PlannedArchiveTime = timestamppb.New(c.PlannedArchiveAt)
+	}
+	if c.Visibility == channel.VisibilityEvent || c.Visibility == channel.VisibilitySelected {
+		out.MemberCount = c.MemberCount
+	}
 	return out
+}
+
+// userIDs parses a list of user IDs (field is the proto field name).
+func userIDs(in []string, field string) ([]id.ID, error) {
+	if len(in) > channel.MaxMembersBatch {
+		return nil, validation(field)
+	}
+	out := make([]id.ID, 0, len(in))
+	for _, x := range in {
+		u, ok := id.Parse(x)
+		if !ok {
+			return nil, validation(field)
+		}
+		out = append(out, u)
+	}
+	return out, nil
 }
 
 func messageToProto(m channel.Message) *chatv1.Message {
@@ -127,7 +158,17 @@ func (s *ChannelServer) CreateChannel(ctx context.Context, req *chatv1.CreateCha
 			return nil, validation("visibility")
 		}
 	}
-	c, err := s.app.Create(ctx, caller, v[0], channel.ChannelInput{Name: req.GetName(), Visibility: vis, SlowModeSeconds: req.GetSlowModeSeconds()})
+	in := channel.ChannelInput{Name: req.GetName(), Visibility: vis, SlowModeSeconds: req.GetSlowModeSeconds()}
+	if e := req.GetEventId(); e != "" {
+		var ok bool
+		if in.Event, ok = id.Parse(e); !ok {
+			return nil, validation("event_id")
+		}
+	}
+	if in.Members, err = userIDs(req.GetMemberUserIds(), "member_user_ids"); err != nil {
+		return nil, err
+	}
+	c, err := s.app.Create(ctx, caller, v[0], in)
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}
@@ -269,4 +310,50 @@ func (s *ChannelServer) MarkChannelRead(ctx context.Context, req *chatv1.MarkCha
 		return nil, errorStatus(ctx, s.log, err)
 	}
 	return &chatv1.MarkChannelReadResponse{}, nil
+}
+
+// ListChannelMembers implements chatv1.ChannelServiceServer (issue #183).
+func (s *ChannelServer) ListChannelMembers(ctx context.Context, req *chatv1.ListChannelMembersRequest) (*chatv1.ListChannelMembersResponse, error) {
+	caller, v, err := ids(ctx, f("tayfa_id", req.GetTayfaId()), f("channel_id", req.GetChannelId()))
+	if err != nil {
+		return nil, err
+	}
+	page, err := s.app.Members(ctx, caller, v[0], v[1], req.GetPageSize(), req.GetPageToken())
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	out := &chatv1.ListChannelMembersResponse{UserIds: make([]string, 0, len(page.Users)), NextPageToken: page.Next}
+	for _, u := range page.Users {
+		out.UserIds = append(out.UserIds, u.String())
+	}
+	return out, nil
+}
+
+// AddChannelMembers implements chatv1.ChannelServiceServer (issue #183).
+func (s *ChannelServer) AddChannelMembers(ctx context.Context, req *chatv1.AddChannelMembersRequest) (*chatv1.AddChannelMembersResponse, error) {
+	caller, v, err := ids(ctx, f("tayfa_id", req.GetTayfaId()), f("channel_id", req.GetChannelId()))
+	if err != nil {
+		return nil, err
+	}
+	users, err := userIDs(req.GetUserIds(), "user_ids")
+	if err != nil {
+		return nil, err
+	}
+	c, err := s.app.AddMembers(ctx, caller, v[0], v[1], users)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &chatv1.AddChannelMembersResponse{Channel: channelToProto(c)}, nil
+}
+
+// RemoveChannelMember implements chatv1.ChannelServiceServer (issue #183).
+func (s *ChannelServer) RemoveChannelMember(ctx context.Context, req *chatv1.RemoveChannelMemberRequest) (*chatv1.RemoveChannelMemberResponse, error) {
+	caller, v, err := ids(ctx, f("tayfa_id", req.GetTayfaId()), f("channel_id", req.GetChannelId()), f("user_id", req.GetUserId()))
+	if err != nil {
+		return nil, err
+	}
+	if err := s.app.RemoveMember(ctx, caller, v[0], v[1], v[2]); err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &chatv1.RemoveChannelMemberResponse{}, nil
 }

@@ -19,17 +19,20 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ChannelService_ListChannels_FullMethodName     = "/tayfam.chat.v1.ChannelService/ListChannels"
-	ChannelService_GetChannel_FullMethodName       = "/tayfam.chat.v1.ChannelService/GetChannel"
-	ChannelService_CreateChannel_FullMethodName    = "/tayfam.chat.v1.ChannelService/CreateChannel"
-	ChannelService_UpdateChannel_FullMethodName    = "/tayfam.chat.v1.ChannelService/UpdateChannel"
-	ChannelService_ArchiveChannel_FullMethodName   = "/tayfam.chat.v1.ChannelService/ArchiveChannel"
-	ChannelService_UnarchiveChannel_FullMethodName = "/tayfam.chat.v1.ChannelService/UnarchiveChannel"
-	ChannelService_SendMessage_FullMethodName      = "/tayfam.chat.v1.ChannelService/SendMessage"
-	ChannelService_ListMessages_FullMethodName     = "/tayfam.chat.v1.ChannelService/ListMessages"
-	ChannelService_DeleteMessage_FullMethodName    = "/tayfam.chat.v1.ChannelService/DeleteMessage"
-	ChannelService_RestoreMessage_FullMethodName   = "/tayfam.chat.v1.ChannelService/RestoreMessage"
-	ChannelService_MarkChannelRead_FullMethodName  = "/tayfam.chat.v1.ChannelService/MarkChannelRead"
+	ChannelService_ListChannels_FullMethodName        = "/tayfam.chat.v1.ChannelService/ListChannels"
+	ChannelService_GetChannel_FullMethodName          = "/tayfam.chat.v1.ChannelService/GetChannel"
+	ChannelService_CreateChannel_FullMethodName       = "/tayfam.chat.v1.ChannelService/CreateChannel"
+	ChannelService_UpdateChannel_FullMethodName       = "/tayfam.chat.v1.ChannelService/UpdateChannel"
+	ChannelService_ArchiveChannel_FullMethodName      = "/tayfam.chat.v1.ChannelService/ArchiveChannel"
+	ChannelService_UnarchiveChannel_FullMethodName    = "/tayfam.chat.v1.ChannelService/UnarchiveChannel"
+	ChannelService_SendMessage_FullMethodName         = "/tayfam.chat.v1.ChannelService/SendMessage"
+	ChannelService_ListMessages_FullMethodName        = "/tayfam.chat.v1.ChannelService/ListMessages"
+	ChannelService_DeleteMessage_FullMethodName       = "/tayfam.chat.v1.ChannelService/DeleteMessage"
+	ChannelService_RestoreMessage_FullMethodName      = "/tayfam.chat.v1.ChannelService/RestoreMessage"
+	ChannelService_MarkChannelRead_FullMethodName     = "/tayfam.chat.v1.ChannelService/MarkChannelRead"
+	ChannelService_ListChannelMembers_FullMethodName  = "/tayfam.chat.v1.ChannelService/ListChannelMembers"
+	ChannelService_AddChannelMembers_FullMethodName   = "/tayfam.chat.v1.ChannelService/AddChannelMembers"
+	ChannelService_RemoveChannelMember_FullMethodName = "/tayfam.chat.v1.ChannelService/RemoveChannelMember"
 )
 
 // ChannelServiceClient is the client API for ChannelService service.
@@ -133,6 +136,21 @@ type ChannelServiceClient interface {
 	// MarkChannelRead moves the caller's read marker to message_id. It only
 	// moves forward; an older message changes nothing.
 	MarkChannelRead(ctx context.Context, in *MarkChannelReadRequest, opts ...grpc.CallOption) (*MarkChannelReadResponse, error)
+	// ListChannelMembers lists the audience of an EVENT or SELECTED channel,
+	// ordered by user ID; for a MEMBERS or STAFF channel it is
+	// ERROR_REASON_VALIDATION (the tayfa's member list applies). Paging as
+	// above.
+	ListChannelMembers(ctx context.Context, in *ListChannelMembersRequest, opts ...grpc.CallOption) (*ListChannelMembersResponse, error)
+	// AddChannelMembers adds members to a SELECTED channel (1–100 user IDs;
+	// already added ones change nothing). Only the opener
+	// (ERROR_REASON_PERMISSION_DENIED otherwise); every user must be an
+	// active member of the tayfa (ERROR_REASON_NOT_TAYFA_MEMBER, nothing is
+	// added). An archived channel is ERROR_REASON_CHANNEL_ARCHIVED.
+	AddChannelMembers(ctx context.Context, in *AddChannelMembersRequest, opts ...grpc.CallOption) (*AddChannelMembersResponse, error)
+	// RemoveChannelMember removes a member from a SELECTED channel. Only the
+	// opener, who cannot remove themself. Removing someone who is not in it
+	// changes nothing.
+	RemoveChannelMember(ctx context.Context, in *RemoveChannelMemberRequest, opts ...grpc.CallOption) (*RemoveChannelMemberResponse, error)
 }
 
 type channelServiceClient struct {
@@ -253,6 +271,36 @@ func (c *channelServiceClient) MarkChannelRead(ctx context.Context, in *MarkChan
 	return out, nil
 }
 
+func (c *channelServiceClient) ListChannelMembers(ctx context.Context, in *ListChannelMembersRequest, opts ...grpc.CallOption) (*ListChannelMembersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListChannelMembersResponse)
+	err := c.cc.Invoke(ctx, ChannelService_ListChannelMembers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *channelServiceClient) AddChannelMembers(ctx context.Context, in *AddChannelMembersRequest, opts ...grpc.CallOption) (*AddChannelMembersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddChannelMembersResponse)
+	err := c.cc.Invoke(ctx, ChannelService_AddChannelMembers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *channelServiceClient) RemoveChannelMember(ctx context.Context, in *RemoveChannelMemberRequest, opts ...grpc.CallOption) (*RemoveChannelMemberResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveChannelMemberResponse)
+	err := c.cc.Invoke(ctx, ChannelService_RemoveChannelMember_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChannelServiceServer is the server API for ChannelService service.
 // All implementations must embed UnimplementedChannelServiceServer
 // for forward compatibility.
@@ -354,6 +402,21 @@ type ChannelServiceServer interface {
 	// MarkChannelRead moves the caller's read marker to message_id. It only
 	// moves forward; an older message changes nothing.
 	MarkChannelRead(context.Context, *MarkChannelReadRequest) (*MarkChannelReadResponse, error)
+	// ListChannelMembers lists the audience of an EVENT or SELECTED channel,
+	// ordered by user ID; for a MEMBERS or STAFF channel it is
+	// ERROR_REASON_VALIDATION (the tayfa's member list applies). Paging as
+	// above.
+	ListChannelMembers(context.Context, *ListChannelMembersRequest) (*ListChannelMembersResponse, error)
+	// AddChannelMembers adds members to a SELECTED channel (1–100 user IDs;
+	// already added ones change nothing). Only the opener
+	// (ERROR_REASON_PERMISSION_DENIED otherwise); every user must be an
+	// active member of the tayfa (ERROR_REASON_NOT_TAYFA_MEMBER, nothing is
+	// added). An archived channel is ERROR_REASON_CHANNEL_ARCHIVED.
+	AddChannelMembers(context.Context, *AddChannelMembersRequest) (*AddChannelMembersResponse, error)
+	// RemoveChannelMember removes a member from a SELECTED channel. Only the
+	// opener, who cannot remove themself. Removing someone who is not in it
+	// changes nothing.
+	RemoveChannelMember(context.Context, *RemoveChannelMemberRequest) (*RemoveChannelMemberResponse, error)
 	mustEmbedUnimplementedChannelServiceServer()
 }
 
@@ -396,6 +459,15 @@ func (UnimplementedChannelServiceServer) RestoreMessage(context.Context, *Restor
 }
 func (UnimplementedChannelServiceServer) MarkChannelRead(context.Context, *MarkChannelReadRequest) (*MarkChannelReadResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method MarkChannelRead not implemented")
+}
+func (UnimplementedChannelServiceServer) ListChannelMembers(context.Context, *ListChannelMembersRequest) (*ListChannelMembersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListChannelMembers not implemented")
+}
+func (UnimplementedChannelServiceServer) AddChannelMembers(context.Context, *AddChannelMembersRequest) (*AddChannelMembersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddChannelMembers not implemented")
+}
+func (UnimplementedChannelServiceServer) RemoveChannelMember(context.Context, *RemoveChannelMemberRequest) (*RemoveChannelMemberResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveChannelMember not implemented")
 }
 func (UnimplementedChannelServiceServer) mustEmbedUnimplementedChannelServiceServer() {}
 func (UnimplementedChannelServiceServer) testEmbeddedByValue()                        {}
@@ -616,6 +688,60 @@ func _ChannelService_MarkChannelRead_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChannelService_ListChannelMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListChannelMembersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChannelServiceServer).ListChannelMembers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChannelService_ListChannelMembers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChannelServiceServer).ListChannelMembers(ctx, req.(*ListChannelMembersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChannelService_AddChannelMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddChannelMembersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChannelServiceServer).AddChannelMembers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChannelService_AddChannelMembers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChannelServiceServer).AddChannelMembers(ctx, req.(*AddChannelMembersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChannelService_RemoveChannelMember_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveChannelMemberRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChannelServiceServer).RemoveChannelMember(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChannelService_RemoveChannelMember_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChannelServiceServer).RemoveChannelMember(ctx, req.(*RemoveChannelMemberRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChannelService_ServiceDesc is the grpc.ServiceDesc for ChannelService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -666,6 +792,18 @@ var ChannelService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MarkChannelRead",
 			Handler:    _ChannelService_MarkChannelRead_Handler,
+		},
+		{
+			MethodName: "ListChannelMembers",
+			Handler:    _ChannelService_ListChannelMembers_Handler,
+		},
+		{
+			MethodName: "AddChannelMembers",
+			Handler:    _ChannelService_AddChannelMembers_Handler,
+		},
+		{
+			MethodName: "RemoveChannelMember",
+			Handler:    _ChannelService_RemoveChannelMember_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

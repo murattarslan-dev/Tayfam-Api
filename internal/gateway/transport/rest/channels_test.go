@@ -83,6 +83,96 @@ func (f *fakeChat) MarkChannelRead(ctx context.Context, in *chatv1.MarkChannelRe
 	return &chatv1.MarkChannelReadResponse{}, f.record(ctx, in)
 }
 
+func (f *fakeChat) ListChannelMembers(ctx context.Context, in *chatv1.ListChannelMembersRequest, _ ...grpc.CallOption) (*chatv1.ListChannelMembersResponse, error) {
+	return &chatv1.ListChannelMembersResponse{UserIds: []string{userID}, NextPageToken: "N"}, f.record(ctx, in)
+}
+
+func (f *fakeChat) AddChannelMembers(ctx context.Context, in *chatv1.AddChannelMembersRequest, _ ...grpc.CallOption) (*chatv1.AddChannelMembersResponse, error) {
+	c := testChannel()
+	c.Visibility, c.MemberCount = chatv1.ChannelVisibility_CHANNEL_VISIBILITY_SELECTED, 3
+	return &chatv1.AddChannelMembersResponse{Channel: c}, f.record(ctx, in)
+}
+
+func (f *fakeChat) RemoveChannelMember(ctx context.Context, in *chatv1.RemoveChannelMemberRequest, _ ...grpc.CallOption) (*chatv1.RemoveChannelMemberResponse, error) {
+	return &chatv1.RemoveChannelMemberResponse{}, f.record(ctx, in)
+}
+
+// TestChannelAudienceRoutes (issue #183): event and selected-member
+// channels, their fields and the member routes.
+func TestChannelAudienceRoutes(t *testing.T) {
+	f := &fakeChat{}
+	h := chatRouter(f)
+	base := "/v1/tayfas/" + tayfaID + "/channels"
+	ch := base + "/" + channelID
+	for _, tc := range []struct {
+		method, path, body string
+		code               int
+		want               proto.Message
+	}{
+		{"POST", base, `{"name":"Kamp","visibility":"event","event_id":"` + eventID + `"}`, 201, &chatv1.CreateChannelRequest{
+			TayfaId: tayfaID, Name: "Kamp", Visibility: chatv1.ChannelVisibility_CHANNEL_VISIBILITY_EVENT, EventId: eventID}},
+		{"POST", base, `{"name":"Seçili","visibility":"selected","member_user_ids":["` + userID + `"]}`, 201, &chatv1.CreateChannelRequest{
+			TayfaId: tayfaID, Name: "Seçili", Visibility: chatv1.ChannelVisibility_CHANNEL_VISIBILITY_SELECTED, MemberUserIds: []string{userID}}},
+		{"GET", ch + "/members?page_size=10&page_token=P", "", 200, &chatv1.ListChannelMembersRequest{TayfaId: tayfaID, ChannelId: channelID, PageSize: 10, PageToken: "P"}},
+		{"POST", ch + "/members", `{"user_ids":["` + userID + `"]}`, 200, &chatv1.AddChannelMembersRequest{TayfaId: tayfaID, ChannelId: channelID, UserIds: []string{userID}}},
+		{"DELETE", ch + "/members/" + userID, "", 204, &chatv1.RemoveChannelMemberRequest{TayfaId: tayfaID, ChannelId: channelID, UserId: userID}},
+	} {
+		w := as(h, tc.method, tc.path, tc.body)
+		got, tok, _ := f.last()
+		if w.Code != tc.code || !proto.Equal(got, tc.want) || tok != "USERTOKEN" {
+			t.Errorf("%s %s: %d %s; chat'e giden %v", tc.method, tc.path, w.Code, w.Body, got)
+		}
+	}
+	if w := as(h, "GET", ch+"/members", ""); !strings.Contains(w.Body.String(), `"user_ids":["`+userID+`"]`) || !strings.Contains(w.Body.String(), `"next_page_token":"N"`) {
+		t.Fatalf("üyeler: %s", w.Body)
+	}
+	if w := as(h, "POST", ch+"/members", `{"user_ids":["`+userID+`"]}`); !strings.Contains(w.Body.String(), `"member_count":3`) || !strings.Contains(w.Body.String(), `"visibility":"selected"`) {
+		t.Fatalf("ekleme: %s", w.Body)
+	}
+	_, _, n0 := f.last()
+	many := strings.TrimSuffix(strings.Repeat(`"`+userID+`",`, 101), ",")
+	for name, tc := range map[string]struct{ method, path, body string }{
+		"bozuk etkinlik": {"POST", base, `{"name":"x","visibility":"event","event_id":"x"}`},
+		"bozuk üye":      {"POST", base, `{"name":"x","visibility":"selected","member_user_ids":["x"]}`},
+		"101 üye":        {"POST", base, `{"name":"x","visibility":"selected","member_user_ids":[` + many + `]}`},
+		"boş ekleme":     {"POST", ch + "/members", `{"user_ids":[]}`},
+		"bozuk ekleme":   {"POST", ch + "/members", `{"user_ids":["x"]}`},
+		"bozuk çıkarma":  {"DELETE", ch + "/members/x", ""},
+		"bilinmeyen tür": {"POST", base, `{"name":"x","visibility":"secret"}`},
+	} {
+		if w := as(h, tc.method, tc.path, tc.body); w.Code != 400 {
+			t.Errorf("%s: %d", name, w.Code)
+		}
+	}
+	if _, _, n := f.last(); n != n0 {
+		t.Fatal("geçersiz istek chat'e gitti")
+	}
+
+	// Fields of the new kinds; a members channel has none of them.
+	at := timestamppb.New(t0.AddDate(0, 0, 7))
+	ev := channelFrom(&chatv1.Channel{Id: channelID, Visibility: chatv1.ChannelVisibility_CHANNEL_VISIBILITY_EVENT, EventId: eventID, MemberCount: 5, PlannedArchiveTime: at}, false)
+	if ev.Visibility != "event" || ev.EventID != eventID || ev.MemberCount == nil || *ev.MemberCount != 5 || ev.PlannedArchiveAt == nil || !ev.PlannedArchiveAt.Equal(at.AsTime()) {
+		t.Fatalf("etkinlik kanalı = %+v", ev)
+	}
+	if m := channelFrom(&chatv1.Channel{Id: channelID, Visibility: chatv1.ChannelVisibility_CHANNEL_VISIBILITY_MEMBERS, MemberCount: 5}, false); m.MemberCount != nil || m.EventID != "" {
+		t.Fatalf("üyeler kanalı = %+v", m)
+	}
+	for reason, want := range map[string]struct {
+		code int
+		typ  string
+	}{
+		"ERROR_REASON_EVENT_CHANNEL_EXISTS": {409, "event-channel-exists"},
+		"ERROR_REASON_EVENT_NOT_FOUND":      {404, "event-not-found"},
+		"ERROR_REASON_NOT_TAYFA_MEMBER":     {400, "not-tayfa-member"},
+		"ERROR_REASON_EVENT_ENDED":          {409, "event-ended"},
+	} {
+		w := as(chatRouter(&fakeChat{err: chatErr(codes.FailedPrecondition, reason)}), "POST", ch+"/members", `{"user_ids":["`+userID+`"]}`)
+		if w.Code != want.code || problemType(t, w) != want.typ {
+			t.Errorf("%s: %d %s", reason, w.Code, problemType(t, w))
+		}
+	}
+}
+
 func TestChannelRoutes(t *testing.T) {
 	f := &fakeChat{}
 	h := chatRouter(f)

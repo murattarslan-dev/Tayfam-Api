@@ -19,7 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ChannelAccessService_AuthorizeChannelAction_FullMethodName = "/tayfam.core.v1.ChannelAccessService/AuthorizeChannelAction"
+	ChannelAccessService_AuthorizeChannelAction_FullMethodName  = "/tayfam.core.v1.ChannelAccessService/AuthorizeChannelAction"
+	ChannelAccessService_GetEventChannelAccess_FullMethodName   = "/tayfam.core.v1.ChannelAccessService/GetEventChannelAccess"
+	ChannelAccessService_ListEventChannelMembers_FullMethodName = "/tayfam.core.v1.ChannelAccessService/ListEventChannelMembers"
+	ChannelAccessService_FilterActiveMembers_FullMethodName     = "/tayfam.core.v1.ChannelAccessService/FilterActiveMembers"
 )
 
 // ChannelAccessServiceClient is the client API for ChannelAccessService service.
@@ -53,6 +56,26 @@ type ChannelAccessServiceClient interface {
 	// can serve one request with one call (and keep the answer a few
 	// seconds).
 	AuthorizeChannelAction(ctx context.Context, in *AuthorizeChannelActionRequest, opts ...grpc.CallOption) (*AuthorizeChannelActionResponse, error)
+	// GetEventChannelAccess answers, for the caller and each event channel
+	// given, whether the caller is in its audience (answered GOING, or
+	// organizes the event, or opened the channel), whether the caller may
+	// open a channel for the event, when the event ended and how many people
+	// the audience has. Events chat names that the caller cannot see in the
+	// tayfa (unknown, another tayfa's, the events module off) are absent from
+	// the answer: then only the channel's opener is in its audience.
+	GetEventChannelAccess(ctx context.Context, in *GetEventChannelAccessRequest, opts ...grpc.CallOption) (*GetEventChannelAccessResponse, error)
+	// ListEventChannelMembers lists the audience of an event channel: the
+	// organizer, the opener (while an active member) and every member who
+	// answered GOING, ordered by user ID. Waitlisted, MAYBE and NOT_GOING
+	// answers are not in it. An event the caller cannot see is
+	// ERROR_REASON_EVENT_NOT_FOUND. chat checks first that the caller is in
+	// the audience. Paging: page_size 0 means 50, above 100 means 100.
+	ListEventChannelMembers(ctx context.Context, in *ListEventChannelMembersRequest, opts ...grpc.CallOption) (*ListEventChannelMembersResponse, error)
+	// FilterActiveMembers returns which of user_ids are active members of the
+	// tayfa (in the order given, without repeats): chat checks them before
+	// it adds them to a selected-member channel. At most 100 IDs
+	// (ERROR_REASON_VALIDATION otherwise).
+	FilterActiveMembers(ctx context.Context, in *FilterActiveMembersRequest, opts ...grpc.CallOption) (*FilterActiveMembersResponse, error)
 }
 
 type channelAccessServiceClient struct {
@@ -67,6 +90,36 @@ func (c *channelAccessServiceClient) AuthorizeChannelAction(ctx context.Context,
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AuthorizeChannelActionResponse)
 	err := c.cc.Invoke(ctx, ChannelAccessService_AuthorizeChannelAction_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *channelAccessServiceClient) GetEventChannelAccess(ctx context.Context, in *GetEventChannelAccessRequest, opts ...grpc.CallOption) (*GetEventChannelAccessResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetEventChannelAccessResponse)
+	err := c.cc.Invoke(ctx, ChannelAccessService_GetEventChannelAccess_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *channelAccessServiceClient) ListEventChannelMembers(ctx context.Context, in *ListEventChannelMembersRequest, opts ...grpc.CallOption) (*ListEventChannelMembersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListEventChannelMembersResponse)
+	err := c.cc.Invoke(ctx, ChannelAccessService_ListEventChannelMembers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *channelAccessServiceClient) FilterActiveMembers(ctx context.Context, in *FilterActiveMembersRequest, opts ...grpc.CallOption) (*FilterActiveMembersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FilterActiveMembersResponse)
+	err := c.cc.Invoke(ctx, ChannelAccessService_FilterActiveMembers_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +157,26 @@ type ChannelAccessServiceServer interface {
 	// can serve one request with one call (and keep the answer a few
 	// seconds).
 	AuthorizeChannelAction(context.Context, *AuthorizeChannelActionRequest) (*AuthorizeChannelActionResponse, error)
+	// GetEventChannelAccess answers, for the caller and each event channel
+	// given, whether the caller is in its audience (answered GOING, or
+	// organizes the event, or opened the channel), whether the caller may
+	// open a channel for the event, when the event ended and how many people
+	// the audience has. Events chat names that the caller cannot see in the
+	// tayfa (unknown, another tayfa's, the events module off) are absent from
+	// the answer: then only the channel's opener is in its audience.
+	GetEventChannelAccess(context.Context, *GetEventChannelAccessRequest) (*GetEventChannelAccessResponse, error)
+	// ListEventChannelMembers lists the audience of an event channel: the
+	// organizer, the opener (while an active member) and every member who
+	// answered GOING, ordered by user ID. Waitlisted, MAYBE and NOT_GOING
+	// answers are not in it. An event the caller cannot see is
+	// ERROR_REASON_EVENT_NOT_FOUND. chat checks first that the caller is in
+	// the audience. Paging: page_size 0 means 50, above 100 means 100.
+	ListEventChannelMembers(context.Context, *ListEventChannelMembersRequest) (*ListEventChannelMembersResponse, error)
+	// FilterActiveMembers returns which of user_ids are active members of the
+	// tayfa (in the order given, without repeats): chat checks them before
+	// it adds them to a selected-member channel. At most 100 IDs
+	// (ERROR_REASON_VALIDATION otherwise).
+	FilterActiveMembers(context.Context, *FilterActiveMembersRequest) (*FilterActiveMembersResponse, error)
 	mustEmbedUnimplementedChannelAccessServiceServer()
 }
 
@@ -116,6 +189,15 @@ type UnimplementedChannelAccessServiceServer struct{}
 
 func (UnimplementedChannelAccessServiceServer) AuthorizeChannelAction(context.Context, *AuthorizeChannelActionRequest) (*AuthorizeChannelActionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AuthorizeChannelAction not implemented")
+}
+func (UnimplementedChannelAccessServiceServer) GetEventChannelAccess(context.Context, *GetEventChannelAccessRequest) (*GetEventChannelAccessResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetEventChannelAccess not implemented")
+}
+func (UnimplementedChannelAccessServiceServer) ListEventChannelMembers(context.Context, *ListEventChannelMembersRequest) (*ListEventChannelMembersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListEventChannelMembers not implemented")
+}
+func (UnimplementedChannelAccessServiceServer) FilterActiveMembers(context.Context, *FilterActiveMembersRequest) (*FilterActiveMembersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method FilterActiveMembers not implemented")
 }
 func (UnimplementedChannelAccessServiceServer) mustEmbedUnimplementedChannelAccessServiceServer() {}
 func (UnimplementedChannelAccessServiceServer) testEmbeddedByValue()                              {}
@@ -156,6 +238,60 @@ func _ChannelAccessService_AuthorizeChannelAction_Handler(srv interface{}, ctx c
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChannelAccessService_GetEventChannelAccess_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetEventChannelAccessRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChannelAccessServiceServer).GetEventChannelAccess(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChannelAccessService_GetEventChannelAccess_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChannelAccessServiceServer).GetEventChannelAccess(ctx, req.(*GetEventChannelAccessRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChannelAccessService_ListEventChannelMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListEventChannelMembersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChannelAccessServiceServer).ListEventChannelMembers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChannelAccessService_ListEventChannelMembers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChannelAccessServiceServer).ListEventChannelMembers(ctx, req.(*ListEventChannelMembersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChannelAccessService_FilterActiveMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FilterActiveMembersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChannelAccessServiceServer).FilterActiveMembers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChannelAccessService_FilterActiveMembers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChannelAccessServiceServer).FilterActiveMembers(ctx, req.(*FilterActiveMembersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChannelAccessService_ServiceDesc is the grpc.ServiceDesc for ChannelAccessService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -166,6 +302,18 @@ var ChannelAccessService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AuthorizeChannelAction",
 			Handler:    _ChannelAccessService_AuthorizeChannelAction_Handler,
+		},
+		{
+			MethodName: "GetEventChannelAccess",
+			Handler:    _ChannelAccessService_GetEventChannelAccess_Handler,
+		},
+		{
+			MethodName: "ListEventChannelMembers",
+			Handler:    _ChannelAccessService_ListEventChannelMembers_Handler,
+		},
+		{
+			MethodName: "FilterActiveMembers",
+			Handler:    _ChannelAccessService_FilterActiveMembers_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -31,6 +31,11 @@ const (
 	ChannelVisibility_CHANNEL_VISIBILITY_MEMBERS ChannelVisibility = 1
 	// Moderators and admins only.
 	ChannelVisibility_CHANNEL_VISIBILITY_STAFF ChannelVisibility = 2
+	// The opener, the event's organizer and members going to the event
+	// (issue #183).
+	ChannelVisibility_CHANNEL_VISIBILITY_EVENT ChannelVisibility = 3
+	// The opener and the members they chose (issue #183).
+	ChannelVisibility_CHANNEL_VISIBILITY_SELECTED ChannelVisibility = 4
 )
 
 // Enum value maps for ChannelVisibility.
@@ -39,11 +44,15 @@ var (
 		0: "CHANNEL_VISIBILITY_UNSPECIFIED",
 		1: "CHANNEL_VISIBILITY_MEMBERS",
 		2: "CHANNEL_VISIBILITY_STAFF",
+		3: "CHANNEL_VISIBILITY_EVENT",
+		4: "CHANNEL_VISIBILITY_SELECTED",
 	}
 	ChannelVisibility_value = map[string]int32{
 		"CHANNEL_VISIBILITY_UNSPECIFIED": 0,
 		"CHANNEL_VISIBILITY_MEMBERS":     1,
 		"CHANNEL_VISIBILITY_STAFF":       2,
+		"CHANNEL_VISIBILITY_EVENT":       3,
+		"CHANNEL_VISIBILITY_SELECTED":    4,
 	}
 )
 
@@ -93,8 +102,15 @@ type Channel struct {
 	UnreadCount int32 `protobuf:"varint,10,opt,name=unread_count,json=unreadCount,proto3" json:"unread_count,omitempty"`
 	// ListChannels only: the caller's read marker; empty if none.
 	LastReadMessageId string `protobuf:"bytes,11,opt,name=last_read_message_id,json=lastReadMessageId,proto3" json:"last_read_message_id,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// EVENT channels only.
+	EventId string `protobuf:"bytes,12,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	// EVENT and SELECTED channels only: the size of the audience.
+	MemberCount int32 `protobuf:"varint,13,opt,name=member_count,json=memberCount,proto3" json:"member_count,omitempty"`
+	// EVENT channels only: when the channel will be archived (7 days after
+	// the event's end or cancellation).
+	PlannedArchiveTime *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=planned_archive_time,json=plannedArchiveTime,proto3" json:"planned_archive_time,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Channel) Reset() {
@@ -202,6 +218,27 @@ func (x *Channel) GetLastReadMessageId() string {
 		return x.LastReadMessageId
 	}
 	return ""
+}
+
+func (x *Channel) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+func (x *Channel) GetMemberCount() int32 {
+	if x != nil {
+		return x.MemberCount
+	}
+	return 0
+}
+
+func (x *Channel) GetPlannedArchiveTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PlannedArchiveTime
+	}
+	return nil
 }
 
 type Message struct {
@@ -490,8 +527,13 @@ type CreateChannelRequest struct {
 	// UNSPECIFIED means MEMBERS.
 	Visibility      ChannelVisibility `protobuf:"varint,3,opt,name=visibility,proto3,enum=tayfam.chat.v1.ChannelVisibility" json:"visibility,omitempty"`
 	SlowModeSeconds int32             `protobuf:"varint,4,opt,name=slow_mode_seconds,json=slowModeSeconds,proto3" json:"slow_mode_seconds,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// EVENT only, and required there.
+	EventId string `protobuf:"bytes,5,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	// SELECTED only: the first members besides the opener (0–100 user IDs,
+	// active members of the tayfa).
+	MemberUserIds []string `protobuf:"bytes,6,rep,name=member_user_ids,json=memberUserIds,proto3" json:"member_user_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateChannelRequest) Reset() {
@@ -550,6 +592,20 @@ func (x *CreateChannelRequest) GetSlowModeSeconds() int32 {
 		return x.SlowModeSeconds
 	}
 	return 0
+}
+
+func (x *CreateChannelRequest) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+func (x *CreateChannelRequest) GetMemberUserIds() []string {
+	if x != nil {
+		return x.MemberUserIds
+	}
+	return nil
 }
 
 type CreateChannelResponse struct {
@@ -1453,11 +1509,331 @@ func (*MarkChannelReadResponse) Descriptor() ([]byte, []int) {
 	return file_tayfam_chat_v1_channels_proto_rawDescGZIP(), []int{23}
 }
 
+type ListChannelMembersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TayfaId       string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	ChannelId     string                 `protobuf:"bytes,2,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
+	PageSize      int32                  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string                 `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListChannelMembersRequest) Reset() {
+	*x = ListChannelMembersRequest{}
+	mi := &file_tayfam_chat_v1_channels_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListChannelMembersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListChannelMembersRequest) ProtoMessage() {}
+
+func (x *ListChannelMembersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_chat_v1_channels_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListChannelMembersRequest.ProtoReflect.Descriptor instead.
+func (*ListChannelMembersRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_chat_v1_channels_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ListChannelMembersRequest) GetTayfaId() string {
+	if x != nil {
+		return x.TayfaId
+	}
+	return ""
+}
+
+func (x *ListChannelMembersRequest) GetChannelId() string {
+	if x != nil {
+		return x.ChannelId
+	}
+	return ""
+}
+
+func (x *ListChannelMembersRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListChannelMembersRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListChannelMembersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserIds       []string               `protobuf:"bytes,1,rep,name=user_ids,json=userIds,proto3" json:"user_ids,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListChannelMembersResponse) Reset() {
+	*x = ListChannelMembersResponse{}
+	mi := &file_tayfam_chat_v1_channels_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListChannelMembersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListChannelMembersResponse) ProtoMessage() {}
+
+func (x *ListChannelMembersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_chat_v1_channels_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListChannelMembersResponse.ProtoReflect.Descriptor instead.
+func (*ListChannelMembersResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_chat_v1_channels_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ListChannelMembersResponse) GetUserIds() []string {
+	if x != nil {
+		return x.UserIds
+	}
+	return nil
+}
+
+func (x *ListChannelMembersResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+type AddChannelMembersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TayfaId       string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	ChannelId     string                 `protobuf:"bytes,2,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
+	UserIds       []string               `protobuf:"bytes,3,rep,name=user_ids,json=userIds,proto3" json:"user_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddChannelMembersRequest) Reset() {
+	*x = AddChannelMembersRequest{}
+	mi := &file_tayfam_chat_v1_channels_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddChannelMembersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddChannelMembersRequest) ProtoMessage() {}
+
+func (x *AddChannelMembersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_chat_v1_channels_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddChannelMembersRequest.ProtoReflect.Descriptor instead.
+func (*AddChannelMembersRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_chat_v1_channels_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *AddChannelMembersRequest) GetTayfaId() string {
+	if x != nil {
+		return x.TayfaId
+	}
+	return ""
+}
+
+func (x *AddChannelMembersRequest) GetChannelId() string {
+	if x != nil {
+		return x.ChannelId
+	}
+	return ""
+}
+
+func (x *AddChannelMembersRequest) GetUserIds() []string {
+	if x != nil {
+		return x.UserIds
+	}
+	return nil
+}
+
+type AddChannelMembersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Channel       *Channel               `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddChannelMembersResponse) Reset() {
+	*x = AddChannelMembersResponse{}
+	mi := &file_tayfam_chat_v1_channels_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddChannelMembersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddChannelMembersResponse) ProtoMessage() {}
+
+func (x *AddChannelMembersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_chat_v1_channels_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddChannelMembersResponse.ProtoReflect.Descriptor instead.
+func (*AddChannelMembersResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_chat_v1_channels_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *AddChannelMembersResponse) GetChannel() *Channel {
+	if x != nil {
+		return x.Channel
+	}
+	return nil
+}
+
+type RemoveChannelMemberRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TayfaId       string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	ChannelId     string                 `protobuf:"bytes,2,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveChannelMemberRequest) Reset() {
+	*x = RemoveChannelMemberRequest{}
+	mi := &file_tayfam_chat_v1_channels_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveChannelMemberRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveChannelMemberRequest) ProtoMessage() {}
+
+func (x *RemoveChannelMemberRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_chat_v1_channels_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveChannelMemberRequest.ProtoReflect.Descriptor instead.
+func (*RemoveChannelMemberRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_chat_v1_channels_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *RemoveChannelMemberRequest) GetTayfaId() string {
+	if x != nil {
+		return x.TayfaId
+	}
+	return ""
+}
+
+func (x *RemoveChannelMemberRequest) GetChannelId() string {
+	if x != nil {
+		return x.ChannelId
+	}
+	return ""
+}
+
+func (x *RemoveChannelMemberRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type RemoveChannelMemberResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveChannelMemberResponse) Reset() {
+	*x = RemoveChannelMemberResponse{}
+	mi := &file_tayfam_chat_v1_channels_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveChannelMemberResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveChannelMemberResponse) ProtoMessage() {}
+
+func (x *RemoveChannelMemberResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_chat_v1_channels_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveChannelMemberResponse.ProtoReflect.Descriptor instead.
+func (*RemoveChannelMemberResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_chat_v1_channels_proto_rawDescGZIP(), []int{29}
+}
+
 var File_tayfam_chat_v1_channels_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_channels_proto_rawDesc = "" +
 	"\n" +
-	"\x1dtayfam/chat/v1/channels.proto\x12\x0etayfam.chat.v1\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xec\x03\n" +
+	"\x1dtayfam/chat/v1/channels.proto\x12\x0etayfam.chat.v1\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf8\x04\n" +
 	"\aChannel\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\btayfa_id\x18\x02 \x01(\tR\atayfaId\x12\x12\n" +
@@ -1474,7 +1850,10 @@ const file_tayfam_chat_v1_channels_proto_rawDesc = "" +
 	"updateTime\x12!\n" +
 	"\funread_count\x18\n" +
 	" \x01(\x05R\vunreadCount\x12/\n" +
-	"\x14last_read_message_id\x18\v \x01(\tR\x11lastReadMessageId\"\xe9\x01\n" +
+	"\x14last_read_message_id\x18\v \x01(\tR\x11lastReadMessageId\x12\x19\n" +
+	"\bevent_id\x18\f \x01(\tR\aeventId\x12!\n" +
+	"\fmember_count\x18\r \x01(\x05R\vmemberCount\x12L\n" +
+	"\x14planned_archive_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\x12plannedArchiveTime\"\xe9\x01\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -1496,14 +1875,16 @@ const file_tayfam_chat_v1_channels_proto_rawDesc = "" +
 	"\n" +
 	"channel_id\x18\x02 \x01(\tR\tchannelId\"G\n" +
 	"\x12GetChannelResponse\x121\n" +
-	"\achannel\x18\x01 \x01(\v2\x17.tayfam.chat.v1.ChannelR\achannel\"\xb4\x01\n" +
+	"\achannel\x18\x01 \x01(\v2\x17.tayfam.chat.v1.ChannelR\achannel\"\xf7\x01\n" +
 	"\x14CreateChannelRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12A\n" +
 	"\n" +
 	"visibility\x18\x03 \x01(\x0e2!.tayfam.chat.v1.ChannelVisibilityR\n" +
 	"visibility\x12*\n" +
-	"\x11slow_mode_seconds\x18\x04 \x01(\x05R\x0fslowModeSeconds\"J\n" +
+	"\x11slow_mode_seconds\x18\x04 \x01(\x05R\x0fslowModeSeconds\x12\x19\n" +
+	"\bevent_id\x18\x05 \x01(\tR\aeventId\x12&\n" +
+	"\x0fmember_user_ids\x18\x06 \x03(\tR\rmemberUserIds\"J\n" +
 	"\x15CreateChannelResponse\x121\n" +
 	"\achannel\x18\x01 \x01(\v2\x17.tayfam.chat.v1.ChannelR\achannel\"\x90\x02\n" +
 	"\x14UpdateChannelRequest\x12\x19\n" +
@@ -1571,11 +1952,37 @@ const file_tayfam_chat_v1_channels_proto_rawDesc = "" +
 	"channel_id\x18\x02 \x01(\tR\tchannelId\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x03 \x01(\tR\tmessageId\"\x19\n" +
-	"\x17MarkChannelReadResponse*u\n" +
+	"\x17MarkChannelReadResponse\"\x91\x01\n" +
+	"\x19ListChannelMembersRequest\x12\x19\n" +
+	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x1d\n" +
+	"\n" +
+	"channel_id\x18\x02 \x01(\tR\tchannelId\x12\x1b\n" +
+	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken\"_\n" +
+	"\x1aListChannelMembersResponse\x12\x19\n" +
+	"\buser_ids\x18\x01 \x03(\tR\auserIds\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"o\n" +
+	"\x18AddChannelMembersRequest\x12\x19\n" +
+	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x1d\n" +
+	"\n" +
+	"channel_id\x18\x02 \x01(\tR\tchannelId\x12\x19\n" +
+	"\buser_ids\x18\x03 \x03(\tR\auserIds\"N\n" +
+	"\x19AddChannelMembersResponse\x121\n" +
+	"\achannel\x18\x01 \x01(\v2\x17.tayfam.chat.v1.ChannelR\achannel\"o\n" +
+	"\x1aRemoveChannelMemberRequest\x12\x19\n" +
+	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x1d\n" +
+	"\n" +
+	"channel_id\x18\x02 \x01(\tR\tchannelId\x12\x17\n" +
+	"\auser_id\x18\x03 \x01(\tR\x06userId\"\x1d\n" +
+	"\x1bRemoveChannelMemberResponse*\xb4\x01\n" +
 	"\x11ChannelVisibility\x12\"\n" +
 	"\x1eCHANNEL_VISIBILITY_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aCHANNEL_VISIBILITY_MEMBERS\x10\x01\x12\x1c\n" +
-	"\x18CHANNEL_VISIBILITY_STAFF\x10\x022\x9a\b\n" +
+	"\x18CHANNEL_VISIBILITY_STAFF\x10\x02\x12\x1c\n" +
+	"\x18CHANNEL_VISIBILITY_EVENT\x10\x03\x12\x1f\n" +
+	"\x1bCHANNEL_VISIBILITY_SELECTED\x10\x042\xe1\n" +
+	"\n" +
 	"\x0eChannelService\x12Y\n" +
 	"\fListChannels\x12#.tayfam.chat.v1.ListChannelsRequest\x1a$.tayfam.chat.v1.ListChannelsResponse\x12S\n" +
 	"\n" +
@@ -1588,7 +1995,10 @@ const file_tayfam_chat_v1_channels_proto_rawDesc = "" +
 	"\fListMessages\x12#.tayfam.chat.v1.ListMessagesRequest\x1a$.tayfam.chat.v1.ListMessagesResponse\x12\\\n" +
 	"\rDeleteMessage\x12$.tayfam.chat.v1.DeleteMessageRequest\x1a%.tayfam.chat.v1.DeleteMessageResponse\x12_\n" +
 	"\x0eRestoreMessage\x12%.tayfam.chat.v1.RestoreMessageRequest\x1a&.tayfam.chat.v1.RestoreMessageResponse\x12b\n" +
-	"\x0fMarkChannelRead\x12&.tayfam.chat.v1.MarkChannelReadRequest\x1a'.tayfam.chat.v1.MarkChannelReadResponseB\xbf\x01\n" +
+	"\x0fMarkChannelRead\x12&.tayfam.chat.v1.MarkChannelReadRequest\x1a'.tayfam.chat.v1.MarkChannelReadResponse\x12k\n" +
+	"\x12ListChannelMembers\x12).tayfam.chat.v1.ListChannelMembersRequest\x1a*.tayfam.chat.v1.ListChannelMembersResponse\x12h\n" +
+	"\x11AddChannelMembers\x12(.tayfam.chat.v1.AddChannelMembersRequest\x1a).tayfam.chat.v1.AddChannelMembersResponse\x12n\n" +
+	"\x13RemoveChannelMember\x12*.tayfam.chat.v1.RemoveChannelMemberRequest\x1a+.tayfam.chat.v1.RemoveChannelMemberResponseB\xbf\x01\n" +
 	"\x12com.tayfam.chat.v1B\rChannelsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1;chatv1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Chat.V1\xca\x02\x0eTayfam\\Chat\\V1\xe2\x02\x1aTayfam\\Chat\\V1\\GPBMetadata\xea\x02\x10Tayfam::Chat::V1b\x06proto3"
 
 var (
@@ -1604,81 +2014,95 @@ func file_tayfam_chat_v1_channels_proto_rawDescGZIP() []byte {
 }
 
 var file_tayfam_chat_v1_channels_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_tayfam_chat_v1_channels_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_tayfam_chat_v1_channels_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_tayfam_chat_v1_channels_proto_goTypes = []any{
-	(ChannelVisibility)(0),           // 0: tayfam.chat.v1.ChannelVisibility
-	(*Channel)(nil),                  // 1: tayfam.chat.v1.Channel
-	(*Message)(nil),                  // 2: tayfam.chat.v1.Message
-	(*ListChannelsRequest)(nil),      // 3: tayfam.chat.v1.ListChannelsRequest
-	(*ListChannelsResponse)(nil),     // 4: tayfam.chat.v1.ListChannelsResponse
-	(*GetChannelRequest)(nil),        // 5: tayfam.chat.v1.GetChannelRequest
-	(*GetChannelResponse)(nil),       // 6: tayfam.chat.v1.GetChannelResponse
-	(*CreateChannelRequest)(nil),     // 7: tayfam.chat.v1.CreateChannelRequest
-	(*CreateChannelResponse)(nil),    // 8: tayfam.chat.v1.CreateChannelResponse
-	(*UpdateChannelRequest)(nil),     // 9: tayfam.chat.v1.UpdateChannelRequest
-	(*UpdateChannelResponse)(nil),    // 10: tayfam.chat.v1.UpdateChannelResponse
-	(*ArchiveChannelRequest)(nil),    // 11: tayfam.chat.v1.ArchiveChannelRequest
-	(*ArchiveChannelResponse)(nil),   // 12: tayfam.chat.v1.ArchiveChannelResponse
-	(*UnarchiveChannelRequest)(nil),  // 13: tayfam.chat.v1.UnarchiveChannelRequest
-	(*UnarchiveChannelResponse)(nil), // 14: tayfam.chat.v1.UnarchiveChannelResponse
-	(*SendMessageRequest)(nil),       // 15: tayfam.chat.v1.SendMessageRequest
-	(*SendMessageResponse)(nil),      // 16: tayfam.chat.v1.SendMessageResponse
-	(*ListMessagesRequest)(nil),      // 17: tayfam.chat.v1.ListMessagesRequest
-	(*ListMessagesResponse)(nil),     // 18: tayfam.chat.v1.ListMessagesResponse
-	(*DeleteMessageRequest)(nil),     // 19: tayfam.chat.v1.DeleteMessageRequest
-	(*DeleteMessageResponse)(nil),    // 20: tayfam.chat.v1.DeleteMessageResponse
-	(*RestoreMessageRequest)(nil),    // 21: tayfam.chat.v1.RestoreMessageRequest
-	(*RestoreMessageResponse)(nil),   // 22: tayfam.chat.v1.RestoreMessageResponse
-	(*MarkChannelReadRequest)(nil),   // 23: tayfam.chat.v1.MarkChannelReadRequest
-	(*MarkChannelReadResponse)(nil),  // 24: tayfam.chat.v1.MarkChannelReadResponse
-	(*timestamppb.Timestamp)(nil),    // 25: google.protobuf.Timestamp
-	(*fieldmaskpb.FieldMask)(nil),    // 26: google.protobuf.FieldMask
+	(ChannelVisibility)(0),              // 0: tayfam.chat.v1.ChannelVisibility
+	(*Channel)(nil),                     // 1: tayfam.chat.v1.Channel
+	(*Message)(nil),                     // 2: tayfam.chat.v1.Message
+	(*ListChannelsRequest)(nil),         // 3: tayfam.chat.v1.ListChannelsRequest
+	(*ListChannelsResponse)(nil),        // 4: tayfam.chat.v1.ListChannelsResponse
+	(*GetChannelRequest)(nil),           // 5: tayfam.chat.v1.GetChannelRequest
+	(*GetChannelResponse)(nil),          // 6: tayfam.chat.v1.GetChannelResponse
+	(*CreateChannelRequest)(nil),        // 7: tayfam.chat.v1.CreateChannelRequest
+	(*CreateChannelResponse)(nil),       // 8: tayfam.chat.v1.CreateChannelResponse
+	(*UpdateChannelRequest)(nil),        // 9: tayfam.chat.v1.UpdateChannelRequest
+	(*UpdateChannelResponse)(nil),       // 10: tayfam.chat.v1.UpdateChannelResponse
+	(*ArchiveChannelRequest)(nil),       // 11: tayfam.chat.v1.ArchiveChannelRequest
+	(*ArchiveChannelResponse)(nil),      // 12: tayfam.chat.v1.ArchiveChannelResponse
+	(*UnarchiveChannelRequest)(nil),     // 13: tayfam.chat.v1.UnarchiveChannelRequest
+	(*UnarchiveChannelResponse)(nil),    // 14: tayfam.chat.v1.UnarchiveChannelResponse
+	(*SendMessageRequest)(nil),          // 15: tayfam.chat.v1.SendMessageRequest
+	(*SendMessageResponse)(nil),         // 16: tayfam.chat.v1.SendMessageResponse
+	(*ListMessagesRequest)(nil),         // 17: tayfam.chat.v1.ListMessagesRequest
+	(*ListMessagesResponse)(nil),        // 18: tayfam.chat.v1.ListMessagesResponse
+	(*DeleteMessageRequest)(nil),        // 19: tayfam.chat.v1.DeleteMessageRequest
+	(*DeleteMessageResponse)(nil),       // 20: tayfam.chat.v1.DeleteMessageResponse
+	(*RestoreMessageRequest)(nil),       // 21: tayfam.chat.v1.RestoreMessageRequest
+	(*RestoreMessageResponse)(nil),      // 22: tayfam.chat.v1.RestoreMessageResponse
+	(*MarkChannelReadRequest)(nil),      // 23: tayfam.chat.v1.MarkChannelReadRequest
+	(*MarkChannelReadResponse)(nil),     // 24: tayfam.chat.v1.MarkChannelReadResponse
+	(*ListChannelMembersRequest)(nil),   // 25: tayfam.chat.v1.ListChannelMembersRequest
+	(*ListChannelMembersResponse)(nil),  // 26: tayfam.chat.v1.ListChannelMembersResponse
+	(*AddChannelMembersRequest)(nil),    // 27: tayfam.chat.v1.AddChannelMembersRequest
+	(*AddChannelMembersResponse)(nil),   // 28: tayfam.chat.v1.AddChannelMembersResponse
+	(*RemoveChannelMemberRequest)(nil),  // 29: tayfam.chat.v1.RemoveChannelMemberRequest
+	(*RemoveChannelMemberResponse)(nil), // 30: tayfam.chat.v1.RemoveChannelMemberResponse
+	(*timestamppb.Timestamp)(nil),       // 31: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil),       // 32: google.protobuf.FieldMask
 }
 var file_tayfam_chat_v1_channels_proto_depIdxs = []int32{
 	0,  // 0: tayfam.chat.v1.Channel.visibility:type_name -> tayfam.chat.v1.ChannelVisibility
-	25, // 1: tayfam.chat.v1.Channel.archive_time:type_name -> google.protobuf.Timestamp
-	25, // 2: tayfam.chat.v1.Channel.create_time:type_name -> google.protobuf.Timestamp
-	25, // 3: tayfam.chat.v1.Channel.update_time:type_name -> google.protobuf.Timestamp
-	25, // 4: tayfam.chat.v1.Message.create_time:type_name -> google.protobuf.Timestamp
-	1,  // 5: tayfam.chat.v1.ListChannelsResponse.channels:type_name -> tayfam.chat.v1.Channel
-	1,  // 6: tayfam.chat.v1.GetChannelResponse.channel:type_name -> tayfam.chat.v1.Channel
-	0,  // 7: tayfam.chat.v1.CreateChannelRequest.visibility:type_name -> tayfam.chat.v1.ChannelVisibility
-	1,  // 8: tayfam.chat.v1.CreateChannelResponse.channel:type_name -> tayfam.chat.v1.Channel
-	0,  // 9: tayfam.chat.v1.UpdateChannelRequest.visibility:type_name -> tayfam.chat.v1.ChannelVisibility
-	26, // 10: tayfam.chat.v1.UpdateChannelRequest.update_mask:type_name -> google.protobuf.FieldMask
-	1,  // 11: tayfam.chat.v1.UpdateChannelResponse.channel:type_name -> tayfam.chat.v1.Channel
-	1,  // 12: tayfam.chat.v1.ArchiveChannelResponse.channel:type_name -> tayfam.chat.v1.Channel
-	1,  // 13: tayfam.chat.v1.UnarchiveChannelResponse.channel:type_name -> tayfam.chat.v1.Channel
-	2,  // 14: tayfam.chat.v1.SendMessageResponse.message:type_name -> tayfam.chat.v1.Message
-	2,  // 15: tayfam.chat.v1.ListMessagesResponse.messages:type_name -> tayfam.chat.v1.Message
-	2,  // 16: tayfam.chat.v1.RestoreMessageResponse.message:type_name -> tayfam.chat.v1.Message
-	3,  // 17: tayfam.chat.v1.ChannelService.ListChannels:input_type -> tayfam.chat.v1.ListChannelsRequest
-	5,  // 18: tayfam.chat.v1.ChannelService.GetChannel:input_type -> tayfam.chat.v1.GetChannelRequest
-	7,  // 19: tayfam.chat.v1.ChannelService.CreateChannel:input_type -> tayfam.chat.v1.CreateChannelRequest
-	9,  // 20: tayfam.chat.v1.ChannelService.UpdateChannel:input_type -> tayfam.chat.v1.UpdateChannelRequest
-	11, // 21: tayfam.chat.v1.ChannelService.ArchiveChannel:input_type -> tayfam.chat.v1.ArchiveChannelRequest
-	13, // 22: tayfam.chat.v1.ChannelService.UnarchiveChannel:input_type -> tayfam.chat.v1.UnarchiveChannelRequest
-	15, // 23: tayfam.chat.v1.ChannelService.SendMessage:input_type -> tayfam.chat.v1.SendMessageRequest
-	17, // 24: tayfam.chat.v1.ChannelService.ListMessages:input_type -> tayfam.chat.v1.ListMessagesRequest
-	19, // 25: tayfam.chat.v1.ChannelService.DeleteMessage:input_type -> tayfam.chat.v1.DeleteMessageRequest
-	21, // 26: tayfam.chat.v1.ChannelService.RestoreMessage:input_type -> tayfam.chat.v1.RestoreMessageRequest
-	23, // 27: tayfam.chat.v1.ChannelService.MarkChannelRead:input_type -> tayfam.chat.v1.MarkChannelReadRequest
-	4,  // 28: tayfam.chat.v1.ChannelService.ListChannels:output_type -> tayfam.chat.v1.ListChannelsResponse
-	6,  // 29: tayfam.chat.v1.ChannelService.GetChannel:output_type -> tayfam.chat.v1.GetChannelResponse
-	8,  // 30: tayfam.chat.v1.ChannelService.CreateChannel:output_type -> tayfam.chat.v1.CreateChannelResponse
-	10, // 31: tayfam.chat.v1.ChannelService.UpdateChannel:output_type -> tayfam.chat.v1.UpdateChannelResponse
-	12, // 32: tayfam.chat.v1.ChannelService.ArchiveChannel:output_type -> tayfam.chat.v1.ArchiveChannelResponse
-	14, // 33: tayfam.chat.v1.ChannelService.UnarchiveChannel:output_type -> tayfam.chat.v1.UnarchiveChannelResponse
-	16, // 34: tayfam.chat.v1.ChannelService.SendMessage:output_type -> tayfam.chat.v1.SendMessageResponse
-	18, // 35: tayfam.chat.v1.ChannelService.ListMessages:output_type -> tayfam.chat.v1.ListMessagesResponse
-	20, // 36: tayfam.chat.v1.ChannelService.DeleteMessage:output_type -> tayfam.chat.v1.DeleteMessageResponse
-	22, // 37: tayfam.chat.v1.ChannelService.RestoreMessage:output_type -> tayfam.chat.v1.RestoreMessageResponse
-	24, // 38: tayfam.chat.v1.ChannelService.MarkChannelRead:output_type -> tayfam.chat.v1.MarkChannelReadResponse
-	28, // [28:39] is the sub-list for method output_type
-	17, // [17:28] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	31, // 1: tayfam.chat.v1.Channel.archive_time:type_name -> google.protobuf.Timestamp
+	31, // 2: tayfam.chat.v1.Channel.create_time:type_name -> google.protobuf.Timestamp
+	31, // 3: tayfam.chat.v1.Channel.update_time:type_name -> google.protobuf.Timestamp
+	31, // 4: tayfam.chat.v1.Channel.planned_archive_time:type_name -> google.protobuf.Timestamp
+	31, // 5: tayfam.chat.v1.Message.create_time:type_name -> google.protobuf.Timestamp
+	1,  // 6: tayfam.chat.v1.ListChannelsResponse.channels:type_name -> tayfam.chat.v1.Channel
+	1,  // 7: tayfam.chat.v1.GetChannelResponse.channel:type_name -> tayfam.chat.v1.Channel
+	0,  // 8: tayfam.chat.v1.CreateChannelRequest.visibility:type_name -> tayfam.chat.v1.ChannelVisibility
+	1,  // 9: tayfam.chat.v1.CreateChannelResponse.channel:type_name -> tayfam.chat.v1.Channel
+	0,  // 10: tayfam.chat.v1.UpdateChannelRequest.visibility:type_name -> tayfam.chat.v1.ChannelVisibility
+	32, // 11: tayfam.chat.v1.UpdateChannelRequest.update_mask:type_name -> google.protobuf.FieldMask
+	1,  // 12: tayfam.chat.v1.UpdateChannelResponse.channel:type_name -> tayfam.chat.v1.Channel
+	1,  // 13: tayfam.chat.v1.ArchiveChannelResponse.channel:type_name -> tayfam.chat.v1.Channel
+	1,  // 14: tayfam.chat.v1.UnarchiveChannelResponse.channel:type_name -> tayfam.chat.v1.Channel
+	2,  // 15: tayfam.chat.v1.SendMessageResponse.message:type_name -> tayfam.chat.v1.Message
+	2,  // 16: tayfam.chat.v1.ListMessagesResponse.messages:type_name -> tayfam.chat.v1.Message
+	2,  // 17: tayfam.chat.v1.RestoreMessageResponse.message:type_name -> tayfam.chat.v1.Message
+	1,  // 18: tayfam.chat.v1.AddChannelMembersResponse.channel:type_name -> tayfam.chat.v1.Channel
+	3,  // 19: tayfam.chat.v1.ChannelService.ListChannels:input_type -> tayfam.chat.v1.ListChannelsRequest
+	5,  // 20: tayfam.chat.v1.ChannelService.GetChannel:input_type -> tayfam.chat.v1.GetChannelRequest
+	7,  // 21: tayfam.chat.v1.ChannelService.CreateChannel:input_type -> tayfam.chat.v1.CreateChannelRequest
+	9,  // 22: tayfam.chat.v1.ChannelService.UpdateChannel:input_type -> tayfam.chat.v1.UpdateChannelRequest
+	11, // 23: tayfam.chat.v1.ChannelService.ArchiveChannel:input_type -> tayfam.chat.v1.ArchiveChannelRequest
+	13, // 24: tayfam.chat.v1.ChannelService.UnarchiveChannel:input_type -> tayfam.chat.v1.UnarchiveChannelRequest
+	15, // 25: tayfam.chat.v1.ChannelService.SendMessage:input_type -> tayfam.chat.v1.SendMessageRequest
+	17, // 26: tayfam.chat.v1.ChannelService.ListMessages:input_type -> tayfam.chat.v1.ListMessagesRequest
+	19, // 27: tayfam.chat.v1.ChannelService.DeleteMessage:input_type -> tayfam.chat.v1.DeleteMessageRequest
+	21, // 28: tayfam.chat.v1.ChannelService.RestoreMessage:input_type -> tayfam.chat.v1.RestoreMessageRequest
+	23, // 29: tayfam.chat.v1.ChannelService.MarkChannelRead:input_type -> tayfam.chat.v1.MarkChannelReadRequest
+	25, // 30: tayfam.chat.v1.ChannelService.ListChannelMembers:input_type -> tayfam.chat.v1.ListChannelMembersRequest
+	27, // 31: tayfam.chat.v1.ChannelService.AddChannelMembers:input_type -> tayfam.chat.v1.AddChannelMembersRequest
+	29, // 32: tayfam.chat.v1.ChannelService.RemoveChannelMember:input_type -> tayfam.chat.v1.RemoveChannelMemberRequest
+	4,  // 33: tayfam.chat.v1.ChannelService.ListChannels:output_type -> tayfam.chat.v1.ListChannelsResponse
+	6,  // 34: tayfam.chat.v1.ChannelService.GetChannel:output_type -> tayfam.chat.v1.GetChannelResponse
+	8,  // 35: tayfam.chat.v1.ChannelService.CreateChannel:output_type -> tayfam.chat.v1.CreateChannelResponse
+	10, // 36: tayfam.chat.v1.ChannelService.UpdateChannel:output_type -> tayfam.chat.v1.UpdateChannelResponse
+	12, // 37: tayfam.chat.v1.ChannelService.ArchiveChannel:output_type -> tayfam.chat.v1.ArchiveChannelResponse
+	14, // 38: tayfam.chat.v1.ChannelService.UnarchiveChannel:output_type -> tayfam.chat.v1.UnarchiveChannelResponse
+	16, // 39: tayfam.chat.v1.ChannelService.SendMessage:output_type -> tayfam.chat.v1.SendMessageResponse
+	18, // 40: tayfam.chat.v1.ChannelService.ListMessages:output_type -> tayfam.chat.v1.ListMessagesResponse
+	20, // 41: tayfam.chat.v1.ChannelService.DeleteMessage:output_type -> tayfam.chat.v1.DeleteMessageResponse
+	22, // 42: tayfam.chat.v1.ChannelService.RestoreMessage:output_type -> tayfam.chat.v1.RestoreMessageResponse
+	24, // 43: tayfam.chat.v1.ChannelService.MarkChannelRead:output_type -> tayfam.chat.v1.MarkChannelReadResponse
+	26, // 44: tayfam.chat.v1.ChannelService.ListChannelMembers:output_type -> tayfam.chat.v1.ListChannelMembersResponse
+	28, // 45: tayfam.chat.v1.ChannelService.AddChannelMembers:output_type -> tayfam.chat.v1.AddChannelMembersResponse
+	30, // 46: tayfam.chat.v1.ChannelService.RemoveChannelMember:output_type -> tayfam.chat.v1.RemoveChannelMemberResponse
+	33, // [33:47] is the sub-list for method output_type
+	19, // [19:33] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_chat_v1_channels_proto_init() }
@@ -1692,7 +2116,7 @@ func file_tayfam_chat_v1_channels_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_chat_v1_channels_proto_rawDesc), len(file_tayfam_chat_v1_channels_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   24,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

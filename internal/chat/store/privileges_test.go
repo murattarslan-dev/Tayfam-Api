@@ -14,6 +14,7 @@ import (
 // or grant must be added here on purpose.
 var wantAppPrivileges = map[string]string{
 	"channels":                 "DELETE,INSERT,SELECT,UPDATE",
+	"channel_members":          "DELETE,INSERT,SELECT",
 	"channel_messages":         "DELETE,INSERT,SELECT,UPDATE",
 	"channel_reads":            "DELETE,INSERT,SELECT,UPDATE",
 	"notifications":            "DELETE,INSERT,SELECT,UPDATE",

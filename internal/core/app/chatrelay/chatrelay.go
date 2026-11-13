@@ -56,7 +56,17 @@ const (
 	// Platform suspension (issue #104, package admin).
 	TypeTayfaSuspended   = "tayfa.suspended"
 	TypeTayfaUnsuspended = "tayfa.unsuspended"
+	// Event channels (issue #183, package event): who is in them and when
+	// they are archived.
+	TypeRSVPChanged    = "rsvp.changed"
+	TypeRSVPPromoted   = "rsvp.promoted"
+	TypeEventUpdated   = "event.updated"
+	TypeEventCancelled = "event.cancelled"
 )
+
+// endedChanges are the membership.changed kinds after which the user is no
+// longer a member (package membership).
+var endedChanges = map[string]bool{"left": true, "removed": true, "banned": true}
 
 // statusTypes change whether the tayfa is writable.
 var statusTypes = map[string]bool{
@@ -72,6 +82,7 @@ func Types() []string {
 		TypeTayfaWarned, TypeTayfaArchived, TypeTayfaReactivated, TypeTayfaDeleted,
 		TypeTayfaDeletionRequested, TypeTayfaDeletionCancelled,
 		TypeTayfaSuspended, TypeTayfaUnsuspended,
+		TypeRSVPChanged, TypeRSVPPromoted, TypeEventUpdated, TypeEventCancelled,
 	}
 }
 
@@ -85,6 +96,9 @@ func Consumer(client chatv1.CoreEventServiceClient) outbox.Consumer {
 			req, err := Request(e)
 			if err != nil {
 				return err
+			}
+			if req == nil {
+				return nil // nothing chat needs (see Request)
 			}
 			ctx, cancel := context.WithTimeout(ctx, deliverTimeout)
 			defer cancel()
@@ -105,6 +119,12 @@ type payload struct {
 	QuestionID   string   `json:"question_id"`
 	UserID       string   `json:"user_id"`
 	Reason       string   `json:"reason"`
+	// Change is a membership.changed kind.
+	Change string `json:"change"`
+	// Event channels (issue #183).
+	EventID     string     `json:"event_id"`
+	EndsAt      *time.Time `json:"ends_at"`
+	CancelledAt *time.Time `json:"cancelled_at"`
 }
 
 var types = map[string]chatv1.NotificationType{
@@ -146,6 +166,8 @@ var reasons = map[string]chatv1.TayfaWarningReason{
 // Request converts a stored event to chat's request. An event it cannot
 // convert is an error: the relay stops at it and retries rather than drop
 // a notification (a new type must be added here and to chat's contract).
+// An event.updated that did not move the event's end is nil: chat needs
+// nothing from it.
 func Request(e outbox.Event) (*chatv1.ApplyCoreEventRequest, error) {
 	var p payload
 	if err := json.Unmarshal(e.Payload, &p); err != nil {
@@ -184,11 +206,43 @@ func Request(e outbox.Event) (*chatv1.ApplyCoreEventRequest, error) {
 		req.Event = &chatv1.ApplyCoreEventRequest_NotificationRequested{NotificationRequested: n}
 	case TypeTayfaPurged:
 		req.Event = &chatv1.ApplyCoreEventRequest_TayfaPurged{TayfaPurged: &chatv1.TayfaPurged{}}
+	case TypeRSVPChanged, TypeRSVPPromoted:
+		if _, ok := id.Parse(p.EventID); !ok {
+			return nil, errors.New("katılım olayında etkinlik yok")
+		}
+		if _, ok := id.Parse(p.UserID); !ok {
+			return nil, errors.New("katılım olayında kullanıcı yok")
+		}
+		// The answer itself is not sent: chat asks core again.
+		req.Event = &chatv1.ApplyCoreEventRequest_EventAttendanceChanged{EventAttendanceChanged: &chatv1.EventAttendanceChanged{
+			EventId: p.EventID, UserId: p.UserID,
+		}}
+	case TypeEventUpdated, TypeEventCancelled:
+		if _, ok := id.Parse(p.EventID); !ok {
+			return nil, errors.New("etkinlik olayında etkinlik yok")
+		}
+		end, cancelled := p.EndsAt, false
+		if e.Type == TypeEventCancelled {
+			end, cancelled = p.CancelledAt, true
+			if end == nil {
+				// Written before the time was added: the event's own time.
+				t := e.OccurredAt
+				end = &t
+			}
+		}
+		if end == nil {
+			return nil, nil //nolint:nilnil // nothing chat needs: the end did not move
+		}
+		req.Event = &chatv1.ApplyCoreEventRequest_EventScheduleChanged{EventScheduleChanged: &chatv1.EventScheduleChanged{
+			EventId: p.EventID, EndTime: timestamppb.New(*end), Cancelled: cancelled,
+		}}
 	case TypeMembershipChanged:
 		if _, ok := id.Parse(p.UserID); !ok {
 			return nil, errors.New("üyelik olayında kullanıcı yok")
 		}
-		req.Event = &chatv1.ApplyCoreEventRequest_MembershipChanged{MembershipChanged: &chatv1.MembershipChanged{UserId: p.UserID}}
+		req.Event = &chatv1.ApplyCoreEventRequest_MembershipChanged{MembershipChanged: &chatv1.MembershipChanged{
+			UserId: p.UserID, Ended: endedChanges[p.Change],
+		}}
 	default:
 		if statusTypes[e.Type] {
 			req.Event = &chatv1.ApplyCoreEventRequest_TayfaStatusChanged{TayfaStatusChanged: &chatv1.TayfaStatusChanged{}}

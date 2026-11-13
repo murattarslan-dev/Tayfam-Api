@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/coreevents"
@@ -199,6 +200,30 @@ func TestApplyCoreEventConversion(t *testing.T) {
 		t.Fatalf("durum = %+v", got)
 	}
 
+	// Event channels (issue #183).
+	if _, err := cores.ApplyCoreEvent(ctx, &chatv1.ApplyCoreEventRequest{EventId: id.New().String(), TayfaId: tf.String(),
+		Event: &chatv1.ApplyCoreEventRequest_MembershipChanged{MembershipChanged: &chatv1.MembershipChanged{UserId: u.String(), Ended: true}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := app.core[len(app.core)-1]; got.MemberChanged != u || !got.MemberEnded {
+		t.Fatalf("biten üyelik = %+v", got)
+	}
+	if _, err := cores.ApplyCoreEvent(ctx, &chatv1.ApplyCoreEventRequest{EventId: id.New().String(), TayfaId: tf.String(),
+		Event: &chatv1.ApplyCoreEventRequest_EventAttendanceChanged{EventAttendanceChanged: &chatv1.EventAttendanceChanged{EventId: ev.String(), UserId: u.String()}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := app.core[len(app.core)-1]; got.Attendance == nil || got.Attendance.Event != ev || got.Attendance.User != u {
+		t.Fatalf("katılım = %+v", got)
+	}
+	end, occurred := time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC)
+	if _, err := cores.ApplyCoreEvent(ctx, &chatv1.ApplyCoreEventRequest{EventId: id.New().String(), TayfaId: tf.String(), OccurredAt: timestamppb.New(occurred),
+		Event: &chatv1.ApplyCoreEventRequest_EventScheduleChanged{EventScheduleChanged: &chatv1.EventScheduleChanged{EventId: ev.String(), EndTime: timestamppb.New(end), Cancelled: true}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := app.core[len(app.core)-1]; got.Schedule == nil || got.Schedule.Event != ev || !got.Schedule.End.Equal(end) || !got.OccurredAt.Equal(occurred) {
+		t.Fatalf("takvim = %+v", got)
+	}
+
 	notice := func(f func(n *chatv1.NotificationRequested)) *chatv1.ApplyCoreEventRequest {
 		n := &chatv1.NotificationRequested{
 			Type: chatv1.NotificationType_NOTIFICATION_TYPE_ANNOUNCEMENT, TargetType: chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT,
@@ -222,6 +247,12 @@ func TestApplyCoreEventConversion(t *testing.T) {
 		"uyarı nedeni":  notice(func(n *chatv1.NotificationRequested) { n.WarningReason = 9 }),
 		"üye": {EventId: id.New().String(), TayfaId: tf.String(),
 			Event: &chatv1.ApplyCoreEventRequest_MembershipChanged{MembershipChanged: &chatv1.MembershipChanged{UserId: "x"}}},
+		"katılım etkinliği": {EventId: id.New().String(), TayfaId: tf.String(),
+			Event: &chatv1.ApplyCoreEventRequest_EventAttendanceChanged{EventAttendanceChanged: &chatv1.EventAttendanceChanged{EventId: "x", UserId: u.String()}}},
+		"katılım kullanıcısı": {EventId: id.New().String(), TayfaId: tf.String(),
+			Event: &chatv1.ApplyCoreEventRequest_EventAttendanceChanged{EventAttendanceChanged: &chatv1.EventAttendanceChanged{EventId: ev.String()}}},
+		"takvim bitişsiz": {EventId: id.New().String(), TayfaId: tf.String(),
+			Event: &chatv1.ApplyCoreEventRequest_EventScheduleChanged{EventScheduleChanged: &chatv1.EventScheduleChanged{EventId: ev.String()}}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := cores.ApplyCoreEvent(ctx, r); status.Code(err) != codes.InvalidArgument {

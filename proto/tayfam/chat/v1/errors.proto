@@ -147,4 +147,15 @@ enum ErrorReason {
 
   // FAILED_PRECONDITION. The caller's device is paired already.
   ERROR_REASON_E2E_ALREADY_PAIRED = 30;
+  // Event and selected-member channels (issue #183).
+  // FAILED_PRECONDITION. The event already has an open (not archived)
+  // channel.
+  ERROR_REASON_EVENT_CHANNEL_EXISTS = 31;
+  // NOT_FOUND. The event is not one the caller can see in the tayfa.
+  ERROR_REASON_EVENT_NOT_FOUND = 32;
+  // INVALID_ARGUMENT. A user to add is not an active member of the tayfa.
+  ERROR_REASON_NOT_TAYFA_MEMBER = 33;
+  // FAILED_PRECONDITION. The event ended more than 7 days ago (or was
+  // cancelled that long ago): its channel would be archived at once.
+  ERROR_REASON_EVENT_ENDED = 34;
 }

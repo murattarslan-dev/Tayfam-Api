@@ -5,27 +5,33 @@
 
 -- Kanallar.
 
+-- event_id ve archive_at yalnızca etkinlik kanalında (issue #183).
 -- name: CreateChannel :one
-INSERT INTO channels (id, tayfa_id, name, name_normalized, visibility, slow_mode_seconds, created_by)
-VALUES (@id, @tayfa_id, @name, @name_normalized, @visibility, @slow_mode_seconds, @created_by)
-RETURNING id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at;
+INSERT INTO channels (id, tayfa_id, name, name_normalized, visibility, slow_mode_seconds, created_by,
+                      event_id, archive_at, archive_source_at)
+VALUES (@id, @tayfa_id, @name, @name_normalized, @visibility, @slow_mode_seconds, @created_by,
+        sqlc.narg(event_id), sqlc.narg(archive_at), sqlc.narg(archive_source_at))
+RETURNING id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at, event_id, archive_at;
 
 -- name: GetChannel :one
-SELECT id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at
+SELECT id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at, event_id, archive_at
 FROM channels
 WHERE tayfa_id = @tayfa_id AND id = @id;
 
 -- name: GetChannelForUpdate :one
-SELECT id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at
+SELECT id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at, event_id, archive_at
 FROM channels
 WHERE tayfa_id = @tayfa_id AND id = @id
 FOR UPDATE;
 
 -- Tayfanın kanalları ve çağıranın okunmamış sayısı (en fazla max_unread;
--- silinmiş ve kendi mesajları sayılmaz). include_staff false ise yalnızca
--- members kanalları. Arşivlenmişler sonda.
+-- silinmiş ve kendi mesajları sayılmaz). include_staff false ise staff
+-- kanalları yok. Seçili üye kanallarından yalnızca çağıranın üyesi
+-- olduğu (issue #183); etkinlik kanallarının hepsi döner, kitleyi
+-- uygulama core'a sorarak süzer. Arşivlenmişler sonda.
 -- name: ListChannels :many
 SELECT c.id, c.tayfa_id, c.name, c.visibility, c.slow_mode_seconds, c.created_by, c.archived_at, c.created_at, c.updated_at,
+  c.event_id, c.archive_at,
   r.last_read_message_id,
   (SELECT count(*) FROM (
     SELECT 1 FROM channel_messages m
@@ -36,20 +42,24 @@ SELECT c.id, c.tayfa_id, c.name, c.visibility, c.slow_mode_seconds, c.created_by
   ) AS u) AS unread_count
 FROM channels c
 LEFT JOIN channel_reads r ON r.channel_id = c.id AND r.user_id = sqlc.arg(user_id)::uuid
-WHERE c.tayfa_id = @tayfa_id AND (sqlc.arg(include_staff)::boolean OR c.visibility = 'members')
-ORDER BY c.archived_at IS NOT NULL, c.name_normalized, c.id;
+WHERE c.tayfa_id = @tayfa_id
+  AND (c.visibility IN ('members', 'event')
+       OR (c.visibility = 'staff' AND sqlc.arg(include_staff)::boolean)
+       OR (c.visibility = 'selected' AND EXISTS (
+             SELECT 1 FROM channel_members cm WHERE cm.channel_id = c.id AND cm.user_id = sqlc.arg(user_id)::uuid)))
+ORDER BY c.archived_at IS NOT NULL OR (c.archive_at IS NOT NULL AND c.archive_at <= now()), c.name_normalized, c.id;
 
 -- name: UpdateChannel :one
 UPDATE channels
 SET name = @name, name_normalized = @name_normalized, visibility = @visibility, slow_mode_seconds = @slow_mode_seconds
 WHERE tayfa_id = @tayfa_id AND id = @id
-RETURNING id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at;
+RETURNING id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at, event_id, archive_at;
 
 -- archived_at NULL: arşivden çıkar.
 -- name: SetChannelArchived :one
 UPDATE channels SET archived_at = sqlc.narg(archived_at)
 WHERE tayfa_id = @tayfa_id AND id = @id
-RETURNING id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at;
+RETURNING id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at, event_id, archive_at;
 
 -- Mesajlar.
 
@@ -152,3 +162,48 @@ DELETE FROM channel_reads WHERE user_id = @user_id;
 -- Tayfa kalıcı silindi (tayfa.purged): mesajlar ve okunma kayıtları CASCADE.
 -- name: DeleteTayfaChannels :exec
 DELETE FROM channels WHERE tayfa_id = @tayfa_id;
+
+-- Seçili üye ve etkinlik kanalları (issue #183, ADR-0024).
+
+-- name: IsChannelMember :one
+SELECT EXISTS (SELECT 1 FROM channel_members WHERE channel_id = @channel_id AND user_id = @user_id)::boolean;
+
+-- name: AddChannelMember :exec
+INSERT INTO channel_members (channel_id, user_id) VALUES (@channel_id, @user_id)
+ON CONFLICT (channel_id, user_id) DO NOTHING;
+
+-- name: RemoveChannelMember :execrows
+DELETE FROM channel_members WHERE channel_id = @channel_id AND user_id = @user_id;
+
+-- name: CountChannelMembers :many
+SELECT channel_id, count(*)::integer AS member_count FROM channel_members
+WHERE channel_id = ANY(@channel_ids::uuid[])
+GROUP BY channel_id;
+
+-- name: ListChannelMembers :many
+SELECT user_id FROM channel_members
+WHERE channel_id = @channel_id AND user_id > @after
+ORDER BY user_id
+LIMIT @n;
+
+-- Kişi tayfadan ayrıldı, çıkarıldı ya da banlandı: o tayfanın seçili üye
+-- kanallarından çıkar.
+-- name: RemoveUserFromTayfaChannels :exec
+DELETE FROM channel_members cm USING channels c
+WHERE cm.channel_id = c.id AND c.tayfa_id = @tayfa_id AND cm.user_id = @user_id;
+
+-- Hesap silme: bütün kanal üyelikleri.
+-- name: DeleteUserChannelMembers :exec
+DELETE FROM channel_members WHERE user_id = @user_id;
+
+-- Etkinliğin bitişi ya da iptali değişti: arşivlenmemiş kanalının planlanan
+-- arşiv zamanı, yalnızca bilgi eldekinden yeniyse.
+-- name: SetEventChannelArchiveAt :exec
+UPDATE channels SET archive_at = @archive_at, archive_source_at = @source_at
+WHERE tayfa_id = @tayfa_id AND event_id = @event_id AND archived_at IS NULL
+  AND archive_source_at < @source_at;
+
+-- Zamanı gelen etkinlik kanallarını arşivler.
+-- name: ArchiveDueEventChannels :execrows
+UPDATE channels SET archived_at = archive_at
+WHERE archive_at IS NOT NULL AND archived_at IS NULL AND archive_at <= @now;

@@ -612,7 +612,13 @@ func (s *Service) Update(ctx context.Context, user, tayfa, event id.ID, fields [
 		if err := audit(ctx, q, c, EventUpdated, event, map[string]any{"fields": changed}); err != nil {
 			return err
 		}
-		b.add(EventUpdated, event, map[string]any{"event_id": event.String(), "fields": changed})
+		payload := map[string]any{"event_id": event.String(), "fields": changed}
+		if set[FieldTime] {
+			// chat archives the event's channel 7 days after its end
+			// (issue #183).
+			payload["ends_at"] = p.EndsAt.Time.UTC()
+		}
+		b.add(EventUpdated, event, payload)
 		// Activity records are snapshots of the event (issue #50).
 		if set[FieldTitle] || set[FieldTime] || set[FieldLocation] {
 			if err := refreshActivity(ctx, q, tayfa, event, c.now); err != nil {
@@ -661,7 +667,7 @@ func (s *Service) Cancel(ctx context.Context, user, tayfa, event id.ID, reason s
 		if err := audit(ctx, q, c, EventCancelled, event, nil); err != nil {
 			return err
 		}
-		b.add(EventCancelled, event, map[string]any{"event_id": event.String()})
+		b.add(EventCancelled, event, map[string]any{"event_id": event.String(), "cancelled_at": c.now.UTC()})
 		return nil
 	})
 	if err != nil {

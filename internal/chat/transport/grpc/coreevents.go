@@ -121,6 +121,9 @@ func coreEventFromProto(req *chatv1.ApplyCoreEventRequest) (coreevents.Event, er
 			return e, validation("tayfa_id")
 		}
 	}
+	if req.GetOccurredAt() != nil {
+		e.OccurredAt = req.GetOccurredAt().AsTime()
+	}
 	var actor id.ID
 	if a := req.GetActorId(); a != "" {
 		if actor, ok = id.Parse(a); !ok {
@@ -142,7 +145,20 @@ func coreEventFromProto(req *chatv1.ApplyCoreEventRequest) (coreevents.Event, er
 		if !ok {
 			return e, validation("membership_changed.user_id")
 		}
-		e.MemberChanged = u
+		e.MemberChanged, e.MemberEnded = u, ev.MembershipChanged.GetEnded()
+	case *chatv1.ApplyCoreEventRequest_EventAttendanceChanged:
+		evID, okE := id.Parse(ev.EventAttendanceChanged.GetEventId())
+		u, okU := id.Parse(ev.EventAttendanceChanged.GetUserId())
+		if !okE || !okU {
+			return e, validation("event_attendance_changed")
+		}
+		e.Attendance = &coreevents.Attendance{Event: evID, User: u}
+	case *chatv1.ApplyCoreEventRequest_EventScheduleChanged:
+		evID, ok := id.Parse(ev.EventScheduleChanged.GetEventId())
+		if !ok || ev.EventScheduleChanged.GetEndTime() == nil {
+			return e, validation("event_schedule_changed")
+		}
+		e.Schedule = &coreevents.Schedule{Event: evID, End: ev.EventScheduleChanged.GetEndTime().AsTime()}
 	case *chatv1.ApplyCoreEventRequest_TayfaStatusChanged:
 		e.StatusChanged = true
 	default:

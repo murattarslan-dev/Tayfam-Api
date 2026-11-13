@@ -19,6 +19,15 @@ type Channel struct {
 	ArchivedAt      pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+	EventID         pgtype.UUID
+	ArchiveAt       pgtype.Timestamptz
+	ArchiveSourceAt pgtype.Timestamptz
+}
+
+type ChannelMember struct {
+	ChannelID pgtype.UUID
+	UserID    pgtype.UUID
+	AddedAt   pgtype.Timestamptz
 }
 
 type ChannelMessage struct {
