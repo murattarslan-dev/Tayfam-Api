@@ -200,6 +200,17 @@ func (e *env) publish(t *testing.T, c crew, author id.ID) id.ID {
 	return v.ID
 }
 
+// ask posts a question by author and returns it: a report about content
+// stays in the tayfa's queue, unlike one about a user (issue #187).
+func (e *env) ask(t *testing.T, c crew, author id.ID) id.ID {
+	t.Helper()
+	qs, err := qa.New(qa.Config{Pool: e.pool})
+	must(t, err)
+	v, err := qs.CreateQuestion(ctx, author, c.tayfa, qa.CreateQuestionInput{Title: "Kamp yeri?", ClientRequestID: id.New().String()})
+	must(t, err)
+	return v.ID
+}
+
 func (e *env) report(t *testing.T, c crew, reporter id.ID, tt TargetType, target id.ID, r Reason) MyView {
 	t.Helper()
 	v, created, err := e.svc.Create(ctx, reporter, c.tayfa, CreateInput{TargetType: tt, TargetID: target.String(), Reason: r, Description: "Ayrıntı"})
@@ -317,7 +328,7 @@ func TestCreateAccess(t *testing.T) {
 	}
 
 	// A mute does not silence a safety report.
-	e.report(t, c, c.mutedMember, TargetUser, c.member, ReasonHarassment)
+	e.report(t, c, c.mutedMember, TargetQuestion, e.ask(t, c, c.member), ReasonHarassment)
 	e.report(t, c, c.member, TargetAnnouncement, a, ReasonSpam)
 	e.report(t, c, c.member, TargetTayfa, c.tayfa, ReasonGambling)
 	_, _, err = e.svc.Create(ctx, c.member, c.tayfa, CreateInput{TargetType: TargetAnnouncement, TargetID: a.String(), Reason: ReasonSpam, Description: strings.Repeat("ş", DescriptionMax)})
@@ -354,7 +365,7 @@ func TestReporterNeverRevealed(t *testing.T) {
 	c := e.crew(t)
 	a := e.publish(t, c, c.mod2)
 	r := e.report(t, c, c.member, TargetAnnouncement, a, ReasonHarassment)
-	u := e.report(t, c, c.member2, TargetUser, c.mod, ReasonHarassment)
+	u := e.report(t, c, c.member2, TargetQuestion, e.ask(t, c, c.mod), ReasonHarassment)
 
 	// The reported moderator sees neither report about themselves.
 	for name, tc := range map[string]struct {
@@ -424,15 +435,15 @@ func TestPriorityAndEscalation(t *testing.T) {
 	e.profile(t, minor, true)
 	unknown := e.member(t, c, authz.Member) // identity does not know them
 
-	adults := e.report(t, c, c.member, TargetUser, c.member2, ReasonSpam)
-	byMinor := e.report(t, c, minor, TargetUser, c.member2, ReasonSpam)
-	aboutUnknown := e.report(t, c, c.member, TargetUser, unknown, ReasonSpam)
-	child := e.report(t, c, c.member2, TargetUser, c.member, ReasonChildSafety)
+	adults := e.report(t, c, c.member, TargetQuestion, e.ask(t, c, c.member2), ReasonSpam)
+	byMinor := e.report(t, c, minor, TargetQuestion, e.ask(t, c, c.member2), ReasonSpam)
+	aboutUnknown := e.report(t, c, c.member, TargetQuestion, e.ask(t, c, unknown), ReasonSpam)
+	child := e.report(t, c, c.member2, TargetQuestion, e.ask(t, c, c.member), ReasonChildSafety)
 	aboutTayfa := e.report(t, c, c.member2, TargetTayfa, c.tayfa, ReasonGambling)
-	staff := e.report(t, c, c.member2, TargetUser, c.mod, ReasonStaffConduct)
+	staff := e.report(t, c, c.member2, TargetQuestion, e.ask(t, c, c.mod), ReasonStaffConduct)
 	// identity cannot be reached: the safe side (ADR-0012).
 	e.minors.down = true
-	outage := e.report(t, c, c.member2, TargetUser, c.member2Peer(t, e), ReasonSpam)
+	outage := e.report(t, c, c.member2, TargetQuestion, e.ask(t, c, c.member2Peer(t, e)), ReasonSpam)
 	e.minors.down = false
 
 	type row struct {
@@ -498,7 +509,7 @@ func TestPriorityAndEscalation(t *testing.T) {
 func TestQueuePermissions(t *testing.T) {
 	e := setup(t)
 	c := e.crew(t)
-	e.report(t, c, c.member, TargetUser, c.member2, ReasonSpam)
+	e.report(t, c, c.member, TargetQuestion, e.ask(t, c, c.member2), ReasonSpam)
 	for _, tc := range []struct {
 		name string
 		user id.ID
@@ -525,9 +536,9 @@ func TestResolve(t *testing.T) {
 	c := e.crew(t)
 	a := e.publish(t, c, c.mod2)
 	content := e.report(t, c, c.member, TargetAnnouncement, a, ReasonSpam)
-	user := e.report(t, c, c.member, TargetUser, c.member2, ReasonHarassment)
-	aboutMod := e.report(t, c, c.member2, TargetUser, c.mod2, ReasonHarassment)
-	dismiss := e.report(t, c, c.member2, TargetUser, c.member, ReasonOther)
+	user := e.report(t, c, c.member, TargetQuestion, e.ask(t, c, c.member2), ReasonHarassment)
+	aboutMod := e.report(t, c, c.member2, TargetQuestion, e.ask(t, c, c.mod2), ReasonHarassment)
+	dismiss := e.report(t, c, c.member2, TargetQuestion, e.ask(t, c, c.member), ReasonOther)
 
 	// Who may resolve.
 	_, err := e.svc.Resolve(ctx, c.member2, c.tayfa, dismiss.ID, ResolutionDismissed)
@@ -556,8 +567,11 @@ func TestResolve(t *testing.T) {
 	is(t, "görünür içerik", err, apperr.ErrReportActionMissing)
 	_, err = e.svc.Resolve(ctx, c.admin, c.tayfa, content.ID, ResolutionMemberSanctioned)
 	is(t, "susturulmamış yazar", err, apperr.ErrReportActionMissing)
-	_, err = e.svc.Resolve(ctx, c.mod, c.tayfa, user.ID, ResolutionContentRemoved)
-	isValidation(t, "kullanıcı için içerik", err, "resolution")
+	// A report about a user themself is the platform's (issue #187): the
+	// tayfa cannot resolve it.
+	aboutUser := e.report(t, c, c.member, TargetUser, c.member2, ReasonHarassment)
+	_, err = e.svc.Resolve(ctx, c.mod, c.tayfa, aboutUser.ID, ResolutionMemberSanctioned)
+	is(t, "kullanıcı şikâyeti", err, apperr.ErrReportNotFound)
 	_, err = e.svc.Resolve(ctx, c.mod, c.tayfa, user.ID, ResolutionMemberSanctioned)
 	is(t, "susturulmamış üye", err, apperr.ErrReportActionMissing)
 
@@ -604,11 +618,11 @@ func TestPaging(t *testing.T) {
 	for range 5 {
 		u := e.member(t, c, authz.Member)
 		e.profile(t, u, false)
-		all = append(all, e.report(t, c, c.member, TargetUser, u, ReasonSpam).ID)
+		all = append(all, e.report(t, c, c.member, TargetQuestion, e.ask(t, c, u), ReasonSpam).ID)
 	}
 	minor := e.member(t, c, authz.Member)
 	e.profile(t, minor, true)
-	last := e.report(t, c, c.member2, TargetUser, minor, ReasonSpam).ID
+	last := e.report(t, c, c.member2, TargetQuestion, e.ask(t, c, minor), ReasonSpam).ID
 	want := append([]id.ID{last}, all...) // MinorInvolved first
 
 	var got []id.ID
@@ -720,8 +734,8 @@ func TestQueueShowsPriorityNotAge(t *testing.T) {
 	e.profile(t, minor, true)
 	adult := e.member(t, c, authz.Member)
 	e.profile(t, adult, false)
-	normal := e.report(t, c, c.member, TargetUser, adult, ReasonSpam)
-	urgent := e.report(t, c, c.member, TargetUser, minor, ReasonSpam)
+	normal := e.report(t, c, c.member, TargetQuestion, e.ask(t, c, adult), ReasonSpam)
+	urgent := e.report(t, c, c.member, TargetQuestion, e.ask(t, c, minor), ReasonSpam)
 
 	q := e.queue(t, c, c.admin, StatusOpen)
 	if len(q) != 2 || q[0].ID != urgent.ID || q[1].ID != normal.ID {
@@ -755,4 +769,184 @@ func TestQueueShowsPriorityNotAge(t *testing.T) {
 	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE payload::text ~* '(birth|"age"|"minor")'`); n != 0 {
 		t.Fatal("olayda yaş bilgisi")
 	}
+}
+
+// userProfile gives u a live profile copy (what user.profile_updated
+// writes), so their profile is visible.
+func (e *env) userProfile(t *testing.T, u id.ID) {
+	t.Helper()
+	_, err := e.pool.Exec(ctx, `INSERT INTO user_profiles (user_id, display_name, source_event_id) VALUES ($1, 'Ece', $2)`, u.PG(), id.New().PG())
+	must(t, err)
+	e.profile(t, u, false)
+}
+
+type reportRow struct {
+	tayfa        pgtype.UUID
+	platformOnly bool
+	escalation   string
+	subject      pgtype.UUID
+}
+
+func (e *env) row(t *testing.T, r id.ID) reportRow {
+	t.Helper()
+	var x reportRow
+	var esc *string
+	must(t, e.pool.QueryRow(ctx, `SELECT tayfa_id, platform_only, escalation_reason, subject_user_id FROM reports WHERE id = $1`, r.PG()).
+		Scan(&x.tayfa, &x.platformOnly, &esc, &x.subject))
+	if esc != nil {
+		x.escalation = *esc
+	}
+	return x
+}
+
+// TestUserReportFromTayfaGoesToPlatform (issue #187): a report about a user
+// filed from a tayfa is kept for compatibility but goes to the platform
+// only; no moderator or admin of the tayfa sees it.
+func TestUserReportFromTayfaGoesToPlatform(t *testing.T) {
+	e := setup(t)
+	c := e.crew(t)
+	r := e.report(t, c, c.member, TargetUser, c.member2, ReasonHarassment)
+	if got := e.row(t, r.ID); !got.platformOnly || got.escalation != EscalationUserTarget || got.tayfa != c.tayfa.PG() || got.subject != c.member2.PG() {
+		t.Fatalf("satır = %+v", got)
+	}
+	child := e.report(t, c, c.member2, TargetUser, c.member, ReasonChildSafety)
+	if got := e.row(t, child.ID); !got.platformOnly || got.escalation != EscalationChildSafety {
+		t.Fatalf("çocuk güvenliği = %+v", got)
+	}
+	for _, viewer := range []id.ID{c.admin, c.mod, c.mod2} {
+		for _, st := range []Status{StatusOpen, StatusResolved} {
+			if q := e.queue(t, c, viewer, st); len(q) != 0 {
+				t.Fatalf("kuyrukta kullanıcı şikâyeti: %+v", q)
+			}
+		}
+	}
+	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'report.escalated' AND payload->>'report_id' = $1`, r.ID.String()); n != 1 {
+		t.Fatalf("report.escalated = %d", n)
+	}
+}
+
+// TestProfileUserReport (issue #187): from a profile, without a shared
+// tayfa, straight to the platform; the target must be a user whose
+// profile the reporter can see.
+func TestProfileUserReport(t *testing.T) {
+	e := setup(t)
+	c := e.crew(t)
+	reporter, stranger := id.New(), id.New()
+	e.userProfile(t, reporter)
+	e.userProfile(t, stranger)
+	file := func(target id.ID, in CreateInput) (MyView, bool, error) {
+		in.TargetType, in.TargetID = TargetUser, target.String()
+		if in.Reason == "" {
+			in.Reason = ReasonHarassment
+		}
+		return e.svc.Create(ctx, reporter, id.ID{}, in)
+	}
+
+	v, created, err := file(stranger, CreateInput{Description: "  Rahatsız edici mesajlar  "})
+	must(t, err)
+	if !created || v.TayfaID != (id.ID{}) || v.TargetType != TargetUser || v.Status != StatusOpen || v.Description != "Rahatsız edici mesajlar" {
+		t.Fatalf("şikâyet = %+v %v", v, created)
+	}
+	if got := e.row(t, v.ID); got.tayfa.Valid || !got.platformOnly || got.escalation != EscalationUserTarget || got.subject != stranger.PG() {
+		t.Fatalf("satır = %+v", got)
+	}
+	// No description is fine.
+	other := id.New()
+	e.userProfile(t, other)
+	if _, created, err := file(other, CreateInput{Reason: ReasonSpam}); err != nil || !created {
+		t.Fatalf("açıklamasız: %v %v", created, err)
+	}
+
+	// The same user again, from a profile or a tayfa, is the same report.
+	again, created, err := file(stranger, CreateInput{Reason: ReasonSpam})
+	if err != nil || created || again.ID != v.ID {
+		t.Fatalf("tekrar = %+v %v %v", again, created, err)
+	}
+	e.userProfile(t, c.member2)
+	fromProfile, _, err := e.svc.Create(ctx, c.member, id.ID{}, CreateInput{TargetType: TargetUser, TargetID: c.member2.String(), Reason: ReasonSpam})
+	must(t, err)
+	fromTayfa, created, err := e.svc.Create(ctx, c.member, c.tayfa, CreateInput{TargetType: TargetUser, TargetID: c.member2.String(), Reason: ReasonSpam})
+	if err != nil || created || fromTayfa.ID != fromProfile.ID {
+		t.Fatalf("tayfadan tekrar = %+v %v %v", fromTayfa, created, err)
+	}
+
+	// It is listed with the reporter's own reports, never in a queue.
+	mine, _, err := e.svc.ListMine(ctx, reporter, 100, "")
+	must(t, err)
+	if len(mine) != 2 {
+		t.Fatalf("şikâyetlerim = %d", len(mine))
+	}
+	if q := e.queue(t, c, c.admin, StatusOpen); len(q) != 0 {
+		t.Fatalf("kuyruk = %+v", q)
+	}
+
+	// Rules.
+	_, _, err = file(reporter, CreateInput{})
+	isValidation(t, "kendisi", err, "target_id")
+	_, _, err = e.svc.Create(ctx, reporter, id.ID{}, CreateInput{TargetType: TargetUser, TargetID: "x", Reason: ReasonSpam})
+	isValidation(t, "bozuk kimlik", err, "target_id")
+	fresh := id.New()
+	e.userProfile(t, fresh)
+	_, _, err = file(fresh, CreateInput{Reason: ReasonStaffConduct})
+	isValidation(t, "yönetici işlemi", err, "reason")
+	_, _, err = file(fresh, CreateInput{Evidence: "metin"})
+	isValidation(t, "delil", err, "evidence_text")
+	_, _, err = file(fresh, CreateInput{Description: strings.Repeat("a", DescriptionMax+1)})
+	isValidation(t, "uzun açıklama", err, "description")
+
+	// A user whose profile the reporter cannot see: the same answer for
+	// every reason, and nothing is written.
+	blocker, blocked, deleted, banned := id.New(), id.New(), id.New(), id.New()
+	for _, u := range []id.ID{blocker, blocked, deleted, banned} {
+		e.userProfile(t, u)
+	}
+	_, err = e.pool.Exec(ctx, `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2), ($3, $4)`,
+		blocker.PG(), reporter.PG(), reporter.PG(), blocked.PG())
+	must(t, err)
+	_, err = e.pool.Exec(ctx, `UPDATE user_profiles SET deleted_at = now(), display_name = NULL WHERE user_id = $1`, deleted.PG())
+	must(t, err)
+	_, err = e.pool.Exec(ctx, `INSERT INTO user_platform_bans (user_id, banned_at, event_id) VALUES ($1, now(), $2)`, banned.PG(), id.New().PG())
+	must(t, err)
+	before := e.count(t, `SELECT count(*) FROM reports`)
+	for name, u := range map[string]id.ID{
+		"beni engelleyen": blocker, "engellediğim": blocked, "silinmiş": deleted, "platformdan banlı": banned, "bilinmeyen": id.New(),
+	} {
+		_, _, err := file(u, CreateInput{})
+		is(t, name, err, apperr.ErrReportTargetNotFound)
+	}
+	if n := e.count(t, `SELECT count(*) FROM reports`); n != before {
+		t.Fatalf("görünmeyen kullanıcı için şikâyet yazıldı: %d", n-before)
+	}
+
+	// Priority: a minor party puts the report first on the platform.
+	minor := id.New()
+	e.userProfile(t, minor)
+	e.profile(t, minor, true)
+	m, _, err := file(minor, CreateInput{})
+	must(t, err)
+	var prio string
+	must(t, e.pool.QueryRow(ctx, `SELECT priority FROM reports WHERE id = $1`, m.ID.PG()).Scan(&prio))
+	if prio != string(PriorityMinorInvolved) {
+		t.Fatalf("öncelik = %s", prio)
+	}
+
+	// The event names no reporter and no description.
+	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type LIKE 'report.%' AND (actor_id = $1 OR payload::text LIKE '%' || $2 || '%' OR payload::text LIKE '%Rahatsız%')`,
+		reporter.PG(), reporter.String()); n != 0 {
+		t.Fatalf("olayda şikâyet eden ya da açıklama: %d", n)
+	}
+}
+
+// TestProfileReportDailyLimit: the daily limit is shared with every other
+// report.
+func TestProfileReportDailyLimit(t *testing.T) {
+	e := setup(t)
+	c := e.crew(t)
+	for range DailyLimit {
+		e.report(t, c, c.member, TargetQuestion, e.ask(t, c, c.member2), ReasonSpam)
+	}
+	u := id.New()
+	e.userProfile(t, u)
+	_, _, err := e.svc.Create(ctx, c.member, id.ID{}, CreateInput{TargetType: TargetUser, TargetID: u.String(), Reason: ReasonSpam})
+	is(t, "sınır", err, apperr.ErrReportLimit)
 }

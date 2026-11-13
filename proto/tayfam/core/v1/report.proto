@@ -46,7 +46,17 @@ service ReportService {
   // IsMinor about the reporter and the sender). REPORT_REASON_STAFF_CONDUCT
   // is not valid for it. UNAVAILABLE when chat cannot answer.
   //
-  // The caller must be an ACTIVE member of the tayfa (muted members too;
+  // A report about a user themself (REPORT_TARGET_TYPE_USER) goes to the
+  // platform only, at once, and never to a tayfa's queue (issue #187).
+  // From the user's profile tayfa_id is empty: no shared tayfa is needed,
+  // the target must be a user whose profile the caller can see (not the
+  // caller, not deleted or banned, no block either way), anything else is
+  // ERROR_REASON_REPORT_TARGET_NOT_FOUND; REPORT_REASON_STAFF_CONDUCT is
+  // not valid then. From a tayfa it is accepted as before and still goes
+  // to the platform only. Both are the same report: one per caller and
+  // user.
+  //
+  // Otherwise the caller must be an ACTIVE member of the tayfa (muted members too;
   // anyone else gets ERROR_REASON_TAYFA_NOT_FOUND). The target must be
   // something the caller can see there: an active member other than the
   // caller (TARGET_TYPE_USER), the tayfa itself, or visible content of a

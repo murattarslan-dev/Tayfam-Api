@@ -173,13 +173,14 @@ func (h coreHandlers) createReport(ctx context.Context, w http.ResponseWriter, r
 }
 
 // createDirectReport files a report that is not about a tayfa: a direct
-// message (issue #95). It goes to the platform only.
+// message (issue #95) or a user from their profile (issue #187). It goes to
+// the platform only.
 func (h coreHandlers) createDirectReport(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	h.fileReport(ctx, w, r, "")
 }
 
-// fileReport checks the body; tayfaID is empty exactly for direct message
-// reports, which alone carry evidence_text.
+// fileReport checks the body; tayfaID is empty for direct message reports,
+// which alone carry evidence_text, and for user reports from a profile.
 func (h coreHandlers) fileReport(ctx context.Context, w http.ResponseWriter, r *http.Request, tayfaID string) {
 	var b reportCreateBody
 	if !decodeLimit(w, r, &b, maxReportBody) {
@@ -188,9 +189,13 @@ func (h coreHandlers) fileReport(ctx context.Context, w http.ResponseWriter, r *
 	tt, okT := reportTargets.value(b.TargetType)
 	reason, okR := reportReasons.value(b.Reason)
 	direct := tt == corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE
+	// Without a tayfa: a direct message or a user from their profile
+	// (issue #187); a user may also be reported from a tayfa.
+	noTayfaOK := direct || tt == corev1.ReportTargetType_REPORT_TARGET_TYPE_USER
 	evidence := utf8.RuneCountInString(strings.TrimSpace(b.EvidenceText))
 	if !okT || !okR || !validUUID(b.TargetID) || utf8.RuneCountInString(strings.TrimSpace(b.Description)) > reportDescriptionMax ||
-		direct != (tayfaID == "") || (direct && (evidence < 1 || evidence > reportEvidenceMax)) || (!direct && b.EvidenceText != "") {
+		(tayfaID == "" && !noTayfaOK) || (direct && tayfaID != "") ||
+		(direct && (evidence < 1 || evidence > reportEvidenceMax)) || (!direct && b.EvidenceText != "") {
 		badRequest(w, r)
 		return
 	}

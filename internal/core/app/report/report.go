@@ -38,8 +38,9 @@
 // queue.
 //
 // Escalation to the platform (v14 "Platforma yükselen şikâyetler"): at once
-// for reports about the tayfa itself and about staff conduct (those go to
-// the platform only and never reach the tayfa's queue), for child safety
+// for reports about the tayfa itself, about a user themself (issue #187,
+// from a profile or a tayfa) and about staff conduct (those go to the
+// platform only and never reach the tayfa's queue), for child safety
 // reports and for MinorInvolved; after seven days unresolved by the jobs
 // package (EscalationAfter).
 //
@@ -204,6 +205,9 @@ const (
 	// EscalationDirectMessage: a direct message report goes to the platform
 	// only (issue #95).
 	EscalationDirectMessage = "direct_message"
+	// EscalationUserTarget: a report about a user themself goes to the
+	// platform only, from a profile or a tayfa (issue #187).
+	EscalationUserTarget = "user_target"
 )
 
 // Outbox event types. Payloads hold IDs and classification only: never the
@@ -320,6 +324,9 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in CreateInput)
 		}
 		return s.createDirect(ctx, user, in)
 	}
+	if in.TargetType == TargetUser && tayfa == (id.ID{}) {
+		return s.createProfileUser(ctx, user, in)
+	}
 	if in.Evidence != "" {
 		return MyView{}, false, apperr.Validation("evidence_text")
 	}
@@ -364,7 +371,7 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in CreateInput)
 		p := store.CreateReportParams{
 			ID: id.New().PG(), TayfaID: tayfa.PG(), ReporterID: user.PG(), TargetType: string(in.TargetType),
 			TargetID: target.PG(), Reason: string(in.Reason), Priority: string(PriorityNormal),
-			PlatformOnly: in.TargetType == TargetTayfa || in.Reason == ReasonStaffConduct, CreatedAt: ts(now),
+			PlatformOnly: in.TargetType == TargetTayfa || in.TargetType == TargetUser || in.Reason == ReasonStaffConduct, CreatedAt: ts(now),
 		}
 		if subject != (id.ID{}) {
 			p.SubjectUserID = subject.PG()
@@ -458,6 +465,8 @@ func escalationAtCreate(t TargetType, r Reason, minor bool) string {
 		return EscalationStaffConduct
 	case r == ReasonChildSafety:
 		return EscalationChildSafety
+	case t == TargetUser:
+		return EscalationUserTarget
 	case minor:
 		return EscalationMinorInvolved
 	}

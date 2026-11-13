@@ -4030,7 +4030,12 @@ paths:
 
         Şikâyet edenin kimliği şikâyet edilen kişiye hiçbir zaman gösterilmez;
         tayfanın moderatörlerine ve yöneticilerine de gösterilmez. Tayfanın
-        kendisi ve `staff_conduct` şikâyetleri yalnızca platforma gider.
+        kendisi, bir kullanıcının kendisi (`target_type: user`, issue #187)
+        ve `staff_conduct` şikâyetleri yalnızca platforma gider; tayfanın
+        moderasyon kuyruğunda görünmez. Kişi profilinden kullanıcı şikâyeti
+        için `POST /v1/me/reports` kullanılır (ortak tayfa gerekmez); bu uç
+        geriye uyum için kullanıcı şikâyetini kabul etmeye devam eder ve
+        ikisi aynı şikâyettir.
         Birebir mesaj (`dm_message`) şikâyeti bir tayfaya ait olmadığı için
         bu uçta değil, `POST /v1/me/reports` ile yapılır (burada
         `invalid-request`). Kanal mesajları henüz şikâyet edilemez.
@@ -4431,10 +4436,25 @@ paths:
         "503": { $ref: "#/components/responses/Problem" }
     post:
       operationId: createDirectMessageReport
-      summary: Bir birebir mesajı şikâyet eder (yalnızca platforma gider)
+      summary: Birebir mesajı ya da kişi profilinden kullanıcıyı şikâyet eder (yalnızca platforma gider)
       description: |
-        Tayfaya ait olmayan şikâyetler için; şimdilik yalnızca
-        `target_type: dm_message`. `target_id` mesajın kimliğidir. Mesajın
+        Tayfaya ait olmayan şikâyetler için: `target_type: dm_message` ve
+        `target_type: user`.
+
+        **Kullanıcı** (`user`, issue #187): kişi profilindeki "Şikâyet et".
+        `target_id` kullanıcının kimliğidir. Ortak tayfa gerekmez; hedef,
+        profilini görebildiğiniz bir kullanıcı olmalıdır. Kendiniz
+        `invalid-request`; engellediğiniz, sizi engelleyen, silinmiş ya da
+        bilinmeyen kullanıcı `report-target-not-found` (nedeni söylenmez).
+        Gerekçe kapalı listeden seçilir, `staff_conduct` geçerli değildir;
+        `description` isteğe bağlıdır, `evidence_text` gönderilmez
+        (`invalid-request`). Şikâyet hiçbir tayfanın moderasyon kuyruğuna
+        düşmez, oluşturulduğu anda platforma gider; şikâyet edenin kimliği
+        şikâyet edilene hiçbir zaman gösterilmez. Aynı kullanıcıyı ikinci kez
+        (bir tayfa ucundan yapılmış olsa da) şikâyet etmek ilk şikâyetinizi
+        `200` ile döndürür; günlük sınır aşağıdakiyle ortaktır.
+
+        **Birebir mesaj** (`dm_message`): `target_id` mesajın kimliğidir. Mesajın
         konuşmasının tarafı olmalısınız (reddettiğiniz istek dahil; silinmiş
         mesaj da olur); kendi mesajınız, bilinmeyen mesaj ve göndereni
         hesabını silmiş mesaj `report-target-not-found`.
@@ -7403,7 +7423,8 @@ components:
           minLength: 1
           maxLength: 2000
           description: |
-            Yalnızca ve zorunlu olarak `dm_message` için: şikâyet ettiğiniz
+            Yalnızca ve zorunlu olarak `dm_message` için (kullanıcı şikâyetinde
+            yoktur): şikâyet ettiğiniz
             mesajın kendi cihazınızdan paylaştığınız metni. Yalnızca platform
             okur; log'a ve olaylara yazılmaz, size geri dönmez.
 
@@ -7418,7 +7439,7 @@ components:
         tayfa_id:
           type: string
           format: uuid
-          description: Birebir mesaj şikâyetinde yoktur.
+          description: Birebir mesaj şikâyetinde ve kişi profilinden yapılan kullanıcı şikâyetinde yoktur.
         target_type: { $ref: "#/components/schemas/ReportTargetType" }
         target_id: { type: string, format: uuid }
         reason: { $ref: "#/components/schemas/ReportReason" }

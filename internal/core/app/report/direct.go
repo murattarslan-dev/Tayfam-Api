@@ -68,7 +68,7 @@ func (s *Service) createDirect(ctx context.Context, user id.ID, in CreateInput) 
 	// First pass, without locks: an earlier report, the daily limit, then
 	// chat and identity before the write transaction (no lock is held while
 	// waiting for them).
-	if prev, found, err := s.directPrecheck(ctx, s.q, user, target, now); err != nil || found {
+	if prev, found, err := s.directPrecheck(ctx, s.q, user, TargetDMMessage, target, now); err != nil || found {
 		return prev, false, err
 	}
 	if s.cfg.DirectMessages == nil {
@@ -88,7 +88,7 @@ func (s *Service) createDirect(ctx context.Context, user id.ID, in CreateInput) 
 		if err := q.LockUserLimit(ctx, user.PG()); err != nil {
 			return fmt.Errorf("şikâyet sınırı kilidi: %w", err)
 		}
-		prev, found, err := s.directPrecheck(ctx, q, user, target, now)
+		prev, found, err := s.directPrecheck(ctx, q, user, TargetDMMessage, target, now)
 		if err != nil || found {
 			v = prev
 			return err
@@ -138,10 +138,10 @@ func (s *Service) createDirect(ctx context.Context, user id.ID, in CreateInput) 
 	return v, created, nil
 }
 
-// directPrecheck returns the caller's earlier report about the message, or
+// directPrecheck returns the caller's earlier report about the target, or
 // apperr.ErrReportLimit when the daily limit is used up.
-func (s *Service) directPrecheck(ctx context.Context, q *store.Queries, user, target id.ID, now time.Time) (MyView, bool, error) {
-	if prev, found, err := mine(ctx, q, user, TargetDMMessage, target); err != nil || found {
+func (s *Service) directPrecheck(ctx context.Context, q *store.Queries, user id.ID, t TargetType, target id.ID, now time.Time) (MyView, bool, error) {
+	if prev, found, err := mine(ctx, q, user, t, target); err != nil || found {
 		return prev, found, err
 	}
 	n, err := q.CountRecentReportsByReporter(ctx, store.CountRecentReportsByReporterParams{ReporterID: user.PG(), Since: ts(now.Add(-24 * time.Hour))})
@@ -171,4 +171,118 @@ func cleanEvidence(s string) (string, error) {
 		}
 	}
 	return e, nil
+}
+
+// createProfileUser files a report about a user from their profile (issue
+// #187; platform owner, 2026-11-13):
+//
+//   - it is not about a tayfa: no shared tayfa is needed, tayfa_id stays
+//     empty; the target must be a user whose profile the reporter can see
+//     (registered, not deleted, no block either way, not the reporter),
+//     anything else is apperr.ErrReportTargetNotFound with no reason given;
+//   - it goes to the platform only, at once (EscalationUserTarget, or
+//     child safety), and never to a tayfa's queue;
+//   - staff_conduct is not valid (there is no tayfa role to judge) and
+//     there is no evidence text;
+//   - the duplicate, daily limit and priority rules are those of every
+//     report. A report about the same user filed from a tayfa is the same
+//     report (one per reporter and target).
+func (s *Service) createProfileUser(ctx context.Context, user id.ID, in CreateInput) (v MyView, created bool, err error) {
+	target, ok := id.Parse(in.TargetID)
+	if !ok || target == user {
+		return MyView{}, false, apperr.Validation("target_id")
+	}
+	if !slices.Contains(Reasons(), in.Reason) || in.Reason == ReasonStaffConduct {
+		return MyView{}, false, apperr.Validation("reason")
+	}
+	if in.Evidence != "" {
+		return MyView{}, false, apperr.Validation("evidence_text")
+	}
+	desc, err := cleanDescription(in.Description)
+	if err != nil {
+		return MyView{}, false, err
+	}
+	now := s.now()
+	if prev, found, err := s.directPrecheck(ctx, s.q, user, TargetUser, target, now); err != nil || found {
+		return prev, false, err
+	}
+	if err := profileVisible(ctx, s.q, user, target); err != nil {
+		return MyView{}, false, err
+	}
+	minor := s.minorInvolved(ctx, user, target)
+	escalation := escalationAtCreate(TargetUser, in.Reason, minor)
+
+	err = txn.WithActor(ctx, s.cfg.Pool, user, func(_ pgx.Tx, q *store.Queries) error {
+		if err := q.LockUserLimit(ctx, user.PG()); err != nil {
+			return fmt.Errorf("şikâyet sınırı kilidi: %w", err)
+		}
+		prev, found, err := s.directPrecheck(ctx, q, user, TargetUser, target, now)
+		if err != nil || found {
+			v = prev
+			return err
+		}
+		if err := profileVisible(ctx, q, user, target); err != nil {
+			return err
+		}
+		p := store.CreateReportParams{
+			ID: id.New().PG(), ReporterID: user.PG(), TargetType: string(TargetUser), TargetID: target.PG(),
+			SubjectUserID: target.PG(), Reason: string(in.Reason), Priority: string(PriorityNormal),
+			PlatformOnly: true, CreatedAt: ts(now),
+			EscalatedToPlatformAt: ts(now), EscalationReason: pgtype.Text{String: escalation, Valid: true},
+			PlatformStatus: pgtype.Text{String: "open", Valid: true},
+		}
+		if desc != "" {
+			p.Description = pgtype.Text{String: desc, Valid: true}
+		}
+		if minor {
+			p.Priority, p.MinorInvolvedAt = string(PriorityMinorInvolved), ts(now)
+		}
+		rid, err := q.CreateReport(ctx, p)
+		if errors.Is(err, pgx.ErrNoRows) {
+			v, _, err = mine(ctx, q, user, TargetUser, target)
+			return err
+		}
+		if err != nil {
+			return fmt.Errorf("şikâyet: %w", err)
+		}
+		created = true
+		if v, _, err = mine(ctx, q, user, TargetUser, target); err != nil {
+			return err
+		}
+		// IDs and classification only: never the description or the
+		// reporter (no actor).
+		rep := id.ID(rid.Bytes)
+		ref := txn.Target{Type: subjectType, ID: rep}
+		if err := txn.Event(ctx, q, EventCreated, id.ID{}, id.ID{}, ref, map[string]any{
+			"report_id": rep.String(), "target_type": p.TargetType, "reason": p.Reason, "priority": p.Priority,
+		}); err != nil {
+			return err
+		}
+		return txn.Event(ctx, q, EventEscalated, id.ID{}, id.ID{}, ref, map[string]any{
+			"report_id": rep.String(), "escalation_reason": escalation, "priority": p.Priority,
+		})
+	})
+	if err != nil {
+		return MyView{}, false, err
+	}
+	return v, created, nil
+}
+
+// profileVisible checks that user can see target's profile, as
+// ProfileService.GetUserProfile decides it: a live user and no block
+// either way. Anything else is apperr.ErrReportTargetNotFound.
+func profileVisible(ctx context.Context, q *store.Queries, user, target id.ID) error {
+	if _, err := q.GetLiveUserProfile(ctx, target.PG()); errors.Is(err, pgx.ErrNoRows) {
+		return apperr.ErrReportTargetNotFound
+	} else if err != nil {
+		return fmt.Errorf("profil: %w", err)
+	}
+	blocked, err := q.IsBlockedEitherWay(ctx, store.IsBlockedEitherWayParams{A: user.PG(), B: target.PG()})
+	if err != nil {
+		return fmt.Errorf("engel: %w", err)
+	}
+	if blocked {
+		return apperr.ErrReportTargetNotFound
+	}
+	return nil
 }
