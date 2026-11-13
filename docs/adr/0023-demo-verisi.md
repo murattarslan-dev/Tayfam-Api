@@ -1,8 +1,8 @@
 # ADR-0023: Prod'da kalıcı demo tayfaları ve sahte hesaplar
 
-- **Durum:** Önerildi
+- **Durum:** Kabul edildi (platform sahibi, 2026-11-13)
 - **Tarih:** 2026-11-13
-- **Karar veren:** Murat Tarslan (kararlar sohbette verildi, 2026-11-13;
+- **Karar veren:** Murat Arslan (kararlar sohbette verildi, 2026-11-13;
   issue #179)
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md),
   [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md),
