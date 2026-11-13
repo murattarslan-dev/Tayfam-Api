@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -116,13 +117,17 @@ func runDemoSeed(args []string, stdout, stderr io.Writer) error {
 	}
 	log.InfoContext(ctx, "demo verisi hazır", slog.Int("tayfas", len(rep.Tayfas)))
 
-	fmt.Fprintf(stdout, "Demo hesapları: %d yeni, %d zaten vardı\n", rep.UsersCreated, rep.UsersExisting)
+	var out strings.Builder
+	fmt.Fprintf(&out, "Demo hesapları: %d yeni, %d zaten vardı\n", rep.UsersCreated, rep.UsersExisting)
 	for _, t := range rep.Tayfas {
 		note := ""
 		if t.ReadOnly {
 			note = " (salt okunur, atlandı)"
 		}
-		fmt.Fprintf(stdout, "%s  %s  rolünüz: %s%s\n", t.ID, t.Name, t.OwnerRole, note)
+		fmt.Fprintf(&out, "%s  %s  rolünüz: %s%s\n", t.ID, t.Name, t.OwnerRole, note)
+	}
+	if _, err := io.WriteString(stdout, out.String()); err != nil {
+		return fmt.Errorf("çıktı: %w", err)
 	}
 	return nil
 }
