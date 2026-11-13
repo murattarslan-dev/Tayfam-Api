@@ -157,6 +157,29 @@ func TestAuthIdentityIsUniquePerProvider(t *testing.T) {
 	}
 }
 
+// Demo hesaplarının giriş kimliği (issue #179, ADR-0023) yalnızca demo-NN
+// biçiminde ve kendi işaret e-postasıyla yazılabilir.
+func TestDemoIdentityIsMarked(t *testing.T) {
+	_, q := setup(t)
+	ctx := context.Background()
+	u := newUser(t, q)
+	ok := CreateAuthIdentityParams{ID: id.New().PG(), UserID: u.PG(), Provider: "demo", Subject: "demo-07", Email: text("demo-07@demo.tayfam.app")}
+	if err := q.CreateAuthIdentity(ctx, ok); err != nil {
+		t.Fatalf("demo kimliği reddedildi: %v", err)
+	}
+	for _, bad := range []CreateAuthIdentityParams{
+		{Provider: "demo", Subject: "demo-08", Email: text("biri@example.com")},
+		{Provider: "demo", Subject: "demo-08", Email: pgtype.Text{}},
+		{Provider: "demo", Subject: "1234567890", Email: text("1234567890@demo.tayfam.app")},
+		{Provider: "demo", Subject: "demo-09", Email: text("demo-08@demo.tayfam.app")},
+	} {
+		bad.ID, bad.UserID = id.New().PG(), u.PG()
+		if err := q.CreateAuthIdentity(ctx, bad); constraintOf(err) != "auth_identities_demo" {
+			t.Errorf("işaretsiz demo kimliği kabul edildi (%s, %v): %v", bad.Subject, bad.Email, err)
+		}
+	}
+}
+
 // session creates a device, a session and one refresh token.
 func session(t *testing.T, q *Queries, user id.ID) (sessionID id.ID, hash []byte) {
 	t.Helper()
