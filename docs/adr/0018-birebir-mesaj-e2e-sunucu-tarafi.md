@@ -170,6 +170,15 @@ türü baytı) ve yetkiyi denetler, saklar ve iletir.
   `ERROR_REASON_E2E_HISTORY_KEY_STALE` ile reddedilir; yeni istek açılır.
 - Başka kullanıcının, süresi geçmiş, cevaplanmış (cevaplarken) ya da
   bilinmeyen istek `ERROR_REASON_E2E_LINK_REQUEST_NOT_FOUND`'dır.
+- **İstemci notu (2026-11-11, Tayfam-App ADR-0020; sunucuyu değiştirmez):**
+  istemci "bu iş için üretilmiş açık anahtar" yerine QR'da yeni cihazın
+  **Signal kimlik açık anahtarını** taşır. Eşleştirme cevabı ve geçmiş
+  anahtarı paylaşımları (§6), kullanıcının kendi cihazları arasındaki
+  **Signal oturumuyla** şifrelenir; yeni bir kripto yapı taşı eklenmez ve
+  aktarım PQXDH ile korunur. Eski cihaz QR'daki kimlik anahtarını sunucunun
+  cihaz listesindekiyle birebir karşılaştırır; tutmazsa cevap vermez.
+  Sunucu açısından cevap yine opak ve 16 KiB sınırında olduğu için sözleşme
+  ve davranış aynıdır.
 
 ### 6. Geçmiş anahtarının yenilenmesi
 
