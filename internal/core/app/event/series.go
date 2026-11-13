@@ -374,7 +374,7 @@ func (s *Service) EndSeries(ctx context.Context, user, tayfa, series id.ID) (Ser
 		cancelled = len(ids)
 		for _, e := range ids {
 			eid := id.ID(e.Bytes)
-			b.add(EventCancelled, eid, map[string]any{"event_id": eid.String(), "series_id": series.String()})
+			b.add(EventCancelled, eid, map[string]any{"event_id": eid.String(), "series_id": series.String(), "cancelled_at": c.now.UTC()})
 		}
 		return txn.Audit(ctx, q, tayfa, user, SeriesEnded, txn.Target{Type: "event_series", ID: series}, map[string]any{"cancelled": cancelled})
 	})

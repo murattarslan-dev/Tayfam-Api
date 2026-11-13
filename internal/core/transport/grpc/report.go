@@ -45,9 +45,10 @@ func (s *ReportServer) CreateReport(ctx context.Context, req *corev1.CreateRepor
 	if !ok {
 		return nil, validation("target_type")
 	}
-	// A direct message report is not about a tayfa (issue #95).
+	// A direct message report is not about a tayfa (issue #95), nor is a
+	// report about a user from their profile (issue #187).
 	var t id.ID
-	if tt != report.TargetDMMessage || req.GetTayfaId() != "" {
+	if (tt != report.TargetDMMessage && tt != report.TargetUser) || req.GetTayfaId() != "" {
 		if t, err = tayfaID(req.GetTayfaId()); err != nil {
 			return nil, err
 		}

@@ -43,7 +43,7 @@ adları içeriktir ve yer alır.
 
 | Dosya | Alanlar |
 |-------|---------|
-| `identity/profile.json` | `user_id`, `display_name`, `avatar_upload_id`, `locale`, `birth_date` (YYYY-AA-GG), `birth_date_visibility`, `birth_date_audience`, `activity_visibility`, `ref_code`, `referred_by_user_id`, `referred_at`, `registered_at`, `created_at` (tek kayıtlık dizi) |
+| `identity/profile.json` | `user_id`, `display_name`, `avatar_upload_id`, `locale`, `birth_date` (YYYY-AA-GG), `birth_date_visibility`, `birth_date_audience`, `activity_visibility`, `ref_code`, `referred_by_user_id`, `referred_at`, `registered_at`, `created_at`; profil tamamlama formu (issue #186): `interests`, `about`, `occupation`, `team`, `languages`, `social_accounts` (`platform`, `username`), `declined_profile_fields`, `about_visibility`, `profile_prompt_snoozed_until` (tek kayıtlık dizi) |
 | `identity/sign_in_identities.json` | `provider`, `email`, `created_at`, `last_used_at` |
 | `identity/devices.json` | `device_id`, `platform`, `created_at`, `last_seen_at` |
 | `identity/consents.json` | `document_type`, `document_version`, `accepted_at`, `withdrawn_at` |

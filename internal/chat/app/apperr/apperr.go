@@ -59,6 +59,16 @@ var (
 	// ErrChannelNameTaken: another channel of the tayfa that is not archived
 	// has the same name (Turkish case-insensitive).
 	ErrChannelNameTaken = errors.New("kanal adı kullanılıyor")
+	// Event and selected-member channels (issue #183).
+	// ErrEventChannelExists: the event already has an open channel.
+	ErrEventChannelExists = errors.New("etkinliğin açık kanalı var")
+	// ErrEventNotFound: core does not show the caller the event.
+	ErrEventNotFound = errors.New("etkinlik bulunamadı")
+	// ErrNotTayfaMember: a user to add is not an active member.
+	ErrNotTayfaMember = errors.New("tayfa üyesi değil")
+	// ErrEventEnded: the event's channel would be archived at once, or
+	// already was by the event's end.
+	ErrEventEnded = errors.New("etkinlik bitmiş")
 	// ErrChannelsUnavailable: chat runs without a message key
 	// (CHAT_MESSAGE_KEYS); channels are off until the key is configured.
 	ErrChannelsUnavailable = errors.New("kanal mesajı anahtarı yok")

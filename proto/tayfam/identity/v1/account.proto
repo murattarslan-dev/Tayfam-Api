@@ -4,6 +4,7 @@ package tayfam.identity.v1;
 
 import "google/protobuf/timestamp.proto";
 import "tayfam/identity/v1/auth.proto";
+import "tayfam/identity/v1/profile_fields.proto";
 
 // AccountService holds the caller's own account settings that identity owns:
 // the referral code and who sees the attendance history (data model v14
@@ -30,6 +31,19 @@ service AccountService {
   // SetActivityVisibility changes who sees the caller's attendance history.
   // core gets the new setting with the profile copy (user.profile_updated).
   rpc SetActivityVisibility(SetActivityVisibilityRequest) returns (SetActivityVisibilityResponse);
+  // UpdateAccount changes the given settings of the caller in one step;
+  // fields left unset stay as they are. Every field is checked before any
+  // is written. The display name (issue #184) is 1–40 characters after
+  // spaces are collapsed and trimmed, else ERROR_REASON_INVALID_DISPLAY_NAME;
+  // it may change at most 3 times in 24 hours (ERROR_REASON_RATE_LIMITED).
+  // Setting a field to its current value changes nothing and is not
+  // counted. A new name or activity visibility reaches core and chat with
+  // user.profile_updated. Returns the account as GetAccount does.
+  rpc UpdateAccount(UpdateAccountRequest) returns (UpdateAccountResponse);
+  // SnoozeProfilePrompt is "Daha sonra doldur" of the profile completion
+  // form (issue #186): profile_completion_pending stays false for 7 days,
+  // unless fields are added to the form meanwhile.
+  rpc SnoozeProfilePrompt(SnoozeProfilePromptRequest) returns (SnoozeProfilePromptResponse);
 
   // SetAvatar makes the caller's READY AVATAR upload (core's MediaService)
   // their avatar. identity does not own media: it asks core with the
@@ -85,6 +99,18 @@ enum ActivityVisibility {
   ACTIVITY_VISIBILITY_PUBLIC = 3;
 }
 
+// BirthdayVisibility is how much of the birth date the user's friends see
+// (issue #185; Notion Proje Planı §4 item 8). Nobody else ever sees it.
+enum BirthdayVisibility {
+  BIRTHDAY_VISIBILITY_UNSPECIFIED = 0;
+  // Nobody.
+  BIRTHDAY_VISIBILITY_HIDDEN = 1;
+  // Day and month only. The default.
+  BIRTHDAY_VISIBILITY_BIRTHDAY = 2;
+  // The date and the age.
+  BIRTHDAY_VISIBILITY_FULL = 3;
+}
+
 message GetAccountRequest {}
 
 message GetAccountResponse {
@@ -97,7 +123,18 @@ message GetAccountResponse {
   string user_id = 4;
   // The caller's display name.
   string display_name = 5;
+  BirthdayVisibility birthday_visibility = 6;
+  // The profile completion form (issue #186).
+  ProfileFields profile = 7;
+  repeated ProfileField declined_profile_fields = 8;
+  AboutVisibility about_visibility = 9;
+  // A field is unanswered and no snooze holds the form back.
+  bool profile_completion_pending = 10;
 }
+
+message SnoozeProfilePromptRequest {}
+
+message SnoozeProfilePromptResponse {}
 
 message SetAvatarRequest {
   string upload_id = 1;
@@ -135,6 +172,24 @@ message SetActivityVisibilityRequest {
 
 message SetActivityVisibilityResponse {
   ActivityVisibility activity_visibility = 1;
+}
+
+message UpdateAccountRequest {
+  // Unset: unchanged.
+  optional string display_name = 1;
+  // UNSPECIFIED: unchanged.
+  ActivityVisibility activity_visibility = 2;
+  // UNSPECIFIED: unchanged. Changes no profile copy: the birth date never
+  // leaves identity but through ProfileService.GetProfileDetails.
+  BirthdayVisibility birthday_visibility = 3;
+  // Unset: unchanged (issue #186). Changes no profile copy.
+  ProfileUpdate profile = 4;
+  // UNSPECIFIED: unchanged.
+  AboutVisibility about_visibility = 5;
+}
+
+message UpdateAccountResponse {
+  GetAccountResponse account = 1;
 }
 
 message ListSessionsRequest {}

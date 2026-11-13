@@ -2285,6 +2285,20 @@ paths:
         okundu işareti sürer. Arşivlenmiş kanallar sondadır. `unread_count`
         başkalarının silinmemiş mesajlarından okunmamış olanlardır; en
         fazla 100 döner, istemci "99+" gösterir.
+
+        **Kanal kitlesi (issue #183, ADR-0024):** `event` ve `selected`
+        kanallarını yalnızca kitlesindekiler görür; yönetici ve moderatörler
+        rolleriyle bu kanallara girmez, kitlesinde değillerse görmezler
+        (`channel-not-found`).
+        - `event`: kanalı açan, etkinliğin organizatörü ve etkinliğe
+          `going` diyenler. Cevabını değiştiren çıkar; bekleme listesi,
+          `maybe` ve `not_going` kanalda değildir. Etkinliğin bitişinden ya
+          da iptal anından 7 gün sonra arşivlenir; `archive_at` bu zamanı
+          baştan söyler ("Kanal N gün sonra kapanacak" bandı).
+        - `selected`: kanalı açan ve seçtiği üyeler.
+        Sonradan giren eski mesajları da görür; çıkan ya da çıkarılan
+        kanalı ve mesajlarını artık göremez, WebSocket aboneliği hemen
+        kesilir; çıkarılana bildirim gitmez.
       responses:
         "200":
           description: Kanallar
@@ -2297,11 +2311,24 @@ paths:
         "503": { $ref: "#/components/responses/Problem" }
     post:
       operationId: createChannel
-      summary: Kanal açar (yönetici ve moderatör)
+      summary: Kanal açar (yönetici ve moderatör; etkinlik kanalını etkinliği yöneten de)
       description: |
         İsim 1–40 karakterdir; arşivlenmemiş kanallar arasında Türkçe büyük/
         küçük harf duyarsız tekildir (`channel-name-taken`). Susturulmuş
         yönetim kanal açamaz (`muted`).
+
+        **Etkinlik kanalı** (`visibility: event`, issue #183): `event_id`
+        zorunludur (başka türde gönderilmez, `invalid-request`). Yönetici,
+        moderatör ya da etkinliği yönetebilen kişi (`caller_can_manage`)
+        açar; diğerleri `permission-denied`. Görmediğiniz etkinlik
+        `event-not-found`. Bir etkinliğin aynı anda tek açık kanalı olur
+        (`event-channel-exists`, 409). Bitişinin ya da iptalinin üzerinden 7
+        gün geçmiş etkinliğe kanal açılmaz (`event-ended`, 409).
+
+        **Seçili üye kanalı** (`visibility: selected`): yönetici ve
+        moderatör açar. `member_user_ids` (en fazla 100) ilk üyelerdir;
+        hepsi tayfanın etkin üyesi olmalıdır (`not-tayfa-member`, 400; hiçbiri
+        eklenmez). Açan kişi her zaman içeridedir.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -2562,6 +2589,87 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/channels/{channel_id}/members:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/ChannelID"
+    get:
+      operationId: listChannelMembers
+      summary: Etkinlik ya da seçili üye kanalının kitlesi
+      description: |
+        Kullanıcı kimliğine göre sıralı (issue #183). Yalnızca kitlesindeki
+        kişi görür. `event` kanalında kanalı açan, organizatör ve `going`
+        diyenler; `selected` kanalında açan ve eklenenler. `members` ve
+        `staff` kanallarında `invalid-request` (tayfanın üye listesi
+        geçerlidir). Adlar `GET /v1/users/{user_id}/profile` ile alınır.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Kitle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChannelMemberList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: addChannelMembers
+      summary: Seçili üye kanalına üye ekler (yalnızca kanalı açan)
+      description: |
+        Yalnızca `selected` kanalında ve yalnızca kanalı açan kişi
+        (`permission-denied`); yönetim de değiştiremez. 1–100 kullanıcı;
+        hepsi tayfanın etkin üyesi olmalıdır (`not-tayfa-member`, hiçbiri
+        eklenmez). Zaten içeride olan bir şey değiştirmez. Etkinlik
+        kanalının kitlesi yalnızca katılım cevabından gelir
+        (`invalid-request`). Arşivli kanal `channel-archived`; susturulmuş
+        kişi `muted`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChannelMembersAddRequest" }
+      responses:
+        "200":
+          description: Güncel kanal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Channel" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/channels/{channel_id}/members/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/ChannelID"
+      - $ref: "#/components/parameters/UserID"
+    delete:
+      operationId: removeChannelMember
+      summary: Seçili üye kanalından üye çıkarır (yalnızca kanalı açan)
+      description: |
+        Çıkarılan kişi kanalı ve mesajlarını artık göremez, WebSocket
+        aboneliği hemen kesilir; kendisine bildirim gitmez. Kanalı açan
+        kendini çıkaramaz (`invalid-request`). İçeride olmayan kişiyi
+        çıkarmak bir şey değiştirmez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Çıkarıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
   /v1/direct-messages:
@@ -3566,11 +3674,40 @@ paths:
         "503": { $ref: "#/components/responses/Problem" }
     patch:
       operationId: updateAccount
-      summary: Katılım geçmişinin kime görüneceğini değiştirir
+      summary: Görünen adı ve hesap ayarlarını değiştirir
       description: |
-        `private`: yalnızca siz. `tayfa` (varsayılan): arkadaşlar tümünü,
-        ortak tayfa üyeleri son 14 gün hariç. `public`: arkadaşlar tümünü,
-        diğer herkes son 14 gün hariç.
+        Gövdedeki alanlar değişir, olmayanlar olduğu gibi kalır; en az bir
+        alan gerekir (yoksa `invalid-request`). Alanların hepsi önce
+        doğrulanır: biri geçersizse hiçbiri yazılmaz. Bir alanı şu anki
+        değerine ayarlamak hiçbir şey değiştirmez.
+
+        **Görünen ad** (issue #184): kayıttaki kuralla aynı; boşluklar
+        tekleştirilip kırpıldıktan sonra 1–40 karakter, kontrol karakteri
+        yok (`invalid-display-name`). 24 saatte en fazla 3 kez değişir
+        (`rate-limited`); aynı adı yeniden göndermek sayılmaz. Yeni ad
+        profil, arkadaş ve üye listeleri ile sohbete birkaç saniye içinde
+        yansır. Eski ad saklanmaz.
+
+        **Katılım geçmişi görünürlüğü:** `private`: yalnızca siz. `tayfa`
+        (varsayılan): arkadaşlar tümünü, ortak tayfa üyeleri son 14 gün
+        hariç. `public`: arkadaşlar tümünü, diğer herkes son 14 gün hariç.
+
+        **Doğum günü görünürlüğü** (`birthday_visibility`, issue #185):
+        yalnızca arkadaşlarınıza ne kadarının görüneceği; doğum tarihinin
+        kendisi değişmez.
+
+        **Profil tamamlama formu** (issue #186): `interests`, `about`,
+        `occupation`, `team`, `languages`, `social_accounts` isteğe bağlıdır;
+        gönderilen alan değişir, boş değer (`""`, `[]`) alanı temizler.
+        Metinlerdeki boşluklar tekleştirilip kırpılır, sosyal medya
+        kullanıcı adındaki `@` atılır; kural dışı değer `invalid-request`
+        (400) alır ve hiçbir alan yazılmaz. `declined_profile_fields`
+        gönderilirse "Paylaşmak istemiyorum" denen alanların tamamını
+        değiştirir; reddedilen alanın değeri silinir, alan cevaplanmış
+        sayılır. Aynı istekte hem değer verip hem reddetmek
+        `invalid-request`'tir; daha önce reddedilmiş alana değer vermek onu
+        listeden çıkarır. `about_visibility` bu alanları kimin göreceğidir.
+        Bu alanlar başka servislere ve bildirimlere gitmez.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -3585,6 +3722,23 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Account" }
         "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/profile-prompt/snooze:
+    post:
+      operationId: snoozeProfilePrompt
+      summary: Profil tamamlama formunu 7 gün erteler ("Daha sonra doldur")
+      description: |
+        `Account.profile_completion_pending` 7 gün `false` döner (issue
+        #186). Erteleme sunucuda tutulur, cihazlar arası tutarlıdır. Bu
+        sürede forma yeni bir alan eklenirse erteleme geçersiz olur ve form
+        yeniden istenir. Tekrar çağırmak süreyi şimdiden başlatır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Ertelendi }
         "401": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
@@ -3912,6 +4066,21 @@ paths:
         Ortak tayfalar yalnızca ikinizin de etkin üyesi olduğu tayfalardır.
         Engel varsa (iki yönden biri) ya da hesap silinmişse `user-not-found`,
         var olmayan kullanıcıyla aynı cevap.
+
+        **Tanıtım alanları** (`interests`, `about`, `occupation`, `team`,
+        `languages`, `social_accounts`; issue #186) kişinin
+        `about_visibility` ayarına göre döner: `friends_and_mutual`
+        arkadaşlara ve ortak tayfa üyelerine, `friends` yalnızca
+        arkadaşlara, `none` kimseye. `social_accounts` ayar ne olursa olsun
+        yalnızca arkadaşlara döner. Boş ya da reddedilmiş alan yoktur;
+        hangisinin reddedildiği gösterilmez. Kendi profilinizde hepsini
+        görürsünüz.
+
+        **Doğum günü** (`birthday`, issue #185) yalnızca arkadaşlara ve
+        kişinin ayarına göre döner (`Account.birthday_visibility`): `birthday`
+        gün ve ay, `full` ayrıca yıl ve yaş, `hidden` hiçbir şey. Kendi
+        profilinizde her zaman tam tarihi ve yaşı görürsünüz. Alan o an
+        alınamazsa profil onsuz döner.
       responses:
         "200":
           description: Profil
@@ -3969,7 +4138,12 @@ paths:
 
         Şikâyet edenin kimliği şikâyet edilen kişiye hiçbir zaman gösterilmez;
         tayfanın moderatörlerine ve yöneticilerine de gösterilmez. Tayfanın
-        kendisi ve `staff_conduct` şikâyetleri yalnızca platforma gider.
+        kendisi, bir kullanıcının kendisi (`target_type: user`, issue #187)
+        ve `staff_conduct` şikâyetleri yalnızca platforma gider; tayfanın
+        moderasyon kuyruğunda görünmez. Kişi profilinden kullanıcı şikâyeti
+        için `POST /v1/me/reports` kullanılır (ortak tayfa gerekmez); bu uç
+        geriye uyum için kullanıcı şikâyetini kabul etmeye devam eder ve
+        ikisi aynı şikâyettir.
         Birebir mesaj (`dm_message`) şikâyeti bir tayfaya ait olmadığı için
         bu uçta değil, `POST /v1/me/reports` ile yapılır (burada
         `invalid-request`). Kanal mesajları henüz şikâyet edilemez.
@@ -4370,10 +4544,25 @@ paths:
         "503": { $ref: "#/components/responses/Problem" }
     post:
       operationId: createDirectMessageReport
-      summary: Bir birebir mesajı şikâyet eder (yalnızca platforma gider)
+      summary: Birebir mesajı ya da kişi profilinden kullanıcıyı şikâyet eder (yalnızca platforma gider)
       description: |
-        Tayfaya ait olmayan şikâyetler için; şimdilik yalnızca
-        `target_type: dm_message`. `target_id` mesajın kimliğidir. Mesajın
+        Tayfaya ait olmayan şikâyetler için: `target_type: dm_message` ve
+        `target_type: user`.
+
+        **Kullanıcı** (`user`, issue #187): kişi profilindeki "Şikâyet et".
+        `target_id` kullanıcının kimliğidir. Ortak tayfa gerekmez; hedef,
+        profilini görebildiğiniz bir kullanıcı olmalıdır. Kendiniz
+        `invalid-request`; engellediğiniz, sizi engelleyen, silinmiş ya da
+        bilinmeyen kullanıcı `report-target-not-found` (nedeni söylenmez).
+        Gerekçe kapalı listeden seçilir, `staff_conduct` geçerli değildir;
+        `description` isteğe bağlıdır, `evidence_text` gönderilmez
+        (`invalid-request`). Şikâyet hiçbir tayfanın moderasyon kuyruğuna
+        düşmez, oluşturulduğu anda platforma gider; şikâyet edenin kimliği
+        şikâyet edilene hiçbir zaman gösterilmez. Aynı kullanıcıyı ikinci kez
+        (bir tayfa ucundan yapılmış olsa da) şikâyet etmek ilk şikâyetinizi
+        `200` ile döndürür; günlük sınır aşağıdakiyle ortaktır.
+
+        **Birebir mesaj** (`dm_message`): `target_id` mesajın kimliğidir. Mesajın
         konuşmasının tarafı olmalısınız (reddettiğiniz istek dahil; silinmiş
         mesaj da olur); kendi mesajınız, bilinmeyen mesaj ve göndereni
         hesabını silmiş mesaj `report-target-not-found`.
@@ -4827,6 +5016,10 @@ components:
         - message-not-found
         - channel-archived
         - channel-name-taken
+        # Etkinlik ve seçili üye kanalları (issue #183)
+        - event-channel-exists
+        - not-tayfa-member
+        - event-ended
         - slow-mode
         # chat: gerçek zamanlı bağlantı (#82)
         - forbidden-origin
@@ -6241,8 +6434,13 @@ components:
     # --- Kanallar (#81) ---
     ChannelVisibility:
       type: string
-      description: "`members`: tüm etkin üyeler; `staff`: yalnızca yönetici ve moderatörler."
-      enum: [members, staff, unknown]
+      description: |
+        `members`: tüm etkin üyeler; `staff`: yalnızca yönetici ve
+        moderatörler; `event`: kanalı açan, etkinliğin organizatörü ve
+        etkinliğe gelenler; `selected`: kanalı açan ve seçtikleri (issue
+        #183). `event` ve `selected` sonradan başka türe, başka tür de
+        bunlara çevrilemez.
+      enum: [members, staff, event, selected, unknown]
     Channel:
       type: object
       required: [id, tayfa_id, name, visibility, slow_mode_seconds, created_at, updated_at]
@@ -6275,6 +6473,21 @@ components:
           type: string
           format: uuid
           description: Yalnızca listede; okundu işaretiniz yoksa yoktur.
+        event_id:
+          type: string
+          format: uuid
+          description: Yalnızca `event` kanalında.
+        member_count:
+          type: integer
+          minimum: 0
+          description: Yalnızca `event` ve `selected` kanalında; kitlenin büyüklüğü.
+        archive_at:
+          type: string
+          format: date-time
+          description: |
+            Yalnızca `event` kanalında: planlanan arşiv zamanı (etkinliğin
+            bitişi ya da iptal anı + 7 gün). İstemci kalan süreyi bundan
+            hesaplar. Bu zaman gelince `archived_at` dolar.
     ChannelList:
       type: object
       required: [channels]
@@ -6290,16 +6503,46 @@ components:
         name: { type: string, minLength: 1, maxLength: 40 }
         visibility:
           type: string
-          enum: [members, staff]
+          enum: [members, staff, event, selected]
           default: members
         slow_mode_seconds: { type: integer, minimum: 0, maximum: 3600, default: 0 }
+        event_id:
+          type: string
+          format: uuid
+          description: Yalnızca ve zorunlu olarak `event` kanalında.
+        member_user_ids:
+          type: array
+          description: Yalnızca `selected` kanalında; açan dışındaki ilk üyeler.
+          maxItems: 100
+          items: { type: string, format: uuid }
+    ChannelMemberList:
+      type: object
+      required: [user_ids]
+      properties:
+        user_ids:
+          type: array
+          items: { type: string, format: uuid }
+        next_page_token: { type: string }
+    ChannelMembersAddRequest:
+      type: object
+      required: [user_ids]
+      additionalProperties: false
+      properties:
+        user_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { type: string, format: uuid }
     ChannelUpdateRequest:
       type: object
       minProperties: 1
       additionalProperties: false
       properties:
         name: { type: string, minLength: 1, maxLength: 40 }
-        visibility: { type: string, enum: [members, staff] }
+        visibility:
+          type: string
+          enum: [members, staff]
+          description: "`event` ve `selected` kanalının türü değişmez (`invalid-request`)."
         slow_mode_seconds: { type: integer, minimum: 0, maximum: 3600 }
     ChannelMessage:
       type: object
@@ -6999,9 +7242,52 @@ components:
       type: string
       description: Katılım geçmişinin kime görüneceği.
       enum: [private, tayfa, public]
+    AboutVisibility:
+      type: string
+      description: |
+        Profil tamamlama formundaki alanları kimin göreceği (issue #186).
+        `friends_and_mutual` (varsayılan): arkadaşlar ve ortak tayfa
+        üyeleri. `friends`: yalnızca arkadaşlar. `none`: kimse. Sosyal
+        medya hesapları her durumda en fazla arkadaşlara görünür.
+      enum: [friends_and_mutual, friends, none]
+    ProfileField:
+      type: string
+      description: Profil tamamlama formunun bir alanı.
+      enum: [interests, about, occupation, team, languages, social_accounts]
+    SocialAccount:
+      type: object
+      description: |
+        Yalnızca kullanıcı adı; bağlantıyı istemci platformun bilinen
+        adresinden kurar. URL kabul edilmez. Kurallar: `instagram`
+        `^[A-Za-z0-9._]{1,30}$`, `x` `^[A-Za-z0-9_]{1,15}$`, `tiktok`
+        `^[A-Za-z0-9._]{2,24}$`, `youtube` `^[A-Za-z0-9._-]{3,30}$` (baştaki
+        `@` atılır). Platform başına bir hesap.
+      required: [platform, username]
+      additionalProperties: false
+      properties:
+        platform: { type: string, enum: [instagram, x, tiktok, youtube] }
+        username: { type: string, maxLength: 31 }
+    BirthdayVisibility:
+      type: string
+      description: |
+        Doğum gününüzün arkadaşlarınıza ne kadarının görüneceği (issue #185).
+        Arkadaşınız olmayan hiç kimse görmez. `hidden`: kimse. `birthday`
+        (varsayılan): gün ve ay. `full`: tarih ve yaş.
+      enum: [hidden, birthday, full]
     Account:
       type: object
-      required: [user_id, display_name, referral_code, activity_visibility]
+      required:
+        - user_id
+        - display_name
+        - referral_code
+        - activity_visibility
+        - birthday_visibility
+        - interests
+        - languages
+        - social_accounts
+        - declined_profile_fields
+        - about_visibility
+        - profile_completion_pending
       properties:
         user_id: { type: string, format: uuid, description: Kendi kullanıcı kimliğiniz. }
         display_name: { type: string, description: Kendi görünen adınız. }
@@ -7010,12 +7296,78 @@ components:
           type: string
           description: Örn. `TYF-8K2M4Q`; paylaşım linki `tayfam.app/r/<kod>`.
         activity_visibility: { $ref: "#/components/schemas/ActivityVisibility" }
+        birthday_visibility: { $ref: "#/components/schemas/BirthdayVisibility" }
+        interests:
+          type: array
+          items: { $ref: "#/components/schemas/EventType" }
+        about: { type: string, description: Boşsa alan yoktur. }
+        occupation: { type: string, description: Boşsa alan yoktur. }
+        team: { type: string, description: Boşsa alan yoktur. }
+        languages:
+          type: array
+          items: { type: string }
+        social_accounts:
+          type: array
+          items: { $ref: "#/components/schemas/SocialAccount" }
+        declined_profile_fields:
+          type: array
+          description: '"Paylaşmak istemiyorum" denen alanlar; cevaplanmış sayılır.'
+          items: { $ref: "#/components/schemas/ProfileField" }
+        about_visibility: { $ref: "#/components/schemas/AboutVisibility" }
+        profile_completion_pending:
+          type: boolean
+          description: |
+            Profil tamamlama formu gösterilmeli: cevaplanmamış (boş ve
+            reddedilmemiş) bir alan var ve geçerli bir erteleme yok.
     AccountUpdate:
       type: object
-      required: [activity_visibility]
+      description: En az bir alan bulunur; olmayan alan değişmez.
+      minProperties: 1
       additionalProperties: false
       properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: |
+            Yeni görünen ad; boşluklar tekleştirilip kırpıldıktan sonra 1–40
+            karakter. 24 saatte en fazla 3 değişiklik.
         activity_visibility: { $ref: "#/components/schemas/ActivityVisibility" }
+        birthday_visibility: { $ref: "#/components/schemas/BirthdayVisibility" }
+        interests:
+          type: array
+          description: Etkinlik türlerinden tekrarsız çoklu seçim.
+          maxItems: 7
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/EventType" }
+        about:
+          type: string
+          maxLength: 160
+          description: Hakkımda; kırpıldıktan sonra en fazla 160 karakter, satır sonu olabilir. `""` temizler.
+        occupation:
+          type: string
+          maxLength: 60
+          description: Meslek / uğraş; tek satır, en fazla 60 karakter. `""` temizler.
+        team:
+          type: string
+          maxLength: 60
+          description: Tutulan takım; tek satır, en fazla 60 karakter. `""` temizler.
+        languages:
+          type: array
+          description: ISO 639-1 kodları (`tr`, `en`), en fazla 5, tekrarsız.
+          maxItems: 5
+          items: { type: string, pattern: "^[a-z]{2}$" }
+        social_accounts:
+          type: array
+          description: Tamamı değişir; platform başına bir hesap.
+          maxItems: 4
+          items: { $ref: "#/components/schemas/SocialAccount" }
+        declined_profile_fields:
+          type: array
+          description: Gönderilirse "Paylaşmak istemiyorum" listesinin tamamı olur.
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/ProfileField" }
+        about_visibility: { $ref: "#/components/schemas/AboutVisibility" }
     ReferralCode:
       type: object
       required: [referral_code]
@@ -7131,6 +7483,35 @@ components:
           description: Katılım geçmişinden size bir şey gösterilip gösterilemeyeceği.
         activity_visibility:
           $ref: "#/components/schemas/ActivityVisibility"
+        birthday:
+          $ref: "#/components/schemas/Birthday"
+        interests:
+          type: array
+          items: { $ref: "#/components/schemas/EventType" }
+        about: { type: string }
+        occupation: { type: string }
+        team: { type: string }
+        languages:
+          type: array
+          items: { type: string, pattern: "^[a-z]{2}$" }
+        social_accounts:
+          type: array
+          description: Yalnızca arkadaşlara (ve kendinize) döner.
+          items: { $ref: "#/components/schemas/SocialAccount" }
+    Birthday:
+      type: object
+      description: |
+        Doğum gününün gösterilen kısmı. Yalnızca arkadaşlara ve ayar izin
+        verdiğinde (kendi profilinizde her zaman) döner; yoksa alan da
+        yoktur.
+      required: [month, day]
+      properties:
+        month: { type: integer, minimum: 1, maximum: 12 }
+        day: { type: integer, minimum: 1, maximum: 31 }
+        year: { type: integer, description: "Yalnızca `full` ayarında ve kendi profilinizde." }
+        age:
+          type: integer
+          description: "Bugünkü yaş (Türkiye saatiyle); `year` ile birlikte."
     ActivityRecord:
       type: object
       required: [event_type, mode, started_at, tayfa_member]
@@ -7204,7 +7585,8 @@ components:
           minLength: 1
           maxLength: 2000
           description: |
-            Yalnızca ve zorunlu olarak `dm_message` için: şikâyet ettiğiniz
+            Yalnızca ve zorunlu olarak `dm_message` için (kullanıcı şikâyetinde
+            yoktur): şikâyet ettiğiniz
             mesajın kendi cihazınızdan paylaştığınız metni. Yalnızca platform
             okur; log'a ve olaylara yazılmaz, size geri dönmez.
 
@@ -7219,7 +7601,7 @@ components:
         tayfa_id:
           type: string
           format: uuid
-          description: Birebir mesaj şikâyetinde yoktur.
+          description: Birebir mesaj şikâyetinde ve kişi profilinden yapılan kullanıcı şikâyetinde yoktur.
         target_type: { $ref: "#/components/schemas/ReportTargetType" }
         target_id: { type: string, format: uuid }
         reason: { $ref: "#/components/schemas/ReportReason" }

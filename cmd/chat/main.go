@@ -165,8 +165,12 @@ func setup(rt *service.Runtime) error {
 	// (dakikada 30, kısa patlama 10). Tek replika: bellek içi yeter
 	// (ADR-0005). Yavaş mod ve DM istek sınırı ayrıca geçerlidir.
 	sendLimit := ratelimit.New(30, 10)
+	// Etkinlik ve seçili üye kanalları (issue #183, ADR-0024): kitle her
+	// istekte core'a kullanıcının kendi token'ıyla sorulur; katılımın
+	// kopyası tutulmaz.
 	channels, err := channel.New(channel.Config{
 		Pool: pool, Log: rt.Log, Access: channelAccess, SendLimit: sendLimit, Cipher: cipher, Publisher: live,
+		Audience: coremembers.NewAudience(corev1.NewChannelAccessServiceClient(coreConn)),
 	})
 	if err != nil {
 		return err

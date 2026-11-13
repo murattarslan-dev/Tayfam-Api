@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package tayfam.identity.v1;
+
+import "tayfam/identity/v1/profile_fields.proto";
+
+// ProfileService shows the profile details identity owns to another user:
+// the birthday (issue #185) and the profile completion fields (issue #186). The rest of the profile (name, avatar,
+// friendship, mutual tayfas, attendance history) is core's ProfileService.
+//
+// Every method needs a full access token; the viewer is always the verified
+// token subject. Who may see what depends on the relationship between the
+// two, and identity does not take it from the request: it asks core's
+// ProfileService.GetUserProfile with the caller's own token. An unknown,
+// deleted or unregistered user, and a block between the two in either
+// direction, are the same ERROR_REASON_USER_NOT_FOUND. Values are never
+// logged and not cached.
+service ProfileService {
+  // GetProfileDetails returns what the caller may see of user_id's details.
+  // Fields the caller may not see are absent.
+  rpc GetProfileDetails(GetProfileDetailsRequest) returns (GetProfileDetailsResponse);
+}
+
+message GetProfileDetailsRequest {
+  string user_id = 1;
+}
+
+// Birthday is the part of the birth date the user shows (Notion Proje Planı
+// §4 item 8). Only friends see it, as much as the user chose; the user
+// always sees their own full date (ADR-0012).
+message Birthday {
+  // 1–12.
+  int32 month = 1;
+  // 1–31.
+  int32 day = 2;
+  // Filled only for BIRTHDAY_VISIBILITY_FULL and on one's own profile.
+  int32 year = 3;
+  // Age today in Europe/Istanbul; filled only when year is.
+  int32 age = 4;
+}
+
+message GetProfileDetailsResponse {
+  // Absent unless the caller may see it.
+  Birthday birthday = 1;
+  // By the user's AboutVisibility: friends see all of it, members of a
+  // shared tayfa all but social_accounts (FRIENDS_AND_MUTUAL only), the
+  // user all of their own. Absent when nothing is shown. Which fields were
+  // declined is never told.
+  ProfileFields about = 2;
+}

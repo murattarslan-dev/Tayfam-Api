@@ -32,6 +32,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -87,6 +89,10 @@ type Config struct {
 	Pool   *pgxpool.Pool
 	Log    *slog.Logger
 	Access Access
+	// Audience answers about event channels and tayfa members (issue
+	// #183). nil makes event and selected channels apperr.ErrUnavailable
+	// (a local run without core).
+	Audience Audience
 	// SendLimit is the per-user message rate, shared with direct messages
 	// and every transport (issue #101); required.
 	SendLimit SendLimit
@@ -170,6 +176,13 @@ type Channel struct {
 	Unread int32
 	// LastRead is the caller's read marker; zero if none. Only in List.
 	LastRead id.ID
+	// Event channels only (issue #183).
+	EventID id.ID
+	// PlannedArchiveAt is when an event channel is archived; zero if not
+	// known.
+	PlannedArchiveAt time.Time
+	// MemberCount is the audience of an event or selected channel.
+	MemberCount int32
 }
 
 // ChannelInput is a new channel.
@@ -177,6 +190,11 @@ type ChannelInput struct {
 	Name            string
 	Visibility      string // empty: members
 	SlowModeSeconds int32
+	// Event is the event of an event channel; required there, only there.
+	Event id.ID
+	// Members are the first members of a selected channel besides the
+	// opener; only there.
+	Members []id.ID
 }
 
 // ChannelUpdate changes the fields that are not nil.
@@ -228,21 +246,48 @@ func (s *Service) access(ctx context.Context, caller, tayfa id.ID) (Decision, er
 	if err != nil {
 		return Decision{}, fmt.Errorf("kanal izni: %w", err)
 	}
+	d.caller = caller
 	return d, nil
 }
 
 // chanRow is a channel row; every channel query returns these columns.
 type chanRow = store.GetChannelRow
 
-// visible returns nil if the caller may see the channel.
-func visible(d Decision, row chanRow) error {
-	if row.Visibility == VisibilityStaff && !d.Allowed(ActionViewStaff) {
-		return apperr.ErrChannelNotFound
+// visible returns nil if the caller may see the channel: staff channels
+// need the role; event and selected channels need the caller in their
+// audience, whatever the role (issue #183). An event channel's answer from
+// core is returned, nil otherwise.
+func (s *Service) visible(ctx context.Context, q *store.Queries, d Decision, row chanRow) (*EventAccess, error) {
+	switch row.Visibility {
+	case VisibilityMembers:
+		return nil, nil
+	case VisibilityStaff:
+		if !d.Allowed(ActionViewStaff) {
+			return nil, apperr.ErrChannelNotFound
+		}
+		return nil, nil
+	case VisibilityEvent, VisibilitySelected:
+		in, a, err := s.inAudience(ctx, q, d.caller, row)
+		if err != nil {
+			return nil, err
+		}
+		if !in {
+			return nil, apperr.ErrChannelNotFound
+		}
+		return a, nil
 	}
-	return nil
+	// A value this version does not know: default "no".
+	return nil, apperr.ErrChannelNotFound
 }
 
 func (s *Service) loadChannel(ctx context.Context, q *store.Queries, m Decision, tayfa, channel id.ID, forUpdate bool) (chanRow, error) {
+	row, _, err := s.loadChannelAudience(ctx, q, m, tayfa, channel, forUpdate)
+	return row, err
+}
+
+// loadChannelAudience is loadChannel that also returns core's answer for
+// an event channel.
+func (s *Service) loadChannelAudience(ctx context.Context, q *store.Queries, m Decision, tayfa, channel id.ID, forUpdate bool) (chanRow, *EventAccess, error) {
 	var (
 		row chanRow
 		err error
@@ -256,14 +301,15 @@ func (s *Service) loadChannel(ctx context.Context, q *store.Queries, m Decision,
 	}
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return chanRow{}, apperr.ErrChannelNotFound
+		return chanRow{}, nil, apperr.ErrChannelNotFound
 	case err != nil:
-		return chanRow{}, fmt.Errorf("kanal: %w", err)
+		return chanRow{}, nil, fmt.Errorf("kanal: %w", err)
 	}
-	if err := visible(m, row); err != nil {
-		return chanRow{}, err
+	a, err := s.visible(ctx, q, m, row)
+	if err != nil {
+		return chanRow{}, nil, err
 	}
-	return row, nil
+	return row, a, nil
 }
 
 // validName checks a channel name: 1–40 characters, valid UTF-8, no
@@ -298,7 +344,9 @@ func validBody(s string) bool {
 	return true
 }
 
-func channelView(r chanRow) Channel {
+// channelView is a channel as members see it at now: an event channel past
+// its planned archive time shows as archived then.
+func channelView(r chanRow, now time.Time) Channel {
 	c := Channel{
 		ID: id.ID(r.ID.Bytes), TayfaID: id.ID(r.TayfaID.Bytes), Name: r.Name, Visibility: r.Visibility,
 		SlowModeSeconds: r.SlowModeSeconds, CreatedAt: r.CreatedAt.Time.UTC(), UpdatedAt: r.UpdatedAt.Time.UTC(),
@@ -306,14 +354,33 @@ func channelView(r chanRow) Channel {
 	if r.CreatedBy.Valid {
 		c.CreatedBy = id.ID(r.CreatedBy.Bytes)
 	}
-	if r.ArchivedAt.Valid {
+	if r.EventID.Valid {
+		c.EventID = id.ID(r.EventID.Bytes)
+	}
+	if r.ArchiveAt.Valid {
+		c.PlannedArchiveAt = r.ArchiveAt.Time.UTC()
+	}
+	switch {
+	case r.ArchivedAt.Valid:
 		c.ArchivedAt = r.ArchivedAt.Time.UTC()
+	case archivedNow(r, now):
+		c.ArchivedAt = c.PlannedArchiveAt
+	}
+	return c
+}
+
+// withEvent fills what core said about an event channel.
+func withEvent(c Channel, a *EventAccess) Channel {
+	if a != nil {
+		c.MemberCount = a.MemberCount
 	}
 	return c
 }
 
 // List returns the tayfa's channels the caller may see, with the caller's
-// unread counts. Archived channels come last.
+// unread counts. Archived channels come last. Event channels are kept only
+// if core puts the caller in their audience (asked in batches of
+// MaxMembersBatch); selected channels only if the caller was added.
 func (s *Service) List(ctx context.Context, caller, tayfa id.ID) ([]Channel, error) {
 	m, err := s.access(ctx, caller, tayfa)
 	if err != nil {
@@ -322,18 +389,64 @@ func (s *Service) List(ctx context.Context, caller, tayfa id.ID) ([]Channel, err
 	if err := authorize(m, ActionView); err != nil {
 		return nil, err
 	}
-	rows, err := store.New(s.cfg.Pool).ListChannels(ctx, store.ListChannelsParams{
+	q := store.New(s.cfg.Pool)
+	rows, err := q.ListChannels(ctx, store.ListChannelsParams{
 		UserID: caller.PG(), MaxUnread: MaxUnread, TayfaID: tayfa.PG(), IncludeStaff: m.Allowed(ActionViewStaff),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("kanallar: %w", err)
 	}
+	now := s.now()
+	var refs []EventRef
+	var selected []pgtype.UUID
+	for _, r := range rows {
+		switch r.Visibility {
+		case VisibilityEvent:
+			refs = append(refs, refOf(listRow(r)))
+		case VisibilitySelected:
+			selected = append(selected, r.ID)
+		}
+	}
+	events := map[EventRef]EventAccess{}
+	if len(refs) > 0 {
+		if s.cfg.Audience == nil {
+			return nil, apperr.ErrUnavailable
+		}
+		for chunk := range slices.Chunk(refs, MaxMembersBatch) {
+			got, err := s.cfg.Audience.EventChannels(ctx, caller, tayfa, chunk)
+			if err != nil {
+				return nil, fmt.Errorf("etkinlik kanalları: %w", err)
+			}
+			maps.Copy(events, got)
+		}
+	}
+	counts := map[id.ID]int32{}
+	if len(selected) > 0 {
+		cs, err := q.CountChannelMembers(ctx, selected)
+		if err != nil {
+			return nil, fmt.Errorf("kanal üyeleri: %w", err)
+		}
+		for _, c := range cs {
+			counts[id.ID(c.ChannelID.Bytes)] = c.MemberCount
+		}
+	}
 	out := make([]Channel, 0, len(rows))
 	for _, r := range rows {
-		c := channelView(chanRow{
-			ID: r.ID, TayfaID: r.TayfaID, Name: r.Name, Visibility: r.Visibility, SlowModeSeconds: r.SlowModeSeconds,
-			CreatedBy: r.CreatedBy, ArchivedAt: r.ArchivedAt, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
-		})
+		row := listRow(r)
+		c := channelView(row, now)
+		switch r.Visibility {
+		case VisibilityEvent:
+			ref := refOf(row)
+			a, ok := events[ref]
+			if (!ok || !a.Member) && caller != ref.Opener {
+				continue
+			}
+			if ok {
+				c = withEvent(c, &a)
+			}
+		case VisibilitySelected:
+			c.MemberCount = counts[c.ID]
+		}
 		c.Unread = int32(min(r.UnreadCount, MaxUnread)) //nolint:gosec // at most MaxUnread
 		if r.LastReadMessageID.Valid {
 			c.LastRead = id.ID(r.LastReadMessageID.Bytes)
@@ -341,6 +454,14 @@ func (s *Service) List(ctx context.Context, caller, tayfa id.ID) ([]Channel, err
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+func listRow(r store.ListChannelsRow) chanRow {
+	return chanRow{
+		ID: r.ID, TayfaID: r.TayfaID, Name: r.Name, Visibility: r.Visibility, SlowModeSeconds: r.SlowModeSeconds,
+		CreatedBy: r.CreatedBy, ArchivedAt: r.ArchivedAt, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+		EventID: r.EventID, ArchiveAt: r.ArchiveAt,
+	}
 }
 
 // Get returns one channel the caller may see.
@@ -352,20 +473,34 @@ func (s *Service) Get(ctx context.Context, caller, tayfa, channel id.ID) (Channe
 	if err := authorize(m, ActionView); err != nil {
 		return Channel{}, err
 	}
-	row, err := s.loadChannel(ctx, store.New(s.cfg.Pool), m, tayfa, channel, false)
+	row, a, err := s.loadChannelAudience(ctx, store.New(s.cfg.Pool), m, tayfa, channel, false)
 	if err != nil {
 		return Channel{}, err
 	}
-	return channelView(row), nil
+	return s.withCount(ctx, withEvent(channelView(row, s.now()), a))
 }
 
-func validVisibility(v string) bool { return v == VisibilityMembers || v == VisibilityStaff }
+func validVisibility(v string) bool {
+	return v == VisibilityMembers || v == VisibilityStaff || v == VisibilityEvent || v == VisibilitySelected
+}
 
-// Create opens a channel. Moderators and admins only.
+// narrow reports whether v is an audience narrower than the tayfa: those
+// cannot be changed to or from (issue #183).
+func narrow(v string) bool { return v == VisibilityEvent || v == VisibilitySelected }
+
+// Create opens a channel. Members and staff channels, and selected-member
+// channels (issue #183): moderators and admins only. Event channels: also
+// whoever may manage the event (core's answer), one open channel per
+// event, archived ArchiveAfter the event's end.
 func (s *Service) Create(ctx context.Context, caller, tayfa id.ID, in ChannelInput) (Channel, error) {
 	if in.Visibility == "" {
 		in.Visibility = VisibilityMembers
 	}
+	members, err := cleanUsers(in.Members, "member_user_ids")
+	if err != nil {
+		return Channel{}, err
+	}
+	members = slices.DeleteFunc(members, func(u id.ID) bool { return u == caller })
 	switch {
 	case !validName(in.Name):
 		return Channel{}, invalid("name")
@@ -373,24 +508,75 @@ func (s *Service) Create(ctx context.Context, caller, tayfa id.ID, in ChannelInp
 		return Channel{}, invalid("visibility")
 	case in.SlowModeSeconds < 0 || time.Duration(in.SlowModeSeconds)*time.Second > MaxSlowMode:
 		return Channel{}, invalid("slow_mode_seconds")
+	case (in.Visibility == VisibilityEvent) != (in.Event != id.ID{}):
+		return Channel{}, invalid("event_id")
+	case in.Visibility != VisibilitySelected && len(in.Members) > 0:
+		return Channel{}, invalid("member_user_ids")
 	}
 	m, err := s.access(ctx, caller, tayfa)
 	if err != nil {
 		return Channel{}, err
 	}
-	if err := authorize(m, ActionManage); err != nil {
-		return Channel{}, err
+	p := store.CreateChannelParams{
+		ID: id.New().PG(), TayfaID: tayfa.PG(), Name: in.Name, NameNormalized: normalize(in.Name),
+		Visibility: in.Visibility, SlowModeSeconds: in.SlowModeSeconds, CreatedBy: caller.PG(),
+	}
+	var ev *EventAccess
+	if in.Visibility == VisibilityEvent {
+		// core decides who may open it; asked before the transaction.
+		if err := authorize(m, ActionView); err != nil {
+			return Channel{}, err
+		}
+		if s.cfg.Audience == nil {
+			return Channel{}, apperr.ErrUnavailable
+		}
+		ref := EventRef{Event: in.Event, Opener: caller}
+		asked := s.now()
+		got, err := s.cfg.Audience.EventChannels(ctx, caller, tayfa, []EventRef{ref})
+		if err != nil {
+			return Channel{}, fmt.Errorf("etkinlik: %w", err)
+		}
+		a, ok := got[ref]
+		switch {
+		case !ok:
+			return Channel{}, apperr.ErrEventNotFound
+		case !a.CanOpen:
+			// Why (role, mute, read-only) is what the general answer says.
+			if err := authorize(m, ActionManage); err != nil {
+				return Channel{}, err
+			}
+			return Channel{}, apperr.ErrPermissionDenied
+		}
+		archiveAt := a.End.Add(ArchiveAfter)
+		if !asked.Before(archiveAt) {
+			return Channel{}, apperr.ErrEventEnded
+		}
+		p.EventID, p.ArchiveAt, p.ArchiveSourceAt = in.Event.PG(), ts(archiveAt), ts(asked)
+		ev = &a
+	} else {
+		if err := authorize(m, ActionManage); err != nil {
+			return Channel{}, err
+		}
+		if err := s.checkActive(ctx, caller, tayfa, members); err != nil {
+			return Channel{}, err
+		}
 	}
 	var c Channel
 	err = pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
-		r, err := store.New(tx).CreateChannel(ctx, store.CreateChannelParams{
-			ID: id.New().PG(), TayfaID: tayfa.PG(), Name: in.Name, NameNormalized: normalize(in.Name),
-			Visibility: in.Visibility, SlowModeSeconds: in.SlowModeSeconds, CreatedBy: caller.PG(),
-		})
+		q := store.New(tx)
+		r, err := q.CreateChannel(ctx, p)
 		if err != nil {
 			return nameErr(err)
 		}
-		c = channelView(chanRow(r))
+		c = withEvent(channelView(chanRow(r), s.now()), ev)
+		if in.Visibility == VisibilitySelected {
+			for _, u := range append([]id.ID{caller}, members...) {
+				if err := q.AddChannelMember(ctx, store.AddChannelMemberParams{ChannelID: r.ID, UserID: u.PG()}); err != nil {
+					return fmt.Errorf("kanal üyesi: %w", err)
+				}
+			}
+			c.MemberCount = int32(len(members) + 1) //nolint:gosec // at most MaxMembersBatch+1
+		}
 		return record(ctx, tx, EventChannelCreated, caller, "channel", c.ID, map[string]any{"tayfa_id": tayfa.String()})
 	})
 	if err != nil {
@@ -404,6 +590,9 @@ func nameErr(err error) error {
 	var pe *pgconn.PgError
 	if errors.As(err, &pe) && pe.Code == "23505" && pe.ConstraintName == "channels_name_unique" {
 		return apperr.ErrChannelNameTaken
+	}
+	if errors.As(err, &pe) && pe.Code == "23505" && pe.ConstraintName == "channels_event_open" {
+		return apperr.ErrEventChannelExists
 	}
 	return fmt.Errorf("kanal yazılamadı: %w", err)
 }
@@ -445,11 +634,15 @@ func (s *Service) Update(ctx context.Context, caller, tayfa, channel id.ID, in C
 		if in.Visibility != nil {
 			next.Visibility = *in.Visibility
 		}
+		// An event or selected channel keeps its audience (issue #183).
+		if next.Visibility != row.Visibility && (narrow(next.Visibility) || narrow(row.Visibility)) {
+			return invalid("visibility")
+		}
 		if in.SlowModeSeconds != nil {
 			next.SlowModeSeconds = *in.SlowModeSeconds
 		}
 		if next == row {
-			c = channelView(row)
+			c = channelView(row, s.now())
 			return nil
 		}
 		r, err := q.UpdateChannel(ctx, store.UpdateChannelParams{
@@ -459,7 +652,7 @@ func (s *Service) Update(ctx context.Context, caller, tayfa, channel id.ID, in C
 		if err != nil {
 			return nameErr(err)
 		}
-		c = channelView(chanRow(r))
+		c = channelView(chanRow(r), s.now())
 		visibility = next.Visibility != row.Visibility
 		return record(ctx, tx, EventChannelUpdated, caller, "channel", channel, map[string]any{"tayfa_id": tayfa.String(), "change": "edited"})
 	})
@@ -491,8 +684,13 @@ func (s *Service) SetArchived(ctx context.Context, caller, tayfa, channel id.ID,
 			return err
 		}
 		if row.ArchivedAt.Valid == archived {
-			c = channelView(row)
+			c = channelView(row, s.now())
 			return nil
+		}
+		// An event channel past its planned archive time stays archived
+		// (issue #183).
+		if !archived && row.ArchiveAt.Valid && !s.now().Before(row.ArchiveAt.Time) {
+			return apperr.ErrEventEnded
 		}
 		at := pgtype.Timestamptz{}
 		change := "unarchived"
@@ -503,7 +701,7 @@ func (s *Service) SetArchived(ctx context.Context, caller, tayfa, channel id.ID,
 		if err != nil {
 			return nameErr(err)
 		}
-		c = channelView(chanRow(r))
+		c = channelView(chanRow(r), s.now())
 		return record(ctx, tx, EventChannelUpdated, caller, "channel", channel, map[string]any{"tayfa_id": tayfa.String(), "change": change})
 	})
 	if err != nil {

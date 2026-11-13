@@ -79,6 +79,10 @@ type CoreDeps struct {
 	Invitations InvitationClient
 	// Profiles enables the profile routes when set.
 	Profiles ProfileClient
+	// ProfileDetails is identity's ProfileService (birthday, issue #185).
+	// Without it, or when identity does not answer, profiles have no
+	// identity details.
+	ProfileDetails ProfileDetailsClient
 	// Reports enables the report and moderation queue routes when set
 	// (issue #76).
 	Reports ReportClient

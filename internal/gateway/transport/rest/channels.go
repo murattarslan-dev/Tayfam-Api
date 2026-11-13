@@ -28,6 +28,10 @@ type ChannelClient interface {
 	DeleteMessage(ctx context.Context, in *chatv1.DeleteMessageRequest, opts ...grpc.CallOption) (*chatv1.DeleteMessageResponse, error)
 	RestoreMessage(ctx context.Context, in *chatv1.RestoreMessageRequest, opts ...grpc.CallOption) (*chatv1.RestoreMessageResponse, error)
 	MarkChannelRead(ctx context.Context, in *chatv1.MarkChannelReadRequest, opts ...grpc.CallOption) (*chatv1.MarkChannelReadResponse, error)
+	// Event and selected-member channels (issue #183).
+	ListChannelMembers(ctx context.Context, in *chatv1.ListChannelMembersRequest, opts ...grpc.CallOption) (*chatv1.ListChannelMembersResponse, error)
+	AddChannelMembers(ctx context.Context, in *chatv1.AddChannelMembersRequest, opts ...grpc.CallOption) (*chatv1.AddChannelMembersResponse, error)
+	RemoveChannelMember(ctx context.Context, in *chatv1.RemoveChannelMemberRequest, opts ...grpc.CallOption) (*chatv1.RemoveChannelMemberResponse, error)
 }
 
 const (
@@ -36,8 +40,11 @@ const (
 	// maxMessageBody fits 4000 characters in the worst JSON escaping
 	// (\uXXXX surrogate pairs) plus the request ID.
 	maxMessageBody = 64 << 10
-	// maxChannelBody fits a 40-character name and the settings.
-	maxChannelBody = 2 << 10
+	// maxChannelBody fits a 40-character name, the settings and up to
+	// channelMembersMax member IDs (issue #183).
+	maxChannelBody = 8 << 10
+	// channelMembersMax bounds the user IDs of one request (issue #183).
+	channelMembersMax = 100
 	// maxReadBody fits one message ID.
 	maxReadBody = 1 << 10
 	// maxRetryAfter bounds the Retry-After header taken from chat.
@@ -58,11 +65,18 @@ func registerChannels(mux *http.ServeMux, h chatHandlers) {
 	mux.HandleFunc("DELETE "+ch+"/messages/{message_id}", a(h.deleteMessage))
 	mux.HandleFunc("POST "+ch+"/messages/{message_id}/restoration", a(h.restoreMessage))
 	mux.HandleFunc("PUT "+ch+"/read", a(h.markChannelRead))
+	// Event and selected-member channels (issue #183).
+	mux.HandleFunc("GET "+ch+"/members", a(h.listChannelMembers))
+	mux.HandleFunc("POST "+ch+"/members", a(h.addChannelMembers))
+	mux.HandleFunc("DELETE "+ch+"/members/{user_id}", a(h.removeChannelMember))
 }
 
 var channelVisibilityNames = map[chatv1.ChannelVisibility]string{
 	chatv1.ChannelVisibility_CHANNEL_VISIBILITY_MEMBERS: "members",
 	chatv1.ChannelVisibility_CHANNEL_VISIBILITY_STAFF:   "staff",
+	// Issue #183.
+	chatv1.ChannelVisibility_CHANNEL_VISIBILITY_EVENT:    "event",
+	chatv1.ChannelVisibility_CHANNEL_VISIBILITY_SELECTED: "selected",
 }
 
 func channelVisibilityFrom(s string) (chatv1.ChannelVisibility, bool) {
@@ -88,6 +102,10 @@ type channelJSON struct {
 	// List only.
 	UnreadCount       *int32 `json:"unread_count,omitempty"`
 	LastReadMessageID string `json:"last_read_message_id,omitempty"`
+	// Event and selected-member channels (issue #183).
+	EventID          string     `json:"event_id,omitempty"`
+	MemberCount      *int32     `json:"member_count,omitempty"`
+	PlannedArchiveAt *time.Time `json:"archive_at,omitempty"`
 }
 
 func channelFrom(c *chatv1.Channel, withReads bool) channelJSON {
@@ -99,6 +117,14 @@ func channelFrom(c *chatv1.Channel, withReads bool) channelJSON {
 	if withReads {
 		n := c.GetUnreadCount()
 		out.UnreadCount, out.LastReadMessageID = &n, c.GetLastReadMessageId()
+	}
+	switch c.GetVisibility() {
+	case chatv1.ChannelVisibility_CHANNEL_VISIBILITY_EVENT:
+		out.EventID, out.PlannedArchiveAt = c.GetEventId(), optTime(c.GetPlannedArchiveTime())
+		fallthrough
+	case chatv1.ChannelVisibility_CHANNEL_VISIBILITY_SELECTED:
+		n := c.GetMemberCount()
+		out.MemberCount = &n
 	}
 	return out
 }
@@ -213,6 +239,10 @@ type channelCreateBody struct {
 	Name            string `json:"name"`
 	Visibility      string `json:"visibility"`
 	SlowModeSeconds int32  `json:"slow_mode_seconds"`
+	// Issue #183: event channels need the event, selected-member channels
+	// may name their first members.
+	EventID       string   `json:"event_id"`
+	MemberUserIDs []string `json:"member_user_ids"`
 }
 
 func (h chatHandlers) createChannel(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -224,7 +254,12 @@ func (h chatHandlers) createChannel(ctx context.Context, w http.ResponseWriter, 
 	if !decodeLimit(w, r, &b, maxChannelBody) {
 		return
 	}
-	req := &chatv1.CreateChannelRequest{TayfaId: id, Name: b.Name, SlowModeSeconds: b.SlowModeSeconds}
+	req := &chatv1.CreateChannelRequest{TayfaId: id, Name: b.Name, SlowModeSeconds: b.SlowModeSeconds,
+		EventId: b.EventID, MemberUserIds: b.MemberUserIDs}
+	if (b.EventID != "" && !validUUID(b.EventID)) || !uuidsOK(b.MemberUserIDs) {
+		badRequest(w, r)
+		return
+	}
 	if b.Visibility != "" {
 		v, ok := channelVisibilityFrom(b.Visibility)
 		if !ok {
@@ -424,6 +459,98 @@ func (h chatHandlers) markChannelRead(ctx context.Context, w http.ResponseWriter
 		return
 	}
 	if _, err := h.d.Channels.MarkChannelRead(ctx, &chatv1.MarkChannelReadRequest{TayfaId: id, ChannelId: cid, MessageId: b.MessageID}); err != nil {
+		h.failChannel(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// uuidsOK checks a list of user IDs: at most channelMembersMax UUIDs.
+func uuidsOK(ids []string) bool {
+	if len(ids) > channelMembersMax {
+		return false
+	}
+	for _, x := range ids {
+		if !validUUID(x) {
+			return false
+		}
+	}
+	return true
+}
+
+type channelMembersJSON struct {
+	UserIDs       []string `json:"user_ids"`
+	NextPageToken string   `json:"next_page_token,omitempty"`
+}
+
+type channelMembersBody struct {
+	UserIDs []string `json:"user_ids"`
+}
+
+// listChannelMembers lists the audience of an event or selected-member
+// channel (issue #183).
+func (h chatHandlers) listChannelMembers(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	tf, ok := pathUUID(w, r, "tayfa_id")
+	if !ok {
+		return
+	}
+	ch, ok := pathUUID(w, r, "channel_id")
+	if !ok {
+		return
+	}
+	size, token, ok := paging(w, r)
+	if !ok {
+		return
+	}
+	resp, err := h.d.Channels.ListChannelMembers(ctx, &chatv1.ListChannelMembersRequest{TayfaId: tf, ChannelId: ch, PageSize: size, PageToken: token})
+	if err != nil {
+		h.failChannel(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, channelMembersJSON{UserIDs: append([]string{}, resp.GetUserIds()...), NextPageToken: resp.GetNextPageToken()})
+}
+
+// addChannelMembers adds members to a selected-member channel.
+func (h chatHandlers) addChannelMembers(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	tf, ok := pathUUID(w, r, "tayfa_id")
+	if !ok {
+		return
+	}
+	ch, ok := pathUUID(w, r, "channel_id")
+	if !ok {
+		return
+	}
+	var b channelMembersBody
+	if !decodeLimit(w, r, &b, maxChannelBody) {
+		return
+	}
+	if len(b.UserIDs) == 0 || !uuidsOK(b.UserIDs) {
+		badRequest(w, r)
+		return
+	}
+	resp, err := h.d.Channels.AddChannelMembers(ctx, &chatv1.AddChannelMembersRequest{TayfaId: tf, ChannelId: ch, UserIds: b.UserIDs})
+	if err != nil {
+		h.failChannel(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, channelFrom(resp.GetChannel(), false))
+}
+
+// removeChannelMember takes a member out of a selected-member channel.
+func (h chatHandlers) removeChannelMember(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	tf, ok := pathUUID(w, r, "tayfa_id")
+	if !ok {
+		return
+	}
+	ch, ok := pathUUID(w, r, "channel_id")
+	if !ok {
+		return
+	}
+	u, ok := pathUUID(w, r, "user_id")
+	if !ok {
+		return
+	}
+	if _, err := h.d.Channels.RemoveChannelMember(ctx, &chatv1.RemoveChannelMemberRequest{TayfaId: tf, ChannelId: ch, UserId: u}); err != nil {
 		h.failChannel(w, r, err)
 		return
 	}

@@ -93,6 +93,17 @@ tutulmalıdır.
   aynı istek zincirinde döngüyü yasaklar, iki ayrı akışta karşılıklı çağrıyı
   yasaklamaz. Hiçbir metod çağrıldığı servisi geri çağıran bir zincir
   başlatmaz.
+- **Uygulama (2026-11-13, issue #185):** Gösterim
+  `identity.v1.ProfileService.GetProfileDetails` ile yapılır; gateway onu
+  `GET /v1/users/{user_id}/profile` cevabına `birthday` olarak ekler ve
+  ilişki bilgisi iletmez. identity ilişkiyi core'un
+  `ProfileService.GetUserProfile`'ına çağıranın kendi token'ıyla sorar
+  (engel ve bilinmeyen kullanıcı `user-not-found`). Platform sahibinin
+  kararıyla (Notion Proje Planı §4 madde 8) bugün yalnızca **arkadaşlar**
+  görür: `birth_date_audience` her hesapta `friends`'tir, hiçbir uç onu
+  değiştirmez ve okunmaz; `tayfa`/`public` kitlesi açılırsa ayrı karar
+  gerekir. Üç seçenek 16–18 yaş arasına da açıktır. `birth_date_visibility`
+  `PATCH /v1/me/account` ile değişir ve hiçbir profil kopyasına gitmez.
 
 ### Doğum günü hatırlatmaları
 
@@ -162,6 +173,19 @@ tutulmalıdır.
 - Profil alanları için "cevaplanmadı / cevaplandı / paylaşmak istemiyorum"
   durumu tutulur; "paylaşmak istemiyorum" alanı cevaplanmış sayar. "Daha
   sonra doldur" seçimi ve tekrar gösterme zamanı istemci tarafında kalır.
+- **Güncelleme (2026-11-13, platform sahibi; issue #186):** "Daha sonra
+  doldur" artık **sunucuda** tutulur ve cihazlar arası tutarlıdır: erteleme
+  7 gün sürer, forma yeni alan eklenince (`profilefields.FieldsVersion`
+  artınca) geçersiz olur; istemci yalnızca
+  `Account.profile_completion_pending`'e bakar. Alanlar (ilgi alanları,
+  hakkımda, meslek, takım, diller, sosyal medya kullanıcı adı) identity'nin
+  `profile_details` ve `user_social_accounts` tablolarındadır; core ve
+  chat'in profil kopyalarına gitmez. Başka kullanıcılara yalnızca
+  identity'nin `ProfileService`'i, kullanıcının `about_visibility` ayarına
+  göre gösterir (ilişki core'a çağıranın token'ıyla sorulur, doğum günüyle
+  aynı yol); sosyal medya hesabı ayar ne olursa olsun en fazla arkadaşlara
+  görünür. Hangi alanın reddedildiği başkasına söylenmez. Alanlar KVKK veri
+  dışa aktarmasında vardır, hesap silmede hemen silinir.
 
 ### Hukuki açık noktalar
 

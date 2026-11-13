@@ -55,6 +55,14 @@ func reasonFor(err error) (code codes.Code, reason chatv1.ErrorReason, ok bool) 
 		return codes.PermissionDenied, chatv1.ErrorReason_ERROR_REASON_ROLE_HIERARCHY, true
 	case errors.Is(err, apperr.ErrChannelNameTaken):
 		return codes.AlreadyExists, chatv1.ErrorReason_ERROR_REASON_CHANNEL_NAME_TAKEN, true
+	case errors.Is(err, apperr.ErrEventChannelExists):
+		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_EVENT_CHANNEL_EXISTS, true
+	case errors.Is(err, apperr.ErrEventNotFound):
+		return codes.NotFound, chatv1.ErrorReason_ERROR_REASON_EVENT_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrNotTayfaMember):
+		return codes.InvalidArgument, chatv1.ErrorReason_ERROR_REASON_NOT_TAYFA_MEMBER, true
+	case errors.Is(err, apperr.ErrEventEnded):
+		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_EVENT_ENDED, true
 	case errors.Is(err, apperr.ErrConversationNotFound):
 		return codes.NotFound, chatv1.ErrorReason_ERROR_REASON_CONVERSATION_NOT_FOUND, true
 	case errors.Is(err, apperr.ErrDirectMessageNotAllowed):

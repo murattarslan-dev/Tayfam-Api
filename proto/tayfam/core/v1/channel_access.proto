@@ -32,6 +32,36 @@ service ChannelAccessService {
   // can serve one request with one call (and keep the answer a few
   // seconds).
   rpc AuthorizeChannelAction(AuthorizeChannelActionRequest) returns (AuthorizeChannelActionResponse);
+
+  // Event and selected-member channels (issue #183, ADR-0024). Their
+  // audience is narrower than the tayfa: chat keeps the selected members
+  // itself, and asks here, with the caller's own token, everything that
+  // depends on core's data. chat keeps no copy of attendance. Every method
+  // answers TAYFA_NOT_FOUND to a caller who is not an active member of a
+  // live tayfa.
+
+  // GetEventChannelAccess answers, for the caller and each event channel
+  // given, whether the caller is in its audience (answered GOING, or
+  // organizes the event, or opened the channel), whether the caller may
+  // open a channel for the event, when the event ended and how many people
+  // the audience has. Events chat names that the caller cannot see in the
+  // tayfa (unknown, another tayfa's, the events module off) are absent from
+  // the answer: then only the channel's opener is in its audience.
+  rpc GetEventChannelAccess(GetEventChannelAccessRequest) returns (GetEventChannelAccessResponse);
+
+  // ListEventChannelMembers lists the audience of an event channel: the
+  // organizer, the opener (while an active member) and every member who
+  // answered GOING, ordered by user ID. Waitlisted, MAYBE and NOT_GOING
+  // answers are not in it. An event the caller cannot see is
+  // ERROR_REASON_EVENT_NOT_FOUND. chat checks first that the caller is in
+  // the audience. Paging: page_size 0 means 50, above 100 means 100.
+  rpc ListEventChannelMembers(ListEventChannelMembersRequest) returns (ListEventChannelMembersResponse);
+
+  // FilterActiveMembers returns which of user_ids are active members of the
+  // tayfa (in the order given, without repeats): chat checks them before
+  // it adds them to a selected-member channel. At most 100 IDs
+  // (ERROR_REASON_VALIDATION otherwise).
+  rpc FilterActiveMembers(FilterActiveMembersRequest) returns (FilterActiveMembersResponse);
 }
 
 enum ChannelAction {
@@ -95,4 +125,60 @@ message AuthorizeChannelActionResponse {
   google.protobuf.Timestamp mute_expire_time = 5;
   // The tayfa is suspended, archived or waiting for deletion.
   bool tayfa_read_only = 6;
+}
+
+// EventChannelRef is one event channel chat asks about.
+message EventChannelRef {
+  string event_id = 1;
+  // The user who opened the channel; empty when the account was deleted.
+  string opener_user_id = 2;
+}
+
+message GetEventChannelAccessRequest {
+  string tayfa_id = 1;
+  // 1–100 channels (ERROR_REASON_VALIDATION otherwise).
+  repeated EventChannelRef channels = 2;
+}
+
+message EventChannelAccess {
+  string event_id = 1;
+  string opener_user_id = 2;
+  // The caller answered GOING, organizes the event or opened the channel.
+  bool member = 3;
+  // The caller may open a channel for the event: a moderator or an admin,
+  // or someone who may manage the event; not while muted or while the tayfa
+  // is read-only.
+  bool can_open_channel = 4;
+  // The event's end, or the moment it was cancelled.
+  google.protobuf.Timestamp end_time = 5;
+  bool cancelled = 6;
+  // Organizer, opener (while an active member) and GOING members, each
+  // once.
+  int32 member_count = 7;
+}
+
+message GetEventChannelAccessResponse {
+  repeated EventChannelAccess channels = 1;
+}
+
+message ListEventChannelMembersRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  string opener_user_id = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+}
+
+message ListEventChannelMembersResponse {
+  repeated string user_ids = 1;
+  string next_page_token = 2;
+}
+
+message FilterActiveMembersRequest {
+  string tayfa_id = 1;
+  repeated string user_ids = 2;
+}
+
+message FilterActiveMembersResponse {
+  repeated string user_ids = 1;
 }

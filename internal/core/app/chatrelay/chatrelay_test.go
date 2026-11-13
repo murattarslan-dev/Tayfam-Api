@@ -3,6 +3,7 @@ package chatrelay
 import (
 	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,6 +32,8 @@ func TestTypesAreExplicit(t *testing.T) {
 		"tayfa.deletion_requested", "tayfa.deletion_cancelled",
 		// Platform suspension (issue #104).
 		"tayfa.suspended", "tayfa.unsuspended",
+		// Event channels (issue #183).
+		"rsvp.changed", "rsvp.promoted", "event.updated", "event.cancelled",
 	}
 	if got := Types(); !slices.Equal(got, want) {
 		t.Fatalf("Types = %v", got)
@@ -130,16 +133,26 @@ func TestRequestRefusesUnknown(t *testing.T) {
 	}
 }
 
-// membership.changed carries only the member; the kind of change and the
-// actor's role do not reach chat.
+// membership.changed carries only the member and whether the membership
+// ended (issue #183); the kind of change and the actor's role do not
+// reach chat.
 func TestMembershipAndStatusEvents(t *testing.T) {
 	tf, u, actor := id.New(), id.New(), id.New()
 	r, err := Request(ev(t, "membership.changed", actor, map[string]any{"tayfa_id": tf.String(), "user_id": u.String(), "change": "muted"}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.GetTayfaId() != tf.String() || r.GetMembershipChanged().GetUserId() != u.String() {
+	if r.GetTayfaId() != tf.String() || r.GetMembershipChanged().GetUserId() != u.String() || r.GetMembershipChanged().GetEnded() {
 		t.Fatalf("üyelik = %v", r)
+	}
+	for change, ended := range map[string]bool{"left": true, "removed": true, "banned": true, "joined": false, "role_changed": false, "withdrawn": false} {
+		r, err := Request(ev(t, "membership.changed", actor, map[string]any{"tayfa_id": tf.String(), "user_id": u.String(), "change": change}))
+		if err != nil || r.GetMembershipChanged().GetEnded() != ended {
+			t.Errorf("%s: %v %v", change, r, err)
+		}
+		if strings.Contains(r.String(), change) {
+			t.Errorf("%s: değişiklik türü chat'e gitti", change)
+		}
 	}
 	if _, err := Request(ev(t, "membership.changed", actor, map[string]any{"tayfa_id": tf.String()})); err == nil {
 		t.Fatal("kullanıcısız üyelik olayı kabul edildi")
@@ -184,5 +197,53 @@ func TestSuspensionReachesChat(t *testing.T) {
 		if err != nil || req.GetNotificationRequested().GetType() != want {
 			t.Fatalf("%s: %v %v", typ, req, err)
 		}
+	}
+}
+
+// TestEventChannelEvents (issue #183): an answer change reaches chat
+// without the answer; the event's end, when it moved, and its
+// cancellation reach chat with the time.
+func TestEventChannelEvents(t *testing.T) {
+	tf, event, user := id.New(), id.New(), id.New()
+	for _, typ := range []string{"rsvp.changed", "rsvp.promoted"} {
+		r, err := Request(ev(t, typ, user, map[string]any{"tayfa_id": tf.String(), "event_id": event.String(), "user_id": user.String(), "status": "going"}))
+		a := r.GetEventAttendanceChanged()
+		if err != nil || r.GetTayfaId() != tf.String() || a.GetEventId() != event.String() || a.GetUserId() != user.String() {
+			t.Fatalf("%s: %v %v", typ, r, err)
+		}
+	}
+	end := time.Date(2026, 12, 1, 18, 0, 0, 0, time.UTC)
+	r, err := Request(ev(t, "event.updated", user, map[string]any{"tayfa_id": tf.String(), "event_id": event.String(), "fields": []string{"time"}, "ends_at": end}))
+	if s := r.GetEventScheduleChanged(); err != nil || !s.GetEndTime().AsTime().Equal(end) || s.GetCancelled() || s.GetEventId() != event.String() {
+		t.Fatalf("güncelleme: %v %v", r, err)
+	}
+	// An update that did not move the end: nothing for chat.
+	r, err = Request(ev(t, "event.updated", user, map[string]any{"tayfa_id": tf.String(), "event_id": event.String(), "fields": []string{"title"}}))
+	if err != nil || r != nil {
+		t.Fatalf("başlık değişikliği: %v %v", r, err)
+	}
+	at := time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC)
+	r, err = Request(ev(t, "event.cancelled", user, map[string]any{"tayfa_id": tf.String(), "event_id": event.String(), "cancelled_at": at}))
+	if s := r.GetEventScheduleChanged(); err != nil || !s.GetEndTime().AsTime().Equal(at) || !s.GetCancelled() {
+		t.Fatalf("iptal: %v %v", r, err)
+	}
+	// An older cancellation without the time uses the event's own time.
+	old := ev(t, "event.cancelled", user, map[string]any{"tayfa_id": tf.String(), "event_id": event.String()})
+	r, err = Request(old)
+	if s := r.GetEventScheduleChanged(); err != nil || !s.GetEndTime().AsTime().Equal(old.OccurredAt) {
+		t.Fatalf("eski iptal: %v %v", r, err)
+	}
+	for name, p := range map[string]map[string]any{
+		"etkinliksiz katılım":  {"tayfa_id": tf.String(), "user_id": user.String()},
+		"kullanıcısız katılım": {"tayfa_id": tf.String(), "event_id": event.String()},
+	} {
+		if _, err := Request(ev(t, "rsvp.changed", user, p)); err == nil {
+			t.Errorf("%s kabul edildi", name)
+		}
+	}
+	// The status never reaches chat.
+	r, _ = Request(ev(t, "rsvp.changed", user, map[string]any{"tayfa_id": tf.String(), "event_id": event.String(), "user_id": user.String(), "status": "not_going"}))
+	if strings.Contains(r.String(), "not_going") {
+		t.Fatal("katılım cevabı chat'e gitti")
 	}
 }

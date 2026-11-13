@@ -17,8 +17,11 @@ type Querier interface {
 	// Yalnızca çağıranın cihazına ait zarflar silinir.
 	AckEnvelopes(ctx context.Context, arg AckEnvelopesParams) (int64, error)
 	AckHistoryKeyShares(ctx context.Context, arg AckHistoryKeySharesParams) (int64, error)
+	AddChannelMember(ctx context.Context, arg AddChannelMemberParams) error
 	// Yalnızca süresi geçmemiş, cevaplanmamış istek cevaplanır.
 	AnswerLinkRequest(ctx context.Context, arg AnswerLinkRequestParams) (int64, error)
+	// Zamanı gelen etkinlik kanallarını arşivler.
+	ArchiveDueEventChannels(ctx context.Context, now pgtype.Timestamptz) (int64, error)
 	// Yeni geçmiş anahtarı (ilk cihaz ya da yenileme): sürüm bir artar.
 	BumpHistoryKeyVersion(ctx context.Context, userID pgtype.UUID) (int16, error)
 	// Bir anahtar bir kez verilir: eşzamanlı çekmeler kilitli satırı atlar,
@@ -40,6 +43,7 @@ type Querier interface {
 	ClearConversationLowSide(ctx context.Context, userID pgtype.UUID) error
 	ClearDirectMessageSender(ctx context.Context, userID pgtype.UUID) error
 	ClearNotificationActor(ctx context.Context, userID pgtype.UUID) error
+	CountChannelMembers(ctx context.Context, channelIds []pgtype.UUID) ([]CountChannelMembersRow, error)
 	CountOneTimePreKeys(ctx context.Context, deviceID pgtype.UUID) (CountOneTimePreKeysRow, error)
 	// Son 24 saatte istek olarak açılan konuşmalar (v7 günlük sınırı). Durumun
 	// sonradan değişmesi (kabul, ret) sayımı değiştirmez.
@@ -58,6 +62,7 @@ type Querier interface {
 	// channel_id ile çalışır (IDOR). Üyelik ve rol kontrolü uygulamada, core'un
 	// cevabıyla yapılır. Mesaj metni burada yalnızca şifreli bayt olarak geçer.
 	// Kanallar.
+	// event_id ve archive_at yalnızca etkinlik kanalında (issue #183).
 	CreateChannel(ctx context.Context, arg CreateChannelParams) (CreateChannelRow, error)
 	// Satır varsa (eşzamanlı ilk mesaj) hiçbir şey yapmaz; sonuç boş döner.
 	CreateConversation(ctx context.Context, arg CreateConversationParams) (CreateConversationRow, error)
@@ -109,6 +114,8 @@ type Querier interface {
 	// Tayfa kalıcı silindi (tayfa.purged).
 	DeleteTayfaNotifications(ctx context.Context, tayfaID pgtype.UUID) error
 	DeleteUserArchive(ctx context.Context, userID pgtype.UUID) (int64, error)
+	// Hesap silme: bütün kanal üyelikleri.
+	DeleteUserChannelMembers(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserChannelReads(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserConversationReads(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserDevices(ctx context.Context, userID pgtype.UUID) ([]DeleteUserDevicesRow, error)
@@ -188,15 +195,20 @@ type Querier interface {
 	// Anahtar olayları ("güvenlik kodu değişti").
 	InsertKeyEvent(ctx context.Context, arg InsertKeyEventParams) error
 	InsertKyberPreKeys(ctx context.Context, arg InsertKyberPreKeysParams) (int64, error)
+	// Seçili üye ve etkinlik kanalları (issue #183, ADR-0024).
+	IsChannelMember(ctx context.Context, arg IsChannelMemberParams) (bool, error)
 	IsSessionEnded(ctx context.Context, sessionID pgtype.UUID) (bool, error)
 	// En eski önce, after_id'den yeniler.
 	ListArchiveAfter(ctx context.Context, arg ListArchiveAfterParams) ([]ListArchiveAfterRow, error)
 	// En yeni önce.
 	ListArchiveBefore(ctx context.Context, arg ListArchiveBeforeParams) ([]ListArchiveBeforeRow, error)
 	ListArchivedMessageIDs(ctx context.Context, arg ListArchivedMessageIDsParams) ([]pgtype.UUID, error)
+	ListChannelMembers(ctx context.Context, arg ListChannelMembersParams) ([]pgtype.UUID, error)
 	// Tayfanın kanalları ve çağıranın okunmamış sayısı (en fazla max_unread;
-	// silinmiş ve kendi mesajları sayılmaz). include_staff false ise yalnızca
-	// members kanalları. Arşivlenmişler sonda.
+	// silinmiş ve kendi mesajları sayılmaz). include_staff false ise staff
+	// kanalları yok. Seçili üye kanallarından yalnızca çağıranın üyesi
+	// olduğu (issue #183); etkinlik kanallarının hepsi döner, kitleyi
+	// uygulama core'a sorarak süzer. Arşivlenmişler sonda.
 	ListChannels(ctx context.Context, arg ListChannelsParams) ([]ListChannelsRow, error)
 	// Kişinin konuşmaları, son mesaja göre yeniden eskiye. Reddettiği istekler
 	// listelenmez; gönderen reddedilen isteğini görmeye devam eder (v7: bunu
@@ -288,6 +300,10 @@ type Querier interface {
 	PurgeStalePushTokens(ctx context.Context, before pgtype.Timestamptz) (int64, error)
 	// Biten oturumlar.
 	RecordEndedSession(ctx context.Context, arg RecordEndedSessionParams) error
+	RemoveChannelMember(ctx context.Context, arg RemoveChannelMemberParams) (int64, error)
+	// Kişi tayfadan ayrıldı, çıkarıldı ya da banlandı: o tayfanın seçili üye
+	// kanallarından çıkar.
+	RemoveUserFromTayfaChannels(ctx context.Context, arg RemoveUserFromTayfaChannelsParams) error
 	// Reddedeni listesinden çıkarır: konuşma bekleyen isteğe döner. Yalnızca
 	// reddeden taraf (istek açan değil) çıkarabilir; başkasınınki etkilenmez.
 	RestoreDeclinedRequest(ctx context.Context, arg RestoreDeclinedRequestParams) (int64, error)
@@ -296,6 +312,9 @@ type Querier interface {
 	RetryPushJob(ctx context.Context, arg RetryPushJobParams) error
 	// archived_at NULL: arşivden çıkar.
 	SetChannelArchived(ctx context.Context, arg SetChannelArchivedParams) (SetChannelArchivedRow, error)
+	// Etkinliğin bitişi ya da iptali değişti: arşivlenmemiş kanalının planlanan
+	// arşiv zamanı, yalnızca bilgi eldekinden yeniyse.
+	SetEventChannelArchiveAt(ctx context.Context, arg SetEventChannelArchiveAtParams) error
 	SetLastDeviceNumber(ctx context.Context, arg SetLastDeviceNumberParams) error
 	SetRotationNeeded(ctx context.Context, arg SetRotationNeededParams) error
 	// Hesap silindi: ad ve avatar temizlenir, satır mezar taşı olarak kalır.

@@ -11,6 +11,35 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addChannelMember = `-- name: AddChannelMember :exec
+INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2)
+ON CONFLICT (channel_id, user_id) DO NOTHING
+`
+
+type AddChannelMemberParams struct {
+	ChannelID pgtype.UUID
+	UserID    pgtype.UUID
+}
+
+func (q *Queries) AddChannelMember(ctx context.Context, arg AddChannelMemberParams) error {
+	_, err := q.db.Exec(ctx, addChannelMember, arg.ChannelID, arg.UserID)
+	return err
+}
+
+const archiveDueEventChannels = `-- name: ArchiveDueEventChannels :execrows
+UPDATE channels SET archived_at = archive_at
+WHERE archive_at IS NOT NULL AND archived_at IS NULL AND archive_at <= $1
+`
+
+// Zamanı gelen etkinlik kanallarını arşivler.
+func (q *Queries) ArchiveDueEventChannels(ctx context.Context, now pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, archiveDueEventChannels, now)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const clearChannelCreator = `-- name: ClearChannelCreator :exec
 UPDATE channels SET created_by = NULL WHERE created_by = $1
 `
@@ -39,12 +68,45 @@ func (q *Queries) ClearChannelMessageDeletedBy(ctx context.Context, userID pgtyp
 	return err
 }
 
+const countChannelMembers = `-- name: CountChannelMembers :many
+SELECT channel_id, count(*)::integer AS member_count FROM channel_members
+WHERE channel_id = ANY($1::uuid[])
+GROUP BY channel_id
+`
+
+type CountChannelMembersRow struct {
+	ChannelID   pgtype.UUID
+	MemberCount int32
+}
+
+func (q *Queries) CountChannelMembers(ctx context.Context, channelIds []pgtype.UUID) ([]CountChannelMembersRow, error) {
+	rows, err := q.db.Query(ctx, countChannelMembers, channelIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountChannelMembersRow{}
+	for rows.Next() {
+		var i CountChannelMembersRow
+		if err := rows.Scan(&i.ChannelID, &i.MemberCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createChannel = `-- name: CreateChannel :one
 
 
-INSERT INTO channels (id, tayfa_id, name, name_normalized, visibility, slow_mode_seconds, created_by)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at
+INSERT INTO channels (id, tayfa_id, name, name_normalized, visibility, slow_mode_seconds, created_by,
+                      event_id, archive_at, archive_source_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10)
+RETURNING id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at, event_id, archive_at
 `
 
 type CreateChannelParams struct {
@@ -55,6 +117,9 @@ type CreateChannelParams struct {
 	Visibility      string
 	SlowModeSeconds int32
 	CreatedBy       pgtype.UUID
+	EventID         pgtype.UUID
+	ArchiveAt       pgtype.Timestamptz
+	ArchiveSourceAt pgtype.Timestamptz
 }
 
 type CreateChannelRow struct {
@@ -67,6 +132,8 @@ type CreateChannelRow struct {
 	ArchivedAt      pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+	EventID         pgtype.UUID
+	ArchiveAt       pgtype.Timestamptz
 }
 
 // Tayfa kanalları ve kanal mesajları (issue #81). Her kanal sorgusu
@@ -74,6 +141,7 @@ type CreateChannelRow struct {
 // channel_id ile çalışır (IDOR). Üyelik ve rol kontrolü uygulamada, core'un
 // cevabıyla yapılır. Mesaj metni burada yalnızca şifreli bayt olarak geçer.
 // Kanallar.
+// event_id ve archive_at yalnızca etkinlik kanalında (issue #183).
 func (q *Queries) CreateChannel(ctx context.Context, arg CreateChannelParams) (CreateChannelRow, error) {
 	row := q.db.QueryRow(ctx, createChannel,
 		arg.ID,
@@ -83,6 +151,9 @@ func (q *Queries) CreateChannel(ctx context.Context, arg CreateChannelParams) (C
 		arg.Visibility,
 		arg.SlowModeSeconds,
 		arg.CreatedBy,
+		arg.EventID,
+		arg.ArchiveAt,
+		arg.ArchiveSourceAt,
 	)
 	var i CreateChannelRow
 	err := row.Scan(
@@ -95,6 +166,8 @@ func (q *Queries) CreateChannel(ctx context.Context, arg CreateChannelParams) (C
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EventID,
+		&i.ArchiveAt,
 	)
 	return i, err
 }
@@ -160,6 +233,16 @@ func (q *Queries) DeleteTayfaChannels(ctx context.Context, tayfaID pgtype.UUID) 
 	return err
 }
 
+const deleteUserChannelMembers = `-- name: DeleteUserChannelMembers :exec
+DELETE FROM channel_members WHERE user_id = $1
+`
+
+// Hesap silme: bütün kanal üyelikleri.
+func (q *Queries) DeleteUserChannelMembers(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserChannelMembers, userID)
+	return err
+}
+
 const deleteUserChannelReads = `-- name: DeleteUserChannelReads :exec
 DELETE FROM channel_reads WHERE user_id = $1
 `
@@ -197,7 +280,7 @@ func (q *Queries) EraseMessage(ctx context.Context, arg EraseMessageParams) (int
 }
 
 const getChannel = `-- name: GetChannel :one
-SELECT id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at
+SELECT id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at, event_id, archive_at
 FROM channels
 WHERE tayfa_id = $1 AND id = $2
 `
@@ -217,6 +300,8 @@ type GetChannelRow struct {
 	ArchivedAt      pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+	EventID         pgtype.UUID
+	ArchiveAt       pgtype.Timestamptz
 }
 
 func (q *Queries) GetChannel(ctx context.Context, arg GetChannelParams) (GetChannelRow, error) {
@@ -232,12 +317,14 @@ func (q *Queries) GetChannel(ctx context.Context, arg GetChannelParams) (GetChan
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EventID,
+		&i.ArchiveAt,
 	)
 	return i, err
 }
 
 const getChannelForUpdate = `-- name: GetChannelForUpdate :one
-SELECT id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at
+SELECT id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at, event_id, archive_at
 FROM channels
 WHERE tayfa_id = $1 AND id = $2
 FOR UPDATE
@@ -258,6 +345,8 @@ type GetChannelForUpdateRow struct {
 	ArchivedAt      pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+	EventID         pgtype.UUID
+	ArchiveAt       pgtype.Timestamptz
 }
 
 func (q *Queries) GetChannelForUpdate(ctx context.Context, arg GetChannelForUpdateParams) (GetChannelForUpdateRow, error) {
@@ -273,6 +362,8 @@ func (q *Queries) GetChannelForUpdate(ctx context.Context, arg GetChannelForUpda
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EventID,
+		&i.ArchiveAt,
 	)
 	return i, err
 }
@@ -439,8 +530,60 @@ func (q *Queries) HideMessage(ctx context.Context, arg HideMessageParams) (int64
 	return result.RowsAffected(), nil
 }
 
+const isChannelMember = `-- name: IsChannelMember :one
+
+SELECT EXISTS (SELECT 1 FROM channel_members WHERE channel_id = $1 AND user_id = $2)::boolean
+`
+
+type IsChannelMemberParams struct {
+	ChannelID pgtype.UUID
+	UserID    pgtype.UUID
+}
+
+// Seçili üye ve etkinlik kanalları (issue #183, ADR-0024).
+func (q *Queries) IsChannelMember(ctx context.Context, arg IsChannelMemberParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isChannelMember, arg.ChannelID, arg.UserID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const listChannelMembers = `-- name: ListChannelMembers :many
+SELECT user_id FROM channel_members
+WHERE channel_id = $1 AND user_id > $2
+ORDER BY user_id
+LIMIT $3
+`
+
+type ListChannelMembersParams struct {
+	ChannelID pgtype.UUID
+	After     pgtype.UUID
+	N         int32
+}
+
+func (q *Queries) ListChannelMembers(ctx context.Context, arg ListChannelMembersParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listChannelMembers, arg.ChannelID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var user_id pgtype.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChannels = `-- name: ListChannels :many
 SELECT c.id, c.tayfa_id, c.name, c.visibility, c.slow_mode_seconds, c.created_by, c.archived_at, c.created_at, c.updated_at,
+  c.event_id, c.archive_at,
   r.last_read_message_id,
   (SELECT count(*) FROM (
     SELECT 1 FROM channel_messages m
@@ -451,8 +594,12 @@ SELECT c.id, c.tayfa_id, c.name, c.visibility, c.slow_mode_seconds, c.created_by
   ) AS u) AS unread_count
 FROM channels c
 LEFT JOIN channel_reads r ON r.channel_id = c.id AND r.user_id = $1::uuid
-WHERE c.tayfa_id = $3 AND ($4::boolean OR c.visibility = 'members')
-ORDER BY c.archived_at IS NOT NULL, c.name_normalized, c.id
+WHERE c.tayfa_id = $3
+  AND (c.visibility IN ('members', 'event')
+       OR (c.visibility = 'staff' AND $4::boolean)
+       OR (c.visibility = 'selected' AND EXISTS (
+             SELECT 1 FROM channel_members cm WHERE cm.channel_id = c.id AND cm.user_id = $1::uuid)))
+ORDER BY c.archived_at IS NOT NULL OR (c.archive_at IS NOT NULL AND c.archive_at <= now()), c.name_normalized, c.id
 `
 
 type ListChannelsParams struct {
@@ -472,13 +619,17 @@ type ListChannelsRow struct {
 	ArchivedAt        pgtype.Timestamptz
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
+	EventID           pgtype.UUID
+	ArchiveAt         pgtype.Timestamptz
 	LastReadMessageID pgtype.UUID
 	UnreadCount       int64
 }
 
 // Tayfanın kanalları ve çağıranın okunmamış sayısı (en fazla max_unread;
-// silinmiş ve kendi mesajları sayılmaz). include_staff false ise yalnızca
-// members kanalları. Arşivlenmişler sonda.
+// silinmiş ve kendi mesajları sayılmaz). include_staff false ise staff
+// kanalları yok. Seçili üye kanallarından yalnızca çağıranın üyesi
+// olduğu (issue #183); etkinlik kanallarının hepsi döner, kitleyi
+// uygulama core'a sorarak süzer. Arşivlenmişler sonda.
 func (q *Queries) ListChannels(ctx context.Context, arg ListChannelsParams) ([]ListChannelsRow, error) {
 	rows, err := q.db.Query(ctx, listChannels,
 		arg.UserID,
@@ -503,6 +654,8 @@ func (q *Queries) ListChannels(ctx context.Context, arg ListChannelsParams) ([]L
 			&i.ArchivedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.EventID,
+			&i.ArchiveAt,
 			&i.LastReadMessageID,
 			&i.UnreadCount,
 		); err != nil {
@@ -674,6 +827,40 @@ func (q *Queries) PurgeDeletedMessages(ctx context.Context, arg PurgeDeletedMess
 	return result.RowsAffected(), nil
 }
 
+const removeChannelMember = `-- name: RemoveChannelMember :execrows
+DELETE FROM channel_members WHERE channel_id = $1 AND user_id = $2
+`
+
+type RemoveChannelMemberParams struct {
+	ChannelID pgtype.UUID
+	UserID    pgtype.UUID
+}
+
+func (q *Queries) RemoveChannelMember(ctx context.Context, arg RemoveChannelMemberParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeChannelMember, arg.ChannelID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const removeUserFromTayfaChannels = `-- name: RemoveUserFromTayfaChannels :exec
+DELETE FROM channel_members cm USING channels c
+WHERE cm.channel_id = c.id AND c.tayfa_id = $1 AND cm.user_id = $2
+`
+
+type RemoveUserFromTayfaChannelsParams struct {
+	TayfaID pgtype.UUID
+	UserID  pgtype.UUID
+}
+
+// Kişi tayfadan ayrıldı, çıkarıldı ya da banlandı: o tayfanın seçili üye
+// kanallarından çıkar.
+func (q *Queries) RemoveUserFromTayfaChannels(ctx context.Context, arg RemoveUserFromTayfaChannelsParams) error {
+	_, err := q.db.Exec(ctx, removeUserFromTayfaChannels, arg.TayfaID, arg.UserID)
+	return err
+}
+
 const restoreMessage = `-- name: RestoreMessage :execrows
 UPDATE channel_messages
 SET deleted_at = NULL, deleted_by = NULL
@@ -696,7 +883,7 @@ func (q *Queries) RestoreMessage(ctx context.Context, arg RestoreMessageParams) 
 const setChannelArchived = `-- name: SetChannelArchived :one
 UPDATE channels SET archived_at = $1
 WHERE tayfa_id = $2 AND id = $3
-RETURNING id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at
+RETURNING id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at, event_id, archive_at
 `
 
 type SetChannelArchivedParams struct {
@@ -715,6 +902,8 @@ type SetChannelArchivedRow struct {
 	ArchivedAt      pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+	EventID         pgtype.UUID
+	ArchiveAt       pgtype.Timestamptz
 }
 
 // archived_at NULL: arşivden çıkar.
@@ -731,15 +920,42 @@ func (q *Queries) SetChannelArchived(ctx context.Context, arg SetChannelArchived
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EventID,
+		&i.ArchiveAt,
 	)
 	return i, err
+}
+
+const setEventChannelArchiveAt = `-- name: SetEventChannelArchiveAt :exec
+UPDATE channels SET archive_at = $1, archive_source_at = $2
+WHERE tayfa_id = $3 AND event_id = $4 AND archived_at IS NULL
+  AND archive_source_at < $2
+`
+
+type SetEventChannelArchiveAtParams struct {
+	ArchiveAt pgtype.Timestamptz
+	SourceAt  pgtype.Timestamptz
+	TayfaID   pgtype.UUID
+	EventID   pgtype.UUID
+}
+
+// Etkinliğin bitişi ya da iptali değişti: arşivlenmemiş kanalının planlanan
+// arşiv zamanı, yalnızca bilgi eldekinden yeniyse.
+func (q *Queries) SetEventChannelArchiveAt(ctx context.Context, arg SetEventChannelArchiveAtParams) error {
+	_, err := q.db.Exec(ctx, setEventChannelArchiveAt,
+		arg.ArchiveAt,
+		arg.SourceAt,
+		arg.TayfaID,
+		arg.EventID,
+	)
+	return err
 }
 
 const updateChannel = `-- name: UpdateChannel :one
 UPDATE channels
 SET name = $1, name_normalized = $2, visibility = $3, slow_mode_seconds = $4
 WHERE tayfa_id = $5 AND id = $6
-RETURNING id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at
+RETURNING id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at, event_id, archive_at
 `
 
 type UpdateChannelParams struct {
@@ -761,6 +977,8 @@ type UpdateChannelRow struct {
 	ArchivedAt      pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+	EventID         pgtype.UUID
+	ArchiveAt       pgtype.Timestamptz
 }
 
 func (q *Queries) UpdateChannel(ctx context.Context, arg UpdateChannelParams) (UpdateChannelRow, error) {
@@ -783,6 +1001,8 @@ func (q *Queries) UpdateChannel(ctx context.Context, arg UpdateChannelParams) (U
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EventID,
+		&i.ArchiveAt,
 	)
 	return i, err
 }

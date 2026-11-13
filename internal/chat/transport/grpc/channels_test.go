@@ -33,7 +33,23 @@ type fakeChannels struct {
 	update                 channel.ChannelUpdate
 	list                   channel.ListInput
 	create                 channel.ChannelInput
+	users                  []id.ID
 	err                    error
+}
+
+func (f *fakeChannels) Members(_ context.Context, caller, tayfa, ch id.ID, _ int32, token string) (channel.MemberPage, error) {
+	f.caller, f.tayfa, f.channel = caller, tayfa, ch
+	return channel.MemberPage{Users: []id.ID{caller}, Next: token + "+"}, f.err
+}
+
+func (f *fakeChannels) AddMembers(_ context.Context, caller, tayfa, ch id.ID, users []id.ID) (channel.Channel, error) {
+	f.caller, f.tayfa, f.channel, f.users = caller, tayfa, ch, users
+	return channel.Channel{ID: ch, TayfaID: tayfa, Name: "seçili", Visibility: channel.VisibilitySelected, MemberCount: 3}, f.err
+}
+
+func (f *fakeChannels) RemoveMember(_ context.Context, caller, tayfa, ch, user id.ID) error {
+	f.caller, f.tayfa, f.channel, f.users = caller, tayfa, ch, []id.ID{user}
+	return f.err
 }
 
 func (f *fakeChannels) List(_ context.Context, caller, tayfa id.ID) ([]channel.Channel, error) {
@@ -243,3 +259,75 @@ type testErr string
 func (e testErr) Error() string { return string(e) }
 
 const errInternalForTest = testErr("test iç hatası")
+
+// TestChannelAudienceConverts (issue #183): the new kinds, their fields
+// and the member methods.
+func TestChannelAudienceConverts(t *testing.T) {
+	app := &fakeChannels{}
+	client, ctx, user := channelConn(t, app, &bytes.Buffer{})
+	tf, ch, ev, other := id.New(), id.New(), id.New(), id.New()
+
+	if _, err := client.CreateChannel(ctx, &chatv1.CreateChannelRequest{
+		TayfaId: tf.String(), Name: "Etkinlik", Visibility: chatv1.ChannelVisibility_CHANNEL_VISIBILITY_EVENT, EventId: ev.String(),
+	}); err != nil || app.create.Visibility != channel.VisibilityEvent || app.create.Event != ev {
+		t.Fatalf("etkinlik kanalı: %v %+v", err, app.create)
+	}
+	if _, err := client.CreateChannel(ctx, &chatv1.CreateChannelRequest{
+		TayfaId: tf.String(), Name: "Seçili", Visibility: chatv1.ChannelVisibility_CHANNEL_VISIBILITY_SELECTED, MemberUserIds: []string{other.String()},
+	}); err != nil || app.create.Visibility != channel.VisibilitySelected || len(app.create.Members) != 1 || app.create.Members[0] != other {
+		t.Fatalf("seçili kanal: %v %+v", err, app.create)
+	}
+	for name, req := range map[string]*chatv1.CreateChannelRequest{
+		"bozuk etkinlik": {TayfaId: tf.String(), Name: "x", EventId: "x"},
+		"bozuk üye":      {TayfaId: tf.String(), Name: "x", MemberUserIds: []string{"x"}},
+		"101 üye":        {TayfaId: tf.String(), Name: "x", MemberUserIds: make([]string, 101)},
+	} {
+		if _, err := client.CreateChannel(ctx, req); status.Code(err) != codes.InvalidArgument {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+
+	page, err := client.ListChannelMembers(ctx, &chatv1.ListChannelMembersRequest{TayfaId: tf.String(), ChannelId: ch.String(), PageToken: "a"})
+	if err != nil || len(page.GetUserIds()) != 1 || page.GetUserIds()[0] != user.String() || page.GetNextPageToken() != "a+" || app.channel != ch {
+		t.Fatalf("üyeler: %v %v", page, err)
+	}
+	added, err := client.AddChannelMembers(ctx, &chatv1.AddChannelMembersRequest{TayfaId: tf.String(), ChannelId: ch.String(), UserIds: []string{other.String()}})
+	if err != nil || len(app.users) != 1 || app.users[0] != other || added.GetChannel().GetMemberCount() != 3 ||
+		added.GetChannel().GetVisibility() != chatv1.ChannelVisibility_CHANNEL_VISIBILITY_SELECTED {
+		t.Fatalf("ekleme: %v %v", added, err)
+	}
+	if _, err := client.RemoveChannelMember(ctx, &chatv1.RemoveChannelMemberRequest{TayfaId: tf.String(), ChannelId: ch.String(), UserId: other.String()}); err != nil || app.users[0] != other {
+		t.Fatalf("çıkarma: %v", err)
+	}
+	if _, err := client.RemoveChannelMember(ctx, &chatv1.RemoveChannelMemberRequest{TayfaId: tf.String(), ChannelId: ch.String(), UserId: "x"}); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("bozuk kullanıcı: %v", err)
+	}
+	for _, tc := range []struct {
+		err    error
+		code   codes.Code
+		reason string
+	}{
+		{apperr.ErrEventChannelExists, codes.FailedPrecondition, "ERROR_REASON_EVENT_CHANNEL_EXISTS"},
+		{apperr.ErrEventNotFound, codes.NotFound, "ERROR_REASON_EVENT_NOT_FOUND"},
+		{apperr.ErrNotTayfaMember, codes.InvalidArgument, "ERROR_REASON_NOT_TAYFA_MEMBER"},
+		{apperr.ErrEventEnded, codes.FailedPrecondition, "ERROR_REASON_EVENT_ENDED"},
+	} {
+		app.err = tc.err
+		_, err := client.AddChannelMembers(ctx, &chatv1.AddChannelMembersRequest{TayfaId: tf.String(), ChannelId: ch.String(), UserIds: []string{other.String()}})
+		if code, reason, _ := reasonOf(err); code != tc.code || reason != tc.reason {
+			t.Errorf("%v: %v %s", tc.err, code, reason)
+		}
+	}
+}
+
+func TestChannelToProtoAudience(t *testing.T) {
+	ev, at := id.New(), time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)
+	p := channelToProto(channel.Channel{Visibility: channel.VisibilityEvent, EventID: ev, PlannedArchiveAt: at, MemberCount: 5})
+	if p.GetVisibility() != chatv1.ChannelVisibility_CHANNEL_VISIBILITY_EVENT || p.GetEventId() != ev.String() ||
+		!p.GetPlannedArchiveTime().AsTime().Equal(at) || p.GetMemberCount() != 5 {
+		t.Fatalf("etkinlik kanalı = %v", p)
+	}
+	if p := channelToProto(channel.Channel{Visibility: channel.VisibilityMembers, MemberCount: 5}); p.GetMemberCount() != 0 || p.GetEventId() != "" {
+		t.Fatalf("üyeler kanalı = %v", p)
+	}
+}

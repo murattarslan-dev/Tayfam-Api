@@ -111,6 +111,45 @@ service ChannelService {
   // MarkChannelRead moves the caller's read marker to message_id. It only
   // moves forward; an older message changes nothing.
   rpc MarkChannelRead(MarkChannelReadRequest) returns (MarkChannelReadResponse);
+
+  // Event and selected-member channels (issue #183, ADR-0024). Their
+  // audience is narrower than the tayfa and staff are not in it by role:
+  // anyone outside the audience, moderators and admins included, gets
+  // ERROR_REASON_CHANNEL_NOT_FOUND for the channel and does not see it in
+  // ListChannels. Whoever enters later reads the earlier messages; whoever
+  // leaves or is removed reads none, and their WebSocket subscription ends
+  // at once. Nobody is notified of a removal.
+  //
+  //   - EVENT: the opener, the event's organizer and every member who
+  //     answered GOING (core's attendance, asked with the caller's token;
+  //     chat keeps no copy). Waitlisted, MAYBE and NOT_GOING are out.
+  //     Opened by a moderator, an admin or whoever may manage the event;
+  //     one open channel per event (ERROR_REASON_EVENT_CHANNEL_EXISTS).
+  //     It is archived 7 days after the event ends, or 7 days after it is
+  //     cancelled (archive_time is set then; planned_archive_time tells it
+  //     in advance) and cannot be unarchived after that.
+  //   - SELECTED: the opener and the members they chose. Opened by a
+  //     moderator or an admin; only the opener adds and removes members.
+  //
+  // Visibility cannot be changed to or from EVENT and SELECTED.
+
+  // ListChannelMembers lists the audience of an EVENT or SELECTED channel,
+  // ordered by user ID; for a MEMBERS or STAFF channel it is
+  // ERROR_REASON_VALIDATION (the tayfa's member list applies). Paging as
+  // above.
+  rpc ListChannelMembers(ListChannelMembersRequest) returns (ListChannelMembersResponse);
+
+  // AddChannelMembers adds members to a SELECTED channel (1–100 user IDs;
+  // already added ones change nothing). Only the opener
+  // (ERROR_REASON_PERMISSION_DENIED otherwise); every user must be an
+  // active member of the tayfa (ERROR_REASON_NOT_TAYFA_MEMBER, nothing is
+  // added). An archived channel is ERROR_REASON_CHANNEL_ARCHIVED.
+  rpc AddChannelMembers(AddChannelMembersRequest) returns (AddChannelMembersResponse);
+
+  // RemoveChannelMember removes a member from a SELECTED channel. Only the
+  // opener, who cannot remove themself. Removing someone who is not in it
+  // changes nothing.
+  rpc RemoveChannelMember(RemoveChannelMemberRequest) returns (RemoveChannelMemberResponse);
 }
 
 enum ChannelVisibility {
@@ -119,6 +158,11 @@ enum ChannelVisibility {
   CHANNEL_VISIBILITY_MEMBERS = 1;
   // Moderators and admins only.
   CHANNEL_VISIBILITY_STAFF = 2;
+  // The opener, the event's organizer and members going to the event
+  // (issue #183).
+  CHANNEL_VISIBILITY_EVENT = 3;
+  // The opener and the members they chose (issue #183).
+  CHANNEL_VISIBILITY_SELECTED = 4;
 }
 
 message Channel {
@@ -139,6 +183,13 @@ message Channel {
   int32 unread_count = 10;
   // ListChannels only: the caller's read marker; empty if none.
   string last_read_message_id = 11;
+  // EVENT channels only.
+  string event_id = 12;
+  // EVENT and SELECTED channels only: the size of the audience.
+  int32 member_count = 13;
+  // EVENT channels only: when the channel will be archived (7 days after
+  // the event's end or cancellation).
+  google.protobuf.Timestamp planned_archive_time = 14;
 }
 
 message Message {
@@ -177,6 +228,11 @@ message CreateChannelRequest {
   // UNSPECIFIED means MEMBERS.
   ChannelVisibility visibility = 3;
   int32 slow_mode_seconds = 4;
+  // EVENT only, and required there.
+  string event_id = 5;
+  // SELECTED only: the first members besides the opener (0–100 user IDs,
+  // active members of the tayfa).
+  repeated string member_user_ids = 6;
 }
 
 message CreateChannelResponse {
@@ -264,3 +320,33 @@ message MarkChannelReadRequest {
 }
 
 message MarkChannelReadResponse {}
+
+message ListChannelMembersRequest {
+  string tayfa_id = 1;
+  string channel_id = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListChannelMembersResponse {
+  repeated string user_ids = 1;
+  string next_page_token = 2;
+}
+
+message AddChannelMembersRequest {
+  string tayfa_id = 1;
+  string channel_id = 2;
+  repeated string user_ids = 3;
+}
+
+message AddChannelMembersResponse {
+  Channel channel = 1;
+}
+
+message RemoveChannelMemberRequest {
+  string tayfa_id = 1;
+  string channel_id = 2;
+  string user_id = 3;
+}
+
+message RemoveChannelMemberResponse {}

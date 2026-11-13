@@ -165,10 +165,16 @@ func TestDirectMessageReportTransport(t *testing.T) {
 	if fields := (&corev1.MyReport{}).ProtoReflect().Descriptor().Fields(); fields.ByName("evidence_text") != nil {
 		t.Fatal("MyReport kanıt metni taşıyor")
 	}
-	// Other targets still need a tayfa.
-	_, err = srv.CreateReport(ctx, &corev1.CreateReportRequest{TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_USER, TargetId: msg.String(), Reason: corev1.ReportReason_REPORT_REASON_SPAM})
+	// A user may be reported without a tayfa, from their profile (issue
+	// #187); content still needs one.
+	f.create = report.CreateInput{}
+	if _, err = srv.CreateReport(ctx, &corev1.CreateReportRequest{TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_USER, TargetId: msg.String(), Reason: corev1.ReportReason_REPORT_REASON_SPAM}); err != nil ||
+		f.tayfa != (id.ID{}) || f.create.TargetType != report.TargetUser {
+		t.Fatalf("profilden kullanıcı şikâyeti: %v %+v", err, f.create)
+	}
+	_, err = srv.CreateReport(ctx, &corev1.CreateReportRequest{TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_ANNOUNCEMENT, TargetId: msg.String(), Reason: corev1.ReportReason_REPORT_REASON_SPAM})
 	if code, info := infoOf(t, err); code != codes.InvalidArgument || info.GetMetadata()["field"] != "tayfa_id" {
-		t.Fatalf("tayfasız üye şikâyeti: %v", err)
+		t.Fatalf("tayfasız duyuru şikâyeti: %v", err)
 	}
 }
 

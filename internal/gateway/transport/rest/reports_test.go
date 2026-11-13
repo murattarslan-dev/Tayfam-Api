@@ -199,7 +199,8 @@ func TestDirectMessageReportRoute(t *testing.T) {
 		"kanıtsız DM":           {"/v1/me/reports", `{"target_type":"dm_message",` + ok + `,"reason":"spam"}`},
 		"boş kanıt":             {"/v1/me/reports", `{"target_type":"dm_message",` + ok + `,"reason":"spam","evidence_text":"   "}`},
 		"uzun kanıt":            {"/v1/me/reports", `{"target_type":"dm_message",` + ok + `,"reason":"spam","evidence_text":"` + strings.Repeat("ş", 2001) + `"}`},
-		"tayfasız üye":          {"/v1/me/reports", `{"target_type":"user",` + ok + `,"reason":"spam"}`},
+		"tayfasız duyuru":       {"/v1/me/reports", `{"target_type":"announcement",` + ok + `,"reason":"spam"}`},
+		"profilden kanıtlı":     {"/v1/me/reports", `{"target_type":"user",` + ok + `,"reason":"spam","evidence_text":"x"}`},
 		"üye şikâyetinde kanıt": {base, `{"target_type":"user",` + ok + `,"reason":"spam","evidence_text":"x"}`},
 	} {
 		if w := as(h, "POST", tc.path, tc.body); w.Code != 400 || problemType(t, w) != "invalid-request" {
@@ -211,5 +212,25 @@ func TestDirectMessageReportRoute(t *testing.T) {
 	}
 	if w := as(h, "POST", "/v1/me/reports", `{"target_type":"dm_message",`+ok+`,"reason":"spam","evidence_text":"  `+strings.Repeat("ş", 2000)+`  "}`); w.Code != 201 {
 		t.Fatalf("2000 karakter: %d %s", w.Code, w.Body)
+	}
+}
+
+// TestProfileUserReportRoute (issue #187): a user is reported from their
+// profile with POST /v1/me/reports, without a tayfa; core decides who may
+// be reported.
+func TestProfileUserReportRoute(t *testing.T) {
+	f := &fakeCore{}
+	h := coreRouter(f)
+	w := as(h, "POST", "/v1/me/reports", `{"target_type":"user","target_id":"`+targetID+`","reason":"harassment","description":"Taciz"}`)
+	got, tok, _ := f.last()
+	want := &corev1.CreateReportRequest{TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_USER, TargetId: targetID,
+		Reason: corev1.ReportReason_REPORT_REASON_HARASSMENT, Description: "Taciz"}
+	if w.Code != 201 || !proto.Equal(got, want) || tok != "USERTOKEN" {
+		t.Fatalf("profil şikâyeti: %d %s; core'a giden %v", w.Code, w.Body, got)
+	}
+	w = as(coreRouter(&fakeCore{err: coreErr(codes.NotFound, "ERROR_REASON_REPORT_TARGET_NOT_FOUND")}), "POST", "/v1/me/reports",
+		`{"target_type":"user","target_id":"`+targetID+`","reason":"spam"}`)
+	if w.Code != 404 || problemType(t, w) != "report-target-not-found" {
+		t.Fatalf("görünmeyen kullanıcı: %d %s", w.Code, problemType(t, w))
 	}
 }

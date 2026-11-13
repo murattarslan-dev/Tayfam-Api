@@ -11,6 +11,7 @@ import (
 )
 
 type Querier interface {
+	AddSocialAccount(ctx context.Context, arg AddSocialAccountParams) error
 	// Pano sayaçları (issue #110). Yalnızca sayılar. Aktif: son @active_since
 	// sonrasında yenilenmiş, iptal edilmemiş oturumu olan kayıtlı hesap.
 	// Silinen hesap (KVKK silme talebi): kişisel veri hemen temizlenir, satır
@@ -26,6 +27,7 @@ type Querier interface {
 	// tamamlanamaz. Etkilenen satır sayısı 0 ise kayıt zaten yapılmış ya da
 	// engellenmiştir.
 	CompleteRegistration(ctx context.Context, arg CompleteRegistrationParams) (int64, error)
+	CountRecentDisplayNameChanges(ctx context.Context, arg CountRecentDisplayNameChangesParams) (int64, error)
 	CountRecentRefCodeLookups(ctx context.Context, arg CountRecentRefCodeLookupsParams) (int64, error)
 	CreateAuthIdentity(ctx context.Context, arg CreateAuthIdentityParams) error
 	// KVKK veri dışa aktarma talepleri (issue #144, ADR-0021). Kullanıcı
@@ -38,9 +40,11 @@ type Querier interface {
 	CreateSanction(ctx context.Context, arg CreateSanctionParams) (CreateSanctionRow, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) error
+	DeleteOldDisplayNameChanges(ctx context.Context, arg DeleteOldDisplayNameChangesParams) error
 	// Sayılmayacak kadar eski denemeler aynı kişinin bir sonraki aramasında
 	// silinir; tablo kendi kendini küçük tutar.
 	DeleteOldRefCodeLookups(ctx context.Context, arg DeleteOldRefCodeLookupsParams) error
+	DeleteSocialAccounts(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silmede giriş kimlikleri hemen silinir; aynı Google/Apple hesabıyla
 	// sonraki giriş yeni bir hesap açar (veri modeli v14).
 	DeleteUserAuthIdentities(ctx context.Context, userID pgtype.UUID) error
@@ -50,6 +54,9 @@ type Querier interface {
 	// ON DELETE CASCADE ile gider (veri modeli v14 "İlişkiler ve Silme
 	// Davranışı").
 	DeleteUserDevices(ctx context.Context, userID pgtype.UUID) (int64, error)
+	DeleteUserDisplayNameChanges(ctx context.Context, userID pgtype.UUID) error
+	// Hesap silme: profil alanları hemen gider (kişisel veri).
+	DeleteUserProfileDetails(ctx context.Context, userID pgtype.UUID) error
 	// Olaylar internal/platform/outbox.Write ile yazılır (sıralama kilidi). Bu
 	// dosyada yalnızca hesap silmede gereken temizlik var.
 	// Silinen kullanıcının henüz silinmemiş profil olayları görünen adını
@@ -86,6 +93,10 @@ type Querier interface {
 	// Kullanıcının kaldırılmamış yaptırımı (süresi dolmuş askı dahil).
 	GetOpenSanction(ctx context.Context, userID pgtype.UUID) (GetOpenSanctionRow, error)
 	GetOwnDataExport(ctx context.Context, arg GetOwnDataExportParams) (DataExportRequest, error)
+	// Profil tamamlama formu (issue #186). Değerler log'a yazılmaz; yalnızca
+	// kişinin kendisine (hesap) ve görünürlüğe göre ProfileService'ten döner.
+	// Satır yoksa her alan cevaplanmamış, görünürlük varsayılandır.
+	GetOwnProfileDetails(ctx context.Context, userID pgtype.UUID) (ProfileDetail, error)
 	// Admin token'ı taşıyan her istekte: kullanıcı hâlâ yönetici mi? Satır
 	// silinince bütün admin token'ları bir sonraki istekte geçersiz olur.
 	GetPlatformAdmin(ctx context.Context, userID pgtype.UUID) (GetPlatformAdminRow, error)
@@ -96,6 +107,8 @@ type Querier interface {
 	// Silinmiş, kaydı tamamlanmamış veya yaş nedeniyle reddedilmiş hesap
 	// yönetici sayılmaz.
 	GetPlatformAdminByIdentity(ctx context.Context, arg GetPlatformAdminByIdentityParams) (GetPlatformAdminByIdentityRow, error)
+	// Profil ayrıntıları (issue #185): yalnızca kayıtlı, silinmemiş hesap.
+	GetProfileDetails(ctx context.Context, id pgtype.UUID) (GetProfileDetailsRow, error)
 	GetUser(ctx context.Context, id pgtype.UUID) (GetUserRow, error)
 	GetUserForAdmin(ctx context.Context, userID pgtype.UUID) (GetUserForAdminRow, error)
 	HasActiveConsent(ctx context.Context, arg HasActiveConsentParams) (bool, error)
@@ -120,6 +133,7 @@ type Querier interface {
 	// kaydın hedefi ya da metadata'daki tayfa, kullanıcı veya şikâyet
 	// kimliğidir. Metadata'dan yalnızca bu üç kimlik okunur.
 	ListPlatformAuditLogs(ctx context.Context, arg ListPlatformAuditLogsParams) ([]ListPlatformAuditLogsRow, error)
+	ListSocialAccounts(ctx context.Context, userID pgtype.UUID) ([]ListSocialAccountsRow, error)
 	// Hesap yönetimi (issue #75).
 	// Kullanıcının kendi açık oturumları, cihaz platformuyla. IP ve token
 	// dönmez. Son görülme oturumun son yenilenme zamanıdır.
@@ -169,6 +183,7 @@ type Querier interface {
 	PurgeSessions(ctx context.Context, arg PurgeSessionsParams) (int64, error)
 	// Aynı sürüm ikinci kez onaylanırsa yeni kayıt açılmaz.
 	RecordConsent(ctx context.Context, arg RecordConsentParams) error
+	RecordDisplayNameChange(ctx context.Context, arg RecordDisplayNameChangeParams) error
 	RecordRefCodeLookup(ctx context.Context, arg RecordRefCodeLookupParams) error
 	// Kapatılan oturumların kimliklerini döner: her biri için session.revoked
 	// yazılır (issue #92).
@@ -190,6 +205,9 @@ type Querier interface {
 	SearchUsersByName(ctx context.Context, pattern string) ([]SearchUsersByNameRow, error)
 	SearchUsersByRefCode(ctx context.Context, refCode pgtype.Text) ([]SearchUsersByRefCodeRow, error)
 	SetActivityVisibility(ctx context.Context, arg SetActivityVisibilityParams) (int64, error)
+	// Doğum günü görünürlüğü (issue #185): hidden / birthday / full. Kitle
+	// (birth_date_audience) bugün yalnızca friends'tir ve değiştirilmez.
+	SetBirthDateVisibility(ctx context.Context, arg SetBirthDateVisibilityParams) (int64, error)
 	SetDisplayName(ctx context.Context, arg SetDisplayNameParams) error
 	SetRefCode(ctx context.Context, arg SetRefCodeParams) (int64, error)
 	// Referans kayıtta bir kez yazılır (trigger users_referral_once da
@@ -201,12 +219,18 @@ type Querier interface {
 	// Avatar (issue #135): core'un, çağıranın kendi token'ıyla doğruladığı
 	// yükleme kimliği; NULL avatarı kaldırır.
 	SetUserAvatar(ctx context.Context, arg SetUserAvatarParams) (int64, error)
+	// "Daha sonra doldur": formu 7 gün göstermez; alan sürümü kaydedilir.
+	SnoozeProfilePrompt(ctx context.Context, arg SnoozeProfilePromptParams) error
 	// Kişisel veriler hemen temizlenir; satır 30 gün sonra saklama işiyle
 	// kalıcı silinir. referred_at kalır (users_referral_once yeniden referans
 	// yazılmasını engeller).
 	SoftDeleteUser(ctx context.Context, id pgtype.UUID) (int64, error)
 	TouchAuthIdentity(ctx context.Context, arg TouchAuthIdentityParams) error
 	TouchDevice(ctx context.Context, id pgtype.UUID) error
+	// Görünen ad değiştirme (issue #184): 24 saatte en fazla 3 kez. Eski ad
+	// saklanmaz; yalnızca değişikliğin zamanı sayılır.
+	UpdateDisplayName(ctx context.Context, arg UpdateDisplayNameParams) (int64, error)
+	UpsertProfileDetails(ctx context.Context, arg UpsertProfileDetailsParams) error
 }
 
 var _ Querier = (*Queries)(nil)

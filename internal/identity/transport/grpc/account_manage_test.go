@@ -203,6 +203,8 @@ func TestNoNewPublicMethods(t *testing.T) {
 			identityv1.AccountService_AcceptConsents_FullMethodName,
 			identityv1.AccountService_DeleteAccount_FullMethodName,
 			identityv1.AdminAuthService_GetAdmin_FullMethodName,
+			identityv1.ProfileService_GetProfileDetails_FullMethodName,
+			identityv1.AccountService_UpdateAccount_FullMethodName,
 		} {
 			if m == managed {
 				t.Fatalf("%s açık metod", m)

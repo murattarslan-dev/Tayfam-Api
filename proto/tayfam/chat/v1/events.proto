@@ -132,6 +132,8 @@ message ApplyCoreEventRequest {
     TayfaPurged tayfa_purged = 11;
     MembershipChanged membership_changed = 12;
     TayfaStatusChanged tayfa_status_changed = 13;
+    EventAttendanceChanged event_attendance_changed = 14;
+    EventScheduleChanged event_schedule_changed = 15;
   }
 }
 
@@ -163,10 +165,33 @@ message TayfaPurged {}
 message MembershipChanged {
   // The member (UUID).
   string user_id = 1;
+  // The user is no longer a member: left, removed or banned. chat takes
+  // them out of the tayfa's selected-member channels (issue #183), so
+  // joining again does not bring them back.
+  bool ended = 2;
 }
 
 // TayfaStatusChanged: the tayfa became read-only or writable again, or was
 // deleted. Which change is not said.
 message TayfaStatusChanged {}
+
+// EventAttendanceChanged: a member's answer to an event changed (or they
+// moved up from the waitlist), so whether they are in the event's channel
+// may have changed (issue #183). Which answer is not said: chat asks core
+// again with each connection's own token.
+message EventAttendanceChanged {
+  string event_id = 1;
+  string user_id = 2;
+}
+
+// EventScheduleChanged: the event's end moved or it was cancelled; its
+// channel is archived 7 days after end_time (issue #183). Applied only if
+// newer (occurred_at) than what chat already has.
+message EventScheduleChanged {
+  string event_id = 1;
+  // The event's end, or the moment it was cancelled.
+  google.protobuf.Timestamp end_time = 2;
+  bool cancelled = 3;
+}
 
 message ApplyCoreEventResponse {}

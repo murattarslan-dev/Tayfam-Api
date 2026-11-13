@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+package tayfam.identity.v1;
+
+// The profile completion form's fields (issue #186; Notion Proje Planı §4
+// item 8). Every field is optional. The values never leave identity but
+// through AccountService (the user's own) and ProfileService (others, by
+// AboutVisibility); they are not in the profile copies of core and chat.
+
+// ProfileInterest is an event type the user is interested in.
+enum ProfileInterest {
+  PROFILE_INTEREST_UNSPECIFIED = 0;
+  PROFILE_INTEREST_CONVOY = 1;
+  PROFILE_INTEREST_CAMP = 2;
+  PROFILE_INTEREST_HIKE = 3;
+  PROFILE_INTEREST_FISHING = 4;
+  PROFILE_INTEREST_GAMING = 5;
+  PROFILE_INTEREST_SPORTS = 6;
+  PROFILE_INTEREST_GENERAL = 7;
+}
+
+// SocialPlatform is the closed list of social platforms. The client builds
+// the link from the platform's own address and the user name.
+enum SocialPlatform {
+  SOCIAL_PLATFORM_UNSPECIFIED = 0;
+  SOCIAL_PLATFORM_INSTAGRAM = 1;
+  SOCIAL_PLATFORM_X = 2;
+  SOCIAL_PLATFORM_TIKTOK = 3;
+  SOCIAL_PLATFORM_YOUTUBE = 4;
+}
+
+// ProfileField names a field, for "Paylaşmak istemiyorum".
+enum ProfileField {
+  PROFILE_FIELD_UNSPECIFIED = 0;
+  PROFILE_FIELD_INTERESTS = 1;
+  PROFILE_FIELD_ABOUT = 2;
+  PROFILE_FIELD_OCCUPATION = 3;
+  PROFILE_FIELD_TEAM = 4;
+  PROFILE_FIELD_LANGUAGES = 5;
+  PROFILE_FIELD_SOCIAL_ACCOUNTS = 6;
+}
+
+// AboutVisibility is who sees the fields. Social accounts go to friends at
+// most, whatever the setting.
+enum AboutVisibility {
+  ABOUT_VISIBILITY_UNSPECIFIED = 0;
+  // Friends and members of a shared tayfa. The default.
+  ABOUT_VISIBILITY_FRIENDS_AND_MUTUAL = 1;
+  ABOUT_VISIBILITY_FRIENDS = 2;
+  ABOUT_VISIBILITY_NONE = 3;
+}
+
+message SocialAccount {
+  SocialPlatform platform = 1;
+  // The user name only, without "@"; never a URL.
+  string username = 2;
+}
+
+// ProfileFields are the values; an empty value is unanswered (or declined,
+// which only the user's own account tells).
+message ProfileFields {
+  // No repeats.
+  repeated ProfileInterest interests = 1;
+  // 1–160 characters.
+  string about = 2;
+  // 1–60 characters.
+  string occupation = 3;
+  // 1–60 characters.
+  string team = 4;
+  // ISO 639-1 codes, at most 5, no repeats.
+  repeated string languages = 5;
+  // One per platform.
+  repeated SocialAccount social_accounts = 6;
+}
+
+message InterestList {
+  repeated ProfileInterest values = 1;
+}
+
+message LanguageList {
+  repeated string values = 1;
+}
+
+message SocialAccountList {
+  repeated SocialAccount values = 1;
+}
+
+message ProfileFieldList {
+  repeated ProfileField values = 1;
+}
+
+// ProfileUpdate changes the fields that are set; unset ones stay as they
+// are. An empty value clears the field. Values are cleaned (spaces
+// collapsed and trimmed, "@" dropped) before they are checked; a value that
+// breaks a rule is ERROR_REASON_VALIDATION and changes nothing.
+message ProfileUpdate {
+  InterestList interests = 1;
+  optional string about = 2;
+  optional string occupation = 3;
+  optional string team = 4;
+  LanguageList languages = 5;
+  SocialAccountList social_accounts = 6;
+  // Set: replaces the declined set; a declined field's value is cleared.
+  // Giving a value to a field the same update declines is
+  // ERROR_REASON_VALIDATION; giving one to a field declined earlier takes
+  // it off the set.
+  ProfileFieldList declined = 7;
+}

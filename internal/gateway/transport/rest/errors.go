@@ -142,9 +142,14 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_MUTED":              {http.StatusForbidden, "muted"},
 		"ERROR_REASON_CHANNEL_ARCHIVED":   {http.StatusConflict, "channel-archived"},
 		"ERROR_REASON_CHANNEL_NAME_TAKEN": {http.StatusConflict, "channel-name-taken"},
-		"ERROR_REASON_SLOW_MODE":          {http.StatusTooManyRequests, "slow-mode"},
-		"ERROR_REASON_TAYFA_READ_ONLY":    {http.StatusConflict, "tayfa-read-only"},
-		"ERROR_REASON_ROLE_HIERARCHY":     {http.StatusForbidden, "role-hierarchy"},
+		// Event and selected-member channels (issue #183).
+		"ERROR_REASON_EVENT_CHANNEL_EXISTS": {http.StatusConflict, "event-channel-exists"},
+		"ERROR_REASON_EVENT_NOT_FOUND":      {http.StatusNotFound, "event-not-found"},
+		"ERROR_REASON_NOT_TAYFA_MEMBER":     {http.StatusBadRequest, "not-tayfa-member"},
+		"ERROR_REASON_EVENT_ENDED":          {http.StatusConflict, "event-ended"},
+		"ERROR_REASON_SLOW_MODE":            {http.StatusTooManyRequests, "slow-mode"},
+		"ERROR_REASON_TAYFA_READ_ONLY":      {http.StatusConflict, "tayfa-read-only"},
+		"ERROR_REASON_ROLE_HIERARCHY":       {http.StatusForbidden, "role-hierarchy"},
 		// Direct messages (issue #95).
 		"ERROR_REASON_CONVERSATION_NOT_FOUND":     {http.StatusNotFound, "conversation-not-found"},
 		"ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED": {http.StatusForbidden, "direct-message-not-allowed"},

@@ -14,6 +14,8 @@ import (
 	"context"
 	"errors"
 
+	"time"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -25,18 +27,39 @@ import (
 )
 
 // Event is one core event: exactly one of Notification, Purged,
-// MemberChanged and StatusChanged.
+// MemberChanged, StatusChanged, Attendance and Schedule.
 type Event struct {
 	ID    id.ID // core's outbox event ID
 	Tayfa id.ID // zero only for a notification not about a tayfa
+	// OccurredAt is when core wrote the event.
+	OccurredAt time.Time
 	// Notification is a notification.requested; its Event, Tayfa and Actor
 	// come from the event.
 	Notification *notification.Request
 	Purged       bool
-	// MemberChanged is the member of a membership.changed.
+	// MemberChanged is the member of a membership.changed; MemberEnded is
+	// set when they are no longer a member (left, removed, banned).
 	MemberChanged id.ID
+	MemberEnded   bool
 	// StatusChanged: the tayfa's read-only state may have changed.
 	StatusChanged bool
+	// Attendance: a member's answer to an event changed (issue #183).
+	Attendance *Attendance
+	// Schedule: an event's end moved or it was cancelled (issue #183).
+	Schedule *Schedule
+}
+
+// Attendance is an event_attendance_changed: whether User is in Event's
+// channel may have changed. The answer itself is not carried.
+type Attendance struct {
+	Event, User id.ID
+}
+
+// Schedule is an event_schedule_changed.
+type Schedule struct {
+	Event id.ID
+	// End is the event's end, or the moment it was cancelled.
+	End time.Time
 }
 
 // AccessCache is the channel permission cache that membership and tayfa
@@ -82,7 +105,7 @@ func New(cfg Config) (*Service, error) {
 // Apply applies e in one transaction.
 func (s *Service) Apply(ctx context.Context, e Event) error {
 	kinds := 0
-	for _, set := range []bool{e.Notification != nil, e.Purged, e.MemberChanged != (id.ID{}), e.StatusChanged} {
+	for _, set := range []bool{e.Notification != nil, e.Purged, e.MemberChanged != (id.ID{}), e.StatusChanged, e.Attendance != nil, e.Schedule != nil} {
 		if set {
 			kinds++
 		}
@@ -95,6 +118,21 @@ func (s *Service) Apply(ctx context.Context, e Event) error {
 	case e.Notification == nil && e.Tayfa == (id.ID{}):
 		// A notification checks its tayfa by type (Request.Validate).
 		return apperr.Validation("tayfa_id")
+	}
+	switch {
+	case e.Attendance != nil:
+		return s.attendance(e)
+	case e.Schedule != nil:
+		return s.schedule(ctx, e)
+	case e.MemberEnded:
+		// Out of the tayfa's selected-member channels first, then the
+		// cache and the live rechecks below. Deleting again changes
+		// nothing.
+		if err := pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
+			return channel.LeaveTayfa(ctx, store.New(tx), e.Tayfa, e.MemberChanged)
+		}); err != nil {
+			return err
+		}
 	}
 	// Cache clearing is idempotent and needs no transaction. The live
 	// rechecks come after it, so they ask core afresh.
@@ -151,4 +189,37 @@ func (s *Service) Apply(ctx context.Context, e Event) error {
 		s.cfg.Live.TayfaPurged(e.Tayfa)
 	}
 	return nil
+}
+
+// attendance: the user's channel permissions are asked afresh and their
+// subscriptions in the tayfa checked again (an event channel they left is
+// cut). Nothing is stored.
+func (s *Service) attendance(e Event) error {
+	a := e.Attendance
+	if a.Event == (id.ID{}) || a.User == (id.ID{}) {
+		return apperr.Validation("event_attendance_changed")
+	}
+	if s.cfg.Access != nil {
+		s.cfg.Access.Forget(e.Tayfa, a.User)
+	}
+	if s.cfg.Live != nil {
+		s.cfg.Live.MembershipChanged(e.Tayfa, a.User)
+	}
+	return nil
+}
+
+// schedule moves the planned archive time of the event's open channel,
+// unless chat already has newer information (events may arrive out of
+// order).
+func (s *Service) schedule(ctx context.Context, e Event) error {
+	sc := e.Schedule
+	if sc.Event == (id.ID{}) || sc.End.IsZero() {
+		return apperr.Validation("event_schedule_changed")
+	}
+	if e.OccurredAt.IsZero() {
+		return apperr.Validation("occurred_at")
+	}
+	return pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
+		return channel.EventEnded(ctx, store.New(tx), e.Tayfa, sc.Event, sc.End.UTC(), e.OccurredAt.UTC())
+	})
 }

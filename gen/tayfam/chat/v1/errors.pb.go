@@ -137,6 +137,17 @@ const (
 	ErrorReason_ERROR_REASON_E2E_LINK_REQUEST_NOT_FOUND ErrorReason = 29
 	// FAILED_PRECONDITION. The caller's device is paired already.
 	ErrorReason_ERROR_REASON_E2E_ALREADY_PAIRED ErrorReason = 30
+	// Event and selected-member channels (issue #183).
+	// FAILED_PRECONDITION. The event already has an open (not archived)
+	// channel.
+	ErrorReason_ERROR_REASON_EVENT_CHANNEL_EXISTS ErrorReason = 31
+	// NOT_FOUND. The event is not one the caller can see in the tayfa.
+	ErrorReason_ERROR_REASON_EVENT_NOT_FOUND ErrorReason = 32
+	// INVALID_ARGUMENT. A user to add is not an active member of the tayfa.
+	ErrorReason_ERROR_REASON_NOT_TAYFA_MEMBER ErrorReason = 33
+	// FAILED_PRECONDITION. The event ended more than 7 days ago (or was
+	// cancelled that long ago): its channel would be archived at once.
+	ErrorReason_ERROR_REASON_EVENT_ENDED ErrorReason = 34
 )
 
 // Enum value maps for ErrorReason.
@@ -173,6 +184,10 @@ var (
 		28: "ERROR_REASON_E2E_HISTORY_KEY_STALE",
 		29: "ERROR_REASON_E2E_LINK_REQUEST_NOT_FOUND",
 		30: "ERROR_REASON_E2E_ALREADY_PAIRED",
+		31: "ERROR_REASON_EVENT_CHANNEL_EXISTS",
+		32: "ERROR_REASON_EVENT_NOT_FOUND",
+		33: "ERROR_REASON_NOT_TAYFA_MEMBER",
+		34: "ERROR_REASON_EVENT_ENDED",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                   0,
@@ -206,6 +221,10 @@ var (
 		"ERROR_REASON_E2E_HISTORY_KEY_STALE":         28,
 		"ERROR_REASON_E2E_LINK_REQUEST_NOT_FOUND":    29,
 		"ERROR_REASON_E2E_ALREADY_PAIRED":            30,
+		"ERROR_REASON_EVENT_CHANNEL_EXISTS":          31,
+		"ERROR_REASON_EVENT_NOT_FOUND":               32,
+		"ERROR_REASON_NOT_TAYFA_MEMBER":              33,
+		"ERROR_REASON_EVENT_ENDED":                   34,
 	}
 )
 
@@ -240,7 +259,8 @@ var File_tayfam_chat_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\x8e\t\n" +
+	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\x98\n" +
+	"\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12'\n" +
@@ -273,7 +293,11 @@ const file_tayfam_chat_v1_errors_proto_rawDesc = "" +
 	"%ERROR_REASON_E2E_PAIRED_DEVICE_EXISTS\x10\x1b\x12&\n" +
 	"\"ERROR_REASON_E2E_HISTORY_KEY_STALE\x10\x1c\x12+\n" +
 	"'ERROR_REASON_E2E_LINK_REQUEST_NOT_FOUND\x10\x1d\x12#\n" +
-	"\x1fERROR_REASON_E2E_ALREADY_PAIRED\x10\x1eB\xbd\x01\n" +
+	"\x1fERROR_REASON_E2E_ALREADY_PAIRED\x10\x1e\x12%\n" +
+	"!ERROR_REASON_EVENT_CHANNEL_EXISTS\x10\x1f\x12 \n" +
+	"\x1cERROR_REASON_EVENT_NOT_FOUND\x10 \x12!\n" +
+	"\x1dERROR_REASON_NOT_TAYFA_MEMBER\x10!\x12\x1c\n" +
+	"\x18ERROR_REASON_EVENT_ENDED\x10\"B\xbd\x01\n" +
 	"\x12com.tayfam.chat.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1;chatv1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Chat.V1\xca\x02\x0eTayfam\\Chat\\V1\xe2\x02\x1aTayfam\\Chat\\V1\\GPBMetadata\xea\x02\x10Tayfam::Chat::V1b\x06proto3"
 
 var (

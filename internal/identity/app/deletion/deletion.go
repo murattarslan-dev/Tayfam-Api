@@ -34,6 +34,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/profilefields"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/userevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -131,6 +132,14 @@ func (s *Service) Delete(ctx context.Context, c Caller) error {
 		}
 		if err := q.DeleteUserRefCodeLookups(ctx, c.User.PG()); err != nil {
 			return fmt.Errorf("arama kayıtları: %w", err)
+		}
+		if err := q.DeleteUserDisplayNameChanges(ctx, c.User.PG()); err != nil {
+			return fmt.Errorf("ad değişiklikleri: %w", err)
+		}
+		// Profile completion fields (issue #186) are personal data: they go
+		// at once, not with the row 30 days later.
+		if err := profilefields.Delete(ctx, q, c.User); err != nil {
+			return err
 		}
 		// Data export requests and their keys go at once (ADR-0021): a
 		// file left in storage can no longer be opened; core deletes it

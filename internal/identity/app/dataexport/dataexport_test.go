@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -317,6 +318,13 @@ func readZip(t *testing.T, b []byte) map[string][]byte {
 func TestExportFlow(t *testing.T) {
 	e := setup(t)
 	c, _ := e.user(t)
+	// Profile completion fields (issue #186) are in identity/profile.json.
+	if _, err := e.pool.Exec(ctx, `INSERT INTO profile_details (user_id, team, interests, declined_fields) VALUES ($1, 'Bursaspor', '{hike}', '{about}')`, c.User.PG()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.pool.Exec(ctx, `INSERT INTO user_social_accounts (user_id, platform, username) VALUES ($1, 'x', 'ece_su')`, c.User.PG()); err != nil {
+		t.Fatal(err)
+	}
 	crid := id.New()
 	r, err := e.svc.Create(ctx, c, crid)
 	must(t, err)
@@ -366,6 +374,10 @@ func TestExportFlow(t *testing.T) {
 	must(t, json.Unmarshal(files["identity/profile.json"], &profile))
 	if len(profile) != 1 || profile[0]["birth_date"] != "2000-02-29" || profile[0]["user_id"] != c.User.String() {
 		t.Fatalf("profil: %v", profile)
+	}
+	if fmt.Sprintf("%v %v %v %v %v", profile[0]["team"], profile[0]["interests"], profile[0]["declined_profile_fields"], profile[0]["social_accounts"], profile[0]["about_visibility"]) !=
+		"Bursaspor [hike] [about] [map[platform:x username:ece_su]] friends_and_mutual" {
+		t.Fatalf("profil alanları: %v", profile)
 	}
 	var events, votes []map[string]any
 	must(t, json.Unmarshal(files["core/events.json"], &events))

@@ -21,6 +21,8 @@ type Accounts interface {
 	RotateReferralCode(ctx context.Context, caller id.ID) (string, error)
 	FindByReferralCode(ctx context.Context, caller id.ID, code string) (account.Found, error)
 	SetActivityVisibility(ctx context.Context, caller id.ID, v account.Visibility) (account.Visibility, error)
+	Update(ctx context.Context, caller id.ID, c account.Changes) error
+	SnoozeProfilePrompt(ctx context.Context, caller id.ID) error
 	SetAvatar(ctx context.Context, caller, upload id.ID) error
 	ClearAvatar(ctx context.Context, caller id.ID) error
 }
@@ -70,6 +72,18 @@ var visibilityFromPB = map[identityv1.ActivityVisibility]account.Visibility{
 	identityv1.ActivityVisibility_ACTIVITY_VISIBILITY_PUBLIC:  account.VisibilityPublic,
 }
 
+var birthdayToPB = map[account.BirthdayVisibility]identityv1.BirthdayVisibility{
+	account.BirthdayHidden:   identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_HIDDEN,
+	account.BirthdayDayMonth: identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_BIRTHDAY,
+	account.BirthdayFull:     identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_FULL,
+}
+
+var birthdayFromPB = map[identityv1.BirthdayVisibility]account.BirthdayVisibility{
+	identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_HIDDEN:   account.BirthdayHidden,
+	identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_BIRTHDAY: account.BirthdayDayMonth,
+	identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_FULL:     account.BirthdayFull,
+}
+
 // maxReferralCode bounds the code before any work; a code is 10 characters.
 const maxReferralCode = 32
 
@@ -79,6 +93,11 @@ func (s *AccountServer) GetAccount(ctx context.Context, _ *identityv1.GetAccount
 	if err != nil {
 		return nil, err
 	}
+	return s.account(ctx, u)
+}
+
+// account is the caller's account as GetAccount returns it.
+func (s *AccountServer) account(ctx context.Context, u id.ID) (*identityv1.GetAccountResponse, error) {
 	a, err := s.app.Get(ctx, u)
 	if err != nil {
 		return nil, s.mapError(ctx, err)
@@ -86,7 +105,13 @@ func (s *AccountServer) GetAccount(ctx context.Context, _ *identityv1.GetAccount
 	out := &identityv1.GetAccountResponse{
 		UserId: a.UserID.String(), DisplayName: a.DisplayName,
 		ReferralCode: a.ReferralCode, ActivityVisibility: visibilityToPB[a.ActivityVisibility],
+		BirthdayVisibility: birthdayToPB[a.BirthdayVisibility],
+		Profile: profileFieldsToPB(a.Profile.Interests, a.Profile.About, a.Profile.Occupation, a.Profile.Team,
+			a.Profile.Languages, a.Profile.SocialAccounts),
+		AboutVisibility:          aboutVisibilityValues[a.AboutVisibility],
+		ProfileCompletionPending: a.ProfileCompletionPending,
 	}
+	out.DeclinedProfileFields, _ = mapAll(a.Profile.Declined, fieldValues)
 	if a.AvatarUploadID != (id.ID{}) {
 		out.AvatarUploadId = a.AvatarUploadID.String()
 	}
@@ -173,6 +198,77 @@ func (s *AccountServer) SetActivityVisibility(ctx context.Context, req *identity
 	return &identityv1.SetActivityVisibilityResponse{ActivityVisibility: visibilityToPB[got]}, nil
 }
 
+// UpdateAccount implements identityv1.AccountServiceServer. The display
+// name is never logged.
+func (s *AccountServer) UpdateAccount(ctx context.Context, req *identityv1.UpdateAccountRequest) (*identityv1.UpdateAccountResponse, error) {
+	u, err := s.caller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var c account.Changes
+	if req.DisplayName != nil {
+		// Bounded before any work: 40 characters of at most 4 bytes, with
+		// room for the spaces Clean removes.
+		if len(req.GetDisplayName()) > maxDisplayNameBytes {
+			return nil, fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_INVALID_DISPLAY_NAME)
+		}
+		name := req.GetDisplayName()
+		c.DisplayName = &name
+	}
+	if v := req.GetActivityVisibility(); v != identityv1.ActivityVisibility_ACTIVITY_VISIBILITY_UNSPECIFIED {
+		vis, ok := visibilityFromPB[v]
+		if !ok {
+			return nil, fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_VALIDATION)
+		}
+		c.ActivityVisibility = &vis
+	}
+	if v := req.GetBirthdayVisibility(); v != identityv1.BirthdayVisibility_BIRTHDAY_VISIBILITY_UNSPECIFIED {
+		vis, ok := birthdayFromPB[v]
+		if !ok {
+			return nil, fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_VALIDATION)
+		}
+		c.BirthdayVisibility = &vis
+	}
+	if v := req.GetAboutVisibility(); v != identityv1.AboutVisibility_ABOUT_VISIBILITY_UNSPECIFIED {
+		vis, ok := aboutVisibilityNames[v]
+		if !ok {
+			return nil, fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_VALIDATION)
+		}
+		c.AboutVisibility = &vis
+	}
+	if profileUpdateTooLarge(req.GetProfile()) {
+		return nil, fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_VALIDATION)
+	}
+	p, ok := profileUpdateFromPB(req.GetProfile())
+	if !ok {
+		return nil, fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_VALIDATION)
+	}
+	c.Profile = p
+	if err := s.app.Update(ctx, u, c); err != nil {
+		return nil, s.mapError(ctx, err)
+	}
+	a, err := s.account(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+	return &identityv1.UpdateAccountResponse{Account: a}, nil
+}
+
+// SnoozeProfilePrompt implements identityv1.AccountServiceServer.
+func (s *AccountServer) SnoozeProfilePrompt(ctx context.Context, _ *identityv1.SnoozeProfilePromptRequest) (*identityv1.SnoozeProfilePromptResponse, error) {
+	u, err := s.caller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.app.SnoozeProfilePrompt(ctx, u); err != nil {
+		return nil, s.mapError(ctx, err)
+	}
+	return &identityv1.SnoozeProfilePromptResponse{}, nil
+}
+
+// maxDisplayNameBytes bounds a display name before it is cleaned.
+const maxDisplayNameBytes = 512
+
 // caller returns the verified user of a full access token.
 func (s *AccountServer) caller(ctx context.Context) (id.ID, error) {
 	t, err := s.token(ctx)
@@ -205,6 +301,10 @@ func (s *AccountServer) mapError(ctx context.Context, err error) error {
 		return fail(codes.ResourceExhausted, identityv1.ErrorReason_ERROR_REASON_RATE_LIMITED)
 	case errors.Is(err, account.ErrCodeNotFound):
 		return fail(codes.NotFound, identityv1.ErrorReason_ERROR_REASON_REFERRAL_CODE_NOT_FOUND)
+	case errors.Is(err, account.ErrInvalidDisplayName):
+		return fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_INVALID_DISPLAY_NAME)
+	case errors.Is(err, account.ErrInvalidProfile):
+		return fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_VALIDATION)
 	case errors.Is(err, account.ErrInvalidVisibility):
 		return fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_UNSPECIFIED)
 	case errors.Is(err, account.ErrUnknownUser):

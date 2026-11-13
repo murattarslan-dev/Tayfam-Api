@@ -52,6 +52,12 @@ type Device struct {
 	LastSeenAt pgtype.Timestamptz
 }
 
+type DisplayNameChange struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	ChangedAt pgtype.Timestamptz
+}
+
 type DomainEvent struct {
 	ID          pgtype.UUID
 	Type        string
@@ -96,6 +102,20 @@ type PlatformSanction struct {
 	LiftedAt  pgtype.Timestamptz
 	LiftedBy  pgtype.UUID
 	CreatedAt pgtype.Timestamptz
+}
+
+type ProfileDetail struct {
+	UserID              pgtype.UUID
+	Interests           []string
+	About               pgtype.Text
+	Occupation          pgtype.Text
+	Team                pgtype.Text
+	Languages           []string
+	DeclinedFields      []string
+	AboutVisibility     string
+	PromptSnoozedUntil  pgtype.Timestamptz
+	PromptFieldsVersion int32
+	UpdatedAt           pgtype.Timestamptz
 }
 
 type RefCodeLookup struct {
@@ -145,4 +165,10 @@ type User struct {
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
+}
+
+type UserSocialAccount struct {
+	UserID   pgtype.UUID
+	Platform string
+	Username string
 }

@@ -19,13 +19,16 @@ import (
 // is append-only except for the retention purge, and a sanction can only be
 // lifted. A new table or grant must be added here on purpose.
 var wantAppPrivileges = map[string]string{
-	"users":            "DELETE,INSERT,SELECT,UPDATE",
-	"auth_identities":  "DELETE,INSERT,SELECT,UPDATE",
-	"devices":          "DELETE,INSERT,SELECT,UPDATE",
-	"sessions":         "DELETE,INSERT,SELECT,UPDATE",
-	"refresh_tokens":   "DELETE,INSERT,SELECT,UPDATE",
-	"ref_code_lookups": "DELETE,INSERT,SELECT",
-	"consent_records":  "INSERT,SELECT",
+	"users":                "DELETE,INSERT,SELECT,UPDATE",
+	"auth_identities":      "DELETE,INSERT,SELECT,UPDATE",
+	"devices":              "DELETE,INSERT,SELECT,UPDATE",
+	"display_name_changes": "DELETE,INSERT,SELECT",
+	"profile_details":      "DELETE,INSERT,SELECT,UPDATE",
+	"user_social_accounts": "DELETE,INSERT,SELECT",
+	"sessions":             "DELETE,INSERT,SELECT,UPDATE",
+	"refresh_tokens":       "DELETE,INSERT,SELECT,UPDATE",
+	"ref_code_lookups":     "DELETE,INSERT,SELECT",
+	"consent_records":      "INSERT,SELECT",
 	// Veri dışa aktarma talepleri (00009, issue #144): durum güncellenir,
 	// saklama işi ve hesap silme satırları siler.
 	"data_export_requests": "DELETE,INSERT,SELECT,UPDATE",
