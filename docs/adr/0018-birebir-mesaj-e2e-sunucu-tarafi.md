@@ -2,7 +2,7 @@
 
 - **Durum:** Önerildi
 - **Tarih:** 2026-11-10
-- **Karar veren:** Murat Tarslan
+- **Karar veren:** Murat Arslan
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md), [ADR-0005](0005-gercek-zamanli-iletisim-ve-chat.md) (bu ADR "Direkt mesajlar" bölümünü uygular), [ADR-0009](0009-veri-modelinin-servislere-dagilimi.md) (chat tablolarının adları ve `devices` bölünmesi), [ADR-0011](0011-guvenlik-ilkesi-ihlal-varsayimi.md), [ADR-0014](0014-websocket-erisim-tokeniyla.md), [ADR-0015](0015-veritabani-rolleri.md), [ADR-0017](0017-yalnizca-mobil-istemci.md) (yalnızca mobil); tayfam-app ADR-0010 (Signal kütüphanesi, AGPL kabul edildi 2026-11-10) ve ADR-0011 (yalnızca mobil); issue #127
 - **Kaynak:** Notion: Veri Modeli (taslak v14) "Sohbet", "E2E güvenlik kodu uyarısı", "Saklama süreleri"
 

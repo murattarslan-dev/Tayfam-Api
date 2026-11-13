@@ -9,7 +9,7 @@
   kaynağı ne olursa olsun gateway'de ve chat'te reddedilir
   (`forbidden-origin`); chat'te izinli kaynak listesi yoktur. 1., 2. ve 4.
   maddelerdeki ve "Sonuçlar"daki web/çerez ifadeleri tarihçe için duruyor.
-- **Karar veren:** Murat Tarslan
+- **Karar veren:** Murat Arslan
 - **İlgili:** [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md) ("WebSocket kimlik doğrulaması" bölümünün yerine geçer), [ADR-0005](0005-gercek-zamanli-iletisim-ve-chat.md) ("Bağlantı" bölümünü değiştirir), [ADR-0009](0009-veri-modelinin-servislere-dagilimi.md), [ADR-0011](0011-guvenlik-ilkesi-ihlal-varsayimi.md), [ADR-0013](0013-servis-kimligi.md)
 
 ## Bağlam

@@ -2,7 +2,7 @@
 
 - **Durum:** Kabul edildi
 - **Tarih:** 2026-11-07
-- **Karar veren:** Murat Tarslan
+- **Karar veren:** Murat Arslan
 - **Revizyon:** Kısmen [ADR-0020](0020-goruntu-isleme-ve-medya-sunumu.md) ile
   değişti (kabul edildi, platform sahibi, 2026-11-11): görüntüyü sunucu
   değil mobil istemci işler (iki varyant, metadata'sız); sunucu yalnızca

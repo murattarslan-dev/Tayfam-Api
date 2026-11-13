@@ -24,7 +24,7 @@
   tarafı [ADR-0019](0019-push-bildirimleri.md) ile ayrıntılandı (token =
   oturum, kayıtla aynı transaction'da açılan gönderim kuyruğu, metin yerine
   çeviri anahtarı, yeniden deneme, saklama).
-- **Karar veren:** Murat Tarslan
+- **Karar veren:** Murat Arslan
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md)
 
 ## Bağlam

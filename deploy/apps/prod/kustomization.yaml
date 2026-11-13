@@ -48,7 +48,7 @@ configMapGenerator:
       # Boşken identity "GOOGLE_CLIENT_IDS: zorunlu" hatasıyla başlamaz.
       - GOOGLE_CLIENT_IDS=73439258394-uhd9m0b6mkc5k8eaoup6kgh57a49on4t.apps.googleusercontent.com
       # Kayıtta onaylanan belgelerin sürümleri; metin değişince artar.
-      - CONSENT_PRIVACY_NOTICE_VERSION=2026-11-08
+      - CONSENT_PRIVACY_NOTICE_VERSION=2026-11-13
       - CONSENT_TERMS_VERSION=2026-11-13
       # Yönetim paneli (admin.tayfam.app, ADR-0008; vds-kurulumu.md adım g.3,
       # issue #173): panel 2026-11-12'den itibaren prod'da. Cloudflare Access

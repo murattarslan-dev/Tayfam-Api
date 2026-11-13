@@ -2,7 +2,7 @@
 
 - **Durum:** Kabul edildi
 - **Tarih:** 2026-11-10
-- **Karar veren:** Murat Tarslan
+- **Karar veren:** Murat Arslan
 - **İlgili:** [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md) ("İstemci tarafında saklama" bölümünün yerine geçer), [ADR-0005](0005-gercek-zamanli-iletisim-ve-chat.md), [ADR-0006](0006-dagitim-ve-ortamlar.md), [ADR-0008](0008-kvkk-ve-platform-yonetimi.md), [ADR-0011](0011-guvenlik-ilkesi-ihlal-varsayimi.md), [ADR-0014](0014-websocket-erisim-tokeniyla.md) (5. maddenin yerine geçer), [ADR-0016](0016-desteklenen-istemci-surumu.md); tayfam-app ADR-0011; issue #124
 
 ## Bağlam

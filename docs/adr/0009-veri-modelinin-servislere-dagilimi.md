@@ -2,7 +2,7 @@
 
 - **Durum:** Kabul edildi
 - **Tarih:** 2026-11-07
-- **Karar veren:** Murat Tarslan
+- **Karar veren:** Murat Arslan
 - **Revizyon:** 2026-11-09 (issue #95): `CheckDirectMessage` imzası
   (gönderen token'dan), core → chat `VerifyDirectMessageForReport` ve
   birebir mesaj şikâyetinin `reports` tablosundaki yeri ("Birebir mesaj

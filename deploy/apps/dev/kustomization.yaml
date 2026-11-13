@@ -44,7 +44,7 @@ configMapGenerator:
       # ID'si mobilde de "server client ID" olarak kullanılır.
       - GOOGLE_CLIENT_IDS=73439258394-uhd9m0b6mkc5k8eaoup6kgh57a49on4t.apps.googleusercontent.com
       # Kayıtta onaylanan belgelerin sürümleri; metin değişince artar.
-      - CONSENT_PRIVACY_NOTICE_VERSION=2026-11-08
+      - CONSENT_PRIVACY_NOTICE_VERSION=2026-11-13
       - CONSENT_TERMS_VERSION=2026-11-13
       # Yönetim paneli (ADR-0008, issue #104): Cloudflare Access uygulaması
       # "Tayfam Panel" (admin.tayfam.app). Gizli değildir; ikisi birlikte
