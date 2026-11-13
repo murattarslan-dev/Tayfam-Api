@@ -1,6 +1,6 @@
 # ADR-0024: Kanal kitlesi — etkinlik ve seçili üye kanalları
 
-- **Durum:** Önerildi (platform sahibinin onayını bekliyor)
+- **Durum:** Kabul edildi (platform sahibi, 2026-11-13)
 - **Tarih:** 2026-11-13
 - **Karar veren:** Ürün kararları platform sahibinindir (2026-11-13,
   issue #183 ve yorumları; Notion Proje Planı §6 Sohbet). Bu ADR onların
