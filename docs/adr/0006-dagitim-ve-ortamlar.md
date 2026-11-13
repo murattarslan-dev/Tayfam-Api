@@ -74,6 +74,10 @@ başka bir node'a kod ve manifest değişmeden taşınabilmeli.
   Postgres cluster'ı vardır; içinde servis başına veritabanı ve kullanıcı
   bulunur (ADR-0002).
 - Postgres image'ı **PostGIS** içerir (konum sorguları, veri modeli v13).
+  *Güncelleme 2026-11-13:* 2026-11-09 kararıyla şema PostGIS kullanmıyor
+  (konumlar enlem/boylam sütunları ve `jsonb` rota; Notion Veri Modeli v15).
+  Image ve `postgis` uzantısı Faz 2 Keşfet (yakındaki tayfalar) için
+  yerinde bırakıldı; kaldırmak ayrı bir karardır.
   Veritabanları **ICU `tr-TR`** yerel ayarıyla oluşturulur; Türkçe büyük/küçük
   harf dönüşümleri ("İ" ↔ "i", "I" ↔ "ı") doğru çalışır.
 - Yedekler Barman Cloud ile Cloudflare R2'ye alınır: sürekli WAL arşivi ve
