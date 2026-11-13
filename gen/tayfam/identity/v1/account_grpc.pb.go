@@ -23,6 +23,7 @@ const (
 	AccountService_RotateReferralCode_FullMethodName     = "/tayfam.identity.v1.AccountService/RotateReferralCode"
 	AccountService_FindUserByReferralCode_FullMethodName = "/tayfam.identity.v1.AccountService/FindUserByReferralCode"
 	AccountService_SetActivityVisibility_FullMethodName  = "/tayfam.identity.v1.AccountService/SetActivityVisibility"
+	AccountService_UpdateAccount_FullMethodName          = "/tayfam.identity.v1.AccountService/UpdateAccount"
 	AccountService_SetAvatar_FullMethodName              = "/tayfam.identity.v1.AccountService/SetAvatar"
 	AccountService_ClearAvatar_FullMethodName            = "/tayfam.identity.v1.AccountService/ClearAvatar"
 	AccountService_ListSessions_FullMethodName           = "/tayfam.identity.v1.AccountService/ListSessions"
@@ -62,6 +63,15 @@ type AccountServiceClient interface {
 	// SetActivityVisibility changes who sees the caller's attendance history.
 	// core gets the new setting with the profile copy (user.profile_updated).
 	SetActivityVisibility(ctx context.Context, in *SetActivityVisibilityRequest, opts ...grpc.CallOption) (*SetActivityVisibilityResponse, error)
+	// UpdateAccount changes the given settings of the caller in one step;
+	// fields left unset stay as they are. Every field is checked before any
+	// is written. The display name (issue #184) is 1–40 characters after
+	// spaces are collapsed and trimmed, else ERROR_REASON_INVALID_DISPLAY_NAME;
+	// it may change at most 3 times in 24 hours (ERROR_REASON_RATE_LIMITED).
+	// Setting a field to its current value changes nothing and is not
+	// counted. A new name or activity visibility reaches core and chat with
+	// user.profile_updated. Returns the account as GetAccount does.
+	UpdateAccount(ctx context.Context, in *UpdateAccountRequest, opts ...grpc.CallOption) (*UpdateAccountResponse, error)
 	// SetAvatar makes the caller's READY AVATAR upload (core's MediaService)
 	// their avatar. identity does not own media: it asks core with the
 	// caller's own token (MediaService.AttachAvatar), which checks that the
@@ -143,6 +153,16 @@ func (c *accountServiceClient) SetActivityVisibility(ctx context.Context, in *Se
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SetActivityVisibilityResponse)
 	err := c.cc.Invoke(ctx, AccountService_SetActivityVisibility_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *accountServiceClient) UpdateAccount(ctx context.Context, in *UpdateAccountRequest, opts ...grpc.CallOption) (*UpdateAccountResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateAccountResponse)
+	err := c.cc.Invoke(ctx, AccountService_UpdateAccount_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -258,6 +278,15 @@ type AccountServiceServer interface {
 	// SetActivityVisibility changes who sees the caller's attendance history.
 	// core gets the new setting with the profile copy (user.profile_updated).
 	SetActivityVisibility(context.Context, *SetActivityVisibilityRequest) (*SetActivityVisibilityResponse, error)
+	// UpdateAccount changes the given settings of the caller in one step;
+	// fields left unset stay as they are. Every field is checked before any
+	// is written. The display name (issue #184) is 1–40 characters after
+	// spaces are collapsed and trimmed, else ERROR_REASON_INVALID_DISPLAY_NAME;
+	// it may change at most 3 times in 24 hours (ERROR_REASON_RATE_LIMITED).
+	// Setting a field to its current value changes nothing and is not
+	// counted. A new name or activity visibility reaches core and chat with
+	// user.profile_updated. Returns the account as GetAccount does.
+	UpdateAccount(context.Context, *UpdateAccountRequest) (*UpdateAccountResponse, error)
 	// SetAvatar makes the caller's READY AVATAR upload (core's MediaService)
 	// their avatar. identity does not own media: it asks core with the
 	// caller's own token (MediaService.AttachAvatar), which checks that the
@@ -316,6 +345,9 @@ func (UnimplementedAccountServiceServer) FindUserByReferralCode(context.Context,
 }
 func (UnimplementedAccountServiceServer) SetActivityVisibility(context.Context, *SetActivityVisibilityRequest) (*SetActivityVisibilityResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetActivityVisibility not implemented")
+}
+func (UnimplementedAccountServiceServer) UpdateAccount(context.Context, *UpdateAccountRequest) (*UpdateAccountResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateAccount not implemented")
 }
 func (UnimplementedAccountServiceServer) SetAvatar(context.Context, *SetAvatarRequest) (*SetAvatarResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetAvatar not implemented")
@@ -430,6 +462,24 @@ func _AccountService_SetActivityVisibility_Handler(srv interface{}, ctx context.
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AccountServiceServer).SetActivityVisibility(ctx, req.(*SetActivityVisibilityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AccountService_UpdateAccount_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateAccountRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AccountServiceServer).UpdateAccount(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AccountService_UpdateAccount_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AccountServiceServer).UpdateAccount(ctx, req.(*UpdateAccountRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -600,6 +650,10 @@ var AccountService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetActivityVisibility",
 			Handler:    _AccountService_SetActivityVisibility_Handler,
+		},
+		{
+			MethodName: "UpdateAccount",
+			Handler:    _AccountService_UpdateAccount_Handler,
 		},
 		{
 			MethodName: "SetAvatar",

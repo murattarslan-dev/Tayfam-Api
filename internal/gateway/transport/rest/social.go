@@ -9,6 +9,7 @@ import (
 
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/httpx"
 )
 
 // Friends, blocks, direct invitations, profiles and the caller's account
@@ -52,7 +53,7 @@ type AccountClient interface {
 	GetAccount(ctx context.Context, in *identityv1.GetAccountRequest, opts ...grpc.CallOption) (*identityv1.GetAccountResponse, error)
 	RotateReferralCode(ctx context.Context, in *identityv1.RotateReferralCodeRequest, opts ...grpc.CallOption) (*identityv1.RotateReferralCodeResponse, error)
 	FindUserByReferralCode(ctx context.Context, in *identityv1.FindUserByReferralCodeRequest, opts ...grpc.CallOption) (*identityv1.FindUserByReferralCodeResponse, error)
-	SetActivityVisibility(ctx context.Context, in *identityv1.SetActivityVisibilityRequest, opts ...grpc.CallOption) (*identityv1.SetActivityVisibilityResponse, error)
+	UpdateAccount(ctx context.Context, in *identityv1.UpdateAccountRequest, opts ...grpc.CallOption) (*identityv1.UpdateAccountResponse, error)
 	// Sessions, consents and account deletion (issue #75, account.go).
 	ListSessions(ctx context.Context, in *identityv1.ListSessionsRequest, opts ...grpc.CallOption) (*identityv1.ListSessionsResponse, error)
 	RevokeSession(ctx context.Context, in *identityv1.RevokeSessionRequest, opts ...grpc.CallOption) (*identityv1.RevokeSessionResponse, error)
@@ -507,9 +508,16 @@ type accountJSON struct {
 	AvatarUploadID     string `json:"avatar_upload_id,omitempty"`
 }
 
+// accountPatchBody is AccountUpdate: every field is optional, absent
+// fields stay as they are, and at least one must be present.
 type accountPatchBody struct {
-	ActivityVisibility string `json:"activity_visibility"`
+	DisplayName        *string `json:"display_name"`
+	ActivityVisibility *string `json:"activity_visibility"`
 }
+
+// maxDisplayNameBytes bounds the name before it reaches identity, which
+// applies the 1–40 character rule (invalid-display-name).
+const maxDisplayNameBytes = 512
 
 type referralCodeJSON struct {
 	ReferralCode string `json:"referral_code"`
@@ -535,28 +543,50 @@ func (h coreHandlers) getAccount(ctx context.Context, w http.ResponseWriter, r *
 		h.identityFail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, accountJSON{
-		UserID: resp.GetUserId(), DisplayName: resp.GetDisplayName(),
-		ReferralCode: resp.GetReferralCode(), ActivityVisibility: identityVisibilities.name(resp.GetActivityVisibility()),
-		AvatarUploadID: resp.GetAvatarUploadId(),
-	})
+	writeJSON(w, http.StatusOK, accountFrom(resp))
 }
 
+func accountFrom(a *identityv1.GetAccountResponse) accountJSON {
+	return accountJSON{
+		UserID: a.GetUserId(), DisplayName: a.GetDisplayName(),
+		ReferralCode: a.GetReferralCode(), ActivityVisibility: identityVisibilities.name(a.GetActivityVisibility()),
+		AvatarUploadID: a.GetAvatarUploadId(),
+	}
+}
+
+// updateAccount applies the present fields in one identity call: an
+// invalid field changes nothing. The display name is never logged.
 func (h coreHandlers) updateAccount(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	var b accountPatchBody
 	if !decode(w, r, &b) {
 		return
 	}
-	v, ok := identityVisibilities.value(b.ActivityVisibility)
-	if !ok {
+	if b.DisplayName == nil && b.ActivityVisibility == nil {
 		badRequest(w, r)
 		return
 	}
-	if _, err := h.d.Accounts.SetActivityVisibility(ctx, &identityv1.SetActivityVisibilityRequest{ActivityVisibility: v}); err != nil {
+	req := &identityv1.UpdateAccountRequest{}
+	if b.DisplayName != nil {
+		if len(*b.DisplayName) > maxDisplayNameBytes {
+			httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-display-name", "Bad Request", "")
+			return
+		}
+		req.DisplayName = b.DisplayName
+	}
+	if b.ActivityVisibility != nil {
+		v, ok := identityVisibilities.value(*b.ActivityVisibility)
+		if !ok {
+			badRequest(w, r)
+			return
+		}
+		req.ActivityVisibility = v
+	}
+	resp, err := h.d.Accounts.UpdateAccount(ctx, req)
+	if err != nil {
 		h.identityFail(w, r, err)
 		return
 	}
-	h.getAccount(ctx, w, r)
+	writeJSON(w, http.StatusOK, accountFrom(resp.GetAccount()))
 }
 
 func (h coreHandlers) rotateReferralCode(ctx context.Context, w http.ResponseWriter, r *http.Request) {

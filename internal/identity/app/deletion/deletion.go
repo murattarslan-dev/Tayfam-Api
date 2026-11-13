@@ -132,6 +132,9 @@ func (s *Service) Delete(ctx context.Context, c Caller) error {
 		if err := q.DeleteUserRefCodeLookups(ctx, c.User.PG()); err != nil {
 			return fmt.Errorf("arama kayıtları: %w", err)
 		}
+		if err := q.DeleteUserDisplayNameChanges(ctx, c.User.PG()); err != nil {
+			return fmt.Errorf("ad değişiklikleri: %w", err)
+		}
 		// Data export requests and their keys go at once (ADR-0021): a
 		// file left in storage can no longer be opened; core deletes it
 		// with the user's files.

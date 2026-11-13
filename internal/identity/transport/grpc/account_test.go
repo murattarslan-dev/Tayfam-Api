@@ -26,6 +26,12 @@ type fakeAccounts struct {
 	vis    account.Visibility
 	found  account.Found
 	avatar id.ID
+	update *account.Changes
+}
+
+func (f *fakeAccounts) Update(_ context.Context, c id.ID, ch account.Changes) error {
+	f.caller, f.update = c, &ch
+	return f.err
 }
 
 func (f *fakeAccounts) Get(_ context.Context, c id.ID) (account.Account, error) {
@@ -80,6 +86,7 @@ func TestAccountNeedsFullToken(t *testing.T) {
 		_, calls["rotate"] = srv.RotateReferralCode(ctx, &identityv1.RotateReferralCodeRequest{})
 		_, calls["find"] = srv.FindUserByReferralCode(ctx, &identityv1.FindUserByReferralCodeRequest{ReferralCode: "TYF-8K2M4Q"})
 		_, calls["set"] = srv.SetActivityVisibility(ctx, &identityv1.SetActivityVisibilityRequest{ActivityVisibility: identityv1.ActivityVisibility_ACTIVITY_VISIBILITY_PUBLIC})
+		_, calls["update"] = srv.UpdateAccount(ctx, &identityv1.UpdateAccountRequest{DisplayName: ptr("Ece")})
 		for m, err := range calls {
 			if status.Code(err) != codes.Unauthenticated {
 				t.Errorf("%s/%s: %v", name, m, err)
@@ -116,6 +123,61 @@ func TestAccountMethods(t *testing.T) {
 	}
 	if _, err := srv.SetActivityVisibility(ctx, &identityv1.SetActivityVisibilityRequest{}); status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("belirtilmemiş görünürlük: %v", err)
+	}
+}
+
+func ptr[T any](v T) *T { return &v }
+
+func TestUpdateAccount(t *testing.T) {
+	u := id.New()
+	ctx := fullCtx(u)
+
+	f := &fakeAccounts{}
+	resp, err := newAccountServer(f).UpdateAccount(ctx, &identityv1.UpdateAccountRequest{
+		DisplayName: ptr(" Ece  Su "), ActivityVisibility: identityv1.ActivityVisibility_ACTIVITY_VISIBILITY_PRIVATE,
+	})
+	if err != nil || f.caller != u || f.update == nil || *f.update.DisplayName != " Ece  Su " ||
+		*f.update.ActivityVisibility != account.VisibilityPrivate || resp.GetAccount().GetUserId() != u.String() {
+		t.Fatalf("güncelleme = %v %v %+v", resp, err, f.update)
+	}
+
+	// Unset fields stay unset: nothing changes but the account is returned.
+	f = &fakeAccounts{}
+	if _, err := newAccountServer(f).UpdateAccount(ctx, &identityv1.UpdateAccountRequest{}); err != nil ||
+		f.update.DisplayName != nil || f.update.ActivityVisibility != nil {
+		t.Fatalf("boş güncelleme = %v %+v", err, f.update)
+	}
+
+	// An over-long name never reaches the app layer.
+	f = &fakeAccounts{}
+	_, err = newAccountServer(f).UpdateAccount(ctx, &identityv1.UpdateAccountRequest{DisplayName: ptr(string(make([]byte, 513)))})
+	if status.Code(err) != codes.InvalidArgument || f.update != nil {
+		t.Fatalf("uzun ad: %v", err)
+	}
+	_, err = newAccountServer(f).UpdateAccount(ctx, &identityv1.UpdateAccountRequest{ActivityVisibility: identityv1.ActivityVisibility(99)})
+	if status.Code(err) != codes.InvalidArgument || f.update != nil {
+		t.Fatalf("bilinmeyen görünürlük: %v", err)
+	}
+
+	for _, tc := range []struct {
+		err    error
+		code   codes.Code
+		reason string
+	}{
+		{account.ErrInvalidDisplayName, codes.InvalidArgument, "ERROR_REASON_INVALID_DISPLAY_NAME"},
+		{account.ErrRateLimited, codes.ResourceExhausted, "ERROR_REASON_RATE_LIMITED"},
+	} {
+		_, err := newAccountServer(&fakeAccounts{err: tc.err}).UpdateAccount(ctx, &identityv1.UpdateAccountRequest{DisplayName: ptr("Ece")})
+		st := status.Convert(err)
+		reason := ""
+		for _, d := range st.Details() {
+			if info, ok := d.(*errdetails.ErrorInfo); ok {
+				reason = info.GetReason()
+			}
+		}
+		if st.Code() != tc.code || reason != tc.reason {
+			t.Errorf("%v: %v %q", tc.err, st.Code(), reason)
+		}
 	}
 }
 

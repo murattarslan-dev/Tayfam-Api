@@ -100,6 +100,20 @@ func (f *fakeCore) SetActivityVisibility(ctx context.Context, in *identityv1.Set
 	return &identityv1.SetActivityVisibilityResponse{ActivityVisibility: in.GetActivityVisibility()}, f.record(ctx, in)
 }
 
+func (f *fakeCore) UpdateAccount(ctx context.Context, in *identityv1.UpdateAccountRequest, _ ...grpc.CallOption) (*identityv1.UpdateAccountResponse, error) {
+	a := &identityv1.GetAccountResponse{
+		UserId: userID, DisplayName: "Deniz",
+		ReferralCode: "TYF-8K2M4Q", ActivityVisibility: identityv1.ActivityVisibility_ACTIVITY_VISIBILITY_TAYFA,
+	}
+	if in.DisplayName != nil {
+		a.DisplayName = in.GetDisplayName()
+	}
+	if in.GetActivityVisibility() != identityv1.ActivityVisibility_ACTIVITY_VISIBILITY_UNSPECIFIED {
+		a.ActivityVisibility = in.GetActivityVisibility()
+	}
+	return &identityv1.UpdateAccountResponse{Account: a}, f.record(ctx, in)
+}
+
 // --- tests ---
 
 func TestFriendRoutes(t *testing.T) {
@@ -160,6 +174,10 @@ func TestSocialRoutesValidateInput(t *testing.T) {
 		{"GET", "/v1/users/x/profile", ""},
 		{"GET", "/v1/users/" + userID + "/activity?page_size=101", ""},
 		{"PATCH", "/v1/me/account", `{"activity_visibility":"friends"}`},
+		{"PATCH", "/v1/me/account", `{}`},
+		{"PATCH", "/v1/me/account", `{"activity_visibility":null}`},
+		{"PATCH", "/v1/me/account", `{"display_name":"` + strings.Repeat("a", 513) + `"}`},
+		{"PATCH", "/v1/me/account", `{"display_name":"Ece","nickname":"x"}`},
 		{"POST", "/v1/referral-lookups", `{"referral_code":""}`},
 		{"POST", "/v1/referral-lookups", `{"referral_code":"` + strings.Repeat("A", 33) + `"}`},
 	} {
@@ -239,8 +257,30 @@ func TestAccountRoutes(t *testing.T) {
 		t.Fatalf("hesap: %d %+v", w.Code, v)
 	}
 	w = as(h, "PATCH", "/v1/me/account", `{"activity_visibility":"private"}`)
-	if w.Code != 200 {
-		t.Fatalf("güncelleme: %d", w.Code)
+	got, _, _ := f.last()
+	if v := decodeBody[accountJSON](t, w); w.Code != 200 || v.ActivityVisibility != "private" ||
+		got.(*identityv1.UpdateAccountRequest).DisplayName != nil {
+		t.Fatalf("güncelleme: %d %+v", w.Code, v)
+	}
+	// Display name (issue #184): passed as typed, identity cleans it.
+	w = as(h, "PATCH", "/v1/me/account", `{"display_name":" Ece  Su "}`)
+	got, _, _ = f.last()
+	if v := decodeBody[accountJSON](t, w); w.Code != 200 || v.DisplayName != " Ece  Su " ||
+		got.(*identityv1.UpdateAccountRequest).GetDisplayName() != " Ece  Su " ||
+		got.(*identityv1.UpdateAccountRequest).GetActivityVisibility() != identityv1.ActivityVisibility_ACTIVITY_VISIBILITY_UNSPECIFIED {
+		t.Fatalf("ad: %d %+v", w.Code, v)
+	}
+	for reason, want := range map[string]struct {
+		code int
+		typ  string
+	}{
+		"ERROR_REASON_INVALID_DISPLAY_NAME": {http.StatusBadRequest, "invalid-display-name"},
+		"ERROR_REASON_RATE_LIMITED":         {http.StatusTooManyRequests, "rate-limited"},
+	} {
+		w = as(coreRouter(&fakeCore{err: identityErr(codes.InvalidArgument, reason)}), "PATCH", "/v1/me/account", `{"display_name":"Ece"}`)
+		if w.Code != want.code || problemType(t, w) != want.typ {
+			t.Errorf("%s: %d %s", reason, w.Code, problemType(t, w))
+		}
 	}
 	w = as(h, "POST", "/v1/me/referral-code", "")
 	if v := decodeBody[referralCodeJSON](t, w); w.Code != 200 || v.ReferralCode != "TYF-2222AB" {

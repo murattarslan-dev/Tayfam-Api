@@ -13,9 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -23,6 +21,7 @@ import (
 
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/birthdate"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/consent"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/displayname"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/refcode"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/userevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/store"
@@ -212,20 +211,12 @@ func setReferrer(ctx context.Context, q *store.Queries, user id.ID, code string)
 	return nil
 }
 
-// cleanDisplayName normalises spaces and checks the 1–40 character limit.
+// cleanDisplayName applies the display name rule (package displayname).
 // Empty means "keep the current name".
 func cleanDisplayName(s string) (string, error) {
-	s = strings.Join(strings.Fields(s), " ")
-	if s == "" {
-		return "", nil
-	}
-	if utf8.RuneCountInString(s) > 40 {
+	s, ok := displayname.Clean(s)
+	if !ok {
 		return "", ErrInvalidDisplayName
-	}
-	for _, r := range s {
-		if r < 0x20 || (r >= 0x7f && r < 0xa0) {
-			return "", ErrInvalidDisplayName
-		}
 	}
 	return s, nil
 }

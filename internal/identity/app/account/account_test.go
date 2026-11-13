@@ -290,3 +290,139 @@ func TestAvatar(t *testing.T) {
 		t.Fatalf("bilinmeyen: %v", err)
 	}
 }
+
+func (e *env) profileEvents(t *testing.T, u id.ID) []string {
+	t.Helper()
+	rows, err := e.pool.Query(context.Background(), `SELECT payload::text FROM domain_events WHERE type = 'user.profile_updated' AND subject_id = $1 ORDER BY id`, u.PG())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+// TestUpdateDisplayName (issue #184): the rule of registration, the new
+// name reaches core and chat, the old one is kept nowhere.
+func TestUpdateDisplayName(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	u, _ := e.registered(t, "Deniz")
+
+	for name, in := range map[string]string{
+		"boş":               "",
+		"yalnız boşluk":     "   ",
+		"41 karakter":       string(bytes.Repeat([]byte("a"), 41)),
+		"kontrol karakteri": "Ece\u0007",
+	} {
+		if err := e.svc.Update(ctx, u, Changes{DisplayName: &in}); !errors.Is(err, ErrInvalidDisplayName) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	// An invalid field changes nothing, a valid one in the same call
+	// included.
+	bad, vis := "", VisibilityPrivate
+	if err := e.svc.Update(ctx, u, Changes{DisplayName: &bad, ActivityVisibility: &vis}); !errors.Is(err, ErrInvalidDisplayName) {
+		t.Fatal(err)
+	}
+	if a, _ := e.svc.Get(ctx, u); a.ActivityVisibility != VisibilityTayfa || len(e.profileEvents(t, u)) != 0 {
+		t.Fatalf("geçersiz güncelleme bir şey değiştirdi: %+v", a)
+	}
+
+	// The current name again (after cleaning) writes nothing.
+	same := "  Deniz "
+	if err := e.svc.Update(ctx, u, Changes{DisplayName: &same}); err != nil || len(e.profileEvents(t, u)) != 0 {
+		t.Fatalf("aynı ad: %v", err)
+	}
+
+	name := "  Deniz   Su "
+	if err := e.svc.Update(ctx, u, Changes{DisplayName: &name, ActivityVisibility: &vis}); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := e.svc.Get(ctx, u)
+	if a.DisplayName != "Deniz Su" || a.ActivityVisibility != VisibilityPrivate {
+		t.Fatalf("hesap = %+v", a)
+	}
+	// One event carries both changes; the old name is nowhere.
+	if got := e.profileEvents(t, u); len(got) != 1 || got[0] != `{"display_name": "Deniz Su", "activity_visibility": "private"}` {
+		t.Fatalf("olaylar = %q", got)
+	}
+	var n int
+	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM display_name_changes WHERE user_id = $1`, u.PG()).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("değişiklik kaydı = %d %v", n, err)
+	}
+
+	if err := e.svc.Update(ctx, id.New(), Changes{DisplayName: &name}); !errors.Is(err, ErrUnknownUser) {
+		t.Fatalf("bilinmeyen: %v", err)
+	}
+}
+
+// TestDisplayNameLimit: 3 changes in 24 hours; the window slides; setting
+// the current name does not count; another user has their own limit.
+func TestDisplayNameLimit(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	u, _ := e.registered(t, "Ad0")
+	other, _ := e.registered(t, "Başka")
+	set := func(user id.ID, s string) error { return e.svc.Update(ctx, user, Changes{DisplayName: &s}) }
+
+	start := e.now
+	for i, n := range []string{"Ad1", "Ad2", "Ad3"} {
+		e.now = start.Add(time.Duration(i) * time.Hour)
+		if err := set(u, n); err != nil {
+			t.Fatalf("%d. değişiklik: %v", i+1, err)
+		}
+	}
+	if err := set(u, "Ad3"); err != nil {
+		t.Fatalf("aynı ad sınıra takılmamalı: %v", err)
+	}
+	if err := set(u, "Ad4"); !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("4. değişiklik: %v", err)
+	}
+	if a, _ := e.svc.Get(ctx, u); a.DisplayName != "Ad3" {
+		t.Fatalf("reddedilen ad yazıldı: %s", a.DisplayName)
+	}
+	if err := set(other, "Başka2"); err != nil {
+		t.Fatalf("başka kullanıcı: %v", err)
+	}
+	// 24 hours after the first change, one more is allowed.
+	e.now = start.Add(24*time.Hour + time.Second)
+	if err := set(u, "Ad4"); err != nil {
+		t.Fatalf("pencere kaydı: %v", err)
+	}
+	if err := set(u, "Ad5"); !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("pencere içinde 4.: %v", err)
+	}
+}
+
+func TestDisplayNameLimitUnderConcurrency(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	u, _ := e.registered(t, "Ad")
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	ok := 0
+	for i := range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s := "Ad " + string(rune('A'+i))
+			if err := e.svc.Update(ctx, u, Changes{DisplayName: &s}); err == nil {
+				mu.Lock()
+				ok++
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	if ok != DisplayNameChangesPerDay {
+		t.Fatalf("başarılı değişiklik = %d", ok)
+	}
+}

@@ -114,3 +114,22 @@ WHERE id = @id AND deleted_at IS NULL;
 
 -- name: DeleteUserRefCodeLookups :exec
 DELETE FROM ref_code_lookups WHERE user_id = @user_id;
+
+-- Görünen ad değiştirme (issue #184): 24 saatte en fazla 3 kez. Eski ad
+-- saklanmaz; yalnızca değişikliğin zamanı sayılır.
+-- name: UpdateDisplayName :execrows
+UPDATE users SET display_name = @display_name
+WHERE id = @id AND registered_at IS NOT NULL AND deleted_at IS NULL;
+
+-- name: CountRecentDisplayNameChanges :one
+SELECT count(*) FROM display_name_changes
+WHERE user_id = @user_id AND changed_at > @since;
+
+-- name: DeleteOldDisplayNameChanges :exec
+DELETE FROM display_name_changes WHERE user_id = @user_id AND changed_at <= @since;
+
+-- name: RecordDisplayNameChange :exec
+INSERT INTO display_name_changes (id, user_id, changed_at) VALUES (@id, @user_id, @changed_at);
+
+-- name: DeleteUserDisplayNameChanges :exec
+DELETE FROM display_name_changes WHERE user_id = @user_id;

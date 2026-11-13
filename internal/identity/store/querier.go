@@ -26,6 +26,7 @@ type Querier interface {
 	// tamamlanamaz. Etkilenen satır sayısı 0 ise kayıt zaten yapılmış ya da
 	// engellenmiştir.
 	CompleteRegistration(ctx context.Context, arg CompleteRegistrationParams) (int64, error)
+	CountRecentDisplayNameChanges(ctx context.Context, arg CountRecentDisplayNameChangesParams) (int64, error)
 	CountRecentRefCodeLookups(ctx context.Context, arg CountRecentRefCodeLookupsParams) (int64, error)
 	CreateAuthIdentity(ctx context.Context, arg CreateAuthIdentityParams) error
 	// KVKK veri dışa aktarma talepleri (issue #144, ADR-0021). Kullanıcı
@@ -38,6 +39,7 @@ type Querier interface {
 	CreateSanction(ctx context.Context, arg CreateSanctionParams) (CreateSanctionRow, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) error
+	DeleteOldDisplayNameChanges(ctx context.Context, arg DeleteOldDisplayNameChangesParams) error
 	// Sayılmayacak kadar eski denemeler aynı kişinin bir sonraki aramasında
 	// silinir; tablo kendi kendini küçük tutar.
 	DeleteOldRefCodeLookups(ctx context.Context, arg DeleteOldRefCodeLookupsParams) error
@@ -50,6 +52,7 @@ type Querier interface {
 	// ON DELETE CASCADE ile gider (veri modeli v14 "İlişkiler ve Silme
 	// Davranışı").
 	DeleteUserDevices(ctx context.Context, userID pgtype.UUID) (int64, error)
+	DeleteUserDisplayNameChanges(ctx context.Context, userID pgtype.UUID) error
 	// Olaylar internal/platform/outbox.Write ile yazılır (sıralama kilidi). Bu
 	// dosyada yalnızca hesap silmede gereken temizlik var.
 	// Silinen kullanıcının henüz silinmemiş profil olayları görünen adını
@@ -169,6 +172,7 @@ type Querier interface {
 	PurgeSessions(ctx context.Context, arg PurgeSessionsParams) (int64, error)
 	// Aynı sürüm ikinci kez onaylanırsa yeni kayıt açılmaz.
 	RecordConsent(ctx context.Context, arg RecordConsentParams) error
+	RecordDisplayNameChange(ctx context.Context, arg RecordDisplayNameChangeParams) error
 	RecordRefCodeLookup(ctx context.Context, arg RecordRefCodeLookupParams) error
 	// Kapatılan oturumların kimliklerini döner: her biri için session.revoked
 	// yazılır (issue #92).
@@ -207,6 +211,9 @@ type Querier interface {
 	SoftDeleteUser(ctx context.Context, id pgtype.UUID) (int64, error)
 	TouchAuthIdentity(ctx context.Context, arg TouchAuthIdentityParams) error
 	TouchDevice(ctx context.Context, id pgtype.UUID) error
+	// Görünen ad değiştirme (issue #184): 24 saatte en fazla 3 kez. Eski ad
+	// saklanmaz; yalnızca değişikliğin zamanı sayılır.
+	UpdateDisplayName(ctx context.Context, arg UpdateDisplayNameParams) (int64, error)
 }
 
 var _ Querier = (*Queries)(nil)

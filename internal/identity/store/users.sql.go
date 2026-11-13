@@ -63,6 +63,23 @@ func (q *Queries) CompleteRegistration(ctx context.Context, arg CompleteRegistra
 	return result.RowsAffected(), nil
 }
 
+const countRecentDisplayNameChanges = `-- name: CountRecentDisplayNameChanges :one
+SELECT count(*) FROM display_name_changes
+WHERE user_id = $1 AND changed_at > $2
+`
+
+type CountRecentDisplayNameChangesParams struct {
+	UserID pgtype.UUID
+	Since  pgtype.Timestamptz
+}
+
+func (q *Queries) CountRecentDisplayNameChanges(ctx context.Context, arg CountRecentDisplayNameChangesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRecentDisplayNameChanges, arg.UserID, arg.Since)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countRecentRefCodeLookups = `-- name: CountRecentRefCodeLookups :one
 SELECT count(*) FROM ref_code_lookups
 WHERE user_id = $1 AND looked_up_at > $2
@@ -96,6 +113,20 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 	return err
 }
 
+const deleteOldDisplayNameChanges = `-- name: DeleteOldDisplayNameChanges :exec
+DELETE FROM display_name_changes WHERE user_id = $1 AND changed_at <= $2
+`
+
+type DeleteOldDisplayNameChangesParams struct {
+	UserID pgtype.UUID
+	Since  pgtype.Timestamptz
+}
+
+func (q *Queries) DeleteOldDisplayNameChanges(ctx context.Context, arg DeleteOldDisplayNameChangesParams) error {
+	_, err := q.db.Exec(ctx, deleteOldDisplayNameChanges, arg.UserID, arg.Since)
+	return err
+}
+
 const deleteOldRefCodeLookups = `-- name: DeleteOldRefCodeLookups :exec
 DELETE FROM ref_code_lookups WHERE user_id = $1 AND looked_up_at <= $2
 `
@@ -109,6 +140,15 @@ type DeleteOldRefCodeLookupsParams struct {
 // silinir; tablo kendi kendini küçük tutar.
 func (q *Queries) DeleteOldRefCodeLookups(ctx context.Context, arg DeleteOldRefCodeLookupsParams) error {
 	_, err := q.db.Exec(ctx, deleteOldRefCodeLookups, arg.UserID, arg.Since)
+	return err
+}
+
+const deleteUserDisplayNameChanges = `-- name: DeleteUserDisplayNameChanges :exec
+DELETE FROM display_name_changes WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserDisplayNameChanges(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserDisplayNameChanges, userID)
 	return err
 }
 
@@ -218,6 +258,21 @@ func (q *Queries) LockRegisteredUser(ctx context.Context, id pgtype.UUID) (pgtyp
 	var id_2 pgtype.UUID
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const recordDisplayNameChange = `-- name: RecordDisplayNameChange :exec
+INSERT INTO display_name_changes (id, user_id, changed_at) VALUES ($1, $2, $3)
+`
+
+type RecordDisplayNameChangeParams struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	ChangedAt pgtype.Timestamptz
+}
+
+func (q *Queries) RecordDisplayNameChange(ctx context.Context, arg RecordDisplayNameChangeParams) error {
+	_, err := q.db.Exec(ctx, recordDisplayNameChange, arg.ID, arg.UserID, arg.ChangedAt)
+	return err
 }
 
 const recordRefCodeLookup = `-- name: RecordRefCodeLookup :exec
@@ -366,6 +421,26 @@ WHERE id = $1 AND deleted_at IS NULL
 // yazılmasını engeller).
 func (q *Queries) SoftDeleteUser(ctx context.Context, id pgtype.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, softDeleteUser, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateDisplayName = `-- name: UpdateDisplayName :execrows
+UPDATE users SET display_name = $1
+WHERE id = $2 AND registered_at IS NOT NULL AND deleted_at IS NULL
+`
+
+type UpdateDisplayNameParams struct {
+	DisplayName pgtype.Text
+	ID          pgtype.UUID
+}
+
+// Görünen ad değiştirme (issue #184): 24 saatte en fazla 3 kez. Eski ad
+// saklanmaz; yalnızca değişikliğin zamanı sayılır.
+func (q *Queries) UpdateDisplayName(ctx context.Context, arg UpdateDisplayNameParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateDisplayName, arg.DisplayName, arg.ID)
 	if err != nil {
 		return 0, err
 	}

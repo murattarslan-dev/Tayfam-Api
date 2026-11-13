@@ -52,6 +52,12 @@ type Device struct {
 	LastSeenAt pgtype.Timestamptz
 }
 
+type DisplayNameChange struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	ChangedAt pgtype.Timestamptz
+}
+
 type DomainEvent struct {
 	ID          pgtype.UUID
 	Type        string

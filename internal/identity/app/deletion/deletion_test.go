@@ -22,6 +22,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
 type fakeGoogle struct{}
@@ -133,6 +134,10 @@ func TestDeleteAccount(t *testing.T) {
 	other := e.signIn(t, "sub-a") // second device of the same user
 	bystander := e.signIn(t, "sub-b")
 	c := e.caller(t, tok)
+	// A display name change (issue #184) is counted until the account goes.
+	if _, err := e.pool.Exec(ctx, `INSERT INTO display_name_changes (id, user_id) VALUES ($1, $2)`, id.New().PG(), tok.UserID.PG()); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := e.svc.Delete(ctx, c); err != nil {
 		t.Fatal(err)
@@ -145,10 +150,11 @@ func TestDeleteAccount(t *testing.T) {
 		t.Fatal("kişisel veriler temizlenmedi")
 	}
 	for name, sql := range map[string]string{
-		"giriş kimliği": `SELECT count(*) FROM auth_identities WHERE user_id = $1`,
-		"cihaz":         `SELECT count(*) FROM devices WHERE user_id = $1`,
-		"oturum":        `SELECT count(*) FROM sessions WHERE user_id = $1`,
-		"refresh token": `SELECT count(*) FROM refresh_tokens rt JOIN sessions s ON s.id = rt.session_id WHERE s.user_id = $1`,
+		"giriş kimliği":  `SELECT count(*) FROM auth_identities WHERE user_id = $1`,
+		"cihaz":          `SELECT count(*) FROM devices WHERE user_id = $1`,
+		"oturum":         `SELECT count(*) FROM sessions WHERE user_id = $1`,
+		"refresh token":  `SELECT count(*) FROM refresh_tokens rt JOIN sessions s ON s.id = rt.session_id WHERE s.user_id = $1`,
+		"ad değişikliği": `SELECT count(*) FROM display_name_changes WHERE user_id = $1`,
 	} {
 		if n := e.count(t, sql, u); n != 0 {
 			t.Errorf("%s kaldı: %d", name, n)

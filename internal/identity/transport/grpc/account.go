@@ -21,6 +21,7 @@ type Accounts interface {
 	RotateReferralCode(ctx context.Context, caller id.ID) (string, error)
 	FindByReferralCode(ctx context.Context, caller id.ID, code string) (account.Found, error)
 	SetActivityVisibility(ctx context.Context, caller id.ID, v account.Visibility) (account.Visibility, error)
+	Update(ctx context.Context, caller id.ID, c account.Changes) error
 	SetAvatar(ctx context.Context, caller, upload id.ID) error
 	ClearAvatar(ctx context.Context, caller id.ID) error
 }
@@ -79,6 +80,11 @@ func (s *AccountServer) GetAccount(ctx context.Context, _ *identityv1.GetAccount
 	if err != nil {
 		return nil, err
 	}
+	return s.account(ctx, u)
+}
+
+// account is the caller's account as GetAccount returns it.
+func (s *AccountServer) account(ctx context.Context, u id.ID) (*identityv1.GetAccountResponse, error) {
 	a, err := s.app.Get(ctx, u)
 	if err != nil {
 		return nil, s.mapError(ctx, err)
@@ -173,6 +179,43 @@ func (s *AccountServer) SetActivityVisibility(ctx context.Context, req *identity
 	return &identityv1.SetActivityVisibilityResponse{ActivityVisibility: visibilityToPB[got]}, nil
 }
 
+// UpdateAccount implements identityv1.AccountServiceServer. The display
+// name is never logged.
+func (s *AccountServer) UpdateAccount(ctx context.Context, req *identityv1.UpdateAccountRequest) (*identityv1.UpdateAccountResponse, error) {
+	u, err := s.caller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var c account.Changes
+	if req.DisplayName != nil {
+		// Bounded before any work: 40 characters of at most 4 bytes, with
+		// room for the spaces Clean removes.
+		if len(req.GetDisplayName()) > maxDisplayNameBytes {
+			return nil, fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_INVALID_DISPLAY_NAME)
+		}
+		name := req.GetDisplayName()
+		c.DisplayName = &name
+	}
+	if v := req.GetActivityVisibility(); v != identityv1.ActivityVisibility_ACTIVITY_VISIBILITY_UNSPECIFIED {
+		vis, ok := visibilityFromPB[v]
+		if !ok {
+			return nil, fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_VALIDATION)
+		}
+		c.ActivityVisibility = &vis
+	}
+	if err := s.app.Update(ctx, u, c); err != nil {
+		return nil, s.mapError(ctx, err)
+	}
+	a, err := s.account(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+	return &identityv1.UpdateAccountResponse{Account: a}, nil
+}
+
+// maxDisplayNameBytes bounds a display name before it is cleaned.
+const maxDisplayNameBytes = 512
+
 // caller returns the verified user of a full access token.
 func (s *AccountServer) caller(ctx context.Context) (id.ID, error) {
 	t, err := s.token(ctx)
@@ -205,6 +248,8 @@ func (s *AccountServer) mapError(ctx context.Context, err error) error {
 		return fail(codes.ResourceExhausted, identityv1.ErrorReason_ERROR_REASON_RATE_LIMITED)
 	case errors.Is(err, account.ErrCodeNotFound):
 		return fail(codes.NotFound, identityv1.ErrorReason_ERROR_REASON_REFERRAL_CODE_NOT_FOUND)
+	case errors.Is(err, account.ErrInvalidDisplayName):
+		return fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_INVALID_DISPLAY_NAME)
 	case errors.Is(err, account.ErrInvalidVisibility):
 		return fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_UNSPECIFIED)
 	case errors.Is(err, account.ErrUnknownUser):

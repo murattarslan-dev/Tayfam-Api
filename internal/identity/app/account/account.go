@@ -1,6 +1,7 @@
 // Package account holds the account settings identity owns for the user
-// themself: the referral code and who sees the attendance history (data
-// model v14 "Arkadaşlık ve Davet (v11)", "Profil görünürlüğü"; issue #71).
+// themself: the display name (issue #184), the referral code and who sees
+// the attendance history (data model v14 "Arkadaşlık ve Davet (v11)",
+// "Profil görünürlüğü"; issue #71).
 //
 // Every method acts on the verified caller only. Looking a user up by
 // referral code is limited per user (LookupsPerHour), counted in the
@@ -18,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/displayname"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/refcode"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/userevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/store"
@@ -32,10 +34,14 @@ const lookupWindow = time.Hour
 var (
 	// ErrUnknownUser: the caller has no registered, live account.
 	ErrUnknownUser = errors.New("kullanıcı bulunamadı")
-	// ErrRateLimited: the caller used up their lookups for the hour.
+	// ErrRateLimited: the caller used up their referral code lookups for
+	// the hour, or their display name changes for the day.
 	ErrRateLimited = errors.New("çok fazla arama")
 	// ErrCodeNotFound: the code is malformed, unknown or replaced.
 	ErrCodeNotFound = errors.New("referans kodu bulunamadı")
+	// ErrInvalidDisplayName: blank, longer than 40 characters or holds a
+	// control character (issue #184).
+	ErrInvalidDisplayName = errors.New("geçersiz ad")
 	// ErrInvalidVisibility: not one of the Visibility values.
 	ErrInvalidVisibility = errors.New("geçersiz görünürlük")
 
@@ -271,12 +277,49 @@ func (s *Service) FindByReferralCode(ctx context.Context, caller id.ID, code str
 }
 
 // SetActivityVisibility changes who sees the caller's attendance history
-// and sends core the profile with the new setting (user.profile_updated,
-// ADR-0009). Setting the current value again writes nothing.
+// (Update with only that change).
 func (s *Service) SetActivityVisibility(ctx context.Context, caller id.ID, v Visibility) (Visibility, error) {
-	if !v.Valid() {
-		return "", ErrInvalidVisibility
+	if err := s.Update(ctx, caller, Changes{ActivityVisibility: &v}); err != nil {
+		return "", err
 	}
+	return v, nil
+}
+
+// DisplayNameChangesPerDay is how often a user may change their display
+// name in 24 hours (issue #184; platform owner, 2026-11-13).
+const DisplayNameChangesPerDay = 3
+
+const displayNameWindow = 24 * time.Hour
+
+// Changes is a partial update of the caller's account; nil fields stay as
+// they are.
+type Changes struct {
+	// DisplayName: 1–40 characters after spaces are collapsed and trimmed
+	// (package displayname); blank is ErrInvalidDisplayName.
+	DisplayName        *string
+	ActivityVisibility *Visibility
+}
+
+// Update applies c in one transaction: every field is checked before
+// anything is written, so an invalid field changes nothing. A field set to
+// its current value writes nothing and, for the display name, does not
+// count toward DisplayNameChangesPerDay. When the display name or the
+// activity visibility changes, core and chat get the new profile
+// (user.profile_updated, ADR-0009). Neither the old nor the new name is
+// logged or kept anywhere else.
+func (s *Service) Update(ctx context.Context, caller id.ID, c Changes) error {
+	var name string
+	if c.DisplayName != nil {
+		var ok bool
+		name, ok = displayname.Clean(*c.DisplayName)
+		if !ok || name == "" {
+			return ErrInvalidDisplayName
+		}
+	}
+	if c.ActivityVisibility != nil && !c.ActivityVisibility.Valid() {
+		return ErrInvalidVisibility
+	}
+	var limited bool
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := store.New(tx)
 		if _, err := q.LockRegisteredUser(ctx, caller.PG()); err != nil {
@@ -289,26 +332,75 @@ func (s *Service) SetActivityVisibility(ctx context.Context, caller id.ID, v Vis
 		if err != nil {
 			return err
 		}
-		if Visibility(u.ActivityVisibility) == v {
+		profile := userevents.Profile{DisplayName: u.DisplayName.String, ActivityVisibility: u.ActivityVisibility}
+		if u.AvatarUploadID.Valid {
+			profile.AvatarUploadID = id.ID(u.AvatarUploadID.Bytes).String()
+		}
+		changed := false
+		if c.DisplayName != nil && name != u.DisplayName.String {
+			ok, err := s.countNameChange(ctx, q, caller)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				limited = true
+				return nil
+			}
+			n, err := q.UpdateDisplayName(ctx, store.UpdateDisplayNameParams{ID: caller.PG(), DisplayName: pgtype.Text{String: name, Valid: true}})
+			if err != nil {
+				return fmt.Errorf("ad: %w", err)
+			}
+			if n != 1 {
+				return ErrUnknownUser
+			}
+			profile.DisplayName, changed = name, true
+		}
+		if c.ActivityVisibility != nil && Visibility(u.ActivityVisibility) != *c.ActivityVisibility {
+			n, err := q.SetActivityVisibility(ctx, store.SetActivityVisibilityParams{ID: caller.PG(), ActivityVisibility: string(*c.ActivityVisibility)})
+			if err != nil {
+				return fmt.Errorf("görünürlük: %w", err)
+			}
+			if n != 1 {
+				return ErrUnknownUser
+			}
+			profile.ActivityVisibility, changed = string(*c.ActivityVisibility), true
+		}
+		if !changed {
 			return nil
 		}
-		n, err := q.SetActivityVisibility(ctx, store.SetActivityVisibilityParams{ID: caller.PG(), ActivityVisibility: string(v)})
-		if err != nil {
-			return fmt.Errorf("görünürlük: %w", err)
-		}
-		if n != 1 {
-			return ErrUnknownUser
-		}
-		p := userevents.Profile{DisplayName: u.DisplayName.String, ActivityVisibility: string(v)}
-		if u.AvatarUploadID.Valid {
-			p.AvatarUploadID = id.ID(u.AvatarUploadID.Bytes).String()
-		}
-		return userevents.ProfileUpdated(ctx, tx, caller, p)
+		return userevents.ProfileUpdated(ctx, tx, caller, profile)
 	})
 	if err != nil {
-		return "", err
+		return err
 	}
-	return v, nil
+	if limited {
+		return ErrRateLimited
+	}
+	return nil
+}
+
+// countNameChange records a display name change of caller unless they
+// already made DisplayNameChangesPerDay in the last 24 hours. The caller's
+// row is locked, so parallel requests are counted one at a time.
+func (s *Service) countNameChange(ctx context.Context, q *store.Queries, caller id.ID) (bool, error) {
+	now := s.now()
+	since := pgtype.Timestamptz{Time: now.Add(-displayNameWindow), Valid: true}
+	if err := q.DeleteOldDisplayNameChanges(ctx, store.DeleteOldDisplayNameChangesParams{UserID: caller.PG(), Since: since}); err != nil {
+		return false, fmt.Errorf("eski ad değişiklikleri: %w", err)
+	}
+	n, err := q.CountRecentDisplayNameChanges(ctx, store.CountRecentDisplayNameChangesParams{UserID: caller.PG(), Since: since})
+	if err != nil {
+		return false, fmt.Errorf("ad değişikliği sayısı: %w", err)
+	}
+	if n >= DisplayNameChangesPerDay {
+		return false, nil
+	}
+	if err := q.RecordDisplayNameChange(ctx, store.RecordDisplayNameChangeParams{
+		ID: id.New().PG(), UserID: caller.PG(), ChangedAt: pgtype.Timestamptz{Time: now, Valid: true},
+	}); err != nil {
+		return false, fmt.Errorf("ad değişikliği kaydı: %w", err)
+	}
+	return true, nil
 }
 
 // registered loads the caller's live, registered account.
