@@ -1,14 +1,17 @@
 // Command identity owns sign-in, sessions, tokens, KVKK requests and platform
 // administration (ADR-0002, ADR-0004, ADR-0008).
 //
-//	identity           runs the service
-//	identity migrate   applies database migrations and exits (init container)
+//	identity             runs the service
+//	identity migrate     applies database migrations and exits (init container)
+//	identity demo-seed   writes the demo tayfas once (by hand; ADR-0023)
 package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -46,6 +49,13 @@ import (
 const accessTokenTTL = 15 * time.Minute
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == demoCommand {
+		if err := runDemoSeed(os.Args[2:], os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintf(os.Stderr, "identity %s: %v\n", demoCommand, err)
+			os.Exit(1)
+		}
+		return
+	}
 	service.MainWithMigrations("identity", identitydb.Migrations(), setup)
 }
 
