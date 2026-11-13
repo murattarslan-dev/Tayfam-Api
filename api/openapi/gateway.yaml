@@ -5019,7 +5019,7 @@ components:
         # Etkinlik ve seçili üye kanalları (issue #183)
         - event-channel-exists
         - not-tayfa-member
-        - event-ended
+        # event-ended yukarıda (etkinlik) tanımlı; kanal açmada da kullanılır.
         - slow-mode
         # chat: gerçek zamanlı bağlantı (#82)
         - forbidden-origin

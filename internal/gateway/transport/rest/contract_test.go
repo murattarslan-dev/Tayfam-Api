@@ -84,6 +84,10 @@ func TestProblemTypesDocumented(t *testing.T) {
 		if m == nil {
 			break
 		}
+		// İstemcinin üreticisi tekrar eden kodu reddeder (Tayfam-App #168).
+		if documented[m[1]] {
+			t.Errorf("problem type %q x-problem-types'ta birden fazla kez geçiyor", m[1])
+		}
 		documented[m[1]] = true
 	}
 	if len(documented) < 10 {
