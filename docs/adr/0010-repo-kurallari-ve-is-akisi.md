@@ -12,7 +12,7 @@
 - **Revizyon:** 2026-11-10: Esnemenin süresi platform sahibinin kararıyla
   "ikinci bir emre kadar" oldu; pilot veya prod'un açılması onu kendiliğinden
   bitirmez.
-- **Karar veren:** Murat Tarslan
+- **Karar veren:** Murat Arslan
 - **İlgili:** [ADR-0003](0003-kod-yapisi-ve-sozlesmeler.md), [ADR-0006](0006-dagitim-ve-ortamlar.md)
 - **Kaynak:** Notion: Proje Planı, "Geliştirme İş Akışı" bölümü
 

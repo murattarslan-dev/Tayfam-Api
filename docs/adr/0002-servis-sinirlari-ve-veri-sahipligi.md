@@ -2,7 +2,7 @@
 
 - **Durum:** Kabul edildi
 - **Tarih:** 2026-11-07
-- **Karar veren:** Murat Tarslan
+- **Karar veren:** Murat Arslan
 - **İlgili:** [ADR-0001](0001-mikroservis-mimarisi.md)
 
 ## Bağlam

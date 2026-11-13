@@ -13,7 +13,7 @@
   önekiyle, uygulama düzeyinde AES-256-GCM ile şifreli yazılır ve anahtar
   identity'de sarılı durur; talep satırı 30 gün tutulur (anahtar ve dosya
   7 gün).
-- **Karar veren:** Murat Tarslan
+- **Karar veren:** Murat Arslan
 - **İlgili:** [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md), [ADR-0006](0006-dagitim-ve-ortamlar.md), [ADR-0009](0009-veri-modelinin-servislere-dagilimi.md)
 - **Kaynak:** Notion: Proje Planı (Güvenlik Tedbirleri), Platform Yönetim
   Paneli, KVKK Aydınlatma Metni (taslak), Veri Modeli v13 (v5 KVKK kuralları,
@@ -25,7 +25,7 @@ KVKK kapsamındaki ürün kararları ve platform yönetim panelinin tasarımı
 Notion'daki planda alınmıştır. Bu ADR o kararları değiştirmez; mikroservis
 mimarisinde (ADR-0001, ADR-0002) nasıl uygulanacaklarını ve Notion'da
 "mimari aşamasında karar verilecek" diye bırakılan noktaları belirler. Veri
-sorumlusu gerçek kişi olarak Murat Tarslan'dır.
+sorumlusu gerçek kişi olarak Murat Arslan'dır.
 
 ## Karar
 

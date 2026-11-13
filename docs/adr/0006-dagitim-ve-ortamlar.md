@@ -13,7 +13,7 @@
 - **Revizyon:** 2026-11-10, web istemcisi yok
   ([ADR-0017](0017-yalnizca-mobil-istemci.md)): `tayfam.app` tanıtım ve
   link karşılama sayfasıdır; web derlemesi yayınlanmaz.
-- **Karar veren:** Murat Tarslan
+- **Karar veren:** Murat Arslan
 - **İlgili:** [ADR-0001](0001-mikroservis-mimarisi.md), [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md)
 
 ## Bağlam

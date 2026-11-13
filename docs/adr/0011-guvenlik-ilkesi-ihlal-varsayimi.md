@@ -2,7 +2,7 @@
 
 - **Durum:** Kabul edildi
 - **Tarih:** 2026-11-07
-- **Karar veren:** Murat Tarslan
+- **Karar veren:** Murat Arslan
 - **İlgili:** [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md), [ADR-0006](0006-dagitim-ve-ortamlar.md), [ADR-0008](0008-kvkk-ve-platform-yonetimi.md), [ADR-0010](0010-repo-kurallari-ve-is-akisi.md)
 
 ## Bağlam

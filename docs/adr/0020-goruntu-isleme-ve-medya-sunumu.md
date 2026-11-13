@@ -2,7 +2,7 @@
 
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-11)
 - **Tarih:** 2026-11-11
-- **Karar veren:** Murat Tarslan
+- **Karar veren:** Murat Arslan
 - **İlgili:** [ADR-0007](0007-dosyalar-ve-medya.md) (bu ADR onun "İşleme",
   "Yükleme akışı", "Sunma" ve "Bucket'lar" bölümlerini kısmen değiştirir),
   [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md),

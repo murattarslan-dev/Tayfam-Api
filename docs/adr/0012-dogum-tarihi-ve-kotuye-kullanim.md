@@ -3,7 +3,7 @@
 - **Durum:** Kabul edildi
 - **Tarih:** 2026-11-07 (güncelleme: 2026-11-09, şikâyet önceliğinin tayfa
   kuyruğunda görünmesi)
-- **Karar veren:** Murat Tarslan
+- **Karar veren:** Murat Arslan
 - **İlgili:** [ADR-0008](0008-kvkk-ve-platform-yonetimi.md), [ADR-0009](0009-veri-modelinin-servislere-dagilimi.md), [ADR-0011](0011-guvenlik-ilkesi-ihlal-varsayimi.md)
 - **Kaynak:** Notion: Veri Modeli v14 ("Doğum Tarihi ve Şikâyet Önceliği"),
   "Kötüye Kullanım ve Genç Kullanıcı Güvenliği (taslak)"

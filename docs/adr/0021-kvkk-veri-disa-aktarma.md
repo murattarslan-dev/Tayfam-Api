@@ -2,7 +2,7 @@
 
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-11)
 - **Tarih:** 2026-11-11
-- **Karar veren:** Murat Tarslan (dokuz önerinin hepsi sohbette kabul
+- **Karar veren:** Murat Arslan (dokuz önerinin hepsi sohbette kabul
   edildi, 2026-11-11)
 - **İlgili:** [ADR-0007](0007-dosyalar-ve-medya.md), [ADR-0008](0008-kvkk-ve-platform-yonetimi.md)
   ("Veri dışa aktarma"; bu ADR onu uygular ve aşağıda belirtilen yerlerde

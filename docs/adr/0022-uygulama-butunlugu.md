@@ -2,7 +2,7 @@
 
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-12; PR #162'yi birleştirme yetkisiyle)
 - **Tarih:** 2026-11-12
-- **Karar veren:** Murat Tarslan (üç temel tercih sohbette verildi,
+- **Karar veren:** Murat Arslan (üç temel tercih sohbette verildi,
   2026-11-12: önce yalnızca kayıt, Android'de `MEETS_STRONG_INTEGRITY`,
   giriş + 24 saatte bir yeniden doğrulama)
 - **İlgili:** [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md),

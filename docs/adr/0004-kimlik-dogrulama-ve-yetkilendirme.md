@@ -13,7 +13,7 @@
   katmanı olarak kalır, `web` değeri yalnızca prod dışında kabul edilir.
   CORS prod'da yoktur. "İstemci tarafında saklama" bölümünün ve
   "Sonuçlar"daki aynı site maddesinin yerine ADR-0017 geçti.
-- **Karar veren:** Murat Tarslan
+- **Karar veren:** Murat Arslan
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0008](0008-kvkk-ve-platform-yonetimi.md)
 
 ## Bağlam

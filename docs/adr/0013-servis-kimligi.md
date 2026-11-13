@@ -2,7 +2,7 @@
 
 - **Durum:** Kabul edildi
 - **Tarih:** 2026-11-08
-- **Karar veren:** Murat Tarslan
+- **Karar veren:** Murat Arslan
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md), [ADR-0006](0006-dagitim-ve-ortamlar.md), [ADR-0011](0011-guvenlik-ilkesi-ihlal-varsayimi.md)
 
 ## Bağlam
