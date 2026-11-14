@@ -568,6 +568,26 @@ paths:
     parameters:
       - $ref: "#/components/parameters/TayfaID"
       - $ref: "#/components/parameters/UserID"
+    get:
+      operationId: getMember
+      summary: Tek bir üye, üye listesindeki satırla aynı
+      description: |
+        Issue #194. Tayfanın her etkin üyesi etkin bir üyeyi okuyabilir;
+        banlı üyeyi yalnızca banlıları listeleyebilen roller (moderatör,
+        yönetici) okur. Kişi tayfada değilse, bekleyen ya da davetliyse veya
+        görmeye yetkiniz yoksa `member-not-found`. Susturma bitişi yalnızca
+        kendinize ve yönetime görünür. Etkin üyesi olmadığınız tayfa
+        `tayfa-not-found`.
+      responses:
+        "200":
+          description: Üye
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Membership" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
     patch:
       operationId: changeMemberRole
       summary: Etkin bir üyenin rolünü değiştirir (yönetici)
@@ -5517,7 +5537,7 @@ components:
 
     InvitePreview:
       type: object
-      required: [tayfa_id, name, member_count, already_member]
+      required: [tayfa_id, name, member_count, already_member, interests]
       description: Linki bilen herkesin görebileceği dar görünüm.
       properties:
         tayfa_id: { type: string, format: uuid }
@@ -5526,6 +5546,12 @@ components:
         already_member:
           type: boolean
           description: Zaten etkin üyeyseniz ya da bekleyen isteğiniz varsa.
+        interests:
+          type: array
+          description: |
+            Tayfanın ilgi alanları (issue #194; avatar rengi). Yalnızca geçerli
+            davette döner; geçersiz davette hiçbir tayfa bilgisi dönmez.
+          items: { $ref: "#/components/schemas/EventType" }
 
     Announcement:
       type: object
@@ -7444,7 +7470,7 @@ components:
         next_page_token: { type: string }
     Invitation:
       type: object
-      required: [tayfa_id, tayfa_name, user_id, invited_at]
+      required: [tayfa_id, tayfa_name, user_id, invited_at, interests]
       properties:
         tayfa_id: { type: string, format: uuid }
         tayfa_name: { type: string }
@@ -7457,6 +7483,10 @@ components:
           format: uuid
           description: Davet edenin hesabı silinmişse yoktur.
         invited_at: { type: string, format: date-time }
+        interests:
+          type: array
+          description: Tayfanın ilgi alanları (issue #194).
+          items: { $ref: "#/components/schemas/EventType" }
     InvitationList:
       type: object
       required: [invitations]

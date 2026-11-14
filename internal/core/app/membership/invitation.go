@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -47,6 +48,33 @@ type Invitation struct {
 	UserID    id.ID
 	InviterID id.ID // zero when the inviter's account was deleted
 	InvitedAt time.Time
+	// Interests are the tayfa's (issue #194).
+	Interests []string
+}
+
+// withInterests fills the tayfa interests of items with one query.
+func withInterests(ctx context.Context, q *store.Queries, items []Invitation) ([]Invitation, error) {
+	if len(items) == 0 {
+		return items, nil
+	}
+	ids := make([]pgtype.UUID, 0, len(items))
+	for _, it := range items {
+		ids = append(ids, it.TayfaID.PG())
+	}
+	rows, err := q.ListInterestsForTayfas(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("ilgi alanları: %w", err)
+	}
+	by := map[id.ID][]string{}
+	for _, r := range rows {
+		t := id.ID(r.TayfaID.Bytes)
+		by[t] = append(by[t], r.EventType)
+	}
+	for i := range items {
+		items[i].Interests = by[items[i].TayfaID]
+		slices.Sort(items[i].Interests)
+	}
+	return items, nil
 }
 
 // InviteFriend invites the caller's friend target into tayfa.
@@ -126,6 +154,11 @@ func (s *Service) InviteFriend(ctx context.Context, caller, tayfa, target id.ID)
 			return fmt.Errorf("tayfa: %w", err)
 		}
 		out = Invitation{TayfaID: tayfa, TayfaName: tf.Name, UserID: target, InviterID: caller, InvitedAt: s.now()}
+		if withI, err := withInterests(ctx, q, []Invitation{out}); err != nil {
+			return err
+		} else {
+			out = withI[0]
+		}
 		if err := s.invitationRecord(ctx, q, tayfa, caller, target, "member.invited", EventInvited); err != nil {
 			return err
 		}
@@ -258,7 +291,9 @@ func (s *Service) ListMyInvitations(ctx context.Context, caller id.ID, size int3
 		}
 		out.Items = append(out.Items, inv)
 	}
-	return out, nil
+	var err2 error
+	out.Items, err2 = withInterests(ctx, s.q, out.Items)
+	return out, err2
 }
 
 // ListInvitations lists tayfa's unanswered invitations, newest first
@@ -302,7 +337,9 @@ func (s *Service) ListInvitations(ctx context.Context, caller, tayfa id.ID, size
 		}
 		out.Items = append(out.Items, inv)
 	}
-	return out, nil
+	var err2 error
+	out.Items, err2 = withInterests(ctx, s.q, out.Items)
+	return out, err2
 }
 
 // farFuture and maxID start a newest-first list.

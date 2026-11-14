@@ -105,6 +105,7 @@ func invitationPB(inv membership.Invitation) *corev1.Invitation {
 	return &corev1.Invitation{
 		TayfaId: inv.TayfaID.String(), TayfaName: inv.TayfaName, UserId: inv.UserID.String(),
 		InviterUserId: optionalID(inv.InviterID), InviteTime: timestamppb.New(inv.InvitedAt),
+		Interests: append([]string{}, inv.Interests...),
 	}
 }
 

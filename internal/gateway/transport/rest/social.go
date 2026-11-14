@@ -166,12 +166,15 @@ type invitationJSON struct {
 	// Absent when the inviter's account was deleted.
 	InviterUserID string    `json:"inviter_user_id,omitempty"`
 	InvitedAt     time.Time `json:"invited_at"`
+	// Issue #194: the tayfa's interests (EventType names).
+	Interests []string `json:"interests"`
 }
 
 func invitationFrom(i *corev1.Invitation) invitationJSON {
 	return invitationJSON{
 		TayfaID: i.GetTayfaId(), TayfaName: i.GetTayfaName(), UserID: i.GetUserId(),
 		InviterUserID: i.GetInviterUserId(), InvitedAt: i.GetInviteTime().AsTime(),
+		Interests: interestNames(i.GetInterests()),
 	}
 }
 

@@ -163,13 +163,16 @@ func (f *fakeCore) RevokeInviteLink(ctx context.Context, in *corev1.RevokeInvite
 	return &corev1.RevokeInviteLinkResponse{}, f.record(ctx, in)
 }
 func (f *fakeCore) PreviewInvite(ctx context.Context, in *corev1.PreviewInviteRequest, _ ...grpc.CallOption) (*corev1.PreviewInviteResponse, error) {
-	return &corev1.PreviewInviteResponse{TayfaId: tayfaID, Name: "Klasikçiler", MemberCount: 12}, f.record(ctx, in)
+	return &corev1.PreviewInviteResponse{TayfaId: tayfaID, Name: "Klasikçiler", MemberCount: 12, Interests: []string{"convoy", "bilinmeyen"}}, f.record(ctx, in)
 }
 func (f *fakeCore) JoinByInvite(ctx context.Context, in *corev1.JoinByInviteRequest, _ ...grpc.CallOption) (*corev1.JoinByInviteResponse, error) {
 	return &corev1.JoinByInviteResponse{Membership: testMembership()}, f.record(ctx, in)
 }
 func (f *fakeCore) ListMembers(ctx context.Context, in *corev1.ListMembersRequest, _ ...grpc.CallOption) (*corev1.ListMembersResponse, error) {
 	return &corev1.ListMembersResponse{Members: []*corev1.Membership{testMembership()}}, f.record(ctx, in)
+}
+func (f *fakeCore) GetMember(ctx context.Context, in *corev1.GetMemberRequest, _ ...grpc.CallOption) (*corev1.GetMemberResponse, error) {
+	return &corev1.GetMemberResponse{Membership: testMembership()}, f.record(ctx, in)
 }
 func (f *fakeCore) ListPending(ctx context.Context, in *corev1.ListPendingRequest, _ ...grpc.CallOption) (*corev1.ListPendingResponse, error) {
 	m := testMembership()
@@ -630,7 +633,8 @@ func TestJoiningCarriesSecretsInBody(t *testing.T) {
 	if got, _, _ := f.last(); w.Code != 200 || !proto.Equal(got, &corev1.PreviewInviteRequest{Token: "GIZLI"}) {
 		t.Fatalf("önizleme: %d %v", w.Code, got)
 	}
-	if p := decodeBody[invitePreviewJSON](t, w); p.Name != "Klasikçiler" || p.MemberCount != 12 || p.AlreadyMember {
+	if p := decodeBody[invitePreviewJSON](t, w); p.Name != "Klasikçiler" || p.MemberCount != 12 || p.AlreadyMember ||
+		len(p.Interests) != 1 || p.Interests[0] != "convoy" {
 		t.Fatalf("önizleme yanıtı: %+v", p)
 	}
 	w = as(h, "POST", "/v1/invite-joins", `{"token":"GIZLI"}`)
@@ -753,5 +757,31 @@ func TestBanReasonRejected(t *testing.T) {
 	}
 	if got, _, _ := f.last(); got != nil {
 		t.Fatalf("core çağrıldı: %v", got)
+	}
+}
+
+// TestMemberAndInviteInterests (issue #194): one member read; the tayfa's
+// interests in the invite preview and invitations (unknown names dropped).
+func TestMemberAndInviteInterests(t *testing.T) {
+	f := &fakeCore{}
+	h := coreRouter(f)
+	w := as(h, "GET", "/v1/tayfas/"+tayfaID+"/members/"+userID, "")
+	got, tok, _ := f.last()
+	if w.Code != 200 || !proto.Equal(got, &corev1.GetMemberRequest{TayfaId: tayfaID, UserId: userID}) || tok != "USERTOKEN" ||
+		!strings.Contains(w.Body.String(), `"user_id":"`+userID+`"`) {
+		t.Fatalf("üye: %d %s %v", w.Code, w.Body, got)
+	}
+	if w := as(h, "GET", "/v1/tayfas/"+tayfaID+"/members/x", ""); w.Code != 400 {
+		t.Fatalf("bozuk kimlik: %d", w.Code)
+	}
+	w = as(coreRouter(&fakeCore{err: coreErr(codes.NotFound, "ERROR_REASON_MEMBER_NOT_FOUND")}), "GET", "/v1/tayfas/"+tayfaID+"/members/"+userID, "")
+	if w.Code != 404 || problemType(t, w) != "member-not-found" {
+		t.Fatalf("bulunamadı: %d %s", w.Code, problemType(t, w))
+	}
+	if j := invitationFrom(&corev1.Invitation{Interests: []string{"hike", "camp"}}); len(j.Interests) != 2 || j.Interests[0] != "hike" {
+		t.Fatalf("davet ilgi alanları = %v", j.Interests)
+	}
+	if j := invitationFrom(&corev1.Invitation{}); j.Interests == nil {
+		t.Fatal("boş ilgi alanı null döndü")
 	}
 }

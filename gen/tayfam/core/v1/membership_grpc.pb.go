@@ -26,6 +26,7 @@ const (
 	MembershipService_PreviewInvite_FullMethodName     = "/tayfam.core.v1.MembershipService/PreviewInvite"
 	MembershipService_JoinByInvite_FullMethodName      = "/tayfam.core.v1.MembershipService/JoinByInvite"
 	MembershipService_ListMembers_FullMethodName       = "/tayfam.core.v1.MembershipService/ListMembers"
+	MembershipService_GetMember_FullMethodName         = "/tayfam.core.v1.MembershipService/GetMember"
 	MembershipService_ListPending_FullMethodName       = "/tayfam.core.v1.MembershipService/ListPending"
 	MembershipService_ApproveMember_FullMethodName     = "/tayfam.core.v1.MembershipService/ApproveMember"
 	MembershipService_RejectMember_FullMethodName      = "/tayfam.core.v1.MembershipService/RejectMember"
@@ -147,6 +148,12 @@ type MembershipServiceClient interface {
 	// ERROR_REASON_VALIDATION (status other than ACTIVE or BANNED; use
 	// ListPending for join requests).
 	ListMembers(ctx context.Context, in *ListMembersRequest, opts ...grpc.CallOption) (*ListMembersResponse, error)
+	// GetMember returns one member of the tayfa, as ListMembers shows them
+	// (issue #194): any active member may read an ACTIVE member; only roles
+	// that may list BANNED members read a BANNED one. Anyone else, and a user
+	// with no such membership, is ERROR_REASON_MEMBER_NOT_FOUND; a caller who
+	// is not an active member gets ERROR_REASON_TAYFA_NOT_FOUND.
+	GetMember(ctx context.Context, in *GetMemberRequest, opts ...grpc.CallOption) (*GetMemberResponse, error)
 	// ListPending lists join requests, oldest first, with where each request
 	// came from. Moderator and admin (permission table).
 	//
@@ -332,6 +339,16 @@ func (c *membershipServiceClient) ListMembers(ctx context.Context, in *ListMembe
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListMembersResponse)
 	err := c.cc.Invoke(ctx, MembershipService_ListMembers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *membershipServiceClient) GetMember(ctx context.Context, in *GetMemberRequest, opts ...grpc.CallOption) (*GetMemberResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetMemberResponse)
+	err := c.cc.Invoke(ctx, MembershipService_GetMember_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -601,6 +618,12 @@ type MembershipServiceServer interface {
 	// ERROR_REASON_VALIDATION (status other than ACTIVE or BANNED; use
 	// ListPending for join requests).
 	ListMembers(context.Context, *ListMembersRequest) (*ListMembersResponse, error)
+	// GetMember returns one member of the tayfa, as ListMembers shows them
+	// (issue #194): any active member may read an ACTIVE member; only roles
+	// that may list BANNED members read a BANNED one. Anyone else, and a user
+	// with no such membership, is ERROR_REASON_MEMBER_NOT_FOUND; a caller who
+	// is not an active member gets ERROR_REASON_TAYFA_NOT_FOUND.
+	GetMember(context.Context, *GetMemberRequest) (*GetMemberResponse, error)
 	// ListPending lists join requests, oldest first, with where each request
 	// came from. Moderator and admin (permission table).
 	//
@@ -742,6 +765,9 @@ func (UnimplementedMembershipServiceServer) JoinByInvite(context.Context, *JoinB
 }
 func (UnimplementedMembershipServiceServer) ListMembers(context.Context, *ListMembersRequest) (*ListMembersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListMembers not implemented")
+}
+func (UnimplementedMembershipServiceServer) GetMember(context.Context, *GetMemberRequest) (*GetMemberResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetMember not implemented")
 }
 func (UnimplementedMembershipServiceServer) ListPending(context.Context, *ListPendingRequest) (*ListPendingResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListPending not implemented")
@@ -934,6 +960,24 @@ func _MembershipService_ListMembers_Handler(srv interface{}, ctx context.Context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MembershipServiceServer).ListMembers(ctx, req.(*ListMembersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MembershipService_GetMember_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetMemberRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MembershipServiceServer).GetMember(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MembershipService_GetMember_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MembershipServiceServer).GetMember(ctx, req.(*GetMemberRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1260,6 +1304,10 @@ var MembershipService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListMembers",
 			Handler:    _MembershipService_ListMembers_Handler,
+		},
+		{
+			MethodName: "GetMember",
+			Handler:    _MembershipService_GetMember_Handler,
 		},
 		{
 			MethodName: "ListPending",

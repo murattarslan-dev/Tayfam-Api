@@ -293,3 +293,34 @@ func TestInvitedUserIsNotAMember(t *testing.T) {
 	_, err = e.svc.InviteFriend(ctx, f, tf.id, e.friend(t, f))
 	wantErr(t, "davetli davet edemez", err, apperr.ErrTayfaNotFound)
 }
+
+// TestInvitationInterests (issue #194): invitations carry the tayfa's
+// interests: on inviting, in the invited user's list and in the tayfa's.
+func TestInvitationInterests(t *testing.T) {
+	e := setup(t)
+	tf := e.newTayfa(t, "approval")
+	e.exec(t, `INSERT INTO tayfa_interests (tayfa_id, event_type) VALUES ($1, 'fishing'), ($1, 'convoy')`, tf.id.PG())
+	plain := e.newTayfa(t, "approval")
+	f := e.friend(t, tf.admin)
+	e.friends(t, plain.admin, f)
+
+	inv, err := e.svc.InviteFriend(ctx, tf.admin, tf.id, f)
+	if err != nil || len(inv.Interests) != 2 || inv.Interests[0] != "convoy" {
+		t.Fatalf("davet: %+v %v", inv, err)
+	}
+	_, err = e.svc.InviteFriend(ctx, plain.admin, plain.id, f)
+	must(t, err)
+	my, err := e.svc.ListMyInvitations(ctx, f, 0, "")
+	must(t, err)
+	got := map[id.ID][]string{}
+	for _, i := range my.Items {
+		got[i.TayfaID] = i.Interests
+	}
+	if len(got[tf.id]) != 2 || got[tf.id][1] != "fishing" || len(got[plain.id]) != 0 {
+		t.Fatalf("davetlerim = %+v", got)
+	}
+	list, err := e.svc.ListInvitations(ctx, tf.admin, tf.id, 0, "")
+	if err != nil || len(list.Items) != 1 || len(list.Items[0].Interests) != 2 {
+		t.Fatalf("tayfanın davetleri = %+v %v", list, err)
+	}
+}
