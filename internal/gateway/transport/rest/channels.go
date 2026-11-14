@@ -104,6 +104,7 @@ type channelJSON struct {
 	LastReadMessageID string `json:"last_read_message_id,omitempty"`
 	// Event and selected-member channels (issue #183).
 	EventID          string     `json:"event_id,omitempty"`
+	EventTitle       string     `json:"event_title,omitempty"`
 	MemberCount      *int32     `json:"member_count,omitempty"`
 	PlannedArchiveAt *time.Time `json:"archive_at,omitempty"`
 }
@@ -120,7 +121,7 @@ func channelFrom(c *chatv1.Channel, withReads bool) channelJSON {
 	}
 	switch c.GetVisibility() {
 	case chatv1.ChannelVisibility_CHANNEL_VISIBILITY_EVENT:
-		out.EventID, out.PlannedArchiveAt = c.GetEventId(), optTime(c.GetPlannedArchiveTime())
+		out.EventID, out.PlannedArchiveAt, out.EventTitle = c.GetEventId(), optTime(c.GetPlannedArchiveTime()), c.GetEventTitle()
 		fallthrough
 	case chatv1.ChannelVisibility_CHANNEL_VISIBILITY_SELECTED:
 		n := c.GetMemberCount()
@@ -479,8 +480,20 @@ func uuidsOK(ids []string) bool {
 }
 
 type channelMembersJSON struct {
-	UserIDs       []string `json:"user_ids"`
-	NextPageToken string   `json:"next_page_token,omitempty"`
+	UserIDs []string `json:"user_ids"`
+	// The same users in the same order, with their parts (issue #193).
+	Members       []channelMemberJSON `json:"members"`
+	NextPageToken string              `json:"next_page_token,omitempty"`
+}
+
+type channelMemberJSON struct {
+	UserID string   `json:"user_id"`
+	Roles  []string `json:"roles"`
+}
+
+var channelMemberRoles = map[chatv1.ChannelMemberRole]string{
+	chatv1.ChannelMemberRole_CHANNEL_MEMBER_ROLE_ORGANIZER: "organizer",
+	chatv1.ChannelMemberRole_CHANNEL_MEMBER_ROLE_CREATOR:   "creator",
 }
 
 type channelMembersBody struct {
@@ -507,7 +520,21 @@ func (h chatHandlers) listChannelMembers(ctx context.Context, w http.ResponseWri
 		h.failChannel(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, channelMembersJSON{UserIDs: append([]string{}, resp.GetUserIds()...), NextPageToken: resp.GetNextPageToken()})
+	out := channelMembersJSON{
+		UserIDs: append([]string{}, resp.GetUserIds()...), NextPageToken: resp.GetNextPageToken(),
+		Members: make([]channelMemberJSON, 0, len(resp.GetMembers())),
+	}
+	for _, m := range resp.GetMembers() {
+		j := channelMemberJSON{UserID: m.GetUserId(), Roles: []string{}}
+		for _, r := range m.GetRoles() {
+			// A role this gateway does not know is left out.
+			if name, ok := channelMemberRoles[r]; ok {
+				j.Roles = append(j.Roles, name)
+			}
+		}
+		out.Members = append(out.Members, j)
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // addChannelMembers adds members to a selected-member channel.

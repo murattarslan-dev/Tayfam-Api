@@ -36,7 +36,10 @@ type Announcement struct {
 	Pinned     bool                   `protobuf:"varint,6,opt,name=pinned,proto3" json:"pinned,omitempty"`
 	CreateTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	// Changes on every edit, pin and restore.
-	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	UpdateTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	// When the title or body last changed; unset if never (issue #191).
+	// Pinning, unpinning and restoring do not change it.
+	EditTime      *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=edit_time,json=editTime,proto3" json:"edit_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -123,6 +126,13 @@ func (x *Announcement) GetCreateTime() *timestamppb.Timestamp {
 func (x *Announcement) GetUpdateTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UpdateTime
+	}
+	return nil
+}
+
+func (x *Announcement) GetEditTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EditTime
 	}
 	return nil
 }
@@ -867,7 +877,7 @@ var File_tayfam_core_v1_announcement_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_announcement_proto_rawDesc = "" +
 	"\n" +
-	"!tayfam/core/v1/announcement.proto\x12\x0etayfam.core.v1\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9b\x02\n" +
+	"!tayfam/core/v1/announcement.proto\x12\x0etayfam.core.v1\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd4\x02\n" +
 	"\fAnnouncement\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\btayfa_id\x18\x02 \x01(\tR\atayfaId\x12$\n" +
@@ -878,7 +888,8 @@ const file_tayfam_core_v1_announcement_proto_rawDesc = "" +
 	"\vcreate_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12;\n" +
 	"\vupdate_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"updateTime\"\x8c\x01\n" +
+	"updateTime\x127\n" +
+	"\tedit_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\beditTime\"\x8c\x01\n" +
 	"\x19CreateAnnouncementRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
@@ -968,32 +979,33 @@ var file_tayfam_core_v1_announcement_proto_goTypes = []any{
 var file_tayfam_core_v1_announcement_proto_depIdxs = []int32{
 	15, // 0: tayfam.core.v1.Announcement.create_time:type_name -> google.protobuf.Timestamp
 	15, // 1: tayfam.core.v1.Announcement.update_time:type_name -> google.protobuf.Timestamp
-	0,  // 2: tayfam.core.v1.CreateAnnouncementResponse.announcement:type_name -> tayfam.core.v1.Announcement
-	0,  // 3: tayfam.core.v1.GetAnnouncementResponse.announcement:type_name -> tayfam.core.v1.Announcement
-	0,  // 4: tayfam.core.v1.ListAnnouncementsResponse.announcements:type_name -> tayfam.core.v1.Announcement
-	16, // 5: tayfam.core.v1.UpdateAnnouncementRequest.update_mask:type_name -> google.protobuf.FieldMask
-	0,  // 6: tayfam.core.v1.UpdateAnnouncementResponse.announcement:type_name -> tayfam.core.v1.Announcement
-	0,  // 7: tayfam.core.v1.SetAnnouncementPinnedResponse.announcement:type_name -> tayfam.core.v1.Announcement
-	0,  // 8: tayfam.core.v1.RestoreAnnouncementResponse.announcement:type_name -> tayfam.core.v1.Announcement
-	1,  // 9: tayfam.core.v1.AnnouncementService.CreateAnnouncement:input_type -> tayfam.core.v1.CreateAnnouncementRequest
-	3,  // 10: tayfam.core.v1.AnnouncementService.GetAnnouncement:input_type -> tayfam.core.v1.GetAnnouncementRequest
-	5,  // 11: tayfam.core.v1.AnnouncementService.ListAnnouncements:input_type -> tayfam.core.v1.ListAnnouncementsRequest
-	7,  // 12: tayfam.core.v1.AnnouncementService.UpdateAnnouncement:input_type -> tayfam.core.v1.UpdateAnnouncementRequest
-	9,  // 13: tayfam.core.v1.AnnouncementService.SetAnnouncementPinned:input_type -> tayfam.core.v1.SetAnnouncementPinnedRequest
-	11, // 14: tayfam.core.v1.AnnouncementService.DeleteAnnouncement:input_type -> tayfam.core.v1.DeleteAnnouncementRequest
-	13, // 15: tayfam.core.v1.AnnouncementService.RestoreAnnouncement:input_type -> tayfam.core.v1.RestoreAnnouncementRequest
-	2,  // 16: tayfam.core.v1.AnnouncementService.CreateAnnouncement:output_type -> tayfam.core.v1.CreateAnnouncementResponse
-	4,  // 17: tayfam.core.v1.AnnouncementService.GetAnnouncement:output_type -> tayfam.core.v1.GetAnnouncementResponse
-	6,  // 18: tayfam.core.v1.AnnouncementService.ListAnnouncements:output_type -> tayfam.core.v1.ListAnnouncementsResponse
-	8,  // 19: tayfam.core.v1.AnnouncementService.UpdateAnnouncement:output_type -> tayfam.core.v1.UpdateAnnouncementResponse
-	10, // 20: tayfam.core.v1.AnnouncementService.SetAnnouncementPinned:output_type -> tayfam.core.v1.SetAnnouncementPinnedResponse
-	12, // 21: tayfam.core.v1.AnnouncementService.DeleteAnnouncement:output_type -> tayfam.core.v1.DeleteAnnouncementResponse
-	14, // 22: tayfam.core.v1.AnnouncementService.RestoreAnnouncement:output_type -> tayfam.core.v1.RestoreAnnouncementResponse
-	16, // [16:23] is the sub-list for method output_type
-	9,  // [9:16] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	15, // 2: tayfam.core.v1.Announcement.edit_time:type_name -> google.protobuf.Timestamp
+	0,  // 3: tayfam.core.v1.CreateAnnouncementResponse.announcement:type_name -> tayfam.core.v1.Announcement
+	0,  // 4: tayfam.core.v1.GetAnnouncementResponse.announcement:type_name -> tayfam.core.v1.Announcement
+	0,  // 5: tayfam.core.v1.ListAnnouncementsResponse.announcements:type_name -> tayfam.core.v1.Announcement
+	16, // 6: tayfam.core.v1.UpdateAnnouncementRequest.update_mask:type_name -> google.protobuf.FieldMask
+	0,  // 7: tayfam.core.v1.UpdateAnnouncementResponse.announcement:type_name -> tayfam.core.v1.Announcement
+	0,  // 8: tayfam.core.v1.SetAnnouncementPinnedResponse.announcement:type_name -> tayfam.core.v1.Announcement
+	0,  // 9: tayfam.core.v1.RestoreAnnouncementResponse.announcement:type_name -> tayfam.core.v1.Announcement
+	1,  // 10: tayfam.core.v1.AnnouncementService.CreateAnnouncement:input_type -> tayfam.core.v1.CreateAnnouncementRequest
+	3,  // 11: tayfam.core.v1.AnnouncementService.GetAnnouncement:input_type -> tayfam.core.v1.GetAnnouncementRequest
+	5,  // 12: tayfam.core.v1.AnnouncementService.ListAnnouncements:input_type -> tayfam.core.v1.ListAnnouncementsRequest
+	7,  // 13: tayfam.core.v1.AnnouncementService.UpdateAnnouncement:input_type -> tayfam.core.v1.UpdateAnnouncementRequest
+	9,  // 14: tayfam.core.v1.AnnouncementService.SetAnnouncementPinned:input_type -> tayfam.core.v1.SetAnnouncementPinnedRequest
+	11, // 15: tayfam.core.v1.AnnouncementService.DeleteAnnouncement:input_type -> tayfam.core.v1.DeleteAnnouncementRequest
+	13, // 16: tayfam.core.v1.AnnouncementService.RestoreAnnouncement:input_type -> tayfam.core.v1.RestoreAnnouncementRequest
+	2,  // 17: tayfam.core.v1.AnnouncementService.CreateAnnouncement:output_type -> tayfam.core.v1.CreateAnnouncementResponse
+	4,  // 18: tayfam.core.v1.AnnouncementService.GetAnnouncement:output_type -> tayfam.core.v1.GetAnnouncementResponse
+	6,  // 19: tayfam.core.v1.AnnouncementService.ListAnnouncements:output_type -> tayfam.core.v1.ListAnnouncementsResponse
+	8,  // 20: tayfam.core.v1.AnnouncementService.UpdateAnnouncement:output_type -> tayfam.core.v1.UpdateAnnouncementResponse
+	10, // 21: tayfam.core.v1.AnnouncementService.SetAnnouncementPinned:output_type -> tayfam.core.v1.SetAnnouncementPinnedResponse
+	12, // 22: tayfam.core.v1.AnnouncementService.DeleteAnnouncement:output_type -> tayfam.core.v1.DeleteAnnouncementResponse
+	14, // 23: tayfam.core.v1.AnnouncementService.RestoreAnnouncement:output_type -> tayfam.core.v1.RestoreAnnouncementResponse
+	17, // [17:24] is the sub-list for method output_type
+	10, // [10:17] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_announcement_proto_init() }

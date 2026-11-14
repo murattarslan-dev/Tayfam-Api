@@ -113,6 +113,9 @@ type View struct {
 	Pinned    bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	// EditedAt is when the title or body last changed; zero if never
+	// (issue #191). Pinning does not change it.
+	EditedAt time.Time
 }
 
 // CreateInput is a publish request.
@@ -253,7 +256,10 @@ func (s *Service) Update(ctx context.Context, user, tayfa, announcement id.ID, i
 			changed = append(changed, FieldBody)
 		}
 		if len(changed) > 0 {
-			n, err := q.UpdateAnnouncementContent(ctx, store.UpdateAnnouncementContentParams{TayfaID: tayfa.PG(), ID: announcement.PG(), Title: title, Body: body})
+			n, err := q.UpdateAnnouncementContent(ctx, store.UpdateAnnouncementContentParams{
+				TayfaID: tayfa.PG(), ID: announcement.PG(), Title: title, Body: body,
+				EditedAt: pgtype.Timestamptz{Time: s.now(), Valid: true},
+			})
 			if err != nil {
 				return fmt.Errorf("duyuru güncelleme: %w", err)
 			}
@@ -479,6 +485,9 @@ func view(r store.ListAnnouncementsPageRow) View {
 	}
 	if r.AuthorID.Valid {
 		v.AuthorID = id.ID(r.AuthorID.Bytes)
+	}
+	if r.EditedAt.Valid {
+		v.EditedAt = r.EditedAt.Time.UTC()
 	}
 	return v
 }

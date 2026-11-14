@@ -126,6 +126,120 @@ func (RequestDirection) EnumDescriptor() ([]byte, []int) {
 	return file_tayfam_core_v1_social_proto_rawDescGZIP(), []int{1}
 }
 
+type RequestKind int32
+
+const (
+	RequestKind_REQUEST_KIND_UNSPECIFIED RequestKind = 0
+	// ref id is the requester's user ID.
+	RequestKind_REQUEST_KIND_FRIEND_REQUEST RequestKind = 1
+	// ref id is the tayfa ID.
+	RequestKind_REQUEST_KIND_TAYFA_INVITATION RequestKind = 2
+)
+
+// Enum value maps for RequestKind.
+var (
+	RequestKind_name = map[int32]string{
+		0: "REQUEST_KIND_UNSPECIFIED",
+		1: "REQUEST_KIND_FRIEND_REQUEST",
+		2: "REQUEST_KIND_TAYFA_INVITATION",
+	}
+	RequestKind_value = map[string]int32{
+		"REQUEST_KIND_UNSPECIFIED":      0,
+		"REQUEST_KIND_FRIEND_REQUEST":   1,
+		"REQUEST_KIND_TAYFA_INVITATION": 2,
+	}
+)
+
+func (x RequestKind) Enum() *RequestKind {
+	p := new(RequestKind)
+	*p = x
+	return p
+}
+
+func (x RequestKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RequestKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_tayfam_core_v1_social_proto_enumTypes[2].Descriptor()
+}
+
+func (RequestKind) Type() protoreflect.EnumType {
+	return &file_tayfam_core_v1_social_proto_enumTypes[2]
+}
+
+func (x RequestKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RequestKind.Descriptor instead.
+func (RequestKind) EnumDescriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_social_proto_rawDescGZIP(), []int{2}
+}
+
+type RequestResolution int32
+
+const (
+	RequestResolution_REQUEST_RESOLUTION_UNSPECIFIED RequestResolution = 0
+	// Waiting for the caller's answer.
+	RequestResolution_REQUEST_RESOLUTION_PENDING  RequestResolution = 1
+	RequestResolution_REQUEST_RESOLUTION_ACCEPTED RequestResolution = 2
+	// The caller declined it.
+	RequestResolution_REQUEST_RESOLUTION_DECLINED RequestResolution = 3
+	// The other side took it back.
+	RequestResolution_REQUEST_RESOLUTION_WITHDRAWN RequestResolution = 4
+	// Nothing is known any more (older than the records, or the other
+	// account is gone).
+	RequestResolution_REQUEST_RESOLUTION_EXPIRED RequestResolution = 5
+)
+
+// Enum value maps for RequestResolution.
+var (
+	RequestResolution_name = map[int32]string{
+		0: "REQUEST_RESOLUTION_UNSPECIFIED",
+		1: "REQUEST_RESOLUTION_PENDING",
+		2: "REQUEST_RESOLUTION_ACCEPTED",
+		3: "REQUEST_RESOLUTION_DECLINED",
+		4: "REQUEST_RESOLUTION_WITHDRAWN",
+		5: "REQUEST_RESOLUTION_EXPIRED",
+	}
+	RequestResolution_value = map[string]int32{
+		"REQUEST_RESOLUTION_UNSPECIFIED": 0,
+		"REQUEST_RESOLUTION_PENDING":     1,
+		"REQUEST_RESOLUTION_ACCEPTED":    2,
+		"REQUEST_RESOLUTION_DECLINED":    3,
+		"REQUEST_RESOLUTION_WITHDRAWN":   4,
+		"REQUEST_RESOLUTION_EXPIRED":     5,
+	}
+)
+
+func (x RequestResolution) Enum() *RequestResolution {
+	p := new(RequestResolution)
+	*p = x
+	return p
+}
+
+func (x RequestResolution) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RequestResolution) Descriptor() protoreflect.EnumDescriptor {
+	return file_tayfam_core_v1_social_proto_enumTypes[3].Descriptor()
+}
+
+func (RequestResolution) Type() protoreflect.EnumType {
+	return &file_tayfam_core_v1_social_proto_enumTypes[3]
+}
+
+func (x RequestResolution) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RequestResolution.Descriptor instead.
+func (RequestResolution) EnumDescriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_social_proto_rawDescGZIP(), []int{3}
+}
+
 // Friend is another user in one of the caller's lists.
 type Friend struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
@@ -1022,6 +1136,147 @@ func (x *ListBlockedUsersResponse) GetNextPageToken() string {
 	return ""
 }
 
+type RequestRef struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kind          RequestKind            `protobuf:"varint,1,opt,name=kind,proto3,enum=tayfam.core.v1.RequestKind" json:"kind,omitempty"`
+	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequestRef) Reset() {
+	*x = RequestRef{}
+	mi := &file_tayfam_core_v1_social_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestRef) ProtoMessage() {}
+
+func (x *RequestRef) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_social_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestRef.ProtoReflect.Descriptor instead.
+func (*RequestRef) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_social_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *RequestRef) GetKind() RequestKind {
+	if x != nil {
+		return x.Kind
+	}
+	return RequestKind_REQUEST_KIND_UNSPECIFIED
+}
+
+func (x *RequestRef) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type GetRequestResolutionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Refs          []*RequestRef          `protobuf:"bytes,1,rep,name=refs,proto3" json:"refs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRequestResolutionsRequest) Reset() {
+	*x = GetRequestResolutionsRequest{}
+	mi := &file_tayfam_core_v1_social_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRequestResolutionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRequestResolutionsRequest) ProtoMessage() {}
+
+func (x *GetRequestResolutionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_social_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRequestResolutionsRequest.ProtoReflect.Descriptor instead.
+func (*GetRequestResolutionsRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_social_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *GetRequestResolutionsRequest) GetRefs() []*RequestRef {
+	if x != nil {
+		return x.Refs
+	}
+	return nil
+}
+
+type GetRequestResolutionsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Same order as refs.
+	Resolutions   []RequestResolution `protobuf:"varint,1,rep,packed,name=resolutions,proto3,enum=tayfam.core.v1.RequestResolution" json:"resolutions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRequestResolutionsResponse) Reset() {
+	*x = GetRequestResolutionsResponse{}
+	mi := &file_tayfam_core_v1_social_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRequestResolutionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRequestResolutionsResponse) ProtoMessage() {}
+
+func (x *GetRequestResolutionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_social_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRequestResolutionsResponse.ProtoReflect.Descriptor instead.
+func (*GetRequestResolutionsResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_social_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *GetRequestResolutionsResponse) GetResolutions() []RequestResolution {
+	if x != nil {
+		return x.Resolutions
+	}
+	return nil
+}
+
 var File_tayfam_core_v1_social_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_social_proto_rawDesc = "" +
@@ -1079,7 +1334,15 @@ const file_tayfam_core_v1_social_proto_rawDesc = "" +
 	"page_token\x18\x02 \x01(\tR\tpageToken\"u\n" +
 	"\x18ListBlockedUsersResponse\x121\n" +
 	"\x05users\x18\x01 \x03(\v2\x1b.tayfam.core.v1.BlockedUserR\x05users\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*{\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"M\n" +
+	"\n" +
+	"RequestRef\x12/\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x1b.tayfam.core.v1.RequestKindR\x04kind\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\"N\n" +
+	"\x1cGetRequestResolutionsRequest\x12.\n" +
+	"\x04refs\x18\x01 \x03(\v2\x1a.tayfam.core.v1.RequestRefR\x04refs\"d\n" +
+	"\x1dGetRequestResolutionsResponse\x12C\n" +
+	"\vresolutions\x18\x01 \x03(\x0e2!.tayfam.core.v1.RequestResolutionR\vresolutions*{\n" +
 	"\vFriendState\x12\x1c\n" +
 	"\x18FRIEND_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14FRIEND_STATE_FRIENDS\x10\x01\x12\x19\n" +
@@ -1088,7 +1351,18 @@ const file_tayfam_core_v1_social_proto_rawDesc = "" +
 	"\x10RequestDirection\x12!\n" +
 	"\x1dREQUEST_DIRECTION_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aREQUEST_DIRECTION_INCOMING\x10\x01\x12\x1e\n" +
-	"\x1aREQUEST_DIRECTION_OUTGOING\x10\x022\xa6\x06\n" +
+	"\x1aREQUEST_DIRECTION_OUTGOING\x10\x02*o\n" +
+	"\vRequestKind\x12\x1c\n" +
+	"\x18REQUEST_KIND_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bREQUEST_KIND_FRIEND_REQUEST\x10\x01\x12!\n" +
+	"\x1dREQUEST_KIND_TAYFA_INVITATION\x10\x02*\xdb\x01\n" +
+	"\x11RequestResolution\x12\"\n" +
+	"\x1eREQUEST_RESOLUTION_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aREQUEST_RESOLUTION_PENDING\x10\x01\x12\x1f\n" +
+	"\x1bREQUEST_RESOLUTION_ACCEPTED\x10\x02\x12\x1f\n" +
+	"\x1bREQUEST_RESOLUTION_DECLINED\x10\x03\x12 \n" +
+	"\x1cREQUEST_RESOLUTION_WITHDRAWN\x10\x04\x12\x1e\n" +
+	"\x1aREQUEST_RESOLUTION_EXPIRED\x10\x052\x9c\a\n" +
 	"\rSocialService\x12h\n" +
 	"\x11SendFriendRequest\x12(.tayfam.core.v1.SendFriendRequestRequest\x1a).tayfam.core.v1.SendFriendRequestResponse\x12n\n" +
 	"\x13AcceptFriendRequest\x12*.tayfam.core.v1.AcceptFriendRequestRequest\x1a+.tayfam.core.v1.AcceptFriendRequestResponse\x12e\n" +
@@ -1097,7 +1371,8 @@ const file_tayfam_core_v1_social_proto_rawDesc = "" +
 	"\x12ListFriendRequests\x12).tayfam.core.v1.ListFriendRequestsRequest\x1a*.tayfam.core.v1.ListFriendRequestsResponse\x12P\n" +
 	"\tBlockUser\x12 .tayfam.core.v1.BlockUserRequest\x1a!.tayfam.core.v1.BlockUserResponse\x12V\n" +
 	"\vUnblockUser\x12\".tayfam.core.v1.UnblockUserRequest\x1a#.tayfam.core.v1.UnblockUserResponse\x12e\n" +
-	"\x10ListBlockedUsers\x12'.tayfam.core.v1.ListBlockedUsersRequest\x1a(.tayfam.core.v1.ListBlockedUsersResponseB\xbd\x01\n" +
+	"\x10ListBlockedUsers\x12'.tayfam.core.v1.ListBlockedUsersRequest\x1a(.tayfam.core.v1.ListBlockedUsersResponse\x12t\n" +
+	"\x15GetRequestResolutions\x12,.tayfam.core.v1.GetRequestResolutionsRequest\x1a-.tayfam.core.v1.GetRequestResolutionsResponseB\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vSocialProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (
@@ -1112,63 +1387,73 @@ func file_tayfam_core_v1_social_proto_rawDescGZIP() []byte {
 	return file_tayfam_core_v1_social_proto_rawDescData
 }
 
-var file_tayfam_core_v1_social_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_tayfam_core_v1_social_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_tayfam_core_v1_social_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_tayfam_core_v1_social_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_tayfam_core_v1_social_proto_goTypes = []any{
-	(FriendState)(0),                    // 0: tayfam.core.v1.FriendState
-	(RequestDirection)(0),               // 1: tayfam.core.v1.RequestDirection
-	(*Friend)(nil),                      // 2: tayfam.core.v1.Friend
-	(*BlockedUser)(nil),                 // 3: tayfam.core.v1.BlockedUser
-	(*SendFriendRequestRequest)(nil),    // 4: tayfam.core.v1.SendFriendRequestRequest
-	(*SendFriendRequestResponse)(nil),   // 5: tayfam.core.v1.SendFriendRequestResponse
-	(*AcceptFriendRequestRequest)(nil),  // 6: tayfam.core.v1.AcceptFriendRequestRequest
-	(*AcceptFriendRequestResponse)(nil), // 7: tayfam.core.v1.AcceptFriendRequestResponse
-	(*RemoveFriendshipRequest)(nil),     // 8: tayfam.core.v1.RemoveFriendshipRequest
-	(*RemoveFriendshipResponse)(nil),    // 9: tayfam.core.v1.RemoveFriendshipResponse
-	(*ListFriendsRequest)(nil),          // 10: tayfam.core.v1.ListFriendsRequest
-	(*ListFriendsResponse)(nil),         // 11: tayfam.core.v1.ListFriendsResponse
-	(*ListFriendRequestsRequest)(nil),   // 12: tayfam.core.v1.ListFriendRequestsRequest
-	(*ListFriendRequestsResponse)(nil),  // 13: tayfam.core.v1.ListFriendRequestsResponse
-	(*BlockUserRequest)(nil),            // 14: tayfam.core.v1.BlockUserRequest
-	(*BlockUserResponse)(nil),           // 15: tayfam.core.v1.BlockUserResponse
-	(*UnblockUserRequest)(nil),          // 16: tayfam.core.v1.UnblockUserRequest
-	(*UnblockUserResponse)(nil),         // 17: tayfam.core.v1.UnblockUserResponse
-	(*ListBlockedUsersRequest)(nil),     // 18: tayfam.core.v1.ListBlockedUsersRequest
-	(*ListBlockedUsersResponse)(nil),    // 19: tayfam.core.v1.ListBlockedUsersResponse
-	(*timestamppb.Timestamp)(nil),       // 20: google.protobuf.Timestamp
+	(FriendState)(0),                      // 0: tayfam.core.v1.FriendState
+	(RequestDirection)(0),                 // 1: tayfam.core.v1.RequestDirection
+	(RequestKind)(0),                      // 2: tayfam.core.v1.RequestKind
+	(RequestResolution)(0),                // 3: tayfam.core.v1.RequestResolution
+	(*Friend)(nil),                        // 4: tayfam.core.v1.Friend
+	(*BlockedUser)(nil),                   // 5: tayfam.core.v1.BlockedUser
+	(*SendFriendRequestRequest)(nil),      // 6: tayfam.core.v1.SendFriendRequestRequest
+	(*SendFriendRequestResponse)(nil),     // 7: tayfam.core.v1.SendFriendRequestResponse
+	(*AcceptFriendRequestRequest)(nil),    // 8: tayfam.core.v1.AcceptFriendRequestRequest
+	(*AcceptFriendRequestResponse)(nil),   // 9: tayfam.core.v1.AcceptFriendRequestResponse
+	(*RemoveFriendshipRequest)(nil),       // 10: tayfam.core.v1.RemoveFriendshipRequest
+	(*RemoveFriendshipResponse)(nil),      // 11: tayfam.core.v1.RemoveFriendshipResponse
+	(*ListFriendsRequest)(nil),            // 12: tayfam.core.v1.ListFriendsRequest
+	(*ListFriendsResponse)(nil),           // 13: tayfam.core.v1.ListFriendsResponse
+	(*ListFriendRequestsRequest)(nil),     // 14: tayfam.core.v1.ListFriendRequestsRequest
+	(*ListFriendRequestsResponse)(nil),    // 15: tayfam.core.v1.ListFriendRequestsResponse
+	(*BlockUserRequest)(nil),              // 16: tayfam.core.v1.BlockUserRequest
+	(*BlockUserResponse)(nil),             // 17: tayfam.core.v1.BlockUserResponse
+	(*UnblockUserRequest)(nil),            // 18: tayfam.core.v1.UnblockUserRequest
+	(*UnblockUserResponse)(nil),           // 19: tayfam.core.v1.UnblockUserResponse
+	(*ListBlockedUsersRequest)(nil),       // 20: tayfam.core.v1.ListBlockedUsersRequest
+	(*ListBlockedUsersResponse)(nil),      // 21: tayfam.core.v1.ListBlockedUsersResponse
+	(*RequestRef)(nil),                    // 22: tayfam.core.v1.RequestRef
+	(*GetRequestResolutionsRequest)(nil),  // 23: tayfam.core.v1.GetRequestResolutionsRequest
+	(*GetRequestResolutionsResponse)(nil), // 24: tayfam.core.v1.GetRequestResolutionsResponse
+	(*timestamppb.Timestamp)(nil),         // 25: google.protobuf.Timestamp
 }
 var file_tayfam_core_v1_social_proto_depIdxs = []int32{
 	0,  // 0: tayfam.core.v1.Friend.state:type_name -> tayfam.core.v1.FriendState
-	20, // 1: tayfam.core.v1.Friend.request_time:type_name -> google.protobuf.Timestamp
-	20, // 2: tayfam.core.v1.Friend.accept_time:type_name -> google.protobuf.Timestamp
-	20, // 3: tayfam.core.v1.BlockedUser.block_time:type_name -> google.protobuf.Timestamp
-	2,  // 4: tayfam.core.v1.SendFriendRequestResponse.friend:type_name -> tayfam.core.v1.Friend
-	2,  // 5: tayfam.core.v1.AcceptFriendRequestResponse.friend:type_name -> tayfam.core.v1.Friend
-	2,  // 6: tayfam.core.v1.ListFriendsResponse.friends:type_name -> tayfam.core.v1.Friend
+	25, // 1: tayfam.core.v1.Friend.request_time:type_name -> google.protobuf.Timestamp
+	25, // 2: tayfam.core.v1.Friend.accept_time:type_name -> google.protobuf.Timestamp
+	25, // 3: tayfam.core.v1.BlockedUser.block_time:type_name -> google.protobuf.Timestamp
+	4,  // 4: tayfam.core.v1.SendFriendRequestResponse.friend:type_name -> tayfam.core.v1.Friend
+	4,  // 5: tayfam.core.v1.AcceptFriendRequestResponse.friend:type_name -> tayfam.core.v1.Friend
+	4,  // 6: tayfam.core.v1.ListFriendsResponse.friends:type_name -> tayfam.core.v1.Friend
 	1,  // 7: tayfam.core.v1.ListFriendRequestsRequest.direction:type_name -> tayfam.core.v1.RequestDirection
-	2,  // 8: tayfam.core.v1.ListFriendRequestsResponse.requests:type_name -> tayfam.core.v1.Friend
-	3,  // 9: tayfam.core.v1.ListBlockedUsersResponse.users:type_name -> tayfam.core.v1.BlockedUser
-	4,  // 10: tayfam.core.v1.SocialService.SendFriendRequest:input_type -> tayfam.core.v1.SendFriendRequestRequest
-	6,  // 11: tayfam.core.v1.SocialService.AcceptFriendRequest:input_type -> tayfam.core.v1.AcceptFriendRequestRequest
-	8,  // 12: tayfam.core.v1.SocialService.RemoveFriendship:input_type -> tayfam.core.v1.RemoveFriendshipRequest
-	10, // 13: tayfam.core.v1.SocialService.ListFriends:input_type -> tayfam.core.v1.ListFriendsRequest
-	12, // 14: tayfam.core.v1.SocialService.ListFriendRequests:input_type -> tayfam.core.v1.ListFriendRequestsRequest
-	14, // 15: tayfam.core.v1.SocialService.BlockUser:input_type -> tayfam.core.v1.BlockUserRequest
-	16, // 16: tayfam.core.v1.SocialService.UnblockUser:input_type -> tayfam.core.v1.UnblockUserRequest
-	18, // 17: tayfam.core.v1.SocialService.ListBlockedUsers:input_type -> tayfam.core.v1.ListBlockedUsersRequest
-	5,  // 18: tayfam.core.v1.SocialService.SendFriendRequest:output_type -> tayfam.core.v1.SendFriendRequestResponse
-	7,  // 19: tayfam.core.v1.SocialService.AcceptFriendRequest:output_type -> tayfam.core.v1.AcceptFriendRequestResponse
-	9,  // 20: tayfam.core.v1.SocialService.RemoveFriendship:output_type -> tayfam.core.v1.RemoveFriendshipResponse
-	11, // 21: tayfam.core.v1.SocialService.ListFriends:output_type -> tayfam.core.v1.ListFriendsResponse
-	13, // 22: tayfam.core.v1.SocialService.ListFriendRequests:output_type -> tayfam.core.v1.ListFriendRequestsResponse
-	15, // 23: tayfam.core.v1.SocialService.BlockUser:output_type -> tayfam.core.v1.BlockUserResponse
-	17, // 24: tayfam.core.v1.SocialService.UnblockUser:output_type -> tayfam.core.v1.UnblockUserResponse
-	19, // 25: tayfam.core.v1.SocialService.ListBlockedUsers:output_type -> tayfam.core.v1.ListBlockedUsersResponse
-	18, // [18:26] is the sub-list for method output_type
-	10, // [10:18] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	4,  // 8: tayfam.core.v1.ListFriendRequestsResponse.requests:type_name -> tayfam.core.v1.Friend
+	5,  // 9: tayfam.core.v1.ListBlockedUsersResponse.users:type_name -> tayfam.core.v1.BlockedUser
+	2,  // 10: tayfam.core.v1.RequestRef.kind:type_name -> tayfam.core.v1.RequestKind
+	22, // 11: tayfam.core.v1.GetRequestResolutionsRequest.refs:type_name -> tayfam.core.v1.RequestRef
+	3,  // 12: tayfam.core.v1.GetRequestResolutionsResponse.resolutions:type_name -> tayfam.core.v1.RequestResolution
+	6,  // 13: tayfam.core.v1.SocialService.SendFriendRequest:input_type -> tayfam.core.v1.SendFriendRequestRequest
+	8,  // 14: tayfam.core.v1.SocialService.AcceptFriendRequest:input_type -> tayfam.core.v1.AcceptFriendRequestRequest
+	10, // 15: tayfam.core.v1.SocialService.RemoveFriendship:input_type -> tayfam.core.v1.RemoveFriendshipRequest
+	12, // 16: tayfam.core.v1.SocialService.ListFriends:input_type -> tayfam.core.v1.ListFriendsRequest
+	14, // 17: tayfam.core.v1.SocialService.ListFriendRequests:input_type -> tayfam.core.v1.ListFriendRequestsRequest
+	16, // 18: tayfam.core.v1.SocialService.BlockUser:input_type -> tayfam.core.v1.BlockUserRequest
+	18, // 19: tayfam.core.v1.SocialService.UnblockUser:input_type -> tayfam.core.v1.UnblockUserRequest
+	20, // 20: tayfam.core.v1.SocialService.ListBlockedUsers:input_type -> tayfam.core.v1.ListBlockedUsersRequest
+	23, // 21: tayfam.core.v1.SocialService.GetRequestResolutions:input_type -> tayfam.core.v1.GetRequestResolutionsRequest
+	7,  // 22: tayfam.core.v1.SocialService.SendFriendRequest:output_type -> tayfam.core.v1.SendFriendRequestResponse
+	9,  // 23: tayfam.core.v1.SocialService.AcceptFriendRequest:output_type -> tayfam.core.v1.AcceptFriendRequestResponse
+	11, // 24: tayfam.core.v1.SocialService.RemoveFriendship:output_type -> tayfam.core.v1.RemoveFriendshipResponse
+	13, // 25: tayfam.core.v1.SocialService.ListFriends:output_type -> tayfam.core.v1.ListFriendsResponse
+	15, // 26: tayfam.core.v1.SocialService.ListFriendRequests:output_type -> tayfam.core.v1.ListFriendRequestsResponse
+	17, // 27: tayfam.core.v1.SocialService.BlockUser:output_type -> tayfam.core.v1.BlockUserResponse
+	19, // 28: tayfam.core.v1.SocialService.UnblockUser:output_type -> tayfam.core.v1.UnblockUserResponse
+	21, // 29: tayfam.core.v1.SocialService.ListBlockedUsers:output_type -> tayfam.core.v1.ListBlockedUsersResponse
+	24, // 30: tayfam.core.v1.SocialService.GetRequestResolutions:output_type -> tayfam.core.v1.GetRequestResolutionsResponse
+	22, // [22:31] is the sub-list for method output_type
+	13, // [13:22] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_social_proto_init() }
@@ -1181,8 +1466,8 @@ func file_tayfam_core_v1_social_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_social_proto_rawDesc), len(file_tayfam_core_v1_social_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   18,
+			NumEnums:      4,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

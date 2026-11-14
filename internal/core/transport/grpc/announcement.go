@@ -153,9 +153,13 @@ func (s *AnnouncementServer) RestoreAnnouncement(ctx context.Context, req *corev
 }
 
 func announcementPB(v announcement.View) *corev1.Announcement {
-	return &corev1.Announcement{
+	out := &corev1.Announcement{
 		Id: v.ID.String(), TayfaId: v.TayfaID.String(), AuthorUserId: optionalID(v.AuthorID),
 		Title: v.Title, Body: v.Body, Pinned: v.Pinned,
 		CreateTime: timestamppb.New(v.CreatedAt), UpdateTime: timestamppb.New(v.UpdatedAt),
 	}
+	if !v.EditedAt.IsZero() {
+		out.EditTime = timestamppb.New(v.EditedAt)
+	}
+	return out
 }

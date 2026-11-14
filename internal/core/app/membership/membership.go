@@ -133,6 +133,9 @@ type Preview struct {
 	Name          string
 	MemberCount   int32
 	AlreadyMember bool
+	// Interests are the tayfa's (issue #194); only a valid invite gets this
+	// far.
+	Interests []string
 }
 
 // Page is one page of a list.
@@ -225,7 +228,11 @@ func (s *Service) PreviewInvite(ctx context.Context, caller id.ID, token string)
 	if err != nil {
 		return Preview{}, fmt.Errorf("üye sayısı: %w", err)
 	}
-	return Preview{TayfaID: tayfa, Name: inv.Name, MemberCount: int32(min(n, 1<<31-1)), AlreadyMember: already}, nil //nolint:gosec // clamped
+	interests, err := s.q.ListTayfaInterests(ctx, inv.TayfaID)
+	if err != nil {
+		return Preview{}, fmt.Errorf("ilgi alanları: %w", err)
+	}
+	return Preview{TayfaID: tayfa, Name: inv.Name, MemberCount: int32(min(n, 1<<31-1)), AlreadyMember: already, Interests: interests}, nil //nolint:gosec // clamped
 }
 
 // JoinByInvite joins the tayfa behind token. The link is locked for the
@@ -626,6 +633,33 @@ func (s *Service) GetMembership(ctx context.Context, caller, tayfa, target id.ID
 		return Member{}, fmt.Errorf("üyelik: %w", err)
 	}
 	return toMember(tayfa, caller, r.Role, r.Status, r.JoinedAt, r.MutedUntil, s.now(), true)
+}
+
+// GetMember returns one member of tayfa as ListMembers shows them (issue
+// #194): an ACTIVE member to any active member; a BANNED one only to the
+// roles that may list banned members. Anything else, a pending or invited
+// user included, is apperr.ErrMemberNotFound.
+func (s *Service) GetMember(ctx context.Context, caller, tayfa, target id.ID) (Member, error) {
+	_, m, err := s.actorFor(ctx, s.q, tayfa, caller, authz.MemberList, false)
+	if err != nil {
+		return Member{}, err
+	}
+	r, err := s.q.GetMembership(ctx, store.GetMembershipParams{TayfaID: tayfa.PG(), UserID: target.PG()})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Member{}, apperr.ErrMemberNotFound
+	}
+	if err != nil {
+		return Member{}, fmt.Errorf("üyelik: %w", err)
+	}
+	now := s.now()
+	seesMod := authz.Allowed(unmuted(m), authz.MemberBan, now)
+	switch {
+	case r.Status == string(authz.StatusActive):
+	case r.Status == string(authz.StatusBanned) && seesMod:
+	default:
+		return Member{}, apperr.ErrMemberNotFound
+	}
+	return toMember(tayfa, target, r.Role, r.Status, r.JoinedAt, r.MutedUntil, now, seesMod || target == caller)
 }
 
 // ---------------------------------------------------------------------------

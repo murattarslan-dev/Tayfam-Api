@@ -909,6 +909,11 @@ type PreviewInviteResponse struct {
 	// True when the caller is already an ACTIVE member or has a PENDING
 	// request in this tayfa.
 	AlreadyMember bool `protobuf:"varint,4,opt,name=already_member,json=alreadyMember,proto3" json:"already_member,omitempty"`
+	// The tayfa's interests (issue #194), as EventType names in lower case
+	// ("convoy", "camp", "hike", "fishing", "gaming", "sports", "general";
+	// tayfa.proto cannot be imported here). Only for a valid invite: an
+	// invalid one returns an error and no tayfa information at all.
+	Interests     []string `protobuf:"bytes,5,rep,name=interests,proto3" json:"interests,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -969,6 +974,13 @@ func (x *PreviewInviteResponse) GetAlreadyMember() bool {
 		return x.AlreadyMember
 	}
 	return false
+}
+
+func (x *PreviewInviteResponse) GetInterests() []string {
+	if x != nil {
+		return x.Interests
+	}
+	return nil
 }
 
 type JoinByInviteRequest struct {
@@ -1183,6 +1195,102 @@ func (x *ListMembersResponse) GetNextPageToken() string {
 	return ""
 }
 
+type GetMemberRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TayfaId       string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMemberRequest) Reset() {
+	*x = GetMemberRequest{}
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMemberRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMemberRequest) ProtoMessage() {}
+
+func (x *GetMemberRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMemberRequest.ProtoReflect.Descriptor instead.
+func (*GetMemberRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *GetMemberRequest) GetTayfaId() string {
+	if x != nil {
+		return x.TayfaId
+	}
+	return ""
+}
+
+func (x *GetMemberRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type GetMemberResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Membership    *Membership            `protobuf:"bytes,1,opt,name=membership,proto3" json:"membership,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMemberResponse) Reset() {
+	*x = GetMemberResponse{}
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMemberResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMemberResponse) ProtoMessage() {}
+
+func (x *GetMemberResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMemberResponse.ProtoReflect.Descriptor instead.
+func (*GetMemberResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *GetMemberResponse) GetMembership() *Membership {
+	if x != nil {
+		return x.Membership
+	}
+	return nil
+}
+
 type ListPendingRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TayfaId       string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
@@ -1194,7 +1302,7 @@ type ListPendingRequest struct {
 
 func (x *ListPendingRequest) Reset() {
 	*x = ListPendingRequest{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[17]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1206,7 +1314,7 @@ func (x *ListPendingRequest) String() string {
 func (*ListPendingRequest) ProtoMessage() {}
 
 func (x *ListPendingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[17]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1219,7 +1327,7 @@ func (x *ListPendingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPendingRequest.ProtoReflect.Descriptor instead.
 func (*ListPendingRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{17}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ListPendingRequest) GetTayfaId() string {
@@ -1253,7 +1361,7 @@ type ListPendingResponse struct {
 
 func (x *ListPendingResponse) Reset() {
 	*x = ListPendingResponse{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[18]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1265,7 +1373,7 @@ func (x *ListPendingResponse) String() string {
 func (*ListPendingResponse) ProtoMessage() {}
 
 func (x *ListPendingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[18]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1278,7 +1386,7 @@ func (x *ListPendingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPendingResponse.ProtoReflect.Descriptor instead.
 func (*ListPendingResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{18}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListPendingResponse) GetPending() []*PendingMember {
@@ -1305,7 +1413,7 @@ type ApproveMemberRequest struct {
 
 func (x *ApproveMemberRequest) Reset() {
 	*x = ApproveMemberRequest{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[19]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1317,7 +1425,7 @@ func (x *ApproveMemberRequest) String() string {
 func (*ApproveMemberRequest) ProtoMessage() {}
 
 func (x *ApproveMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[19]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1330,7 +1438,7 @@ func (x *ApproveMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveMemberRequest.ProtoReflect.Descriptor instead.
 func (*ApproveMemberRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{19}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ApproveMemberRequest) GetTayfaId() string {
@@ -1356,7 +1464,7 @@ type ApproveMemberResponse struct {
 
 func (x *ApproveMemberResponse) Reset() {
 	*x = ApproveMemberResponse{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[20]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1368,7 +1476,7 @@ func (x *ApproveMemberResponse) String() string {
 func (*ApproveMemberResponse) ProtoMessage() {}
 
 func (x *ApproveMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[20]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1381,7 +1489,7 @@ func (x *ApproveMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveMemberResponse.ProtoReflect.Descriptor instead.
 func (*ApproveMemberResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{20}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ApproveMemberResponse) GetMembership() *Membership {
@@ -1401,7 +1509,7 @@ type RejectMemberRequest struct {
 
 func (x *RejectMemberRequest) Reset() {
 	*x = RejectMemberRequest{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[21]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1413,7 +1521,7 @@ func (x *RejectMemberRequest) String() string {
 func (*RejectMemberRequest) ProtoMessage() {}
 
 func (x *RejectMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[21]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1426,7 +1534,7 @@ func (x *RejectMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RejectMemberRequest.ProtoReflect.Descriptor instead.
 func (*RejectMemberRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{21}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *RejectMemberRequest) GetTayfaId() string {
@@ -1451,7 +1559,7 @@ type RejectMemberResponse struct {
 
 func (x *RejectMemberResponse) Reset() {
 	*x = RejectMemberResponse{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[22]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1463,7 +1571,7 @@ func (x *RejectMemberResponse) String() string {
 func (*RejectMemberResponse) ProtoMessage() {}
 
 func (x *RejectMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[22]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1476,7 +1584,7 @@ func (x *RejectMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RejectMemberResponse.ProtoReflect.Descriptor instead.
 func (*RejectMemberResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{22}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{24}
 }
 
 type ChangeRoleRequest struct {
@@ -1490,7 +1598,7 @@ type ChangeRoleRequest struct {
 
 func (x *ChangeRoleRequest) Reset() {
 	*x = ChangeRoleRequest{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[23]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1502,7 +1610,7 @@ func (x *ChangeRoleRequest) String() string {
 func (*ChangeRoleRequest) ProtoMessage() {}
 
 func (x *ChangeRoleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[23]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1515,7 +1623,7 @@ func (x *ChangeRoleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChangeRoleRequest.ProtoReflect.Descriptor instead.
 func (*ChangeRoleRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{23}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ChangeRoleRequest) GetTayfaId() string {
@@ -1548,7 +1656,7 @@ type ChangeRoleResponse struct {
 
 func (x *ChangeRoleResponse) Reset() {
 	*x = ChangeRoleResponse{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[24]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1560,7 +1668,7 @@ func (x *ChangeRoleResponse) String() string {
 func (*ChangeRoleResponse) ProtoMessage() {}
 
 func (x *ChangeRoleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[24]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1573,7 +1681,7 @@ func (x *ChangeRoleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChangeRoleResponse.ProtoReflect.Descriptor instead.
 func (*ChangeRoleResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{24}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ChangeRoleResponse) GetMembership() *Membership {
@@ -1595,7 +1703,7 @@ type MuteMemberRequest struct {
 
 func (x *MuteMemberRequest) Reset() {
 	*x = MuteMemberRequest{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[25]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1607,7 +1715,7 @@ func (x *MuteMemberRequest) String() string {
 func (*MuteMemberRequest) ProtoMessage() {}
 
 func (x *MuteMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[25]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1620,7 +1728,7 @@ func (x *MuteMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MuteMemberRequest.ProtoReflect.Descriptor instead.
 func (*MuteMemberRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{25}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *MuteMemberRequest) GetTayfaId() string {
@@ -1653,7 +1761,7 @@ type MuteMemberResponse struct {
 
 func (x *MuteMemberResponse) Reset() {
 	*x = MuteMemberResponse{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[26]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1665,7 +1773,7 @@ func (x *MuteMemberResponse) String() string {
 func (*MuteMemberResponse) ProtoMessage() {}
 
 func (x *MuteMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[26]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1678,7 +1786,7 @@ func (x *MuteMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MuteMemberResponse.ProtoReflect.Descriptor instead.
 func (*MuteMemberResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{26}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *MuteMemberResponse) GetMembership() *Membership {
@@ -1698,7 +1806,7 @@ type UnmuteMemberRequest struct {
 
 func (x *UnmuteMemberRequest) Reset() {
 	*x = UnmuteMemberRequest{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[27]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1710,7 +1818,7 @@ func (x *UnmuteMemberRequest) String() string {
 func (*UnmuteMemberRequest) ProtoMessage() {}
 
 func (x *UnmuteMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[27]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1723,7 +1831,7 @@ func (x *UnmuteMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnmuteMemberRequest.ProtoReflect.Descriptor instead.
 func (*UnmuteMemberRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{27}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *UnmuteMemberRequest) GetTayfaId() string {
@@ -1749,7 +1857,7 @@ type UnmuteMemberResponse struct {
 
 func (x *UnmuteMemberResponse) Reset() {
 	*x = UnmuteMemberResponse{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[28]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1761,7 +1869,7 @@ func (x *UnmuteMemberResponse) String() string {
 func (*UnmuteMemberResponse) ProtoMessage() {}
 
 func (x *UnmuteMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[28]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1774,7 +1882,7 @@ func (x *UnmuteMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnmuteMemberResponse.ProtoReflect.Descriptor instead.
 func (*UnmuteMemberResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{28}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *UnmuteMemberResponse) GetMembership() *Membership {
@@ -1796,7 +1904,7 @@ type BanMemberRequest struct {
 
 func (x *BanMemberRequest) Reset() {
 	*x = BanMemberRequest{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[29]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1808,7 +1916,7 @@ func (x *BanMemberRequest) String() string {
 func (*BanMemberRequest) ProtoMessage() {}
 
 func (x *BanMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[29]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1821,7 +1929,7 @@ func (x *BanMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BanMemberRequest.ProtoReflect.Descriptor instead.
 func (*BanMemberRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{29}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *BanMemberRequest) GetTayfaId() string {
@@ -1853,7 +1961,7 @@ type BanMemberResponse struct {
 
 func (x *BanMemberResponse) Reset() {
 	*x = BanMemberResponse{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[30]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1865,7 +1973,7 @@ func (x *BanMemberResponse) String() string {
 func (*BanMemberResponse) ProtoMessage() {}
 
 func (x *BanMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[30]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1878,7 +1986,7 @@ func (x *BanMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BanMemberResponse.ProtoReflect.Descriptor instead.
 func (*BanMemberResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{30}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{32}
 }
 
 type RemoveMemberRequest struct {
@@ -1891,7 +1999,7 @@ type RemoveMemberRequest struct {
 
 func (x *RemoveMemberRequest) Reset() {
 	*x = RemoveMemberRequest{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[31]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1903,7 +2011,7 @@ func (x *RemoveMemberRequest) String() string {
 func (*RemoveMemberRequest) ProtoMessage() {}
 
 func (x *RemoveMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[31]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1916,7 +2024,7 @@ func (x *RemoveMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveMemberRequest.ProtoReflect.Descriptor instead.
 func (*RemoveMemberRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{31}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *RemoveMemberRequest) GetTayfaId() string {
@@ -1941,7 +2049,7 @@ type RemoveMemberResponse struct {
 
 func (x *RemoveMemberResponse) Reset() {
 	*x = RemoveMemberResponse{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[32]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1953,7 +2061,7 @@ func (x *RemoveMemberResponse) String() string {
 func (*RemoveMemberResponse) ProtoMessage() {}
 
 func (x *RemoveMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[32]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1966,7 +2074,7 @@ func (x *RemoveMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveMemberResponse.ProtoReflect.Descriptor instead.
 func (*RemoveMemberResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{32}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{34}
 }
 
 type LeaveTayfaRequest struct {
@@ -1978,7 +2086,7 @@ type LeaveTayfaRequest struct {
 
 func (x *LeaveTayfaRequest) Reset() {
 	*x = LeaveTayfaRequest{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[33]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1990,7 +2098,7 @@ func (x *LeaveTayfaRequest) String() string {
 func (*LeaveTayfaRequest) ProtoMessage() {}
 
 func (x *LeaveTayfaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[33]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2003,7 +2111,7 @@ func (x *LeaveTayfaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaveTayfaRequest.ProtoReflect.Descriptor instead.
 func (*LeaveTayfaRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{33}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *LeaveTayfaRequest) GetTayfaId() string {
@@ -2021,7 +2129,7 @@ type LeaveTayfaResponse struct {
 
 func (x *LeaveTayfaResponse) Reset() {
 	*x = LeaveTayfaResponse{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[34]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2033,7 +2141,7 @@ func (x *LeaveTayfaResponse) String() string {
 func (*LeaveTayfaResponse) ProtoMessage() {}
 
 func (x *LeaveTayfaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[34]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2046,7 +2154,7 @@ func (x *LeaveTayfaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaveTayfaResponse.ProtoReflect.Descriptor instead.
 func (*LeaveTayfaResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{34}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{36}
 }
 
 type GetMembershipRequest struct {
@@ -2060,7 +2168,7 @@ type GetMembershipRequest struct {
 
 func (x *GetMembershipRequest) Reset() {
 	*x = GetMembershipRequest{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[35]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2072,7 +2180,7 @@ func (x *GetMembershipRequest) String() string {
 func (*GetMembershipRequest) ProtoMessage() {}
 
 func (x *GetMembershipRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[35]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2085,7 +2193,7 @@ func (x *GetMembershipRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMembershipRequest.ProtoReflect.Descriptor instead.
 func (*GetMembershipRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{35}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *GetMembershipRequest) GetTayfaId() string {
@@ -2112,7 +2220,7 @@ type GetMembershipResponse struct {
 
 func (x *GetMembershipResponse) Reset() {
 	*x = GetMembershipResponse{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[36]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2124,7 +2232,7 @@ func (x *GetMembershipResponse) String() string {
 func (*GetMembershipResponse) ProtoMessage() {}
 
 func (x *GetMembershipResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[36]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2137,7 +2245,7 @@ func (x *GetMembershipResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMembershipResponse.ProtoReflect.Descriptor instead.
 func (*GetMembershipResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{36}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *GetMembershipResponse) GetMembership() *Membership {
@@ -2157,13 +2265,15 @@ type Invitation struct {
 	// Empty when the inviter's account was deleted.
 	InviterUserId string                 `protobuf:"bytes,4,opt,name=inviter_user_id,json=inviterUserId,proto3" json:"inviter_user_id,omitempty"`
 	InviteTime    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=invite_time,json=inviteTime,proto3" json:"invite_time,omitempty"`
+	// The tayfa's interests (issue #194), as in PreviewInviteResponse.
+	Interests     []string `protobuf:"bytes,6,rep,name=interests,proto3" json:"interests,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Invitation) Reset() {
 	*x = Invitation{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[37]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2175,7 +2285,7 @@ func (x *Invitation) String() string {
 func (*Invitation) ProtoMessage() {}
 
 func (x *Invitation) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[37]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2188,7 +2298,7 @@ func (x *Invitation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Invitation.ProtoReflect.Descriptor instead.
 func (*Invitation) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{37}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *Invitation) GetTayfaId() string {
@@ -2226,6 +2336,13 @@ func (x *Invitation) GetInviteTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Invitation) GetInterests() []string {
+	if x != nil {
+		return x.Interests
+	}
+	return nil
+}
+
 type InviteFriendRequest struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	TayfaId string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
@@ -2237,7 +2354,7 @@ type InviteFriendRequest struct {
 
 func (x *InviteFriendRequest) Reset() {
 	*x = InviteFriendRequest{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[38]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2249,7 +2366,7 @@ func (x *InviteFriendRequest) String() string {
 func (*InviteFriendRequest) ProtoMessage() {}
 
 func (x *InviteFriendRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[38]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2262,7 +2379,7 @@ func (x *InviteFriendRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InviteFriendRequest.ProtoReflect.Descriptor instead.
 func (*InviteFriendRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{38}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *InviteFriendRequest) GetTayfaId() string {
@@ -2288,7 +2405,7 @@ type InviteFriendResponse struct {
 
 func (x *InviteFriendResponse) Reset() {
 	*x = InviteFriendResponse{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[39]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2300,7 +2417,7 @@ func (x *InviteFriendResponse) String() string {
 func (*InviteFriendResponse) ProtoMessage() {}
 
 func (x *InviteFriendResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[39]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2313,7 +2430,7 @@ func (x *InviteFriendResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InviteFriendResponse.ProtoReflect.Descriptor instead.
 func (*InviteFriendResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{39}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *InviteFriendResponse) GetInvitation() *Invitation {
@@ -2333,7 +2450,7 @@ type ListMyInvitationsRequest struct {
 
 func (x *ListMyInvitationsRequest) Reset() {
 	*x = ListMyInvitationsRequest{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[40]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2345,7 +2462,7 @@ func (x *ListMyInvitationsRequest) String() string {
 func (*ListMyInvitationsRequest) ProtoMessage() {}
 
 func (x *ListMyInvitationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[40]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2358,7 +2475,7 @@ func (x *ListMyInvitationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMyInvitationsRequest.ProtoReflect.Descriptor instead.
 func (*ListMyInvitationsRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{40}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ListMyInvitationsRequest) GetPageSize() int32 {
@@ -2385,7 +2502,7 @@ type ListMyInvitationsResponse struct {
 
 func (x *ListMyInvitationsResponse) Reset() {
 	*x = ListMyInvitationsResponse{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[41]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2397,7 +2514,7 @@ func (x *ListMyInvitationsResponse) String() string {
 func (*ListMyInvitationsResponse) ProtoMessage() {}
 
 func (x *ListMyInvitationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[41]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2410,7 +2527,7 @@ func (x *ListMyInvitationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMyInvitationsResponse.ProtoReflect.Descriptor instead.
 func (*ListMyInvitationsResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{41}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ListMyInvitationsResponse) GetInvitations() []*Invitation {
@@ -2436,7 +2553,7 @@ type AcceptInvitationRequest struct {
 
 func (x *AcceptInvitationRequest) Reset() {
 	*x = AcceptInvitationRequest{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[42]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2448,7 +2565,7 @@ func (x *AcceptInvitationRequest) String() string {
 func (*AcceptInvitationRequest) ProtoMessage() {}
 
 func (x *AcceptInvitationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[42]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2461,7 +2578,7 @@ func (x *AcceptInvitationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcceptInvitationRequest.ProtoReflect.Descriptor instead.
 func (*AcceptInvitationRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{42}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *AcceptInvitationRequest) GetTayfaId() string {
@@ -2481,7 +2598,7 @@ type AcceptInvitationResponse struct {
 
 func (x *AcceptInvitationResponse) Reset() {
 	*x = AcceptInvitationResponse{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[43]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2493,7 +2610,7 @@ func (x *AcceptInvitationResponse) String() string {
 func (*AcceptInvitationResponse) ProtoMessage() {}
 
 func (x *AcceptInvitationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[43]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2506,7 +2623,7 @@ func (x *AcceptInvitationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcceptInvitationResponse.ProtoReflect.Descriptor instead.
 func (*AcceptInvitationResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{43}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *AcceptInvitationResponse) GetMembership() *Membership {
@@ -2525,7 +2642,7 @@ type DeclineInvitationRequest struct {
 
 func (x *DeclineInvitationRequest) Reset() {
 	*x = DeclineInvitationRequest{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[44]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2537,7 +2654,7 @@ func (x *DeclineInvitationRequest) String() string {
 func (*DeclineInvitationRequest) ProtoMessage() {}
 
 func (x *DeclineInvitationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[44]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2550,7 +2667,7 @@ func (x *DeclineInvitationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeclineInvitationRequest.ProtoReflect.Descriptor instead.
 func (*DeclineInvitationRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{44}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *DeclineInvitationRequest) GetTayfaId() string {
@@ -2568,7 +2685,7 @@ type DeclineInvitationResponse struct {
 
 func (x *DeclineInvitationResponse) Reset() {
 	*x = DeclineInvitationResponse{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[45]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2580,7 +2697,7 @@ func (x *DeclineInvitationResponse) String() string {
 func (*DeclineInvitationResponse) ProtoMessage() {}
 
 func (x *DeclineInvitationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[45]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2593,7 +2710,7 @@ func (x *DeclineInvitationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeclineInvitationResponse.ProtoReflect.Descriptor instead.
 func (*DeclineInvitationResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{45}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{47}
 }
 
 type ListInvitationsRequest struct {
@@ -2607,7 +2724,7 @@ type ListInvitationsRequest struct {
 
 func (x *ListInvitationsRequest) Reset() {
 	*x = ListInvitationsRequest{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[46]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2619,7 +2736,7 @@ func (x *ListInvitationsRequest) String() string {
 func (*ListInvitationsRequest) ProtoMessage() {}
 
 func (x *ListInvitationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[46]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2632,7 +2749,7 @@ func (x *ListInvitationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInvitationsRequest.ProtoReflect.Descriptor instead.
 func (*ListInvitationsRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{46}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ListInvitationsRequest) GetTayfaId() string {
@@ -2666,7 +2783,7 @@ type ListInvitationsResponse struct {
 
 func (x *ListInvitationsResponse) Reset() {
 	*x = ListInvitationsResponse{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[47]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2678,7 +2795,7 @@ func (x *ListInvitationsResponse) String() string {
 func (*ListInvitationsResponse) ProtoMessage() {}
 
 func (x *ListInvitationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[47]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2691,7 +2808,7 @@ func (x *ListInvitationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInvitationsResponse.ProtoReflect.Descriptor instead.
 func (*ListInvitationsResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{47}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ListInvitationsResponse) GetInvitations() []*Invitation {
@@ -2719,7 +2836,7 @@ type CancelInvitationRequest struct {
 
 func (x *CancelInvitationRequest) Reset() {
 	*x = CancelInvitationRequest{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[48]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2731,7 +2848,7 @@ func (x *CancelInvitationRequest) String() string {
 func (*CancelInvitationRequest) ProtoMessage() {}
 
 func (x *CancelInvitationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[48]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2744,7 +2861,7 @@ func (x *CancelInvitationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelInvitationRequest.ProtoReflect.Descriptor instead.
 func (*CancelInvitationRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{48}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *CancelInvitationRequest) GetTayfaId() string {
@@ -2769,7 +2886,7 @@ type CancelInvitationResponse struct {
 
 func (x *CancelInvitationResponse) Reset() {
 	*x = CancelInvitationResponse{}
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[49]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2781,7 +2898,7 @@ func (x *CancelInvitationResponse) String() string {
 func (*CancelInvitationResponse) ProtoMessage() {}
 
 func (x *CancelInvitationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_membership_proto_msgTypes[49]
+	mi := &file_tayfam_core_v1_membership_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2794,7 +2911,7 @@ func (x *CancelInvitationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelInvitationResponse.ProtoReflect.Descriptor instead.
 func (*CancelInvitationResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{49}
+	return file_tayfam_core_v1_membership_proto_rawDescGZIP(), []int{51}
 }
 
 var File_tayfam_core_v1_membership_proto protoreflect.FileDescriptor
@@ -2853,12 +2970,13 @@ const file_tayfam_core_v1_membership_proto_rawDesc = "" +
 	"\tinvite_id\x18\x02 \x01(\tR\binviteId\"\x1a\n" +
 	"\x18RevokeInviteLinkResponse\",\n" +
 	"\x14PreviewInviteRequest\x12\x14\n" +
-	"\x05token\x18\x01 \x01(\tR\x05token\"\x90\x01\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\"\xae\x01\n" +
 	"\x15PreviewInviteResponse\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12!\n" +
 	"\fmember_count\x18\x03 \x01(\x05R\vmemberCount\x12%\n" +
-	"\x0ealready_member\x18\x04 \x01(\bR\ralreadyMember\"+\n" +
+	"\x0ealready_member\x18\x04 \x01(\bR\ralreadyMember\x12\x1c\n" +
+	"\tinterests\x18\x05 \x03(\tR\tinterests\"+\n" +
 	"\x13JoinByInviteRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\"R\n" +
 	"\x14JoinByInviteResponse\x12:\n" +
@@ -2873,7 +2991,14 @@ const file_tayfam_core_v1_membership_proto_rawDesc = "" +
 	"page_token\x18\x04 \x01(\tR\tpageToken\"s\n" +
 	"\x13ListMembersResponse\x124\n" +
 	"\amembers\x18\x01 \x03(\v2\x1a.tayfam.core.v1.MembershipR\amembers\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"k\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"F\n" +
+	"\x10GetMemberRequest\x12\x19\n" +
+	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\"O\n" +
+	"\x11GetMemberResponse\x12:\n" +
+	"\n" +
+	"membership\x18\x01 \x01(\v2\x1a.tayfam.core.v1.MembershipR\n" +
+	"membership\"k\n" +
 	"\x12ListPendingRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
@@ -2935,7 +3060,7 @@ const file_tayfam_core_v1_membership_proto_rawDesc = "" +
 	"\x15GetMembershipResponse\x12:\n" +
 	"\n" +
 	"membership\x18\x01 \x01(\v2\x1a.tayfam.core.v1.MembershipR\n" +
-	"membership\"\xc4\x01\n" +
+	"membership\"\xe2\x01\n" +
 	"\n" +
 	"Invitation\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x1d\n" +
@@ -2944,7 +3069,8 @@ const file_tayfam_core_v1_membership_proto_rawDesc = "" +
 	"\auser_id\x18\x03 \x01(\tR\x06userId\x12&\n" +
 	"\x0finviter_user_id\x18\x04 \x01(\tR\rinviterUserId\x12;\n" +
 	"\vinvite_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"inviteTime\"I\n" +
+	"inviteTime\x12\x1c\n" +
+	"\tinterests\x18\x06 \x03(\tR\tinterests\"I\n" +
 	"\x13InviteFriendRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\"R\n" +
@@ -2999,7 +3125,7 @@ const file_tayfam_core_v1_membership_proto_rawDesc = "" +
 	"\x17JOIN_SOURCE_INVITE_LINK\x10\x02\x12\x1d\n" +
 	"\x19JOIN_SOURCE_DIRECT_INVITE\x10\x03\x12\x14\n" +
 	"\x10JOIN_SOURCE_CODE\x10\x04\x12\x18\n" +
-	"\x14JOIN_SOURCE_DISCOVER\x10\x052\x82\x11\n" +
+	"\x14JOIN_SOURCE_DISCOVER\x10\x052\xd4\x11\n" +
 	"\x11MembershipService\x12S\n" +
 	"\n" +
 	"JoinByCode\x12!.tayfam.core.v1.JoinByCodeRequest\x1a\".tayfam.core.v1.JoinByCodeResponse\x12e\n" +
@@ -3008,7 +3134,8 @@ const file_tayfam_core_v1_membership_proto_rawDesc = "" +
 	"\x10RevokeInviteLink\x12'.tayfam.core.v1.RevokeInviteLinkRequest\x1a(.tayfam.core.v1.RevokeInviteLinkResponse\x12\\\n" +
 	"\rPreviewInvite\x12$.tayfam.core.v1.PreviewInviteRequest\x1a%.tayfam.core.v1.PreviewInviteResponse\x12Y\n" +
 	"\fJoinByInvite\x12#.tayfam.core.v1.JoinByInviteRequest\x1a$.tayfam.core.v1.JoinByInviteResponse\x12V\n" +
-	"\vListMembers\x12\".tayfam.core.v1.ListMembersRequest\x1a#.tayfam.core.v1.ListMembersResponse\x12V\n" +
+	"\vListMembers\x12\".tayfam.core.v1.ListMembersRequest\x1a#.tayfam.core.v1.ListMembersResponse\x12P\n" +
+	"\tGetMember\x12 .tayfam.core.v1.GetMemberRequest\x1a!.tayfam.core.v1.GetMemberResponse\x12V\n" +
 	"\vListPending\x12\".tayfam.core.v1.ListPendingRequest\x1a#.tayfam.core.v1.ListPendingResponse\x12\\\n" +
 	"\rApproveMember\x12$.tayfam.core.v1.ApproveMemberRequest\x1a%.tayfam.core.v1.ApproveMemberResponse\x12Y\n" +
 	"\fRejectMember\x12#.tayfam.core.v1.RejectMemberRequest\x1a$.tayfam.core.v1.RejectMemberResponse\x12S\n" +
@@ -3043,7 +3170,7 @@ func file_tayfam_core_v1_membership_proto_rawDescGZIP() []byte {
 }
 
 var file_tayfam_core_v1_membership_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_tayfam_core_v1_membership_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
+var file_tayfam_core_v1_membership_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
 var file_tayfam_core_v1_membership_proto_goTypes = []any{
 	(Role)(0),                         // 0: tayfam.core.v1.Role
 	(MembershipStatus)(0),             // 1: tayfam.core.v1.MembershipStatus
@@ -3065,126 +3192,131 @@ var file_tayfam_core_v1_membership_proto_goTypes = []any{
 	(*JoinByInviteResponse)(nil),      // 17: tayfam.core.v1.JoinByInviteResponse
 	(*ListMembersRequest)(nil),        // 18: tayfam.core.v1.ListMembersRequest
 	(*ListMembersResponse)(nil),       // 19: tayfam.core.v1.ListMembersResponse
-	(*ListPendingRequest)(nil),        // 20: tayfam.core.v1.ListPendingRequest
-	(*ListPendingResponse)(nil),       // 21: tayfam.core.v1.ListPendingResponse
-	(*ApproveMemberRequest)(nil),      // 22: tayfam.core.v1.ApproveMemberRequest
-	(*ApproveMemberResponse)(nil),     // 23: tayfam.core.v1.ApproveMemberResponse
-	(*RejectMemberRequest)(nil),       // 24: tayfam.core.v1.RejectMemberRequest
-	(*RejectMemberResponse)(nil),      // 25: tayfam.core.v1.RejectMemberResponse
-	(*ChangeRoleRequest)(nil),         // 26: tayfam.core.v1.ChangeRoleRequest
-	(*ChangeRoleResponse)(nil),        // 27: tayfam.core.v1.ChangeRoleResponse
-	(*MuteMemberRequest)(nil),         // 28: tayfam.core.v1.MuteMemberRequest
-	(*MuteMemberResponse)(nil),        // 29: tayfam.core.v1.MuteMemberResponse
-	(*UnmuteMemberRequest)(nil),       // 30: tayfam.core.v1.UnmuteMemberRequest
-	(*UnmuteMemberResponse)(nil),      // 31: tayfam.core.v1.UnmuteMemberResponse
-	(*BanMemberRequest)(nil),          // 32: tayfam.core.v1.BanMemberRequest
-	(*BanMemberResponse)(nil),         // 33: tayfam.core.v1.BanMemberResponse
-	(*RemoveMemberRequest)(nil),       // 34: tayfam.core.v1.RemoveMemberRequest
-	(*RemoveMemberResponse)(nil),      // 35: tayfam.core.v1.RemoveMemberResponse
-	(*LeaveTayfaRequest)(nil),         // 36: tayfam.core.v1.LeaveTayfaRequest
-	(*LeaveTayfaResponse)(nil),        // 37: tayfam.core.v1.LeaveTayfaResponse
-	(*GetMembershipRequest)(nil),      // 38: tayfam.core.v1.GetMembershipRequest
-	(*GetMembershipResponse)(nil),     // 39: tayfam.core.v1.GetMembershipResponse
-	(*Invitation)(nil),                // 40: tayfam.core.v1.Invitation
-	(*InviteFriendRequest)(nil),       // 41: tayfam.core.v1.InviteFriendRequest
-	(*InviteFriendResponse)(nil),      // 42: tayfam.core.v1.InviteFriendResponse
-	(*ListMyInvitationsRequest)(nil),  // 43: tayfam.core.v1.ListMyInvitationsRequest
-	(*ListMyInvitationsResponse)(nil), // 44: tayfam.core.v1.ListMyInvitationsResponse
-	(*AcceptInvitationRequest)(nil),   // 45: tayfam.core.v1.AcceptInvitationRequest
-	(*AcceptInvitationResponse)(nil),  // 46: tayfam.core.v1.AcceptInvitationResponse
-	(*DeclineInvitationRequest)(nil),  // 47: tayfam.core.v1.DeclineInvitationRequest
-	(*DeclineInvitationResponse)(nil), // 48: tayfam.core.v1.DeclineInvitationResponse
-	(*ListInvitationsRequest)(nil),    // 49: tayfam.core.v1.ListInvitationsRequest
-	(*ListInvitationsResponse)(nil),   // 50: tayfam.core.v1.ListInvitationsResponse
-	(*CancelInvitationRequest)(nil),   // 51: tayfam.core.v1.CancelInvitationRequest
-	(*CancelInvitationResponse)(nil),  // 52: tayfam.core.v1.CancelInvitationResponse
-	(*timestamppb.Timestamp)(nil),     // 53: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),       // 54: google.protobuf.Duration
-	(ReportReason)(0),                 // 55: tayfam.core.v1.ReportReason
+	(*GetMemberRequest)(nil),          // 20: tayfam.core.v1.GetMemberRequest
+	(*GetMemberResponse)(nil),         // 21: tayfam.core.v1.GetMemberResponse
+	(*ListPendingRequest)(nil),        // 22: tayfam.core.v1.ListPendingRequest
+	(*ListPendingResponse)(nil),       // 23: tayfam.core.v1.ListPendingResponse
+	(*ApproveMemberRequest)(nil),      // 24: tayfam.core.v1.ApproveMemberRequest
+	(*ApproveMemberResponse)(nil),     // 25: tayfam.core.v1.ApproveMemberResponse
+	(*RejectMemberRequest)(nil),       // 26: tayfam.core.v1.RejectMemberRequest
+	(*RejectMemberResponse)(nil),      // 27: tayfam.core.v1.RejectMemberResponse
+	(*ChangeRoleRequest)(nil),         // 28: tayfam.core.v1.ChangeRoleRequest
+	(*ChangeRoleResponse)(nil),        // 29: tayfam.core.v1.ChangeRoleResponse
+	(*MuteMemberRequest)(nil),         // 30: tayfam.core.v1.MuteMemberRequest
+	(*MuteMemberResponse)(nil),        // 31: tayfam.core.v1.MuteMemberResponse
+	(*UnmuteMemberRequest)(nil),       // 32: tayfam.core.v1.UnmuteMemberRequest
+	(*UnmuteMemberResponse)(nil),      // 33: tayfam.core.v1.UnmuteMemberResponse
+	(*BanMemberRequest)(nil),          // 34: tayfam.core.v1.BanMemberRequest
+	(*BanMemberResponse)(nil),         // 35: tayfam.core.v1.BanMemberResponse
+	(*RemoveMemberRequest)(nil),       // 36: tayfam.core.v1.RemoveMemberRequest
+	(*RemoveMemberResponse)(nil),      // 37: tayfam.core.v1.RemoveMemberResponse
+	(*LeaveTayfaRequest)(nil),         // 38: tayfam.core.v1.LeaveTayfaRequest
+	(*LeaveTayfaResponse)(nil),        // 39: tayfam.core.v1.LeaveTayfaResponse
+	(*GetMembershipRequest)(nil),      // 40: tayfam.core.v1.GetMembershipRequest
+	(*GetMembershipResponse)(nil),     // 41: tayfam.core.v1.GetMembershipResponse
+	(*Invitation)(nil),                // 42: tayfam.core.v1.Invitation
+	(*InviteFriendRequest)(nil),       // 43: tayfam.core.v1.InviteFriendRequest
+	(*InviteFriendResponse)(nil),      // 44: tayfam.core.v1.InviteFriendResponse
+	(*ListMyInvitationsRequest)(nil),  // 45: tayfam.core.v1.ListMyInvitationsRequest
+	(*ListMyInvitationsResponse)(nil), // 46: tayfam.core.v1.ListMyInvitationsResponse
+	(*AcceptInvitationRequest)(nil),   // 47: tayfam.core.v1.AcceptInvitationRequest
+	(*AcceptInvitationResponse)(nil),  // 48: tayfam.core.v1.AcceptInvitationResponse
+	(*DeclineInvitationRequest)(nil),  // 49: tayfam.core.v1.DeclineInvitationRequest
+	(*DeclineInvitationResponse)(nil), // 50: tayfam.core.v1.DeclineInvitationResponse
+	(*ListInvitationsRequest)(nil),    // 51: tayfam.core.v1.ListInvitationsRequest
+	(*ListInvitationsResponse)(nil),   // 52: tayfam.core.v1.ListInvitationsResponse
+	(*CancelInvitationRequest)(nil),   // 53: tayfam.core.v1.CancelInvitationRequest
+	(*CancelInvitationResponse)(nil),  // 54: tayfam.core.v1.CancelInvitationResponse
+	(*timestamppb.Timestamp)(nil),     // 55: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),       // 56: google.protobuf.Duration
+	(ReportReason)(0),                 // 57: tayfam.core.v1.ReportReason
 }
 var file_tayfam_core_v1_membership_proto_depIdxs = []int32{
 	0,  // 0: tayfam.core.v1.Membership.role:type_name -> tayfam.core.v1.Role
 	1,  // 1: tayfam.core.v1.Membership.status:type_name -> tayfam.core.v1.MembershipStatus
-	53, // 2: tayfam.core.v1.Membership.join_time:type_name -> google.protobuf.Timestamp
-	53, // 3: tayfam.core.v1.Membership.mute_expire_time:type_name -> google.protobuf.Timestamp
+	55, // 2: tayfam.core.v1.Membership.join_time:type_name -> google.protobuf.Timestamp
+	55, // 3: tayfam.core.v1.Membership.mute_expire_time:type_name -> google.protobuf.Timestamp
 	3,  // 4: tayfam.core.v1.PendingMember.membership:type_name -> tayfam.core.v1.Membership
-	53, // 5: tayfam.core.v1.PendingMember.request_time:type_name -> google.protobuf.Timestamp
+	55, // 5: tayfam.core.v1.PendingMember.request_time:type_name -> google.protobuf.Timestamp
 	2,  // 6: tayfam.core.v1.PendingMember.source:type_name -> tayfam.core.v1.JoinSource
-	53, // 7: tayfam.core.v1.InviteLink.create_time:type_name -> google.protobuf.Timestamp
-	53, // 8: tayfam.core.v1.InviteLink.expire_time:type_name -> google.protobuf.Timestamp
-	53, // 9: tayfam.core.v1.InviteLink.revoke_time:type_name -> google.protobuf.Timestamp
+	55, // 7: tayfam.core.v1.InviteLink.create_time:type_name -> google.protobuf.Timestamp
+	55, // 8: tayfam.core.v1.InviteLink.expire_time:type_name -> google.protobuf.Timestamp
+	55, // 9: tayfam.core.v1.InviteLink.revoke_time:type_name -> google.protobuf.Timestamp
 	3,  // 10: tayfam.core.v1.JoinByCodeResponse.membership:type_name -> tayfam.core.v1.Membership
-	54, // 11: tayfam.core.v1.CreateInviteLinkRequest.ttl:type_name -> google.protobuf.Duration
+	56, // 11: tayfam.core.v1.CreateInviteLinkRequest.ttl:type_name -> google.protobuf.Duration
 	5,  // 12: tayfam.core.v1.CreateInviteLinkResponse.invite:type_name -> tayfam.core.v1.InviteLink
 	5,  // 13: tayfam.core.v1.ListInviteLinksResponse.invites:type_name -> tayfam.core.v1.InviteLink
 	3,  // 14: tayfam.core.v1.JoinByInviteResponse.membership:type_name -> tayfam.core.v1.Membership
 	1,  // 15: tayfam.core.v1.ListMembersRequest.status:type_name -> tayfam.core.v1.MembershipStatus
 	3,  // 16: tayfam.core.v1.ListMembersResponse.members:type_name -> tayfam.core.v1.Membership
-	4,  // 17: tayfam.core.v1.ListPendingResponse.pending:type_name -> tayfam.core.v1.PendingMember
-	3,  // 18: tayfam.core.v1.ApproveMemberResponse.membership:type_name -> tayfam.core.v1.Membership
-	0,  // 19: tayfam.core.v1.ChangeRoleRequest.new_role:type_name -> tayfam.core.v1.Role
-	3,  // 20: tayfam.core.v1.ChangeRoleResponse.membership:type_name -> tayfam.core.v1.Membership
-	53, // 21: tayfam.core.v1.MuteMemberRequest.expire_time:type_name -> google.protobuf.Timestamp
-	3,  // 22: tayfam.core.v1.MuteMemberResponse.membership:type_name -> tayfam.core.v1.Membership
-	3,  // 23: tayfam.core.v1.UnmuteMemberResponse.membership:type_name -> tayfam.core.v1.Membership
-	55, // 24: tayfam.core.v1.BanMemberRequest.reason:type_name -> tayfam.core.v1.ReportReason
-	3,  // 25: tayfam.core.v1.GetMembershipResponse.membership:type_name -> tayfam.core.v1.Membership
-	53, // 26: tayfam.core.v1.Invitation.invite_time:type_name -> google.protobuf.Timestamp
-	40, // 27: tayfam.core.v1.InviteFriendResponse.invitation:type_name -> tayfam.core.v1.Invitation
-	40, // 28: tayfam.core.v1.ListMyInvitationsResponse.invitations:type_name -> tayfam.core.v1.Invitation
-	3,  // 29: tayfam.core.v1.AcceptInvitationResponse.membership:type_name -> tayfam.core.v1.Membership
-	40, // 30: tayfam.core.v1.ListInvitationsResponse.invitations:type_name -> tayfam.core.v1.Invitation
-	6,  // 31: tayfam.core.v1.MembershipService.JoinByCode:input_type -> tayfam.core.v1.JoinByCodeRequest
-	8,  // 32: tayfam.core.v1.MembershipService.CreateInviteLink:input_type -> tayfam.core.v1.CreateInviteLinkRequest
-	10, // 33: tayfam.core.v1.MembershipService.ListInviteLinks:input_type -> tayfam.core.v1.ListInviteLinksRequest
-	12, // 34: tayfam.core.v1.MembershipService.RevokeInviteLink:input_type -> tayfam.core.v1.RevokeInviteLinkRequest
-	14, // 35: tayfam.core.v1.MembershipService.PreviewInvite:input_type -> tayfam.core.v1.PreviewInviteRequest
-	16, // 36: tayfam.core.v1.MembershipService.JoinByInvite:input_type -> tayfam.core.v1.JoinByInviteRequest
-	18, // 37: tayfam.core.v1.MembershipService.ListMembers:input_type -> tayfam.core.v1.ListMembersRequest
-	20, // 38: tayfam.core.v1.MembershipService.ListPending:input_type -> tayfam.core.v1.ListPendingRequest
-	22, // 39: tayfam.core.v1.MembershipService.ApproveMember:input_type -> tayfam.core.v1.ApproveMemberRequest
-	24, // 40: tayfam.core.v1.MembershipService.RejectMember:input_type -> tayfam.core.v1.RejectMemberRequest
-	26, // 41: tayfam.core.v1.MembershipService.ChangeRole:input_type -> tayfam.core.v1.ChangeRoleRequest
-	28, // 42: tayfam.core.v1.MembershipService.MuteMember:input_type -> tayfam.core.v1.MuteMemberRequest
-	30, // 43: tayfam.core.v1.MembershipService.UnmuteMember:input_type -> tayfam.core.v1.UnmuteMemberRequest
-	32, // 44: tayfam.core.v1.MembershipService.BanMember:input_type -> tayfam.core.v1.BanMemberRequest
-	34, // 45: tayfam.core.v1.MembershipService.RemoveMember:input_type -> tayfam.core.v1.RemoveMemberRequest
-	36, // 46: tayfam.core.v1.MembershipService.LeaveTayfa:input_type -> tayfam.core.v1.LeaveTayfaRequest
-	38, // 47: tayfam.core.v1.MembershipService.GetMembership:input_type -> tayfam.core.v1.GetMembershipRequest
-	41, // 48: tayfam.core.v1.MembershipService.InviteFriend:input_type -> tayfam.core.v1.InviteFriendRequest
-	43, // 49: tayfam.core.v1.MembershipService.ListMyInvitations:input_type -> tayfam.core.v1.ListMyInvitationsRequest
-	45, // 50: tayfam.core.v1.MembershipService.AcceptInvitation:input_type -> tayfam.core.v1.AcceptInvitationRequest
-	47, // 51: tayfam.core.v1.MembershipService.DeclineInvitation:input_type -> tayfam.core.v1.DeclineInvitationRequest
-	49, // 52: tayfam.core.v1.MembershipService.ListInvitations:input_type -> tayfam.core.v1.ListInvitationsRequest
-	51, // 53: tayfam.core.v1.MembershipService.CancelInvitation:input_type -> tayfam.core.v1.CancelInvitationRequest
-	7,  // 54: tayfam.core.v1.MembershipService.JoinByCode:output_type -> tayfam.core.v1.JoinByCodeResponse
-	9,  // 55: tayfam.core.v1.MembershipService.CreateInviteLink:output_type -> tayfam.core.v1.CreateInviteLinkResponse
-	11, // 56: tayfam.core.v1.MembershipService.ListInviteLinks:output_type -> tayfam.core.v1.ListInviteLinksResponse
-	13, // 57: tayfam.core.v1.MembershipService.RevokeInviteLink:output_type -> tayfam.core.v1.RevokeInviteLinkResponse
-	15, // 58: tayfam.core.v1.MembershipService.PreviewInvite:output_type -> tayfam.core.v1.PreviewInviteResponse
-	17, // 59: tayfam.core.v1.MembershipService.JoinByInvite:output_type -> tayfam.core.v1.JoinByInviteResponse
-	19, // 60: tayfam.core.v1.MembershipService.ListMembers:output_type -> tayfam.core.v1.ListMembersResponse
-	21, // 61: tayfam.core.v1.MembershipService.ListPending:output_type -> tayfam.core.v1.ListPendingResponse
-	23, // 62: tayfam.core.v1.MembershipService.ApproveMember:output_type -> tayfam.core.v1.ApproveMemberResponse
-	25, // 63: tayfam.core.v1.MembershipService.RejectMember:output_type -> tayfam.core.v1.RejectMemberResponse
-	27, // 64: tayfam.core.v1.MembershipService.ChangeRole:output_type -> tayfam.core.v1.ChangeRoleResponse
-	29, // 65: tayfam.core.v1.MembershipService.MuteMember:output_type -> tayfam.core.v1.MuteMemberResponse
-	31, // 66: tayfam.core.v1.MembershipService.UnmuteMember:output_type -> tayfam.core.v1.UnmuteMemberResponse
-	33, // 67: tayfam.core.v1.MembershipService.BanMember:output_type -> tayfam.core.v1.BanMemberResponse
-	35, // 68: tayfam.core.v1.MembershipService.RemoveMember:output_type -> tayfam.core.v1.RemoveMemberResponse
-	37, // 69: tayfam.core.v1.MembershipService.LeaveTayfa:output_type -> tayfam.core.v1.LeaveTayfaResponse
-	39, // 70: tayfam.core.v1.MembershipService.GetMembership:output_type -> tayfam.core.v1.GetMembershipResponse
-	42, // 71: tayfam.core.v1.MembershipService.InviteFriend:output_type -> tayfam.core.v1.InviteFriendResponse
-	44, // 72: tayfam.core.v1.MembershipService.ListMyInvitations:output_type -> tayfam.core.v1.ListMyInvitationsResponse
-	46, // 73: tayfam.core.v1.MembershipService.AcceptInvitation:output_type -> tayfam.core.v1.AcceptInvitationResponse
-	48, // 74: tayfam.core.v1.MembershipService.DeclineInvitation:output_type -> tayfam.core.v1.DeclineInvitationResponse
-	50, // 75: tayfam.core.v1.MembershipService.ListInvitations:output_type -> tayfam.core.v1.ListInvitationsResponse
-	52, // 76: tayfam.core.v1.MembershipService.CancelInvitation:output_type -> tayfam.core.v1.CancelInvitationResponse
-	54, // [54:77] is the sub-list for method output_type
-	31, // [31:54] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	3,  // 17: tayfam.core.v1.GetMemberResponse.membership:type_name -> tayfam.core.v1.Membership
+	4,  // 18: tayfam.core.v1.ListPendingResponse.pending:type_name -> tayfam.core.v1.PendingMember
+	3,  // 19: tayfam.core.v1.ApproveMemberResponse.membership:type_name -> tayfam.core.v1.Membership
+	0,  // 20: tayfam.core.v1.ChangeRoleRequest.new_role:type_name -> tayfam.core.v1.Role
+	3,  // 21: tayfam.core.v1.ChangeRoleResponse.membership:type_name -> tayfam.core.v1.Membership
+	55, // 22: tayfam.core.v1.MuteMemberRequest.expire_time:type_name -> google.protobuf.Timestamp
+	3,  // 23: tayfam.core.v1.MuteMemberResponse.membership:type_name -> tayfam.core.v1.Membership
+	3,  // 24: tayfam.core.v1.UnmuteMemberResponse.membership:type_name -> tayfam.core.v1.Membership
+	57, // 25: tayfam.core.v1.BanMemberRequest.reason:type_name -> tayfam.core.v1.ReportReason
+	3,  // 26: tayfam.core.v1.GetMembershipResponse.membership:type_name -> tayfam.core.v1.Membership
+	55, // 27: tayfam.core.v1.Invitation.invite_time:type_name -> google.protobuf.Timestamp
+	42, // 28: tayfam.core.v1.InviteFriendResponse.invitation:type_name -> tayfam.core.v1.Invitation
+	42, // 29: tayfam.core.v1.ListMyInvitationsResponse.invitations:type_name -> tayfam.core.v1.Invitation
+	3,  // 30: tayfam.core.v1.AcceptInvitationResponse.membership:type_name -> tayfam.core.v1.Membership
+	42, // 31: tayfam.core.v1.ListInvitationsResponse.invitations:type_name -> tayfam.core.v1.Invitation
+	6,  // 32: tayfam.core.v1.MembershipService.JoinByCode:input_type -> tayfam.core.v1.JoinByCodeRequest
+	8,  // 33: tayfam.core.v1.MembershipService.CreateInviteLink:input_type -> tayfam.core.v1.CreateInviteLinkRequest
+	10, // 34: tayfam.core.v1.MembershipService.ListInviteLinks:input_type -> tayfam.core.v1.ListInviteLinksRequest
+	12, // 35: tayfam.core.v1.MembershipService.RevokeInviteLink:input_type -> tayfam.core.v1.RevokeInviteLinkRequest
+	14, // 36: tayfam.core.v1.MembershipService.PreviewInvite:input_type -> tayfam.core.v1.PreviewInviteRequest
+	16, // 37: tayfam.core.v1.MembershipService.JoinByInvite:input_type -> tayfam.core.v1.JoinByInviteRequest
+	18, // 38: tayfam.core.v1.MembershipService.ListMembers:input_type -> tayfam.core.v1.ListMembersRequest
+	20, // 39: tayfam.core.v1.MembershipService.GetMember:input_type -> tayfam.core.v1.GetMemberRequest
+	22, // 40: tayfam.core.v1.MembershipService.ListPending:input_type -> tayfam.core.v1.ListPendingRequest
+	24, // 41: tayfam.core.v1.MembershipService.ApproveMember:input_type -> tayfam.core.v1.ApproveMemberRequest
+	26, // 42: tayfam.core.v1.MembershipService.RejectMember:input_type -> tayfam.core.v1.RejectMemberRequest
+	28, // 43: tayfam.core.v1.MembershipService.ChangeRole:input_type -> tayfam.core.v1.ChangeRoleRequest
+	30, // 44: tayfam.core.v1.MembershipService.MuteMember:input_type -> tayfam.core.v1.MuteMemberRequest
+	32, // 45: tayfam.core.v1.MembershipService.UnmuteMember:input_type -> tayfam.core.v1.UnmuteMemberRequest
+	34, // 46: tayfam.core.v1.MembershipService.BanMember:input_type -> tayfam.core.v1.BanMemberRequest
+	36, // 47: tayfam.core.v1.MembershipService.RemoveMember:input_type -> tayfam.core.v1.RemoveMemberRequest
+	38, // 48: tayfam.core.v1.MembershipService.LeaveTayfa:input_type -> tayfam.core.v1.LeaveTayfaRequest
+	40, // 49: tayfam.core.v1.MembershipService.GetMembership:input_type -> tayfam.core.v1.GetMembershipRequest
+	43, // 50: tayfam.core.v1.MembershipService.InviteFriend:input_type -> tayfam.core.v1.InviteFriendRequest
+	45, // 51: tayfam.core.v1.MembershipService.ListMyInvitations:input_type -> tayfam.core.v1.ListMyInvitationsRequest
+	47, // 52: tayfam.core.v1.MembershipService.AcceptInvitation:input_type -> tayfam.core.v1.AcceptInvitationRequest
+	49, // 53: tayfam.core.v1.MembershipService.DeclineInvitation:input_type -> tayfam.core.v1.DeclineInvitationRequest
+	51, // 54: tayfam.core.v1.MembershipService.ListInvitations:input_type -> tayfam.core.v1.ListInvitationsRequest
+	53, // 55: tayfam.core.v1.MembershipService.CancelInvitation:input_type -> tayfam.core.v1.CancelInvitationRequest
+	7,  // 56: tayfam.core.v1.MembershipService.JoinByCode:output_type -> tayfam.core.v1.JoinByCodeResponse
+	9,  // 57: tayfam.core.v1.MembershipService.CreateInviteLink:output_type -> tayfam.core.v1.CreateInviteLinkResponse
+	11, // 58: tayfam.core.v1.MembershipService.ListInviteLinks:output_type -> tayfam.core.v1.ListInviteLinksResponse
+	13, // 59: tayfam.core.v1.MembershipService.RevokeInviteLink:output_type -> tayfam.core.v1.RevokeInviteLinkResponse
+	15, // 60: tayfam.core.v1.MembershipService.PreviewInvite:output_type -> tayfam.core.v1.PreviewInviteResponse
+	17, // 61: tayfam.core.v1.MembershipService.JoinByInvite:output_type -> tayfam.core.v1.JoinByInviteResponse
+	19, // 62: tayfam.core.v1.MembershipService.ListMembers:output_type -> tayfam.core.v1.ListMembersResponse
+	21, // 63: tayfam.core.v1.MembershipService.GetMember:output_type -> tayfam.core.v1.GetMemberResponse
+	23, // 64: tayfam.core.v1.MembershipService.ListPending:output_type -> tayfam.core.v1.ListPendingResponse
+	25, // 65: tayfam.core.v1.MembershipService.ApproveMember:output_type -> tayfam.core.v1.ApproveMemberResponse
+	27, // 66: tayfam.core.v1.MembershipService.RejectMember:output_type -> tayfam.core.v1.RejectMemberResponse
+	29, // 67: tayfam.core.v1.MembershipService.ChangeRole:output_type -> tayfam.core.v1.ChangeRoleResponse
+	31, // 68: tayfam.core.v1.MembershipService.MuteMember:output_type -> tayfam.core.v1.MuteMemberResponse
+	33, // 69: tayfam.core.v1.MembershipService.UnmuteMember:output_type -> tayfam.core.v1.UnmuteMemberResponse
+	35, // 70: tayfam.core.v1.MembershipService.BanMember:output_type -> tayfam.core.v1.BanMemberResponse
+	37, // 71: tayfam.core.v1.MembershipService.RemoveMember:output_type -> tayfam.core.v1.RemoveMemberResponse
+	39, // 72: tayfam.core.v1.MembershipService.LeaveTayfa:output_type -> tayfam.core.v1.LeaveTayfaResponse
+	41, // 73: tayfam.core.v1.MembershipService.GetMembership:output_type -> tayfam.core.v1.GetMembershipResponse
+	44, // 74: tayfam.core.v1.MembershipService.InviteFriend:output_type -> tayfam.core.v1.InviteFriendResponse
+	46, // 75: tayfam.core.v1.MembershipService.ListMyInvitations:output_type -> tayfam.core.v1.ListMyInvitationsResponse
+	48, // 76: tayfam.core.v1.MembershipService.AcceptInvitation:output_type -> tayfam.core.v1.AcceptInvitationResponse
+	50, // 77: tayfam.core.v1.MembershipService.DeclineInvitation:output_type -> tayfam.core.v1.DeclineInvitationResponse
+	52, // 78: tayfam.core.v1.MembershipService.ListInvitations:output_type -> tayfam.core.v1.ListInvitationsResponse
+	54, // 79: tayfam.core.v1.MembershipService.CancelInvitation:output_type -> tayfam.core.v1.CancelInvitationResponse
+	56, // [56:80] is the sub-list for method output_type
+	32, // [32:56] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_membership_proto_init() }
@@ -3199,7 +3331,7 @@ func file_tayfam_core_v1_membership_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_membership_proto_rawDesc), len(file_tayfam_core_v1_membership_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   50,
+			NumMessages:   52,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

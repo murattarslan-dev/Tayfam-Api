@@ -84,7 +84,9 @@ func (f *fakeChat) MarkChannelRead(ctx context.Context, in *chatv1.MarkChannelRe
 }
 
 func (f *fakeChat) ListChannelMembers(ctx context.Context, in *chatv1.ListChannelMembersRequest, _ ...grpc.CallOption) (*chatv1.ListChannelMembersResponse, error) {
-	return &chatv1.ListChannelMembersResponse{UserIds: []string{userID}, NextPageToken: "N"}, f.record(ctx, in)
+	return &chatv1.ListChannelMembersResponse{UserIds: []string{userID}, NextPageToken: "N", Members: []*chatv1.ChannelMember{
+		{UserId: userID, Roles: []chatv1.ChannelMemberRole{chatv1.ChannelMemberRole_CHANNEL_MEMBER_ROLE_ORGANIZER, 9}},
+	}}, f.record(ctx, in)
 }
 
 func (f *fakeChat) AddChannelMembers(ctx context.Context, in *chatv1.AddChannelMembersRequest, _ ...grpc.CallOption) (*chatv1.AddChannelMembersResponse, error) {
@@ -123,7 +125,8 @@ func TestChannelAudienceRoutes(t *testing.T) {
 			t.Errorf("%s %s: %d %s; chat'e giden %v", tc.method, tc.path, w.Code, w.Body, got)
 		}
 	}
-	if w := as(h, "GET", ch+"/members", ""); !strings.Contains(w.Body.String(), `"user_ids":["`+userID+`"]`) || !strings.Contains(w.Body.String(), `"next_page_token":"N"`) {
+	if w := as(h, "GET", ch+"/members", ""); !strings.Contains(w.Body.String(), `"user_ids":["`+userID+`"]`) || !strings.Contains(w.Body.String(), `"next_page_token":"N"`) ||
+		!strings.Contains(w.Body.String(), `"members":[{"user_id":"`+userID+`","roles":["organizer"]}]`) {
 		t.Fatalf("üyeler: %s", w.Body)
 	}
 	if w := as(h, "POST", ch+"/members", `{"user_ids":["`+userID+`"]}`); !strings.Contains(w.Body.String(), `"member_count":3`) || !strings.Contains(w.Body.String(), `"visibility":"selected"`) {
@@ -150,8 +153,8 @@ func TestChannelAudienceRoutes(t *testing.T) {
 
 	// Fields of the new kinds; a members channel has none of them.
 	at := timestamppb.New(t0.AddDate(0, 0, 7))
-	ev := channelFrom(&chatv1.Channel{Id: channelID, Visibility: chatv1.ChannelVisibility_CHANNEL_VISIBILITY_EVENT, EventId: eventID, MemberCount: 5, PlannedArchiveTime: at}, false)
-	if ev.Visibility != "event" || ev.EventID != eventID || ev.MemberCount == nil || *ev.MemberCount != 5 || ev.PlannedArchiveAt == nil || !ev.PlannedArchiveAt.Equal(at.AsTime()) {
+	ev := channelFrom(&chatv1.Channel{Id: channelID, Visibility: chatv1.ChannelVisibility_CHANNEL_VISIBILITY_EVENT, EventId: eventID, EventTitle: "Kamp", MemberCount: 5, PlannedArchiveTime: at}, false)
+	if ev.Visibility != "event" || ev.EventID != eventID || ev.EventTitle != "Kamp" || ev.MemberCount == nil || *ev.MemberCount != 5 || ev.PlannedArchiveAt == nil || !ev.PlannedArchiveAt.Equal(at.AsTime()) {
 		t.Fatalf("etkinlik kanalı = %+v", ev)
 	}
 	if m := channelFrom(&chatv1.Channel{Id: channelID, Visibility: chatv1.ChannelVisibility_CHANNEL_VISIBILITY_MEMBERS, MemberCount: 5}, false); m.MemberCount != nil || m.EventID != "" {

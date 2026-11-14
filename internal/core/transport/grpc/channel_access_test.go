@@ -31,7 +31,7 @@ func (f *fakeChannelAccess) EventChannels(_ context.Context, caller, tayfa id.ID
 	f.caller, f.tayfa, f.chans = caller, tayfa, chans
 	out := []channelaccess.EventAccess{}
 	for _, c := range chans {
-		out = append(out, channelaccess.EventAccess{EventChannel: c, Member: true, End: time.Unix(100, 0), MemberCount: 4})
+		out = append(out, channelaccess.EventAccess{EventChannel: c, Member: true, End: time.Unix(100, 0), MemberCount: 4, Title: "Kamp", Organizer: caller})
 	}
 	return out, f.err
 }
@@ -61,6 +61,7 @@ func TestEventChannelAccessServer(t *testing.T) {
 	}})
 	if err != nil || f.caller != user || f.tayfa != tf || len(f.chans) != 2 || f.chans[0].Opener != opener || f.chans[1].Opener != (id.ID{}) ||
 		len(resp.GetChannels()) != 2 || !resp.GetChannels()[0].GetMember() || resp.GetChannels()[0].GetMemberCount() != 4 ||
+		resp.GetChannels()[0].GetTitle() != "Kamp" || resp.GetChannels()[0].GetOrganizerUserId() != user.String() ||
 		resp.GetChannels()[1].GetOpenerUserId() != "" {
 		t.Fatalf("erişim = %v %v", resp, err)
 	}

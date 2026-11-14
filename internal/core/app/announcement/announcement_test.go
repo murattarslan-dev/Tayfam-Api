@@ -541,3 +541,41 @@ func TestOtherTayfasAnnouncement(t *testing.T) {
 		}
 	}
 }
+
+// TestEditedAt (issue #191): only a change of the title or body sets
+// edited_at; pinning, unpinning, restoring and an edit that changes nothing
+// do not.
+func TestEditedAt(t *testing.T) {
+	e := setup(t)
+	c := e.crew(t)
+	ctx := context.Background()
+	a := e.publish(t, c, c.admin, "Pazar konvoyu")
+	if !a.EditedAt.IsZero() {
+		t.Fatalf("yeni duyuru düzenlenmiş görünüyor: %v", a.EditedAt)
+	}
+	v, err := e.svc.SetPinned(ctx, c.mod, c.tayfa, a.ID, true)
+	if err != nil || !v.EditedAt.IsZero() {
+		t.Fatalf("sabitleme: %+v %v", v, err)
+	}
+	v, err = e.svc.SetPinned(ctx, c.mod, c.tayfa, a.ID, false)
+	if err != nil || !v.EditedAt.IsZero() {
+		t.Fatalf("sabitlemeyi kaldırma: %+v %v", v, err)
+	}
+	// The same title again changes nothing.
+	v, err = e.svc.Update(ctx, c.admin, c.tayfa, a.ID, UpdateInput{Fields: []string{FieldTitle}, Title: "Pazar konvoyu"})
+	if err != nil || !v.EditedAt.IsZero() {
+		t.Fatalf("değişmeyen düzenleme: %+v %v", v, err)
+	}
+	v, err = e.svc.Update(ctx, c.admin, c.tayfa, a.ID, UpdateInput{Fields: []string{FieldBody}, Body: "Saat 9'da"})
+	if err != nil || v.EditedAt.IsZero() {
+		t.Fatalf("düzenleme: %+v %v", v, err)
+	}
+	edited := v.EditedAt
+	v, err = e.svc.SetPinned(ctx, c.mod, c.tayfa, a.ID, true)
+	if err != nil || !v.EditedAt.Equal(edited) {
+		t.Fatalf("düzenlemeden sonra sabitleme: %v, %v bekleniyordu", v.EditedAt, edited)
+	}
+	if got, err := e.svc.Get(ctx, c.member, c.tayfa, a.ID); err != nil || !got.EditedAt.Equal(edited) {
+		t.Fatalf("okuma: %+v %v", got, err)
+	}
+}

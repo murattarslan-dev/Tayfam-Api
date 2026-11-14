@@ -22,6 +22,16 @@ type fakeSocial struct {
 	other    id.ID
 	incoming bool
 	called   bool
+	refs     []social.RequestRef
+}
+
+func (f *fakeSocial) Resolutions(_ context.Context, caller id.ID, refs []social.RequestRef) ([]social.Resolution, error) {
+	f.caller, f.refs, f.called = caller, refs, true
+	out := []social.Resolution{}
+	for range refs {
+		out = append(out, social.ResolutionDeclined)
+	}
+	return out, f.err
 }
 
 func (f *fakeSocial) friend() social.Friend {
@@ -130,5 +140,33 @@ func TestSocialValidationAndAuth(t *testing.T) {
 	_, err := srv.SendFriendRequest(ctx, &corev1.SendFriendRequestRequest{UserId: id.New().String()})
 	if code, reason, _ := reasonOf(t, err); code != codes.NotFound || reason != "ERROR_REASON_USER_NOT_FOUND" {
 		t.Fatalf("bulunamadı: %v %q", code, reason)
+	}
+}
+
+// TestGetRequestResolutions (issue #192): kinds and IDs are parsed, the
+// caller comes from the token, the order is kept.
+func TestGetRequestResolutions(t *testing.T) {
+	f := &fakeSocial{}
+	srv := NewSocialServer(f, discard)
+	u, a, tf := id.New(), id.New(), id.New()
+	resp, err := srv.GetRequestResolutions(callerCtx(u), &corev1.GetRequestResolutionsRequest{Refs: []*corev1.RequestRef{
+		{Kind: corev1.RequestKind_REQUEST_KIND_FRIEND_REQUEST, Id: a.String()},
+		{Kind: corev1.RequestKind_REQUEST_KIND_TAYFA_INVITATION, Id: tf.String()},
+	}})
+	if err != nil || f.caller != u || len(f.refs) != 2 || f.refs[0] != (social.RequestRef{Kind: social.KindFriendRequest, ID: a}) ||
+		f.refs[1].Kind != social.KindTayfaInvitation || len(resp.GetResolutions()) != 2 ||
+		resp.GetResolutions()[1] != corev1.RequestResolution_REQUEST_RESOLUTION_DECLINED {
+		t.Fatalf("çözüm = %v %v %+v", resp, err, f.refs)
+	}
+	for name, req := range map[string]*corev1.GetRequestResolutionsRequest{
+		"boş":          {},
+		"tür yok":      {Refs: []*corev1.RequestRef{{Id: a.String()}}},
+		"bozuk kimlik": {Refs: []*corev1.RequestRef{{Kind: corev1.RequestKind_REQUEST_KIND_FRIEND_REQUEST, Id: "x"}}},
+		"101 kayıt":    {Refs: make([]*corev1.RequestRef, 101)},
+	} {
+		f := &fakeSocial{}
+		if _, err := NewSocialServer(f, discard).GetRequestResolutions(callerCtx(u), req); func() codes.Code { c, _ := infoOf(t, err); return c }() != codes.InvalidArgument || f.called {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }

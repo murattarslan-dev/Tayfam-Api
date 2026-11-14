@@ -487,9 +487,13 @@ type EventChannelAccess struct {
 	Cancelled bool                   `protobuf:"varint,6,opt,name=cancelled,proto3" json:"cancelled,omitempty"`
 	// Organizer, opener (while an active member) and GOING members, each
 	// once.
-	MemberCount   int32 `protobuf:"varint,7,opt,name=member_count,json=memberCount,proto3" json:"member_count,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	MemberCount int32 `protobuf:"varint,7,opt,name=member_count,json=memberCount,proto3" json:"member_count,omitempty"`
+	// The event's title, also when it was cancelled (issue #193).
+	Title string `protobuf:"bytes,8,opt,name=title,proto3" json:"title,omitempty"`
+	// The event's organizer; empty when the account was deleted (issue #193).
+	OrganizerUserId string `protobuf:"bytes,9,opt,name=organizer_user_id,json=organizerUserId,proto3" json:"organizer_user_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *EventChannelAccess) Reset() {
@@ -569,6 +573,20 @@ func (x *EventChannelAccess) GetMemberCount() int32 {
 		return x.MemberCount
 	}
 	return 0
+}
+
+func (x *EventChannelAccess) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *EventChannelAccess) GetOrganizerUserId() string {
+	if x != nil {
+		return x.OrganizerUserId
+	}
+	return ""
 }
 
 type GetEventChannelAccessResponse struct {
@@ -863,7 +881,7 @@ const file_tayfam_core_v1_channel_access_proto_rawDesc = "" +
 	"\x0eopener_user_id\x18\x02 \x01(\tR\fopenerUserId\"v\n" +
 	"\x1cGetEventChannelAccessRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12;\n" +
-	"\bchannels\x18\x02 \x03(\v2\x1f.tayfam.core.v1.EventChannelRefR\bchannels\"\x8f\x02\n" +
+	"\bchannels\x18\x02 \x03(\v2\x1f.tayfam.core.v1.EventChannelRefR\bchannels\"\xd1\x02\n" +
 	"\x12EventChannelAccess\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12$\n" +
 	"\x0eopener_user_id\x18\x02 \x01(\tR\fopenerUserId\x12\x16\n" +
@@ -871,7 +889,9 @@ const file_tayfam_core_v1_channel_access_proto_rawDesc = "" +
 	"\x10can_open_channel\x18\x04 \x01(\bR\x0ecanOpenChannel\x125\n" +
 	"\bend_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12\x1c\n" +
 	"\tcancelled\x18\x06 \x01(\bR\tcancelled\x12!\n" +
-	"\fmember_count\x18\a \x01(\x05R\vmemberCount\"_\n" +
+	"\fmember_count\x18\a \x01(\x05R\vmemberCount\x12\x14\n" +
+	"\x05title\x18\b \x01(\tR\x05title\x12*\n" +
+	"\x11organizer_user_id\x18\t \x01(\tR\x0forganizerUserId\"_\n" +
 	"\x1dGetEventChannelAccessResponse\x12>\n" +
 	"\bchannels\x18\x01 \x03(\v2\".tayfam.core.v1.EventChannelAccessR\bchannels\"\xb8\x01\n" +
 	"\x1eListEventChannelMembersRequest\x12\x19\n" +

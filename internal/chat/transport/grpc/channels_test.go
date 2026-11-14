@@ -39,7 +39,7 @@ type fakeChannels struct {
 
 func (f *fakeChannels) Members(_ context.Context, caller, tayfa, ch id.ID, _ int32, token string) (channel.MemberPage, error) {
 	f.caller, f.tayfa, f.channel = caller, tayfa, ch
-	return channel.MemberPage{Users: []id.ID{caller}, Next: token + "+"}, f.err
+	return channel.MemberPage{Users: []id.ID{caller}, Next: token + "+", Members: []channel.ChannelMember{{User: caller, Organizer: true, Creator: true}}}, f.err
 }
 
 func (f *fakeChannels) AddMembers(_ context.Context, caller, tayfa, ch id.ID, users []id.ID) (channel.Channel, error) {
@@ -288,7 +288,8 @@ func TestChannelAudienceConverts(t *testing.T) {
 	}
 
 	page, err := client.ListChannelMembers(ctx, &chatv1.ListChannelMembersRequest{TayfaId: tf.String(), ChannelId: ch.String(), PageToken: "a"})
-	if err != nil || len(page.GetUserIds()) != 1 || page.GetUserIds()[0] != user.String() || page.GetNextPageToken() != "a+" || app.channel != ch {
+	if err != nil || len(page.GetUserIds()) != 1 || page.GetUserIds()[0] != user.String() || page.GetNextPageToken() != "a+" || app.channel != ch ||
+		len(page.GetMembers()) != 1 || len(page.GetMembers()[0].GetRoles()) != 2 {
 		t.Fatalf("üyeler: %v %v", page, err)
 	}
 	added, err := client.AddChannelMembers(ctx, &chatv1.AddChannelMembersRequest{TayfaId: tf.String(), ChannelId: ch.String(), UserIds: []string{other.String()}})
@@ -322,8 +323,8 @@ func TestChannelAudienceConverts(t *testing.T) {
 
 func TestChannelToProtoAudience(t *testing.T) {
 	ev, at := id.New(), time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)
-	p := channelToProto(channel.Channel{Visibility: channel.VisibilityEvent, EventID: ev, PlannedArchiveAt: at, MemberCount: 5})
-	if p.GetVisibility() != chatv1.ChannelVisibility_CHANNEL_VISIBILITY_EVENT || p.GetEventId() != ev.String() ||
+	p := channelToProto(channel.Channel{Visibility: channel.VisibilityEvent, EventID: ev, PlannedArchiveAt: at, MemberCount: 5, EventTitle: "Kamp"})
+	if p.GetVisibility() != chatv1.ChannelVisibility_CHANNEL_VISIBILITY_EVENT || p.GetEventId() != ev.String() || p.GetEventTitle() != "Kamp" ||
 		!p.GetPlannedArchiveTime().AsTime().Equal(at) || p.GetMemberCount() != 5 {
 		t.Fatalf("etkinlik kanalı = %v", p)
 	}

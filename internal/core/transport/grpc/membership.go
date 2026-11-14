@@ -34,6 +34,7 @@ type Memberships interface {
 	RemoveMember(ctx context.Context, caller, tayfa, target id.ID) error
 	LeaveTayfa(ctx context.Context, caller, tayfa id.ID) error
 	GetMembership(ctx context.Context, caller, tayfa, target id.ID) (membership.Member, error)
+	GetMember(ctx context.Context, caller, tayfa, target id.ID) (membership.Member, error)
 	InviteFriend(ctx context.Context, caller, tayfa, target id.ID) (membership.Invitation, error)
 	ListMyInvitations(ctx context.Context, caller id.ID, size int32, token string) (membership.Page[membership.Invitation], error)
 	AcceptInvitation(ctx context.Context, caller, tayfa id.ID) (membership.Member, error)
@@ -143,6 +144,7 @@ func (s *MembershipServer) PreviewInvite(ctx context.Context, req *corev1.Previe
 	}
 	return &corev1.PreviewInviteResponse{
 		TayfaId: p.TayfaID.String(), Name: p.Name, MemberCount: p.MemberCount, AlreadyMember: p.AlreadyMember,
+		Interests: append([]string{}, p.Interests...),
 	}, nil
 }
 
@@ -345,6 +347,19 @@ func (s *MembershipServer) GetMembership(ctx context.Context, req *corev1.GetMem
 		return nil, errorStatus(ctx, s.log, err)
 	}
 	return &corev1.GetMembershipResponse{Membership: memberPB(m)}, nil
+}
+
+// GetMember implements corev1.MembershipServiceServer (issue #194).
+func (s *MembershipServer) GetMember(ctx context.Context, req *corev1.GetMemberRequest) (*corev1.GetMemberResponse, error) {
+	u, tayfa, target, err := targetArgs(ctx, req.GetTayfaId(), req.GetUserId())
+	if err != nil {
+		return nil, err
+	}
+	m, err := s.app.GetMember(ctx, u, tayfa, target)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.GetMemberResponse{Membership: memberPB(m)}, nil
 }
 
 // parseID parses a UUID request field.

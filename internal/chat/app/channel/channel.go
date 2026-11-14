@@ -183,6 +183,9 @@ type Channel struct {
 	PlannedArchiveAt time.Time
 	// MemberCount is the audience of an event or selected channel.
 	MemberCount int32
+	// EventTitle is the event's title (event channels; issue #193); empty
+	// when core does not show the caller the event.
+	EventTitle string
 }
 
 // ChannelInput is a new channel.
@@ -372,7 +375,7 @@ func channelView(r chanRow, now time.Time) Channel {
 // withEvent fills what core said about an event channel.
 func withEvent(c Channel, a *EventAccess) Channel {
 	if a != nil {
-		c.MemberCount = a.MemberCount
+		c.MemberCount, c.EventTitle = a.MemberCount, a.Title
 	}
 	return c
 }

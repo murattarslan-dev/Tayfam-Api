@@ -96,10 +96,16 @@ func (a *Audience) EventChannels(ctx context.Context, _, tayfa id.ID, refs []cha
 		if !asked[ref] {
 			continue
 		}
-		out[ref] = channel.EventAccess{
+		a := channel.EventAccess{
 			Member: c.GetMember(), CanOpen: c.GetCanOpenChannel(), End: c.GetEndTime().AsTime().UTC(),
-			Cancelled: c.GetCancelled(), MemberCount: c.GetMemberCount(),
+			Cancelled: c.GetCancelled(), MemberCount: c.GetMemberCount(), Title: c.GetTitle(),
 		}
+		if o := c.GetOrganizerUserId(); o != "" {
+			if a.Organizer, ok = id.Parse(o); !ok {
+				return nil, fmt.Errorf("core kanal kitlesi: bozuk organizatör kimliği")
+			}
+		}
+		out[ref] = a
 	}
 	return out, nil
 }

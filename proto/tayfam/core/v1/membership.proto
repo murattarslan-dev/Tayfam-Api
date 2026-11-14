@@ -112,6 +112,13 @@ service MembershipService {
   // ListPending for join requests).
   rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
 
+  // GetMember returns one member of the tayfa, as ListMembers shows them
+  // (issue #194): any active member may read an ACTIVE member; only roles
+  // that may list BANNED members read a BANNED one. Anyone else, and a user
+  // with no such membership, is ERROR_REASON_MEMBER_NOT_FOUND; a caller who
+  // is not an active member gets ERROR_REASON_TAYFA_NOT_FOUND.
+  rpc GetMember(GetMemberRequest) returns (GetMemberResponse);
+
   // ListPending lists join requests, oldest first, with where each request
   // came from. Moderator and admin (permission table).
   //
@@ -374,6 +381,11 @@ message PreviewInviteResponse {
   // True when the caller is already an ACTIVE member or has a PENDING
   // request in this tayfa.
   bool already_member = 4;
+  // The tayfa's interests (issue #194), as EventType names in lower case
+  // ("convoy", "camp", "hike", "fishing", "gaming", "sports", "general";
+  // tayfa.proto cannot be imported here). Only for a valid invite: an
+  // invalid one returns an error and no tayfa information at all.
+  repeated string interests = 5;
 }
 
 message JoinByInviteRequest {
@@ -398,6 +410,15 @@ message ListMembersRequest {
 message ListMembersResponse {
   repeated Membership members = 1;
   string next_page_token = 2;
+}
+
+message GetMemberRequest {
+  string tayfa_id = 1;
+  string user_id = 2;
+}
+
+message GetMemberResponse {
+  Membership membership = 1;
 }
 
 message ListPendingRequest {
@@ -499,6 +520,8 @@ message Invitation {
   // Empty when the inviter's account was deleted.
   string inviter_user_id = 4;
   google.protobuf.Timestamp invite_time = 5;
+  // The tayfa's interests (issue #194), as in PreviewInviteResponse.
+  repeated string interests = 6;
 }
 
 message InviteFriendRequest {

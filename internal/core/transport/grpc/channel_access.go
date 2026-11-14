@@ -147,6 +147,7 @@ func (s *ChannelAccessServer) GetEventChannelAccess(ctx context.Context, req *co
 		out.Channels = append(out.Channels, &corev1.EventChannelAccess{
 			EventId: a.Event.String(), OpenerUserId: optionalID(a.Opener), Member: a.Member, CanOpenChannel: a.CanOpen,
 			EndTime: timestamppb.New(a.End), Cancelled: a.Cancelled, MemberCount: a.MemberCount,
+			Title: a.Title, OrganizerUserId: optionalID(a.Organizer),
 		})
 	}
 	return out, nil

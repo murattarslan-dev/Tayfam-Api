@@ -13,7 +13,7 @@ import (
 
 const channelEvents = `-- name: ChannelEvents :many
 
-SELECT e.id, e.ends_at, e.status, e.cancelled_at, e.created_by,
+SELECT e.id, e.title, e.ends_at, e.status, e.cancelled_at, e.created_by,
        COALESCE((SELECT r.status FROM event_rsvps r WHERE r.event_id = e.id AND r.user_id = $1), '')::text AS caller_status
 FROM events e
 WHERE e.tayfa_id = $2 AND e.id = ANY($3::uuid[]) AND e.deleted_at IS NULL
@@ -27,6 +27,7 @@ type ChannelEventsParams struct {
 
 type ChannelEventsRow struct {
 	ID           pgtype.UUID
+	Title        string
 	EndsAt       pgtype.Timestamptz
 	Status       string
 	CancelledAt  pgtype.Timestamptz
@@ -50,6 +51,7 @@ func (q *Queries) ChannelEvents(ctx context.Context, arg ChannelEventsParams) ([
 		var i ChannelEventsRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.Title,
 			&i.EndsAt,
 			&i.Status,
 			&i.CancelledAt,

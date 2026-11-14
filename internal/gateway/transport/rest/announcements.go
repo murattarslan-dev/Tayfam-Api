@@ -54,13 +54,15 @@ type announcementJSON struct {
 	Pinned       bool      `json:"pinned"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	// Absent when the title and body never changed (issue #191).
+	EditedAt *time.Time `json:"edited_at,omitempty"`
 }
 
 func announcementFrom(a *corev1.Announcement) announcementJSON {
 	return announcementJSON{
 		ID: a.GetId(), TayfaID: a.GetTayfaId(), AuthorUserID: a.GetAuthorUserId(),
 		Title: a.GetTitle(), Body: a.GetBody(), Pinned: a.GetPinned(),
-		CreatedAt: a.GetCreateTime().AsTime(), UpdatedAt: a.GetUpdateTime().AsTime(),
+		CreatedAt: a.GetCreateTime().AsTime(), UpdatedAt: a.GetUpdateTime().AsTime(), EditedAt: optTime(a.GetEditTime()),
 	}
 }
 

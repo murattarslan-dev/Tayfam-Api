@@ -52,6 +52,11 @@ type EventAccess struct {
 	// MemberCount is the audience: going members, the organizer and the
 	// opener, active members each counted once.
 	MemberCount int32
+	// Title is the event's title, also when it was cancelled (issue #193).
+	Title string
+	// Organizer is the event's organizer; zero when the account was
+	// deleted.
+	Organizer id.ID
 }
 
 // EventChannels answers for caller and each channel. Events caller cannot
@@ -126,7 +131,10 @@ func (s *Service) EventChannels(ctx context.Context, caller, tayfa id.ID, chans 
 		if r.CreatedBy.Valid {
 			organizer = id.ID(r.CreatedBy.Bytes)
 		}
-		a := EventAccess{EventChannel: c, End: r.EndsAt.Time.UTC(), Cancelled: r.Status == eventCancelled, MemberCount: count[c.Event]}
+		a := EventAccess{
+			EventChannel: c, End: r.EndsAt.Time.UTC(), Cancelled: r.Status == eventCancelled, MemberCount: count[c.Event],
+			Title: r.Title, Organizer: organizer,
+		}
 		if a.Cancelled && r.CancelledAt.Valid {
 			a.End = r.CancelledAt.Time.UTC()
 		}

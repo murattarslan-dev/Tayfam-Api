@@ -68,6 +68,25 @@ type Notification struct {
 	Unread    int32
 	ReadAt    time.Time
 	CreatedAt time.Time
+	// Resolution: friend_request and tayfa_invitation only, how the request
+	// stands now (issue #192): pending, accepted, declined, withdrawn or
+	// expired. Asked of core when listing, never stored; empty when core
+	// could not answer.
+	Resolution string
+}
+
+// RequestRef names a request for Resolver: the requester of a
+// friend_request, the tayfa of a tayfa_invitation.
+type RequestRef struct {
+	Invitation bool // false: a friend request
+	ID         id.ID
+}
+
+// Resolver asks core how requests the caller received stand, with the
+// caller's own token (SocialService.GetRequestResolutions; issue #192).
+// One answer per ref, in order.
+type Resolver interface {
+	Resolve(ctx context.Context, refs []RequestRef) ([]string, error)
 }
 
 // Preference is one muting preference of the caller.
@@ -99,7 +118,10 @@ type Config struct {
 	Log           *slog.Logger
 	Members       Memberships
 	Conversations Conversations
-	Now           func() time.Time // optional, for tests
+	// Resolver fills Notification.Resolution; optional (without it the
+	// field stays empty).
+	Resolver Resolver
+	Now      func() time.Time // optional, for tests
 }
 
 // Service serves the notification center.
@@ -181,7 +203,38 @@ func (s *Service) List(ctx context.Context, caller id.ID, size int32, token stri
 		}
 		out = append(out, v)
 	}
+	s.resolve(ctx, out)
 	return out, next, nil
+}
+
+// resolve fills the resolution of the page's friend_request and
+// tayfa_invitation notices with one call to core. If core cannot answer
+// the list is served without them.
+func (s *Service) resolve(ctx context.Context, items []Notification) {
+	if s.cfg.Resolver == nil {
+		return
+	}
+	var refs []RequestRef
+	var at []int
+	for i, n := range items {
+		switch n.Type {
+		case TypeFriendRequest:
+			refs, at = append(refs, RequestRef{ID: n.Target}), append(at, i)
+		case TypeTayfaInvitation:
+			refs, at = append(refs, RequestRef{Invitation: true, ID: n.Target}), append(at, i)
+		}
+	}
+	if len(refs) == 0 {
+		return
+	}
+	got, err := s.cfg.Resolver.Resolve(ctx, refs)
+	if err != nil || len(got) != len(refs) {
+		s.cfg.Log.WarnContext(ctx, "bildirim yanıt durumları alınamadı", slog.Any("hata", err))
+		return
+	}
+	for j, i := range at {
+		items[i].Resolution = got[j]
+	}
 }
 
 // UnreadCount returns the caller's unread notifications, at most MaxUnread.

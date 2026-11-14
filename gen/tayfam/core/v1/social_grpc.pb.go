@@ -19,14 +19,15 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SocialService_SendFriendRequest_FullMethodName   = "/tayfam.core.v1.SocialService/SendFriendRequest"
-	SocialService_AcceptFriendRequest_FullMethodName = "/tayfam.core.v1.SocialService/AcceptFriendRequest"
-	SocialService_RemoveFriendship_FullMethodName    = "/tayfam.core.v1.SocialService/RemoveFriendship"
-	SocialService_ListFriends_FullMethodName         = "/tayfam.core.v1.SocialService/ListFriends"
-	SocialService_ListFriendRequests_FullMethodName  = "/tayfam.core.v1.SocialService/ListFriendRequests"
-	SocialService_BlockUser_FullMethodName           = "/tayfam.core.v1.SocialService/BlockUser"
-	SocialService_UnblockUser_FullMethodName         = "/tayfam.core.v1.SocialService/UnblockUser"
-	SocialService_ListBlockedUsers_FullMethodName    = "/tayfam.core.v1.SocialService/ListBlockedUsers"
+	SocialService_SendFriendRequest_FullMethodName     = "/tayfam.core.v1.SocialService/SendFriendRequest"
+	SocialService_AcceptFriendRequest_FullMethodName   = "/tayfam.core.v1.SocialService/AcceptFriendRequest"
+	SocialService_RemoveFriendship_FullMethodName      = "/tayfam.core.v1.SocialService/RemoveFriendship"
+	SocialService_ListFriends_FullMethodName           = "/tayfam.core.v1.SocialService/ListFriends"
+	SocialService_ListFriendRequests_FullMethodName    = "/tayfam.core.v1.SocialService/ListFriendRequests"
+	SocialService_BlockUser_FullMethodName             = "/tayfam.core.v1.SocialService/BlockUser"
+	SocialService_UnblockUser_FullMethodName           = "/tayfam.core.v1.SocialService/UnblockUser"
+	SocialService_ListBlockedUsers_FullMethodName      = "/tayfam.core.v1.SocialService/ListBlockedUsers"
+	SocialService_GetRequestResolutions_FullMethodName = "/tayfam.core.v1.SocialService/GetRequestResolutions"
 )
 
 // SocialServiceClient is the client API for SocialService service.
@@ -84,6 +85,13 @@ type SocialServiceClient interface {
 	// ListBlockedUsers lists the users the caller blocked. Who blocked the
 	// caller is never listed.
 	ListBlockedUsers(ctx context.Context, in *ListBlockedUsersRequest, opts ...grpc.CallOption) (*ListBlockedUsersResponse, error)
+	// GetRequestResolutions answers, for the caller as the recipient, how
+	// friend requests and tayfa invitations stand now (issue #192): chat asks
+	// it for one page of FRIEND_REQUEST and TAYFA_INVITATION notifications
+	// with the caller's own token. One answer per ref, in the same order;
+	// 1–100 refs (ERROR_REASON_VALIDATION otherwise). Who withdrew is never
+	// said.
+	GetRequestResolutions(ctx context.Context, in *GetRequestResolutionsRequest, opts ...grpc.CallOption) (*GetRequestResolutionsResponse, error)
 }
 
 type socialServiceClient struct {
@@ -174,6 +182,16 @@ func (c *socialServiceClient) ListBlockedUsers(ctx context.Context, in *ListBloc
 	return out, nil
 }
 
+func (c *socialServiceClient) GetRequestResolutions(ctx context.Context, in *GetRequestResolutionsRequest, opts ...grpc.CallOption) (*GetRequestResolutionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRequestResolutionsResponse)
+	err := c.cc.Invoke(ctx, SocialService_GetRequestResolutions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SocialServiceServer is the server API for SocialService service.
 // All implementations must embed UnimplementedSocialServiceServer
 // for forward compatibility.
@@ -229,6 +247,13 @@ type SocialServiceServer interface {
 	// ListBlockedUsers lists the users the caller blocked. Who blocked the
 	// caller is never listed.
 	ListBlockedUsers(context.Context, *ListBlockedUsersRequest) (*ListBlockedUsersResponse, error)
+	// GetRequestResolutions answers, for the caller as the recipient, how
+	// friend requests and tayfa invitations stand now (issue #192): chat asks
+	// it for one page of FRIEND_REQUEST and TAYFA_INVITATION notifications
+	// with the caller's own token. One answer per ref, in the same order;
+	// 1–100 refs (ERROR_REASON_VALIDATION otherwise). Who withdrew is never
+	// said.
+	GetRequestResolutions(context.Context, *GetRequestResolutionsRequest) (*GetRequestResolutionsResponse, error)
 	mustEmbedUnimplementedSocialServiceServer()
 }
 
@@ -262,6 +287,9 @@ func (UnimplementedSocialServiceServer) UnblockUser(context.Context, *UnblockUse
 }
 func (UnimplementedSocialServiceServer) ListBlockedUsers(context.Context, *ListBlockedUsersRequest) (*ListBlockedUsersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListBlockedUsers not implemented")
+}
+func (UnimplementedSocialServiceServer) GetRequestResolutions(context.Context, *GetRequestResolutionsRequest) (*GetRequestResolutionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetRequestResolutions not implemented")
 }
 func (UnimplementedSocialServiceServer) mustEmbedUnimplementedSocialServiceServer() {}
 func (UnimplementedSocialServiceServer) testEmbeddedByValue()                       {}
@@ -428,6 +456,24 @@ func _SocialService_ListBlockedUsers_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SocialService_GetRequestResolutions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRequestResolutionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SocialServiceServer).GetRequestResolutions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SocialService_GetRequestResolutions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SocialServiceServer).GetRequestResolutions(ctx, req.(*GetRequestResolutionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SocialService_ServiceDesc is the grpc.ServiceDesc for SocialService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -466,6 +512,10 @@ var SocialService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListBlockedUsers",
 			Handler:    _SocialService_ListBlockedUsers_Handler,
+		},
+		{
+			MethodName: "GetRequestResolutions",
+			Handler:    _SocialService_GetRequestResolutions_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

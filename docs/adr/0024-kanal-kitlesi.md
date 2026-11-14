@@ -123,3 +123,14 @@ olay yalnızca chat'e "yeniden sor" der.
   ("gateway'den geçti" gerekçe değildir) gereği reddedildi.
 - **Arşivin her erişimde core'dan hesaplanması:** kimse kanala bakmasa da
   arşivlenmesi gerektiği için (iş, kullanıcısız çalışır) yetmez.
+
+## Notlar
+
+- **2026-11-14 (platform sahibi, sohbette; issue #193):** `Channel`
+  isteğe bağlı `event_title` taşır (yalnızca `event` kanalında, etkinlik
+  iptal edilmiş olsa da). Başlık ve organizatör, kitleyle aynı çağrıda
+  core'dan gelir (`EventChannelAccess.title`, `organizer_user_id`); chat
+  başlığı saklamaz. `GET .../channels/{id}/members` `user_ids`'in yanında
+  aynı sırada `members: [{user_id, roles}]` döndürür; roller `organizer`
+  (yalnızca etkinlik kanalında) ve `creator`. `user_ids` geriye uyum için
+  kalır. Tayfa rolü, ad ve avatar burada tekrar edilmez.

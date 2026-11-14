@@ -479,3 +479,72 @@ func TestListCarriesDirectUnreadCount(t *testing.T) {
 		}
 	}
 }
+
+// fakeResolver answers as core would and records what it was asked.
+type fakeResolver struct {
+	calls int
+	refs  []RequestRef
+	err   error
+}
+
+func (f *fakeResolver) Resolve(_ context.Context, refs []RequestRef) ([]string, error) {
+	f.calls++
+	f.refs = refs
+	out := make([]string, 0, len(refs))
+	for _, r := range refs {
+		if r.Invitation {
+			out = append(out, "declined")
+		} else {
+			out = append(out, "pending")
+		}
+	}
+	return out, f.err
+}
+
+// TestListResolutions (issue #192): friend_request and tayfa_invitation
+// notices get their resolution from core in one call per page; others get
+// none; without an answer the list is still served.
+func TestListResolutions(t *testing.T) {
+	e := setup(t)
+	r := &fakeResolver{}
+	e.svc.cfg.Resolver = r
+	u, requester, tf := id.New(), id.New(), id.New()
+	// A friend request is not about a tayfa: written without the helper's
+	// default tayfa.
+	fr := Request{Event: id.New(), Type: TypeFriendRequest, Actor: requester, TargetType: TargetUser, Target: requester, Recipients: []id.ID{u}}
+	must(t, pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error { return Store(ctx, store.New(tx), fr) }))
+	e.store(t, Request{Type: TypeTayfaInvitation, Tayfa: tf, Actor: requester, TargetType: TargetTayfa, Target: tf, Recipients: []id.ID{u}})
+	e.announce(t, requester, u)
+
+	list, _, err := e.svc.List(ctx, u, 0, "")
+	must(t, err)
+	got := map[string]string{}
+	for _, n := range list {
+		got[n.Type] = n.Resolution
+	}
+	if got[TypeFriendRequest] != "pending" || got[TypeTayfaInvitation] != "declined" || got[TypeAnnouncement] != "" || r.calls != 1 || len(r.refs) != 2 {
+		t.Fatalf("durumlar = %v, çağrı %d %+v", got, r.calls, r.refs)
+	}
+	for _, ref := range r.refs {
+		if (ref.Invitation && ref.ID != tf) || (!ref.Invitation && ref.ID != requester) {
+			t.Fatalf("soru = %+v", ref)
+		}
+	}
+	// A page with neither type asks nothing.
+	other := id.New()
+	e.announce(t, requester, other)
+	r.calls = 0
+	_, _, err = e.svc.List(ctx, other, 0, "")
+	if err != nil || r.calls != 0 {
+		t.Fatalf("gereksiz soru: %d %v", r.calls, err)
+	}
+	// core down: the list is served without resolutions.
+	r.err = errors.New("core yok")
+	list, _, err = e.svc.List(ctx, u, 0, "")
+	must(t, err)
+	for _, n := range list {
+		if n.Resolution != "" {
+			t.Fatalf("hata varken durum = %+v", n)
+		}
+	}
+}

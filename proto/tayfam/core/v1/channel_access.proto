@@ -155,6 +155,10 @@ message EventChannelAccess {
   // Organizer, opener (while an active member) and GOING members, each
   // once.
   int32 member_count = 7;
+  // The event's title, also when it was cancelled (issue #193).
+  string title = 8;
+  // The event's organizer; empty when the account was deleted (issue #193).
+  string organizer_user_id = 9;
 }
 
 message GetEventChannelAccessResponse {

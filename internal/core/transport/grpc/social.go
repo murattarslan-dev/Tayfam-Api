@@ -21,6 +21,7 @@ type Socials interface {
 	BlockUser(ctx context.Context, caller, target id.ID) error
 	UnblockUser(ctx context.Context, caller, target id.ID) error
 	ListBlockedUsers(ctx context.Context, caller id.ID, size int32, token string) (social.Page[social.Blocked], error)
+	Resolutions(ctx context.Context, caller id.ID, refs []social.RequestRef) ([]social.Resolution, error)
 }
 
 // SocialServer implements corev1.SocialServiceServer. Every method needs a
@@ -185,4 +186,49 @@ func friendsPB(items []social.Friend) []*corev1.Friend {
 		out = append(out, friendPB(f))
 	}
 	return out
+}
+
+var requestKinds = map[corev1.RequestKind]social.RequestKind{
+	corev1.RequestKind_REQUEST_KIND_FRIEND_REQUEST:   social.KindFriendRequest,
+	corev1.RequestKind_REQUEST_KIND_TAYFA_INVITATION: social.KindTayfaInvitation,
+}
+
+var requestResolutions = map[social.Resolution]corev1.RequestResolution{
+	social.ResolutionPending:   corev1.RequestResolution_REQUEST_RESOLUTION_PENDING,
+	social.ResolutionAccepted:  corev1.RequestResolution_REQUEST_RESOLUTION_ACCEPTED,
+	social.ResolutionDeclined:  corev1.RequestResolution_REQUEST_RESOLUTION_DECLINED,
+	social.ResolutionWithdrawn: corev1.RequestResolution_REQUEST_RESOLUTION_WITHDRAWN,
+	social.ResolutionExpired:   corev1.RequestResolution_REQUEST_RESOLUTION_EXPIRED,
+}
+
+// GetRequestResolutions implements corev1.SocialServiceServer (issue #192).
+func (s *SocialServer) GetRequestResolutions(ctx context.Context, req *corev1.GetRequestResolutionsRequest) (*corev1.GetRequestResolutionsResponse, error) {
+	u, err := callerID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if n := len(req.GetRefs()); n == 0 || n > social.MaxResolutionRefs {
+		return nil, validation("refs")
+	}
+	refs := make([]social.RequestRef, 0, len(req.GetRefs()))
+	for _, r := range req.GetRefs() {
+		kind, ok := requestKinds[r.GetKind()]
+		if !ok {
+			return nil, validation("refs.kind")
+		}
+		v, err := parseID(r.GetId(), "refs.id")
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, social.RequestRef{Kind: kind, ID: v})
+	}
+	got, err := s.app.Resolutions(ctx, u, refs)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	out := &corev1.GetRequestResolutionsResponse{Resolutions: make([]corev1.RequestResolution, 0, len(got))}
+	for _, r := range got {
+		out.Resolutions = append(out.Resolutions, requestResolutions[r])
+	}
+	return out, nil
 }

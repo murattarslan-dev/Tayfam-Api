@@ -293,3 +293,78 @@ func TestInvitedUserIsNotAMember(t *testing.T) {
 	_, err = e.svc.InviteFriend(ctx, f, tf.id, e.friend(t, f))
 	wantErr(t, "davetli davet edemez", err, apperr.ErrTayfaNotFound)
 }
+
+// TestInvitationInterests (issue #194): invitations carry the tayfa's
+// interests: on inviting, in the invited user's list and in the tayfa's.
+func TestInvitationInterests(t *testing.T) {
+	e := setup(t)
+	tf := e.newTayfa(t, "approval")
+	e.exec(t, `INSERT INTO tayfa_interests (tayfa_id, event_type) VALUES ($1, 'fishing'), ($1, 'convoy')`, tf.id.PG())
+	plain := e.newTayfa(t, "approval")
+	f := e.friend(t, tf.admin)
+	e.friends(t, plain.admin, f)
+
+	inv, err := e.svc.InviteFriend(ctx, tf.admin, tf.id, f)
+	if err != nil || len(inv.Interests) != 2 || inv.Interests[0] != "convoy" {
+		t.Fatalf("davet: %+v %v", inv, err)
+	}
+	_, err = e.svc.InviteFriend(ctx, plain.admin, plain.id, f)
+	must(t, err)
+	my, err := e.svc.ListMyInvitations(ctx, f, 0, "")
+	must(t, err)
+	got := map[id.ID][]string{}
+	for _, i := range my.Items {
+		got[i.TayfaID] = i.Interests
+	}
+	if len(got[tf.id]) != 2 || got[tf.id][1] != "fishing" || len(got[plain.id]) != 0 {
+		t.Fatalf("davetlerim = %+v", got)
+	}
+	list, err := e.svc.ListInvitations(ctx, tf.admin, tf.id, 0, "")
+	if err != nil || len(list.Items) != 1 || len(list.Items[0].Interests) != 2 {
+		t.Fatalf("tayfanın davetleri = %+v %v", list, err)
+	}
+}
+
+// TestInvitationResolutions (issue #192): how each invitation the user
+// received stands, from the membership row or the recorded outcome.
+func TestInvitationResolutions(t *testing.T) {
+	e := setup(t)
+	soc, err := social.New(social.Config{Pool: e.pool})
+	must(t, err)
+	u := id.New()
+	open, declined, cancelled, waiting := e.newTayfa(t, "open"), e.newTayfa(t, "approval"), e.newTayfa(t, "approval"), e.newTayfa(t, "approval")
+	for _, tf := range []tayfa{open, declined, cancelled, waiting} {
+		e.friends(t, tf.admin, u)
+		_, err := e.svc.InviteFriend(ctx, tf.admin, tf.id, u)
+		must(t, err)
+	}
+	_, err = e.svc.AcceptInvitation(ctx, u, open.id)
+	must(t, err)
+	must(t, e.svc.DeclineInvitation(ctx, u, declined.id))
+	must(t, e.svc.CancelInvitation(ctx, cancelled.admin, cancelled.id, u))
+
+	refs := []social.RequestRef{}
+	for _, tf := range []id.ID{open.id, declined.id, cancelled.id, waiting.id, id.New()} {
+		refs = append(refs, social.RequestRef{Kind: social.KindTayfaInvitation, ID: tf})
+	}
+	got, err := soc.Resolutions(ctx, u, refs)
+	want := []social.Resolution{social.ResolutionAccepted, social.ResolutionDeclined, social.ResolutionWithdrawn, social.ResolutionPending, social.ResolutionExpired}
+	if err != nil || len(got) != len(want) {
+		t.Fatalf("çözümler = %v %v", got, err)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("%d: %s, %s bekleniyordu", i, got[i], want[i])
+		}
+	}
+	// Invited again: pending, the old outcome is gone.
+	_, err = e.svc.InviteFriend(ctx, declined.admin, declined.id, u)
+	must(t, err)
+	if got, err := soc.Resolutions(ctx, u, refs[1:2]); err != nil || got[0] != social.ResolutionPending {
+		t.Fatalf("yeniden davet = %v %v", got, err)
+	}
+	// Another user asking about the same tayfas learns nothing.
+	if got, err := soc.Resolutions(ctx, id.New(), refs[:1]); err != nil || got[0] != social.ResolutionExpired {
+		t.Fatalf("başkası = %v %v", got, err)
+	}
+}

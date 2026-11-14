@@ -103,6 +103,11 @@ func (f *fakeApp) LeaveTayfa(_ context.Context, c, t id.ID) error {
 	f.caller, f.tayfa = c, t
 	return f.err
 }
+func (f *fakeApp) GetMember(_ context.Context, c, t, u id.ID) (membership.Member, error) {
+	f.caller, f.tayfa, f.target = c, t, u
+	return f.member(), f.err
+}
+
 func (f *fakeApp) GetMembership(_ context.Context, c, t, u id.ID) (membership.Member, error) {
 	f.caller, f.tayfa, f.target = c, t, u
 	return f.member(), f.err

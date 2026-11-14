@@ -194,6 +194,9 @@ func setup(rt *service.Runtime) error {
 	notifications, err := notification.New(notification.Config{
 		Pool: pool, Log: rt.Log, Members: coremembers.New(corev1.NewMembershipServiceClient(coreConn)),
 		Conversations: directMessages,
+		// İstek ve davet bildirimlerinin yanıt durumu (issue #192):
+		// listelenirken core'a kullanıcının token'ıyla sorulur, saklanmaz.
+		Resolver: coremembers.NewResolutions(corev1.NewSocialServiceClient(coreConn)),
 	})
 	if err != nil {
 		return err

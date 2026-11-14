@@ -15,6 +15,7 @@ import (
 
 // fakeEvent is an event as the fake core knows it.
 type fakeEvent struct {
+	title     string
 	organizer id.ID
 	going     []id.ID
 	managers  []id.ID // may manage the event (besides staff)
@@ -52,6 +53,7 @@ func (f *fakeAudience) EventChannels(_ context.Context, caller, tayfa id.ID, ref
 			Member:  slices.Contains(audience, caller),
 			CanOpen: staff || slices.Contains(ev.managers, caller) || caller == ev.organizer,
 			End:     ev.end, Cancelled: ev.cancelled, MemberCount: int32(len(audience)),
+			Title: ev.title, Organizer: ev.organizer,
 		}
 	}
 	return out, nil
@@ -132,7 +134,7 @@ func TestEventChannel(t *testing.T) {
 		e.members.set(e.tayfa, u, Member{Active: true, Role: RoleMember})
 	}
 	ev := id.New()
-	a.events[ev] = &fakeEvent{organizer: organizer, going: []id.ID{going}, managers: []id.ID{manager}, end: time.Now().Add(48 * time.Hour)}
+	a.events[ev] = &fakeEvent{title: "Gece yürüyüşü", organizer: organizer, going: []id.ID{going}, managers: []id.ID{manager}, end: time.Now().Add(48 * time.Hour)}
 
 	// Who may open it: staff, the organizer and whoever manages the event.
 	_, err := e.svc.Create(ctx, e.member, e.tayfa, ChannelInput{Name: "Etkinlik", Visibility: VisibilityEvent, Event: ev})
@@ -145,7 +147,7 @@ func TestEventChannel(t *testing.T) {
 	isValidation(t, err, "event_id")
 	c, err := e.svc.Create(ctx, manager, e.tayfa, ChannelInput{Name: "Etkinlik", Visibility: VisibilityEvent, Event: ev})
 	must(t, err)
-	if c.EventID != ev || c.MemberCount != 3 || !c.PlannedArchiveAt.Equal(a.events[ev].end.Add(ArchiveAfter).Truncate(time.Microsecond)) {
+	if c.EventID != ev || c.MemberCount != 3 || c.EventTitle != "Gece yürüyüşü" || !c.PlannedArchiveAt.Equal(a.events[ev].end.Add(ArchiveAfter).Truncate(time.Microsecond)) {
 		t.Fatalf("kanal = %+v", c)
 	}
 	// One open channel per event.
@@ -182,11 +184,21 @@ func TestEventChannel(t *testing.T) {
 		t.Fatal("kanalı açan çıktı")
 	}
 
-	// Members come from core.
+	// Members come from core, with their parts (issue #193).
+	a.setGoing(ev, manager)
 	page, err := e.svc.Members(ctx, organizer, e.tayfa, c.ID, 0, "")
-	if err != nil || len(page.Users) != 1 || page.Users[0] != organizer {
+	if err != nil || len(page.Users) != 2 || page.Users[0] != organizer || len(page.Members) != 2 ||
+		page.Members[0] != (ChannelMember{User: organizer, Organizer: true}) || page.Members[1] != (ChannelMember{User: manager, Creator: true}) {
 		t.Fatalf("üyeler = %+v %v", page, err)
 	}
+	list, err := e.svc.List(ctx, organizer, e.tayfa)
+	must(t, err)
+	for _, ch := range list {
+		if ch.ID == c.ID && ch.EventTitle != "Gece yürüyüşü" {
+			t.Fatalf("listede etkinlik başlığı = %q", ch.EventTitle)
+		}
+	}
+	a.setGoing(ev)
 	// The audience cannot be changed by hand, nor the kind.
 	_, err = e.svc.AddMembers(ctx, manager, e.tayfa, c.ID, []id.ID{e.member})
 	isValidation(t, err, "channel_id")
@@ -291,8 +303,16 @@ func TestSelectedChannel(t *testing.T) {
 		t.Fatalf("sonradan giren: %v %v", msgs, err)
 	}
 	page, err := e.svc.Members(ctx, e.other, e.tayfa, c.ID, 2, "")
-	if err != nil || len(page.Users) != 2 || page.Next == "" {
+	if err != nil || len(page.Users) != 2 || page.Next == "" || len(page.Members) != 2 {
 		t.Fatalf("üyeler sayfası = %+v %v", page, err)
+	}
+	// Only the opener is marked; no organizer in a selected channel.
+	all, err := e.svc.Members(ctx, e.other, e.tayfa, c.ID, 0, "")
+	must(t, err)
+	for _, m := range all.Members {
+		if m.Organizer || m.Creator != (m.User == e.mod) {
+			t.Fatalf("rol = %+v", m)
+		}
 	}
 	rest, err := e.svc.Members(ctx, e.other, e.tayfa, c.ID, 2, page.Next)
 	if err != nil || len(rest.Users) != 1 || rest.Next != "" {

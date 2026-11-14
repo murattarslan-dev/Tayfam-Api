@@ -45,6 +45,7 @@ type MembershipClient interface {
 	PreviewInvite(ctx context.Context, in *corev1.PreviewInviteRequest, opts ...grpc.CallOption) (*corev1.PreviewInviteResponse, error)
 	JoinByInvite(ctx context.Context, in *corev1.JoinByInviteRequest, opts ...grpc.CallOption) (*corev1.JoinByInviteResponse, error)
 	ListMembers(ctx context.Context, in *corev1.ListMembersRequest, opts ...grpc.CallOption) (*corev1.ListMembersResponse, error)
+	GetMember(ctx context.Context, in *corev1.GetMemberRequest, opts ...grpc.CallOption) (*corev1.GetMemberResponse, error)
 	ListPending(ctx context.Context, in *corev1.ListPendingRequest, opts ...grpc.CallOption) (*corev1.ListPendingResponse, error)
 	ApproveMember(ctx context.Context, in *corev1.ApproveMemberRequest, opts ...grpc.CallOption) (*corev1.ApproveMemberResponse, error)
 	RejectMember(ctx context.Context, in *corev1.RejectMemberRequest, opts ...grpc.CallOption) (*corev1.RejectMemberResponse, error)
@@ -147,6 +148,7 @@ func registerCore(mux *http.ServeMux, d CoreDeps) {
 
 	mux.HandleFunc("DELETE /v1/tayfas/{tayfa_id}/membership", a(h.leave))
 	mux.HandleFunc("GET /v1/tayfas/{tayfa_id}/members", a(h.listMembers))
+	mux.HandleFunc("GET /v1/tayfas/{tayfa_id}/members/{user_id}", a(h.getMember))
 	mux.HandleFunc("PATCH /v1/tayfas/{tayfa_id}/members/{user_id}", a(h.changeRole))
 	mux.HandleFunc("DELETE /v1/tayfas/{tayfa_id}/members/{user_id}", a(h.removeMember))
 	mux.HandleFunc("PUT /v1/tayfas/{tayfa_id}/members/{user_id}/mute", a(h.mute))
@@ -542,6 +544,20 @@ func (h coreHandlers) listMembers(ctx context.Context, w http.ResponseWriter, r 
 	writeJSON(w, http.StatusOK, out)
 }
 
+// getMember reads one member, as the member list shows them (issue #194).
+func (h coreHandlers) getMember(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	id, user, ok := pathTayfaUser(w, r)
+	if !ok {
+		return
+	}
+	resp, err := h.d.Members.GetMember(ctx, &corev1.GetMemberRequest{TayfaId: id, UserId: user})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, membershipFrom(resp.GetMembership()))
+}
+
 type roleUpdateBody struct {
 	Role string `json:"role"`
 }
@@ -837,6 +853,20 @@ type invitePreviewJSON struct {
 	Name          string `json:"name"`
 	MemberCount   int32  `json:"member_count"`
 	AlreadyMember bool   `json:"already_member"`
+	// Issue #194: the tayfa's interests (EventType names).
+	Interests []string `json:"interests"`
+}
+
+// interestNames passes core's interest names through, keeping only the
+// EventType values the contract knows.
+func interestNames(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if _, ok := eventTypes.value(s); ok {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func (h coreHandlers) previewInvite(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -849,7 +879,7 @@ func (h coreHandlers) previewInvite(ctx context.Context, w http.ResponseWriter, 
 		h.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, invitePreviewJSON{resp.GetTayfaId(), resp.GetName(), resp.GetMemberCount(), resp.GetAlreadyMember()})
+	writeJSON(w, http.StatusOK, invitePreviewJSON{resp.GetTayfaId(), resp.GetName(), resp.GetMemberCount(), resp.GetAlreadyMember(), interestNames(resp.GetInterests())})
 }
 
 func (h coreHandlers) joinByInvite(ctx context.Context, w http.ResponseWriter, r *http.Request) {

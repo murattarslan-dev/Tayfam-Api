@@ -366,8 +366,12 @@ func TestInviteLinkErrors(t *testing.T) {
 		"boş":           {"", errValidation},
 	} {
 		u := id.New()
-		_, err := e.svc.PreviewInvite(ctx, u, tc.tok)
+		pv, err := e.svc.PreviewInvite(ctx, u, tc.tok)
 		wantErr(t, name+" önizleme", err, tc.want)
+		// Issue #194: an invalid invite tells nothing about the tayfa.
+		if pv.TayfaID != (id.ID{}) || pv.Name != "" || pv.Interests != nil || pv.MemberCount != 0 {
+			t.Fatalf("%s: geçersiz davette tayfa bilgisi: %+v", name, pv)
+		}
 		_, err = e.svc.JoinByInvite(ctx, u, tc.tok)
 		wantErr(t, name+" katılım", err, tc.want)
 		if s := e.status(t, tf.id, u); s != "none" {
@@ -901,5 +905,59 @@ func TestBanReason(t *testing.T) {
 	if n := e.count(t, `SELECT count(*) FROM audit_logs WHERE action = 'member.banned' AND target_id = $1
 		AND NOT metadata ? 'reason'`, without.PG()); n != 1 {
 		t.Fatalf("gerekçesiz denetim kaydı = %d", n)
+	}
+}
+
+// TestPreviewInterests (issue #194): a valid invite shows the tayfa's
+// interests.
+func TestPreviewInterests(t *testing.T) {
+	e := setup(t)
+	tf := e.newTayfa(t, "approval")
+	e.exec(t, `INSERT INTO tayfa_interests (tayfa_id, event_type) VALUES ($1, 'hike'), ($1, 'camp')`, tf.id.PG())
+	_, tok, err := e.svc.CreateInviteLink(ctx, tf.admin, tf.id, 24*time.Hour, 5)
+	must(t, err)
+	pv, err := e.svc.PreviewInvite(ctx, id.New(), tok)
+	if err != nil || len(pv.Interests) != 2 || pv.Interests[0] != "camp" || pv.Interests[1] != "hike" {
+		t.Fatalf("önizleme = %+v %v", pv, err)
+	}
+}
+
+// TestGetMember (issue #194): every role reads an active member; only
+// moderators and admins read a banned one; pending, invited, unknown and
+// other tayfas' users are not found; a non-member gets tayfa-not-found.
+func TestGetMember(t *testing.T) {
+	e := setup(t)
+	tf := e.newTayfa(t, "approval")
+	mod := e.seed(t, tf.id, authz.Moderator, authz.StatusActive)
+	member := e.seed(t, tf.id, authz.Member, authz.StatusActive)
+	target := e.seed(t, tf.id, authz.Member, authz.StatusActive)
+	banned := e.seed(t, tf.id, authz.Member, authz.StatusBanned)
+	pending := e.seed(t, tf.id, authz.Member, authz.StatusPending)
+	other := e.newTayfa(t, "open")
+
+	for name, tc := range map[string]struct {
+		caller, target id.ID
+		want           error
+	}{
+		"üye → etkin üye":       {member, target, nil},
+		"moderatör → etkin üye": {mod, target, nil},
+		"yönetici → etkin üye":  {tf.admin, target, nil},
+		"kendisi":               {member, member, nil},
+		"üye → banlı":           {member, banned, apperr.ErrMemberNotFound},
+		"moderatör → banlı":     {mod, banned, nil},
+		"yönetici → banlı":      {tf.admin, banned, nil},
+		"üye → bekleyen":        {member, pending, apperr.ErrMemberNotFound},
+		"yönetici → bekleyen":   {tf.admin, pending, apperr.ErrMemberNotFound},
+		"üye → başka tayfadan":  {member, other.admin, apperr.ErrMemberNotFound},
+		"üye → bilinmeyen":      {member, id.New(), apperr.ErrMemberNotFound},
+		"üye olmayan":           {id.New(), target, apperr.ErrTayfaNotFound},
+		"bekleyen çağıran":      {pending, target, apperr.ErrTayfaNotFound},
+		"banlı çağıran":         {banned, target, apperr.ErrTayfaNotFound},
+	} {
+		m, err := e.svc.GetMember(ctx, tc.caller, tf.id, tc.target)
+		wantErr(t, name, err, tc.want)
+		if tc.want == nil && (m.UserID != tc.target || m.TayfaID != tf.id) {
+			t.Errorf("%s: üye = %+v", name, m)
+		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -47,6 +48,33 @@ type Invitation struct {
 	UserID    id.ID
 	InviterID id.ID // zero when the inviter's account was deleted
 	InvitedAt time.Time
+	// Interests are the tayfa's (issue #194).
+	Interests []string
+}
+
+// withInterests fills the tayfa interests of items with one query.
+func withInterests(ctx context.Context, q *store.Queries, items []Invitation) ([]Invitation, error) {
+	if len(items) == 0 {
+		return items, nil
+	}
+	ids := make([]pgtype.UUID, 0, len(items))
+	for _, it := range items {
+		ids = append(ids, it.TayfaID.PG())
+	}
+	rows, err := q.ListInterestsForTayfas(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("ilgi alanları: %w", err)
+	}
+	by := map[id.ID][]string{}
+	for _, r := range rows {
+		t := id.ID(r.TayfaID.Bytes)
+		by[t] = append(by[t], r.EventType)
+	}
+	for i := range items {
+		items[i].Interests = by[items[i].TayfaID]
+		slices.Sort(items[i].Interests)
+	}
+	return items, nil
 }
 
 // InviteFriend invites the caller's friend target into tayfa.
@@ -125,7 +153,16 @@ func (s *Service) InviteFriend(ctx context.Context, caller, tayfa, target id.ID)
 		if err != nil {
 			return fmt.Errorf("tayfa: %w", err)
 		}
+		// A new invitation: the earlier outcome no longer applies (issue #192).
+		if err := q.ClearInvitationOutcome(ctx, store.ClearInvitationOutcomeParams{TayfaID: tayfa.PG(), UserID: target.PG()}); err != nil {
+			return fmt.Errorf("davet sonucu: %w", err)
+		}
 		out = Invitation{TayfaID: tayfa, TayfaName: tf.Name, UserID: target, InviterID: caller, InvitedAt: s.now()}
+		if withI, err := withInterests(ctx, q, []Invitation{out}); err != nil {
+			return err
+		} else {
+			out = withI[0]
+		}
 		if err := s.invitationRecord(ctx, q, tayfa, caller, target, "member.invited", EventInvited); err != nil {
 			return err
 		}
@@ -171,6 +208,9 @@ func (s *Service) AcceptInvitation(ctx context.Context, caller, tayfa id.ID) (Me
 		if n != 1 {
 			return apperr.ErrInvitationNotFound
 		}
+		if err := s.invitationOutcome(ctx, q, tayfa, caller, social.OutcomeAccepted); err != nil {
+			return err
+		}
 		change := changeJoined
 		if st == authz.StatusPending {
 			change = changeRequested
@@ -198,6 +238,9 @@ func (s *Service) DeclineInvitation(ctx context.Context, caller, tayfa id.ID) er
 		if _, err := q.DeleteMembership(ctx, store.DeleteMembershipParams{TayfaID: tayfa.PG(), UserID: caller.PG()}); err != nil {
 			return fmt.Errorf("davet reddi: %w", err)
 		}
+		if err := s.invitationOutcome(ctx, q, tayfa, caller, social.OutcomeDeclined); err != nil {
+			return err
+		}
 		return s.invitationRecord(ctx, q, tayfa, caller, caller, "member.invitation_declined", EventInvitationDeclined)
 	})
 }
@@ -220,6 +263,9 @@ func (s *Service) CancelInvitation(ctx context.Context, caller, tayfa, target id
 		}
 		if _, err := q.DeleteMembership(ctx, store.DeleteMembershipParams{TayfaID: tayfa.PG(), UserID: target.PG()}); err != nil {
 			return fmt.Errorf("davet iptali: %w", err)
+		}
+		if err := s.invitationOutcome(ctx, q, tayfa, target, social.OutcomeWithdrawn); err != nil {
+			return err
 		}
 		return s.invitationRecord(ctx, q, tayfa, caller, target, "member.invitation_cancelled", EventInvitationCancelled)
 	})
@@ -258,7 +304,9 @@ func (s *Service) ListMyInvitations(ctx context.Context, caller id.ID, size int3
 		}
 		out.Items = append(out.Items, inv)
 	}
-	return out, nil
+	var err2 error
+	out.Items, err2 = withInterests(ctx, s.q, out.Items)
+	return out, err2
 }
 
 // ListInvitations lists tayfa's unanswered invitations, newest first
@@ -302,7 +350,20 @@ func (s *Service) ListInvitations(ctx context.Context, caller, tayfa id.ID, size
 		}
 		out.Items = append(out.Items, inv)
 	}
-	return out, nil
+	var err2 error
+	out.Items, err2 = withInterests(ctx, s.q, out.Items)
+	return out, err2
+}
+
+// invitationOutcome records how user's invitation to tayfa ended (issue
+// #192); only the invited user reads it.
+func (s *Service) invitationOutcome(ctx context.Context, q *store.Queries, tayfa, user id.ID, outcome string) error {
+	if err := q.SetInvitationOutcome(ctx, store.SetInvitationOutcomeParams{
+		TayfaID: tayfa.PG(), UserID: user.PG(), Outcome: outcome, ResolvedAt: pgtype.Timestamptz{Time: s.now(), Valid: true},
+	}); err != nil {
+		return fmt.Errorf("davet sonucu: %w", err)
+	}
+	return nil
 }
 
 // farFuture and maxID start a newest-first list.

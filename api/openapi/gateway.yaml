@@ -568,6 +568,26 @@ paths:
     parameters:
       - $ref: "#/components/parameters/TayfaID"
       - $ref: "#/components/parameters/UserID"
+    get:
+      operationId: getMember
+      summary: Tek bir üye, üye listesindeki satırla aynı
+      description: |
+        Issue #194. Tayfanın her etkin üyesi etkin bir üyeyi okuyabilir;
+        banlı üyeyi yalnızca banlıları listeleyebilen roller (moderatör,
+        yönetici) okur. Kişi tayfada değilse, bekleyen ya da davetliyse veya
+        görmeye yetkiniz yoksa `member-not-found`. Susturma bitişi yalnızca
+        kendinize ve yönetime görünür. Etkin üyesi olmadığınız tayfa
+        `tayfa-not-found`.
+      responses:
+        "200":
+          description: Üye
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Membership" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
     patch:
       operationId: changeMemberRole
       summary: Etkin bir üyenin rolünü değiştirir (yönetici)
@@ -5517,7 +5537,7 @@ components:
 
     InvitePreview:
       type: object
-      required: [tayfa_id, name, member_count, already_member]
+      required: [tayfa_id, name, member_count, already_member, interests]
       description: Linki bilen herkesin görebileceği dar görünüm.
       properties:
         tayfa_id: { type: string, format: uuid }
@@ -5526,6 +5546,12 @@ components:
         already_member:
           type: boolean
           description: Zaten etkin üyeyseniz ya da bekleyen isteğiniz varsa.
+        interests:
+          type: array
+          description: |
+            Tayfanın ilgi alanları (issue #194; avatar rengi). Yalnızca geçerli
+            davette döner; geçersiz davette hiçbir tayfa bilgisi dönmez.
+          items: { $ref: "#/components/schemas/EventType" }
 
     Announcement:
       type: object
@@ -5545,6 +5571,14 @@ components:
           type: string
           format: date-time
           description: Her düzenleme, sabitleme ve geri almada değişir.
+        edited_at:
+          type: string
+          format: date-time
+          description: |
+            Başlık ya da gövdenin son değiştiği zaman (issue #191).
+            Sabitleme, sabitlemeyi kaldırma ve geri alma onu değiştirmez.
+            Hiç düzenlenmemiş duyuruda yoktur; istemci "düzenlendi"
+            etiketini bu alana göre gösterir.
 
     AnnouncementList:
       type: object
@@ -6372,6 +6406,17 @@ components:
             mesaj sayınızdır (en fazla 100; istemci "99+" gösterir). Her yeni
             mesajda güncellenir; konuşma okununca bildirim okundu olur ve
             sonraki mesaj yeni bildirimi 1'den başlatır.
+        resolution:
+          type: string
+          description: |
+            Yalnızca `friend_request` ve `tayfa_invitation` (issue #192):
+            isteğin ya da davetin şu anki durumu. `pending` yanıt bekliyor
+            (satır içi düğmeler gösterilir); `accepted` kabul edildi;
+            `declined` siz reddettiniz; `withdrawn` karşı taraf geri çekti;
+            `expired` artık bilinmiyor. Liste alınırken core'dan hesaplanır,
+            bildirime yazılmaz; yalnızca alıcıya döner, kimin geri çektiği
+            söylenmez. O an hesaplanamazsa alan yoktur.
+          enum: [pending, accepted, declined, withdrawn, expired, unknown]
         read: { type: boolean }
         created_at: { type: string, format: date-time }
     NotificationList:
@@ -6477,6 +6522,11 @@ components:
           type: string
           format: uuid
           description: Yalnızca `event` kanalında.
+        event_title:
+          type: string
+          description: |
+            Yalnızca `event` kanalında: etkinliğin başlığı, iptal edilmiş olsa
+            da (issue #193). Etkinlik size görünmüyorsa yoktur.
         member_count:
           type: integer
           minimum: 0
@@ -6517,12 +6567,28 @@ components:
           items: { type: string, format: uuid }
     ChannelMemberList:
       type: object
-      required: [user_ids]
+      required: [user_ids, members]
       properties:
         user_ids:
           type: array
           items: { type: string, format: uuid }
+        members:
+          type: array
+          description: |
+            `user_ids` ile aynı kişiler aynı sırada, kanaldaki rolleriyle
+            (issue #193). Tayfa rolü burada yoktur; ad ve avatar profil
+            ucundan gelir.
+          items: { $ref: "#/components/schemas/ChannelMember" }
         next_page_token: { type: string }
+    ChannelMember:
+      type: object
+      required: [user_id, roles]
+      properties:
+        user_id: { type: string, format: uuid }
+        roles:
+          type: array
+          description: "`organizer`: etkinliğin organizatörü (yalnızca `event`); `creator`: kanalı açan. Boş olabilir."
+          items: { type: string, enum: [organizer, creator] }
     ChannelMembersAddRequest:
       type: object
       required: [user_ids]
@@ -7436,7 +7502,7 @@ components:
         next_page_token: { type: string }
     Invitation:
       type: object
-      required: [tayfa_id, tayfa_name, user_id, invited_at]
+      required: [tayfa_id, tayfa_name, user_id, invited_at, interests]
       properties:
         tayfa_id: { type: string, format: uuid }
         tayfa_name: { type: string }
@@ -7449,6 +7515,10 @@ components:
           format: uuid
           description: Davet edenin hesabı silinmişse yoktur.
         invited_at: { type: string, format: date-time }
+        interests:
+          type: array
+          description: Tayfanın ilgi alanları (issue #194).
+          items: { $ref: "#/components/schemas/EventType" }
     InvitationList:
       type: object
       required: [invitations]
