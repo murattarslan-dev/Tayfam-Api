@@ -5545,6 +5545,14 @@ components:
           type: string
           format: date-time
           description: Her düzenleme, sabitleme ve geri almada değişir.
+        edited_at:
+          type: string
+          format: date-time
+          description: |
+            Başlık ya da gövdenin son değiştiği zaman (issue #191).
+            Sabitleme, sabitlemeyi kaldırma ve geri alma onu değiştirmez.
+            Hiç düzenlenmemiş duyuruda yoktur; istemci "düzenlendi"
+            etiketini bu alana göre gösterir.
 
     AnnouncementList:
       type: object

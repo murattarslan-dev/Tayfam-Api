@@ -99,6 +99,9 @@ message Announcement {
   google.protobuf.Timestamp create_time = 7;
   // Changes on every edit, pin and restore.
   google.protobuf.Timestamp update_time = 8;
+  // When the title or body last changed; unset if never (issue #191).
+  // Pinning, unpinning and restoring do not change it.
+  google.protobuf.Timestamp edit_time = 9;
 }
 
 message CreateAnnouncementRequest {

@@ -2,10 +2,12 @@ package rest
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -188,5 +190,23 @@ func TestAnnouncementRoutesOptional(t *testing.T) {
 	d.Announcements = nil
 	if w := as(coreRouterWith(d), "GET", "/v1/tayfas/"+tayfaID+"/announcements", ""); w.Code != 404 {
 		t.Fatalf("kod %d", w.Code)
+	}
+}
+
+// TestAnnouncementEditedAt (issue #191): edited_at only when core sends an
+// edit time.
+func TestAnnouncementEditedAt(t *testing.T) {
+	never := announcementFrom(&corev1.Announcement{Id: annID, CreateTime: timestamppb.New(t0), UpdateTime: timestamppb.New(t0.Add(time.Hour))})
+	if never.EditedAt != nil {
+		t.Fatalf("düzenlenmemiş duyuruda edited_at: %v", never.EditedAt)
+	}
+	b, _ := json.Marshal(never)
+	if strings.Contains(string(b), "edited_at") {
+		t.Fatalf("JSON'da edited_at: %s", b)
+	}
+	at := t0.Add(2 * time.Hour)
+	edited := announcementFrom(&corev1.Announcement{Id: annID, CreateTime: timestamppb.New(t0), EditTime: timestamppb.New(at)})
+	if edited.EditedAt == nil || !edited.EditedAt.Equal(at) {
+		t.Fatalf("edited_at = %v", edited.EditedAt)
 	}
 }

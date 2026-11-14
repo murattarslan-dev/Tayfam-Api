@@ -12,13 +12,13 @@ FROM announcements
 WHERE author_id = @author_id AND client_request_id = @client_request_id;
 
 -- name: GetAnnouncement :one
-SELECT id, tayfa_id, author_id, title, body, pinned, created_at, updated_at
+SELECT id, tayfa_id, author_id, title, body, pinned, created_at, updated_at, edited_at
 FROM announcements
 WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL;
 
 -- Yazma işlemleri satırı kilitleyerek okur; silinmiş satır da döner.
 -- name: GetAnnouncementForUpdate :one
-SELECT id, tayfa_id, author_id, title, body, pinned, created_at, updated_at, deleted_at, deleted_by
+SELECT id, tayfa_id, author_id, title, body, pinned, created_at, updated_at, edited_at, deleted_at, deleted_by
 FROM announcements
 WHERE tayfa_id = @tayfa_id AND id = @id
 FOR UPDATE;
@@ -26,7 +26,7 @@ FOR UPDATE;
 -- Sabitlenenler önce, yeniden eskiye. Sayfa, önceki sayfanın son satırından
 -- sonra başlar (pinned, created_at, id azalan).
 -- name: ListAnnouncementsPage :many
-SELECT id, tayfa_id, author_id, title, body, pinned, created_at, updated_at
+SELECT id, tayfa_id, author_id, title, body, pinned, created_at, updated_at, edited_at
 FROM announcements
 WHERE tayfa_id = @tayfa_id
   AND deleted_at IS NULL
@@ -35,9 +35,11 @@ WHERE tayfa_id = @tayfa_id
 ORDER BY pinned DESC, created_at DESC, id DESC
 LIMIT @page_size;
 
+-- Yalnızca başlık ya da gövde değiştiğinde; edited_at bununla yazılır
+-- (issue #191). Sabitleme edited_at'e dokunmaz.
 -- name: UpdateAnnouncementContent :execrows
 UPDATE announcements
-SET title = @title, body = @body
+SET title = @title, body = @body, edited_at = @edited_at
 WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL;
 
 -- name: SetAnnouncementPinned :execrows

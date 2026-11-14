@@ -20,6 +20,7 @@ type Announcement struct {
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
 	DeletedBy       pgtype.UUID
+	EditedAt        pgtype.Timestamptz
 }
 
 type Answer struct {

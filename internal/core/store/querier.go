@@ -765,6 +765,8 @@ type Querier interface {
 	// İş başına bir kilit; transaction bitince bırakılır.
 	TryJobLock(ctx context.Context, lockKey string) (bool, error)
 	UnmuteMembership(ctx context.Context, arg UnmuteMembershipParams) (int64, error)
+	// Yalnızca başlık ya da gövde değiştiğinde; edited_at bununla yazılır
+	// (issue #191). Sabitleme edited_at'e dokunmaz.
 	UpdateAnnouncementContent(ctx context.Context, arg UpdateAnnouncementContentParams) (int64, error)
 	UpdateAnswerBody(ctx context.Context, arg UpdateAnswerBodyParams) (int64, error)
 	// Seri örneği elle düzenlenince seri güncellemeleri ona dokunmaz.

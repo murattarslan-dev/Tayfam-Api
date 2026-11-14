@@ -69,7 +69,7 @@ func (q *Queries) EraseAnnouncement(ctx context.Context, arg EraseAnnouncementPa
 }
 
 const getAnnouncement = `-- name: GetAnnouncement :one
-SELECT id, tayfa_id, author_id, title, body, pinned, created_at, updated_at
+SELECT id, tayfa_id, author_id, title, body, pinned, created_at, updated_at, edited_at
 FROM announcements
 WHERE tayfa_id = $1 AND id = $2 AND deleted_at IS NULL
 `
@@ -88,6 +88,7 @@ type GetAnnouncementRow struct {
 	Pinned    bool
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
+	EditedAt  pgtype.Timestamptz
 }
 
 func (q *Queries) GetAnnouncement(ctx context.Context, arg GetAnnouncementParams) (GetAnnouncementRow, error) {
@@ -102,6 +103,7 @@ func (q *Queries) GetAnnouncement(ctx context.Context, arg GetAnnouncementParams
 		&i.Pinned,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EditedAt,
 	)
 	return i, err
 }
@@ -132,7 +134,7 @@ func (q *Queries) GetAnnouncementByClientRequest(ctx context.Context, arg GetAnn
 }
 
 const getAnnouncementForUpdate = `-- name: GetAnnouncementForUpdate :one
-SELECT id, tayfa_id, author_id, title, body, pinned, created_at, updated_at, deleted_at, deleted_by
+SELECT id, tayfa_id, author_id, title, body, pinned, created_at, updated_at, edited_at, deleted_at, deleted_by
 FROM announcements
 WHERE tayfa_id = $1 AND id = $2
 FOR UPDATE
@@ -152,6 +154,7 @@ type GetAnnouncementForUpdateRow struct {
 	Pinned    bool
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
+	EditedAt  pgtype.Timestamptz
 	DeletedAt pgtype.Timestamptz
 	DeletedBy pgtype.UUID
 }
@@ -169,6 +172,7 @@ func (q *Queries) GetAnnouncementForUpdate(ctx context.Context, arg GetAnnouncem
 		&i.Pinned,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EditedAt,
 		&i.DeletedAt,
 		&i.DeletedBy,
 	)
@@ -203,7 +207,7 @@ func (q *Queries) HideAnnouncement(ctx context.Context, arg HideAnnouncementPara
 }
 
 const listAnnouncementsPage = `-- name: ListAnnouncementsPage :many
-SELECT id, tayfa_id, author_id, title, body, pinned, created_at, updated_at
+SELECT id, tayfa_id, author_id, title, body, pinned, created_at, updated_at, edited_at
 FROM announcements
 WHERE tayfa_id = $1
   AND deleted_at IS NULL
@@ -231,6 +235,7 @@ type ListAnnouncementsPageRow struct {
 	Pinned    bool
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
+	EditedAt  pgtype.Timestamptz
 }
 
 // Sabitlenenler önce, yeniden eskiye. Sayfa, önceki sayfanın son satırından
@@ -260,6 +265,7 @@ func (q *Queries) ListAnnouncementsPage(ctx context.Context, arg ListAnnouncemen
 			&i.Pinned,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.EditedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -312,21 +318,25 @@ func (q *Queries) SetAnnouncementPinned(ctx context.Context, arg SetAnnouncement
 
 const updateAnnouncementContent = `-- name: UpdateAnnouncementContent :execrows
 UPDATE announcements
-SET title = $1, body = $2
-WHERE tayfa_id = $3 AND id = $4 AND deleted_at IS NULL
+SET title = $1, body = $2, edited_at = $3
+WHERE tayfa_id = $4 AND id = $5 AND deleted_at IS NULL
 `
 
 type UpdateAnnouncementContentParams struct {
-	Title   string
-	Body    string
-	TayfaID pgtype.UUID
-	ID      pgtype.UUID
+	Title    string
+	Body     string
+	EditedAt pgtype.Timestamptz
+	TayfaID  pgtype.UUID
+	ID       pgtype.UUID
 }
 
+// Yalnızca başlık ya da gövde değiştiğinde; edited_at bununla yazılır
+// (issue #191). Sabitleme edited_at'e dokunmaz.
 func (q *Queries) UpdateAnnouncementContent(ctx context.Context, arg UpdateAnnouncementContentParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updateAnnouncementContent,
 		arg.Title,
 		arg.Body,
+		arg.EditedAt,
 		arg.TayfaID,
 		arg.ID,
 	)
