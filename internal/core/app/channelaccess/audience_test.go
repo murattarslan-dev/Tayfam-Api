@@ -67,7 +67,7 @@ func TestEventChannelAudience(t *testing.T) {
 			continue
 		}
 		// going + organizer + opener (the moderator).
-		if got[0].MemberCount != 3 || !got[0].End.Equal(end) || got[0].Cancelled {
+		if got[0].MemberCount != 3 || !got[0].End.Equal(end) || got[0].Cancelled || got[0].Title != "Oyun gecesi" || got[0].Organizer != f.member {
 			t.Errorf("%s: sayı/bitiş %+v", name, got[0])
 		}
 	}
@@ -84,7 +84,7 @@ func TestEventChannelAudience(t *testing.T) {
 	must(t, err)
 	got, err = f.svc.EventChannels(ctx, going, f.tayfa, []EventChannel{ch})
 	must(t, err)
-	if !got[0].Cancelled || !got[0].End.Equal(at) {
+	if !got[0].Cancelled || !got[0].End.Equal(at) || got[0].Title != "Oyun gecesi" {
 		t.Fatalf("iptal: %+v", got[0])
 	}
 

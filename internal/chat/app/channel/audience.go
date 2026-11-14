@@ -56,6 +56,10 @@ type EventAccess struct {
 	End         time.Time
 	Cancelled   bool
 	MemberCount int32
+	// Title and Organizer of the event (issue #193); Organizer is zero when
+	// the account was deleted.
+	Title     string
+	Organizer id.ID
 }
 
 // Audience asks core about event channels and tayfa members
@@ -123,6 +127,27 @@ func (s *Service) inAudience(ctx context.Context, q *store.Queries, caller id.ID
 type MemberPage struct {
 	Users []id.ID
 	Next  string
+	// Members are Users with their parts (issue #193), in the same order.
+	Members []ChannelMember
+}
+
+// ChannelMember is a member of an event or selected channel with their part
+// in it; the tayfa role is not repeated.
+type ChannelMember struct {
+	User      id.ID
+	Organizer bool // event channels: the event's organizer
+	Creator   bool // opened the channel
+}
+
+// withRoles fills p.Members from p.Users.
+func (p MemberPage) withRoles(opener, organizer id.ID) MemberPage {
+	p.Members = make([]ChannelMember, 0, len(p.Users))
+	for _, u := range p.Users {
+		p.Members = append(p.Members, ChannelMember{
+			User: u, Organizer: organizer != (id.ID{}) && u == organizer, Creator: opener != (id.ID{}) && u == opener,
+		})
+	}
+	return p
 }
 
 // Members lists the audience of an event or selected channel the caller is
@@ -143,10 +168,11 @@ func (s *Service) Members(ctx context.Context, caller, tayfa, channel id.ID, siz
 		return MemberPage{}, err
 	}
 	q := store.New(s.cfg.Pool)
-	row, err := s.loadChannel(ctx, q, m, tayfa, channel, false)
+	row, ev, err := s.loadChannelAudience(ctx, q, m, tayfa, channel, false)
 	if err != nil {
 		return MemberPage{}, err
 	}
+	opener := refOf(row).Opener
 	switch row.Visibility {
 	case VisibilityEvent:
 		if s.cfg.Audience == nil {
@@ -156,7 +182,11 @@ func (s *Service) Members(ctx context.Context, caller, tayfa, channel id.ID, siz
 		if err != nil {
 			return MemberPage{}, err
 		}
-		return MemberPage{Users: users, Next: next}, nil
+		organizer := id.ID{}
+		if ev != nil {
+			organizer = ev.Organizer
+		}
+		return MemberPage{Users: users, Next: next}.withRoles(opener, organizer), nil
 	case VisibilitySelected:
 	default:
 		return MemberPage{}, invalid("channel_id")
@@ -182,7 +212,7 @@ func (s *Service) Members(ctx context.Context, caller, tayfa, channel id.ID, siz
 		last := out.Users[len(out.Users)-1]
 		out.Next = base64.RawURLEncoding.EncodeToString(last[:])
 	}
-	return out, nil
+	return out.withRoles(opener, id.ID{}), nil
 }
 
 // selectedForChange loads a selected channel whose members the caller, its

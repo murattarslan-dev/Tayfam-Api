@@ -190,6 +190,9 @@ message Channel {
   // EVENT channels only: when the channel will be archived (7 days after
   // the event's end or cancellation).
   google.protobuf.Timestamp planned_archive_time = 14;
+  // EVENT channels only: the event's title, also when it was cancelled
+  // (issue #193). Empty when core does not show the caller the event.
+  string event_title = 15;
 }
 
 message Message {
@@ -328,9 +331,26 @@ message ListChannelMembersRequest {
   string page_token = 4;
 }
 
+// ChannelMemberRole marks a member's part in the channel (issue #193); the
+// tayfa role is not repeated here.
+enum ChannelMemberRole {
+  CHANNEL_MEMBER_ROLE_UNSPECIFIED = 0;
+  // EVENT channels: the event's organizer.
+  CHANNEL_MEMBER_ROLE_ORGANIZER = 1;
+  // The user who opened the channel.
+  CHANNEL_MEMBER_ROLE_CREATOR = 2;
+}
+
+message ChannelMember {
+  string user_id = 1;
+  repeated ChannelMemberRole roles = 2;
+}
+
 message ListChannelMembersResponse {
   repeated string user_ids = 1;
   string next_page_token = 2;
+  // The same users in the same order, with their roles (issue #193).
+  repeated ChannelMember members = 3;
 }
 
 message AddChannelMembersRequest {

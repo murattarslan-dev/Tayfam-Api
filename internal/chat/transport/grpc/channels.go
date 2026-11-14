@@ -86,6 +86,7 @@ func channelToProto(c channel.Channel) *chatv1.Channel {
 	if !c.PlannedArchiveAt.IsZero() {
 		out.PlannedArchiveTime = timestamppb.New(c.PlannedArchiveAt)
 	}
+	out.EventTitle = c.EventTitle
 	if c.Visibility == channel.VisibilityEvent || c.Visibility == channel.VisibilitySelected {
 		out.MemberCount = c.MemberCount
 	}
@@ -322,9 +323,22 @@ func (s *ChannelServer) ListChannelMembers(ctx context.Context, req *chatv1.List
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}
-	out := &chatv1.ListChannelMembersResponse{UserIds: make([]string, 0, len(page.Users)), NextPageToken: page.Next}
+	out := &chatv1.ListChannelMembersResponse{
+		UserIds: make([]string, 0, len(page.Users)), NextPageToken: page.Next,
+		Members: make([]*chatv1.ChannelMember, 0, len(page.Members)),
+	}
 	for _, u := range page.Users {
 		out.UserIds = append(out.UserIds, u.String())
+	}
+	for _, m := range page.Members {
+		pm := &chatv1.ChannelMember{UserId: m.User.String()}
+		if m.Organizer {
+			pm.Roles = append(pm.Roles, chatv1.ChannelMemberRole_CHANNEL_MEMBER_ROLE_ORGANIZER)
+		}
+		if m.Creator {
+			pm.Roles = append(pm.Roles, chatv1.ChannelMemberRole_CHANNEL_MEMBER_ROLE_CREATOR)
+		}
+		out.Members = append(out.Members, pm)
 	}
 	return out, nil
 }

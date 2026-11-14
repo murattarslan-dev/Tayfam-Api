@@ -6511,6 +6511,11 @@ components:
           type: string
           format: uuid
           description: Yalnızca `event` kanalında.
+        event_title:
+          type: string
+          description: |
+            Yalnızca `event` kanalında: etkinliğin başlığı, iptal edilmiş olsa
+            da (issue #193). Etkinlik size görünmüyorsa yoktur.
         member_count:
           type: integer
           minimum: 0
@@ -6551,12 +6556,28 @@ components:
           items: { type: string, format: uuid }
     ChannelMemberList:
       type: object
-      required: [user_ids]
+      required: [user_ids, members]
       properties:
         user_ids:
           type: array
           items: { type: string, format: uuid }
+        members:
+          type: array
+          description: |
+            `user_ids` ile aynı kişiler aynı sırada, kanaldaki rolleriyle
+            (issue #193). Tayfa rolü burada yoktur; ad ve avatar profil
+            ucundan gelir.
+          items: { $ref: "#/components/schemas/ChannelMember" }
         next_page_token: { type: string }
+    ChannelMember:
+      type: object
+      required: [user_id, roles]
+      properties:
+        user_id: { type: string, format: uuid }
+        roles:
+          type: array
+          description: "`organizer`: etkinliğin organizatörü (yalnızca `event`); `creator`: kanalı açan. Boş olabilir."
+          items: { type: string, enum: [organizer, creator] }
     ChannelMembersAddRequest:
       type: object
       required: [user_ids]

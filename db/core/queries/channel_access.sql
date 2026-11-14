@@ -5,7 +5,7 @@
 -- Etkinlikler, çağıranın cevabıyla. Başka tayfanın ya da silinmiş etkinlik
 -- satırı dönmez.
 -- name: ChannelEvents :many
-SELECT e.id, e.ends_at, e.status, e.cancelled_at, e.created_by,
+SELECT e.id, e.title, e.ends_at, e.status, e.cancelled_at, e.created_by,
        COALESCE((SELECT r.status FROM event_rsvps r WHERE r.event_id = e.id AND r.user_id = @caller_id), '')::text AS caller_status
 FROM events e
 WHERE e.tayfa_id = @tayfa_id AND e.id = ANY(@event_ids::uuid[]) AND e.deleted_at IS NULL;
