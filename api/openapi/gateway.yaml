@@ -6406,6 +6406,17 @@ components:
             mesaj sayınızdır (en fazla 100; istemci "99+" gösterir). Her yeni
             mesajda güncellenir; konuşma okununca bildirim okundu olur ve
             sonraki mesaj yeni bildirimi 1'den başlatır.
+        resolution:
+          type: string
+          description: |
+            Yalnızca `friend_request` ve `tayfa_invitation` (issue #192):
+            isteğin ya da davetin şu anki durumu. `pending` yanıt bekliyor
+            (satır içi düğmeler gösterilir); `accepted` kabul edildi;
+            `declined` siz reddettiniz; `withdrawn` karşı taraf geri çekti;
+            `expired` artık bilinmiyor. Liste alınırken core'dan hesaplanır,
+            bildirime yazılmaz; yalnızca alıcıya döner, kimin geri çektiği
+            söylenmez. O an hesaplanamazsa alan yoktur.
+          enum: [pending, accepted, declined, withdrawn, expired, unknown]
         read: { type: boolean }
         created_at: { type: string, format: date-time }
     NotificationList:

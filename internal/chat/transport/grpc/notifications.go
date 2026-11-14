@@ -98,7 +98,7 @@ func (s *NotificationServer) ListNotifications(ctx context.Context, req *chatv1.
 			TargetType: toProto(listedTargets, n.TargetType), TargetId: n.Target.String(), QuestionId: idOrEmpty(n.Question),
 			Read: !n.ReadAt.IsZero(), CreateTime: timestamppb.New(n.CreatedAt),
 			SubjectUserId: idOrEmpty(n.Subject), WarningReason: toProto(warningReasons, n.Reason),
-			UnreadCount: n.Unread,
+			UnreadCount: n.Unread, Resolution: notificationResolutions[n.Resolution],
 		})
 	}
 	return out, nil
@@ -231,4 +231,14 @@ func preferenceToProto(p notification.Preference) *chatv1.NotificationPreference
 		out.MuteUntil = timestamppb.New(p.MutedUntil)
 	}
 	return out
+}
+
+// notificationResolutions maps Notification.Resolution (issue #192); an
+// empty or unknown value is UNSPECIFIED.
+var notificationResolutions = map[string]chatv1.NotificationResolution{
+	"pending":   chatv1.NotificationResolution_NOTIFICATION_RESOLUTION_PENDING,
+	"accepted":  chatv1.NotificationResolution_NOTIFICATION_RESOLUTION_ACCEPTED,
+	"declined":  chatv1.NotificationResolution_NOTIFICATION_RESOLUTION_DECLINED,
+	"withdrawn": chatv1.NotificationResolution_NOTIFICATION_RESOLUTION_WITHDRAWN,
+	"expired":   chatv1.NotificationResolution_NOTIFICATION_RESOLUTION_EXPIRED,
 }

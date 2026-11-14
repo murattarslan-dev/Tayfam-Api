@@ -242,6 +242,10 @@ func (s *Service) SendFriendRequest(ctx context.Context, caller, target id.ID) (
 		if err != nil {
 			return fmt.Errorf("istek: %w", err)
 		}
+		// A new request: the earlier outcome no longer applies (issue #192).
+		if err := q.ClearFriendRequestOutcome(ctx, store.ClearFriendRequestOutcomeParams{RequesterID: caller.PG(), RecipientID: target.PG()}); err != nil {
+			return fmt.Errorf("istek sonucu: %w", err)
+		}
 		if created != 1 {
 			// The pair lock makes this unreachable; never report success
 			// for a request that was not written.
@@ -293,6 +297,11 @@ func (s *Service) accept(ctx context.Context, q *store.Queries, caller, requeste
 	if n != 1 {
 		return Friend{}, apperr.ErrFriendRequestNotFound
 	}
+	if err := q.SetFriendRequestOutcome(ctx, store.SetFriendRequestOutcomeParams{
+		RequesterID: requester.PG(), RecipientID: caller.PG(), Outcome: OutcomeAccepted, ResolvedAt: ts(s.now()),
+	}); err != nil {
+		return Friend{}, fmt.Errorf("istek sonucu: %w", err)
+	}
 	f, err := q.GetFriendship(ctx, store.GetFriendshipParams{UserLowID: low.PG(), UserHighID: high.PG()})
 	if err != nil {
 		return Friend{}, fmt.Errorf("arkadaşlık: %w", err)
@@ -317,11 +326,51 @@ func (s *Service) RemoveFriendship(ctx context.Context, caller, other id.ID) err
 		return apperr.Validation("user_id")
 	}
 	low, high := Pair(caller, other)
-	if _, err := s.q.DeleteFriendship(ctx, store.DeleteFriendshipParams{UserLowID: low.PG(), UserHighID: high.PG()}); err != nil {
-		return fmt.Errorf("arkadaşlık silme: %w", err)
-	}
-	return nil
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := store.New(tx)
+		if err := q.LockFriendPair(ctx, store.LockFriendPairParams{UserLowID: low.PG(), UserHighID: high.PG()}); err != nil {
+			return fmt.Errorf("çift kilidi: %w", err)
+		}
+		f, err := q.GetFriendship(ctx, store.GetFriendshipParams{UserLowID: low.PG(), UserHighID: high.PG()})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil
+		case err != nil:
+			return fmt.Errorf("arkadaşlık: %w", err)
+		}
+		if _, err := q.DeleteFriendship(ctx, store.DeleteFriendshipParams{UserLowID: low.PG(), UserHighID: high.PG()}); err != nil {
+			return fmt.Errorf("arkadaşlık silme: %w", err)
+		}
+		// The outcome of the request (issue #192): only the recipient
+		// reads it, and it does not say who withdrew.
+		requester := id.ID(f.RequestedBy.Bytes)
+		recipient := other
+		if requester == other {
+			recipient = caller
+		}
+		outcome := OutcomeAccepted
+		if f.Status == "pending" {
+			outcome = OutcomeDeclined
+			if requester == caller {
+				outcome = OutcomeWithdrawn
+			}
+		}
+		if err := q.SetFriendRequestOutcome(ctx, store.SetFriendRequestOutcomeParams{
+			RequesterID: requester.PG(), RecipientID: recipient.PG(), Outcome: outcome, ResolvedAt: ts(s.now()),
+		}); err != nil {
+			return fmt.Errorf("istek sonucu: %w", err)
+		}
+		return nil
+	})
 }
+
+// Outcomes of a friend request or an invitation (friend_request_outcomes,
+// invitation_outcomes; issue #192).
+const (
+	OutcomeAccepted  = "accepted"
+	OutcomeDeclined  = "declined"
+	OutcomeWithdrawn = "withdrawn"
+)
 
 // ListFriends lists the caller's friends.
 func (s *Service) ListFriends(ctx context.Context, caller id.ID, size int32, token string) (Page[Friend], error) {

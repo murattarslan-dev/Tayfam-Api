@@ -22,6 +22,64 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type NotificationResolution int32
+
+const (
+	NotificationResolution_NOTIFICATION_RESOLUTION_UNSPECIFIED NotificationResolution = 0
+	NotificationResolution_NOTIFICATION_RESOLUTION_PENDING     NotificationResolution = 1
+	NotificationResolution_NOTIFICATION_RESOLUTION_ACCEPTED    NotificationResolution = 2
+	NotificationResolution_NOTIFICATION_RESOLUTION_DECLINED    NotificationResolution = 3
+	NotificationResolution_NOTIFICATION_RESOLUTION_WITHDRAWN   NotificationResolution = 4
+	NotificationResolution_NOTIFICATION_RESOLUTION_EXPIRED     NotificationResolution = 5
+)
+
+// Enum value maps for NotificationResolution.
+var (
+	NotificationResolution_name = map[int32]string{
+		0: "NOTIFICATION_RESOLUTION_UNSPECIFIED",
+		1: "NOTIFICATION_RESOLUTION_PENDING",
+		2: "NOTIFICATION_RESOLUTION_ACCEPTED",
+		3: "NOTIFICATION_RESOLUTION_DECLINED",
+		4: "NOTIFICATION_RESOLUTION_WITHDRAWN",
+		5: "NOTIFICATION_RESOLUTION_EXPIRED",
+	}
+	NotificationResolution_value = map[string]int32{
+		"NOTIFICATION_RESOLUTION_UNSPECIFIED": 0,
+		"NOTIFICATION_RESOLUTION_PENDING":     1,
+		"NOTIFICATION_RESOLUTION_ACCEPTED":    2,
+		"NOTIFICATION_RESOLUTION_DECLINED":    3,
+		"NOTIFICATION_RESOLUTION_WITHDRAWN":   4,
+		"NOTIFICATION_RESOLUTION_EXPIRED":     5,
+	}
+)
+
+func (x NotificationResolution) Enum() *NotificationResolution {
+	p := new(NotificationResolution)
+	*p = x
+	return p
+}
+
+func (x NotificationResolution) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (NotificationResolution) Descriptor() protoreflect.EnumDescriptor {
+	return file_tayfam_chat_v1_notifications_proto_enumTypes[0].Descriptor()
+}
+
+func (NotificationResolution) Type() protoreflect.EnumType {
+	return &file_tayfam_chat_v1_notifications_proto_enumTypes[0]
+}
+
+func (x NotificationResolution) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use NotificationResolution.Descriptor instead.
+func (NotificationResolution) EnumDescriptor() ([]byte, []int) {
+	return file_tayfam_chat_v1_notifications_proto_rawDescGZIP(), []int{0}
+}
+
 type NotificationLevel int32
 
 const (
@@ -59,11 +117,11 @@ func (x NotificationLevel) String() string {
 }
 
 func (NotificationLevel) Descriptor() protoreflect.EnumDescriptor {
-	return file_tayfam_chat_v1_notifications_proto_enumTypes[0].Descriptor()
+	return file_tayfam_chat_v1_notifications_proto_enumTypes[1].Descriptor()
 }
 
 func (NotificationLevel) Type() protoreflect.EnumType {
-	return &file_tayfam_chat_v1_notifications_proto_enumTypes[0]
+	return &file_tayfam_chat_v1_notifications_proto_enumTypes[1]
 }
 
 func (x NotificationLevel) Number() protoreflect.EnumNumber {
@@ -72,7 +130,7 @@ func (x NotificationLevel) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use NotificationLevel.Descriptor instead.
 func (NotificationLevel) EnumDescriptor() ([]byte, []int) {
-	return file_tayfam_chat_v1_notifications_proto_rawDescGZIP(), []int{0}
+	return file_tayfam_chat_v1_notifications_proto_rawDescGZIP(), []int{1}
 }
 
 type NotificationScopeType int32
@@ -113,11 +171,11 @@ func (x NotificationScopeType) String() string {
 }
 
 func (NotificationScopeType) Descriptor() protoreflect.EnumDescriptor {
-	return file_tayfam_chat_v1_notifications_proto_enumTypes[1].Descriptor()
+	return file_tayfam_chat_v1_notifications_proto_enumTypes[2].Descriptor()
 }
 
 func (NotificationScopeType) Type() protoreflect.EnumType {
-	return &file_tayfam_chat_v1_notifications_proto_enumTypes[1]
+	return &file_tayfam_chat_v1_notifications_proto_enumTypes[2]
 }
 
 func (x NotificationScopeType) Number() protoreflect.EnumNumber {
@@ -126,7 +184,7 @@ func (x NotificationScopeType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use NotificationScopeType.Descriptor instead.
 func (NotificationScopeType) EnumDescriptor() ([]byte, []int) {
-	return file_tayfam_chat_v1_notifications_proto_rawDescGZIP(), []int{1}
+	return file_tayfam_chat_v1_notifications_proto_rawDescGZIP(), []int{2}
 }
 
 type Notification struct {
@@ -152,7 +210,12 @@ type Notification struct {
 	// notice was last updated (1–100; the client shows 100 as "99+"). Each
 	// new message updates the waiting notice; reading the conversation marks
 	// it read, and the next message opens a new one.
-	UnreadCount   int32 `protobuf:"varint,12,opt,name=unread_count,json=unreadCount,proto3" json:"unread_count,omitempty"`
+	UnreadCount int32 `protobuf:"varint,12,opt,name=unread_count,json=unreadCount,proto3" json:"unread_count,omitempty"`
+	// FRIEND_REQUEST and TAYFA_INVITATION only: how the request stands now
+	// (issue #192), asked of core when listing and never stored. Unset when
+	// core could not answer. Only the recipient sees it; who withdrew is
+	// never said.
+	Resolution    NotificationResolution `protobuf:"varint,13,opt,name=resolution,proto3,enum=tayfam.chat.v1.NotificationResolution" json:"resolution,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -269,6 +332,13 @@ func (x *Notification) GetUnreadCount() int32 {
 		return x.UnreadCount
 	}
 	return 0
+}
+
+func (x *Notification) GetResolution() NotificationResolution {
+	if x != nil {
+		return x.Resolution
+	}
+	return NotificationResolution_NOTIFICATION_RESOLUTION_UNSPECIFIED
 }
 
 type ListNotificationsRequest struct {
@@ -979,7 +1049,7 @@ var File_tayfam_chat_v1_notifications_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_notifications_proto_rawDesc = "" +
 	"\n" +
-	"\"tayfam/chat/v1/notifications.proto\x12\x0etayfam.chat.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a'tayfam/chat/v1/notification_types.proto\"\xf8\x03\n" +
+	"\"tayfam/chat/v1/notifications.proto\x12\x0etayfam.chat.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a'tayfam/chat/v1/notification_types.proto\"\xc0\x04\n" +
 	"\fNotification\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x124\n" +
 	"\x04type\x18\x02 \x01(\x0e2 .tayfam.chat.v1.NotificationTypeR\x04type\x12\x19\n" +
@@ -996,7 +1066,10 @@ const file_tayfam_chat_v1_notifications_proto_rawDesc = "" +
 	"\x0fsubject_user_id\x18\n" +
 	" \x01(\tR\rsubjectUserId\x12I\n" +
 	"\x0ewarning_reason\x18\v \x01(\x0e2\".tayfam.chat.v1.TayfaWarningReasonR\rwarningReason\x12!\n" +
-	"\funread_count\x18\f \x01(\x05R\vunreadCount\"V\n" +
+	"\funread_count\x18\f \x01(\x05R\vunreadCount\x12F\n" +
+	"\n" +
+	"resolution\x18\r \x01(\x0e2&.tayfam.chat.v1.NotificationResolutionR\n" +
+	"resolution\"V\n" +
 	"\x18ListNotificationsRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
@@ -1041,7 +1114,14 @@ const file_tayfam_chat_v1_notifications_proto_rawDesc = "" +
 	"-SetConversationNotificationPreferenceResponse\x12F\n" +
 	"\n" +
 	"preference\x18\x01 \x01(\v2&.tayfam.chat.v1.NotificationPreferenceR\n" +
-	"preference*\x91\x01\n" +
+	"preference*\xfe\x01\n" +
+	"\x16NotificationResolution\x12'\n" +
+	"#NOTIFICATION_RESOLUTION_UNSPECIFIED\x10\x00\x12#\n" +
+	"\x1fNOTIFICATION_RESOLUTION_PENDING\x10\x01\x12$\n" +
+	" NOTIFICATION_RESOLUTION_ACCEPTED\x10\x02\x12$\n" +
+	" NOTIFICATION_RESOLUTION_DECLINED\x10\x03\x12%\n" +
+	"!NOTIFICATION_RESOLUTION_WITHDRAWN\x10\x04\x12#\n" +
+	"\x1fNOTIFICATION_RESOLUTION_EXPIRED\x10\x05*\x91\x01\n" +
 	"\x11NotificationLevel\x12\"\n" +
 	"\x1eNOTIFICATION_LEVEL_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16NOTIFICATION_LEVEL_ALL\x10\x01\x12\x1f\n" +
@@ -1074,68 +1154,70 @@ func file_tayfam_chat_v1_notifications_proto_rawDescGZIP() []byte {
 	return file_tayfam_chat_v1_notifications_proto_rawDescData
 }
 
-var file_tayfam_chat_v1_notifications_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_tayfam_chat_v1_notifications_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_tayfam_chat_v1_notifications_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_tayfam_chat_v1_notifications_proto_goTypes = []any{
-	(NotificationLevel)(0),                                // 0: tayfam.chat.v1.NotificationLevel
-	(NotificationScopeType)(0),                            // 1: tayfam.chat.v1.NotificationScopeType
-	(*Notification)(nil),                                  // 2: tayfam.chat.v1.Notification
-	(*ListNotificationsRequest)(nil),                      // 3: tayfam.chat.v1.ListNotificationsRequest
-	(*ListNotificationsResponse)(nil),                     // 4: tayfam.chat.v1.ListNotificationsResponse
-	(*GetUnreadNotificationCountRequest)(nil),             // 5: tayfam.chat.v1.GetUnreadNotificationCountRequest
-	(*GetUnreadNotificationCountResponse)(nil),            // 6: tayfam.chat.v1.GetUnreadNotificationCountResponse
-	(*MarkNotificationReadRequest)(nil),                   // 7: tayfam.chat.v1.MarkNotificationReadRequest
-	(*MarkNotificationReadResponse)(nil),                  // 8: tayfam.chat.v1.MarkNotificationReadResponse
-	(*MarkAllNotificationsReadRequest)(nil),               // 9: tayfam.chat.v1.MarkAllNotificationsReadRequest
-	(*MarkAllNotificationsReadResponse)(nil),              // 10: tayfam.chat.v1.MarkAllNotificationsReadResponse
-	(*NotificationPreference)(nil),                        // 11: tayfam.chat.v1.NotificationPreference
-	(*ListNotificationPreferencesRequest)(nil),            // 12: tayfam.chat.v1.ListNotificationPreferencesRequest
-	(*ListNotificationPreferencesResponse)(nil),           // 13: tayfam.chat.v1.ListNotificationPreferencesResponse
-	(*SetTayfaNotificationPreferenceRequest)(nil),         // 14: tayfam.chat.v1.SetTayfaNotificationPreferenceRequest
-	(*SetTayfaNotificationPreferenceResponse)(nil),        // 15: tayfam.chat.v1.SetTayfaNotificationPreferenceResponse
-	(*SetConversationNotificationPreferenceRequest)(nil),  // 16: tayfam.chat.v1.SetConversationNotificationPreferenceRequest
-	(*SetConversationNotificationPreferenceResponse)(nil), // 17: tayfam.chat.v1.SetConversationNotificationPreferenceResponse
-	(NotificationType)(0),                                 // 18: tayfam.chat.v1.NotificationType
-	(NotificationTargetType)(0),                           // 19: tayfam.chat.v1.NotificationTargetType
-	(*timestamppb.Timestamp)(nil),                         // 20: google.protobuf.Timestamp
-	(TayfaWarningReason)(0),                               // 21: tayfam.chat.v1.TayfaWarningReason
+	(NotificationResolution)(0),                           // 0: tayfam.chat.v1.NotificationResolution
+	(NotificationLevel)(0),                                // 1: tayfam.chat.v1.NotificationLevel
+	(NotificationScopeType)(0),                            // 2: tayfam.chat.v1.NotificationScopeType
+	(*Notification)(nil),                                  // 3: tayfam.chat.v1.Notification
+	(*ListNotificationsRequest)(nil),                      // 4: tayfam.chat.v1.ListNotificationsRequest
+	(*ListNotificationsResponse)(nil),                     // 5: tayfam.chat.v1.ListNotificationsResponse
+	(*GetUnreadNotificationCountRequest)(nil),             // 6: tayfam.chat.v1.GetUnreadNotificationCountRequest
+	(*GetUnreadNotificationCountResponse)(nil),            // 7: tayfam.chat.v1.GetUnreadNotificationCountResponse
+	(*MarkNotificationReadRequest)(nil),                   // 8: tayfam.chat.v1.MarkNotificationReadRequest
+	(*MarkNotificationReadResponse)(nil),                  // 9: tayfam.chat.v1.MarkNotificationReadResponse
+	(*MarkAllNotificationsReadRequest)(nil),               // 10: tayfam.chat.v1.MarkAllNotificationsReadRequest
+	(*MarkAllNotificationsReadResponse)(nil),              // 11: tayfam.chat.v1.MarkAllNotificationsReadResponse
+	(*NotificationPreference)(nil),                        // 12: tayfam.chat.v1.NotificationPreference
+	(*ListNotificationPreferencesRequest)(nil),            // 13: tayfam.chat.v1.ListNotificationPreferencesRequest
+	(*ListNotificationPreferencesResponse)(nil),           // 14: tayfam.chat.v1.ListNotificationPreferencesResponse
+	(*SetTayfaNotificationPreferenceRequest)(nil),         // 15: tayfam.chat.v1.SetTayfaNotificationPreferenceRequest
+	(*SetTayfaNotificationPreferenceResponse)(nil),        // 16: tayfam.chat.v1.SetTayfaNotificationPreferenceResponse
+	(*SetConversationNotificationPreferenceRequest)(nil),  // 17: tayfam.chat.v1.SetConversationNotificationPreferenceRequest
+	(*SetConversationNotificationPreferenceResponse)(nil), // 18: tayfam.chat.v1.SetConversationNotificationPreferenceResponse
+	(NotificationType)(0),                                 // 19: tayfam.chat.v1.NotificationType
+	(NotificationTargetType)(0),                           // 20: tayfam.chat.v1.NotificationTargetType
+	(*timestamppb.Timestamp)(nil),                         // 21: google.protobuf.Timestamp
+	(TayfaWarningReason)(0),                               // 22: tayfam.chat.v1.TayfaWarningReason
 }
 var file_tayfam_chat_v1_notifications_proto_depIdxs = []int32{
-	18, // 0: tayfam.chat.v1.Notification.type:type_name -> tayfam.chat.v1.NotificationType
-	19, // 1: tayfam.chat.v1.Notification.target_type:type_name -> tayfam.chat.v1.NotificationTargetType
-	20, // 2: tayfam.chat.v1.Notification.create_time:type_name -> google.protobuf.Timestamp
-	21, // 3: tayfam.chat.v1.Notification.warning_reason:type_name -> tayfam.chat.v1.TayfaWarningReason
-	2,  // 4: tayfam.chat.v1.ListNotificationsResponse.notifications:type_name -> tayfam.chat.v1.Notification
-	1,  // 5: tayfam.chat.v1.NotificationPreference.scope_type:type_name -> tayfam.chat.v1.NotificationScopeType
-	0,  // 6: tayfam.chat.v1.NotificationPreference.level:type_name -> tayfam.chat.v1.NotificationLevel
-	20, // 7: tayfam.chat.v1.NotificationPreference.mute_until:type_name -> google.protobuf.Timestamp
-	20, // 8: tayfam.chat.v1.NotificationPreference.update_time:type_name -> google.protobuf.Timestamp
-	11, // 9: tayfam.chat.v1.ListNotificationPreferencesResponse.preferences:type_name -> tayfam.chat.v1.NotificationPreference
-	0,  // 10: tayfam.chat.v1.SetTayfaNotificationPreferenceRequest.level:type_name -> tayfam.chat.v1.NotificationLevel
-	20, // 11: tayfam.chat.v1.SetTayfaNotificationPreferenceRequest.mute_until:type_name -> google.protobuf.Timestamp
-	11, // 12: tayfam.chat.v1.SetTayfaNotificationPreferenceResponse.preference:type_name -> tayfam.chat.v1.NotificationPreference
-	0,  // 13: tayfam.chat.v1.SetConversationNotificationPreferenceRequest.level:type_name -> tayfam.chat.v1.NotificationLevel
-	20, // 14: tayfam.chat.v1.SetConversationNotificationPreferenceRequest.mute_until:type_name -> google.protobuf.Timestamp
-	11, // 15: tayfam.chat.v1.SetConversationNotificationPreferenceResponse.preference:type_name -> tayfam.chat.v1.NotificationPreference
-	3,  // 16: tayfam.chat.v1.NotificationService.ListNotifications:input_type -> tayfam.chat.v1.ListNotificationsRequest
-	5,  // 17: tayfam.chat.v1.NotificationService.GetUnreadNotificationCount:input_type -> tayfam.chat.v1.GetUnreadNotificationCountRequest
-	7,  // 18: tayfam.chat.v1.NotificationService.MarkNotificationRead:input_type -> tayfam.chat.v1.MarkNotificationReadRequest
-	9,  // 19: tayfam.chat.v1.NotificationService.MarkAllNotificationsRead:input_type -> tayfam.chat.v1.MarkAllNotificationsReadRequest
-	12, // 20: tayfam.chat.v1.NotificationService.ListNotificationPreferences:input_type -> tayfam.chat.v1.ListNotificationPreferencesRequest
-	14, // 21: tayfam.chat.v1.NotificationService.SetTayfaNotificationPreference:input_type -> tayfam.chat.v1.SetTayfaNotificationPreferenceRequest
-	16, // 22: tayfam.chat.v1.NotificationService.SetConversationNotificationPreference:input_type -> tayfam.chat.v1.SetConversationNotificationPreferenceRequest
-	4,  // 23: tayfam.chat.v1.NotificationService.ListNotifications:output_type -> tayfam.chat.v1.ListNotificationsResponse
-	6,  // 24: tayfam.chat.v1.NotificationService.GetUnreadNotificationCount:output_type -> tayfam.chat.v1.GetUnreadNotificationCountResponse
-	8,  // 25: tayfam.chat.v1.NotificationService.MarkNotificationRead:output_type -> tayfam.chat.v1.MarkNotificationReadResponse
-	10, // 26: tayfam.chat.v1.NotificationService.MarkAllNotificationsRead:output_type -> tayfam.chat.v1.MarkAllNotificationsReadResponse
-	13, // 27: tayfam.chat.v1.NotificationService.ListNotificationPreferences:output_type -> tayfam.chat.v1.ListNotificationPreferencesResponse
-	15, // 28: tayfam.chat.v1.NotificationService.SetTayfaNotificationPreference:output_type -> tayfam.chat.v1.SetTayfaNotificationPreferenceResponse
-	17, // 29: tayfam.chat.v1.NotificationService.SetConversationNotificationPreference:output_type -> tayfam.chat.v1.SetConversationNotificationPreferenceResponse
-	23, // [23:30] is the sub-list for method output_type
-	16, // [16:23] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	19, // 0: tayfam.chat.v1.Notification.type:type_name -> tayfam.chat.v1.NotificationType
+	20, // 1: tayfam.chat.v1.Notification.target_type:type_name -> tayfam.chat.v1.NotificationTargetType
+	21, // 2: tayfam.chat.v1.Notification.create_time:type_name -> google.protobuf.Timestamp
+	22, // 3: tayfam.chat.v1.Notification.warning_reason:type_name -> tayfam.chat.v1.TayfaWarningReason
+	0,  // 4: tayfam.chat.v1.Notification.resolution:type_name -> tayfam.chat.v1.NotificationResolution
+	3,  // 5: tayfam.chat.v1.ListNotificationsResponse.notifications:type_name -> tayfam.chat.v1.Notification
+	2,  // 6: tayfam.chat.v1.NotificationPreference.scope_type:type_name -> tayfam.chat.v1.NotificationScopeType
+	1,  // 7: tayfam.chat.v1.NotificationPreference.level:type_name -> tayfam.chat.v1.NotificationLevel
+	21, // 8: tayfam.chat.v1.NotificationPreference.mute_until:type_name -> google.protobuf.Timestamp
+	21, // 9: tayfam.chat.v1.NotificationPreference.update_time:type_name -> google.protobuf.Timestamp
+	12, // 10: tayfam.chat.v1.ListNotificationPreferencesResponse.preferences:type_name -> tayfam.chat.v1.NotificationPreference
+	1,  // 11: tayfam.chat.v1.SetTayfaNotificationPreferenceRequest.level:type_name -> tayfam.chat.v1.NotificationLevel
+	21, // 12: tayfam.chat.v1.SetTayfaNotificationPreferenceRequest.mute_until:type_name -> google.protobuf.Timestamp
+	12, // 13: tayfam.chat.v1.SetTayfaNotificationPreferenceResponse.preference:type_name -> tayfam.chat.v1.NotificationPreference
+	1,  // 14: tayfam.chat.v1.SetConversationNotificationPreferenceRequest.level:type_name -> tayfam.chat.v1.NotificationLevel
+	21, // 15: tayfam.chat.v1.SetConversationNotificationPreferenceRequest.mute_until:type_name -> google.protobuf.Timestamp
+	12, // 16: tayfam.chat.v1.SetConversationNotificationPreferenceResponse.preference:type_name -> tayfam.chat.v1.NotificationPreference
+	4,  // 17: tayfam.chat.v1.NotificationService.ListNotifications:input_type -> tayfam.chat.v1.ListNotificationsRequest
+	6,  // 18: tayfam.chat.v1.NotificationService.GetUnreadNotificationCount:input_type -> tayfam.chat.v1.GetUnreadNotificationCountRequest
+	8,  // 19: tayfam.chat.v1.NotificationService.MarkNotificationRead:input_type -> tayfam.chat.v1.MarkNotificationReadRequest
+	10, // 20: tayfam.chat.v1.NotificationService.MarkAllNotificationsRead:input_type -> tayfam.chat.v1.MarkAllNotificationsReadRequest
+	13, // 21: tayfam.chat.v1.NotificationService.ListNotificationPreferences:input_type -> tayfam.chat.v1.ListNotificationPreferencesRequest
+	15, // 22: tayfam.chat.v1.NotificationService.SetTayfaNotificationPreference:input_type -> tayfam.chat.v1.SetTayfaNotificationPreferenceRequest
+	17, // 23: tayfam.chat.v1.NotificationService.SetConversationNotificationPreference:input_type -> tayfam.chat.v1.SetConversationNotificationPreferenceRequest
+	5,  // 24: tayfam.chat.v1.NotificationService.ListNotifications:output_type -> tayfam.chat.v1.ListNotificationsResponse
+	7,  // 25: tayfam.chat.v1.NotificationService.GetUnreadNotificationCount:output_type -> tayfam.chat.v1.GetUnreadNotificationCountResponse
+	9,  // 26: tayfam.chat.v1.NotificationService.MarkNotificationRead:output_type -> tayfam.chat.v1.MarkNotificationReadResponse
+	11, // 27: tayfam.chat.v1.NotificationService.MarkAllNotificationsRead:output_type -> tayfam.chat.v1.MarkAllNotificationsReadResponse
+	14, // 28: tayfam.chat.v1.NotificationService.ListNotificationPreferences:output_type -> tayfam.chat.v1.ListNotificationPreferencesResponse
+	16, // 29: tayfam.chat.v1.NotificationService.SetTayfaNotificationPreference:output_type -> tayfam.chat.v1.SetTayfaNotificationPreferenceResponse
+	18, // 30: tayfam.chat.v1.NotificationService.SetConversationNotificationPreference:output_type -> tayfam.chat.v1.SetConversationNotificationPreferenceResponse
+	24, // [24:31] is the sub-list for method output_type
+	17, // [17:24] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_chat_v1_notifications_proto_init() }
@@ -1149,7 +1231,7 @@ func file_tayfam_chat_v1_notifications_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_chat_v1_notifications_proto_rawDesc), len(file_tayfam_chat_v1_notifications_proto_rawDesc)),
-			NumEnums:      2,
+			NumEnums:      3,
 			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,

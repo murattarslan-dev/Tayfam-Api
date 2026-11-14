@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/report"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
@@ -66,5 +67,24 @@ func (s *Service) ExpireRecords(ctx context.Context) (int, error) {
 		}
 		return int(n), nil //nolint:gosec // at most one batch
 	})
-	return reports + audits, err
+	if err != nil {
+		return reports + audits, err
+	}
+	// Outcomes of friend requests and invitations live as long as the
+	// notifications that show them (issue #192).
+	outBefore := ts(s.now().Add(-OutcomeRetention))
+	q := store.New(s.cfg.Pool)
+	nf, err := q.DeleteOldFriendRequestOutcomes(ctx, outBefore)
+	if err != nil {
+		return reports + audits, fmt.Errorf("istek sonuçları: %w", err)
+	}
+	ni, err := q.DeleteOldInvitationOutcomes(ctx, outBefore)
+	if err != nil {
+		return reports + audits, fmt.Errorf("davet sonuçları: %w", err)
+	}
+	return reports + audits + int(nf) + int(ni), nil //nolint:gosec // row counts
 }
+
+// OutcomeRetention is how long the outcome of a friend request or an
+// invitation is kept: as long as chat keeps notifications.
+const OutcomeRetention = 90 * 24 * time.Hour

@@ -1,0 +1,122 @@
+package social
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
+)
+
+// Notification resolutions (issue #192): how a friend request or a tayfa
+// invitation the caller received stands now. chat asks for one page of
+// notifications at a time; the answer comes from the current request or
+// membership row and, once that is gone, from the recorded outcome. Only
+// the recipient's own requests are read; who withdrew is never said.
+
+// MaxResolutionRefs bounds one question.
+const MaxResolutionRefs = 100
+
+// RequestKind is what a ref names.
+type RequestKind int
+
+// Request kinds.
+const (
+	KindFriendRequest   RequestKind = iota + 1 // ref: the requester
+	KindTayfaInvitation                        // ref: the tayfa
+)
+
+// Resolution is how a request stands.
+type Resolution string
+
+// Resolutions.
+const (
+	ResolutionPending   Resolution = "pending"
+	ResolutionAccepted  Resolution = "accepted"
+	ResolutionDeclined  Resolution = "declined"
+	ResolutionWithdrawn Resolution = "withdrawn"
+	ResolutionExpired   Resolution = "expired"
+)
+
+// RequestRef is one request the caller received.
+type RequestRef struct {
+	Kind RequestKind
+	ID   id.ID
+}
+
+// Resolutions answers for each ref, in order, with two queries in all.
+func (s *Service) Resolutions(ctx context.Context, caller id.ID, refs []RequestRef) ([]Resolution, error) {
+	if len(refs) == 0 || len(refs) > MaxResolutionRefs {
+		return nil, apperr.Validation("refs")
+	}
+	var requesters, tayfas []pgtype.UUID
+	for _, r := range refs {
+		switch {
+		case r.ID == (id.ID{}):
+			return nil, apperr.Validation("refs.id")
+		case r.Kind == KindFriendRequest:
+			requesters = append(requesters, r.ID.PG())
+		case r.Kind == KindTayfaInvitation:
+			tayfas = append(tayfas, r.ID.PG())
+		default:
+			return nil, apperr.Validation("refs.kind")
+		}
+	}
+	friend := map[id.ID]Resolution{}
+	if len(requesters) > 0 {
+		rows, err := s.q.FriendRequestStates(ctx, store.FriendRequestStatesParams{RequesterIds: requesters, RecipientID: caller.PG()})
+		if err != nil {
+			return nil, fmt.Errorf("istek durumu: %w", err)
+		}
+		for _, r := range rows {
+			a := id.ID(r.RequesterID.Bytes)
+			switch {
+			case r.FriendshipStatus.String == "pending" && id.ID(r.RequestedBy.Bytes) == a:
+				friend[a] = ResolutionPending
+			case r.FriendshipStatus.String == "accepted":
+				friend[a] = ResolutionAccepted
+			case r.Outcome.Valid:
+				friend[a] = Resolution(r.Outcome.String)
+			default:
+				friend[a] = ResolutionExpired
+			}
+		}
+	}
+	invite := map[id.ID]Resolution{}
+	if len(tayfas) > 0 {
+		rows, err := s.q.InvitationStates(ctx, store.InvitationStatesParams{TayfaIds: tayfas, UserID: caller.PG()})
+		if err != nil {
+			return nil, fmt.Errorf("davet durumu: %w", err)
+		}
+		for _, r := range rows {
+			t := id.ID(r.TayfaID.Bytes)
+			switch st := r.MembershipStatus.String; {
+			case st == "invited":
+				invite[t] = ResolutionPending
+			case r.Outcome.Valid:
+				invite[t] = Resolution(r.Outcome.String)
+			case st == "active" || st == "pending":
+				// Joined, or asked to join, some other way.
+				invite[t] = ResolutionAccepted
+			default:
+				invite[t] = ResolutionExpired
+			}
+		}
+	}
+	out := make([]Resolution, 0, len(refs))
+	for _, r := range refs {
+		m := friend
+		if r.Kind == KindTayfaInvitation {
+			m = invite
+		}
+		v, ok := m[r.ID]
+		if !ok {
+			v = ResolutionExpired
+		}
+		out = append(out, v)
+	}
+	return out, nil
+}

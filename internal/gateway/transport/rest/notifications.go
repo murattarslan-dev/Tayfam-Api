@@ -147,9 +147,19 @@ type notificationJSON struct {
 	WarningReason string `json:"warning_reason,omitempty"`
 	// dm_request and dm_message only: unread messages in the conversation
 	// (issue #101).
-	UnreadCount int32     `json:"unread_count,omitempty"`
-	Read        bool      `json:"read"`
-	CreatedAt   time.Time `json:"created_at"`
+	UnreadCount int32 `json:"unread_count,omitempty"`
+	// friend_request and tayfa_invitation only (issue #192).
+	Resolution string    `json:"resolution,omitempty"`
+	Read       bool      `json:"read"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+var notificationResolutionNames = map[chatv1.NotificationResolution]string{
+	chatv1.NotificationResolution_NOTIFICATION_RESOLUTION_PENDING:   "pending",
+	chatv1.NotificationResolution_NOTIFICATION_RESOLUTION_ACCEPTED:  "accepted",
+	chatv1.NotificationResolution_NOTIFICATION_RESOLUTION_DECLINED:  "declined",
+	chatv1.NotificationResolution_NOTIFICATION_RESOLUTION_WITHDRAWN: "withdrawn",
+	chatv1.NotificationResolution_NOTIFICATION_RESOLUTION_EXPIRED:   "expired",
 }
 
 type notificationListJSON struct {
@@ -201,7 +211,8 @@ func (h chatHandlers) list(ctx context.Context, w http.ResponseWriter, r *http.R
 			ID: n.GetId(), Type: nameOr(notificationTypeNames, n.GetType()), TayfaID: n.GetTayfaId(), ActorID: n.GetActorId(),
 			TargetType: nameOr(notificationTargetNames, n.GetTargetType()), TargetID: n.GetTargetId(), QuestionID: n.GetQuestionId(),
 			SubjectUserID: n.GetSubjectUserId(), WarningReason: reason, UnreadCount: n.GetUnreadCount(),
-			Read: n.GetRead(), CreatedAt: n.GetCreateTime().AsTime(),
+			Resolution: notificationResolutionNames[n.GetResolution()],
+			Read:       n.GetRead(), CreatedAt: n.GetCreateTime().AsTime(),
 		})
 	}
 	w.Header().Set("Cache-Control", "no-store")

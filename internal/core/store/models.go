@@ -228,6 +228,13 @@ type FishingCatch struct {
 	PhotoUploadID   pgtype.UUID
 }
 
+type FriendRequestOutcome struct {
+	RequesterID pgtype.UUID
+	RecipientID pgtype.UUID
+	Outcome     string
+	ResolvedAt  pgtype.Timestamptz
+}
+
 type Friendship struct {
 	UserLowID   pgtype.UUID
 	UserHighID  pgtype.UUID
@@ -235,6 +242,13 @@ type Friendship struct {
 	RequestedBy pgtype.UUID
 	CreatedAt   pgtype.Timestamptz
 	AcceptedAt  pgtype.Timestamptz
+}
+
+type InvitationOutcome struct {
+	TayfaID    pgtype.UUID
+	UserID     pgtype.UUID
+	Outcome    string
+	ResolvedAt pgtype.Timestamptz
 }
 
 type Invite struct {

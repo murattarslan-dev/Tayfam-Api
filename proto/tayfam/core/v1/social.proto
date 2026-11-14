@@ -56,6 +56,14 @@ service SocialService {
   // ListBlockedUsers lists the users the caller blocked. Who blocked the
   // caller is never listed.
   rpc ListBlockedUsers(ListBlockedUsersRequest) returns (ListBlockedUsersResponse);
+
+  // GetRequestResolutions answers, for the caller as the recipient, how
+  // friend requests and tayfa invitations stand now (issue #192): chat asks
+  // it for one page of FRIEND_REQUEST and TAYFA_INVITATION notifications
+  // with the caller's own token. One answer per ref, in the same order;
+  // 1–100 refs (ERROR_REASON_VALIDATION otherwise). Who withdrew is never
+  // said.
+  rpc GetRequestResolutions(GetRequestResolutionsRequest) returns (GetRequestResolutionsResponse);
 }
 
 // FriendState is a friendship as the caller sees it.
@@ -161,4 +169,40 @@ message ListBlockedUsersRequest {
 message ListBlockedUsersResponse {
   repeated BlockedUser users = 1;
   string next_page_token = 2;
+}
+
+enum RequestKind {
+  REQUEST_KIND_UNSPECIFIED = 0;
+  // ref id is the requester's user ID.
+  REQUEST_KIND_FRIEND_REQUEST = 1;
+  // ref id is the tayfa ID.
+  REQUEST_KIND_TAYFA_INVITATION = 2;
+}
+
+enum RequestResolution {
+  REQUEST_RESOLUTION_UNSPECIFIED = 0;
+  // Waiting for the caller's answer.
+  REQUEST_RESOLUTION_PENDING = 1;
+  REQUEST_RESOLUTION_ACCEPTED = 2;
+  // The caller declined it.
+  REQUEST_RESOLUTION_DECLINED = 3;
+  // The other side took it back.
+  REQUEST_RESOLUTION_WITHDRAWN = 4;
+  // Nothing is known any more (older than the records, or the other
+  // account is gone).
+  REQUEST_RESOLUTION_EXPIRED = 5;
+}
+
+message RequestRef {
+  RequestKind kind = 1;
+  string id = 2;
+}
+
+message GetRequestResolutionsRequest {
+  repeated RequestRef refs = 1;
+}
+
+message GetRequestResolutionsResponse {
+  // Same order as refs.
+  repeated RequestResolution resolutions = 1;
 }

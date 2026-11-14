@@ -109,6 +109,10 @@ type Querier interface {
 	// seriler de öyle (v14 "İlişkiler ve Silme Davranışı": yazar kolonları
 	// SET NULL).
 	ClearEventUserFields(ctx context.Context, userID pgtype.UUID) error
+	// Yeni istek: eski sonuç geçersiz.
+	ClearFriendRequestOutcome(ctx context.Context, arg ClearFriendRequestOutcomeParams) error
+	// Yeni davet: eski sonuç geçersiz.
+	ClearInvitationOutcome(ctx context.Context, arg ClearInvitationOutcomeParams) error
 	ClearInviteCreator(ctx context.Context, userID pgtype.UUID) error
 	ClearMembershipUserFields(ctx context.Context, userID pgtype.UUID) error
 	// ---------------------------------------------------------------------------
@@ -233,6 +237,8 @@ type Querier interface {
 	DeleteFriendship(ctx context.Context, arg DeleteFriendshipParams) (int64, error)
 	// Ayrılma, çıkarma, başvuru reddi, ban kaldırma.
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (int64, error)
+	DeleteOldFriendRequestOutcomes(ctx context.Context, before pgtype.Timestamptz) (int64, error)
+	DeleteOldInvitationOutcomes(ctx context.Context, before pgtype.Timestamptz) (int64, error)
 	// Oy değiştirmek eski oyu siler (v14).
 	DeleteOwnPollVotes(ctx context.Context, arg DeleteOwnPollVotesParams) (int64, error)
 	DeletePoll(ctx context.Context, arg DeletePollParams) (int64, error)
@@ -264,6 +270,7 @@ type Querier interface {
 	DeleteUserFriendships(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserHikeCheckins(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserPollVotes(ctx context.Context, userID pgtype.UUID) error
+	DeleteUserRequestOutcomes(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserRsvps(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silme (user.deleted): kullanıcının dosyaları silinir; bağlı kapak
 	// görselleri tayfanındır, yalnızca sahiplikleri kaldırılır.
@@ -323,6 +330,9 @@ type Querier interface {
 	// Verilen kullanıcılardan hâlâ etkin üye olanlar (tek alıcılı bildirimler
 	// ve arka plan işlerinin seçtiği alıcılar).
 	FilterNotifyActive(ctx context.Context, arg FilterNotifyActiveParams) ([]pgtype.UUID, error)
+	// Alıcının bir sayfadaki istek bildirimleri için: isteyenlerle arasındaki
+	// arkadaşlık satırı ve kayıtlı sonuç.
+	FriendRequestStates(ctx context.Context, arg FriendRequestStatesParams) ([]FriendRequestStatesRow, error)
 	GetAnnouncement(ctx context.Context, arg GetAnnouncementParams) (GetAnnouncementRow, error)
 	// Tekrar gönderilen yayınlama isteği aynı duyuruyu döndürür.
 	GetAnnouncementByClientRequest(ctx context.Context, arg GetAnnouncementByClientRequestParams) (GetAnnouncementByClientRequestRow, error)
@@ -441,6 +451,9 @@ type Querier interface {
 	// Organizatörün eklediği kişinin yanıtı yoksa "geliyorum" olarak açılır;
 	// etkinlik bitmiş olduğu için kapasiteyi etkilemez.
 	InsertAttendedRsvp(ctx context.Context, arg InsertAttendedRsvpParams) error
+	// Davet edilenin bir sayfadaki davet bildirimleri için: o tayfadaki
+	// üyeliği ve kayıtlı sonuç.
+	InvitationStates(ctx context.Context, arg InvitationStatesParams) ([]InvitationStatesRow, error)
 	IsActiveMember(ctx context.Context, arg IsActiveMemberParams) (bool, error)
 	IsBlockedEitherWay(ctx context.Context, arg IsBlockedEitherWayParams) (bool, error)
 	// Kapalı ya da kaydı olmayan modül kapalı sayılır (varsayılan "hayır").
@@ -720,6 +733,10 @@ type Querier interface {
 	// Boyut bir kez yazılır (trigger uploads_export_bytes_once); aynı boyut
 	// tekrar yazılabilir.
 	SetExportBytes(ctx context.Context, arg SetExportBytesParams) (int64, error)
+	// İstek ve davet sonuçları (issue #192). Okuma yalnızca alıcının
+	// (doğrulanmış çağıran) kendi kayıtları üzerinedir.
+	SetFriendRequestOutcome(ctx context.Context, arg SetFriendRequestOutcomeParams) error
+	SetInvitationOutcome(ctx context.Context, arg SetInvitationOutcomeParams) error
 	SetMembershipRole(ctx context.Context, arg SetMembershipRoleParams) (int64, error)
 	SetRsvp(ctx context.Context, arg SetRsvpParams) error
 	// Kullanıcısız arka plan işi. Trigger'ın tanıdığı tek değer

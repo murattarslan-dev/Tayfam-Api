@@ -2,6 +2,7 @@ package rest
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -252,5 +253,19 @@ func TestConversationPreferenceErrors(t *testing.T) {
 		if strings.Contains(w.Body.String(), "istek reddedildi") || strings.Contains(w.Body.String(), "yok") {
 			t.Errorf("%s: hata cevabı iç ayrıntı taşıyor: %s", tc.method, w.Body)
 		}
+	}
+}
+
+// TestNotificationResolution (issue #192): the resolution passes through by
+// name; an unknown or unset one is left out.
+func TestNotificationResolution(t *testing.T) {
+	if notificationResolutionNames[chatv1.NotificationResolution_NOTIFICATION_RESOLUTION_DECLINED] != "declined" ||
+		notificationResolutionNames[chatv1.NotificationResolution_NOTIFICATION_RESOLUTION_UNSPECIFIED] != "" ||
+		len(notificationResolutionNames) != 5 {
+		t.Fatalf("adlar = %v", notificationResolutionNames)
+	}
+	b, _ := json.Marshal(notificationJSON{Type: "announcement"})
+	if strings.Contains(string(b), "resolution") {
+		t.Fatalf("boş durum JSON'da: %s", b)
 	}
 }

@@ -324,3 +324,47 @@ func TestInvitationInterests(t *testing.T) {
 		t.Fatalf("tayfanın davetleri = %+v %v", list, err)
 	}
 }
+
+// TestInvitationResolutions (issue #192): how each invitation the user
+// received stands, from the membership row or the recorded outcome.
+func TestInvitationResolutions(t *testing.T) {
+	e := setup(t)
+	soc, err := social.New(social.Config{Pool: e.pool})
+	must(t, err)
+	u := id.New()
+	open, declined, cancelled, waiting := e.newTayfa(t, "open"), e.newTayfa(t, "approval"), e.newTayfa(t, "approval"), e.newTayfa(t, "approval")
+	for _, tf := range []tayfa{open, declined, cancelled, waiting} {
+		e.friends(t, tf.admin, u)
+		_, err := e.svc.InviteFriend(ctx, tf.admin, tf.id, u)
+		must(t, err)
+	}
+	_, err = e.svc.AcceptInvitation(ctx, u, open.id)
+	must(t, err)
+	must(t, e.svc.DeclineInvitation(ctx, u, declined.id))
+	must(t, e.svc.CancelInvitation(ctx, cancelled.admin, cancelled.id, u))
+
+	refs := []social.RequestRef{}
+	for _, tf := range []id.ID{open.id, declined.id, cancelled.id, waiting.id, id.New()} {
+		refs = append(refs, social.RequestRef{Kind: social.KindTayfaInvitation, ID: tf})
+	}
+	got, err := soc.Resolutions(ctx, u, refs)
+	want := []social.Resolution{social.ResolutionAccepted, social.ResolutionDeclined, social.ResolutionWithdrawn, social.ResolutionPending, social.ResolutionExpired}
+	if err != nil || len(got) != len(want) {
+		t.Fatalf("çözümler = %v %v", got, err)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("%d: %s, %s bekleniyordu", i, got[i], want[i])
+		}
+	}
+	// Invited again: pending, the old outcome is gone.
+	_, err = e.svc.InviteFriend(ctx, declined.admin, declined.id, u)
+	must(t, err)
+	if got, err := soc.Resolutions(ctx, u, refs[1:2]); err != nil || got[0] != social.ResolutionPending {
+		t.Fatalf("yeniden davet = %v %v", got, err)
+	}
+	// Another user asking about the same tayfas learns nothing.
+	if got, err := soc.Resolutions(ctx, id.New(), refs[:1]); err != nil || got[0] != social.ResolutionExpired {
+		t.Fatalf("başkası = %v %v", got, err)
+	}
+}
