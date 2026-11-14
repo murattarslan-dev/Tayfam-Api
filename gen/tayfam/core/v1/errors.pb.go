@@ -136,6 +136,9 @@ const (
 	// FAILED_PRECONDITION. The method is for another event type (for example
 	// AddCampItem on a convoy event).
 	ErrorReason_ERROR_REASON_EVENT_TYPE_MISMATCH ErrorReason = 36
+	// ABORTED. Someone else took the camp item; reload the event (issue
+	// #198).
+	ErrorReason_ERROR_REASON_EVENT_ITEM_TAKEN ErrorReason = 37
 	// FAILED_PRECONDITION. Outside the check-in window: from 30 minutes
 	// before the start until the end.
 	ErrorReason_ERROR_REASON_CHECK_IN_CLOSED ErrorReason = 40
@@ -287,6 +290,7 @@ var (
 		34:  "ERROR_REASON_EVENT_ITEM_NOT_FOUND",
 		35:  "ERROR_REASON_EVENT_LIMIT",
 		36:  "ERROR_REASON_EVENT_TYPE_MISMATCH",
+		37:  "ERROR_REASON_EVENT_ITEM_TAKEN",
 		40:  "ERROR_REASON_CHECK_IN_CLOSED",
 		41:  "ERROR_REASON_CHECK_IN_TOO_FAR",
 		42:  "ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED",
@@ -361,6 +365,7 @@ var (
 		"ERROR_REASON_EVENT_ITEM_NOT_FOUND":        34,
 		"ERROR_REASON_EVENT_LIMIT":                 35,
 		"ERROR_REASON_EVENT_TYPE_MISMATCH":         36,
+		"ERROR_REASON_EVENT_ITEM_TAKEN":            37,
 		"ERROR_REASON_CHECK_IN_CLOSED":             40,
 		"ERROR_REASON_CHECK_IN_TOO_FAR":            41,
 		"ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED": 42,
@@ -436,7 +441,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xfa\x13\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\x9d\x14\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -469,7 +474,8 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\x1cERROR_REASON_EVENT_NOT_GOING\x10!\x12%\n" +
 	"!ERROR_REASON_EVENT_ITEM_NOT_FOUND\x10\"\x12\x1c\n" +
 	"\x18ERROR_REASON_EVENT_LIMIT\x10#\x12$\n" +
-	" ERROR_REASON_EVENT_TYPE_MISMATCH\x10$\x12 \n" +
+	" ERROR_REASON_EVENT_TYPE_MISMATCH\x10$\x12!\n" +
+	"\x1dERROR_REASON_EVENT_ITEM_TAKEN\x10%\x12 \n" +
 	"\x1cERROR_REASON_CHECK_IN_CLOSED\x10(\x12!\n" +
 	"\x1dERROR_REASON_CHECK_IN_TOO_FAR\x10)\x12,\n" +
 	"(ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED\x10*\x12\"\n" +

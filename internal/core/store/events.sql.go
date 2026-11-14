@@ -240,6 +240,38 @@ func (q *Queries) DeleteUserConvoyVehicle(ctx context.Context, arg DeleteUserCon
 	return result.RowsAffected(), nil
 }
 
+const getCampItemForUpdate = `-- name: GetCampItemForUpdate :one
+SELECT id, name, quantity, assigned_user_id FROM event_camp_items
+WHERE event_id = $1 AND id = $2
+FOR UPDATE
+`
+
+type GetCampItemForUpdateParams struct {
+	EventID pgtype.UUID
+	ID      pgtype.UUID
+}
+
+type GetCampItemForUpdateRow struct {
+	ID             pgtype.UUID
+	Name           string
+	Quantity       int32
+	AssignedUserID pgtype.UUID
+}
+
+// Kilit, aynı malzemeyi aynı anda üstlenen iki kişiden ikincisinin
+// güncel atamayı görmesini sağlar (issue #198).
+func (q *Queries) GetCampItemForUpdate(ctx context.Context, arg GetCampItemForUpdateParams) (GetCampItemForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getCampItemForUpdate, arg.EventID, arg.ID)
+	var i GetCampItemForUpdateRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Quantity,
+		&i.AssignedUserID,
+	)
+	return i, err
+}
+
 const getConvoyVehicleOwner = `-- name: GetConvoyVehicleOwner :one
 SELECT user_id FROM event_convoy_vehicles WHERE event_id = $1 AND id = $2
 `
@@ -921,6 +953,22 @@ func (q *Queries) PromoteRsvp(ctx context.Context, arg PromoteRsvpParams) (int64
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setCampItemAssignee = `-- name: SetCampItemAssignee :exec
+UPDATE event_camp_items SET assigned_user_id = $1
+WHERE event_id = $2 AND id = $3
+`
+
+type SetCampItemAssigneeParams struct {
+	AssignedUserID pgtype.UUID
+	EventID        pgtype.UUID
+	ID             pgtype.UUID
+}
+
+func (q *Queries) SetCampItemAssignee(ctx context.Context, arg SetCampItemAssigneeParams) error {
+	_, err := q.db.Exec(ctx, setCampItemAssignee, arg.AssignedUserID, arg.EventID, arg.ID)
+	return err
 }
 
 const setConvoyVehicle = `-- name: SetConvoyVehicle :one

@@ -88,6 +88,11 @@ func (f *fakeEvents) RemoveCampItem(_ context.Context, u, t, e, _ id.ID) error {
 	f.rec(u, t, e)
 	return f.err
 }
+func (f *fakeEvents) AssignCampItem(_ context.Context, u, t, e, item, a id.ID) (event.CampItem, error) {
+	f.rec(u, t, e)
+	f.assigned = a
+	return event.CampItem{ID: item, Name: "Çadır", Quantity: 1, AssignedUserID: a}, f.err
+}
 func (f *fakeEvents) SetVehicle(_ context.Context, u, t, e id.ID, in event.VehicleInput) (event.Vehicle, error) {
 	f.rec(u, t, e)
 	f.vehicle = in
@@ -171,6 +176,7 @@ func callAllEvents(ctx context.Context, c corev1.EventServiceServer, tayfaID, ev
 	_, out["ListAttendees"] = c.ListAttendees(ctx, &corev1.ListAttendeesRequest{TayfaId: tayfaID, EventId: eventID})
 	_, out["AddCampItem"] = c.AddCampItem(ctx, &corev1.AddCampItemRequest{TayfaId: tayfaID, EventId: eventID, Name: "Çadır"})
 	_, out["RemoveCampItem"] = c.RemoveCampItem(ctx, &corev1.RemoveCampItemRequest{TayfaId: tayfaID, EventId: eventID, ItemId: id.New().String()})
+	_, out["AssignCampItem"] = c.AssignCampItem(ctx, &corev1.AssignCampItemRequest{TayfaId: tayfaID, EventId: eventID, ItemId: id.New().String()})
 	_, out["AddConvoyVehicle"] = c.AddConvoyVehicle(ctx, &corev1.AddConvoyVehicleRequest{TayfaId: tayfaID, EventId: eventID, Make: "Ford"})
 	_, out["RemoveConvoyVehicle"] = c.RemoveConvoyVehicle(ctx, &corev1.RemoveConvoyVehicleRequest{TayfaId: tayfaID, EventId: eventID, VehicleId: id.New().String()})
 	_, out["CheckIn"] = c.CheckIn(ctx, &corev1.CheckInRequest{TayfaId: tayfaID, EventId: eventID, Location: &corev1.LatLng{Lat: 38.42, Lng: 27.14}})
@@ -291,6 +297,14 @@ func TestEventServerValidatesRequest(t *testing.T) {
 	_, err = srv.RemoveCampItem(ctx, &corev1.RemoveCampItemRequest{TayfaId: good, EventId: good, ItemId: "x"})
 	if field(err) != "item_id" {
 		t.Error("bozuk malzeme kimliği")
+	}
+	_, err = srv.AssignCampItem(ctx, &corev1.AssignCampItemRequest{TayfaId: good, EventId: good, ItemId: "x"})
+	if field(err) != "item_id" {
+		t.Error("atamada bozuk malzeme kimliği")
+	}
+	_, err = srv.AssignCampItem(ctx, &corev1.AssignCampItemRequest{TayfaId: good, EventId: good, ItemId: good, AssignedUserId: "x"})
+	if field(err) != "assigned_user_id" {
+		t.Error("atamada bozuk kişi")
 	}
 	_, err = srv.RemoveConvoyVehicle(ctx, &corev1.RemoveConvoyVehicleRequest{TayfaId: good, EventId: good, VehicleId: "x"})
 	if field(err) != "vehicle_id" {

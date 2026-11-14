@@ -2,6 +2,7 @@ package rest
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -25,6 +26,7 @@ type EventClient interface {
 	ListAttendees(ctx context.Context, in *corev1.ListAttendeesRequest, opts ...grpc.CallOption) (*corev1.ListAttendeesResponse, error)
 	AddCampItem(ctx context.Context, in *corev1.AddCampItemRequest, opts ...grpc.CallOption) (*corev1.AddCampItemResponse, error)
 	RemoveCampItem(ctx context.Context, in *corev1.RemoveCampItemRequest, opts ...grpc.CallOption) (*corev1.RemoveCampItemResponse, error)
+	AssignCampItem(ctx context.Context, in *corev1.AssignCampItemRequest, opts ...grpc.CallOption) (*corev1.AssignCampItemResponse, error)
 	AddConvoyVehicle(ctx context.Context, in *corev1.AddConvoyVehicleRequest, opts ...grpc.CallOption) (*corev1.AddConvoyVehicleResponse, error)
 	RemoveConvoyVehicle(ctx context.Context, in *corev1.RemoveConvoyVehicleRequest, opts ...grpc.CallOption) (*corev1.RemoveConvoyVehicleResponse, error)
 	CheckIn(ctx context.Context, in *corev1.CheckInRequest, opts ...grpc.CallOption) (*corev1.CheckInResponse, error)
@@ -79,6 +81,7 @@ func registerEvents(mux *http.ServeMux, h coreHandlers) {
 	mux.HandleFunc("POST "+one+"/hike-return", a(h.finishHike))
 	mux.HandleFunc("POST "+one+"/camp-items", a(h.addCampItem))
 	mux.HandleFunc("DELETE "+one+"/camp-items/{item_id}", a(h.removeCampItem))
+	mux.HandleFunc("PATCH "+one+"/camp-items/{item_id}", a(h.assignCampItem))
 	mux.HandleFunc("POST "+one+"/convoy-vehicles", a(h.addConvoyVehicle))
 	mux.HandleFunc("DELETE "+one+"/convoy-vehicles/{vehicle_id}", a(h.removeConvoyVehicle))
 	mux.HandleFunc("GET "+one+"/fishing-catches", a(h.listFishingCatches))
@@ -705,6 +708,49 @@ func (h coreHandlers) addCampItem(ctx context.Context, w http.ResponseWriter, r 
 		return
 	}
 	writeJSON(w, http.StatusCreated, campItemFrom(resp.GetItem()))
+}
+
+// campItemAssignBody: a uuid sets the assignee; a missing field or null
+// clears it (issue #198).
+type campItemAssignBody struct {
+	AssignedUserID json.RawMessage `json:"assigned_user_id"`
+}
+
+func (h coreHandlers) assignCampItem(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	ids, ok := pathIDs(w, r, "tayfa_id", "event_id", "item_id")
+	if !ok {
+		return
+	}
+	var b campItemAssignBody
+	if !decode(w, r, &b) {
+		return
+	}
+	assigned, ok := nullableUUID(b.AssignedUserID)
+	if !ok {
+		badRequest(w, r)
+		return
+	}
+	resp, err := h.d.Events.AssignCampItem(ctx, &corev1.AssignCampItemRequest{
+		TayfaId: ids[0], EventId: ids[1], ItemId: ids[2], AssignedUserId: assigned,
+	})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, campItemFrom(resp.GetItem()))
+}
+
+// nullableUUID reads an optional uuid: missing or null gives "", a uuid
+// string gives itself; anything else is not ok.
+func nullableUUID(raw json.RawMessage) (string, bool) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return "", true
+	}
+	var v string
+	if err := json.Unmarshal(raw, &v); err != nil || !validUUID(v) {
+		return "", false
+	}
+	return v, true
 }
 
 func (h coreHandlers) removeCampItem(ctx context.Context, w http.ResponseWriter, r *http.Request) {

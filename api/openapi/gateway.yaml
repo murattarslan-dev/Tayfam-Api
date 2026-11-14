@@ -1985,7 +1985,8 @@ paths:
       description: |
         Yalnızca kamp etkinliğinde (`event-type-mismatch`); en fazla 200
         malzeme (`event-limit`). Liste tek etkinlik yanıtındaki
-        `camp.items`'tadır.
+        `camp.items`'tadır. `assigned_user_id` verilirse kişi tayfanın etkin
+        üyesi olmalı ve `going` cevabı vermiş olmalıdır (`event-not-going`).
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -2014,6 +2015,43 @@ paths:
         in: path
         required: true
         schema: { type: string, format: uuid }
+    patch:
+      operationId: assignCampItem
+      summary: Malzemeyi kimin getireceğini belirler ya da atamayı kaldırır
+      description: |
+        `assigned_user_id` bir kullanıcı kimliği atar; alan yoksa ya da
+        `null` ise atama kaldırılır.
+
+        - Organizatör, moderatör ve yönetici `going` cevabı vermiş herhangi
+          bir etkin üyeyi atayabilir ya da herhangi bir atamayı kaldırabilir.
+        - `going` cevabı vermiş diğer üyeler yalnızca boştaki malzemeyi
+          kendine atayabilir ve yalnızca kendi atamasını kaldırabilir.
+          Başkasına atamak `permission-denied`dır.
+
+        `going` cevabı olmayan (ya da etkin üye olmayan) kişi:
+        `event-not-going`. Malzemeyi başkası üstlenmişse (aynı anda üstlenen
+        iki kişiden ikincisi dahil): `event-item-taken`; istemci etkinliği
+        yeniden yükler. Değeri zaten olana ayarlamak değişiklik yapmadan
+        başarılı olur. Yalnızca kamp etkinliğinde (`event-type-mismatch`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CampItemAssignRequest" }
+      responses:
+        "200":
+          description: Güncel malzeme
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CampItem" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
     delete:
       operationId: removeCampItem
       summary: Kamp listesinden malzeme çıkarır (organizatör, moderatör, yönetici)
@@ -4971,6 +5009,7 @@ components:
         - event-cancelled
         - event-ended
         - event-not-going
+        - event-item-taken
         - event-item-not-found
         - event-limit
         - event-type-mismatch
@@ -5994,7 +6033,18 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 60 }
         quantity: { type: integer, minimum: 0, maximum: 999, description: "0 ya da yok: 1." }
-        assigned_user_id: { type: string, format: uuid, description: Tayfanın etkin bir üyesi. }
+        assigned_user_id:
+          type: string
+          format: uuid
+          description: Tayfanın `going` cevabı vermiş etkin bir üyesi (`event-not-going`).
+    CampItemAssignRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        assigned_user_id:
+          type: string
+          format: uuid
+          description: Getirecek kişi. Yoksa (ya da `null`) atama kaldırılır.
 
     HikeDetails:
       type: object

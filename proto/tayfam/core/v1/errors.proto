@@ -132,6 +132,9 @@ enum ErrorReason {
   // FAILED_PRECONDITION. The method is for another event type (for example
   // AddCampItem on a convoy event).
   ERROR_REASON_EVENT_TYPE_MISMATCH = 36;
+  // ABORTED. Someone else took the camp item; reload the event (issue
+  // #198).
+  ERROR_REASON_EVENT_ITEM_TAKEN = 37;
 
   // Attendance (EventService check-in, correction and fishing catches;
   // issue #50). None of these errors says anything about the location that

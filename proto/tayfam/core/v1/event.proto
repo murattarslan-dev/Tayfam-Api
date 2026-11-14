@@ -88,7 +88,9 @@ service EventService {
   // AddCampItem adds an item to a camp event's list (at most 200).
   //
   // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-  // ERROR_REASON_EVENT_LIMIT, ERROR_REASON_VALIDATION.
+  // ERROR_REASON_EVENT_LIMIT, ERROR_REASON_EVENT_NOT_GOING (the assignee
+  // did not answer GOING or is not an active member),
+  // ERROR_REASON_VALIDATION.
   rpc AddCampItem(AddCampItemRequest) returns (AddCampItemResponse);
 
   // RemoveCampItem removes an item from a camp event's list.
@@ -96,6 +98,17 @@ service EventService {
   // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
   // ERROR_REASON_EVENT_ITEM_NOT_FOUND.
   rpc RemoveCampItem(RemoveCampItemRequest) returns (RemoveCampItemResponse);
+
+  // AssignCampItem sets or clears who brings a camp item (issue #198). The
+  // organizer, moderators and admins assign any participant who answered
+  // GOING or clear any assignment; a member who answered GOING takes a
+  // free item for themselves or drops their own. Setting the current value
+  // is a no-op.
+  //
+  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+  // ERROR_REASON_EVENT_ITEM_NOT_FOUND, ERROR_REASON_EVENT_NOT_GOING,
+  // ERROR_REASON_EVENT_ITEM_TAKEN, ERROR_REASON_VALIDATION.
+  rpc AssignCampItem(AssignCampItemRequest) returns (AssignCampItemResponse);
 
   // AddConvoyVehicle sets the caller's vehicle on a convoy event; it
   // replaces the caller's previous vehicle there. The caller must have
@@ -360,7 +373,8 @@ message CampItem {
   string name = 2;
   // 1–999.
   int32 quantity = 3;
-  // Optional: who brings it; an active member of the tayfa.
+  // Optional: who brings it; an active member of the tayfa who answered
+  // GOING when assigned.
   string assigned_user_id = 4;
 }
 
@@ -678,7 +692,7 @@ message AddCampItemRequest {
   string name = 3;
   // 0 means 1; otherwise 1–999.
   int32 quantity = 4;
-  // Optional; must be an active member of the tayfa.
+  // Optional; must be an active member of the tayfa who answered GOING.
   string assigned_user_id = 5;
 }
 
@@ -693,6 +707,18 @@ message RemoveCampItemRequest {
 }
 
 message RemoveCampItemResponse {}
+
+message AssignCampItemRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  string item_id = 3;
+  // Empty clears the assignment.
+  string assigned_user_id = 4;
+}
+
+message AssignCampItemResponse {
+  CampItem item = 1;
+}
 
 message AddConvoyVehicleRequest {
   string tayfa_id = 1;

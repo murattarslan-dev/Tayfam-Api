@@ -85,6 +85,7 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_EVENT_NOT_GOING":             {http.StatusConflict, "event-not-going"},
 		"ERROR_REASON_EVENT_ITEM_NOT_FOUND":        {http.StatusNotFound, "event-item-not-found"},
 		"ERROR_REASON_EVENT_LIMIT":                 {http.StatusConflict, "event-limit"},
+		"ERROR_REASON_EVENT_ITEM_TAKEN":            {http.StatusConflict, "event-item-taken"},
 		"ERROR_REASON_EVENT_TYPE_MISMATCH":         {http.StatusConflict, "event-type-mismatch"},
 		"ERROR_REASON_CHECK_IN_CLOSED":             {http.StatusConflict, "check-in-closed"},
 		"ERROR_REASON_CHECK_IN_TOO_FAR":            {http.StatusConflict, "check-in-too-far"},

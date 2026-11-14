@@ -28,6 +28,7 @@ const (
 	EventService_ListAttendees_FullMethodName       = "/tayfam.core.v1.EventService/ListAttendees"
 	EventService_AddCampItem_FullMethodName         = "/tayfam.core.v1.EventService/AddCampItem"
 	EventService_RemoveCampItem_FullMethodName      = "/tayfam.core.v1.EventService/RemoveCampItem"
+	EventService_AssignCampItem_FullMethodName      = "/tayfam.core.v1.EventService/AssignCampItem"
 	EventService_AddConvoyVehicle_FullMethodName    = "/tayfam.core.v1.EventService/AddConvoyVehicle"
 	EventService_RemoveConvoyVehicle_FullMethodName = "/tayfam.core.v1.EventService/RemoveConvoyVehicle"
 	EventService_CheckIn_FullMethodName             = "/tayfam.core.v1.EventService/CheckIn"
@@ -121,13 +122,25 @@ type EventServiceClient interface {
 	// AddCampItem adds an item to a camp event's list (at most 200).
 	//
 	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_LIMIT, ERROR_REASON_VALIDATION.
+	// ERROR_REASON_EVENT_LIMIT, ERROR_REASON_EVENT_NOT_GOING (the assignee
+	// did not answer GOING or is not an active member),
+	// ERROR_REASON_VALIDATION.
 	AddCampItem(ctx context.Context, in *AddCampItemRequest, opts ...grpc.CallOption) (*AddCampItemResponse, error)
 	// RemoveCampItem removes an item from a camp event's list.
 	//
 	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
 	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
 	RemoveCampItem(ctx context.Context, in *RemoveCampItemRequest, opts ...grpc.CallOption) (*RemoveCampItemResponse, error)
+	// AssignCampItem sets or clears who brings a camp item (issue #198). The
+	// organizer, moderators and admins assign any participant who answered
+	// GOING or clear any assignment; a member who answered GOING takes a
+	// free item for themselves or drops their own. Setting the current value
+	// is a no-op.
+	//
+	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+	// ERROR_REASON_EVENT_ITEM_NOT_FOUND, ERROR_REASON_EVENT_NOT_GOING,
+	// ERROR_REASON_EVENT_ITEM_TAKEN, ERROR_REASON_VALIDATION.
+	AssignCampItem(ctx context.Context, in *AssignCampItemRequest, opts ...grpc.CallOption) (*AssignCampItemResponse, error)
 	// AddConvoyVehicle sets the caller's vehicle on a convoy event; it
 	// replaces the caller's previous vehicle there. The caller must have
 	// answered GOING.
@@ -334,6 +347,16 @@ func (c *eventServiceClient) RemoveCampItem(ctx context.Context, in *RemoveCampI
 	return out, nil
 }
 
+func (c *eventServiceClient) AssignCampItem(ctx context.Context, in *AssignCampItemRequest, opts ...grpc.CallOption) (*AssignCampItemResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AssignCampItemResponse)
+	err := c.cc.Invoke(ctx, EventService_AssignCampItem_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *eventServiceClient) AddConvoyVehicle(ctx context.Context, in *AddConvoyVehicleRequest, opts ...grpc.CallOption) (*AddConvoyVehicleResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AddConvoyVehicleResponse)
@@ -533,13 +556,25 @@ type EventServiceServer interface {
 	// AddCampItem adds an item to a camp event's list (at most 200).
 	//
 	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_LIMIT, ERROR_REASON_VALIDATION.
+	// ERROR_REASON_EVENT_LIMIT, ERROR_REASON_EVENT_NOT_GOING (the assignee
+	// did not answer GOING or is not an active member),
+	// ERROR_REASON_VALIDATION.
 	AddCampItem(context.Context, *AddCampItemRequest) (*AddCampItemResponse, error)
 	// RemoveCampItem removes an item from a camp event's list.
 	//
 	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
 	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
 	RemoveCampItem(context.Context, *RemoveCampItemRequest) (*RemoveCampItemResponse, error)
+	// AssignCampItem sets or clears who brings a camp item (issue #198). The
+	// organizer, moderators and admins assign any participant who answered
+	// GOING or clear any assignment; a member who answered GOING takes a
+	// free item for themselves or drops their own. Setting the current value
+	// is a no-op.
+	//
+	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
+	// ERROR_REASON_EVENT_ITEM_NOT_FOUND, ERROR_REASON_EVENT_NOT_GOING,
+	// ERROR_REASON_EVENT_ITEM_TAKEN, ERROR_REASON_VALIDATION.
+	AssignCampItem(context.Context, *AssignCampItemRequest) (*AssignCampItemResponse, error)
 	// AddConvoyVehicle sets the caller's vehicle on a convoy event; it
 	// replaces the caller's previous vehicle there. The caller must have
 	// answered GOING.
@@ -682,6 +717,9 @@ func (UnimplementedEventServiceServer) AddCampItem(context.Context, *AddCampItem
 }
 func (UnimplementedEventServiceServer) RemoveCampItem(context.Context, *RemoveCampItemRequest) (*RemoveCampItemResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RemoveCampItem not implemented")
+}
+func (UnimplementedEventServiceServer) AssignCampItem(context.Context, *AssignCampItemRequest) (*AssignCampItemResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AssignCampItem not implemented")
 }
 func (UnimplementedEventServiceServer) AddConvoyVehicle(context.Context, *AddConvoyVehicleRequest) (*AddConvoyVehicleResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AddConvoyVehicle not implemented")
@@ -898,6 +936,24 @@ func _EventService_RemoveCampItem_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(EventServiceServer).RemoveCampItem(ctx, req.(*RemoveCampItemRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EventService_AssignCampItem_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AssignCampItemRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).AssignCampItem(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_AssignCampItem_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).AssignCampItem(ctx, req.(*AssignCampItemRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1160,6 +1216,10 @@ var EventService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveCampItem",
 			Handler:    _EventService_RemoveCampItem_Handler,
+		},
+		{
+			MethodName: "AssignCampItem",
+			Handler:    _EventService_AssignCampItem_Handler,
 		},
 		{
 			MethodName: "AddConvoyVehicle",

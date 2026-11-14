@@ -650,6 +650,7 @@ func (e *env) callAll(user, tf, ev id.ID) map[string]error {
 	_, _, out["ListAttendees"] = e.svc.ListAttendees(ctx, user, tf, ev, "", 0, "")
 	_, out["AddCampItem"] = e.svc.AddCampItem(ctx, user, tf, ev, "Çadır", 1, id.ID{})
 	out["RemoveCampItem"] = e.svc.RemoveCampItem(ctx, user, tf, ev, id.New())
+	_, out["AssignCampItem"] = e.svc.AssignCampItem(ctx, user, tf, ev, id.New(), id.ID{})
 	_, out["SetVehicle"] = e.svc.SetVehicle(ctx, user, tf, ev, VehicleInput{Make: "Ford"})
 	out["RemoveVehicle"] = e.svc.RemoveVehicle(ctx, user, tf, ev, id.New())
 	_, out["CheckIn"] = e.svc.CheckIn(ctx, user, tf, ev, izmir)
@@ -843,7 +844,11 @@ func TestCampItems(t *testing.T) {
 	_, err = e.svc.AddCampItem(ctx, admin, tf, ev.ID, "Çadır", 1000, id.ID{})
 	wantField(t, "1000 adet", err, "quantity")
 	_, err = e.svc.AddCampItem(ctx, admin, tf, ev.ID, "Çadır", 1, id.New())
-	wantField(t, "üye olmayana atama", err, "assigned_user_id")
+	wantErr(t, "üye olmayana atama", err, apperr.ErrEventNotGoing)
+	_, err = e.svc.AddCampItem(ctx, admin, tf, ev.ID, "Çadır", 1, member)
+	wantErr(t, "gelmeyene atama", err, apperr.ErrEventNotGoing)
+	_, err = e.svc.SetRSVP(ctx, member, tf, ev.ID, RSVPGoing)
+	must(t, err)
 
 	item, err := e.svc.AddCampItem(ctx, admin, tf, ev.ID, " Çadır ", 0, member)
 	must(t, err)
@@ -881,6 +886,164 @@ func TestCampItems(t *testing.T) {
 	general := e.create(t, tf, admin, input())
 	_, err = e.svc.AddCampItem(ctx, admin, tf, general.ID, "Çadır", 1, id.ID{})
 	wantErr(t, "genel etkinliğe malzeme", err, apperr.ErrEventTypeMismatch)
+}
+
+// TestAssignCampItem (issue #198): who may take, drop and assign a camp
+// item, for every role and state.
+func TestAssignCampItem(t *testing.T) {
+	e := setup(t)
+	tf, admin := e.newTayfa(t)
+	e.allowMembers(t, tf, admin)
+	org := e.seed(t, tf, authz.Member)
+	in := input()
+	in.Type, in.Details.Camp = TypeCamp, &Camp{SiteName: "Kazdağları"}
+	ev := e.create(t, tf, org, in)
+	a := e.going(t, tf, ev.ID, authz.Member)
+	b := e.going(t, tf, ev.ID, authz.Member)
+	mod := e.seed(t, tf, authz.Moderator)
+	maybe := e.seed(t, tf, authz.Member)
+	_, err := e.svc.SetRSVP(ctx, maybe, tf, ev.ID, RSVPMaybe)
+	must(t, err)
+	muted := e.going(t, tf, ev.ID, authz.Member)
+	e.mute(t, tf, muted)
+	banned := e.going(t, tf, ev.ID, authz.Member)
+	e.exec(t, `UPDATE memberships SET status = 'banned' WHERE tayfa_id = $1 AND user_id = $2`, tf.PG(), banned.PG())
+	none := id.ID{}
+
+	newItem := func(assigned id.ID) id.ID {
+		t.Helper()
+		it, err := e.svc.AddCampItem(ctx, org, tf, ev.ID, "Ocak", 1, assigned)
+		must(t, err)
+		return it.ID
+	}
+	assignee := func(item id.ID) id.ID {
+		t.Helper()
+		v, err := e.svc.Get(ctx, org, tf, ev.ID)
+		must(t, err)
+		for _, it := range v.Details.Camp.Items {
+			if it.ID == item {
+				return it.AssignedUserID
+			}
+		}
+		t.Fatalf("malzeme yok: %s", item)
+		return id.ID{}
+	}
+
+	for name, tc := range map[string]struct {
+		caller, before, to, after id.ID
+		err                       error
+	}{
+		"üye boştakini üstlenir":               {caller: a, before: none, to: a, after: a},
+		"üye kendi atamasından vazgeçer":       {caller: a, before: a, to: none, after: none},
+		"üye kendininkini yeniden alır":        {caller: a, before: a, to: a, after: a},
+		"üye boştakini bırakır (değişmez)":     {caller: a, before: none, to: none, after: none},
+		"üye başkasınınkini alamaz":            {caller: a, before: b, to: a, after: b, err: apperr.ErrEventItemTaken},
+		"üye başkasınınkini bırakamaz":         {caller: a, before: b, to: none, after: b, err: apperr.ErrEventItemTaken},
+		"üye başkasına atayamaz":               {caller: a, before: none, to: b, after: none, err: apperr.ErrPermissionDenied},
+		"belki diyen üstlenemez":               {caller: maybe, before: none, to: maybe, after: none, err: apperr.ErrEventNotGoing},
+		"susturulan üstlenemez":                {caller: muted, before: none, to: muted, after: none, err: apperr.ErrMuted},
+		"organizatör gelene atar":              {caller: org, before: none, to: a, after: a},
+		"organizatör başkasına geçirir":        {caller: org, before: a, to: b, after: b},
+		"organizatör atamayı kaldırır":         {caller: org, before: b, to: none, after: none},
+		"organizatör gelmeyene atayamaz":       {caller: org, before: none, to: maybe, after: none, err: apperr.ErrEventNotGoing},
+		"organizatör uzaklaştırılana atayamaz": {caller: org, before: none, to: banned, after: none, err: apperr.ErrEventNotGoing},
+		"organizatör yabancıya atayamaz":       {caller: org, before: none, to: id.New(), after: none, err: apperr.ErrEventNotGoing},
+		"moderatör atar":                       {caller: mod, before: none, to: a, after: a},
+		"moderatör kaldırır":                   {caller: mod, before: a, to: none, after: none},
+		"yönetici atar":                        {caller: admin, before: b, to: a, after: a},
+	} {
+		t.Run(name, func(t *testing.T) {
+			item := newItem(tc.before)
+			got, err := e.svc.AssignCampItem(ctx, tc.caller, tf, ev.ID, item, tc.to)
+			if tc.err != nil {
+				wantErr(t, name, err, tc.err)
+			} else {
+				must(t, err)
+				if got.ID != item || got.Name != "Ocak" || got.AssignedUserID != tc.after {
+					t.Fatalf("yanıt = %+v", got)
+				}
+			}
+			if g := assignee(item); g != tc.after {
+				t.Fatalf("atanan = %s, beklenen %s", g, tc.after)
+			}
+		})
+	}
+
+	// Unknown items, other events' items and other types.
+	_, err = e.svc.AssignCampItem(ctx, a, tf, ev.ID, id.New(), a)
+	wantErr(t, "bilinmeyen malzeme", err, apperr.ErrEventItemNotFound)
+	in.ClientRequestID = id.New().String()
+	other := e.create(t, tf, org, in)
+	_, err = e.svc.AssignCampItem(ctx, org, tf, other.ID, newItem(none), none)
+	wantErr(t, "başka etkinliğin malzemesi", err, apperr.ErrEventItemNotFound)
+	general := e.create(t, tf, org, input())
+	_, err = e.svc.AssignCampItem(ctx, org, tf, general.ID, id.New(), none)
+	wantErr(t, "genel etkinlik", err, apperr.ErrEventTypeMismatch)
+
+	// A change is audited and announced as a list change; a no-op is not.
+	item := newItem(none)
+	before := e.count(t, `SELECT count(*) FROM audit_logs WHERE action = 'event.camp_item_assigned'`)
+	_, err = e.svc.AssignCampItem(ctx, a, tf, ev.ID, item, a)
+	must(t, err)
+	_, err = e.svc.AssignCampItem(ctx, a, tf, ev.ID, item, a)
+	must(t, err)
+	if n := e.count(t, `SELECT count(*) FROM audit_logs WHERE action = 'event.camp_item_assigned'`); n != before+1 {
+		t.Fatalf("denetim kaydı = %d, beklenen %d", n, before+1)
+	}
+
+	// Cancelled events no longer change.
+	_, err = e.svc.Cancel(ctx, org, tf, ev.ID, "")
+	must(t, err)
+	_, err = e.svc.AssignCampItem(ctx, org, tf, ev.ID, item, none)
+	wantErr(t, "iptal", err, apperr.ErrEventCancelled)
+}
+
+// TestAssignCampItemRace (issue #198): of members taking the same item at
+// once exactly one wins; the others get ErrEventItemTaken.
+func TestAssignCampItemRace(t *testing.T) {
+	e := setup(t)
+	tf, admin := e.newTayfa(t)
+	in := input()
+	in.Type, in.Details.Camp = TypeCamp, &Camp{SiteName: "Kazdağları"}
+	ev := e.create(t, tf, admin, in)
+	it, err := e.svc.AddCampItem(ctx, admin, tf, ev.ID, "Ocak", 1, id.ID{})
+	must(t, err)
+	const n = 6
+	users := make([]id.ID, n)
+	for i := range users {
+		users[i] = e.going(t, tf, ev.ID, authz.Member)
+	}
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i, u := range users {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, errs[i] = e.svc.AssignCampItem(ctx, u, tf, ev.ID, it.ID, u)
+		}()
+	}
+	close(start)
+	wg.Wait()
+	var winner id.ID
+	for i, err := range errs {
+		switch {
+		case err == nil:
+			if winner != (id.ID{}) {
+				t.Fatal("iki kişi aynı malzemeyi üstlendi")
+			}
+			winner = users[i]
+		case errors.Is(err, apperr.ErrEventItemTaken):
+		default:
+			t.Fatalf("beklenmeyen hata: %v", err)
+		}
+	}
+	v, err := e.svc.Get(ctx, admin, tf, ev.ID)
+	must(t, err)
+	if winner == (id.ID{}) || v.Details.Camp.Items[0].AssignedUserID != winner {
+		t.Fatalf("kazanan = %s, kayıt = %+v", winner, v.Details.Camp.Items)
+	}
 }
 
 func TestFishingSpotVisibility(t *testing.T) {

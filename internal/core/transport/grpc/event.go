@@ -25,6 +25,7 @@ type Events interface {
 	ListAttendees(ctx context.Context, user, t, e id.ID, status string, pageSize int32, pageToken string) ([]event.Attendee, string, error)
 	AddCampItem(ctx context.Context, user, t, e id.ID, name string, quantity int32, assigned id.ID) (event.CampItem, error)
 	RemoveCampItem(ctx context.Context, user, t, e, item id.ID) error
+	AssignCampItem(ctx context.Context, user, t, e, item, assigned id.ID) (event.CampItem, error)
 	SetVehicle(ctx context.Context, user, t, e id.ID, in event.VehicleInput) (event.Vehicle, error)
 	RemoveVehicle(ctx context.Context, user, t, e, vehicle id.ID) error
 	CheckIn(ctx context.Context, user, t, e id.ID, at *event.Point) (event.Attendance, error)
@@ -265,6 +266,29 @@ func (s *EventServer) RemoveCampItem(ctx context.Context, req *corev1.RemoveCamp
 		return nil, errorStatus(ctx, s.log, err)
 	}
 	return &corev1.RemoveCampItemResponse{}, nil
+}
+
+// AssignCampItem implements corev1.EventServiceServer.
+func (s *EventServer) AssignCampItem(ctx context.Context, req *corev1.AssignCampItemRequest) (*corev1.AssignCampItemResponse, error) {
+	user, t, e, err := scope(ctx, req.GetTayfaId(), ptr(req.GetEventId()))
+	if err != nil {
+		return nil, err
+	}
+	item, ok := id.Parse(req.GetItemId())
+	if !ok {
+		return nil, validation("item_id")
+	}
+	var assigned id.ID
+	if a := req.GetAssignedUserId(); a != "" {
+		if assigned, ok = id.Parse(a); !ok {
+			return nil, validation("assigned_user_id")
+		}
+	}
+	out, err := s.app.AssignCampItem(ctx, user, t, e, item, assigned)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.AssignCampItemResponse{Item: campItemToProto(out)}, nil
 }
 
 // AddConvoyVehicle implements corev1.EventServiceServer.

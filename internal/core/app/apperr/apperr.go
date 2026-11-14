@@ -62,6 +62,8 @@ var (
 	ErrEventItemNotFound = errors.New("kayıt bulunamadı")
 	ErrEventLimit        = errors.New("liste dolu")
 	ErrEventTypeMismatch = errors.New("etkinlik türü uymuyor")
+	// ErrEventItemTaken: a camp item someone else took (issue #198).
+	ErrEventItemTaken = errors.New("malzeme başkasında")
 )
 
 // Attendance errors (issue #50). None of them carries the location that was
