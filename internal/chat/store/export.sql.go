@@ -13,7 +13,7 @@ import (
 
 const exportChannelMessages = `-- name: ExportChannelMessages :many
 
-SELECT m.id, m.channel_id, c.tayfa_id, m.body_encrypted, m.key_version, m.created_at, m.deleted_at
+SELECT m.id, m.channel_id, c.tayfa_id, m.body_encrypted, m.key_version, m.created_at, m.deleted_at, m.kind, m.photo_upload_id
 FROM channel_messages m JOIN channels c ON c.id = m.channel_id
 WHERE m.author_id = $1 AND m.id > $2
 ORDER BY m.id
@@ -34,6 +34,8 @@ type ExportChannelMessagesRow struct {
 	KeyVersion    pgtype.Int2
 	CreatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
+	Kind          string
+	PhotoUploadID pgtype.UUID
 }
 
 // KVKK veri dışa aktarma (issue #144, ADR-0021; alanlar
@@ -57,6 +59,8 @@ func (q *Queries) ExportChannelMessages(ctx context.Context, arg ExportChannelMe
 			&i.KeyVersion,
 			&i.CreatedAt,
 			&i.DeletedAt,
+			&i.Kind,
+			&i.PhotoUploadID,
 		); err != nil {
 			return nil, err
 		}

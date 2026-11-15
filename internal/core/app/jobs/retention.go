@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -48,7 +49,8 @@ func purgeSteps() []purgeStep {
 // in it along (ON DELETE CASCADE), the memberships and audit_logs triggers
 // allow that once the tayfa row is gone (migration 00001), and
 // tayfa.purged tells chat to delete the tayfa's channels for good
-// (ADR-0009). Then announcements, questions (with their answers), answers,
+// (ADR-0009) while its channel photos are queued for deletion (ADR-0028).
+// Then announcements, questions (with their answers), answers,
 // polls, fishing catches and events go in batches of contentBatch.
 // Activity records stay (SET NULL).
 func (s *Service) Purge(ctx context.Context) (int, error) {
@@ -69,6 +71,11 @@ func (s *Service) Purge(ctx context.Context) (int, error) {
 			}
 			purged++
 			tf := id.ID(t.Bytes)
+			// The tayfa's channel photos go too (their channels go in
+			// chat with tayfa.purged; ADR-0028).
+			if err := media.TayfaPurged(ctx, q, tf); err != nil {
+				return 0, err
+			}
 			// domain_events.tayfa_id is not a foreign key: the event outlives
 			// the tayfa row.
 			if err := txn.Event(ctx, q, EventTayfaPurged, tf, id.ID{}, txn.Target{Type: "tayfa", ID: tf},

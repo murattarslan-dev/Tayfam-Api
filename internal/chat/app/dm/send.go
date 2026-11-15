@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
@@ -47,6 +48,8 @@ func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message
 		return Message{}, Conversation{}, invalid("client_request_id")
 	case in.Session == (id.ID{}):
 		return Message{}, Conversation{}, apperr.ErrE2EDeviceNotRegistered
+	case in.Attachment != (id.ID{}) && s.cfg.Attachments == nil:
+		return Message{}, Conversation{}, apperr.ErrUnavailable
 	}
 	if !s.cfg.SendLimit.Allow(caller.String()) {
 		return Message{}, Conversation{}, apperr.ErrRateLimited
@@ -98,15 +101,32 @@ func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message
 			}
 		}
 		convID := uuidOf(c.ID)
-		_, err = q.CreateDirectMessageE2E(ctx, store.CreateDirectMessageE2EParams{
+		p := store.CreateDirectMessageE2EParams{
 			ID: msgID.PG(), ConversationID: convID.PG(), SenderID: caller.PG(), SenderDeviceID: from.ID.PG(),
 			ClientRequestID: in.ClientRequestID.PG(),
-		})
+		}
+		if in.Attachment != (id.ID{}) {
+			p.AttachmentUploadID = in.Attachment.PG()
+		}
+		_, err = q.CreateDirectMessageE2E(ctx, p)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return errRetried // a concurrent retry won; nothing of this one is kept
 			}
+			var pe *pgconn.PgError
+			if errors.As(err, &pe) && pe.Code == "23505" && pe.ConstraintName == "dm_messages_attachment_upload_id_key" {
+				return apperr.ErrUploadInUse // another message holds the attachment
+			}
 			return fmt.Errorf("mesaj yazılamadı: %w", err)
+		}
+		if in.Attachment != (id.ID{}) {
+			// The encrypted attachment is attached to this message in core
+			// after every check above and before the outbox write
+			// (ADR-0028): core checks it is the caller's, READY, a DM
+			// attachment and free. A refusal rolls the message back.
+			if err := s.cfg.Attachments.AttachDirectMessageAttachment(ctx, in.Attachment, msgID); err != nil {
+				return err
+			}
 		}
 		if deliveries, err = keys.StoreEnvelopes(ctx, q, msgID, convID, caller, from, targets, envelopesOf(in.Envelopes), now); err != nil {
 			return err
@@ -139,7 +159,7 @@ func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message
 		return Message{}, Conversation{}, err
 	}
 	convID := uuidOf(conv.ID)
-	msg := Message{ID: msgID, ConversationID: convID, SenderID: caller, Encryption: EncryptionE2E, CreatedAt: now}
+	msg := Message{ID: msgID, ConversationID: convID, SenderID: caller, Encryption: EncryptionE2E, AttachmentUploadID: in.Attachment, CreatedAt: now}
 	view, err := s.view(ctx, store.New(s.cfg.Pool), caller, convID)
 	if err != nil {
 		return Message{}, Conversation{}, err

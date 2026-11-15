@@ -227,10 +227,17 @@ func (q *Queries) DeleteUserConversationReads(ctx context.Context, userID pgtype
 	return err
 }
 
-const eraseDirectMessage = `-- name: EraseDirectMessage :execrows
-UPDATE dm_messages
-SET deleted_at = $1
-WHERE conversation_id = $2 AND id = $3 AND sender_id = $4 AND deleted_at IS NULL
+const eraseDirectMessage = `-- name: EraseDirectMessage :one
+WITH old AS (
+  SELECT o.id, o.attachment_upload_id FROM dm_messages o
+  WHERE o.conversation_id = $2 AND o.id = $3 AND o.sender_id = $4 AND o.deleted_at IS NULL
+  FOR UPDATE
+)
+UPDATE dm_messages m
+SET deleted_at = $1, attachment_upload_id = NULL
+FROM old
+WHERE m.id = old.id
+RETURNING old.attachment_upload_id AS released_upload_id
 `
 
 type EraseDirectMessageParams struct {
@@ -242,17 +249,19 @@ type EraseDirectMessageParams struct {
 
 // Gönderenin kendi silmesi: mesaj silinmiş görünür, geri alınamaz.
 // İçerik sunucuda hiç yoktur (yalnızca zarflarda ve arşivde, ADR-0018).
-func (q *Queries) EraseDirectMessage(ctx context.Context, arg EraseDirectMessageParams) (int64, error) {
-	result, err := q.db.Exec(ctx, eraseDirectMessage,
+// Ek varsa kimliği hemen boşalır ve eski değer döner: dosyayı core'a aynı
+// transaction'da olayla bırakmak için (issue #205). Satır yoksa (başkasının,
+// bilinmeyen ya da zaten silinmiş) sonuç boştur.
+func (q *Queries) EraseDirectMessage(ctx context.Context, arg EraseDirectMessageParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, eraseDirectMessage,
 		arg.DeletedAt,
 		arg.ConversationID,
 		arg.ID,
 		arg.SenderID,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	var released_upload_id pgtype.UUID
+	err := row.Scan(&released_upload_id)
+	return released_upload_id, err
 }
 
 const getConversationByPair = `-- name: GetConversationByPair :one
@@ -417,7 +426,7 @@ func (q *Queries) GetConversationView(ctx context.Context, arg GetConversationVi
 }
 
 const getDirectMessage = `-- name: GetDirectMessage :one
-SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at, attachment_upload_id
 FROM dm_messages
 WHERE conversation_id = $1 AND id = $2
 `
@@ -428,12 +437,13 @@ type GetDirectMessageParams struct {
 }
 
 type GetDirectMessageRow struct {
-	ID             pgtype.UUID
-	ConversationID pgtype.UUID
-	SenderID       pgtype.UUID
-	Encryption     string
-	CreatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
+	ID                 pgtype.UUID
+	ConversationID     pgtype.UUID
+	SenderID           pgtype.UUID
+	Encryption         string
+	CreatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	AttachmentUploadID pgtype.UUID
 }
 
 func (q *Queries) GetDirectMessage(ctx context.Context, arg GetDirectMessageParams) (GetDirectMessageRow, error) {
@@ -446,13 +456,35 @@ func (q *Queries) GetDirectMessage(ctx context.Context, arg GetDirectMessagePara
 		&i.Encryption,
 		&i.CreatedAt,
 		&i.DeletedAt,
+		&i.AttachmentUploadID,
 	)
 	return i, err
 }
 
+const getDirectMessageAttachmentForParty = `-- name: GetDirectMessageAttachmentForParty :one
+SELECT m.attachment_upload_id
+FROM dm_messages m
+JOIN dm_conversations c ON c.id = m.conversation_id
+WHERE m.id = $1 AND m.deleted_at IS NULL AND (c.user_low_id = $2 OR c.user_high_id = $2)
+`
+
+type GetDirectMessageAttachmentForPartyParams struct {
+	ID     pgtype.UUID
+	UserID pgtype.UUID
+}
+
+// Görme kararı (MessageMediaService, issue #205): kişinin taraf olduğu
+// konuşmadaki silinmemiş mesajın eki.
+func (q *Queries) GetDirectMessageAttachmentForParty(ctx context.Context, arg GetDirectMessageAttachmentForPartyParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getDirectMessageAttachmentForParty, arg.ID, arg.UserID)
+	var attachment_upload_id pgtype.UUID
+	err := row.Scan(&attachment_upload_id)
+	return attachment_upload_id, err
+}
+
 const getDirectMessageByRequest = `-- name: GetDirectMessageByRequest :one
 
-SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at, attachment_upload_id
 FROM dm_messages
 WHERE sender_id = $1 AND client_request_id = $2
 `
@@ -463,12 +495,13 @@ type GetDirectMessageByRequestParams struct {
 }
 
 type GetDirectMessageByRequestRow struct {
-	ID             pgtype.UUID
-	ConversationID pgtype.UUID
-	SenderID       pgtype.UUID
-	Encryption     string
-	CreatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
+	ID                 pgtype.UUID
+	ConversationID     pgtype.UUID
+	SenderID           pgtype.UUID
+	Encryption         string
+	CreatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	AttachmentUploadID pgtype.UUID
 }
 
 // Mesajlar.
@@ -482,6 +515,7 @@ func (q *Queries) GetDirectMessageByRequest(ctx context.Context, arg GetDirectMe
 		&i.Encryption,
 		&i.CreatedAt,
 		&i.DeletedAt,
+		&i.AttachmentUploadID,
 	)
 	return i, err
 }
@@ -659,7 +693,7 @@ func (q *Queries) ListDeclinedRequests(ctx context.Context, arg ListDeclinedRequ
 }
 
 const listDirectMessagesAfter = `-- name: ListDirectMessagesAfter :many
-SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at, attachment_upload_id
 FROM dm_messages
 WHERE conversation_id = $1 AND id > $2
 ORDER BY id
@@ -673,12 +707,13 @@ type ListDirectMessagesAfterParams struct {
 }
 
 type ListDirectMessagesAfterRow struct {
-	ID             pgtype.UUID
-	ConversationID pgtype.UUID
-	SenderID       pgtype.UUID
-	Encryption     string
-	CreatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
+	ID                 pgtype.UUID
+	ConversationID     pgtype.UUID
+	SenderID           pgtype.UUID
+	Encryption         string
+	CreatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	AttachmentUploadID pgtype.UUID
 }
 
 // En eski önce, after_id'den yeniler: kaçırılan mesajları tamamlama
@@ -699,6 +734,7 @@ func (q *Queries) ListDirectMessagesAfter(ctx context.Context, arg ListDirectMes
 			&i.Encryption,
 			&i.CreatedAt,
 			&i.DeletedAt,
+			&i.AttachmentUploadID,
 		); err != nil {
 			return nil, err
 		}
@@ -711,7 +747,7 @@ func (q *Queries) ListDirectMessagesAfter(ctx context.Context, arg ListDirectMes
 }
 
 const listDirectMessagesBefore = `-- name: ListDirectMessagesBefore :many
-SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at, attachment_upload_id
 FROM dm_messages
 WHERE conversation_id = $1 AND ($2::uuid IS NULL OR id < $2::uuid)
 ORDER BY id DESC
@@ -725,12 +761,13 @@ type ListDirectMessagesBeforeParams struct {
 }
 
 type ListDirectMessagesBeforeRow struct {
-	ID             pgtype.UUID
-	ConversationID pgtype.UUID
-	SenderID       pgtype.UUID
-	Encryption     string
-	CreatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
+	ID                 pgtype.UUID
+	ConversationID     pgtype.UUID
+	SenderID           pgtype.UUID
+	Encryption         string
+	CreatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	AttachmentUploadID pgtype.UUID
 }
 
 // En yeni önce; before_id verilirse ondan eskiler.
@@ -750,6 +787,7 @@ func (q *Queries) ListDirectMessagesBefore(ctx context.Context, arg ListDirectMe
 			&i.Encryption,
 			&i.CreatedAt,
 			&i.DeletedAt,
+			&i.AttachmentUploadID,
 		); err != nil {
 			return nil, err
 		}

@@ -76,6 +76,9 @@ type directMessageJSON struct {
 	Deleted    bool      `json:"deleted"`
 	Encryption string    `json:"encryption"`
 	CreatedAt  time.Time `json:"created_at"`
+	// The encrypted attachment's upload (issue #205); what it holds and
+	// its key are in the envelopes.
+	AttachmentUploadID string `json:"attachment_upload_id,omitempty"`
 }
 
 var messageEncryptionNames = map[chatv1.MessageEncryption]string{
@@ -86,6 +89,7 @@ func directMessageFrom(m *chatv1.DirectMessage) directMessageJSON {
 	return directMessageJSON{
 		ID: m.GetId(), ConversationID: m.GetConversationId(), SenderUserID: m.GetSenderUserId(),
 		Deleted: m.GetDeleted(), Encryption: nameOr(messageEncryptionNames, m.GetEncryption()), CreatedAt: m.GetCreateTime().AsTime(),
+		AttachmentUploadID: m.GetAttachmentUploadId(),
 	}
 }
 
@@ -110,6 +114,8 @@ type directMessageSendBody struct {
 	RecipientUserID string                 `json:"recipient_user_id"`
 	ClientRequestID string                 `json:"client_request_id"`
 	Envelopes       []outgoingEnvelopeJSON `json:"envelopes"`
+	// Optional encrypted attachment (issue #205, ADR-0028).
+	AttachmentUploadID string `json:"attachment_upload_id"`
 }
 
 type outgoingEnvelopeJSON struct {
@@ -143,12 +149,14 @@ func (h chatHandlers) sendDirectMessage(ctx context.Context, w http.ResponseWrit
 		return
 	}
 	envelopes, ok := envelopesProto(b.Envelopes)
-	if !ok || len(envelopes) == 0 || !validUUID(b.RecipientUserID) || !validUUID(b.ClientRequestID) {
+	if !ok || len(envelopes) == 0 || !validUUID(b.RecipientUserID) || !validUUID(b.ClientRequestID) ||
+		(b.AttachmentUploadID != "" && !validUUID(b.AttachmentUploadID)) {
 		badRequest(w, r)
 		return
 	}
 	resp, err := h.d.DirectMessages.SendDirectMessage(ctx, &chatv1.SendDirectMessageRequest{
 		RecipientUserId: b.RecipientUserID, ClientRequestId: b.ClientRequestID, Envelopes: envelopes,
+		AttachmentUploadId: b.AttachmentUploadID,
 	})
 	if err != nil {
 		h.failE2E(w, r, err)

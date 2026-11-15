@@ -273,7 +273,8 @@ type Querier interface {
 	DeleteUserRequestOutcomes(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserRsvps(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silme (user.deleted): kullanıcının dosyaları silinir; bağlı kapak
-	// görselleri tayfanındır, yalnızca sahiplikleri kaldırılır.
+	// görselleri tayfanındır, bağlı şikâyet kanıtı platformundur (rapor
+	// durdukça, ADR-0028); yalnızca sahiplikleri kaldırılır.
 	DeleteUserUploads(ctx context.Context, userID pgtype.UUID) (int64, error)
 	DisownUserCovers(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// Yanlış boyutta yüklenmiş dışa aktarma silinir.
@@ -398,6 +399,9 @@ type Querier interface {
 	GetQuestionByClientRequest(ctx context.Context, arg GetQuestionByClientRequestParams) (GetQuestionByClientRequestRow, error)
 	// Yazma işlemleri satırı kilitleyerek okur; silinmiş satır da döner.
 	GetQuestionForUpdate(ctx context.Context, arg GetQuestionForUpdateParams) (GetQuestionForUpdateRow, error)
+	// Platform panelinde şikâyetin kanıt fotoğrafı (issue #205): yalnızca o
+	// rapora bağlı, hazır dosya.
+	GetReportEvidenceUpload(ctx context.Context, arg GetReportEvidenceUploadParams) (GetReportEvidenceUploadRow, error)
 	// Şikâyet edenin kendi şikâyeti.
 	GetReportOfReporter(ctx context.Context, arg GetReportOfReporterParams) (GetReportOfReporterRow, error)
 	GetReportOfReporterByTarget(ctx context.Context, arg GetReportOfReporterByTargetParams) (GetReportOfReporterByTargetRow, error)
@@ -680,6 +684,10 @@ type Querier interface {
 	// ezilmez. Başarısız tur son başarılı zamanı korur.
 	RecordJobRun(ctx context.Context, arg RecordJobRunParams) error
 	RejectPendingUpload(ctx context.Context, arg RejectPendingUploadParams) (int64, error)
+	// Sohbet mesajı fotoğrafını ya da ekini bıraktı (chat.media_released,
+	// ADR-0028): dosya hâlâ o mesaja bağlıysa silinir; değilse bir şey olmaz
+	// (tekrar gelen olay).
+	ReleaseMessageMedia(ctx context.Context, arg ReleaseMessageMediaParams) (int64, error)
 	// Kullanıcının güncel avatarı dışındaki bağlı avatarları silinir
 	// (identity'nin user.profile_updated olayı). keep NULL: avatar kaldırıldı.
 	ReleaseOtherAvatars(ctx context.Context, arg ReleaseOtherAvatarsParams) (int64, error)
@@ -688,6 +696,9 @@ type Querier interface {
 	// Yeni yuva açılmadan önce kullanıcının başka etkin dışa aktarması
 	// silinir: identity aynı anda tek talep yürütür, eskisi artıktır.
 	ReleaseOtherExports(ctx context.Context, arg ReleaseOtherExportsParams) (int64, error)
+	// Tayfa kalıcı silindi: kanal fotoğrafları da gider (kanallar chat'te
+	// tayfa.purged ile silinir; dosyanın tayfası core'da bellidir).
+	ReleaseTayfaChatPhotos(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
 	RemoveAnswerVote(ctx context.Context, arg RemoveAnswerVoteParams) (int64, error)
 	RequestTayfaDeletion(ctx context.Context, arg RequestTayfaDeletionParams) (int64, error)
 	ResolveReport(ctx context.Context, arg ResolveReportParams) (int64, error)
@@ -805,7 +816,8 @@ type Querier interface {
 	// activity_visibility NULL ise (alanı taşımayan eski olay) mevcut değer
 	// kalır; yeni satırda varsayılan 'tayfa' olur.
 	UpsertUserProfile(ctx context.Context, arg UpsertUserProfileParams) (int64, error)
-	// Kota: iki varyantın bildirilen (ve imzayla zorlanan) boyutları.
+	// Kota: iki varyantın (birebir ekte tek nesnenin) bildirilen (ve imzayla
+	// zorlanan) boyutları.
 	UserStoredBytes(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// Uyarı iki sebeple verilir:
 	//   inactive:    last_activity_at @inactive_before'dan eski (30 gün).

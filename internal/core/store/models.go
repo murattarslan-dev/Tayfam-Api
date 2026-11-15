@@ -362,6 +362,7 @@ type Report struct {
 	EvidenceText          pgtype.Text
 	PlatformDecision      pgtype.Text
 	PlatformHandledAt     pgtype.Timestamptz
+	EvidenceUploadID      pgtype.UUID
 }
 
 type Tag struct {

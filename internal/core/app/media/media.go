@@ -42,6 +42,15 @@ const (
 	PurposeAvatar     = "avatar"
 	PurposeCatchPhoto = "catch_photo"
 	PurposeCover      = "cover"
+	// PurposeChatPhoto is a channel message's photo (issue #205,
+	// ADR-0028): an image whose audience chat decides.
+	PurposeChatPhoto = "chat_photo"
+	// PurposeDMAttachment is an end-to-end encrypted direct message
+	// attachment: one opaque blob that is never read.
+	PurposeDMAttachment = "dm_attachment"
+	// PurposeReportEvidence is the photo a direct message's reporter
+	// shares from their device; only the platform panel sees it.
+	PurposeReportEvidence = "report_evidence"
 )
 
 // Statuses (uploads.status). statusDeleting is never returned.
@@ -58,12 +67,22 @@ const (
 	TargetTayfa        = "tayfa"
 	TargetEvent        = "event"
 	TargetFishingCatch = "fishing_catch"
+	// Chat's message IDs (ADR-0028); chat decides who sees them.
+	TargetChannelMessage = "channel_message"
+	TargetDMMessage      = "dm_message"
+	TargetReport         = "report"
 )
 
 // Variant kinds.
 const (
 	KindPreview = "preview"
 	KindFull    = "full"
+	// KindBlob is a DM attachment's single object. It is stored where an
+	// image's full variant is (incoming/<key>/full, media/<key>/full) and
+	// in the full_* columns; there is no preview.
+	KindBlob = "blob"
+	// BlobType is the only content type of a blob.
+	BlobType = "application/octet-stream"
 )
 
 // Limits and lifetimes (ADR-0007, ADR-0020).
@@ -118,6 +137,10 @@ type Config struct {
 	Log  *slog.Logger
 	// Store is nil when no object storage is configured: media is off.
 	Store Store
+	// Messages answers who may see the files of chat's messages
+	// (ADR-0028). nil: those files are visible to their owners only (a
+	// local run without chat).
+	Messages MessageMedia
 	// UploadsPerHour per user; 0 means DefaultUploadsPerHour.
 	UploadsPerHour int
 	// QuotaBytes per user; 0 means DefaultQuotaBytes.
@@ -210,8 +233,16 @@ func uploadOf(u store.Upload) Upload {
 	return out
 }
 
-// urls signs the GET links of a checked upload.
+// urls signs the GET links of a checked upload. A blob (no preview type)
+// has the full link only.
 func (s *Service) urls(uploadID pgtype.UUID, key, previewType, fullType string, w, h pgtype.Int4) (*URLs, error) {
+	if previewType == "" {
+		f, err := s.cfg.Store.PresignGet(mediaKey(key, KindFull), DownloadLinkTTL)
+		if err != nil {
+			return nil, fmt.Errorf("dosya linki: %w", err)
+		}
+		return &URLs{UploadID: id.ID(uploadID.Bytes), Full: f.URL, FullContentType: fullType, Expires: f.Expires.UTC()}, nil
+	}
 	p, err := s.cfg.Store.PresignGet(mediaKey(key, KindPreview), DownloadLinkTTL)
 	if err != nil {
 		return nil, fmt.Errorf("önizleme linki: %w", err)

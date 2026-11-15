@@ -774,6 +774,33 @@ func (h *handlers) report(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, http.StatusOK, "report", p)
 }
 
+// reportEvidencePhoto opens a DM report's evidence photo (issue #205,
+// ADR-0028). The page never carries the storage link: core signs a fresh
+// 5-minute link on each click (and records the viewing), and the panel
+// redirects to it without a referrer. The panel's CSP keeps img-src
+// 'self'; the photo opens in its own tab.
+func (h *handlers) reportEvidencePhoto(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.pathID(w, r)
+	if !ok {
+		return
+	}
+	ctx, cancel := sessionFrom(r.Context()).upstream(r.Context())
+	defer cancel()
+	resp, err := h.cfg.Core.GetReportedItem(ctx, &corev1.GetReportedItemRequest{ReportId: id})
+	if err != nil {
+		h.failedPage(w, r, err)
+		return
+	}
+	link := resp.GetItem().GetEvidencePhotoUrl()
+	if !strings.HasPrefix(link, "https://") {
+		h.renderError(w, r, http.StatusNotFound, errorText("bulunamadi"))
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	http.Redirect(w, r, link, http.StatusSeeOther)
+}
+
 // decideReport records the platform's decision. It reads the report again
 // (core records that as a viewing) so the decision is checked against the
 // report itself, not against form fields. A ban is applied in

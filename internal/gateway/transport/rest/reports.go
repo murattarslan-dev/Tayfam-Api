@@ -161,6 +161,8 @@ type reportCreateBody struct {
 	Reason       string `json:"reason"`
 	Description  string `json:"description"`
 	EvidenceText string `json:"evidence_text"`
+	// dm_message only (issue #205): the reporter's evidence photo.
+	EvidenceUploadID string `json:"evidence_upload_id"`
 }
 
 // createReport files a report about something in a tayfa.
@@ -193,14 +195,18 @@ func (h coreHandlers) fileReport(ctx context.Context, w http.ResponseWriter, r *
 	// (issue #187); a user may also be reported from a tayfa.
 	noTayfaOK := direct || tt == corev1.ReportTargetType_REPORT_TARGET_TYPE_USER
 	evidence := utf8.RuneCountInString(strings.TrimSpace(b.EvidenceText))
+	photo := b.EvidenceUploadID != ""
+	// A direct message report carries the text, the photo or both.
+	evidenceOK := (b.EvidenceText == "" && photo) || (evidence >= 1 && evidence <= reportEvidenceMax)
 	if !okT || !okR || !validUUID(b.TargetID) || utf8.RuneCountInString(strings.TrimSpace(b.Description)) > reportDescriptionMax ||
 		(tayfaID == "" && !noTayfaOK) || (direct && tayfaID != "") ||
-		(direct && (evidence < 1 || evidence > reportEvidenceMax)) || (!direct && b.EvidenceText != "") {
+		(direct && !evidenceOK) || (!direct && (b.EvidenceText != "" || photo)) || (photo && !validUUID(b.EvidenceUploadID)) {
 		badRequest(w, r)
 		return
 	}
 	resp, err := h.d.Reports.CreateReport(ctx, &corev1.CreateReportRequest{
 		TayfaId: tayfaID, TargetType: tt, TargetId: b.TargetID, Reason: reason, Description: b.Description, EvidenceText: b.EvidenceText,
+		EvidenceUploadId: b.EvidenceUploadID,
 	})
 	if err != nil {
 		h.fail(w, r, err)

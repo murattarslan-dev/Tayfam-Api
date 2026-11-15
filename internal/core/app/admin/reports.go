@@ -38,22 +38,23 @@ var resolutionOf = map[string]string{
 
 // Report is a report as the platform sees it.
 type Report struct {
-	ID            id.ID
-	Tayfa         id.ID // zero for a direct message report
-	TargetType    string
-	Target        id.ID
-	Subject       id.ID // reported person; zero if deleted
-	Reporter      id.ID // zero if deleted
-	Reason        string
-	Description   string
-	Priority      string
-	CreatedAt     time.Time
-	EscalatedAt   time.Time
-	Resolved      bool // on the platform
-	Decision      string
-	DecidedAt     time.Time
-	evidenceText  string
-	tayfaResolved bool
+	ID             id.ID
+	Tayfa          id.ID // zero for a direct message report
+	TargetType     string
+	Target         id.ID
+	Subject        id.ID // reported person; zero if deleted
+	Reporter       id.ID // zero if deleted
+	Reason         string
+	Description    string
+	Priority       string
+	CreatedAt      time.Time
+	EscalatedAt    time.Time
+	Resolved       bool // on the platform
+	Decision       string
+	DecidedAt      time.Time
+	evidenceText   string
+	evidenceUpload id.ID
+	tayfaResolved  bool
 }
 
 // Item is the reported item alone.
@@ -66,6 +67,9 @@ type Item struct {
 	Options    []string
 	CreatedAt  time.Time
 	DeletedAt  time.Time
+	// EvidencePhotoURL is a DM report's evidence photo (issue #205): a
+	// 5-minute bearer link, never logged; empty when there is none.
+	EvidencePhotoURL string
 }
 
 func reportOf(r store.AdminListPlatformReportsRow) Report {
@@ -106,6 +110,7 @@ func (s *Service) report(ctx context.Context, q *store.Queries, report id.ID) (R
 		PlatformHandledAt: r.PlatformHandledAt,
 	})
 	out.evidenceText = r.EvidenceText.String
+	out.evidenceUpload = idOf(r.EvidenceUploadID)
 	out.tayfaResolved = r.Status == "resolved"
 	return out, nil
 }
@@ -139,6 +144,13 @@ func (s *Service) GetReportedItem(ctx context.Context, c auth.AdminClaims, repor
 	})
 	if err != nil {
 		return Report{}, nil, err
+	}
+	if item != nil && rep.evidenceUpload != (id.ID{}) && s.cfg.Evidence != nil {
+		u, err := s.cfg.Evidence.ReportEvidenceURL(ctx, rep.ID, rep.evidenceUpload)
+		if err != nil {
+			return Report{}, nil, err
+		}
+		item.EvidencePhotoURL = u
 	}
 	return rep, item, nil
 }

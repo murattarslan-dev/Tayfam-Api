@@ -108,8 +108,8 @@ type CreateUploadParams struct {
 	TayfaID         pgtype.UUID
 	Purpose         string
 	R2Key           string
-	PreviewType     string
-	PreviewBytes    int64
+	PreviewType     pgtype.Text
+	PreviewBytes    pgtype.Int8
 	FullType        string
 	FullBytes       int64
 	ClientRequestID pgtype.UUID
@@ -153,11 +153,12 @@ func (q *Queries) DeleteUploadRow(ctx context.Context, id pgtype.UUID) (int64, e
 const deleteUserUploads = `-- name: DeleteUserUploads :execrows
 UPDATE uploads SET status = 'deleting'
 WHERE user_id = $1 AND status <> 'deleting'
-  AND NOT (purpose = 'cover' AND attached_type IS NOT NULL)
+  AND NOT (purpose IN ('cover', 'report_evidence') AND attached_type IS NOT NULL)
 `
 
 // Hesap silme (user.deleted): kullanıcının dosyaları silinir; bağlı kapak
-// görselleri tayfanındır, yalnızca sahiplikleri kaldırılır.
+// görselleri tayfanındır, bağlı şikâyet kanıtı platformundur (rapor
+// durdukça, ADR-0028); yalnızca sahiplikleri kaldırılır.
 func (q *Queries) DeleteUserUploads(ctx context.Context, userID pgtype.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteUserUploads, userID)
 	if err != nil {
@@ -168,7 +169,7 @@ func (q *Queries) DeleteUserUploads(ctx context.Context, userID pgtype.UUID) (in
 
 const disownUserCovers = `-- name: DisownUserCovers :execrows
 UPDATE uploads SET user_id = NULL
-WHERE user_id = $1 AND purpose = 'cover' AND attached_type IS NOT NULL
+WHERE user_id = $1 AND purpose IN ('cover', 'report_evidence') AND attached_type IS NOT NULL
 `
 
 func (q *Queries) DisownUserCovers(ctx context.Context, userID pgtype.UUID) (int64, error) {
@@ -419,6 +420,31 @@ func (q *Queries) GetOwnUploadForUpdate(ctx context.Context, arg GetOwnUploadFor
 	return i, err
 }
 
+const getReportEvidenceUpload = `-- name: GetReportEvidenceUpload :one
+SELECT r2_key, full_type::text AS full_type FROM uploads
+WHERE id = $1 AND purpose = 'report_evidence' AND status = 'ready'
+  AND attached_type = 'report' AND attached_id = $2
+`
+
+type GetReportEvidenceUploadParams struct {
+	ID       pgtype.UUID
+	ReportID pgtype.UUID
+}
+
+type GetReportEvidenceUploadRow struct {
+	R2Key    string
+	FullType string
+}
+
+// Platform panelinde şikâyetin kanıt fotoğrafı (issue #205): yalnızca o
+// rapora bağlı, hazır dosya.
+func (q *Queries) GetReportEvidenceUpload(ctx context.Context, arg GetReportEvidenceUploadParams) (GetReportEvidenceUploadRow, error) {
+	row := q.db.QueryRow(ctx, getReportEvidenceUpload, arg.ID, arg.ReportID)
+	var i GetReportEvidenceUploadRow
+	err := row.Scan(&i.R2Key, &i.FullType)
+	return i, err
+}
+
 const getUploadByClientRequest = `-- name: GetUploadByClientRequest :one
 SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at, export_bytes, expires_at FROM uploads
 WHERE user_id = $1 AND client_request_id = $2 AND purpose <> 'data_export'
@@ -493,7 +519,7 @@ func (q *Queries) ListDeletingUploads(ctx context.Context, n int32) ([]ListDelet
 }
 
 const listMediaForViewer = `-- name: ListMediaForViewer :many
-SELECT u.id, u.user_id, u.purpose, u.r2_key, u.preview_type::text AS preview_type, u.full_type::text AS full_type, u.width, u.height,
+SELECT u.id, u.user_id, u.purpose, u.r2_key, COALESCE(u.preview_type, '')::text AS preview_type, u.full_type::text AS full_type, u.width, u.height,
        u.attached_type, u.attached_id,
        c.tayfa_id AS content_tayfa_id,
        m.role AS member_role, m.status AS member_status, m.muted_until AS member_muted_until,
@@ -675,6 +701,28 @@ func (q *Queries) RejectPendingUpload(ctx context.Context, arg RejectPendingUplo
 	return result.RowsAffected(), nil
 }
 
+const releaseMessageMedia = `-- name: ReleaseMessageMedia :execrows
+UPDATE uploads SET status = 'deleting'
+WHERE id = $1 AND attached_type IN ('channel_message', 'dm_message') AND attached_id = $2
+  AND status <> 'deleting'
+`
+
+type ReleaseMessageMediaParams struct {
+	ID        pgtype.UUID
+	MessageID pgtype.UUID
+}
+
+// Sohbet mesajı fotoğrafını ya da ekini bıraktı (chat.media_released,
+// ADR-0028): dosya hâlâ o mesaja bağlıysa silinir; değilse bir şey olmaz
+// (tekrar gelen olay).
+func (q *Queries) ReleaseMessageMedia(ctx context.Context, arg ReleaseMessageMediaParams) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseMessageMedia, arg.ID, arg.MessageID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const releaseOtherAvatars = `-- name: ReleaseOtherAvatars :execrows
 UPDATE uploads SET status = 'deleting'
 WHERE user_id = $1 AND purpose = 'avatar' AND attached_type = 'user' AND attached_id = $1
@@ -715,6 +763,21 @@ type ReleaseOtherExportsParams struct {
 // silinir: identity aynı anda tek talep yürütür, eskisi artıktır.
 func (q *Queries) ReleaseOtherExports(ctx context.Context, arg ReleaseOtherExportsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, releaseOtherExports, arg.UserID, arg.ClientRequestID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const releaseTayfaChatPhotos = `-- name: ReleaseTayfaChatPhotos :execrows
+UPDATE uploads SET status = 'deleting'
+WHERE tayfa_id = $1 AND purpose = 'chat_photo' AND status <> 'deleting'
+`
+
+// Tayfa kalıcı silindi: kanal fotoğrafları da gider (kanallar chat'te
+// tayfa.purged ile silinir; dosyanın tayfası core'da bellidir).
+func (q *Queries) ReleaseTayfaChatPhotos(ctx context.Context, tayfaID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseTayfaChatPhotos, tayfaID)
 	if err != nil {
 		return 0, err
 	}
@@ -793,11 +856,12 @@ func (q *Queries) SetTayfaCover(ctx context.Context, arg SetTayfaCoverParams) er
 }
 
 const userStoredBytes = `-- name: UserStoredBytes :one
-SELECT COALESCE(sum(preview_bytes + full_bytes), 0)::bigint FROM uploads
+SELECT COALESCE(sum(COALESCE(preview_bytes, 0) + full_bytes), 0)::bigint FROM uploads
 WHERE user_id = $1 AND status NOT IN ('rejected', 'deleting') AND purpose <> 'data_export'
 `
 
-// Kota: iki varyantın bildirilen (ve imzayla zorlanan) boyutları.
+// Kota: iki varyantın (birebir ekte tek nesnenin) bildirilen (ve imzayla
+// zorlanan) boyutları.
 func (q *Queries) UserStoredBytes(ctx context.Context, userID pgtype.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, userStoredBytes, userID)
 	var column_1 int64

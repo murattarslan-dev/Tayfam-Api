@@ -35,8 +35,10 @@ const (
 	dmReportID   = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a63"
 	xssName      = `<script>alert("x")</script><img src=x onerror=alert(1)>`
 	evidence     = "Şikâyet edenin kendi kopyası: kanıt metni"
-	goodReason   = "Topluluk kurallarına aykırı davranış"
-	auditReason  = "Tekrarlanan taciz şikâyetleri, denetim kaydı gerekçesi"
+	// evidencePhotoURL stands for a signed link (issue #205).
+	evidencePhotoURL = "https://r2.example/media/kanit/full?X-Amz-Signature=abc"
+	goodReason       = "Topluluk kurallarına aykırı davranış"
+	auditReason      = "Tekrarlanan taciz şikâyetleri, denetim kaydı gerekçesi"
 	// hidden is a value that must never appear on a page: the e-mail
 	// address an administrator searched for.
 	hidden = "gizli.kisi@ornek.test"
@@ -159,7 +161,8 @@ func (f *fakeCore) GetReportedItem(ctx context.Context, in *corev1.GetReportedIt
 	reps := f.reportList()
 	if in.GetReportId() == dmReportID {
 		return &corev1.GetReportedItemResponse{Report: reps[0], Item: &corev1.ReportedItem{
-			TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE, AuthorId: memberID, Body: evidence}}, nil
+			TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE, AuthorId: memberID, Body: evidence,
+			EvidencePhotoUrl: evidencePhotoURL}}, nil
 	}
 	return &corev1.GetReportedItemResponse{Report: reps[1], Item: &corev1.ReportedItem{
 		TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_ANNOUNCEMENT, AuthorId: memberID, Title: f.tayfaName, Body: f.tayfaName}}, nil
@@ -542,6 +545,18 @@ func TestPagesHidePersonalData(t *testing.T) {
 	}
 	if !strings.Contains(pages["/sikayetler/"+dmReportID], evidence) {
 		t.Fatal("DM şikâyetinde kanıt metni yok")
+	}
+	// The evidence photo (issue #205): the page links to the panel, never
+	// to storage; the panel redirects to a fresh signed link.
+	if p := pages["/sikayetler/"+dmReportID]; !strings.Contains(p, `href="/sikayetler/`+dmReportID+`/kanit-fotografi"`) || strings.Contains(p, evidencePhotoURL) {
+		t.Fatal("DM şikâyetinde kanıt fotoğrafı linki yanlış")
+	}
+	pw := e.do(e.page("/sikayetler/" + dmReportID + "/kanit-fotografi"))
+	if pw.Code != http.StatusSeeOther || pw.Header().Get("Location") != evidencePhotoURL || pw.Header().Get("Referrer-Policy") != "no-referrer" {
+		t.Fatalf("kanıt yönlendirmesi: %d %v", pw.Code, pw.Header())
+	}
+	if pw := e.do(e.page("/sikayetler/" + reportID + "/kanit-fotografi")); pw.Code != http.StatusNotFound {
+		t.Fatalf("kanıtsız şikâyet: %d", pw.Code)
 	}
 	// The search went in the body, never in a URL.
 	if strings.Contains(w.Header().Get("Location"), "@") {

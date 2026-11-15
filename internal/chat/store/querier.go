@@ -135,8 +135,12 @@ type Querier interface {
 	EnsureE2EState(ctx context.Context, userID pgtype.UUID) error
 	// Gönderenin kendi silmesi: mesaj silinmiş görünür, geri alınamaz.
 	// İçerik sunucuda hiç yoktur (yalnızca zarflarda ve arşivde, ADR-0018).
-	EraseDirectMessage(ctx context.Context, arg EraseDirectMessageParams) (int64, error)
-	// Yazarın kendi silmesi: metin hemen gider, geri alınamaz.
+	// Ek varsa kimliği hemen boşalır ve eski değer döner: dosyayı core'a aynı
+	// transaction'da olayla bırakmak için (issue #205). Satır yoksa (başkasının,
+	// bilinmeyen ya da zaten silinmiş) sonuç boştur.
+	EraseDirectMessage(ctx context.Context, arg EraseDirectMessageParams) (pgtype.UUID, error)
+	// Yazarın kendi silmesi: metin, yer ve fotoğraf kimliği hemen gider, geri
+	// alınamaz (fotoğrafı core, chat.media_released olayıyla siler).
 	EraseMessage(ctx context.Context, arg EraseMessageParams) (int64, error)
 	// KVKK veri dışa aktarma (issue #144, ADR-0021; alanlar
 	// docs/data-export-format.md). Yalnızca @user_id'nin (doğrulanmış çağıran)
@@ -146,6 +150,10 @@ type Querier interface {
 	ExportNotificationPreferences(ctx context.Context, arg ExportNotificationPreferencesParams) ([]ExportNotificationPreferencesRow, error)
 	GetChannel(ctx context.Context, arg GetChannelParams) (GetChannelRow, error)
 	GetChannelForUpdate(ctx context.Context, arg GetChannelForUpdateParams) (GetChannelForUpdateRow, error)
+	// Görme kararı (MessageMediaService, issue #205): fotoğrafın bağlı olduğu
+	// mesaj ve kanalı. Silinmiş mesaj ve arşivlenmiş kanal da döner; karar
+	// uygulamadadır (silinmiş mesajın fotoğrafı görünmez).
+	GetChannelPhotoMessage(ctx context.Context, id pgtype.UUID) (GetChannelPhotoMessageRow, error)
 	GetChannelRead(ctx context.Context, arg GetChannelReadParams) (pgtype.UUID, error)
 	// Birebir mesajlar (issue #95; 00006_direct_messages.sql). Taraflar her
 	// zaman user_low_id < user_high_id sırasıyla verilir. Bir kullanıcının
@@ -162,6 +170,9 @@ type Querier interface {
 	// Oturumun cihazı (çağıranın kendi cihazı).
 	GetDeviceBySession(ctx context.Context, arg GetDeviceBySessionParams) (GetDeviceBySessionRow, error)
 	GetDirectMessage(ctx context.Context, arg GetDirectMessageParams) (GetDirectMessageRow, error)
+	// Görme kararı (MessageMediaService, issue #205): kişinin taraf olduğu
+	// konuşmadaki silinmemiş mesajın eki.
+	GetDirectMessageAttachmentForParty(ctx context.Context, arg GetDirectMessageAttachmentForPartyParams) (pgtype.UUID, error)
 	// Mesajlar.
 	GetDirectMessageByRequest(ctx context.Context, arg GetDirectMessageByRequestParams) (GetDirectMessageByRequestRow, error)
 	// Şikâyet doğrulaması (core'un sorusu, issue #95): kişinin taraf olduğu
@@ -283,8 +294,10 @@ type Querier interface {
 	// 30 gün: silinmiş mesajlardan bir parti kalıcı silinir.
 	PurgeDeletedDirectMessages(ctx context.Context, arg PurgeDeletedDirectMessagesParams) (int64, error)
 	// Saklama ve silme.
-	// 30 gün: silinmiş mesajlardan bir parti kalıcı silinir.
-	PurgeDeletedMessages(ctx context.Context, arg PurgeDeletedMessagesParams) (int64, error)
+	// 30 gün: silinmiş mesajlardan bir parti kalıcı silinir. Hâlâ fotoğrafı
+	// olanlar (moderatör gizlemesi) döner: dosyayı core'a aynı transaction'da
+	// olayla bırakmak için.
+	PurgeDeletedMessages(ctx context.Context, arg PurgeDeletedMessagesParams) ([]PurgeDeletedMessagesRow, error)
 	// Hesabı silinen ya da yaptırım alan ve cihazı kalmayan kullanıcının
 	// durumu, token'larının süresi çoktan dolduktan sonra (bir gün) silinir.
 	// Geçmiş anahtarı sürümü olan (arşivi olan) kullanıcınınki kalır.

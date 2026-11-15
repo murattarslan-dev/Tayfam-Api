@@ -57,9 +57,13 @@ func (s *ReportServer) CreateReport(ctx context.Context, req *corev1.CreateRepor
 	if !ok {
 		return nil, validation("reason")
 	}
+	evidenceUpload, err := optionalUploadID(req.GetEvidenceUploadId(), "evidence_upload_id")
+	if err != nil {
+		return nil, err
+	}
 	v, created, err := s.app.Create(ctx, user, t, report.CreateInput{
 		TargetType: tt, TargetID: req.GetTargetId(), Reason: reason, Description: req.GetDescription(),
-		Evidence: req.GetEvidenceText(),
+		Evidence: req.GetEvidenceText(), EvidenceUpload: evidenceUpload,
 	})
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)

@@ -161,6 +161,7 @@ func NewHandler(cfg Config) (http.Handler, error) {
 	change("POST /kullanicilar/{id}/yaptirim-kaldir", h.liftSanction)
 	page("GET /sikayetler", h.reports)
 	page("GET /sikayetler/{id}", h.report)
+	page("GET /sikayetler/{id}/kanit-fotografi", h.reportEvidencePhoto)
 	change("POST /sikayetler/{id}/karar", h.decideReport)
 	page("GET /denetim", h.auditLog)
 	mux.HandleFunc("/", httpx.NotFound)

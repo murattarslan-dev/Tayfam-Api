@@ -401,11 +401,11 @@ func TestPanelCannotSee(t *testing.T) {
 		}
 	}
 	want := []string{
-		"Item.TargetType", "Item.Target", "Item.Author", "Item.Title", "Item.Body", "Item.Options", "Item.CreatedAt", "Item.DeletedAt",
+		"Item.TargetType", "Item.Target", "Item.Author", "Item.Title", "Item.Body", "Item.Options", "Item.CreatedAt", "Item.DeletedAt", "Item.EvidencePhotoURL",
 		"TayfaDetail.TayfaSummary", "TayfaDetail.Description", "TayfaDetail.City", "TayfaDetail.District", "TayfaDetail.SuspendReason", "TayfaDetail.Staff", "TayfaDetail.OpenPlatformReports",
 		"TayfaSummary.ID", "TayfaSummary.Name", "TayfaSummary.Status", "TayfaSummary.Listed", "TayfaSummary.MemberCount", "TayfaSummary.CreatedAt", "TayfaSummary.SuspendedAt", "TayfaSummary.DeletedAt", "TayfaSummary.DeletionScheduledAt",
 		"Member.User", "Member.DisplayName", "Member.Role", "Member.Status", "Member.JoinedAt", "Member.BanReason",
-		"Report.ID", "Report.Tayfa", "Report.TargetType", "Report.Target", "Report.Subject", "Report.Reporter", "Report.Reason", "Report.Description", "Report.Priority", "Report.CreatedAt", "Report.EscalatedAt", "Report.Resolved", "Report.Decision", "Report.DecidedAt", "Report.evidenceText", "Report.tayfaResolved",
+		"Report.ID", "Report.Tayfa", "Report.TargetType", "Report.Target", "Report.Subject", "Report.Reporter", "Report.Reason", "Report.Description", "Report.Priority", "Report.CreatedAt", "Report.EscalatedAt", "Report.Resolved", "Report.Decision", "Report.DecidedAt", "Report.evidenceText", "Report.evidenceUpload", "Report.tayfaResolved",
 	}
 	if !slices.Equal(fields, want) {
 		t.Fatalf("panelin gördüğü alanlar değişti:\n%v", fields)

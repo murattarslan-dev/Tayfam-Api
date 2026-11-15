@@ -307,9 +307,14 @@ type CreateInput struct {
 	TargetID    string
 	Reason      Reason
 	Description string
-	// Evidence is only, and required, for TargetDMMessage: the text the
-	// reporter shares from their own device.
+	// Evidence is only for TargetDMMessage: the text the reporter shares
+	// from their own device.
 	Evidence string
+	// EvidenceUpload is only for TargetDMMessage (issue #205): the
+	// reporter's READY report_evidence upload, a photo of the message
+	// shared from their own device. Evidence, EvidenceUpload or both are
+	// required there.
+	EvidenceUpload id.ID
 }
 
 // Create files a report by user. A second report by the same user about the
@@ -329,6 +334,9 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in CreateInput)
 	}
 	if in.Evidence != "" {
 		return MyView{}, false, apperr.Validation("evidence_text")
+	}
+	if in.EvidenceUpload != (id.ID{}) {
+		return MyView{}, false, apperr.Validation("evidence_upload_id")
 	}
 	target, ok := id.Parse(in.TargetID)
 	if !ok || (in.TargetType == TargetTayfa && target != tayfa) || (in.TargetType == TargetUser && target == user) {

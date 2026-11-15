@@ -335,7 +335,7 @@ func (q *Queries) AdminGetEvent(ctx context.Context, arg AdminGetEventParams) (A
 const adminGetPlatformReport = `-- name: AdminGetPlatformReport :one
 SELECT id, tayfa_id, target_type, target_id, subject_user_id, reporter_id, reason, description,
        priority, created_at, escalated_to_platform_at, platform_status, platform_decision, platform_handled_at,
-       evidence_text, status
+       evidence_text, status, evidence_upload_id
 FROM reports
 WHERE id = $1 AND escalated_to_platform_at IS NOT NULL
 `
@@ -357,6 +357,7 @@ type AdminGetPlatformReportRow struct {
 	PlatformHandledAt     pgtype.Timestamptz
 	EvidenceText          pgtype.Text
 	Status                string
+	EvidenceUploadID      pgtype.UUID
 }
 
 func (q *Queries) AdminGetPlatformReport(ctx context.Context, id pgtype.UUID) (AdminGetPlatformReportRow, error) {
@@ -379,6 +380,7 @@ func (q *Queries) AdminGetPlatformReport(ctx context.Context, id pgtype.UUID) (A
 		&i.PlatformHandledAt,
 		&i.EvidenceText,
 		&i.Status,
+		&i.EvidenceUploadID,
 	)
 	return i, err
 }

@@ -202,6 +202,9 @@ func TestDirectMessageReportRoute(t *testing.T) {
 		"tayfasız duyuru":       {"/v1/me/reports", `{"target_type":"announcement",` + ok + `,"reason":"spam"}`},
 		"profilden kanıtlı":     {"/v1/me/reports", `{"target_type":"user",` + ok + `,"reason":"spam","evidence_text":"x"}`},
 		"üye şikâyetinde kanıt": {base, `{"target_type":"user",` + ok + `,"reason":"spam","evidence_text":"x"}`},
+		// Issue #205: the evidence photo belongs to DM reports only.
+		"üye şikâyetinde fotoğraf": {base, `{"target_type":"user",` + ok + `,"reason":"spam","evidence_upload_id":"` + targetID + `"}`},
+		"bozuk fotoğraf":           {"/v1/me/reports", `{"target_type":"dm_message",` + ok + `,"reason":"spam","evidence_upload_id":"x"}`},
 	} {
 		if w := as(h, "POST", tc.path, tc.body); w.Code != 400 || problemType(t, w) != "invalid-request" {
 			t.Errorf("%s: %d %s", name, w.Code, problemType(t, w))
@@ -212,6 +215,13 @@ func TestDirectMessageReportRoute(t *testing.T) {
 	}
 	if w := as(h, "POST", "/v1/me/reports", `{"target_type":"dm_message",`+ok+`,"reason":"spam","evidence_text":"  `+strings.Repeat("ş", 2000)+`  "}`); w.Code != 201 {
 		t.Fatalf("2000 karakter: %d %s", w.Code, w.Body)
+	}
+	// A photo alone is evidence enough (issue #205).
+	if w := as(h, "POST", "/v1/me/reports", `{"target_type":"dm_message",`+ok+`,"reason":"spam","evidence_upload_id":"`+reportID+`"}`); w.Code != 201 {
+		t.Fatalf("yalnız fotoğraf: %d %s", w.Code, w.Body)
+	}
+	if got, _, _ := f.last(); got.(*corev1.CreateReportRequest).GetEvidenceUploadId() != reportID {
+		t.Fatalf("core'a giden: %v", got)
 	}
 }
 

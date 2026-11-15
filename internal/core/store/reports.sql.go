@@ -51,12 +51,12 @@ func (q *Queries) CountRecentReportsByReporter(ctx context.Context, arg CountRec
 
 const createReport = `-- name: CreateReport :one
 INSERT INTO reports (
-  id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, evidence_text,
+  id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, evidence_text, evidence_upload_id,
   priority, minor_involved_at, platform_only, escalated_to_platform_at, escalation_reason, platform_status, created_at)
 VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9,
-  $10, $11, $12, $13,
-  $14, $15, $16)
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+  $11, $12, $13, $14,
+  $15, $16, $17)
 ON CONFLICT (reporter_id, target_type, target_id) DO NOTHING
 RETURNING id
 `
@@ -71,6 +71,7 @@ type CreateReportParams struct {
 	Reason                string
 	Description           pgtype.Text
 	EvidenceText          pgtype.Text
+	EvidenceUploadID      pgtype.UUID
 	Priority              string
 	MinorInvolvedAt       pgtype.Timestamptz
 	PlatformOnly          bool
@@ -94,6 +95,7 @@ func (q *Queries) CreateReport(ctx context.Context, arg CreateReportParams) (pgt
 		arg.Reason,
 		arg.Description,
 		arg.EvidenceText,
+		arg.EvidenceUploadID,
 		arg.Priority,
 		arg.MinorInvolvedAt,
 		arg.PlatformOnly,

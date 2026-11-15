@@ -27,6 +27,7 @@
   {{if .Title}}<dt>Başlık</dt><dd>{{.Title}}</dd>{{end}}
 </dl>
 {{if .Body}}<p class="item-body">{{.Body}}</p>{{end}}
+{{if .EvidencePhotoUrl}}<p><a href="/sikayetler/{{$.Data.Report.ReportId}}/kanit-fotografi" target="_blank" rel="noopener noreferrer">Kanıt fotoğrafını aç</a> (her açılışta 5 dakikalık yeni link)</p>{{end}}
 {{if .Options}}<ul>{{range .Options}}<li>{{.}}</li>{{end}}</ul>{{end}}
 </div>
 {{else}}
