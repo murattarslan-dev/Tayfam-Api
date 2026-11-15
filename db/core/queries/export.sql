@@ -188,3 +188,15 @@ FROM uploads u
 WHERE u.user_id = @user_id AND u.purpose <> 'data_export' AND u.status <> 'deleting' AND u.id > @after
 ORDER BY u.id
 LIMIT @n;
+
+-- "Boşum" (issue #207): kişinin kaydedilmiş boş günleri (geçmişi saklama
+-- işi siler).
+-- name: ExportAvailability :many
+SELECT a.id AS k, jsonb_build_object(
+  'date', a.day, 'slots', a.slots, 'note', a.note,
+  'created_at', a.created_at, 'updated_at', a.updated_at
+) AS data
+FROM user_availability a
+WHERE a.user_id = @user_id AND a.id > @after
+ORDER BY a.id
+LIMIT @n;

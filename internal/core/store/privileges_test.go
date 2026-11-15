@@ -54,6 +54,8 @@ var wantAppPrivileges = map[string]string{
 	"job_runs":                "INSERT,SELECT,UPDATE(changed,finished_at,last_succeeded_at,succeeded)",
 	// Issue #135: the key, purpose, declared type and size never change.
 	"uploads": "DELETE,INSERT,SELECT,UPDATE(attached_at,attached_id,attached_type,expires_at,export_bytes,height,ready_at,reject_reason,status,updated_at,user_id,width)",
+	// Issue #207: user_id and day never change.
+	"user_availability": "DELETE,INSERT,SELECT,UPDATE(note,slots,updated_at)",
 }
 
 func TestAppRolePrivileges(t *testing.T) {

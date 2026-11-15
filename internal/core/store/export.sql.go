@@ -177,6 +177,50 @@ func (q *Queries) ExportAnswers(ctx context.Context, arg ExportAnswersParams) ([
 	return items, nil
 }
 
+const exportAvailability = `-- name: ExportAvailability :many
+SELECT a.id AS k, jsonb_build_object(
+  'date', a.day, 'slots', a.slots, 'note', a.note,
+  'created_at', a.created_at, 'updated_at', a.updated_at
+) AS data
+FROM user_availability a
+WHERE a.user_id = $1 AND a.id > $2
+ORDER BY a.id
+LIMIT $3
+`
+
+type ExportAvailabilityParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportAvailabilityRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// "Boşum" (issue #207): kişinin kaydedilmiş boş günleri (geçmişi saklama
+// işi siler).
+func (q *Queries) ExportAvailability(ctx context.Context, arg ExportAvailabilityParams) ([]ExportAvailabilityRow, error) {
+	rows, err := q.db.Query(ctx, exportAvailability, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportAvailabilityRow{}
+	for rows.Next() {
+		var i ExportAvailabilityRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportBlocks = `-- name: ExportBlocks :many
 SELECT b.blocked_id AS k, jsonb_build_object('user_id', b.blocked_id, 'created_at', b.created_at) AS data
 FROM user_blocks b
