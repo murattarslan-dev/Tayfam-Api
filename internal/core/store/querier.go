@@ -188,6 +188,10 @@ type Querier interface {
 	CreateExportUpload(ctx context.Context, arg CreateExportUploadParams) (pgtype.UUID, error)
 	// Satır varsa hiçbir şey yapmaz; etkilenen satır 0 olur.
 	CreateFriendRequest(ctx context.Context, arg CreateFriendRequestParams) (int64, error)
+	// Öneriyi yazar; transaction içinde haftalık sınırı, arkadaşlığı, engeli,
+	// "Beni önerme"yi, kapatmayı ve profillemeyi yeniden denetler. Yazılmadıysa
+	// 0 döner.
+	CreateFriendSuggestion(ctx context.Context, arg CreateFriendSuggestionParams) (int64, error)
 	CreateInvite(ctx context.Context, arg CreateInviteParams) error
 	// Üyelik değişiklikleri transaction içinde SetActor ya da SetSystemJob'dan
 	// sonra yapılır; aksi halde trigger reddeder.
@@ -225,6 +229,11 @@ type Querier interface {
 	// verilir.
 	CreateUpload(ctx context.Context, arg CreateUploadParams) (pgtype.UUID, error)
 	DeleteActivityRecord(ctx context.Context, arg DeleteActivityRecordParams) (int64, error)
+	// Arkadaşlık puanı ve arkadaş önerisi (issue #208, ADR-0028). Puan hiçbir
+	// sorgunun API'ye giden sonucunda yoktur; yalnızca aday sırası için okunur.
+	// ---------------------------------------------------------------------------
+	// Puan (friend-suggestions işi)
+	DeleteAllFriendScores(ctx context.Context) error
 	DeleteAnswerVotes(ctx context.Context, answerID pgtype.UUID) error
 	DeleteBlock(ctx context.Context, arg DeleteBlockParams) (int64, error)
 	DeleteCampItem(ctx context.Context, arg DeleteCampItemParams) (int64, error)
@@ -233,12 +242,25 @@ type Querier interface {
 	DeleteExpiredAuditLogs(ctx context.Context, arg DeleteExpiredAuditLogsParams) (int64, error)
 	// Çözülmüş şikâyetler 1 yıl sonra silinir; platformda açık olan kalır.
 	DeleteExpiredReports(ctx context.Context, arg DeleteExpiredReportsParams) (int64, error)
+	// ---------------------------------------------------------------------------
+	// Engelleme ve hesap silme
+	DeleteFriendScore(ctx context.Context, arg DeleteFriendScoreParams) error
 	// Arkadaşlığı bitirme, isteği geri çekme ya da reddetme.
 	DeleteFriendship(ctx context.Context, arg DeleteFriendshipParams) (int64, error)
 	// Ayrılma, çıkarma, başvuru reddi, ban kaldırma.
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (int64, error)
 	DeleteOldFriendRequestOutcomes(ctx context.Context, before pgtype.Timestamptz) (int64, error)
 	DeleteOldInvitationOutcomes(ctx context.Context, before pgtype.Timestamptz) (int64, error)
+	// Saklama: 365 günden eski açık öneriler (kapatılmışlar kalır).
+	DeleteOldOpenFriendSuggestions(ctx context.Context, before pgtype.Timestamptz) (int64, error)
+	// Engelleme: iki yöndeki açık öneriler silinir, engelleyen adına kapatılmış
+	// kayıt yazılır (çift bir daha önerilmez).
+	DeleteOpenSuggestionsBetween(ctx context.Context, arg DeleteOpenSuggestionsBetweenParams) error
+	// Profilleme kapatma: kişiye yapılmış ve kişinin önerildiği açık öneriler.
+	// Kapatılmış satırlar kalır.
+	DeleteOpenSuggestionsInvolving(ctx context.Context, userID pgtype.UUID) error
+	// "Beni önerme": kişinin önerildiği açık öneriler.
+	DeleteOpenSuggestionsOf(ctx context.Context, userID pgtype.UUID) error
 	// Oy değiştirmek eski oyu siler (v14).
 	DeleteOwnPollVotes(ctx context.Context, arg DeleteOwnPollVotesParams) (int64, error)
 	DeletePoll(ctx context.Context, arg DeletePollParams) (int64, error)
@@ -265,6 +287,9 @@ type Querier interface {
 	DeleteUserConvoyVehicle(ctx context.Context, arg DeleteUserConvoyVehicleParams) (int64, error)
 	// Araç (plaka dahil) kişisel veridir ve kişiye aittir: silinir.
 	DeleteUserConvoyVehicles(ctx context.Context, userID pgtype.UUID) error
+	// Profilleme kapatma ve hesap silme: kişinin bütün puanları.
+	DeleteUserFriendScores(ctx context.Context, userID pgtype.UUID) error
+	DeleteUserFriendSuggestions(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silme (user.deleted): kişinin arkadaşlıkları, istekleri ve iki
 	// yöndeki engellemeleri.
 	DeleteUserFriendships(ctx context.Context, userID pgtype.UUID) error
@@ -272,9 +297,12 @@ type Querier interface {
 	DeleteUserPollVotes(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserRequestOutcomes(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserRsvps(ctx context.Context, userID pgtype.UUID) error
+	DeleteUserSocialSettings(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silme (user.deleted): kullanıcının dosyaları silinir; bağlı kapak
 	// görselleri tayfanındır, yalnızca sahiplikleri kaldırılır.
 	DeleteUserUploads(ctx context.Context, userID pgtype.UUID) (int64, error)
+	DismissFriendSuggestion(ctx context.Context, arg DismissFriendSuggestionParams) (int64, error)
+	DismissSuggestionPair(ctx context.Context, arg DismissSuggestionPairParams) error
 	DisownUserCovers(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// Yanlış boyutta yüklenmiş dışa aktarma silinir.
 	DropExport(ctx context.Context, arg DropExportParams) (int64, error)
@@ -308,6 +336,9 @@ type Querier interface {
 	ExportEventRSVPs(ctx context.Context, arg ExportEventRSVPsParams) ([]ExportEventRSVPsRow, error)
 	ExportEvents(ctx context.Context, arg ExportEventsParams) ([]ExportEventsRow, error)
 	ExportFishingCatches(ctx context.Context, arg ExportFishingCatchesParams) ([]ExportFishingCatchesRow, error)
+	// Kişiye yapılan öneriler, kapatılanlar dahil. Engellemede yazılan kayıt
+	// (source = blocked) bir öneri değildir; engel zaten blocks bölümündedir.
+	ExportFriendSuggestions(ctx context.Context, arg ExportFriendSuggestionsParams) ([]ExportFriendSuggestionsRow, error)
 	ExportFriendships(ctx context.Context, arg ExportFriendshipsParams) ([]ExportFriendshipsRow, error)
 	ExportHikeCheckins(ctx context.Context, arg ExportHikeCheckinsParams) ([]ExportHikeCheckinsRow, error)
 	// KVKK veri dışa aktarma (issue #144, ADR-0021; alanlar
@@ -324,6 +355,10 @@ type Querier interface {
 	ExportQuestions(ctx context.Context, arg ExportQuestionsParams) ([]ExportQuestionsRow, error)
 	// Şikâyeti işleyen, öncelik ve platform alanları girmez (ADR-0021 madde 7).
 	ExportReports(ctx context.Context, arg ExportReportsParams) ([]ExportReportsRow, error)
+	// Tek kayıt: iki ayar (satır yoksa varsayılanlar) ve kişi hakkında puan
+	// tutulan kişi sayısı. Puan değerleri ve kiminle olduğu girmez (ADR-0028
+	// §9). Ayar satırı da puanı da yoksa tutulan bir şey yoktur, kayıt da yok.
+	ExportSocialSettings(ctx context.Context, arg ExportSocialSettingsParams) ([]ExportSocialSettingsRow, error)
 	// Yalnızca liste; dosyalar ve dışa aktarma kayıtları girmez.
 	ExportUploads(ctx context.Context, arg ExportUploadsParams) ([]ExportUploadsRow, error)
 	FilterActiveMembers(ctx context.Context, arg FilterActiveMembersParams) ([]pgtype.UUID, error)
@@ -424,6 +459,9 @@ type Querier interface {
 	// etkinliğin kimliğiyle çalışır. Check-in'de gönderilen konum hiçbir
 	// sorguya parametre olarak girmez.
 	GetRsvpForCheckIn(ctx context.Context, arg GetRsvpForCheckInParams) (GetRsvpForCheckInRow, error)
+	// ---------------------------------------------------------------------------
+	// Ayarlar
+	GetSocialSettings(ctx context.Context, userID pgtype.UUID) (GetSocialSettingsRow, error)
 	GetTag(ctx context.Context, arg GetTagParams) (GetTagRow, error)
 	GetTagsByNormalized(ctx context.Context, arg GetTagsByNormalizedParams) ([]GetTagsByNormalizedRow, error)
 	GetTayfa(ctx context.Context, id pgtype.UUID) (GetTayfaRow, error)
@@ -454,6 +492,11 @@ type Querier interface {
 	// Organizatörün eklediği kişinin yanıtı yoksa "geliyorum" olarak açılır;
 	// etkinlik bitmiş olduğu için kapasiteyi etkilemez.
 	InsertAttendedRsvp(ctx context.Context, arg InsertAttendedRsvpParams) error
+	// Son 12 ayda (@since sonrası, @now öncesi başlayan) silinmemiş ve iptal
+	// edilmemiş etkinliklerde ikisi de "attended" olan çiftler. Ağırlık
+	// 0,5 ^ (yaş / yarı ömür). Profillemesi kapalı, hesabı silinmiş ya da banlı
+	// kullanıcı girmez.
+	InsertFriendScores(ctx context.Context, arg InsertFriendScoresParams) (int64, error)
 	// Davet edilenin bir sayfadaki davet bildirimleri için: o tayfadaki
 	// üyeliği ve kayıtlı sonuç.
 	InvitationStates(ctx context.Context, arg InvitationStatesParams) ([]InvitationStatesRow, error)
@@ -552,6 +595,11 @@ type Querier interface {
 	ListNotifyParticipants(ctx context.Context, arg ListNotifyParticipantsParams) ([]pgtype.UUID, error)
 	// Yönetici ve moderatörler (başvuru, silme talebi).
 	ListNotifyStaff(ctx context.Context, arg ListNotifyStaffParams) ([]pgtype.UUID, error)
+	// ---------------------------------------------------------------------------
+	// Öneri listesi ve kapatma (kullanıcının kendi token'ıyla)
+	// Alıcının @since sonrasındaki açık önerileri; her okumada yeniden süzülür.
+	// Puan ve ortak katılım sayısı okunmaz.
+	ListOpenFriendSuggestions(ctx context.Context, arg ListOpenFriendSuggestionsParams) ([]ListOpenFriendSuggestionsRow, error)
 	// Kuyruk: tayfanın açık şikâyetleri; platforma özel olanlar ve izleyicinin
 	// kendisi hakkındakiler hariç. minor_involved ve çocuk/genç güvenliği
 	// şikâyetleri önce, sonra eskiden yeniye (ADR-0012, platform sahibinin
@@ -593,6 +641,14 @@ type Querier interface {
 	// Serinin henüz başlamamış, iptal edilmemiş ve tek başına düzenlenmemiş
 	// örnekleri; seri güncellemesi bunları değiştirir.
 	ListSeriesUpcomingEvents(ctx context.Context, arg ListSeriesUpcomingEventsParams) ([]pgtype.UUID, error)
+	// ---------------------------------------------------------------------------
+	// Öneri adayları (friend-suggestions işi)
+	// @after_user'dan sonraki alıcılar için, alıcı başına puana göre en çok
+	// @per_user aday. Alıcı son 7 günde öneri almışsa hiç aday dönmez.
+	// Elenenler (ADR-0028 §3): arkadaşlık ya da bekleyen istek, iki yönde engel,
+	// iki yönde şikâyet, reddedilmiş istek, alıcıya daha önce önerilmiş ya da
+	// karşı tarafın alıcıyı kapattığı çift, "Beni önerme", silinmiş/banlı aday.
+	ListSuggestionCandidates(ctx context.Context, arg ListSuggestionCandidatesParams) ([]ListSuggestionCandidatesRow, error)
 	ListTags(ctx context.Context, tayfaID pgtype.UUID) ([]ListTagsRow, error)
 	ListTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) ([]string, error)
 	// Tayfanın bekleyen davetleri (yönetici), yeniden eskiye.
@@ -623,6 +679,8 @@ type Querier interface {
 	// Etkinlik iptal ya da silinmiş olsa da alarm gider: kişi hâlâ dağda
 	// olabilir.
 	LockOverdueHikers(ctx context.Context, arg LockOverdueHikersParams) ([]LockOverdueHikersRow, error)
+	// Aynı alıcının eşzamanlı önerileri sıraya girer.
+	LockSuggestionRecipient(ctx context.Context, userID pgtype.UUID) error
 	// Aynı kullanıcının eşzamanlı oluşturma istekleri sırayla işlenir; günlük
 	// sınır iki istekte birden aşılamaz. Kilit transaction bitince bırakılır.
 	LockTayfaCreation(ctx context.Context, lockKey string) error
@@ -799,6 +857,9 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// Kalıcı katılım geçmişi
 	UpsertActivityRecord(ctx context.Context, arg UpsertActivityRecordParams) error
+	// Verilmeyen alan (NULL) olduğu gibi kalır; satır yoksa varsayılanlardan
+	// açılır.
+	UpsertSocialSettings(ctx context.Context, arg UpsertSocialSettingsParams) (UpsertSocialSettingsRow, error)
 	// Profil kopyası (ADR-0009). Yalnızca UserEventService yazar.
 	// Daha yeni bir olay uygulanmışsa ya da profil silinmişse değişmez; etkilenen
 	// satır 0 olur.

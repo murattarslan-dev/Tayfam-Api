@@ -51,7 +51,7 @@ her okumada yeniden süzülür. Yeni tablolar (migration `00023`):
 | Tablo | Alanlar | Not |
 | --- | --- | --- |
 | `friend_scores` | `user_low_id`, `user_high_id`, `score` (> 0), `shared_count` (≥ 1), `last_shared_at`, `computed_at` | PK (low, high), low < high. Her gün baştan hesaplanır. Hiçbir API cevabına, olaya, log'a, metriğe girmez |
-| `friend_suggestions` | `user_id`, `suggested_user_id`, `created_at`, `dismissed_at` | PK (user, suggested); kendini öneremez. Öneri satırı ve "Kapat" kararı |
+| `friend_suggestions` | `user_id`, `suggested_user_id`, `created_at`, `dismissed_at`, `source` (`suggested` / `blocked`) | PK (user, suggested); kendini öneremez. Öneri satırı ve "Kapat" kararı; `blocked` engellemede yazılan, baştan kapatılmış kayıttır (listelenmez, haftalık sınıra sayılmaz, dışa aktarmaya öneri olarak girmez) |
 | `social_settings` | `user_id` PK, `profiling_enabled` (varsayılan true), `hide_from_suggestions` (varsayılan false), `updated_at` | Satır yalnızca kişi bir ayarı değiştirince açılır; yoksa varsayılanlar geçerlidir |
 
 Kullanıcı kimlikleri identity'nindir; FK yoktur, `user.deleted` tüketicisi

@@ -390,6 +390,49 @@ func (q *Queries) ExportFishingCatches(ctx context.Context, arg ExportFishingCat
 	return items, nil
 }
 
+const exportFriendSuggestions = `-- name: ExportFriendSuggestions :many
+SELECT fs.suggested_user_id AS k, jsonb_build_object(
+  'user_id', fs.suggested_user_id, 'created_at', fs.created_at, 'dismissed_at', fs.dismissed_at
+) AS data
+FROM friend_suggestions fs
+WHERE fs.user_id = $1 AND fs.source = 'suggested' AND fs.suggested_user_id > $2
+ORDER BY fs.suggested_user_id
+LIMIT $3
+`
+
+type ExportFriendSuggestionsParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportFriendSuggestionsRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Kişiye yapılan öneriler, kapatılanlar dahil. Engellemede yazılan kayıt
+// (source = blocked) bir öneri değildir; engel zaten blocks bölümündedir.
+func (q *Queries) ExportFriendSuggestions(ctx context.Context, arg ExportFriendSuggestionsParams) ([]ExportFriendSuggestionsRow, error) {
+	rows, err := q.db.Query(ctx, exportFriendSuggestions, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportFriendSuggestionsRow{}
+	for rows.Next() {
+		var i ExportFriendSuggestionsRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportFriendships = `-- name: ExportFriendships :many
 SELECT (CASE WHEN f.user_low_id = $1::uuid THEN f.user_high_id ELSE f.user_low_id END)::uuid AS k, jsonb_build_object(
   'user_id', CASE WHEN f.user_low_id = $1::uuid THEN f.user_high_id ELSE f.user_low_id END,
@@ -691,6 +734,56 @@ func (q *Queries) ExportReports(ctx context.Context, arg ExportReportsParams) ([
 	items := []ExportReportsRow{}
 	for rows.Next() {
 		var i ExportReportsRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportSocialSettings = `-- name: ExportSocialSettings :many
+SELECT $1::uuid AS k, jsonb_build_object(
+  'profiling_enabled', COALESCE(s.profiling_enabled, true),
+  'hide_from_suggestions', COALESCE(s.hide_from_suggestions, false),
+  'updated_at', s.updated_at,
+  'scored_people_count', (SELECT count(*) FROM friend_scores f
+                          WHERE f.user_low_id = $1::uuid OR f.user_high_id = $1::uuid)
+) AS data
+FROM (SELECT 1) one
+LEFT JOIN social_settings s ON s.user_id = $1::uuid
+WHERE $1::uuid > $2::uuid
+  AND (s.user_id IS NOT NULL
+       OR EXISTS (SELECT 1 FROM friend_scores f WHERE f.user_low_id = $1::uuid OR f.user_high_id = $1::uuid))
+LIMIT $3
+`
+
+type ExportSocialSettingsParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportSocialSettingsRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Tek kayıt: iki ayar (satır yoksa varsayılanlar) ve kişi hakkında puan
+// tutulan kişi sayısı. Puan değerleri ve kiminle olduğu girmez (ADR-0028
+// §9). Ayar satırı da puanı da yoksa tutulan bir şey yoktur, kayıt da yok.
+func (q *Queries) ExportSocialSettings(ctx context.Context, arg ExportSocialSettingsParams) ([]ExportSocialSettingsRow, error) {
+	rows, err := q.db.Query(ctx, exportSocialSettings, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportSocialSettingsRow{}
+	for rows.Next() {
+		var i ExportSocialSettingsRow
 		if err := rows.Scan(&i.K, &i.Data); err != nil {
 			return nil, err
 		}
