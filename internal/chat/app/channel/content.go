@@ -86,10 +86,19 @@ type placeData struct {
 	Name string  `json:"name,omitempty"`
 }
 
+// maxPlaceBytes bounds an encoded place: two numbers and a name of at
+// most PlaceNameMax characters (4 bytes each, JSON escaping up to 6 per
+// byte) fit well within it, and it stays under the stored body's limit
+// (channel_messages_body_len).
+const maxPlaceBytes = 4096
+
 func encodePlace(p Place) (string, error) {
 	b, err := json.Marshal(placeData{Lat: p.Latitude, Lng: p.Longitude, Name: p.Name})
 	if err != nil {
 		return "", fmt.Errorf("yer: %w", err)
+	}
+	if len(b) > maxPlaceBytes {
+		return "", invalid("place.name")
 	}
 	return string(b), nil
 }
