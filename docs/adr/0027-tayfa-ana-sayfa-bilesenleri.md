@@ -1,6 +1,6 @@
 # ADR-0027: Tayfa ana sayfa bileşenleri ve günün içeriği (v3)
 
-- **Durum:** Önerildi
+- **Durum:** Kabul edildi (platform sahibi, 2026-11-15)
 - **Tarih:** 2026-11-15
 - **Karar veren:** Ürün kararları platform sahibinindir (2026-11-15, Notion
   "Faz 3 (v3)" §5a ve §4.15). Bu ADR onların mimariye taşınmasıdır.

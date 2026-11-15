@@ -1,6 +1,6 @@
 # ADR-0025: Etkinlik türü kataloğu ve bileşen modeli (v3)
 
-- **Durum:** Önerildi
+- **Durum:** Kabul edildi (platform sahibi, 2026-11-15)
 - **Tarih:** 2026-11-15
 - **Karar veren:** Ürün kararları platform sahibinindir (2026-11-15, Notion
   "Faz 3 (v3) — Dinamik Etkinlik Kataloğu ve Bileşenler"). Bu ADR onların

@@ -1,6 +1,6 @@
 # ADR-0026: Tayfa istatistikleri, kişisel istatistik ve Keşfet vitrini (v3)
 
-- **Durum:** Önerildi
+- **Durum:** Kabul edildi (platform sahibi, 2026-11-15)
 - **Tarih:** 2026-11-15
 - **Karar veren:** Ürün kararları platform sahibinindir (2026-11-15, Notion
   "Faz 3 (v3)" §5). Bu ADR onların mimariye taşınmasıdır.
