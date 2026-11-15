@@ -76,6 +76,8 @@ type CoreDeps struct {
 	Polls PollClient
 	// Social enables the friend and block routes when set (issue #71).
 	Social SocialClient
+	// Availability enables the "Boşum" routes when set (issue #207).
+	Availability AvailabilityClient
 	// Invitations enables the direct invitation routes when set.
 	Invitations InvitationClient
 	// Profiles enables the profile routes when set.
@@ -177,6 +179,9 @@ func registerCore(mux *http.ServeMux, d CoreDeps) {
 	}
 	if d.Social != nil {
 		registerSocial(mux, h)
+	}
+	if d.Availability != nil {
+		registerAvailability(mux, h)
 	}
 	if d.Invitations != nil {
 		registerInvitations(mux, h)

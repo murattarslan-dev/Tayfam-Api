@@ -201,6 +201,7 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"poll_votes.user_id":             `SELECT count(*) FROM poll_votes WHERE user_id = $1`,
 		"friendships":                    `SELECT count(*) FROM friendships WHERE $1 IN (user_low_id, user_high_id, requested_by)`,
 		"user_blocks":                    `SELECT count(*) FROM user_blocks WHERE $1 IN (blocker_id, blocked_id)`,
+		"user_availability":              `SELECT count(*) FROM user_availability WHERE user_id = $1`,
 		"reports":                        `SELECT count(*) FROM reports WHERE $1 IN (reporter_id, subject_user_id, handled_by, platform_handled_by)`,
 		"user_profiles (kişisel)":        `SELECT count(*) FROM user_profiles WHERE user_id = $1 AND (display_name IS NOT NULL OR avatar_upload_id IS NOT NULL OR deleted_at IS NULL)`,
 	} {
@@ -574,6 +575,12 @@ func TestDeletedRemovesSocialRecords(t *testing.T) {
 	}
 	e.seed(t, `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2), ($3, $4), ($5, $6)`,
 		u.PG(), blocked.PG(), blocker.PG(), u.PG(), other.PG(), friend.PG())
+	// "Boşum" days (issue #207): the user's go, a friend's stay.
+	e.seed(t, `INSERT INTO user_availability (id, user_id, day, slots, note) VALUES
+		($1, $2, (now() AT TIME ZONE 'Europe/Istanbul')::date, '{evening}', 'not'),
+		($3, $2, (now() AT TIME ZONE 'Europe/Istanbul')::date + 3, '{all_day}', NULL),
+		($4, $5, (now() AT TIME ZONE 'Europe/Istanbul')::date, '{morning}', NULL)`,
+		id.New().PG(), u.PG(), id.New().PG(), id.New().PG(), friend.PG())
 
 	admin := id.New()
 	tf := e.tayfa(t, admin)
@@ -601,6 +608,9 @@ func TestDeletedRemovesSocialRecords(t *testing.T) {
 	}
 	if n := e.count(t, `SELECT count(*) FROM user_blocks`); n != 1 {
 		t.Fatalf("başkalarının engeli = %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM user_availability WHERE user_id = $1`, friend.PG()); n != 1 {
+		t.Fatalf("başkalarının boş vakti = %d", n)
 	}
 	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'tayfa.invitation_cancelled' AND payload->>'user_id' = $1 AND actor_id IS NULL`, invitee.String()); n != 1 {
 		t.Fatalf("davet iptal olayı = %d", n)

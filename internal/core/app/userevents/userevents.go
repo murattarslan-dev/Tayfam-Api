@@ -267,6 +267,7 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			q.ClearQuestionUserFields, q.ClearAnswerUserFields, q.DeleteUserAnswerVotes,
 			q.ClearPollUserFields, q.DeleteUserPollVotes,
 			q.DeleteUserFriendships, q.DeleteUserBlocks, q.DeleteUserRequestOutcomes,
+			q.DeleteUserAvailability,
 			q.ClearAuditActor, q.ClearEventActor, q.ClearReportUserFields,
 		} {
 			if err := clear(ctx, e.User.PG()); err != nil {
