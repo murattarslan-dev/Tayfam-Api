@@ -1,0 +1,99 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// AvailabilityService holds "Boşum": the days a user is free, shown to all
+// of their friends and nobody else (issue #207, ADR-0028). There are no
+// notifications and no events; friends see a badge in their friend list
+// (Friend.next_available) and the days when they open them.
+//
+// Every method needs the caller's access token; the caller is always the
+// verified token subject.
+//
+// A day is a calendar date (YYYY-MM-DD), not an instant: "today" is the
+// Europe/Istanbul date. Only today through today + 30 days can be written;
+// past days are never returned and are deleted by a daily job.
+//
+// Another user's days are visible only to an accepted friend with no block
+// in either direction; everyone else gets ERROR_REASON_USER_NOT_FOUND, the
+// same as for an unknown user.
+//
+// The note is user content: it is never logged and never put in an event.
+service AvailabilityService {
+  // ListMyAvailability lists the caller's days from today on, oldest first
+  // (at most 31; no paging).
+  rpc ListMyAvailability(ListMyAvailabilityRequest) returns (ListMyAvailabilityResponse);
+  // SetAvailability writes the caller's day, replacing what was there.
+  //
+  // Errors: ERROR_REASON_VALIDATION (date not in today..today+30, no or
+  // unknown slots, ALL_DAY with another slot, note too long or with
+  // control characters).
+  rpc SetAvailability(SetAvailabilityRequest) returns (SetAvailabilityResponse);
+  // DeleteAvailability deletes the caller's day. Deleting nothing succeeds.
+  //
+  // Errors: ERROR_REASON_VALIDATION (malformed date).
+  rpc DeleteAvailability(DeleteAvailabilityRequest) returns (DeleteAvailabilityResponse);
+  // ListUserAvailability lists user_id's days from today on, oldest first.
+  // user_id may be the caller.
+  //
+  // Errors: ERROR_REASON_USER_NOT_FOUND (not a friend, a block either way,
+  // unknown, deleted or banned user).
+  rpc ListUserAvailability(ListUserAvailabilityRequest) returns (ListUserAvailabilityResponse);
+}
+
+// DaySlot is a rough part of a day; not a time.
+enum DaySlot {
+  DAY_SLOT_UNSPECIFIED = 0;
+  DAY_SLOT_MORNING = 1;
+  DAY_SLOT_AFTERNOON = 2;
+  DAY_SLOT_EVENING = 3;
+  // The whole day; never together with another slot.
+  DAY_SLOT_ALL_DAY = 4;
+}
+
+// AvailabilityDay is one free day.
+message AvailabilityDay {
+  // YYYY-MM-DD.
+  string date = 1;
+  // One to three slots in the order above, or ALL_DAY alone.
+  repeated DaySlot slots = 2;
+  // Empty when there is none. 1–60 characters.
+  string note = 3;
+  google.protobuf.Timestamp update_time = 4;
+}
+
+message ListMyAvailabilityRequest {}
+
+message ListMyAvailabilityResponse {
+  repeated AvailabilityDay days = 1;
+}
+
+message SetAvailabilityRequest {
+  // YYYY-MM-DD.
+  string date = 1;
+  // Duplicates are ignored.
+  repeated DaySlot slots = 2;
+  // Optional; leading and trailing spaces are trimmed, empty means none.
+  string note = 3;
+}
+
+message SetAvailabilityResponse {
+  AvailabilityDay day = 1;
+}
+
+message DeleteAvailabilityRequest {
+  // YYYY-MM-DD.
+  string date = 1;
+}
+
+message DeleteAvailabilityResponse {}
+
+message ListUserAvailabilityRequest {
+  string user_id = 1;
+}
+
+message ListUserAvailabilityResponse {
+  repeated AvailabilityDay days = 1;
+}

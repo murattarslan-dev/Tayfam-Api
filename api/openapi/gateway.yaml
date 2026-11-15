@@ -3985,6 +3985,83 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- "Boşum": arkadaşlara görünen boş vakit (core AvailabilityService, #207, ADR-0028) ---
+
+  /v1/me/availability:
+    get:
+      operationId: listMyAvailability
+      summary: Boş günleriniz (bugünden itibaren, en fazla 31; sayfalanmaz)
+      description: |
+        Gün, Europe/Istanbul takvimine göre bugünden başlar; geçmiş günler
+        dönmez ve günlük bir işle silinir.
+      responses:
+        "200":
+          description: Boş günler, eskiden yeniye
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AvailabilityDayList" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/availability/{date}:
+    parameters:
+      - $ref: "#/components/parameters/AvailabilityDate"
+    put:
+      operationId: setAvailability
+      summary: Bu günü boş olarak işaretler ya da bütünüyle değiştirir
+      description: |
+        Gün bugünden (Europe/Istanbul) en fazla 30 gün ileri olabilir.
+        Bildirim gitmez; tüm arkadaşlarınız görür, başka kimse görmez. Not
+        isteğe bağlıdır; boş ya da yalnızca boşluk ise not yoktur.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AvailabilityInput" }
+      responses:
+        "200":
+          description: Kaydedilen gün
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AvailabilityDay" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteAvailability
+      summary: Bu günün boş vaktini siler
+      description: Silinecek bir şey yoksa da başarılıdır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Silindi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/users/{user_id}/availability:
+    parameters:
+      - $ref: "#/components/parameters/UserID"
+    get:
+      operationId: listUserAvailability
+      summary: Bir arkadaşınızın boş günleri (bugünden itibaren)
+      description: |
+        Yalnızca kabul edilmiş arkadaşlar görür. Arkadaş değilseniz, istek
+        bekliyorsa, iki yönden biri engellediyse ya da kullanıcı yoksa cevap
+        aynıdır (`user-not-found`). Kendi kimliğinizle kendi günleriniz döner.
+      responses:
+        "200":
+          description: Boş günler, eskiden yeniye
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AvailabilityDayList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   # --- Doğrudan tayfa daveti (core MembershipService, #71) ---
 
   /v1/tayfas/{tayfa_id}/invitations:
@@ -4937,6 +5014,12 @@ components:
       in: query
       required: false
       schema: { type: integer, minimum: 0, maximum: 100, default: 0 }
+    AvailabilityDate:
+      name: date
+      in: path
+      required: true
+      description: Takvim günü (YYYY-MM-DD), saat değil; "bugün" Europe/Istanbul tarihidir.
+      schema: { type: string, format: date }
     PageToken:
       name: page_token
       in: query
@@ -7524,6 +7607,13 @@ components:
           enum: [friends, incoming, outgoing]
         requested_at: { type: string, format: date-time }
         accepted_at: { type: string, format: date-time }
+        next_available:
+          description: |
+            "Boşum" rozeti (#207): arkadaşın bugünden itibaren en yakın boş
+            günü, not olmadan. Yalnızca `GET /v1/me/friends`'te ve kaydı
+            varsa döner.
+          allOf:
+            - $ref: "#/components/schemas/AvailabilitySummary"
     FriendList:
       type: object
       required: [friends]
@@ -7532,6 +7622,64 @@ components:
           type: array
           items: { $ref: "#/components/schemas/Friend" }
         next_page_token: { type: string }
+    DaySlot:
+      type: string
+      description: Günün kaba bir bölümü; saat değil. `all_day` başka dilimle birlikte olmaz.
+      enum: [morning, afternoon, evening, all_day]
+    AvailabilitySummary:
+      type: object
+      required: [date, slots]
+      properties:
+        date: { type: string, format: date }
+        slots:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items: { $ref: "#/components/schemas/DaySlot" }
+    AvailabilityDay:
+      type: object
+      required: [date, slots, updated_at]
+      properties:
+        date:
+          type: string
+          format: date
+          description: Takvim günü (Europe/Istanbul).
+        slots:
+          type: array
+          description: Sabah, öğleden sonra, akşam sırasıyla; ya da yalnızca `all_day`.
+          minItems: 1
+          maxItems: 3
+          items: { $ref: "#/components/schemas/DaySlot" }
+        note:
+          type: string
+          description: Not yoksa alan yoktur.
+          maxLength: 60
+        updated_at: { type: string, format: date-time }
+    AvailabilityDayList:
+      type: object
+      required: [days]
+      properties:
+        days:
+          type: array
+          maxItems: 31
+          items: { $ref: "#/components/schemas/AvailabilityDay" }
+    AvailabilityInput:
+      type: object
+      required: [slots]
+      additionalProperties: false
+      properties:
+        slots:
+          type: array
+          description: Tekrar eden dilim yok sayılır. `all_day` tek başına.
+          minItems: 1
+          maxItems: 4
+          items: { $ref: "#/components/schemas/DaySlot" }
+        note:
+          type: string
+          description: |
+            İsteğe bağlı, en fazla 60 karakter; kontrol karakteri (satır sonu
+            dahil) içeremez. Baştaki ve sondaki boşluk kırpılır.
+          maxLength: 60
     BlockedUser:
       type: object
       required: [user_id, blocked_at]

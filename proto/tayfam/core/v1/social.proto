@@ -3,6 +3,7 @@ syntax = "proto3";
 package tayfam.core.v1;
 
 import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/availability.proto";
 
 // SocialService holds friendships and blocks (issue #71; data model v14
 // "Arkadaşlık ve Davet (v11)", "Mesaj İsteği Modeli (v7)"; ADR-0009).
@@ -92,6 +93,10 @@ message Friend {
   google.protobuf.Timestamp request_time = 5;
   // Set when FRIEND_STATE_FRIENDS.
   google.protobuf.Timestamp accept_time = 6;
+  // "Boşum" badge (issue #207, ADR-0028): the friend's nearest free day
+  // from today on, without the note. Only in ListFriends, and only when
+  // there is one.
+  AvailabilityDay next_available = 7;
 }
 
 message BlockedUser {
