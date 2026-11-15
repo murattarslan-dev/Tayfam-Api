@@ -122,7 +122,8 @@ type MediaServiceClient interface {
 	// account is deleted. A tayfa cover is visible to ACTIVE members of the
 	// tayfa (TayfaView). An event cover or a catch photo is visible to ACTIVE
 	// members who may see the event (EventView, events module on, event not
-	// deleted; the catch not deleted).
+	// deleted; the catch not deleted). An event album photo likewise (the
+	// photo not deleted; ADR-0028).
 	// 1 to 100 distinct upload IDs.
 	GetMediaUrls(ctx context.Context, in *GetMediaUrlsRequest, opts ...grpc.CallOption) (*GetMediaUrlsResponse, error)
 	// AttachAvatar marks the caller's READY AVATAR upload as their avatar.
@@ -348,7 +349,8 @@ type MediaServiceServer interface {
 	// account is deleted. A tayfa cover is visible to ACTIVE members of the
 	// tayfa (TayfaView). An event cover or a catch photo is visible to ACTIVE
 	// members who may see the event (EventView, events module on, event not
-	// deleted; the catch not deleted).
+	// deleted; the catch not deleted). An event album photo likewise (the
+	// photo not deleted; ADR-0028).
 	// 1 to 100 distinct upload IDs.
 	GetMediaUrls(context.Context, *GetMediaUrlsRequest) (*GetMediaUrlsResponse, error)
 	// AttachAvatar marks the caller's READY AVATAR upload as their avatar.

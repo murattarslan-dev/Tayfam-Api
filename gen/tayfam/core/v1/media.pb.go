@@ -33,6 +33,9 @@ const (
 	UploadPurpose_UPLOAD_PURPOSE_CATCH_PHOTO UploadPurpose = 2
 	// A tayfa or event cover.
 	UploadPurpose_UPLOAD_PURPOSE_COVER UploadPurpose = 3
+	// An event album photo (issue #206, ADR-0028). Attached with
+	// EventService.AddEventPhoto; never a cover.
+	UploadPurpose_UPLOAD_PURPOSE_EVENT_PHOTO UploadPurpose = 4
 )
 
 // Enum value maps for UploadPurpose.
@@ -42,12 +45,14 @@ var (
 		1: "UPLOAD_PURPOSE_AVATAR",
 		2: "UPLOAD_PURPOSE_CATCH_PHOTO",
 		3: "UPLOAD_PURPOSE_COVER",
+		4: "UPLOAD_PURPOSE_EVENT_PHOTO",
 	}
 	UploadPurpose_value = map[string]int32{
 		"UPLOAD_PURPOSE_UNSPECIFIED": 0,
 		"UPLOAD_PURPOSE_AVATAR":      1,
 		"UPLOAD_PURPOSE_CATCH_PHOTO": 2,
 		"UPLOAD_PURPOSE_COVER":       3,
+		"UPLOAD_PURPOSE_EVENT_PHOTO": 4,
 	}
 )
 
@@ -1597,12 +1602,13 @@ const file_tayfam_core_v1_media_proto_rawDesc = "" +
 	"\x1cGetExportDownloadUrlResponse\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12;\n" +
 	"\vexpire_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTime*\x84\x01\n" +
+	"expireTime*\xa4\x01\n" +
 	"\rUploadPurpose\x12\x1e\n" +
 	"\x1aUPLOAD_PURPOSE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15UPLOAD_PURPOSE_AVATAR\x10\x01\x12\x1e\n" +
 	"\x1aUPLOAD_PURPOSE_CATCH_PHOTO\x10\x02\x12\x18\n" +
-	"\x14UPLOAD_PURPOSE_COVER\x10\x03*}\n" +
+	"\x14UPLOAD_PURPOSE_COVER\x10\x03\x12\x1e\n" +
+	"\x1aUPLOAD_PURPOSE_EVENT_PHOTO\x10\x04*}\n" +
 	"\fUploadStatus\x12\x1d\n" +
 	"\x19UPLOAD_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15UPLOAD_STATUS_PENDING\x10\x01\x12\x17\n" +
