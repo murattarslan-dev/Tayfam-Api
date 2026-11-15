@@ -153,6 +153,9 @@ docs/runbooks/              işletim adımları
   yazılır; tüketici metodlar idempotent olmalıdır (ADR-0002).
 - **Arayüz metinleri** API'den Türkçe dönmez; istemci çeviri dosyalarını
   kullanır. API hata kodları makine tarafından okunabilir (`type` alanı).
+  İstisna: etkinlik kataloğundaki tür, ilgi alanı ve alan adları platform
+  sahibinin yazdığı içeriktir ve `labels` (dil → metin) olarak döner
+  (ADR-0025 §8).
 
 ## Test beklentileri
 
