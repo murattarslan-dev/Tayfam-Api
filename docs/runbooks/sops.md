@@ -286,8 +286,9 @@ Platform sahibinin listesi (ortam başına bir kez; `<ortam>` = `dev` |
    Filtering* **boş bırakılır**: telefonlar dosyayı core'un verdiği imzalı
    linkle doğrudan R2'ye yükler ve okur; imzalı link bu token'la
    imzalandığı için IP filtresi telefonun isteğini de reddeder
-   (`AccessDenied`, 2026-11-15'te prod'da yaşandı). Token'ın sızma riski
-   tek bucket ve nesne yetkisiyle sınırlanır. *Admin Read &
+   (`AccessDenied`). Token'ın sızma riski tek bucket ve nesne yetkisiyle
+   sınırlanır. Bucket'ı token'da tek tek seçin ve adını kontrol edin:
+   başka ortamın bucket'ına yetkili token da `AccessDenied` döner. *Admin Read &
    Write* veya hesap düzeyinde token **kullanılmaz**; yedek (Barman)
    token'ı ayrıdır ve bu bucket'a yetkisi yoktur (ADR-0011 madde 11).
    Panel *Access Key ID* ve *Secret Access Key*'i bir kez gösterir;
