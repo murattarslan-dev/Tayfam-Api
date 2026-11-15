@@ -88,6 +88,8 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_EVENT_ITEM_NOT_FOUND, true
 	case errors.Is(err, apperr.ErrEventLimit):
 		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_EVENT_LIMIT, true
+	case errors.Is(err, apperr.ErrEventItemTaken):
+		return codes.Aborted, corev1.ErrorReason_ERROR_REASON_EVENT_ITEM_TAKEN, true
 	case errors.Is(err, apperr.ErrEventTypeMismatch):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_TYPE_MISMATCH, true
 	case errors.Is(err, apperr.ErrCheckInClosed):

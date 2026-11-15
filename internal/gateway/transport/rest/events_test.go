@@ -97,6 +97,9 @@ func (f *fakeCore) AddCampItem(ctx context.Context, in *corev1.AddCampItemReques
 func (f *fakeCore) RemoveCampItem(ctx context.Context, in *corev1.RemoveCampItemRequest, _ ...grpc.CallOption) (*corev1.RemoveCampItemResponse, error) {
 	return &corev1.RemoveCampItemResponse{}, f.record(ctx, in)
 }
+func (f *fakeCore) AssignCampItem(ctx context.Context, in *corev1.AssignCampItemRequest, _ ...grpc.CallOption) (*corev1.AssignCampItemResponse, error) {
+	return &corev1.AssignCampItemResponse{Item: &corev1.CampItem{Id: in.GetItemId(), Name: "Çadır", Quantity: 1, AssignedUserId: in.GetAssignedUserId()}}, f.record(ctx, in)
+}
 func (f *fakeCore) AddConvoyVehicle(ctx context.Context, in *corev1.AddConvoyVehicleRequest, _ ...grpc.CallOption) (*corev1.AddConvoyVehicleResponse, error) {
 	return &corev1.AddConvoyVehicleResponse{Vehicle: &corev1.ConvoyVehicle{Id: vehicleID, UserId: userID, Make: in.GetMake()}}, f.record(ctx, in)
 }
@@ -170,6 +173,9 @@ func TestEventRoutes(t *testing.T) {
 		{"POST", one + "/hike-return", `{"returned_at":"` + t0.Format(time.RFC3339) + `"}`, 200, &corev1.FinishHikeRequest{TayfaId: tayfaID, EventId: eventID, ReturnTime: timestamppb.New(t0)}},
 		{"POST", one + "/camp-items", `{"name":"Çadır","quantity":2,"assigned_user_id":"` + userID + `"}`, 201, &corev1.AddCampItemRequest{TayfaId: tayfaID, EventId: eventID, Name: "Çadır", Quantity: 2, AssignedUserId: userID}},
 		{"DELETE", one + "/camp-items/" + itemID, "", 204, &corev1.RemoveCampItemRequest{TayfaId: tayfaID, EventId: eventID, ItemId: itemID}},
+		{"PATCH", one + "/camp-items/" + itemID, `{"assigned_user_id":"` + userID + `"}`, 200, &corev1.AssignCampItemRequest{TayfaId: tayfaID, EventId: eventID, ItemId: itemID, AssignedUserId: userID}},
+		{"PATCH", one + "/camp-items/" + itemID, `{"assigned_user_id":null}`, 200, &corev1.AssignCampItemRequest{TayfaId: tayfaID, EventId: eventID, ItemId: itemID}},
+		{"PATCH", one + "/camp-items/" + itemID, `{}`, 200, &corev1.AssignCampItemRequest{TayfaId: tayfaID, EventId: eventID, ItemId: itemID}},
 		{"POST", one + "/convoy-vehicles", `{"make":"Ford","model":"Mustang","model_year":1967,"color":"Kırmızı","plate":"34 ABC 12"}`, 201,
 			&corev1.AddConvoyVehicleRequest{TayfaId: tayfaID, EventId: eventID, Make: "Ford", Model: "Mustang", ModelYear: 1967, Color: "Kırmızı", Plate: "34 ABC 12"}},
 		{"DELETE", one + "/convoy-vehicles/" + vehicleID, "", 204, &corev1.RemoveConvoyVehicleRequest{TayfaId: tayfaID, EventId: eventID, VehicleId: vehicleID}},
@@ -368,6 +374,10 @@ func TestEventBadRequests(t *testing.T) {
 		"malzeme adedi":         {"POST", one + "/camp-items", `{"name":"Çadır","quantity":1000}`},
 		"malzeme kişisi bozuk":  {"POST", one + "/camp-items", `{"name":"Çadır","assigned_user_id":"x"}`},
 		"bozuk malzeme id":      {"DELETE", one + "/camp-items/x", ""},
+		"atamada bilinmeyen":    {"PATCH", one + "/camp-items/" + itemID, `{"user_id":"` + userID + `"}`},
+		"atamada bozuk kişi":    {"PATCH", one + "/camp-items/" + itemID, `{"assigned_user_id":"x"}`},
+		"atamada sayı":          {"PATCH", one + "/camp-items/" + itemID, `{"assigned_user_id":5}`},
+		"atamada bozuk id":      {"PATCH", one + "/camp-items/x", `{"assigned_user_id":null}`},
 		"marka yok":             {"POST", one + "/convoy-vehicles", `{"make":" "}`},
 		"uzun plaka":            {"POST", one + "/convoy-vehicles", `{"make":"Ford","plate":"` + strings.Repeat("A", 17) + `"}`},
 		"bozuk araç id":         {"DELETE", one + "/convoy-vehicles/x", ""},
@@ -437,7 +447,7 @@ func TestEventWritesNeedClientHeader(t *testing.T) {
 		{"POST", "/v1/tayfas/" + tayfaID + "/events"}, {"PATCH", one}, {"POST", one + "/cancellation"},
 		{"PUT", one + "/rsvp"}, {"PUT", one + "/attendees/" + userID + "/attendance"}, {"DELETE", one + "/attendees/" + userID + "/attendance"},
 		{"POST", one + "/check-in"}, {"POST", one + "/hike-start"}, {"POST", one + "/hike-return"},
-		{"POST", one + "/camp-items"}, {"DELETE", one + "/camp-items/" + itemID},
+		{"POST", one + "/camp-items"}, {"DELETE", one + "/camp-items/" + itemID}, {"PATCH", one + "/camp-items/" + itemID},
 		{"POST", one + "/convoy-vehicles"}, {"DELETE", one + "/convoy-vehicles/" + vehicleID},
 		{"POST", one + "/fishing-catches"}, {"DELETE", one + "/fishing-catches/" + catchID},
 		{"POST", "/v1/tayfas/" + tayfaID + "/event-series/" + seriesID + "/ending"},
@@ -591,6 +601,8 @@ func TestEventProblems(t *testing.T) {
 		{"POST", one + "/hike-return", `{}`, "ERROR_REASON_HIKE_NOT_STARTED", 409, "hike-not-started"},
 		{"POST", one + "/fishing-catches", `{"species":"Levrek","length_cm":10,"client_request_id":"` + reqID + `"}`, "ERROR_REASON_NOT_ATTENDED", 409, "not-attended"},
 		{"POST", one + "/camp-items", `{"name":"Ocak"}`, "ERROR_REASON_EVENT_TYPE_MISMATCH", 409, "event-type-mismatch"},
+		{"PATCH", one + "/camp-items/" + itemID, `{"assigned_user_id":null}`, "ERROR_REASON_EVENT_ITEM_TAKEN", 409, "event-item-taken"},
+		{"PATCH", one + "/camp-items/" + itemID, `{"assigned_user_id":"` + userID + `"}`, "ERROR_REASON_EVENT_NOT_GOING", 409, "event-not-going"},
 		{"POST", "/v1/tayfas/" + tayfaID + "/event-series/" + seriesID + "/ending", "", "ERROR_REASON_EVENT_SERIES_ENDED", 409, "event-series-ended"},
 		{"GET", "/v1/tayfas/" + tayfaID + "/event-series/" + seriesID, "", "ERROR_REASON_EVENT_SERIES_NOT_FOUND", 404, "event-series-not-found"},
 	} {

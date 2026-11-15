@@ -342,6 +342,9 @@ type Querier interface {
 	GetAnswer(ctx context.Context, arg GetAnswerParams) (GetAnswerRow, error)
 	GetAnswerByClientRequest(ctx context.Context, arg GetAnswerByClientRequestParams) (GetAnswerByClientRequestRow, error)
 	GetAnswerForUpdate(ctx context.Context, arg GetAnswerForUpdateParams) (GetAnswerForUpdateRow, error)
+	// Kilit, aynı malzemeyi aynı anda üstlenen iki kişiden ikincisinin
+	// güncel atamayı görmesini sağlar (issue #198).
+	GetCampItemForUpdate(ctx context.Context, arg GetCampItemForUpdateParams) (GetCampItemForUpdateRow, error)
 	GetCatch(ctx context.Context, arg GetCatchParams) (GetCatchRow, error)
 	// ---------------------------------------------------------------------------
 	// Av günlüğü
@@ -708,6 +711,7 @@ type Querier interface {
 	// audit_logs saklama işi; trigger yalnızca bu ayarla ve 365 günden eski
 	// kayıtlar için silmeye izin verir.
 	SetAuditRetentionJob(ctx context.Context) error
+	SetCampItemAssignee(ctx context.Context, arg SetCampItemAssigneeParams) error
 	SetCatchPhoto(ctx context.Context, arg SetCatchPhotoParams) error
 	// ---------------------------------------------------------------------------
 	// Konvoy araçları. Kişi başına bir araç; yeniden eklemek öncekinin yerine

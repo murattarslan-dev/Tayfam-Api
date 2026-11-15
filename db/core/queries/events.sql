@@ -190,6 +190,17 @@ SELECT id, name, quantity, assigned_user_id FROM event_camp_items
 WHERE event_id = @event_id
 ORDER BY created_at, id;
 
+-- name: GetCampItemForUpdate :one
+-- Kilit, aynı malzemeyi aynı anda üstlenen iki kişiden ikincisinin
+-- güncel atamayı görmesini sağlar (issue #198).
+SELECT id, name, quantity, assigned_user_id FROM event_camp_items
+WHERE event_id = @event_id AND id = @id
+FOR UPDATE;
+
+-- name: SetCampItemAssignee :exec
+UPDATE event_camp_items SET assigned_user_id = @assigned_user_id
+WHERE event_id = @event_id AND id = @id;
+
 -- name: DeleteCampItem :execrows
 DELETE FROM event_camp_items WHERE event_id = @event_id AND id = @id;
 

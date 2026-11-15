@@ -21,6 +21,7 @@ const campItemsMax = 200
 const (
 	auditCampItemAdded   = "event.camp_item_added"
 	auditCampItemRemoved = "event.camp_item_removed"
+	auditCampItemAssign  = "event.camp_item_assigned"
 	auditVehicleSet      = "event.vehicle_set"
 	auditVehicleRemoved  = "event.vehicle_removed"
 
@@ -30,7 +31,7 @@ const (
 
 // AddCampItem adds an item to a camp's list. The organizer, moderators and
 // admins manage the list. assigned may be zero; otherwise it must be an
-// active member of the tayfa.
+// active member of the tayfa who answered going (issue #198).
 func (s *Service) AddCampItem(ctx context.Context, user, tayfa, event id.ID, name string, quantity int32, assigned id.ID) (CampItem, error) {
 	n, err := cleanText(name, "name", 1, itemNameMax, false)
 	if err != nil {
@@ -59,12 +60,8 @@ func (s *Service) AddCampItem(ctx context.Context, user, tayfa, event id.ID, nam
 			return apperr.ErrEventLimit
 		}
 		if assigned != (id.ID{}) {
-			m, err := q.GetMembership(ctx, store.GetMembershipParams{TayfaID: tayfa.PG(), UserID: assigned.PG()})
-			if errors.Is(err, pgx.ErrNoRows) || (err == nil && m.Status != "active") {
-				return apperr.Validation("assigned_user_id")
-			}
-			if err != nil {
-				return fmt.Errorf("üyelik: %w", err)
+			if err := goingMember(ctx, q, tayfa, event, assigned); err != nil {
+				return err
 			}
 		}
 		if err := q.CreateCampItem(ctx, store.CreateCampItemParams{
@@ -100,6 +97,114 @@ func (s *Service) RemoveCampItem(ctx context.Context, user, tayfa, event, item i
 		}
 		return listChanged(ctx, q, c, b, event, auditCampItemRemoved, fieldCampItems, "item_id", item)
 	})
+}
+
+// AssignCampItem sets or clears who brings a camp item (issue #198);
+// assigned zero clears it. The organizer, moderators and admins assign any
+// participant who answered going, or clear any assignment. Other members
+// who answered going may only take a free item for themselves and drop
+// their own; an item someone else took is ErrEventItemTaken. Setting the
+// value it already has succeeds without a change. The event and the item
+// are locked, so of two people taking one item at once the second sees the
+// first's assignment.
+func (s *Service) AssignCampItem(ctx context.Context, user, tayfa, event, item, assigned id.ID) (CampItem, error) {
+	var out CampItem
+	err := s.write(ctx, user, tayfa, func(q *store.Queries, c caller, b *batch) error {
+		ev, err := lockEvent(ctx, q, tayfa, event)
+		if err != nil {
+			return err
+		}
+		manager := c.manage(ev, authz.EventEditOwn, authz.EventEditAny) == nil
+		if !manager {
+			// Default no: a member needs the RSVP right (a mute takes it).
+			if err := c.authorize(authz.EventRSVP); err != nil {
+				return err
+			}
+		}
+		if ev.Type != TypeCamp {
+			return apperr.ErrEventTypeMismatch
+		}
+		if err := changeable(ev, c.now); err != nil {
+			return err
+		}
+		row, err := q.GetCampItemForUpdate(ctx, store.GetCampItemForUpdateParams{EventID: event.PG(), ID: item.PG()})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return apperr.ErrEventItemNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("kamp malzemesi: %w", err)
+		}
+		current := id.ID{}
+		if row.AssignedUserID.Valid {
+			current = id.ID(row.AssignedUserID.Bytes)
+		}
+		out = CampItem{ID: item, Name: row.Name, Quantity: row.Quantity, AssignedUserID: assigned}
+		if !manager {
+			if err := memberAssign(ctx, q, event, user, current, assigned); err != nil {
+				return err
+			}
+		} else if assigned != (id.ID{}) && assigned != current {
+			if err := goingMember(ctx, q, tayfa, event, assigned); err != nil {
+				return err
+			}
+		}
+		if current == assigned {
+			return nil
+		}
+		if err := q.SetCampItemAssignee(ctx, store.SetCampItemAssigneeParams{
+			EventID: event.PG(), ID: item.PG(), AssignedUserID: optID(assigned),
+		}); err != nil {
+			return fmt.Errorf("kamp malzemesi: %w", err)
+		}
+		return listChanged(ctx, q, c, b, event, auditCampItemAssign, fieldCampItems, "item_id", item)
+	})
+	if err != nil {
+		return CampItem{}, err
+	}
+	return out, nil
+}
+
+// memberAssign checks a change by a member who does not manage the event:
+// only for themselves, only with a going answer, only on a free item or
+// their own.
+func memberAssign(ctx context.Context, q *store.Queries, event, user, current, assigned id.ID) error {
+	if assigned != (id.ID{}) && assigned != user {
+		return apperr.ErrPermissionDenied
+	}
+	if err := going(ctx, q, event, user); err != nil {
+		return err
+	}
+	if current != (id.ID{}) && current != user {
+		// Taken by someone else: neither taking it nor dropping it is ours.
+		return apperr.ErrEventItemTaken
+	}
+	return nil
+}
+
+// going checks that user answered going on event.
+func going(ctx context.Context, q *store.Queries, event, user id.ID) error {
+	r, err := q.GetRsvp(ctx, store.GetRsvpParams{EventID: event.PG(), UserID: user.PG()})
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && r.Status != RSVPGoing) {
+		return apperr.ErrEventNotGoing
+	}
+	if err != nil {
+		return fmt.Errorf("katılım: %w", err)
+	}
+	return nil
+}
+
+// goingMember checks that an assignee is an active member of the tayfa who
+// answered going. Both cases give ErrEventNotGoing, so the answer says no
+// more about the person than the attendee list does.
+func goingMember(ctx context.Context, q *store.Queries, tayfa, event, user id.ID) error {
+	m, err := q.GetMembership(ctx, store.GetMembershipParams{TayfaID: tayfa.PG(), UserID: user.PG()})
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && m.Status != "active") {
+		return apperr.ErrEventNotGoing
+	}
+	if err != nil {
+		return fmt.Errorf("üyelik: %w", err)
+	}
+	return going(ctx, q, event, user)
 }
 
 // listEvent locks a camp or convoy event for a list change by its managers:
