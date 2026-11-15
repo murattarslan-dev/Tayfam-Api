@@ -23,6 +23,7 @@ type fakeSocial struct {
 	incoming bool
 	called   bool
 	refs     []social.RequestRef
+	update   social.SettingsUpdate
 }
 
 func (f *fakeSocial) Resolutions(_ context.Context, caller id.ID, refs []social.RequestRef) ([]social.Resolution, error) {

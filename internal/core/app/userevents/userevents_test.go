@@ -201,6 +201,9 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"poll_votes.user_id":             `SELECT count(*) FROM poll_votes WHERE user_id = $1`,
 		"friendships":                    `SELECT count(*) FROM friendships WHERE $1 IN (user_low_id, user_high_id, requested_by)`,
 		"user_blocks":                    `SELECT count(*) FROM user_blocks WHERE $1 IN (blocker_id, blocked_id)`,
+		"friend_scores":                  `SELECT count(*) FROM friend_scores WHERE $1 IN (user_low_id, user_high_id)`,
+		"friend_suggestions":             `SELECT count(*) FROM friend_suggestions WHERE $1 IN (user_id, suggested_user_id)`,
+		"social_settings":                `SELECT count(*) FROM social_settings WHERE user_id = $1`,
 		"reports":                        `SELECT count(*) FROM reports WHERE $1 IN (reporter_id, subject_user_id, handled_by, platform_handled_by)`,
 		"user_profiles (kişisel)":        `SELECT count(*) FROM user_profiles WHERE user_id = $1 AND (display_name IS NOT NULL OR avatar_upload_id IS NOT NULL OR deleted_at IS NULL)`,
 	} {
@@ -574,6 +577,15 @@ func TestDeletedRemovesSocialRecords(t *testing.T) {
 	}
 	e.seed(t, `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2), ($3, $4), ($5, $6)`,
 		u.PG(), blocked.PG(), blocker.PG(), u.PG(), other.PG(), friend.PG())
+	// Issue #208: scores, suggestions both ways (dismissed too) and settings.
+	for _, p := range [][2]id.ID{{u, other}, {friend, other}} {
+		low, high := pair(p[0], p[1])
+		e.seed(t, `INSERT INTO friend_scores (user_low_id, user_high_id, score, shared_count, last_shared_at, computed_at) VALUES ($1, $2, 1.5, 3, $3, $3)`,
+			low.PG(), high.PG(), now)
+	}
+	e.seed(t, `INSERT INTO friend_suggestions (user_id, suggested_user_id, created_at, dismissed_at) VALUES ($1, $2, $5, NULL), ($3, $1, $5, $5), ($4, $3, $5, NULL)`,
+		u.PG(), other.PG(), friend.PG(), requester.PG(), now)
+	e.seed(t, `INSERT INTO social_settings (user_id, profiling_enabled) VALUES ($1, false), ($2, false)`, u.PG(), other.PG())
 
 	admin := id.New()
 	tf := e.tayfa(t, admin)
@@ -601,6 +613,10 @@ func TestDeletedRemovesSocialRecords(t *testing.T) {
 	}
 	if n := e.count(t, `SELECT count(*) FROM user_blocks`); n != 1 {
 		t.Fatalf("başkalarının engeli = %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM friend_scores`) + e.count(t, `SELECT count(*) FROM friend_suggestions`) +
+		e.count(t, `SELECT count(*) FROM social_settings`); n != 3 {
+		t.Fatalf("başkalarının puan, öneri ve ayarları = %d", n)
 	}
 	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'tayfa.invitation_cancelled' AND payload->>'user_id' = $1 AND actor_id IS NULL`, invitee.String()); n != 1 {
 		t.Fatalf("davet iptal olayı = %d", n)
