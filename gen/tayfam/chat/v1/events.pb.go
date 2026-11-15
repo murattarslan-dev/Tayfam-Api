@@ -445,7 +445,7 @@ type ApplyCoreEventRequest struct {
 	EventId string `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
 	// The tayfa the event belongs to (UUID). Empty only for a
 	// notification_requested that is not about a tayfa (FRIEND_REQUEST,
-	// FRIEND_ACCEPTED).
+	// FRIEND_ACCEPTED, FRIEND_SUGGESTION).
 	TayfaId string `protobuf:"bytes,2,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
 	// The user who made the change (UUID); empty for the system (background
 	// jobs, account deletion).
@@ -633,8 +633,8 @@ type NotificationRequested struct {
 	TargetId   string                 `protobuf:"bytes,3,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
 	// Users chosen by core, never the actor (UUIDs, 1–200; a large audience
 	// comes as several events): active members for tayfa notifications, the
-	// one person concerned for FRIEND_REQUEST, FRIEND_ACCEPTED and
-	// TAYFA_INVITATION.
+	// one person concerned for FRIEND_REQUEST, FRIEND_ACCEPTED,
+	// FRIEND_SUGGESTION and TAYFA_INVITATION.
 	RecipientIds []string `protobuf:"bytes,4,rep,name=recipient_ids,json=recipientIds,proto3" json:"recipient_ids,omitempty"`
 	// ANSWER_RECEIVED: the answered question.
 	QuestionId string `protobuf:"bytes,5,opt,name=question_id,json=questionId,proto3" json:"question_id,omitempty"`

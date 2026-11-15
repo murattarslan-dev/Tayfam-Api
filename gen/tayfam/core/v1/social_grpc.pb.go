@@ -19,15 +19,19 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SocialService_SendFriendRequest_FullMethodName     = "/tayfam.core.v1.SocialService/SendFriendRequest"
-	SocialService_AcceptFriendRequest_FullMethodName   = "/tayfam.core.v1.SocialService/AcceptFriendRequest"
-	SocialService_RemoveFriendship_FullMethodName      = "/tayfam.core.v1.SocialService/RemoveFriendship"
-	SocialService_ListFriends_FullMethodName           = "/tayfam.core.v1.SocialService/ListFriends"
-	SocialService_ListFriendRequests_FullMethodName    = "/tayfam.core.v1.SocialService/ListFriendRequests"
-	SocialService_BlockUser_FullMethodName             = "/tayfam.core.v1.SocialService/BlockUser"
-	SocialService_UnblockUser_FullMethodName           = "/tayfam.core.v1.SocialService/UnblockUser"
-	SocialService_ListBlockedUsers_FullMethodName      = "/tayfam.core.v1.SocialService/ListBlockedUsers"
-	SocialService_GetRequestResolutions_FullMethodName = "/tayfam.core.v1.SocialService/GetRequestResolutions"
+	SocialService_SendFriendRequest_FullMethodName       = "/tayfam.core.v1.SocialService/SendFriendRequest"
+	SocialService_AcceptFriendRequest_FullMethodName     = "/tayfam.core.v1.SocialService/AcceptFriendRequest"
+	SocialService_RemoveFriendship_FullMethodName        = "/tayfam.core.v1.SocialService/RemoveFriendship"
+	SocialService_ListFriends_FullMethodName             = "/tayfam.core.v1.SocialService/ListFriends"
+	SocialService_ListFriendRequests_FullMethodName      = "/tayfam.core.v1.SocialService/ListFriendRequests"
+	SocialService_BlockUser_FullMethodName               = "/tayfam.core.v1.SocialService/BlockUser"
+	SocialService_UnblockUser_FullMethodName             = "/tayfam.core.v1.SocialService/UnblockUser"
+	SocialService_ListBlockedUsers_FullMethodName        = "/tayfam.core.v1.SocialService/ListBlockedUsers"
+	SocialService_GetRequestResolutions_FullMethodName   = "/tayfam.core.v1.SocialService/GetRequestResolutions"
+	SocialService_ListFriendSuggestions_FullMethodName   = "/tayfam.core.v1.SocialService/ListFriendSuggestions"
+	SocialService_DismissFriendSuggestion_FullMethodName = "/tayfam.core.v1.SocialService/DismissFriendSuggestion"
+	SocialService_GetSocialSettings_FullMethodName       = "/tayfam.core.v1.SocialService/GetSocialSettings"
+	SocialService_UpdateSocialSettings_FullMethodName    = "/tayfam.core.v1.SocialService/UpdateSocialSettings"
 )
 
 // SocialServiceClient is the client API for SocialService service.
@@ -92,6 +96,26 @@ type SocialServiceClient interface {
 	// 1–100 refs (ERROR_REASON_VALIDATION otherwise). Who withdrew is never
 	// said.
 	GetRequestResolutions(ctx context.Context, in *GetRequestResolutionsRequest, opts ...grpc.CallOption) (*GetRequestResolutionsResponse, error)
+	// ListFriendSuggestions lists the caller's open suggestions of the last
+	// 30 days, newest first, at most 10. A suggestion leaves the list when
+	// the two become friends or one sends a request, when either blocks or
+	// reports the other, when the suggested user turns on
+	// hide_from_suggestions or deletes their account, or when the caller
+	// dismisses it. Empty while the caller's profiling is off.
+	ListFriendSuggestions(ctx context.Context, in *ListFriendSuggestionsRequest, opts ...grpc.CallOption) (*ListFriendSuggestionsResponse, error)
+	// DismissFriendSuggestion closes the caller's suggestion of user_id
+	// ("Kapat"): the two are never suggested to each other again. Succeeds
+	// when there is no such suggestion and changes nothing then.
+	DismissFriendSuggestion(ctx context.Context, in *DismissFriendSuggestionRequest, opts ...grpc.CallOption) (*DismissFriendSuggestionResponse, error)
+	// GetSocialSettings returns the caller's profiling settings; defaults
+	// when the caller never changed them.
+	GetSocialSettings(ctx context.Context, in *GetSocialSettingsRequest, opts ...grpc.CallOption) (*GetSocialSettingsResponse, error)
+	// UpdateSocialSettings changes the fields that are set (at least one;
+	// ERROR_REASON_VALIDATION otherwise). Turning profiling off deletes the
+	// caller's friendship scores and open suggestions to and of the caller
+	// at once; turning hide_from_suggestions on deletes the open suggestions
+	// of the caller.
+	UpdateSocialSettings(ctx context.Context, in *UpdateSocialSettingsRequest, opts ...grpc.CallOption) (*UpdateSocialSettingsResponse, error)
 }
 
 type socialServiceClient struct {
@@ -192,6 +216,46 @@ func (c *socialServiceClient) GetRequestResolutions(ctx context.Context, in *Get
 	return out, nil
 }
 
+func (c *socialServiceClient) ListFriendSuggestions(ctx context.Context, in *ListFriendSuggestionsRequest, opts ...grpc.CallOption) (*ListFriendSuggestionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListFriendSuggestionsResponse)
+	err := c.cc.Invoke(ctx, SocialService_ListFriendSuggestions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *socialServiceClient) DismissFriendSuggestion(ctx context.Context, in *DismissFriendSuggestionRequest, opts ...grpc.CallOption) (*DismissFriendSuggestionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DismissFriendSuggestionResponse)
+	err := c.cc.Invoke(ctx, SocialService_DismissFriendSuggestion_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *socialServiceClient) GetSocialSettings(ctx context.Context, in *GetSocialSettingsRequest, opts ...grpc.CallOption) (*GetSocialSettingsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSocialSettingsResponse)
+	err := c.cc.Invoke(ctx, SocialService_GetSocialSettings_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *socialServiceClient) UpdateSocialSettings(ctx context.Context, in *UpdateSocialSettingsRequest, opts ...grpc.CallOption) (*UpdateSocialSettingsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateSocialSettingsResponse)
+	err := c.cc.Invoke(ctx, SocialService_UpdateSocialSettings_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SocialServiceServer is the server API for SocialService service.
 // All implementations must embed UnimplementedSocialServiceServer
 // for forward compatibility.
@@ -254,6 +318,26 @@ type SocialServiceServer interface {
 	// 1–100 refs (ERROR_REASON_VALIDATION otherwise). Who withdrew is never
 	// said.
 	GetRequestResolutions(context.Context, *GetRequestResolutionsRequest) (*GetRequestResolutionsResponse, error)
+	// ListFriendSuggestions lists the caller's open suggestions of the last
+	// 30 days, newest first, at most 10. A suggestion leaves the list when
+	// the two become friends or one sends a request, when either blocks or
+	// reports the other, when the suggested user turns on
+	// hide_from_suggestions or deletes their account, or when the caller
+	// dismisses it. Empty while the caller's profiling is off.
+	ListFriendSuggestions(context.Context, *ListFriendSuggestionsRequest) (*ListFriendSuggestionsResponse, error)
+	// DismissFriendSuggestion closes the caller's suggestion of user_id
+	// ("Kapat"): the two are never suggested to each other again. Succeeds
+	// when there is no such suggestion and changes nothing then.
+	DismissFriendSuggestion(context.Context, *DismissFriendSuggestionRequest) (*DismissFriendSuggestionResponse, error)
+	// GetSocialSettings returns the caller's profiling settings; defaults
+	// when the caller never changed them.
+	GetSocialSettings(context.Context, *GetSocialSettingsRequest) (*GetSocialSettingsResponse, error)
+	// UpdateSocialSettings changes the fields that are set (at least one;
+	// ERROR_REASON_VALIDATION otherwise). Turning profiling off deletes the
+	// caller's friendship scores and open suggestions to and of the caller
+	// at once; turning hide_from_suggestions on deletes the open suggestions
+	// of the caller.
+	UpdateSocialSettings(context.Context, *UpdateSocialSettingsRequest) (*UpdateSocialSettingsResponse, error)
 	mustEmbedUnimplementedSocialServiceServer()
 }
 
@@ -290,6 +374,18 @@ func (UnimplementedSocialServiceServer) ListBlockedUsers(context.Context, *ListB
 }
 func (UnimplementedSocialServiceServer) GetRequestResolutions(context.Context, *GetRequestResolutionsRequest) (*GetRequestResolutionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetRequestResolutions not implemented")
+}
+func (UnimplementedSocialServiceServer) ListFriendSuggestions(context.Context, *ListFriendSuggestionsRequest) (*ListFriendSuggestionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListFriendSuggestions not implemented")
+}
+func (UnimplementedSocialServiceServer) DismissFriendSuggestion(context.Context, *DismissFriendSuggestionRequest) (*DismissFriendSuggestionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DismissFriendSuggestion not implemented")
+}
+func (UnimplementedSocialServiceServer) GetSocialSettings(context.Context, *GetSocialSettingsRequest) (*GetSocialSettingsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSocialSettings not implemented")
+}
+func (UnimplementedSocialServiceServer) UpdateSocialSettings(context.Context, *UpdateSocialSettingsRequest) (*UpdateSocialSettingsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateSocialSettings not implemented")
 }
 func (UnimplementedSocialServiceServer) mustEmbedUnimplementedSocialServiceServer() {}
 func (UnimplementedSocialServiceServer) testEmbeddedByValue()                       {}
@@ -474,6 +570,78 @@ func _SocialService_GetRequestResolutions_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SocialService_ListFriendSuggestions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListFriendSuggestionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SocialServiceServer).ListFriendSuggestions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SocialService_ListFriendSuggestions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SocialServiceServer).ListFriendSuggestions(ctx, req.(*ListFriendSuggestionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SocialService_DismissFriendSuggestion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DismissFriendSuggestionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SocialServiceServer).DismissFriendSuggestion(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SocialService_DismissFriendSuggestion_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SocialServiceServer).DismissFriendSuggestion(ctx, req.(*DismissFriendSuggestionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SocialService_GetSocialSettings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSocialSettingsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SocialServiceServer).GetSocialSettings(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SocialService_GetSocialSettings_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SocialServiceServer).GetSocialSettings(ctx, req.(*GetSocialSettingsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SocialService_UpdateSocialSettings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateSocialSettingsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SocialServiceServer).UpdateSocialSettings(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SocialService_UpdateSocialSettings_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SocialServiceServer).UpdateSocialSettings(ctx, req.(*UpdateSocialSettingsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SocialService_ServiceDesc is the grpc.ServiceDesc for SocialService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -516,6 +684,22 @@ var SocialService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetRequestResolutions",
 			Handler:    _SocialService_GetRequestResolutions_Handler,
+		},
+		{
+			MethodName: "ListFriendSuggestions",
+			Handler:    _SocialService_ListFriendSuggestions_Handler,
+		},
+		{
+			MethodName: "DismissFriendSuggestion",
+			Handler:    _SocialService_DismissFriendSuggestion_Handler,
+		},
+		{
+			MethodName: "GetSocialSettings",
+			Handler:    _SocialService_GetSocialSettings_Handler,
+		},
+		{
+			MethodName: "UpdateSocialSettings",
+			Handler:    _SocialService_UpdateSocialSettings_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

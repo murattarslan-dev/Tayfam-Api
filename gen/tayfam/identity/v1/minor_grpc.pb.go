@@ -37,7 +37,9 @@ const (
 //
 // The answer is a derived yes/no only. The birth date, the age or anything
 // else about the users never leaves identity, and the caller does not keep
-// the answer: core uses it once, to set a new report's priority.
+// the answer: core uses it once, either to set a new report's priority or
+// to decide whether a friend suggestion stays on one side of the 18 line
+// (ADR-0028: no suggestion between a minor and an adult).
 type MinorServiceClient interface {
 	// IsMinor answers, for each known user, whether they are under 18 today
 	// (Europe/Istanbul date, as everywhere in identity). Users identity cannot
@@ -83,7 +85,9 @@ func (c *minorServiceClient) IsMinor(ctx context.Context, in *IsMinorRequest, op
 //
 // The answer is a derived yes/no only. The birth date, the age or anything
 // else about the users never leaves identity, and the caller does not keep
-// the answer: core uses it once, to set a new report's priority.
+// the answer: core uses it once, either to set a new report's priority or
+// to decide whether a friend suggestion stays on one side of the 18 line
+// (ADR-0028: no suggestion between a minor and an adult).
 type MinorServiceServer interface {
 	// IsMinor answers, for each known user, whether they are under 18 today
 	// (Europe/Istanbul date, as everywhere in identity). Users identity cannot

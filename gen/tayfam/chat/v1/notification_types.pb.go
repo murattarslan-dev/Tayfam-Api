@@ -94,6 +94,12 @@ const (
 	// (target: DATA_EXPORT; issue #144, ADR-0021). identity asks for it; no
 	// tayfa, no actor.
 	NotificationType_NOTIFICATION_TYPE_DATA_EXPORT_READY NotificationType = 21
+	// core suggests target_id as a friend: they attended at least three
+	// events together lately (target: USER, target_id is the suggested user;
+	// issue #208, ADR-0028). Not about a tayfa, no actor (the system). Never
+	// carries why or the score. In-app only: no push is sent for it. The
+	// client reads open suggestions from core's ListFriendSuggestions.
+	NotificationType_NOTIFICATION_TYPE_FRIEND_SUGGESTION NotificationType = 22
 )
 
 // Enum value maps for NotificationType.
@@ -121,6 +127,7 @@ var (
 		19: "NOTIFICATION_TYPE_TAYFA_SUSPENDED",
 		20: "NOTIFICATION_TYPE_TAYFA_UNSUSPENDED",
 		21: "NOTIFICATION_TYPE_DATA_EXPORT_READY",
+		22: "NOTIFICATION_TYPE_FRIEND_SUGGESTION",
 	}
 	NotificationType_value = map[string]int32{
 		"NOTIFICATION_TYPE_UNSPECIFIED":              0,
@@ -145,6 +152,7 @@ var (
 		"NOTIFICATION_TYPE_TAYFA_SUSPENDED":          19,
 		"NOTIFICATION_TYPE_TAYFA_UNSUSPENDED":        20,
 		"NOTIFICATION_TYPE_DATA_EXPORT_READY":        21,
+		"NOTIFICATION_TYPE_FRIEND_SUGGESTION":        22,
 	}
 )
 
@@ -308,7 +316,7 @@ var File_tayfam_chat_v1_notification_types_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\n" +
-	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xd6\x06\n" +
+	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xff\x06\n" +
 	"\x10NotificationType\x12!\n" +
 	"\x1dNOTIFICATION_TYPE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fNOTIFICATION_TYPE_EVENT_CREATED\x10\x01\x12#\n" +
@@ -332,7 +340,8 @@ const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\x1cNOTIFICATION_TYPE_DM_MESSAGE\x10\x12\x12%\n" +
 	"!NOTIFICATION_TYPE_TAYFA_SUSPENDED\x10\x13\x12'\n" +
 	"#NOTIFICATION_TYPE_TAYFA_UNSUSPENDED\x10\x14\x12'\n" +
-	"#NOTIFICATION_TYPE_DATA_EXPORT_READY\x10\x15*\xa3\x03\n" +
+	"#NOTIFICATION_TYPE_DATA_EXPORT_READY\x10\x15\x12'\n" +
+	"#NOTIFICATION_TYPE_FRIEND_SUGGESTION\x10\x16*\xa3\x03\n" +
 	"\x16NotificationTargetType\x12(\n" +
 	"$NOTIFICATION_TARGET_TYPE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eNOTIFICATION_TARGET_TYPE_TAYFA\x10\x01\x12'\n" +
