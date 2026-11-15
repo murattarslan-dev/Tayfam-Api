@@ -660,6 +660,9 @@ func (e *env) callAll(user, tf, ev id.ID) map[string]error {
 	_, out["AddCatch"] = e.svc.AddCatch(ctx, user, tf, ev, CatchInput{Species: "Levrek", LengthCm: 40, ClientRequestID: id.New().String()})
 	_, _, out["ListCatches"] = e.svc.ListCatches(ctx, user, tf, ev, 0, "")
 	out["RemoveCatch"] = e.svc.RemoveCatch(ctx, user, tf, ev, id.New())
+	_, out["AddPhoto"] = e.svc.AddPhoto(ctx, user, tf, ev, PhotoInput{UploadID: id.New(), ClientRequestID: id.New().String()})
+	_, _, out["ListPhotos"] = e.svc.ListPhotos(ctx, user, tf, ev, 0, "")
+	out["RemovePhoto"] = e.svc.RemovePhoto(ctx, user, tf, ev, id.New())
 	return out
 }
 
@@ -711,7 +714,7 @@ func TestReadOnlyTayfa(t *testing.T) {
 	e.exec(t, `UPDATE tayfas SET suspended_at = now(), suspended_reason = 'test', suspended_by = $2 WHERE id = $1`, tf.PG(), id.New().PG())
 	for name, err := range e.callAll(admin, tf, ev.ID) {
 		switch name {
-		case "Get", "ListUpcoming", "ListAttendees":
+		case "Get", "ListUpcoming", "ListAttendees", "ListPhotos":
 			must(t, err)
 		case "ListCatches":
 			// A read: it gets past the read-only check to the type check.

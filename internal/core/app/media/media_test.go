@@ -350,19 +350,22 @@ func TestCreateValidation(t *testing.T) {
 		user id.ID
 		want error
 	}{
-		"png":                   {CreateInput{Purpose: PurposeAvatar, Variants: vs(func(v []VariantInput) { v[1].ContentType = "image/png" })}, e.owner, apperr.Validation("variants")},
-		"heic":                  {CreateInput{Purpose: PurposeAvatar, Variants: vs(func(v []VariantInput) { v[0].ContentType = "image/heic" })}, e.owner, apperr.Validation("variants")},
-		"boş":                   {CreateInput{Purpose: PurposeAvatar, Variants: vs(func(v []VariantInput) { v[0].SizeBytes = 0 })}, e.owner, apperr.Validation("variants")},
-		"10 MiB üstü":           {CreateInput{Purpose: PurposeAvatar, Variants: vs(func(v []VariantInput) { v[1].SizeBytes = MaxVariantBytes + 1 })}, e.owner, apperr.Validation("variants")},
-		"iki full":              {CreateInput{Purpose: PurposeAvatar, Variants: vs(func(v []VariantInput) { v[0].Kind = KindFull })}, e.owner, apperr.Validation("variants")},
-		"tek varyant":           {CreateInput{Purpose: PurposeAvatar, Variants: f.variants()[:1]}, e.owner, apperr.Validation("variants")},
-		"avatarda tayfa":        {CreateInput{Purpose: PurposeAvatar, Variants: f.variants(), Tayfa: e.tayfa}, e.owner, apperr.Validation("tayfa_id")},
-		"kapakta tayfa yok":     {CreateInput{Purpose: PurposeCover, Variants: f.variants()}, e.owner, apperr.Validation("tayfa_id")},
-		"bilinmeyen amaç":       {CreateInput{Purpose: "data_export", Variants: f.variants()}, e.owner, apperr.Validation("purpose")},
-		"üye olmadığı tayfa":    {CreateInput{Purpose: PurposeCatchPhoto, Variants: f.variants(), Tayfa: e.tayfa}, e.stranger, apperr.ErrTayfaNotFound},
-		"olmayan tayfa":         {CreateInput{Purpose: PurposeCover, Variants: f.variants(), Tayfa: id.New()}, e.owner, apperr.ErrTayfaNotFound},
-		"üyenin av fotoğrafı":   {CreateInput{Purpose: PurposeCatchPhoto, Variants: f.variants(), Tayfa: e.tayfa}, e.member, nil},
-		"geçerli avatar isteği": {CreateInput{Purpose: PurposeAvatar, Variants: f.variants()}, e.stranger, nil},
+		"png":                    {CreateInput{Purpose: PurposeAvatar, Variants: vs(func(v []VariantInput) { v[1].ContentType = "image/png" })}, e.owner, apperr.Validation("variants")},
+		"heic":                   {CreateInput{Purpose: PurposeAvatar, Variants: vs(func(v []VariantInput) { v[0].ContentType = "image/heic" })}, e.owner, apperr.Validation("variants")},
+		"boş":                    {CreateInput{Purpose: PurposeAvatar, Variants: vs(func(v []VariantInput) { v[0].SizeBytes = 0 })}, e.owner, apperr.Validation("variants")},
+		"10 MiB üstü":            {CreateInput{Purpose: PurposeAvatar, Variants: vs(func(v []VariantInput) { v[1].SizeBytes = MaxVariantBytes + 1 })}, e.owner, apperr.Validation("variants")},
+		"iki full":               {CreateInput{Purpose: PurposeAvatar, Variants: vs(func(v []VariantInput) { v[0].Kind = KindFull })}, e.owner, apperr.Validation("variants")},
+		"tek varyant":            {CreateInput{Purpose: PurposeAvatar, Variants: f.variants()[:1]}, e.owner, apperr.Validation("variants")},
+		"avatarda tayfa":         {CreateInput{Purpose: PurposeAvatar, Variants: f.variants(), Tayfa: e.tayfa}, e.owner, apperr.Validation("tayfa_id")},
+		"kapakta tayfa yok":      {CreateInput{Purpose: PurposeCover, Variants: f.variants()}, e.owner, apperr.Validation("tayfa_id")},
+		"bilinmeyen amaç":        {CreateInput{Purpose: "data_export", Variants: f.variants()}, e.owner, apperr.Validation("purpose")},
+		"üye olmadığı tayfa":     {CreateInput{Purpose: PurposeCatchPhoto, Variants: f.variants(), Tayfa: e.tayfa}, e.stranger, apperr.ErrTayfaNotFound},
+		"olmayan tayfa":          {CreateInput{Purpose: PurposeCover, Variants: f.variants(), Tayfa: id.New()}, e.owner, apperr.ErrTayfaNotFound},
+		"üyenin av fotoğrafı":    {CreateInput{Purpose: PurposeCatchPhoto, Variants: f.variants(), Tayfa: e.tayfa}, e.member, nil},
+		"albümde tayfa yok":      {CreateInput{Purpose: PurposeEventPhoto, Variants: f.variants()}, e.member, apperr.Validation("tayfa_id")},
+		"üye olmayan albüm":      {CreateInput{Purpose: PurposeEventPhoto, Variants: f.variants(), Tayfa: e.tayfa}, e.stranger, apperr.ErrTayfaNotFound},
+		"üyenin albüm fotoğrafı": {CreateInput{Purpose: PurposeEventPhoto, Variants: f.variants(), Tayfa: e.tayfa}, e.member, nil},
+		"geçerli avatar isteği":  {CreateInput{Purpose: PurposeAvatar, Variants: f.variants()}, e.stranger, nil},
 	} {
 		t.Run(name, func(t *testing.T) {
 			in := tc.in
@@ -621,3 +624,50 @@ func TestLogsCarryNoSecrets(t *testing.T) {
 }
 
 var _ Store = (*objstore.Client)(nil)
+
+// An album photo is served to the tayfa's active members who may see the
+// event, while the photo and the event are not deleted; the uploader always
+// sees their own file (issue #206, ADR-0028).
+func TestEventPhotoVisibility(t *testing.T) {
+	e := setup(t)
+	f := clean()
+	ev := id.New()
+	_, err := e.pool.Exec(ctx, `INSERT INTO events (id, tayfa_id, type, mode, title, starts_at, ends_at, online_url, created_by)
+		VALUES ($1, $2, 'general', 'online', 'Göl', now(), now() + interval '1 hour', 'https://example.test/g', $3)`, ev.PG(), e.tayfa.PG(), e.owner.PG())
+	must(t, err)
+	_, err = e.pool.Exec(ctx, `INSERT INTO event_rsvps (event_id, user_id, status, attendance, attendance_method, checked_in_at)
+		VALUES ($1, $2, 'going', 'attended', 'online', now())`, ev.PG(), e.member.PG())
+	must(t, err)
+	up := e.upload(t, e.member, PurposeEventPhoto, e.tayfa, f, 300, 200)
+	photo := id.New()
+	must(t, e.attach(t, e.member, up.ID, PurposeEventPhoto, e.tayfa, Target{TargetEventPhoto, photo}))
+	_, err = e.pool.Exec(ctx, `INSERT INTO event_photos (id, event_id, uploader_id, upload_id, client_request_id) VALUES ($1, $2, $3, $4, $5)`,
+		photo.PG(), ev.PG(), e.member.PG(), up.ID.PG(), id.New().PG())
+	must(t, err)
+	// Not a cover.
+	if err := e.attach(t, e.member, up.ID, PurposeCover, e.tayfa, Target{TargetEvent, ev}); !errors.Is(err, apperr.ErrUploadNotFound) {
+		t.Fatalf("albüm fotoğrafı kapak olarak bağlanmamalı: %v", err)
+	}
+
+	sees := func(viewer id.ID) bool {
+		t.Helper()
+		out, err := e.svc.MediaURLs(ctx, viewer, []id.ID{up.ID})
+		must(t, err)
+		return len(out) == 1
+	}
+	if !sees(e.owner) || !sees(e.member) || sees(e.stranger) {
+		t.Fatal("albüm fotoğrafını üyeler görmeli, üye olmayan görmemeli")
+	}
+	_, err = e.pool.Exec(ctx, `UPDATE tayfa_modules SET enabled = false WHERE tayfa_id = $1 AND module = 'events'`, e.tayfa.PG())
+	must(t, err)
+	if sees(e.owner) {
+		t.Fatal("etkinlik modülü kapalıyken görünmemeli")
+	}
+	_, err = e.pool.Exec(ctx, `UPDATE tayfa_modules SET enabled = true WHERE tayfa_id = $1 AND module = 'events'`, e.tayfa.PG())
+	must(t, err)
+	_, err = e.pool.Exec(ctx, `UPDATE event_photos SET deleted_at = now(), deleted_by = $2 WHERE id = $1`, photo.PG(), e.owner.PG())
+	must(t, err)
+	if sees(e.owner) || !sees(e.member) {
+		t.Fatal("silinen fotoğraf yalnızca yükleyene görünmeli")
+	}
+}

@@ -36,6 +36,9 @@ type EventClient interface {
 	AddFishingCatch(ctx context.Context, in *corev1.AddFishingCatchRequest, opts ...grpc.CallOption) (*corev1.AddFishingCatchResponse, error)
 	ListFishingCatches(ctx context.Context, in *corev1.ListFishingCatchesRequest, opts ...grpc.CallOption) (*corev1.ListFishingCatchesResponse, error)
 	RemoveFishingCatch(ctx context.Context, in *corev1.RemoveFishingCatchRequest, opts ...grpc.CallOption) (*corev1.RemoveFishingCatchResponse, error)
+	AddEventPhoto(ctx context.Context, in *corev1.AddEventPhotoRequest, opts ...grpc.CallOption) (*corev1.AddEventPhotoResponse, error)
+	ListEventPhotos(ctx context.Context, in *corev1.ListEventPhotosRequest, opts ...grpc.CallOption) (*corev1.ListEventPhotosResponse, error)
+	RemoveEventPhoto(ctx context.Context, in *corev1.RemoveEventPhotoRequest, opts ...grpc.CallOption) (*corev1.RemoveEventPhotoResponse, error)
 	GetEventSeries(ctx context.Context, in *corev1.GetEventSeriesRequest, opts ...grpc.CallOption) (*corev1.GetEventSeriesResponse, error)
 	EndEventSeries(ctx context.Context, in *corev1.EndEventSeriesRequest, opts ...grpc.CallOption) (*corev1.EndEventSeriesResponse, error)
 	ExportEvent(ctx context.Context, in *corev1.ExportEventRequest, opts ...grpc.CallOption) (*corev1.ExportEventResponse, error)
@@ -44,21 +47,23 @@ type EventClient interface {
 const (
 	// maxEventBody fits 5000 characters of description in the worst JSON
 	// escaping plus a 500-point convoy route.
-	maxEventBody      = 160 << 10
-	eventTitleMax     = 120
-	eventDescMax      = 5000
-	eventCapacityMax  = 10000
-	convoyRouteMax    = 500
-	rruleMax          = 256
-	timeZoneMax       = 64
-	cancelReasonMax   = 500
-	campItemNameMax   = 60
-	campQuantityMax   = 999
-	vehicleMakeMax    = 40
-	vehicleColorMax   = 30
-	vehiclePlateMax   = 16
-	catchSpeciesMax   = 60
-	catchLengthMaxCm  = 1000
+	maxEventBody     = 160 << 10
+	eventTitleMax    = 120
+	eventDescMax     = 5000
+	eventCapacityMax = 10000
+	convoyRouteMax   = 500
+	rruleMax         = 256
+	timeZoneMax      = 64
+	cancelReasonMax  = 500
+	campItemNameMax  = 60
+	campQuantityMax  = 999
+	vehicleMakeMax   = 40
+	vehicleColorMax  = 30
+	vehiclePlateMax  = 16
+	catchSpeciesMax  = 60
+	catchLengthMaxCm = 1000
+	// photoCaptionMax: album photo caption (core trims and checks again).
+	photoCaptionMax   = 200
 	calendarMediaType = "text/calendar; charset=utf-8"
 )
 
@@ -87,6 +92,9 @@ func registerEvents(mux *http.ServeMux, h coreHandlers) {
 	mux.HandleFunc("GET "+one+"/fishing-catches", a(h.listFishingCatches))
 	mux.HandleFunc("POST "+one+"/fishing-catches", a(h.addFishingCatch))
 	mux.HandleFunc("DELETE "+one+"/fishing-catches/{catch_id}", a(h.removeFishingCatch))
+	mux.HandleFunc("GET "+one+"/photos", a(h.listEventPhotos))
+	mux.HandleFunc("POST "+one+"/photos", a(h.addEventPhoto))
+	mux.HandleFunc("DELETE "+one+"/photos/{photo_id}", a(h.removeEventPhoto))
 	mux.HandleFunc("GET /v1/tayfas/{tayfa_id}/event-series/{series_id}", a(h.getEventSeries))
 	mux.HandleFunc("POST /v1/tayfas/{tayfa_id}/event-series/{series_id}/ending", a(h.endEventSeries))
 }
@@ -875,6 +883,70 @@ func (h coreHandlers) removeFishingCatch(ctx context.Context, w http.ResponseWri
 		return
 	}
 	if _, err := h.d.Events.RemoveFishingCatch(ctx, &corev1.RemoveFishingCatchRequest{TayfaId: ids[0], EventId: ids[1], CatchId: ids[2]}); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- Album (issue #206) ---
+
+func (h coreHandlers) listEventPhotos(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	id, eid, ok := pathTayfaEvent(w, r)
+	if !ok {
+		return
+	}
+	size, token, ok := paging(w, r)
+	if !ok {
+		return
+	}
+	resp, err := h.d.Events.ListEventPhotos(ctx, &corev1.ListEventPhotosRequest{TayfaId: id, EventId: eid, PageSize: size, PageToken: token})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := eventPhotoListJSON{Photos: make([]eventPhotoJSON, 0, len(resp.GetPhotos())), NextPageToken: resp.GetNextPageToken()}
+	for _, p := range resp.GetPhotos() {
+		out.Photos = append(out.Photos, eventPhotoFrom(p))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+type eventPhotoBody struct {
+	UploadID        string `json:"upload_id"`
+	Caption         string `json:"caption"`
+	ClientRequestID string `json:"client_request_id"`
+}
+
+func (h coreHandlers) addEventPhoto(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	id, eid, ok := pathTayfaEvent(w, r)
+	if !ok {
+		return
+	}
+	var b eventPhotoBody
+	if !decode(w, r, &b) {
+		return
+	}
+	if !validUUID(b.UploadID) || !validUUID(b.ClientRequestID) || runes(b.Caption) > photoCaptionMax {
+		badRequest(w, r)
+		return
+	}
+	resp, err := h.d.Events.AddEventPhoto(ctx, &corev1.AddEventPhotoRequest{
+		TayfaId: id, EventId: eid, UploadId: b.UploadID, Caption: b.Caption, ClientRequestId: b.ClientRequestID,
+	})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, eventPhotoFrom(resp.GetPhoto()))
+}
+
+func (h coreHandlers) removeEventPhoto(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	ids, ok := pathIDs(w, r, "tayfa_id", "event_id", "photo_id")
+	if !ok {
+		return
+	}
+	if _, err := h.d.Events.RemoveEventPhoto(ctx, &corev1.RemoveEventPhotoRequest{TayfaId: ids[0], EventId: ids[1], PhotoId: ids[2]}); err != nil {
 		h.fail(w, r, err)
 		return
 	}

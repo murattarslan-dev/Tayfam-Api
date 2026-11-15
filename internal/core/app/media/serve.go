@@ -66,8 +66,8 @@ func (s *Service) MediaURLs(ctx context.Context, viewer id.ID, ids []id.ID) ([]U
 
 // canView is the visibility rule of ADR-0020 item 4. Tayfa content is
 // decided by core's permission table (authz): TayfaView for a tayfa cover,
-// EventView (with the events module on) for an event cover or a catch
-// photo. The default is no.
+// EventView (with the events module on) for an event cover, a catch photo
+// or an album photo (ADR-0028). The default is no.
 func canView(viewer id.ID, r store.ListMediaForViewerRow, now time.Time) (bool, error) {
 	if r.UserID.Valid && id.ID(r.UserID.Bytes) == viewer {
 		return true, nil
@@ -78,7 +78,7 @@ func canView(viewer id.ID, r store.ListMediaForViewerRow, now time.Time) (bool, 
 	switch r.AttachedType.String {
 	case TargetUser:
 		return !r.Blocked && !r.OwnerDeleted, nil
-	case TargetTayfa, TargetEvent, TargetFishingCatch:
+	case TargetTayfa, TargetEvent, TargetFishingCatch, TargetEventPhoto:
 		if !r.ContentTayfaID.Valid || !r.MemberStatus.Valid {
 			return false, nil
 		}

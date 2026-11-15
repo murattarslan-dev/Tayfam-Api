@@ -190,6 +190,10 @@ func reportedItem(ctx context.Context, q *store.Queries, r Report) (*Item, error
 		var x store.AdminGetCatchRow
 		x, err = q.AdminGetCatch(ctx, store.AdminGetCatchParams{ID: r.Target.PG(), TayfaID: tf})
 		it.Author, it.Title, it.CreatedAt, it.DeletedAt = idOf(x.UserID), x.Species, timeOf(x.CreatedAt), timeOf(x.DeletedAt)
+	case "event_photo":
+		var x store.AdminGetEventPhotoRow
+		x, err = q.AdminGetEventPhoto(ctx, store.AdminGetEventPhotoParams{ID: r.Target.PG(), TayfaID: tf})
+		it.Author, it.Title, it.CreatedAt, it.DeletedAt = idOf(x.UploaderID), x.Caption.String, timeOf(x.CreatedAt), timeOf(x.DeletedAt)
 	default:
 		return nil, fmt.Errorf("bilinmeyen şikâyet hedefi %q", r.TargetType)
 	}
@@ -220,6 +224,8 @@ func removeContent(ctx context.Context, q *store.Queries, r Report, by id.ID, no
 		_, err = q.AdminDeletePoll(ctx, store.AdminDeletePollParams{ID: tid, TayfaID: tf, At: at, By: b})
 	case "fishing_catch":
 		_, err = q.AdminDeleteCatch(ctx, store.AdminDeleteCatchParams{ID: tid, TayfaID: tf, At: at, By: b})
+	case "event_photo":
+		_, err = q.AdminDeleteEventPhoto(ctx, store.AdminDeleteEventPhotoParams{ID: tid, TayfaID: tf, At: at, By: b})
 	default:
 		// Users, tayfas and direct messages are not content to remove.
 		return apperr.ErrDecisionNotApplicable

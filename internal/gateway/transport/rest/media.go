@@ -46,7 +46,8 @@ func registerMedia(mux *http.ServeMux, h coreHandlers) {
 var (
 	uploadPurposes = newEnum(map[string]corev1.UploadPurpose{
 		"avatar": corev1.UploadPurpose_UPLOAD_PURPOSE_AVATAR, "catch_photo": corev1.UploadPurpose_UPLOAD_PURPOSE_CATCH_PHOTO,
-		"cover": corev1.UploadPurpose_UPLOAD_PURPOSE_COVER,
+		"event_photo": corev1.UploadPurpose_UPLOAD_PURPOSE_EVENT_PHOTO,
+		"cover":       corev1.UploadPurpose_UPLOAD_PURPOSE_COVER,
 	})
 	uploadStatuses = newEnum(map[string]corev1.UploadStatus{
 		"pending": corev1.UploadStatus_UPLOAD_STATUS_PENDING, "ready": corev1.UploadStatus_UPLOAD_STATUS_READY,

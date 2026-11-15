@@ -160,6 +160,17 @@ const (
 	// EventCatchDeleteAny removes anyone's.
 	EventCatchAdd
 	EventCatchDeleteAny
+	// Event album (issue #206, ADR-0028). EventPhotoAdd adds a photo (the
+	// caller also checks verified attendance, the window and the limits);
+	// viewing is EventView. EventPhotoDeleteOwn removes one's own photo;
+	// EventPhotoDeleteOwnEvent is the organizer's removal of any photo of
+	// their own event (the caller checks that the event is theirs);
+	// EventPhotoDeleteAny removes any photo of the tayfa. "Her fotoğrafı":
+	// no role hierarchy applies.
+	EventPhotoAdd
+	EventPhotoDeleteOwn
+	EventPhotoDeleteOwnEvent
+	EventPhotoDeleteAny
 	// Q&A (issue #59). The qa module switch is checked by the caller.
 	// QuestionCreate also opens new tags. The Own actions are for the
 	// author (the caller checks that the content is theirs); the Any
@@ -231,81 +242,85 @@ const (
 
 // actionNames are the stable names used in logs and audit records.
 var actionNames = [...]string{
-	TayfaView:            "tayfa.view",
-	TayfaUpdateSettings:  "tayfa.update_settings",
-	TayfaRotateJoinCode:  "tayfa.rotate_join_code",
-	TayfaManageModules:   "tayfa.manage_modules",
-	TayfaRequestDeletion: "tayfa.request_deletion",
-	TayfaCancelDeletion:  "tayfa.cancel_deletion",
-	InviteCreate:         "invite.create",
-	InviteList:           "invite.list",
-	InviteRevokeOwn:      "invite.revoke_own",
-	InviteRevokeAny:      "invite.revoke_any",
-	MemberList:           "member.list",
-	MemberListPending:    "member.list_pending",
-	MemberApprove:        "member.approve",
-	MemberReject:         "member.reject",
-	MemberChangeRole:     "member.change_role",
-	MemberMute:           "member.mute",
-	MemberBan:            "member.ban",
-	MemberRemove:         "member.remove",
-	AuditView:            "audit.view",
-	RoleStepDown:         "role.step_down",
-	AnnouncementCreate:   "announcement.create",
-	AnnouncementEdit:     "announcement.edit",
-	AnnouncementDelete:   "announcement.delete",
-	AnnouncementPin:      "announcement.pin",
-	AnnouncementRestore:  "announcement.restore",
-	EventView:            "event.view",
-	EventCreate:          "event.create",
-	EventEditOwn:         "event.edit_own",
-	EventEditAny:         "event.edit_any",
-	EventCancelOwn:       "event.cancel_own",
-	EventCancelAny:       "event.cancel_any",
-	EventRSVP:            "event.rsvp",
-	EventViewAttendees:   "event.view_attendees",
-	EventCheckIn:         "event.check_in",
-	EventAttendanceOwn:   "event.attendance_own",
-	EventAttendanceAny:   "event.attendance_any",
-	EventCatchAdd:        "event.catch_add",
-	EventCatchDeleteAny:  "event.catch_delete_any",
-	QuestionCreate:       "question.create",
-	QuestionEditOwn:      "question.edit_own",
-	QuestionEditAny:      "question.edit_any",
-	QuestionDeleteOwn:    "question.delete_own",
-	QuestionDeleteAny:    "question.delete_any",
-	QuestionRestore:      "question.restore",
-	AnswerCreate:         "answer.create",
-	AnswerEditOwn:        "answer.edit_own",
-	AnswerEditAny:        "answer.edit_any",
-	AnswerDeleteOwn:      "answer.delete_own",
-	AnswerDeleteAny:      "answer.delete_any",
-	AnswerRestore:        "answer.restore",
-	AnswerVote:           "answer.vote",
-	TagDelete:            "tag.delete",
-	PollView:             "poll.view",
-	PollCreate:           "poll.create",
-	PollVote:             "poll.vote",
-	PollViewVoters:       "poll.view_voters",
-	PollCloseOwn:         "poll.close_own",
-	PollCloseAny:         "poll.close_any",
-	PollDeleteOwn:        "poll.delete_own",
-	PollDeleteAny:        "poll.delete_any",
-	InviteDirect:         "invite.direct",
-	InviteDirectCancel:   "invite.direct_cancel",
-	ReportCreate:         "report.create",
-	ReportQueueView:      "report.queue_view",
-	ReportResolve:        "report.resolve",
-	ChannelView:          "channel.view",
-	ChannelViewStaff:     "channel.view_staff",
-	ChannelManage:        "channel.manage",
-	ChannelPost:          "channel.post",
-	ChannelSkipSlowMode:  "channel.skip_slow_mode",
-	ChannelDeleteOwn:     "channel.delete_own",
-	ChannelModerate:      "channel.moderate",
-	ChannelRestore:       "channel.restore",
-	ChannelMarkRead:      "channel.mark_read",
-	actionEnd:            "",
+	TayfaView:                "tayfa.view",
+	TayfaUpdateSettings:      "tayfa.update_settings",
+	TayfaRotateJoinCode:      "tayfa.rotate_join_code",
+	TayfaManageModules:       "tayfa.manage_modules",
+	TayfaRequestDeletion:     "tayfa.request_deletion",
+	TayfaCancelDeletion:      "tayfa.cancel_deletion",
+	InviteCreate:             "invite.create",
+	InviteList:               "invite.list",
+	InviteRevokeOwn:          "invite.revoke_own",
+	InviteRevokeAny:          "invite.revoke_any",
+	MemberList:               "member.list",
+	MemberListPending:        "member.list_pending",
+	MemberApprove:            "member.approve",
+	MemberReject:             "member.reject",
+	MemberChangeRole:         "member.change_role",
+	MemberMute:               "member.mute",
+	MemberBan:                "member.ban",
+	MemberRemove:             "member.remove",
+	AuditView:                "audit.view",
+	RoleStepDown:             "role.step_down",
+	AnnouncementCreate:       "announcement.create",
+	AnnouncementEdit:         "announcement.edit",
+	AnnouncementDelete:       "announcement.delete",
+	AnnouncementPin:          "announcement.pin",
+	AnnouncementRestore:      "announcement.restore",
+	EventView:                "event.view",
+	EventCreate:              "event.create",
+	EventEditOwn:             "event.edit_own",
+	EventEditAny:             "event.edit_any",
+	EventCancelOwn:           "event.cancel_own",
+	EventCancelAny:           "event.cancel_any",
+	EventRSVP:                "event.rsvp",
+	EventViewAttendees:       "event.view_attendees",
+	EventCheckIn:             "event.check_in",
+	EventAttendanceOwn:       "event.attendance_own",
+	EventAttendanceAny:       "event.attendance_any",
+	EventCatchAdd:            "event.catch_add",
+	EventCatchDeleteAny:      "event.catch_delete_any",
+	EventPhotoAdd:            "event.photo_add",
+	EventPhotoDeleteOwn:      "event.photo_delete_own",
+	EventPhotoDeleteOwnEvent: "event.photo_delete_own_event",
+	EventPhotoDeleteAny:      "event.photo_delete_any",
+	QuestionCreate:           "question.create",
+	QuestionEditOwn:          "question.edit_own",
+	QuestionEditAny:          "question.edit_any",
+	QuestionDeleteOwn:        "question.delete_own",
+	QuestionDeleteAny:        "question.delete_any",
+	QuestionRestore:          "question.restore",
+	AnswerCreate:             "answer.create",
+	AnswerEditOwn:            "answer.edit_own",
+	AnswerEditAny:            "answer.edit_any",
+	AnswerDeleteOwn:          "answer.delete_own",
+	AnswerDeleteAny:          "answer.delete_any",
+	AnswerRestore:            "answer.restore",
+	AnswerVote:               "answer.vote",
+	TagDelete:                "tag.delete",
+	PollView:                 "poll.view",
+	PollCreate:               "poll.create",
+	PollVote:                 "poll.vote",
+	PollViewVoters:           "poll.view_voters",
+	PollCloseOwn:             "poll.close_own",
+	PollCloseAny:             "poll.close_any",
+	PollDeleteOwn:            "poll.delete_own",
+	PollDeleteAny:            "poll.delete_any",
+	InviteDirect:             "invite.direct",
+	InviteDirectCancel:       "invite.direct_cancel",
+	ReportCreate:             "report.create",
+	ReportQueueView:          "report.queue_view",
+	ReportResolve:            "report.resolve",
+	ChannelView:              "channel.view",
+	ChannelViewStaff:         "channel.view_staff",
+	ChannelManage:            "channel.manage",
+	ChannelPost:              "channel.post",
+	ChannelSkipSlowMode:      "channel.skip_slow_mode",
+	ChannelDeleteOwn:         "channel.delete_own",
+	ChannelModerate:          "channel.moderate",
+	ChannelRestore:           "channel.restore",
+	ChannelMarkRead:          "channel.mark_read",
+	actionEnd:                "",
 }
 
 // String returns the stable name of the action, or "" for an invalid one.
@@ -341,6 +356,12 @@ var permissions = map[Action]Role{
 	EventCheckIn:       Member,
 	EventAttendanceOwn: Member,
 	EventCatchAdd:      Member,
+	// Event album (issue #206, Notion Faz 2 §2): a verified attendee adds
+	// photos; the uploader removes their own and the organizer any photo
+	// of their own event.
+	EventPhotoAdd:            Member,
+	EventPhotoDeleteOwn:      Member,
+	EventPhotoDeleteOwnEvent: Member,
 	// Q&A (issue #59): every active member asks, answers, votes, opens tags
 	// while asking, and edits and deletes their own questions and answers.
 	QuestionCreate:    Member,
@@ -397,6 +418,8 @@ var permissions = map[Action]Role{
 	// and removing anyone's fishing catch.
 	EventAttendanceAny:  Moderator,
 	EventCatchDeleteAny: Moderator,
+	// "Yönetim her fotoğrafı" (Notion Faz 2 §2).
+	EventPhotoDeleteAny: Moderator,
 	// Q&A: someone else's question or answer (with CanActOnContent), and
 	// removing a tag from the tayfa.
 	QuestionEditAny:   Moderator,
@@ -463,6 +486,9 @@ var allowedWhileMuted = map[Action]bool{
 	// does not keep a member's text in the tayfa against their will.
 	QuestionDeleteOwn: true,
 	AnswerDeleteOwn:   true,
+	// Removing one's own album photo likewise: a mute does not keep a
+	// member's picture in the tayfa against their will (ADR-0028).
+	EventPhotoDeleteOwn: true,
 	// Reading polls and their open voter lists. Creating and voting are
 	// refused while muted (v14 "Anket (MVP)").
 	PollView:       true,
