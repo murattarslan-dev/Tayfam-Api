@@ -2224,7 +2224,7 @@ paths:
       operationId: addEventPhoto
       summary: Albüme fotoğraf ekler
       description: |
-        Önce `POST /v1/media/uploads` ile `event_photo` amaçlı, bu tayfa için
+        Önce `POST /v1/uploads` ile `event_photo` amaçlı, bu tayfa için
         bir yükleme açılıp tamamlanır; burada albüme bağlanır. Katılımınız
         doğrulanmış olmalıdır (`not-attended`). Albüm etkinliğin
         başlangıcından bitişten sonraki yedi günün sonuna kadar açıktır
