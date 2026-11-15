@@ -428,7 +428,9 @@ func (s *Service) listFriendships(ctx context.Context, caller id.ID, status, dir
 // Blocks
 
 // BlockUser blocks target: the friendship or waiting request between the two
-// goes in the same transaction. Blocking again changes nothing.
+// goes in the same transaction, and so do their friendship score and open
+// suggestions; the pair is never suggested again (ADR-0028). Blocking again
+// changes nothing.
 func (s *Service) BlockUser(ctx context.Context, caller, target id.ID) error {
 	if target == caller || target == (id.ID{}) {
 		return apperr.Validation("user_id")
@@ -452,7 +454,7 @@ func (s *Service) BlockUser(ctx context.Context, caller, target id.ID) error {
 		if _, err := q.CreateBlock(ctx, store.CreateBlockParams{BlockerID: caller.PG(), BlockedID: target.PG()}); err != nil {
 			return fmt.Errorf("engel: %w", err)
 		}
-		return nil
+		return s.forgetPairOnBlock(ctx, q, caller, target)
 	})
 }
 

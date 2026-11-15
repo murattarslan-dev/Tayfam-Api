@@ -54,6 +54,7 @@ var notificationTypes = map[chatv1.NotificationType]string{
 	chatv1.NotificationType_NOTIFICATION_TYPE_HIKE_OVERDUE:             notification.TypeHikeOverdue,
 	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_REQUEST:           notification.TypeFriendRequest,
 	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_ACCEPTED:          notification.TypeFriendAccepted,
+	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_SUGGESTION:        notification.TypeFriendSuggestion,
 	chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_INVITATION:         notification.TypeTayfaInvitation,
 	chatv1.NotificationType_NOTIFICATION_TYPE_REPORT_RESOLVED:          notification.TypeReportResolved,
 }

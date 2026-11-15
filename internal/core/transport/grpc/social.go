@@ -22,6 +22,11 @@ type Socials interface {
 	UnblockUser(ctx context.Context, caller, target id.ID) error
 	ListBlockedUsers(ctx context.Context, caller id.ID, size int32, token string) (social.Page[social.Blocked], error)
 	Resolutions(ctx context.Context, caller id.ID, refs []social.RequestRef) ([]social.Resolution, error)
+	// Issue #208, ADR-0028.
+	ListFriendSuggestions(ctx context.Context, caller id.ID) ([]social.Suggestion, error)
+	DismissFriendSuggestion(ctx context.Context, caller, other id.ID) error
+	GetSocialSettings(ctx context.Context, caller id.ID) (social.Settings, error)
+	UpdateSocialSettings(ctx context.Context, caller id.ID, u social.SettingsUpdate) (social.Settings, error)
 }
 
 // SocialServer implements corev1.SocialServiceServer. Every method needs a
@@ -231,4 +236,69 @@ func (s *SocialServer) GetRequestResolutions(ctx context.Context, req *corev1.Ge
 		out.Resolutions = append(out.Resolutions, requestResolutions[r])
 	}
 	return out, nil
+}
+
+// ListFriendSuggestions implements corev1.SocialServiceServer. The score is
+// not part of social.Suggestion, so it cannot reach the response.
+func (s *SocialServer) ListFriendSuggestions(ctx context.Context, _ *corev1.ListFriendSuggestionsRequest) (*corev1.ListFriendSuggestionsResponse, error) {
+	u, err := callerID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	items, err := s.app.ListFriendSuggestions(ctx, u)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	out := &corev1.ListFriendSuggestionsResponse{Suggestions: make([]*corev1.FriendSuggestion, 0, len(items))}
+	for _, sg := range items {
+		out.Suggestions = append(out.Suggestions, &corev1.FriendSuggestion{
+			UserId: sg.UserID.String(), DisplayName: sg.DisplayName, AvatarUploadId: optionalID(sg.AvatarUploadID),
+			SuggestTime: timestamppb.New(sg.SuggestedAt),
+		})
+	}
+	return out, nil
+}
+
+// DismissFriendSuggestion implements corev1.SocialServiceServer.
+func (s *SocialServer) DismissFriendSuggestion(ctx context.Context, req *corev1.DismissFriendSuggestionRequest) (*corev1.DismissFriendSuggestionResponse, error) {
+	u, other, err := userArgs(ctx, req.GetUserId())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.app.DismissFriendSuggestion(ctx, u, other); err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.DismissFriendSuggestionResponse{}, nil
+}
+
+// GetSocialSettings implements corev1.SocialServiceServer.
+func (s *SocialServer) GetSocialSettings(ctx context.Context, _ *corev1.GetSocialSettingsRequest) (*corev1.GetSocialSettingsResponse, error) {
+	u, err := callerID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	st, err := s.app.GetSocialSettings(ctx, u)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.GetSocialSettingsResponse{Settings: settingsPB(st)}, nil
+}
+
+// UpdateSocialSettings implements corev1.SocialServiceServer.
+func (s *SocialServer) UpdateSocialSettings(ctx context.Context, req *corev1.UpdateSocialSettingsRequest) (*corev1.UpdateSocialSettingsResponse, error) {
+	u, err := callerID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	st, err := s.app.UpdateSocialSettings(ctx, u, social.SettingsUpdate{
+		ProfilingEnabled: req.ProfilingEnabled, HideFromSuggestions: req.HideFromSuggestions,
+	})
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.UpdateSocialSettingsResponse{Settings: settingsPB(st)}, nil
+}
+
+func settingsPB(st social.Settings) *corev1.SocialSettings {
+	return &corev1.SocialSettings{ProfilingEnabled: st.ProfilingEnabled, HideFromSuggestions: st.HideFromSuggestions}
 }

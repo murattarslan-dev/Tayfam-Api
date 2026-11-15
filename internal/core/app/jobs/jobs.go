@@ -12,6 +12,9 @@
 //	report-escalation  sends reports open for 7 days to the platform (#76)
 //	retention       deletes resolved reports and audit records after a
 //	                year (#76)
+//	friend-suggestions  recomputes the friendship scores, suggests at most
+//	                one friend a week per user and deletes old open
+//	                suggestions (#208, ADR-0028; suggestions.go)
 //
 // The outcome of every pass (finish time, success, rows changed) is written
 // to job_runs for the panel's dashboard (issue #110).
@@ -59,6 +62,8 @@ const (
 	// Issue #76.
 	JobReportEscalation = "report-escalation"
 	JobRetention        = "retention"
+	// Issue #208.
+	JobFriendSuggestions = "friend-suggestions"
 )
 
 // Default run intervals.
@@ -158,6 +163,8 @@ type Intervals struct {
 	// Issue #76.
 	ReportEscalation time.Duration
 	Retention        time.Duration
+	// Issue #208.
+	FriendSuggestions time.Duration
 }
 
 func (i Intervals) withDefaults() Intervals {
@@ -173,6 +180,7 @@ func (i Intervals) withDefaults() Intervals {
 	def(&i.Plates, DefaultPlatesInterval)
 	def(&i.ReportEscalation, DefaultReportEscalationInterval)
 	def(&i.Retention, DefaultRetentionInterval)
+	def(&i.FriendSuggestions, DefaultFriendSuggestionsInterval)
 	return i
 }
 
@@ -183,6 +191,10 @@ type Config struct {
 	// Now is the clock; nil means time.Now.
 	Now       func() time.Time
 	Intervals Intervals
+	// Minors answers the 18 line for friend suggestions (identity's
+	// IsMinor). nil, or an unavailable identity, means no suggestions are
+	// made; the scores are still kept.
+	Minors MinorChecker
 }
 
 // Service runs the jobs.
@@ -222,6 +234,7 @@ func (s *Service) Workers() []Worker {
 		{JobPlates, s.every(JobPlates, iv.Plates, s.ClearPlates)},
 		{JobReportEscalation, s.every(JobReportEscalation, iv.ReportEscalation, s.EscalateReports)},
 		{JobRetention, s.every(JobRetention, iv.Retention, s.ExpireRecords)},
+		{JobFriendSuggestions, s.every(JobFriendSuggestions, iv.FriendSuggestions, s.SuggestFriends)},
 	}
 }
 

@@ -69,6 +69,8 @@ adları içeriktir ve yer alır.
 | `core/friendships.json` | `user_id` (karşı taraf), `status`, `requested_by_me`, `created_at`, `accepted_at` |
 | `core/blocks.json` | `user_id` (engellenen), `created_at` |
 | `core/reports.json` | `id`, `tayfa_id`, `target_type`, `target_id`, `reason`, `description`, `evidence_text`, `status`, `resolution`, `created_at` |
+| `core/social_settings.json` | Ayar değiştirildiyse ya da puan tutuluyorsa tek kayıt: `profiling_enabled`, `hide_from_suggestions`, `updated_at` (hiç değiştirilmediyse `null`), `scored_people_count` (hakkınızda arkadaşlık puanı tutulan kişi sayısı; puan değerleri ve kişiler girmez, ADR-0028) |
+| `core/friend_suggestions.json` | `user_id` (önerilen kişi), `created_at`, `dismissed_at` (kapatılmadıysa `null`) |
 | `core/uploads.json` | `id`, `purpose`, `status`, `tayfa_id`, `width`, `height`, `attached_type`, `attached_id`, `created_at`, `ready_at` (dosyaların kendisi yoktur; istemci kendi dosyalarını `POST /v1/media/urls` ile indirir) |
 
 ### chat

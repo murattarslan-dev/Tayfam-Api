@@ -209,6 +209,8 @@ func validDisplayName(s string) bool {
 //   - friendships, friend requests and blocks in both directions are
 //     deleted, and so are the direct invitations the user sent that are
 //     still unanswered (issue #71);
+//   - friendship scores, friend suggestions in both directions (dismissed
+//     ones included) and the profiling settings are deleted (issue #208);
 //   - on every upcoming event the user was going to, the seat goes to the
 //     oldest waitlisted answer (rsvp.promoted), as when an answer changes;
 //   - reports stay, but the user's ID in them (as reporter, reported
@@ -267,6 +269,7 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			q.ClearQuestionUserFields, q.ClearAnswerUserFields, q.DeleteUserAnswerVotes,
 			q.ClearPollUserFields, q.DeleteUserPollVotes,
 			q.DeleteUserFriendships, q.DeleteUserBlocks, q.DeleteUserRequestOutcomes,
+			q.DeleteUserFriendScores, q.DeleteUserFriendSuggestions, q.DeleteUserSocialSettings,
 			q.ClearAuditActor, q.ClearEventActor, q.ClearReportUserFields,
 		} {
 			if err := clear(ctx, e.User.PG()); err != nil {
