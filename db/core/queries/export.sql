@@ -146,6 +146,19 @@ WHERE f.user_id = @user_id AND f.id > @after
 ORDER BY f.id
 LIMIT @n;
 
+-- Albüm fotoğrafları (issue #206); dosyaların kendisi zip'e girmez
+-- (ADR-0021 §5), uploads bölümü onları listeler.
+-- name: ExportEventPhotos :many
+SELECT p.id AS k, jsonb_build_object(
+  'id', p.id, 'event_id', p.event_id, 'tayfa_id', e.tayfa_id, 'upload_id', p.upload_id,
+  'caption', p.caption, 'created_at', p.created_at, 'deleted_at', p.deleted_at
+) AS data
+FROM event_photos p
+JOIN events e ON e.id = p.event_id
+WHERE p.uploader_id = @user_id AND p.id > @after
+ORDER BY p.id
+LIMIT @n;
+
 -- name: ExportFriendships :many
 SELECT (CASE WHEN f.user_low_id = @user_id::uuid THEN f.user_high_id ELSE f.user_low_id END)::uuid AS k, jsonb_build_object(
   'user_id', CASE WHEN f.user_low_id = @user_id::uuid THEN f.user_high_id ELSE f.user_low_id END,

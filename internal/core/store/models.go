@@ -176,6 +176,18 @@ type EventHikeCheckin struct {
 	UpdatedAt          pgtype.Timestamptz
 }
 
+type EventPhoto struct {
+	ID              pgtype.UUID
+	EventID         pgtype.UUID
+	UploaderID      pgtype.UUID
+	UploadID        pgtype.UUID
+	Caption         pgtype.Text
+	ClientRequestID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	DeletedBy       pgtype.UUID
+}
+
 type EventRsvp struct {
 	EventID            pgtype.UUID
 	UserID             pgtype.UUID

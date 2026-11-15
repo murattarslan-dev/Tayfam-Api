@@ -518,6 +518,11 @@ LEFT JOIN LATERAL (
   JOIN events e ON e.id = f.event_id AND e.deleted_at IS NULL
   JOIN tayfas t ON t.id = e.tayfa_id AND t.deleted_at IS NULL
   WHERE u.attached_type = 'fishing_catch' AND f.id = u.attached_id AND f.deleted_at IS NULL
+  UNION ALL
+  SELECT e.tayfa_id FROM event_photos ph
+  JOIN events e ON e.id = ph.event_id AND e.deleted_at IS NULL
+  JOIN tayfas t ON t.id = e.tayfa_id AND t.deleted_at IS NULL
+  WHERE u.attached_type = 'event_photo' AND ph.id = u.attached_id AND ph.deleted_at IS NULL
 ) c ON true
 LEFT JOIN memberships m ON m.tayfa_id = c.tayfa_id AND m.user_id = $1
 LEFT JOIN tayfa_modules tm ON tm.tayfa_id = c.tayfa_id AND tm.module = 'events'
@@ -553,7 +558,8 @@ type ListMediaForViewerRow struct {
 // göremeyeceğine karar vermek için bağlam. Karar uygulama katmanında, core'un
 // izin tablosuyla verilir (authz); burada yalnızca veri toplanır. İçeriğin
 // tayfası: tayfa kapağında tayfanın kendisi, etkinlik kapağında ve av
-// fotoğrafında etkinliğin tayfası (silinmiş içerik ve tayfa bağlam vermez).
+// fotoğrafında ve albüm fotoğrafında etkinliğin tayfası (silinmiş içerik ve
+// tayfa bağlam vermez).
 func (q *Queries) ListMediaForViewer(ctx context.Context, arg ListMediaForViewerParams) ([]ListMediaForViewerRow, error) {
 	rows, err := q.db.Query(ctx, listMediaForViewer, arg.ViewerID, arg.Ids)
 	if err != nil {
