@@ -4,7 +4,7 @@
 
 -- name: CreateUpload :one
 INSERT INTO uploads (id, user_id, tayfa_id, purpose, r2_key, preview_type, preview_bytes, full_type, full_bytes, client_request_id)
-VALUES (@id, @user_id, sqlc.narg(tayfa_id), @purpose, @r2_key, @preview_type::text, @preview_bytes::bigint, @full_type::text, @full_bytes::bigint, @client_request_id)
+VALUES (@id, @user_id, sqlc.narg(tayfa_id), @purpose, @r2_key, sqlc.narg(preview_type)::text, sqlc.narg(preview_bytes)::bigint, @full_type::text, @full_bytes::bigint, @client_request_id)
 ON CONFLICT (user_id, client_request_id) DO NOTHING
 RETURNING id;
 
@@ -35,9 +35,10 @@ SELECT pg_advisory_xact_lock(hashtextextended('uploads:' || @user_id::text, 0));
 SELECT count(*) FROM uploads
 WHERE user_id = @user_id AND created_at > @since AND purpose <> 'data_export';
 
--- Kota: iki varyantın bildirilen (ve imzayla zorlanan) boyutları.
+-- Kota: iki varyantın (birebir ekte tek nesnenin) bildirilen (ve imzayla
+-- zorlanan) boyutları.
 -- name: UserStoredBytes :one
-SELECT COALESCE(sum(preview_bytes + full_bytes), 0)::bigint FROM uploads
+SELECT COALESCE(sum(COALESCE(preview_bytes, 0) + full_bytes), 0)::bigint FROM uploads
 WHERE user_id = @user_id AND status NOT IN ('rejected', 'deleting') AND purpose <> 'data_export';
 
 -- Denetimden geçti (ADR-0020). Yalnızca bekleyen kayıt; eşzamanlı ikinci
@@ -70,15 +71,37 @@ WHERE user_id = @user_id AND purpose = 'avatar' AND attached_type = 'user' AND a
   AND (sqlc.narg(keep)::uuid IS NULL OR id <> sqlc.narg(keep)::uuid);
 
 -- Hesap silme (user.deleted): kullanıcının dosyaları silinir; bağlı kapak
--- görselleri tayfanındır, yalnızca sahiplikleri kaldırılır.
+-- görselleri tayfanındır, bağlı şikâyet kanıtı platformundur (rapor
+-- durdukça, ADR-0028); yalnızca sahiplikleri kaldırılır.
 -- name: DeleteUserUploads :execrows
 UPDATE uploads SET status = 'deleting'
 WHERE user_id = @user_id AND status <> 'deleting'
-  AND NOT (purpose = 'cover' AND attached_type IS NOT NULL);
+  AND NOT (purpose IN ('cover', 'report_evidence') AND attached_type IS NOT NULL);
 
 -- name: DisownUserCovers :execrows
 UPDATE uploads SET user_id = NULL
-WHERE user_id = @user_id AND purpose = 'cover' AND attached_type IS NOT NULL;
+WHERE user_id = @user_id AND purpose IN ('cover', 'report_evidence') AND attached_type IS NOT NULL;
+
+-- Sohbet mesajı fotoğrafını ya da ekini bıraktı (chat.media_released,
+-- ADR-0028): dosya hâlâ o mesaja bağlıysa silinir; değilse bir şey olmaz
+-- (tekrar gelen olay).
+-- name: ReleaseMessageMedia :execrows
+UPDATE uploads SET status = 'deleting'
+WHERE id = @id AND attached_type IN ('channel_message', 'dm_message') AND attached_id = @message_id
+  AND status <> 'deleting';
+
+-- Tayfa kalıcı silindi: kanal fotoğrafları da gider (kanallar chat'te
+-- tayfa.purged ile silinir; dosyanın tayfası core'da bellidir).
+-- name: ReleaseTayfaChatPhotos :execrows
+UPDATE uploads SET status = 'deleting'
+WHERE tayfa_id = @tayfa_id AND purpose = 'chat_photo' AND status <> 'deleting';
+
+-- Platform panelinde şikâyetin kanıt fotoğrafı (issue #205): yalnızca o
+-- rapora bağlı, hazır dosya.
+-- name: GetReportEvidenceUpload :one
+SELECT r2_key, full_type::text AS full_type FROM uploads
+WHERE id = @id AND purpose = 'report_evidence' AND status = 'ready'
+  AND attached_type = 'report' AND attached_id = @report_id;
 
 -- Temizlik: 24 saatte tamamlanmayan, 24 saattir reddedilmiş ve 7 gün
 -- içinde bağlanmamış görüntüler ile süresi dolan dışa aktarmalar silme
@@ -120,7 +143,7 @@ DELETE FROM uploads WHERE id = @id AND status = 'deleting';
 -- tayfası: tayfa kapağında tayfanın kendisi, etkinlik kapağında ve av
 -- fotoğrafında etkinliğin tayfası (silinmiş içerik ve tayfa bağlam vermez).
 -- name: ListMediaForViewer :many
-SELECT u.id, u.user_id, u.purpose, u.r2_key, u.preview_type::text AS preview_type, u.full_type::text AS full_type, u.width, u.height,
+SELECT u.id, u.user_id, u.purpose, u.r2_key, COALESCE(u.preview_type, '')::text AS preview_type, u.full_type::text AS full_type, u.width, u.height,
        u.attached_type, u.attached_id,
        c.tayfa_id AS content_tayfa_id,
        m.role AS member_role, m.status AS member_status, m.muted_until AS member_muted_until,
