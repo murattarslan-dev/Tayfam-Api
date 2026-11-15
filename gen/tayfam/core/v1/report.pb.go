@@ -42,8 +42,8 @@ const (
 	// tayfa_id is empty. core asks chat with the reporter's own token
 	// (DirectMessageService.VerifyDirectMessageForReport) whether the
 	// reporter is a party of the message's conversation and who sent it;
-	// anything else is ERROR_REASON_REPORT_TARGET_NOT_FOUND. evidence_text
-	// is required. Goes to the platform only, at once; never to a tayfa's
+	// anything else is ERROR_REASON_REPORT_TARGET_NOT_FOUND. evidence_text,
+	// evidence_upload_id or both are required (issue #205). Goes to the platform only, at once; never to a tayfa's
 	// queue.
 	ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE ReportTargetType = 9
 )
@@ -684,14 +684,21 @@ type CreateReportRequest struct {
 	// Optional, up to 1000 characters after trimming surrounding spaces; line
 	// breaks allowed, other control characters not. Never logged.
 	Description string `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
-	// Only and required for REPORT_TARGET_TYPE_DM_MESSAGE: the message text
+	// Only for REPORT_TARGET_TYPE_DM_MESSAGE (required unless
+	// evidence_upload_id is set): the message text
 	// the reporter shares from their own device (ADR-0005 "Şikâyet"), 1–2000
 	// characters after trimming surrounding spaces; line breaks allowed,
 	// other control characters not. Stored for the platform only; never
 	// logged, never in events, never returned (MyReport does not carry it).
-	EvidenceText  string `protobuf:"bytes,6,opt,name=evidence_text,json=evidenceText,proto3" json:"evidence_text,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	EvidenceText string `protobuf:"bytes,6,opt,name=evidence_text,json=evidenceText,proto3" json:"evidence_text,omitempty"`
+	// Only for REPORT_TARGET_TYPE_DM_MESSAGE (issue #205, ADR-0028): a photo
+	// of the message the reporter shares from their own device, the
+	// caller's READY upload of purpose REPORT_EVIDENCE not used elsewhere
+	// (ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,
+	// ERROR_REASON_UPLOAD_IN_USE). Only the platform panel sees it.
+	EvidenceUploadId string `protobuf:"bytes,7,opt,name=evidence_upload_id,json=evidenceUploadId,proto3" json:"evidence_upload_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *CreateReportRequest) Reset() {
@@ -762,6 +769,13 @@ func (x *CreateReportRequest) GetDescription() string {
 func (x *CreateReportRequest) GetEvidenceText() string {
 	if x != nil {
 		return x.EvidenceText
+	}
+	return ""
+}
+
+func (x *CreateReportRequest) GetEvidenceUploadId() string {
+	if x != nil {
+		return x.EvidenceUploadId
 	}
 	return ""
 }
@@ -1274,7 +1288,7 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"\vcreate_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12=\n" +
 	"\fresolve_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vresolveTime\x12:\n" +
-	"\bpriority\x18\r \x01(\x0e2\x1e.tayfam.core.v1.ReportPriorityR\bpriority\"\x8d\x02\n" +
+	"\bpriority\x18\r \x01(\x0e2\x1e.tayfam.core.v1.ReportPriorityR\bpriority\"\xbb\x02\n" +
 	"\x13CreateReportRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12A\n" +
 	"\vtarget_type\x18\x02 \x01(\x0e2 .tayfam.core.v1.ReportTargetTypeR\n" +
@@ -1282,7 +1296,8 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"\ttarget_id\x18\x03 \x01(\tR\btargetId\x124\n" +
 	"\x06reason\x18\x04 \x01(\x0e2\x1c.tayfam.core.v1.ReportReasonR\x06reason\x12 \n" +
 	"\vdescription\x18\x05 \x01(\tR\vdescription\x12#\n" +
-	"\revidence_text\x18\x06 \x01(\tR\fevidenceText\"b\n" +
+	"\revidence_text\x18\x06 \x01(\tR\fevidenceText\x12,\n" +
+	"\x12evidence_upload_id\x18\a \x01(\tR\x10evidenceUploadId\"b\n" +
 	"\x14CreateReportResponse\x120\n" +
 	"\x06report\x18\x01 \x01(\v2\x18.tayfam.core.v1.MyReportR\x06report\x12\x18\n" +
 	"\acreated\x18\x02 \x01(\bR\acreated\"1\n" +

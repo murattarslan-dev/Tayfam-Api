@@ -1360,9 +1360,13 @@ type ReportedItem struct {
 	Options    []string               `protobuf:"bytes,6,rep,name=options,proto3" json:"options,omitempty"`
 	CreateTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	// Set if the item is already deleted.
-	DeleteTime    *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=delete_time,json=deleteTime,proto3" json:"delete_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	DeleteTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=delete_time,json=deleteTime,proto3" json:"delete_time,omitempty"`
+	// A DM report's evidence photo (issue #205): a GET link to the full
+	// variant, valid for 5 minutes; empty when there is none or object
+	// storage is off. A bearer link: never logged.
+	EvidencePhotoUrl string `protobuf:"bytes,9,opt,name=evidence_photo_url,json=evidencePhotoUrl,proto3" json:"evidence_photo_url,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ReportedItem) Reset() {
@@ -1449,6 +1453,13 @@ func (x *ReportedItem) GetDeleteTime() *timestamppb.Timestamp {
 		return x.DeleteTime
 	}
 	return nil
+}
+
+func (x *ReportedItem) GetEvidencePhotoUrl() string {
+	if x != nil {
+		return x.EvidencePhotoUrl
+	}
+	return ""
 }
 
 type GetReportedItemResponse struct {
@@ -1954,7 +1965,7 @@ const file_tayfam_core_v1_admin_proto_rawDesc = "" +
 	"\x1bListPlatformReportsResponse\x128\n" +
 	"\areports\x18\x01 \x03(\v2\x1e.tayfam.core.v1.PlatformReportR\areports\"5\n" +
 	"\x16GetReportedItemRequest\x12\x1b\n" +
-	"\treport_id\x18\x01 \x01(\tR\breportId\"\xc9\x02\n" +
+	"\treport_id\x18\x01 \x01(\tR\breportId\"\xf7\x02\n" +
 	"\fReportedItem\x12A\n" +
 	"\vtarget_type\x18\x01 \x01(\x0e2 .tayfam.core.v1.ReportTargetTypeR\n" +
 	"targetType\x12\x1b\n" +
@@ -1966,7 +1977,8 @@ const file_tayfam_core_v1_admin_proto_rawDesc = "" +
 	"\vcreate_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12;\n" +
 	"\vdelete_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"deleteTime\"\x83\x01\n" +
+	"deleteTime\x12,\n" +
+	"\x12evidence_photo_url\x18\t \x01(\tR\x10evidencePhotoUrl\"\x83\x01\n" +
 	"\x17GetReportedItemResponse\x126\n" +
 	"\x06report\x18\x01 \x01(\v2\x1e.tayfam.core.v1.PlatformReportR\x06report\x120\n" +
 	"\x04item\x18\x02 \x01(\v2\x1c.tayfam.core.v1.ReportedItemR\x04item\"\x88\x01\n" +

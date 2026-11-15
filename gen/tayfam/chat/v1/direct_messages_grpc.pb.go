@@ -90,6 +90,17 @@ type DirectMessageServiceClient interface {
 	// acknowledged or after 30 days. The caller's session must have a device
 	// (ERROR_REASON_E2E_DEVICE_NOT_REGISTERED).
 	//
+	// attachment_upload_id (optional, issue #205, ADR-0028) is the caller's
+	// READY upload of purpose DM_ATTACHMENT: an opaque blob the client
+	// encrypted with a random key (AES-256-GCM); the key and the digest are
+	// inside the envelopes, never on the server. At most one per message; the
+	// kind of content (text, photo, place) is inside the envelopes too. chat
+	// attaches it to the new message with the caller's token before the
+	// message is written (core AttachDirectMessageAttachment). Only the two
+	// parties may get its link (core GetMediaUrls asks chat). Errors:
+	// ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,
+	// ERROR_REASON_UPLOAD_IN_USE.
+	//
 	// Errors: ERROR_REASON_VALIDATION (recipient_user_id, the caller;
 	// envelopes: none, or a bad one; body: any non-empty value, the plain
 	// path is gone (issue #151); client_request_id; a client_request_id used
@@ -109,8 +120,9 @@ type DirectMessageServiceClient interface {
 	// reconnect, ADR-0005). Deleted messages stay in place, marked deleted.
 	ListDirectMessages(ctx context.Context, in *ListDirectMessagesRequest, opts ...grpc.CallOption) (*ListDirectMessagesResponse, error)
 	// DeleteDirectMessage deletes one of the caller's own messages: it shows
-	// as deleted at once, its waiting envelopes and archive entries go, and
-	// it cannot be restored. Others' messages, and unknown
+	// as deleted at once, its waiting envelopes and archive entries go, its
+	// attachment is deleted from storage (ADR-0028), and it cannot be
+	// restored. Others' messages, and unknown
 	// ones, are ERROR_REASON_MESSAGE_NOT_FOUND. Deleting again changes
 	// nothing. Messages cannot be edited.
 	DeleteDirectMessage(ctx context.Context, in *DeleteDirectMessageRequest, opts ...grpc.CallOption) (*DeleteDirectMessageResponse, error)
@@ -334,6 +346,17 @@ type DirectMessageServiceServer interface {
 	// acknowledged or after 30 days. The caller's session must have a device
 	// (ERROR_REASON_E2E_DEVICE_NOT_REGISTERED).
 	//
+	// attachment_upload_id (optional, issue #205, ADR-0028) is the caller's
+	// READY upload of purpose DM_ATTACHMENT: an opaque blob the client
+	// encrypted with a random key (AES-256-GCM); the key and the digest are
+	// inside the envelopes, never on the server. At most one per message; the
+	// kind of content (text, photo, place) is inside the envelopes too. chat
+	// attaches it to the new message with the caller's token before the
+	// message is written (core AttachDirectMessageAttachment). Only the two
+	// parties may get its link (core GetMediaUrls asks chat). Errors:
+	// ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,
+	// ERROR_REASON_UPLOAD_IN_USE.
+	//
 	// Errors: ERROR_REASON_VALIDATION (recipient_user_id, the caller;
 	// envelopes: none, or a bad one; body: any non-empty value, the plain
 	// path is gone (issue #151); client_request_id; a client_request_id used
@@ -353,8 +376,9 @@ type DirectMessageServiceServer interface {
 	// reconnect, ADR-0005). Deleted messages stay in place, marked deleted.
 	ListDirectMessages(context.Context, *ListDirectMessagesRequest) (*ListDirectMessagesResponse, error)
 	// DeleteDirectMessage deletes one of the caller's own messages: it shows
-	// as deleted at once, its waiting envelopes and archive entries go, and
-	// it cannot be restored. Others' messages, and unknown
+	// as deleted at once, its waiting envelopes and archive entries go, its
+	// attachment is deleted from storage (ADR-0028), and it cannot be
+	// restored. Others' messages, and unknown
 	// ones, are ERROR_REASON_MESSAGE_NOT_FOUND. Deleting again changes
 	// nothing. Messages cannot be edited.
 	DeleteDirectMessage(context.Context, *DeleteDirectMessageRequest) (*DeleteDirectMessageResponse, error)

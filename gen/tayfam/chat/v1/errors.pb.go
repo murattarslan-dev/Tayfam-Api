@@ -148,6 +148,15 @@ const (
 	// FAILED_PRECONDITION. The event ended more than 7 days ago (or was
 	// cancelled that long ago): its channel would be archived at once.
 	ErrorReason_ERROR_REASON_EVENT_ENDED ErrorReason = 34
+	// Photos and attachments (issue #205, ADR-0028): core's answer about the
+	// upload a message names.
+	// NOT_FOUND. Unknown, another user's, another purpose or (for a channel
+	// photo) another tayfa's upload.
+	ErrorReason_ERROR_REASON_UPLOAD_NOT_FOUND ErrorReason = 35
+	// FAILED_PRECONDITION. The upload is not READY yet.
+	ErrorReason_ERROR_REASON_UPLOAD_NOT_READY ErrorReason = 36
+	// FAILED_PRECONDITION. The upload already belongs to another message.
+	ErrorReason_ERROR_REASON_UPLOAD_IN_USE ErrorReason = 37
 )
 
 // Enum value maps for ErrorReason.
@@ -188,6 +197,9 @@ var (
 		32: "ERROR_REASON_EVENT_NOT_FOUND",
 		33: "ERROR_REASON_NOT_TAYFA_MEMBER",
 		34: "ERROR_REASON_EVENT_ENDED",
+		35: "ERROR_REASON_UPLOAD_NOT_FOUND",
+		36: "ERROR_REASON_UPLOAD_NOT_READY",
+		37: "ERROR_REASON_UPLOAD_IN_USE",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                   0,
@@ -225,6 +237,9 @@ var (
 		"ERROR_REASON_EVENT_NOT_FOUND":               32,
 		"ERROR_REASON_NOT_TAYFA_MEMBER":              33,
 		"ERROR_REASON_EVENT_ENDED":                   34,
+		"ERROR_REASON_UPLOAD_NOT_FOUND":              35,
+		"ERROR_REASON_UPLOAD_NOT_READY":              36,
+		"ERROR_REASON_UPLOAD_IN_USE":                 37,
 	}
 )
 
@@ -259,7 +274,7 @@ var File_tayfam_chat_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\x98\n" +
+	"\x1btayfam/chat/v1/errors.proto\x12\x0etayfam.chat.v1*\xfe\n" +
 	"\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
@@ -297,7 +312,10 @@ const file_tayfam_chat_v1_errors_proto_rawDesc = "" +
 	"!ERROR_REASON_EVENT_CHANNEL_EXISTS\x10\x1f\x12 \n" +
 	"\x1cERROR_REASON_EVENT_NOT_FOUND\x10 \x12!\n" +
 	"\x1dERROR_REASON_NOT_TAYFA_MEMBER\x10!\x12\x1c\n" +
-	"\x18ERROR_REASON_EVENT_ENDED\x10\"B\xbd\x01\n" +
+	"\x18ERROR_REASON_EVENT_ENDED\x10\"\x12!\n" +
+	"\x1dERROR_REASON_UPLOAD_NOT_FOUND\x10#\x12!\n" +
+	"\x1dERROR_REASON_UPLOAD_NOT_READY\x10$\x12\x1e\n" +
+	"\x1aERROR_REASON_UPLOAD_IN_USE\x10%B\xbd\x01\n" +
 	"\x12com.tayfam.chat.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1;chatv1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Chat.V1\xca\x02\x0eTayfam\\Chat\\V1\xe2\x02\x1aTayfam\\Chat\\V1\\GPBMetadata\xea\x02\x10Tayfam::Chat::V1b\x06proto3"
 
 var (

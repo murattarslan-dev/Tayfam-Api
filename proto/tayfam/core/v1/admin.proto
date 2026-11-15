@@ -240,6 +240,10 @@ message ReportedItem {
   google.protobuf.Timestamp create_time = 7;
   // Set if the item is already deleted.
   google.protobuf.Timestamp delete_time = 8;
+  // A DM report's evidence photo (issue #205): a GET link to the full
+  // variant, valid for 5 minutes; empty when there is none or object
+  // storage is off. A bearer link: never logged.
+  string evidence_photo_url = 9;
 }
 
 message GetReportedItemResponse {

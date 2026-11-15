@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package tayfam.chat.v1;
+
+// MessageMediaService answers core's question when a user asks for the
+// links of a photo or an attachment that belongs to a message (issue #205,
+// ADR-0028). core owns the files and signs the links; chat owns channels,
+// their audiences (ADR-0024) and conversations, so chat decides who may
+// see a message.
+//
+// Authentication: the caller's access token, forwarded by core as it is
+// (auth.ForwardToken; ADR-0004, ADR-0011). Service tokens are refused. The
+// answer is about the caller only and holds no content.
+service MessageMediaService {
+  // FilterVisibleMessageMedia returns the upload IDs among items that the
+  // caller may see, in request order:
+  //   - CHANNEL: the message is in a channel the caller may read (the same
+  //     rule as ChannelService.ListMessages: an active member of the tayfa
+  //     who is in the channel's audience: members, staff, event or
+  //     selected), it is not deleted and its photo_upload_id is upload_id.
+  //   - DIRECT: the caller is a party of the message's conversation, the
+  //     message is not deleted and its attachment_upload_id is upload_id.
+  // Everything else is left out without a reason. 1 to 100 items
+  // (ERROR_REASON_VALIDATION otherwise, field "items"). UNAVAILABLE without
+  // ErrorInfo when core cannot answer about the tayfa.
+  rpc FilterVisibleMessageMedia(FilterVisibleMessageMediaRequest) returns (FilterVisibleMessageMediaResponse);
+}
+
+// MessageMediaKind is where a message lives.
+enum MessageMediaKind {
+  MESSAGE_MEDIA_KIND_UNSPECIFIED = 0;
+  // A channel message's photo.
+  MESSAGE_MEDIA_KIND_CHANNEL = 1;
+  // A direct message's encrypted attachment.
+  MESSAGE_MEDIA_KIND_DIRECT = 2;
+}
+
+message MessageMediaItem {
+  string upload_id = 1;
+  // The message the upload is attached to (core's uploads.attached_id).
+  string message_id = 2;
+  MessageMediaKind kind = 3;
+}
+
+message FilterVisibleMessageMediaRequest {
+  repeated MessageMediaItem items = 1;
+}
+
+message FilterVisibleMessageMediaResponse {
+  repeated string visible_upload_ids = 1;
+}

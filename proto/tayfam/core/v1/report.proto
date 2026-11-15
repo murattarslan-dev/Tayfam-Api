@@ -136,8 +136,8 @@ enum ReportTargetType {
   // tayfa_id is empty. core asks chat with the reporter's own token
   // (DirectMessageService.VerifyDirectMessageForReport) whether the
   // reporter is a party of the message's conversation and who sent it;
-  // anything else is ERROR_REASON_REPORT_TARGET_NOT_FOUND. evidence_text
-  // is required. Goes to the platform only, at once; never to a tayfa's
+  // anything else is ERROR_REASON_REPORT_TARGET_NOT_FOUND. evidence_text,
+  // evidence_upload_id or both are required (issue #205). Goes to the platform only, at once; never to a tayfa's
   // queue.
   REPORT_TARGET_TYPE_DM_MESSAGE = 9;
 }
@@ -250,12 +250,19 @@ message CreateReportRequest {
   // Optional, up to 1000 characters after trimming surrounding spaces; line
   // breaks allowed, other control characters not. Never logged.
   string description = 5;
-  // Only and required for REPORT_TARGET_TYPE_DM_MESSAGE: the message text
+  // Only for REPORT_TARGET_TYPE_DM_MESSAGE (required unless
+  // evidence_upload_id is set): the message text
   // the reporter shares from their own device (ADR-0005 "Şikâyet"), 1–2000
   // characters after trimming surrounding spaces; line breaks allowed,
   // other control characters not. Stored for the platform only; never
   // logged, never in events, never returned (MyReport does not carry it).
   string evidence_text = 6;
+  // Only for REPORT_TARGET_TYPE_DM_MESSAGE (issue #205, ADR-0028): a photo
+  // of the message the reporter shares from their own device, the
+  // caller's READY upload of purpose REPORT_EVIDENCE not used elsewhere
+  // (ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,
+  // ERROR_REASON_UPLOAD_IN_USE). Only the platform panel sees it.
+  string evidence_upload_id = 7;
 }
 
 message CreateReportResponse {

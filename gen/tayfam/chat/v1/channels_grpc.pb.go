@@ -101,8 +101,24 @@ type ChannelServiceClient interface {
 	// Moderators and admins. Doing it twice changes nothing.
 	ArchiveChannel(ctx context.Context, in *ArchiveChannelRequest, opts ...grpc.CallOption) (*ArchiveChannelResponse, error)
 	UnarchiveChannel(ctx context.Context, in *UnarchiveChannelRequest, opts ...grpc.CallOption) (*UnarchiveChannelResponse, error)
-	// SendMessage writes a message. body is 1–4000 characters, not only white
-	// space, without control characters other than tab and line breaks.
+	// SendMessage writes a message of one kind (issue #205, ADR-0028):
+	//   - TEXT (also UNSPECIFIED): body is 1–4000 characters, not only white
+	//     space, without control characters other than tab and line breaks;
+	//     photo_upload_id and place are empty.
+	//   - PHOTO: photo_upload_id is the caller's READY upload of purpose
+	//     CHAT_PHOTO for this tayfa (core MediaService), not used by another
+	//     message; body and place are empty (no caption). chat attaches it to
+	//     the new message with the caller's token before the message is
+	//     written (core AttachChannelPhoto): ERROR_REASON_UPLOAD_NOT_FOUND
+	//     (unknown, another user's, another purpose or tayfa),
+	//     ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE.
+	//   - PLACE: place with latitude −90..90, longitude −180..180 (finite)
+	//     and an optional name of 1–120 characters without control
+	//     characters; body and photo_upload_id are empty. The place is
+	//     encrypted like a body and never logged (it is content the user
+	//     chose to share, not the device's location; ADR-0008).
+	// A field of another kind, or a missing one, is ERROR_REASON_VALIDATION
+	// naming the field.
 	// client_request_id (UUID, chosen by the client) is required: sending
 	// again with the same value returns the first message and writes nothing
 	// (also past slow mode); reusing it in another channel is
@@ -121,10 +137,12 @@ type ChannelServiceClient interface {
 	// after_message_id (the last message the client has) the newer messages
 	// come oldest first and next_page_token goes to newer ones: this is how a
 	// client catches up after a reconnect (ADR-0005). Deleted messages keep
-	// their place with deleted set and no body.
+	// their place with deleted set and no body, place or photo.
 	ListMessages(ctx context.Context, in *ListMessagesRequest, opts ...grpc.CallOption) (*ListMessagesResponse, error)
 	// DeleteMessage deletes a message. The author's own deletion erases the
-	// body at once and cannot be undone. A moderator's or admin's deletion of
+	// body (a place too) at once and cannot be undone; a photo is released
+	// and deleted from storage (ADR-0028). A moderation deletion keeps the
+	// photo until the message is deleted for good. A moderator's or admin's deletion of
 	// someone else's message hides it; an admin can restore it within 30
 	// days, after which it is deleted permanently. Deleting a deleted message
 	// changes nothing. Messages cannot be edited.
@@ -367,8 +385,24 @@ type ChannelServiceServer interface {
 	// Moderators and admins. Doing it twice changes nothing.
 	ArchiveChannel(context.Context, *ArchiveChannelRequest) (*ArchiveChannelResponse, error)
 	UnarchiveChannel(context.Context, *UnarchiveChannelRequest) (*UnarchiveChannelResponse, error)
-	// SendMessage writes a message. body is 1–4000 characters, not only white
-	// space, without control characters other than tab and line breaks.
+	// SendMessage writes a message of one kind (issue #205, ADR-0028):
+	//   - TEXT (also UNSPECIFIED): body is 1–4000 characters, not only white
+	//     space, without control characters other than tab and line breaks;
+	//     photo_upload_id and place are empty.
+	//   - PHOTO: photo_upload_id is the caller's READY upload of purpose
+	//     CHAT_PHOTO for this tayfa (core MediaService), not used by another
+	//     message; body and place are empty (no caption). chat attaches it to
+	//     the new message with the caller's token before the message is
+	//     written (core AttachChannelPhoto): ERROR_REASON_UPLOAD_NOT_FOUND
+	//     (unknown, another user's, another purpose or tayfa),
+	//     ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE.
+	//   - PLACE: place with latitude −90..90, longitude −180..180 (finite)
+	//     and an optional name of 1–120 characters without control
+	//     characters; body and photo_upload_id are empty. The place is
+	//     encrypted like a body and never logged (it is content the user
+	//     chose to share, not the device's location; ADR-0008).
+	// A field of another kind, or a missing one, is ERROR_REASON_VALIDATION
+	// naming the field.
 	// client_request_id (UUID, chosen by the client) is required: sending
 	// again with the same value returns the first message and writes nothing
 	// (also past slow mode); reusing it in another channel is
@@ -387,10 +421,12 @@ type ChannelServiceServer interface {
 	// after_message_id (the last message the client has) the newer messages
 	// come oldest first and next_page_token goes to newer ones: this is how a
 	// client catches up after a reconnect (ADR-0005). Deleted messages keep
-	// their place with deleted set and no body.
+	// their place with deleted set and no body, place or photo.
 	ListMessages(context.Context, *ListMessagesRequest) (*ListMessagesResponse, error)
 	// DeleteMessage deletes a message. The author's own deletion erases the
-	// body at once and cannot be undone. A moderator's or admin's deletion of
+	// body (a place too) at once and cannot be undone; a photo is released
+	// and deleted from storage (ADR-0028). A moderation deletion keeps the
+	// photo until the message is deleted for good. A moderator's or admin's deletion of
 	// someone else's message hides it; an admin can restore it within 30
 	// days, after which it is deleted permanently. Deleting a deleted message
 	// changes nothing. Messages cannot be edited.

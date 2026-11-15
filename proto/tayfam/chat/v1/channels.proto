@@ -72,8 +72,24 @@ service ChannelService {
   rpc ArchiveChannel(ArchiveChannelRequest) returns (ArchiveChannelResponse);
   rpc UnarchiveChannel(UnarchiveChannelRequest) returns (UnarchiveChannelResponse);
 
-  // SendMessage writes a message. body is 1–4000 characters, not only white
-  // space, without control characters other than tab and line breaks.
+  // SendMessage writes a message of one kind (issue #205, ADR-0028):
+  //   - TEXT (also UNSPECIFIED): body is 1–4000 characters, not only white
+  //     space, without control characters other than tab and line breaks;
+  //     photo_upload_id and place are empty.
+  //   - PHOTO: photo_upload_id is the caller's READY upload of purpose
+  //     CHAT_PHOTO for this tayfa (core MediaService), not used by another
+  //     message; body and place are empty (no caption). chat attaches it to
+  //     the new message with the caller's token before the message is
+  //     written (core AttachChannelPhoto): ERROR_REASON_UPLOAD_NOT_FOUND
+  //     (unknown, another user's, another purpose or tayfa),
+  //     ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE.
+  //   - PLACE: place with latitude −90..90, longitude −180..180 (finite)
+  //     and an optional name of 1–120 characters without control
+  //     characters; body and photo_upload_id are empty. The place is
+  //     encrypted like a body and never logged (it is content the user
+  //     chose to share, not the device's location; ADR-0008).
+  // A field of another kind, or a missing one, is ERROR_REASON_VALIDATION
+  // naming the field.
   // client_request_id (UUID, chosen by the client) is required: sending
   // again with the same value returns the first message and writes nothing
   // (also past slow mode); reusing it in another channel is
@@ -93,11 +109,13 @@ service ChannelService {
   // after_message_id (the last message the client has) the newer messages
   // come oldest first and next_page_token goes to newer ones: this is how a
   // client catches up after a reconnect (ADR-0005). Deleted messages keep
-  // their place with deleted set and no body.
+  // their place with deleted set and no body, place or photo.
   rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse);
 
   // DeleteMessage deletes a message. The author's own deletion erases the
-  // body at once and cannot be undone. A moderator's or admin's deletion of
+  // body (a place too) at once and cannot be undone; a photo is released
+  // and deleted from storage (ADR-0028). A moderation deletion keeps the
+  // photo until the message is deleted for good. A moderator's or admin's deletion of
   // someone else's message hides it; an admin can restore it within 30
   // days, after which it is deleted permanently. Deleting a deleted message
   // changes nothing. Messages cannot be edited.
@@ -200,12 +218,41 @@ message Message {
   string channel_id = 2;
   // Empty when the author's account was deleted ("Silinmiş kullanıcı").
   string author_user_id = 3;
-  // Empty when deleted.
+  // TEXT only; empty when deleted.
   string body = 4;
   bool deleted = 5;
   google.protobuf.Timestamp create_time = 6;
   // Set for admins on a moderation deletion that can still be restored.
   bool restorable = 7;
+  // TEXT for every message written before kinds existed (issue #205).
+  MessageKind kind = 8;
+  // PHOTO only; empty when deleted. Links come from core's GetMediaUrls,
+  // which asks chat whether the caller may see this message.
+  string photo_upload_id = 9;
+  // PLACE only; unset when deleted.
+  Place place = 10;
+}
+
+// MessageKind is what a channel message carries (ADR-0028).
+enum MessageKind {
+  // Read as TEXT in requests.
+  MESSAGE_KIND_UNSPECIFIED = 0;
+  MESSAGE_KIND_TEXT = 1;
+  // A photo through core's media pipeline (purpose CHAT_PHOTO).
+  MESSAGE_KIND_PHOTO = 2;
+  // A point picked on the map, with an optional name.
+  MESSAGE_KIND_PLACE = 3;
+}
+
+// Place is a point a user chose to share (ADR-0008: content, not the
+// device's location). Never logged.
+message Place {
+  // −90..90.
+  double latitude = 1;
+  // −180..180.
+  double longitude = 2;
+  // Optional, 1–120 characters.
+  string name = 3;
 }
 
 message ListChannelsRequest {
@@ -276,8 +323,15 @@ message UnarchiveChannelResponse {
 message SendMessageRequest {
   string tayfa_id = 1;
   string channel_id = 2;
+  // TEXT only.
   string body = 3;
   string client_request_id = 4;
+  // UNSPECIFIED means TEXT.
+  MessageKind kind = 5;
+  // PHOTO only.
+  string photo_upload_id = 6;
+  // PLACE only.
+  Place place = 7;
 }
 
 message SendMessageResponse {

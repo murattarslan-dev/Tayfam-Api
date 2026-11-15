@@ -33,6 +33,12 @@ const (
 	UploadPurpose_UPLOAD_PURPOSE_CATCH_PHOTO UploadPurpose = 2
 	// A tayfa or event cover.
 	UploadPurpose_UPLOAD_PURPOSE_COVER UploadPurpose = 3
+	// A photo in a channel message (issue #205).
+	UploadPurpose_UPLOAD_PURPOSE_CHAT_PHOTO UploadPurpose = 4
+	// An end-to-end encrypted direct message attachment: an opaque BLOB.
+	UploadPurpose_UPLOAD_PURPOSE_DM_ATTACHMENT UploadPurpose = 5
+	// A photo the reporter of a direct message shares from their device.
+	UploadPurpose_UPLOAD_PURPOSE_REPORT_EVIDENCE UploadPurpose = 6
 )
 
 // Enum value maps for UploadPurpose.
@@ -42,12 +48,18 @@ var (
 		1: "UPLOAD_PURPOSE_AVATAR",
 		2: "UPLOAD_PURPOSE_CATCH_PHOTO",
 		3: "UPLOAD_PURPOSE_COVER",
+		4: "UPLOAD_PURPOSE_CHAT_PHOTO",
+		5: "UPLOAD_PURPOSE_DM_ATTACHMENT",
+		6: "UPLOAD_PURPOSE_REPORT_EVIDENCE",
 	}
 	UploadPurpose_value = map[string]int32{
-		"UPLOAD_PURPOSE_UNSPECIFIED": 0,
-		"UPLOAD_PURPOSE_AVATAR":      1,
-		"UPLOAD_PURPOSE_CATCH_PHOTO": 2,
-		"UPLOAD_PURPOSE_COVER":       3,
+		"UPLOAD_PURPOSE_UNSPECIFIED":     0,
+		"UPLOAD_PURPOSE_AVATAR":          1,
+		"UPLOAD_PURPOSE_CATCH_PHOTO":     2,
+		"UPLOAD_PURPOSE_COVER":           3,
+		"UPLOAD_PURPOSE_CHAT_PHOTO":      4,
+		"UPLOAD_PURPOSE_DM_ATTACHMENT":   5,
+		"UPLOAD_PURPOSE_REPORT_EVIDENCE": 6,
 	}
 )
 
@@ -219,6 +231,8 @@ const (
 	VariantKind_VARIANT_KIND_PREVIEW VariantKind = 1
 	// Longest side at most 1600 px.
 	VariantKind_VARIANT_KIND_FULL VariantKind = 2
+	// DM_ATTACHMENT only: the encrypted file, never read by the server.
+	VariantKind_VARIANT_KIND_BLOB VariantKind = 3
 )
 
 // Enum value maps for VariantKind.
@@ -227,11 +241,13 @@ var (
 		0: "VARIANT_KIND_UNSPECIFIED",
 		1: "VARIANT_KIND_PREVIEW",
 		2: "VARIANT_KIND_FULL",
+		3: "VARIANT_KIND_BLOB",
 	}
 	VariantKind_value = map[string]int32{
 		"VARIANT_KIND_UNSPECIFIED": 0,
 		"VARIANT_KIND_PREVIEW":     1,
 		"VARIANT_KIND_FULL":        2,
+		"VARIANT_KIND_BLOB":        3,
 	}
 )
 
@@ -269,9 +285,10 @@ type Upload struct {
 	Status  UploadStatus           `protobuf:"varint,3,opt,name=status,proto3,enum=tayfam.core.v1.UploadStatus" json:"status,omitempty"`
 	// Set when status is REJECTED.
 	RejectReason UploadRejectReason `protobuf:"varint,4,opt,name=reject_reason,json=rejectReason,proto3,enum=tayfam.core.v1.UploadRejectReason" json:"reject_reason,omitempty"`
-	// Set for COVER and CATCH_PHOTO.
+	// Set for COVER, CATCH_PHOTO and CHAT_PHOTO.
 	TayfaId string `protobuf:"bytes,5,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
-	// Declared sizes of both variants together.
+	// Declared sizes of both variants together (the blob's size for
+	// DM_ATTACHMENT).
 	SizeBytes  int64                  `protobuf:"varint,6,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
 	CreateTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	// Set when status is READY: the links (1 hour) and their expiry.
@@ -485,7 +502,7 @@ func (x *MediaUrls) GetExpireTime() *timestamppb.Timestamp {
 type UploadVariant struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Kind  VariantKind            `protobuf:"varint,1,opt,name=kind,proto3,enum=tayfam.core.v1.VariantKind" json:"kind,omitempty"`
-	// "image/jpeg" or "image/webp".
+	// "image/jpeg" or "image/webp"; "application/octet-stream" for BLOB.
 	ContentType string `protobuf:"bytes,2,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
 	// Exact size of the file, 1 to 10485760.
 	SizeBytes     int64 `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
@@ -1113,6 +1130,193 @@ func (*AttachAvatarResponse) Descriptor() ([]byte, []int) {
 	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{13}
 }
 
+type AttachChannelPhotoRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	UploadId string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	// The tayfa of the channel; the upload must be for it.
+	TayfaId string `protobuf:"bytes,2,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	// chat's channel message ID (UUID).
+	MessageId     string `protobuf:"bytes,3,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AttachChannelPhotoRequest) Reset() {
+	*x = AttachChannelPhotoRequest{}
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AttachChannelPhotoRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AttachChannelPhotoRequest) ProtoMessage() {}
+
+func (x *AttachChannelPhotoRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AttachChannelPhotoRequest.ProtoReflect.Descriptor instead.
+func (*AttachChannelPhotoRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *AttachChannelPhotoRequest) GetUploadId() string {
+	if x != nil {
+		return x.UploadId
+	}
+	return ""
+}
+
+func (x *AttachChannelPhotoRequest) GetTayfaId() string {
+	if x != nil {
+		return x.TayfaId
+	}
+	return ""
+}
+
+func (x *AttachChannelPhotoRequest) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+type AttachChannelPhotoResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AttachChannelPhotoResponse) Reset() {
+	*x = AttachChannelPhotoResponse{}
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AttachChannelPhotoResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AttachChannelPhotoResponse) ProtoMessage() {}
+
+func (x *AttachChannelPhotoResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AttachChannelPhotoResponse.ProtoReflect.Descriptor instead.
+func (*AttachChannelPhotoResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{15}
+}
+
+type AttachDirectMessageAttachmentRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	UploadId string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	// chat's direct message ID (UUID).
+	MessageId     string `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AttachDirectMessageAttachmentRequest) Reset() {
+	*x = AttachDirectMessageAttachmentRequest{}
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AttachDirectMessageAttachmentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AttachDirectMessageAttachmentRequest) ProtoMessage() {}
+
+func (x *AttachDirectMessageAttachmentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AttachDirectMessageAttachmentRequest.ProtoReflect.Descriptor instead.
+func (*AttachDirectMessageAttachmentRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *AttachDirectMessageAttachmentRequest) GetUploadId() string {
+	if x != nil {
+		return x.UploadId
+	}
+	return ""
+}
+
+func (x *AttachDirectMessageAttachmentRequest) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+type AttachDirectMessageAttachmentResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AttachDirectMessageAttachmentResponse) Reset() {
+	*x = AttachDirectMessageAttachmentResponse{}
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AttachDirectMessageAttachmentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AttachDirectMessageAttachmentResponse) ProtoMessage() {}
+
+func (x *AttachDirectMessageAttachmentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AttachDirectMessageAttachmentResponse.ProtoReflect.Descriptor instead.
+func (*AttachDirectMessageAttachmentResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{17}
+}
+
 type ReserveExportUploadRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// identity's data export request (UUID).
@@ -1123,7 +1327,7 @@ type ReserveExportUploadRequest struct {
 
 func (x *ReserveExportUploadRequest) Reset() {
 	*x = ReserveExportUploadRequest{}
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[14]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1135,7 +1339,7 @@ func (x *ReserveExportUploadRequest) String() string {
 func (*ReserveExportUploadRequest) ProtoMessage() {}
 
 func (x *ReserveExportUploadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[14]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1148,7 +1352,7 @@ func (x *ReserveExportUploadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReserveExportUploadRequest.ProtoReflect.Descriptor instead.
 func (*ReserveExportUploadRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{14}
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ReserveExportUploadRequest) GetDataExportId() string {
@@ -1167,7 +1371,7 @@ type ReserveExportUploadResponse struct {
 
 func (x *ReserveExportUploadResponse) Reset() {
 	*x = ReserveExportUploadResponse{}
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[15]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1179,7 +1383,7 @@ func (x *ReserveExportUploadResponse) String() string {
 func (*ReserveExportUploadResponse) ProtoMessage() {}
 
 func (x *ReserveExportUploadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[15]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1192,7 +1396,7 @@ func (x *ReserveExportUploadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReserveExportUploadResponse.ProtoReflect.Descriptor instead.
 func (*ReserveExportUploadResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{15}
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ReserveExportUploadResponse) GetUploadId() string {
@@ -1213,7 +1417,7 @@ type GetExportUploadUrlRequest struct {
 
 func (x *GetExportUploadUrlRequest) Reset() {
 	*x = GetExportUploadUrlRequest{}
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[16]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1225,7 +1429,7 @@ func (x *GetExportUploadUrlRequest) String() string {
 func (*GetExportUploadUrlRequest) ProtoMessage() {}
 
 func (x *GetExportUploadUrlRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[16]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1238,7 +1442,7 @@ func (x *GetExportUploadUrlRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetExportUploadUrlRequest.ProtoReflect.Descriptor instead.
 func (*GetExportUploadUrlRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{16}
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GetExportUploadUrlRequest) GetUploadId() string {
@@ -1267,7 +1471,7 @@ type GetExportUploadUrlResponse struct {
 
 func (x *GetExportUploadUrlResponse) Reset() {
 	*x = GetExportUploadUrlResponse{}
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[17]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1279,7 +1483,7 @@ func (x *GetExportUploadUrlResponse) String() string {
 func (*GetExportUploadUrlResponse) ProtoMessage() {}
 
 func (x *GetExportUploadUrlResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[17]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1292,7 +1496,7 @@ func (x *GetExportUploadUrlResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetExportUploadUrlResponse.ProtoReflect.Descriptor instead.
 func (*GetExportUploadUrlResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{17}
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GetExportUploadUrlResponse) GetUrl() string {
@@ -1325,7 +1529,7 @@ type CompleteExportUploadRequest struct {
 
 func (x *CompleteExportUploadRequest) Reset() {
 	*x = CompleteExportUploadRequest{}
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[18]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1337,7 +1541,7 @@ func (x *CompleteExportUploadRequest) String() string {
 func (*CompleteExportUploadRequest) ProtoMessage() {}
 
 func (x *CompleteExportUploadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[18]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1350,7 +1554,7 @@ func (x *CompleteExportUploadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteExportUploadRequest.ProtoReflect.Descriptor instead.
 func (*CompleteExportUploadRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{18}
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *CompleteExportUploadRequest) GetUploadId() string {
@@ -1370,7 +1574,7 @@ type CompleteExportUploadResponse struct {
 
 func (x *CompleteExportUploadResponse) Reset() {
 	*x = CompleteExportUploadResponse{}
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[19]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1382,7 +1586,7 @@ func (x *CompleteExportUploadResponse) String() string {
 func (*CompleteExportUploadResponse) ProtoMessage() {}
 
 func (x *CompleteExportUploadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[19]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1395,7 +1599,7 @@ func (x *CompleteExportUploadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteExportUploadResponse.ProtoReflect.Descriptor instead.
 func (*CompleteExportUploadResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{19}
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *CompleteExportUploadResponse) GetExpireTime() *timestamppb.Timestamp {
@@ -1414,7 +1618,7 @@ type GetExportDownloadUrlRequest struct {
 
 func (x *GetExportDownloadUrlRequest) Reset() {
 	*x = GetExportDownloadUrlRequest{}
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[20]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1426,7 +1630,7 @@ func (x *GetExportDownloadUrlRequest) String() string {
 func (*GetExportDownloadUrlRequest) ProtoMessage() {}
 
 func (x *GetExportDownloadUrlRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[20]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1439,7 +1643,7 @@ func (x *GetExportDownloadUrlRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetExportDownloadUrlRequest.ProtoReflect.Descriptor instead.
 func (*GetExportDownloadUrlRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{20}
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GetExportDownloadUrlRequest) GetUploadId() string {
@@ -1460,7 +1664,7 @@ type GetExportDownloadUrlResponse struct {
 
 func (x *GetExportDownloadUrlResponse) Reset() {
 	*x = GetExportDownloadUrlResponse{}
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[21]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1472,7 +1676,7 @@ func (x *GetExportDownloadUrlResponse) String() string {
 func (*GetExportDownloadUrlResponse) ProtoMessage() {}
 
 func (x *GetExportDownloadUrlResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_media_proto_msgTypes[21]
+	mi := &file_tayfam_core_v1_media_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1485,7 +1689,7 @@ func (x *GetExportDownloadUrlResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetExportDownloadUrlResponse.ProtoReflect.Descriptor instead.
 func (*GetExportDownloadUrlResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{21}
+	return file_tayfam_core_v1_media_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *GetExportDownloadUrlResponse) GetUrl() string {
@@ -1570,7 +1774,18 @@ const file_tayfam_core_v1_media_proto_rawDesc = "" +
 	"\x05media\x18\x01 \x03(\v2\x19.tayfam.core.v1.MediaUrlsR\x05media\"2\n" +
 	"\x13AttachAvatarRequest\x12\x1b\n" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\"\x16\n" +
-	"\x14AttachAvatarResponse\"B\n" +
+	"\x14AttachAvatarResponse\"r\n" +
+	"\x19AttachChannelPhotoRequest\x12\x1b\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x19\n" +
+	"\btayfa_id\x18\x02 \x01(\tR\atayfaId\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x03 \x01(\tR\tmessageId\"\x1c\n" +
+	"\x1aAttachChannelPhotoResponse\"b\n" +
+	"$AttachDirectMessageAttachmentRequest\x12\x1b\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x02 \x01(\tR\tmessageId\"'\n" +
+	"%AttachDirectMessageAttachmentResponse\"B\n" +
 	"\x1aReserveExportUploadRequest\x12$\n" +
 	"\x0edata_export_id\x18\x01 \x01(\tR\fdataExportId\":\n" +
 	"\x1bReserveExportUploadResponse\x12\x1b\n" +
@@ -1597,12 +1812,15 @@ const file_tayfam_core_v1_media_proto_rawDesc = "" +
 	"\x1cGetExportDownloadUrlResponse\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12;\n" +
 	"\vexpire_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTime*\x84\x01\n" +
+	"expireTime*\xe9\x01\n" +
 	"\rUploadPurpose\x12\x1e\n" +
 	"\x1aUPLOAD_PURPOSE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15UPLOAD_PURPOSE_AVATAR\x10\x01\x12\x1e\n" +
 	"\x1aUPLOAD_PURPOSE_CATCH_PHOTO\x10\x02\x12\x18\n" +
-	"\x14UPLOAD_PURPOSE_COVER\x10\x03*}\n" +
+	"\x14UPLOAD_PURPOSE_COVER\x10\x03\x12\x1d\n" +
+	"\x19UPLOAD_PURPOSE_CHAT_PHOTO\x10\x04\x12 \n" +
+	"\x1cUPLOAD_PURPOSE_DM_ATTACHMENT\x10\x05\x12\"\n" +
+	"\x1eUPLOAD_PURPOSE_REPORT_EVIDENCE\x10\x06*}\n" +
 	"\fUploadStatus\x12\x1d\n" +
 	"\x19UPLOAD_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15UPLOAD_STATUS_PENDING\x10\x01\x12\x17\n" +
@@ -1616,17 +1834,20 @@ const file_tayfam_core_v1_media_proto_rawDesc = "" +
 	"'UPLOAD_REJECT_REASON_DIMENSION_MISMATCH\x10\x04\x12&\n" +
 	"\"UPLOAD_REJECT_REASON_SIZE_MISMATCH\x10\x05\x12\"\n" +
 	"\x1eUPLOAD_REJECT_REASON_TOO_LARGE\x10\x06\x12\x1f\n" +
-	"\x1bUPLOAD_REJECT_REASON_FAILED\x10\a*\\\n" +
+	"\x1bUPLOAD_REJECT_REASON_FAILED\x10\a*s\n" +
 	"\vVariantKind\x12\x1c\n" +
 	"\x18VARIANT_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14VARIANT_KIND_PREVIEW\x10\x01\x12\x15\n" +
-	"\x11VARIANT_KIND_FULL\x10\x022\x95\a\n" +
+	"\x11VARIANT_KIND_FULL\x10\x02\x12\x15\n" +
+	"\x11VARIANT_KIND_BLOB\x10\x032\x91\t\n" +
 	"\fMediaService\x12Y\n" +
 	"\fCreateUpload\x12#.tayfam.core.v1.CreateUploadRequest\x1a$.tayfam.core.v1.CreateUploadResponse\x12_\n" +
 	"\x0eCompleteUpload\x12%.tayfam.core.v1.CompleteUploadRequest\x1a&.tayfam.core.v1.CompleteUploadResponse\x12P\n" +
 	"\tGetUpload\x12 .tayfam.core.v1.GetUploadRequest\x1a!.tayfam.core.v1.GetUploadResponse\x12Y\n" +
 	"\fGetMediaUrls\x12#.tayfam.core.v1.GetMediaUrlsRequest\x1a$.tayfam.core.v1.GetMediaUrlsResponse\x12Y\n" +
-	"\fAttachAvatar\x12#.tayfam.core.v1.AttachAvatarRequest\x1a$.tayfam.core.v1.AttachAvatarResponse\x12n\n" +
+	"\fAttachAvatar\x12#.tayfam.core.v1.AttachAvatarRequest\x1a$.tayfam.core.v1.AttachAvatarResponse\x12k\n" +
+	"\x12AttachChannelPhoto\x12).tayfam.core.v1.AttachChannelPhotoRequest\x1a*.tayfam.core.v1.AttachChannelPhotoResponse\x12\x8c\x01\n" +
+	"\x1dAttachDirectMessageAttachment\x124.tayfam.core.v1.AttachDirectMessageAttachmentRequest\x1a5.tayfam.core.v1.AttachDirectMessageAttachmentResponse\x12n\n" +
 	"\x13ReserveExportUpload\x12*.tayfam.core.v1.ReserveExportUploadRequest\x1a+.tayfam.core.v1.ReserveExportUploadResponse\x12k\n" +
 	"\x12GetExportUploadUrl\x12).tayfam.core.v1.GetExportUploadUrlRequest\x1a*.tayfam.core.v1.GetExportUploadUrlResponse\x12q\n" +
 	"\x14CompleteExportUpload\x12+.tayfam.core.v1.CompleteExportUploadRequest\x1a,.tayfam.core.v1.CompleteExportUploadResponse\x12q\n" +
@@ -1647,49 +1868,53 @@ func file_tayfam_core_v1_media_proto_rawDescGZIP() []byte {
 }
 
 var file_tayfam_core_v1_media_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_tayfam_core_v1_media_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_tayfam_core_v1_media_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_tayfam_core_v1_media_proto_goTypes = []any{
-	(UploadPurpose)(0),                   // 0: tayfam.core.v1.UploadPurpose
-	(UploadStatus)(0),                    // 1: tayfam.core.v1.UploadStatus
-	(UploadRejectReason)(0),              // 2: tayfam.core.v1.UploadRejectReason
-	(VariantKind)(0),                     // 3: tayfam.core.v1.VariantKind
-	(*Upload)(nil),                       // 4: tayfam.core.v1.Upload
-	(*MediaUrls)(nil),                    // 5: tayfam.core.v1.MediaUrls
-	(*UploadVariant)(nil),                // 6: tayfam.core.v1.UploadVariant
-	(*UploadTarget)(nil),                 // 7: tayfam.core.v1.UploadTarget
-	(*CreateUploadRequest)(nil),          // 8: tayfam.core.v1.CreateUploadRequest
-	(*CreateUploadResponse)(nil),         // 9: tayfam.core.v1.CreateUploadResponse
-	(*CompleteUploadRequest)(nil),        // 10: tayfam.core.v1.CompleteUploadRequest
-	(*CompleteUploadResponse)(nil),       // 11: tayfam.core.v1.CompleteUploadResponse
-	(*GetUploadRequest)(nil),             // 12: tayfam.core.v1.GetUploadRequest
-	(*GetUploadResponse)(nil),            // 13: tayfam.core.v1.GetUploadResponse
-	(*GetMediaUrlsRequest)(nil),          // 14: tayfam.core.v1.GetMediaUrlsRequest
-	(*GetMediaUrlsResponse)(nil),         // 15: tayfam.core.v1.GetMediaUrlsResponse
-	(*AttachAvatarRequest)(nil),          // 16: tayfam.core.v1.AttachAvatarRequest
-	(*AttachAvatarResponse)(nil),         // 17: tayfam.core.v1.AttachAvatarResponse
-	(*ReserveExportUploadRequest)(nil),   // 18: tayfam.core.v1.ReserveExportUploadRequest
-	(*ReserveExportUploadResponse)(nil),  // 19: tayfam.core.v1.ReserveExportUploadResponse
-	(*GetExportUploadUrlRequest)(nil),    // 20: tayfam.core.v1.GetExportUploadUrlRequest
-	(*GetExportUploadUrlResponse)(nil),   // 21: tayfam.core.v1.GetExportUploadUrlResponse
-	(*CompleteExportUploadRequest)(nil),  // 22: tayfam.core.v1.CompleteExportUploadRequest
-	(*CompleteExportUploadResponse)(nil), // 23: tayfam.core.v1.CompleteExportUploadResponse
-	(*GetExportDownloadUrlRequest)(nil),  // 24: tayfam.core.v1.GetExportDownloadUrlRequest
-	(*GetExportDownloadUrlResponse)(nil), // 25: tayfam.core.v1.GetExportDownloadUrlResponse
-	nil,                                  // 26: tayfam.core.v1.UploadTarget.HeadersEntry
-	nil,                                  // 27: tayfam.core.v1.GetExportUploadUrlResponse.HeadersEntry
-	(*timestamppb.Timestamp)(nil),        // 28: google.protobuf.Timestamp
+	(UploadPurpose)(0),                            // 0: tayfam.core.v1.UploadPurpose
+	(UploadStatus)(0),                             // 1: tayfam.core.v1.UploadStatus
+	(UploadRejectReason)(0),                       // 2: tayfam.core.v1.UploadRejectReason
+	(VariantKind)(0),                              // 3: tayfam.core.v1.VariantKind
+	(*Upload)(nil),                                // 4: tayfam.core.v1.Upload
+	(*MediaUrls)(nil),                             // 5: tayfam.core.v1.MediaUrls
+	(*UploadVariant)(nil),                         // 6: tayfam.core.v1.UploadVariant
+	(*UploadTarget)(nil),                          // 7: tayfam.core.v1.UploadTarget
+	(*CreateUploadRequest)(nil),                   // 8: tayfam.core.v1.CreateUploadRequest
+	(*CreateUploadResponse)(nil),                  // 9: tayfam.core.v1.CreateUploadResponse
+	(*CompleteUploadRequest)(nil),                 // 10: tayfam.core.v1.CompleteUploadRequest
+	(*CompleteUploadResponse)(nil),                // 11: tayfam.core.v1.CompleteUploadResponse
+	(*GetUploadRequest)(nil),                      // 12: tayfam.core.v1.GetUploadRequest
+	(*GetUploadResponse)(nil),                     // 13: tayfam.core.v1.GetUploadResponse
+	(*GetMediaUrlsRequest)(nil),                   // 14: tayfam.core.v1.GetMediaUrlsRequest
+	(*GetMediaUrlsResponse)(nil),                  // 15: tayfam.core.v1.GetMediaUrlsResponse
+	(*AttachAvatarRequest)(nil),                   // 16: tayfam.core.v1.AttachAvatarRequest
+	(*AttachAvatarResponse)(nil),                  // 17: tayfam.core.v1.AttachAvatarResponse
+	(*AttachChannelPhotoRequest)(nil),             // 18: tayfam.core.v1.AttachChannelPhotoRequest
+	(*AttachChannelPhotoResponse)(nil),            // 19: tayfam.core.v1.AttachChannelPhotoResponse
+	(*AttachDirectMessageAttachmentRequest)(nil),  // 20: tayfam.core.v1.AttachDirectMessageAttachmentRequest
+	(*AttachDirectMessageAttachmentResponse)(nil), // 21: tayfam.core.v1.AttachDirectMessageAttachmentResponse
+	(*ReserveExportUploadRequest)(nil),            // 22: tayfam.core.v1.ReserveExportUploadRequest
+	(*ReserveExportUploadResponse)(nil),           // 23: tayfam.core.v1.ReserveExportUploadResponse
+	(*GetExportUploadUrlRequest)(nil),             // 24: tayfam.core.v1.GetExportUploadUrlRequest
+	(*GetExportUploadUrlResponse)(nil),            // 25: tayfam.core.v1.GetExportUploadUrlResponse
+	(*CompleteExportUploadRequest)(nil),           // 26: tayfam.core.v1.CompleteExportUploadRequest
+	(*CompleteExportUploadResponse)(nil),          // 27: tayfam.core.v1.CompleteExportUploadResponse
+	(*GetExportDownloadUrlRequest)(nil),           // 28: tayfam.core.v1.GetExportDownloadUrlRequest
+	(*GetExportDownloadUrlResponse)(nil),          // 29: tayfam.core.v1.GetExportDownloadUrlResponse
+	nil,                                           // 30: tayfam.core.v1.UploadTarget.HeadersEntry
+	nil,                                           // 31: tayfam.core.v1.GetExportUploadUrlResponse.HeadersEntry
+	(*timestamppb.Timestamp)(nil),                 // 32: google.protobuf.Timestamp
 }
 var file_tayfam_core_v1_media_proto_depIdxs = []int32{
 	0,  // 0: tayfam.core.v1.Upload.purpose:type_name -> tayfam.core.v1.UploadPurpose
 	1,  // 1: tayfam.core.v1.Upload.status:type_name -> tayfam.core.v1.UploadStatus
 	2,  // 2: tayfam.core.v1.Upload.reject_reason:type_name -> tayfam.core.v1.UploadRejectReason
-	28, // 3: tayfam.core.v1.Upload.create_time:type_name -> google.protobuf.Timestamp
+	32, // 3: tayfam.core.v1.Upload.create_time:type_name -> google.protobuf.Timestamp
 	5,  // 4: tayfam.core.v1.Upload.urls:type_name -> tayfam.core.v1.MediaUrls
-	28, // 5: tayfam.core.v1.MediaUrls.expire_time:type_name -> google.protobuf.Timestamp
+	32, // 5: tayfam.core.v1.MediaUrls.expire_time:type_name -> google.protobuf.Timestamp
 	3,  // 6: tayfam.core.v1.UploadVariant.kind:type_name -> tayfam.core.v1.VariantKind
 	3,  // 7: tayfam.core.v1.UploadTarget.kind:type_name -> tayfam.core.v1.VariantKind
-	26, // 8: tayfam.core.v1.UploadTarget.headers:type_name -> tayfam.core.v1.UploadTarget.HeadersEntry
-	28, // 9: tayfam.core.v1.UploadTarget.expire_time:type_name -> google.protobuf.Timestamp
+	30, // 8: tayfam.core.v1.UploadTarget.headers:type_name -> tayfam.core.v1.UploadTarget.HeadersEntry
+	32, // 9: tayfam.core.v1.UploadTarget.expire_time:type_name -> google.protobuf.Timestamp
 	0,  // 10: tayfam.core.v1.CreateUploadRequest.purpose:type_name -> tayfam.core.v1.UploadPurpose
 	6,  // 11: tayfam.core.v1.CreateUploadRequest.variants:type_name -> tayfam.core.v1.UploadVariant
 	4,  // 12: tayfam.core.v1.CreateUploadResponse.upload:type_name -> tayfam.core.v1.Upload
@@ -1697,30 +1922,34 @@ var file_tayfam_core_v1_media_proto_depIdxs = []int32{
 	4,  // 14: tayfam.core.v1.CompleteUploadResponse.upload:type_name -> tayfam.core.v1.Upload
 	4,  // 15: tayfam.core.v1.GetUploadResponse.upload:type_name -> tayfam.core.v1.Upload
 	5,  // 16: tayfam.core.v1.GetMediaUrlsResponse.media:type_name -> tayfam.core.v1.MediaUrls
-	27, // 17: tayfam.core.v1.GetExportUploadUrlResponse.headers:type_name -> tayfam.core.v1.GetExportUploadUrlResponse.HeadersEntry
-	28, // 18: tayfam.core.v1.GetExportUploadUrlResponse.expire_time:type_name -> google.protobuf.Timestamp
-	28, // 19: tayfam.core.v1.CompleteExportUploadResponse.expire_time:type_name -> google.protobuf.Timestamp
-	28, // 20: tayfam.core.v1.GetExportDownloadUrlResponse.expire_time:type_name -> google.protobuf.Timestamp
+	31, // 17: tayfam.core.v1.GetExportUploadUrlResponse.headers:type_name -> tayfam.core.v1.GetExportUploadUrlResponse.HeadersEntry
+	32, // 18: tayfam.core.v1.GetExportUploadUrlResponse.expire_time:type_name -> google.protobuf.Timestamp
+	32, // 19: tayfam.core.v1.CompleteExportUploadResponse.expire_time:type_name -> google.protobuf.Timestamp
+	32, // 20: tayfam.core.v1.GetExportDownloadUrlResponse.expire_time:type_name -> google.protobuf.Timestamp
 	8,  // 21: tayfam.core.v1.MediaService.CreateUpload:input_type -> tayfam.core.v1.CreateUploadRequest
 	10, // 22: tayfam.core.v1.MediaService.CompleteUpload:input_type -> tayfam.core.v1.CompleteUploadRequest
 	12, // 23: tayfam.core.v1.MediaService.GetUpload:input_type -> tayfam.core.v1.GetUploadRequest
 	14, // 24: tayfam.core.v1.MediaService.GetMediaUrls:input_type -> tayfam.core.v1.GetMediaUrlsRequest
 	16, // 25: tayfam.core.v1.MediaService.AttachAvatar:input_type -> tayfam.core.v1.AttachAvatarRequest
-	18, // 26: tayfam.core.v1.MediaService.ReserveExportUpload:input_type -> tayfam.core.v1.ReserveExportUploadRequest
-	20, // 27: tayfam.core.v1.MediaService.GetExportUploadUrl:input_type -> tayfam.core.v1.GetExportUploadUrlRequest
-	22, // 28: tayfam.core.v1.MediaService.CompleteExportUpload:input_type -> tayfam.core.v1.CompleteExportUploadRequest
-	24, // 29: tayfam.core.v1.MediaService.GetExportDownloadUrl:input_type -> tayfam.core.v1.GetExportDownloadUrlRequest
-	9,  // 30: tayfam.core.v1.MediaService.CreateUpload:output_type -> tayfam.core.v1.CreateUploadResponse
-	11, // 31: tayfam.core.v1.MediaService.CompleteUpload:output_type -> tayfam.core.v1.CompleteUploadResponse
-	13, // 32: tayfam.core.v1.MediaService.GetUpload:output_type -> tayfam.core.v1.GetUploadResponse
-	15, // 33: tayfam.core.v1.MediaService.GetMediaUrls:output_type -> tayfam.core.v1.GetMediaUrlsResponse
-	17, // 34: tayfam.core.v1.MediaService.AttachAvatar:output_type -> tayfam.core.v1.AttachAvatarResponse
-	19, // 35: tayfam.core.v1.MediaService.ReserveExportUpload:output_type -> tayfam.core.v1.ReserveExportUploadResponse
-	21, // 36: tayfam.core.v1.MediaService.GetExportUploadUrl:output_type -> tayfam.core.v1.GetExportUploadUrlResponse
-	23, // 37: tayfam.core.v1.MediaService.CompleteExportUpload:output_type -> tayfam.core.v1.CompleteExportUploadResponse
-	25, // 38: tayfam.core.v1.MediaService.GetExportDownloadUrl:output_type -> tayfam.core.v1.GetExportDownloadUrlResponse
-	30, // [30:39] is the sub-list for method output_type
-	21, // [21:30] is the sub-list for method input_type
+	18, // 26: tayfam.core.v1.MediaService.AttachChannelPhoto:input_type -> tayfam.core.v1.AttachChannelPhotoRequest
+	20, // 27: tayfam.core.v1.MediaService.AttachDirectMessageAttachment:input_type -> tayfam.core.v1.AttachDirectMessageAttachmentRequest
+	22, // 28: tayfam.core.v1.MediaService.ReserveExportUpload:input_type -> tayfam.core.v1.ReserveExportUploadRequest
+	24, // 29: tayfam.core.v1.MediaService.GetExportUploadUrl:input_type -> tayfam.core.v1.GetExportUploadUrlRequest
+	26, // 30: tayfam.core.v1.MediaService.CompleteExportUpload:input_type -> tayfam.core.v1.CompleteExportUploadRequest
+	28, // 31: tayfam.core.v1.MediaService.GetExportDownloadUrl:input_type -> tayfam.core.v1.GetExportDownloadUrlRequest
+	9,  // 32: tayfam.core.v1.MediaService.CreateUpload:output_type -> tayfam.core.v1.CreateUploadResponse
+	11, // 33: tayfam.core.v1.MediaService.CompleteUpload:output_type -> tayfam.core.v1.CompleteUploadResponse
+	13, // 34: tayfam.core.v1.MediaService.GetUpload:output_type -> tayfam.core.v1.GetUploadResponse
+	15, // 35: tayfam.core.v1.MediaService.GetMediaUrls:output_type -> tayfam.core.v1.GetMediaUrlsResponse
+	17, // 36: tayfam.core.v1.MediaService.AttachAvatar:output_type -> tayfam.core.v1.AttachAvatarResponse
+	19, // 37: tayfam.core.v1.MediaService.AttachChannelPhoto:output_type -> tayfam.core.v1.AttachChannelPhotoResponse
+	21, // 38: tayfam.core.v1.MediaService.AttachDirectMessageAttachment:output_type -> tayfam.core.v1.AttachDirectMessageAttachmentResponse
+	23, // 39: tayfam.core.v1.MediaService.ReserveExportUpload:output_type -> tayfam.core.v1.ReserveExportUploadResponse
+	25, // 40: tayfam.core.v1.MediaService.GetExportUploadUrl:output_type -> tayfam.core.v1.GetExportUploadUrlResponse
+	27, // 41: tayfam.core.v1.MediaService.CompleteExportUpload:output_type -> tayfam.core.v1.CompleteExportUploadResponse
+	29, // 42: tayfam.core.v1.MediaService.GetExportDownloadUrl:output_type -> tayfam.core.v1.GetExportDownloadUrlResponse
+	32, // [32:43] is the sub-list for method output_type
+	21, // [21:32] is the sub-list for method input_type
 	21, // [21:21] is the sub-list for extension type_name
 	21, // [21:21] is the sub-list for extension extendee
 	0,  // [0:21] is the sub-list for field type_name
@@ -1737,7 +1966,7 @@ func file_tayfam_core_v1_media_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_media_proto_rawDesc), len(file_tayfam_core_v1_media_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   24,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
