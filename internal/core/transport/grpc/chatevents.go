@@ -14,7 +14,7 @@ import (
 )
 
 // ChatEventServiceName is the gRPC service whose methods only chat's
-// service token may call (ADR-0013, ADR-0028); cmd/core gives it to
+// service token may call (ADR-0013, ADR-0031); cmd/core gives it to
 // auth.Guard.
 const ChatEventServiceName = "tayfam.core.v1.ChatEventService"
 

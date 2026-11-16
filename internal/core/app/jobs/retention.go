@@ -49,7 +49,7 @@ func purgeSteps() []purgeStep {
 // in it along (ON DELETE CASCADE), the memberships and audit_logs triggers
 // allow that once the tayfa row is gone (migration 00001), and
 // tayfa.purged tells chat to delete the tayfa's channels for good
-// (ADR-0009) while its channel photos are queued for deletion (ADR-0028).
+// (ADR-0009) while its channel photos are queued for deletion (ADR-0031).
 // Then announcements, questions (with their answers), answers,
 // polls, fishing catches and events go in batches of contentBatch.
 // Activity records stay (SET NULL).
@@ -72,7 +72,7 @@ func (s *Service) Purge(ctx context.Context) (int, error) {
 			purged++
 			tf := id.ID(t.Bytes)
 			// The tayfa's channel photos go too (their channels go in
-			// chat with tayfa.purged; ADR-0028).
+			// chat with tayfa.purged; ADR-0031).
 			if err := media.TayfaPurged(ctx, q, tf); err != nil {
 				return 0, err
 			}

@@ -95,7 +95,7 @@ type MessageMediaItem struct {
 
 // MessageMedia asks chat, with the caller's own token, which of the items
 // the caller may see (chat MessageMediaService.FilterVisibleMessageMedia;
-// ADR-0028): the channel's audience for a channel photo, the two parties
+// ADR-0031): the channel's audience for a channel photo, the two parties
 // for a direct message attachment. chat owns channels and conversations;
 // core keeps no copy of either.
 type MessageMedia interface {

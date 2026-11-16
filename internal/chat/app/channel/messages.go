@@ -136,7 +136,7 @@ func (s *Service) Send(ctx context.Context, caller, tayfa, channel id.ID, in Sen
 		if in.Kind == KindPhoto {
 			// The photo is attached to this message in core while the row
 			// is not committed yet, after every check of chat and before
-			// the outbox write (ADR-0028): core checks it is the caller's,
+			// the outbox write (ADR-0031): core checks it is the caller's,
 			// READY, a chat photo of this tayfa and free. If core refuses,
 			// the message is rolled back; a retry gets a new message ID
 			// and nothing was attached.
@@ -328,7 +328,7 @@ func (s *Service) Delete(ctx context.Context, caller, tayfa, channel, message id
 		}
 		if released != (id.ID{}) {
 			// The author's own deletion lets go of the photo at once;
-			// core deletes it (ADR-0028).
+			// core deletes it (ADR-0031).
 			return corerelay.Release(ctx, tx, released, message)
 		}
 		return nil
@@ -500,7 +500,7 @@ func PurgeTayfa(ctx context.Context, q *store.Queries, tayfa id.ID) error {
 
 // PurgeDeleted permanently deletes messages deleted more than RestoreWindow
 // ago and returns how many. A photo still held by a hidden message is let
-// go in the same transaction (chat.media_released; ADR-0028).
+// go in the same transaction (chat.media_released; ADR-0031).
 func (s *Service) PurgeDeleted(ctx context.Context) (int64, error) {
 	before := ts(s.now().Add(-RestoreWindow))
 	var total int64

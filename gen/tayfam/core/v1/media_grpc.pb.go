@@ -85,7 +85,7 @@ const (
 // for good, the avatar changed or the account deleted) its media is deleted
 // too.
 //
-// Chat photos and attachments (issue #205, ADR-0028):
+// Chat photos and attachments (issue #205, ADR-0031):
 //   - CHAT_PHOTO is an image like the others, for one tayfa. chat attaches
 //     it to a channel message (AttachChannelPhoto) when the message is
 //     sent; its links go only to the channel's audience, which chat decides
@@ -372,7 +372,7 @@ func (c *mediaServiceClient) GetExportDownloadUrl(ctx context.Context, in *GetEx
 // for good, the avatar changed or the account deleted) its media is deleted
 // too.
 //
-// Chat photos and attachments (issue #205, ADR-0028):
+// Chat photos and attachments (issue #205, ADR-0031):
 //   - CHAT_PHOTO is an image like the others, for one tayfa. chat attaches
 //     it to a channel message (AttachChannelPhoto) when the message is
 //     sent; its links go only to the channel's audience, which chat decides

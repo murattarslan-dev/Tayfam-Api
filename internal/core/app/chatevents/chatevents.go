@@ -1,5 +1,5 @@
 // Package chatevents applies chat's events in core (ChatEventService,
-// proto/tayfam/core/v1/chat_events.proto; ADR-0002, ADR-0028). chat's
+// proto/tayfam/core/v1/chat_events.proto; ADR-0002, ADR-0031). chat's
 // outbox relay delivers them with chat's service token (ADR-0013); only
 // the tayfam-chat ServiceAccount reaches this code.
 //

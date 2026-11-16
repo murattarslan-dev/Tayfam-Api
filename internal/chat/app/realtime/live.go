@@ -63,7 +63,7 @@ type MessageData struct {
 	AuthorID  string    `json:"author_user_id,omitempty"`
 	Body      string    `json:"body"`
 	CreatedAt time.Time `json:"created_at"`
-	// Kind is text, photo or place (issue #205, ADR-0028).
+	// Kind is text, photo or place (issue #205, ADR-0031).
 	Kind          string     `json:"kind"`
 	PhotoUploadID string     `json:"photo_upload_id,omitempty"`
 	Place         *PlaceData `json:"place,omitempty"`

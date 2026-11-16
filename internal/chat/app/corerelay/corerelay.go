@@ -1,5 +1,5 @@
 // Package corerelay delivers chat's events to core (ADR-0002, ADR-0013,
-// ADR-0028): chat's first outbox consumer outside chat. Only the types in
+// ADR-0031): chat's first outbox consumer outside chat. Only the types in
 // Types reach core; every other chat event stays in chat's outbox for
 // history and counting.
 //

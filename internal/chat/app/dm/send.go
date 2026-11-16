@@ -122,7 +122,7 @@ func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message
 		if in.Attachment != (id.ID{}) {
 			// The encrypted attachment is attached to this message in core
 			// after every check above and before the outbox write
-			// (ADR-0028): core checks it is the caller's, READY, a DM
+			// (ADR-0031): core checks it is the caller's, READY, a DM
 			// attachment and free. A refusal rolls the message back.
 			if err := s.cfg.Attachments.AttachDirectMessageAttachment(ctx, in.Attachment, msgID); err != nil {
 				return err

@@ -1,4 +1,4 @@
--- Sohbet ekleri (issue #205, ADR-0028): kanal fotoğrafı, uçtan uca şifreli
+-- Sohbet ekleri (issue #205, ADR-0031): kanal fotoğrafı, uçtan uca şifreli
 -- birebir ek ve birebir mesaj şikâyetinin kanıt fotoğrafı.
 --
 -- chat_photo: kanal mesajındaki fotoğraf; görüntü hattının aynısı (iki
@@ -42,7 +42,7 @@ ALTER TABLE uploads ADD CONSTRAINT uploads_variants CHECK (
     AND preview_type IS NULL AND preview_bytes IS NULL
     AND full_type IS NOT NULL AND full_bytes IS NOT NULL
     AND full_type = 'application/octet-stream'
-    -- En fazla 10 MiB (ADR-0028).
+    -- En fazla 10 MiB (ADR-0031).
     AND full_bytes BETWEEN 1 AND 10485760
     AND width IS NULL AND export_bytes IS NULL AND expires_at IS NULL)
   OR (purpose NOT IN ('data_export', 'dm_attachment')

@@ -16,7 +16,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
-// Tests for photo and place messages (issue #205, ADR-0028).
+// Tests for photo and place messages (issue #205, ADR-0031).
 
 // fakePhotos stands in for core's AttachChannelPhoto: an upload is the
 // owner's and attaches to one message.

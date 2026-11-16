@@ -72,7 +72,7 @@ WHERE user_id = @user_id AND purpose = 'avatar' AND attached_type = 'user' AND a
 
 -- Hesap silme (user.deleted): kullanıcının dosyaları silinir; bağlı kapak
 -- görselleri tayfanındır, bağlı şikâyet kanıtı platformundur (rapor
--- durdukça, ADR-0028); yalnızca sahiplikleri kaldırılır.
+-- durdukça, ADR-0031); yalnızca sahiplikleri kaldırılır.
 -- name: DeleteUserUploads :execrows
 UPDATE uploads SET status = 'deleting'
 WHERE user_id = @user_id AND status <> 'deleting'
@@ -83,7 +83,7 @@ UPDATE uploads SET user_id = NULL
 WHERE user_id = @user_id AND purpose IN ('cover', 'report_evidence') AND attached_type IS NOT NULL;
 
 -- Sohbet mesajı fotoğrafını ya da ekini bıraktı (chat.media_released,
--- ADR-0028): dosya hâlâ o mesaja bağlıysa silinir; değilse bir şey olmaz
+-- ADR-0031): dosya hâlâ o mesaja bağlıysa silinir; değilse bir şey olmaz
 -- (tekrar gelen olay).
 -- name: ReleaseMessageMedia :execrows
 UPDATE uploads SET status = 'deleting'

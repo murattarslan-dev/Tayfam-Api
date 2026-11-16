@@ -385,7 +385,7 @@ func (s *Service) verify(ctx context.Context, row store.Upload, width, height in
 
 // verifyBlob checks a DM attachment: the stored object has the declared
 // size, and it is copied out of quarantine bound to the checked ETag. The
-// content is encrypted by the client and never read (ADR-0028): no range
+// content is encrypted by the client and never read (ADR-0031): no range
 // read, no type, metadata or dimension check.
 func (s *Service) verifyBlob(ctx context.Context, row store.Upload) error {
 	o, err := s.cfg.Store.Head(ctx, incomingKey(row.R2Key, KindFull))
@@ -493,7 +493,7 @@ func (s *Service) AttachAvatar(ctx context.Context, user, upload id.ID) error {
 
 // AttachChannelPhoto attaches the caller's READY chat photo of tayfa to the
 // channel message (MediaService.AttachChannelPhoto; chat calls it with the
-// caller's token while it writes the message, ADR-0028).
+// caller's token while it writes the message, ADR-0031).
 func (s *Service) AttachChannelPhoto(ctx context.Context, user, upload, tayfa, message id.ID) error {
 	if !s.Enabled() {
 		return apperr.ErrUnavailable
@@ -526,7 +526,7 @@ func (s *Service) AttachDirectMessageAttachment(ctx context.Context, user, uploa
 }
 
 // MessageMediaReleased deletes an upload still attached to message (chat's
-// chat.media_released event, ADR-0028). q runs in the consumer's
+// chat.media_released event, ADR-0031). q runs in the consumer's
 // transaction; the method is idempotent.
 func MessageMediaReleased(ctx context.Context, q *store.Queries, upload, message id.ID) error {
 	if _, err := q.ReleaseMessageMedia(ctx, store.ReleaseMessageMediaParams{ID: upload.PG(), MessageID: message.PG()}); err != nil {
@@ -536,7 +536,7 @@ func MessageMediaReleased(ctx context.Context, q *store.Queries, upload, message
 }
 
 // TayfaPurged deletes a purged tayfa's channel photos inside the purge's
-// transaction (ADR-0028).
+// transaction (ADR-0031).
 func TayfaPurged(ctx context.Context, q *store.Queries, tayfa id.ID) error {
 	if _, err := q.ReleaseTayfaChatPhotos(ctx, tayfa.PG()); err != nil {
 		return fmt.Errorf("kanal fotoğrafları: %w", err)
@@ -556,7 +556,7 @@ func UserProfileUpdated(ctx context.Context, q *store.Queries, user, current id.
 
 // UserDeleted deletes the user's files; covers attached to a tayfa or
 // event stay with the content without an owner, and so does report
-// evidence attached to a report (the platform's, ADR-0028) (identity's
+// evidence attached to a report (the platform's, ADR-0031) (identity's
 // user.deleted).
 // q runs in the consumer's transaction; the method is idempotent.
 func UserDeleted(ctx context.Context, q *store.Queries, user id.ID) error {

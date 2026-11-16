@@ -11,7 +11,7 @@ import (
 )
 
 // A direct message report may carry a photo of the message instead of, or
-// with, its text (issue #205, ADR-0028).
+// with, its text (issue #205, ADR-0031).
 func TestDirectMessageReportEvidencePhoto(t *testing.T) {
 	e := setup(t)
 	chat := e.withChat(t)

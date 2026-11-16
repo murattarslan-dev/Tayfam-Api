@@ -43,7 +43,7 @@ func (f *fakeChatEvents) count() int {
 }
 
 // chatEventConn serves ChatEventService behind the same Guard policy as
-// cmd/core: only tayfam-chat in the deployment's namespace (ADR-0028).
+// cmd/core: only tayfam-chat in the deployment's namespace (ADR-0031).
 func chatEventConn(t *testing.T, c *satest.Cluster, app ChatEvents) (corev1.ChatEventServiceClient, string) {
 	t.Helper()
 	key, err := auth.ParseSigningKey("k1", base64.StdEncoding.EncodeToString(make([]byte, ed25519.SeedSize)))

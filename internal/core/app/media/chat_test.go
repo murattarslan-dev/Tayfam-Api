@@ -17,7 +17,7 @@ import (
 )
 
 // Tests for chat photos, encrypted DM attachments and report evidence
-// (issue #205, ADR-0028).
+// (issue #205, ADR-0031).
 
 // rangeCounter counts ranged reads: a DM attachment is never read.
 type rangeCounter struct {

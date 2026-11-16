@@ -18,7 +18,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
-// Message kinds (channel_messages.kind; issue #205, ADR-0028).
+// Message kinds (channel_messages.kind; issue #205, ADR-0031).
 const (
 	KindText  = "text"
 	KindPhoto = "photo"
@@ -38,7 +38,7 @@ type Place struct {
 }
 
 // Photos attaches a channel message's photo in core with the sender's own
-// token (core MediaService.AttachChannelPhoto; ADR-0028). It returns
+// token (core MediaService.AttachChannelPhoto; ADR-0031). It returns
 // apperr.ErrUploadNotFound, apperr.ErrUploadNotReady, apperr.ErrUploadInUse
 // or apperr.ErrUnavailable.
 type Photos interface {
@@ -154,7 +154,7 @@ func normalizeSend(in *SendInput) (string, error) {
 }
 
 // MediaItem asks whether a photo attached to a channel message is
-// visible (MessageMediaService; ADR-0028).
+// visible (MessageMediaService; ADR-0031).
 type MediaItem struct {
 	Upload, Message id.ID
 }

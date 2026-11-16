@@ -274,7 +274,7 @@ type Querier interface {
 	DeleteUserRsvps(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silme (user.deleted): kullanıcının dosyaları silinir; bağlı kapak
 	// görselleri tayfanındır, bağlı şikâyet kanıtı platformundur (rapor
-	// durdukça, ADR-0028); yalnızca sahiplikleri kaldırılır.
+	// durdukça, ADR-0031); yalnızca sahiplikleri kaldırılır.
 	DeleteUserUploads(ctx context.Context, userID pgtype.UUID) (int64, error)
 	DisownUserCovers(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// Yanlış boyutta yüklenmiş dışa aktarma silinir.
@@ -685,7 +685,7 @@ type Querier interface {
 	RecordJobRun(ctx context.Context, arg RecordJobRunParams) error
 	RejectPendingUpload(ctx context.Context, arg RejectPendingUploadParams) (int64, error)
 	// Sohbet mesajı fotoğrafını ya da ekini bıraktı (chat.media_released,
-	// ADR-0028): dosya hâlâ o mesaja bağlıysa silinir; değilse bir şey olmaz
+	// ADR-0031): dosya hâlâ o mesaja bağlıysa silinir; değilse bir şey olmaz
 	// (tekrar gelen olay).
 	ReleaseMessageMedia(ctx context.Context, arg ReleaseMessageMediaParams) (int64, error)
 	// Kullanıcının güncel avatarı dışındaki bağlı avatarları silinir

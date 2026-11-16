@@ -1,4 +1,4 @@
-# ADR-0028: Sohbet ekleri — fotoğraf ve yer (kanal ve uçtan uca birebir)
+# ADR-0031: Sohbet ekleri — fotoğraf ve yer (kanal ve uçtan uca birebir)
 
 - **Durum:** Önerildi
 - **Tarih:** 2026-11-15
@@ -201,7 +201,7 @@ kimin görebileceğini chat bilir.
 
 ### 8. Veritabanı
 
-- core `00023_chat_media.sql`: `uploads.purpose`'a `chat_photo`,
+- core `00026_chat_media.sql`: `uploads.purpose`'a `chat_photo`,
   `dm_attachment`, `report_evidence`; blob tek nesnedir: `full_type =
   'application/octet-stream'`, `full_bytes` 1–10 485 760, önizleme ve
   ölçü yok (R2'de görüntünün `full` anahtarında; temizlik işi aynı
@@ -209,7 +209,7 @@ kimin görebileceğini chat bilir.
   `channel_message`, `dm_message`, `report`; `reports.evidence_upload_id`
   (bağlı dosya trigger'ları ADR-0020 düzeninde); `evidence_text`'in
   `dm_message`'da metin ya da dosyadan en az birine gevşemesi.
-- chat `00016_message_media.sql`: `channel_messages.kind`,
+- chat `00017_message_media.sql`: `channel_messages.kind`,
   `photo_upload_id`; `dm_messages.attachment_upload_id`; `chat_app`'e
   yalnızca gereken kolon düzeyinde `UPDATE`.
 - Diğer servisin kimlikleri düz `uuid`'dir (FK yok, ADR-0002).

@@ -101,7 +101,7 @@ type ChannelServiceClient interface {
 	// Moderators and admins. Doing it twice changes nothing.
 	ArchiveChannel(ctx context.Context, in *ArchiveChannelRequest, opts ...grpc.CallOption) (*ArchiveChannelResponse, error)
 	UnarchiveChannel(ctx context.Context, in *UnarchiveChannelRequest, opts ...grpc.CallOption) (*UnarchiveChannelResponse, error)
-	// SendMessage writes a message of one kind (issue #205, ADR-0028):
+	// SendMessage writes a message of one kind (issue #205, ADR-0031):
 	//   - TEXT (also UNSPECIFIED): body is 1–4000 characters, not only white
 	//     space, without control characters other than tab and line breaks;
 	//     photo_upload_id and place are empty.
@@ -141,7 +141,7 @@ type ChannelServiceClient interface {
 	ListMessages(ctx context.Context, in *ListMessagesRequest, opts ...grpc.CallOption) (*ListMessagesResponse, error)
 	// DeleteMessage deletes a message. The author's own deletion erases the
 	// body (a place too) at once and cannot be undone; a photo is released
-	// and deleted from storage (ADR-0028). A moderation deletion keeps the
+	// and deleted from storage (ADR-0031). A moderation deletion keeps the
 	// photo until the message is deleted for good. A moderator's or admin's deletion of
 	// someone else's message hides it; an admin can restore it within 30
 	// days, after which it is deleted permanently. Deleting a deleted message
@@ -385,7 +385,7 @@ type ChannelServiceServer interface {
 	// Moderators and admins. Doing it twice changes nothing.
 	ArchiveChannel(context.Context, *ArchiveChannelRequest) (*ArchiveChannelResponse, error)
 	UnarchiveChannel(context.Context, *UnarchiveChannelRequest) (*UnarchiveChannelResponse, error)
-	// SendMessage writes a message of one kind (issue #205, ADR-0028):
+	// SendMessage writes a message of one kind (issue #205, ADR-0031):
 	//   - TEXT (also UNSPECIFIED): body is 1–4000 characters, not only white
 	//     space, without control characters other than tab and line breaks;
 	//     photo_upload_id and place are empty.
@@ -425,7 +425,7 @@ type ChannelServiceServer interface {
 	ListMessages(context.Context, *ListMessagesRequest) (*ListMessagesResponse, error)
 	// DeleteMessage deletes a message. The author's own deletion erases the
 	// body (a place too) at once and cannot be undone; a photo is released
-	// and deleted from storage (ADR-0028). A moderation deletion keeps the
+	// and deleted from storage (ADR-0031). A moderation deletion keeps the
 	// photo until the message is deleted for good. A moderator's or admin's deletion of
 	// someone else's message hides it; an admin can restore it within 30
 	// days, after which it is deleted permanently. Deleting a deleted message

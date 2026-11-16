@@ -158,7 +158,7 @@ WHERE user_id = $1 AND status <> 'deleting'
 
 // Hesap silme (user.deleted): kullanıcının dosyaları silinir; bağlı kapak
 // görselleri tayfanındır, bağlı şikâyet kanıtı platformundur (rapor
-// durdukça, ADR-0028); yalnızca sahiplikleri kaldırılır.
+// durdukça, ADR-0031); yalnızca sahiplikleri kaldırılır.
 func (q *Queries) DeleteUserUploads(ctx context.Context, userID pgtype.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteUserUploads, userID)
 	if err != nil {
@@ -713,7 +713,7 @@ type ReleaseMessageMediaParams struct {
 }
 
 // Sohbet mesajı fotoğrafını ya da ekini bıraktı (chat.media_released,
-// ADR-0028): dosya hâlâ o mesaja bağlıysa silinir; değilse bir şey olmaz
+// ADR-0031): dosya hâlâ o mesaja bağlıysa silinir; değilse bir şey olmaz
 // (tekrar gelen olay).
 func (q *Queries) ReleaseMessageMedia(ctx context.Context, arg ReleaseMessageMediaParams) (int64, error) {
 	result, err := q.db.Exec(ctx, releaseMessageMedia, arg.ID, arg.MessageID)

@@ -159,7 +159,7 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	// chat'in olayları (issue #205, ADR-0028): mesajın bıraktığı dosya.
+	// chat'in olayları (issue #205, ADR-0031): mesajın bıraktığı dosya.
 	chatEvents, err := chatevents.New(pool)
 	if err != nil {
 		return err
@@ -174,7 +174,7 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 	// ChatEventService'i yalnızca chat'in ServiceAccount'u çağırabilir
-	// (ADR-0028).
+	// (ADR-0031).
 	policy := auth.ServicePolicy{Verifier: si.Verifier, Services: []string{grpcapi.UserEventServiceName, grpcapi.ChatEventServiceName}}
 	if si.Verifier != nil {
 		policy.Callers = map[string][]auth.ServiceAccount{
@@ -246,7 +246,7 @@ func setup(rt *service.Runtime) error {
 // NetworkPolicy is added to an environment together with its secret).
 // Partial or malformed values stop the start.
 //
-// Who may see a chat message's file is chat's answer (ADR-0028), asked
+// Who may see a chat message's file is chat's answer (ADR-0031), asked
 // with the caller's own token over chatConn; without chat those files are
 // visible to their owners only.
 func mediaService(rt *service.Runtime, pool *pgxpool.Pool, chatConn *grpc.ClientConn) (*media.Service, error) {
@@ -338,7 +338,7 @@ func identityMinors(rt *service.Runtime) (report.MinorChecker, error) {
 // chatConnection returns the connection to chat that forwards the caller's
 // own token (auth.ForwardToken; core gets no service identity for it,
 // ADR-0013): reported direct messages (issue #95, ADR-0009) and who may
-// see a chat message's file (issue #205, ADR-0028). Without CHAT_GRPC_ADDR
+// see a chat message's file (issue #205, ADR-0031). Without CHAT_GRPC_ADDR
 // (a local run without chat) direct message reports are UNAVAILABLE and
 // chat files are visible to their owners only.
 func chatConnection(rt *service.Runtime) (*grpc.ClientConn, error) {

@@ -90,7 +90,7 @@ type DirectMessageServiceClient interface {
 	// acknowledged or after 30 days. The caller's session must have a device
 	// (ERROR_REASON_E2E_DEVICE_NOT_REGISTERED).
 	//
-	// attachment_upload_id (optional, issue #205, ADR-0028) is the caller's
+	// attachment_upload_id (optional, issue #205, ADR-0031) is the caller's
 	// READY upload of purpose DM_ATTACHMENT: an opaque blob the client
 	// encrypted with a random key (AES-256-GCM); the key and the digest are
 	// inside the envelopes, never on the server. At most one per message; the
@@ -121,7 +121,7 @@ type DirectMessageServiceClient interface {
 	ListDirectMessages(ctx context.Context, in *ListDirectMessagesRequest, opts ...grpc.CallOption) (*ListDirectMessagesResponse, error)
 	// DeleteDirectMessage deletes one of the caller's own messages: it shows
 	// as deleted at once, its waiting envelopes and archive entries go, its
-	// attachment is deleted from storage (ADR-0028), and it cannot be
+	// attachment is deleted from storage (ADR-0031), and it cannot be
 	// restored. Others' messages, and unknown
 	// ones, are ERROR_REASON_MESSAGE_NOT_FOUND. Deleting again changes
 	// nothing. Messages cannot be edited.
@@ -346,7 +346,7 @@ type DirectMessageServiceServer interface {
 	// acknowledged or after 30 days. The caller's session must have a device
 	// (ERROR_REASON_E2E_DEVICE_NOT_REGISTERED).
 	//
-	// attachment_upload_id (optional, issue #205, ADR-0028) is the caller's
+	// attachment_upload_id (optional, issue #205, ADR-0031) is the caller's
 	// READY upload of purpose DM_ATTACHMENT: an opaque blob the client
 	// encrypted with a random key (AES-256-GCM); the key and the digest are
 	// inside the envelopes, never on the server. At most one per message; the
@@ -377,7 +377,7 @@ type DirectMessageServiceServer interface {
 	ListDirectMessages(context.Context, *ListDirectMessagesRequest) (*ListDirectMessagesResponse, error)
 	// DeleteDirectMessage deletes one of the caller's own messages: it shows
 	// as deleted at once, its waiting envelopes and archive entries go, its
-	// attachment is deleted from storage (ADR-0028), and it cannot be
+	// attachment is deleted from storage (ADR-0031), and it cannot be
 	// restored. Others' messages, and unknown
 	// ones, are ERROR_REASON_MESSAGE_NOT_FOUND. Deleting again changes
 	// nothing. Messages cannot be edited.

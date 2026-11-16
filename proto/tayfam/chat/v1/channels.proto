@@ -72,7 +72,7 @@ service ChannelService {
   rpc ArchiveChannel(ArchiveChannelRequest) returns (ArchiveChannelResponse);
   rpc UnarchiveChannel(UnarchiveChannelRequest) returns (UnarchiveChannelResponse);
 
-  // SendMessage writes a message of one kind (issue #205, ADR-0028):
+  // SendMessage writes a message of one kind (issue #205, ADR-0031):
   //   - TEXT (also UNSPECIFIED): body is 1–4000 characters, not only white
   //     space, without control characters other than tab and line breaks;
   //     photo_upload_id and place are empty.
@@ -114,7 +114,7 @@ service ChannelService {
 
   // DeleteMessage deletes a message. The author's own deletion erases the
   // body (a place too) at once and cannot be undone; a photo is released
-  // and deleted from storage (ADR-0028). A moderation deletion keeps the
+  // and deleted from storage (ADR-0031). A moderation deletion keeps the
   // photo until the message is deleted for good. A moderator's or admin's deletion of
   // someone else's message hides it; an admin can restore it within 30
   // days, after which it is deleted permanently. Deleting a deleted message
@@ -233,7 +233,7 @@ message Message {
   Place place = 10;
 }
 
-// MessageKind is what a channel message carries (ADR-0028).
+// MessageKind is what a channel message carries (ADR-0031).
 enum MessageKind {
   // Read as TEXT in requests.
   MESSAGE_KIND_UNSPECIFIED = 0;

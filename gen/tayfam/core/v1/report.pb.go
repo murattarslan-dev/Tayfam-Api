@@ -691,7 +691,7 @@ type CreateReportRequest struct {
 	// other control characters not. Stored for the platform only; never
 	// logged, never in events, never returned (MyReport does not carry it).
 	EvidenceText string `protobuf:"bytes,6,opt,name=evidence_text,json=evidenceText,proto3" json:"evidence_text,omitempty"`
-	// Only for REPORT_TARGET_TYPE_DM_MESSAGE (issue #205, ADR-0028): a photo
+	// Only for REPORT_TARGET_TYPE_DM_MESSAGE (issue #205, ADR-0031): a photo
 	// of the message the reporter shares from their own device, the
 	// caller's READY upload of purpose REPORT_EVIDENCE not used elsewhere
 	// (ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,

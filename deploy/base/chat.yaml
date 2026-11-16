@@ -67,7 +67,7 @@ spec:
             # Sessize almada üyelik kontrolü: core GetMembership, kullanıcının
             # kendi token'ıyla (ADR-0009). Servis token'ı gerekmez.
             - { name: CORE_GRPC_ADDR, value: "core:9090" }
-            # Outbox relay → core ChatEventService (issue #205, ADR-0028):
+            # Outbox relay → core ChatEventService (issue #205, ADR-0031):
             # mesajın bıraktığı fotoğraf/ek core'da silinir. Token yalnızca
             # core audience'ı için geçerli ve 10 dakikalık; core onu yalnızca
             # ApplyChatEvent'te kabul eder.
@@ -147,7 +147,7 @@ spec:
                   name: kube-root-ca.crt
                   items:
                     - { key: ca.crt, path: ca.crt }
-        # core'u çağırmak için servis token'ı (outbox relay, ADR-0028):
+        # core'u çağırmak için servis token'ı (outbox relay, ADR-0031):
         # audience core.tayfam.internal, 10 dakika; kubelet süresi dolmadan
         # yeniler. Başka hiçbir hedefte ve Kubernetes API'sinde geçmez.
         - name: core-token

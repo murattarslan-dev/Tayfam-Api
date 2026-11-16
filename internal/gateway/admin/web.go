@@ -775,7 +775,7 @@ func (h *handlers) report(w http.ResponseWriter, r *http.Request) {
 }
 
 // reportEvidencePhoto opens a DM report's evidence photo (issue #205,
-// ADR-0028). The page never carries the storage link: core signs a fresh
+// ADR-0031). The page never carries the storage link: core signs a fresh
 // 5-minute link on each click (and records the viewing), and the panel
 // redirects to it without a referrer. The panel's CSP keeps img-src
 // 'self'; the photo opens in its own tab.

@@ -25,7 +25,7 @@ type MediaClient interface {
 }
 
 // Media attaches a message's photo or attachment in core (issue #205,
-// ADR-0028) with the sender's own token: core checks that the upload is
+// ADR-0031) with the sender's own token: core checks that the upload is
 // the sender's, READY, of the right purpose (and tayfa) and free.
 type Media struct {
 	core MediaClient

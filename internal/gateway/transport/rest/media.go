@@ -47,7 +47,7 @@ var (
 	uploadPurposes = newEnum(map[string]corev1.UploadPurpose{
 		"avatar": corev1.UploadPurpose_UPLOAD_PURPOSE_AVATAR, "catch_photo": corev1.UploadPurpose_UPLOAD_PURPOSE_CATCH_PHOTO,
 		"cover": corev1.UploadPurpose_UPLOAD_PURPOSE_COVER,
-		// Issue #205 (ADR-0028).
+		// Issue #205 (ADR-0031).
 		"chat_photo": corev1.UploadPurpose_UPLOAD_PURPOSE_CHAT_PHOTO, "dm_attachment": corev1.UploadPurpose_UPLOAD_PURPOSE_DM_ATTACHMENT,
 		"report_evidence": corev1.UploadPurpose_UPLOAD_PURPOSE_REPORT_EVIDENCE,
 	})

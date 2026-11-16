@@ -1,4 +1,4 @@
--- Sohbette fotoğraf ve yer (issue #205, ADR-0028).
+-- Sohbette fotoğraf ve yer (issue #205, ADR-0031).
 --
 -- Kanal mesajının türü: text (bugünkü mesajlar), photo, place.
 --   - photo: photo_upload_id core'daki dosyanın kimliğidir (servisler arası

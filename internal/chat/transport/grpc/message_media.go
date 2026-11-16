@@ -15,7 +15,7 @@ import (
 const maxMediaItems = 100
 
 // ChannelPhotos and DirectAttachments answer who may see a message's file
-// (issue #205, ADR-0028).
+// (issue #205, ADR-0031).
 type ChannelPhotos interface {
 	VisiblePhotos(ctx context.Context, caller id.ID, items []channel.MediaItem) (map[id.ID]bool, error)
 }

@@ -28,7 +28,7 @@ const (
 //
 // MessageMediaService answers core's question when a user asks for the
 // links of a photo or an attachment that belongs to a message (issue #205,
-// ADR-0028). core owns the files and signs the links; chat owns channels,
+// ADR-0031). core owns the files and signs the links; chat owns channels,
 // their audiences (ADR-0024) and conversations, so chat decides who may
 // see a message.
 //
@@ -74,7 +74,7 @@ func (c *messageMediaServiceClient) FilterVisibleMessageMedia(ctx context.Contex
 //
 // MessageMediaService answers core's question when a user asks for the
 // links of a photo or an attachment that belongs to a message (issue #205,
-// ADR-0028). core owns the files and signs the links; chat owns channels,
+// ADR-0031). core owns the files and signs the links; chat owns channels,
 // their audiences (ADR-0024) and conversations, so chat decides who may
 // see a message.
 //

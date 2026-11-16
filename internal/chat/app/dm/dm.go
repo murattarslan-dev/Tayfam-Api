@@ -248,7 +248,7 @@ type SendInput struct {
 	// session, whose device sends.
 	Envelopes []OutgoingEnvelope
 	Session   id.ID
-	// Attachment is optional (issue #205, ADR-0028): the caller's READY
+	// Attachment is optional (issue #205, ADR-0031): the caller's READY
 	// dm_attachment upload, an opaque blob; the key and digest are in the
 	// envelopes.
 	Attachment id.ID
@@ -256,7 +256,7 @@ type SendInput struct {
 
 // Attachments attaches a direct message's encrypted attachment in core
 // with the sender's own token (core MediaService.AttachDirectMessageAttachment;
-// ADR-0028). It returns apperr.ErrUploadNotFound, apperr.ErrUploadNotReady,
+// ADR-0031). It returns apperr.ErrUploadNotFound, apperr.ErrUploadNotReady,
 // apperr.ErrUploadInUse or apperr.ErrUnavailable.
 type Attachments interface {
 	AttachDirectMessageAttachment(ctx context.Context, upload, message id.ID) error

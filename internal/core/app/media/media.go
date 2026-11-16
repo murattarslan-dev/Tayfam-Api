@@ -43,7 +43,7 @@ const (
 	PurposeCatchPhoto = "catch_photo"
 	PurposeCover      = "cover"
 	// PurposeChatPhoto is a channel message's photo (issue #205,
-	// ADR-0028): an image whose audience chat decides.
+	// ADR-0031): an image whose audience chat decides.
 	PurposeChatPhoto = "chat_photo"
 	// PurposeDMAttachment is an end-to-end encrypted direct message
 	// attachment: one opaque blob that is never read.
@@ -67,7 +67,7 @@ const (
 	TargetTayfa        = "tayfa"
 	TargetEvent        = "event"
 	TargetFishingCatch = "fishing_catch"
-	// Chat's message IDs (ADR-0028); chat decides who sees them.
+	// Chat's message IDs (ADR-0031); chat decides who sees them.
 	TargetChannelMessage = "channel_message"
 	TargetDMMessage      = "dm_message"
 	TargetReport         = "report"
@@ -138,7 +138,7 @@ type Config struct {
 	// Store is nil when no object storage is configured: media is off.
 	Store Store
 	// Messages answers who may see the files of chat's messages
-	// (ADR-0028). nil: those files are visible to their owners only (a
+	// (ADR-0031). nil: those files are visible to their owners only (a
 	// local run without chat).
 	Messages MessageMedia
 	// UploadsPerHour per user; 0 means DefaultUploadsPerHour.

@@ -148,7 +148,7 @@ const (
 	// FAILED_PRECONDITION. The event ended more than 7 days ago (or was
 	// cancelled that long ago): its channel would be archived at once.
 	ErrorReason_ERROR_REASON_EVENT_ENDED ErrorReason = 34
-	// Photos and attachments (issue #205, ADR-0028): core's answer about the
+	// Photos and attachments (issue #205, ADR-0031): core's answer about the
 	// upload a message names.
 	// NOT_FOUND. Unknown, another user's, another purpose or (for a channel
 	// photo) another tayfa's upload.

@@ -21,7 +21,7 @@ type MediaClient interface {
 const maxMediaItems = 100
 
 // MessageMedia implements media.MessageMedia with chat (issue #205,
-// ADR-0028): which files of chat's messages the caller may see. The
+// ADR-0031): which files of chat's messages the caller may see. The
 // connection forwards the caller's own token, so chat answers about the
 // caller only; the answer is upload IDs, never content.
 type MessageMedia struct {

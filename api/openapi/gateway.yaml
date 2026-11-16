@@ -2527,7 +2527,7 @@ paths:
       operationId: sendChannelMessage
       summary: Kanala mesaj yazar
       description: |
-        Mesajın türü `kind` (#205, ADR-0028): `text` (varsayılan), `photo`
+        Mesajın türü `kind` (#205, ADR-0031): `text` (varsayılan), `photo`
         ya da `place`; başka türün alanı gönderilirse `invalid-request`.
         - `text`: `body` 1–4000 karakter, yalnız boşluk olamaz; sekme ve
           satır sonu dışında kontrol karakteri içeremez.
@@ -2788,7 +2788,7 @@ paths:
         Gönderim yalnızca REST'tedir (WebSocket çerçevesi 64 KB).
         Gövde en fazla 1,5 MiB.
 
-        **Fotoğraf ve yer (#205, ADR-0028):** mesajın türü zarfın
+        **Fotoğraf ve yer (#205, ADR-0031):** mesajın türü zarfın
         içindedir; sunucu bilmez. Fotoğrafı istemci rastgele bir anahtarla
         AES-256-GCM ile şifreler ve `dm_attachment` yüklemesi olarak (tek
         `blob`) yükler; anahtar ve özet (SHA-256) zarfın içinde gider,
@@ -4337,7 +4337,7 @@ paths:
   # `upload_id`'dir. R2 yapılandırılmamışsa bu uçlar 503 `unavailable` döner.
   # İmzalı linkler taşıyıcı sırlardır: log'a yazılmaz, paylaşılmaz.
   #
-  # Sohbet (#205, ADR-0028): `chat_photo` kanal mesajındaki fotoğraftır
+  # Sohbet (#205, ADR-0031): `chat_photo` kanal mesajındaki fotoğraftır
   # (görüntü hattı, tayfalı); `report_evidence` birebir mesaj şikâyetinin
   # kanıt fotoğrafıdır (görüntü hattı, tayfasız, yalnızca platform görür);
   # `dm_attachment` istemcinin şifrelediği tek bir `blob`'dur

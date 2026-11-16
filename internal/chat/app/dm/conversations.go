@@ -193,7 +193,7 @@ func (s *Service) Delete(ctx context.Context, caller, conversation, message id.I
 			return err
 		}
 		if released.Valid {
-			// The attachment goes too; core deletes it (ADR-0028).
+			// The attachment goes too; core deletes it (ADR-0031).
 			return corerelay.Release(ctx, tx, id.ID(released.Bytes), message)
 		}
 		return nil
@@ -468,7 +468,7 @@ func (s *Service) VerifyForReport(ctx context.Context, caller, message id.ID) (c
 }
 
 // MediaItem asks whether a direct message's attachment is visible
-// (MessageMediaService; ADR-0028).
+// (MessageMediaService; ADR-0031).
 type MediaItem struct {
 	Upload, Message id.ID
 }

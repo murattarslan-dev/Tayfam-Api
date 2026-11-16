@@ -172,7 +172,7 @@ func setup(rt *service.Runtime) error {
 	// Etkinlik ve seçili üye kanalları (issue #183, ADR-0024): kitle her
 	// istekte core'a kullanıcının kendi token'ıyla sorulur; katılımın
 	// kopyası tutulmaz.
-	// Sohbette fotoğraf (issue #205, ADR-0028): dosya core'dadır; mesaj
+	// Sohbette fotoğraf (issue #205, ADR-0031): dosya core'dadır; mesaj
 	// yazılırken gönderenin kendi token'ıyla core'da mesaja bağlanır.
 	media := coremembers.NewMedia(corev1.NewMediaServiceClient(coreConn))
 	channels, err := channel.New(channel.Config{
@@ -271,7 +271,7 @@ func setup(rt *service.Runtime) error {
 	chatv1.RegisterPushServiceServer(srv, grpcapi.NewPushServer(pushes, rt.Log))
 	// core, bir sohbet dosyasının linkini imzalamadan önce kullanıcının
 	// kendi token'ıyla sorar: kanal kitlesi ya da konuşmanın iki tarafı
-	// (issue #205, ADR-0028).
+	// (issue #205, ADR-0031).
 	chatv1.RegisterMessageMediaServiceServer(srv, grpcapi.NewMessageMediaServer(channels, directMessages, rt.Log))
 	// KVKK veri dışa aktarma (issue #144, ADR-0021): çağıranın kendi kanal
 	// mesajları (çözülmüş) ve tercihleri; identity kullanıcının token'ıyla
@@ -314,7 +314,7 @@ func setup(rt *service.Runtime) error {
 	return addRelay(rt, pool)
 }
 
-// addRelay starts chat's outbox relay to core (issue #205, ADR-0028): only
+// addRelay starts chat's outbox relay to core (issue #205, ADR-0031): only
 // chat.media_released (corerelay.Types) reaches core's ChatEventService,
 // with chat's service token for core (ADR-0013). Only a local environment
 // may run without the token; events then wait in the outbox.

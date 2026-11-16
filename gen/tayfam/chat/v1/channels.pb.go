@@ -83,7 +83,7 @@ func (ChannelVisibility) EnumDescriptor() ([]byte, []int) {
 	return file_tayfam_chat_v1_channels_proto_rawDescGZIP(), []int{0}
 }
 
-// MessageKind is what a channel message carries (ADR-0028).
+// MessageKind is what a channel message carries (ADR-0031).
 type MessageKind int32
 
 const (

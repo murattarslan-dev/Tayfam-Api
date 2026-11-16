@@ -27,7 +27,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // ChatEventService receives chat's events from chat's outbox relay
-// (ADR-0002, ADR-0013, ADR-0028). It is a service-to-service API: no user
+// (ADR-0002, ADR-0013, ADR-0031). It is a service-to-service API: no user
 // can call it.
 //
 // Authentication: only a Kubernetes service token (ADR-0013) with audience
@@ -70,7 +70,7 @@ func (c *chatEventServiceClient) ApplyChatEvent(ctx context.Context, in *ApplyCh
 // for forward compatibility.
 //
 // ChatEventService receives chat's events from chat's outbox relay
-// (ADR-0002, ADR-0013, ADR-0028). It is a service-to-service API: no user
+// (ADR-0002, ADR-0013, ADR-0031). It is a service-to-service API: no user
 // can call it.
 //
 // Authentication: only a Kubernetes service token (ADR-0013) with audience

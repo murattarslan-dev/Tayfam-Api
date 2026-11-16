@@ -114,7 +114,7 @@ type directMessageSendBody struct {
 	RecipientUserID string                 `json:"recipient_user_id"`
 	ClientRequestID string                 `json:"client_request_id"`
 	Envelopes       []outgoingEnvelopeJSON `json:"envelopes"`
-	// Optional encrypted attachment (issue #205, ADR-0028).
+	// Optional encrypted attachment (issue #205, ADR-0031).
 	AttachmentUploadID string `json:"attachment_upload_id"`
 }
 

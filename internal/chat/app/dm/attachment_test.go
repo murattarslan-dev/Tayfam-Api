@@ -10,7 +10,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
-// Encrypted attachments of direct messages (issue #205, ADR-0028).
+// Encrypted attachments of direct messages (issue #205, ADR-0031).
 
 // fakeAttachments stands in for core's AttachDirectMessageAttachment.
 type fakeAttachments struct {

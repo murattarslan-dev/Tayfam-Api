@@ -67,7 +67,7 @@ protokolüyle uçtan uca şifrelidir; geçmiş, kullanıcının kendi anahtarıy
 - Sohbette fotoğraf ve yer: kanal fotoğrafı aynı hattan gider, kimin
   göreceğini core chat'e kullanıcının token'ıyla sorar; birebir fotoğraf
   istemcide şifrelenmiş opak bir blob'dur, sunucu okumaz. Mesajın bıraktığı
-  dosya chat'in outbox'ıyla core'da silinir ([ADR-0028](docs/adr/0028-sohbet-ekleri-fotograf-ve-yer.md)).
+  dosya chat'in outbox'ıyla core'da silinir ([ADR-0031](docs/adr/0031-sohbet-ekleri-fotograf-ve-yer.md)).
 
 ## Dağıtım
 
