@@ -1,11 +1,11 @@
-# ADR-0028: "Boşum" — arkadaşlara görünen boş vakit (v2)
+# ADR-0029: "Boşum" — arkadaşlara görünen boş vakit (v2)
 
-- **Durum:** Önerildi
+- **Durum:** Kabul edildi (platform sahibi, 2026-11-15; PR #211 incelemesi)
 - **Tarih:** 2026-11-15
 - **Karar veren:** Ürün kararları platform sahibinindir (2026-11-15, Notion
   "Faz 2 (v2) — Medya ve Sosyal" §3; issue #207). Bu ADR onların mimariye
-  taşınmasıdır; kararın bıraktığı ayrıntılar aşağıda gerekçesiyle seçildi ve
-  "Açık sorular"da listelendi.
+  taşınmasıdır. İlk taslakta açık kalan dört ayrıntıyı platform sahibi
+  2026-11-15'te cevapladı ("Açık sorular — cevaplar").
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md),
   [ADR-0008](0008-kvkk-ve-platform-yonetimi.md),
   [ADR-0009](0009-veri-modelinin-servislere-dagilimi.md),
@@ -53,9 +53,19 @@ yoktur. Başka servise kopya, olay veya bildirim gitmez.
 | `user_id` | uuid 🔗 | | identity kullanıcısı; FK değil |
 | `day` | date | `UNIQUE(user_id, day)` | Takvim günü (§3) |
 | `slots` | text[] | 1–3 eleman; `morning` / `afternoon` / `evening` / `all_day`; `all_day` tek başına | Go sıralar ve tekilleştirir |
-| `note` | text | NULL ya da 1–60 karakter | Kontrol karakteri yok (Go) |
+| `note` | text | NULL ya da 1–60 karakter | Yasak karakter yok (aşağıda) |
 | `created_at`, `updated_at` | timestamptz | | `updated_at` trigger'la |
 
+- Notta şu karakterler yasaktır; Go (`availability.ForbiddenNoteRune`) ve
+  veritabanı CHECK'i aynı listeyi açıkça yazar, bir test ikisinin eşit
+  kaldığını korur: kontrol karakterleri (Cc), U+2028/U+2029, yön kontrolleri
+  (U+061C, U+200E/F, U+202A–U+202E, U+2066–U+2069) ve görünmez karakterler
+  (U+00AD, U+180E, U+200B, U+200C, U+2060–U+206F, U+FEFF, U+FFF9–U+FFFB).
+  Emoji dizileri için U+200D, varyasyon seçicileri ve etiket karakterleri
+  serbesttir. Postgres'in `[[:cntrl:]]` sınıfı kullanılmaz: anlamı locale'e
+  bağlıdır ve Go'nun `unicode.IsControl`'ünden farklıdır. Yine de bir fark
+  kalırsa veritabanının `check_violation` (23514) hatası 500 değil, ilgili
+  alanın doğrulama hatası olarak döner.
 - Bir gün için tek satır vardır; aynı güne birden çok dilim girilebilir
   (sabah ve akşam). "Tüm gün" diğer dilimlerle birlikte seçilemez.
 - Yazma, günün satırını bütünüyle değiştirir (`PUT`); silme kalıcıdır.
@@ -115,11 +125,16 @@ listesi çekilince hesaplanır.
 | `PUT /v1/me/availability/{date}` | `SetAvailability` | O günü ekler ya da bütünüyle değiştirir |
 | `DELETE /v1/me/availability/{date}` | `DeleteAvailability` | O günü siler; yoksa da başarılı |
 | `GET /v1/users/{user_id}/availability` | `ListUserAvailability` | Bir arkadaşın gelecek günleri (§4) |
-| `GET /v1/me/friends` → `Friend.next_available` | `ListFriends` | Rozet: en yakın boş gün ve dilimleri |
+| `GET /v1/me/friends` → `Friend.next_available` | `ListFriends` | Rozet: önümüzdeki 7 gündeki en yakın boş gün ve dilimleri |
 
 - `next_available` yalnızca kabul edilmiş arkadaş satırında ve arkadaşın
-  bugünden sonraki (bugün dahil) bir kaydı varsa döner; istek listelerinde
-  hiç yoktur. Not taşımaz; not yalnızca arkadaşın günleri açılınca döner.
+  **önümüzdeki 7 takvim gününde** (bugün dahil: bugün … bugün + 6) bir
+  kaydı varsa döner; 7 gün içinde boş gün yoksa rozet yoktur. İstek
+  listelerinde hiç yoktur. Not taşımaz. Arkadaşın günleri açılınca
+  (`ListUserAvailability`) 30 günün tamamı ve notlar görünür.
+- Rozet sorgusu arkadaşlıkla birlikte iki yönlü engeli de ayrıca kontrol
+  eder. Engel arkadaşlığı zaten siler; bu ikinci kontrol savunma
+  derinliğidir (ADR-0011).
 - Liste uçları sayfalanmaz: aralık kişi başı en fazla 31 gündür.
 - Yeni hata kodu yoktur: geçersiz tarih, dilim ya da not `invalid-request`,
   görünmeyen kişi `user-not-found`.
@@ -159,8 +174,8 @@ denetim kaydına ve hata mesajına yazılmaz; tarih ve dilimler de log'a girmez
 - Kişi başı 31 satır sınırı tabloyu küçük tutar; temizlik günlük tek
   `DELETE`'tir.
 - Europe/Istanbul seçimi yurt dışındaki kullanıcı için gün sınırında kayma
-  bırakır; gerekirse ileride istek başına istemci saat dilimiyle
-  genişletilebilir (sözleşme `date` alanını değiştirmeden).
+  bırakır (kabul edildi); gerekirse ileride istek başına istemci saat
+  dilimiyle genişletilebilir (sözleşme `date` alanını değiştirmeden).
 - Filtre gelene kadar notta eşleşme panele düşmez; bu bilinçli olarak
   filtre işine bırakıldı.
 
@@ -178,12 +193,14 @@ denetim kaydına ve hata mesajına yazılmaz; tarih ve dilimler de log'a girmez
   idempotenttir ve eşzamanlı iki cihazda bir günün değişikliği diğerini
   silmez; birden çok gün birden çok istekle girilir.
 
-## Açık sorular (platform sahibine)
+## Açık sorular — cevaplar (platform sahibi, 2026-11-15)
 
-1. "Bugün" Europe/Istanbul takvimine göre; yurt dışındaki kullanıcı için
-   kayma kabul edilebilir mi?
-2. Notun kelime filtresine bağlanması filtre işine (moderation_terms) mi
-   bırakılsın, yoksa ondan önce ayrı bir iş mi açılsın?
-3. Aynı güne birden çok dilim (küme) ve "tüm gün" tek başına — uygun mu?
-4. Rozet `next_available` 30 günlük pencerenin tamamına bakıyor (en yakın
-   gün); "yakında" daha dar bir pencere mi olmalı (örn. 7 gün)?
+1. **"Bugün" Europe/Istanbul takvimine göre:** kabul. Yurt dışındaki
+   kullanıcı için gün sınırındaki kayma kabul edilir.
+2. **Not ve kelime filtresi:** filtre işine bırakılır. `moderation_terms` /
+   `moderation_flags` geldiğinde `user_availability.note` filtrenin
+   kapsamına eklenir (§7); o işin kabul kriterine bu alan yazılmalıdır.
+3. **Aynı güne birden çok dilim, `all_day` tek başına:** kabul.
+4. **Rozet penceresi:** rozet yalnızca önümüzdeki 7 gündeki en yakın boş
+   günü gösterir; 7 gün içinde boş gün yoksa rozet yoktur. Kişinin günleri
+   açılınca 30 günün tamamı görünür (§6).

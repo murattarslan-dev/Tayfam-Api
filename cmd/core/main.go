@@ -109,7 +109,7 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	// "Boşum" (issue #207, ADR-0028).
+	// "Boşum" (issue #207, ADR-0029).
 	availabilities, err := availability.New(availability.Config{Pool: pool})
 	if err != nil {
 		return err

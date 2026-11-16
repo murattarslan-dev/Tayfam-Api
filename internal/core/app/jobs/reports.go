@@ -83,7 +83,7 @@ func (s *Service) ExpireRecords(ctx context.Context) (int, error) {
 	if err != nil {
 		return reports + audits, fmt.Errorf("davet sonuçları: %w", err)
 	}
-	// "Boşum": past days go (issue #207, ADR-0028). Reads already skip
+	// "Boşum": past days go (issue #207, ADR-0029). Reads already skip
 	// them; at most 31 rows per user exist, so one statement is enough.
 	na, err := availability.DeletePast(ctx, q, s.now())
 	if err != nil {

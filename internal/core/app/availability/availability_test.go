@@ -3,11 +3,15 @@ package availability
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
@@ -260,8 +264,9 @@ func TestVisibility(t *testing.T) {
 	}
 }
 
-// The friend list badge: the nearest day from today on, only for accepted
-// friends, never a past day, never the note.
+// The friend list badge: the nearest day within the next seven calendar
+// days (today through today + 6), only for accepted friends, never a past
+// day, never the note (platform owner, 2026-11-15).
 func TestFriendListBadge(t *testing.T) {
 	e := setup(t)
 	me := e.user(t, "Ben")
@@ -270,6 +275,16 @@ func TestFriendListBadge(t *testing.T) {
 	asker := e.user(t, "İsteyen")
 	e.friends(t, me, busy)
 	e.friends(t, me, free)
+	edge := e.user(t, "Sınırda")
+	later := e.user(t, "Sonra")
+	e.friends(t, me, edge)
+	e.friends(t, me, later)
+	_, err0 := e.svc.Set(ctx, edge, e.day(social.BadgeDays-1), []Slot{SlotEvening}, "")
+	must(t, err0)
+	_, err0 = e.svc.Set(ctx, later, e.day(social.BadgeDays), []Slot{SlotEvening}, "")
+	must(t, err0)
+	_, err0 = e.svc.Set(ctx, later, e.day(MaxDaysAhead), []Slot{SlotAllDay}, "")
+	must(t, err0)
 	_, err := e.svc.Set(ctx, asker, e.day(1), []Slot{SlotMorning}, "")
 	must(t, err)
 	_, err = e.social.SendFriendRequest(ctx, asker, me)
@@ -291,8 +306,18 @@ func TestFriendListBadge(t *testing.T) {
 	for _, f := range l.Items {
 		got[f.UserID] = f.NextAvailable
 	}
-	if len(got) != 2 {
+	if len(got) != 4 {
 		t.Fatalf("arkadaşlar: %+v", l.Items)
+	}
+	if n := got[edge]; n.Date.Format(DateLayout) != e.day(social.BadgeDays-1) {
+		t.Fatalf("7. gün (bugün+6) rozette olmalı: %+v", n)
+	}
+	if n := got[later]; !n.Date.IsZero() {
+		t.Fatalf("7 günden sonraki gün rozette: %+v", n)
+	}
+	// Opening the days still shows all of them.
+	if days, err := e.svc.ListUser(ctx, me, later); err != nil || len(days) != 2 {
+		t.Fatalf("30 günlük liste: %+v %v", days, err)
 	}
 	if n := got[free]; n.Date.Format(DateLayout) != e.day(3) || !slices.Equal(n.Slots, []string{"afternoon", "evening"}) {
 		t.Fatalf("boş arkadaş rozeti: %+v", n)
@@ -302,6 +327,22 @@ func TestFriendListBadge(t *testing.T) {
 	}
 	if days, err := e.svc.ListUser(ctx, me, busy); err != nil || len(days) != 0 {
 		t.Fatalf("geçmiş gün listede: %+v %v", days, err)
+	}
+	// Defense in depth: a block row next to a friendship (the app never
+	// leaves one; written here as the owner role) hides the badge in either
+	// direction.
+	for _, dir := range [][2]id.ID{{me, free}, {free, me}} {
+		_, err = e.admin.Exec(ctx, `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)`, dir[0].PG(), dir[1].PG())
+		must(t, err)
+		l, err = e.social.ListFriends(ctx, me, 0, "")
+		must(t, err)
+		for _, f := range l.Items {
+			if f.UserID == free && !f.NextAvailable.Date.IsZero() {
+				t.Fatalf("engelde rozet (%v engelledi): %+v", dir[0] == me, f.NextAvailable)
+			}
+		}
+		_, err = e.admin.Exec(ctx, `DELETE FROM user_blocks`)
+		must(t, err)
 	}
 	// Requests carry no badge, even when the requester has a free day.
 	in, err := e.social.ListFriendRequests(ctx, me, true, 0, "")
@@ -346,5 +387,76 @@ func TestDatabaseChecks(t *testing.T) {
 	}
 	if _, err := e.pool.Exec(ctx, `UPDATE user_availability SET user_id = $2 WHERE user_id = $1`, u.PG(), id.New().PG()); err == nil {
 		t.Error("core_app user_id'yi değiştirdi")
+	}
+}
+
+// Go's ForbiddenNoteRune and the database CHECK reject exactly the same
+// characters (review of PR #211: [[:cntrl:]] and unicode.IsControl
+// differed, so U+2028 passed Go and failed the database with a 500). Every
+// code point is compared, using the pattern read back from the live
+// constraint.
+func TestNoteCharactersMatchDatabase(t *testing.T) {
+	e := setup(t)
+	var def string
+	must(t, e.pool.QueryRow(ctx, `SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'user_availability_note'`).Scan(&def))
+	i, j := strings.Index(def, "'["), strings.Index(def, "]'")
+	if i < 0 || j < i {
+		t.Fatalf("kısıt deseni bulunamadı: %s", def)
+	}
+	pattern := def[i+1 : j+1]
+	rows, err := e.pool.Query(ctx, `SELECT cp FROM generate_series(1, 1114111) cp
+		WHERE cp NOT BETWEEN 55296 AND 57343 AND chr(cp) ~ $1 ORDER BY cp`, pattern)
+	must(t, err)
+	db := map[rune]bool{}
+	for rows.Next() {
+		var cp int32
+		must(t, rows.Scan(&cp))
+		db[cp] = true
+	}
+	must(t, rows.Err())
+	if len(db) == 0 {
+		t.Fatal("veritabanı hiçbir karakteri reddetmedi")
+	}
+	for r := rune(1); r <= unicode.MaxRune; r++ {
+		if r >= 0xd800 && r <= 0xdfff {
+			continue
+		}
+		if ForbiddenNoteRune(r) != db[r] {
+			t.Errorf("U+%04X: Go %v, veritabanı %v", r, ForbiddenNoteRune(r), db[r])
+		}
+	}
+
+	// Through the service: forbidden ones are validation errors, emoji
+	// sequences are kept.
+	u := e.user(t, "Kişi")
+	for _, r := range []rune{0x2028, 0x2029, 0x202e, 0x200b, 0xfeff, 0x0085, 0x061c} {
+		_, err := e.svc.Set(ctx, u, e.day(1), []Slot{SlotMorning}, "a"+string(r)+"b")
+		wantInvalid(t, fmt.Sprintf("U+%04X", r), err, "note")
+	}
+	family := "Aile 👨\u200d👩\u200d👧 ❤\ufe0f 🏴\U000e0067\U000e0062\U000e0065\U000e006e\U000e0067\U000e007f"
+	note, err := strconv.Unquote(`"` + family + `"`)
+	must(t, err)
+	d, err := e.svc.Set(ctx, u, e.day(1), []Slot{SlotMorning}, note)
+	if err != nil || d.Note != note {
+		t.Fatalf("emoji dizisi: %q %v", d.Note, err)
+	}
+}
+
+// A check_violation that slips past Go becomes a validation error of the
+// right field, never a 500.
+func TestCheckField(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want string
+	}{
+		{&pgconn.PgError{Code: "23514", ConstraintName: "user_availability_note"}, "note"},
+		{&pgconn.PgError{Code: "23514", ConstraintName: "user_availability_slots"}, "slots"},
+		{fmt.Errorf("sarılı: %w", &pgconn.PgError{Code: "23514"}), "date"}, // the day window trigger
+		{&pgconn.PgError{Code: "23505", ConstraintName: "user_availability_user_day"}, ""},
+		{errors.New("başka"), ""},
+	} {
+		if got := checkField(tc.err); got != tc.want {
+			t.Errorf("checkField(%v) = %q, beklenen %q", tc.err, got, tc.want)
+		}
 	}
 }

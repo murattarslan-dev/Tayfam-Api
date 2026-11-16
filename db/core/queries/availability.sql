@@ -1,4 +1,4 @@
--- "Boşum": boş vakit (issue #207, ADR-0028). day takvim günüdür; "bugün"
+-- "Boşum": boş vakit (issue #207, ADR-0029). day takvim günüdür; "bugün"
 -- (@today) uygulamada Europe/Istanbul tarihine göre hesaplanır ve her
 -- sorguya verilir. Görünürlük kuralı (arkadaşlık, engel) app katmanında,
 -- aynı veritabanında okunur.

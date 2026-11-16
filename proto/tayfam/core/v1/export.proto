@@ -56,7 +56,7 @@ enum CoreExportSection {
   // Files the caller uploaded: a list only, never the files (ADR-0021).
   CORE_EXPORT_SECTION_UPLOADS = 17;
   // "Boşum" free days the caller saved, today on (issue #207).
-  CORE_EXPORT_SECTION_AVAILABILITY = 18;
+  CORE_EXPORT_SECTION_AVAILABILITY = 19;
 }
 
 message ExportMyDataRequest {}

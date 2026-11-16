@@ -1,6 +1,6 @@
 // Package localday gives core's calendar "today": the Europe/Istanbul date
 // (as for ages, data model v15). "Boşum" days are calendar dates, not
-// instants (issue #207, ADR-0028).
+// instants (issue #207, ADR-0029).
 package localday
 
 import (

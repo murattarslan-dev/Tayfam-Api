@@ -11,7 +11,7 @@ import (
 )
 
 // "Boşum": free days shown to all of the caller's friends (issue #207,
-// ADR-0028). Every route needs the user's full access token; core checks it
+// ADR-0029). Every route needs the user's full access token; core checks it
 // again, takes the caller from it and applies the friendship rule. Notes
 // travel only in the body, never in the path or query, so access logs
 // cannot hold them.

@@ -111,11 +111,16 @@ type Friend struct {
 	State          State
 	RequestedAt    time.Time
 	AcceptedAt     time.Time // zero unless friends
-	// NextAvailable is the friend's nearest free day from today on
+	// NextAvailable is the friend's nearest free day within BadgeDays
 	// ("Boşum" badge, issue #207); zero Date when there is none. Only in
 	// ListFriends.
 	NextAvailable NextAvailable
 }
+
+// BadgeDays is the "Boşum" badge window: the nearest free day within the
+// next seven calendar days, today included (platform owner, 2026-11-15).
+// Opening a friend's days still shows all thirty.
+const BadgeDays = 7
 
 // NextAvailable is a friend's nearest free day, without the note.
 type NextAvailable struct {
@@ -411,7 +416,7 @@ func (s *Service) listFriendships(ctx context.Context, caller id.ID, status, dir
 	today := localday.Today(s.now())
 	rows, err := s.q.ListFriendshipsPage(ctx, store.ListFriendshipsPageParams{
 		UserID: caller.PG(), Status: status, Direction: dir, AfterUserID: after.PG(), PageSize: size + 1,
-		Today: pgtype.Date{Time: today, Valid: true},
+		Today: pgtype.Date{Time: today, Valid: true}, BadgeUntil: pgtype.Date{Time: today.AddDate(0, 0, BadgeDays-1), Valid: true},
 	})
 	if err != nil {
 		return Page[Friend]{}, fmt.Errorf("arkadaşlar: %w", err)

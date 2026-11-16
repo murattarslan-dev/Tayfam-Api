@@ -3985,7 +3985,7 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
-  # --- "Boşum": arkadaşlara görünen boş vakit (core AvailabilityService, #207, ADR-0028) ---
+  # --- "Boşum": arkadaşlara görünen boş vakit (core AvailabilityService, #207, ADR-0029) ---
 
   /v1/me/availability:
     get:
@@ -7609,9 +7609,11 @@ components:
         accepted_at: { type: string, format: date-time }
         next_available:
           description: |
-            "Boşum" rozeti (#207): arkadaşın bugünden itibaren en yakın boş
-            günü, not olmadan. Yalnızca `GET /v1/me/friends`'te ve kaydı
-            varsa döner.
+            "Boşum" rozeti (#207): arkadaşın önümüzdeki 7 takvim günündeki
+            (bugün dahil, bugün … bugün+6, Europe/Istanbul) en yakın boş
+            günü, not olmadan. Yalnızca `GET /v1/me/friends`'te ve bu
+            pencerede boş günü varsa döner; 30 günün tamamı
+            `GET /v1/users/{user_id}/availability` ile görülür.
           allOf:
             - $ref: "#/components/schemas/AvailabilitySummary"
     FriendList:
@@ -7677,8 +7679,11 @@ components:
         note:
           type: string
           description: |
-            İsteğe bağlı, en fazla 60 karakter; kontrol karakteri (satır sonu
-            dahil) içeremez. Baştaki ve sondaki boşluk kırpılır.
+            İsteğe bağlı, en fazla 60 karakter. Kontrol karakteri (satır sonu
+            dahil), satır/paragraf ayırıcı (U+2028, U+2029), yön kontrolü
+            (U+202A–U+202E, U+2066–U+2069) ve görünmez karakter (U+200B
+            gibi) içeremez; emoji dizileri (U+200D) serbesttir. Baştaki ve
+            sondaki boşluk kırpılır.
           maxLength: 60
     BlockedUser:
       type: object

@@ -21,7 +21,7 @@ type Availabilities interface {
 }
 
 // AvailabilityServer implements corev1.AvailabilityServiceServer ("Boşum",
-// issue #207, ADR-0028). Every method needs a verified token (auth.Guard);
+// issue #207, ADR-0029). Every method needs a verified token (auth.Guard);
 // the caller always comes from it. Notes, dates and slots are never logged.
 type AvailabilityServer struct {
 	corev1.UnimplementedAvailabilityServiceServer

@@ -1,4 +1,4 @@
--- "Boşum": arkadaşlara görünen boş vakit (issue #207, ADR-0028; platform
+-- "Boşum": arkadaşlara görünen boş vakit (issue #207, ADR-0029; platform
 -- sahibi 2026-11-15, Notion "Faz 2 (v2)" §3).
 --
 -- Kişi başı gün başına tek satır. day bir takvim günüdür (saat değil);
@@ -33,9 +33,16 @@ CREATE TABLE user_availability (
     AND (cardinality(slots) < 2 OR slots[1] <> slots[2])
     AND (cardinality(slots) < 3 OR (slots[1] <> slots[3] AND slots[2] <> slots[3]))
   ),
+  -- Yasak karakterler Go'daki availability.ForbiddenNoteRune ile birebir
+  -- aynıdır (test eşitliği korur): kontrol karakterleri, satır/paragraf
+  -- ayırıcıları, yön kontrolleri (U+202E gibi) ve görünmez karakterler.
+  -- [[:cntrl:]] kullanılmaz: anlamı locale'e bağlıdır ve Go'dan farklıdır.
+  -- Emoji dizileri için U+200D, varyasyon seçicileri ve etiket karakterleri
+  -- serbesttir.
   CONSTRAINT user_availability_note CHECK (
     note IS NULL
-    OR (char_length(note) BETWEEN 1 AND 60 AND note = btrim(note) AND note !~ '[[:cntrl:]]')
+    OR (char_length(note) BETWEEN 1 AND 60 AND note = btrim(note)
+        AND note !~ '[\u0001-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b\u200c\u200e\u200f\u2028\u2029\u202a-\u202e\u2060-\u206f\ufeff\ufff9-\ufffb]')
   )
 );
 -- Saklama işi geçmiş günleri siler.

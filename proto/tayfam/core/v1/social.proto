@@ -93,9 +93,10 @@ message Friend {
   google.protobuf.Timestamp request_time = 5;
   // Set when FRIEND_STATE_FRIENDS.
   google.protobuf.Timestamp accept_time = 6;
-  // "Boşum" badge (issue #207, ADR-0028): the friend's nearest free day
-  // from today on, without the note. Only in ListFriends, and only when
-  // there is one.
+  // "Boşum" badge (issue #207, ADR-0029): the friend's nearest free day
+  // within the next seven calendar days (today through today + 6, Europe/
+  // Istanbul), without the note. Only in ListFriends, and only when there
+  // is one; AvailabilityService.ListUserAvailability shows all 30 days.
   AvailabilityDay next_available = 7;
 }
 

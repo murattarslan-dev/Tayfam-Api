@@ -506,8 +506,9 @@ type Querier interface {
 	// Kişinin arkadaşları ve istekleri; karşı tarafın kimliğine göre sayfalanır.
 	// Silinmiş hesapların satırı hesap silmede gider; profili henüz gelmemiş
 	// kişi listede adsız görünmez, atlanır. Kabul edilmiş arkadaşlıkta
-	// arkadaşın bugünden itibaren en yakın boş günü de döner ("Boşum" rozeti,
-	// issue #207; not dönmez).
+	// arkadaşın @today ile @badge_until (dahil) arasındaki en yakın boş günü de
+	// döner ("Boşum" rozeti, issue #207; not dönmez). Engel arkadaşlığı zaten
+	// siler; rozet yine de iki yönlü engelde dönmez (savunma derinliği).
 	ListFriendshipsPage(ctx context.Context, arg ListFriendshipsPageParams) ([]ListFriendshipsPageRow, error)
 	// Alarmın alıcıları: organizatör (tayfada hâlâ aktif üyeyse) ve aktif
 	// yöneticiler ve moderatörler; dönmeyen kişinin kendisi hariç. Organizatör
@@ -811,7 +812,7 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// Kalıcı katılım geçmişi
 	UpsertActivityRecord(ctx context.Context, arg UpsertActivityRecordParams) error
-	// "Boşum": boş vakit (issue #207, ADR-0028). day takvim günüdür; "bugün"
+	// "Boşum": boş vakit (issue #207, ADR-0029). day takvim günüdür; "bugün"
 	// (@today) uygulamada Europe/Istanbul tarihine göre hesaplanır ve her
 	// sorguya verilir. Görünürlük kuralı (arkadaşlık, engel) app katmanında,
 	// aynı veritabanında okunur.

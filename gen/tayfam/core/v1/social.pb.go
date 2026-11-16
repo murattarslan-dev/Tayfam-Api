@@ -251,9 +251,10 @@ type Friend struct {
 	RequestTime    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=request_time,json=requestTime,proto3" json:"request_time,omitempty"`
 	// Set when FRIEND_STATE_FRIENDS.
 	AcceptTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=accept_time,json=acceptTime,proto3" json:"accept_time,omitempty"`
-	// "Boşum" badge (issue #207, ADR-0028): the friend's nearest free day
-	// from today on, without the note. Only in ListFriends, and only when
-	// there is one.
+	// "Boşum" badge (issue #207, ADR-0029): the friend's nearest free day
+	// within the next seven calendar days (today through today + 6, Europe/
+	// Istanbul), without the note. Only in ListFriends, and only when there
+	// is one; AvailabilityService.ListUserAvailability shows all 30 days.
 	NextAvailable *AvailabilityDay `protobuf:"bytes,7,opt,name=next_available,json=nextAvailable,proto3" json:"next_available,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

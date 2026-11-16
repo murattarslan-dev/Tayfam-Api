@@ -283,23 +283,30 @@ JOIN user_profiles p
  AND NOT EXISTS (SELECT 1 FROM user_platform_bans b WHERE b.user_id = p.user_id AND b.banned_at IS NOT NULL)
 LEFT JOIN LATERAL (
   SELECT a.day, a.slots FROM user_availability a
-  WHERE f.status = 'accepted' AND a.user_id = p.user_id AND a.day >= $2::date
+  WHERE f.status = 'accepted' AND a.user_id = p.user_id
+    AND a.day >= $2::date AND a.day <= $3::date
+    AND NOT EXISTS (
+      SELECT 1 FROM user_blocks ub
+      WHERE (ub.blocker_id = $1 AND ub.blocked_id = p.user_id)
+         OR (ub.blocker_id = p.user_id AND ub.blocked_id = $1)
+    )
   ORDER BY a.day
   LIMIT 1
 ) na ON true
 WHERE (f.user_low_id = $1 OR f.user_high_id = $1)
-  AND f.status = $3
-  AND ($4::text = ''
-       OR ($4::text = 'incoming' AND f.requested_by <> $1)
-       OR ($4::text = 'outgoing' AND f.requested_by = $1))
-  AND p.user_id > $5
+  AND f.status = $4
+  AND ($5::text = ''
+       OR ($5::text = 'incoming' AND f.requested_by <> $1)
+       OR ($5::text = 'outgoing' AND f.requested_by = $1))
+  AND p.user_id > $6
 ORDER BY p.user_id
-LIMIT $6
+LIMIT $7
 `
 
 type ListFriendshipsPageParams struct {
 	UserID      pgtype.UUID
 	Today       pgtype.Date
+	BadgeUntil  pgtype.Date
 	Status      string
 	Direction   string
 	AfterUserID pgtype.UUID
@@ -321,12 +328,14 @@ type ListFriendshipsPageRow struct {
 // Kişinin arkadaşları ve istekleri; karşı tarafın kimliğine göre sayfalanır.
 // Silinmiş hesapların satırı hesap silmede gider; profili henüz gelmemiş
 // kişi listede adsız görünmez, atlanır. Kabul edilmiş arkadaşlıkta
-// arkadaşın bugünden itibaren en yakın boş günü de döner ("Boşum" rozeti,
-// issue #207; not dönmez).
+// arkadaşın @today ile @badge_until (dahil) arasındaki en yakın boş günü de
+// döner ("Boşum" rozeti, issue #207; not dönmez). Engel arkadaşlığı zaten
+// siler; rozet yine de iki yönlü engelde dönmez (savunma derinliği).
 func (q *Queries) ListFriendshipsPage(ctx context.Context, arg ListFriendshipsPageParams) ([]ListFriendshipsPageRow, error) {
 	rows, err := q.db.Query(ctx, listFriendshipsPage,
 		arg.UserID,
 		arg.Today,
+		arg.BadgeUntil,
 		arg.Status,
 		arg.Direction,
 		arg.AfterUserID,

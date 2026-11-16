@@ -59,7 +59,7 @@ const (
 	// Files the caller uploaded: a list only, never the files (ADR-0021).
 	CoreExportSection_CORE_EXPORT_SECTION_UPLOADS CoreExportSection = 17
 	// "Boşum" free days the caller saved, today on (issue #207).
-	CoreExportSection_CORE_EXPORT_SECTION_AVAILABILITY CoreExportSection = 18
+	CoreExportSection_CORE_EXPORT_SECTION_AVAILABILITY CoreExportSection = 19
 )
 
 // Enum value maps for CoreExportSection.
@@ -83,7 +83,7 @@ var (
 		15: "CORE_EXPORT_SECTION_BLOCKS",
 		16: "CORE_EXPORT_SECTION_REPORTS",
 		17: "CORE_EXPORT_SECTION_UPLOADS",
-		18: "CORE_EXPORT_SECTION_AVAILABILITY",
+		19: "CORE_EXPORT_SECTION_AVAILABILITY",
 	}
 	CoreExportSection_value = map[string]int32{
 		"CORE_EXPORT_SECTION_UNSPECIFIED":      0,
@@ -104,7 +104,7 @@ var (
 		"CORE_EXPORT_SECTION_BLOCKS":           15,
 		"CORE_EXPORT_SECTION_REPORTS":          16,
 		"CORE_EXPORT_SECTION_UPLOADS":          17,
-		"CORE_EXPORT_SECTION_AVAILABILITY":     18,
+		"CORE_EXPORT_SECTION_AVAILABILITY":     19,
 	}
 )
 
@@ -253,7 +253,7 @@ const file_tayfam_core_v1_export_proto_rawDesc = "" +
 	"\x1aCORE_EXPORT_SECTION_BLOCKS\x10\x0f\x12\x1f\n" +
 	"\x1bCORE_EXPORT_SECTION_REPORTS\x10\x10\x12\x1f\n" +
 	"\x1bCORE_EXPORT_SECTION_UPLOADS\x10\x11\x12$\n" +
-	" CORE_EXPORT_SECTION_AVAILABILITY\x10\x122l\n" +
+	" CORE_EXPORT_SECTION_AVAILABILITY\x10\x132l\n" +
 	"\rExportService\x12[\n" +
 	"\fExportMyData\x12#.tayfam.core.v1.ExportMyDataRequest\x1a$.tayfam.core.v1.ExportMyDataResponse0\x01B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vExportProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"

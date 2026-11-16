@@ -5,7 +5,7 @@ package tayfam.core.v1;
 import "google/protobuf/timestamp.proto";
 
 // AvailabilityService holds "Boşum": the days a user is free, shown to all
-// of their friends and nobody else (issue #207, ADR-0028). There are no
+// of their friends and nobody else (issue #207, ADR-0029). There are no
 // notifications and no events; friends see a badge in their friend list
 // (Friend.next_available) and the days when they open them.
 //
@@ -28,8 +28,9 @@ service AvailabilityService {
   // SetAvailability writes the caller's day, replacing what was there.
   //
   // Errors: ERROR_REASON_VALIDATION (date not in today..today+30, no or
-  // unknown slots, ALL_DAY with another slot, note too long or with
-  // control characters).
+  // unknown slots, ALL_DAY with another slot, note too long or with a
+  // control, line separator, bidirectional control or invisible
+  // character; emoji sequences with U+200D are allowed).
   rpc SetAvailability(SetAvailabilityRequest) returns (SetAvailabilityResponse);
   // DeleteAvailability deletes the caller's day. Deleting nothing succeeds.
   //

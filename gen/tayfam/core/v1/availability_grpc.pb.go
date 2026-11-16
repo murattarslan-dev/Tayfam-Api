@@ -30,7 +30,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // AvailabilityService holds "Boşum": the days a user is free, shown to all
-// of their friends and nobody else (issue #207, ADR-0028). There are no
+// of their friends and nobody else (issue #207, ADR-0029). There are no
 // notifications and no events; friends see a badge in their friend list
 // (Friend.next_available) and the days when they open them.
 //
@@ -53,8 +53,9 @@ type AvailabilityServiceClient interface {
 	// SetAvailability writes the caller's day, replacing what was there.
 	//
 	// Errors: ERROR_REASON_VALIDATION (date not in today..today+30, no or
-	// unknown slots, ALL_DAY with another slot, note too long or with
-	// control characters).
+	// unknown slots, ALL_DAY with another slot, note too long or with a
+	// control, line separator, bidirectional control or invisible
+	// character; emoji sequences with U+200D are allowed).
 	SetAvailability(ctx context.Context, in *SetAvailabilityRequest, opts ...grpc.CallOption) (*SetAvailabilityResponse, error)
 	// DeleteAvailability deletes the caller's day. Deleting nothing succeeds.
 	//
@@ -121,7 +122,7 @@ func (c *availabilityServiceClient) ListUserAvailability(ctx context.Context, in
 // for forward compatibility.
 //
 // AvailabilityService holds "Boşum": the days a user is free, shown to all
-// of their friends and nobody else (issue #207, ADR-0028). There are no
+// of their friends and nobody else (issue #207, ADR-0029). There are no
 // notifications and no events; friends see a badge in their friend list
 // (Friend.next_available) and the days when they open them.
 //
@@ -144,8 +145,9 @@ type AvailabilityServiceServer interface {
 	// SetAvailability writes the caller's day, replacing what was there.
 	//
 	// Errors: ERROR_REASON_VALIDATION (date not in today..today+30, no or
-	// unknown slots, ALL_DAY with another slot, note too long or with
-	// control characters).
+	// unknown slots, ALL_DAY with another slot, note too long or with a
+	// control, line separator, bidirectional control or invisible
+	// character; emoji sequences with U+200D are allowed).
 	SetAvailability(context.Context, *SetAvailabilityRequest) (*SetAvailabilityResponse, error)
 	// DeleteAvailability deletes the caller's day. Deleting nothing succeeds.
 	//

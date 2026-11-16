@@ -1,5 +1,5 @@
 // Package availability holds "Boşum": the days a user is free, shown to all
-// of their friends and nobody else (issue #207, ADR-0028; Notion "Faz 2
+// of their friends and nobody else (issue #207, ADR-0029; Notion "Faz 2
 // (v2)" §3).
 //
 // Rules:
@@ -30,10 +30,10 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -45,7 +45,7 @@ import (
 )
 
 // Limits (Notion "Faz 2 (v2)" §3; also CHECKs and a trigger in core
-// migration 00023).
+// migration 00024).
 const (
 	// MaxDaysAhead: the last day that can be written is today + 30.
 	MaxDaysAhead = 30
@@ -138,14 +138,41 @@ func NormalizeSlots(in []Slot) ([]Slot, error) {
 }
 
 // NormalizeNote trims note; empty means none. It must be valid UTF-8, at
-// most MaxNoteLength characters and without control characters.
+// most MaxNoteLength characters and without a ForbiddenNoteRune.
 func NormalizeNote(note string) (string, error) {
 	note = strings.TrimSpace(note)
 	if !utf8.ValidString(note) || utf8.RuneCountInString(note) > MaxNoteLength ||
-		strings.ContainsFunc(note, unicode.IsControl) {
+		strings.ContainsFunc(note, ForbiddenNoteRune) {
 		return "", apperr.Validation("note")
 	}
 	return note, nil
+}
+
+// ForbiddenNoteRune reports the characters a note may not hold: control
+// characters (Cc), line and paragraph separators, bidirectional controls
+// (text that reads backwards, U+202E) and invisible characters. The zero
+// width joiner (U+200D), variation selectors and tag characters stay
+// allowed: emoji sequences use them. The database CHECK
+// user_availability_note (core migration 00024) lists exactly the same
+// characters; a test keeps the two in step.
+func ForbiddenNoteRune(r rune) bool {
+	switch {
+	case r <= 0x1f, r >= 0x7f && r <= 0x9f: // Cc
+		return true
+	case r == 0x00ad, r == 0x061c, r == 0x180e: // soft hyphen, Arabic letter mark, Mongolian vowel separator
+		return true
+	case r == 0x200b, r == 0x200c, r == 0x200e, r == 0x200f: // zero width space and non-joiner, LRM, RLM
+		return true
+	case r == 0x2028, r == 0x2029: // line and paragraph separators
+		return true
+	case r >= 0x202a && r <= 0x202e: // bidi embeddings and overrides
+		return true
+	case r >= 0x2060 && r <= 0x206f: // word joiner, invisible operators, bidi isolates
+		return true
+	case r == 0xfeff, r >= 0xfff9 && r <= 0xfffb: // BOM, interlinear annotation
+		return true
+	}
+	return false
 }
 
 // Set writes the caller's day, replacing what was there.
@@ -171,6 +198,11 @@ func (s *Service) Set(ctx context.Context, caller id.ID, date string, slots []Sl
 		Note: pgtype.Text{String: note, Valid: note != ""},
 	})
 	if err != nil {
+		if field := checkField(err); field != "" {
+			// Go and the database check the same rules; should they ever
+			// differ, the caller still gets a validation error, not a 500.
+			return Day{}, apperr.Validation(field)
+		}
 		return Day{}, fmt.Errorf("boş vakit: %w", err)
 	}
 	return dayOf(r.Day, r.Slots, r.Note, r.UpdatedAt), nil
@@ -277,5 +309,23 @@ func dayOf(d pgtype.Date, slots []string, note pgtype.Text, updated pgtype.Times
 	return Day{
 		Date:  time.Date(d.Time.Year(), d.Time.Month(), d.Time.Day(), 0, 0, 0, 0, time.UTC),
 		Slots: SlotsOf(slots), Note: note.String, UpdatedAt: updated.Time.UTC(),
+	}
+}
+
+// checkField maps a check_violation (23514) of user_availability to the
+// request field it is about; "" for any other error. The day window
+// trigger raises it without a constraint name.
+func checkField(err error) string {
+	var pg *pgconn.PgError
+	if !errors.As(err, &pg) || pg.Code != store.CodeCheckViolation {
+		return ""
+	}
+	switch pg.ConstraintName {
+	case "user_availability_note":
+		return "note"
+	case "user_availability_slots":
+		return "slots"
+	default:
+		return "date"
 	}
 }
