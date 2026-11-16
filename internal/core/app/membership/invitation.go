@@ -84,95 +84,110 @@ func (s *Service) InviteFriend(ctx context.Context, caller, tayfa, target id.ID)
 	}
 	var out Invitation
 	err := txn.WithActor(ctx, s.pool, caller, func(_ pgx.Tx, q *store.Queries) error {
-		t, _, err := s.actorFor(ctx, q, tayfa, caller, authz.InviteDirect, true)
-		if err != nil {
-			return err
-		}
-		if t.readOnly {
-			return apperr.ErrTayfaReadOnly
-		}
-		// The target must be a live user without a block between the two,
-		// and the caller's friend.
-		if _, err := q.GetLiveUserProfile(ctx, target.PG()); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return apperr.ErrUserNotFound
-			}
-			return fmt.Errorf("profil: %w", err)
-		}
-		blocked, err := social.IsBlocked(ctx, q, caller, target)
-		if err != nil {
-			return err
-		}
-		if blocked {
-			return apperr.ErrUserNotFound
-		}
-		friends, err := social.Friends(ctx, q, caller, target)
-		if err != nil {
-			return err
-		}
-		if !friends {
-			return apperr.ErrNotFriends
-		}
-		m, err := q.GetMembership(ctx, store.GetMembershipParams{TayfaID: tayfa.PG(), UserID: target.PG()})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-		case err != nil:
-			return fmt.Errorf("üyelik: %w", err)
-		default:
-			switch authz.Status(m.Status) {
-			case authz.StatusActive:
-				return apperr.ErrAlreadyMember
-			case authz.StatusInvited:
-				return apperr.ErrAlreadyInvited
-			default:
-				// Banned (the ban row stays) or a waiting join request.
-				return apperr.ErrInviteNotAllowed
-			}
-		}
-
-		if err := q.LockUserLimit(ctx, caller.PG()); err != nil {
-			return fmt.Errorf("sınır kilidi: %w", err)
-		}
-		n, err := q.CountRecentEventsByActor(ctx, store.CountRecentEventsByActorParams{
-			ActorID: caller.PG(), Type: EventInvited, Since: pgtype.Timestamptz{Time: s.now().Add(-social.LimitWindow), Valid: true},
-		})
-		if err != nil {
-			return fmt.Errorf("davet sayısı: %w", err)
-		}
-		if n >= DirectInvitesPerDay {
-			return apperr.ErrDirectInviteLimit
-		}
-
-		if err := q.CreateMembership(ctx, store.CreateMembershipParams{
-			TayfaID: tayfa.PG(), UserID: target.PG(), Role: authz.Member.String(), Status: string(authz.StatusInvited),
-			JoinedVia: "direct_invite", InvitedByUserID: caller.PG(),
-		}); err != nil {
-			return fmt.Errorf("davet: %w", err)
-		}
-		tf, err := q.GetTayfa(ctx, tayfa.PG())
-		if err != nil {
-			return fmt.Errorf("tayfa: %w", err)
-		}
-		// A new invitation: the earlier outcome no longer applies (issue #192).
-		if err := q.ClearInvitationOutcome(ctx, store.ClearInvitationOutcomeParams{TayfaID: tayfa.PG(), UserID: target.PG()}); err != nil {
-			return fmt.Errorf("davet sonucu: %w", err)
-		}
-		out = Invitation{TayfaID: tayfa, TayfaName: tf.Name, UserID: target, InviterID: caller, InvitedAt: s.now()}
-		if withI, err := withInterests(ctx, q, []Invitation{out}); err != nil {
-			return err
-		} else {
-			out = withI[0]
-		}
-		if err := s.invitationRecord(ctx, q, tayfa, caller, target, "member.invited", EventInvited); err != nil {
-			return err
-		}
-		// The invited user is not a member, so not one of notify's member
-		// audiences: the one recipient is named directly.
-		return notify.Write(ctx, q, notify.Request{
-			Type: notify.TypeTayfaInvitation, Tayfa: tayfa, Actor: caller, TargetType: notify.TargetTayfa, Target: tayfa,
-		}, []id.ID{target})
+		var err error
+		out, err = s.InviteFriendTx(ctx, q, caller, tayfa, target)
+		return err
 	})
 	return out, err
+}
+
+// InviteFriendTx is InviteFriend inside the caller's transaction q, which
+// must have been opened with txn.WithActor for caller (package instant,
+// ADR-0032 §2).
+func (s *Service) InviteFriendTx(ctx context.Context, q *store.Queries, caller, tayfa, target id.ID) (Invitation, error) {
+	if target == caller || target == (id.ID{}) {
+		return Invitation{}, apperr.Validation("user_id")
+	}
+	t, _, err := s.actorFor(ctx, q, tayfa, caller, authz.InviteDirect, true)
+	if err != nil {
+		return Invitation{}, err
+	}
+	if t.readOnly {
+		return Invitation{}, apperr.ErrTayfaReadOnly
+	}
+	// The target must be a live user without a block between the two,
+	// and the caller's friend.
+	if _, err := q.GetLiveUserProfile(ctx, target.PG()); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Invitation{}, apperr.ErrUserNotFound
+		}
+		return Invitation{}, fmt.Errorf("profil: %w", err)
+	}
+	blocked, err := social.IsBlocked(ctx, q, caller, target)
+	if err != nil {
+		return Invitation{}, err
+	}
+	if blocked {
+		return Invitation{}, apperr.ErrUserNotFound
+	}
+	friends, err := social.Friends(ctx, q, caller, target)
+	if err != nil {
+		return Invitation{}, err
+	}
+	if !friends {
+		return Invitation{}, apperr.ErrNotFriends
+	}
+	m, err := q.GetMembership(ctx, store.GetMembershipParams{TayfaID: tayfa.PG(), UserID: target.PG()})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return Invitation{}, fmt.Errorf("üyelik: %w", err)
+	default:
+		switch authz.Status(m.Status) {
+		case authz.StatusActive:
+			return Invitation{}, apperr.ErrAlreadyMember
+		case authz.StatusInvited:
+			return Invitation{}, apperr.ErrAlreadyInvited
+		default:
+			// Banned (the ban row stays) or a waiting join request.
+			return Invitation{}, apperr.ErrInviteNotAllowed
+		}
+	}
+
+	if err := q.LockUserLimit(ctx, caller.PG()); err != nil {
+		return Invitation{}, fmt.Errorf("sınır kilidi: %w", err)
+	}
+	n, err := q.CountRecentEventsByActor(ctx, store.CountRecentEventsByActorParams{
+		ActorID: caller.PG(), Type: EventInvited, Since: pgtype.Timestamptz{Time: s.now().Add(-social.LimitWindow), Valid: true},
+	})
+	if err != nil {
+		return Invitation{}, fmt.Errorf("davet sayısı: %w", err)
+	}
+	if n >= DirectInvitesPerDay {
+		return Invitation{}, apperr.ErrDirectInviteLimit
+	}
+
+	if err := q.CreateMembership(ctx, store.CreateMembershipParams{
+		TayfaID: tayfa.PG(), UserID: target.PG(), Role: authz.Member.String(), Status: string(authz.StatusInvited),
+		JoinedVia: "direct_invite", InvitedByUserID: caller.PG(),
+	}); err != nil {
+		return Invitation{}, fmt.Errorf("davet: %w", err)
+	}
+	tf, err := q.GetTayfa(ctx, tayfa.PG())
+	if err != nil {
+		return Invitation{}, fmt.Errorf("tayfa: %w", err)
+	}
+	// A new invitation: the earlier outcome no longer applies (issue #192).
+	if err := q.ClearInvitationOutcome(ctx, store.ClearInvitationOutcomeParams{TayfaID: tayfa.PG(), UserID: target.PG()}); err != nil {
+		return Invitation{}, fmt.Errorf("davet sonucu: %w", err)
+	}
+	out := Invitation{TayfaID: tayfa, TayfaName: tf.Name, UserID: target, InviterID: caller, InvitedAt: s.now()}
+	withI, err := withInterests(ctx, q, []Invitation{out})
+	if err != nil {
+		return Invitation{}, err
+	}
+	out = withI[0]
+	if err := s.invitationRecord(ctx, q, tayfa, caller, target, "member.invited", EventInvited); err != nil {
+		return Invitation{}, err
+	}
+	// The invited user is not a member, so not one of notify's member
+	// audiences: the one recipient is named directly.
+	if err := notify.Write(ctx, q, notify.Request{
+		Type: notify.TypeTayfaInvitation, Tayfa: tayfa, Actor: caller, TargetType: notify.TargetTayfa, Target: tayfa,
+	}, []id.ID{target}); err != nil {
+		return Invitation{}, err
+	}
+	return out, nil
 }
 
 // AcceptInvitation accepts the caller's invitation to tayfa: active when the

@@ -815,6 +815,16 @@ var expected = []struct {
 	{invited, ChannelMarkRead, false},
 	{banned, ChannelMarkRead, false},
 	{nonMember, ChannelMarkRead, false},
+	// TayfaConvert: never in a standard tayfa (TestInstantMatrix).
+	{admin, TayfaConvert, false},
+	{moderator, TayfaConvert, false},
+	{member, TayfaConvert, false},
+	{mutedMember, TayfaConvert, false},
+	{mutedModerator, TayfaConvert, false},
+	{pending, TayfaConvert, false},
+	{invited, TayfaConvert, false},
+	{banned, TayfaConvert, false},
+	{nonMember, TayfaConvert, false},
 }
 
 func TestAllowedMatrix(t *testing.T) {
@@ -1115,6 +1125,49 @@ func TestSettingsMatrix(t *testing.T) {
 		}
 		if got := AllowedIn(tt.who.m, tt.a, now, on); got != tt.want {
 			t.Errorf("ayar açık, %s / %s: AllowedIn = %v, %v bekleniyordu", tt.who.name, tt.a, got, tt.want)
+		}
+	}
+}
+
+// instantOverrides are the answers that differ in an instant tayfa
+// (ADR-0032 §3), written out by hand: subjects missing from an entry are
+// refused. Every other action answers as in expected.
+var instantOverrides = map[Action]map[string]bool{
+	TayfaUpdateSettings: {},
+	TayfaRotateJoinCode: {},
+	TayfaManageModules:  {},
+	EventCreate:         {},
+	MemberChangeRole:    {},
+	InviteCreate:        {admin.name: true},
+	InviteDirect:        {admin.name: true},
+	TayfaConvert:        {admin.name: true},
+}
+
+// TestInstantMatrix: the permission table of an instant tayfa, for every
+// role and action; the members_can_create_events setting does not reopen
+// EventCreate.
+func TestInstantMatrix(t *testing.T) {
+	for _, set := range []Settings{{Instant: true}, {Instant: true, MembersCanCreateEvents: true}} {
+		for _, tt := range expected {
+			want := tt.want
+			if o, ok := instantOverrides[tt.a]; ok {
+				want = o[tt.who.name]
+			}
+			if got := AllowedIn(tt.who.m, tt.a, now, set); got != want {
+				t.Errorf("anlık %+v, %s / %s: AllowedIn = %v, %v bekleniyordu", set, tt.who.name, tt.a, got, want)
+			}
+		}
+	}
+	for a := range instantRules {
+		if _, ok := instantOverrides[a]; !ok {
+			t.Errorf("%s anlık kurallarda var, beklenen tabloda yok", a)
+		}
+	}
+	// A muted organizer neither invites nor converts.
+	mutedAdmin := Membership{Role: Admin, Status: StatusActive, MutedUntil: now.Add(time.Hour)}
+	for _, a := range []Action{InviteCreate, InviteDirect, TayfaConvert} {
+		if AllowedIn(mutedAdmin, a, now, Settings{Instant: true}) {
+			t.Errorf("susturulmuş organizatör %s yapabiliyor", a)
 		}
 	}
 }

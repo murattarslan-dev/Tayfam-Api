@@ -18,6 +18,7 @@ import (
 // EventClient is core's EventService as the gateway uses it.
 type EventClient interface {
 	CreateEvent(ctx context.Context, in *corev1.CreateEventRequest, opts ...grpc.CallOption) (*corev1.CreateEventResponse, error)
+	CreateInstantEvent(ctx context.Context, in *corev1.CreateInstantEventRequest, opts ...grpc.CallOption) (*corev1.CreateInstantEventResponse, error)
 	UpdateEvent(ctx context.Context, in *corev1.UpdateEventRequest, opts ...grpc.CallOption) (*corev1.UpdateEventResponse, error)
 	CancelEvent(ctx context.Context, in *corev1.CancelEventRequest, opts ...grpc.CallOption) (*corev1.CancelEventResponse, error)
 	GetEvent(ctx context.Context, in *corev1.GetEventRequest, opts ...grpc.CallOption) (*corev1.GetEventResponse, error)
@@ -73,6 +74,7 @@ func registerEvents(mux *http.ServeMux, h coreHandlers) {
 	const one = ev + "/{event_id}"
 	mux.HandleFunc("GET "+ev, a(h.listEvents))
 	mux.HandleFunc("POST "+ev, a(h.createEvent))
+	mux.HandleFunc("POST /v1/instant-events", a(h.createInstantEvent))
 	mux.HandleFunc("GET "+one, a(h.getEvent))
 	mux.HandleFunc("PATCH "+one, a(h.updateEvent))
 	mux.HandleFunc("POST "+one+"/cancellation", a(h.cancelEvent))
@@ -310,15 +312,9 @@ type eventCreateBody struct {
 	CoverUploadID   string          `json:"cover_upload_id"`
 }
 
-func (h coreHandlers) createEvent(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	id, ok := pathUUID(w, r, "tayfa_id")
-	if !ok {
-		return
-	}
-	var b eventCreateBody
-	if !decodeLimit(w, r, &b, maxEventBody) {
-		return
-	}
+// request checks the body and converts it for core; ok is false for a bad
+// request.
+func (b eventCreateBody) request(tayfaID string) (*corev1.CreateEventRequest, bool) {
 	typ, okT := eventTypes.value(b.Type)
 	mode, okM := eventModes.value(b.Mode)
 	det, okD := b.details()
@@ -326,11 +322,10 @@ func (h coreHandlers) createEvent(ctx context.Context, w http.ResponseWriter, r 
 		!eventTitleOK(b.Title) || !eventDescOK(b.Description) || b.StartsAt.IsZero() || b.EndsAt.IsZero() ||
 		!pointOK(b.MeetingPoint) || !capacityOK(b.Capacity) || !validUUID(b.ClientRequestID) ||
 		(b.CoverUploadID != "" && !validUUID(b.CoverUploadID)) {
-		badRequest(w, r)
-		return
+		return nil, false
 	}
 	req := &corev1.CreateEventRequest{
-		TayfaId: id, Type: typ, Mode: mode, Title: b.Title, Description: b.Description,
+		TayfaId: tayfaID, Type: typ, Mode: mode, Title: b.Title, Description: b.Description,
 		StartTime: timestamppb.New(b.StartsAt), EndTime: timestamppb.New(b.EndsAt),
 		MeetingPointName: b.MeetingPointName, MeetingPoint: b.MeetingPoint.proto(),
 		City: b.City, District: b.District, OnlineUrl: b.OnlineURL,
@@ -340,10 +335,73 @@ func (h coreHandlers) createEvent(ctx context.Context, w http.ResponseWriter, r 
 	det.setCreate(req)
 	if rc := b.Recurrence; rc != nil {
 		if rc.RRule == "" || len(rc.RRule) > rruleMax || len(rc.TimeZone) > timeZoneMax {
+			return nil, false
+		}
+		req.Recurrence = &corev1.Recurrence{Rrule: rc.RRule, TimeZone: rc.TimeZone}
+	}
+	return req, true
+}
+
+// maxInstantInvitees is core's limit on friends invited with an instant
+// event (ADR-0032).
+const maxInstantInvitees = 10
+
+type instantEventBody struct {
+	Event          *eventCreateBody `json:"event"`
+	InviteeUserIDs []string         `json:"invitee_user_ids"`
+}
+
+type instantEventJSON struct {
+	Tayfa tayfaJSON `json:"tayfa"`
+	Event eventJSON `json:"event"`
+}
+
+// createInstantEvent opens an instant event: a hidden single-event tayfa
+// and its event (ADR-0032). It is not a tayfa creation: the per-IP tayfa
+// limit does not apply; core limits open instant events per user.
+func (h coreHandlers) createInstantEvent(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	var b instantEventBody
+	if !decodeLimit(w, r, &b, maxEventBody) {
+		return
+	}
+	if b.Event == nil || b.Event.Recurrence != nil || b.Event.CoverUploadID != "" || len(b.InviteeUserIDs) > maxInstantInvitees {
+		badRequest(w, r)
+		return
+	}
+	for _, u := range b.InviteeUserIDs {
+		if !validUUID(u) {
 			badRequest(w, r)
 			return
 		}
-		req.Recurrence = &corev1.Recurrence{Rrule: rc.RRule, TimeZone: rc.TimeZone}
+	}
+	er, ok := b.Event.request("")
+	if !ok {
+		badRequest(w, r)
+		return
+	}
+	resp, err := h.d.Events.CreateInstantEvent(ctx, &corev1.CreateInstantEventRequest{Event: er, InviteeUserIds: b.InviteeUserIDs})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := instantEventJSON{Tayfa: tayfaFrom(resp.GetTayfa()), Event: eventFrom(resp.GetEvent())}
+	w.Header().Set("Location", "/v1/tayfas/"+out.Tayfa.ID+"/events/"+out.Event.ID)
+	writeJSON(w, http.StatusCreated, out)
+}
+
+func (h coreHandlers) createEvent(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	id, ok := pathUUID(w, r, "tayfa_id")
+	if !ok {
+		return
+	}
+	var b eventCreateBody
+	if !decodeLimit(w, r, &b, maxEventBody) {
+		return
+	}
+	req, ok := b.request(id)
+	if !ok {
+		badRequest(w, r)
+		return
 	}
 	resp, err := h.d.Events.CreateEvent(ctx, req)
 	if err != nil {

@@ -115,6 +115,11 @@ type View struct {
 	UpdatedAt           time.Time
 	// CoverUploadID is the cover image; zero when there is none.
 	CoverUploadID id.ID
+	// Kind is access.KindStandard or access.KindInstant (ADR-0032).
+	Kind string
+	// InstantEventID is the single event of an instant tayfa; zero
+	// otherwise.
+	InstantEventID id.ID
 }
 
 // CreateInput is a create request.
@@ -186,7 +191,7 @@ func (s *Service) Create(ctx context.Context, user id.ID, in CreateInput) (View,
 		}
 
 		tayfaID = id.New()
-		if err := withJoinCode(ctx, tx, func(q *store.Queries, code string) error {
+		if err := WithJoinCode(ctx, tx, func(q *store.Queries, code string) error {
 			return q.CreateTayfa(ctx, store.CreateTayfaParams{
 				ID: tayfaID.PG(), Name: name, NameNormalized: normalized,
 				Description: text(desc), JoinCode: code, JoinPolicy: policy,
@@ -218,6 +223,10 @@ func (s *Service) Create(ctx context.Context, user id.ID, in CreateInput) (View,
 	}
 
 	v, _, err := s.get(ctx, user, tayfaID)
+	if replay && err == nil && v.Kind == access.KindInstant {
+		// The ID belongs to an instant event's request (ADR-0032).
+		return View{}, apperr.Validation("client_request_id")
+	}
 	if replay && errors.Is(err, apperr.ErrTayfaNotFound) {
 		// The first create's tayfa exists but the caller is no longer an
 		// active member: the request ID cannot be reused.
@@ -394,7 +403,7 @@ func (s *Service) SetModule(ctx context.Context, user, tayfa id.ID, module strin
 func (s *Service) RotateJoinCode(ctx context.Context, user, tayfa id.ID) (string, error) {
 	var code string
 	err := s.write(ctx, user, tayfa, authz.TayfaRotateJoinCode, func(q *store.Queries, tx pgx.Tx, _ access.Tayfa) error {
-		if err := withJoinCode(ctx, tx, func(q *store.Queries, c string) error {
+		if err := WithJoinCode(ctx, tx, func(q *store.Queries, c string) error {
 			n, err := q.SetTayfaJoinCode(ctx, store.SetTayfaJoinCodeParams{ID: tayfa.PG(), JoinCode: c})
 			if err == nil && n != 1 {
 				return apperr.ErrTayfaNotFound
@@ -475,6 +484,110 @@ func (s *Service) CancelDeletion(ctx context.Context, user, tayfa id.ID) error {
 	})
 }
 
+// ConvertInput is a "Bu ekiple tayfa kur" request (ADR-0032 §7): the
+// settings of the standard tayfa, with CreateInput's rules.
+type ConvertInput struct {
+	Name        string
+	Description string
+	Interests   []string
+	// JoinPolicy "" means JoinApproval.
+	JoinPolicy string
+}
+
+// auditConverted is the audit action of a conversion; its outbox event is
+// tayfa.updated with "kind" among the fields.
+const auditConverted = "tayfa.converted"
+
+// convertFields are the fields a conversion changes, in audit order.
+var convertFields = []string{"kind", FieldName, FieldDescription, FieldInterests, FieldJoinPolicy, "modules"}
+
+// Convert turns the caller's instant tayfa into a standard one: kind,
+// name, description, interests and join policy change, every module is
+// turned on and the inactivity clock starts again. Members, invitations,
+// the event and its channel stay. Only the admin (organizer) of an instant
+// tayfa that is not read-only may convert it (TayfaConvert), and it counts
+// as creating a tayfa: the daily creation limit applies.
+func (s *Service) Convert(ctx context.Context, user, tayfa id.ID, in ConvertInput) (View, error) {
+	name, normalized, err := cleanName(in.Name)
+	if err != nil {
+		return View{}, err
+	}
+	desc, err := cleanDescription(in.Description)
+	if err != nil {
+		return View{}, err
+	}
+	interests, err := cleanInterests(in.Interests)
+	if err != nil {
+		return View{}, err
+	}
+	policy := in.JoinPolicy
+	if policy == "" {
+		policy = JoinApproval
+	}
+	if !validJoinPolicy(policy) {
+		return View{}, apperr.Validation(FieldJoinPolicy)
+	}
+
+	now := s.now()
+	err = txn.WithActor(ctx, s.cfg.Pool, user, func(tx pgx.Tx, q *store.Queries) error {
+		// The same lock as Create: the daily limit cannot be raced by a
+		// create and a conversion together.
+		if err := q.LockTayfaCreation(ctx, "tayfa_create:"+user.String()); err != nil {
+			return fmt.Errorf("oluşturma kilidi: %w", err)
+		}
+		t, m, err := access.Load(ctx, q, tayfa, user, true)
+		if err != nil {
+			return err
+		}
+		if err := access.AuthorizeIn(m, authz.TayfaConvert, now, access.Settings(t)); err != nil {
+			return err
+		}
+		// The organizer is the only admin of an instant tayfa; the limit is
+		// counted on created_by.
+		if !t.CreatedBy.Valid || id.ID(t.CreatedBy.Bytes) != user {
+			return apperr.ErrPermissionDenied
+		}
+		if access.ReadOnly(t) {
+			return apperr.ErrTayfaReadOnly
+		}
+		n, err := q.CountTayfasCreatedSince(ctx, store.CountTayfasCreatedSinceParams{CreatedBy: user.PG(), Since: ts(now.Add(-createWindow))})
+		if err != nil {
+			return fmt.Errorf("günlük sınır: %w", err)
+		}
+		if n > 0 {
+			return apperr.ErrTayfaCreateLimit
+		}
+		if n, err := q.ConvertInstantTayfa(ctx, store.ConvertInstantTayfaParams{
+			ID: tayfa.PG(), ConvertedAt: ts(now), Name: name, NameNormalized: normalized,
+			Description: text(desc), JoinPolicy: policy,
+		}); err != nil {
+			return fmt.Errorf("dönüştürme: %w", err)
+		} else if n != 1 {
+			return apperr.ErrTayfaNotFound
+		}
+		if err := q.DeleteTayfaInterests(ctx, tayfa.PG()); err != nil {
+			return fmt.Errorf("ilgi alanları: %w", err)
+		}
+		for _, v := range interests {
+			if err := q.AddTayfaInterest(ctx, store.AddTayfaInterestParams{TayfaID: tayfa.PG(), EventType: v}); err != nil {
+				return fmt.Errorf("ilgi alanı: %w", err)
+			}
+		}
+		for _, mod := range Modules {
+			if err := q.SetTayfaModule(ctx, store.SetTayfaModuleParams{TayfaID: tayfa.PG(), Module: mod, Enabled: true}); err != nil {
+				return fmt.Errorf("modül: %w", err)
+			}
+		}
+		return record(ctx, q, tayfa, user, auditConverted, EventUpdated, map[string]any{"fields": convertFields})
+	})
+	if err != nil {
+		return View{}, err
+	}
+	s.cfg.Log.InfoContext(ctx, "anlık tayfa dönüştürüldü", slog.String("tayfa_id", tayfa.String()), slog.String("user_id", user.String()))
+	v, _, err := s.get(ctx, user, tayfa)
+	return v, err
+}
+
 type writeFunc func(q *store.Queries, tx pgx.Tx, t access.Tayfa) error
 
 // write runs fn for an active member allowed to perform a on a tayfa that is
@@ -497,7 +610,7 @@ func (s *Service) writeChecked(ctx context.Context, user, tayfa id.ID, a authz.A
 		if err != nil {
 			return err
 		}
-		if err := access.Authorize(m, a, now); err != nil {
+		if err := access.AuthorizeIn(m, a, now, access.Settings(t)); err != nil {
 			return err
 		}
 		if err := check(t); err != nil {

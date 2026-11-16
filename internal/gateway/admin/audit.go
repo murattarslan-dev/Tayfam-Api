@@ -188,6 +188,8 @@ func jobLabel(job string) string {
 	switch job {
 	case "tayfa-cleanup":
 		return "Hareketsiz tayfa temizliği"
+	case "instant-archive":
+		return "Anlık etkinlik arşivi (7 gün)"
 	case "tayfa-deletion":
 		return "Tayfa silme (72 saat bekleme)"
 	case "purge":
