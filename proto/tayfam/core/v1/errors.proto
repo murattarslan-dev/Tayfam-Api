@@ -275,4 +275,8 @@ enum ErrorReason {
   ERROR_REASON_UPLOAD_RATE_LIMITED = 124;
   // RESOURCE_EXHAUSTED. The caller's stored media would exceed the quota.
   ERROR_REASON_UPLOAD_QUOTA_EXCEEDED = 125;
+  // Instant events (ADR-0032).
+  // RESOURCE_EXHAUSTED. The caller already organizes 3 open instant events
+  // (not ended, not cancelled).
+  ERROR_REASON_INSTANT_EVENT_LIMIT = 130;
 }

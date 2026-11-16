@@ -258,6 +258,10 @@ const (
 	ErrorReason_ERROR_REASON_UPLOAD_RATE_LIMITED ErrorReason = 124
 	// RESOURCE_EXHAUSTED. The caller's stored media would exceed the quota.
 	ErrorReason_ERROR_REASON_UPLOAD_QUOTA_EXCEEDED ErrorReason = 125
+	// Instant events (ADR-0032).
+	// RESOURCE_EXHAUSTED. The caller already organizes 3 open instant events
+	// (not ended, not cancelled).
+	ErrorReason_ERROR_REASON_INSTANT_EVENT_LIMIT ErrorReason = 130
 )
 
 // Enum value maps for ErrorReason.
@@ -337,6 +341,7 @@ var (
 		123: "ERROR_REASON_UPLOAD_NOT_RECEIVED",
 		124: "ERROR_REASON_UPLOAD_RATE_LIMITED",
 		125: "ERROR_REASON_UPLOAD_QUOTA_EXCEEDED",
+		130: "ERROR_REASON_INSTANT_EVENT_LIMIT",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                 0,
@@ -413,6 +418,7 @@ var (
 		"ERROR_REASON_UPLOAD_NOT_RECEIVED":         123,
 		"ERROR_REASON_UPLOAD_RATE_LIMITED":         124,
 		"ERROR_REASON_UPLOAD_QUOTA_EXCEEDED":       125,
+		"ERROR_REASON_INSTANT_EVENT_LIMIT":         130,
 	}
 )
 
@@ -447,7 +453,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xbc\x14\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xe3\x14\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -523,7 +529,8 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\x1aERROR_REASON_UPLOAD_IN_USE\x10z\x12$\n" +
 	" ERROR_REASON_UPLOAD_NOT_RECEIVED\x10{\x12$\n" +
 	" ERROR_REASON_UPLOAD_RATE_LIMITED\x10|\x12&\n" +
-	"\"ERROR_REASON_UPLOAD_QUOTA_EXCEEDED\x10}B\xbd\x01\n" +
+	"\"ERROR_REASON_UPLOAD_QUOTA_EXCEEDED\x10}\x12%\n" +
+	" ERROR_REASON_INSTANT_EVENT_LIMIT\x10\x82\x01B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

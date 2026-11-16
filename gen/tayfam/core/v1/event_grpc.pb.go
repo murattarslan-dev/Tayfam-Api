@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	EventService_CreateEvent_FullMethodName         = "/tayfam.core.v1.EventService/CreateEvent"
+	EventService_CreateInstantEvent_FullMethodName  = "/tayfam.core.v1.EventService/CreateInstantEvent"
 	EventService_UpdateEvent_FullMethodName         = "/tayfam.core.v1.EventService/UpdateEvent"
 	EventService_CancelEvent_FullMethodName         = "/tayfam.core.v1.EventService/CancelEvent"
 	EventService_GetEvent_FullMethodName            = "/tayfam.core.v1.EventService/GetEvent"
@@ -93,6 +94,20 @@ type EventServiceClient interface {
 	//
 	// Errors: common, ERROR_REASON_VALIDATION.
 	CreateEvent(ctx context.Context, in *CreateEventRequest, opts ...grpc.CallOption) (*CreateEventResponse, error)
+	// CreateInstantEvent creates an instant event (ADR-0032): a hidden tayfa
+	// of kind TAYFA_KIND_INSTANT with the caller as its only admin and this
+	// single event, in one transaction. Only the events module is on. The
+	// invitees get direct invitations like InviteFriend (they must be the
+	// caller's friends). Any signed-in user may call it; a caller may
+	// organize at most 3 open instant events at a time (not ended, not
+	// cancelled). It does not count toward the tayfa creation limits. A
+	// repeat with the same client_request_id by the same caller returns the
+	// tayfa and event created the first time and creates nothing.
+	//
+	// Errors: ERROR_REASON_VALIDATION, ERROR_REASON_INSTANT_EVENT_LIMIT,
+	// ERROR_REASON_USER_NOT_FOUND, ERROR_REASON_NOT_FRIENDS,
+	// ERROR_REASON_DIRECT_INVITE_LIMIT.
+	CreateInstantEvent(ctx context.Context, in *CreateInstantEventRequest, opts ...grpc.CallOption) (*CreateInstantEventResponse, error)
 	// UpdateEvent changes the fields named in update_mask. Raising the
 	// capacity (or removing it) moves the oldest waitlisted RSVPs to GOING in
 	// the same transaction; lowering it below the current GOING count moves
@@ -289,6 +304,16 @@ func (c *eventServiceClient) CreateEvent(ctx context.Context, in *CreateEventReq
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CreateEventResponse)
 	err := c.cc.Invoke(ctx, EventService_CreateEvent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *eventServiceClient) CreateInstantEvent(ctx context.Context, in *CreateInstantEventRequest, opts ...grpc.CallOption) (*CreateInstantEventResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateInstantEventResponse)
+	err := c.cc.Invoke(ctx, EventService_CreateInstantEvent_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -582,6 +607,20 @@ type EventServiceServer interface {
 	//
 	// Errors: common, ERROR_REASON_VALIDATION.
 	CreateEvent(context.Context, *CreateEventRequest) (*CreateEventResponse, error)
+	// CreateInstantEvent creates an instant event (ADR-0032): a hidden tayfa
+	// of kind TAYFA_KIND_INSTANT with the caller as its only admin and this
+	// single event, in one transaction. Only the events module is on. The
+	// invitees get direct invitations like InviteFriend (they must be the
+	// caller's friends). Any signed-in user may call it; a caller may
+	// organize at most 3 open instant events at a time (not ended, not
+	// cancelled). It does not count toward the tayfa creation limits. A
+	// repeat with the same client_request_id by the same caller returns the
+	// tayfa and event created the first time and creates nothing.
+	//
+	// Errors: ERROR_REASON_VALIDATION, ERROR_REASON_INSTANT_EVENT_LIMIT,
+	// ERROR_REASON_USER_NOT_FOUND, ERROR_REASON_NOT_FRIENDS,
+	// ERROR_REASON_DIRECT_INVITE_LIMIT.
+	CreateInstantEvent(context.Context, *CreateInstantEventRequest) (*CreateInstantEventResponse, error)
 	// UpdateEvent changes the fields named in update_mask. Raising the
 	// capacity (or removing it) moves the oldest waitlisted RSVPs to GOING in
 	// the same transaction; lowering it below the current GOING count moves
@@ -777,6 +816,9 @@ type UnimplementedEventServiceServer struct{}
 func (UnimplementedEventServiceServer) CreateEvent(context.Context, *CreateEventRequest) (*CreateEventResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateEvent not implemented")
 }
+func (UnimplementedEventServiceServer) CreateInstantEvent(context.Context, *CreateInstantEventRequest) (*CreateInstantEventResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateInstantEvent not implemented")
+}
 func (UnimplementedEventServiceServer) UpdateEvent(context.Context, *UpdateEventRequest) (*UpdateEventResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateEvent not implemented")
 }
@@ -884,6 +926,24 @@ func _EventService_CreateEvent_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(EventServiceServer).CreateEvent(ctx, req.(*CreateEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EventService_CreateInstantEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateInstantEventRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).CreateInstantEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_CreateInstantEvent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).CreateInstantEvent(ctx, req.(*CreateInstantEventRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1330,6 +1390,10 @@ var EventService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateEvent",
 			Handler:    _EventService_CreateEvent_Handler,
+		},
+		{
+			MethodName: "CreateInstantEvent",
+			Handler:    _EventService_CreateInstantEvent_Handler,
 		},
 		{
 			MethodName: "UpdateEvent",
