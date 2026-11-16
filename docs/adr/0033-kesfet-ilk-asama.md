@@ -80,9 +80,11 @@ yalnızca olgu sayılarını döndürür.
 - **Güvenlik kişisinin ayrı bayrağı: `SAFETY_CONTACT_ENABLED`** (`true` /
   `false`, **varsayılan `true`**; platform sahibi 2026-11-16). Güvenlik
   kişisi Keşfet'e bağlı değildir, bütün yüz yüze etkinliklerde kullanılır
-  (yürüyüş alarmının genellemesi). Kapalıyken seçme, okuma ve paylaşılanlar
-  listesi `FEATURE_DISABLED` döner. **"Döndüm" ve kaldırma hiçbir bayrağa
-  bağlı değildir** (§10).
+  (yürüyüş alarmının genellemesi). Kapalıyken seçme (yeni kayıt ya da
+  değiştirme), kaydı olmayanın okuması ve paylaşılanlar listesi
+  `FEATURE_DISABLED` döner. **Kişinin kendi mevcut kaydını okuması,
+  "Döndüm" ve kaldırma hiçbir bayrağa bağlı değildir** (§10; okuma
+  2026-11-16 ekiyle, issue #221).
 - **Alarm işi bayraklardan bağımsızdır:** bayrak kapalıyken yeni güvenlik
   kişisi seçilemez, ama bayrak sonradan kapatılırsa önceden seçilmiş
   kişilere alarm yine gider (bir güvenlik sinyali yarıda kesilmez).
@@ -331,6 +333,20 @@ Mevcut panel uçları ve sayfaları altında ("Keşfet" sekmesi):
   satırına, etkinlik bu tayfanınsa, dokunurlar; başka hiçbir şey okumaz ve
   yetki vermezler. Gerekçe: kurulmuş bir güvenlik ağı her zaman
   kapatılabilmeli, yoksa güvenlik kişisine yanlış alarm gider.
+- **Kendi kaydını okuma da bayrağa bağlı değildir** (2026-11-16 eki,
+  issue #221; platform sahibi açık sorularda mimari oturumunun önerisini
+  uygulamaya yetki verdi): `GetSafetyContact` önce çağıranın kendi
+  satırını, etkinlik bu tayfanınsa, okur ve varsa bayrak, üyelik ve modül
+  aramadan döndürür; "döndüm" ile aynı koşullar. Aksi halde bayrak
+  sonradan kapatılınca istemci kartı gizler, kişi "döndüm" diyemez ve
+  alarm işi (bayraksız) seçilen kişiye yanlış alarm gönderir. Sorgu
+  yalnızca `user_id = çağıran` satırını seçer; başkasının kaydı, başka
+  tayfa üzerinden okuma ya da etkinlik ayrıntısı dönmez. Kaydı yoksa eski
+  davranış: bayrak kapalıyken `FEATURE_DISABLED`, açıkken üyelik ve
+  etkinlik kontrolleri. Seçme ve değiştirme bayrağa bağlı kalır.
+  Değerlendirilen seçenek: `feature-disabled` cevabına mevcut kaydı
+  eklemek; reddedildi, çünkü hata cevabına veri koymak sözleşmeyi
+  bulandırır ve istemci iki yolu ayrı ayrı işlemek zorunda kalır.
 - **Alarm** (`safety-alerts` işi, dakikada bir; yürüyüş alarmının modeli):
   `returned_at` yok, `alert_sent_at` yok ve `ends_at + grace_minutes`
   geçmişse **yalnızca seçilen kişiye** `safety_alert` bildirimi gider ve
@@ -426,9 +442,11 @@ bağlıdır.
 | `POST /v1/discover/tayfas/{tayfa_id}/join` | `JoinFromDiscover` | evet |
 | `GET` / `PUT /v1/tayfas/{tayfa_id}/discover` | `GetTayfaDiscover` / `SetTayfaDiscover` | hayır |
 | `GET` / `PUT /v1/tayfas/{tayfa_id}/events/{event_id}/feedback` | `GetEventFeedback` / `SetEventFeedback` | evet |
-| `GET` / `PUT` / `DELETE /v1/tayfas/{tayfa_id}/events/{event_id}/safety-contact` | `GetSafetyContact` / `SetSafetyContact` / `ClearSafetyContact` | evet |
-| `POST /v1/tayfas/{tayfa_id}/events/{event_id}/safety-contact/return` | `MarkReturned` | evet |
-| `GET /v1/me/safety-shares` | `ListSafetyShares` | evet |
+| `GET /v1/tayfas/{tayfa_id}/events/{event_id}/safety-contact` | `GetSafetyContact` | `SAFETY_CONTACT_ENABLED`; kendi mevcut kaydı bayraksız döner (§10) |
+| `PUT /v1/tayfas/{tayfa_id}/events/{event_id}/safety-contact` | `SetSafetyContact` | `SAFETY_CONTACT_ENABLED` |
+| `DELETE /v1/tayfas/{tayfa_id}/events/{event_id}/safety-contact` | `ClearSafetyContact` | hayır (§10) |
+| `POST /v1/tayfas/{tayfa_id}/events/{event_id}/safety-contact/return` | `MarkReturned` | hayır (§10) |
+| `GET /v1/me/safety-shares` | `ListSafetyShares` | `SAFETY_CONTACT_ENABLED` |
 | Panel "Keşfet" sekmesi | `AdminService.ListDiscoverQueue` / `ApproveDiscover` / `RejectDiscover` | hayır |
 
 Yeni hata kodları: `FEATURE_DISABLED` (404 `feature-disabled`),

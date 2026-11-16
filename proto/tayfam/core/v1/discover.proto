@@ -86,7 +86,11 @@ service DiscoverService {
   rpc SetEventFeedback(SetEventFeedbackRequest) returns (SetEventFeedbackResponse);
 
   // GetSafetyContact returns the caller's safety contact for the event;
-  // an empty contact when there is none.
+  // an empty contact when there is none. The caller's own existing row of
+  // an event of the tayfa is returned whatever the flag, membership or
+  // module (like MarkReturned), so "back" can always be marked; it returns
+  // nothing but that row. Without a row: ERROR_REASON_FEATURE_DISABLED
+  // while SAFETY_CONTACT_ENABLED is off, else the usual checks.
   //
   // Errors: ERROR_REASON_FEATURE_DISABLED, ERROR_REASON_TAYFA_NOT_FOUND,
   // ERROR_REASON_EVENT_NOT_FOUND.

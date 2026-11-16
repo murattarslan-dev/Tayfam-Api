@@ -410,6 +410,47 @@ func (q *Queries) GetEventFeedback(ctx context.Context, arg GetEventFeedbackPara
 	return i, err
 }
 
+const getOwnSafetyContact = `-- name: GetOwnSafetyContact :one
+SELECT c.contact_user_id, c.grace_minutes, c.returned_at, c.alert_sent_at,
+       p.display_name, p.avatar_upload_id
+FROM event_safety_contacts c
+JOIN events e ON e.id = c.event_id
+LEFT JOIN user_profiles p ON p.user_id = c.contact_user_id AND p.deleted_at IS NULL
+WHERE c.event_id = $1 AND c.user_id = $2 AND e.tayfa_id = $3
+`
+
+type GetOwnSafetyContactParams struct {
+	EventID pgtype.UUID
+	UserID  pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+type GetOwnSafetyContactRow struct {
+	ContactUserID  pgtype.UUID
+	GraceMinutes   int32
+	ReturnedAt     pgtype.Timestamptz
+	AlertSentAt    pgtype.Timestamptz
+	DisplayName    pgtype.Text
+	AvatarUploadID pgtype.UUID
+}
+
+// Kişinin kendi satırını okuma, etkinlik bu tayfanınsa. Kurulmuş bir
+// güvenlik ağı her zaman görülebilmeli ki "döndüm" denebilsin: üyelik,
+// modül ve bayrak aranmaz; yalnızca çağıranın satırı döner (ADR-0033 §10).
+func (q *Queries) GetOwnSafetyContact(ctx context.Context, arg GetOwnSafetyContactParams) (GetOwnSafetyContactRow, error) {
+	row := q.db.QueryRow(ctx, getOwnSafetyContact, arg.EventID, arg.UserID, arg.TayfaID)
+	var i GetOwnSafetyContactRow
+	err := row.Scan(
+		&i.ContactUserID,
+		&i.GraceMinutes,
+		&i.ReturnedAt,
+		&i.AlertSentAt,
+		&i.DisplayName,
+		&i.AvatarUploadID,
+	)
+	return i, err
+}
+
 const getOwnSafetyContactForUpdate = `-- name: GetOwnSafetyContactForUpdate :one
 SELECT c.alert_sent_at
 FROM event_safety_contacts c

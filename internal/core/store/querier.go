@@ -508,6 +508,10 @@ type Querier interface {
 	GetLiveUserProfile(ctx context.Context, userID pgtype.UUID) (GetLiveUserProfileRow, error)
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
 	GetOwnExport(ctx context.Context, arg GetOwnExportParams) (Upload, error)
+	// Kişinin kendi satırını okuma, etkinlik bu tayfanınsa. Kurulmuş bir
+	// güvenlik ağı her zaman görülebilmeli ki "döndüm" denebilsin: üyelik,
+	// modül ve bayrak aranmaz; yalnızca çağıranın satırı döner (ADR-0033 §10).
+	GetOwnSafetyContact(ctx context.Context, arg GetOwnSafetyContactParams) (GetOwnSafetyContactRow, error)
 	// Kişinin kendi satırı, etkinlik bu tayfanınsa. Kaldırma ve "döndüm"
 	// yalnızca kendi satırına dokunur; üyelik, modül ve bayrak aranmaz
 	// (ADR-0033 §10).

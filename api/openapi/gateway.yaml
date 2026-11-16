@@ -4524,7 +4524,13 @@ paths:
     get:
       operationId: getSafetyContact
       summary: Bu etkinlik için güvenlik kişiniz
-      description: Seçilmemişse `contact` yoktur.
+      description: |
+        Seçilmemişse `contact` yoktur. Seçilmiş bir kaydınız varsa sunucu
+        bayrağı (`SAFETY_CONTACT_ENABLED`) kapalıyken, tayfadan ayrıldıktan
+        sonra ya da etkinlik modülü kapalıyken de döner, böylece "Döndüm"
+        her zaman gösterilebilir; yalnızca kendi kaydınızı döndürür. Kaydınız
+        yokken bayrak kapalıysa 404 `feature-disabled` (yeni kayıt
+        oluşturulamaz).
       responses:
         "200":
           description: Güvenlik kişisi
