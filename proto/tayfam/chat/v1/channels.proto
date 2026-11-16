@@ -168,6 +168,20 @@ service ChannelService {
   // opener, who cannot remove themself. Removing someone who is not in it
   // changes nothing.
   rpc RemoveChannelMember(RemoveChannelMemberRequest) returns (RemoveChannelMemberResponse);
+
+  // VerifyChannelMessageForReport answers core's question when the caller
+  // reports a channel message (core ReportService.CreateReport with
+  // REPORT_TARGET_TYPE_CHANNEL_MESSAGE; issue #205, ADR-0031): core
+  // forwards the reporter's own token. The caller must be able to read the
+  // message's channel by the same rule as ListMessages (an active member of
+  // the tayfa in the channel's audience: members, staff, event or
+  // selected), and the message must be in tayfa_id and not deleted. The
+  // answer is the message as the caller sees it, so the report keeps what
+  // was reported even if the author deletes it later; it is nothing the
+  // caller could not read already. A message whose author's account was
+  // deleted, and anything else, is ERROR_REASON_MESSAGE_NOT_FOUND. The
+  // caller's own message is answered; core refuses it.
+  rpc VerifyChannelMessageForReport(VerifyChannelMessageForReportRequest) returns (VerifyChannelMessageForReportResponse);
 }
 
 enum ChannelVisibility {
@@ -424,3 +438,21 @@ message RemoveChannelMemberRequest {
 }
 
 message RemoveChannelMemberResponse {}
+
+message VerifyChannelMessageForReportRequest {
+  string tayfa_id = 1;
+  string message_id = 2;
+}
+
+message VerifyChannelMessageForReportResponse {
+  string channel_id = 1;
+  string author_user_id = 2;
+  MessageKind kind = 3;
+  // TEXT: the body.
+  string body = 4;
+  // PHOTO: the photo's upload ID in core.
+  string photo_upload_id = 5;
+  // PLACE: the shared place.
+  Place place = 6;
+  google.protobuf.Timestamp create_time = 7;
+}

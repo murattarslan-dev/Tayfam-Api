@@ -501,6 +501,26 @@ func (q *Queries) GetReportEvidenceUpload(ctx context.Context, arg GetReportEvid
 	return i, err
 }
 
+const getReportedMessagePhotoUpload = `-- name: GetReportedMessagePhotoUpload :one
+SELECT r2_key FROM uploads
+WHERE id = $1 AND purpose = 'chat_photo' AND status = 'ready'
+  AND attached_type = 'channel_message' AND attached_id = $2
+`
+
+type GetReportedMessagePhotoUploadParams struct {
+	ID        pgtype.UUID
+	MessageID pgtype.UUID
+}
+
+// Platform panelinde şikâyet edilen kanal mesajının fotoğrafı (ADR-0031):
+// şikâyetin kaydettiği upload_id, hâlâ o mesaja bağlı, hazır chat_photo.
+func (q *Queries) GetReportedMessagePhotoUpload(ctx context.Context, arg GetReportedMessagePhotoUploadParams) (string, error) {
+	row := q.db.QueryRow(ctx, getReportedMessagePhotoUpload, arg.ID, arg.MessageID)
+	var r2_key string
+	err := row.Scan(&r2_key)
+	return r2_key, err
+}
+
 const getReportedPhotoUpload = `-- name: GetReportedPhotoUpload :one
 SELECT r2_key, full_type::text AS full_type FROM uploads
 WHERE id = $1 AND purpose = 'event_photo' AND status = 'ready'

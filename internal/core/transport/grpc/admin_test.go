@@ -21,6 +21,16 @@ import (
 // addresses, IPs, devices and tokens; and no way to act as a user.
 var forbidden = regexp.MustCompile(`(^|_)(lat|lng|latitude|longitude|location|coordinates?|meeting|votes?|voters?|birth|email|ip|device|token|password|impersonat\w*|act_as|on_behalf)($|_)`)
 
+// reportedContent are the only fields allowed to match forbidden: a place a
+// reported channel message shared is content the author chose to share,
+// not anyone's location (ADR-0008), and the panel sees reported content
+// only (Notion "Panelin göremedikleri"; platform owner, 2026-11-16;
+// ADR-0031). Nothing else may be added here.
+var reportedContent = map[protoreflect.FullName]bool{
+	"tayfam.core.v1.ReportedPlace.latitude":  true,
+	"tayfam.core.v1.ReportedPlace.longitude": true,
+}
+
 // TestPanelContractsCannotSee walks every request and response message of
 // core's AdminService and identity's AdminUserService and AdminAuditService,
 // nested ones too.
@@ -35,7 +45,7 @@ func TestPanelContractsCannotSee(t *testing.T) {
 		fs := m.Fields()
 		for i := range fs.Len() {
 			f := fs.Get(i)
-			if forbidden.MatchString(string(f.Name())) {
+			if forbidden.MatchString(string(f.Name())) && !reportedContent[f.FullName()] {
 				t.Errorf("%s.%s panel sözleşmesinde olmamalı", m.FullName(), f.Name())
 			}
 			if f.Message() != nil {

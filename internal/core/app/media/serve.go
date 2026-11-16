@@ -194,6 +194,28 @@ func canView(viewer id.ID, r store.ListMediaForViewerRow, now time.Time) (bool, 
 // photo works (ADR-0028 §5).
 const ReportedPhotoLinkTTL = 5 * time.Minute
 
+// ReportedMessagePhotoURL signs a short GET link to a reported channel
+// message's photo for the platform panel (ADR-0031): only the upload the
+// report recorded, still a ready chat_photo attached to that message.
+// Gone (the author deleted the message, or it was purged) is ok = false.
+func (s *Service) ReportedMessagePhotoURL(ctx context.Context, message, upload id.ID) (link string, expires time.Time, ok bool, err error) {
+	if !s.Enabled() {
+		return "", time.Time{}, false, nil
+	}
+	key, err := s.q.GetReportedMessagePhotoUpload(ctx, store.GetReportedMessagePhotoUploadParams{ID: upload.PG(), MessageID: message.PG()})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", time.Time{}, false, nil
+	case err != nil:
+		return "", time.Time{}, false, fmt.Errorf("şikâyet edilen mesaj fotoğrafı: %w", err)
+	}
+	p, err := s.cfg.Store.PresignGet(mediaKey(key, KindFull), ReportedPhotoLinkTTL)
+	if err != nil {
+		return "", time.Time{}, false, fmt.Errorf("şikâyet edilen mesaj fotoğrafı linki: %w", err)
+	}
+	return p.URL, p.Expires.UTC(), true, nil
+}
+
 // ReportedPhotoURL signs a short GET link to the full variant of a READY
 // album photo upload for the platform panel. Only the admin service calls
 // it, with the upload ID it read from a report escalated to the platform

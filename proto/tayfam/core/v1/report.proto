@@ -118,8 +118,7 @@ service ReportService {
   rpc ResolveReport(ResolveReportRequest) returns (ResolveReportResponse);
 }
 
-// ReportTargetType is what a report is about. Channel messages are not
-// reportable yet.
+// ReportTargetType is what a report is about.
 enum ReportTargetType {
   REPORT_TARGET_TYPE_UNSPECIFIED = 0;
   // target_id is a user ID: an active member of the tayfa.
@@ -143,6 +142,17 @@ enum ReportTargetType {
   // target_id is an event album photo (issue #206, ADR-0028); the subject
   // is its uploader.
   REPORT_TARGET_TYPE_EVENT_PHOTO = 10;
+  // target_id is a channel message ID (issue #205, ADR-0031): a text, photo
+  // or place message of a channel of tayfa_id. core asks chat with the
+  // reporter's own token (ChannelService.VerifyChannelMessageForReport)
+  // whether the reporter can read the message (the channel's audience
+  // included) and keeps the message as it was then, for the platform only;
+  // anything the reporter cannot read is
+  // ERROR_REASON_REPORT_TARGET_NOT_FOUND, the reporter's own message
+  // ERROR_REASON_VALIDATION (field target_id). Goes to the tayfa's queue
+  // like other content; content_removed means the message is no longer
+  // visible (deleted or hidden by moderation).
+  REPORT_TARGET_TYPE_CHANNEL_MESSAGE = 11;
 }
 
 // ReportReason follows the community rules (Notion "Topluluk Kuralları").
@@ -232,6 +242,10 @@ message ModerationReport {
   google.protobuf.Timestamp create_time = 11;
   google.protobuf.Timestamp resolve_time = 12;
   ReportPriority priority = 13;
+  // Only for REPORT_TARGET_TYPE_CHANNEL_MESSAGE: the message's channel, to
+  // open it. Moderators who cannot read the channel (an event or selected
+  // channel they are not in) cannot open or hide it either.
+  string channel_id = 14;
 }
 
 enum ReportPriority {

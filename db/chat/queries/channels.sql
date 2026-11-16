@@ -156,6 +156,15 @@ RETURNING id, photo_upload_id;
 -- Görme kararı (MessageMediaService, issue #205): fotoğrafın bağlı olduğu
 -- mesaj ve kanalı. Silinmiş mesaj ve arşivlenmiş kanal da döner; karar
 -- uygulamadadır (silinmiş mesajın fotoğrafı görünmez).
+-- Şikâyet edilen kanal mesajı (issue #205, ADR-0031): kimliğiyle ve
+-- kanalının tayfasıyla; erişim uygulamada denetlenir.
+-- name: GetChannelMessageForReport :one
+SELECT m.id, m.channel_id, m.author_id, m.body_encrypted, m.key_version, m.created_at, m.deleted_at, m.deleted_by,
+       m.kind, m.photo_upload_id, ch.tayfa_id
+FROM channel_messages m
+JOIN channels ch ON ch.id = m.channel_id
+WHERE m.id = @id;
+
 -- name: GetChannelPhotoMessage :one
 SELECT m.channel_id, ch.tayfa_id, m.photo_upload_id, m.deleted_at
 FROM channel_messages m

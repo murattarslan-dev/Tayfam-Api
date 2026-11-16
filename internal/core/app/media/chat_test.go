@@ -469,3 +469,34 @@ func (e *env) blobReady(t *testing.T, user id.ID) id.ID {
 	must(t, err)
 	return u.ID
 }
+
+// A reported channel message's photo (ADR-0031): the panel gets a link
+// only to the upload the report recorded while that message still holds it.
+func TestReportedMessagePhotoURL(t *testing.T) {
+	e := setup(t)
+	photo := e.upload(t, e.member, PurposeChatPhoto, e.tayfa, clean(), 300, 200)
+	msg := id.New()
+	if link, _, ok, err := e.svc.ReportedMessagePhotoURL(ctx, msg, photo.ID); err != nil || ok || link != "" {
+		t.Fatalf("bağlanmamış: %q %v", link, err)
+	}
+	must(t, e.svc.AttachChannelPhoto(ctx, e.member, photo.ID, e.tayfa, msg))
+	link, exp, ok, err := e.svc.ReportedMessagePhotoURL(ctx, msg, photo.ID)
+	if err != nil || !ok || !strings.Contains(link, "/media/") || exp.Sub(e.clock.now()) > ReportedPhotoLinkTTL+time.Second {
+		t.Fatalf("link: %v", err)
+	}
+	if other, _, _, err := e.svc.ReportedMessagePhotoURL(ctx, id.New(), photo.ID); err != nil || other != "" {
+		t.Fatalf("başka mesaj: %q %v", other, err)
+	}
+	// The author deletes the message: chat lets go of the photo and the
+	// link is gone with it.
+	must(t, MessageMediaReleased(ctx, store.New(e.pool), photo.ID, msg))
+	if link, _, ok, _ := e.svc.ReportedMessagePhotoURL(ctx, msg, photo.ID); ok || link != "" {
+		t.Fatal("bırakılan fotoğrafa link verildi")
+	}
+	// Another purpose with the same message ID: no link.
+	att := e.blobReady(t, e.member)
+	must(t, e.svc.AttachDirectMessageAttachment(ctx, e.member, att, msg))
+	if link, _, ok, _ := e.svc.ReportedMessagePhotoURL(ctx, msg, att); ok || link != "" {
+		t.Fatal("birebir eke link verildi")
+	}
+}

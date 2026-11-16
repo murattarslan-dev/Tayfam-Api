@@ -794,7 +794,30 @@ func (h *handlers) reportEvidencePhoto(w http.ResponseWriter, r *http.Request) {
 		h.failedPage(w, r, err)
 		return
 	}
-	link := resp.GetUrl()
+	h.redirectPhoto(w, r, resp.GetUrl())
+}
+
+// reportMessagePhoto opens a reported channel message's photo (issue #205,
+// ADR-0031), the same way as reportEvidencePhoto: core signs a fresh link
+// on each click and records it (report.view_message_photo).
+func (h *handlers) reportMessagePhoto(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.pathID(w, r)
+	if !ok {
+		return
+	}
+	ctx, cancel := sessionFrom(r.Context()).upstream(r.Context())
+	defer cancel()
+	resp, err := h.cfg.Core.GetReportedMessagePhotoUrl(ctx, &corev1.GetReportedMessagePhotoUrlRequest{ReportId: id})
+	if err != nil {
+		h.failedPage(w, r, err)
+		return
+	}
+	h.redirectPhoto(w, r, resp.GetUrl())
+}
+
+// redirectPhoto sends the browser to a signed storage link without a
+// referrer; anything but https is not found.
+func (h *handlers) redirectPhoto(w http.ResponseWriter, r *http.Request, link string) {
 	if !strings.HasPrefix(link, "https://") {
 		h.renderError(w, r, http.StatusNotFound, errorText("bulunamadi"))
 		return

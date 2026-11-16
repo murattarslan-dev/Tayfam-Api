@@ -100,6 +100,7 @@ type Config struct {
 type ReportedMedia interface {
 	ReportedPhotoURL(ctx context.Context, upload id.ID) (link string, expires time.Time, ok bool, err error)
 	ReportEvidenceURL(ctx context.Context, report, upload id.ID) (link string, expires time.Time, ok bool, err error)
+	ReportedMessagePhotoURL(ctx context.Context, message, upload id.ID) (link string, expires time.Time, ok bool, err error)
 }
 
 // Service implements the panel's core methods.

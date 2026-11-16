@@ -26,6 +26,7 @@ type Channels interface {
 	Members(ctx context.Context, caller, tayfa, ch id.ID, size int32, token string) (channel.MemberPage, error)
 	AddMembers(ctx context.Context, caller, tayfa, ch id.ID, users []id.ID) (channel.Channel, error)
 	RemoveMember(ctx context.Context, caller, tayfa, ch, user id.ID) error
+	ReportTarget(ctx context.Context, caller, tayfa, message id.ID) (channel.Message, error)
 }
 
 // ChannelServer implements chatv1.ChannelServiceServer. Every method acts
@@ -119,6 +120,24 @@ func messageToProto(m channel.Message) *chatv1.Message {
 		out.Place = &chatv1.Place{Latitude: m.Place.Latitude, Longitude: m.Place.Longitude, Name: m.Place.Name}
 	}
 	return out
+}
+
+// VerifyChannelMessageForReport implements chatv1.ChannelServiceServer
+// (issue #205, ADR-0031): core asks with the reporter's own token.
+func (s *ChannelServer) VerifyChannelMessageForReport(ctx context.Context, req *chatv1.VerifyChannelMessageForReportRequest) (*chatv1.VerifyChannelMessageForReportResponse, error) {
+	caller, v, err := ids(ctx, f("tayfa_id", req.GetTayfaId()), f("message_id", req.GetMessageId()))
+	if err != nil {
+		return nil, err
+	}
+	m, err := s.app.ReportTarget(ctx, caller, v[0], v[1])
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	p := messageToProto(m)
+	return &chatv1.VerifyChannelMessageForReportResponse{
+		ChannelId: p.GetChannelId(), AuthorUserId: p.GetAuthorUserId(), Kind: p.GetKind(), Body: p.GetBody(),
+		PhotoUploadId: p.GetPhotoUploadId(), Place: p.GetPlace(), CreateTime: p.GetCreateTime(),
+	}, nil
 }
 
 // messageKinds maps channel_messages.kind (issue #205); an unknown value

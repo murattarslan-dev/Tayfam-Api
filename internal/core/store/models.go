@@ -393,6 +393,13 @@ type Report struct {
 	PlatformDecision      pgtype.Text
 	PlatformHandledAt     pgtype.Timestamptz
 	EvidenceUploadID      pgtype.UUID
+	ChannelID             pgtype.UUID
+	MessageKind           pgtype.Text
+	MessageBody           pgtype.Text
+	MessagePhotoUploadID  pgtype.UUID
+	PlaceLatitude         pgtype.Float8
+	PlaceLongitude        pgtype.Float8
+	PlaceName             pgtype.Text
 }
 
 type SocialSetting struct {

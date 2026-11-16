@@ -305,6 +305,25 @@ func (s *AdminServer) GetReportEvidencePhotoUrl(ctx context.Context, req *corev1
 	return &corev1.GetReportEvidencePhotoUrlResponse{Url: link, ExpireTime: timestamppb.New(exp)}, nil
 }
 
+// GetReportedMessagePhotoUrl implements corev1.AdminServiceServer (issue
+// #205): a reported channel message's photo, signed only here, on request,
+// and audited.
+func (s *AdminServer) GetReportedMessagePhotoUrl(ctx context.Context, req *corev1.GetReportedMessagePhotoUrlRequest) (*corev1.GetReportedMessagePhotoUrlResponse, error) {
+	c, err := s.claims(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rid, err := parseID(req.GetReportId(), "report_id")
+	if err != nil {
+		return nil, err
+	}
+	link, exp, err := s.app.ReportedMessagePhotoURL(ctx, c, rid)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.GetReportedMessagePhotoUrlResponse{Url: link, ExpireTime: timestamppb.New(exp)}, nil
+}
+
 // GetReportedItem implements corev1.AdminServiceServer.
 func (s *AdminServer) GetReportedItem(ctx context.Context, req *corev1.GetReportedItemRequest) (*corev1.GetReportedItemResponse, error) {
 	c, err := s.claims(ctx)
@@ -326,7 +345,11 @@ func (s *AdminServer) GetReportedItem(ctx context.Context, req *corev1.GetReport
 			Title: item.Title, Body: item.Body, Options: item.Options,
 			CreateTime: tsOrNil(item.CreatedAt), DeleteTime: tsOrNil(item.DeletedAt),
 			MediaUrl: item.MediaURL, MediaExpireTime: tsOrNil(item.MediaExpires),
-			HasEvidencePhoto: item.HasEvidencePhoto,
+			HasEvidencePhoto: item.HasEvidencePhoto, HasMessagePhoto: item.HasMessagePhoto,
+			ChannelId: idString(item.Channel),
+		}
+		if p := item.Place; p != nil {
+			out.Item.Place = &corev1.ReportedPlace{Latitude: p.Latitude, Longitude: p.Longitude, Name: p.Name}
 		}
 	}
 	return out, nil

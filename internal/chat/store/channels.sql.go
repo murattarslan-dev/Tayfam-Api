@@ -411,6 +411,52 @@ func (q *Queries) GetChannelForUpdate(ctx context.Context, arg GetChannelForUpda
 	return i, err
 }
 
+const getChannelMessageForReport = `-- name: GetChannelMessageForReport :one
+SELECT m.id, m.channel_id, m.author_id, m.body_encrypted, m.key_version, m.created_at, m.deleted_at, m.deleted_by,
+       m.kind, m.photo_upload_id, ch.tayfa_id
+FROM channel_messages m
+JOIN channels ch ON ch.id = m.channel_id
+WHERE m.id = $1
+`
+
+type GetChannelMessageForReportRow struct {
+	ID            pgtype.UUID
+	ChannelID     pgtype.UUID
+	AuthorID      pgtype.UUID
+	BodyEncrypted []byte
+	KeyVersion    pgtype.Int2
+	CreatedAt     pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
+	DeletedBy     pgtype.UUID
+	Kind          string
+	PhotoUploadID pgtype.UUID
+	TayfaID       pgtype.UUID
+}
+
+// Görme kararı (MessageMediaService, issue #205): fotoğrafın bağlı olduğu
+// mesaj ve kanalı. Silinmiş mesaj ve arşivlenmiş kanal da döner; karar
+// uygulamadadır (silinmiş mesajın fotoğrafı görünmez).
+// Şikâyet edilen kanal mesajı (issue #205, ADR-0031): kimliğiyle ve
+// kanalının tayfasıyla; erişim uygulamada denetlenir.
+func (q *Queries) GetChannelMessageForReport(ctx context.Context, id pgtype.UUID) (GetChannelMessageForReportRow, error) {
+	row := q.db.QueryRow(ctx, getChannelMessageForReport, id)
+	var i GetChannelMessageForReportRow
+	err := row.Scan(
+		&i.ID,
+		&i.ChannelID,
+		&i.AuthorID,
+		&i.BodyEncrypted,
+		&i.KeyVersion,
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.DeletedBy,
+		&i.Kind,
+		&i.PhotoUploadID,
+		&i.TayfaID,
+	)
+	return i, err
+}
+
 const getChannelPhotoMessage = `-- name: GetChannelPhotoMessage :one
 SELECT m.channel_id, ch.tayfa_id, m.photo_upload_id, m.deleted_at
 FROM channel_messages m
@@ -425,9 +471,6 @@ type GetChannelPhotoMessageRow struct {
 	DeletedAt     pgtype.Timestamptz
 }
 
-// Görme kararı (MessageMediaService, issue #205): fotoğrafın bağlı olduğu
-// mesaj ve kanalı. Silinmiş mesaj ve arşivlenmiş kanal da döner; karar
-// uygulamadadır (silinmiş mesajın fotoğrafı görünmez).
 func (q *Queries) GetChannelPhotoMessage(ctx context.Context, id pgtype.UUID) (GetChannelPhotoMessageRow, error) {
 	row := q.db.QueryRow(ctx, getChannelPhotoMessage, id)
 	var i GetChannelPhotoMessageRow

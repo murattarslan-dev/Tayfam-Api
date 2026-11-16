@@ -18,6 +18,11 @@ func (f *fakeMedia) ReportEvidenceURL(_ context.Context, _, upload id.ID) (strin
 	return "https://r2.example.test/kanit", time.Now().Add(5 * time.Minute), true, nil
 }
 
+func (f *fakeMedia) ReportedMessagePhotoURL(_ context.Context, _, upload id.ID) (string, time.Time, bool, error) {
+	f.asked = append(f.asked, upload)
+	return "https://r2.example.test/mesaj", time.Now().Add(5 * time.Minute), true, nil
+}
+
 func (f *fakeMedia) ReportedPhotoURL(_ context.Context, upload id.ID) (string, time.Time, bool, error) {
 	f.asked = append(f.asked, upload)
 	return "https://r2.example.test/imzali", time.Now().Add(5 * time.Minute), true, nil

@@ -69,6 +69,14 @@ service AdminService {
   // the report carries has_evidence_photo, never the link. A report
   // without one, or without object storage, is ERROR_REASON_REPORT_NOT_FOUND.
   rpc GetReportEvidencePhotoUrl(GetReportEvidencePhotoUrlRequest) returns (GetReportEvidencePhotoUrlResponse);
+  // GetReportedMessagePhotoUrl returns a GET link, valid for 5 minutes, to
+  // the photo of a reported channel message (issue #205, ADR-0031), and
+  // records the opening in the platform audit log
+  // (report.view_message_photo). It is signed only when asked: a read of
+  // the report carries has_message_photo, never the link. The photo is
+  // there while the message holds it; a report without one, a photo
+  // already gone, or no object storage is ERROR_REASON_REPORT_NOT_FOUND.
+  rpc GetReportedMessagePhotoUrl(GetReportedMessagePhotoUrlRequest) returns (GetReportedMessagePhotoUrlResponse);
   // DecideReport records the platform's decision on an escalated report.
   rpc DecideReport(DecideReportRequest) returns (DecideReportResponse);
   // GetStats returns the panel dashboard's tayfa counts and the last run of
@@ -240,7 +248,8 @@ message ReportedItem {
   // catch's species; the tayfa's or user's name.
   string title = 4;
   // Body of an announcement, question or answer; an event's or tayfa's
-  // description; a DM report's evidence_text (the reporter's own copy).
+  // description; a DM report's evidence_text (the reporter's own copy); a
+  // channel message's text as it was when the report was filed.
   string body = 5;
   // A poll's options (no counts, no voters).
   repeated string options = 6;
@@ -257,6 +266,33 @@ message ReportedItem {
   // ADR-0031): the link itself is never part of this read; the panel asks
   // AdminService.GetReportEvidencePhotoUrl when the administrator opens it.
   bool has_evidence_photo = 11;
+  // Only for a reported channel message (REPORT_TARGET_TYPE_CHANNEL_MESSAGE,
+  // issue #205, ADR-0031), as it was when the report was filed: a photo
+  // message (its link is asked with GetReportedMessagePhotoUrl when the
+  // administrator opens it) or a shared place. A text message has its text
+  // in body. channel_id is the message's channel.
+  bool has_message_photo = 12;
+  ReportedPlace place = 13;
+  string channel_id = 14;
+}
+
+// ReportedPlace is a place a reported channel message shared: content,
+// not anyone's device location (ADR-0008). Never logged.
+message ReportedPlace {
+  double latitude = 1;
+  double longitude = 2;
+  // Empty when none was given.
+  string name = 3;
+}
+
+message GetReportedMessagePhotoUrlRequest {
+  string report_id = 1;
+}
+
+message GetReportedMessagePhotoUrlResponse {
+  // A bearer link: never logged.
+  string url = 1;
+  google.protobuf.Timestamp expire_time = 2;
 }
 
 message GetReportEvidencePhotoUrlRequest {

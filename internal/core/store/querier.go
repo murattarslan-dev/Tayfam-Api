@@ -490,6 +490,9 @@ type Querier interface {
 	GetReportTargetEventPhoto(ctx context.Context, arg GetReportTargetEventPhotoParams) (GetReportTargetEventPhotoRow, error)
 	GetReportTargetPoll(ctx context.Context, arg GetReportTargetPollParams) (GetReportTargetPollRow, error)
 	GetReportTargetQuestion(ctx context.Context, arg GetReportTargetQuestionParams) (GetReportTargetQuestionRow, error)
+	// Platform panelinde şikâyet edilen kanal mesajının fotoğrafı (ADR-0031):
+	// şikâyetin kaydettiği upload_id, hâlâ o mesaja bağlı, hazır chat_photo.
+	GetReportedMessagePhotoUpload(ctx context.Context, arg GetReportedMessagePhotoUploadParams) (string, error)
 	// Platform panelinde şikâyet edilen albüm fotoğrafı (ADR-0028 §5): yalnızca
 	// panelin şikâyetten okuduğu upload_id, hazır event_photo dosyası.
 	GetReportedPhotoUpload(ctx context.Context, id pgtype.UUID) (GetReportedPhotoUploadRow, error)
@@ -513,6 +516,8 @@ type Querier interface {
 	// Yazan işlemler tayfa satırını kilitleyerek okur; memberships trigger'ı da
 	// aynı satırı kilitlediği için üyelik değişiklikleriyle sırayla çalışır.
 	GetTayfaForUpdate(ctx context.Context, id pgtype.UUID) (GetTayfaForUpdateRow, error)
+	// Çözümden önce, kilitsiz: dışarıya (chat) sorulacak hedef (kanal mesajı).
+	GetTayfaReportTarget(ctx context.Context, arg GetTayfaReportTargetParams) (GetTayfaReportTargetRow, error)
 	GetUploadByClientRequest(ctx context.Context, arg GetUploadByClientRequestParams) (Upload, error)
 	GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUserProfileRow, error)
 	// Kanalı açanlardan hangileri o etkinliğe gidiyor.

@@ -109,12 +109,17 @@ const (
 	// TargetDMMessage: a direct message (issue #95). Not about a tayfa; see
 	// createDirect.
 	TargetDMMessage TargetType = "dm_message"
+	// TargetChannelMessage: a channel message (issue #205, ADR-0031): chat
+	// confirms it with the reporter's token and the report keeps it as it
+	// was; see channel.go.
+	TargetChannelMessage TargetType = "channel_message"
 )
 
 // content reports whether t is content (has an author and can be removed).
 func (t TargetType) content() bool {
 	switch t {
-	case TargetAnnouncement, TargetEvent, TargetQuestion, TargetAnswer, TargetPoll, TargetFishingCatch, TargetEventPhoto:
+	case TargetAnnouncement, TargetEvent, TargetQuestion, TargetAnswer, TargetPoll, TargetFishingCatch, TargetEventPhoto,
+		TargetChannelMessage:
 		return true
 	}
 	return false
@@ -243,7 +248,12 @@ type Config struct {
 	// DirectMessages checks direct message reports with chat. Without it
 	// (a local run without chat) they are apperr.ErrUnavailable.
 	DirectMessages DirectMessages
-	Now            func() time.Time
+	// ChannelMessages and ChannelStatus check channel message reports with
+	// chat (issue #205); without them those reports, and resolving one as
+	// content_removed, are apperr.ErrUnavailable.
+	ChannelMessages ChannelMessages
+	ChannelStatus   ChannelMessageStatus
+	Now             func() time.Time
 }
 
 // Service implements ReportService's business logic.
@@ -290,7 +300,9 @@ type ModView struct {
 	TargetID   id.ID
 	// SubjectID is the reported user or the content's author; zero when
 	// unknown or the account was deleted.
-	SubjectID   id.ID
+	SubjectID id.ID
+	// ChannelID is a reported channel message's channel; zero otherwise.
+	ChannelID   id.ID
 	Reason      Reason
 	Description string
 	// Priority is MinorInvolved when a party was under 18 (or not known to
@@ -353,9 +365,23 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in CreateInput)
 	}
 
 	now := s.now()
+	// A channel message is chat's: it is asked (with the reporter's own
+	// token) before anything is locked, after an earlier report is looked
+	// for.
+	var msg *ChannelMessage
+	if in.TargetType == TargetChannelMessage {
+		if prev, found, err := mine(ctx, s.q, user, in.TargetType, target); err != nil || found {
+			return prev, false, err
+		}
+		m, err := s.channelMessage(ctx, user, tayfa, target)
+		if err != nil {
+			return MyView{}, false, err
+		}
+		msg = &m
+	}
 	// First pass, without locks: who is reported, so identity can be asked
 	// before the write transaction (no lock is held while waiting).
-	prev, subject, err := s.prepare(ctx, s.q, user, tayfa, in.TargetType, target, now, false)
+	prev, subject, err := s.prepare(ctx, s.q, user, tayfa, in.TargetType, target, now, false, msg)
 	if err != nil || prev != nil {
 		if prev != nil {
 			return *prev, false, nil
@@ -365,7 +391,7 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in CreateInput)
 	minor := s.minorInvolved(ctx, user, subject)
 
 	err = txn.WithActor(ctx, s.cfg.Pool, user, func(_ pgx.Tx, q *store.Queries) error {
-		prev, again, err := s.prepare(ctx, q, user, tayfa, in.TargetType, target, now, true)
+		prev, again, err := s.prepare(ctx, q, user, tayfa, in.TargetType, target, now, true, msg)
 		if err != nil || prev != nil {
 			if prev != nil {
 				v = *prev
@@ -391,6 +417,9 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in CreateInput)
 		}
 		if minor {
 			p.Priority, p.MinorInvolvedAt = string(PriorityMinorInvolved), ts(now)
+		}
+		if msg != nil {
+			msg.params(&p)
 		}
 		escalation := escalationAtCreate(in.TargetType, in.Reason, minor)
 		if escalation != "" {
@@ -438,7 +467,7 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in CreateInput)
 // prepare checks the caller and the target. It returns the caller's earlier
 // report about the target if there is one, otherwise the reported person.
 // Writes pass lock = true inside the transaction.
-func (s *Service) prepare(ctx context.Context, q *store.Queries, user, tayfa id.ID, t TargetType, target id.ID, now time.Time, lock bool) (*MyView, id.ID, error) {
+func (s *Service) prepare(ctx context.Context, q *store.Queries, user, tayfa id.ID, t TargetType, target id.ID, now time.Time, lock bool, msg *ChannelMessage) (*MyView, id.ID, error) {
 	// Reports work on read-only tayfas, and a muted member may report
 	// (authz.allowedWhileMuted).
 	_, m, err := access.Load(ctx, q, tayfa, user, lock)
@@ -460,6 +489,10 @@ func (s *Service) prepare(ctx context.Context, q *store.Queries, user, tayfa id.
 	}
 	if n >= DailyLimit {
 		return nil, id.ID{}, apperr.ErrReportLimit
+	}
+	if t == TargetChannelMessage {
+		// chat confirmed the message for the caller (channelMessage).
+		return nil, msg.Author, nil
 	}
 	subject, err := s.subjectOf(ctx, q, tayfa, user, t, target)
 	return nil, subject, err
@@ -631,8 +664,14 @@ func (s *Service) Resolve(ctx context.Context, user, tayfa, report id.ID, r Reso
 		return ModView{}, apperr.Validation("resolution")
 	}
 	now := s.now()
+	// A channel message's removal is chat's to tell; asked before anything
+	// is locked.
+	chatRemoved, err := s.channelRemovedForResolve(ctx, user, tayfa, report, r)
+	if err != nil {
+		return ModView{}, err
+	}
 	var v ModView
-	err := txn.WithActor(ctx, s.cfg.Pool, user, func(_ pgx.Tx, q *store.Queries) error {
+	err = txn.WithActor(ctx, s.cfg.Pool, user, func(_ pgx.Tx, q *store.Queries) error {
 		_, m, err := access.Load(ctx, q, tayfa, user, true)
 		if err != nil {
 			return err
@@ -665,6 +704,12 @@ func (s *Service) Resolve(ctx context.Context, user, tayfa, report id.ID, r Reso
 			if !t.content() {
 				return apperr.Validation("resolution")
 			}
+			if t == TargetChannelMessage {
+				if chatRemoved == nil || !*chatRemoved {
+					return apperr.ErrReportActionMissing
+				}
+				break
+			}
 			c, err := lookup(ctx, q, tayfa, t, id.ID(row.TargetID.Bytes))
 			if err != nil {
 				return err
@@ -692,6 +737,7 @@ func (s *Service) Resolve(ctx context.Context, user, tayfa, report id.ID, r Reso
 			SubjectUserID: row.SubjectUserID, Reason: row.Reason, Description: row.Description,
 			Status: string(StatusResolved), Resolution: pgtype.Text{String: string(r), Valid: true},
 			HandledBy: user.PG(), HandledAt: ts(now), Priority: row.Priority, CreatedAt: row.CreatedAt,
+			ChannelID: row.ChannelID,
 		})
 
 		ref := txn.Target{Type: subjectType, ID: report}
@@ -813,7 +859,7 @@ func modView(r store.ListOpenTayfaReportsRow) ModView {
 		TargetID: id.ID(r.TargetID.Bytes), SubjectID: pgID(r.SubjectUserID), Reason: Reason(r.Reason),
 		Description: r.Description.String, Priority: Priority(r.Priority), Status: Status(r.Status),
 		Resolution: Resolution(r.Resolution.String), HandledBy: pgID(r.HandledBy),
-		CreatedAt: r.CreatedAt.Time.UTC(),
+		CreatedAt: r.CreatedAt.Time.UTC(), ChannelID: pgID(r.ChannelID),
 	}
 	if r.HandledAt.Valid {
 		v.ResolvedAt = r.HandledAt.Time.UTC()

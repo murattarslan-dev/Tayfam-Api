@@ -19,11 +19,17 @@
 -- sahipliği kaldırılır).
 --
 -- reports: dm_message şikâyetinde kanıt metni, fotoğrafı ya da ikisi.
+-- channel_message (kanal mesajı şikâyeti; platform sahibi, 2026-11-16):
+-- mesaj şikâyet anındaki haliyle saklanır (chat, şikâyet edenin kendi
+-- token'ıyla verir): kanal, tür ve metin ya da yer ya da fotoğrafın
+-- yükleme kimliği. Yalnızca platform paneli okur. Fotoğrafın kendisi
+-- kopyalanmaz; mesaj onu tuttukça panelden açılabilir.
 --
 -- Geri alma planı: Down sohbet eklerini ve kanıt fotoğraflarını silme
 -- kuyruğuna değil doğrudan siler (R2'de kalan nesneler kullanılamaz; temizlik
 -- elle), fotoğrafı olup metni olmayan şikâyetleri siler ve kısıtları 00023 /
--- 00013'teki haline döndürür (event_photo korunur).
+-- 00013'teki haline döndürür (event_photo korunur). Kanal mesajı
+-- şikâyetlerini siler.
 
 -- +goose Up
 ALTER TABLE uploads DROP CONSTRAINT uploads_purpose;
@@ -135,6 +141,37 @@ CREATE TRIGGER reports_evidence_check BEFORE INSERT OR UPDATE OF evidence_upload
 CREATE TRIGGER reports_evidence_release AFTER UPDATE OF evidence_upload_id OR DELETE ON reports
   FOR EACH ROW EXECUTE FUNCTION uploads_release_ref('evidence_upload_id');
 
+-- Kanal mesajı şikâyeti: şikâyet anındaki mesaj (yalnızca platform).
+-- message_photo_upload_id'nin yabancı anahtarı yoktur: dosya mesajındır,
+-- bağlantı her açılışta mesaja bağlı ve hazır olduğu denetlenerek imzalanır.
+ALTER TABLE reports DROP CONSTRAINT reports_target_type;
+ALTER TABLE reports ADD CONSTRAINT reports_target_type CHECK (target_type IN
+  ('user', 'tayfa', 'announcement', 'event', 'question', 'answer', 'poll', 'fishing_catch', 'dm_message', 'event_photo',
+   'channel_message'));
+ALTER TABLE reports
+  ADD COLUMN channel_id uuid,
+  ADD COLUMN message_kind text,
+  ADD COLUMN message_body text,
+  ADD COLUMN message_photo_upload_id uuid,
+  ADD COLUMN place_latitude double precision,
+  ADD COLUMN place_longitude double precision,
+  ADD COLUMN place_name text;
+ALTER TABLE reports ADD CONSTRAINT reports_channel_message CHECK (
+  (target_type = 'channel_message') = (channel_id IS NOT NULL)
+  AND (target_type = 'channel_message') = (message_kind IS NOT NULL)
+  AND (message_kind IS NULL OR message_kind IN ('text', 'photo', 'place'))
+  AND (message_kind = 'text') = (message_body IS NOT NULL)
+  AND (message_kind = 'photo') = (message_photo_upload_id IS NOT NULL)
+  AND (message_kind = 'place') = (place_latitude IS NOT NULL)
+  AND (message_kind = 'place') = (place_longitude IS NOT NULL)
+  AND (place_name IS NULL OR message_kind = 'place'));
+ALTER TABLE reports ADD CONSTRAINT reports_message_body_len CHECK (
+  message_body IS NULL OR char_length(message_body) BETWEEN 1 AND 4000);
+ALTER TABLE reports ADD CONSTRAINT reports_place CHECK (
+  (place_latitude IS NULL OR place_latitude BETWEEN -90 AND 90)
+  AND (place_longitude IS NULL OR place_longitude BETWEEN -180 AND 180)
+  AND (place_name IS NULL OR char_length(place_name) BETWEEN 1 AND 120));
+
 -- Oluşturma bilgileri değişmez; kanıt fotoğrafı yalnızca boşalabilir
 -- (dosyanın satırı silinince ON DELETE SET NULL).
 -- +goose StatementBegin
@@ -146,6 +183,11 @@ BEGIN
      OR NEW.reason <> OLD.reason OR NEW.description IS DISTINCT FROM OLD.description
      OR NEW.evidence_text IS DISTINCT FROM OLD.evidence_text
      OR (NEW.evidence_upload_id IS DISTINCT FROM OLD.evidence_upload_id AND NEW.evidence_upload_id IS NOT NULL)
+     OR NEW.channel_id IS DISTINCT FROM OLD.channel_id OR NEW.message_kind IS DISTINCT FROM OLD.message_kind
+     OR NEW.message_body IS DISTINCT FROM OLD.message_body
+     OR NEW.message_photo_upload_id IS DISTINCT FROM OLD.message_photo_upload_id
+     OR NEW.place_latitude IS DISTINCT FROM OLD.place_latitude OR NEW.place_longitude IS DISTINCT FROM OLD.place_longitude
+     OR NEW.place_name IS DISTINCT FROM OLD.place_name
      OR NEW.priority <> OLD.priority OR NEW.minor_involved_at IS DISTINCT FROM OLD.minor_involved_at
      OR NEW.platform_only <> OLD.platform_only OR NEW.created_at <> OLD.created_at THEN
     RAISE EXCEPTION 'şikâyetin oluşturma bilgileri değişmez' USING ERRCODE = 'TF100';
@@ -200,6 +242,15 @@ BEGIN
 END
 $$;
 -- +goose StatementEnd
+DELETE FROM reports WHERE target_type = 'channel_message';
+ALTER TABLE reports DROP CONSTRAINT reports_place, DROP CONSTRAINT reports_message_body_len,
+  DROP CONSTRAINT reports_channel_message;
+ALTER TABLE reports
+  DROP COLUMN place_name, DROP COLUMN place_longitude, DROP COLUMN place_latitude,
+  DROP COLUMN message_photo_upload_id, DROP COLUMN message_body, DROP COLUMN message_kind, DROP COLUMN channel_id;
+ALTER TABLE reports DROP CONSTRAINT reports_target_type;
+ALTER TABLE reports ADD CONSTRAINT reports_target_type CHECK (target_type IN
+  ('user', 'tayfa', 'announcement', 'event', 'question', 'answer', 'poll', 'fishing_catch', 'dm_message', 'event_photo'));
 DROP TRIGGER reports_evidence_release ON reports;
 DROP TRIGGER reports_evidence_check ON reports;
 DROP TRIGGER reports_evidence_required ON reports;

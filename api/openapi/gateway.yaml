@@ -4477,7 +4477,18 @@ paths:
         ikisi aynı şikâyettir.
         Birebir mesaj (`dm_message`) şikâyeti bir tayfaya ait olmadığı için
         bu uçta değil, `POST /v1/me/reports` ile yapılır (burada
-        `invalid-request`). Kanal mesajları henüz şikâyet edilemez.
+        `invalid-request`).
+
+        **Kanal mesajı** (`channel_message`, #205, ADR-0031): `target_id`
+        mesajın kimliğidir; metin, fotoğraf ve yer mesajları şikâyet
+        edilebilir. Mesajın kanalını okuyabiliyor olmalısınız (kanalın
+        kitlesi dahil: yönetim, etkinlik ve seçili kişi kanallarında
+        kitlede değilseniz) ve mesaj silinmemiş olmalıdır; aksi
+        `report-target-not-found`. Kendi mesajınız `invalid-request`.
+        Mesaj şikâyet anındaki haliyle yalnızca platform için saklanır
+        (yazar sonradan silse de). Şikâyet tayfanın kuyruğuna düşer;
+        `content_removed` mesajın silinmiş ya da moderasyonla gizlenmiş
+        olmasını ister. Sohbet servisine ulaşılamazsa `503`.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -4546,7 +4557,9 @@ paths:
         içeriğin ya da üyeliğin kendi uçlarıyla önceden yapılmış işleme
         bağlanır:
         - `content_removed`: içerik artık görünmüyor (silinmiş; etkinlikte
-          iptal de sayılır). Üye ve tayfa şikâyetinde kullanılamaz.
+          iptal de sayılır; kanal mesajında silinmiş ya da moderasyonla
+          gizlenmiş). Üye ve tayfa şikâyetinde kullanılamaz. Kanal mesajında
+          sohbet servisine ulaşılamazsa `503`.
         - `member_sanctioned`: şikâyet edilen kişi şu anda susturulmuş ya da
           banlı.
         - `dismissed`: işlem yok.
@@ -8177,8 +8190,9 @@ components:
       type: string
       description: |
         `dm_message` (birebir mesaj) yalnızca `POST /v1/me/reports` ile;
-        diğerleri yalnızca tayfa ucuyla. Kanal mesajları bu listede değildir.
-      enum: [user, tayfa, announcement, event, question, answer, poll, fishing_catch, dm_message, event_photo]
+        diğerleri yalnızca tayfa ucuyla. `channel_message` kanal mesajıdır
+        (metin, fotoğraf ya da yer; #205).
+      enum: [user, tayfa, announcement, event, question, answer, poll, fishing_catch, dm_message, event_photo, channel_message]
 
     BanRequest:
       type: object
@@ -8296,6 +8310,13 @@ components:
           description: Çözen moderatör; açıkken ya da hesap silindiyse yoktur.
         created_at: { type: string, format: date-time }
         resolved_at: { type: string, format: date-time }
+        channel_id:
+          type: string
+          format: uuid
+          description: |
+            Yalnızca `channel_message`: mesajın kanalı (mesajı açmak için).
+            Kanalı okuyamayan moderatör (içinde olmadığı etkinlik ya da seçili
+            kişi kanalı) mesajı açamaz ve gizleyemez.
 
     ModerationReportList:
       type: object

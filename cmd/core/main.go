@@ -128,11 +128,21 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	var dmCheck report.DirectMessages
-	if chatConn != nil {
-		dmCheck = chatdm.New(chatv1.NewDirectMessageServiceClient(chatConn))
+	chatServiceConn, err := chatServiceConnection(rt)
+	if err != nil {
+		return err
 	}
-	reports, err := report.New(report.Config{Pool: pool, Minors: minors, DirectMessages: dmCheck})
+	reportCfg := report.Config{Pool: pool, Minors: minors}
+	if chatConn != nil {
+		reportCfg.DirectMessages = chatdm.New(chatv1.NewDirectMessageServiceClient(chatConn))
+		// Kanal mesajı şikâyeti (issue #205, ADR-0031): şikâyet edenin
+		// token'ıyla doğrulama; çözümde durum core'un servis token'ıyla.
+		reportCfg.ChannelMessages = chatdm.NewChannelMessages(chatv1.NewChannelServiceClient(chatConn))
+	}
+	if chatServiceConn != nil {
+		reportCfg.ChannelStatus = chatdm.NewChannelStatus(chatv1.NewReportedMessageServiceClient(chatServiceConn))
+	}
+	reports, err := report.New(reportCfg)
 	if err != nil {
 		return err
 	}
@@ -145,7 +155,7 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 
-	medias, err := mediaService(rt, pool, chatConn)
+	medias, err := mediaService(rt, pool, chatConn, chatServiceConn)
 	if err != nil {
 		return err
 	}
@@ -252,6 +262,22 @@ func setup(rt *service.Runtime) error {
 	return addRelay(rt, pool)
 }
 
+// chatServiceConnection connects to chat with core's service token for chat
+// (ADR-0013), for calls without a user: the reconciliation of chat
+// attachments and a reported channel message's status (ADR-0031). Without
+// the token (local runs only) it returns nil.
+func chatServiceConnection(rt *service.Runtime) (*grpc.ClientConn, error) {
+	tok, ok := rt.ServiceToken("chat")
+	if !ok {
+		return nil, rt.Config.Err()
+	}
+	addr := rt.Config.Required("CHAT_GRPC_ADDR")
+	if err := rt.Config.Err(); err != nil {
+		return nil, err
+	}
+	return grpcx.NewClient(addr, auth.ServiceTokenFrom(tok)...)
+}
+
 // mediaService returns the media service (issue #135, ADR-0020). The R2
 // credentials come from the optional core-r2 secret; without them media is
 // off and core still starts (and has no internet egress: the core-egress-r2
@@ -261,7 +287,7 @@ func setup(rt *service.Runtime) error {
 // Who may see a chat message's file is chat's answer (ADR-0031), asked
 // with the caller's own token over chatConn; without chat those files are
 // visible to their owners only.
-func mediaService(rt *service.Runtime, pool *pgxpool.Pool, chatConn *grpc.ClientConn) (*media.Service, error) {
+func mediaService(rt *service.Runtime, pool *pgxpool.Pool, chatConn, chatServiceConn *grpc.ClientConn) (*media.Service, error) {
 	c := rt.Config
 	perHour := c.Int("MEDIA_UPLOADS_PER_HOUR", media.DefaultUploadsPerHour)
 	quotaMiB := c.Int("MEDIA_QUOTA_MIB", media.DefaultQuotaBytes>>20)
@@ -282,18 +308,8 @@ func mediaService(rt *service.Runtime, pool *pgxpool.Pool, chatConn *grpc.Client
 	// Sohbet bağlamalarının uzlaştırılması (ADR-0031): kullanıcısız iş,
 	// core'un chat için servis token'ıyla (ADR-0013). Token yoksa (yalnızca
 	// yerel ortam) iş kapalıdır; onaylanmamış bağlama yine taşınabilir.
-	if tok, ok := rt.ServiceToken("chat"); ok {
-		addr := rt.Config.Required("CHAT_GRPC_ADDR")
-		if err := rt.Config.Err(); err != nil {
-			return nil, err
-		}
-		conn, err := grpcx.NewClient(addr, auth.ServiceTokenFrom(tok)...)
-		if err != nil {
-			return nil, err
-		}
-		cfg.Holders = chatdm.NewHolders(chatv1.NewMediaHolderServiceClient(conn))
-	} else if err := rt.Config.Err(); err != nil {
-		return nil, err
+	if chatServiceConn != nil {
+		cfg.Holders = chatdm.NewHolders(chatv1.NewMediaHolderServiceClient(chatServiceConn))
 	}
 	if r2 == nil {
 		rt.Log.Info("R2 yapılandırması yok; dosya yükleme kapalı")

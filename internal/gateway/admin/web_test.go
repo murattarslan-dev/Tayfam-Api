@@ -34,6 +34,9 @@ const (
 	reportID      = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a62"
 	dmReportID    = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a63"
 	photoReportID = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a64"
+	// chanReportID is a reported channel message: a photo with a shared
+	// place in the fake (issue #205).
+	chanReportID = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a65"
 	// photoLink stands for core's short signed link to a reported album
 	// photo (ADR-0028 §5).
 	photoLink   = "https://r2.example.test/media/abc/full?X-Amz-Signature=imza&a=1"
@@ -170,6 +173,18 @@ func (f *fakeCore) GetReportEvidencePhotoUrl(ctx context.Context, in *corev1.Get
 	return &corev1.GetReportEvidencePhotoUrlResponse{Url: evidencePhotoURL, ExpireTime: timestamppb.New(time.Now().Add(5 * time.Minute))}, nil
 }
 
+// messagePhotoURL stands for core's short signed link to a reported
+// channel message's photo (issue #205).
+const messagePhotoURL = "https://r2.example.test/media/mesaj/full?X-Amz-Signature=def"
+
+func (f *fakeCore) GetReportedMessagePhotoUrl(ctx context.Context, in *corev1.GetReportedMessagePhotoUrlRequest, _ ...grpc.CallOption) (*corev1.GetReportedMessagePhotoUrlResponse, error) {
+	f.add(ctx, "GetReportedMessagePhotoUrl")
+	if in.GetReportId() != chanReportID {
+		return nil, status.Error(codes.NotFound, "yok")
+	}
+	return &corev1.GetReportedMessagePhotoUrlResponse{Url: messagePhotoURL, ExpireTime: timestamppb.New(time.Now().Add(5 * time.Minute))}, nil
+}
+
 func (f *fakeCore) GetReportedItem(ctx context.Context, in *corev1.GetReportedItemRequest, _ ...grpc.CallOption) (*corev1.GetReportedItemResponse, error) {
 	f.add(ctx, "GetReportedItem")
 	reps := f.reportList()
@@ -179,6 +194,13 @@ func (f *fakeCore) GetReportedItem(ctx context.Context, in *corev1.GetReportedIt
 		return &corev1.GetReportedItemResponse{Report: r, Item: &corev1.ReportedItem{
 			TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT_PHOTO, AuthorId: memberID, Title: "Göl kenarı",
 			MediaUrl: photoLink, MediaExpireTime: timestamppb.New(time.Now().Add(5 * time.Minute))}}, nil
+	}
+	if in.GetReportId() == chanReportID {
+		r := reps[1]
+		r.ReportId, r.TargetType = chanReportID, corev1.ReportTargetType_REPORT_TARGET_TYPE_CHANNEL_MESSAGE
+		return &corev1.GetReportedItemResponse{Report: r, Item: &corev1.ReportedItem{
+			TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_CHANNEL_MESSAGE, AuthorId: memberID, HasMessagePhoto: true,
+			Place: &corev1.ReportedPlace{Latitude: 38.4192, Longitude: 27.1287, Name: "Saat Kulesi"}}}, nil
 	}
 	if in.GetReportId() == dmReportID {
 		return &corev1.GetReportedItemResponse{Report: reps[0], Item: &corev1.ReportedItem{
@@ -316,7 +338,7 @@ func (e *env) resetCalls() { e.core.reset() }
 // getPages are every page, with IDs that the fakes know.
 var getPages = []string{
 	"/", "/tayfalar", "/tayfalar?q=klasik", "/tayfalar/" + tayfaID, "/kullanicilar", "/kullanicilar/" + memberID,
-	"/sikayetler", "/sikayetler?tumu=1", "/sikayetler/" + reportID, "/sikayetler/" + dmReportID,
+	"/sikayetler", "/sikayetler?tumu=1", "/sikayetler/" + reportID, "/sikayetler/" + dmReportID, "/sikayetler/" + chanReportID,
 	"/denetim", "/denetim?islem=tayfa.suspend&tur=tayfa&ilgili=" + tayfaID + "&baslangic=2026-11-01&bitis=2026-11-09",
 }
 
@@ -578,6 +600,20 @@ func TestPagesHidePersonalData(t *testing.T) {
 	}
 	if pw := e.do(e.page("/sikayetler/" + reportID + "/kanit-fotografi")); pw.Code != http.StatusNotFound {
 		t.Fatalf("kanıtsız şikâyet: %d", pw.Code)
+	}
+	// A reported channel message (issue #205): the shared place as content,
+	// the photo through the panel only, signed on click.
+	cp := pages["/sikayetler/"+chanReportID]
+	if !strings.Contains(cp, "Kanal mesajı") || !strings.Contains(cp, "Saat Kulesi") || !strings.Contains(cp, "38.419200, 27.128700") ||
+		!strings.Contains(cp, `href="/sikayetler/`+chanReportID+`/mesaj-fotografi"`) || strings.Contains(cp, messagePhotoURL) {
+		t.Fatalf("kanal mesajı şikâyeti sayfası:\n%s", cp)
+	}
+	pw = e.do(e.page("/sikayetler/" + chanReportID + "/mesaj-fotografi"))
+	if pw.Code != http.StatusSeeOther || pw.Header().Get("Location") != messagePhotoURL || pw.Header().Get("Referrer-Policy") != "no-referrer" {
+		t.Fatalf("mesaj fotoğrafı yönlendirmesi: %d %v", pw.Code, pw.Header())
+	}
+	if pw := e.do(e.page("/sikayetler/" + reportID + "/mesaj-fotografi")); pw.Code != http.StatusNotFound {
+		t.Fatalf("fotoğrafsız şikâyet: %d", pw.Code)
 	}
 	// The search went in the body, never in a URL.
 	if strings.Contains(w.Header().Get("Location"), "@") {

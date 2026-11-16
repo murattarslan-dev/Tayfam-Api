@@ -224,6 +224,15 @@ func TestApplyCoreEventConversion(t *testing.T) {
 		t.Fatalf("takvim = %+v", got)
 	}
 
+	removed := id.New()
+	if _, err := cores.ApplyCoreEvent(ctx, &chatv1.ApplyCoreEventRequest{EventId: id.New().String(), TayfaId: tf.String(), ActorId: actor.String(),
+		Event: &chatv1.ApplyCoreEventRequest_ChannelMessageRemoved{ChannelMessageRemoved: &chatv1.ChannelMessageRemoved{MessageId: removed.String()}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := app.core[len(app.core)-1]; got.RemovedMessage != removed || got.RemovedBy != actor {
+		t.Fatalf("mesaj kaldırma = %+v", got)
+	}
+
 	notice := func(f func(n *chatv1.NotificationRequested)) *chatv1.ApplyCoreEventRequest {
 		n := &chatv1.NotificationRequested{
 			Type: chatv1.NotificationType_NOTIFICATION_TYPE_ANNOUNCEMENT, TargetType: chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT,
@@ -251,6 +260,8 @@ func TestApplyCoreEventConversion(t *testing.T) {
 			Event: &chatv1.ApplyCoreEventRequest_EventAttendanceChanged{EventAttendanceChanged: &chatv1.EventAttendanceChanged{EventId: "x", UserId: u.String()}}},
 		"katılım kullanıcısı": {EventId: id.New().String(), TayfaId: tf.String(),
 			Event: &chatv1.ApplyCoreEventRequest_EventAttendanceChanged{EventAttendanceChanged: &chatv1.EventAttendanceChanged{EventId: ev.String()}}},
+		"kaldırılan mesaj": {EventId: id.New().String(), TayfaId: tf.String(), ActorId: actor.String(),
+			Event: &chatv1.ApplyCoreEventRequest_ChannelMessageRemoved{ChannelMessageRemoved: &chatv1.ChannelMessageRemoved{MessageId: "x"}}},
 		"takvim bitişsiz": {EventId: id.New().String(), TayfaId: tf.String(),
 			Event: &chatv1.ApplyCoreEventRequest_EventScheduleChanged{EventScheduleChanged: &chatv1.EventScheduleChanged{EventId: ev.String()}}},
 	} {

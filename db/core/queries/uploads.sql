@@ -216,6 +216,13 @@ WHERE u.id = ANY(@ids::uuid[]) AND u.status = 'ready' AND u.purpose <> 'data_exp
 SELECT r2_key, full_type::text AS full_type FROM uploads
 WHERE id = @id AND purpose = 'event_photo' AND status = 'ready';
 
+-- Platform panelinde şikâyet edilen kanal mesajının fotoğrafı (ADR-0031):
+-- şikâyetin kaydettiği upload_id, hâlâ o mesaja bağlı, hazır chat_photo.
+-- name: GetReportedMessagePhotoUpload :one
+SELECT r2_key FROM uploads
+WHERE id = @id AND purpose = 'chat_photo' AND status = 'ready'
+  AND attached_type = 'channel_message' AND attached_id = @message_id;
+
 -- İçeriğin dosyası. Kolonun trigger'ı (uploads_check_ref) dosyanın bu
 -- içeriğe bağlı ve hazır olduğunu yeniden doğrular; eski dosya
 -- uploads_release_ref ile silme kuyruğuna girer.

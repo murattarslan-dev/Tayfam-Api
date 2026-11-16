@@ -1,11 +1,12 @@
 # ADR-0031: Sohbet ekleri — fotoğraf ve yer (kanal ve uçtan uca birebir)
 
-- **Durum:** Önerildi
-- **Tarih:** 2026-11-15
+- **Durum:** Kabul edildi (2026-11-16)
+- **Tarih:** 2026-11-15, güncelleme 2026-11-16
 - **Karar veren:** Ürün kararları platform sahibinindir (2026-11-15, Notion
   "Faz 2 (v2) — Medya ve Sosyal" §1; issue #205). Bu ADR onları mimariye
-  taşır ve açık kalan ayrıntıları gerekçesiyle seçer; seçilenler
-  "Platform sahibine sorular" bölümündedir.
+  taşır. Açık kalan ayrıntılar platform sahibine soruldu ve 2026-11-16'da
+  cevaplandı ("Platform sahibinin kararları"); kanal mesajı şikâyeti bu
+  cevapla eklendi (§6).
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md),
   [ADR-0005](0005-gercek-zamanli-iletisim-ve-chat.md),
   [ADR-0007](0007-dosyalar-ve-medya.md),
@@ -49,7 +50,7 @@ kimin görebileceğini chat bilir.
   Mevcut mesajlar `text`'tir. Tür sonradan değişmez (mesaj zaten
   düzenlenemez).
   - `photo`: `photo_upload_id` (core'daki dosyanın kimliği). Fotoğrafla
-    birlikte metin (alt yazı) **yoktur**; metin ayrı mesajla gider (soru 1).
+    birlikte metin (alt yazı) **yoktur**; metin ayrı mesajla gider (karar 2).
   - `place`: `latitude` (−90..90), `longitude` (−180..180), isteğe bağlı
     `name` (1–120 karakter; v15'teki `events.meeting_point_name` ile aynı
     sınır). Değerler sonlu olmalıdır (NaN/∞ reddedilir).
@@ -57,7 +58,7 @@ kimin görebileceğini chat bilir.
   zarfın içindedir (ADR-0018). Sunucu yalnızca, varsa, şifreli ekin dosya
   kimliğini (`attachment_upload_id`, mesaj başına en çok bir) bilir. Böylece
   sunucunun birebir mesaj hakkında bildiği meta veri yalnızca "bir eki var"
-  kadar büyür (ADR-0005'te kabul edilen meta veriye ek; soru 2).
+  kadar büyür (ADR-0005'te kabul edilen meta veriye ek; karar 3).
 
 ### 2. Kanal fotoğrafı: mevcut görüntü hattı
 
@@ -197,10 +198,72 @@ kimin görebileceğini chat bilir.
   dışında link üretmez. Şikâyet edenin hesabı silinse de kanıt rapor
   durdukça kalır (kapaktaki gibi sahipliği kaldırılır); rapor 1 yıl sonra
   silinince dosya da gider (bağlı kolon trigger'ı).
-- **Kanal:** issue "mevcut kanal mesajı şikâyeti" diyor; **böyle bir şikâyet
-  hedefi bugün yok** (`reports.target_type` listesinde `channel_message`
-  yoktur). Bu ADR onu eklemez; kişiyi şikâyet etme ve moderatörün mesajı
-  gizlemesi bugünkü yoldur (soru 3).
+- **Kanal** (platform sahibi, 2026-11-16; karar 1): `reports.target_type`'a
+  `channel_message` eklenir; metin, fotoğraf ve yer mesajları şikâyet
+  edilir. Mevcut şikâyet modeli aynen geçerlidir: kapalı gerekçe listesi,
+  aynı hedefe tekrar şikâyet yok (ilk şikâyet döner), günlük sınır, 18 yaş
+  altı önceliği, tayfanın kuyruğu ve 7 günde platforma yükselme, şikâyet
+  edenin kimliği kimseye gösterilmez. "Yönetici ve moderatör başkasının
+  içeriğini şikâyet etmez, gizler" kuralı diğer modüllerdeki gibi
+  istemcidedir (Notion, 2026-11-14: tüm modüllerde tek kural); sunucu
+  diğer içeriklerde olduğu gibi bunu zorlamaz.
+  - **Kimin şikâyet edebileceği chat'in kararıdır.** core,
+    `ChannelService.VerifyChannelMessageForReport`'u **şikâyet edenin kendi
+    token'ıyla** çağırır (birebirdeki `VerifyDirectMessageForReport` gibi).
+    chat, mesajları listelerken uyguladığı kuralın aynısını uygular:
+    şikâyet eden tayfanın etkin üyesi ve kanalın kitlesinde (`members`,
+    `staff`, `event`, `selected`), mesaj bu tayfanın, silinmemiş, yazarın
+    hesabı silinmemiş. Aksi her durumda `report-target-not-found` (neden
+    söylenmez): kitle dışındaki biri mesajı şikâyet edemez ve varlığını da
+    öğrenemez (IDOR). Kendi mesajı `invalid-request`. Çağrı yazma
+    transaction'ından önce, kilit tutulmadan yapılır; önce aynı hedefe
+    önceki şikâyete bakılır (varsa chat'e sorulmaz).
+  - **Şikâyet edilen mesaj şikâyetle saklanır.** chat'in cevabı (kanal,
+    tür, metin ya da yer ya da fotoğrafın dosya kimliği) `reports`'a yazılır
+    (`channel_id`, `message_kind`, `message_body`,
+    `message_photo_upload_id`, `place_*`) ve değişmez (`reports_guard`).
+    Gerekçe: yazarın kendi silmesi kanal mesajının metnini hemen siler
+    (§5); şikâyet konusunu kaybetmemelidir. Saklanan, şikâyet edenin zaten
+    okuyabildiği mesajın kendisidir; core başka hiçbir mesajı okumaz ve
+    chat'e "her mesajı oku" yetkisi verilmez. Bu kopyayı yalnızca platform
+    paneli okur; log'a, olaya, şikâyet edene ve tayfa kuyruğuna girmez;
+    şikâyet 1 yıl sonra silinince gider. Fotoğrafın kendisi kopyalanmaz:
+    yazar mesajı silerse fotoğraf da gider (§5).
+  - **Tayfa kuyruğu:** şikâyet edilen kişi mesajın yazarıdır; kuyruk
+    mesajı açmak için `channel_id`'yi de gösterir. Kanalı okuyamayan
+    moderatör (içinde olmadığı etkinlik ya da seçili kişi kanalı) mesajı
+    açamaz ve gizleyemez; şikâyeti reddedebilir, üyeyi susturabilir ya da
+    7 gün sonra platforma gider.
+  - **`content_removed`:** moderatörün mesajı kendi yoluyla gizlemesi
+    (ya da yazarın silmesi) gerekir. core bunu chat'in
+    `ReportedMessageService.GetChannelMessageStatus`'una **core'un servis
+    token'ıyla** (yalnızca `tayfam-core`) sorar; cevap tek bayraktır
+    (silinmiş ya da yok), içerik dönmez. Çağrı çözüm transaction'ından önce
+    yapılır; chat cevap veremezse `503`.
+  - **Platform paneli:** metin ve yer "şikâyet edilmiş içerik moderasyon
+    için görüntülenebilir" kuralıyla (Notion "Panelin göremedikleri")
+    şikâyetteki kopyadan gösterilir; chat'e sorulmaz. Paylaşılan yer
+    içeriktir (ADR-0008), kullanıcı konumu değildir; panel sözleşmesinin
+    koordinat yasağına yalnızca `ReportedPlace` için dar bir istisna
+    eklendi (test). Fotoğraf kanıt fotoğrafıyla aynı desende açılır:
+    okumada yalnızca `has_message_photo`, link "Mesajın fotoğrafını aç"
+    tıklamasında `AdminService.GetReportedMessagePhotoUrl` ile imzalanır
+    (5 dakika; dosya hâlâ o mesaja bağlı, hazır `chat_photo` olmalı) ve
+    ayrı denetim işlemi olarak yazılır (`report.view_message_photo`).
+  - **Platformun `content_removed` kararı:** core kanal mesajını
+    kaldıramaz (verinin sahibi chat). Karar transaction'ında
+    `report.channel_message_removed` olayı yazılır (yalnızca kimlikler,
+    aktör platform yöneticisi); core'un chat relay'i bunu
+    `ApplyCoreEvent{channel_message_removed}` olarak iletir ve chat mesajı
+    **moderatör gizlemesi gibi** gizler (tayfa yöneticisi 30 gün içinde
+    geri alabilir; aktör platform yöneticisi olarak kaydedilir; bağlı
+    istemcilere silindi bilgisi gider). Tekrar gelen olay bir şey
+    değiştirmez.
+  - **Ele geçirilirse:** core'un servis token'ı chat'te yalnızca "bu mesaj
+    kaldırılmış mı" sorusunu ve geri alınabilir gizlemeyi açar; hiçbir
+    mesajın içeriğini okutmaz. Şikâyet edenin token'ıyla yapılan doğrulama
+    kitleyi aşamaz. Ele geçirilmiş bir gateway şikâyete kitle dışı bir
+    mesaj ekleyemez (core chat'e şikâyet edenin token'ıyla sorar).
 
 ### 7. Sınırlar
 
@@ -226,7 +289,12 @@ kimin görebileceğini chat bilir.
   kalır); bağlanma türleri
   `channel_message`, `dm_message`, `report`; `reports.evidence_upload_id`
   (bağlı dosya trigger'ları ADR-0020 düzeninde); `evidence_text`'in
-  `dm_message`'da metin ya da dosyadan en az birine gevşemesi.
+  `dm_message`'da metin ya da dosyadan en az birine gevşemesi;
+  `reports.target_type`'a `channel_message` ve şikâyet edilen mesajın
+  kolonları (`channel_id`, `message_kind`, `message_body` 1–4000,
+  `message_photo_upload_id`, `place_latitude`/`place_longitude` aralıkta,
+  `place_name` 1–120; türe göre tam olarak gerekenler `CHECK` ile, değişmez
+  `reports_guard` ile; diğer servisin kimlikleri FK'siz).
 - chat `00017_message_media.sql`: `channel_messages.kind`,
   `photo_upload_id`; `dm_messages.attachment_upload_id`; `chat_app`'e
   yalnızca gereken kolon düzeyinde `UPDATE`.
@@ -270,6 +338,13 @@ kimin görebileceğini chat bilir.
   çerçevesi aynı `ChannelMessage` gövdesini taşır.
 - KVKK dışa aktarma: kullanıcının kendi kanal mesajlarının türü, yeri
   (açık) ve fotoğraf kimliği girer; dosyalar zip'e girmez (ADR-0021).
+  Kanal mesajı şikâyetinin sakladığı mesaj, şikâyet edenin dışa
+  aktarımına girmez (başkasının içeriğidir); şikâyetin kendisi girer.
+- Kanal mesajı şikâyeti: chat `ChannelService.VerifyChannelMessageForReport`
+  (kullanıcı token'ı) ve `ReportedMessageService` (yalnızca core'un servis
+  token'ı) kazanır; core'un chat'e giden olay listesine
+  `report.channel_message_removed` eklenir. core'un servis token'ıyla chat
+  bağlantısı tek yerde kurulur ve uzlaştırma işiyle paylaşılır.
 - Notion "Veri Modeli (v15)" bu tablolarla güncellenmelidir (PR
   açıklamasında listelendi).
 
@@ -288,8 +363,16 @@ kimin görebileceğini chat bilir.
 - **Birebir ekte sunucunun da mesaj türünü bilmesi:** liste ve bildirimde
   "fotoğraf" yazmak kolaylaşırdı, ama sunucuya içerik hakkında bilgi verir;
   istemci zarfı çözünce zaten bilir.
-- **Kanal fotoğrafına alt yazı:** yaygın, ama ürün kararında yok; ayrı
-  karar (soru 1).
+- **Kanal fotoğrafına alt yazı:** yaygın, ama ürün kararında yok
+  (karar 2).
+- **Şikâyet edilen kanal mesajını panelde chat'ten canlı okumak:** core'a
+  servis token'ıyla "herhangi bir mesajı oku" yetkisi gerekirdi (chat
+  şikâyetin varlığını doğrulayamaz) ve yazar mesajı silince metni de
+  giderdi. Şikâyet anındaki kopya, şikâyet edenin zaten okuyabildiğinden
+  fazlasını içermez.
+- **Kanal mesajında kanıtı şikâyet edene yükletmek (birebirdeki gibi):**
+  sunucu kanal mesajını zaten okuyabilir; şikâyet edenin değiştirebileceği
+  bir kopyaya gerek yok.
 - **Bağlamayı chat'in transaction'ı içinde yapmak (ilk taslak):** geri
   almada core'daki bağlama yine kalırdı (servisler arası transaction yok)
   ve 5 sn'ye kadar süren bir çağrı chat'te kilit ve bağlantı tutardı.
@@ -301,22 +384,21 @@ kimin görebileceğini chat bilir.
   token'ıyla):** yazarın silmesinde yeterdi, ama 30 günlük kalıcı silmede
   kullanıcı token'ı yoktur.
 
-## Platform sahibine sorular
+## Platform sahibinin kararları (2026-11-16)
 
-1. Kanal fotoğrafında alt yazı yok (metin ayrı mesaj). Alt yazı istenirse
-   `photo` mesajına şifreli `body` eklenir; şema buna hazırdır.
-2. Birebirde sunucu "bu mesajın şifreli bir eki var" bilgisini görür (mesaj
-   türünü değil). Kabul mü?
-3. Kanal mesajı şikâyet hedefi (`channel_message`) bugün yok; fotoğraf için
-   ayrı bir issue açılsın mı (chat'in mesajı doğrulaması, tayfa kuyruğu,
-   panelde fotoğraf)?
-4. `dm_attachment` üst sınırı 10 MiB (yalnızca fotoğraf). Video/dosya
-   kapsam dışı olduğu için yeterli görüldü.
-5. Hesap silinince kişinin kanal fotoğrafları da silinir (ADR-0020 §5'teki
-   "kullanıcının dosyaları" kuralı); mesaj kalır, fotoğraf görünmez. Buna
-   karşılık şikâyet kanıtı, şikâyet edenin hesabı silinse de rapor
-   durdukça (1 yıl) platformda kalır. İkisi de kabul mü?
-6. Kanal mesajı kalıcı silinirken ya da yazar silerken fotoğrafın core'da
-   silinmesi chat'in ilk outbox relay'iyle olur; bunun için chat pod'una
-   core audience'lı servis token'ı bağlandı (`deploy/base/chat.yaml`).
-   Cluster tarafında ek adım yok; onay?
+1. **Kanal mesajı şikâyeti bu işle eklenir** (§6): `channel_message`
+   (metin, fotoğraf, yer); tayfa kuyruğu ve platform paneli; mevcut
+   şikâyet modeli; çözüm `content_removed` = moderatör gizlemesi; panelde
+   metin/yer "şikâyet edilince içerik görünür" kuralıyla, fotoğraf
+   tıklamada imzalanan kısa link ve ayrı denetim kaydıyla; kitle dışındaki
+   biri şikâyet edemez.
+2. **Alt yazı yok:** fotoğraf ve metin ayrı mesajlardır.
+3. **Diğer seçimler uygun:** birebir ekte sunucu yalnızca "eki var" bilir
+   (tür bilinmez); `dm_attachment` 10 MiB; hesap silinince kanal
+   fotoğrafları silinir; kanıt fotoğrafı şikâyet durdukça kalır; chat'in
+   core audience'lı servis token'ı (`deploy/base/chat.yaml`).
+
+Bu ADR'nin kararlar dışında seçtiği ayrıntılar (gerekçeleri §6'da):
+şikâyet edilen kanal mesajının şikâyetle saklanması (fotoğraf hariç),
+panel sözleşmesinde `ReportedPlace` için koordinat istisnası, kanalı
+okuyamayan moderatörün mesajı gizleyememesi.

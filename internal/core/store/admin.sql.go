@@ -393,7 +393,8 @@ func (q *Queries) AdminGetEventPhoto(ctx context.Context, arg AdminGetEventPhoto
 const adminGetPlatformReport = `-- name: AdminGetPlatformReport :one
 SELECT id, tayfa_id, target_type, target_id, subject_user_id, reporter_id, reason, description,
        priority, created_at, escalated_to_platform_at, platform_status, platform_decision, platform_handled_at,
-       evidence_text, status, evidence_upload_id
+       evidence_text, status, evidence_upload_id,
+       channel_id, message_kind, message_body, message_photo_upload_id, place_latitude, place_longitude, place_name
 FROM reports
 WHERE id = $1 AND escalated_to_platform_at IS NOT NULL
 `
@@ -416,6 +417,13 @@ type AdminGetPlatformReportRow struct {
 	EvidenceText          pgtype.Text
 	Status                string
 	EvidenceUploadID      pgtype.UUID
+	ChannelID             pgtype.UUID
+	MessageKind           pgtype.Text
+	MessageBody           pgtype.Text
+	MessagePhotoUploadID  pgtype.UUID
+	PlaceLatitude         pgtype.Float8
+	PlaceLongitude        pgtype.Float8
+	PlaceName             pgtype.Text
 }
 
 func (q *Queries) AdminGetPlatformReport(ctx context.Context, id pgtype.UUID) (AdminGetPlatformReportRow, error) {
@@ -439,6 +447,13 @@ func (q *Queries) AdminGetPlatformReport(ctx context.Context, id pgtype.UUID) (A
 		&i.EvidenceText,
 		&i.Status,
 		&i.EvidenceUploadID,
+		&i.ChannelID,
+		&i.MessageKind,
+		&i.MessageBody,
+		&i.MessagePhotoUploadID,
+		&i.PlaceLatitude,
+		&i.PlaceLongitude,
+		&i.PlaceName,
 	)
 	return i, err
 }

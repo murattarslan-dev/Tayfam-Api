@@ -159,6 +159,9 @@ type Querier interface {
 	// Görme kararı (MessageMediaService, issue #205): fotoğrafın bağlı olduğu
 	// mesaj ve kanalı. Silinmiş mesaj ve arşivlenmiş kanal da döner; karar
 	// uygulamadadır (silinmiş mesajın fotoğrafı görünmez).
+	// Şikâyet edilen kanal mesajı (issue #205, ADR-0031): kimliğiyle ve
+	// kanalının tayfasıyla; erişim uygulamada denetlenir.
+	GetChannelMessageForReport(ctx context.Context, id pgtype.UUID) (GetChannelMessageForReportRow, error)
 	GetChannelPhotoMessage(ctx context.Context, id pgtype.UUID) (GetChannelPhotoMessageRow, error)
 	GetChannelRead(ctx context.Context, arg GetChannelReadParams) (pgtype.UUID, error)
 	// Birebir mesajlar (issue #95; 00006_direct_messages.sql). Taraflar her
