@@ -247,6 +247,24 @@ type FriendRequestOutcome struct {
 	ResolvedAt  pgtype.Timestamptz
 }
 
+type FriendScore struct {
+	UserLowID    pgtype.UUID
+	UserHighID   pgtype.UUID
+	Score        float64
+	SharedCount  int32
+	LastSharedAt pgtype.Timestamptz
+	ComputedAt   pgtype.Timestamptz
+}
+
+type FriendSuggestion struct {
+	UserID          pgtype.UUID
+	SuggestedUserID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	DismissedAt     pgtype.Timestamptz
+	WithdrawnAt     pgtype.Timestamptz
+	Source          string
+}
+
 type Friendship struct {
 	UserLowID   pgtype.UUID
 	UserHighID  pgtype.UUID
@@ -375,6 +393,13 @@ type Report struct {
 	PlatformDecision      pgtype.Text
 	PlatformHandledAt     pgtype.Timestamptz
 	EvidenceUploadID      pgtype.UUID
+}
+
+type SocialSetting struct {
+	UserID              pgtype.UUID
+	ProfilingEnabled    bool
+	HideFromSuggestions bool
+	UpdatedAt           pgtype.Timestamptz
 }
 
 type Tag struct {

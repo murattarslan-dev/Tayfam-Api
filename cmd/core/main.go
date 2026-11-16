@@ -156,7 +156,9 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 
-	background, err := jobs.New(jobs.Config{Pool: pool, Log: rt.Log})
+	// Arkadaş önerisi (issue #208, ADR-0030): 18 yaş sınırı identity'nin
+	// IsMinor cevabıyla; identity yoksa (yalnızca yerel) öneri yapılmaz.
+	background, err := jobs.New(jobs.Config{Pool: pool, Log: rt.Log, Minors: minors})
 	if err != nil {
 		return err
 	}
@@ -240,7 +242,8 @@ func setup(rt *service.Runtime) error {
 	rt.AddWorker("event-series", events.RunSeriesGenerator)
 	// Pasif tayfa temizliği, 72 saatlik tayfa silme, 30 günlük kalıcı silme,
 	// yürüyüş dönmeme alarmı ve plaka temizliği (issue #66); şikâyetlerin
-	// 7 gün sonra platforma yükselmesi ve 1 yıllık saklama süresi (#76). Her biri ayrı
+	// 7 gün sonra platforma yükselmesi ve 1 yıllık saklama süresi (#76);
+	// arkadaşlık puanı ve haftalık arkadaş önerisi (#208). Her biri ayrı
 	// bir worker; birden fazla pod'da her partiyi advisory kilidi alan tek
 	// pod işler.
 	for _, w := range background.Workers() {

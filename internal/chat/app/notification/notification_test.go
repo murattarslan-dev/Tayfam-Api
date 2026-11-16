@@ -492,9 +492,12 @@ func (f *fakeResolver) Resolve(_ context.Context, refs []RequestRef) ([]string, 
 	f.refs = refs
 	out := make([]string, 0, len(refs))
 	for _, r := range refs {
-		if r.Invitation {
+		switch {
+		case r.Invitation:
 			out = append(out, "declined")
-		} else {
+		case r.Suggestion:
+			out = append(out, "expired")
+		default:
 			out = append(out, "pending")
 		}
 	}
@@ -515,6 +518,10 @@ func TestListResolutions(t *testing.T) {
 	must(t, pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error { return Store(ctx, store.New(tx), fr) }))
 	e.store(t, Request{Type: TypeTayfaInvitation, Tayfa: tf, Actor: requester, TargetType: TargetTayfa, Target: tf, Recipients: []id.ID{u}})
 	e.announce(t, requester, u)
+	// Issue #208: a friend suggestion, no tayfa, no actor.
+	suggested := id.New()
+	fs := Request{Event: id.New(), Type: TypeFriendSuggestion, TargetType: TargetUser, Target: suggested, Recipients: []id.ID{u}}
+	must(t, pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error { return Store(ctx, store.New(tx), fs) }))
 
 	list, _, err := e.svc.List(ctx, u, 0, "")
 	must(t, err)
@@ -522,11 +529,12 @@ func TestListResolutions(t *testing.T) {
 	for _, n := range list {
 		got[n.Type] = n.Resolution
 	}
-	if got[TypeFriendRequest] != "pending" || got[TypeTayfaInvitation] != "declined" || got[TypeAnnouncement] != "" || r.calls != 1 || len(r.refs) != 2 {
+	if got[TypeFriendRequest] != "pending" || got[TypeTayfaInvitation] != "declined" || got[TypeFriendSuggestion] != "expired" ||
+		got[TypeAnnouncement] != "" || r.calls != 1 || len(r.refs) != 3 {
 		t.Fatalf("durumlar = %v, çağrı %d %+v", got, r.calls, r.refs)
 	}
 	for _, ref := range r.refs {
-		if (ref.Invitation && ref.ID != tf) || (!ref.Invitation && ref.ID != requester) {
+		if (ref.Invitation && ref.ID != tf) || (ref.Suggestion && ref.ID != suggested) || (!ref.Invitation && !ref.Suggestion && ref.ID != requester) {
 			t.Fatalf("soru = %+v", ref)
 		}
 	}

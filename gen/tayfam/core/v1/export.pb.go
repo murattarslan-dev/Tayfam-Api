@@ -63,6 +63,12 @@ const (
 	CoreExportSection_CORE_EXPORT_SECTION_EVENT_PHOTOS CoreExportSection = 18
 	// "Boşum" free days the caller saved, today on (issue #207).
 	CoreExportSection_CORE_EXPORT_SECTION_AVAILABILITY CoreExportSection = 19
+	// One record: the caller's profiling and "do not suggest me" settings
+	// and how many people a friendship score is kept with (ADR-0030). The
+	// scores themselves and who they are with are not exported.
+	CoreExportSection_CORE_EXPORT_SECTION_SOCIAL_SETTINGS CoreExportSection = 20
+	// Friend suggestions made to the caller, dismissed ones included.
+	CoreExportSection_CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS CoreExportSection = 21
 )
 
 // Enum value maps for CoreExportSection.
@@ -88,28 +94,32 @@ var (
 		17: "CORE_EXPORT_SECTION_UPLOADS",
 		18: "CORE_EXPORT_SECTION_EVENT_PHOTOS",
 		19: "CORE_EXPORT_SECTION_AVAILABILITY",
+		20: "CORE_EXPORT_SECTION_SOCIAL_SETTINGS",
+		21: "CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS",
 	}
 	CoreExportSection_value = map[string]int32{
-		"CORE_EXPORT_SECTION_UNSPECIFIED":      0,
-		"CORE_EXPORT_SECTION_MEMBERSHIPS":      1,
-		"CORE_EXPORT_SECTION_EVENT_RSVPS":      2,
-		"CORE_EXPORT_SECTION_HIKE_CHECKINS":    3,
-		"CORE_EXPORT_SECTION_CONVOY_VEHICLES":  4,
-		"CORE_EXPORT_SECTION_ACTIVITY_RECORDS": 5,
-		"CORE_EXPORT_SECTION_ANNOUNCEMENTS":    6,
-		"CORE_EXPORT_SECTION_EVENTS":           7,
-		"CORE_EXPORT_SECTION_QUESTIONS":        8,
-		"CORE_EXPORT_SECTION_ANSWERS":          9,
-		"CORE_EXPORT_SECTION_ANSWER_VOTES":     10,
-		"CORE_EXPORT_SECTION_POLLS":            11,
-		"CORE_EXPORT_SECTION_POLL_VOTES":       12,
-		"CORE_EXPORT_SECTION_FISHING_CATCHES":  13,
-		"CORE_EXPORT_SECTION_FRIENDSHIPS":      14,
-		"CORE_EXPORT_SECTION_BLOCKS":           15,
-		"CORE_EXPORT_SECTION_REPORTS":          16,
-		"CORE_EXPORT_SECTION_UPLOADS":          17,
-		"CORE_EXPORT_SECTION_EVENT_PHOTOS":     18,
-		"CORE_EXPORT_SECTION_AVAILABILITY":     19,
+		"CORE_EXPORT_SECTION_UNSPECIFIED":        0,
+		"CORE_EXPORT_SECTION_MEMBERSHIPS":        1,
+		"CORE_EXPORT_SECTION_EVENT_RSVPS":        2,
+		"CORE_EXPORT_SECTION_HIKE_CHECKINS":      3,
+		"CORE_EXPORT_SECTION_CONVOY_VEHICLES":    4,
+		"CORE_EXPORT_SECTION_ACTIVITY_RECORDS":   5,
+		"CORE_EXPORT_SECTION_ANNOUNCEMENTS":      6,
+		"CORE_EXPORT_SECTION_EVENTS":             7,
+		"CORE_EXPORT_SECTION_QUESTIONS":          8,
+		"CORE_EXPORT_SECTION_ANSWERS":            9,
+		"CORE_EXPORT_SECTION_ANSWER_VOTES":       10,
+		"CORE_EXPORT_SECTION_POLLS":              11,
+		"CORE_EXPORT_SECTION_POLL_VOTES":         12,
+		"CORE_EXPORT_SECTION_FISHING_CATCHES":    13,
+		"CORE_EXPORT_SECTION_FRIENDSHIPS":        14,
+		"CORE_EXPORT_SECTION_BLOCKS":             15,
+		"CORE_EXPORT_SECTION_REPORTS":            16,
+		"CORE_EXPORT_SECTION_UPLOADS":            17,
+		"CORE_EXPORT_SECTION_EVENT_PHOTOS":       18,
+		"CORE_EXPORT_SECTION_AVAILABILITY":       19,
+		"CORE_EXPORT_SECTION_SOCIAL_SETTINGS":    20,
+		"CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS": 21,
 	}
 )
 
@@ -237,7 +247,7 @@ const file_tayfam_core_v1_export_proto_rawDesc = "" +
 	"\x13ExportMyDataRequest\"m\n" +
 	"\x14ExportMyDataResponse\x12;\n" +
 	"\asection\x18\x01 \x01(\x0e2!.tayfam.core.v1.CoreExportSectionR\asection\x12\x18\n" +
-	"\arecords\x18\x02 \x03(\fR\arecords*\xec\x05\n" +
+	"\arecords\x18\x02 \x03(\fR\arecords*\xc1\x06\n" +
 	"\x11CoreExportSection\x12#\n" +
 	"\x1fCORE_EXPORT_SECTION_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fCORE_EXPORT_SECTION_MEMBERSHIPS\x10\x01\x12#\n" +
@@ -259,7 +269,9 @@ const file_tayfam_core_v1_export_proto_rawDesc = "" +
 	"\x1bCORE_EXPORT_SECTION_REPORTS\x10\x10\x12\x1f\n" +
 	"\x1bCORE_EXPORT_SECTION_UPLOADS\x10\x11\x12$\n" +
 	" CORE_EXPORT_SECTION_EVENT_PHOTOS\x10\x12\x12$\n" +
-	" CORE_EXPORT_SECTION_AVAILABILITY\x10\x132l\n" +
+	" CORE_EXPORT_SECTION_AVAILABILITY\x10\x13\x12'\n" +
+	"#CORE_EXPORT_SECTION_SOCIAL_SETTINGS\x10\x14\x12*\n" +
+	"&CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS\x10\x152l\n" +
 	"\rExportService\x12[\n" +
 	"\fExportMyData\x12#.tayfam.core.v1.ExportMyDataRequest\x1a$.tayfam.core.v1.ExportMyDataResponse0\x01B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vExportProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"

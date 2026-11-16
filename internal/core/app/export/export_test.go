@@ -57,6 +57,13 @@ INSERT INTO user_availability (id, user_id, day, slots, note) VALUES
 INSERT INTO reports (id, tayfa_id, reporter_id, target_type, target_id, reason) VALUES
   (gen_random_uuid(), '%[1]s', '%[2]s', 'announcement', '%[5]s', 'spam'),
   (gen_random_uuid(), '%[1]s', '%[3]s', 'announcement', '%[4]s', 'spam');
+INSERT INTO friend_scores (user_low_id, user_high_id, score, shared_count, last_shared_at, computed_at)
+  VALUES ('%[9]s', '%[10]s', 2.75, 4, now(), now());
+INSERT INTO friend_suggestions (user_id, suggested_user_id, created_at, dismissed_at, source) VALUES
+  ('%[2]s', '%[3]s', now(), NULL, 'suggested'),
+  ('%[2]s', gen_random_uuid(), now(), now(), 'blocked'),
+  ('%[3]s', '%[2]s', now(), now(), 'suggested');
+INSERT INTO social_settings (user_id, hide_from_suggestions) VALUES ('%[3]s', true);
 BEGIN;
 SET LOCAL session_replication_role = replica;
 INSERT INTO events (id, tayfa_id, type, mode, title, starts_at, ends_at, online_url, created_by)
@@ -135,6 +142,20 @@ func TestExportOnlyCallersData(t *testing.T) {
 			}
 		}
 	}
+	// Issue #208, ADR-0030: the settings and how many people a score is
+	// kept with; never the score or who it is with.
+	if st := got[SectionSocialSettings]; len(st) != 1 || st[0]["profiling_enabled"] != true ||
+		st[0]["hide_from_suggestions"] != false || st[0]["scored_people_count"] != float64(1) {
+		t.Fatalf("sosyal ayarlar: %v", st)
+	}
+	for _, k := range []string{"score", "scores", "shared_count", "user_id"} {
+		if _, ok := got[SectionSocialSettings][0][k]; ok {
+			t.Errorf("sosyal ayarlarda %s olmamalı", k)
+		}
+	}
+	if sg := got[SectionFriendSuggestions]; len(sg) != 1 || sg[0]["user_id"] != other.String() || sg[0]["dismissed_at"] != nil {
+		t.Fatalf("öneriler yalnızca kendisine yapılanlar, engel kaydı değil: %v", sg)
+	}
 	if ph := got[SectionEventPhotos]; len(ph) != 1 || ph[0]["caption"] != "Benim fotoğrafım" || ph[0]["tayfa_id"] == nil || ph[0]["upload_id"] == nil {
 		t.Fatalf("albüm fotoğrafları yalnızca kendi yükledikleri: %v", ph)
 	}
@@ -159,6 +180,12 @@ func TestExportOnlyCallersData(t *testing.T) {
 	}
 	if f := theirs[SectionFriendships]; len(f) != 1 || f[0]["requested_by_me"] != true {
 		t.Fatalf("arkadaşlık: %v", f)
+	}
+	if st := theirs[SectionSocialSettings]; len(st) != 1 || st[0]["hide_from_suggestions"] != true || st[0]["updated_at"] == nil {
+		t.Fatalf("diğer kullanıcının ayarları: %v", st)
+	}
+	if sg := theirs[SectionFriendSuggestions]; len(sg) != 1 || sg[0]["user_id"] != me.String() || sg[0]["dismissed_at"] == nil {
+		t.Fatalf("diğer kullanıcının önerileri: %v", sg)
 	}
 
 	// A user with nothing gets nothing.

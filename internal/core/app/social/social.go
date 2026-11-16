@@ -336,8 +336,9 @@ func (s *Service) accept(ctx context.Context, q *store.Queries, caller, requeste
 
 // RemoveFriendship ends a friendship, withdraws the caller's request or
 // declines other's request: whatever there is between the two is deleted.
-// Nobody is told; a declined sender keeps seeing nothing. Removing nothing
-// is not an error.
+// Nobody is told; a declined sender keeps seeing nothing. A declined
+// request or an ended friendship also excludes the pair from friend
+// suggestions for good (ADR-0030). Removing nothing is not an error.
 func (s *Service) RemoveFriendship(ctx context.Context, caller, other id.ID) error {
 	if other == caller || other == (id.ID{}) {
 		return apperr.Validation("user_id")
@@ -376,6 +377,14 @@ func (s *Service) RemoveFriendship(ctx context.Context, caller, other id.ID) err
 			RequesterID: requester.PG(), RecipientID: recipient.PG(), Outcome: outcome, ResolvedAt: ts(s.now()),
 		}); err != nil {
 			return fmt.Errorf("istek sonucu: %w", err)
+		}
+		// A declined request and an ended friendship are never suggested
+		// again (ADR-0030 §6); a withdrawn request is not a rejection.
+		switch {
+		case f.Status == "accepted":
+			return s.excludePair(ctx, q, caller, other, excludeUnfriended)
+		case outcome == OutcomeDeclined:
+			return s.excludePair(ctx, q, caller, other, excludeDeclined)
 		}
 		return nil
 	})
@@ -453,7 +462,9 @@ func (s *Service) listFriendships(ctx context.Context, caller id.ID, status, dir
 // Blocks
 
 // BlockUser blocks target: the friendship or waiting request between the two
-// goes in the same transaction. Blocking again changes nothing.
+// goes in the same transaction, and so do their friendship score and open
+// suggestions; the pair is never suggested again (ADR-0030). Blocking again
+// changes nothing.
 func (s *Service) BlockUser(ctx context.Context, caller, target id.ID) error {
 	if target == caller || target == (id.ID{}) {
 		return apperr.Validation("user_id")
@@ -477,7 +488,7 @@ func (s *Service) BlockUser(ctx context.Context, caller, target id.ID) error {
 		if _, err := q.CreateBlock(ctx, store.CreateBlockParams{BlockerID: caller.PG(), BlockedID: target.PG()}); err != nil {
 			return fmt.Errorf("engel: %w", err)
 		}
-		return nil
+		return s.excludePair(ctx, q, caller, target, excludeBlocked)
 	})
 }
 
