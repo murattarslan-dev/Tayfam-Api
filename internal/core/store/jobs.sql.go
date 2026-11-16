@@ -321,6 +321,26 @@ func (q *Queries) PurgeAnswers(ctx context.Context, arg PurgeAnswersParams) (int
 	return result.RowsAffected(), nil
 }
 
+const purgeEventPhotos = `-- name: PurgeEventPhotos :execrows
+DELETE FROM event_photos WHERE id IN (
+  SELECT x.id FROM event_photos x WHERE x.deleted_at <= $1
+  ORDER BY x.deleted_at, x.id LIMIT $2 FOR UPDATE SKIP LOCKED)
+`
+
+type PurgeEventPhotosParams struct {
+	DeletedBefore pgtype.Timestamptz
+	N             int32
+}
+
+// Albüm fotoğrafı; dosyası uploads_release_ref ile silme kuyruğuna girer.
+func (q *Queries) PurgeEventPhotos(ctx context.Context, arg PurgeEventPhotosParams) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeEventPhotos, arg.DeletedBefore, arg.N)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const purgeEvents = `-- name: PurgeEvents :execrows
 DELETE FROM events WHERE id IN (
   SELECT x.id FROM events x WHERE x.deleted_at <= $1

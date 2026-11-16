@@ -402,6 +402,9 @@ func TestPanelCannotSee(t *testing.T) {
 	}
 	want := []string{
 		"Item.TargetType", "Item.Target", "Item.Author", "Item.Title", "Item.Body", "Item.Options", "Item.CreatedAt", "Item.DeletedAt",
+		// Only a reported album photo's short link (ADR-0028 §5; platform
+		// owner 2026-11-15); the upload ID stays inside core.
+		"Item.MediaURL", "Item.MediaExpires", "Item.upload",
 		"TayfaDetail.TayfaSummary", "TayfaDetail.Description", "TayfaDetail.City", "TayfaDetail.District", "TayfaDetail.SuspendReason", "TayfaDetail.Staff", "TayfaDetail.OpenPlatformReports",
 		"TayfaSummary.ID", "TayfaSummary.Name", "TayfaSummary.Status", "TayfaSummary.Listed", "TayfaSummary.MemberCount", "TayfaSummary.CreatedAt", "TayfaSummary.SuspendedAt", "TayfaSummary.DeletedAt", "TayfaSummary.DeletionScheduledAt",
 		"Member.User", "Member.DisplayName", "Member.Role", "Member.Status", "Member.JoinedAt", "Member.BanReason",

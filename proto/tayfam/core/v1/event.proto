@@ -201,6 +201,34 @@ service EventService {
   // ERROR_REASON_EVENT_ITEM_NOT_FOUND.
   rpc RemoveFishingCatch(RemoveFishingCatchRequest) returns (RemoveFishingCatchResponse);
 
+  // AddEventPhoto adds the caller's own READY EVENT_PHOTO upload, opened
+  // for this tayfa, to the event's album (issue #206, ADR-0028). The
+  // caller's attendance must be verified; photos are accepted from the
+  // start until seven days after the end (ERROR_REASON_ALBUM_CLOSED
+  // otherwise), not on a cancelled event. At most 30 photos per person and
+  // 500 per album (deleted ones do not count). A repeat with the same
+  // client_request_id returns the first photo.
+  //
+  // Errors: common, ERROR_REASON_EVENT_CANCELLED, ERROR_REASON_ALBUM_CLOSED,
+  // ERROR_REASON_NOT_ATTENDED, ERROR_REASON_EVENT_LIMIT,
+  // ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,
+  // ERROR_REASON_UPLOAD_IN_USE, ERROR_REASON_VALIDATION.
+  rpc AddEventPhoto(AddEventPhotoRequest) returns (AddEventPhotoResponse);
+
+  // ListEventPhotos lists the event's album, oldest first. Every active
+  // member may read it, also while muted and on a cancelled event. The
+  // photos carry upload IDs only; links come from MediaService.GetMediaUrls.
+  //
+  // Errors: common.
+  rpc ListEventPhotos(ListEventPhotosRequest) returns (ListEventPhotosResponse);
+
+  // RemoveEventPhoto removes an album photo: one's own (also while muted),
+  // any photo of one's own event for the organizer, any photo for
+  // moderators and admins. Works on cancelled and ended events too.
+  //
+  // Errors: common, ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+  rpc RemoveEventPhoto(RemoveEventPhotoRequest) returns (RemoveEventPhotoResponse);
+
   // GetEventSeries returns a series' rule (issue #51). Every active member
   // may read it.
   //
@@ -859,6 +887,58 @@ message RemoveFishingCatchRequest {
 }
 
 message RemoveFishingCatchResponse {}
+
+// EventPhoto is a photo of an event's album (issue #206, ADR-0028).
+message EventPhoto {
+  string id = 1;
+  string event_id = 2;
+  // The member who added it.
+  string uploader_id = 3;
+  // The READY EVENT_PHOTO upload; links come from
+  // MediaService.GetMediaUrls.
+  string upload_id = 4;
+  // Optional, 1–200 characters.
+  string caption = 5;
+  google.protobuf.Timestamp create_time = 6;
+}
+
+message AddEventPhotoRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  // Required: the caller's own READY EVENT_PHOTO upload opened for this
+  // tayfa and not attached elsewhere.
+  string upload_id = 3;
+  // Optional, 1–200 characters after trimming; empty means none.
+  string caption = 4;
+  // Required. A UUID the client generates once per photo and reuses on
+  // retry.
+  string client_request_id = 5;
+}
+
+message AddEventPhotoResponse {
+  EventPhoto photo = 1;
+}
+
+message ListEventPhotosRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  // 0 means 50; at most 100.
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListEventPhotosResponse {
+  repeated EventPhoto photos = 1;
+  string next_page_token = 2;
+}
+
+message RemoveEventPhotoRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  string photo_id = 3;
+}
+
+message RemoveEventPhotoResponse {}
 
 message GetEventSeriesRequest {
   string tayfa_id = 1;

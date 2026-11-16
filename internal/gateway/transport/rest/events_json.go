@@ -310,6 +310,29 @@ type fishingCatchListJSON struct {
 	NextPageToken string             `json:"next_page_token,omitempty"`
 }
 
+// eventPhotoJSON is an album photo (issue #206). Links come from
+// POST /v1/media/urls.
+type eventPhotoJSON struct {
+	ID         string    `json:"id"`
+	EventID    string    `json:"event_id"`
+	UploaderID string    `json:"uploader_id"`
+	UploadID   string    `json:"upload_id"`
+	Caption    string    `json:"caption,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+func eventPhotoFrom(p *corev1.EventPhoto) eventPhotoJSON {
+	return eventPhotoJSON{
+		ID: p.GetId(), EventID: p.GetEventId(), UploaderID: p.GetUploaderId(), UploadID: p.GetUploadId(),
+		Caption: p.GetCaption(), CreatedAt: p.GetCreateTime().AsTime(),
+	}
+}
+
+type eventPhotoListJSON struct {
+	Photos        []eventPhotoJSON `json:"photos"`
+	NextPageToken string           `json:"next_page_token,omitempty"`
+}
+
 type eventSeriesJSON struct {
 	ID              string     `json:"id"`
 	TayfaID         string     `json:"tayfa_id"`

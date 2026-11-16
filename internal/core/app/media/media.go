@@ -42,6 +42,8 @@ const (
 	PurposeAvatar     = "avatar"
 	PurposeCatchPhoto = "catch_photo"
 	PurposeCover      = "cover"
+	// PurposeEventPhoto is an event album photo (issue #206, ADR-0028).
+	PurposeEventPhoto = "event_photo"
 )
 
 // Statuses (uploads.status). statusDeleting is never returned.
@@ -58,6 +60,7 @@ const (
 	TargetTayfa        = "tayfa"
 	TargetEvent        = "event"
 	TargetFishingCatch = "fishing_catch"
+	TargetEventPhoto   = "event_photo"
 )
 
 // Variant kinds.

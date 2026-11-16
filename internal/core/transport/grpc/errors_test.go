@@ -84,6 +84,7 @@ func TestErrorStatus(t *testing.T) {
 		{apperr.ErrCorrectionClosed, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_CORRECTION_CLOSED},
 		{apperr.ErrHikeNotStarted, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_HIKE_NOT_STARTED},
 		{apperr.ErrNotAttended, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_NOT_ATTENDED},
+		{apperr.ErrAlbumClosed, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_ALBUM_CLOSED},
 		{apperr.ErrEventSeriesNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_EVENT_SERIES_NOT_FOUND},
 		{apperr.ErrEventSeriesEnded, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_SERIES_ENDED},
 		{apperr.ErrQuestionNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_QUESTION_NOT_FOUND},

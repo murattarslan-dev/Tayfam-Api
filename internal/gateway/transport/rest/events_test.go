@@ -27,6 +27,8 @@ const (
 	vehicleID = "01965a3c-0000-7000-8000-000000000007"
 	catchID   = "01965a3c-0000-7000-8000-000000000008"
 	seriesID  = "01965a3c-0000-7000-8000-000000000009"
+	photoID   = "01965a3c-0000-7000-8000-0000000000a1"
+	uploadID2 = "01965a3c-0000-7000-8000-0000000000a2"
 )
 
 // Coordinates that must never show up in a log line or a problem response.
@@ -132,6 +134,19 @@ func (f *fakeCore) ListFishingCatches(ctx context.Context, in *corev1.ListFishin
 func (f *fakeCore) RemoveFishingCatch(ctx context.Context, in *corev1.RemoveFishingCatchRequest, _ ...grpc.CallOption) (*corev1.RemoveFishingCatchResponse, error) {
 	return &corev1.RemoveFishingCatchResponse{}, f.record(ctx, in)
 }
+func (f *fakeCore) AddEventPhoto(ctx context.Context, in *corev1.AddEventPhotoRequest, _ ...grpc.CallOption) (*corev1.AddEventPhotoResponse, error) {
+	return &corev1.AddEventPhotoResponse{Photo: &corev1.EventPhoto{
+		Id: photoID, EventId: in.GetEventId(), UploaderId: userID, UploadId: in.GetUploadId(), Caption: in.GetCaption(), CreateTime: timestamppb.New(t0),
+	}}, f.record(ctx, in)
+}
+func (f *fakeCore) ListEventPhotos(ctx context.Context, in *corev1.ListEventPhotosRequest, _ ...grpc.CallOption) (*corev1.ListEventPhotosResponse, error) {
+	return &corev1.ListEventPhotosResponse{Photos: []*corev1.EventPhoto{
+		{Id: photoID, EventId: in.GetEventId(), UploaderId: userID, UploadId: uploadID2, CreateTime: timestamppb.New(t0)},
+	}, NextPageToken: "N"}, f.record(ctx, in)
+}
+func (f *fakeCore) RemoveEventPhoto(ctx context.Context, in *corev1.RemoveEventPhotoRequest, _ ...grpc.CallOption) (*corev1.RemoveEventPhotoResponse, error) {
+	return &corev1.RemoveEventPhotoResponse{}, f.record(ctx, in)
+}
 func (f *fakeCore) GetEventSeries(ctx context.Context, in *corev1.GetEventSeriesRequest, _ ...grpc.CallOption) (*corev1.GetEventSeriesResponse, error) {
 	return &corev1.GetEventSeriesResponse{Series: testSeries()}, f.record(ctx, in)
 }
@@ -185,6 +200,12 @@ func TestEventRoutes(t *testing.T) {
 		{"POST", one + "/fishing-catches", `{"species":"Lüfer","length_cm":20,"client_request_id":"` + reqID + `"}`, 201,
 			&corev1.AddFishingCatchRequest{TayfaId: tayfaID, EventId: eventID, Species: "Lüfer", LengthCm: 20, ClientRequestId: reqID}},
 		{"DELETE", one + "/fishing-catches/" + catchID, "", 204, &corev1.RemoveFishingCatchRequest{TayfaId: tayfaID, EventId: eventID, CatchId: catchID}},
+		{"GET", one + "/photos?page_size=20&page_token=P", "", 200, &corev1.ListEventPhotosRequest{TayfaId: tayfaID, EventId: eventID, PageSize: 20, PageToken: "P"}},
+		{"POST", one + "/photos", `{"upload_id":"` + uploadID2 + `","caption":"Zirvede","client_request_id":"` + reqID + `"}`, 201,
+			&corev1.AddEventPhotoRequest{TayfaId: tayfaID, EventId: eventID, UploadId: uploadID2, Caption: "Zirvede", ClientRequestId: reqID}},
+		{"POST", one + "/photos", `{"upload_id":"` + uploadID2 + `","client_request_id":"` + reqID + `"}`, 201,
+			&corev1.AddEventPhotoRequest{TayfaId: tayfaID, EventId: eventID, UploadId: uploadID2, ClientRequestId: reqID}},
+		{"DELETE", one + "/photos/" + photoID, "", 204, &corev1.RemoveEventPhotoRequest{TayfaId: tayfaID, EventId: eventID, PhotoId: photoID}},
 		{"GET", series, "", 200, &corev1.GetEventSeriesRequest{TayfaId: tayfaID, SeriesId: seriesID}},
 		{"POST", series + "/ending", "", 200, &corev1.EndEventSeriesRequest{TayfaId: tayfaID, SeriesId: seriesID}},
 		{"GET", one + "/calendar", "", 200, &corev1.ExportEventRequest{TayfaId: tayfaID, EventId: eventID}},
@@ -253,6 +274,15 @@ func TestEventResponses(t *testing.T) {
 	w = as(h, "GET", one+"/fishing-catches", "")
 	if cl := decodeBody[fishingCatchListJSON](t, w); len(cl.Catches) != 1 || cl.Catches[0].Visibility != "tayfa" || cl.Catches[0].Location != nil || strings.Contains(w.Body.String(), "location") {
 		t.Fatalf("avlar: %s", w.Body)
+	}
+	w = as(h, "GET", one+"/photos", "")
+	if pl := decodeBody[eventPhotoListJSON](t, w); len(pl.Photos) != 1 || pl.Photos[0].UploadID != uploadID2 || pl.Photos[0].UploaderID != userID ||
+		pl.NextPageToken != "N" || strings.Contains(w.Body.String(), "caption") {
+		t.Fatalf("albüm: %s", w.Body)
+	}
+	w = as(h, "POST", one+"/photos", `{"upload_id":"`+uploadID2+`","caption":"Göl","client_request_id":"`+reqID+`"}`)
+	if p := decodeBody[eventPhotoJSON](t, w); p.ID != photoID || p.Caption != "Göl" || !p.CreatedAt.Equal(t0) || p.EventID != eventID {
+		t.Fatalf("albüm fotoğrafı: %s", w.Body)
 	}
 	w = as(h, "POST", "/v1/tayfas/"+tayfaID+"/event-series/"+seriesID+"/ending", "")
 	if s := decodeBody[eventSeriesEndingJSON](t, w); s.CancelledCount != 3 || s.Series.EndedAt == nil || s.Series.RRule != "FREQ=WEEKLY;BYDAY=SA" || s.Series.TemplateEventID != eventID {
@@ -388,6 +418,11 @@ func TestEventBadRequests(t *testing.T) {
 		"av konumu":             {"POST", one + "/fishing-catches", `{"species":"Levrek","length_cm":10,"location":{"lat":0,"lng":200},"client_request_id":"` + reqID + `"}`},
 		"av istek kimliği":      {"POST", one + "/fishing-catches", `{"species":"Levrek","length_cm":10}`},
 		"bozuk av id":           {"DELETE", one + "/fishing-catches/x", ""},
+		"albüm yüklemesi yok":   {"POST", one + "/photos", `{"client_request_id":"` + reqID + `"}`},
+		"albüm istek kimliği":   {"POST", one + "/photos", `{"upload_id":"` + uploadID2 + `"}`},
+		"albüm uzun açıklama":   {"POST", one + "/photos", `{"upload_id":"` + uploadID2 + `","caption":"` + strings.Repeat("ş", 201) + `","client_request_id":"` + reqID + `"}`},
+		"albüm bilinmeyen alan": {"POST", one + "/photos", `{"upload_id":"` + uploadID2 + `","url":"x","client_request_id":"` + reqID + `"}`},
+		"bozuk fotoğraf id":     {"DELETE", one + "/photos/x", ""},
 		"bozuk etkinlik id":     {"GET", base + "/x", ""},
 		"bozuk tayfa id":        {"GET", "/v1/tayfas/x/events", ""},
 		"bozuk sayfa":           {"GET", base + "?page_size=101", ""},

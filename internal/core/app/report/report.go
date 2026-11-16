@@ -104,6 +104,8 @@ const (
 	TargetAnswer       TargetType = "answer"
 	TargetPoll         TargetType = "poll"
 	TargetFishingCatch TargetType = "fishing_catch"
+	// TargetEventPhoto: an event album photo (issue #206, ADR-0028).
+	TargetEventPhoto TargetType = "event_photo"
 	// TargetDMMessage: a direct message (issue #95). Not about a tayfa; see
 	// createDirect.
 	TargetDMMessage TargetType = "dm_message"
@@ -112,7 +114,7 @@ const (
 // content reports whether t is content (has an author and can be removed).
 func (t TargetType) content() bool {
 	switch t {
-	case TargetAnnouncement, TargetEvent, TargetQuestion, TargetAnswer, TargetPoll, TargetFishingCatch:
+	case TargetAnnouncement, TargetEvent, TargetQuestion, TargetAnswer, TargetPoll, TargetFishingCatch, TargetEventPhoto:
 		return true
 	}
 	return false
@@ -522,7 +524,7 @@ func moduleOf(t TargetType) string {
 	case TargetPoll:
 		return access.ModulePolls
 	}
-	return access.ModuleEvents // events and fishing catches
+	return access.ModuleEvents // events, fishing catches and album photos
 }
 
 // content is a reported piece of content as the report needs it.
@@ -573,6 +575,10 @@ func lookup(ctx context.Context, q *store.Queries, tayfa id.ID, t TargetType, ta
 		r, err = q.GetReportTargetCatch(ctx, store.GetReportTargetCatchParams{TayfaID: p.t, ID: p.i})
 		author, visible = r.AuthorID, r.Visible
 		c.ownOnly = r.Visibility != "tayfa"
+	case TargetEventPhoto:
+		var r store.GetReportTargetEventPhotoRow
+		r, err = q.GetReportTargetEventPhoto(ctx, store.GetReportTargetEventPhotoParams{TayfaID: p.t, ID: p.i})
+		author, visible = r.AuthorID, r.Visible
 	default:
 		return content{}, errors.New("içerik olmayan hedef")
 	}
