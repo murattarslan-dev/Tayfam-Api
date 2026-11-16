@@ -13,7 +13,8 @@ import (
 
 const adminApproveDiscover = `-- name: AdminApproveDiscover :execrows
 UPDATE tayfa_discover
-SET status = 'approved', drop_reason = NULL, reviewed_at = $1, reviewed_by = $2, status_changed_at = $1
+SET status = 'approved', drop_reason = NULL, reviewed_at = $1, reviewed_by = $2, status_changed_at = $1,
+    masked_status = NULL, masked_until = NULL
 WHERE tayfa_id = $3 AND status IN ('pending', 'dropped')
 `
 
@@ -23,6 +24,7 @@ type AdminApproveDiscoverParams struct {
 	TayfaID pgtype.UUID
 }
 
+// Panel kararı maskeyi kaldırır.
 func (q *Queries) AdminApproveDiscover(ctx context.Context, arg AdminApproveDiscoverParams) (int64, error) {
 	result, err := q.db.Exec(ctx, adminApproveDiscover, arg.Now, arg.By, arg.TayfaID)
 	if err != nil {
@@ -122,7 +124,8 @@ func (q *Queries) AdminLockTayfaDiscover(ctx context.Context, tayfaID pgtype.UUI
 
 const adminRejectDiscover = `-- name: AdminRejectDiscover :execrows
 UPDATE tayfa_discover
-SET status = 'rejected', drop_reason = NULL, reviewed_at = $1, reviewed_by = $2, status_changed_at = $1
+SET status = 'rejected', drop_reason = NULL, reviewed_at = $1, reviewed_by = $2, status_changed_at = $1,
+    masked_status = NULL, masked_until = NULL
 WHERE tayfa_id = $3 AND status <> 'rejected'
 `
 
@@ -150,6 +153,19 @@ WHERE requested_by = $1 OR reviewed_by = $1
 func (q *Queries) ClearTayfaDiscoverUser(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, clearTayfaDiscoverUser, userID)
 	return err
+}
+
+const deleteOldDiscoverJoins = `-- name: DeleteOldDiscoverJoins :execrows
+DELETE FROM discover_joins WHERE left_at < $1::timestamptz
+`
+
+// İşaret ayrılıştan 30 gün sonra gerekmez.
+func (q *Queries) DeleteOldDiscoverJoins(ctx context.Context, before pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOldDiscoverJoins, before)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteOldEventFeedback = `-- name: DeleteOldEventFeedback :execrows
@@ -195,6 +211,15 @@ func (q *Queries) DeleteSafetyContact(ctx context.Context, arg DeleteSafetyConta
 	return err
 }
 
+const deleteUserDiscoverJoins = `-- name: DeleteUserDiscoverJoins :exec
+DELETE FROM discover_joins WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserDiscoverJoins(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserDiscoverJoins, userID)
+	return err
+}
+
 const deleteUserEventFeedback = `-- name: DeleteUserEventFeedback :exec
 DELETE FROM event_feedback WHERE user_id = $1
 `
@@ -211,6 +236,33 @@ DELETE FROM event_safety_contacts WHERE user_id = $1 OR contact_user_id = $1
 func (q *Queries) DeleteUserSafetyContacts(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserSafetyContacts, userID)
 	return err
+}
+
+const discoverFormerMember = `-- name: DiscoverFormerMember :one
+
+SELECT EXISTS (
+  SELECT 1 FROM discover_joins j JOIN tayfas t ON t.id = j.tayfa_id
+  WHERE j.tayfa_id = $1 AND j.user_id = $2
+    AND j.left_at > $3::timestamptz AND t.deleted_at IS NULL
+)::boolean
+`
+
+type DiscoverFormerMemberParams struct {
+	TayfaID   pgtype.UUID
+	UserID    pgtype.UUID
+	LeftAfter pgtype.Timestamptz
+}
+
+// ---------------------------------------------------------------------------
+// Eski Keşfet üyesi (ADR-0033 §7)
+// Kişi tayfaya Keşfet'ten gelmiş ve aktif üyeliği left_after'dan sonra
+// bitmiş mi; tayfa silinmemiş. Tayfa içeriğine erişim vermez: yalnızca
+// tayfayı şikâyet ve katıldığı etkinliğe geri bildirim.
+func (q *Queries) DiscoverFormerMember(ctx context.Context, arg DiscoverFormerMemberParams) (bool, error) {
+	row := q.db.QueryRow(ctx, discoverFormerMember, arg.TayfaID, arg.UserID, arg.LeftAfter)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const discoverTayfaVisible = `-- name: DiscoverTayfaVisible :one
@@ -239,6 +291,41 @@ func (q *Queries) DiscoverTayfaVisible(ctx context.Context, arg DiscoverTayfaVis
 	return column_1, err
 }
 
+const dropDiscoverForRemovedMember = `-- name: DropDiscoverForRemovedMember :execrows
+UPDATE tayfa_discover d
+SET status = 'dropped', drop_reason = 'member_removed', status_changed_at = $1::timestamptz
+WHERE d.tayfa_id = $2::uuid AND d.status IN ('approved', 'pending')
+  AND EXISTS (SELECT 1 FROM discover_joins j WHERE j.tayfa_id = d.tayfa_id AND j.user_id = $3::uuid)
+  AND EXISTS (SELECT 1 FROM event_rsvps r JOIN events e ON e.id = r.event_id
+              WHERE e.tayfa_id = d.tayfa_id AND r.user_id = $3::uuid AND e.deleted_at IS NULL
+                AND (r.status = 'going' OR r.attendance = 'attended')
+                AND e.ends_at > $4::timestamptz)
+`
+
+type DropDiscoverForRemovedMemberParams struct {
+	Now         pgtype.Timestamptz
+	TayfaID     pgtype.UUID
+	UserID      pgtype.UUID
+	WindowStart pgtype.Timestamptz
+}
+
+// Yönetici, Keşfet'ten gelmiş bir üyeyi geri bildirim penceresi açıkken
+// (going ya da attended olduğu etkinliğin bitişi window_start'tan sonra)
+// çıkardı ya da banladı: tayfa incelemeye düşer. Yönetici kendi işlemini
+// bildiği için durum maskelenmez.
+func (q *Queries) DropDiscoverForRemovedMember(ctx context.Context, arg DropDiscoverForRemovedMemberParams) (int64, error) {
+	result, err := q.db.Exec(ctx, dropDiscoverForRemovedMember,
+		arg.Now,
+		arg.TayfaID,
+		arg.UserID,
+		arg.WindowStart,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const exportDiscover = `-- name: ExportDiscover :many
 
 SELECT $1::uuid AS k,
@@ -251,12 +338,17 @@ SELECT $1::uuid AS k,
              'event_id', c.event_id, 'contact_user_id', c.contact_user_id, 'grace_minutes', c.grace_minutes,
              'returned_at', c.returned_at, 'alert_sent_at', c.alert_sent_at, 'created_at', c.created_at)
              ORDER BY c.created_at, c.event_id)
-           FROM event_safety_contacts c WHERE c.user_id = $1::uuid), '[]'::jsonb)
+           FROM event_safety_contacts c WHERE c.user_id = $1::uuid), '[]'::jsonb),
+         'discover_joins', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+             'tayfa_id', j.tayfa_id, 'joined_at', j.joined_at, 'left_at', j.left_at)
+             ORDER BY j.joined_at, j.tayfa_id)
+           FROM discover_joins j WHERE j.user_id = $1::uuid), '[]'::jsonb)
        ) AS data
 FROM (SELECT 1) one
 WHERE $1::uuid > $2::uuid
   AND (EXISTS (SELECT 1 FROM event_feedback f WHERE f.user_id = $1::uuid)
-       OR EXISTS (SELECT 1 FROM event_safety_contacts c WHERE c.user_id = $1::uuid))
+       OR EXISTS (SELECT 1 FROM event_safety_contacts c WHERE c.user_id = $1::uuid)
+       OR EXISTS (SELECT 1 FROM discover_joins j WHERE j.user_id = $1::uuid))
 LIMIT $3
 `
 
@@ -316,6 +408,30 @@ func (q *Queries) GetEventFeedback(ctx context.Context, arg GetEventFeedbackPara
 	var i GetEventFeedbackRow
 	err := row.Scan(&i.Answer, &i.UpdatedAt)
 	return i, err
+}
+
+const getOwnSafetyContactForUpdate = `-- name: GetOwnSafetyContactForUpdate :one
+SELECT c.alert_sent_at
+FROM event_safety_contacts c
+JOIN events e ON e.id = c.event_id
+WHERE c.event_id = $1 AND c.user_id = $2 AND e.tayfa_id = $3
+FOR UPDATE OF c
+`
+
+type GetOwnSafetyContactForUpdateParams struct {
+	EventID pgtype.UUID
+	UserID  pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+// Kişinin kendi satırı, etkinlik bu tayfanınsa. Kaldırma ve "döndüm"
+// yalnızca kendi satırına dokunur; üyelik, modül ve bayrak aranmaz
+// (ADR-0033 §10).
+func (q *Queries) GetOwnSafetyContactForUpdate(ctx context.Context, arg GetOwnSafetyContactForUpdateParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getOwnSafetyContactForUpdate, arg.EventID, arg.UserID, arg.TayfaID)
+	var alert_sent_at pgtype.Timestamptz
+	err := row.Scan(&alert_sent_at)
+	return alert_sent_at, err
 }
 
 const getSafetyContact = `-- name: GetSafetyContact :one
@@ -390,7 +506,7 @@ func (q *Queries) GetSafetyContactForUpdate(ctx context.Context, arg GetSafetyCo
 
 const getTayfaDiscoverState = `-- name: GetTayfaDiscoverState :one
 
-SELECT t.visibility, d.status AS review_status
+SELECT t.visibility, d.status AS review_status, d.masked_status, d.masked_until
 FROM tayfas t
 LEFT JOIN tayfa_discover d ON d.tayfa_id = t.id
 WHERE t.id = $1
@@ -399,14 +515,22 @@ WHERE t.id = $1
 type GetTayfaDiscoverStateRow struct {
 	Visibility   string
 	ReviewStatus pgtype.Text
+	MaskedStatus pgtype.Text
+	MaskedUntil  pgtype.Timestamptz
 }
 
 // ---------------------------------------------------------------------------
 // Tayfa yöneticisinin ayarı
+// masked_*: yöneticilerin göreceği önceki durum (ADR-0033 §7).
 func (q *Queries) GetTayfaDiscoverState(ctx context.Context, tayfaID pgtype.UUID) (GetTayfaDiscoverStateRow, error) {
 	row := q.db.QueryRow(ctx, getTayfaDiscoverState, tayfaID)
 	var i GetTayfaDiscoverStateRow
-	err := row.Scan(&i.Visibility, &i.ReviewStatus)
+	err := row.Scan(
+		&i.Visibility,
+		&i.ReviewStatus,
+		&i.MaskedStatus,
+		&i.MaskedUntil,
+	)
 	return i, err
 }
 
@@ -545,9 +669,18 @@ FROM event_safety_contacts c
 JOIN events e ON e.id = c.event_id
 JOIN tayfas t ON t.id = e.tayfa_id
 LEFT JOIN user_profiles p ON p.user_id = c.user_id AND p.deleted_at IS NULL
+JOIN memberships m ON m.tayfa_id = e.tayfa_id AND m.user_id = c.user_id AND m.status = 'active'
+JOIN event_rsvps r ON r.event_id = c.event_id AND r.user_id = c.user_id
 WHERE c.contact_user_id = $1
   AND (e.ends_at > $2::timestamptz
        OR c.alert_sent_at > $3::timestamptz)
+  AND t.deleted_at IS NULL AND t.deletion_requested_at IS NULL AND t.suspended_at IS NULL
+  AND ((r.status = 'going' AND e.status = 'scheduled' AND e.deleted_at IS NULL)
+       OR (c.alert_sent_at IS NOT NULL AND r.checked_in_at IS NOT NULL))
+  AND EXISTS (SELECT 1 FROM friendships f
+              WHERE f.user_low_id = LEAST(c.user_id, c.contact_user_id)
+                AND f.user_high_id = GREATEST(c.user_id, c.contact_user_id)
+                AND f.status = 'accepted')
   AND NOT EXISTS (SELECT 1 FROM user_blocks ub
                   WHERE (ub.blocker_id = c.user_id AND ub.blocked_id = c.contact_user_id)
                      OR (ub.blocker_id = c.contact_user_id AND ub.blocked_id = c.user_id))
@@ -579,7 +712,12 @@ type ListSafetySharesRow struct {
 }
 
 // Kişiyi güvenlik kişisi seçenlerin etkinlikleri: bitişinden 24 saat
-// geçmemiş ya da alarmı son 7 günde gitmiş. Koordinat seçilmez.
+// geçmemiş ya da alarmı son 7 günde gitmiş. Koordinat seçilmez. Paylaşım
+// yalnızca hâlâ geçerliyse görünür: ikisi arkadaş, engel yok, katılımcı
+// tayfanın aktif üyesi ve etkinliğe going; etkinlik silinmemiş ya da
+// iptal edilmemiş, tayfa silinmemiş ya da askıda değil. Alarm gitmişse
+// (etkinlik sonradan iptal ya da silinmiş olsa bile) katılımcı check-in
+// yaptıysa görünür; alarmın kendisi bildirimle gitti.
 func (q *Queries) ListSafetyShares(ctx context.Context, arg ListSafetySharesParams) ([]ListSafetySharesRow, error) {
 	rows, err := q.db.Query(ctx, listSafetyShares, arg.ContactID, arg.EndedAfter, arg.AlertedAfter)
 	if err != nil {
@@ -620,11 +758,12 @@ const lockDueSafetyAlerts = `-- name: LockDueSafetyAlerts :many
 SELECT c.event_id, c.user_id, c.contact_user_id
 FROM event_safety_contacts c
 JOIN events e ON e.id = c.event_id
+JOIN memberships m ON m.tayfa_id = e.tayfa_id AND m.user_id = c.user_id AND m.status = 'active'
+JOIN event_rsvps r ON r.event_id = c.event_id AND r.user_id = c.user_id
 WHERE c.returned_at IS NULL AND c.alert_sent_at IS NULL
   AND e.ends_at + make_interval(mins => c.grace_minutes) <= $1::timestamptz
-  AND ((e.status = 'scheduled' AND e.deleted_at IS NULL)
-       OR EXISTS (SELECT 1 FROM event_rsvps r
-                  WHERE r.event_id = c.event_id AND r.user_id = c.user_id AND r.checked_in_at IS NOT NULL))
+  AND ((r.status = 'going' AND e.status = 'scheduled' AND e.deleted_at IS NULL)
+       OR r.checked_in_at IS NOT NULL)
   AND EXISTS (SELECT 1 FROM friendships f
               WHERE f.user_low_id = LEAST(c.user_id, c.contact_user_id)
                 AND f.user_high_id = GREATEST(c.user_id, c.contact_user_id)
@@ -651,8 +790,10 @@ type LockDueSafetyAlertsRow struct {
 // ---------------------------------------------------------------------------
 // safety-alerts işi
 // Alarmı gelmiş satırlar: döndüm yok, alarm gitmemiş, bitiş + tolerans
-// geçmiş; etkinlik başlamadan iptal ya da silindiyse yalnızca check-in
-// yapılmışsa. Gönderim anında ikisi hâlâ arkadaş ve engel yok.
+// geçmiş; katılımcı tayfanın aktif üyesi. Planlı ve silinmemiş etkinlikte
+// going olmalı; etkinlik iptal ya da silindiyse yalnızca check-in
+// yapılmışsa (yola çıkmış demektir). Gönderim anında ikisi hâlâ arkadaş ve
+// engel yok.
 func (q *Queries) LockDueSafetyAlerts(ctx context.Context, arg LockDueSafetyAlertsParams) ([]LockDueSafetyAlertsRow, error) {
 	rows, err := q.db.Query(ctx, lockDueSafetyAlerts, arg.Now, arg.N)
 	if err != nil {

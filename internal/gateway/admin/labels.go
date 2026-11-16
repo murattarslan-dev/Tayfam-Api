@@ -117,6 +117,8 @@ func label(v any) string {
 			return "Keşfet üyesinden şikâyet"
 		case corev1.DiscoverDropReason_DISCOVER_DROP_REASON_NEGATIVE_FEEDBACK:
 			return "Ciddi olumsuz geri bildirim"
+		case corev1.DiscoverDropReason_DISCOVER_DROP_REASON_MEMBER_REMOVED:
+			return "Keşfet üyesi çıkarıldı"
 		}
 	case identityv1.SanctionType:
 		switch x {

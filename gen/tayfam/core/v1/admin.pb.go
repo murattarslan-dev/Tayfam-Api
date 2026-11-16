@@ -149,10 +149,14 @@ type DiscoverDropReason int32
 
 const (
 	DiscoverDropReason_DISCOVER_DROP_REASON_UNSPECIFIED DiscoverDropReason = 0
-	// A member who came from Keşfet filed a report in the tayfa.
+	// A member who came from Keşfet (now or within 30 days of leaving)
+	// filed a report in the tayfa.
 	DiscoverDropReason_DISCOVER_DROP_REASON_MEMBER_REPORT DiscoverDropReason = 1
 	// An attendee answered SERIOUS to "Was everything all right?".
 	DiscoverDropReason_DISCOVER_DROP_REASON_NEGATIVE_FEEDBACK DiscoverDropReason = 2
+	// The tayfa removed or banned a member who came from Keşfet while their
+	// feedback window was open.
+	DiscoverDropReason_DISCOVER_DROP_REASON_MEMBER_REMOVED DiscoverDropReason = 3
 )
 
 // Enum value maps for DiscoverDropReason.
@@ -161,11 +165,13 @@ var (
 		0: "DISCOVER_DROP_REASON_UNSPECIFIED",
 		1: "DISCOVER_DROP_REASON_MEMBER_REPORT",
 		2: "DISCOVER_DROP_REASON_NEGATIVE_FEEDBACK",
+		3: "DISCOVER_DROP_REASON_MEMBER_REMOVED",
 	}
 	DiscoverDropReason_value = map[string]int32{
 		"DISCOVER_DROP_REASON_UNSPECIFIED":       0,
 		"DISCOVER_DROP_REASON_MEMBER_REPORT":     1,
 		"DISCOVER_DROP_REASON_NEGATIVE_FEEDBACK": 2,
+		"DISCOVER_DROP_REASON_MEMBER_REMOVED":    3,
 	}
 )
 
@@ -2908,11 +2914,12 @@ const file_tayfam_core_v1_admin_proto_rawDesc = "" +
 	"\x1eDISCOVER_REVIEW_STATUS_PENDING\x10\x01\x12#\n" +
 	"\x1fDISCOVER_REVIEW_STATUS_APPROVED\x10\x02\x12#\n" +
 	"\x1fDISCOVER_REVIEW_STATUS_REJECTED\x10\x03\x12\"\n" +
-	"\x1eDISCOVER_REVIEW_STATUS_DROPPED\x10\x04*\x8e\x01\n" +
+	"\x1eDISCOVER_REVIEW_STATUS_DROPPED\x10\x04*\xb7\x01\n" +
 	"\x12DiscoverDropReason\x12$\n" +
 	" DISCOVER_DROP_REASON_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"DISCOVER_DROP_REASON_MEMBER_REPORT\x10\x01\x12*\n" +
-	"&DISCOVER_DROP_REASON_NEGATIVE_FEEDBACK\x10\x022\xd8\r\n" +
+	"&DISCOVER_DROP_REASON_NEGATIVE_FEEDBACK\x10\x02\x12'\n" +
+	"#DISCOVER_DROP_REASON_MEMBER_REMOVED\x10\x032\xd8\r\n" +
 	"\fAdminService\x12Y\n" +
 	"\fSearchTayfas\x12#.tayfam.core.v1.SearchTayfasRequest\x1a$.tayfam.core.v1.SearchTayfasResponse\x12e\n" +
 	"\bGetTayfa\x12+.tayfam.core.v1.AdminServiceGetTayfaRequest\x1a,.tayfam.core.v1.AdminServiceGetTayfaResponse\x12e\n" +

@@ -4468,7 +4468,10 @@ paths:
     get:
       operationId: getEventFeedback
       summary: '"Her şey yolunda mıydı?" cevabınız'
-      description: Cevap yoksa `answer` yoktur.
+      description: |
+        Cevap yoksa `answer` yoktur. Geri bildirim uçları, tayfaya Keşfet'ten
+        gelip üyeliği son 30 günde biten kişiye de açıktır (yalnızca
+        katıldığı etkinlik için).
       responses:
         "200":
           description: Cevabınız
@@ -4558,7 +4561,11 @@ paths:
     delete:
       operationId: clearSafetyContact
       summary: Güvenlik kişisini kaldırır
-      description: Kaldırılacak bir şey yoksa da başarılıdır.
+      description: |
+        Kaldırılacak bir şey yoksa da başarılıdır. Alarm gittikten sonra
+        kaldırılamaz (`safety-contact-closed`). Keşfet kapalıyken, tayfadan
+        ayrıldıktan sonra ya da etkinlik modülü kapalıyken de çalışır;
+        yalnızca kendi kaydınıza dokunur.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       responses:
@@ -4566,6 +4573,7 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
   /v1/tayfas/{tayfa_id}/events/{event_id}/safety-contact/return:
@@ -4577,7 +4585,9 @@ paths:
       summary: '"Döndüm": güvenlik alarmını durdurur'
       description: |
         Güvenlik kişisi seçilmemişse `safety-contact-not-found`. Tekrar
-        çağrı ilk zamanı korur. Susturulmuşken de çalışır.
+        çağrı ilk zamanı korur. Keşfet kapalıyken, susturulmuşken, tayfadan
+        ayrıldıktan sonra ya da etkinlik modülü kapalıyken de çalışır;
+        yalnızca kendi kaydınıza dokunur.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       responses:
@@ -4597,7 +4607,11 @@ paths:
       summary: Sizi güvenlik kişisi seçenlerin etkinlikleri
       description: |
         Bitişinden 24 saat geçmemiş ya da alarmı son 7 günde gitmiş
-        etkinlikler, en yeni başlangıç önce (en fazla 50). Yalnızca katılımcının
+        etkinlikler, en yeni başlangıç önce (en fazla 50). Paylaşım yalnızca
+        hâlâ geçerliyse görünür: arkadaşlık sürüyor, engel yok, katılımcı
+        tayfanın aktif üyesi ve `going`; etkinlik ve tayfa silinmemiş, iptal
+        edilmemiş ya da askıda değil (alarm gittiyse ve katılımcı check-in
+        yaptıysa kalır). Yalnızca katılımcının
         paylaştığı: ad, tayfa adı, etkinlik başlığı ve zamanı, buluşma
         noktasının adı, il/ilçe, "Döndüm" ve alarm zamanı. Koordinat,
         açıklama ve diğer katılımcılar yoktur.

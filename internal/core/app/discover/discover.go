@@ -44,7 +44,7 @@ const (
 	// MinMembers is the fewest active members a listed tayfa has.
 	MinMembers = 5
 	// FeedbackWindow is how long after the end feedback is taken.
-	FeedbackWindow = 7 * 24 * time.Hour
+	FeedbackWindow = access.DiscoverFeedbackWindow
 	// FrozenAfter is when an event's numbers stop changing (ADR-0026 §1).
 	FrozenAfter = 7 * 24 * time.Hour
 	// Safety contact grace time bounds and default, in minutes.
@@ -55,6 +55,8 @@ const (
 	// or this long after its alert.
 	ShareAfterEnd   = 24 * time.Hour
 	ShareAfterAlert = 7 * 24 * time.Hour
+	// FormerMemberWindow: access.DiscoverFormerMemberWindow.
+	FormerMemberWindow = access.DiscoverFormerMemberWindow
 )
 
 // Tayfa states as the tayfa's admins see them (TayfaDiscoverState).
@@ -197,8 +199,16 @@ type TayfaState struct {
 }
 
 // stateOf maps the admins' wish and the platform's decision. The reason a
-// tayfa was dropped is never told (ADR-0033 §7).
-func stateOf(visibility string, review pgtype.Text) TayfaState {
+// tayfa was dropped is never told (ADR-0033 §7). Until masked_until the
+// admins see the state before a drop by feedback or a Keşfet member's
+// report, so its timing does not point at who wrote it; the tayfa is out
+// of the feed all the same.
+func stateOf(r store.GetTayfaDiscoverStateRow, now time.Time) TayfaState {
+	visibility, review := r.Visibility, r.ReviewStatus
+	if review.Valid && review.String == "dropped" && r.MaskedStatus.Valid && r.MaskedUntil.Valid &&
+		now.Before(r.MaskedUntil.Time) {
+		review = r.MaskedStatus
+	}
 	enabled := visibility == "listed"
 	var st string
 	switch {
@@ -237,7 +247,7 @@ func (s *Service) GetTayfa(ctx context.Context, caller, tayfa id.ID) (TayfaState
 	if err != nil {
 		return TayfaState{}, fmt.Errorf("keşfet durumu: %w", err)
 	}
-	return stateOf(r.Visibility, r.ReviewStatus), nil
+	return stateOf(r, s.now()), nil
 }
 
 // SetTayfa turns the admins' wish on or off. Turning it on needs at least
@@ -295,7 +305,7 @@ func (s *Service) SetTayfa(ctx context.Context, caller, tayfa id.ID, enabled boo
 		if err != nil {
 			return fmt.Errorf("keşfet durumu: %w", err)
 		}
-		out = stateOf(r.Visibility, r.ReviewStatus)
+		out = stateOf(r, now)
 		return nil
 	})
 	return out, err
@@ -336,12 +346,49 @@ func (s *Service) eventFor(ctx context.Context, q *store.Queries, caller, tayfa,
 	return ev, nil
 }
 
+// feedbackEvent returns the event for feedback by caller: an active member
+// allowed authz.EventFeedback, or a member who came from Keşfet and whose
+// membership ended within FormerMemberWindow (ADR-0033 §7). The second
+// reads nothing of the tayfa but this event's row, and SetFeedback still
+// requires their attendance. The events module is not required: feedback
+// is a safety signal that turning the module off must not silence.
+func (s *Service) feedbackEvent(ctx context.Context, q *store.Queries, caller, tayfa, event id.ID, lock bool) (store.GetEventRow, error) {
+	now := s.now()
+	_, m, err := access.Load(ctx, q, tayfa, caller, lock)
+	switch {
+	case errors.Is(err, apperr.ErrTayfaNotFound):
+		former, ferr := q.DiscoverFormerMember(ctx, store.DiscoverFormerMemberParams{
+			TayfaID: tayfa.PG(), UserID: caller.PG(), LeftAfter: ts(now.Add(-FormerMemberWindow)),
+		})
+		if ferr != nil {
+			return store.GetEventRow{}, fmt.Errorf("eski keşfet üyesi: %w", ferr)
+		}
+		if !former {
+			return store.GetEventRow{}, err
+		}
+	case err != nil:
+		return store.GetEventRow{}, err
+	default:
+		if err := access.Authorize(m, authz.EventFeedback, now); err != nil {
+			return store.GetEventRow{}, err
+		}
+	}
+	ev, err := q.GetEvent(ctx, store.GetEventParams{TayfaID: tayfa.PG(), ID: event.PG()})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return store.GetEventRow{}, apperr.ErrEventNotFound
+	}
+	if err != nil {
+		return store.GetEventRow{}, fmt.Errorf("etkinlik: %w", err)
+	}
+	return ev, nil
+}
+
 // GetFeedback returns the caller's answer for the event.
 func (s *Service) GetFeedback(ctx context.Context, caller, tayfa, event id.ID) (Feedback, error) {
 	if err := s.gate(); err != nil {
 		return Feedback{}, err
 	}
-	if _, err := s.eventFor(ctx, s.q, caller, tayfa, event, authz.EventFeedback, false); err != nil {
+	if _, err := s.feedbackEvent(ctx, s.q, caller, tayfa, event, false); err != nil {
 		return Feedback{}, err
 	}
 	r, err := s.q.GetEventFeedback(ctx, store.GetEventFeedbackParams{EventID: event.PG(), UserID: caller.PG()})
@@ -366,7 +413,7 @@ func (s *Service) SetFeedback(ctx context.Context, caller, tayfa, event id.ID, a
 	}
 	var out Feedback
 	err := txn.WithActor(ctx, s.pool, caller, func(_ pgx.Tx, q *store.Queries) error {
-		ev, err := s.eventFor(ctx, q, caller, tayfa, event, authz.EventFeedback, true)
+		ev, err := s.feedbackEvent(ctx, q, caller, tayfa, event, true)
 		if err != nil {
 			return err
 		}
@@ -487,14 +534,27 @@ func (s *Service) SetSafetyContact(ctx context.Context, caller, tayfa, event, co
 }
 
 // ClearSafetyContact removes the caller's safety contact; nothing to
-// remove succeeds.
+// remove succeeds. Once the alert went out it stays (the contact acts on
+// it): apperr.ErrSafetyContactClosed.
+//
+// ClearSafetyContact and MarkReturned touch only the caller's own row of
+// an event of tayfa. They work with the flag off, after the caller left
+// the tayfa and with the events module off (ADR-0033 §10): a safety net
+// that was set must always be closable, or the contact gets a false
+// alarm.
 func (s *Service) ClearSafetyContact(ctx context.Context, caller, tayfa, event id.ID) error {
-	if err := s.gate(); err != nil {
-		return err
-	}
 	return txn.WithActor(ctx, s.pool, caller, func(_ pgx.Tx, q *store.Queries) error {
-		if _, err := s.eventFor(ctx, q, caller, tayfa, event, authz.EventSafetyContact, true); err != nil {
-			return err
+		alert, err := q.GetOwnSafetyContactForUpdate(ctx, store.GetOwnSafetyContactForUpdateParams{
+			EventID: event.PG(), UserID: caller.PG(), TayfaID: tayfa.PG(),
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("güvenlik kişisi: %w", err)
+		}
+		if alert.Valid {
+			return apperr.ErrSafetyContactClosed
 		}
 		if err := q.DeleteSafetyContact(ctx, store.DeleteSafetyContactParams{EventID: event.PG(), UserID: caller.PG()}); err != nil {
 			return fmt.Errorf("güvenlik kişisi: %w", err)
@@ -503,15 +563,19 @@ func (s *Service) ClearSafetyContact(ctx context.Context, caller, tayfa, event i
 	})
 }
 
-// MarkReturned records "I'm back"; the first time is kept.
+// MarkReturned records "I'm back"; the first time is kept. See
+// ClearSafetyContact for what it does not require.
 func (s *Service) MarkReturned(ctx context.Context, caller, tayfa, event id.ID) (SafetyContact, error) {
-	if err := s.gate(); err != nil {
-		return SafetyContact{}, err
-	}
 	var out SafetyContact
 	err := txn.WithActor(ctx, s.pool, caller, func(_ pgx.Tx, q *store.Queries) error {
-		if _, err := s.eventFor(ctx, q, caller, tayfa, event, authz.EventSafetyContact, true); err != nil {
-			return err
+		_, err := q.GetOwnSafetyContactForUpdate(ctx, store.GetOwnSafetyContactForUpdateParams{
+			EventID: event.PG(), UserID: caller.PG(), TayfaID: tayfa.PG(),
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return apperr.ErrSafetyContactNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("güvenlik kişisi: %w", err)
 		}
 		n, err := q.MarkSafetyReturned(ctx, store.MarkSafetyReturnedParams{EventID: event.PG(), UserID: caller.PG(), Now: ts(s.now())})
 		if err != nil {

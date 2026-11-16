@@ -84,7 +84,8 @@ Bütün girdiler (tayfa, üyelik, etkinlik, katılım, arkadaşlık, puan,
 
 | Tablo | Alanlar | Not |
 | --- | --- | --- |
-| `tayfa_discover` | `tayfa_id` PK FK (CASCADE), `status` (`pending` / `approved` / `rejected` / `dropped`), `drop_reason` (`member_report` / `negative_feedback`; yalnızca `dropped`'da), `requested_at`, `requested_by` 🔗, `reviewed_at`, `reviewed_by` 🔗 (panel yöneticisi), `status_changed_at`, `created_at`, `updated_at` | Başvuru ve panel kararı. Satır ilk başvuruda açılır, tayfa silinene kadar durur |
+| `tayfa_discover` | `tayfa_id` PK FK (CASCADE), `status` (`pending` / `approved` / `rejected` / `dropped`), `drop_reason` (`member_report` / `negative_feedback` / `member_removed`; yalnızca `dropped`'da), `requested_at`, `requested_by` 🔗, `reviewed_at`, `reviewed_by` 🔗 (panel yöneticisi), `status_changed_at`, `masked_status` (`pending` / `approved`), `masked_until`, `created_at`, `updated_at` | Başvuru ve panel kararı. Satır ilk başvuruda açılır, tayfa silinene kadar durur. `masked_*` yalnızca `dropped`'da (§7) |
+| `discover_joins` | `tayfa_id` FK (CASCADE), `user_id` 🔗, `joined_at`, `left_at` | PK (tayfa, user). Keşfet'ten gelip aktif üye olanın kalıcı işareti (§7); trigger yazar |
 | `event_feedback` | `event_id` FK (CASCADE), `user_id` 🔗, `answer` (`ok` / `not_ok` / `serious`), `created_at`, `updated_at` | PK (event, user). Serbest metin **yok** |
 | `event_safety_contacts` | `event_id` FK (CASCADE), `user_id` 🔗, `contact_user_id` 🔗, `grace_minutes` (15–1440, varsayılan 60), `returned_at`, `alert_sent_at`, `created_at`, `updated_at` | PK (event, user); kişi kendini seçemez. **Konum alanı yok** |
 
@@ -158,7 +159,25 @@ katkısı 0'dır. Puan, toplam ya da sıra numarası hiçbir alanda dönmez.
   düzeltme penceresi sayıyı oynatmaz. Üye sayısı, kapak, vitrin
   istatistiği yoktur (v3).
 - Arkadaşlar: en çok 3 görünür arkadaşın kimliği, adı, avatarı (sıra:
-  puan, sonra ad; puan dönmez) ve görünür arkadaş sayısı.
+  puan, sonra ad; puan dönmez) ve görünür arkadaş sayısı. **Not:** öğe
+  içindeki arkadaş sırası puandan türer; izleyici birden çok öğeyi
+  karşılaştırarak arkadaşlarının kabaca sırasını çıkarabilir. Bu, arkadaş
+  listesinin (ADR-0030) zaten verdiği sıranın aynısıdır, yeni bilgi
+  değildir; puanın kendisi, toplamı ya da sıra numarası dönmez.
+
+**Etkinlik modülü:** tayfanın `events` modülü kapalıysa etkinlikleri
+akışta yoktur (`discover_friend_visible` `tayfa_modules`'a bakar). Modül
+kapalıyken üyeler de etkinliği göremez; Keşfet daha fazlasını göstermez.
+
+**Etkinlik başlığı ve kötüye kullanım filtresi:** akış etkinlik başlığını
+döndürür; başlık panelin onayladığı meta veri değildir ve yeniden
+incelemeyi tetiklemez (her etkinlik başlığı için panel incelemesi
+ölçeklenmez). Şemada henüz kötüye kullanım sözlüğü (`moderation_terms`,
+Notion "Kötüye Kullanım ve Genç Kullanıcı Güvenliği") yoktur; o tablo
+geldiğinde başlık Keşfet'e girmeden filtreden geçer. **Bayrak açılmadan
+önceki ön koşuldur** (Sonuçlar); o zamana kadar riski sınırlayan:
+listelenen tayfa panelden geçmiştir, öğe yalnızca arkadaşı olan izleyiciye
+görünür, başlık uzunluğu sınırlıdır ve şikâyet + düşürme akışı açıktır.
 
 ### 5. Keşfet'ten katılım: `JoinFromDiscover`
 
@@ -184,13 +203,35 @@ Bekleyen istekler zaten `JOIN_SOURCE_DISCOVER` taşır.
 
 Kurallar trigger'dadır; hangi uçtan gelirse gelsin atlanamaz:
 
+- **Keşfet işareti (`discover_joins`):** `joined_via = 'discover'` üyelik
+  aktif olunca trigger işareti açar (yeniden katılımda tazeler); aktif
+  üyelik bitince (ayrılma, çıkarılma, ban, hesap silme) `left_at` yazar.
+  İşaret, üyelikten bağımsızdır: üyelik satırı silinse de durur. Gerekçe
+  (2026-11-16 incelemesi): yalnızca üyeliğe bakılsaydı yönetici Keşfet
+  üyesini çıkararak hem şikâyetini hem geri bildirimini engelleyebilir,
+  güvenlik ağını kapatabilirdi.
+- **Eski Keşfet üyesi:** üyeliği bitmiş, işareti olan kişi `left_at`'ten
+  sonraki **30 gün** boyunca yalnızca (a) tayfanın kendisini şikâyet
+  edebilir (`target_type = tayfa`, doğrudan platforma gider) ve
+  (b) katıldığı (`attended`) etkinliğe §9'daki pencerede geri bildirim
+  verebilir. Tayfanın başka hiçbir içeriğine erişemez; bu iki yol üyelik
+  kontrolüne değil işarete dayanır (IDOR'a karşı: kimlik, işaret ve
+  katılım satırıyla doğrulanır). Kodla ya da davetle gelip ayrılan eski
+  üye bu yolu kullanamaz.
 - **Keşfet üyesinden şikâyet:** `reports` satırı eklendiğinde şikâyet edenin
-  o tayfadaki üyeliği `joined_via = 'discover'` ise (durumu ne olursa
-  olsun), tayfanın `approved` ya da `pending` başvurusu `dropped`
-  (`member_report`) olur. Şikâyetin kendisi normal akışına devam eder;
-  askı ayrı bir panel kararıdır. Böylece düşürme askıdan **önce** gelir.
+  o tayfada işareti varsa (hâlâ üye ya da son 30 günde ayrılmış), tayfanın
+  `approved` ya da `pending` başvurusu `dropped` (`member_report`) olur.
+  Şikâyetin kendisi normal akışına devam eder; askı ayrı bir panel
+  kararıdır. Böylece düşürme askıdan **önce** gelir.
 - **Ciddi olumsuz geri bildirim:** `event_feedback.answer = 'serious'`
   yazıldığında (ekleme ya da değişiklik) aynı düşürme (`negative_feedback`).
+- **Keşfet üyesinin çıkarılması:** tayfa yöneticisi (ya da moderatörü)
+  Keşfet'ten gelmiş bir üyeyi, o üyenin geri bildirim penceresi açıkken
+  (`going` ya da `attended` olduğu bir etkinliğin bitişi son 7 gün içinde
+  ya da gelecekte) çıkarır ya da banlarsa tayfa düşer (`member_removed`).
+  Bu, üyelik servisinde çıkarma/ban ile aynı transaction'dadır (trigger
+  ayrılma ile çıkarmayı ayırt edemez). Kişinin kendi isteğiyle ayrılması
+  ya da penceresi kapanmış bir üyenin çıkarılması düşürmez.
 - **Meta veri değişikliği:** onaylı tayfanın adı, açıklaması, ili ya da
   ilçesi değişirse başvuru `pending`'e döner (panel meta veriyi onaylamıştı;
   değişen meta veri onaysızdır).
@@ -200,6 +241,26 @@ Kurallar trigger'dadır; hangi uçtan gelirse gelsin atlanamaz:
 - **Tayfa yöneticisine düşürme nedeni söylenmez:** yönetici durumu
   "incelemede" görür. Keşfet'ten gelen üyeler azdır; "Keşfet üyesi şikâyet
   etti" demek şikâyet edeni ele verirdi.
+- **Gecikmeli görünürlük (maske):** nedeni söylemek kadar **zamanı** da ele
+  verir: etkinlikten bir saat sonra "incelemede" görmek, o etkinliğe
+  katılan birkaç kişiyi işaret eder. Bu yüzden geri bildirim ve Keşfet
+  üyesi şikâyetiyle düşürmede **listeden çıkış hemen**, yöneticilerin
+  gördüğü durum ise gecikmelidir: trigger önceki durumu `masked_status`'a,
+  açılma anını `masked_until`'a yazar; o ana kadar yönetici önceki durumu
+  ("listede" ya da "inceleme bekliyor") görür. `masked_until`:
+  - geri bildirimde: etkinliğin geri bildirim penceresinin kapanışı
+    (bitiş + 7 gün), en erken ertesi UTC gün dönümünden sonraki gün dönümü;
+  - Keşfet üyesi şikâyetinde: ertesi UTC gün dönümünden sonraki gün dönümü
+    (24–48 saat; günlük toplu iş gibi). Şikâyetin kendisi zaten
+    platforma gider, tayfa yöneticisi görmez; maske yalnızca listeden
+    düşme zamanını bulanıklaştırır.
+  Panel gerçeği hemen görür (kuyrukta `dropped`). Panel kararı (onay/ret)
+  maskeyi kaldırır. Yöneticinin Keşfet'i kapatıp açması maskeyi açmaz.
+  `member_removed` maskelenmez: yönetici kendi işlemini zaten bilir; hemen
+  "incelemede" görmesi bu kuralı öğretir. Kalan sızıntı: yönetici olmayan
+  bir hesapla akışa bakan biri tayfanın akıştan düştüğünü görebilir; bu
+  hesabın tayfada üyeliği olmamalı ve izleyicinin arkadaşı etkinliğe
+  gidiyor olmalı (§4), bu yüzden kabul edildi.
 
 ### 8. Platform paneli
 
@@ -224,7 +285,9 @@ Mevcut panel uçları ve sayfaları altında ("Keşfet" sekmesi):
 
 - Kim: etkinliğe katılımı `attended` olan (organizatör işaretlemesi
   dahil), `discoverable` yüz yüze bir etkinliğin katılımcısı; tayfanın
-  aktif üyesi.
+  aktif üyesi ya da eski Keşfet üyesi (§7). Etkinlik modülünün açık olması
+  aranmaz: geri bildirim bir güvenlik sinyalidir, modülü kapatmak onu
+  susturmamalı.
 - Ne zaman: bitişten bitiş + 7 güne kadar (düzeltme penceresiyle aynı);
   bu sürede cevap değiştirilebilir.
 - Cevap: `ok` / `not_ok` / `serious`. Serbest metin yoktur (tutmadığın veri
@@ -239,18 +302,27 @@ Mevcut panel uçları ve sayfaları altında ("Keşfet" sekmesi):
 - **Seçme:** etkinliğe `going` demiş aktif üye, yüz yüze, iptal edilmemiş,
   **bitmemiş** bir etkinlik için **bir** kabul edilmiş arkadaşını (iki
   yönden engel yok) seçer; `grace_minutes` 15–1440 (varsayılan 60).
-  Alarm gitmeden önce değiştirilebilir ya da kaldırılabilir. Etkinliğin
-  Keşfet'te olması gerekmez (yürüyüş alarmının genellemesidir); bayrağa
-  bağlıdır.
+  Alarm gitmeden önce değiştirilebilir ya da kaldırılabilir; **alarm
+  gittikten sonra kaldırılamaz** (`SAFETY_CONTACT_CLOSED`): güvenlik kişisi
+  alarma göre davranıyordur, paylaşım onun listesinden kaybolmamalı.
+  Etkinliğin Keşfet'te olması gerekmez (yürüyüş alarmının
+  genellemesidir); seçme bayrağa bağlıdır.
 - **"Döndüm":** kişi `returned_at`'i işaretler; alarm durur.
+- **Kapatma bayrağa bağlı değildir:** "döndüm" ve kaldırma (alarm
+  gitmeden) bayrak kapalıyken, kişi tayfadan ayrıldıktan sonra ya da
+  etkinlik modülü kapalıyken de çalışır. Yalnızca çağıranın kendi
+  satırına, etkinlik bu tayfanınsa, dokunurlar; başka hiçbir şey okumaz ve
+  yetki vermezler. Gerekçe: kurulmuş bir güvenlik ağı her zaman
+  kapatılabilmeli, yoksa güvenlik kişisine yanlış alarm gider.
 - **Alarm** (`safety-alerts` işi, dakikada bir; yürüyüş alarmının modeli):
   `returned_at` yok, `alert_sent_at` yok ve `ends_at + grace_minutes`
   geçmişse **yalnızca seçilen kişiye** `safety_alert` bildirimi gider ve
   `alert_sent_at` aynı transaction'da yazılır (bir kez). Gönderim anında
-  ikisi hâlâ arkadaş ve aralarında engel yoksa gider; değilse gitmez.
-  Etkinlik başlamadan iptal ya da silindiyse ve kişi check-in yapmadıysa
-  gitmez; check-in yaptıysa yine gider (kişi dışarıda olabilir). Check-in
-  alarmı durdurmaz: varmak dönmek değildir.
+  ikisi hâlâ arkadaş, aralarında engel yok ve katılımcı tayfanın **aktif
+  üyesiyse** gider; değilse gitmez. Planlı etkinlikte katılımcının hâlâ
+  `going` olması gerekir. Etkinlik iptal ya da silindiyse ve kişi
+  check-in yapmadıysa gitmez; check-in yaptıysa yine gider (kişi dışarıda
+  olabilir). Check-in alarmı durdurmaz: varmak dönmek değildir.
 - **Bildirim:** yeni `safety_alert` türü (chat migration `00018`): tayfasız,
   aktörsüz, hedef `user` = katılımcı. **İçerik ve konum taşımaz.** Push
   gider ve susturma uygulanmaz (yürüyüş alarmı gibi).
@@ -258,7 +330,12 @@ Mevcut panel uçları ve sayfaları altında ("Keşfet" sekmesi):
   kişilerin, bitişinden 24 saat geçmemiş ya da alarmı son 7 günde gitmiş
   etkinlikleri: katılımcının adı ve avatarı, tayfa adı, etkinlik başlığı,
   başlangıç/bitiş, buluşma noktası **adı**, il/ilçe, `returned_at`,
-  `alert_sent_at`. **Koordinat dönmez.** Katılımcı bu paylaşımı bilerek
+  `alert_sent_at`. **Koordinat dönmez.** Paylaşım yalnızca hâlâ geçerliyse
+  listelenir: ikisi arkadaş, engel yok, katılımcı tayfanın aktif üyesi ve
+  `going`; etkinlik silinmemiş ve iptal edilmemiş; tayfa silinmemiş ya da
+  askıda değil. Alarm gitmişse ve kişi check-in yaptıysa etkinlik
+  sonradan iptal ya da silinmiş olsa da görünür (alarmın bağlamı).
+  Katılımcı bu paylaşımı bilerek
   yapar; güvenlik kişisi tayfa üyesi olmadığı için diğer bilgiler
   (açıklama, katılımcılar, kanal) ona açılmaz.
 - Seçilen kişiye seçildiği anda bildirim gitmez (kötüye kullanımla
@@ -295,13 +372,16 @@ bile) tayfayı dışarıda tuttuğunu sabitler.
 | `tayfa_discover` | Tayfa kalıcı silinene kadar (CASCADE). Hesap silinince `requested_by` / `reviewed_by` NULL |
 | `event_feedback` | 365 gün (günlük `retention` işi); etkinlik kalıcı silinince CASCADE |
 | `event_safety_contacts` | Etkinlik bitişinden 30 gün sonra silinir (günlük `retention` işi) |
+| `discover_joins` | Üyelik sürerken durur; üyelik bitişinden (`left_at`) 30 gün sonra silinir (günlük `retention` işi). Tayfa kalıcı silinince CASCADE |
 
-- **Hesap silme** (`user.deleted`): kişinin geri bildirimleri ve iki yöndeki
-  güvenlik kişisi satırları (seçtiği ve seçildiği) silinir.
+- **Hesap silme** (`user.deleted`): kişinin geri bildirimleri, iki yöndeki
+  güvenlik kişisi satırları (seçtiği ve seçildiği) ve Keşfet işaretleri
+  silinir.
 - **KVKK dışa aktarma** (ADR-0021): yeni bölüm `CORE_EXPORT_SECTION_DISCOVER
   = 23`, `core/discover.json`: kişinin geri bildirimleri (etkinlik kimliği,
   cevap, zamanlar) ve seçtiği güvenlik kişileri (etkinlik, kişi kimliği,
-  tolerans, döndüm ve alarm zamanları). Başkasının kişiyi seçtiği satırlar
+  tolerans, döndüm ve alarm zamanları) ve Keşfet işaretleri (tayfa,
+  katılış ve ayrılış zamanı). Başkasının kişiyi seçtiği satırlar
   o başkasının verisidir, girmez.
 
 ### 14. İzinler (ADR-0004, tek izin tablosu)
@@ -355,8 +435,8 @@ Tayfa yöneticisinin gördüğü durum: `off` (kapalı), `pending` (incelemede),
 
 ## Sonuçlar
 
-- core'a üç tablo, iki fonksiyon/trigger grubu, bir iş, bir servis; chat'e
-  bir bildirim türü; panele bir sekme eklenir.
+- core'a dört tablo (`discover_joins` dahil), iki fonksiyon/trigger grubu,
+  bir iş, bir servis; chat'e bir bildirim türü; panele bir sekme eklenir.
 - `DISCOVER_ENABLED` dağıtımda tanımlanmaz (varsayılan kapalı); açmak tek
   bir ortam değişkenidir.
 - Topluluk Kuralları'na "Keşfet'teki etkinlik halka açık yerde buluşur"
@@ -364,6 +444,8 @@ Tayfa yöneticisinin gördüğü durum: `off` (kapalı), `pending` (incelemede),
 - Aydınlatma metnine Keşfet (arkadaşın katılımının arkadaşlara gösterilmesi,
   güvenlik kişisi, geri bildirim) eklenmeden bayrak açılmamalıdır
   (hukukçu listesi).
+- Kötüye kullanım sözlüğü (`moderation_terms`) gelip Keşfet'teki etkinlik
+  başlığı ondan geçmeden bayrak açılmamalıdır (§4).
 
 ## Platform sahibine sorular
 
@@ -393,6 +475,13 @@ verirse ilgili bölüm değişir.
    türü açılmadı; durum Keşfet ayarında görünür.
 9. **Geri bildirim yalnızca `discoverable` etkinliklerde;** tüm
    etkinliklere genişletilmesi ayrı karar.
+10. **Eski Keşfet üyesinin süresi 30 gün** ve yalnızca tayfayı şikâyet +
+    katıldığı etkinliğe geri bildirim (§7). Daha uzun bir süre ya da
+    tayfanın içeriğini (ör. bir mesajı) şikâyet etme ayrı karar.
+11. **Maskenin süresi:** geri bildirimde pencere kapanışı, şikâyette 24–48
+    saat (§7). Panelin isteği varsa günlük sabit saat de olabilir.
+12. **Etkinlik başlığı kötüye kullanım filtresi** `moderation_terms`
+    gelince; o zamana kadar bayrak kapalı kalır (§4, Sonuçlar).
 
 ## Hukukçu listesi
 

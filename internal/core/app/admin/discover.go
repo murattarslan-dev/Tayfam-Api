@@ -30,7 +30,7 @@ type DiscoverEntry struct {
 	CreatedAt           time.Time
 	Enabled             bool
 	Status              string // pending, dropped
-	DropReason          string // member_report, negative_feedback; "" unless dropped
+	DropReason          string // member_report, negative_feedback, member_removed; "" unless dropped
 	RequestedAt         time.Time
 	StatusChangedAt     time.Time
 	MemberCount         int

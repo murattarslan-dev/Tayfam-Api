@@ -25,6 +25,9 @@ const (
 	// FeedbackRetention: "Was everything all right?" answers go after a
 	// year.
 	FeedbackRetention = 365 * 24 * time.Hour
+	// DiscoverJoinRetention: a Keşfet join mark goes this long after the
+	// membership ended (discover.FormerMemberWindow).
+	DiscoverJoinRetention = 30 * 24 * time.Hour
 )
 
 const safetyBatch = 100
@@ -70,7 +73,8 @@ func (s *Service) AlertMissedReturns(ctx context.Context) (int, error) {
 	})
 }
 
-// expireDiscover deletes old safety contacts and feedback.
+// expireDiscover deletes old safety contacts, feedback and Keşfet join
+// marks.
 func (s *Service) expireDiscover(ctx context.Context, q *store.Queries) (int, error) {
 	nc, err := q.DeleteOldSafetyContacts(ctx, ts(s.now().Add(-SafetyContactRetention)))
 	if err != nil {
@@ -80,5 +84,9 @@ func (s *Service) expireDiscover(ctx context.Context, q *store.Queries) (int, er
 	if err != nil {
 		return int(nc), fmt.Errorf("geri bildirim saklama: %w", err) //nolint:gosec // row count
 	}
-	return int(nc + nf), nil //nolint:gosec // row counts
+	nj, err := q.DeleteOldDiscoverJoins(ctx, ts(s.now().Add(-DiscoverJoinRetention)))
+	if err != nil {
+		return int(nc + nf), fmt.Errorf("keşfet işareti saklama: %w", err) //nolint:gosec // row counts
+	}
+	return int(nc + nf + nj), nil //nolint:gosec // row counts
 }

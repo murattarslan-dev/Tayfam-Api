@@ -386,10 +386,14 @@ enum DiscoverReviewStatus {
 // DiscoverDropReason is why a tayfa was taken out of Keşfet.
 enum DiscoverDropReason {
   DISCOVER_DROP_REASON_UNSPECIFIED = 0;
-  // A member who came from Keşfet filed a report in the tayfa.
+  // A member who came from Keşfet (now or within 30 days of leaving)
+  // filed a report in the tayfa.
   DISCOVER_DROP_REASON_MEMBER_REPORT = 1;
   // An attendee answered SERIOUS to "Was everything all right?".
   DISCOVER_DROP_REASON_NEGATIVE_FEEDBACK = 2;
+  // The tayfa removed or banned a member who came from Keşfet while their
+  // feedback window was open.
+  DISCOVER_DROP_REASON_MEMBER_REMOVED = 3;
 }
 
 // DiscoverQueueEntry is a tayfa waiting for a Keşfet decision.

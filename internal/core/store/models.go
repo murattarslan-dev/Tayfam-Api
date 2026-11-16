@@ -54,6 +54,13 @@ type AuditLog struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type DiscoverJoin struct {
+	TayfaID  pgtype.UUID
+	UserID   pgtype.UUID
+	JoinedAt pgtype.Timestamptz
+	LeftAt   pgtype.Timestamptz
+}
+
 type DomainEvent struct {
 	ID          pgtype.UUID
 	Type        string
@@ -477,6 +484,8 @@ type TayfaDiscover struct {
 	ReviewedAt      pgtype.Timestamptz
 	ReviewedBy      pgtype.UUID
 	StatusChangedAt pgtype.Timestamptz
+	MaskedStatus    pgtype.Text
+	MaskedUntil     pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 }

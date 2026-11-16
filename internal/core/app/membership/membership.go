@@ -917,6 +917,9 @@ func (s *Service) BanMember(ctx context.Context, caller, tayfa, target id.ID, re
 			return apperr.ErrMemberNotFound
 		}
 		meta["from_status"] = tm.Status
+		if err := s.dropDiscover(ctx, q, tayfa, target); err != nil {
+			return err
+		}
 		return s.membershipChanged(ctx, q, tayfa, caller, target, changeBanned, meta)
 	})
 }
@@ -934,8 +937,28 @@ func (s *Service) RemoveMember(ctx context.Context, caller, tayfa, target id.ID)
 		if n != 1 {
 			return apperr.ErrMemberNotFound
 		}
+		if err := s.dropDiscover(ctx, q, tayfa, target); err != nil {
+			return err
+		}
 		return s.membershipChanged(ctx, q, tayfa, caller, target, changeRemoved, nil)
 	})
+}
+
+// dropDiscover takes the tayfa out of Keşfet for the platform's review
+// when its admins remove or ban a member who came from Keşfet while that
+// member's feedback window is open: an event they were going to or
+// attended ends after now - FeedbackWindow (ADR-0033 §7). Otherwise
+// removing the one who might report would close the safety net. Leaving
+// by oneself does not drop.
+func (s *Service) dropDiscover(ctx context.Context, q *store.Queries, tayfa, target id.ID) error {
+	now := s.now()
+	if _, err := q.DropDiscoverForRemovedMember(ctx, store.DropDiscoverForRemovedMemberParams{
+		TayfaID: tayfa.PG(), UserID: target.PG(), Now: pgtype.Timestamptz{Time: now, Valid: true},
+		WindowStart: pgtype.Timestamptz{Time: now.Add(-access.DiscoverFeedbackWindow), Valid: true},
+	}); err != nil {
+		return fmt.Errorf("keşfet düşürme: %w", err)
+	}
+	return nil
 }
 
 // LeaveTayfa ends the caller's active membership or withdraws their pending

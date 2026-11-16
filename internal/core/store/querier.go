@@ -21,6 +21,7 @@ type Querier interface {
 	AddQuestionTag(ctx context.Context, arg AddQuestionTagParams) error
 	AddTayfaInterest(ctx context.Context, arg AddTayfaInterestParams) error
 	AdjustAnswerVoteCount(ctx context.Context, arg AdjustAnswerVoteCountParams) (int64, error)
+	// Panel kararı maskeyi kaldırır.
 	AdminApproveDiscover(ctx context.Context, arg AdminApproveDiscoverParams) (int64, error)
 	// Platform kararı. Tayfada henüz açıksa şikâyet de çözülür (çözen tayfa
 	// yetkilisi değil: handled_by boş kalır).
@@ -286,6 +287,8 @@ type Querier interface {
 	DeleteFriendship(ctx context.Context, arg DeleteFriendshipParams) (int64, error)
 	// Ayrılma, çıkarma, başvuru reddi, ban kaldırma.
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (int64, error)
+	// İşaret ayrılıştan 30 gün sonra gerekmez.
+	DeleteOldDiscoverJoins(ctx context.Context, before pgtype.Timestamptz) (int64, error)
 	DeleteOldEventFeedback(ctx context.Context, before pgtype.Timestamptz) (int64, error)
 	DeleteOldFriendRequestOutcomes(ctx context.Context, before pgtype.Timestamptz) (int64, error)
 	DeleteOldInvitationOutcomes(ctx context.Context, before pgtype.Timestamptz) (int64, error)
@@ -325,6 +328,7 @@ type Querier interface {
 	DeleteUserConvoyVehicle(ctx context.Context, arg DeleteUserConvoyVehicleParams) (int64, error)
 	// Araç (plaka dahil) kişisel veridir ve kişiye aittir: silinir.
 	DeleteUserConvoyVehicles(ctx context.Context, userID pgtype.UUID) error
+	DeleteUserDiscoverJoins(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserEventFeedback(ctx context.Context, userID pgtype.UUID) error
 	// Albüm fotoğrafları kişiseldir; kişiyle birlikte silinir, dosyaları
 	// silme kuyruğuna girer (issue #206).
@@ -348,6 +352,12 @@ type Querier interface {
 	// Hiçbir mesaj dosyayı tutmuyor: bağlama kaldırılır; dosya bağlanmamış
 	// hazır dosya olarak 7 günlük temizliğe döner (ready_at'ten sayılır).
 	DetachChatAttachment(ctx context.Context, arg DetachChatAttachmentParams) (int64, error)
+	// ---------------------------------------------------------------------------
+	// Eski Keşfet üyesi (ADR-0033 §7)
+	// Kişi tayfaya Keşfet'ten gelmiş ve aktif üyeliği left_after'dan sonra
+	// bitmiş mi; tayfa silinmemiş. Tayfa içeriğine erişim vermez: yalnızca
+	// tayfayı şikâyet ve katıldığı etkinliğe geri bildirim.
+	DiscoverFormerMember(ctx context.Context, arg DiscoverFormerMemberParams) (bool, error)
 	// Tayfa şu anda izleyicinin akışında mı (Keşfet'ten katılım): tayfanın
 	// bir etkinliğinde görünür bir arkadaş var.
 	DiscoverTayfaVisible(ctx context.Context, arg DiscoverTayfaVisibleParams) (bool, error)
@@ -357,6 +367,11 @@ type Querier interface {
 	// önerilmez.
 	DismissSuggestionPair(ctx context.Context, arg DismissSuggestionPairParams) error
 	DisownUserCovers(ctx context.Context, userID pgtype.UUID) (int64, error)
+	// Yönetici, Keşfet'ten gelmiş bir üyeyi geri bildirim penceresi açıkken
+	// (going ya da attended olduğu etkinliğin bitişi window_start'tan sonra)
+	// çıkardı ya da banladı: tayfa incelemeye düşer. Yönetici kendi işlemini
+	// bildiği için durum maskelenmez.
+	DropDiscoverForRemovedMember(ctx context.Context, arg DropDiscoverForRemovedMemberParams) (int64, error)
 	// Yanlış boyutta yüklenmiş dışa aktarma silinir.
 	DropExport(ctx context.Context, arg DropExportParams) (int64, error)
 	EndEventSeries(ctx context.Context, arg EndEventSeriesParams) (int64, error)
@@ -493,6 +508,10 @@ type Querier interface {
 	GetLiveUserProfile(ctx context.Context, userID pgtype.UUID) (GetLiveUserProfileRow, error)
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
 	GetOwnExport(ctx context.Context, arg GetOwnExportParams) (Upload, error)
+	// Kişinin kendi satırı, etkinlik bu tayfanınsa. Kaldırma ve "döndüm"
+	// yalnızca kendi satırına dokunur; üyelik, modül ve bayrak aranmaz
+	// (ADR-0033 §10).
+	GetOwnSafetyContactForUpdate(ctx context.Context, arg GetOwnSafetyContactForUpdateParams) (pgtype.Timestamptz, error)
 	// Sahibinin görüntüsü; başkasınınki bulunamaz (IDOR). Dışa aktarma
 	// dosyaları (data_export) görüntü yollarında hiç görünmez.
 	GetOwnUpload(ctx context.Context, arg GetOwnUploadParams) (Upload, error)
@@ -560,6 +579,7 @@ type Querier interface {
 	GetTayfaByJoinCode(ctx context.Context, joinCode string) (GetTayfaByJoinCodeRow, error)
 	// ---------------------------------------------------------------------------
 	// Tayfa yöneticisinin ayarı
+	// masked_*: yöneticilerin göreceği önceki durum (ADR-0033 §7).
 	GetTayfaDiscoverState(ctx context.Context, tayfaID pgtype.UUID) (GetTayfaDiscoverStateRow, error)
 	// Yazan işlemler tayfa satırını kilitleyerek okur; memberships trigger'ı da
 	// aynı satırı kilitlediği için üyelik değişiklikleriyle sırayla çalışır.
@@ -768,7 +788,12 @@ type Querier interface {
 	// Çözülmüşler, son çözülen önce.
 	ListResolvedTayfaReports(ctx context.Context, arg ListResolvedTayfaReportsParams) ([]ListResolvedTayfaReportsRow, error)
 	// Kişiyi güvenlik kişisi seçenlerin etkinlikleri: bitişinden 24 saat
-	// geçmemiş ya da alarmı son 7 günde gitmiş. Koordinat seçilmez.
+	// geçmemiş ya da alarmı son 7 günde gitmiş. Koordinat seçilmez. Paylaşım
+	// yalnızca hâlâ geçerliyse görünür: ikisi arkadaş, engel yok, katılımcı
+	// tayfanın aktif üyesi ve etkinliğe going; etkinlik silinmemiş ya da
+	// iptal edilmemiş, tayfa silinmemiş ya da askıda değil. Alarm gitmişse
+	// (etkinlik sonradan iptal ya da silinmiş olsa bile) katılımcı check-in
+	// yaptıysa görünür; alarmın kendisi bildirimle gitti.
 	ListSafetyShares(ctx context.Context, arg ListSafetySharesParams) ([]ListSafetySharesRow, error)
 	// Serinin henüz başlamamış, iptal edilmemiş ve tek başına düzenlenmemiş
 	// örnekleri; seri güncellemesi bunları değiştirir.
@@ -797,8 +822,10 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// safety-alerts işi
 	// Alarmı gelmiş satırlar: döndüm yok, alarm gitmemiş, bitiş + tolerans
-	// geçmiş; etkinlik başlamadan iptal ya da silindiyse yalnızca check-in
-	// yapılmışsa. Gönderim anında ikisi hâlâ arkadaş ve engel yok.
+	// geçmiş; katılımcı tayfanın aktif üyesi. Planlı ve silinmemiş etkinlikte
+	// going olmalı; etkinlik iptal ya da silindiyse yalnızca check-in
+	// yapılmışsa (yola çıkmış demektir). Gönderim anında ikisi hâlâ arkadaş ve
+	// engel yok.
 	LockDueSafetyAlerts(ctx context.Context, arg LockDueSafetyAlertsParams) ([]LockDueSafetyAlertsRow, error)
 	// İki kişi arasındaki istek, kabul ve engelleme sırayla işlenir (satır
 	// henüz yokken de).

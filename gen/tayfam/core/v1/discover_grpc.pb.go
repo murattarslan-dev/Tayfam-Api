@@ -44,11 +44,13 @@ const (
 // verified token subject.
 //
 // Feature flag: core's DISCOVER_ENABLED (default off). While it is off,
-// ListDiscoverFeed, JoinFromDiscover, the feedback methods, the safety
-// contact methods and ListSafetyShares fail with
+// ListDiscoverFeed, JoinFromDiscover, the feedback methods,
+// GetSafetyContact, SetSafetyContact and ListSafetyShares fail with
 // ERROR_REASON_FEATURE_DISABLED before reading anything. GetTayfaDiscover
 // and SetTayfaDiscover work regardless (the tayfa's admins may apply and
-// the platform may review before Keşfet opens).
+// the platform may review before Keşfet opens), and so do
+// ClearSafetyContact and MarkReturned: a safety net that was set can
+// always be closed.
 //
 // Keşfet gives facts, not trust: nothing here says "trusted", "verified"
 // or "approved". The friendship score (ADR-0030) orders the feed but is
@@ -89,7 +91,9 @@ type DiscoverServiceClient interface {
 	// (turning on with fewer than five active members).
 	SetTayfaDiscover(ctx context.Context, in *SetTayfaDiscoverRequest, opts ...grpc.CallOption) (*SetTayfaDiscoverResponse, error)
 	// GetEventFeedback returns the caller's own "Was everything all right?"
-	// answer; UNSPECIFIED when there is none.
+	// answer; UNSPECIFIED when there is none. The feedback methods also
+	// accept a member who came from Keşfet within 30 days of their
+	// membership ending (ADR-0033 §7).
 	//
 	// Errors: ERROR_REASON_FEATURE_DISABLED, ERROR_REASON_TAYFA_NOT_FOUND,
 	// ERROR_REASON_EVENT_NOT_FOUND.
@@ -121,21 +125,26 @@ type DiscoverServiceClient interface {
 	// either way, or an unknown user), ERROR_REASON_SAFETY_CONTACT_CLOSED.
 	SetSafetyContact(ctx context.Context, in *SetSafetyContactRequest, opts ...grpc.CallOption) (*SetSafetyContactResponse, error)
 	// ClearSafetyContact removes the caller's safety contact; removing
-	// nothing succeeds.
+	// nothing succeeds. Once the alert went out it cannot be removed. It
+	// touches only the caller's own row of an event of the tayfa: no flag,
+	// membership or module is required.
 	//
-	// Errors: ERROR_REASON_FEATURE_DISABLED, ERROR_REASON_TAYFA_NOT_FOUND,
-	// ERROR_REASON_EVENT_NOT_FOUND.
+	// Errors: ERROR_REASON_SAFETY_CONTACT_CLOSED.
 	ClearSafetyContact(ctx context.Context, in *ClearSafetyContactRequest, opts ...grpc.CallOption) (*ClearSafetyContactResponse, error)
 	// MarkReturned records "I'm back": no alert goes out after it. Calling it
-	// again keeps the first time. Allowed while muted.
+	// again keeps the first time. Like ClearSafetyContact it touches only
+	// the caller's own row: no flag, membership or module is required.
 	//
-	// Errors: ERROR_REASON_FEATURE_DISABLED, ERROR_REASON_TAYFA_NOT_FOUND,
-	// ERROR_REASON_EVENT_NOT_FOUND, ERROR_REASON_SAFETY_CONTACT_NOT_FOUND.
+	// Errors: ERROR_REASON_SAFETY_CONTACT_NOT_FOUND.
 	MarkReturned(ctx context.Context, in *MarkReturnedRequest, opts ...grpc.CallOption) (*MarkReturnedResponse, error)
 	// ListSafetyShares lists the events whose participants chose the caller
 	// as safety contact: those that ended less than 24 hours ago or whose
 	// alert went out in the last seven days, newest start first (at most
-	// 50). Only the meeting point's name, never its coordinates.
+	// 50), and only while the share still holds: still friends, no block,
+	// the participant an active member and GOING, the event and tayfa
+	// neither removed nor suspended (after an alert, a checked-in
+	// participant's share stays). Only the meeting point's name, never its
+	// coordinates.
 	//
 	// Errors: ERROR_REASON_FEATURE_DISABLED.
 	ListSafetyShares(ctx context.Context, in *ListSafetySharesRequest, opts ...grpc.CallOption) (*ListSafetySharesResponse, error)
@@ -271,11 +280,13 @@ func (c *discoverServiceClient) ListSafetyShares(ctx context.Context, in *ListSa
 // verified token subject.
 //
 // Feature flag: core's DISCOVER_ENABLED (default off). While it is off,
-// ListDiscoverFeed, JoinFromDiscover, the feedback methods, the safety
-// contact methods and ListSafetyShares fail with
+// ListDiscoverFeed, JoinFromDiscover, the feedback methods,
+// GetSafetyContact, SetSafetyContact and ListSafetyShares fail with
 // ERROR_REASON_FEATURE_DISABLED before reading anything. GetTayfaDiscover
 // and SetTayfaDiscover work regardless (the tayfa's admins may apply and
-// the platform may review before Keşfet opens).
+// the platform may review before Keşfet opens), and so do
+// ClearSafetyContact and MarkReturned: a safety net that was set can
+// always be closed.
 //
 // Keşfet gives facts, not trust: nothing here says "trusted", "verified"
 // or "approved". The friendship score (ADR-0030) orders the feed but is
@@ -316,7 +327,9 @@ type DiscoverServiceServer interface {
 	// (turning on with fewer than five active members).
 	SetTayfaDiscover(context.Context, *SetTayfaDiscoverRequest) (*SetTayfaDiscoverResponse, error)
 	// GetEventFeedback returns the caller's own "Was everything all right?"
-	// answer; UNSPECIFIED when there is none.
+	// answer; UNSPECIFIED when there is none. The feedback methods also
+	// accept a member who came from Keşfet within 30 days of their
+	// membership ending (ADR-0033 §7).
 	//
 	// Errors: ERROR_REASON_FEATURE_DISABLED, ERROR_REASON_TAYFA_NOT_FOUND,
 	// ERROR_REASON_EVENT_NOT_FOUND.
@@ -348,21 +361,26 @@ type DiscoverServiceServer interface {
 	// either way, or an unknown user), ERROR_REASON_SAFETY_CONTACT_CLOSED.
 	SetSafetyContact(context.Context, *SetSafetyContactRequest) (*SetSafetyContactResponse, error)
 	// ClearSafetyContact removes the caller's safety contact; removing
-	// nothing succeeds.
+	// nothing succeeds. Once the alert went out it cannot be removed. It
+	// touches only the caller's own row of an event of the tayfa: no flag,
+	// membership or module is required.
 	//
-	// Errors: ERROR_REASON_FEATURE_DISABLED, ERROR_REASON_TAYFA_NOT_FOUND,
-	// ERROR_REASON_EVENT_NOT_FOUND.
+	// Errors: ERROR_REASON_SAFETY_CONTACT_CLOSED.
 	ClearSafetyContact(context.Context, *ClearSafetyContactRequest) (*ClearSafetyContactResponse, error)
 	// MarkReturned records "I'm back": no alert goes out after it. Calling it
-	// again keeps the first time. Allowed while muted.
+	// again keeps the first time. Like ClearSafetyContact it touches only
+	// the caller's own row: no flag, membership or module is required.
 	//
-	// Errors: ERROR_REASON_FEATURE_DISABLED, ERROR_REASON_TAYFA_NOT_FOUND,
-	// ERROR_REASON_EVENT_NOT_FOUND, ERROR_REASON_SAFETY_CONTACT_NOT_FOUND.
+	// Errors: ERROR_REASON_SAFETY_CONTACT_NOT_FOUND.
 	MarkReturned(context.Context, *MarkReturnedRequest) (*MarkReturnedResponse, error)
 	// ListSafetyShares lists the events whose participants chose the caller
 	// as safety contact: those that ended less than 24 hours ago or whose
 	// alert went out in the last seven days, newest start first (at most
-	// 50). Only the meeting point's name, never its coordinates.
+	// 50), and only while the share still holds: still friends, no block,
+	// the participant an active member and GOING, the event and tayfa
+	// neither removed nor suspended (after an alert, a checked-in
+	// participant's share stays). Only the meeting point's name, never its
+	// coordinates.
 	//
 	// Errors: ERROR_REASON_FEATURE_DISABLED.
 	ListSafetyShares(context.Context, *ListSafetySharesRequest) (*ListSafetySharesResponse, error)

@@ -131,6 +131,17 @@ func RequireModule(ctx context.Context, q *store.Queries, tayfa id.ID, module st
 	return nil
 }
 
+// Keşfet windows (ADR-0033 §7), shared by discover, membership and report.
+const (
+	// DiscoverFeedbackWindow is how long after an event's end feedback is
+	// taken.
+	DiscoverFeedbackWindow = 7 * 24 * time.Hour
+	// DiscoverFormerMemberWindow is how long after their membership ends a
+	// member who came from Keşfet may still report the tayfa and give
+	// feedback on events they attended (discover_joins).
+	DiscoverFormerMemberWindow = 30 * 24 * time.Hour
+)
+
 // Kinds of tayfa (tayfas.kind, ADR-0032).
 const (
 	KindStandard = "standard"

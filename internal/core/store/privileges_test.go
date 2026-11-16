@@ -38,7 +38,8 @@ var wantAppPrivileges = map[string]string{
 	// Issue #210, ADR-0033: an application is never deleted (it goes with
 	// the tayfa); feedback carries no text; a safety contact row never
 	// moves to another event or participant.
-	"tayfa_discover":        "INSERT,SELECT,UPDATE(drop_reason,requested_at,requested_by,reviewed_at,reviewed_by,status,status_changed_at,updated_at)",
+	"tayfa_discover":        "INSERT,SELECT,UPDATE(drop_reason,masked_status,masked_until,requested_at,requested_by,reviewed_at,reviewed_by,status,status_changed_at,updated_at)",
+	"discover_joins":        "DELETE,INSERT,SELECT,UPDATE(joined_at,left_at)",
 	"event_feedback":        "DELETE,INSERT,SELECT,UPDATE(answer,updated_at)",
 	"event_safety_contacts": "DELETE,INSERT,SELECT,UPDATE(alert_sent_at,contact_user_id,grace_minutes,returned_at,updated_at)",
 	"invitation_outcomes":   "DELETE,INSERT,SELECT,UPDATE(outcome,resolved_at)",

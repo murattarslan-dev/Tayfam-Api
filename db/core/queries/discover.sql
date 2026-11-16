@@ -71,8 +71,9 @@ SELECT EXISTS (
 -- ---------------------------------------------------------------------------
 -- Tayfa yöneticisinin ayarı
 
+-- masked_*: yöneticilerin göreceği önceki durum (ADR-0033 §7).
 -- name: GetTayfaDiscoverState :one
-SELECT t.visibility, d.status AS review_status
+SELECT t.visibility, d.status AS review_status, d.masked_status, d.masked_until
 FROM tayfas t
 LEFT JOIN tayfa_discover d ON d.tayfa_id = t.id
 WHERE t.id = @tayfa_id;
@@ -90,6 +91,33 @@ ON CONFLICT (tayfa_id) DO UPDATE
 SET status = 'pending', requested_at = EXCLUDED.requested_at, requested_by = EXCLUDED.requested_by,
     status_changed_at = EXCLUDED.status_changed_at
 WHERE tayfa_discover.status = 'rejected';
+
+-- ---------------------------------------------------------------------------
+-- Eski Keşfet üyesi (ADR-0033 §7)
+
+-- Kişi tayfaya Keşfet'ten gelmiş ve aktif üyeliği left_after'dan sonra
+-- bitmiş mi; tayfa silinmemiş. Tayfa içeriğine erişim vermez: yalnızca
+-- tayfayı şikâyet ve katıldığı etkinliğe geri bildirim.
+-- name: DiscoverFormerMember :one
+SELECT EXISTS (
+  SELECT 1 FROM discover_joins j JOIN tayfas t ON t.id = j.tayfa_id
+  WHERE j.tayfa_id = @tayfa_id AND j.user_id = @user_id
+    AND j.left_at > @left_after::timestamptz AND t.deleted_at IS NULL
+)::boolean;
+
+-- Yönetici, Keşfet'ten gelmiş bir üyeyi geri bildirim penceresi açıkken
+-- (going ya da attended olduğu etkinliğin bitişi window_start'tan sonra)
+-- çıkardı ya da banladı: tayfa incelemeye düşer. Yönetici kendi işlemini
+-- bildiği için durum maskelenmez.
+-- name: DropDiscoverForRemovedMember :execrows
+UPDATE tayfa_discover d
+SET status = 'dropped', drop_reason = 'member_removed', status_changed_at = @now::timestamptz
+WHERE d.tayfa_id = @tayfa_id::uuid AND d.status IN ('approved', 'pending')
+  AND EXISTS (SELECT 1 FROM discover_joins j WHERE j.tayfa_id = d.tayfa_id AND j.user_id = @user_id::uuid)
+  AND EXISTS (SELECT 1 FROM event_rsvps r JOIN events e ON e.id = r.event_id
+              WHERE e.tayfa_id = d.tayfa_id AND r.user_id = @user_id::uuid AND e.deleted_at IS NULL
+                AND (r.status = 'going' OR r.attendance = 'attended')
+                AND e.ends_at > @window_start::timestamptz);
 
 -- ---------------------------------------------------------------------------
 -- "Her şey yolunda mıydı?"
@@ -146,6 +174,16 @@ ON CONFLICT (event_id, user_id) DO UPDATE
 SET contact_user_id = EXCLUDED.contact_user_id, grace_minutes = EXCLUDED.grace_minutes
 WHERE event_safety_contacts.alert_sent_at IS NULL;
 
+-- Kişinin kendi satırı, etkinlik bu tayfanınsa. Kaldırma ve "döndüm"
+-- yalnızca kendi satırına dokunur; üyelik, modül ve bayrak aranmaz
+-- (ADR-0033 §10).
+-- name: GetOwnSafetyContactForUpdate :one
+SELECT c.alert_sent_at
+FROM event_safety_contacts c
+JOIN events e ON e.id = c.event_id
+WHERE c.event_id = @event_id AND c.user_id = @user_id AND e.tayfa_id = @tayfa_id
+FOR UPDATE OF c;
+
 -- name: DeleteSafetyContact :exec
 DELETE FROM event_safety_contacts WHERE event_id = @event_id AND user_id = @user_id;
 
@@ -155,7 +193,12 @@ UPDATE event_safety_contacts SET returned_at = COALESCE(returned_at, @now)
 WHERE event_id = @event_id AND user_id = @user_id;
 
 -- Kişiyi güvenlik kişisi seçenlerin etkinlikleri: bitişinden 24 saat
--- geçmemiş ya da alarmı son 7 günde gitmiş. Koordinat seçilmez.
+-- geçmemiş ya da alarmı son 7 günde gitmiş. Koordinat seçilmez. Paylaşım
+-- yalnızca hâlâ geçerliyse görünür: ikisi arkadaş, engel yok, katılımcı
+-- tayfanın aktif üyesi ve etkinliğe going; etkinlik silinmemiş ya da
+-- iptal edilmemiş, tayfa silinmemiş ya da askıda değil. Alarm gitmişse
+-- (etkinlik sonradan iptal ya da silinmiş olsa bile) katılımcı check-in
+-- yaptıysa görünür; alarmın kendisi bildirimle gitti.
 -- name: ListSafetyShares :many
 SELECT c.user_id, p.display_name, p.avatar_upload_id, t.name AS tayfa_name,
        e.id AS event_id, e.title, e.starts_at, e.ends_at, e.meeting_point_name, e.city, e.district,
@@ -164,9 +207,18 @@ FROM event_safety_contacts c
 JOIN events e ON e.id = c.event_id
 JOIN tayfas t ON t.id = e.tayfa_id
 LEFT JOIN user_profiles p ON p.user_id = c.user_id AND p.deleted_at IS NULL
+JOIN memberships m ON m.tayfa_id = e.tayfa_id AND m.user_id = c.user_id AND m.status = 'active'
+JOIN event_rsvps r ON r.event_id = c.event_id AND r.user_id = c.user_id
 WHERE c.contact_user_id = @contact_id
   AND (e.ends_at > @ended_after::timestamptz
        OR c.alert_sent_at > @alerted_after::timestamptz)
+  AND t.deleted_at IS NULL AND t.deletion_requested_at IS NULL AND t.suspended_at IS NULL
+  AND ((r.status = 'going' AND e.status = 'scheduled' AND e.deleted_at IS NULL)
+       OR (c.alert_sent_at IS NOT NULL AND r.checked_in_at IS NOT NULL))
+  AND EXISTS (SELECT 1 FROM friendships f
+              WHERE f.user_low_id = LEAST(c.user_id, c.contact_user_id)
+                AND f.user_high_id = GREATEST(c.user_id, c.contact_user_id)
+                AND f.status = 'accepted')
   AND NOT EXISTS (SELECT 1 FROM user_blocks ub
                   WHERE (ub.blocker_id = c.user_id AND ub.blocked_id = c.contact_user_id)
                      OR (ub.blocker_id = c.contact_user_id AND ub.blocked_id = c.user_id))
@@ -177,17 +229,20 @@ LIMIT 50;
 -- safety-alerts işi
 
 -- Alarmı gelmiş satırlar: döndüm yok, alarm gitmemiş, bitiş + tolerans
--- geçmiş; etkinlik başlamadan iptal ya da silindiyse yalnızca check-in
--- yapılmışsa. Gönderim anında ikisi hâlâ arkadaş ve engel yok.
+-- geçmiş; katılımcı tayfanın aktif üyesi. Planlı ve silinmemiş etkinlikte
+-- going olmalı; etkinlik iptal ya da silindiyse yalnızca check-in
+-- yapılmışsa (yola çıkmış demektir). Gönderim anında ikisi hâlâ arkadaş ve
+-- engel yok.
 -- name: LockDueSafetyAlerts :many
 SELECT c.event_id, c.user_id, c.contact_user_id
 FROM event_safety_contacts c
 JOIN events e ON e.id = c.event_id
+JOIN memberships m ON m.tayfa_id = e.tayfa_id AND m.user_id = c.user_id AND m.status = 'active'
+JOIN event_rsvps r ON r.event_id = c.event_id AND r.user_id = c.user_id
 WHERE c.returned_at IS NULL AND c.alert_sent_at IS NULL
   AND e.ends_at + make_interval(mins => c.grace_minutes) <= @now::timestamptz
-  AND ((e.status = 'scheduled' AND e.deleted_at IS NULL)
-       OR EXISTS (SELECT 1 FROM event_rsvps r
-                  WHERE r.event_id = c.event_id AND r.user_id = c.user_id AND r.checked_in_at IS NOT NULL))
+  AND ((r.status = 'going' AND e.status = 'scheduled' AND e.deleted_at IS NULL)
+       OR r.checked_in_at IS NOT NULL)
   AND EXISTS (SELECT 1 FROM friendships f
               WHERE f.user_low_id = LEAST(c.user_id, c.contact_user_id)
                 AND f.user_high_id = GREATEST(c.user_id, c.contact_user_id)
@@ -213,6 +268,13 @@ WHERE e.id = c.event_id AND e.ends_at < @before::timestamptz;
 
 -- name: DeleteOldEventFeedback :execrows
 DELETE FROM event_feedback WHERE created_at < @before::timestamptz;
+
+-- İşaret ayrılıştan 30 gün sonra gerekmez.
+-- name: DeleteOldDiscoverJoins :execrows
+DELETE FROM discover_joins WHERE left_at < @before::timestamptz;
+
+-- name: DeleteUserDiscoverJoins :exec
+DELETE FROM discover_joins WHERE user_id = @user_id;
 
 -- name: DeleteUserEventFeedback :exec
 DELETE FROM event_feedback WHERE user_id = @user_id;
@@ -250,14 +312,17 @@ LIMIT 200;
 -- name: AdminLockTayfaDiscover :one
 SELECT status FROM tayfa_discover WHERE tayfa_id = @tayfa_id FOR UPDATE;
 
+-- Panel kararı maskeyi kaldırır.
 -- name: AdminApproveDiscover :execrows
 UPDATE tayfa_discover
-SET status = 'approved', drop_reason = NULL, reviewed_at = @now, reviewed_by = @by, status_changed_at = @now
+SET status = 'approved', drop_reason = NULL, reviewed_at = @now, reviewed_by = @by, status_changed_at = @now,
+    masked_status = NULL, masked_until = NULL
 WHERE tayfa_id = @tayfa_id AND status IN ('pending', 'dropped');
 
 -- name: AdminRejectDiscover :execrows
 UPDATE tayfa_discover
-SET status = 'rejected', drop_reason = NULL, reviewed_at = @now, reviewed_by = @by, status_changed_at = @now
+SET status = 'rejected', drop_reason = NULL, reviewed_at = @now, reviewed_by = @by, status_changed_at = @now,
+    masked_status = NULL, masked_until = NULL
 WHERE tayfa_id = @tayfa_id AND status <> 'rejected';
 
 -- ---------------------------------------------------------------------------
@@ -274,10 +339,15 @@ SELECT @user_id::uuid AS k,
              'event_id', c.event_id, 'contact_user_id', c.contact_user_id, 'grace_minutes', c.grace_minutes,
              'returned_at', c.returned_at, 'alert_sent_at', c.alert_sent_at, 'created_at', c.created_at)
              ORDER BY c.created_at, c.event_id)
-           FROM event_safety_contacts c WHERE c.user_id = @user_id::uuid), '[]'::jsonb)
+           FROM event_safety_contacts c WHERE c.user_id = @user_id::uuid), '[]'::jsonb),
+         'discover_joins', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+             'tayfa_id', j.tayfa_id, 'joined_at', j.joined_at, 'left_at', j.left_at)
+             ORDER BY j.joined_at, j.tayfa_id)
+           FROM discover_joins j WHERE j.user_id = @user_id::uuid), '[]'::jsonb)
        ) AS data
 FROM (SELECT 1) one
 WHERE @user_id::uuid > @after::uuid
   AND (EXISTS (SELECT 1 FROM event_feedback f WHERE f.user_id = @user_id::uuid)
-       OR EXISTS (SELECT 1 FROM event_safety_contacts c WHERE c.user_id = @user_id::uuid))
+       OR EXISTS (SELECT 1 FROM event_safety_contacts c WHERE c.user_id = @user_id::uuid)
+       OR EXISTS (SELECT 1 FROM discover_joins j WHERE j.user_id = @user_id::uuid))
 LIMIT @n;

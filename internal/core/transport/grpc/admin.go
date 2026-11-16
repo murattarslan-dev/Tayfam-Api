@@ -411,6 +411,7 @@ var discoverReviewStatuses = map[string]corev1.DiscoverReviewStatus{
 var discoverDropReasons = map[string]corev1.DiscoverDropReason{
 	"member_report":     corev1.DiscoverDropReason_DISCOVER_DROP_REASON_MEMBER_REPORT,
 	"negative_feedback": corev1.DiscoverDropReason_DISCOVER_DROP_REASON_NEGATIVE_FEEDBACK,
+	"member_removed":    corev1.DiscoverDropReason_DISCOVER_DROP_REASON_MEMBER_REMOVED,
 }
 
 func clamp32(n int) int32 { return int32(min(max(n, 0), 1<<30)) } // #nosec G115 -- bounded

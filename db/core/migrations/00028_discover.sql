@@ -18,6 +18,14 @@
 --   rejected  panel reddetti ya da Keşfet'ten çıkardı;
 --   dropped   otomatik düşürüldü (drop_reason), yalnızca panel kararıyla
 --             döner. Nedeni tayfaya söylenmez (şikâyet edeni ele vermesin).
+--   masked_status, masked_until: geri bildirim ya da Keşfet üyesinin
+--             şikâyetiyle düşürülen tayfanın yöneticileri masked_until'e
+--             kadar önceki durumu görür (ADR-0033 §7). Listeden çıkış
+--             hemen olur; panel gerçeği görür.
+-- discover_joins: Keşfet'ten gelip aktif üye olan kişinin kalıcı işareti.
+--   Üyelik bitse de (ayrılma, çıkarılma, ban) 30 gün durur: eski Keşfet
+--   üyesi bu sürede tayfayı şikâyet edebilir ve katıldığı etkinliğe geri
+--   bildirim verebilir; tayfa içeriğine erişim vermez (ADR-0033 §7).
 -- event_feedback: "Her şey yolunda mıydı?" cevabı; serbest metin yok.
 -- event_safety_contacts: güvenlik kişisi; konum alanı yok.
 --
@@ -28,7 +36,9 @@
 --                                     (akış ve Keşfet'ten katılım);
 --   memberships_discover_guard        discover katılımı yalnızca pending ve
 --                                     yalnızca listelenebilir tayfaya;
---   reports_discover_drop             Keşfet üyesinin şikâyeti tayfayı düşürür;
+--   memberships_discover_join         discover_joins işaretini tutar;
+--   reports_discover_drop             (eski) Keşfet üyesinin şikâyeti tayfayı
+--                                     düşürür;
 --   event_feedback_discover_drop      'serious' cevap tayfayı düşürür;
 --   tayfas_discover_rereview          onaylı tayfanın adı, açıklaması, ili ya
 --                                     da ilçesi değişirse yeniden incelemeye.
@@ -54,18 +64,36 @@ CREATE TABLE tayfa_discover (
   reviewed_at       timestamptz,
   reviewed_by       uuid,
   status_changed_at timestamptz NOT NULL,
+  masked_status     text,
+  masked_until      timestamptz,
   created_at        timestamptz NOT NULL DEFAULT now(),
   updated_at        timestamptz NOT NULL DEFAULT now(),
 
   CONSTRAINT tayfa_discover_status CHECK (status IN ('pending', 'approved', 'rejected', 'dropped')),
   CONSTRAINT tayfa_discover_drop_reason CHECK (
     (status = 'dropped') = (drop_reason IS NOT NULL)
-    AND (drop_reason IS NULL OR drop_reason IN ('member_report', 'negative_feedback'))),
+    AND (drop_reason IS NULL OR drop_reason IN ('member_report', 'negative_feedback', 'member_removed'))),
+  CONSTRAINT tayfa_discover_masked CHECK (
+    (masked_status IS NULL) = (masked_until IS NULL)
+    AND (masked_status IS NULL OR (status = 'dropped' AND masked_status IN ('pending', 'approved')))),
   CONSTRAINT tayfa_discover_reviewed CHECK (status NOT IN ('approved', 'rejected') OR reviewed_at IS NOT NULL)
 );
 CREATE TRIGGER tayfa_discover_updated_at BEFORE UPDATE ON tayfa_discover FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 -- Panel kuyruğu.
 CREATE INDEX tayfa_discover_queue_idx ON tayfa_discover (status_changed_at) WHERE status IN ('pending', 'dropped');
+
+CREATE TABLE discover_joins (
+  tayfa_id  uuid NOT NULL REFERENCES tayfas (id) ON DELETE CASCADE,
+  user_id   uuid NOT NULL,
+  joined_at timestamptz NOT NULL,
+  left_at   timestamptz,
+
+  PRIMARY KEY (tayfa_id, user_id),
+  CONSTRAINT discover_joins_left CHECK (left_at IS NULL OR left_at >= joined_at)
+);
+-- Hesap silme, dışa aktarma ve saklama.
+CREATE INDEX discover_joins_user_idx ON discover_joins (user_id);
+CREATE INDEX discover_joins_left_idx ON discover_joins (left_at) WHERE left_at IS NOT NULL;
 
 CREATE TABLE event_feedback (
   event_id   uuid NOT NULL REFERENCES events (id) ON DELETE CASCADE,
@@ -137,7 +165,8 @@ $$;
 --   - arkadaşın katılım geçmişi görünürlüğü private değil (ProfileService:
 --     arkadaşlar tayfa ve public'te geçmişin tamamını görür);
 --   - etkinlik "halka açık yer" işaretli, yüz yüze, planlı, silinmemiş,
---     bitmemiş ve 30 gün içinde başlıyor; tayfa listelenebilir;
+--     bitmemiş ve 30 gün içinde başlıyor; tayfanın etkinlik modülü açık;
+--     tayfa listelenebilir;
 --   - izleyicinin o tayfada hiçbir üyeliği yok (aktif, bekleyen, davetli ya
 --     da banlı).
 -- +goose StatementBegin
@@ -160,6 +189,8 @@ LANGUAGE sql STABLE AS $$
                          OR (ub.blocker_id = friend AND ub.blocked_id = viewer))
       AND NOT EXISTS (SELECT 1 FROM user_platform_bans b WHERE b.user_id = friend AND b.banned_at IS NOT NULL)
       AND NOT EXISTS (SELECT 1 FROM memberships vm WHERE vm.tayfa_id = e.tayfa_id AND vm.user_id = viewer)
+      AND EXISTS (SELECT 1 FROM tayfa_modules tm
+                  WHERE tm.tayfa_id = e.tayfa_id AND tm.module = 'events' AND tm.enabled)
       AND tayfa_discover_listable(e.tayfa_id)
   )
 $$;
@@ -182,17 +213,54 @@ $$;
 CREATE TRIGGER memberships_discover_guard BEFORE INSERT ON memberships
   FOR EACH ROW WHEN (NEW.joined_via = 'discover') EXECUTE FUNCTION memberships_discover_guard();
 
--- Keşfet'ten gelen üyenin (durumu ne olursa olsun) tayfadaki şikâyeti,
--- tayfayı askıdan önce Keşfet'ten düşürür.
+-- Keşfet'ten gelip aktif üye olan kişinin işareti: aktif olunca açılır
+-- (yeniden katılımda tazelenir), aktif üyelik bitince (ayrılma, çıkarılma,
+-- ban, hesap silme) left_at yazılır. Satırı yalnızca saklama işi, hesap
+-- silme ve tayfanın silinmesi kaldırır.
+-- +goose StatementBegin
+CREATE FUNCTION memberships_discover_join() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP <> 'DELETE' AND NEW.joined_via = 'discover' AND NEW.status = 'active'
+     AND (TG_OP = 'INSERT' OR OLD.status <> 'active') THEN
+    INSERT INTO discover_joins (tayfa_id, user_id, joined_at)
+    VALUES (NEW.tayfa_id, NEW.user_id, COALESCE(NEW.joined_at, now()))
+    ON CONFLICT (tayfa_id, user_id) DO UPDATE SET joined_at = EXCLUDED.joined_at, left_at = NULL;
+  END IF;
+  IF TG_OP <> 'INSERT' AND OLD.joined_via = 'discover' AND OLD.status = 'active'
+     AND (TG_OP = 'DELETE' OR NEW.status <> 'active') THEN
+    UPDATE discover_joins SET left_at = GREATEST(now(), joined_at)
+    WHERE tayfa_id = OLD.tayfa_id AND user_id = OLD.user_id AND left_at IS NULL;
+  END IF;
+  RETURN NULL;
+END
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER memberships_discover_join AFTER INSERT OR UPDATE OF status OR DELETE ON memberships
+  FOR EACH ROW EXECUTE FUNCTION memberships_discover_join();
+
+-- Bildirimi yapanın anonimliği için yöneticilerin gördüğü durumun
+-- açılacağı an (ADR-0033 §7): en erken ertesi UTC gün dönümünden sonraki
+-- gün dönümü (24–48 saat; günlük toplu iş gibi).
+-- +goose StatementBegin
+CREATE FUNCTION discover_mask_until() RETURNS timestamptz
+LANGUAGE sql STABLE AS $$
+  SELECT date_bin('1 day', now() + interval '1 day', timestamptz '2000-01-01 00:00:00+00') + interval '1 day'
+$$;
+-- +goose StatementEnd
+
+-- Keşfet'ten gelmiş (şimdi ya da son 30 günde ayrılmış) üyenin tayfadaki
+-- şikâyeti, tayfayı askıdan önce Keşfet'ten düşürür.
 -- +goose StatementBegin
 CREATE FUNCTION reports_discover_drop() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
   IF NEW.reporter_id IS NOT NULL AND EXISTS (
-       SELECT 1 FROM memberships m
-       WHERE m.tayfa_id = NEW.tayfa_id AND m.user_id = NEW.reporter_id AND m.joined_via = 'discover') THEN
+       SELECT 1 FROM discover_joins j
+       WHERE j.tayfa_id = NEW.tayfa_id AND j.user_id = NEW.reporter_id) THEN
     UPDATE tayfa_discover
-    SET status = 'dropped', drop_reason = 'member_report', status_changed_at = now()
+    SET status = 'dropped', drop_reason = 'member_report', status_changed_at = now(),
+        masked_status = status, masked_until = discover_mask_until()
     WHERE tayfa_id = NEW.tayfa_id AND status IN ('approved', 'pending');
   END IF;
   RETURN NULL;
@@ -207,10 +275,15 @@ CREATE TRIGGER reports_discover_drop AFTER INSERT ON reports
 CREATE FUNCTION event_feedback_discover_drop() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-  UPDATE tayfa_discover
-  SET status = 'dropped', drop_reason = 'negative_feedback', status_changed_at = now()
-  WHERE tayfa_id = (SELECT e.tayfa_id FROM events e WHERE e.id = NEW.event_id)
-    AND status IN ('approved', 'pending');
+  -- Geri bildirim penceresi (bitiş + 7 gün) kapanmadan yöneticiler
+  -- değişikliği görmez: o etkinliğe katılanlardan kimin yazdığı daralmaz.
+  UPDATE tayfa_discover d
+  SET status = 'dropped', drop_reason = 'negative_feedback', status_changed_at = now(),
+      masked_status = d.status,
+      masked_until = GREATEST(e.ends_at + interval '7 days', discover_mask_until())
+  FROM events e
+  WHERE e.id = NEW.event_id AND d.tayfa_id = e.tayfa_id
+    AND d.status IN ('approved', 'pending');
   RETURN NULL;
 END
 $$;
@@ -242,8 +315,12 @@ CREATE TRIGGER tayfas_discover_rereview AFTER UPDATE OF name, description, city,
 -- event_feedback: cevap güncellenir; saklama ve hesap silmede silinir.
 -- event_safety_contacts: kişi, tolerans, döndüm ve alarm zamanı
 --   güncellenir; kaldırma, saklama ve hesap silmede silinir.
-GRANT UPDATE (status, drop_reason, requested_at, requested_by, reviewed_at, reviewed_by, status_changed_at, updated_at)
+-- discover_joins: işaret açılır, tazelenir ve kapanır; saklama ve hesap
+--   silmede silinir.
+GRANT UPDATE (status, drop_reason, requested_at, requested_by, reviewed_at, reviewed_by, status_changed_at,
+              masked_status, masked_until, updated_at)
   ON tayfa_discover TO core_app;
+GRANT UPDATE (joined_at, left_at), DELETE ON discover_joins TO core_app;
 GRANT UPDATE (answer, updated_at), DELETE ON event_feedback TO core_app;
 GRANT UPDATE (contact_user_id, grace_minutes, returned_at, alert_sent_at, updated_at), DELETE
   ON event_safety_contacts TO core_app;
@@ -255,10 +332,14 @@ DROP TRIGGER event_feedback_discover_drop ON event_feedback;
 DROP FUNCTION event_feedback_discover_drop();
 DROP TRIGGER reports_discover_drop ON reports;
 DROP FUNCTION reports_discover_drop();
+DROP FUNCTION discover_mask_until();
+DROP TRIGGER memberships_discover_join ON memberships;
+DROP FUNCTION memberships_discover_join();
 DROP TRIGGER memberships_discover_guard ON memberships;
 DROP FUNCTION memberships_discover_guard();
 DROP FUNCTION discover_friend_visible(uuid, uuid, uuid, timestamptz);
 DROP FUNCTION tayfa_discover_listable(uuid);
 DROP TABLE event_safety_contacts;
 DROP TABLE event_feedback;
+DROP TABLE discover_joins;
 DROP TABLE tayfa_discover;

@@ -16,6 +16,7 @@ import (
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/report"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
@@ -78,6 +79,20 @@ func (e *env) seedExec(t *testing.T, sql string, args ...any) {
 }
 
 // exec runs sql as the superuser with triggers on.
+// execAs runs sql with every trigger, as actor (app.actor_id).
+func (e *env) execAs(t *testing.T, actor id.ID, sql string, args ...any) {
+	t.Helper()
+	tx, err := e.admin.Begin(ctx)
+	must(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	_, err = tx.Exec(ctx, "SELECT set_config('app.actor_id', $1, true)", actor.String())
+	must(t, err)
+	if _, err := tx.Exec(ctx, sql, args...); err != nil {
+		t.Fatalf("%s: %v", sql, err)
+	}
+	must(t, tx.Commit(ctx))
+}
+
 func (e *env) exec(t *testing.T, sql string, args ...any) {
 	t.Helper()
 	if _, err := e.admin.Exec(ctx, sql, args...); err != nil {
@@ -118,6 +133,21 @@ func (e *env) member(t *testing.T, tf, u id.ID, role, status, via string) {
 	var joined any
 	if status == "active" {
 		joined = e.base
+	}
+	if via == "discover" && status == "active" {
+		// Through the real triggers, so discover_joins gets its mark.
+		e.seedExec(t, `INSERT INTO memberships (tayfa_id, user_id, role, status, joined_via) VALUES ($1, $2, 'member', 'pending', 'discover')`,
+			tf.PG(), u.PG())
+		// Approved by one of the tayfa's admins.
+		var approver pgtype.UUID
+		must(t, e.admin.QueryRow(ctx, `SELECT user_id FROM memberships WHERE tayfa_id = $1 AND status = 'active'
+		    AND role IN ('owner', 'admin') ORDER BY joined_at LIMIT 1`, tf.PG()).Scan(&approver))
+		e.execAs(t, id.ID(approver.Bytes), `UPDATE memberships SET status = 'active', joined_at = $3, approved_by = $4
+		    WHERE tayfa_id = $1 AND user_id = $2`, tf.PG(), u.PG(), e.base, approver)
+		if role != "member" {
+			e.seedExec(t, `UPDATE memberships SET role = $3 WHERE tayfa_id = $1 AND user_id = $2`, tf.PG(), u.PG(), role)
+		}
+		return
 	}
 	e.seedExec(t, `INSERT INTO memberships (tayfa_id, user_id, role, status, joined_via, joined_at) VALUES ($1, $2, $3, $4, $5, $6)`,
 		tf.PG(), u.PG(), role, status, via, joined)
@@ -262,6 +292,9 @@ func TestFeedListing(t *testing.T) {
 		}, false},
 		"düşürüldü": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE tayfa_discover SET status = 'dropped', drop_reason = 'member_report' WHERE tayfa_id = $1`, sc.tf.PG())
+		}, false},
+		"etkinlik modülü kapalı": {func(t *testing.T, sc scenario) {
+			e.seedExec(t, `UPDATE tayfa_modules SET enabled = false WHERE tayfa_id = $1 AND module = 'events'`, sc.tf.PG())
 		}, false},
 		"yönetici kapattı (gizli tayfa)": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE tayfas SET visibility = 'private' WHERE id = $1`, sc.tf.PG())
@@ -616,8 +649,140 @@ func TestDropOnDiscoverMemberReport(t *testing.T) {
 	if items := e.feed(t, sc.viewer); len(items) != 0 {
 		t.Fatal("düşürülen tayfa listelendi")
 	}
+	// The admins see the earlier state for a day or two (the reporter's
+	// anonymity, ADR-0033 §7); the platform sees the drop at once.
+	if st, _ := e.svc(t, true, 0).GetTayfa(ctx, sc.admin, sc.tf); st.State != StateListed {
+		t.Fatalf("maskeli durum: %+v", st)
+	}
+	if st, _ := e.svc(t, true, 3*24*time.Hour).GetTayfa(ctx, sc.admin, sc.tf); st.State != StateUnderReview {
+		t.Fatalf("maske sonrası yöneticinin gördüğü: %+v", st)
+	}
+}
+
+type noMinors struct{}
+
+func (noMinors) IsMinor(context.Context, []id.ID) (map[id.ID]bool, error) {
+	return map[id.ID]bool{}, nil
+}
+
+func (e *env) reports(t *testing.T, d time.Duration) *report.Service {
+	t.Helper()
+	now := e.base.Add(d)
+	s, err := report.New(report.Config{Pool: e.pool, Minors: noMinors{}, Now: func() time.Time { return now }})
+	must(t, err)
+	return s
+}
+
+func reportTayfa(r *report.Service, user, tf id.ID) error {
+	_, _, err := r.Create(ctx, user, tf, report.CreateInput{TargetType: report.TargetTayfa, TargetID: tf.String(), Reason: report.ReasonOther})
+	return err
+}
+
+// TestFormerDiscoverMember (ADR-0033 §7): removing a member who came from
+// Keşfet while their feedback window is open takes the tayfa out; for 30
+// days after their membership ended they may still report the tayfa and
+// give feedback on events they attended, and nothing else. Other former
+// members may not.
+func TestFormerDiscoverMember(t *testing.T) {
+	e := setup(t)
+	sc := e.scenario(t)
+	o := defaultEvent()
+	o.start, o.end = -3*time.Hour, -time.Hour
+	past := e.event(t, sc.tf, sc.admin, o)
+	newcomer := e.user(t, "Yeni", "tayfa")
+	e.member(t, sc.tf, newcomer, "member", "active", "discover")
+	e.rsvp(t, past, newcomer, "going", "attended")
+	if n := e.one(t, `SELECT count(*)::text FROM discover_joins WHERE tayfa_id = $1 AND user_id = $2 AND left_at IS NULL`,
+		sc.tf.PG(), newcomer.PG()); n != "1" {
+		t.Fatalf("işaret: %s", n)
+	}
+	m := e.members(t, true)
+	must(t, m.RemoveMember(ctx, sc.admin, sc.tf, newcomer))
+	if st := e.one(t, `SELECT status || '/' || drop_reason FROM tayfa_discover WHERE tayfa_id = $1`, sc.tf.PG()); st != "dropped/member_removed" {
+		t.Fatalf("çıkarma: %s", st)
+	}
 	if st, _ := e.svc(t, true, 0).GetTayfa(ctx, sc.admin, sc.tf); st.State != StateUnderReview {
-		t.Fatalf("yöneticinin gördüğü: %+v", st)
+		t.Fatalf("yönetici kendi işlemini görür: %+v", st)
+	}
+	if n := e.one(t, `SELECT count(*)::text FROM discover_joins WHERE tayfa_id = $1 AND user_id = $2 AND left_at IS NOT NULL`,
+		sc.tf.PG(), newcomer.PG()); n != "1" {
+		t.Fatalf("ayrılış: %s", n)
+	}
+
+	s := e.svc(t, true, 0)
+	if _, err := s.SetFeedback(ctx, newcomer, sc.tf, past, AnswerNotOK); err != nil {
+		t.Fatalf("eski Keşfet üyesinin geri bildirimi: %v", err)
+	}
+	if got, err := s.GetFeedback(ctx, newcomer, sc.tf, past); err != nil || got.Answer != AnswerNotOK {
+		t.Fatalf("okuma: %+v %v", got, err)
+	}
+	if _, err := s.SetFeedback(ctx, newcomer, sc.tf, sc.ev, AnswerOK); !errors.Is(err, apperr.ErrFeedbackClosed) {
+		t.Fatalf("bitmemiş etkinlik: %v", err)
+	}
+	if _, err := s.GetSafetyContact(ctx, newcomer, sc.tf, sc.ev); !errors.Is(err, apperr.ErrTayfaNotFound) {
+		t.Fatalf("tayfa içeriğine erişim: %v", err)
+	}
+	r := e.reports(t, 0)
+	if err := reportTayfa(r, newcomer, sc.tf); err != nil {
+		t.Fatalf("eski Keşfet üyesinin şikâyeti: %v", err)
+	}
+	if _, _, err := r.Create(ctx, newcomer, sc.tf, report.CreateInput{
+		TargetType: report.TargetEvent, TargetID: past.String(), Reason: report.ReasonSpam,
+	}); !errors.Is(err, apperr.ErrTayfaNotFound) {
+		t.Fatalf("etkinlik şikâyeti: %v", err)
+	}
+
+	// After 30 days the mark no longer counts.
+	if _, err := e.svc(t, true, 31*24*time.Hour).GetFeedback(ctx, newcomer, sc.tf, past); !errors.Is(err, apperr.ErrTayfaNotFound) {
+		t.Fatalf("30 gün sonra geri bildirim: %v", err)
+	}
+	if err := reportTayfa(e.reports(t, 31*24*time.Hour), newcomer, sc.tf); !errors.Is(err, apperr.ErrTayfaNotFound) {
+		t.Fatalf("30 gün sonra şikâyet: %v", err)
+	}
+
+	// A member who joined by code and left is not a Keşfet member.
+	byCode := e.user(t, "Kodla", "tayfa")
+	e.member(t, sc.tf, byCode, "member", "active", "code")
+	must(t, m.LeaveTayfa(ctx, byCode, sc.tf))
+	if err := reportTayfa(r, byCode, sc.tf); !errors.Is(err, apperr.ErrTayfaNotFound) {
+		t.Fatalf("kodla gelen eski üye: %v", err)
+	}
+}
+
+// TestDiscoverMemberLeftOrRemovedLate: leaving by oneself, or a removal
+// when the member's feedback window is closed, does not drop the tayfa.
+func TestDiscoverMemberLeftOrRemovedLate(t *testing.T) {
+	e := setup(t)
+	sc := e.scenario(t)
+	o := defaultEvent()
+	o.start, o.end = -10*24*time.Hour, -9*24*time.Hour
+	old := e.event(t, sc.tf, sc.admin, o)
+	m := e.members(t, true)
+
+	leaver := e.user(t, "Ayrılan", "tayfa")
+	e.member(t, sc.tf, leaver, "member", "active", "discover")
+	e.rsvp(t, sc.ev, leaver, "going", "unknown")
+	must(t, m.LeaveTayfa(ctx, leaver, sc.tf))
+
+	late := e.user(t, "Eski", "tayfa")
+	e.member(t, sc.tf, late, "member", "active", "discover")
+	e.rsvp(t, old, late, "going", "attended")
+	must(t, m.BanMember(ctx, sc.admin, sc.tf, late, ""))
+
+	if st := e.one(t, `SELECT status FROM tayfa_discover WHERE tayfa_id = $1`, sc.tf.PG()); st != "approved" {
+		t.Fatalf("düşürüldü: %s", st)
+	}
+	// The ban closes the mark too.
+	if n := e.one(t, `SELECT count(*)::text FROM discover_joins WHERE tayfa_id = $1 AND left_at IS NOT NULL`, sc.tf.PG()); n != "2" {
+		t.Fatalf("kapanan işaret: %s", n)
+	}
+	// Removing a going Keşfet member before the event drops it.
+	going := e.user(t, "Gidecek", "tayfa")
+	e.member(t, sc.tf, going, "member", "active", "discover")
+	e.rsvp(t, sc.ev, going, "going", "unknown")
+	must(t, m.BanMember(ctx, sc.admin, sc.tf, going, ""))
+	if st := e.one(t, `SELECT status || '/' || drop_reason FROM tayfa_discover WHERE tayfa_id = $1`, sc.tf.PG()); st != "dropped/member_removed" {
+		t.Fatalf("yaklaşan etkinlikten çıkarma: %s", st)
 	}
 }
 
@@ -738,6 +903,30 @@ func TestFeedback(t *testing.T) {
 	if st := e.one(t, `SELECT status || '/' || drop_reason FROM tayfa_discover WHERE tayfa_id = $1`, sc.tf.PG()); st != "dropped/negative_feedback" {
 		t.Fatalf("ciddi cevap: %s", st)
 	}
+	// Out of the feed at once; the admins see the change only after the
+	// feedback window closes, so it does not point at an attendee.
+	if items := e.feed(t, sc.viewer); len(items) != 0 {
+		t.Fatal("düşürülen tayfa listelendi")
+	}
+	if st, _ := s.GetTayfa(ctx, sc.admin, sc.tf); st.State != StateListed {
+		t.Fatalf("pencere içinde yöneticinin gördüğü: %+v", st)
+	}
+	if st, _ := e.svc(t, true, 6*24*time.Hour).GetTayfa(ctx, sc.admin, sc.tf); st.State != StateListed {
+		t.Fatalf("pencere kapanmadan: %+v", st)
+	}
+	if st, _ := e.svc(t, true, 9*24*time.Hour).GetTayfa(ctx, sc.admin, sc.tf); st.State != StateUnderReview {
+		t.Fatalf("pencere kapandıktan sonra: %+v", st)
+	}
+	// Turning the setting off and on again shows nothing new either.
+	_, _ = s.SetTayfa(ctx, sc.admin, sc.tf, false)
+	if st, err := s.SetTayfa(ctx, sc.admin, sc.tf, true); err != nil || st.State != StateListed {
+		t.Fatalf("yeniden açılış: %+v %v", st, err)
+	}
+	// Turning the events module off does not silence feedback.
+	e.seedExec(t, `UPDATE tayfa_modules SET enabled = false WHERE tayfa_id = $1 AND module = 'events'`, sc.tf.PG())
+	if _, err := s.SetFeedback(ctx, sc.friend, sc.tf, past, AnswerOK); err != nil {
+		t.Fatalf("modül kapalıyken: %v", err)
+	}
 }
 
 // TestSafetyContact: a going participant chooses one friend; the share is
@@ -786,7 +975,8 @@ func TestSafetyContact(t *testing.T) {
 	if err != nil || got.ReturnedAt.IsZero() {
 		t.Fatalf("döndüm: %+v %v", got, err)
 	}
-	if _, err := s.MarkReturned(ctx, sc.viewer, sc.tf, sc.ev); !errors.Is(err, apperr.ErrTayfaNotFound) {
+	// Only one's own row: someone else has none to mark.
+	if _, err := s.MarkReturned(ctx, sc.viewer, sc.tf, sc.ev); !errors.Is(err, apperr.ErrSafetyContactNotFound) {
 		t.Fatalf("üye olmayan döndüm dedi: %v", err)
 	}
 	must(t, s.ClearSafetyContact(ctx, sc.friend, sc.tf, sc.ev))
@@ -803,6 +993,91 @@ func TestSafetyContact(t *testing.T) {
 	}
 	if _, err := e.svc(t, true, 51*time.Hour).SetSafetyContact(ctx, sc.friend, sc.tf, sc.ev, contact, 0); !errors.Is(err, apperr.ErrSafetyContactClosed) {
 		t.Fatalf("bitmiş: %v", err)
+	}
+}
+
+// TestSafetyNetClosing (ADR-0033 §10): "I'm back" and removing the
+// contact work with the flag off and after leaving the tayfa; once the
+// alert went out the contact cannot be removed.
+func TestSafetyNetClosing(t *testing.T) {
+	e := setup(t)
+	sc := e.scenario(t)
+	contact := e.user(t, "Anne", "tayfa")
+	e.friends(t, sc.friend, contact)
+	on, off := e.svc(t, true, 0), e.svc(t, false, 0)
+	if _, err := on.SetSafetyContact(ctx, sc.friend, sc.tf, sc.ev, contact, 0); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := off.MarkReturned(ctx, sc.friend, sc.tf, sc.ev); err != nil || got.ReturnedAt.IsZero() {
+		t.Fatalf("bayrak kapalıyken döndüm: %+v %v", got, err)
+	}
+	// The wrong tayfa finds nothing.
+	other, _ := e.listedTayfa(t, 5)
+	if _, err := off.MarkReturned(ctx, sc.friend, other, sc.ev); !errors.Is(err, apperr.ErrSafetyContactNotFound) {
+		t.Fatalf("başka tayfa: %v", err)
+	}
+	must(t, off.ClearSafetyContact(ctx, sc.friend, sc.tf, sc.ev))
+	if n := e.one(t, `SELECT count(*)::text FROM event_safety_contacts WHERE event_id = $1`, sc.ev.PG()); n != "0" {
+		t.Fatalf("bayrak kapalıyken kaldırma: %s", n)
+	}
+
+	if _, err := on.SetSafetyContact(ctx, sc.friend, sc.tf, sc.ev, contact, 0); err != nil {
+		t.Fatal(err)
+	}
+	e.exec(t, `UPDATE event_safety_contacts SET alert_sent_at = now() WHERE event_id = $1`, sc.ev.PG())
+	if err := on.ClearSafetyContact(ctx, sc.friend, sc.tf, sc.ev); !errors.Is(err, apperr.ErrSafetyContactClosed) {
+		t.Fatalf("alarmdan sonra kaldırma: %v", err)
+	}
+	e.exec(t, `UPDATE event_safety_contacts SET alert_sent_at = NULL WHERE event_id = $1`, sc.ev.PG())
+	// After leaving the tayfa the row can still be closed.
+	must(t, e.members(t, true).LeaveTayfa(ctx, sc.friend, sc.tf))
+	if _, err := off.MarkReturned(ctx, sc.friend, sc.tf, sc.ev); err != nil {
+		t.Fatalf("ayrıldıktan sonra döndüm: %v", err)
+	}
+	must(t, off.ClearSafetyContact(ctx, sc.friend, sc.tf, sc.ev))
+}
+
+// TestStaleSafetyShares: a share disappears from the contact's list when
+// it no longer holds.
+func TestStaleSafetyShares(t *testing.T) {
+	e := setup(t)
+	for name, change := range map[string]func(t *testing.T, sc scenario, contact id.ID){
+		"gitmiyor": func(t *testing.T, sc scenario, _ id.ID) {
+			e.seedExec(t, `UPDATE event_rsvps SET status = 'not_going' WHERE event_id = $1 AND user_id = $2`, sc.ev.PG(), sc.friend.PG())
+		},
+		"artık arkadaş değil": func(t *testing.T, sc scenario, contact id.ID) {
+			e.seedExec(t, `DELETE FROM friendships WHERE $1 IN (user_low_id, user_high_id) AND $2 IN (user_low_id, user_high_id)`,
+				sc.friend.PG(), contact.PG())
+		},
+		"tayfadan ayrıldı": func(t *testing.T, sc scenario, _ id.ID) {
+			e.seedExec(t, `DELETE FROM memberships WHERE tayfa_id = $1 AND user_id = $2`, sc.tf.PG(), sc.friend.PG())
+		},
+		"etkinlik iptal": func(t *testing.T, sc scenario, _ id.ID) {
+			e.seedExec(t, `UPDATE events SET status = 'cancelled', cancelled_at = now(), cancel_reason = 'x' WHERE id = $1`, sc.ev.PG())
+		},
+		"etkinlik silindi": func(t *testing.T, sc scenario, _ id.ID) {
+			e.seedExec(t, `UPDATE events SET deleted_at = now() WHERE id = $1`, sc.ev.PG())
+		},
+		"tayfa askıda": func(t *testing.T, sc scenario, _ id.ID) {
+			e.seedExec(t, `UPDATE tayfas SET suspended_at = now(), suspended_reason = 'inceleme', suspended_by = $2 WHERE id = $1`, sc.tf.PG(), id.New().PG())
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			sc := e.scenario(t)
+			contact := e.user(t, "Anne", "tayfa")
+			e.friends(t, sc.friend, contact)
+			s := e.svc(t, true, 0)
+			if _, err := s.SetSafetyContact(ctx, sc.friend, sc.tf, sc.ev, contact, 0); err != nil {
+				t.Fatal(err)
+			}
+			if got, _ := s.ListSafetyShares(ctx, contact); len(got) != 1 {
+				t.Fatalf("başta: %d", len(got))
+			}
+			change(t, sc, contact)
+			if got, err := s.ListSafetyShares(ctx, contact); err != nil || len(got) != 0 {
+				t.Fatalf("bayat paylaşım göründü: %+v %v", got, err)
+			}
+		})
 	}
 }
 
@@ -826,5 +1101,18 @@ func TestExportAndAccountDeletion(t *testing.T) {
 	must(t, q.DeleteUserSafetyContacts(ctx, contact.PG()))
 	if n := e.one(t, `SELECT count(*)::text FROM event_safety_contacts`); n != "0" {
 		t.Fatalf("hesap silmede güvenlik kişisi kaldı: %s", n)
+	}
+
+	// The Keşfet join mark is the user's own data.
+	newcomer := e.user(t, "Yeni", "tayfa")
+	e.member(t, sc.tf, newcomer, "member", "active", "discover")
+	rows, err = q.ExportDiscover(ctx, store.ExportDiscoverParams{UserID: newcomer.PG(), After: id.ID{}.PG(), N: 10})
+	if err != nil || len(rows) != 1 || !strings.Contains(string(rows[0].Data), `"discover_joins": [{`) ||
+		!strings.Contains(string(rows[0].Data), sc.tf.String()) {
+		t.Fatalf("işaretin dışa aktarımı: %s %v", rows, err)
+	}
+	must(t, q.DeleteUserDiscoverJoins(ctx, newcomer.PG()))
+	if n := e.one(t, `SELECT count(*)::text FROM discover_joins`); n != "0" {
+		t.Fatalf("hesap silmede işaret kaldı: %s", n)
 	}
 }

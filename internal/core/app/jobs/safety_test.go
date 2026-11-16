@@ -29,8 +29,10 @@ func (e *env) befriend(t *testing.T, a, b id.ID) {
 	e.exec(t, `INSERT INTO friendships (user_low_id, user_high_id, status, requested_by, accepted_at) VALUES ($1, $2, 'accepted', $1, now())`, lo.PG(), hi.PG())
 }
 
+// safetyContact chooses contact for user's event; user is going.
 func (e *env) safetyContact(t *testing.T, ev, user, contact id.ID, grace int) {
 	t.Helper()
+	e.exec(t, `INSERT INTO event_rsvps (event_id, user_id, status) VALUES ($1, $2, 'going') ON CONFLICT DO NOTHING`, ev.PG(), user.PG())
 	e.exec(t, `INSERT INTO event_safety_contacts (event_id, user_id, contact_user_id, grace_minutes) VALUES ($1, $2, $3, $4)`,
 		ev.PG(), user.PG(), contact.PG(), grace)
 }
@@ -71,9 +73,18 @@ func TestSafetyAlert(t *testing.T) {
 	cancelledThere := e.seed(t, tf, "member")
 	ctContact := contactOf(cancelledThere)
 	ctEv := e.safetyEvent(t, tf, -2*time.Hour, "cancelled")
-	e.safetyContact(t, ctEv, cancelledThere, ctContact, 15)
 	e.exec(t, `INSERT INTO event_rsvps (event_id, user_id, status, attendance, attendance_method, checked_in_at) VALUES ($1, $2, 'going', 'attended', 'location', now())`,
 		ctEv.PG(), cancelledThere.PG())
+	e.safetyContact(t, ctEv, cancelledThere, ctContact, 15)
+
+	// No longer going, or no longer a member: a stale share raises no alarm.
+	notGoing := e.seed(t, tf, "member")
+	ngEv := e.safetyEvent(t, tf, -2*time.Hour, "scheduled")
+	e.safetyContact(t, ngEv, notGoing, contactOf(notGoing), 15)
+	e.exec(t, `UPDATE event_rsvps SET status = 'not_going' WHERE event_id = $1 AND user_id = $2`, ngEv.PG(), notGoing.PG())
+
+	removed := id.New() // left or was removed after choosing
+	e.safetyContact(t, e.safetyEvent(t, tf, -2*time.Hour, "scheduled"), removed, contactOf(removed), 15)
 
 	n, err := e.at(t, 0).AlertMissedReturns(ctx)
 	must(t, err)
@@ -86,7 +97,7 @@ func TestSafetyAlert(t *testing.T) {
 	if got := e.noticeFor(t, notify.TypeSafetyAlert, cancelledThere); len(got) != 1 || got[0] != ctContact.String() {
 		t.Fatalf("check-in yapılmış iptal etkinlik: %v", got)
 	}
-	for _, u := range []id.ID{inGrace, back, unfriended, cancelled} {
+	for _, u := range []id.ID{inGrace, back, unfriended, cancelled, notGoing, removed} {
 		if got := e.noticeFor(t, notify.TypeSafetyAlert, u); got != nil {
 			t.Errorf("%s için alarm gitti: %v", u, got)
 		}
@@ -122,6 +133,11 @@ func TestSafetyRetention(t *testing.T) {
 	}
 	e.exec(t, `INSERT INTO event_feedback (event_id, user_id, answer, created_at) VALUES ($1, $2, 'ok', now() - interval '366 days'), ($3, $2, 'ok', now())`,
 		old.PG(), u.PG(), recent.PG())
+	// Keşfet join marks: still a member, left 29 days ago, left 31 days ago.
+	e.exec(t, `INSERT INTO discover_joins (tayfa_id, user_id, joined_at, left_at) VALUES
+	    ($1, $2, now() - interval '40 days', NULL),
+	    ($1, $3, now() - interval '40 days', now() - interval '29 days'),
+	    ($1, $4, now() - interval '40 days', now() - interval '31 days')`, tf.PG(), id.New().PG(), id.New().PG(), id.New().PG())
 	_, err := e.at(t, 0).ExpireRecords(ctx)
 	must(t, err)
 	if n := e.count(t, `SELECT count(*) FROM event_safety_contacts WHERE event_id = $1`, recent.PG()); n != 1 {
@@ -132,5 +148,8 @@ func TestSafetyRetention(t *testing.T) {
 	}
 	if n := e.count(t, `SELECT count(*) FROM event_feedback`); n != 1 {
 		t.Fatalf("geri bildirim: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM discover_joins`); n != 2 {
+		t.Fatalf("keşfet işaretleri: %d", n)
 	}
 }

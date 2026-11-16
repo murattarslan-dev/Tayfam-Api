@@ -471,11 +471,32 @@ func (s *Service) prepare(ctx context.Context, q *store.Queries, user, tayfa id.
 	// Reports work on read-only tayfas, and a muted member may report
 	// (authz.allowedWhileMuted).
 	_, m, err := access.Load(ctx, q, tayfa, user, lock)
-	if err != nil {
+	switch {
+	case errors.Is(err, apperr.ErrTayfaNotFound) && t == TargetTayfa:
+		// A member who came from Keşfet may report the tayfa itself for
+		// access.DiscoverFormerMemberWindow after leaving or being removed
+		// (ADR-0033 §7); nothing else of the tayfa.
+		former, ferr := q.DiscoverFormerMember(ctx, store.DiscoverFormerMemberParams{
+			TayfaID: tayfa.PG(), UserID: user.PG(), LeftAfter: ts(now.Add(-access.DiscoverFormerMemberWindow)),
+		})
+		if ferr != nil {
+			return nil, id.ID{}, fmt.Errorf("eski keşfet üyesi: %w", ferr)
+		}
+		if !former {
+			return nil, id.ID{}, err
+		}
+		if lock {
+			// The same tayfa lock a member's report takes.
+			if _, err := q.GetTayfaForUpdate(ctx, tayfa.PG()); err != nil {
+				return nil, id.ID{}, fmt.Errorf("tayfa kilidi: %w", err)
+			}
+		}
+	case err != nil:
 		return nil, id.ID{}, err
-	}
-	if err := access.Authorize(m, authz.ReportCreate, now); err != nil {
-		return nil, id.ID{}, err
+	default:
+		if err := access.Authorize(m, authz.ReportCreate, now); err != nil {
+			return nil, id.ID{}, err
+		}
 	}
 	if prev, found, err := mine(ctx, q, user, t, target); err != nil || found {
 		if found {
