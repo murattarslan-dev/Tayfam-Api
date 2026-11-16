@@ -278,11 +278,12 @@ func (s *Service) JoinByInvite(ctx context.Context, caller id.ID, token string) 
 		// instant tayfa a link always leaves a join request for the
 		// organizer (ADR-0032 §4).
 		st := authz.StatusPending
-		if t.instant {
-			// pending
-		} else if t.joinPolicy == "open" {
+		switch {
+		case t.instant:
+			// Always a join request.
+		case t.joinPolicy == "open":
 			st = authz.StatusActive
-		} else if inv.CreatedBy.Valid {
+		case inv.CreatedBy.Valid:
 			cm, err := q.GetMembership(ctx, store.GetMembershipParams{TayfaID: inv.TayfaID, UserID: inv.CreatedBy})
 			switch {
 			case errors.Is(err, pgx.ErrNoRows):
