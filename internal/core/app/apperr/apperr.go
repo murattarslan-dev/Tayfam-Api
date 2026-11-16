@@ -97,7 +97,7 @@ var (
 	// (DISCOVER_ENABLED); nothing was read.
 	ErrFeatureDisabled = errors.New("özellik kapalı")
 	// ErrDiscoverTooFewMembers: Keşfet needs at least five active members.
-	ErrDiscoverTooFewMembers = errors.New("Keşfet için üye sayısı yetersiz")
+	ErrDiscoverTooFewMembers = errors.New("keşfet için üye sayısı yetersiz")
 	// ErrFeedbackClosed: the event takes no "Was everything all right?"
 	// answer (not a discoverable in-person event, not ended, or more than
 	// seven days after the end).

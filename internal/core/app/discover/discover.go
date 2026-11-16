@@ -200,7 +200,7 @@ type TayfaState struct {
 // tayfa was dropped is never told (ADR-0033 §7).
 func stateOf(visibility string, review pgtype.Text) TayfaState {
 	enabled := visibility == "listed"
-	st := StateOff
+	var st string
 	switch {
 	case review.Valid && review.String == "rejected":
 		st = StateRejected
