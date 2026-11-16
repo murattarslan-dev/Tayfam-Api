@@ -149,11 +149,11 @@ func TestDirectMessageIdempotentAndErase(t *testing.T) {
 		t.Fatalf("gönderen mesaj sayısı = %d", n)
 	}
 	// Only the sender erases.
-	if n, err := q.EraseDirectMessage(ctx, EraseDirectMessageParams{DeletedAt: at(time.Now()), ConversationID: conv.PG(), ID: m.PG(), SenderID: b.PG()}); err != nil || n != 0 {
-		t.Fatalf("başkası sildi: %d %v", n, err)
+	if _, err := q.EraseDirectMessage(ctx, EraseDirectMessageParams{DeletedAt: at(time.Now()), ConversationID: conv.PG(), ID: m.PG(), SenderID: b.PG()}); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("başkası sildi: %v", err)
 	}
-	if n, err := q.EraseDirectMessage(ctx, EraseDirectMessageParams{DeletedAt: at(time.Now()), ConversationID: conv.PG(), ID: m.PG(), SenderID: a.PG()}); err != nil || n != 1 {
-		t.Fatalf("gönderen sildi: %d %v", n, err)
+	if released, err := q.EraseDirectMessage(ctx, EraseDirectMessageParams{DeletedAt: at(time.Now()), ConversationID: conv.PG(), ID: m.PG(), SenderID: a.PG()}); err != nil || released.Valid {
+		t.Fatalf("gönderen sildi: %v %v", released, err)
 	}
 	got, err := q.GetDirectMessage(ctx, GetDirectMessageParams{ConversationID: conv.PG(), ID: m.PG()})
 	if err != nil || !got.DeletedAt.Valid {

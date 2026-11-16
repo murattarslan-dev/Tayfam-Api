@@ -73,7 +73,9 @@ type SocialServiceClient interface {
 	// user_id: a friendship, the caller's request, or user_id's request
 	// (declining it). Nobody is told. Removing nothing succeeds.
 	RemoveFriendship(ctx context.Context, in *RemoveFriendshipRequest, opts ...grpc.CallOption) (*RemoveFriendshipResponse, error)
-	// ListFriends lists the caller's friends.
+	// ListFriends lists the caller's friends, highest friendship score first,
+	// by user ID among equals (ADR-0030 §12). The score is in no field and not
+	// in next_page_token; it counts only while both sides have profiling on.
 	ListFriends(ctx context.Context, in *ListFriendsRequest, opts ...grpc.CallOption) (*ListFriendsResponse, error)
 	// ListFriendRequests lists requests waiting for the caller (INCOMING) or
 	// sent by the caller (OUTGOING).
@@ -299,7 +301,9 @@ type SocialServiceServer interface {
 	// user_id: a friendship, the caller's request, or user_id's request
 	// (declining it). Nobody is told. Removing nothing succeeds.
 	RemoveFriendship(context.Context, *RemoveFriendshipRequest) (*RemoveFriendshipResponse, error)
-	// ListFriends lists the caller's friends.
+	// ListFriends lists the caller's friends, highest friendship score first,
+	// by user ID among equals (ADR-0030 §12). The score is in no field and not
+	// in next_page_token; it counts only while both sides have profiling on.
 	ListFriends(context.Context, *ListFriendsRequest) (*ListFriendsResponse, error)
 	// ListFriendRequests lists requests waiting for the caller (INCOMING) or
 	// sent by the caller (OUTGOING).

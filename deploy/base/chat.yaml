@@ -67,6 +67,11 @@ spec:
             # Sessize almada üyelik kontrolü: core GetMembership, kullanıcının
             # kendi token'ıyla (ADR-0009). Servis token'ı gerekmez.
             - { name: CORE_GRPC_ADDR, value: "core:9090" }
+            # Outbox relay → core ChatEventService (issue #205, ADR-0031):
+            # mesajın bıraktığı fotoğraf/ek core'da silinir. Token yalnızca
+            # core audience'ı için geçerli ve 10 dakikalık; core onu yalnızca
+            # ApplyChatEvent'te kabul eder.
+            - { name: SERVICE_TOKEN_FILE_CORE, value: /var/run/secrets/tayfam/core/token }
             # Servis token'ı doğrulaması (ADR-0013): identity'nin ve core'un
             # outbox relay'leri olay servislerini servis token'ıyla çağırır.
             # İzinli çağıranlar bu namespace'teki ServiceAccount'lardır.
@@ -125,6 +130,7 @@ spec:
             capabilities: { drop: ["ALL"] }
           volumeMounts:
             - { name: kube-api, mountPath: /var/run/secrets/tayfam/kube-api, readOnly: true }
+            - { name: core-token, mountPath: /var/run/secrets/tayfam/core, readOnly: true }
       volumes:
         # Cluster'ın açık anahtarlarını (JWKS) okumak için API sunucusunun CA'sı
         # ve audience'ı API sunucusu olan 10 dakikalık token. Bu token'la
@@ -141,6 +147,17 @@ spec:
                   name: kube-root-ca.crt
                   items:
                     - { key: ca.crt, path: ca.crt }
+        # core'u çağırmak için servis token'ı (outbox relay, ADR-0031):
+        # audience core.tayfam.internal, 10 dakika; kubelet süresi dolmadan
+        # yeniler. Başka hiçbir hedefte ve Kubernetes API'sinde geçmez.
+        - name: core-token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: core.tayfam.internal
+                  expirationSeconds: 600
 ---
 # gRPC ve WebSocket (http) portları servis üzerinden açılır; ops portu (8081)
 # sadece kubelet probe'ları içindir ve servis üzerinden yayınlanmaz.

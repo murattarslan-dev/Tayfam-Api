@@ -795,6 +795,7 @@ const exportReports = `-- name: ExportReports :many
 SELECT r.id AS k, jsonb_build_object(
   'id', r.id, 'tayfa_id', r.tayfa_id, 'target_type', r.target_type, 'target_id', r.target_id,
   'reason', r.reason, 'description', r.description, 'evidence_text', r.evidence_text,
+  'evidence_upload_id', r.evidence_upload_id,
   'status', r.status, 'resolution', r.resolution, 'created_at', r.created_at
 ) AS data
 FROM reports r

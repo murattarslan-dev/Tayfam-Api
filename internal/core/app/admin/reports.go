@@ -11,7 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatrelay"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -38,22 +40,42 @@ var resolutionOf = map[string]string{
 
 // Report is a report as the platform sees it.
 type Report struct {
-	ID            id.ID
-	Tayfa         id.ID // zero for a direct message report
-	TargetType    string
-	Target        id.ID
-	Subject       id.ID // reported person; zero if deleted
-	Reporter      id.ID // zero if deleted
-	Reason        string
-	Description   string
-	Priority      string
-	CreatedAt     time.Time
-	EscalatedAt   time.Time
-	Resolved      bool // on the platform
-	Decision      string
-	DecidedAt     time.Time
-	evidenceText  string
-	tayfaResolved bool
+	ID             id.ID
+	Tayfa          id.ID // zero for a direct message report
+	TargetType     string
+	Target         id.ID
+	Subject        id.ID // reported person; zero if deleted
+	Reporter       id.ID // zero if deleted
+	Reason         string
+	Description    string
+	Priority       string
+	CreatedAt      time.Time
+	EscalatedAt    time.Time
+	Resolved       bool // on the platform
+	Decision       string
+	DecidedAt      time.Time
+	evidenceText   string
+	evidenceUpload id.ID
+	tayfaResolved  bool
+	// message is a reported channel message as it was when the report was
+	// filed (issue #205, ADR-0031).
+	message *reportedMessage
+}
+
+// reportedMessage is the channel message a report keeps.
+type reportedMessage struct {
+	channel id.ID
+	kind    string
+	body    string
+	photo   id.ID
+	place   *Place
+}
+
+// Place is a place a reported channel message shared: content, not a
+// device location (ADR-0008). Never logged.
+type Place struct {
+	Latitude, Longitude float64
+	Name                string
 }
 
 // Item is the reported item alone.
@@ -72,6 +94,15 @@ type Item struct {
 	MediaExpires time.Time
 	// upload is the reported photo's file.
 	upload id.ID
+	// HasEvidencePhoto: a DM report carries an evidence photo (ADR-0031);
+	// its link is signed only on request (ReportEvidencePhotoURL).
+	HasEvidencePhoto bool
+	// A reported channel message (ADR-0031): its channel, and a photo
+	// (signed only on request, ReportedMessagePhotoURL) or a place. A text
+	// message's text is in Body.
+	Channel         id.ID
+	HasMessagePhoto bool
+	Place           *Place
 }
 
 func reportOf(r store.AdminListPlatformReportsRow) Report {
@@ -112,7 +143,16 @@ func (s *Service) report(ctx context.Context, q *store.Queries, report id.ID) (R
 		PlatformHandledAt: r.PlatformHandledAt,
 	})
 	out.evidenceText = r.EvidenceText.String
+	out.evidenceUpload = idOf(r.EvidenceUploadID)
 	out.tayfaResolved = r.Status == "resolved"
+	if r.MessageKind.Valid {
+		m := &reportedMessage{channel: idOf(r.ChannelID), kind: r.MessageKind.String, body: r.MessageBody.String,
+			photo: idOf(r.MessagePhotoUploadID)}
+		if r.PlaceLatitude.Valid && r.PlaceLongitude.Valid {
+			m.place = &Place{Latitude: r.PlaceLatitude.Float64, Longitude: r.PlaceLongitude.Float64, Name: r.PlaceName.String}
+		}
+		out.message = m
+	}
 	return out, nil
 }
 
@@ -161,6 +201,93 @@ func (s *Service) GetReportedItem(ctx context.Context, c auth.AdminClaims, repor
 	return rep, item, nil
 }
 
+// evidenceReason is the audit reason of opening a DM report's evidence
+// photo.
+const evidenceReason = "Şikâyet kanıt fotoğrafının incelenmesi"
+
+// ReportEvidencePhotoURL signs a short link to a DM report's evidence
+// photo when the administrator opens it (ADR-0031) and records the opening
+// in the platform audit log (report.view_evidence_photo). A report without
+// a photo, or without object storage, is apperr.ErrReportNotFound.
+func (s *Service) ReportEvidencePhotoURL(ctx context.Context, c auth.AdminClaims, report id.ID) (string, time.Time, error) {
+	cl, err := s.caller(ctx, c)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	var (
+		link string
+		exp  time.Time
+	)
+	err = pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		rep, err := s.report(ctx, q, report)
+		if err != nil {
+			return err
+		}
+		if rep.evidenceUpload == (id.ID{}) || s.cfg.Media == nil {
+			return apperr.ErrReportNotFound
+		}
+		l, e, ok, err := s.cfg.Media.ReportEvidenceURL(ctx, rep.ID, rep.evidenceUpload)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return apperr.ErrReportNotFound
+		}
+		link, exp = l, e
+		return audit(ctx, q, cl, rep.Tayfa, "report.view_evidence_photo", "report", rep.ID, evidenceReason,
+			map[string]string{"upload_id": rep.evidenceUpload.String()})
+	})
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return link, exp, nil
+}
+
+// messagePhotoReason is the audit reason of opening a reported channel
+// message's photo.
+const messagePhotoReason = "Şikâyet edilen mesaj fotoğrafının incelenmesi"
+
+// ReportedMessagePhotoURL signs a short link to a reported channel
+// message's photo when the administrator opens it (ADR-0031) and records
+// the opening in the platform audit log (report.view_message_photo). The
+// photo is there while the message holds it; a report without one, a
+// photo already gone or no object storage is apperr.ErrReportNotFound.
+func (s *Service) ReportedMessagePhotoURL(ctx context.Context, c auth.AdminClaims, report id.ID) (string, time.Time, error) {
+	cl, err := s.caller(ctx, c)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	var (
+		link string
+		exp  time.Time
+	)
+	err = pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		rep, err := s.report(ctx, q, report)
+		if err != nil {
+			return err
+		}
+		if rep.message == nil || rep.message.photo == (id.ID{}) || s.cfg.Media == nil {
+			return apperr.ErrReportNotFound
+		}
+		l, e, ok, err := s.cfg.Media.ReportedMessagePhotoURL(ctx, rep.Target, rep.message.photo)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return apperr.ErrReportNotFound
+		}
+		link, exp = l, e
+		return audit(ctx, q, cl, rep.Tayfa, "report.view_message_photo", "report", rep.ID, messagePhotoReason,
+			map[string]string{"upload_id": rep.message.photo.String()})
+	})
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return link, exp, nil
+}
+
 // reportedItem reads the one reported thing. No other content of the
 // tayfa, no poll votes and no coordinates are read.
 func reportedItem(ctx context.Context, q *store.Queries, r Report) (*Item, error) {
@@ -172,6 +299,17 @@ func reportedItem(ctx context.Context, q *store.Queries, r Report) (*Item, error
 		// The server cannot read direct messages (end-to-end encrypted);
 		// the evidence is the reporter's own copy (ADR-0005).
 		it.Author, it.Body, it.CreatedAt = r.Subject, r.evidenceText, r.CreatedAt
+		it.HasEvidencePhoto = r.evidenceUpload != (id.ID{})
+		return it, nil
+	case "channel_message":
+		// What the reporter could read when filing (ADR-0031); chat is
+		// not asked and no other message is read.
+		if r.message == nil {
+			return nil, nil
+		}
+		m := r.message
+		it.Author, it.Body, it.Channel, it.Place = r.Subject, m.body, m.channel, m.place
+		it.HasMessagePhoto = m.photo != (id.ID{})
 		return it, nil
 	case "user":
 		var name pgtype.Text
@@ -245,6 +383,12 @@ func removeContent(ctx context.Context, q *store.Queries, r Report, by id.ID, no
 		_, err = q.AdminDeleteCatch(ctx, store.AdminDeleteCatchParams{ID: tid, TayfaID: tf, At: at, By: b})
 	case "event_photo":
 		_, err = q.AdminDeleteEventPhoto(ctx, store.AdminDeleteEventPhotoParams{ID: tid, TayfaID: tf, At: at, By: b})
+	case "channel_message":
+		// chat hides it (the moderator's path) when the event arrives
+		// (chatrelay; ADR-0031). IDs only.
+		err = txn.Event(ctx, q, chatrelay.TypeChannelMessageRemoved, r.Tayfa, by,
+			txn.Target{Type: "channel_message", ID: r.Target},
+			map[string]any{"tayfa_id": r.Tayfa.String(), "target_id": r.Target.String(), "report_id": r.ID.String()})
 	default:
 		// Users, tayfas and direct messages are not content to remove.
 		return apperr.ErrDecisionNotApplicable

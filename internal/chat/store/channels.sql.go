@@ -173,18 +173,20 @@ func (q *Queries) CreateChannel(ctx context.Context, arg CreateChannelParams) (C
 }
 
 const createMessage = `-- name: CreateMessage :one
-INSERT INTO channel_messages (id, channel_id, author_id, body_encrypted, key_version, client_request_id)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO channel_messages (id, channel_id, author_id, kind, body_encrypted, key_version, photo_upload_id, client_request_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (author_id, client_request_id) DO NOTHING
-RETURNING id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by
+RETURNING id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by, kind, photo_upload_id
 `
 
 type CreateMessageParams struct {
 	ID              pgtype.UUID
 	ChannelID       pgtype.UUID
 	AuthorID        pgtype.UUID
+	Kind            string
 	BodyEncrypted   []byte
 	KeyVersion      pgtype.Int2
+	PhotoUploadID   pgtype.UUID
 	ClientRequestID pgtype.UUID
 }
 
@@ -197,6 +199,8 @@ type CreateMessageRow struct {
 	CreatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
 	DeletedBy     pgtype.UUID
+	Kind          string
+	PhotoUploadID pgtype.UUID
 }
 
 // Aynı (yazar, client_request_id) varsa satır açılmaz ve sonuç boş döner.
@@ -205,8 +209,10 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (C
 		arg.ID,
 		arg.ChannelID,
 		arg.AuthorID,
+		arg.Kind,
 		arg.BodyEncrypted,
 		arg.KeyVersion,
+		arg.PhotoUploadID,
 		arg.ClientRequestID,
 	)
 	var i CreateMessageRow
@@ -219,6 +225,8 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (C
 		&i.CreatedAt,
 		&i.DeletedAt,
 		&i.DeletedBy,
+		&i.Kind,
+		&i.PhotoUploadID,
 	)
 	return i, err
 }
@@ -254,7 +262,8 @@ func (q *Queries) DeleteUserChannelReads(ctx context.Context, userID pgtype.UUID
 
 const eraseMessage = `-- name: EraseMessage :execrows
 UPDATE channel_messages
-SET body_encrypted = NULL, key_version = NULL, deleted_at = COALESCE(deleted_at, $1), deleted_by = $2
+SET body_encrypted = NULL, key_version = NULL, photo_upload_id = NULL,
+    deleted_at = COALESCE(deleted_at, $1), deleted_by = $2
 WHERE channel_id = $3 AND id = $4
 `
 
@@ -265,7 +274,8 @@ type EraseMessageParams struct {
 	ID        pgtype.UUID
 }
 
-// Yazarın kendi silmesi: metin hemen gider, geri alınamaz.
+// Yazarın kendi silmesi: metin, yer ve fotoğraf kimliği hemen gider, geri
+// alınamaz (fotoğrafı core, chat.media_released olayıyla siler).
 func (q *Queries) EraseMessage(ctx context.Context, arg EraseMessageParams) (int64, error) {
 	result, err := q.db.Exec(ctx, eraseMessage,
 		arg.DeletedAt,
@@ -277,6 +287,39 @@ func (q *Queries) EraseMessage(ctx context.Context, arg EraseMessageParams) (int
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const findChannelPhotoHolders = `-- name: FindChannelPhotoHolders :many
+SELECT id, photo_upload_id::uuid AS upload_id FROM channel_messages
+WHERE photo_upload_id = ANY($1::uuid[])
+`
+
+type FindChannelPhotoHoldersRow struct {
+	ID       pgtype.UUID
+	UploadID pgtype.UUID
+}
+
+// Dosyayı tutan kanal mesajları (issue #205, ADR-0031): gönderimden önce
+// dosyanın başka bir mesajda olup olmadığı ve core'un uzlaştırma işi.
+// Silinmiş ama dosyasını tutan (moderatörün gizlediği) mesaj da sayılır.
+func (q *Queries) FindChannelPhotoHolders(ctx context.Context, uploadIds []pgtype.UUID) ([]FindChannelPhotoHoldersRow, error) {
+	rows, err := q.db.Query(ctx, findChannelPhotoHolders, uploadIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FindChannelPhotoHoldersRow{}
+	for rows.Next() {
+		var i FindChannelPhotoHoldersRow
+		if err := rows.Scan(&i.ID, &i.UploadID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getChannel = `-- name: GetChannel :one
@@ -368,6 +411,78 @@ func (q *Queries) GetChannelForUpdate(ctx context.Context, arg GetChannelForUpda
 	return i, err
 }
 
+const getChannelMessageForReport = `-- name: GetChannelMessageForReport :one
+SELECT m.id, m.channel_id, m.author_id, m.body_encrypted, m.key_version, m.created_at, m.deleted_at, m.deleted_by,
+       m.kind, m.photo_upload_id, ch.tayfa_id
+FROM channel_messages m
+JOIN channels ch ON ch.id = m.channel_id
+WHERE m.id = $1
+`
+
+type GetChannelMessageForReportRow struct {
+	ID            pgtype.UUID
+	ChannelID     pgtype.UUID
+	AuthorID      pgtype.UUID
+	BodyEncrypted []byte
+	KeyVersion    pgtype.Int2
+	CreatedAt     pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
+	DeletedBy     pgtype.UUID
+	Kind          string
+	PhotoUploadID pgtype.UUID
+	TayfaID       pgtype.UUID
+}
+
+// Görme kararı (MessageMediaService, issue #205): fotoğrafın bağlı olduğu
+// mesaj ve kanalı. Silinmiş mesaj ve arşivlenmiş kanal da döner; karar
+// uygulamadadır (silinmiş mesajın fotoğrafı görünmez).
+// Şikâyet edilen kanal mesajı (issue #205, ADR-0031): kimliğiyle ve
+// kanalının tayfasıyla; erişim uygulamada denetlenir.
+func (q *Queries) GetChannelMessageForReport(ctx context.Context, id pgtype.UUID) (GetChannelMessageForReportRow, error) {
+	row := q.db.QueryRow(ctx, getChannelMessageForReport, id)
+	var i GetChannelMessageForReportRow
+	err := row.Scan(
+		&i.ID,
+		&i.ChannelID,
+		&i.AuthorID,
+		&i.BodyEncrypted,
+		&i.KeyVersion,
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.DeletedBy,
+		&i.Kind,
+		&i.PhotoUploadID,
+		&i.TayfaID,
+	)
+	return i, err
+}
+
+const getChannelPhotoMessage = `-- name: GetChannelPhotoMessage :one
+SELECT m.channel_id, ch.tayfa_id, m.photo_upload_id, m.deleted_at
+FROM channel_messages m
+JOIN channels ch ON ch.id = m.channel_id
+WHERE m.id = $1
+`
+
+type GetChannelPhotoMessageRow struct {
+	ChannelID     pgtype.UUID
+	TayfaID       pgtype.UUID
+	PhotoUploadID pgtype.UUID
+	DeletedAt     pgtype.Timestamptz
+}
+
+func (q *Queries) GetChannelPhotoMessage(ctx context.Context, id pgtype.UUID) (GetChannelPhotoMessageRow, error) {
+	row := q.db.QueryRow(ctx, getChannelPhotoMessage, id)
+	var i GetChannelPhotoMessageRow
+	err := row.Scan(
+		&i.ChannelID,
+		&i.TayfaID,
+		&i.PhotoUploadID,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const getChannelRead = `-- name: GetChannelRead :one
 SELECT last_read_message_id FROM channel_reads WHERE channel_id = $1 AND user_id = $2
 `
@@ -385,7 +500,7 @@ func (q *Queries) GetChannelRead(ctx context.Context, arg GetChannelReadParams) 
 }
 
 const getMessage = `-- name: GetMessage :one
-SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by
+SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by, kind, photo_upload_id
 FROM channel_messages
 WHERE channel_id = $1 AND id = $2
 `
@@ -404,6 +519,8 @@ type GetMessageRow struct {
 	CreatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
 	DeletedBy     pgtype.UUID
+	Kind          string
+	PhotoUploadID pgtype.UUID
 }
 
 func (q *Queries) GetMessage(ctx context.Context, arg GetMessageParams) (GetMessageRow, error) {
@@ -418,13 +535,15 @@ func (q *Queries) GetMessage(ctx context.Context, arg GetMessageParams) (GetMess
 		&i.CreatedAt,
 		&i.DeletedAt,
 		&i.DeletedBy,
+		&i.Kind,
+		&i.PhotoUploadID,
 	)
 	return i, err
 }
 
 const getMessageByRequest = `-- name: GetMessageByRequest :one
 
-SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by
+SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by, kind, photo_upload_id
 FROM channel_messages
 WHERE author_id = $1 AND client_request_id = $2
 `
@@ -443,6 +562,8 @@ type GetMessageByRequestRow struct {
 	CreatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
 	DeletedBy     pgtype.UUID
+	Kind          string
+	PhotoUploadID pgtype.UUID
 }
 
 // Mesajlar.
@@ -460,12 +581,14 @@ func (q *Queries) GetMessageByRequest(ctx context.Context, arg GetMessageByReque
 		&i.CreatedAt,
 		&i.DeletedAt,
 		&i.DeletedBy,
+		&i.Kind,
+		&i.PhotoUploadID,
 	)
 	return i, err
 }
 
 const getMessageForUpdate = `-- name: GetMessageForUpdate :one
-SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by
+SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by, kind, photo_upload_id
 FROM channel_messages
 WHERE channel_id = $1 AND id = $2
 FOR UPDATE
@@ -485,6 +608,8 @@ type GetMessageForUpdateRow struct {
 	CreatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
 	DeletedBy     pgtype.UUID
+	Kind          string
+	PhotoUploadID pgtype.UUID
 }
 
 func (q *Queries) GetMessageForUpdate(ctx context.Context, arg GetMessageForUpdateParams) (GetMessageForUpdateRow, error) {
@@ -499,6 +624,8 @@ func (q *Queries) GetMessageForUpdate(ctx context.Context, arg GetMessageForUpda
 		&i.CreatedAt,
 		&i.DeletedAt,
 		&i.DeletedBy,
+		&i.Kind,
+		&i.PhotoUploadID,
 	)
 	return i, err
 }
@@ -670,7 +797,7 @@ func (q *Queries) ListChannels(ctx context.Context, arg ListChannelsParams) ([]L
 }
 
 const listMessagesAfter = `-- name: ListMessagesAfter :many
-SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by
+SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by, kind, photo_upload_id
 FROM channel_messages
 WHERE channel_id = $1 AND id > $2
 ORDER BY id
@@ -692,6 +819,8 @@ type ListMessagesAfterRow struct {
 	CreatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
 	DeletedBy     pgtype.UUID
+	Kind          string
+	PhotoUploadID pgtype.UUID
 }
 
 // En eski önce, after_id'den yeniler: kaçırılan mesajları tamamlama
@@ -714,6 +843,8 @@ func (q *Queries) ListMessagesAfter(ctx context.Context, arg ListMessagesAfterPa
 			&i.CreatedAt,
 			&i.DeletedAt,
 			&i.DeletedBy,
+			&i.Kind,
+			&i.PhotoUploadID,
 		); err != nil {
 			return nil, err
 		}
@@ -726,7 +857,7 @@ func (q *Queries) ListMessagesAfter(ctx context.Context, arg ListMessagesAfterPa
 }
 
 const listMessagesBefore = `-- name: ListMessagesBefore :many
-SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by
+SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by, kind, photo_upload_id
 FROM channel_messages
 WHERE channel_id = $1 AND ($2::uuid IS NULL OR id < $2::uuid)
 ORDER BY id DESC
@@ -748,6 +879,8 @@ type ListMessagesBeforeRow struct {
 	CreatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
 	DeletedBy     pgtype.UUID
+	Kind          string
+	PhotoUploadID pgtype.UUID
 }
 
 // En yeni önce; before_id verilirse ondan eskiler.
@@ -769,6 +902,8 @@ func (q *Queries) ListMessagesBefore(ctx context.Context, arg ListMessagesBefore
 			&i.CreatedAt,
 			&i.DeletedAt,
 			&i.DeletedBy,
+			&i.Kind,
+			&i.PhotoUploadID,
 		); err != nil {
 			return nil, err
 		}
@@ -801,7 +936,7 @@ func (q *Queries) MarkChannelRead(ctx context.Context, arg MarkChannelReadParams
 	return err
 }
 
-const purgeDeletedMessages = `-- name: PurgeDeletedMessages :execrows
+const purgeDeletedMessages = `-- name: PurgeDeletedMessages :many
 
 DELETE FROM channel_messages
 WHERE id IN (
@@ -809,7 +944,9 @@ WHERE id IN (
   WHERE o.deleted_at < $1::timestamptz
   ORDER BY o.deleted_at
   LIMIT $2
+  FOR UPDATE SKIP LOCKED
 )
+RETURNING id, photo_upload_id
 `
 
 type PurgeDeletedMessagesParams struct {
@@ -817,14 +954,33 @@ type PurgeDeletedMessagesParams struct {
 	N      int32
 }
 
+type PurgeDeletedMessagesRow struct {
+	ID            pgtype.UUID
+	PhotoUploadID pgtype.UUID
+}
+
 // Saklama ve silme.
-// 30 gün: silinmiş mesajlardan bir parti kalıcı silinir.
-func (q *Queries) PurgeDeletedMessages(ctx context.Context, arg PurgeDeletedMessagesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, purgeDeletedMessages, arg.Before, arg.N)
+// 30 gün: silinmiş mesajlardan bir parti kalıcı silinir. Hâlâ fotoğrafı
+// olanlar (moderatör gizlemesi) döner: dosyayı core'a aynı transaction'da
+// olayla bırakmak için.
+func (q *Queries) PurgeDeletedMessages(ctx context.Context, arg PurgeDeletedMessagesParams) ([]PurgeDeletedMessagesRow, error) {
+	rows, err := q.db.Query(ctx, purgeDeletedMessages, arg.Before, arg.N)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	items := []PurgeDeletedMessagesRow{}
+	for rows.Next() {
+		var i PurgeDeletedMessagesRow
+		if err := rows.Scan(&i.ID, &i.PhotoUploadID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const removeChannelMember = `-- name: RemoveChannelMember :execrows
@@ -864,7 +1020,8 @@ func (q *Queries) RemoveUserFromTayfaChannels(ctx context.Context, arg RemoveUse
 const restoreMessage = `-- name: RestoreMessage :execrows
 UPDATE channel_messages
 SET deleted_at = NULL, deleted_by = NULL
-WHERE channel_id = $1 AND id = $2 AND deleted_at IS NOT NULL AND body_encrypted IS NOT NULL
+WHERE channel_id = $1 AND id = $2 AND deleted_at IS NOT NULL
+  AND (body_encrypted IS NOT NULL OR photo_upload_id IS NOT NULL)
 `
 
 type RestoreMessageParams struct {

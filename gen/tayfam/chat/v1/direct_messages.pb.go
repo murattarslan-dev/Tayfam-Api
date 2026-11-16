@@ -249,12 +249,15 @@ type DirectMessage struct {
 	// Removed with the plain version (issue #151); always empty.
 	//
 	// Deprecated: Marked as deprecated in tayfam/chat/v1/direct_messages.proto.
-	Body          string                 `protobuf:"bytes,4,opt,name=body,proto3" json:"body,omitempty"`
-	Deleted       bool                   `protobuf:"varint,5,opt,name=deleted,proto3" json:"deleted,omitempty"`
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	Encryption    MessageEncryption      `protobuf:"varint,7,opt,name=encryption,proto3,enum=tayfam.chat.v1.MessageEncryption" json:"encryption,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Body       string                 `protobuf:"bytes,4,opt,name=body,proto3" json:"body,omitempty"`
+	Deleted    bool                   `protobuf:"varint,5,opt,name=deleted,proto3" json:"deleted,omitempty"`
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	Encryption MessageEncryption      `protobuf:"varint,7,opt,name=encryption,proto3,enum=tayfam.chat.v1.MessageEncryption" json:"encryption,omitempty"`
+	// The encrypted attachment's upload ID (issue #205); empty when there is
+	// none or the message is deleted. What it holds is in the envelopes.
+	AttachmentUploadId string `protobuf:"bytes,8,opt,name=attachment_upload_id,json=attachmentUploadId,proto3" json:"attachment_upload_id,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *DirectMessage) Reset() {
@@ -337,6 +340,13 @@ func (x *DirectMessage) GetEncryption() MessageEncryption {
 	return MessageEncryption_MESSAGE_ENCRYPTION_UNSPECIFIED
 }
 
+func (x *DirectMessage) GetAttachmentUploadId() string {
+	if x != nil {
+		return x.AttachmentUploadId
+	}
+	return ""
+}
+
 type SendDirectMessageRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	RecipientUserId string                 `protobuf:"bytes,1,opt,name=recipient_user_id,json=recipientUserId,proto3" json:"recipient_user_id,omitempty"`
@@ -347,9 +357,11 @@ type SendDirectMessageRequest struct {
 	Body            string `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
 	ClientRequestId string `protobuf:"bytes,3,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
 	// End to end (E2EService, e2e.proto).
-	Envelopes     []*OutgoingEnvelope `protobuf:"bytes,4,rep,name=envelopes,proto3" json:"envelopes,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Envelopes []*OutgoingEnvelope `protobuf:"bytes,4,rep,name=envelopes,proto3" json:"envelopes,omitempty"`
+	// Optional encrypted attachment (see SendDirectMessage).
+	AttachmentUploadId string `protobuf:"bytes,5,opt,name=attachment_upload_id,json=attachmentUploadId,proto3" json:"attachment_upload_id,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *SendDirectMessageRequest) Reset() {
@@ -409,6 +421,13 @@ func (x *SendDirectMessageRequest) GetEnvelopes() []*OutgoingEnvelope {
 		return x.Envelopes
 	}
 	return nil
+}
+
+func (x *SendDirectMessageRequest) GetAttachmentUploadId() string {
+	if x != nil {
+		return x.AttachmentUploadId
+	}
+	return ""
 }
 
 type SendDirectMessageResponse struct {
@@ -1484,7 +1503,7 @@ const file_tayfam_chat_v1_direct_messages_proto_rawDesc = "" +
 	"\x19peer_last_read_message_id\x18\x06 \x01(\tR\x15peerLastReadMessageId\x12F\n" +
 	"\x11last_message_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x0flastMessageTime\x12;\n" +
 	"\vcreate_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\xa0\x02\n" +
+	"createTime\"\xd2\x02\n" +
 	"\rDirectMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0fconversation_id\x18\x02 \x01(\tR\x0econversationId\x12$\n" +
@@ -1495,12 +1514,14 @@ const file_tayfam_chat_v1_direct_messages_proto_rawDesc = "" +
 	"createTime\x12A\n" +
 	"\n" +
 	"encryption\x18\a \x01(\x0e2!.tayfam.chat.v1.MessageEncryptionR\n" +
-	"encryption\"\xca\x01\n" +
+	"encryption\x120\n" +
+	"\x14attachment_upload_id\x18\b \x01(\tR\x12attachmentUploadId\"\xfc\x01\n" +
 	"\x18SendDirectMessageRequest\x12*\n" +
 	"\x11recipient_user_id\x18\x01 \x01(\tR\x0frecipientUserId\x12\x16\n" +
 	"\x04body\x18\x02 \x01(\tB\x02\x18\x01R\x04body\x12*\n" +
 	"\x11client_request_id\x18\x03 \x01(\tR\x0fclientRequestId\x12>\n" +
-	"\tenvelopes\x18\x04 \x03(\v2 .tayfam.chat.v1.OutgoingEnvelopeR\tenvelopes\"\x96\x01\n" +
+	"\tenvelopes\x18\x04 \x03(\v2 .tayfam.chat.v1.OutgoingEnvelopeR\tenvelopes\x120\n" +
+	"\x14attachment_upload_id\x18\x05 \x01(\tR\x12attachmentUploadId\"\x96\x01\n" +
 	"\x19SendDirectMessageResponse\x127\n" +
 	"\amessage\x18\x01 \x01(\v2\x1d.tayfam.chat.v1.DirectMessageR\amessage\x12@\n" +
 	"\fconversation\x18\x02 \x01(\v2\x1c.tayfam.chat.v1.ConversationR\fconversation\"V\n" +

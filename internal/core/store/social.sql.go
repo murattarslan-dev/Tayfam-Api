@@ -273,6 +273,20 @@ func (q *Queries) ListBlocksPage(ctx context.Context, arg ListBlocksPageParams) 
 }
 
 const listFriendshipsPage = `-- name: ListFriendshipsPage :many
+WITH cur AS (
+  SELECT CASE WHEN $8::boolean THEN 'Infinity'::float8
+         ELSE COALESCE((
+           SELECT fs.score FROM friend_scores fs
+           JOIN friendships af
+             ON af.user_low_id = fs.user_low_id AND af.user_high_id = fs.user_high_id
+            AND af.status = 'accepted'
+           WHERE $4::text = 'accepted'
+             AND fs.user_low_id = LEAST($1::uuid, $6::uuid)
+             AND fs.user_high_id = GREATEST($1::uuid, $6::uuid)
+             AND NOT EXISTS (SELECT 1 FROM social_settings s
+                             WHERE s.user_id IN (fs.user_low_id, fs.user_high_id) AND NOT s.profiling_enabled)
+         ), 0) END AS rank
+)
 SELECT p.user_id AS other_id, f.status, f.requested_by, f.created_at, f.accepted_at,
        p.display_name, p.avatar_upload_id,
        na.day AS next_available_day, na.slots AS next_available_slots
@@ -293,13 +307,23 @@ LEFT JOIN LATERAL (
   ORDER BY a.day
   LIMIT 1
 ) na ON true
+CROSS JOIN LATERAL (
+  SELECT COALESCE((
+    SELECT fs.score FROM friend_scores fs
+    WHERE f.status = 'accepted'
+      AND fs.user_low_id = f.user_low_id AND fs.user_high_id = f.user_high_id
+      AND NOT EXISTS (SELECT 1 FROM social_settings s
+                      WHERE s.user_id IN (f.user_low_id, f.user_high_id) AND NOT s.profiling_enabled)
+  ), 0) AS rank
+) sc
+CROSS JOIN cur
 WHERE (f.user_low_id = $1 OR f.user_high_id = $1)
   AND f.status = $4
   AND ($5::text = ''
        OR ($5::text = 'incoming' AND f.requested_by <> $1)
        OR ($5::text = 'outgoing' AND f.requested_by = $1))
-  AND p.user_id > $6
-ORDER BY p.user_id
+  AND (sc.rank < cur.rank OR (sc.rank = cur.rank AND p.user_id > $6))
+ORDER BY sc.rank DESC, p.user_id
 LIMIT $7
 `
 
@@ -311,6 +335,7 @@ type ListFriendshipsPageParams struct {
 	Direction   string
 	AfterUserID pgtype.UUID
 	PageSize    int32
+	FirstPage   bool
 }
 
 type ListFriendshipsPageRow struct {
@@ -325,12 +350,25 @@ type ListFriendshipsPageRow struct {
 	NextAvailableSlots []string
 }
 
-// Kişinin arkadaşları ve istekleri; karşı tarafın kimliğine göre sayfalanır.
-// Silinmiş hesapların satırı hesap silmede gider; profili henüz gelmemiş
-// kişi listede adsız görünmez, atlanır. Kabul edilmiş arkadaşlıkta
-// arkadaşın @today ile @badge_until (dahil) arasındaki en yakın boş günü de
-// döner ("Boşum" rozeti, issue #207; not dönmez). Engel arkadaşlığı zaten
-// siler; rozet yine de iki yönlü engelde dönmez (savunma derinliği).
+// Kişinin arkadaşları ve istekleri. Silinmiş hesapların satırı hesap
+// silmede gider; profili henüz gelmemiş kişi listede adsız görünmez, atlanır.
+// Kabul edilmiş arkadaşlıkta arkadaşın @today ile @badge_until (dahil)
+// arasındaki en yakın boş günü de döner ("Boşum" rozeti, issue #207; not
+// dönmez). Engel arkadaşlığı zaten siler; rozet yine de iki yönlü engelde
+// dönmez (savunma derinliği).
+//
+// Sıra (ADR-0030 §12, issue #215): kabul edilmiş arkadaşlar arkadaşlık
+// puanına göre azalan, eşitlikte karşı tarafın kimliğine göre. Puan yalnızca
+// arkadaşlık kabul edilmişse ve iki tarafın da profillemesi açıksa sayılır;
+// yoksa 0'dır. İsteklerde puan hiç sayılmaz (sıra kimliğe göredir). Puan
+// sonuç sütunu değildir: yalnızca ORDER BY ve WHERE'de kullanılır, Go'ya
+// gelmez.
+//
+// Sayfalama: imleç yalnızca önceki sayfanın son kişisini taşır
+// (@after_user_id). O kişinin konumu (puanı) burada, aynı kurallarla yeniden
+// okunur. İmleçteki kişi çağıranın kabul edilmiş arkadaşı değilse (uydurma
+// ya da sayfalar arasında biten arkadaşlık) puanı 0 sayılır: imleç başka
+// birinin puanını sorgulamak için kullanılamaz.
 func (q *Queries) ListFriendshipsPage(ctx context.Context, arg ListFriendshipsPageParams) ([]ListFriendshipsPageRow, error) {
 	rows, err := q.db.Query(ctx, listFriendshipsPage,
 		arg.UserID,
@@ -340,6 +378,7 @@ func (q *Queries) ListFriendshipsPage(ctx context.Context, arg ListFriendshipsPa
 		arg.Direction,
 		arg.AfterUserID,
 		arg.PageSize,
+		arg.FirstPage,
 	)
 	if err != nil {
 		return nil, err

@@ -200,7 +200,13 @@ func TestChannelRoutes(t *testing.T) {
 		{"GET", ch + "/messages?page_size=20&page_token=P", "", 200, &chatv1.ListMessagesRequest{TayfaId: tayfaID, ChannelId: channelID, PageSize: 20, PageToken: "P"}},
 		{"GET", ch + "/messages?after_message_id=" + messageID, "", 200, &chatv1.ListMessagesRequest{TayfaId: tayfaID, ChannelId: channelID, AfterMessageId: messageID}},
 		{"POST", ch + "/messages", `{"body":"Kordon'da buluşalım","client_request_id":"` + requestID + `"}`, 201, &chatv1.SendMessageRequest{
-			TayfaId: tayfaID, ChannelId: channelID, Body: "Kordon'da buluşalım", ClientRequestId: requestID}},
+			TayfaId: tayfaID, ChannelId: channelID, Kind: chatv1.MessageKind_MESSAGE_KIND_TEXT, Body: "Kordon'da buluşalım", ClientRequestId: requestID}},
+		// Issue #205: a photo and a place.
+		{"POST", ch + "/messages", `{"kind":"photo","photo_upload_id":"` + uploadID + `","client_request_id":"` + requestID + `"}`, 201, &chatv1.SendMessageRequest{
+			TayfaId: tayfaID, ChannelId: channelID, Kind: chatv1.MessageKind_MESSAGE_KIND_PHOTO, PhotoUploadId: uploadID, ClientRequestId: requestID}},
+		{"POST", ch + "/messages", `{"kind":"place","place":{"latitude":38.43,"longitude":27.14,"name":"Kordon"},"client_request_id":"` + requestID + `"}`, 201, &chatv1.SendMessageRequest{
+			TayfaId: tayfaID, ChannelId: channelID, Kind: chatv1.MessageKind_MESSAGE_KIND_PLACE, ClientRequestId: requestID,
+			Place: &chatv1.Place{Latitude: 38.43, Longitude: 27.14, Name: "Kordon"}}},
 		{"DELETE", ch + "/messages/" + messageID, "", 204, &chatv1.DeleteMessageRequest{TayfaId: tayfaID, ChannelId: channelID, MessageId: messageID}},
 		{"POST", ch + "/messages/" + messageID + "/restoration", "", 200, &chatv1.RestoreMessageRequest{TayfaId: tayfaID, ChannelId: channelID, MessageId: messageID}},
 		{"PUT", ch + "/read", `{"message_id":"` + messageID + `"}`, 204, &chatv1.MarkChannelReadRequest{TayfaId: tayfaID, ChannelId: channelID, MessageId: messageID}},
@@ -250,11 +256,21 @@ func TestChannelBadRequests(t *testing.T) {
 		"boş güncelleme":        {"PATCH", ch, `{}`},
 		"bilinmeyen alan":       {"PATCH", ch, `{"archived":true}`},
 		"boş mesaj":             {"POST", ch + "/messages", `{"body":"","client_request_id":"` + requestID + `"}`},
-		"uzun mesaj":            {"POST", ch + "/messages", `{"body":"` + strings.Repeat("a", 4001) + `","client_request_id":"` + requestID + `"}`},
-		"istek kimliği yok":     {"POST", ch + "/messages", `{"body":"x"}`},
-		"yazar alanı":           {"POST", ch + "/messages", `{"body":"x","client_request_id":"` + requestID + `","author_user_id":"` + userID + `"}`},
-		"bozuk after":           {"GET", ch + "/messages?after_message_id=x", ""},
-		"okundu kimliği yok":    {"PUT", ch + "/read", `{}`},
+		// Issue #205: one kind's fields only.
+		"bilinmeyen tür":     {"POST", ch + "/messages", `{"kind":"video","body":"x","client_request_id":"` + requestID + `"}`},
+		"fotoğrafsız foto":   {"POST", ch + "/messages", `{"kind":"photo","client_request_id":"` + requestID + `"}`},
+		"alt yazılı foto":    {"POST", ch + "/messages", `{"kind":"photo","photo_upload_id":"` + uploadID + `","body":"x","client_request_id":"` + requestID + `"}`},
+		"metinde fotoğraf":   {"POST", ch + "/messages", `{"body":"x","photo_upload_id":"` + uploadID + `","client_request_id":"` + requestID + `"}`},
+		"yersiz yer":         {"POST", ch + "/messages", `{"kind":"place","client_request_id":"` + requestID + `"}`},
+		"enlem dışı":         {"POST", ch + "/messages", `{"kind":"place","place":{"latitude":91,"longitude":0},"client_request_id":"` + requestID + `"}`},
+		"boylam dışı":        {"POST", ch + "/messages", `{"kind":"place","place":{"latitude":0,"longitude":-181},"client_request_id":"` + requestID + `"}`},
+		"uzun yer adı":       {"POST", ch + "/messages", `{"kind":"place","place":{"latitude":0,"longitude":0,"name":"` + strings.Repeat("ş", 121) + `"},"client_request_id":"` + requestID + `"}`},
+		"yerde bilinmeyen":   {"POST", ch + "/messages", `{"kind":"place","place":{"latitude":0,"longitude":0,"accuracy":5},"client_request_id":"` + requestID + `"}`},
+		"uzun mesaj":         {"POST", ch + "/messages", `{"body":"` + strings.Repeat("a", 4001) + `","client_request_id":"` + requestID + `"}`},
+		"istek kimliği yok":  {"POST", ch + "/messages", `{"body":"x"}`},
+		"yazar alanı":        {"POST", ch + "/messages", `{"body":"x","client_request_id":"` + requestID + `","author_user_id":"` + userID + `"}`},
+		"bozuk after":        {"GET", ch + "/messages?after_message_id=x", ""},
+		"okundu kimliği yok": {"PUT", ch + "/read", `{}`},
 	} {
 		if w := as(h, tc.method, tc.path, tc.body); w.Code != 400 || problemType(t, w) != "invalid-request" {
 			t.Errorf("%s: %d %s", name, w.Code, problemType(t, w))

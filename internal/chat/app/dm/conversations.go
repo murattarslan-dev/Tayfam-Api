@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/corerelay"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/keys"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -173,14 +174,14 @@ func (s *Service) Delete(ctx context.Context, caller, conversation, message id.I
 	}
 	changed := false
 	err = pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
-		n, err := store.New(tx).EraseDirectMessage(ctx, store.EraseDirectMessageParams{
+		released, err := store.New(tx).EraseDirectMessage(ctx, store.EraseDirectMessageParams{
 			DeletedAt: ts(s.now()), ConversationID: conversation.PG(), ID: message.PG(), SenderID: caller.PG(),
 		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil // erased concurrently
+		}
 		if err != nil {
 			return fmt.Errorf("mesaj silme: %w", err)
-		}
-		if n == 0 {
-			return nil // erased concurrently
 		}
 		changed = true
 		// The message's waiting envelopes and both parties' archive entries
@@ -188,7 +189,14 @@ func (s *Service) Delete(ctx context.Context, caller, conversation, message id.I
 		if err := keys.MessageDeleted(ctx, store.New(tx), message); err != nil {
 			return err
 		}
-		return record(ctx, tx, EventMessageDeleted, caller, "dm_message", message, map[string]any{"conversation_id": conversation.String()})
+		if err := record(ctx, tx, EventMessageDeleted, caller, "dm_message", message, map[string]any{"conversation_id": conversation.String()}); err != nil {
+			return err
+		}
+		if released.Valid {
+			// The attachment goes too; core deletes it (ADR-0031).
+			return corerelay.Release(ctx, tx, id.ID(released.Bytes), message)
+		}
+		return nil
 	})
 	if err != nil {
 		return err
@@ -457,4 +465,51 @@ func (s *Service) VerifyForReport(ctx context.Context, caller, message id.ID) (c
 		return id.ID{}, id.ID{}, apperr.ErrMessageNotFound
 	}
 	return uuidOf(r.ConversationID), sender, nil
+}
+
+// MediaItem asks whether a direct message's attachment is visible
+// (MessageMediaService; ADR-0031).
+type MediaItem struct {
+	Upload, Message id.ID
+}
+
+// VisibleAttachments returns the uploads among items that caller may see:
+// the caller is a party of the message's conversation, the message is not
+// deleted and its attachment is the upload. Anything else is left out
+// without a reason. core asks this before it signs a link.
+func (s *Service) VisibleAttachments(ctx context.Context, caller id.ID, items []MediaItem) (map[id.ID]bool, error) {
+	q := store.New(s.cfg.Pool)
+	out := make(map[id.ID]bool, len(items))
+	for _, it := range items {
+		up, err := q.GetDirectMessageAttachmentForParty(ctx, store.GetDirectMessageAttachmentForPartyParams{ID: it.Message.PG(), UserID: caller.PG()})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			continue
+		case err != nil:
+			return nil, fmt.Errorf("birebir mesaj eki: %w", err)
+		}
+		if up.Valid && id.ID(up.Bytes) == it.Upload {
+			out[it.Upload] = true
+		}
+	}
+	return out, nil
+}
+
+// AttachmentHolders returns, for each of uploads some direct message
+// holds, that message's ID (core's reconciliation, MediaHolderService;
+// ADR-0031). Only core's service token reaches it.
+func (s *Service) AttachmentHolders(ctx context.Context, uploads []id.ID) (map[id.ID]id.ID, error) {
+	pg := make([]pgtype.UUID, len(uploads))
+	for i, u := range uploads {
+		pg[i] = u.PG()
+	}
+	rows, err := store.New(s.cfg.Pool).FindDirectMessageAttachmentHolders(ctx, pg)
+	if err != nil {
+		return nil, fmt.Errorf("ek sahipleri: %w", err)
+	}
+	out := make(map[id.ID]id.ID, len(rows))
+	for _, r := range rows {
+		out[id.ID(r.UploadID.Bytes)] = id.ID(r.ID.Bytes)
+	}
+	return out, nil
 }

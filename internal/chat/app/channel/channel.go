@@ -96,6 +96,10 @@ type Config struct {
 	// SendLimit is the per-user message rate, shared with direct messages
 	// and every transport (issue #101); required.
 	SendLimit SendLimit
+	// Photos attaches photo messages' uploads in core (issue #205). nil
+	// makes photo messages apperr.ErrUnavailable (a local run without
+	// core).
+	Photos Photos
 	// Cipher encrypts message bodies. nil turns the user methods off
 	// (apperr.ErrChannelsUnavailable); only local and dev may run so.
 	Cipher *channelcrypt.Cipher
@@ -212,18 +216,34 @@ type Message struct {
 	ID        id.ID
 	ChannelID id.ID
 	AuthorID  id.ID // zero when the author's account was deleted
-	// Body is empty for a deleted message ("Bu mesaj silindi").
+	// Kind is KindText, KindPhoto or KindPlace (issue #205).
+	Kind string
+	// Body is a text message's; empty for a deleted message ("Bu mesaj
+	// silindi").
 	Body      string
 	Deleted   bool
 	CreatedAt time.Time
 	// Restorable is set, for callers who may restore, on a moderation
 	// deletion still within RestoreWindow.
 	Restorable bool
+	// PhotoUploadID is a photo message's upload in core; zero when
+	// deleted.
+	PhotoUploadID id.ID
+	// Place is a place message's; nil when deleted.
+	Place *Place
 }
 
-// SendInput is a message to send.
+// SendInput is a message to send (issue #205: one of three kinds).
 type SendInput struct {
+	// Kind is KindText (also empty), KindPhoto or KindPlace.
+	Kind string
+	// Body is a text message's only.
 	Body string
+	// PhotoUploadID is a photo message's only: the sender's READY
+	// chat_photo upload for this tayfa.
+	PhotoUploadID id.ID
+	// Place is a place message's only.
+	Place *Place
 	// ClientRequestID makes a retry return the first message (ADR-0005).
 	ClientRequestID id.ID
 }

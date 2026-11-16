@@ -22,8 +22,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ReportTargetType is what a report is about. Channel messages are not
-// reportable yet.
+// ReportTargetType is what a report is about.
 type ReportTargetType int32
 
 const (
@@ -42,13 +41,24 @@ const (
 	// tayfa_id is empty. core asks chat with the reporter's own token
 	// (DirectMessageService.VerifyDirectMessageForReport) whether the
 	// reporter is a party of the message's conversation and who sent it;
-	// anything else is ERROR_REASON_REPORT_TARGET_NOT_FOUND. evidence_text
-	// is required. Goes to the platform only, at once; never to a tayfa's
+	// anything else is ERROR_REASON_REPORT_TARGET_NOT_FOUND. evidence_text,
+	// evidence_upload_id or both are required (issue #205). Goes to the platform only, at once; never to a tayfa's
 	// queue.
 	ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE ReportTargetType = 9
 	// target_id is an event album photo (issue #206, ADR-0028); the subject
 	// is its uploader.
 	ReportTargetType_REPORT_TARGET_TYPE_EVENT_PHOTO ReportTargetType = 10
+	// target_id is a channel message ID (issue #205, ADR-0031): a text, photo
+	// or place message of a channel of tayfa_id. core asks chat with the
+	// reporter's own token (ChannelService.VerifyChannelMessageForReport)
+	// whether the reporter can read the message (the channel's audience
+	// included) and keeps the message as it was then, for the platform only;
+	// anything the reporter cannot read is
+	// ERROR_REASON_REPORT_TARGET_NOT_FOUND, the reporter's own message
+	// ERROR_REASON_VALIDATION (field target_id). Goes to the tayfa's queue
+	// like other content; content_removed means the message is no longer
+	// visible (deleted or hidden by moderation).
+	ReportTargetType_REPORT_TARGET_TYPE_CHANNEL_MESSAGE ReportTargetType = 11
 )
 
 // Enum value maps for ReportTargetType.
@@ -65,19 +75,21 @@ var (
 		8:  "REPORT_TARGET_TYPE_FISHING_CATCH",
 		9:  "REPORT_TARGET_TYPE_DM_MESSAGE",
 		10: "REPORT_TARGET_TYPE_EVENT_PHOTO",
+		11: "REPORT_TARGET_TYPE_CHANNEL_MESSAGE",
 	}
 	ReportTargetType_value = map[string]int32{
-		"REPORT_TARGET_TYPE_UNSPECIFIED":   0,
-		"REPORT_TARGET_TYPE_USER":          1,
-		"REPORT_TARGET_TYPE_TAYFA":         2,
-		"REPORT_TARGET_TYPE_ANNOUNCEMENT":  3,
-		"REPORT_TARGET_TYPE_EVENT":         4,
-		"REPORT_TARGET_TYPE_QUESTION":      5,
-		"REPORT_TARGET_TYPE_ANSWER":        6,
-		"REPORT_TARGET_TYPE_POLL":          7,
-		"REPORT_TARGET_TYPE_FISHING_CATCH": 8,
-		"REPORT_TARGET_TYPE_DM_MESSAGE":    9,
-		"REPORT_TARGET_TYPE_EVENT_PHOTO":   10,
+		"REPORT_TARGET_TYPE_UNSPECIFIED":     0,
+		"REPORT_TARGET_TYPE_USER":            1,
+		"REPORT_TARGET_TYPE_TAYFA":           2,
+		"REPORT_TARGET_TYPE_ANNOUNCEMENT":    3,
+		"REPORT_TARGET_TYPE_EVENT":           4,
+		"REPORT_TARGET_TYPE_QUESTION":        5,
+		"REPORT_TARGET_TYPE_ANSWER":          6,
+		"REPORT_TARGET_TYPE_POLL":            7,
+		"REPORT_TARGET_TYPE_FISHING_CATCH":   8,
+		"REPORT_TARGET_TYPE_DM_MESSAGE":      9,
+		"REPORT_TARGET_TYPE_EVENT_PHOTO":     10,
+		"REPORT_TARGET_TYPE_CHANNEL_MESSAGE": 11,
 	}
 )
 
@@ -553,8 +565,12 @@ type ModerationReport struct {
 	CreateTime      *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	ResolveTime     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=resolve_time,json=resolveTime,proto3" json:"resolve_time,omitempty"`
 	Priority        ReportPriority         `protobuf:"varint,13,opt,name=priority,proto3,enum=tayfam.core.v1.ReportPriority" json:"priority,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Only for REPORT_TARGET_TYPE_CHANNEL_MESSAGE: the message's channel, to
+	// open it. Moderators who cannot read the channel (an event or selected
+	// channel they are not in) cannot open or hide it either.
+	ChannelId     string `protobuf:"bytes,14,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ModerationReport) Reset() {
@@ -678,6 +694,13 @@ func (x *ModerationReport) GetPriority() ReportPriority {
 	return ReportPriority_REPORT_PRIORITY_UNSPECIFIED
 }
 
+func (x *ModerationReport) GetChannelId() string {
+	if x != nil {
+		return x.ChannelId
+	}
+	return ""
+}
+
 type CreateReportRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Empty for REPORT_TARGET_TYPE_DM_MESSAGE, required otherwise.
@@ -689,14 +712,21 @@ type CreateReportRequest struct {
 	// Optional, up to 1000 characters after trimming surrounding spaces; line
 	// breaks allowed, other control characters not. Never logged.
 	Description string `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
-	// Only and required for REPORT_TARGET_TYPE_DM_MESSAGE: the message text
+	// Only for REPORT_TARGET_TYPE_DM_MESSAGE (required unless
+	// evidence_upload_id is set): the message text
 	// the reporter shares from their own device (ADR-0005 "Şikâyet"), 1–2000
 	// characters after trimming surrounding spaces; line breaks allowed,
 	// other control characters not. Stored for the platform only; never
 	// logged, never in events, never returned (MyReport does not carry it).
-	EvidenceText  string `protobuf:"bytes,6,opt,name=evidence_text,json=evidenceText,proto3" json:"evidence_text,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	EvidenceText string `protobuf:"bytes,6,opt,name=evidence_text,json=evidenceText,proto3" json:"evidence_text,omitempty"`
+	// Only for REPORT_TARGET_TYPE_DM_MESSAGE (issue #205, ADR-0031): a photo
+	// of the message the reporter shares from their own device, the
+	// caller's READY upload of purpose REPORT_EVIDENCE not used elsewhere
+	// (ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,
+	// ERROR_REASON_UPLOAD_IN_USE). Only the platform panel sees it.
+	EvidenceUploadId string `protobuf:"bytes,7,opt,name=evidence_upload_id,json=evidenceUploadId,proto3" json:"evidence_upload_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *CreateReportRequest) Reset() {
@@ -767,6 +797,13 @@ func (x *CreateReportRequest) GetDescription() string {
 func (x *CreateReportRequest) GetEvidenceText() string {
 	if x != nil {
 		return x.EvidenceText
+	}
+	return ""
+}
+
+func (x *CreateReportRequest) GetEvidenceUploadId() string {
+	if x != nil {
+		return x.EvidenceUploadId
 	}
 	return ""
 }
@@ -1260,7 +1297,7 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"\vcreate_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12=\n" +
 	"\fresolve_time\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\vresolveTime\"\xfa\x04\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\vresolveTime\"\x99\x05\n" +
 	"\x10ModerationReport\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\btayfa_id\x18\x02 \x01(\tR\atayfaId\x12A\n" +
@@ -1279,7 +1316,9 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"\vcreate_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12=\n" +
 	"\fresolve_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vresolveTime\x12:\n" +
-	"\bpriority\x18\r \x01(\x0e2\x1e.tayfam.core.v1.ReportPriorityR\bpriority\"\x8d\x02\n" +
+	"\bpriority\x18\r \x01(\x0e2\x1e.tayfam.core.v1.ReportPriorityR\bpriority\x12\x1d\n" +
+	"\n" +
+	"channel_id\x18\x0e \x01(\tR\tchannelId\"\xbb\x02\n" +
 	"\x13CreateReportRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12A\n" +
 	"\vtarget_type\x18\x02 \x01(\x0e2 .tayfam.core.v1.ReportTargetTypeR\n" +
@@ -1287,7 +1326,8 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"\ttarget_id\x18\x03 \x01(\tR\btargetId\x124\n" +
 	"\x06reason\x18\x04 \x01(\x0e2\x1c.tayfam.core.v1.ReportReasonR\x06reason\x12 \n" +
 	"\vdescription\x18\x05 \x01(\tR\vdescription\x12#\n" +
-	"\revidence_text\x18\x06 \x01(\tR\fevidenceText\"b\n" +
+	"\revidence_text\x18\x06 \x01(\tR\fevidenceText\x12,\n" +
+	"\x12evidence_upload_id\x18\a \x01(\tR\x10evidenceUploadId\"b\n" +
 	"\x14CreateReportResponse\x120\n" +
 	"\x06report\x18\x01 \x01(\v2\x18.tayfam.core.v1.MyReportR\x06report\x12\x18\n" +
 	"\acreated\x18\x02 \x01(\bR\acreated\"1\n" +
@@ -1318,7 +1358,7 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"resolution\x18\x03 \x01(\x0e2 .tayfam.core.v1.ReportResolutionR\n" +
 	"resolution\"Q\n" +
 	"\x15ResolveReportResponse\x128\n" +
-	"\x06report\x18\x01 \x01(\v2 .tayfam.core.v1.ModerationReportR\x06report*\xfe\x02\n" +
+	"\x06report\x18\x01 \x01(\v2 .tayfam.core.v1.ModerationReportR\x06report*\xa6\x03\n" +
 	"\x10ReportTargetType\x12\"\n" +
 	"\x1eREPORT_TARGET_TYPE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17REPORT_TARGET_TYPE_USER\x10\x01\x12\x1c\n" +
@@ -1331,7 +1371,8 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	" REPORT_TARGET_TYPE_FISHING_CATCH\x10\b\x12!\n" +
 	"\x1dREPORT_TARGET_TYPE_DM_MESSAGE\x10\t\x12\"\n" +
 	"\x1eREPORT_TARGET_TYPE_EVENT_PHOTO\x10\n" +
-	"*\x8d\x04\n" +
+	"\x12&\n" +
+	"\"REPORT_TARGET_TYPE_CHANNEL_MESSAGE\x10\v*\x8d\x04\n" +
 	"\fReportReason\x12\x1d\n" +
 	"\x19REPORT_REASON_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18REPORT_REASON_HARASSMENT\x10\x01\x12\x1d\n" +

@@ -60,12 +60,15 @@ WHERE reporter_id = @reporter_id AND created_at > @since;
 -- (00013_dm_reports.sql).
 -- name: CreateReport :one
 INSERT INTO reports (
-  id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, evidence_text,
-  priority, minor_involved_at, platform_only, escalated_to_platform_at, escalation_reason, platform_status, created_at)
+  id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, evidence_text, evidence_upload_id,
+  priority, minor_involved_at, platform_only, escalated_to_platform_at, escalation_reason, platform_status, created_at,
+  channel_id, message_kind, message_body, message_photo_upload_id, place_latitude, place_longitude, place_name)
 VALUES (
-  @id, sqlc.narg(tayfa_id), @reporter_id, @target_type, @target_id, @subject_user_id, @reason, sqlc.narg(description), sqlc.narg(evidence_text),
+  @id, sqlc.narg(tayfa_id), @reporter_id, @target_type, @target_id, @subject_user_id, @reason, sqlc.narg(description), sqlc.narg(evidence_text), sqlc.narg(evidence_upload_id),
   @priority, sqlc.narg(minor_involved_at), @platform_only, sqlc.narg(escalated_to_platform_at),
-  sqlc.narg(escalation_reason), sqlc.narg(platform_status), @created_at)
+  sqlc.narg(escalation_reason), sqlc.narg(platform_status), @created_at,
+  sqlc.narg(channel_id), sqlc.narg(message_kind), sqlc.narg(message_body), sqlc.narg(message_photo_upload_id),
+  sqlc.narg(place_latitude), sqlc.narg(place_longitude), sqlc.narg(place_name))
 ON CONFLICT (reporter_id, target_type, target_id) DO NOTHING
 RETURNING id;
 
@@ -96,7 +99,7 @@ LIMIT @page_size;
 -- ve yükselme bilgisi seçilmez; yaş ve doğum tarihi core'da hiç yoktur.
 -- name: ListOpenTayfaReports :many
 SELECT id, tayfa_id, target_type, target_id, subject_user_id, reason, description, status, resolution,
-       handled_by, handled_at, priority, created_at
+       handled_by, handled_at, priority, created_at, channel_id
 FROM reports
 WHERE tayfa_id = @tayfa_id AND status = 'open' AND NOT platform_only
   AND subject_user_id IS DISTINCT FROM @viewer_id::uuid
@@ -110,7 +113,7 @@ LIMIT @page_size;
 -- Çözülmüşler, son çözülen önce.
 -- name: ListResolvedTayfaReports :many
 SELECT id, tayfa_id, target_type, target_id, subject_user_id, reason, description, status, resolution,
-       handled_by, handled_at, priority, created_at
+       handled_by, handled_at, priority, created_at, channel_id
 FROM reports
 WHERE tayfa_id = @tayfa_id AND status = 'resolved' AND NOT platform_only
   AND subject_user_id IS DISTINCT FROM @viewer_id::uuid
@@ -122,11 +125,18 @@ LIMIT @page_size;
 -- izleyicinin kendisi hakkındaki şikâyet bulunamaz).
 -- name: LockTayfaReport :one
 SELECT id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, status,
-       resolution, handled_by, handled_at, priority, created_at
+       resolution, handled_by, handled_at, priority, created_at, channel_id
 FROM reports
 WHERE tayfa_id = @tayfa_id AND id = @id AND NOT platform_only
   AND subject_user_id IS DISTINCT FROM @viewer_id::uuid
 FOR UPDATE;
+
+-- Çözümden önce, kilitsiz: dışarıya (chat) sorulacak hedef (kanal mesajı).
+-- name: GetTayfaReportTarget :one
+SELECT target_type, target_id
+FROM reports
+WHERE tayfa_id = @tayfa_id AND id = @id AND NOT platform_only
+  AND subject_user_id IS DISTINCT FROM @viewer_id::uuid;
 
 -- name: ResolveReport :execrows
 UPDATE reports

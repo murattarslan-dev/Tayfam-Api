@@ -40,6 +40,8 @@ func auditActions() []option {
 		{"tayfa.delete", "Tayfa silme"},
 		{"membership.set_role", "Rol düzeltme"},
 		{"report.view_item", "Şikâyet edilen öğeyi görüntüleme"},
+		{"report.view_evidence_photo", "Şikâyet kanıt fotoğrafını açma"},
+		{"report.view_message_photo", "Şikâyet edilen mesajın fotoğrafını açma"},
 		{"report.decide", "Şikâyet kararı"},
 		{"user.revoke_sessions", "Oturumları kapatma"},
 		{"user.suspend", "Kullanıcı askısı"},

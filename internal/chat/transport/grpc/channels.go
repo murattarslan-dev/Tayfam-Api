@@ -26,6 +26,7 @@ type Channels interface {
 	Members(ctx context.Context, caller, tayfa, ch id.ID, size int32, token string) (channel.MemberPage, error)
 	AddMembers(ctx context.Context, caller, tayfa, ch id.ID, users []id.ID) (channel.Channel, error)
 	RemoveMember(ctx context.Context, caller, tayfa, ch, user id.ID) error
+	ReportTarget(ctx context.Context, caller, tayfa, message id.ID) (channel.Message, error)
 }
 
 // ChannelServer implements chatv1.ChannelServiceServer. Every method acts
@@ -110,10 +111,67 @@ func userIDs(in []string, field string) ([]id.ID, error) {
 }
 
 func messageToProto(m channel.Message) *chatv1.Message {
-	return &chatv1.Message{
+	out := &chatv1.Message{
 		Id: m.ID.String(), ChannelId: m.ChannelID.String(), AuthorUserId: idOrEmpty(m.AuthorID),
 		Body: m.Body, Deleted: m.Deleted, CreateTime: timestamppb.New(m.CreatedAt), Restorable: m.Restorable,
+		Kind: messageKinds[m.Kind], PhotoUploadId: idOrEmpty(m.PhotoUploadID),
 	}
+	if m.Place != nil {
+		out.Place = &chatv1.Place{Latitude: m.Place.Latitude, Longitude: m.Place.Longitude, Name: m.Place.Name}
+	}
+	return out
+}
+
+// VerifyChannelMessageForReport implements chatv1.ChannelServiceServer
+// (issue #205, ADR-0031): core asks with the reporter's own token.
+func (s *ChannelServer) VerifyChannelMessageForReport(ctx context.Context, req *chatv1.VerifyChannelMessageForReportRequest) (*chatv1.VerifyChannelMessageForReportResponse, error) {
+	caller, v, err := ids(ctx, f("tayfa_id", req.GetTayfaId()), f("message_id", req.GetMessageId()))
+	if err != nil {
+		return nil, err
+	}
+	m, err := s.app.ReportTarget(ctx, caller, v[0], v[1])
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	p := messageToProto(m)
+	return &chatv1.VerifyChannelMessageForReportResponse{
+		ChannelId: p.GetChannelId(), AuthorUserId: p.GetAuthorUserId(), Kind: p.GetKind(), Body: p.GetBody(),
+		PhotoUploadId: p.GetPhotoUploadId(), Place: p.GetPlace(), CreateTime: p.GetCreateTime(),
+	}, nil
+}
+
+// messageKinds maps channel_messages.kind (issue #205); an unknown value
+// stays UNSPECIFIED.
+var messageKinds = map[string]chatv1.MessageKind{
+	channel.KindText:  chatv1.MessageKind_MESSAGE_KIND_TEXT,
+	channel.KindPhoto: chatv1.MessageKind_MESSAGE_KIND_PHOTO,
+	channel.KindPlace: chatv1.MessageKind_MESSAGE_KIND_PLACE,
+}
+
+// sendInput converts a send request's content (issue #205).
+func sendInput(req *chatv1.SendMessageRequest, request id.ID) (channel.SendInput, error) {
+	in := channel.SendInput{Body: req.GetBody(), ClientRequestID: request}
+	switch req.GetKind() {
+	case chatv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, chatv1.MessageKind_MESSAGE_KIND_TEXT:
+		in.Kind = channel.KindText
+	case chatv1.MessageKind_MESSAGE_KIND_PHOTO:
+		in.Kind = channel.KindPhoto
+	case chatv1.MessageKind_MESSAGE_KIND_PLACE:
+		in.Kind = channel.KindPlace
+	default:
+		return channel.SendInput{}, validation("kind")
+	}
+	if p := req.GetPhotoUploadId(); p != "" {
+		u, ok := id.Parse(p)
+		if !ok {
+			return channel.SendInput{}, validation("photo_upload_id")
+		}
+		in.PhotoUploadID = u
+	}
+	if p := req.GetPlace(); p != nil {
+		in.Place = &channel.Place{Latitude: p.GetLatitude(), Longitude: p.GetLongitude(), Name: p.GetName()}
+	}
+	return in, nil
 }
 
 // ListChannels implements chatv1.ChannelServiceServer.
@@ -244,7 +302,11 @@ func (s *ChannelServer) SendMessage(ctx context.Context, req *chatv1.SendMessage
 	if err != nil {
 		return nil, err
 	}
-	m, err := s.app.Send(ctx, caller, v[0], v[1], channel.SendInput{Body: req.GetBody(), ClientRequestID: v[2]})
+	in, err := sendInput(req, v[2])
+	if err != nil {
+		return nil, err
+	}
+	m, err := s.app.Send(ctx, caller, v[0], v[1], in)
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}

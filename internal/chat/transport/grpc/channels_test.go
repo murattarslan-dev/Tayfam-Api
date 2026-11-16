@@ -47,6 +47,12 @@ func (f *fakeChannels) AddMembers(_ context.Context, caller, tayfa, ch id.ID, us
 	return channel.Channel{ID: ch, TayfaID: tayfa, Name: "seçili", Visibility: channel.VisibilitySelected, MemberCount: 3}, f.err
 }
 
+func (f *fakeChannels) ReportTarget(_ context.Context, caller, tayfa, message id.ID) (channel.Message, error) {
+	f.caller, f.tayfa = caller, tayfa
+	return channel.Message{ID: message, ChannelID: f.channel, AuthorID: f.channel, Kind: channel.KindPlace,
+		Place: &channel.Place{Latitude: 38.4, Longitude: 27.1, Name: "İskele"}, CreatedAt: time.Unix(1700000000, 0)}, f.err
+}
+
 func (f *fakeChannels) RemoveMember(_ context.Context, caller, tayfa, ch, user id.ID) error {
 	f.caller, f.tayfa, f.channel, f.users = caller, tayfa, ch, []id.ID{user}
 	return f.err
@@ -330,5 +336,25 @@ func TestChannelToProtoAudience(t *testing.T) {
 	}
 	if p := channelToProto(channel.Channel{Visibility: channel.VisibilityMembers, MemberCount: 5}); p.GetMemberCount() != 0 || p.GetEventId() != "" {
 		t.Fatalf("üyeler kanalı = %v", p)
+	}
+}
+
+// Channel message reports (issue #205): the reporter's own token, the
+// message as chat sees it for them, not found without a reason.
+func TestVerifyChannelMessageForReport(t *testing.T) {
+	app := &fakeChannels{channel: id.New()}
+	client, ctx, user := channelConn(t, app, &bytes.Buffer{})
+	tf, msg := id.New(), id.New()
+	resp, err := client.VerifyChannelMessageForReport(ctx, &chatv1.VerifyChannelMessageForReportRequest{TayfaId: tf.String(), MessageId: msg.String()})
+	if err != nil || app.caller != user || app.tayfa != tf || resp.GetChannelId() != app.channel.String() ||
+		resp.GetKind() != chatv1.MessageKind_MESSAGE_KIND_PLACE || resp.GetPlace().GetName() != "İskele" || resp.GetBody() != "" {
+		t.Fatalf("cevap = %v, %v", resp, err)
+	}
+	if _, err := client.VerifyChannelMessageForReport(ctx, &chatv1.VerifyChannelMessageForReportRequest{TayfaId: tf.String(), MessageId: "x"}); func() string { _, _, m := reasonOf(err); return m["field"] }() != "message_id" {
+		t.Fatalf("geçersiz kimlik: %v", err)
+	}
+	app.err = apperr.ErrMessageNotFound
+	if _, err := client.VerifyChannelMessageForReport(ctx, &chatv1.VerifyChannelMessageForReportRequest{TayfaId: tf.String(), MessageId: msg.String()}); status.Code(err) != codes.NotFound {
+		t.Fatalf("bulunamadı: %v", err)
 	}
 }

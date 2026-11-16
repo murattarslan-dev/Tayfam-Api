@@ -64,6 +64,12 @@ protokolüyle uçtan uca şifrelidir; geçmiş, kullanıcının kendi anahtarıy
   R2'ye doğrudan, imzalı linkle yükler; core pikselleri çözmeden
   başlıkları denetler ve görme yetkisi olana 1 saatlik imzalı linkle sunar ([ADR-0007](docs/adr/0007-dosyalar-ve-medya.md),
   [ADR-0020](docs/adr/0020-goruntu-isleme-ve-medya-sunumu.md)).
+- Sohbette fotoğraf ve yer: kanal fotoğrafı aynı hattan gider, kimin
+  göreceğini core chat'e kullanıcının token'ıyla sorar; birebir fotoğraf
+  istemcide şifrelenmiş opak bir blob'dur, sunucu okumaz. Mesajın bıraktığı
+  dosya chat'in outbox'ıyla core'da silinir. Kanal mesajı şikâyetinde chat,
+  şikâyet edenin token'ıyla mesajı okuyabildiğini doğrular; şikâyet mesajın
+  o anki halini platform için saklar ([ADR-0031](docs/adr/0031-sohbet-ekleri-fotograf-ve-yer.md)).
 
 ## Dağıtım
 

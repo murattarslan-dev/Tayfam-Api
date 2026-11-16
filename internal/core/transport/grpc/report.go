@@ -57,9 +57,13 @@ func (s *ReportServer) CreateReport(ctx context.Context, req *corev1.CreateRepor
 	if !ok {
 		return nil, validation("reason")
 	}
+	evidenceUpload, err := optionalUploadID(req.GetEvidenceUploadId(), "evidence_upload_id")
+	if err != nil {
+		return nil, err
+	}
 	v, created, err := s.app.Create(ctx, user, t, report.CreateInput{
 		TargetType: tt, TargetID: req.GetTargetId(), Reason: reason, Description: req.GetDescription(),
-		Evidence: req.GetEvidenceText(),
+		Evidence: req.GetEvidenceText(), EvidenceUpload: evidenceUpload,
 	})
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
@@ -157,16 +161,17 @@ func (s *ReportServer) ResolveReport(ctx context.Context, req *corev1.ResolveRep
 }
 
 var reportTargets = map[corev1.ReportTargetType]report.TargetType{
-	corev1.ReportTargetType_REPORT_TARGET_TYPE_USER:          report.TargetUser,
-	corev1.ReportTargetType_REPORT_TARGET_TYPE_TAYFA:         report.TargetTayfa,
-	corev1.ReportTargetType_REPORT_TARGET_TYPE_ANNOUNCEMENT:  report.TargetAnnouncement,
-	corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT:         report.TargetEvent,
-	corev1.ReportTargetType_REPORT_TARGET_TYPE_QUESTION:      report.TargetQuestion,
-	corev1.ReportTargetType_REPORT_TARGET_TYPE_ANSWER:        report.TargetAnswer,
-	corev1.ReportTargetType_REPORT_TARGET_TYPE_POLL:          report.TargetPoll,
-	corev1.ReportTargetType_REPORT_TARGET_TYPE_FISHING_CATCH: report.TargetFishingCatch,
-	corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT_PHOTO:   report.TargetEventPhoto,
-	corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE:    report.TargetDMMessage,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_USER:            report.TargetUser,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_TAYFA:           report.TargetTayfa,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_ANNOUNCEMENT:    report.TargetAnnouncement,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT:           report.TargetEvent,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_QUESTION:        report.TargetQuestion,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_ANSWER:          report.TargetAnswer,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_POLL:            report.TargetPoll,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_FISHING_CATCH:   report.TargetFishingCatch,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT_PHOTO:     report.TargetEventPhoto,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE:      report.TargetDMMessage,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_CHANNEL_MESSAGE: report.TargetChannelMessage,
 }
 
 var reportReasons = map[corev1.ReportReason]report.Reason{
@@ -250,5 +255,6 @@ func modReportPB(v report.ModView) *corev1.ModerationReport {
 		Description: v.Description, Status: reportStatusPB(v.Status),
 		Resolution: toProto(reportResolutions, v.Resolution), HandledByUserId: optionalID(v.HandledBy),
 		CreateTime: timestamppb.New(v.CreatedAt), ResolveTime: optionalTime(v.ResolvedAt),
+		ChannelId: optionalID(v.ChannelID),
 	}
 }

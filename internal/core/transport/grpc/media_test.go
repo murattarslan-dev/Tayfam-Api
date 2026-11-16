@@ -21,6 +21,18 @@ type fakeMedia struct {
 	ids  []id.ID
 	w, h int
 	err  error
+	// AttachChannelPhoto / AttachDirectMessageAttachment arguments.
+	attached [3]id.ID
+}
+
+func (f *fakeMedia) AttachChannelPhoto(_ context.Context, u, up, tayfa, msg id.ID) error {
+	f.user, f.attached = u, [3]id.ID{up, tayfa, msg}
+	return f.err
+}
+
+func (f *fakeMedia) AttachDirectMessageAttachment(_ context.Context, u, up, msg id.ID) error {
+	f.user, f.attached = u, [3]id.ID{up, {}, msg}
+	return f.err
 }
 
 func (f *fakeMedia) CreateUpload(_ context.Context, u id.ID, in media.CreateInput) (media.Created, error) {

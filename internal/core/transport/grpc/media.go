@@ -21,6 +21,8 @@ type Media interface {
 	GetUpload(ctx context.Context, user, upload id.ID) (media.Upload, error)
 	MediaURLs(ctx context.Context, viewer id.ID, ids []id.ID) ([]media.URLs, error)
 	AttachAvatar(ctx context.Context, user, upload id.ID) error
+	AttachChannelPhoto(ctx context.Context, user, upload, tayfa, message id.ID) error
+	AttachDirectMessageAttachment(ctx context.Context, user, upload, message id.ID) error
 	ReserveExport(ctx context.Context, user, request id.ID) (id.ID, error)
 	ExportUploadURL(ctx context.Context, user, upload id.ID, size int64) (objstore.Presigned, error)
 	CompleteExport(ctx context.Context, user, upload id.ID) (time.Time, error)
@@ -46,6 +48,10 @@ var uploadPurposes = map[corev1.UploadPurpose]string{
 	corev1.UploadPurpose_UPLOAD_PURPOSE_CATCH_PHOTO: media.PurposeCatchPhoto,
 	corev1.UploadPurpose_UPLOAD_PURPOSE_EVENT_PHOTO: media.PurposeEventPhoto,
 	corev1.UploadPurpose_UPLOAD_PURPOSE_COVER:       media.PurposeCover,
+	// Issue #205 (ADR-0031).
+	corev1.UploadPurpose_UPLOAD_PURPOSE_CHAT_PHOTO:      media.PurposeChatPhoto,
+	corev1.UploadPurpose_UPLOAD_PURPOSE_DM_ATTACHMENT:   media.PurposeDMAttachment,
+	corev1.UploadPurpose_UPLOAD_PURPOSE_REPORT_EVIDENCE: media.PurposeReportEvidence,
 }
 
 var uploadStatuses = map[string]corev1.UploadStatus{
@@ -67,11 +73,15 @@ var rejectReasons = map[string]corev1.UploadRejectReason{
 var variantKinds = map[corev1.VariantKind]string{
 	corev1.VariantKind_VARIANT_KIND_PREVIEW: media.KindPreview,
 	corev1.VariantKind_VARIANT_KIND_FULL:    media.KindFull,
+	corev1.VariantKind_VARIANT_KIND_BLOB:    media.KindBlob,
 }
 
 func kindToProto(k string) corev1.VariantKind {
-	if k == media.KindPreview {
+	switch k {
+	case media.KindPreview:
 		return corev1.VariantKind_VARIANT_KIND_PREVIEW
+	case media.KindBlob:
+		return corev1.VariantKind_VARIANT_KIND_BLOB
 	}
 	return corev1.VariantKind_VARIANT_KIND_FULL
 }
@@ -234,6 +244,44 @@ func (s *MediaServer) AttachAvatar(ctx context.Context, req *corev1.AttachAvatar
 		return nil, errorStatus(ctx, s.log, err)
 	}
 	return &corev1.AttachAvatarResponse{}, nil
+}
+
+// AttachChannelPhoto implements corev1.MediaServiceServer (issue #205).
+// chat calls it with the sender's own token.
+func (s *MediaServer) AttachChannelPhoto(ctx context.Context, req *corev1.AttachChannelPhotoRequest) (*corev1.AttachChannelPhotoResponse, error) {
+	u, up, err := uploadArg(ctx, req.GetUploadId())
+	if err != nil {
+		return nil, err
+	}
+	tayfa, ok := id.Parse(req.GetTayfaId())
+	if !ok {
+		return nil, validation("tayfa_id")
+	}
+	msg, ok := id.Parse(req.GetMessageId())
+	if !ok {
+		return nil, validation("message_id")
+	}
+	if err := s.app.AttachChannelPhoto(ctx, u, up, tayfa, msg); err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.AttachChannelPhotoResponse{}, nil
+}
+
+// AttachDirectMessageAttachment implements corev1.MediaServiceServer
+// (issue #205). chat calls it with the sender's own token.
+func (s *MediaServer) AttachDirectMessageAttachment(ctx context.Context, req *corev1.AttachDirectMessageAttachmentRequest) (*corev1.AttachDirectMessageAttachmentResponse, error) {
+	u, up, err := uploadArg(ctx, req.GetUploadId())
+	if err != nil {
+		return nil, err
+	}
+	msg, ok := id.Parse(req.GetMessageId())
+	if !ok {
+		return nil, validation("message_id")
+	}
+	if err := s.app.AttachDirectMessageAttachment(ctx, u, up, msg); err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.AttachDirectMessageAttachmentResponse{}, nil
 }
 
 // ReserveExportUpload implements corev1.MediaServiceServer (issue #144).

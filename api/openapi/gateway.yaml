@@ -2669,8 +2669,8 @@ paths:
         doğru gider. `after_message_id` (elinizdeki son mesaj) verilirse
         ondan yeni mesajlar en eski önce gelir ve `next_page_token` yeniye
         doğru gider: yeniden bağlanınca eksikler böyle tamamlanır (ADR-0005).
-        Silinen mesaj yerinde `deleted: true` ve metinsiz durur ("Bu mesaj
-        silindi").
+        Silinen mesaj yerinde `deleted: true` ve metinsiz, fotoğrafsız,
+        yersiz durur ("Bu mesaj silindi").
       parameters:
         - $ref: "#/components/parameters/PageSize"
         - $ref: "#/components/parameters/PageToken"
@@ -2692,8 +2692,21 @@ paths:
       operationId: sendChannelMessage
       summary: Kanala mesaj yazar
       description: |
-        Metin 1–4000 karakter, yalnız boşluk olamaz; sekme ve satır sonu
-        dışında kontrol karakteri içeremez. Aynı `client_request_id` ile
+        Mesajın türü `kind` (#205, ADR-0031): `text` (varsayılan), `photo`
+        ya da `place`; başka türün alanı gönderilirse `invalid-request`.
+        - `text`: `body` 1–4000 karakter, yalnız boşluk olamaz; sekme ve
+          satır sonu dışında kontrol karakteri içeremez.
+        - `photo`: `photo_upload_id`, bu tayfa için açılmış, hazır (`ready`)
+          ve başka mesajda kullanılmamış kendi `chat_photo` yüklemeniz
+          (`POST /v1/uploads`). Alt yazı yoktur. Bilinmeyen, başkasının ya
+          da başka amaçlı/tayfalı yükleme `upload-not-found` (404), hazır
+          değilse `upload-not-ready`, başka mesajdaysa `upload-in-use`
+          (409). Fotoğrafın linkini yalnızca kanalın kitlesi alır
+          (`POST /v1/media/urls`).
+        - `place`: haritadan seçtiğiniz yer `{latitude, longitude, name?}`
+          (enlem −90..90, boylam −180..180, ad 1–120 karakter). Paylaştığınız
+          içeriktir, cihaz konumu değildir (ADR-0008); metin gibi sunucu
+          anahtarıyla şifreli saklanır ve log'a yazılmaz. Aynı `client_request_id` ile
         tekrar gönderim ilk mesajı döndürür, yeni mesaj yazmaz (yavaş moda da
         takılmaz); başka kanalda kullanılmış değer `invalid-request`.
         Susturulmuşsanız `muted`, kanal arşivliyse `channel-archived`. Yavaş
@@ -2939,6 +2952,16 @@ paths:
         `GET /v1/me/e2e/envelopes` ve WebSocket `dm.envelope` ile gider.
         Gönderim yalnızca REST'tedir (WebSocket çerçevesi 64 KB).
         Gövde en fazla 1,5 MiB.
+
+        **Fotoğraf ve yer (#205, ADR-0031):** mesajın türü zarfın
+        içindedir; sunucu bilmez. Fotoğrafı istemci rastgele bir anahtarla
+        AES-256-GCM ile şifreler ve `dm_attachment` yüklemesi olarak (tek
+        `blob`) yükler; anahtar ve özet (SHA-256) zarfın içinde gider,
+        sunucuya hiç gelmez. `attachment_upload_id` hazır, kendi ve başka
+        mesajda kullanılmamış yüklemeniz olmalıdır (mesaj başına en çok
+        bir): `upload-not-found` (404), `upload-not-ready`,
+        `upload-in-use` (409). Eki yalnızca konuşmanın iki tarafı indirir
+        (`POST /v1/media/urls`). Yer tamamen zarfın içindedir.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -2955,6 +2978,7 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
@@ -4014,6 +4038,15 @@ paths:
     get:
       operationId: listFriends
       summary: Arkadaşlarınız (yalnızca size görünür)
+      description: |
+        Sıra: arkadaşlık puanına göre (ortak doğrulanmış katılım; ADR-0030
+        §12), eşitlikte ve puanı olmayanlarda kullanıcı kimliğine göre. Puan
+        hiçbir alanda ve `next_page_token`'da dönmez. Sizin ya da arkadaşın
+        profillemesi kapalıysa o arkadaşın puanı sıraya girmez; sizin
+        profillemeniz kapalıysa liste yalnızca kimliğe göredir. Sıra günlük
+        değişebildiği için sayfalar arasında bir kişi iki kez görünebilir;
+        istemci `user_id`'ye göre tekilleştirir. Tayfa davetinde kişi seçimi
+        bu listeyle yapılır.
       parameters:
         - $ref: "#/components/parameters/PageSize"
         - $ref: "#/components/parameters/PageToken"
@@ -4535,7 +4568,18 @@ paths:
         ikisi aynı şikâyettir.
         Birebir mesaj (`dm_message`) şikâyeti bir tayfaya ait olmadığı için
         bu uçta değil, `POST /v1/me/reports` ile yapılır (burada
-        `invalid-request`). Kanal mesajları henüz şikâyet edilemez.
+        `invalid-request`).
+
+        **Kanal mesajı** (`channel_message`, #205, ADR-0031): `target_id`
+        mesajın kimliğidir; metin, fotoğraf ve yer mesajları şikâyet
+        edilebilir. Mesajın kanalını okuyabiliyor olmalısınız (kanalın
+        kitlesi dahil: yönetim, etkinlik ve seçili kişi kanallarında
+        kitlede değilseniz) ve mesaj silinmemiş olmalıdır; aksi
+        `report-target-not-found`. Kendi mesajınız `invalid-request`.
+        Mesaj şikâyet anındaki haliyle yalnızca platform için saklanır
+        (yazar sonradan silse de). Şikâyet tayfanın kuyruğuna düşer;
+        `content_removed` mesajın silinmiş ya da moderasyonla gizlenmiş
+        olmasını ister. Sohbet servisine ulaşılamazsa `503`.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -4604,7 +4648,9 @@ paths:
         içeriğin ya da üyeliğin kendi uçlarıyla önceden yapılmış işleme
         bağlanır:
         - `content_removed`: içerik artık görünmüyor (silinmiş; etkinlikte
-          iptal de sayılır). Üye ve tayfa şikâyetinde kullanılamaz.
+          iptal de sayılır; kanal mesajında silinmiş ya da moderasyonla
+          gizlenmiş). Üye ve tayfa şikâyetinde kullanılamaz. Kanal mesajında
+          sohbet servisine ulaşılamazsa `503`.
         - `member_sanctioned`: şikâyet edilen kişi şu anda susturulmuş ya da
           banlı.
         - `dismissed`: işlem yok.
@@ -4643,18 +4689,27 @@ paths:
   # istemciden URL ya da depolama anahtarı kabul etmez; kimlik yalnızca
   # `upload_id`'dir. R2 yapılandırılmamışsa bu uçlar 503 `unavailable` döner.
   # İmzalı linkler taşıyıcı sırlardır: log'a yazılmaz, paylaşılmaz.
+  #
+  # Sohbet (#205, ADR-0031): `chat_photo` kanal mesajındaki fotoğraftır
+  # (görüntü hattı, tayfalı); `report_evidence` birebir mesaj şikâyetinin
+  # kanıt fotoğrafıdır (görüntü hattı, tayfasız, yalnızca platform görür);
+  # `dm_attachment` istemcinin şifrelediği tek bir `blob`'dur
+  # (`application/octet-stream`, 1 B – 10 MiB): sunucu yalnızca boyutunu
+  # denetler, içeriğini hiç okumaz.
 
   /v1/uploads:
     post:
       operationId: createUpload
       summary: Dosya yüklemesi açar ve her varyant için imzalı PUT linki döner
       description: |
-        `variants`'ta tam bir `preview` ve bir `full`. Her link 5 dakika
+        `variants`'ta tam bir `preview` ve bir `full`; `dm_attachment`'ta
+        yalnızca bir `blob` (`application/octet-stream`). Her link 5 dakika
         geçerlidir ve yalnızca o varyantın nesnesi, türü ve boyutu içindir:
         `headers`'taki `Content-Type` ve `Content-Length` aynen
         gönderilmelidir; başka tür ya da boyutla R2 isteği reddeder. Anahtarı
-        sunucu belirler. Kapak, av ve albüm fotoğrafında `tayfa_id` zorunludur
-        (aktif üye olunmalı, tayfa salt okunur olmamalı); avatarda verilmez.
+        sunucu belirler. Kapak, av fotoğrafı, albüm fotoğrafı ve `chat_photo`'da
+        `tayfa_id` zorunludur (aktif üye olunmalı, tayfa salt okunur
+        olmamalı); avatar, `dm_attachment` ve `report_evidence`'ta verilmez.
         Aynı `client_request_id` ile tekrar, kayıt `pending` iken aynı
         yüklemeyi yeni linklerle döner. Sınırlar: kullanıcı başına saatte 30
         yükleme (`upload-rate-limited`) ve 500 MiB toplam
@@ -4715,6 +4770,10 @@ paths:
         PUT'u bitirip link geçerliyken tekrar çağırın. Depoya ulaşılamazsa
         503 ve yükleme `pending` kalır. Yükleme `pending` değilse tekrar
         çağrı onu değiştirmeden döner.
+
+        `dm_attachment`'ta gövde `{width: 0, height: 0}`'dır: yalnızca
+        saklanan boyut denetlenir (`size_mismatch`), içerik okunmaz ve
+        kopyalanır.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -4746,7 +4805,12 @@ paths:
         dosyanız her zaman; avatar oturum açmış herkese (iki taraftan biri
         engellediyse ya da hesap silindiyse kimseye); tayfa kapağı aktif
         üyelere; etkinlik kapağı, av fotoğrafı ve albüm fotoğrafı etkinliği
-        görebilen aktif üyelere. 1–100 farklı kimlik; sıra korunur.
+        görebilen aktif üyelere; kanal fotoğrafı (`chat_photo`) mesajın
+        kanalının kitlesine (mesaj silinmemişken; chat'e sorulur); birebir
+        mesaj eki (`dm_attachment`) konuşmanın iki tarafına (mesaj
+        silinmemişken); şikâyet kanıtı (`report_evidence`) yalnızca sahibine.
+        Ekin linki `full_url`'dir (`application/octet-stream`); önizlemesi ve
+        ölçüsü yoktur. 1–100 farklı kimlik; sıra korunur.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -5050,8 +5114,10 @@ paths:
           (`too_many_subscriptions`).
         - `unsubscribe` `{tayfa_id, channel_id}` → `unsubscribed`
           (`reason: requested`).
-        - `send` `{tayfa_id, channel_id, body, client_request_id}` → `sent`
-          (mesaj). REST'teki `POST …/messages` ile aynı fonksiyondan geçer:
+        - `send` `{tayfa_id, channel_id, kind?, body?, photo_upload_id?,
+          place?, client_request_id}` → `sent` (mesaj). Türler ve alanlar
+          REST'tekiyle aynıdır (#205); dosya hataları `upload_not_found`,
+          `upload_not_ready`, `upload_in_use`. REST'teki `POST …/messages` ile aynı fonksiyondan geçer:
           susturma (`muted`), yavaş mod (`slow_mode`,
           `data.retry_after_seconds`), arşiv (`channel_archived`), salt
           okunur tayfa (`tayfa_read_only`), yetki (`permission_denied`),
@@ -5073,7 +5139,8 @@ paths:
           `data.expires_at` bağlantının en geç kapanacağı an.
         - `message.created`, `message.restored`: abone olunan kanalda yeni
           ya da geri alınan mesaj `{id, tayfa_id, channel_id,
-          author_user_id, body, created_at}`; gönderenin kendi bağlantısına
+          author_user_id, kind, body, photo_upload_id?, place?,
+          created_at}`; gönderenin kendi bağlantısına
           da gelir (istemci `id` ile tekilleştirir).
         - `message.deleted`: `{tayfa_id, channel_id, message_id}`.
         - `unsubscribed`: sunucunun kestiği abonelik; `data.reason`:
@@ -7105,7 +7172,7 @@ components:
         slow_mode_seconds: { type: integer, minimum: 0, maximum: 3600 }
     ChannelMessage:
       type: object
-      required: [id, channel_id, deleted, created_at]
+      required: [id, channel_id, kind, deleted, created_at]
       properties:
         id: { type: string, format: uuid }
         channel_id: { type: string, format: uuid }
@@ -7113,9 +7180,19 @@ components:
           type: string
           format: uuid
           description: Yazarın hesabı silindiyse yoktur ("Silinmiş kullanıcı").
+        kind: { $ref: "#/components/schemas/ChannelMessageKind" }
         body:
           type: string
-          description: Silinmiş mesajda yoktur.
+          description: Yalnızca `text`; silinmiş mesajda yoktur.
+        photo_upload_id:
+          type: string
+          format: uuid
+          description: |
+            Yalnızca `photo`; silinmiş mesajda yoktur. Linkler
+            `POST /v1/media/urls` ile (yalnızca kanalın kitlesine).
+        place:
+          allOf: [{ $ref: "#/components/schemas/Place" }]
+          description: Yalnızca `place`; silinmiş mesajda yoktur.
         deleted: { type: boolean }
         restorable:
           type: boolean
@@ -7129,12 +7206,42 @@ components:
           type: array
           items: { $ref: "#/components/schemas/ChannelMessage" }
         next_page_token: { type: string }
-    ChannelMessageCreateRequest:
+    ChannelMessageKind:
+      type: string
+      enum: [text, photo, place, unknown]
+      description: "`unknown`: istemciden yeni bir sunucu değeri (#205)."
+    Place:
       type: object
-      required: [body, client_request_id]
+      description: |
+        Kullanıcının haritadan seçip paylaştığı yer (ADR-0008: içerik,
+        cihaz konumu değil). Log'a yazılmaz.
+      required: [latitude, longitude]
       additionalProperties: false
       properties:
-        body: { type: string, minLength: 1, maxLength: 4000 }
+        latitude: { type: number, format: double, minimum: -90, maximum: 90 }
+        longitude: { type: number, format: double, minimum: -180, maximum: 180 }
+        name: { type: string, minLength: 1, maxLength: 120 }
+    ChannelMessageCreateRequest:
+      type: object
+      required: [client_request_id]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: [text, photo, place]
+          description: Verilmezse `text`.
+        body:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          description: Yalnızca ve zorunlu olarak `text`.
+        photo_upload_id:
+          type: string
+          format: uuid
+          description: Yalnızca ve zorunlu olarak `photo`; kendi hazır `chat_photo` yüklemeniz.
+        place:
+          allOf: [{ $ref: "#/components/schemas/Place" }]
+          description: Yalnızca ve zorunlu olarak `place`.
         client_request_id:
           type: string
           format: uuid
@@ -7217,6 +7324,12 @@ components:
             Her mesaj uçtan uca şifrelidir; içerik yalnızca zarflarda ve
             arşivdedir (`server` değeri #151 ile kalktı).
         created_at: { type: string, format: date-time }
+        attachment_upload_id:
+          type: string
+          format: uuid
+          description: |
+            Şifreli ekin yüklemesi (#205); yoksa ya da mesaj silindiyse
+            yoktur. Ne olduğu ve anahtarı zarfın içindedir.
     DirectMessageList:
       type: object
       required: [messages]
@@ -7241,6 +7354,10 @@ components:
           type: string
           format: uuid
           description: İstemcinin ürettiği tekrar gönderim anahtarı.
+        attachment_upload_id:
+          type: string
+          format: uuid
+          description: İsteğe bağlı şifreli ek; kendi hazır `dm_attachment` yüklemeniz (#205).
     DirectMessageSent:
       type: object
       required: [message, conversation]
@@ -7309,11 +7426,13 @@ components:
         low: { type: boolean, description: Bir türden 10'dan az kaldı; yükleyin. }
     UploadPurpose:
       type: string
-      enum: [avatar, catch_photo, cover, event_photo]
+      enum: [avatar, catch_photo, cover, event_photo, chat_photo, dm_attachment, report_evidence]
       description: |
         `cover` tayfa ya da etkinlik kapağıdır. `event_photo` etkinlik
         albümünün fotoğrafıdır (`POST .../events/{event_id}/photos`); kapak
-        olarak kullanılamaz.
+        olarak kullanılamaz. `chat_photo` kanal mesajı fotoğrafı,
+        `dm_attachment` birebir mesajın şifreli eki (tek `blob`),
+        `report_evidence` birebir mesaj şikâyetinin kanıt fotoğrafıdır (#205).
     UploadStatus:
       type: string
       enum: [pending, ready, rejected, unknown]
@@ -7336,8 +7455,14 @@ components:
       required: [kind, content_type, size_bytes]
       additionalProperties: false
       properties:
-        kind: { type: string, enum: [preview, full] }
-        content_type: { type: string, enum: [image/jpeg, image/webp] }
+        kind:
+          type: string
+          enum: [preview, full, blob]
+          description: "`blob` yalnızca `dm_attachment`'ta."
+        content_type:
+          type: string
+          enum: [image/jpeg, image/webp, application/octet-stream]
+          description: "`application/octet-stream` yalnızca `blob`'da."
         size_bytes: { type: integer, format: int64, minimum: 1, maximum: 10485760, description: "Dosyanın tam boyutu." }
     UploadCreateRequest:
       type: object
@@ -7347,14 +7472,14 @@ components:
         purpose: { $ref: "#/components/schemas/UploadPurpose" }
         variants:
           type: array
-          minItems: 2
+          minItems: 1
           maxItems: 2
-          description: Tam bir `preview` ve bir `full`.
+          description: Tam bir `preview` ve bir `full`; `dm_attachment`'ta yalnızca bir `blob`.
           items: { $ref: "#/components/schemas/UploadVariant" }
         tayfa_id:
           type: string
           format: uuid
-          description: "`cover`, `catch_photo` ve `event_photo` için zorunlu; `avatar`'da verilmez."
+          description: "`cover`, `catch_photo`, `event_photo` ve `chat_photo` için zorunlu; `avatar`, `dm_attachment` ve `report_evidence`'ta verilmez."
         client_request_id:
           type: string
           format: uuid
@@ -7363,7 +7488,7 @@ components:
       type: object
       required: [kind, method, url, headers, expires_at]
       properties:
-        kind: { type: string, enum: [preview, full, unknown] }
+        kind: { type: string, enum: [preview, full, blob, unknown] }
         method: { type: string, enum: [PUT] }
         url: { type: string, format: uri, description: "R2'ye imzalı PUT linki. Taşıyıcı link; log'a yazılmaz." }
         headers:
@@ -7376,17 +7501,17 @@ components:
       required: [width, height]
       additionalProperties: false
       properties:
-        width: { type: integer, minimum: 1, maximum: 1600, description: "Full varyantın genişliği (piksel)." }
-        height: { type: integer, minimum: 1, maximum: 1600 }
+        width: { type: integer, minimum: 0, maximum: 1600, description: "Full varyantın genişliği (piksel); `dm_attachment`'ta 0." }
+        height: { type: integer, minimum: 0, maximum: 1600, description: "`dm_attachment`'ta 0." }
     MediaUrls:
       type: object
-      required: [upload_id, preview_url, preview_content_type, full_url, full_content_type, width, height, expires_at]
+      required: [upload_id, full_url, full_content_type, width, height, expires_at]
       properties:
         upload_id: { type: string, format: uuid }
-        preview_url: { type: string, format: uri, description: "Taşıyıcı link; log'a yazılmaz." }
+        preview_url: { type: string, format: uri, description: "Taşıyıcı link; log'a yazılmaz. `dm_attachment`'ta yoktur." }
         preview_content_type: { type: string, enum: [image/jpeg, image/webp] }
-        full_url: { type: string, format: uri }
-        full_content_type: { type: string, enum: [image/jpeg, image/webp] }
+        full_url: { type: string, format: uri, description: "`dm_attachment`'ta şifreli blob." }
+        full_content_type: { type: string, enum: [image/jpeg, image/webp, application/octet-stream] }
         width: { type: integer, description: "Full varyantın genişliği" }
         height: { type: integer }
         expires_at: { type: string, format: date-time, description: "Linklerin geçerliliği (1 saat)." }
@@ -8218,8 +8343,9 @@ components:
       type: string
       description: |
         `dm_message` (birebir mesaj) yalnızca `POST /v1/me/reports` ile;
-        diğerleri yalnızca tayfa ucuyla. Kanal mesajları bu listede değildir.
-      enum: [user, tayfa, announcement, event, question, answer, poll, fishing_catch, dm_message, event_photo]
+        diğerleri yalnızca tayfa ucuyla. `channel_message` kanal mesajıdır
+        (metin, fotoğraf ya da yer; #205).
+      enum: [user, tayfa, announcement, event, question, answer, poll, fishing_catch, dm_message, event_photo, channel_message]
 
     BanRequest:
       type: object
@@ -8258,10 +8384,19 @@ components:
           minLength: 1
           maxLength: 2000
           description: |
-            Yalnızca ve zorunlu olarak `dm_message` için (kullanıcı şikâyetinde
-            yoktur): şikâyet ettiğiniz
+            Yalnızca `dm_message` için (kullanıcı şikâyetinde yoktur;
+            `evidence_upload_id` yoksa zorunlu): şikâyet ettiğiniz
             mesajın kendi cihazınızdan paylaştığınız metni. Yalnızca platform
             okur; log'a ve olaylara yazılmaz, size geri dönmez.
+        evidence_upload_id:
+          type: string
+          format: uuid
+          description: |
+            Yalnızca `dm_message` için (#205): şikâyet ettiğiniz fotoğrafı
+            kendi cihazınızdan `report_evidence` yüklemesi olarak (metadata'sız
+            iki varyant) yükleyip burada verirsiniz. Hazır, kendi ve
+            kullanılmamış olmalıdır (`upload-not-found`, `upload-not-ready`,
+            `upload-in-use`). Yalnızca platform paneli görür.
 
     MyReport:
       type: object
@@ -8328,6 +8463,13 @@ components:
           description: Çözen moderatör; açıkken ya da hesap silindiyse yoktur.
         created_at: { type: string, format: date-time }
         resolved_at: { type: string, format: date-time }
+        channel_id:
+          type: string
+          format: uuid
+          description: |
+            Yalnızca `channel_message`: mesajın kanalı (mesajı açmak için).
+            Kanalı okuyamayan moderatör (içinde olmadığı etkinlik ya da seçili
+            kişi kanalı) mesajı açamaz ve gizleyemez.
 
     ModerationReportList:
       type: object

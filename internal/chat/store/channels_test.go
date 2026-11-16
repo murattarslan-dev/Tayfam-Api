@@ -53,7 +53,7 @@ var testMessageIDs = &messageIDs{}
 func newMessage(t *testing.T, q *Queries, ch, author id.ID) id.ID {
 	t.Helper()
 	m := testMessageIDs.next()
-	row, err := q.CreateMessage(context.Background(), CreateMessageParams{
+	row, err := q.CreateMessage(context.Background(), CreateMessageParams{Kind: "text",
 		ID: m.PG(), ChannelID: ch.PG(), AuthorID: author.PG(), BodyEncrypted: sealed(1), KeyVersion: int2(1), ClientRequestID: id.New().PG(),
 	})
 	if err != nil {
@@ -111,19 +111,48 @@ func TestMessageConstraints(t *testing.T) {
 		"channel_messages_key":         {BodyEncrypted: sealed(1)},
 		"channel_messages_key_version": {BodyEncrypted: sealed(1), KeyVersion: int2(0)},
 		"channel_messages_body_len":    {BodyEncrypted: []byte{1, 2, 3}, KeyVersion: int2(1)},
-		"channel_messages_live_body":   {},
+		"channel_messages_live_body":   {Kind: "text"},
+		// Issue #205: kinds, and a photo holds its upload and no body.
+		"channel_messages_kind":        {Kind: "video", BodyEncrypted: sealed(1), KeyVersion: int2(1)},
+		"channel_messages_photo":       {Kind: "photo", BodyEncrypted: sealed(1), KeyVersion: int2(1), PhotoUploadID: id.New().PG()},
+		"channel_messages_live_body ":  {Kind: "photo"},
+		"channel_messages_live_body  ": {Kind: "place"},
+		"channel_messages_photo ":      {Kind: "text", BodyEncrypted: sealed(1), KeyVersion: int2(1), PhotoUploadID: id.New().PG()},
+		"channel_messages_photo  ":     {Kind: "place", BodyEncrypted: sealed(1), KeyVersion: int2(1), PhotoUploadID: id.New().PG()},
 	} {
+		if p.Kind == "" {
+			p.Kind = "text"
+		}
+		name = strings.TrimSpace(name)
 		p.ID, p.ChannelID, p.AuthorID, p.ClientRequestID = id.New().PG(), ch.PG(), author.PG(), id.New().PG()
 		if _, err := q.CreateMessage(ctx, p); !violates(err, name) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
 	// A message cannot belong to a channel that does not exist.
-	_, err := q.CreateMessage(ctx, CreateMessageParams{
+	_, err := q.CreateMessage(ctx, CreateMessageParams{Kind: "text",
 		ID: id.New().PG(), ChannelID: id.New().PG(), AuthorID: author.PG(), BodyEncrypted: sealed(1), KeyVersion: int2(1), ClientRequestID: id.New().PG(),
 	})
 	if !violates(err, "channel_messages_channel_id_fkey") {
 		t.Errorf("olmayan kanal: %v", err)
+	}
+	// A photo message and a place message are stored; one upload is in one
+	// message only.
+	photo := id.New()
+	if _, err := q.CreateMessage(ctx, CreateMessageParams{
+		Kind: "photo", ID: id.New().PG(), ChannelID: ch.PG(), AuthorID: author.PG(), PhotoUploadID: photo.PG(), ClientRequestID: id.New().PG(),
+	}); err != nil {
+		t.Fatalf("fotoğraf mesajı: %v", err)
+	}
+	if _, err := q.CreateMessage(ctx, CreateMessageParams{
+		Kind: "photo", ID: id.New().PG(), ChannelID: ch.PG(), AuthorID: author.PG(), PhotoUploadID: photo.PG(), ClientRequestID: id.New().PG(),
+	}); !violates(err, "channel_messages_photo_upload_id_key") {
+		t.Errorf("aynı fotoğraf iki mesajda: %v", err)
+	}
+	if _, err := q.CreateMessage(ctx, CreateMessageParams{
+		Kind: "place", ID: id.New().PG(), ChannelID: ch.PG(), AuthorID: author.PG(), BodyEncrypted: sealed(1), KeyVersion: int2(1), ClientRequestID: id.New().PG(),
+	}); err != nil {
+		t.Fatalf("yer mesajı: %v", err)
 	}
 }
 
@@ -132,7 +161,7 @@ func TestCreateMessageIsIdempotent(t *testing.T) {
 	ctx := context.Background()
 	ch := newChannel(t, q, id.New(), "genel", "members")
 	author, req := id.New(), id.New()
-	p := CreateMessageParams{ID: id.New().PG(), ChannelID: ch.PG(), AuthorID: author.PG(), BodyEncrypted: sealed(1), KeyVersion: int2(1), ClientRequestID: req.PG()}
+	p := CreateMessageParams{Kind: "text", ID: id.New().PG(), ChannelID: ch.PG(), AuthorID: author.PG(), BodyEncrypted: sealed(1), KeyVersion: int2(1), ClientRequestID: req.PG()}
 	first, err := q.CreateMessage(ctx, p)
 	if err != nil {
 		t.Fatal(err)
@@ -146,7 +175,7 @@ func TestCreateMessageIsIdempotent(t *testing.T) {
 		t.Fatalf("GetMessageByRequest = %v, %v", got.ID, err)
 	}
 	// Another author may use the same client_request_id.
-	createMessageWith := CreateMessageParams{ID: id.New().PG(), ChannelID: ch.PG(), AuthorID: id.New().PG(), BodyEncrypted: sealed(1), KeyVersion: int2(1), ClientRequestID: req.PG()}
+	createMessageWith := CreateMessageParams{Kind: "text", ID: id.New().PG(), ChannelID: ch.PG(), AuthorID: id.New().PG(), BodyEncrypted: sealed(1), KeyVersion: int2(1), ClientRequestID: req.PG()}
 	if _, err := q.CreateMessage(ctx, createMessageWith); err != nil {
 		t.Fatal(err)
 	}
@@ -251,9 +280,9 @@ func TestDeleteRestoreAndPurge(t *testing.T) {
 		t.Fatal("başka kanaldan geri alındı")
 	}
 
-	n, err := q.PurgeDeletedMessages(ctx, PurgeDeletedMessagesParams{Before: at(now.Add(-30 * 24 * time.Hour)), N: 100})
-	if err != nil || n != 1 {
-		t.Fatalf("PurgeDeletedMessages = %d, %v", n, err)
+	gone, err := q.PurgeDeletedMessages(ctx, PurgeDeletedMessagesParams{Before: at(now.Add(-30 * 24 * time.Hour)), N: 100})
+	if err != nil || len(gone) != 1 || id.ID(gone[0].ID.Bytes) != hidden || gone[0].PhotoUploadID.Valid {
+		t.Fatalf("PurgeDeletedMessages = %v, %v", gone, err)
 	}
 	if _, err := q.GetMessage(ctx, GetMessageParams{ChannelID: ch.PG(), ID: hidden.PG()}); !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("30 günlük mesaj kaldı: %v", err)

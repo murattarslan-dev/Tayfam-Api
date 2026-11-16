@@ -128,13 +128,13 @@ WHERE c.id = @id AND (c.user_low_id = @user_id::uuid OR c.user_high_id = @user_i
 -- Mesajlar.
 
 -- name: GetDirectMessageByRequest :one
-SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at, attachment_upload_id
 FROM dm_messages
 WHERE sender_id = @sender_id AND client_request_id = @client_request_id;
 
 -- En yeni önce; before_id verilirse ondan eskiler.
 -- name: ListDirectMessagesBefore :many
-SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at, attachment_upload_id
 FROM dm_messages
 WHERE conversation_id = @conversation_id AND (sqlc.narg(before_id)::uuid IS NULL OR id < sqlc.narg(before_id)::uuid)
 ORDER BY id DESC
@@ -143,23 +143,33 @@ LIMIT @n;
 -- En eski önce, after_id'den yeniler: kaçırılan mesajları tamamlama
 -- (ADR-0005).
 -- name: ListDirectMessagesAfter :many
-SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at, attachment_upload_id
 FROM dm_messages
 WHERE conversation_id = @conversation_id AND id > @after_id
 ORDER BY id
 LIMIT @n;
 
 -- name: GetDirectMessage :one
-SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at
+SELECT id, conversation_id, sender_id, encryption, created_at, deleted_at, attachment_upload_id
 FROM dm_messages
 WHERE conversation_id = @conversation_id AND id = @id;
 
 -- Gönderenin kendi silmesi: mesaj silinmiş görünür, geri alınamaz.
 -- İçerik sunucuda hiç yoktur (yalnızca zarflarda ve arşivde, ADR-0018).
--- name: EraseDirectMessage :execrows
-UPDATE dm_messages
-SET deleted_at = @deleted_at
-WHERE conversation_id = @conversation_id AND id = @id AND sender_id = @sender_id AND deleted_at IS NULL;
+-- Ek varsa kimliği hemen boşalır ve eski değer döner: dosyayı core'a aynı
+-- transaction'da olayla bırakmak için (issue #205). Satır yoksa (başkasının,
+-- bilinmeyen ya da zaten silinmiş) sonuç boştur.
+-- name: EraseDirectMessage :one
+WITH old AS (
+  SELECT o.id, o.attachment_upload_id FROM dm_messages o
+  WHERE o.conversation_id = @conversation_id AND o.id = @id AND o.sender_id = @sender_id AND o.deleted_at IS NULL
+  FOR UPDATE
+)
+UPDATE dm_messages m
+SET deleted_at = @deleted_at, attachment_upload_id = NULL
+FROM old
+WHERE m.id = old.id
+RETURNING old.attachment_upload_id AS released_upload_id;
 
 -- Şikâyet doğrulaması (core'un sorusu, issue #95): kişinin taraf olduğu
 -- konuşmadaki mesajın konuşması ve göndereni. İçerik seçilmez. Silinmiş
@@ -170,6 +180,14 @@ SELECT m.conversation_id, m.sender_id
 FROM dm_messages m
 JOIN dm_conversations c ON c.id = m.conversation_id
 WHERE m.id = @id AND (c.user_low_id = @user_id OR c.user_high_id = @user_id);
+
+-- Görme kararı (MessageMediaService, issue #205): kişinin taraf olduğu
+-- konuşmadaki silinmemiş mesajın eki.
+-- name: GetDirectMessageAttachmentForParty :one
+SELECT m.attachment_upload_id
+FROM dm_messages m
+JOIN dm_conversations c ON c.id = m.conversation_id
+WHERE m.id = @id AND m.deleted_at IS NULL AND (c.user_low_id = @user_id OR c.user_high_id = @user_id);
 
 -- Okunma bilgisi.
 
@@ -253,3 +271,8 @@ WITH gone AS (
 )
 DELETE FROM notification_preferences
 WHERE scope_type = 'dm_conversation' AND scope_id IN (SELECT id FROM gone);
+
+-- Eki tutan birebir mesajlar (issue #205, ADR-0031); kanaldaki gibi.
+-- name: FindDirectMessageAttachmentHolders :many
+SELECT id, attachment_upload_id::uuid AS upload_id FROM dm_messages
+WHERE attachment_upload_id = ANY(@upload_ids::uuid[]);
