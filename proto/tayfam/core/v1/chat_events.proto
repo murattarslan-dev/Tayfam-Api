@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// ChatEventService receives chat's events from chat's outbox relay
+// (ADR-0002, ADR-0013, ADR-0031). It is a service-to-service API: no user
+// can call it.
+//
+// Authentication: only a Kubernetes service token (ADR-0013) with audience
+// core.tayfam.internal from the tayfam-chat ServiceAccount is accepted. A
+// user access token is refused (UNAUTHENTICATED); a service token from any
+// other ServiceAccount is PERMISSION_DENIED.
+//
+// Every method is idempotent: the relay delivers at least once. Errors:
+// ERROR_REASON_VALIDATION for a malformed request; any other error is
+// retried by the relay.
+service ChatEventService {
+  // ApplyChatEvent applies one chat event.
+  //
+  // media_released: a message no longer holds its photo or attachment (the
+  // author deleted it, or it was deleted for good). core deletes the upload
+  // if it is still attached to that message; otherwise nothing happens.
+  rpc ApplyChatEvent(ApplyChatEventRequest) returns (ApplyChatEventResponse);
+}
+
+message ApplyChatEventRequest {
+  // Outbox event ID in chat (UUIDv7).
+  string event_id = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+
+  oneof event {
+    ChatMediaReleased media_released = 10;
+  }
+}
+
+// ChatMediaReleased carries IDs only.
+message ChatMediaReleased {
+  string upload_id = 1;
+  // The channel or direct message the upload was attached to.
+  string message_id = 2;
+}
+
+message ApplyChatEventResponse {}

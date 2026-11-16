@@ -69,6 +69,11 @@ var (
 	// ErrEventEnded: the event's channel would be archived at once, or
 	// already was by the event's end.
 	ErrEventEnded = errors.New("etkinlik bitmiş")
+	// Photos and attachments (issue #205): core's answer about the upload
+	// a message names.
+	ErrUploadNotFound = errors.New("dosya bulunamadı")
+	ErrUploadNotReady = errors.New("dosya hazır değil")
+	ErrUploadInUse    = errors.New("dosya başka bir mesajda")
 	// ErrChannelsUnavailable: chat runs without a message key
 	// (CHAT_MESSAGE_KEYS); channels are off until the key is configured.
 	ErrChannelsUnavailable = errors.New("kanal mesajı anahtarı yok")

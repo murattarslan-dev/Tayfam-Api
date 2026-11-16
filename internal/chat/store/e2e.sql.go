@@ -232,27 +232,29 @@ func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Cre
 
 const createDirectMessageE2E = `-- name: CreateDirectMessageE2E :one
 
-INSERT INTO dm_messages (id, conversation_id, sender_id, sender_device_id, encryption, client_request_id)
-VALUES ($1, $2, $3, $4, 'e2e', $5)
+INSERT INTO dm_messages (id, conversation_id, sender_id, sender_device_id, encryption, attachment_upload_id, client_request_id)
+VALUES ($1, $2, $3, $4, 'e2e', $5, $6)
 ON CONFLICT (sender_id, client_request_id) DO NOTHING
-RETURNING id, conversation_id, sender_id, encryption, created_at, deleted_at
+RETURNING id, conversation_id, sender_id, encryption, created_at, deleted_at, attachment_upload_id
 `
 
 type CreateDirectMessageE2EParams struct {
-	ID              pgtype.UUID
-	ConversationID  pgtype.UUID
-	SenderID        pgtype.UUID
-	SenderDeviceID  pgtype.UUID
-	ClientRequestID pgtype.UUID
+	ID                 pgtype.UUID
+	ConversationID     pgtype.UUID
+	SenderID           pgtype.UUID
+	SenderDeviceID     pgtype.UUID
+	AttachmentUploadID pgtype.UUID
+	ClientRequestID    pgtype.UUID
 }
 
 type CreateDirectMessageE2ERow struct {
-	ID             pgtype.UUID
-	ConversationID pgtype.UUID
-	SenderID       pgtype.UUID
-	Encryption     string
-	CreatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
+	ID                 pgtype.UUID
+	ConversationID     pgtype.UUID
+	SenderID           pgtype.UUID
+	Encryption         string
+	CreatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	AttachmentUploadID pgtype.UUID
 }
 
 // Zarflar.
@@ -262,6 +264,7 @@ func (q *Queries) CreateDirectMessageE2E(ctx context.Context, arg CreateDirectMe
 		arg.ConversationID,
 		arg.SenderID,
 		arg.SenderDeviceID,
+		arg.AttachmentUploadID,
 		arg.ClientRequestID,
 	)
 	var i CreateDirectMessageE2ERow
@@ -272,6 +275,7 @@ func (q *Queries) CreateDirectMessageE2E(ctx context.Context, arg CreateDirectMe
 		&i.Encryption,
 		&i.CreatedAt,
 		&i.DeletedAt,
+		&i.AttachmentUploadID,
 	)
 	return i, err
 }

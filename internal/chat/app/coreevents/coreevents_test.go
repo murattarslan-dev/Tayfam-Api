@@ -251,6 +251,9 @@ func (f *fakeLive) MembershipChanged(tayfa, user id.ID) {
 }
 func (f *fakeLive) TayfaChanged(id.ID) { f.calls = append(f.calls, "tayfa") }
 func (f *fakeLive) TayfaPurged(id.ID)  { f.calls = append(f.calls, "purged") }
+func (f *fakeLive) MessageDeleted(_, _, m id.ID) {
+	f.calls = append(f.calls, "deleted "+m.String())
+}
 func (f *fakeLive) Notified(r notification.Request) {
 	f.calls = append(f.calls, "notified")
 	f.notice = append(f.notice, r)
@@ -366,5 +369,36 @@ func TestEventChannelEvents(t *testing.T) {
 		if err := svc.Apply(ctx, e); !errors.As(err, &v) {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+}
+
+// The platform removes a reported channel message (issue #205, ADR-0031):
+// chat hides it with the administrator as actor and tells connected
+// clients once; a second delivery and another tayfa's ID change nothing.
+func TestPlatformRemovesReportedMessage(t *testing.T) {
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
+	cache := &fakeCache{}
+	live := &fakeLive{cache: cache}
+	svc, err := New(Config{Pool: pool, Access: cache, Live: live})
+	must(t, err)
+	tf, ch, msg, author, admin := id.New(), id.New(), id.New(), id.New(), id.New()
+	_, err = pool.Exec(ctx, `INSERT INTO channels (id, tayfa_id, name, name_normalized) VALUES ($1, $2, 'genel', 'genel')`, ch.PG(), tf.PG())
+	must(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO channel_messages (id, channel_id, author_id, body_encrypted, key_version, client_request_id)
+		VALUES ($1, $2, $3, decode(repeat('ab', 40), 'hex'), 1, gen_random_uuid())`, msg.PG(), ch.PG(), author.PG())
+	must(t, err)
+
+	if err := svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, RemovedMessage: msg}); !errors.As(err, new(*apperr.ValidationError)) {
+		t.Fatalf("aktörsüz: %v", err)
+	}
+	must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: id.New(), RemovedMessage: msg, RemovedBy: admin}))
+	for range 2 {
+		must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, RemovedMessage: msg, RemovedBy: admin}))
+	}
+	if n := count(t, pool, `SELECT count(*) FROM channel_messages WHERE id = $1 AND deleted_by = $2 AND body_encrypted IS NOT NULL`, msg.PG(), admin.PG()); n != 1 {
+		t.Fatal("mesaj moderasyon gibi gizlenmedi")
+	}
+	if len(live.calls) != 1 || live.calls[0] != "deleted "+msg.String() {
+		t.Fatalf("canlı katman = %v", live.calls)
 	}
 }

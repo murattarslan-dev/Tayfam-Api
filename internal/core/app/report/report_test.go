@@ -318,7 +318,7 @@ func TestCreateAccess(t *testing.T) {
 		{"kendi duyurusu", CreateInput{TargetType: TargetAnnouncement, TargetID: a.String(), Reason: ReasonSpam}, c.mod, "target_id"},
 		{"başka tayfa hedefi", CreateInput{TargetType: TargetTayfa, TargetID: other.tayfa.String(), Reason: ReasonSpam}, c.member, "target_id"},
 		{"bozuk kimlik", CreateInput{TargetType: TargetUser, TargetID: "x", Reason: ReasonSpam}, c.member, "target_id"},
-		{"tür", CreateInput{TargetType: "channel_message", TargetID: a.String(), Reason: ReasonSpam}, c.member, "target_type"},
+		{"tür", CreateInput{TargetType: "channel", TargetID: a.String(), Reason: ReasonSpam}, c.member, "target_type"},
 		{"sebep", CreateInput{TargetType: TargetAnnouncement, TargetID: a.String(), Reason: "boring"}, c.member, "reason"},
 		{"uzun açıklama", CreateInput{TargetType: TargetAnnouncement, TargetID: a.String(), Reason: ReasonSpam, Description: strings.Repeat("ş", DescriptionMax+1)}, c.member, "description"},
 		{"kontrol karakteri", CreateInput{TargetType: TargetAnnouncement, TargetID: a.String(), Reason: ReasonSpam, Description: "a\x00b"}, c.member, "description"},

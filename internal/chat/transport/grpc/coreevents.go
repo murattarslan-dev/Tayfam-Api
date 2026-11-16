@@ -163,6 +163,12 @@ func coreEventFromProto(req *chatv1.ApplyCoreEventRequest) (coreevents.Event, er
 		e.Schedule = &coreevents.Schedule{Event: evID, End: ev.EventScheduleChanged.GetEndTime().AsTime()}
 	case *chatv1.ApplyCoreEventRequest_TayfaStatusChanged:
 		e.StatusChanged = true
+	case *chatv1.ApplyCoreEventRequest_ChannelMessageRemoved:
+		m, ok := id.Parse(ev.ChannelMessageRemoved.GetMessageId())
+		if !ok {
+			return e, validation("channel_message_removed.message_id")
+		}
+		e.RemovedMessage, e.RemovedBy = m, actor
 	default:
 		return e, validation("event")
 	}

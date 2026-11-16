@@ -62,6 +62,9 @@ const (
 	TypeRSVPPromoted   = "rsvp.promoted"
 	TypeEventUpdated   = "event.updated"
 	TypeEventCancelled = "event.cancelled"
+	// TypeChannelMessageRemoved: the platform removes a reported channel
+	// message (issue #205, ADR-0031); chat hides it.
+	TypeChannelMessageRemoved = "report.channel_message_removed"
 )
 
 // endedChanges are the membership.changed kinds after which the user is no
@@ -83,6 +86,7 @@ func Types() []string {
 		TypeTayfaDeletionRequested, TypeTayfaDeletionCancelled,
 		TypeTayfaSuspended, TypeTayfaUnsuspended,
 		TypeRSVPChanged, TypeRSVPPromoted, TypeEventUpdated, TypeEventCancelled,
+		TypeChannelMessageRemoved,
 	}
 }
 
@@ -244,6 +248,16 @@ func Request(e outbox.Event) (*chatv1.ApplyCoreEventRequest, error) {
 		}
 		req.Event = &chatv1.ApplyCoreEventRequest_MembershipChanged{MembershipChanged: &chatv1.MembershipChanged{
 			UserId: p.UserID, Ended: endedChanges[p.Change],
+		}}
+	case TypeChannelMessageRemoved:
+		if _, ok := id.Parse(p.TargetID); !ok {
+			return nil, errors.New("mesaj kaldırma olayında mesaj yok")
+		}
+		if e.Actor == (id.ID{}) {
+			return nil, errors.New("mesaj kaldırma olayında aktör yok")
+		}
+		req.Event = &chatv1.ApplyCoreEventRequest_ChannelMessageRemoved{ChannelMessageRemoved: &chatv1.ChannelMessageRemoved{
+			MessageId: p.TargetID,
 		}}
 	default:
 		if statusTypes[e.Type] {

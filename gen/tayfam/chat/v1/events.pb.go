@@ -459,6 +459,7 @@ type ApplyCoreEventRequest struct {
 	//	*ApplyCoreEventRequest_TayfaStatusChanged
 	//	*ApplyCoreEventRequest_EventAttendanceChanged
 	//	*ApplyCoreEventRequest_EventScheduleChanged
+	//	*ApplyCoreEventRequest_ChannelMessageRemoved
 	Event         isApplyCoreEventRequest_Event `protobuf_oneof:"event"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -583,6 +584,15 @@ func (x *ApplyCoreEventRequest) GetEventScheduleChanged() *EventScheduleChanged 
 	return nil
 }
 
+func (x *ApplyCoreEventRequest) GetChannelMessageRemoved() *ChannelMessageRemoved {
+	if x != nil {
+		if x, ok := x.Event.(*ApplyCoreEventRequest_ChannelMessageRemoved); ok {
+			return x.ChannelMessageRemoved
+		}
+	}
+	return nil
+}
+
 type isApplyCoreEventRequest_Event interface {
 	isApplyCoreEventRequest_Event()
 }
@@ -611,6 +621,10 @@ type ApplyCoreEventRequest_EventScheduleChanged struct {
 	EventScheduleChanged *EventScheduleChanged `protobuf:"bytes,15,opt,name=event_schedule_changed,json=eventScheduleChanged,proto3,oneof"`
 }
 
+type ApplyCoreEventRequest_ChannelMessageRemoved struct {
+	ChannelMessageRemoved *ChannelMessageRemoved `protobuf:"bytes,16,opt,name=channel_message_removed,json=channelMessageRemoved,proto3,oneof"`
+}
+
 func (*ApplyCoreEventRequest_NotificationRequested) isApplyCoreEventRequest_Event() {}
 
 func (*ApplyCoreEventRequest_TayfaPurged) isApplyCoreEventRequest_Event() {}
@@ -622,6 +636,57 @@ func (*ApplyCoreEventRequest_TayfaStatusChanged) isApplyCoreEventRequest_Event()
 func (*ApplyCoreEventRequest_EventAttendanceChanged) isApplyCoreEventRequest_Event() {}
 
 func (*ApplyCoreEventRequest_EventScheduleChanged) isApplyCoreEventRequest_Event() {}
+
+func (*ApplyCoreEventRequest_ChannelMessageRemoved) isApplyCoreEventRequest_Event() {}
+
+// ChannelMessageRemoved: the platform decided to remove a reported channel
+// message (report.channel_message_removed; issue #205, ADR-0031). chat
+// hides it as a moderator would (restorable by the tayfa's admins within
+// the restore window); the actor is the platform administrator. A message
+// already deleted or gone, or of another tayfa, changes nothing.
+type ChannelMessageRemoved struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MessageId     string                 `protobuf:"bytes,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChannelMessageRemoved) Reset() {
+	*x = ChannelMessageRemoved{}
+	mi := &file_tayfam_chat_v1_events_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChannelMessageRemoved) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChannelMessageRemoved) ProtoMessage() {}
+
+func (x *ChannelMessageRemoved) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_chat_v1_events_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChannelMessageRemoved.ProtoReflect.Descriptor instead.
+func (*ChannelMessageRemoved) Descriptor() ([]byte, []int) {
+	return file_tayfam_chat_v1_events_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ChannelMessageRemoved) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
 
 // NotificationRequested is one notification for many recipients. It
 // carries IDs and classification only, never content text: clients read
@@ -649,7 +714,7 @@ type NotificationRequested struct {
 
 func (x *NotificationRequested) Reset() {
 	*x = NotificationRequested{}
-	mi := &file_tayfam_chat_v1_events_proto_msgTypes[8]
+	mi := &file_tayfam_chat_v1_events_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -661,7 +726,7 @@ func (x *NotificationRequested) String() string {
 func (*NotificationRequested) ProtoMessage() {}
 
 func (x *NotificationRequested) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_chat_v1_events_proto_msgTypes[8]
+	mi := &file_tayfam_chat_v1_events_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -674,7 +739,7 @@ func (x *NotificationRequested) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NotificationRequested.ProtoReflect.Descriptor instead.
 func (*NotificationRequested) Descriptor() ([]byte, []int) {
-	return file_tayfam_chat_v1_events_proto_rawDescGZIP(), []int{8}
+	return file_tayfam_chat_v1_events_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *NotificationRequested) GetType() NotificationType {
@@ -735,7 +800,7 @@ type TayfaPurged struct {
 
 func (x *TayfaPurged) Reset() {
 	*x = TayfaPurged{}
-	mi := &file_tayfam_chat_v1_events_proto_msgTypes[9]
+	mi := &file_tayfam_chat_v1_events_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -747,7 +812,7 @@ func (x *TayfaPurged) String() string {
 func (*TayfaPurged) ProtoMessage() {}
 
 func (x *TayfaPurged) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_chat_v1_events_proto_msgTypes[9]
+	mi := &file_tayfam_chat_v1_events_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -760,7 +825,7 @@ func (x *TayfaPurged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TayfaPurged.ProtoReflect.Descriptor instead.
 func (*TayfaPurged) Descriptor() ([]byte, []int) {
-	return file_tayfam_chat_v1_events_proto_rawDescGZIP(), []int{9}
+	return file_tayfam_chat_v1_events_proto_rawDescGZIP(), []int{10}
 }
 
 // MembershipChanged: a member's role, mute or status changed in the tayfa
@@ -779,7 +844,7 @@ type MembershipChanged struct {
 
 func (x *MembershipChanged) Reset() {
 	*x = MembershipChanged{}
-	mi := &file_tayfam_chat_v1_events_proto_msgTypes[10]
+	mi := &file_tayfam_chat_v1_events_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -791,7 +856,7 @@ func (x *MembershipChanged) String() string {
 func (*MembershipChanged) ProtoMessage() {}
 
 func (x *MembershipChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_chat_v1_events_proto_msgTypes[10]
+	mi := &file_tayfam_chat_v1_events_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -804,7 +869,7 @@ func (x *MembershipChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MembershipChanged.ProtoReflect.Descriptor instead.
 func (*MembershipChanged) Descriptor() ([]byte, []int) {
-	return file_tayfam_chat_v1_events_proto_rawDescGZIP(), []int{10}
+	return file_tayfam_chat_v1_events_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *MembershipChanged) GetUserId() string {
@@ -831,7 +896,7 @@ type TayfaStatusChanged struct {
 
 func (x *TayfaStatusChanged) Reset() {
 	*x = TayfaStatusChanged{}
-	mi := &file_tayfam_chat_v1_events_proto_msgTypes[11]
+	mi := &file_tayfam_chat_v1_events_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -843,7 +908,7 @@ func (x *TayfaStatusChanged) String() string {
 func (*TayfaStatusChanged) ProtoMessage() {}
 
 func (x *TayfaStatusChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_chat_v1_events_proto_msgTypes[11]
+	mi := &file_tayfam_chat_v1_events_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -856,7 +921,7 @@ func (x *TayfaStatusChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TayfaStatusChanged.ProtoReflect.Descriptor instead.
 func (*TayfaStatusChanged) Descriptor() ([]byte, []int) {
-	return file_tayfam_chat_v1_events_proto_rawDescGZIP(), []int{11}
+	return file_tayfam_chat_v1_events_proto_rawDescGZIP(), []int{12}
 }
 
 // EventAttendanceChanged: a member's answer to an event changed (or they
@@ -873,7 +938,7 @@ type EventAttendanceChanged struct {
 
 func (x *EventAttendanceChanged) Reset() {
 	*x = EventAttendanceChanged{}
-	mi := &file_tayfam_chat_v1_events_proto_msgTypes[12]
+	mi := &file_tayfam_chat_v1_events_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -885,7 +950,7 @@ func (x *EventAttendanceChanged) String() string {
 func (*EventAttendanceChanged) ProtoMessage() {}
 
 func (x *EventAttendanceChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_chat_v1_events_proto_msgTypes[12]
+	mi := &file_tayfam_chat_v1_events_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -898,7 +963,7 @@ func (x *EventAttendanceChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventAttendanceChanged.ProtoReflect.Descriptor instead.
 func (*EventAttendanceChanged) Descriptor() ([]byte, []int) {
-	return file_tayfam_chat_v1_events_proto_rawDescGZIP(), []int{12}
+	return file_tayfam_chat_v1_events_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *EventAttendanceChanged) GetEventId() string {
@@ -930,7 +995,7 @@ type EventScheduleChanged struct {
 
 func (x *EventScheduleChanged) Reset() {
 	*x = EventScheduleChanged{}
-	mi := &file_tayfam_chat_v1_events_proto_msgTypes[13]
+	mi := &file_tayfam_chat_v1_events_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -942,7 +1007,7 @@ func (x *EventScheduleChanged) String() string {
 func (*EventScheduleChanged) ProtoMessage() {}
 
 func (x *EventScheduleChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_chat_v1_events_proto_msgTypes[13]
+	mi := &file_tayfam_chat_v1_events_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -955,7 +1020,7 @@ func (x *EventScheduleChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventScheduleChanged.ProtoReflect.Descriptor instead.
 func (*EventScheduleChanged) Descriptor() ([]byte, []int) {
-	return file_tayfam_chat_v1_events_proto_rawDescGZIP(), []int{13}
+	return file_tayfam_chat_v1_events_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *EventScheduleChanged) GetEventId() string {
@@ -987,7 +1052,7 @@ type ApplyCoreEventResponse struct {
 
 func (x *ApplyCoreEventResponse) Reset() {
 	*x = ApplyCoreEventResponse{}
-	mi := &file_tayfam_chat_v1_events_proto_msgTypes[14]
+	mi := &file_tayfam_chat_v1_events_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -999,7 +1064,7 @@ func (x *ApplyCoreEventResponse) String() string {
 func (*ApplyCoreEventResponse) ProtoMessage() {}
 
 func (x *ApplyCoreEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_chat_v1_events_proto_msgTypes[14]
+	mi := &file_tayfam_chat_v1_events_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1012,7 +1077,7 @@ func (x *ApplyCoreEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyCoreEventResponse.ProtoReflect.Descriptor instead.
 func (*ApplyCoreEventResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_chat_v1_events_proto_rawDescGZIP(), []int{14}
+	return file_tayfam_chat_v1_events_proto_rawDescGZIP(), []int{15}
 }
 
 var File_tayfam_chat_v1_events_proto protoreflect.FileDescriptor
@@ -1044,7 +1109,7 @@ const file_tayfam_chat_v1_events_proto_rawDesc = "" +
 	"\x0eUserSanctioned\"7\n" +
 	"\x0fDataExportReady\x12$\n" +
 	"\x0edata_export_id\x18\x01 \x01(\tR\fdataExportId\"\x18\n" +
-	"\x16ApplyUserEventResponse\"\xbe\x05\n" +
+	"\x16ApplyUserEventResponse\"\x9f\x06\n" +
 	"\x15ApplyCoreEventRequest\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x19\n" +
 	"\btayfa_id\x18\x02 \x01(\tR\atayfaId\x12\x19\n" +
@@ -1057,8 +1122,12 @@ const file_tayfam_chat_v1_events_proto_rawDesc = "" +
 	"\x12membership_changed\x18\f \x01(\v2!.tayfam.chat.v1.MembershipChangedH\x00R\x11membershipChanged\x12V\n" +
 	"\x14tayfa_status_changed\x18\r \x01(\v2\".tayfam.chat.v1.TayfaStatusChangedH\x00R\x12tayfaStatusChanged\x12b\n" +
 	"\x18event_attendance_changed\x18\x0e \x01(\v2&.tayfam.chat.v1.EventAttendanceChangedH\x00R\x16eventAttendanceChanged\x12\\\n" +
-	"\x16event_schedule_changed\x18\x0f \x01(\v2$.tayfam.chat.v1.EventScheduleChangedH\x00R\x14eventScheduleChangedB\a\n" +
-	"\x05event\"\xec\x02\n" +
+	"\x16event_schedule_changed\x18\x0f \x01(\v2$.tayfam.chat.v1.EventScheduleChangedH\x00R\x14eventScheduleChanged\x12_\n" +
+	"\x17channel_message_removed\x18\x10 \x01(\v2%.tayfam.chat.v1.ChannelMessageRemovedH\x00R\x15channelMessageRemovedB\a\n" +
+	"\x05event\"6\n" +
+	"\x15ChannelMessageRemoved\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x01 \x01(\tR\tmessageId\"\xec\x02\n" +
 	"\x15NotificationRequested\x124\n" +
 	"\x04type\x18\x01 \x01(\x0e2 .tayfam.chat.v1.NotificationTypeR\x04type\x12G\n" +
 	"\vtarget_type\x18\x02 \x01(\x0e2&.tayfam.chat.v1.NotificationTargetTypeR\n" +
@@ -1100,7 +1169,7 @@ func file_tayfam_chat_v1_events_proto_rawDescGZIP() []byte {
 	return file_tayfam_chat_v1_events_proto_rawDescData
 }
 
-var file_tayfam_chat_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_tayfam_chat_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_tayfam_chat_v1_events_proto_goTypes = []any{
 	(*ApplyUserEventRequest)(nil),  // 0: tayfam.chat.v1.ApplyUserEventRequest
 	(*UserProfileUpdated)(nil),     // 1: tayfam.chat.v1.UserProfileUpdated
@@ -1110,45 +1179,47 @@ var file_tayfam_chat_v1_events_proto_goTypes = []any{
 	(*DataExportReady)(nil),        // 5: tayfam.chat.v1.DataExportReady
 	(*ApplyUserEventResponse)(nil), // 6: tayfam.chat.v1.ApplyUserEventResponse
 	(*ApplyCoreEventRequest)(nil),  // 7: tayfam.chat.v1.ApplyCoreEventRequest
-	(*NotificationRequested)(nil),  // 8: tayfam.chat.v1.NotificationRequested
-	(*TayfaPurged)(nil),            // 9: tayfam.chat.v1.TayfaPurged
-	(*MembershipChanged)(nil),      // 10: tayfam.chat.v1.MembershipChanged
-	(*TayfaStatusChanged)(nil),     // 11: tayfam.chat.v1.TayfaStatusChanged
-	(*EventAttendanceChanged)(nil), // 12: tayfam.chat.v1.EventAttendanceChanged
-	(*EventScheduleChanged)(nil),   // 13: tayfam.chat.v1.EventScheduleChanged
-	(*ApplyCoreEventResponse)(nil), // 14: tayfam.chat.v1.ApplyCoreEventResponse
-	(*timestamppb.Timestamp)(nil),  // 15: google.protobuf.Timestamp
-	(NotificationType)(0),          // 16: tayfam.chat.v1.NotificationType
-	(NotificationTargetType)(0),    // 17: tayfam.chat.v1.NotificationTargetType
-	(TayfaWarningReason)(0),        // 18: tayfam.chat.v1.TayfaWarningReason
+	(*ChannelMessageRemoved)(nil),  // 8: tayfam.chat.v1.ChannelMessageRemoved
+	(*NotificationRequested)(nil),  // 9: tayfam.chat.v1.NotificationRequested
+	(*TayfaPurged)(nil),            // 10: tayfam.chat.v1.TayfaPurged
+	(*MembershipChanged)(nil),      // 11: tayfam.chat.v1.MembershipChanged
+	(*TayfaStatusChanged)(nil),     // 12: tayfam.chat.v1.TayfaStatusChanged
+	(*EventAttendanceChanged)(nil), // 13: tayfam.chat.v1.EventAttendanceChanged
+	(*EventScheduleChanged)(nil),   // 14: tayfam.chat.v1.EventScheduleChanged
+	(*ApplyCoreEventResponse)(nil), // 15: tayfam.chat.v1.ApplyCoreEventResponse
+	(*timestamppb.Timestamp)(nil),  // 16: google.protobuf.Timestamp
+	(NotificationType)(0),          // 17: tayfam.chat.v1.NotificationType
+	(NotificationTargetType)(0),    // 18: tayfam.chat.v1.NotificationTargetType
+	(TayfaWarningReason)(0),        // 19: tayfam.chat.v1.TayfaWarningReason
 }
 var file_tayfam_chat_v1_events_proto_depIdxs = []int32{
-	15, // 0: tayfam.chat.v1.ApplyUserEventRequest.occurred_at:type_name -> google.protobuf.Timestamp
+	16, // 0: tayfam.chat.v1.ApplyUserEventRequest.occurred_at:type_name -> google.protobuf.Timestamp
 	1,  // 1: tayfam.chat.v1.ApplyUserEventRequest.profile_updated:type_name -> tayfam.chat.v1.UserProfileUpdated
 	2,  // 2: tayfam.chat.v1.ApplyUserEventRequest.deleted:type_name -> tayfam.chat.v1.UserDeleted
 	3,  // 3: tayfam.chat.v1.ApplyUserEventRequest.session_revoked:type_name -> tayfam.chat.v1.SessionRevoked
 	4,  // 4: tayfam.chat.v1.ApplyUserEventRequest.sanctioned:type_name -> tayfam.chat.v1.UserSanctioned
 	5,  // 5: tayfam.chat.v1.ApplyUserEventRequest.data_export_ready:type_name -> tayfam.chat.v1.DataExportReady
-	15, // 6: tayfam.chat.v1.ApplyCoreEventRequest.occurred_at:type_name -> google.protobuf.Timestamp
-	8,  // 7: tayfam.chat.v1.ApplyCoreEventRequest.notification_requested:type_name -> tayfam.chat.v1.NotificationRequested
-	9,  // 8: tayfam.chat.v1.ApplyCoreEventRequest.tayfa_purged:type_name -> tayfam.chat.v1.TayfaPurged
-	10, // 9: tayfam.chat.v1.ApplyCoreEventRequest.membership_changed:type_name -> tayfam.chat.v1.MembershipChanged
-	11, // 10: tayfam.chat.v1.ApplyCoreEventRequest.tayfa_status_changed:type_name -> tayfam.chat.v1.TayfaStatusChanged
-	12, // 11: tayfam.chat.v1.ApplyCoreEventRequest.event_attendance_changed:type_name -> tayfam.chat.v1.EventAttendanceChanged
-	13, // 12: tayfam.chat.v1.ApplyCoreEventRequest.event_schedule_changed:type_name -> tayfam.chat.v1.EventScheduleChanged
-	16, // 13: tayfam.chat.v1.NotificationRequested.type:type_name -> tayfam.chat.v1.NotificationType
-	17, // 14: tayfam.chat.v1.NotificationRequested.target_type:type_name -> tayfam.chat.v1.NotificationTargetType
-	18, // 15: tayfam.chat.v1.NotificationRequested.warning_reason:type_name -> tayfam.chat.v1.TayfaWarningReason
-	15, // 16: tayfam.chat.v1.EventScheduleChanged.end_time:type_name -> google.protobuf.Timestamp
-	0,  // 17: tayfam.chat.v1.UserEventService.ApplyUserEvent:input_type -> tayfam.chat.v1.ApplyUserEventRequest
-	7,  // 18: tayfam.chat.v1.CoreEventService.ApplyCoreEvent:input_type -> tayfam.chat.v1.ApplyCoreEventRequest
-	6,  // 19: tayfam.chat.v1.UserEventService.ApplyUserEvent:output_type -> tayfam.chat.v1.ApplyUserEventResponse
-	14, // 20: tayfam.chat.v1.CoreEventService.ApplyCoreEvent:output_type -> tayfam.chat.v1.ApplyCoreEventResponse
-	19, // [19:21] is the sub-list for method output_type
-	17, // [17:19] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	16, // 6: tayfam.chat.v1.ApplyCoreEventRequest.occurred_at:type_name -> google.protobuf.Timestamp
+	9,  // 7: tayfam.chat.v1.ApplyCoreEventRequest.notification_requested:type_name -> tayfam.chat.v1.NotificationRequested
+	10, // 8: tayfam.chat.v1.ApplyCoreEventRequest.tayfa_purged:type_name -> tayfam.chat.v1.TayfaPurged
+	11, // 9: tayfam.chat.v1.ApplyCoreEventRequest.membership_changed:type_name -> tayfam.chat.v1.MembershipChanged
+	12, // 10: tayfam.chat.v1.ApplyCoreEventRequest.tayfa_status_changed:type_name -> tayfam.chat.v1.TayfaStatusChanged
+	13, // 11: tayfam.chat.v1.ApplyCoreEventRequest.event_attendance_changed:type_name -> tayfam.chat.v1.EventAttendanceChanged
+	14, // 12: tayfam.chat.v1.ApplyCoreEventRequest.event_schedule_changed:type_name -> tayfam.chat.v1.EventScheduleChanged
+	8,  // 13: tayfam.chat.v1.ApplyCoreEventRequest.channel_message_removed:type_name -> tayfam.chat.v1.ChannelMessageRemoved
+	17, // 14: tayfam.chat.v1.NotificationRequested.type:type_name -> tayfam.chat.v1.NotificationType
+	18, // 15: tayfam.chat.v1.NotificationRequested.target_type:type_name -> tayfam.chat.v1.NotificationTargetType
+	19, // 16: tayfam.chat.v1.NotificationRequested.warning_reason:type_name -> tayfam.chat.v1.TayfaWarningReason
+	16, // 17: tayfam.chat.v1.EventScheduleChanged.end_time:type_name -> google.protobuf.Timestamp
+	0,  // 18: tayfam.chat.v1.UserEventService.ApplyUserEvent:input_type -> tayfam.chat.v1.ApplyUserEventRequest
+	7,  // 19: tayfam.chat.v1.CoreEventService.ApplyCoreEvent:input_type -> tayfam.chat.v1.ApplyCoreEventRequest
+	6,  // 20: tayfam.chat.v1.UserEventService.ApplyUserEvent:output_type -> tayfam.chat.v1.ApplyUserEventResponse
+	15, // 21: tayfam.chat.v1.CoreEventService.ApplyCoreEvent:output_type -> tayfam.chat.v1.ApplyCoreEventResponse
+	20, // [20:22] is the sub-list for method output_type
+	18, // [18:20] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_chat_v1_events_proto_init() }
@@ -1171,6 +1242,7 @@ func file_tayfam_chat_v1_events_proto_init() {
 		(*ApplyCoreEventRequest_TayfaStatusChanged)(nil),
 		(*ApplyCoreEventRequest_EventAttendanceChanged)(nil),
 		(*ApplyCoreEventRequest_EventScheduleChanged)(nil),
+		(*ApplyCoreEventRequest_ChannelMessageRemoved)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1178,7 +1250,7 @@ func file_tayfam_chat_v1_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_chat_v1_events_proto_rawDesc), len(file_tayfam_chat_v1_events_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   15,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

@@ -411,6 +411,14 @@ type Report struct {
 	EvidenceText          pgtype.Text
 	PlatformDecision      pgtype.Text
 	PlatformHandledAt     pgtype.Timestamptz
+	EvidenceUploadID      pgtype.UUID
+	ChannelID             pgtype.UUID
+	MessageKind           pgtype.Text
+	MessageBody           pgtype.Text
+	MessagePhotoUploadID  pgtype.UUID
+	PlaceLatitude         pgtype.Float8
+	PlaceLongitude        pgtype.Float8
+	PlaceName             pgtype.Text
 }
 
 type SocialSetting struct {
@@ -486,28 +494,29 @@ type TayfaModule struct {
 }
 
 type Upload struct {
-	ID              pgtype.UUID
-	UserID          pgtype.UUID
-	TayfaID         pgtype.UUID
-	Purpose         string
-	Status          string
-	R2Key           string
-	PreviewType     pgtype.Text
-	PreviewBytes    pgtype.Int8
-	FullType        pgtype.Text
-	FullBytes       pgtype.Int8
-	Width           pgtype.Int4
-	Height          pgtype.Int4
-	RejectReason    pgtype.Text
-	AttachedType    pgtype.Text
-	AttachedID      pgtype.UUID
-	AttachedAt      pgtype.Timestamptz
-	ClientRequestID pgtype.UUID
-	CreatedAt       pgtype.Timestamptz
-	ReadyAt         pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	ExportBytes     pgtype.Int8
-	ExpiresAt       pgtype.Timestamptz
+	ID                pgtype.UUID
+	UserID            pgtype.UUID
+	TayfaID           pgtype.UUID
+	Purpose           string
+	Status            string
+	R2Key             string
+	PreviewType       pgtype.Text
+	PreviewBytes      pgtype.Int8
+	FullType          pgtype.Text
+	FullBytes         pgtype.Int8
+	Width             pgtype.Int4
+	Height            pgtype.Int4
+	RejectReason      pgtype.Text
+	AttachedType      pgtype.Text
+	AttachedID        pgtype.UUID
+	AttachedAt        pgtype.Timestamptz
+	ClientRequestID   pgtype.UUID
+	CreatedAt         pgtype.Timestamptz
+	ReadyAt           pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	ExportBytes       pgtype.Int8
+	ExpiresAt         pgtype.Timestamptz
+	AttachConfirmedAt pgtype.Timestamptz
 }
 
 type UserActivityRecord struct {

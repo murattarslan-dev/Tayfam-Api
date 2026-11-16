@@ -49,8 +49,9 @@ var (
 		"announcement": corev1.ReportTargetType_REPORT_TARGET_TYPE_ANNOUNCEMENT, "event": corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT,
 		"question": corev1.ReportTargetType_REPORT_TARGET_TYPE_QUESTION, "answer": corev1.ReportTargetType_REPORT_TARGET_TYPE_ANSWER,
 		"poll": corev1.ReportTargetType_REPORT_TARGET_TYPE_POLL, "fishing_catch": corev1.ReportTargetType_REPORT_TARGET_TYPE_FISHING_CATCH,
-		"event_photo": corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT_PHOTO,
-		"dm_message":  corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE,
+		"event_photo":     corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT_PHOTO,
+		"channel_message": corev1.ReportTargetType_REPORT_TARGET_TYPE_CHANNEL_MESSAGE,
+		"dm_message":      corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE,
 	})
 	reportReasons = newEnum(map[string]corev1.ReportReason{
 		"harassment":         corev1.ReportReason_REPORT_REASON_HARASSMENT,
@@ -130,6 +131,8 @@ type modReportJSON struct {
 	HandledByUserID string     `json:"handled_by_user_id,omitempty"`
 	CreatedAt       time.Time  `json:"created_at"`
 	ResolvedAt      *time.Time `json:"resolved_at,omitempty"`
+	// channel_message only (issue #205).
+	ChannelID string `json:"channel_id,omitempty"`
 }
 
 func modReportFrom(m *corev1.ModerationReport) modReportJSON {
@@ -139,6 +142,7 @@ func modReportFrom(m *corev1.ModerationReport) modReportJSON {
 		Priority: reportPriorities.name(m.GetPriority()), Status: reportStatuses.name(m.GetStatus()),
 		HandledByUserID: m.GetHandledByUserId(),
 		CreatedAt:       m.GetCreateTime().AsTime(), ResolvedAt: optTime(m.GetResolveTime()),
+		ChannelID: m.GetChannelId(),
 	}
 	if m.GetResolution() != corev1.ReportResolution_REPORT_RESOLUTION_UNSPECIFIED {
 		out.Resolution = reportResolutions.name(m.GetResolution())
@@ -162,6 +166,8 @@ type reportCreateBody struct {
 	Reason       string `json:"reason"`
 	Description  string `json:"description"`
 	EvidenceText string `json:"evidence_text"`
+	// dm_message only (issue #205): the reporter's evidence photo.
+	EvidenceUploadID string `json:"evidence_upload_id"`
 }
 
 // createReport files a report about something in a tayfa.
@@ -194,14 +200,18 @@ func (h coreHandlers) fileReport(ctx context.Context, w http.ResponseWriter, r *
 	// (issue #187); a user may also be reported from a tayfa.
 	noTayfaOK := direct || tt == corev1.ReportTargetType_REPORT_TARGET_TYPE_USER
 	evidence := utf8.RuneCountInString(strings.TrimSpace(b.EvidenceText))
+	photo := b.EvidenceUploadID != ""
+	// A direct message report carries the text, the photo or both.
+	evidenceOK := (b.EvidenceText == "" && photo) || (evidence >= 1 && evidence <= reportEvidenceMax)
 	if !okT || !okR || !validUUID(b.TargetID) || utf8.RuneCountInString(strings.TrimSpace(b.Description)) > reportDescriptionMax ||
 		(tayfaID == "" && !noTayfaOK) || (direct && tayfaID != "") ||
-		(direct && (evidence < 1 || evidence > reportEvidenceMax)) || (!direct && b.EvidenceText != "") {
+		(direct && !evidenceOK) || (!direct && (b.EvidenceText != "" || photo)) || (photo && !validUUID(b.EvidenceUploadID)) {
 		badRequest(w, r)
 		return
 	}
 	resp, err := h.d.Reports.CreateReport(ctx, &corev1.CreateReportRequest{
 		TayfaId: tayfaID, TargetType: tt, TargetId: b.TargetID, Reason: reason, Description: b.Description, EvidenceText: b.EvidenceText,
+		EvidenceUploadId: b.EvidenceUploadID,
 	})
 	if err != nil {
 		h.fail(w, r, err)

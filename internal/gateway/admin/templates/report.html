@@ -27,6 +27,9 @@
   {{if .Title}}<dt>Başlık</dt><dd>{{.Title}}</dd>{{end}}
 </dl>
 {{if .Body}}<p class="item-body">{{.Body}}</p>{{end}}
+{{if .HasMessagePhoto}}<p><a href="/sikayetler/{{$.Data.Report.ReportId}}/mesaj-fotografi" target="_blank" rel="noopener noreferrer">Mesajın fotoğrafını aç</a> (her açılışta 5 dakikalık yeni link; mesaj silindiyse fotoğraf da yoktur)</p>{{end}}
+{{with .Place}}<dl class="meta"><dt>Paylaşılan yer</dt><dd>{{if .Name}}{{.Name}} — {{end}}{{printf "%.6f" .Latitude}}, {{printf "%.6f" .Longitude}}</dd></dl>{{end}}
+{{if .HasEvidencePhoto}}<p><a href="/sikayetler/{{$.Data.Report.ReportId}}/kanit-fotografi" target="_blank" rel="noopener noreferrer">Kanıt fotoğrafını aç</a> (her açılışta 5 dakikalık yeni link)</p>{{end}}
 {{if .Options}}<ul>{{range .Options}}<li>{{.}}</li>{{end}}</ul>{{end}}
 {{if .MediaUrl}}<p><a href="{{.MediaUrl}}" target="_blank" rel="noopener noreferrer">Fotoğrafı aç</a> <span class="hint">(bağlantı {{ts .MediaExpireTime}} tarihine kadar geçerli; her açılış denetim kaydında)</span></p>{{end}}
 </div>

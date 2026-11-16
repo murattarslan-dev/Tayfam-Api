@@ -19,21 +19,23 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AdminService_SearchTayfas_FullMethodName        = "/tayfam.core.v1.AdminService/SearchTayfas"
-	AdminService_GetTayfa_FullMethodName            = "/tayfam.core.v1.AdminService/GetTayfa"
-	AdminService_ListTayfaMembers_FullMethodName    = "/tayfam.core.v1.AdminService/ListTayfaMembers"
-	AdminService_ListUserTayfas_FullMethodName      = "/tayfam.core.v1.AdminService/ListUserTayfas"
-	AdminService_SuspendTayfa_FullMethodName        = "/tayfam.core.v1.AdminService/SuspendTayfa"
-	AdminService_UnsuspendTayfa_FullMethodName      = "/tayfam.core.v1.AdminService/UnsuspendTayfa"
-	AdminService_DeleteTayfa_FullMethodName         = "/tayfam.core.v1.AdminService/DeleteTayfa"
-	AdminService_SetMemberRole_FullMethodName       = "/tayfam.core.v1.AdminService/SetMemberRole"
-	AdminService_ListPlatformReports_FullMethodName = "/tayfam.core.v1.AdminService/ListPlatformReports"
-	AdminService_GetReportedItem_FullMethodName     = "/tayfam.core.v1.AdminService/GetReportedItem"
-	AdminService_DecideReport_FullMethodName        = "/tayfam.core.v1.AdminService/DecideReport"
-	AdminService_GetStats_FullMethodName            = "/tayfam.core.v1.AdminService/GetStats"
-	AdminService_ListDiscoverQueue_FullMethodName   = "/tayfam.core.v1.AdminService/ListDiscoverQueue"
-	AdminService_ApproveDiscover_FullMethodName     = "/tayfam.core.v1.AdminService/ApproveDiscover"
-	AdminService_RejectDiscover_FullMethodName      = "/tayfam.core.v1.AdminService/RejectDiscover"
+	AdminService_SearchTayfas_FullMethodName               = "/tayfam.core.v1.AdminService/SearchTayfas"
+	AdminService_GetTayfa_FullMethodName                   = "/tayfam.core.v1.AdminService/GetTayfa"
+	AdminService_ListTayfaMembers_FullMethodName           = "/tayfam.core.v1.AdminService/ListTayfaMembers"
+	AdminService_ListUserTayfas_FullMethodName             = "/tayfam.core.v1.AdminService/ListUserTayfas"
+	AdminService_SuspendTayfa_FullMethodName               = "/tayfam.core.v1.AdminService/SuspendTayfa"
+	AdminService_UnsuspendTayfa_FullMethodName             = "/tayfam.core.v1.AdminService/UnsuspendTayfa"
+	AdminService_DeleteTayfa_FullMethodName                = "/tayfam.core.v1.AdminService/DeleteTayfa"
+	AdminService_SetMemberRole_FullMethodName              = "/tayfam.core.v1.AdminService/SetMemberRole"
+	AdminService_ListPlatformReports_FullMethodName        = "/tayfam.core.v1.AdminService/ListPlatformReports"
+	AdminService_GetReportedItem_FullMethodName            = "/tayfam.core.v1.AdminService/GetReportedItem"
+	AdminService_GetReportEvidencePhotoUrl_FullMethodName  = "/tayfam.core.v1.AdminService/GetReportEvidencePhotoUrl"
+	AdminService_GetReportedMessagePhotoUrl_FullMethodName = "/tayfam.core.v1.AdminService/GetReportedMessagePhotoUrl"
+	AdminService_DecideReport_FullMethodName               = "/tayfam.core.v1.AdminService/DecideReport"
+	AdminService_GetStats_FullMethodName                   = "/tayfam.core.v1.AdminService/GetStats"
+	AdminService_ListDiscoverQueue_FullMethodName          = "/tayfam.core.v1.AdminService/ListDiscoverQueue"
+	AdminService_ApproveDiscover_FullMethodName            = "/tayfam.core.v1.AdminService/ApproveDiscover"
+	AdminService_RejectDiscover_FullMethodName             = "/tayfam.core.v1.AdminService/RejectDiscover"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -93,6 +95,21 @@ type AdminServiceClient interface {
 	// GetReportedItem returns the reported item only, and records the viewing
 	// in the platform audit log.
 	GetReportedItem(ctx context.Context, in *GetReportedItemRequest, opts ...grpc.CallOption) (*GetReportedItemResponse, error)
+	// GetReportEvidencePhotoUrl returns a GET link, valid for 5 minutes, to a
+	// direct message report's evidence photo (issue #205, ADR-0031), and
+	// records the opening in the platform audit log
+	// (report.view_evidence_photo). It is signed only when asked: a read of
+	// the report carries has_evidence_photo, never the link. A report
+	// without one, or without object storage, is ERROR_REASON_REPORT_NOT_FOUND.
+	GetReportEvidencePhotoUrl(ctx context.Context, in *GetReportEvidencePhotoUrlRequest, opts ...grpc.CallOption) (*GetReportEvidencePhotoUrlResponse, error)
+	// GetReportedMessagePhotoUrl returns a GET link, valid for 5 minutes, to
+	// the photo of a reported channel message (issue #205, ADR-0031), and
+	// records the opening in the platform audit log
+	// (report.view_message_photo). It is signed only when asked: a read of
+	// the report carries has_message_photo, never the link. The photo is
+	// there while the message holds it; a report without one, a photo
+	// already gone, or no object storage is ERROR_REASON_REPORT_NOT_FOUND.
+	GetReportedMessagePhotoUrl(ctx context.Context, in *GetReportedMessagePhotoUrlRequest, opts ...grpc.CallOption) (*GetReportedMessagePhotoUrlResponse, error)
 	// DecideReport records the platform's decision on an escalated report.
 	DecideReport(ctx context.Context, in *DecideReportRequest, opts ...grpc.CallOption) (*DecideReportResponse, error)
 	// GetStats returns the panel dashboard's tayfa counts and the last run of
@@ -225,6 +242,26 @@ func (c *adminServiceClient) GetReportedItem(ctx context.Context, in *GetReporte
 	return out, nil
 }
 
+func (c *adminServiceClient) GetReportEvidencePhotoUrl(ctx context.Context, in *GetReportEvidencePhotoUrlRequest, opts ...grpc.CallOption) (*GetReportEvidencePhotoUrlResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetReportEvidencePhotoUrlResponse)
+	err := c.cc.Invoke(ctx, AdminService_GetReportEvidencePhotoUrl_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) GetReportedMessagePhotoUrl(ctx context.Context, in *GetReportedMessagePhotoUrlRequest, opts ...grpc.CallOption) (*GetReportedMessagePhotoUrlResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetReportedMessagePhotoUrlResponse)
+	err := c.cc.Invoke(ctx, AdminService_GetReportedMessagePhotoUrl_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *adminServiceClient) DecideReport(ctx context.Context, in *DecideReportRequest, opts ...grpc.CallOption) (*DecideReportResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DecideReportResponse)
@@ -332,6 +369,21 @@ type AdminServiceServer interface {
 	// GetReportedItem returns the reported item only, and records the viewing
 	// in the platform audit log.
 	GetReportedItem(context.Context, *GetReportedItemRequest) (*GetReportedItemResponse, error)
+	// GetReportEvidencePhotoUrl returns a GET link, valid for 5 minutes, to a
+	// direct message report's evidence photo (issue #205, ADR-0031), and
+	// records the opening in the platform audit log
+	// (report.view_evidence_photo). It is signed only when asked: a read of
+	// the report carries has_evidence_photo, never the link. A report
+	// without one, or without object storage, is ERROR_REASON_REPORT_NOT_FOUND.
+	GetReportEvidencePhotoUrl(context.Context, *GetReportEvidencePhotoUrlRequest) (*GetReportEvidencePhotoUrlResponse, error)
+	// GetReportedMessagePhotoUrl returns a GET link, valid for 5 minutes, to
+	// the photo of a reported channel message (issue #205, ADR-0031), and
+	// records the opening in the platform audit log
+	// (report.view_message_photo). It is signed only when asked: a read of
+	// the report carries has_message_photo, never the link. The photo is
+	// there while the message holds it; a report without one, a photo
+	// already gone, or no object storage is ERROR_REASON_REPORT_NOT_FOUND.
+	GetReportedMessagePhotoUrl(context.Context, *GetReportedMessagePhotoUrlRequest) (*GetReportedMessagePhotoUrlResponse, error)
 	// DecideReport records the platform's decision on an escalated report.
 	DecideReport(context.Context, *DecideReportRequest) (*DecideReportResponse, error)
 	// GetStats returns the panel dashboard's tayfa counts and the last run of
@@ -393,6 +445,12 @@ func (UnimplementedAdminServiceServer) ListPlatformReports(context.Context, *Lis
 }
 func (UnimplementedAdminServiceServer) GetReportedItem(context.Context, *GetReportedItemRequest) (*GetReportedItemResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetReportedItem not implemented")
+}
+func (UnimplementedAdminServiceServer) GetReportEvidencePhotoUrl(context.Context, *GetReportEvidencePhotoUrlRequest) (*GetReportEvidencePhotoUrlResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetReportEvidencePhotoUrl not implemented")
+}
+func (UnimplementedAdminServiceServer) GetReportedMessagePhotoUrl(context.Context, *GetReportedMessagePhotoUrlRequest) (*GetReportedMessagePhotoUrlResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetReportedMessagePhotoUrl not implemented")
 }
 func (UnimplementedAdminServiceServer) DecideReport(context.Context, *DecideReportRequest) (*DecideReportResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DecideReport not implemented")
@@ -610,6 +668,42 @@ func _AdminService_GetReportedItem_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_GetReportEvidencePhotoUrl_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetReportEvidencePhotoUrlRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).GetReportEvidencePhotoUrl(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_GetReportEvidencePhotoUrl_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).GetReportEvidencePhotoUrl(ctx, req.(*GetReportEvidencePhotoUrlRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_GetReportedMessagePhotoUrl_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetReportedMessagePhotoUrlRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).GetReportedMessagePhotoUrl(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_GetReportedMessagePhotoUrl_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).GetReportedMessagePhotoUrl(ctx, req.(*GetReportedMessagePhotoUrlRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AdminService_DecideReport_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DecideReportRequest)
 	if err := dec(in); err != nil {
@@ -746,6 +840,14 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetReportedItem",
 			Handler:    _AdminService_GetReportedItem_Handler,
+		},
+		{
+			MethodName: "GetReportEvidencePhotoUrl",
+			Handler:    _AdminService_GetReportEvidencePhotoUrl_Handler,
+		},
+		{
+			MethodName: "GetReportedMessagePhotoUrl",
+			Handler:    _AdminService_GetReportedMessagePhotoUrl_Handler,
 		},
 		{
 			MethodName: "DecideReport",

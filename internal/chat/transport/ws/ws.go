@@ -427,6 +427,11 @@ type sendData struct {
 	ChannelID       string `json:"channel_id"`
 	Body            string `json:"body"`
 	ClientRequestID string `json:"client_request_id"`
+	// Issue #205: kind (text, photo, place; empty is text), the photo's
+	// upload and the place, as in REST.
+	Kind          string              `json:"kind"`
+	PhotoUploadID string              `json:"photo_upload_id"`
+	Place         *realtime.PlaceData `json:"place"`
 }
 
 // envelopeAckData acknowledges end-to-end envelopes of the connection's
@@ -512,7 +517,17 @@ func (c *conn) handle(ctx context.Context, f frame) {
 			c.invalid(f.ID, "client_request_id")
 			return
 		}
-		msg, err := c.cfg.Live.Send(ctx, c.m, tayfa, ch, channel.SendInput{Body: d.Body, ClientRequestID: req})
+		in := channel.SendInput{Kind: d.Kind, Body: d.Body, ClientRequestID: req}
+		if d.PhotoUploadID != "" {
+			if in.PhotoUploadID, ok = id.Parse(d.PhotoUploadID); !ok {
+				c.invalid(f.ID, "photo_upload_id")
+				return
+			}
+		}
+		if d.Place != nil {
+			in.Place = &channel.Place{Latitude: d.Place.Latitude, Longitude: d.Place.Longitude, Name: d.Place.Name}
+		}
+		msg, err := c.cfg.Live.Send(ctx, c.m, tayfa, ch, in)
 		if err != nil {
 			c.appError(ctx, f.ID, err)
 			return
@@ -577,6 +592,9 @@ func (c *conn) appError(ctx context.Context, frameID string, err error) {
 		{apperr.ErrMessageRequestLimit, "message_request_limit"},
 		{apperr.ErrRateLimited, "rate_limited"},
 		{apperr.ErrE2EDeviceNotRegistered, "e2e_device_not_registered"},
+		{apperr.ErrUploadNotFound, "upload_not_found"},
+		{apperr.ErrUploadNotReady, "upload_not_ready"},
+		{apperr.ErrUploadInUse, "upload_in_use"},
 		{context.DeadlineExceeded, "unavailable"},
 	} {
 		if errors.Is(err, e.err) {

@@ -100,7 +100,8 @@ message ApplyUserEventResponse {}
 // chat (an explicit list in core's relay): notification.requested,
 // tayfa.purged, membership.changed and the tayfa state changes
 // (tayfa.warned, tayfa.archived, tayfa.reactivated, tayfa.deleted,
-// tayfa.deletion_requested, tayfa.deletion_cancelled).
+// tayfa.deletion_requested, tayfa.deletion_cancelled), the event changes and
+// report.channel_message_removed.
 service CoreEventService {
   // ApplyCoreEvent applies one core event.
   //
@@ -134,7 +135,17 @@ message ApplyCoreEventRequest {
     TayfaStatusChanged tayfa_status_changed = 13;
     EventAttendanceChanged event_attendance_changed = 14;
     EventScheduleChanged event_schedule_changed = 15;
+    ChannelMessageRemoved channel_message_removed = 16;
   }
+}
+
+// ChannelMessageRemoved: the platform decided to remove a reported channel
+// message (report.channel_message_removed; issue #205, ADR-0031). chat
+// hides it as a moderator would (restorable by the tayfa's admins within
+// the restore window); the actor is the platform administrator. A message
+// already deleted or gone, or of another tayfa, changes nothing.
+message ChannelMessageRemoved {
+  string message_id = 1;
 }
 
 // NotificationRequested is one notification for many recipients. It

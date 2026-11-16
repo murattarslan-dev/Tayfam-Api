@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	chatdb "github.com/murattarslan-dev/tayfam-api/db/chat"
 	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
@@ -19,6 +21,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/channelcrypt"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/coreevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/coremembers"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/corerelay"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/dm"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/export"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/keys"
@@ -32,6 +35,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/grpcx"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/outbox"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/ratelimit"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/service"
 )
@@ -132,11 +136,16 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	policy := auth.ServicePolicy{Verifier: si.Verifier, Services: []string{grpcapi.UserEventServiceName, grpcapi.CoreEventServiceName}}
+	// MediaHolderService'i (sohbet bağlamalarının uzlaştırılması,
+	// ADR-0031) yalnızca core'un ServiceAccount'u çağırabilir.
+	policy := auth.ServicePolicy{Verifier: si.Verifier, Services: []string{grpcapi.UserEventServiceName, grpcapi.CoreEventServiceName, grpcapi.MediaHolderServiceName, grpcapi.ReportedMessageServiceName}}
 	if si.Verifier != nil {
 		policy.Callers = map[string][]auth.ServiceAccount{
-			chatv1.UserEventService_ApplyUserEvent_FullMethodName: {si.Account("tayfam-identity")},
-			chatv1.CoreEventService_ApplyCoreEvent_FullMethodName: {si.Account("tayfam-core")},
+			chatv1.UserEventService_ApplyUserEvent_FullMethodName:            {si.Account("tayfam-identity")},
+			chatv1.CoreEventService_ApplyCoreEvent_FullMethodName:            {si.Account("tayfam-core")},
+			chatv1.MediaHolderService_FindMessageMediaHolders_FullMethodName: {si.Account("tayfam-core")},
+			// Şikâyet edilen kanal mesajının durumu (issue #205, ADR-0031).
+			chatv1.ReportedMessageService_GetChannelMessageStatus_FullMethodName: {si.Account("tayfam-core")},
 		}
 	}
 	guard, err := auth.NewGuard(v).WithServices(policy)
@@ -168,9 +177,13 @@ func setup(rt *service.Runtime) error {
 	// Etkinlik ve seçili üye kanalları (issue #183, ADR-0024): kitle her
 	// istekte core'a kullanıcının kendi token'ıyla sorulur; katılımın
 	// kopyası tutulmaz.
+	// Sohbette fotoğraf (issue #205, ADR-0031): dosya core'dadır; mesaj
+	// yazılırken gönderenin kendi token'ıyla core'da mesaja bağlanır.
+	media := coremembers.NewMedia(corev1.NewMediaServiceClient(coreConn))
 	channels, err := channel.New(channel.Config{
 		Pool: pool, Log: rt.Log, Access: channelAccess, SendLimit: sendLimit, Cipher: cipher, Publisher: live,
 		Audience: coremembers.NewAudience(corev1.NewChannelAccessServiceClient(coreConn)),
+		Photos:   media,
 	})
 	if err != nil {
 		return err
@@ -183,7 +196,7 @@ func setup(rt *service.Runtime) error {
 	// üzerindendir; WebSocket zarfları teslim eder.
 	directMessages, err := dm.New(dm.Config{
 		Pool: pool, Log: rt.Log, Rules: coremembers.NewDirectMessageRules(corev1.NewDirectMessageServiceClient(coreConn)),
-		SendLimit: sendLimit, Publisher: live.Direct(),
+		SendLimit: sendLimit, Publisher: live.Direct(), Attachments: media,
 	})
 	if err != nil {
 		return err
@@ -261,6 +274,12 @@ func setup(rt *service.Runtime) error {
 	chatv1.RegisterDirectMessageServiceServer(srv, grpcapi.NewDirectMessageServer(directMessages, rt.Log))
 	chatv1.RegisterE2EServiceServer(srv, grpcapi.NewE2EServer(e2e, rt.Log))
 	chatv1.RegisterPushServiceServer(srv, grpcapi.NewPushServer(pushes, rt.Log))
+	// core, bir sohbet dosyasının linkini imzalamadan önce kullanıcının
+	// kendi token'ıyla sorar: kanal kitlesi ya da konuşmanın iki tarafı
+	// (issue #205, ADR-0031).
+	chatv1.RegisterMessageMediaServiceServer(srv, grpcapi.NewMessageMediaServer(channels, directMessages, rt.Log))
+	chatv1.RegisterMediaHolderServiceServer(srv, grpcapi.NewMediaHolderServer(channels, directMessages, rt.Log))
+	chatv1.RegisterReportedMessageServiceServer(srv, grpcapi.NewReportedMessageServer(channels, rt.Log))
 	// KVKK veri dışa aktarma (issue #144, ADR-0021): çağıranın kendi kanal
 	// mesajları (çözülmüş) ve tercihleri; identity kullanıcının token'ıyla
 	// çağırır. Anahtar yoksa UNAVAILABLE.
@@ -299,5 +318,36 @@ func setup(rt *service.Runtime) error {
 	// silinir.
 	rt.AddWorker("push-sender", pushes.Run)
 	rt.AddWorker("push-retention", pushes.RunRetention)
+	return addRelay(rt, pool)
+}
+
+// addRelay starts chat's outbox relay to core (issue #205, ADR-0031): only
+// chat.media_released (corerelay.Types) reaches core's ChatEventService,
+// with chat's service token for core (ADR-0013). Only a local environment
+// may run without the token; events then wait in the outbox.
+func addRelay(rt *service.Runtime, pool *pgxpool.Pool) error {
+	tok, ok := rt.ServiceToken("core")
+	if !ok {
+		if err := rt.Config.Err(); err != nil {
+			return err
+		}
+		rt.Log.Warn("core servis token'ı yok; outbox relay kapalı (yalnızca yerel ortam)")
+		return nil
+	}
+	addr := rt.Config.Required("CORE_GRPC_ADDR")
+	if err := rt.Config.Err(); err != nil {
+		return err
+	}
+	conn, err := grpcx.NewClient(addr, auth.ServiceTokenFrom(tok)...)
+	if err != nil {
+		return err
+	}
+	relay, err := outbox.NewRelay(outbox.RelayConfig{
+		Pool: pool, Log: rt.Log, Consumers: []outbox.Consumer{corerelay.Consumer(corev1.NewChatEventServiceClient(conn))},
+	})
+	if err != nil {
+		return err
+	}
+	rt.AddWorker("outbox", relay.Run)
 	return nil
 }

@@ -19,15 +19,17 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MediaService_CreateUpload_FullMethodName         = "/tayfam.core.v1.MediaService/CreateUpload"
-	MediaService_CompleteUpload_FullMethodName       = "/tayfam.core.v1.MediaService/CompleteUpload"
-	MediaService_GetUpload_FullMethodName            = "/tayfam.core.v1.MediaService/GetUpload"
-	MediaService_GetMediaUrls_FullMethodName         = "/tayfam.core.v1.MediaService/GetMediaUrls"
-	MediaService_AttachAvatar_FullMethodName         = "/tayfam.core.v1.MediaService/AttachAvatar"
-	MediaService_ReserveExportUpload_FullMethodName  = "/tayfam.core.v1.MediaService/ReserveExportUpload"
-	MediaService_GetExportUploadUrl_FullMethodName   = "/tayfam.core.v1.MediaService/GetExportUploadUrl"
-	MediaService_CompleteExportUpload_FullMethodName = "/tayfam.core.v1.MediaService/CompleteExportUpload"
-	MediaService_GetExportDownloadUrl_FullMethodName = "/tayfam.core.v1.MediaService/GetExportDownloadUrl"
+	MediaService_CreateUpload_FullMethodName                  = "/tayfam.core.v1.MediaService/CreateUpload"
+	MediaService_CompleteUpload_FullMethodName                = "/tayfam.core.v1.MediaService/CompleteUpload"
+	MediaService_GetUpload_FullMethodName                     = "/tayfam.core.v1.MediaService/GetUpload"
+	MediaService_GetMediaUrls_FullMethodName                  = "/tayfam.core.v1.MediaService/GetMediaUrls"
+	MediaService_AttachAvatar_FullMethodName                  = "/tayfam.core.v1.MediaService/AttachAvatar"
+	MediaService_AttachChannelPhoto_FullMethodName            = "/tayfam.core.v1.MediaService/AttachChannelPhoto"
+	MediaService_AttachDirectMessageAttachment_FullMethodName = "/tayfam.core.v1.MediaService/AttachDirectMessageAttachment"
+	MediaService_ReserveExportUpload_FullMethodName           = "/tayfam.core.v1.MediaService/ReserveExportUpload"
+	MediaService_GetExportUploadUrl_FullMethodName            = "/tayfam.core.v1.MediaService/GetExportUploadUrl"
+	MediaService_CompleteExportUpload_FullMethodName          = "/tayfam.core.v1.MediaService/CompleteExportUpload"
+	MediaService_GetExportDownloadUrl_FullMethodName          = "/tayfam.core.v1.MediaService/GetExportDownloadUrl"
 )
 
 // MediaServiceClient is the client API for MediaService service.
@@ -83,6 +85,27 @@ const (
 // for good, the avatar changed or the account deleted) its media is deleted
 // too.
 //
+// Chat photos and attachments (issue #205, ADR-0031):
+//   - CHAT_PHOTO is an image like the others, for one tayfa. chat attaches
+//     it to a channel message (AttachChannelPhoto) when the message is
+//     sent; its links go only to the channel's audience, which chat decides
+//     (GetMediaUrls asks chat's MessageMediaService with the caller's
+//     token).
+//   - DM_ATTACHMENT is not an image: one opaque BLOB the client encrypted
+//     (AES-256-GCM, a random key that travels inside the Signal envelope
+//     and never reaches the server). CompleteUpload checks its size only
+//     and copies it out of quarantine; it is never read, parsed or decoded.
+//     chat attaches it to a direct message (AttachDirectMessageAttachment);
+//     its links go only to the conversation's two parties (chat decides).
+//   - REPORT_EVIDENCE is an image the reporter of a direct message shares
+//     from their own device (ReportService.CreateReport,
+//     evidence_upload_id). Only its owner and the platform panel ever get
+//     a link to it.
+//
+// When chat cannot answer, chat files are left out of GetMediaUrls (the
+// others are returned). Messages delete their files through chat's events
+// (ChatEventService).
+//
 // Without object storage configured (no R2 credentials) every method is
 // UNAVAILABLE without ErrorInfo; core runs anyway.
 //
@@ -91,11 +114,13 @@ const (
 type MediaServiceClient interface {
 	// CreateUpload opens an upload and returns its PUT links.
 	// variants: exactly one PREVIEW and one FULL, each "image/jpeg" or
-	// "image/webp" and 1 to 10 MiB (10485760); otherwise
+	// "image/webp" and 1 to 10 MiB (10485760); for DM_ATTACHMENT exactly one
+	// BLOB of "application/octet-stream", 1 to 10 MiB; otherwise
 	// ERROR_REASON_VALIDATION (field "variants").
-	// tayfa_id: required for COVER and CATCH_PHOTO (the caller must be an
-	// ACTIVE member, ERROR_REASON_TAYFA_NOT_FOUND otherwise, and the tayfa
-	// must not be read-only); must be empty for AVATAR.
+	// tayfa_id: required for COVER, CATCH_PHOTO and CHAT_PHOTO (the caller
+	// must be an ACTIVE member, ERROR_REASON_TAYFA_NOT_FOUND otherwise, and
+	// the tayfa must not be read-only); must be empty for AVATAR,
+	// DM_ATTACHMENT and REPORT_EVIDENCE.
 	// client_request_id: required; a repeat returns the same upload with
 	// fresh links while it is PENDING (the same purpose, tayfa and variants,
 	// otherwise ERROR_REASON_VALIDATION on client_request_id).
@@ -104,7 +129,9 @@ type MediaServiceClient interface {
 	CreateUpload(ctx context.Context, in *CreateUploadRequest, opts ...grpc.CallOption) (*CreateUploadResponse, error)
 	// CompleteUpload checks both variants (see the flow above) and makes the
 	// upload READY or REJECTED. width and height are the full variant's,
-	// 1 to 1600 (ERROR_REASON_VALIDATION otherwise). A variant that is not
+	// 1 to 1600 (ERROR_REASON_VALIDATION otherwise). For DM_ATTACHMENT they
+	// must be 0: only the blob's stored size is checked (REJECTED with
+	// SIZE_MISMATCH otherwise) and it is copied out of quarantine unread. A variant that is not
 	// stored yet is ERROR_REASON_UPLOAD_NOT_RECEIVED and the upload stays
 	// PENDING (finish the PUT and call again while the link is valid). Storage
 	// trouble is UNAVAILABLE and the upload stays PENDING. A repeat after the
@@ -123,7 +150,12 @@ type MediaServiceClient interface {
 	// tayfa (TayfaView). An event cover or a catch photo is visible to ACTIVE
 	// members who may see the event (EventView, events module on, event not
 	// deleted; the catch not deleted). An event album photo likewise (the
-	// photo not deleted; ADR-0028).
+	// photo not deleted; ADR-0028). A CHAT_PHOTO or DM_ATTACHMENT is
+	// visible when chat says the caller may see the message it is attached
+	// to (channel audience; conversation parties). A REPORT_EVIDENCE is
+	// visible to its owner only. For DM_ATTACHMENT the link is full_url
+	// ("application/octet-stream"); preview_url is empty and width and
+	// height are 0.
 	// 1 to 100 distinct upload IDs.
 	GetMediaUrls(ctx context.Context, in *GetMediaUrlsRequest, opts ...grpc.CallOption) (*GetMediaUrlsResponse, error)
 	// AttachAvatar marks the caller's READY AVATAR upload as their avatar.
@@ -136,6 +168,24 @@ type MediaServiceClient interface {
 	// deleted when identity's user.profile_updated with the new avatar
 	// reaches core.
 	AttachAvatar(ctx context.Context, in *AttachAvatarRequest, opts ...grpc.CallOption) (*AttachAvatarResponse, error)
+	// AttachChannelPhoto attaches the caller's READY CHAT_PHOTO upload of
+	// tayfa_id to the channel message message_id (issue #205). chat calls it
+	// with the caller's own token just before it writes the message, outside
+	// its transaction; the gateway exposes it nowhere. Unknown, another
+	// user's, another purpose or another tayfa's upload is
+	// ERROR_REASON_UPLOAD_NOT_FOUND; not READY is
+	// ERROR_REASON_UPLOAD_NOT_READY; attached to a message chat has
+	// confirmed is ERROR_REASON_UPLOAD_IN_USE. A repeat for the same message
+	// succeeds. An attachment chat has not confirmed yet (its message may
+	// never have been written) moves to the new message, so a failed send
+	// can be retried. core's reconciliation job confirms attachments with
+	// chat (MediaHolderService, chat's service token) after 10 minutes and
+	// undoes those no message holds; the file then expires like any
+	// unattached upload.
+	AttachChannelPhoto(ctx context.Context, in *AttachChannelPhotoRequest, opts ...grpc.CallOption) (*AttachChannelPhotoResponse, error)
+	// AttachDirectMessageAttachment attaches the caller's READY DM_ATTACHMENT
+	// upload to the direct message message_id, like AttachChannelPhoto.
+	AttachDirectMessageAttachment(ctx context.Context, in *AttachDirectMessageAttachmentRequest, opts ...grpc.CallOption) (*AttachDirectMessageAttachmentResponse, error)
 	// ReserveExportUpload opens the caller's export slot for the identity
 	// request data_export_id (a UUID; a repeat returns the same upload). A
 	// user has at most one PENDING or READY export: an older one is deleted.
@@ -211,6 +261,26 @@ func (c *mediaServiceClient) AttachAvatar(ctx context.Context, in *AttachAvatarR
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AttachAvatarResponse)
 	err := c.cc.Invoke(ctx, MediaService_AttachAvatar_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mediaServiceClient) AttachChannelPhoto(ctx context.Context, in *AttachChannelPhotoRequest, opts ...grpc.CallOption) (*AttachChannelPhotoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AttachChannelPhotoResponse)
+	err := c.cc.Invoke(ctx, MediaService_AttachChannelPhoto_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mediaServiceClient) AttachDirectMessageAttachment(ctx context.Context, in *AttachDirectMessageAttachmentRequest, opts ...grpc.CallOption) (*AttachDirectMessageAttachmentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AttachDirectMessageAttachmentResponse)
+	err := c.cc.Invoke(ctx, MediaService_AttachDirectMessageAttachment_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -310,6 +380,27 @@ func (c *mediaServiceClient) GetExportDownloadUrl(ctx context.Context, in *GetEx
 // for good, the avatar changed or the account deleted) its media is deleted
 // too.
 //
+// Chat photos and attachments (issue #205, ADR-0031):
+//   - CHAT_PHOTO is an image like the others, for one tayfa. chat attaches
+//     it to a channel message (AttachChannelPhoto) when the message is
+//     sent; its links go only to the channel's audience, which chat decides
+//     (GetMediaUrls asks chat's MessageMediaService with the caller's
+//     token).
+//   - DM_ATTACHMENT is not an image: one opaque BLOB the client encrypted
+//     (AES-256-GCM, a random key that travels inside the Signal envelope
+//     and never reaches the server). CompleteUpload checks its size only
+//     and copies it out of quarantine; it is never read, parsed or decoded.
+//     chat attaches it to a direct message (AttachDirectMessageAttachment);
+//     its links go only to the conversation's two parties (chat decides).
+//   - REPORT_EVIDENCE is an image the reporter of a direct message shares
+//     from their own device (ReportService.CreateReport,
+//     evidence_upload_id). Only its owner and the platform panel ever get
+//     a link to it.
+//
+// When chat cannot answer, chat files are left out of GetMediaUrls (the
+// others are returned). Messages delete their files through chat's events
+// (ChatEventService).
+//
 // Without object storage configured (no R2 credentials) every method is
 // UNAVAILABLE without ErrorInfo; core runs anyway.
 //
@@ -318,11 +409,13 @@ func (c *mediaServiceClient) GetExportDownloadUrl(ctx context.Context, in *GetEx
 type MediaServiceServer interface {
 	// CreateUpload opens an upload and returns its PUT links.
 	// variants: exactly one PREVIEW and one FULL, each "image/jpeg" or
-	// "image/webp" and 1 to 10 MiB (10485760); otherwise
+	// "image/webp" and 1 to 10 MiB (10485760); for DM_ATTACHMENT exactly one
+	// BLOB of "application/octet-stream", 1 to 10 MiB; otherwise
 	// ERROR_REASON_VALIDATION (field "variants").
-	// tayfa_id: required for COVER and CATCH_PHOTO (the caller must be an
-	// ACTIVE member, ERROR_REASON_TAYFA_NOT_FOUND otherwise, and the tayfa
-	// must not be read-only); must be empty for AVATAR.
+	// tayfa_id: required for COVER, CATCH_PHOTO and CHAT_PHOTO (the caller
+	// must be an ACTIVE member, ERROR_REASON_TAYFA_NOT_FOUND otherwise, and
+	// the tayfa must not be read-only); must be empty for AVATAR,
+	// DM_ATTACHMENT and REPORT_EVIDENCE.
 	// client_request_id: required; a repeat returns the same upload with
 	// fresh links while it is PENDING (the same purpose, tayfa and variants,
 	// otherwise ERROR_REASON_VALIDATION on client_request_id).
@@ -331,7 +424,9 @@ type MediaServiceServer interface {
 	CreateUpload(context.Context, *CreateUploadRequest) (*CreateUploadResponse, error)
 	// CompleteUpload checks both variants (see the flow above) and makes the
 	// upload READY or REJECTED. width and height are the full variant's,
-	// 1 to 1600 (ERROR_REASON_VALIDATION otherwise). A variant that is not
+	// 1 to 1600 (ERROR_REASON_VALIDATION otherwise). For DM_ATTACHMENT they
+	// must be 0: only the blob's stored size is checked (REJECTED with
+	// SIZE_MISMATCH otherwise) and it is copied out of quarantine unread. A variant that is not
 	// stored yet is ERROR_REASON_UPLOAD_NOT_RECEIVED and the upload stays
 	// PENDING (finish the PUT and call again while the link is valid). Storage
 	// trouble is UNAVAILABLE and the upload stays PENDING. A repeat after the
@@ -350,7 +445,12 @@ type MediaServiceServer interface {
 	// tayfa (TayfaView). An event cover or a catch photo is visible to ACTIVE
 	// members who may see the event (EventView, events module on, event not
 	// deleted; the catch not deleted). An event album photo likewise (the
-	// photo not deleted; ADR-0028).
+	// photo not deleted; ADR-0028). A CHAT_PHOTO or DM_ATTACHMENT is
+	// visible when chat says the caller may see the message it is attached
+	// to (channel audience; conversation parties). A REPORT_EVIDENCE is
+	// visible to its owner only. For DM_ATTACHMENT the link is full_url
+	// ("application/octet-stream"); preview_url is empty and width and
+	// height are 0.
 	// 1 to 100 distinct upload IDs.
 	GetMediaUrls(context.Context, *GetMediaUrlsRequest) (*GetMediaUrlsResponse, error)
 	// AttachAvatar marks the caller's READY AVATAR upload as their avatar.
@@ -363,6 +463,24 @@ type MediaServiceServer interface {
 	// deleted when identity's user.profile_updated with the new avatar
 	// reaches core.
 	AttachAvatar(context.Context, *AttachAvatarRequest) (*AttachAvatarResponse, error)
+	// AttachChannelPhoto attaches the caller's READY CHAT_PHOTO upload of
+	// tayfa_id to the channel message message_id (issue #205). chat calls it
+	// with the caller's own token just before it writes the message, outside
+	// its transaction; the gateway exposes it nowhere. Unknown, another
+	// user's, another purpose or another tayfa's upload is
+	// ERROR_REASON_UPLOAD_NOT_FOUND; not READY is
+	// ERROR_REASON_UPLOAD_NOT_READY; attached to a message chat has
+	// confirmed is ERROR_REASON_UPLOAD_IN_USE. A repeat for the same message
+	// succeeds. An attachment chat has not confirmed yet (its message may
+	// never have been written) moves to the new message, so a failed send
+	// can be retried. core's reconciliation job confirms attachments with
+	// chat (MediaHolderService, chat's service token) after 10 minutes and
+	// undoes those no message holds; the file then expires like any
+	// unattached upload.
+	AttachChannelPhoto(context.Context, *AttachChannelPhotoRequest) (*AttachChannelPhotoResponse, error)
+	// AttachDirectMessageAttachment attaches the caller's READY DM_ATTACHMENT
+	// upload to the direct message message_id, like AttachChannelPhoto.
+	AttachDirectMessageAttachment(context.Context, *AttachDirectMessageAttachmentRequest) (*AttachDirectMessageAttachmentResponse, error)
 	// ReserveExportUpload opens the caller's export slot for the identity
 	// request data_export_id (a UUID; a repeat returns the same upload). A
 	// user has at most one PENDING or READY export: an older one is deleted.
@@ -408,6 +526,12 @@ func (UnimplementedMediaServiceServer) GetMediaUrls(context.Context, *GetMediaUr
 }
 func (UnimplementedMediaServiceServer) AttachAvatar(context.Context, *AttachAvatarRequest) (*AttachAvatarResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AttachAvatar not implemented")
+}
+func (UnimplementedMediaServiceServer) AttachChannelPhoto(context.Context, *AttachChannelPhotoRequest) (*AttachChannelPhotoResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AttachChannelPhoto not implemented")
+}
+func (UnimplementedMediaServiceServer) AttachDirectMessageAttachment(context.Context, *AttachDirectMessageAttachmentRequest) (*AttachDirectMessageAttachmentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AttachDirectMessageAttachment not implemented")
 }
 func (UnimplementedMediaServiceServer) ReserveExportUpload(context.Context, *ReserveExportUploadRequest) (*ReserveExportUploadResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReserveExportUpload not implemented")
@@ -532,6 +656,42 @@ func _MediaService_AttachAvatar_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MediaService_AttachChannelPhoto_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AttachChannelPhotoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MediaServiceServer).AttachChannelPhoto(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MediaService_AttachChannelPhoto_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MediaServiceServer).AttachChannelPhoto(ctx, req.(*AttachChannelPhotoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MediaService_AttachDirectMessageAttachment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AttachDirectMessageAttachmentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MediaServiceServer).AttachDirectMessageAttachment(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MediaService_AttachDirectMessageAttachment_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MediaServiceServer).AttachDirectMessageAttachment(ctx, req.(*AttachDirectMessageAttachmentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MediaService_ReserveExportUpload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ReserveExportUploadRequest)
 	if err := dec(in); err != nil {
@@ -630,6 +790,14 @@ var MediaService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AttachAvatar",
 			Handler:    _MediaService_AttachAvatar_Handler,
+		},
+		{
+			MethodName: "AttachChannelPhoto",
+			Handler:    _MediaService_AttachChannelPhoto_Handler,
+		},
+		{
+			MethodName: "AttachDirectMessageAttachment",
+			Handler:    _MediaService_AttachDirectMessageAttachment_Handler,
 		},
 		{
 			MethodName: "ReserveExportUpload",

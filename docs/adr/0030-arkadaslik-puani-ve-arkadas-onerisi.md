@@ -13,7 +13,7 @@
   [ADR-0012](0012-dogum-tarihi-ve-kotuye-kullanim.md),
   [ADR-0013](0013-servis-kimligi.md),
   [ADR-0019](0019-push-bildirimleri.md),
-  [ADR-0021](0021-kvkk-veri-disa-aktarma.md); issue #208
+  [ADR-0021](0021-kvkk-veri-disa-aktarma.md); issue #208, #215 (§12)
 
 ## Bağlam
 
@@ -92,9 +92,9 @@ temizler (ADR-0002).
   engelli çiftlerin satırlarını yeniden siler.
 - **Kullanım (platform sahibinin kararı, 2026-11-15):** Puan öneri
   adaylarının sırasının yanında **arkadaş listesi ve davet ekranlarındaki
-  kişi sırasında da** kullanılacaktır; bu ayrı bir issue'dur, bu ADR'nin
-  uygulandığı PR'da yapılmaz. Orada da yalnızca sıra döner, puan dönmez;
-  profillemesi kapalı kullanıcının listesi puansız (bugünkü) sırayla gelir.
+  kişi sırasında da** kullanılır (issue #215, §12). Orada da yalnızca sıra
+  döner, puan dönmez; profillemesi kapalı kullanıcının listesi puansız
+  (kimliğe göre) sırayla gelir.
 
 ### 3. Öneri üretimi
 
@@ -263,6 +263,61 @@ Hepsi kullanıcının kendi erişim token'ıyla; çağıran her zaman token'ın
 sahibidir. `FriendSuggestion` mesajında ve şemasında puan alanı yoktur; bir
 sözleşme testi bunu sabitler.
 
+### 12. Arkadaş listesi ve davet sırası (issue #215)
+
+Ek bölüm, 2026-11-16 (platform sahibinin 2026-11-15 kararı, §2 "Kullanım";
+Notion §9). Migration yoktur: `friend_scores`, `social_settings` ve
+`friendships` yeterlidir.
+
+- **Kapsam:** `GET /v1/me/friends` (`ListFriends`). Tayfa davetindeki kişi
+  seçimi istemcide bu listeyle yapılır; sunucuda ayrı bir "davet adayı"
+  ucu yoktur. Anlık etkinlik davetinin (#209) kişi listesi de arkadaş
+  listesiyse aynı sıra geçerlidir; ayrı bir aday ucu eklenirse aynı sorgu
+  kuralını (aşağıda) kullanır. Keşfet sırası #210'dadır. Arkadaşlık istek
+  listeleri (`ListFriendRequests`) puanla sıralanmaz.
+- **Sıra:** etkin puana göre azalan, eşitlikte karşı tarafın kimliğine göre
+  artan (bugünkü sıra). Puanı olmayan arkadaşların etkin puanı 0'dır; bu
+  yüzden puanlılar önde, puansızlar bugünkü sırayla arkadadır.
+- **Etkin puan:** `friend_scores.score`, yalnızca arkadaşlık kabul
+  edilmişse ve **iki tarafın da** profillemesi açıksa; aksi halde 0.
+  Profilleme kapatılınca puan zaten silinir (§5); okumadaki bu koşul,
+  hesaplama işiyle yarışta geride kalabilecek bir satıra karşı savunma
+  derinliğidir. Çağıranın profillemesi kapalıysa bütün puanlar 0 olur ve
+  liste tamamen kimliğe göre gelir.
+- **Puan dışarı çıkmaz:** puan sorgunun sonuç sütunu değildir; yalnızca
+  `ORDER BY` ve `WHERE` içinde kullanılır, Go'ya, cevaba, log'a gelmez.
+  `Friend` mesajında ve şemasında puan alanı yoktur (sözleşme testleri).
+
+**Sayfalama imleci: sunucuda yeniden okunan konum.** İmleç bugünkü
+biçimindedir: liste adı ve sayfanın son kişisinin kimliği (`{m, u}`,
+base64url JSON). Puan, sıra numarası ya da konum taşımaz. Sonraki sayfada
+sorgu o kişinin etkin puanını aynı kurallarla veritabanından yeniden okur
+ve `(etkin puan, kimlik)` anahtarıyla devam eder.
+
+- **Uydurma imleç kâhin olamaz:** imleçteki kişi çağıranın kabul edilmiş
+  arkadaşı değilse (ya da iki taraftan birinin profillemesi kapalıysa)
+  puanı 0 sayılır. Böylece biri, arkadaş olmadığı birinin kimliğini
+  imlece yazarak o çiftin puanını arkadaşlarınınkiyle karşılaştıramaz;
+  arkadaşları için de sıra zaten listede görünen bilgiden fazlasını
+  vermez. İmleç başka listede kabul edilmez (liste adı).
+- **Seçilmeyen yollar:** imlece puanı koyup AES-GCM ile şifrelemek yeni bir
+  anahtar (SOPS secret, döndürme, ortam değişkeni) ve anahtar sızarsa
+  geçmiş imleçlerden puanın okunması demekti; ofset (sıra numarası)
+  sayfalama sıra kayınca kişi atlar ya da tekrarlar ve büyük ofsette
+  yavaştır; sunucuda saklanan imleç durumu (tablo ya da önbellek) yeni bir
+  tablo, saklama süresi ve temizlik işi demekti. Konumu yeniden okumak
+  hiçbir yeni sır ya da tablo eklemez.
+- **Bilinen sınır:** sayfalar arasında puan değişirse (günlük hesaplama,
+  profilleme kapatma, arkadaşlığın bitmesi) bir kişi atlanabilir ya da iki
+  kez görünebilir; sıra anahtarı değişen her anahtar-imleçli listede olduğu
+  gibi. İstemci listeyi kimliğe göre tekilleştirir; tam listeyi yenilemek
+  sırayı düzeltir. Hesaplama günde birdir, etki küçüktür.
+- **Sıranın kendisi:** sıra, kimlerle yakın zamanda birlikte etkinliğe
+  katıldığını kaba bir şekilde yansıtır. Bu, platform sahibinin istediği
+  özelliğin kendisidir ve yalnızca kişinin kendisine görünür (kendi
+  katılımları zaten kendisine açıktır); puanın değeri ve ortak katılım
+  sayısı çıkarılamaz.
+
 ## Gerekçe
 
 - **Tutmadığın veri çalınamaz:** yaş bilgisi core'a gelmez, gelen evet/hayır
@@ -282,8 +337,8 @@ sözleşme testi bunu sabitler.
 - chat'e yeni bildirim türü (migration, proto enum) eklenir; push
   trigger'ı bu türü atlar; bildirim listesi bu türün durumunu da core'a
   sorar.
-- Puanın arkadaş listesi ve davet ekranı sırasında kullanılması için ayrı
-  bir issue açılır.
+- Puan arkadaş listesi ve davet ekranı sırasında da kullanılır (issue
+  #215, §12); imleç puan taşımaz.
 - Aydınlatma metnine profilleme maddesi eklenmeden pilotta açılmamalıdır
   (hukukçu listesi).
 - Veri Modeli v15'e üç tablo, bir bildirim türü, iki dışa aktarma bölümü ve

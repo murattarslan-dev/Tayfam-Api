@@ -66,20 +66,20 @@ RETURNING id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archive
 -- Tekrar gönderim: yazarın aynı client_request_id ile daha önce yazdığı
 -- mesaj (hangi kanalda olursa olsun; çağıran kanalı karşılaştırır).
 -- name: GetMessageByRequest :one
-SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by
+SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by, kind, photo_upload_id
 FROM channel_messages
 WHERE author_id = @author_id AND client_request_id = @client_request_id;
 
 -- Aynı (yazar, client_request_id) varsa satır açılmaz ve sonuç boş döner.
 -- name: CreateMessage :one
-INSERT INTO channel_messages (id, channel_id, author_id, body_encrypted, key_version, client_request_id)
-VALUES (@id, @channel_id, @author_id, @body_encrypted, @key_version, @client_request_id)
+INSERT INTO channel_messages (id, channel_id, author_id, kind, body_encrypted, key_version, photo_upload_id, client_request_id)
+VALUES (@id, @channel_id, @author_id, @kind, @body_encrypted, @key_version, sqlc.narg(photo_upload_id), @client_request_id)
 ON CONFLICT (author_id, client_request_id) DO NOTHING
-RETURNING id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by;
+RETURNING id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by, kind, photo_upload_id;
 
 -- En yeni önce; before_id verilirse ondan eskiler.
 -- name: ListMessagesBefore :many
-SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by
+SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by, kind, photo_upload_id
 FROM channel_messages
 WHERE channel_id = @channel_id AND (sqlc.narg(before_id)::uuid IS NULL OR id < sqlc.narg(before_id)::uuid)
 ORDER BY id DESC
@@ -88,27 +88,29 @@ LIMIT @n;
 -- En eski önce, after_id'den yeniler: kaçırılan mesajları tamamlama
 -- (ADR-0005).
 -- name: ListMessagesAfter :many
-SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by
+SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by, kind, photo_upload_id
 FROM channel_messages
 WHERE channel_id = @channel_id AND id > @after_id
 ORDER BY id
 LIMIT @n;
 
 -- name: GetMessage :one
-SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by
+SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by, kind, photo_upload_id
 FROM channel_messages
 WHERE channel_id = @channel_id AND id = @id;
 
 -- name: GetMessageForUpdate :one
-SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by
+SELECT id, channel_id, author_id, body_encrypted, key_version, created_at, deleted_at, deleted_by, kind, photo_upload_id
 FROM channel_messages
 WHERE channel_id = @channel_id AND id = @id
 FOR UPDATE;
 
--- Yazarın kendi silmesi: metin hemen gider, geri alınamaz.
+-- Yazarın kendi silmesi: metin, yer ve fotoğraf kimliği hemen gider, geri
+-- alınamaz (fotoğrafı core, chat.media_released olayıyla siler).
 -- name: EraseMessage :execrows
 UPDATE channel_messages
-SET body_encrypted = NULL, key_version = NULL, deleted_at = COALESCE(deleted_at, @deleted_at), deleted_by = @deleted_by
+SET body_encrypted = NULL, key_version = NULL, photo_upload_id = NULL,
+    deleted_at = COALESCE(deleted_at, @deleted_at), deleted_by = @deleted_by
 WHERE channel_id = @channel_id AND id = @id;
 
 -- Moderatör veya yönetici silmesi: metin şifreli kalır, mesaj gizlenir.
@@ -120,7 +122,8 @@ WHERE channel_id = @channel_id AND id = @id AND deleted_at IS NULL;
 -- name: RestoreMessage :execrows
 UPDATE channel_messages
 SET deleted_at = NULL, deleted_by = NULL
-WHERE channel_id = @channel_id AND id = @id AND deleted_at IS NOT NULL AND body_encrypted IS NOT NULL;
+WHERE channel_id = @channel_id AND id = @id AND deleted_at IS NOT NULL
+  AND (body_encrypted IS NOT NULL OR photo_upload_id IS NOT NULL);
 
 -- Okunma bilgisi.
 
@@ -136,15 +139,37 @@ SELECT last_read_message_id FROM channel_reads WHERE channel_id = @channel_id AN
 
 -- Saklama ve silme.
 
--- 30 gün: silinmiş mesajlardan bir parti kalıcı silinir.
--- name: PurgeDeletedMessages :execrows
+-- 30 gün: silinmiş mesajlardan bir parti kalıcı silinir. Hâlâ fotoğrafı
+-- olanlar (moderatör gizlemesi) döner: dosyayı core'a aynı transaction'da
+-- olayla bırakmak için.
+-- name: PurgeDeletedMessages :many
 DELETE FROM channel_messages
 WHERE id IN (
   SELECT o.id FROM channel_messages o
   WHERE o.deleted_at < sqlc.arg(before)::timestamptz
   ORDER BY o.deleted_at
   LIMIT sqlc.arg(n)
-);
+  FOR UPDATE SKIP LOCKED
+)
+RETURNING id, photo_upload_id;
+
+-- Görme kararı (MessageMediaService, issue #205): fotoğrafın bağlı olduğu
+-- mesaj ve kanalı. Silinmiş mesaj ve arşivlenmiş kanal da döner; karar
+-- uygulamadadır (silinmiş mesajın fotoğrafı görünmez).
+-- Şikâyet edilen kanal mesajı (issue #205, ADR-0031): kimliğiyle ve
+-- kanalının tayfasıyla; erişim uygulamada denetlenir.
+-- name: GetChannelMessageForReport :one
+SELECT m.id, m.channel_id, m.author_id, m.body_encrypted, m.key_version, m.created_at, m.deleted_at, m.deleted_by,
+       m.kind, m.photo_upload_id, ch.tayfa_id
+FROM channel_messages m
+JOIN channels ch ON ch.id = m.channel_id
+WHERE m.id = @id;
+
+-- name: GetChannelPhotoMessage :one
+SELECT m.channel_id, ch.tayfa_id, m.photo_upload_id, m.deleted_at
+FROM channel_messages m
+JOIN channels ch ON ch.id = m.channel_id
+WHERE m.id = @id;
 
 -- Hesap silindi (user.deleted): içerik kalır, yazar "Silinmiş kullanıcı".
 -- name: ClearChannelMessageAuthor :exec
@@ -207,3 +232,10 @@ WHERE tayfa_id = @tayfa_id AND event_id = @event_id AND archived_at IS NULL
 -- name: ArchiveDueEventChannels :execrows
 UPDATE channels SET archived_at = archive_at
 WHERE archive_at IS NOT NULL AND archived_at IS NULL AND archive_at <= @now;
+
+-- Dosyayı tutan kanal mesajları (issue #205, ADR-0031): gönderimden önce
+-- dosyanın başka bir mesajda olup olmadığı ve core'un uzlaştırma işi.
+-- Silinmiş ama dosyasını tutan (moderatörün gizlediği) mesaj da sayılır.
+-- name: FindChannelPhotoHolders :many
+SELECT id, photo_upload_id::uuid AS upload_id FROM channel_messages
+WHERE photo_upload_id = ANY(@upload_ids::uuid[]);

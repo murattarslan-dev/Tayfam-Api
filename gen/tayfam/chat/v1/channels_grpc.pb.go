@@ -19,20 +19,21 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ChannelService_ListChannels_FullMethodName        = "/tayfam.chat.v1.ChannelService/ListChannels"
-	ChannelService_GetChannel_FullMethodName          = "/tayfam.chat.v1.ChannelService/GetChannel"
-	ChannelService_CreateChannel_FullMethodName       = "/tayfam.chat.v1.ChannelService/CreateChannel"
-	ChannelService_UpdateChannel_FullMethodName       = "/tayfam.chat.v1.ChannelService/UpdateChannel"
-	ChannelService_ArchiveChannel_FullMethodName      = "/tayfam.chat.v1.ChannelService/ArchiveChannel"
-	ChannelService_UnarchiveChannel_FullMethodName    = "/tayfam.chat.v1.ChannelService/UnarchiveChannel"
-	ChannelService_SendMessage_FullMethodName         = "/tayfam.chat.v1.ChannelService/SendMessage"
-	ChannelService_ListMessages_FullMethodName        = "/tayfam.chat.v1.ChannelService/ListMessages"
-	ChannelService_DeleteMessage_FullMethodName       = "/tayfam.chat.v1.ChannelService/DeleteMessage"
-	ChannelService_RestoreMessage_FullMethodName      = "/tayfam.chat.v1.ChannelService/RestoreMessage"
-	ChannelService_MarkChannelRead_FullMethodName     = "/tayfam.chat.v1.ChannelService/MarkChannelRead"
-	ChannelService_ListChannelMembers_FullMethodName  = "/tayfam.chat.v1.ChannelService/ListChannelMembers"
-	ChannelService_AddChannelMembers_FullMethodName   = "/tayfam.chat.v1.ChannelService/AddChannelMembers"
-	ChannelService_RemoveChannelMember_FullMethodName = "/tayfam.chat.v1.ChannelService/RemoveChannelMember"
+	ChannelService_ListChannels_FullMethodName                  = "/tayfam.chat.v1.ChannelService/ListChannels"
+	ChannelService_GetChannel_FullMethodName                    = "/tayfam.chat.v1.ChannelService/GetChannel"
+	ChannelService_CreateChannel_FullMethodName                 = "/tayfam.chat.v1.ChannelService/CreateChannel"
+	ChannelService_UpdateChannel_FullMethodName                 = "/tayfam.chat.v1.ChannelService/UpdateChannel"
+	ChannelService_ArchiveChannel_FullMethodName                = "/tayfam.chat.v1.ChannelService/ArchiveChannel"
+	ChannelService_UnarchiveChannel_FullMethodName              = "/tayfam.chat.v1.ChannelService/UnarchiveChannel"
+	ChannelService_SendMessage_FullMethodName                   = "/tayfam.chat.v1.ChannelService/SendMessage"
+	ChannelService_ListMessages_FullMethodName                  = "/tayfam.chat.v1.ChannelService/ListMessages"
+	ChannelService_DeleteMessage_FullMethodName                 = "/tayfam.chat.v1.ChannelService/DeleteMessage"
+	ChannelService_RestoreMessage_FullMethodName                = "/tayfam.chat.v1.ChannelService/RestoreMessage"
+	ChannelService_MarkChannelRead_FullMethodName               = "/tayfam.chat.v1.ChannelService/MarkChannelRead"
+	ChannelService_ListChannelMembers_FullMethodName            = "/tayfam.chat.v1.ChannelService/ListChannelMembers"
+	ChannelService_AddChannelMembers_FullMethodName             = "/tayfam.chat.v1.ChannelService/AddChannelMembers"
+	ChannelService_RemoveChannelMember_FullMethodName           = "/tayfam.chat.v1.ChannelService/RemoveChannelMember"
+	ChannelService_VerifyChannelMessageForReport_FullMethodName = "/tayfam.chat.v1.ChannelService/VerifyChannelMessageForReport"
 )
 
 // ChannelServiceClient is the client API for ChannelService service.
@@ -101,8 +102,24 @@ type ChannelServiceClient interface {
 	// Moderators and admins. Doing it twice changes nothing.
 	ArchiveChannel(ctx context.Context, in *ArchiveChannelRequest, opts ...grpc.CallOption) (*ArchiveChannelResponse, error)
 	UnarchiveChannel(ctx context.Context, in *UnarchiveChannelRequest, opts ...grpc.CallOption) (*UnarchiveChannelResponse, error)
-	// SendMessage writes a message. body is 1–4000 characters, not only white
-	// space, without control characters other than tab and line breaks.
+	// SendMessage writes a message of one kind (issue #205, ADR-0031):
+	//   - TEXT (also UNSPECIFIED): body is 1–4000 characters, not only white
+	//     space, without control characters other than tab and line breaks;
+	//     photo_upload_id and place are empty.
+	//   - PHOTO: photo_upload_id is the caller's READY upload of purpose
+	//     CHAT_PHOTO for this tayfa (core MediaService), not used by another
+	//     message; body and place are empty (no caption). chat attaches it to
+	//     the new message with the caller's token before the message is
+	//     written (core AttachChannelPhoto): ERROR_REASON_UPLOAD_NOT_FOUND
+	//     (unknown, another user's, another purpose or tayfa),
+	//     ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE.
+	//   - PLACE: place with latitude −90..90, longitude −180..180 (finite)
+	//     and an optional name of 1–120 characters without control
+	//     characters; body and photo_upload_id are empty. The place is
+	//     encrypted like a body and never logged (it is content the user
+	//     chose to share, not the device's location; ADR-0008).
+	// A field of another kind, or a missing one, is ERROR_REASON_VALIDATION
+	// naming the field.
 	// client_request_id (UUID, chosen by the client) is required: sending
 	// again with the same value returns the first message and writes nothing
 	// (also past slow mode); reusing it in another channel is
@@ -121,10 +138,12 @@ type ChannelServiceClient interface {
 	// after_message_id (the last message the client has) the newer messages
 	// come oldest first and next_page_token goes to newer ones: this is how a
 	// client catches up after a reconnect (ADR-0005). Deleted messages keep
-	// their place with deleted set and no body.
+	// their place with deleted set and no body, place or photo.
 	ListMessages(ctx context.Context, in *ListMessagesRequest, opts ...grpc.CallOption) (*ListMessagesResponse, error)
 	// DeleteMessage deletes a message. The author's own deletion erases the
-	// body at once and cannot be undone. A moderator's or admin's deletion of
+	// body (a place too) at once and cannot be undone; a photo is released
+	// and deleted from storage (ADR-0031). A moderation deletion keeps the
+	// photo until the message is deleted for good. A moderator's or admin's deletion of
 	// someone else's message hides it; an admin can restore it within 30
 	// days, after which it is deleted permanently. Deleting a deleted message
 	// changes nothing. Messages cannot be edited.
@@ -151,6 +170,19 @@ type ChannelServiceClient interface {
 	// opener, who cannot remove themself. Removing someone who is not in it
 	// changes nothing.
 	RemoveChannelMember(ctx context.Context, in *RemoveChannelMemberRequest, opts ...grpc.CallOption) (*RemoveChannelMemberResponse, error)
+	// VerifyChannelMessageForReport answers core's question when the caller
+	// reports a channel message (core ReportService.CreateReport with
+	// REPORT_TARGET_TYPE_CHANNEL_MESSAGE; issue #205, ADR-0031): core
+	// forwards the reporter's own token. The caller must be able to read the
+	// message's channel by the same rule as ListMessages (an active member of
+	// the tayfa in the channel's audience: members, staff, event or
+	// selected), and the message must be in tayfa_id and not deleted. The
+	// answer is the message as the caller sees it, so the report keeps what
+	// was reported even if the author deletes it later; it is nothing the
+	// caller could not read already. A message whose author's account was
+	// deleted, and anything else, is ERROR_REASON_MESSAGE_NOT_FOUND. The
+	// caller's own message is answered; core refuses it.
+	VerifyChannelMessageForReport(ctx context.Context, in *VerifyChannelMessageForReportRequest, opts ...grpc.CallOption) (*VerifyChannelMessageForReportResponse, error)
 }
 
 type channelServiceClient struct {
@@ -301,6 +333,16 @@ func (c *channelServiceClient) RemoveChannelMember(ctx context.Context, in *Remo
 	return out, nil
 }
 
+func (c *channelServiceClient) VerifyChannelMessageForReport(ctx context.Context, in *VerifyChannelMessageForReportRequest, opts ...grpc.CallOption) (*VerifyChannelMessageForReportResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VerifyChannelMessageForReportResponse)
+	err := c.cc.Invoke(ctx, ChannelService_VerifyChannelMessageForReport_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChannelServiceServer is the server API for ChannelService service.
 // All implementations must embed UnimplementedChannelServiceServer
 // for forward compatibility.
@@ -367,8 +409,24 @@ type ChannelServiceServer interface {
 	// Moderators and admins. Doing it twice changes nothing.
 	ArchiveChannel(context.Context, *ArchiveChannelRequest) (*ArchiveChannelResponse, error)
 	UnarchiveChannel(context.Context, *UnarchiveChannelRequest) (*UnarchiveChannelResponse, error)
-	// SendMessage writes a message. body is 1–4000 characters, not only white
-	// space, without control characters other than tab and line breaks.
+	// SendMessage writes a message of one kind (issue #205, ADR-0031):
+	//   - TEXT (also UNSPECIFIED): body is 1–4000 characters, not only white
+	//     space, without control characters other than tab and line breaks;
+	//     photo_upload_id and place are empty.
+	//   - PHOTO: photo_upload_id is the caller's READY upload of purpose
+	//     CHAT_PHOTO for this tayfa (core MediaService), not used by another
+	//     message; body and place are empty (no caption). chat attaches it to
+	//     the new message with the caller's token before the message is
+	//     written (core AttachChannelPhoto): ERROR_REASON_UPLOAD_NOT_FOUND
+	//     (unknown, another user's, another purpose or tayfa),
+	//     ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE.
+	//   - PLACE: place with latitude −90..90, longitude −180..180 (finite)
+	//     and an optional name of 1–120 characters without control
+	//     characters; body and photo_upload_id are empty. The place is
+	//     encrypted like a body and never logged (it is content the user
+	//     chose to share, not the device's location; ADR-0008).
+	// A field of another kind, or a missing one, is ERROR_REASON_VALIDATION
+	// naming the field.
 	// client_request_id (UUID, chosen by the client) is required: sending
 	// again with the same value returns the first message and writes nothing
 	// (also past slow mode); reusing it in another channel is
@@ -387,10 +445,12 @@ type ChannelServiceServer interface {
 	// after_message_id (the last message the client has) the newer messages
 	// come oldest first and next_page_token goes to newer ones: this is how a
 	// client catches up after a reconnect (ADR-0005). Deleted messages keep
-	// their place with deleted set and no body.
+	// their place with deleted set and no body, place or photo.
 	ListMessages(context.Context, *ListMessagesRequest) (*ListMessagesResponse, error)
 	// DeleteMessage deletes a message. The author's own deletion erases the
-	// body at once and cannot be undone. A moderator's or admin's deletion of
+	// body (a place too) at once and cannot be undone; a photo is released
+	// and deleted from storage (ADR-0031). A moderation deletion keeps the
+	// photo until the message is deleted for good. A moderator's or admin's deletion of
 	// someone else's message hides it; an admin can restore it within 30
 	// days, after which it is deleted permanently. Deleting a deleted message
 	// changes nothing. Messages cannot be edited.
@@ -417,6 +477,19 @@ type ChannelServiceServer interface {
 	// opener, who cannot remove themself. Removing someone who is not in it
 	// changes nothing.
 	RemoveChannelMember(context.Context, *RemoveChannelMemberRequest) (*RemoveChannelMemberResponse, error)
+	// VerifyChannelMessageForReport answers core's question when the caller
+	// reports a channel message (core ReportService.CreateReport with
+	// REPORT_TARGET_TYPE_CHANNEL_MESSAGE; issue #205, ADR-0031): core
+	// forwards the reporter's own token. The caller must be able to read the
+	// message's channel by the same rule as ListMessages (an active member of
+	// the tayfa in the channel's audience: members, staff, event or
+	// selected), and the message must be in tayfa_id and not deleted. The
+	// answer is the message as the caller sees it, so the report keeps what
+	// was reported even if the author deletes it later; it is nothing the
+	// caller could not read already. A message whose author's account was
+	// deleted, and anything else, is ERROR_REASON_MESSAGE_NOT_FOUND. The
+	// caller's own message is answered; core refuses it.
+	VerifyChannelMessageForReport(context.Context, *VerifyChannelMessageForReportRequest) (*VerifyChannelMessageForReportResponse, error)
 	mustEmbedUnimplementedChannelServiceServer()
 }
 
@@ -468,6 +541,9 @@ func (UnimplementedChannelServiceServer) AddChannelMembers(context.Context, *Add
 }
 func (UnimplementedChannelServiceServer) RemoveChannelMember(context.Context, *RemoveChannelMemberRequest) (*RemoveChannelMemberResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RemoveChannelMember not implemented")
+}
+func (UnimplementedChannelServiceServer) VerifyChannelMessageForReport(context.Context, *VerifyChannelMessageForReportRequest) (*VerifyChannelMessageForReportResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method VerifyChannelMessageForReport not implemented")
 }
 func (UnimplementedChannelServiceServer) mustEmbedUnimplementedChannelServiceServer() {}
 func (UnimplementedChannelServiceServer) testEmbeddedByValue()                        {}
@@ -742,6 +818,24 @@ func _ChannelService_RemoveChannelMember_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChannelService_VerifyChannelMessageForReport_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(VerifyChannelMessageForReportRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChannelServiceServer).VerifyChannelMessageForReport(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChannelService_VerifyChannelMessageForReport_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChannelServiceServer).VerifyChannelMessageForReport(ctx, req.(*VerifyChannelMessageForReportRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChannelService_ServiceDesc is the grpc.ServiceDesc for ChannelService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -804,6 +898,10 @@ var ChannelService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveChannelMember",
 			Handler:    _ChannelService_RemoveChannelMember_Handler,
+		},
+		{
+			MethodName: "VerifyChannelMessageForReport",
+			Handler:    _ChannelService_VerifyChannelMessageForReport_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

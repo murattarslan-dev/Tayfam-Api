@@ -146,6 +146,9 @@ type Querier interface {
 	ClearTayfaDiscoverUser(ctx context.Context, userID pgtype.UUID) error
 	ClearTayfaUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClosePoll(ctx context.Context, arg ClosePollParams) (int64, error)
+	// chat dosyayı tutan mesajı söyledi: bağlama o mesajla onaylanır. Arada
+	// taşındıysa (asked_id değişti) bir şey olmaz.
+	ConfirmChatAttachment(ctx context.Context, arg ConfirmChatAttachmentParams) (int64, error)
 	CountActiveMembers(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
 	CountActiveMembersForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]CountActiveMembersForTayfasRow, error)
 	// ---------------------------------------------------------------------------
@@ -321,8 +324,12 @@ type Querier interface {
 	DeleteUserSafetyContacts(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserSocialSettings(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silme (user.deleted): kullanıcının dosyaları silinir; bağlı kapak
-	// görselleri tayfanındır, yalnızca sahiplikleri kaldırılır.
+	// görselleri tayfanındır, bağlı şikâyet kanıtı platformundur (rapor
+	// durdukça, ADR-0031); yalnızca sahiplikleri kaldırılır.
 	DeleteUserUploads(ctx context.Context, userID pgtype.UUID) (int64, error)
+	// Hiçbir mesaj dosyayı tutmuyor: bağlama kaldırılır; dosya bağlanmamış
+	// hazır dosya olarak 7 günlük temizliğe döner (ready_at'ten sayılır).
+	DetachChatAttachment(ctx context.Context, arg DetachChatAttachmentParams) (int64, error)
 	// Tayfa şu anda izleyicinin akışında mı (Keşfet'ten katılım): tayfanın
 	// bir etkinliğinde görünür bir arkadaş var.
 	DiscoverTayfaVisible(ctx context.Context, arg DiscoverTayfaVisibleParams) (bool, error)
@@ -482,6 +489,9 @@ type Querier interface {
 	GetQuestionByClientRequest(ctx context.Context, arg GetQuestionByClientRequestParams) (GetQuestionByClientRequestRow, error)
 	// Yazma işlemleri satırı kilitleyerek okur; silinmiş satır da döner.
 	GetQuestionForUpdate(ctx context.Context, arg GetQuestionForUpdateParams) (GetQuestionForUpdateRow, error)
+	// Platform panelinde şikâyetin kanıt fotoğrafı (issue #205): yalnızca o
+	// rapora bağlı, hazır dosya.
+	GetReportEvidenceUpload(ctx context.Context, arg GetReportEvidenceUploadParams) (GetReportEvidenceUploadRow, error)
 	// Şikâyet edenin kendi şikâyeti.
 	GetReportOfReporter(ctx context.Context, arg GetReportOfReporterParams) (GetReportOfReporterRow, error)
 	GetReportOfReporterByTarget(ctx context.Context, arg GetReportOfReporterByTargetParams) (GetReportOfReporterByTargetRow, error)
@@ -503,6 +513,9 @@ type Querier interface {
 	GetReportTargetEventPhoto(ctx context.Context, arg GetReportTargetEventPhotoParams) (GetReportTargetEventPhotoRow, error)
 	GetReportTargetPoll(ctx context.Context, arg GetReportTargetPollParams) (GetReportTargetPollRow, error)
 	GetReportTargetQuestion(ctx context.Context, arg GetReportTargetQuestionParams) (GetReportTargetQuestionRow, error)
+	// Platform panelinde şikâyet edilen kanal mesajının fotoğrafı (ADR-0031):
+	// şikâyetin kaydettiği upload_id, hâlâ o mesaja bağlı, hazır chat_photo.
+	GetReportedMessagePhotoUpload(ctx context.Context, arg GetReportedMessagePhotoUploadParams) (string, error)
 	// Platform panelinde şikâyet edilen albüm fotoğrafı (ADR-0028 §5): yalnızca
 	// panelin şikâyetten okuduğu upload_id, hazır event_photo dosyası.
 	GetReportedPhotoUpload(ctx context.Context, id pgtype.UUID) (GetReportedPhotoUploadRow, error)
@@ -533,6 +546,8 @@ type Querier interface {
 	// Yazan işlemler tayfa satırını kilitleyerek okur; memberships trigger'ı da
 	// aynı satırı kilitlediği için üyelik değişiklikleriyle sırayla çalışır.
 	GetTayfaForUpdate(ctx context.Context, id pgtype.UUID) (GetTayfaForUpdateRow, error)
+	// Çözümden önce, kilitsiz: dışarıya (chat) sorulacak hedef (kanal mesajı).
+	GetTayfaReportTarget(ctx context.Context, arg GetTayfaReportTargetParams) (GetTayfaReportTargetRow, error)
 	GetUploadByClientRequest(ctx context.Context, arg GetUploadByClientRequestParams) (Upload, error)
 	GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUserProfileRow, error)
 	// Kanalı açanlardan hangileri o etkinliğe gidiyor.
@@ -612,12 +627,25 @@ type Querier interface {
 	ListEventPhotos(ctx context.Context, arg ListEventPhotosParams) ([]ListEventPhotosRow, error)
 	// Liste görünümünde mera gizliliği için.
 	ListFishingVisibility(ctx context.Context, eventIds []pgtype.UUID) ([]ListFishingVisibilityRow, error)
-	// Kişinin arkadaşları ve istekleri; karşı tarafın kimliğine göre sayfalanır.
-	// Silinmiş hesapların satırı hesap silmede gider; profili henüz gelmemiş
-	// kişi listede adsız görünmez, atlanır. Kabul edilmiş arkadaşlıkta
-	// arkadaşın @today ile @badge_until (dahil) arasındaki en yakın boş günü de
-	// döner ("Boşum" rozeti, issue #207; not dönmez). Engel arkadaşlığı zaten
-	// siler; rozet yine de iki yönlü engelde dönmez (savunma derinliği).
+	// Kişinin arkadaşları ve istekleri. Silinmiş hesapların satırı hesap
+	// silmede gider; profili henüz gelmemiş kişi listede adsız görünmez, atlanır.
+	// Kabul edilmiş arkadaşlıkta arkadaşın @today ile @badge_until (dahil)
+	// arasındaki en yakın boş günü de döner ("Boşum" rozeti, issue #207; not
+	// dönmez). Engel arkadaşlığı zaten siler; rozet yine de iki yönlü engelde
+	// dönmez (savunma derinliği).
+	//
+	// Sıra (ADR-0030 §12, issue #215): kabul edilmiş arkadaşlar arkadaşlık
+	// puanına göre azalan, eşitlikte karşı tarafın kimliğine göre. Puan yalnızca
+	// arkadaşlık kabul edilmişse ve iki tarafın da profillemesi açıksa sayılır;
+	// yoksa 0'dır. İsteklerde puan hiç sayılmaz (sıra kimliğe göredir). Puan
+	// sonuç sütunu değildir: yalnızca ORDER BY ve WHERE'de kullanılır, Go'ya
+	// gelmez.
+	//
+	// Sayfalama: imleç yalnızca önceki sayfanın son kişisini taşır
+	// (@after_user_id). O kişinin konumu (puanı) burada, aynı kurallarla yeniden
+	// okunur. İmleçteki kişi çağıranın kabul edilmiş arkadaşı değilse (uydurma
+	// ya da sayfalar arasında biten arkadaşlık) puanı 0 sayılır: imleç başka
+	// birinin puanını sorgulamak için kullanılamaz.
 	ListFriendshipsPage(ctx context.Context, arg ListFriendshipsPageParams) ([]ListFriendshipsPageRow, error)
 	// Alarmın alıcıları: organizatör (tayfada hâlâ aktif üyeyse) ve aktif
 	// yöneticiler ve moderatörler; dönmeyen kişinin kendisi hariç. Organizatör
@@ -738,6 +766,8 @@ type Querier interface {
 	ListTayfaModules(ctx context.Context, tayfaID pgtype.UUID) ([]ListTayfaModulesRow, error)
 	// Bildirim alıcıları: aktif yöneticiler ve moderatörler, yönetici önce.
 	ListTayfaStaffIDs(ctx context.Context, arg ListTayfaStaffIDsParams) ([]pgtype.UUID, error)
+	// Uzlaştırma işi: onaylanmamış, before'dan eski sohbet bağlamaları.
+	ListUnconfirmedChatAttachments(ctx context.Context, arg ListUnconfirmedChatAttachmentsParams) ([]ListUnconfirmedChatAttachmentsRow, error)
 	// Bitmemiş etkinlikler, başlangıç zamanına göre; (starts_at, id) ile
 	// sayfalanır.
 	ListUpcomingEvents(ctx context.Context, arg ListUpcomingEventsParams) ([]ListUpcomingEventsRow, error)
@@ -809,6 +839,10 @@ type Querier interface {
 	// Denetimden geçti (ADR-0020). Yalnızca bekleyen kayıt; eşzamanlı ikinci
 	// tamamlama bir şey değiştirmez.
 	MarkUploadReady(ctx context.Context, arg MarkUploadReadyParams) (int64, error)
+	// Onaylanmamış sohbet bağlaması (ADR-0031): chat'in henüz onaylamadığı,
+	// belki hiç yazılmamış bir mesaja bağlı dosya, aynı sahibin yeni mesajına
+	// taşınır. Çağıran satırı önce GetOwnUploadForUpdate ile kilitler.
+	MoveChatAttachment(ctx context.Context, arg MoveChatAttachmentParams) (int64, error)
 	MuteMembership(ctx context.Context, arg MuteMembershipParams) (int64, error)
 	// Bekleme listesinin başı: en eski kayıt önce. Çağıran etkinlik satırını
 	// zaten kilitlemiştir; satır kilidi aynı kaydın iki kez terfisini de önler.
@@ -842,6 +876,10 @@ type Querier interface {
 	// ezilmez. Başarısız tur son başarılı zamanı korur.
 	RecordJobRun(ctx context.Context, arg RecordJobRunParams) error
 	RejectPendingUpload(ctx context.Context, arg RejectPendingUploadParams) (int64, error)
+	// Sohbet mesajı fotoğrafını ya da ekini bıraktı (chat.media_released,
+	// ADR-0031): dosya hâlâ o mesaja bağlıysa silinir; değilse bir şey olmaz
+	// (tekrar gelen olay).
+	ReleaseMessageMedia(ctx context.Context, arg ReleaseMessageMediaParams) (int64, error)
 	// Kullanıcının güncel avatarı dışındaki bağlı avatarları silinir
 	// (identity'nin user.profile_updated olayı). keep NULL: avatar kaldırıldı.
 	ReleaseOtherAvatars(ctx context.Context, arg ReleaseOtherAvatarsParams) (int64, error)
@@ -850,6 +888,9 @@ type Querier interface {
 	// Yeni yuva açılmadan önce kullanıcının başka etkin dışa aktarması
 	// silinir: identity aynı anda tek talep yürütür, eskisi artıktır.
 	ReleaseOtherExports(ctx context.Context, arg ReleaseOtherExportsParams) (int64, error)
+	// Tayfa kalıcı silindi: kanal fotoğrafları da gider (kanallar chat'te
+	// tayfa.purged ile silinir; dosyanın tayfası core'da bellidir).
+	ReleaseTayfaChatPhotos(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
 	RemoveAnswerVote(ctx context.Context, arg RemoveAnswerVoteParams) (int64, error)
 	RequestTayfaDeletion(ctx context.Context, arg RequestTayfaDeletionParams) (int64, error)
 	// Açılışta başvuru: satır yoksa pending açılır; reddedilmişse yeniden
@@ -986,7 +1027,8 @@ type Querier interface {
 	// activity_visibility NULL ise (alanı taşımayan eski olay) mevcut değer
 	// kalır; yeni satırda varsayılan 'tayfa' olur.
 	UpsertUserProfile(ctx context.Context, arg UpsertUserProfileParams) (int64, error)
-	// Kota: iki varyantın bildirilen (ve imzayla zorlanan) boyutları.
+	// Kota: iki varyantın (birebir ekte tek nesnenin) bildirilen (ve imzayla
+	// zorlanan) boyutları.
 	UserStoredBytes(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// Uyarı iki sebeple verilir:
 	//   inactive:    last_activity_at @inactive_before'dan eski (30 gün).

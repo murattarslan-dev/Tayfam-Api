@@ -13,6 +13,7 @@ import (
 
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/channelcrypt"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/corerelay"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -24,18 +25,29 @@ type msgRow = store.GetMessageRow
 // decrypt is an error: it means a wrong key or a tampered row, never
 // something to show.
 func (s *Service) view(r msgRow, m Decision, now time.Time) (Message, error) {
-	msg := Message{ID: id.ID(r.ID.Bytes), ChannelID: id.ID(r.ChannelID.Bytes), CreatedAt: r.CreatedAt.Time.UTC()}
+	msg := Message{ID: id.ID(r.ID.Bytes), ChannelID: id.ID(r.ChannelID.Bytes), Kind: r.Kind, CreatedAt: r.CreatedAt.Time.UTC()}
 	if r.AuthorID.Valid {
 		msg.AuthorID = id.ID(r.AuthorID.Bytes)
 	}
 	if r.DeletedAt.Valid {
 		msg.Deleted = true
-		msg.Restorable = r.BodyEncrypted != nil && now.Sub(r.DeletedAt.Time) <= RestoreWindow && m.Allowed(ActionRestore)
+		msg.Restorable = (r.BodyEncrypted != nil || r.PhotoUploadID.Valid) &&
+			now.Sub(r.DeletedAt.Time) <= RestoreWindow && m.Allowed(ActionRestore)
+		return msg, nil
+	}
+	if r.Kind == KindPhoto {
+		msg.PhotoUploadID = id.ID(r.PhotoUploadID.Bytes)
 		return msg, nil
 	}
 	body, err := s.cfg.Cipher.Decrypt(msg.ID, msg.ChannelID, channelcrypt.Sealed{Version: r.KeyVersion.Int16, Data: r.BodyEncrypted})
 	if err != nil {
 		return Message{}, fmt.Errorf("mesaj %s: %w", msg.ID, err)
+	}
+	if r.Kind == KindPlace {
+		if msg.Place, err = DecodePlace(body); err != nil {
+			return Message{}, fmt.Errorf("mesaj %s: %w", msg.ID, err)
+		}
+		return msg, nil
 	}
 	msg.Body = body
 	return msg, nil
@@ -53,11 +65,15 @@ func (s *Service) view(r msgRow, m Decision, now time.Time) (Message, error) {
 // (Config.SendLimit, issue #101; apperr.ErrRateLimited). Retries count too;
 // slow mode applies on top.
 func (s *Service) Send(ctx context.Context, caller, tayfa, channel id.ID, in SendInput) (Message, error) {
-	switch {
-	case in.ClientRequestID == (id.ID{}):
+	if in.ClientRequestID == (id.ID{}) {
 		return Message{}, invalid("client_request_id")
-	case !validBody(in.Body):
-		return Message{}, invalid("body")
+	}
+	plain, err := normalizeSend(&in)
+	if err != nil {
+		return Message{}, err
+	}
+	if in.Kind == KindPhoto && s.cfg.Photos == nil {
+		return Message{}, apperr.ErrUnavailable
 	}
 	if !s.cfg.SendLimit.Allow(caller.String()) {
 		return Message{}, apperr.ErrRateLimited
@@ -94,16 +110,41 @@ func (s *Service) Send(ctx context.Context, caller, tayfa, channel id.ID, in Sen
 	}
 
 	msgID := s.ids.next()
-	sealed := s.cfg.Cipher.Encrypt(msgID, channel, in.Body)
+	p := store.CreateMessageParams{
+		ID: msgID.PG(), ChannelID: channel.PG(), AuthorID: caller.PG(), Kind: in.Kind, ClientRequestID: in.ClientRequestID.PG(),
+	}
+	if in.Kind == KindPhoto {
+		// Another message already holds the photo: nothing to ask core.
+		held, err := q.FindChannelPhotoHolders(ctx, []pgtype.UUID{in.PhotoUploadID.PG()})
+		if err != nil {
+			return Message{}, fmt.Errorf("fotoğraf: %w", err)
+		}
+		if len(held) > 0 {
+			return Message{}, apperr.ErrUploadInUse
+		}
+		// core attaches the photo to this message just before the row is
+		// written, outside chat's transaction, so no lock or connection is
+		// held during the call (ADR-0031): core checks it is the caller's,
+		// READY, a chat photo of this tayfa and free. If chat then fails to
+		// write the message, the attachment stays unconfirmed: a retry moves
+		// it to the new message, and core's reconciliation undoes it.
+		if err = s.cfg.Photos.AttachChannelPhoto(ctx, in.PhotoUploadID, tayfa, msgID); err != nil {
+			return Message{}, err
+		}
+		p.PhotoUploadID = in.PhotoUploadID.PG()
+	} else {
+		sealed := s.cfg.Cipher.Encrypt(msgID, channel, plain)
+		p.BodyEncrypted, p.KeyVersion = sealed.Data, pgtype.Int2{Int16: sealed.Version, Valid: true}
+	}
 	var row msgRow
 	created := false
 	err = pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
-		r, err := store.New(tx).CreateMessage(ctx, store.CreateMessageParams{
-			ID: msgID.PG(), ChannelID: channel.PG(), AuthorID: caller.PG(), BodyEncrypted: sealed.Data,
-			KeyVersion: pgtype.Int2{Int16: sealed.Version, Valid: true}, ClientRequestID: in.ClientRequestID.PG(),
-		})
+		r, err := store.New(tx).CreateMessage(ctx, p)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil // a concurrent retry won; read it below
+		}
+		if isUniqueViolation(err, "channel_messages_photo_upload_id_key") {
+			return apperr.ErrUploadInUse // another message holds the photo
 		}
 		if err != nil {
 			return fmt.Errorf("mesaj yazılamadı: %w", err)
@@ -123,8 +164,11 @@ func (s *Service) Send(ctx context.Context, caller, tayfa, channel id.ID, in Sen
 		}
 		return msg, err
 	}
-	// The caller wrote it: return the body without decrypting it again.
-	msg := Message{ID: msgID, ChannelID: channel, AuthorID: caller, Body: in.Body, CreatedAt: row.CreatedAt.Time.UTC()}
+	// The caller wrote it: return the content without decrypting it again.
+	msg := Message{
+		ID: msgID, ChannelID: channel, AuthorID: caller, Kind: in.Kind, Body: in.Body, PhotoUploadID: in.PhotoUploadID,
+		Place: in.Place, CreatedAt: row.CreatedAt.Time.UTC(),
+	}
 	s.cfg.Publisher.MessageCreated(tayfa, msg)
 	return msg, nil
 }
@@ -261,9 +305,13 @@ func (s *Service) Delete(ctx context.Context, caller, tayfa, channel, message id
 			return fmt.Errorf("mesaj: %w", err)
 		}
 		var n int64
+		var released id.ID
 		if own {
-			if r.BodyEncrypted == nil {
+			if r.BodyEncrypted == nil && !r.PhotoUploadID.Valid {
 				return nil // already erased
+			}
+			if r.PhotoUploadID.Valid {
+				released = id.ID(r.PhotoUploadID.Bytes)
 			}
 			n, err = q.EraseMessage(ctx, store.EraseMessageParams{DeletedAt: ts(now), DeletedBy: caller.PG(), ChannelID: channel.PG(), ID: message.PG()})
 		} else {
@@ -279,9 +327,17 @@ func (s *Service) Delete(ctx context.Context, caller, tayfa, channel, message id
 			return apperr.ErrMessageNotFound
 		}
 		changed = true
-		return record(ctx, tx, EventMessageDeleted, caller, "channel_message", message, map[string]any{
+		if err := record(ctx, tx, EventMessageDeleted, caller, "channel_message", message, map[string]any{
 			"tayfa_id": tayfa.String(), "channel_id": channel.String(), "restorable": !own,
-		})
+		}); err != nil {
+			return err
+		}
+		if released != (id.ID{}) {
+			// The author's own deletion lets go of the photo at once;
+			// core deletes it (ADR-0031).
+			return corerelay.Release(ctx, tx, released, message)
+		}
+		return nil
 	})
 	if err != nil {
 		return err
@@ -345,7 +401,7 @@ func (s *Service) Restore(ctx context.Context, caller, tayfa, channel, message i
 	if !row.DeletedAt.Valid {
 		return s.view(row, m, now)
 	}
-	if row.BodyEncrypted == nil || now.Sub(row.DeletedAt.Time) > RestoreWindow {
+	if (row.BodyEncrypted == nil && !row.PhotoUploadID.Valid) || now.Sub(row.DeletedAt.Time) > RestoreWindow {
 		return Message{}, apperr.ErrMessageNotFound
 	}
 	if err := s.onAuthor(ctx, caller, tayfa, ActionRestore, row); err != nil {
@@ -449,16 +505,33 @@ func PurgeTayfa(ctx context.Context, q *store.Queries, tayfa id.ID) error {
 }
 
 // PurgeDeleted permanently deletes messages deleted more than RestoreWindow
-// ago and returns how many.
+// ago and returns how many. A photo still held by a hidden message is let
+// go in the same transaction (chat.media_released; ADR-0031).
 func (s *Service) PurgeDeleted(ctx context.Context) (int64, error) {
 	before := ts(s.now().Add(-RestoreWindow))
 	var total int64
 	for {
-		n, err := store.New(s.cfg.Pool).PurgeDeletedMessages(ctx, store.PurgeDeletedMessagesParams{Before: before, N: purgeBatch})
+		var n int
+		err := pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
+			rows, err := store.New(tx).PurgeDeletedMessages(ctx, store.PurgeDeletedMessagesParams{Before: before, N: purgeBatch})
+			if err != nil {
+				return err
+			}
+			n = len(rows)
+			for _, r := range rows {
+				if !r.PhotoUploadID.Valid {
+					continue
+				}
+				if err := corerelay.Release(ctx, tx, id.ID(r.PhotoUploadID.Bytes), id.ID(r.ID.Bytes)); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 		if err != nil {
 			return total, fmt.Errorf("silinmiş mesajlar: %w", err)
 		}
-		total += n
+		total += int64(n)
 		if n < purgeBatch {
 			return total, nil
 		}

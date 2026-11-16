@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -60,9 +61,11 @@ func (s *Service) createDirect(ctx context.Context, user id.ID, in CreateInput) 
 	if err != nil {
 		return MyView{}, false, err
 	}
-	evidence, err := cleanEvidence(in.Evidence)
-	if err != nil {
-		return MyView{}, false, err
+	evidence := ""
+	if in.Evidence != "" || in.EvidenceUpload == (id.ID{}) {
+		if evidence, err = cleanEvidence(in.Evidence); err != nil {
+			return MyView{}, false, err
+		}
 	}
 	now := s.now()
 	// First pass, without locks: an earlier report, the daily limit, then
@@ -93,13 +96,26 @@ func (s *Service) createDirect(ctx context.Context, user id.ID, in CreateInput) 
 			v = prev
 			return err
 		}
+		rid := id.New()
 		p := store.CreateReportParams{
-			ID: id.New().PG(), ReporterID: user.PG(), TargetType: string(TargetDMMessage), TargetID: target.PG(),
+			ID: rid.PG(), ReporterID: user.PG(), TargetType: string(TargetDMMessage), TargetID: target.PG(),
 			SubjectUserID: sender.PG(), Reason: string(in.Reason), Priority: string(PriorityNormal),
-			EvidenceText: pgtype.Text{String: evidence, Valid: true},
 			PlatformOnly: true, CreatedAt: ts(now),
 			EscalatedToPlatformAt: ts(now), EscalationReason: pgtype.Text{String: EscalationDirectMessage, Valid: true},
 			PlatformStatus: pgtype.Text{String: "open", Valid: true},
+		}
+		if evidence != "" {
+			p.EvidenceText = pgtype.Text{String: evidence, Valid: true}
+		}
+		if in.EvidenceUpload != (id.ID{}) {
+			// The photo belongs to this report before the row is written
+			// (the column's trigger checks it again); a lost race below
+			// rolls the attachment back with the transaction.
+			if err := media.Attach(ctx, q, user, in.EvidenceUpload, media.PurposeReportEvidence, id.ID{},
+				media.Target{Type: media.TargetReport, ID: rid}, now); err != nil {
+				return err
+			}
+			p.EvidenceUploadID = in.EvidenceUpload.PG()
 		}
 		if desc != "" {
 			p.Description = pgtype.Text{String: desc, Valid: true}
@@ -107,12 +123,9 @@ func (s *Service) createDirect(ctx context.Context, user id.ID, in CreateInput) 
 		if minor {
 			p.Priority, p.MinorInvolvedAt = string(PriorityMinorInvolved), ts(now)
 		}
-		rid, err := q.CreateReport(ctx, p)
-		if errors.Is(err, pgx.ErrNoRows) {
-			v, _, err = mine(ctx, q, user, TargetDMMessage, target)
-			return err
-		}
-		if err != nil {
+		if _, err := q.CreateReport(ctx, p); errors.Is(err, pgx.ErrNoRows) {
+			return errReportRaced
+		} else if err != nil {
 			return fmt.Errorf("şikâyet: %w", err)
 		}
 		created = true
@@ -121,7 +134,7 @@ func (s *Service) createDirect(ctx context.Context, user id.ID, in CreateInput) 
 		}
 		// IDs and classification only: never the evidence, the description
 		// or the reporter (no actor).
-		rep := id.ID(rid.Bytes)
+		rep := rid
 		ref := txn.Target{Type: subjectType, ID: rep}
 		if err := txn.Event(ctx, q, EventCreated, id.ID{}, id.ID{}, ref, map[string]any{
 			"report_id": rep.String(), "target_type": p.TargetType, "reason": p.Reason, "priority": p.Priority,
@@ -132,11 +145,20 @@ func (s *Service) createDirect(ctx context.Context, user id.ID, in CreateInput) 
 			"report_id": rep.String(), "escalation_reason": EscalationDirectMessage, "priority": p.Priority,
 		})
 	})
+	if errors.Is(err, errReportRaced) {
+		// Another report about the target won (the same reporter): the
+		// transaction, with the photo's attachment, was rolled back.
+		v, _, err = mine(ctx, s.q, user, TargetDMMessage, target)
+		return v, false, err
+	}
 	if err != nil {
 		return MyView{}, false, err
 	}
 	return v, created, nil
 }
+
+// errReportRaced rolls back a report whose INSERT lost to an earlier one.
+var errReportRaced = errors.New("şikâyet zaten var")
 
 // directPrecheck returns the caller's earlier report about the target, or
 // apperr.ErrReportLimit when the daily limit is used up.
@@ -197,6 +219,9 @@ func (s *Service) createProfileUser(ctx context.Context, user id.ID, in CreateIn
 	}
 	if in.Evidence != "" {
 		return MyView{}, false, apperr.Validation("evidence_text")
+	}
+	if in.EvidenceUpload != (id.ID{}) {
+		return MyView{}, false, apperr.Validation("evidence_upload_id")
 	}
 	desc, err := cleanDescription(in.Description)
 	if err != nil {

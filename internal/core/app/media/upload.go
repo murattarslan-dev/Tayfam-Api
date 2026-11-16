@@ -50,8 +50,16 @@ type Created struct {
 	Links  []PutLink
 }
 
-// variants returns the preview and the full variant of in.
-func variants(in []VariantInput) (preview, full VariantInput, err error) {
+// variants returns the preview and the full variant of in. A DM
+// attachment has exactly one blob, returned as full with no preview.
+func variants(purpose string, in []VariantInput) (preview, full VariantInput, err error) {
+	if purpose == PurposeDMAttachment {
+		if len(in) != 1 || in[0].Kind != KindBlob || in[0].ContentType != BlobType ||
+			in[0].SizeBytes < 1 || in[0].SizeBytes > MaxVariantBytes {
+			return preview, full, apperr.Validation("variants")
+		}
+		return preview, in[0], nil
+	}
 	if len(in) != 2 {
 		return preview, full, apperr.Validation("variants")
 	}
@@ -73,18 +81,18 @@ func variants(in []VariantInput) (preview, full VariantInput, err error) {
 
 func validate(in CreateInput) (id.ID, VariantInput, VariantInput, error) {
 	switch in.Purpose {
-	case PurposeAvatar:
+	case PurposeAvatar, PurposeDMAttachment, PurposeReportEvidence:
 		if in.Tayfa != (id.ID{}) {
 			return id.ID{}, VariantInput{}, VariantInput{}, apperr.Validation("tayfa_id")
 		}
-	case PurposeCover, PurposeCatchPhoto, PurposeEventPhoto:
+	case PurposeCover, PurposeCatchPhoto, PurposeEventPhoto, PurposeChatPhoto:
 		if in.Tayfa == (id.ID{}) {
 			return id.ID{}, VariantInput{}, VariantInput{}, apperr.Validation("tayfa_id")
 		}
 	default:
 		return id.ID{}, VariantInput{}, VariantInput{}, apperr.Validation("purpose")
 	}
-	preview, full, err := variants(in.Variants)
+	preview, full, err := variants(in.Purpose, in.Variants)
 	if err != nil {
 		return id.ID{}, VariantInput{}, VariantInput{}, err
 	}
@@ -158,7 +166,7 @@ func (s *Service) CreateUpload(ctx context.Context, user id.ID, in CreateInput) 
 		uid := id.New()
 		if _, err := q.CreateUpload(ctx, store.CreateUploadParams{
 			ID: uid.PG(), UserID: user.PG(), TayfaID: optional(in.Tayfa), Purpose: in.Purpose, R2Key: key,
-			PreviewType: preview.ContentType, PreviewBytes: preview.SizeBytes,
+			PreviewType: optText(preview.ContentType), PreviewBytes: optInt8(preview.SizeBytes),
 			FullType: full.ContentType, FullBytes: full.SizeBytes, ClientRequestID: crid.PG(),
 		}); err != nil {
 			return fmt.Errorf("yükleme kaydı: %w", err)
@@ -176,16 +184,38 @@ func (s *Service) CreateUpload(ctx context.Context, user id.ID, in CreateInput) 
 	if row.Status != StatusPending {
 		return out, nil
 	}
-	for _, v := range []VariantInput{
+	vs := []VariantInput{
 		{KindPreview, row.PreviewType.String, row.PreviewBytes.Int64}, {KindFull, row.FullType.String, row.FullBytes.Int64},
-	} {
-		link, err := s.cfg.Store.PresignPut(incomingKey(row.R2Key, v.Kind), v.ContentType, v.SizeBytes, UploadLinkTTL)
+	}
+	if row.Purpose == PurposeDMAttachment {
+		vs = []VariantInput{{KindBlob, row.FullType.String, row.FullBytes.Int64}}
+	}
+	for _, v := range vs {
+		key := v.Kind
+		if key == KindBlob {
+			key = KindFull
+		}
+		link, err := s.cfg.Store.PresignPut(incomingKey(row.R2Key, key), v.ContentType, v.SizeBytes, UploadLinkTTL)
 		if err != nil {
 			return Created{}, fmt.Errorf("yükleme linki: %w", err)
 		}
 		out.Links = append(out.Links, PutLink{Kind: v.Kind, Presigned: link})
 	}
 	return out, nil
+}
+
+func optText(s string) pgtype.Text {
+	if s == "" {
+		return pgtype.Text{}
+	}
+	return text(s)
+}
+
+func optInt8(v int64) pgtype.Int8 {
+	if v == 0 {
+		return pgtype.Int8{}
+	}
+	return pgtype.Int8{Int64: v, Valid: true}
 }
 
 func optional(u id.ID) pgtype.UUID {
@@ -265,21 +295,36 @@ func (s *Service) CompleteUpload(ctx context.Context, user, upload id.ID, width,
 	if !s.Enabled() {
 		return Upload{}, apperr.ErrUnavailable
 	}
-	if width < 1 || width > MaxFullSide {
+	if width < 0 || width > MaxFullSide {
 		return Upload{}, apperr.Validation("width")
 	}
-	if height < 1 || height > MaxFullSide {
+	if height < 0 || height > MaxFullSide {
 		return Upload{}, apperr.Validation("height")
 	}
 	row, err := s.ownUpload(ctx, user, upload)
 	if err != nil {
 		return Upload{}, err
 	}
+	blob := row.Purpose == PurposeDMAttachment
+	switch {
+	case blob && width != 0:
+		return Upload{}, apperr.Validation("width")
+	case blob && height != 0:
+		return Upload{}, apperr.Validation("height")
+	case !blob && (width < 1 || width > MaxFullSide):
+		return Upload{}, apperr.Validation("width")
+	case !blob && (height < 1 || height > MaxFullSide):
+		return Upload{}, apperr.Validation("height")
+	}
 	if row.Status != StatusPending {
 		return s.withURLs(row)
 	}
 	log := s.cfg.Log.With(slog.String("upload_id", upload.String()))
-	err = s.verify(ctx, row, width, height)
+	if blob {
+		err = s.verifyBlob(ctx, row)
+	} else {
+		err = s.verify(ctx, row, width, height)
+	}
 	var rj rejection
 	switch {
 	case errors.As(err, &rj):
@@ -294,9 +339,11 @@ func (s *Service) CompleteUpload(ctx context.Context, user, upload id.ID, width,
 		log.WarnContext(ctx, "yükleme denetlenemedi; bekliyor", slog.String("err", err.Error()))
 		return Upload{}, apperr.ErrUnavailable
 	default:
-		if _, err := s.q.MarkUploadReady(ctx, store.MarkUploadReadyParams{
-			ID: row.ID, Width: pgInt4(width), Height: pgInt4(height), Now: ts(s.now()),
-		}); err != nil {
+		p := store.MarkUploadReadyParams{ID: row.ID, Now: ts(s.now())}
+		if !blob {
+			p.Width, p.Height = pgInt4(width), pgInt4(height)
+		}
+		if _, err := s.q.MarkUploadReady(ctx, p); err != nil {
 			return Upload{}, fmt.Errorf("hazır: %w", err)
 		}
 		log.InfoContext(ctx, "yükleme hazır")
@@ -335,6 +382,28 @@ func (s *Service) verify(ctx context.Context, row store.Upload, width, height in
 		}
 	}
 	return nil
+}
+
+// verifyBlob checks a DM attachment: the stored object has the declared
+// size, and it is copied out of quarantine bound to the checked ETag. The
+// content is encrypted by the client and never read (ADR-0031): no range
+// read, no type, metadata or dimension check.
+func (s *Service) verifyBlob(ctx context.Context, row store.Upload) error {
+	o, err := s.cfg.Store.Head(ctx, incomingKey(row.R2Key, KindFull))
+	switch {
+	case errors.Is(err, objstore.ErrNotFound):
+		return apperr.ErrUploadNotReceived
+	case err != nil:
+		return err
+	}
+	if o.Size != row.FullBytes.Int64 {
+		return rejection{"size_mismatch"}
+	}
+	err = s.cfg.Store.Copy(ctx, incomingKey(row.R2Key, KindFull), mediaKey(row.R2Key, KindFull), o.ETag)
+	if errors.Is(err, objstore.ErrNotFound) {
+		return apperr.ErrUploadNotReceived
+	}
+	return err
 }
 
 // GetUpload returns the caller's own upload (MediaService.GetUpload).
@@ -398,7 +467,23 @@ func Attach(ctx context.Context, q *store.Queries, user, upload id.ID, purpose s
 		return apperr.ErrUploadNotReady
 	}
 	if row.AttachedID.Valid && (row.AttachedType.String != target.Type || id.ID(row.AttachedID.Bytes) != target.ID) {
-		return apperr.ErrUploadInUse
+		// A chat attachment chat has not confirmed may belong to a message
+		// that was never written (ADR-0031): it moves to the owner's new
+		// message, so a failed send can be retried.
+		if !chatTarget(target.Type) || row.AttachedType.String != target.Type || row.AttachConfirmedAt.Valid {
+			return apperr.ErrUploadInUse
+		}
+		n, err := q.MoveChatAttachment(ctx, store.MoveChatAttachmentParams{
+			AttachedID: target.ID.PG(), Now: ts(now), ID: upload.PG(), UserID: user.PG(), Purpose: purpose,
+			TayfaID: optional(tayfa), AttachedType: target.Type,
+		})
+		if err != nil {
+			return fmt.Errorf("bağlama: %w", err)
+		}
+		if n != 1 {
+			return apperr.ErrUploadInUse
+		}
+		return nil
 	}
 	n, err := q.AttachUpload(ctx, store.AttachUploadParams{
 		ID: upload.PG(), UserID: user.PG(), Purpose: purpose, TayfaID: optional(tayfa),
@@ -423,6 +508,61 @@ func (s *Service) AttachAvatar(ctx context.Context, user, upload id.ID) error {
 	})
 }
 
+func chatTarget(t string) bool { return t == TargetChannelMessage || t == TargetDMMessage }
+
+// AttachChannelPhoto attaches the caller's READY chat photo of tayfa to the
+// channel message (MediaService.AttachChannelPhoto; chat calls it with the
+// caller's token while it writes the message, ADR-0031).
+func (s *Service) AttachChannelPhoto(ctx context.Context, user, upload, tayfa, message id.ID) error {
+	if !s.Enabled() {
+		return apperr.ErrUnavailable
+	}
+	if tayfa == (id.ID{}) {
+		return apperr.Validation("tayfa_id")
+	}
+	if message == (id.ID{}) {
+		return apperr.Validation("message_id")
+	}
+	now := s.now()
+	return pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
+		return Attach(ctx, store.New(tx), user, upload, PurposeChatPhoto, tayfa, Target{Type: TargetChannelMessage, ID: message}, now)
+	})
+}
+
+// AttachDirectMessageAttachment attaches the caller's READY DM attachment
+// to the direct message (MediaService.AttachDirectMessageAttachment).
+func (s *Service) AttachDirectMessageAttachment(ctx context.Context, user, upload, message id.ID) error {
+	if !s.Enabled() {
+		return apperr.ErrUnavailable
+	}
+	if message == (id.ID{}) {
+		return apperr.Validation("message_id")
+	}
+	now := s.now()
+	return pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
+		return Attach(ctx, store.New(tx), user, upload, PurposeDMAttachment, id.ID{}, Target{Type: TargetDMMessage, ID: message}, now)
+	})
+}
+
+// MessageMediaReleased deletes an upload still attached to message (chat's
+// chat.media_released event, ADR-0031). q runs in the consumer's
+// transaction; the method is idempotent.
+func MessageMediaReleased(ctx context.Context, q *store.Queries, upload, message id.ID) error {
+	if _, err := q.ReleaseMessageMedia(ctx, store.ReleaseMessageMediaParams{ID: upload.PG(), MessageID: message.PG()}); err != nil {
+		return fmt.Errorf("mesaj dosyası: %w", err)
+	}
+	return nil
+}
+
+// TayfaPurged deletes a purged tayfa's channel photos inside the purge's
+// transaction (ADR-0031).
+func TayfaPurged(ctx context.Context, q *store.Queries, tayfa id.ID) error {
+	if _, err := q.ReleaseTayfaChatPhotos(ctx, tayfa.PG()); err != nil {
+		return fmt.Errorf("kanal fotoğrafları: %w", err)
+	}
+	return nil
+}
+
 // UserProfileUpdated deletes the user's attached avatars other than the
 // current one (identity's user.profile_updated; zero current: no avatar).
 // q runs in the consumer's transaction; the method is idempotent.
@@ -434,7 +574,9 @@ func UserProfileUpdated(ctx context.Context, q *store.Queries, user, current id.
 }
 
 // UserDeleted deletes the user's files; covers attached to a tayfa or
-// event stay with the content without an owner (identity's user.deleted).
+// event stay with the content without an owner, and so does report
+// evidence attached to a report (the platform's, ADR-0031) (identity's
+// user.deleted).
 // q runs in the consumer's transaction; the method is idempotent.
 func UserDeleted(ctx context.Context, q *store.Queries, user id.ID) error {
 	if _, err := q.DeleteUserUploads(ctx, user.PG()); err != nil {

@@ -40,6 +40,8 @@ type ChannelMessage struct {
 	CreatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
 	DeletedBy       pgtype.UUID
+	Kind            string
+	PhotoUploadID   pgtype.UUID
 }
 
 type ChannelRead struct {
@@ -131,14 +133,15 @@ type DmEnvelope struct {
 }
 
 type DmMessage struct {
-	ID              pgtype.UUID
-	ConversationID  pgtype.UUID
-	SenderID        pgtype.UUID
-	SenderDeviceID  pgtype.UUID
-	Encryption      string
-	ClientRequestID pgtype.UUID
-	CreatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
+	ID                 pgtype.UUID
+	ConversationID     pgtype.UUID
+	SenderID           pgtype.UUID
+	SenderDeviceID     pgtype.UUID
+	Encryption         string
+	ClientRequestID    pgtype.UUID
+	CreatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	AttachmentUploadID pgtype.UUID
 }
 
 type DomainEvent struct {

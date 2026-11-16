@@ -53,6 +53,26 @@ import "google/protobuf/timestamp.proto";
 // for good, the avatar changed or the account deleted) its media is deleted
 // too.
 //
+// Chat photos and attachments (issue #205, ADR-0031):
+//   - CHAT_PHOTO is an image like the others, for one tayfa. chat attaches
+//     it to a channel message (AttachChannelPhoto) when the message is
+//     sent; its links go only to the channel's audience, which chat decides
+//     (GetMediaUrls asks chat's MessageMediaService with the caller's
+//     token).
+//   - DM_ATTACHMENT is not an image: one opaque BLOB the client encrypted
+//     (AES-256-GCM, a random key that travels inside the Signal envelope
+//     and never reaches the server). CompleteUpload checks its size only
+//     and copies it out of quarantine; it is never read, parsed or decoded.
+//     chat attaches it to a direct message (AttachDirectMessageAttachment);
+//     its links go only to the conversation's two parties (chat decides).
+//   - REPORT_EVIDENCE is an image the reporter of a direct message shares
+//     from their own device (ReportService.CreateReport,
+//     evidence_upload_id). Only its owner and the platform panel ever get
+//     a link to it.
+// When chat cannot answer, chat files are left out of GetMediaUrls (the
+// others are returned). Messages delete their files through chat's events
+// (ChatEventService).
+//
 // Without object storage configured (no R2 credentials) every method is
 // UNAVAILABLE without ErrorInfo; core runs anyway.
 //
@@ -61,11 +81,13 @@ import "google/protobuf/timestamp.proto";
 service MediaService {
   // CreateUpload opens an upload and returns its PUT links.
   // variants: exactly one PREVIEW and one FULL, each "image/jpeg" or
-  // "image/webp" and 1 to 10 MiB (10485760); otherwise
+  // "image/webp" and 1 to 10 MiB (10485760); for DM_ATTACHMENT exactly one
+  // BLOB of "application/octet-stream", 1 to 10 MiB; otherwise
   // ERROR_REASON_VALIDATION (field "variants").
-  // tayfa_id: required for COVER and CATCH_PHOTO (the caller must be an
-  // ACTIVE member, ERROR_REASON_TAYFA_NOT_FOUND otherwise, and the tayfa
-  // must not be read-only); must be empty for AVATAR.
+  // tayfa_id: required for COVER, CATCH_PHOTO and CHAT_PHOTO (the caller
+  // must be an ACTIVE member, ERROR_REASON_TAYFA_NOT_FOUND otherwise, and
+  // the tayfa must not be read-only); must be empty for AVATAR,
+  // DM_ATTACHMENT and REPORT_EVIDENCE.
   // client_request_id: required; a repeat returns the same upload with
   // fresh links while it is PENDING (the same purpose, tayfa and variants,
   // otherwise ERROR_REASON_VALIDATION on client_request_id).
@@ -75,7 +97,9 @@ service MediaService {
 
   // CompleteUpload checks both variants (see the flow above) and makes the
   // upload READY or REJECTED. width and height are the full variant's,
-  // 1 to 1600 (ERROR_REASON_VALIDATION otherwise). A variant that is not
+  // 1 to 1600 (ERROR_REASON_VALIDATION otherwise). For DM_ATTACHMENT they
+  // must be 0: only the blob's stored size is checked (REJECTED with
+  // SIZE_MISMATCH otherwise) and it is copied out of quarantine unread. A variant that is not
   // stored yet is ERROR_REASON_UPLOAD_NOT_RECEIVED and the upload stays
   // PENDING (finish the PUT and call again while the link is valid). Storage
   // trouble is UNAVAILABLE and the upload stays PENDING. A repeat after the
@@ -96,7 +120,12 @@ service MediaService {
   // tayfa (TayfaView). An event cover or a catch photo is visible to ACTIVE
   // members who may see the event (EventView, events module on, event not
   // deleted; the catch not deleted). An event album photo likewise (the
-  // photo not deleted; ADR-0028).
+  // photo not deleted; ADR-0028). A CHAT_PHOTO or DM_ATTACHMENT is
+  // visible when chat says the caller may see the message it is attached
+  // to (channel audience; conversation parties). A REPORT_EVIDENCE is
+  // visible to its owner only. For DM_ATTACHMENT the link is full_url
+  // ("application/octet-stream"); preview_url is empty and width and
+  // height are 0.
   // 1 to 100 distinct upload IDs.
   rpc GetMediaUrls(GetMediaUrlsRequest) returns (GetMediaUrlsResponse);
 
@@ -110,6 +139,26 @@ service MediaService {
   // deleted when identity's user.profile_updated with the new avatar
   // reaches core.
   rpc AttachAvatar(AttachAvatarRequest) returns (AttachAvatarResponse);
+
+  // AttachChannelPhoto attaches the caller's READY CHAT_PHOTO upload of
+  // tayfa_id to the channel message message_id (issue #205). chat calls it
+  // with the caller's own token just before it writes the message, outside
+  // its transaction; the gateway exposes it nowhere. Unknown, another
+  // user's, another purpose or another tayfa's upload is
+  // ERROR_REASON_UPLOAD_NOT_FOUND; not READY is
+  // ERROR_REASON_UPLOAD_NOT_READY; attached to a message chat has
+  // confirmed is ERROR_REASON_UPLOAD_IN_USE. A repeat for the same message
+  // succeeds. An attachment chat has not confirmed yet (its message may
+  // never have been written) moves to the new message, so a failed send
+  // can be retried. core's reconciliation job confirms attachments with
+  // chat (MediaHolderService, chat's service token) after 10 minutes and
+  // undoes those no message holds; the file then expires like any
+  // unattached upload.
+  rpc AttachChannelPhoto(AttachChannelPhotoRequest) returns (AttachChannelPhotoResponse);
+
+  // AttachDirectMessageAttachment attaches the caller's READY DM_ATTACHMENT
+  // upload to the direct message message_id, like AttachChannelPhoto.
+  rpc AttachDirectMessageAttachment(AttachDirectMessageAttachmentRequest) returns (AttachDirectMessageAttachmentResponse);
 
   // KVKK data export storage (issue #144, ADR-0021). identity calls these
   // with the caller's own token while it builds the caller's export; the
@@ -158,6 +207,12 @@ enum UploadPurpose {
   // An event album photo (issue #206, ADR-0028). Attached with
   // EventService.AddEventPhoto; never a cover.
   UPLOAD_PURPOSE_EVENT_PHOTO = 4;
+  // A photo in a channel message (issue #205, ADR-0031).
+  UPLOAD_PURPOSE_CHAT_PHOTO = 5;
+  // An end-to-end encrypted direct message attachment: an opaque BLOB.
+  UPLOAD_PURPOSE_DM_ATTACHMENT = 6;
+  // A photo the reporter of a direct message shares from their device.
+  UPLOAD_PURPOSE_REPORT_EVIDENCE = 7;
 }
 
 // UploadStatus is where an upload stands (uploads.status).
@@ -201,6 +256,8 @@ enum VariantKind {
   VARIANT_KIND_PREVIEW = 1;
   // Longest side at most 1600 px.
   VARIANT_KIND_FULL = 2;
+  // DM_ATTACHMENT only: the encrypted file, never read by the server.
+  VARIANT_KIND_BLOB = 3;
 }
 
 message Upload {
@@ -209,9 +266,10 @@ message Upload {
   UploadStatus status = 3;
   // Set when status is REJECTED.
   UploadRejectReason reject_reason = 4;
-  // Set for COVER and CATCH_PHOTO.
+  // Set for COVER, CATCH_PHOTO and CHAT_PHOTO.
   string tayfa_id = 5;
-  // Declared sizes of both variants together.
+  // Declared sizes of both variants together (the blob's size for
+  // DM_ATTACHMENT).
   int64 size_bytes = 6;
   google.protobuf.Timestamp create_time = 7;
   // Set when status is READY: the links (1 hour) and their expiry.
@@ -240,7 +298,7 @@ message MediaUrls {
 // UploadVariant is a variant the client will PUT.
 message UploadVariant {
   VariantKind kind = 1;
-  // "image/jpeg" or "image/webp".
+  // "image/jpeg" or "image/webp"; "application/octet-stream" for BLOB.
   string content_type = 2;
   // Exact size of the file, 1 to 10485760.
   int64 size_bytes = 3;
@@ -310,6 +368,24 @@ message AttachAvatarRequest {
 }
 
 message AttachAvatarResponse {}
+
+message AttachChannelPhotoRequest {
+  string upload_id = 1;
+  // The tayfa of the channel; the upload must be for it.
+  string tayfa_id = 2;
+  // chat's channel message ID (UUID).
+  string message_id = 3;
+}
+
+message AttachChannelPhotoResponse {}
+
+message AttachDirectMessageAttachmentRequest {
+  string upload_id = 1;
+  // chat's direct message ID (UUID).
+  string message_id = 2;
+}
+
+message AttachDirectMessageAttachmentResponse {}
 
 message ReserveExportUploadRequest {
   // identity's data export request (UUID).

@@ -63,6 +63,7 @@ func directMessageToProto(m dm.Message) *chatv1.DirectMessage {
 	return &chatv1.DirectMessage{
 		Id: m.ID.String(), ConversationId: m.ConversationID.String(), SenderUserId: idOrEmpty(m.SenderID),
 		Deleted: m.Deleted, CreateTime: timestamppb.New(m.CreatedAt), Encryption: messageEncryptions[m.Encryption],
+		AttachmentUploadId: idOrEmpty(m.AttachmentUploadID),
 	}
 }
 
@@ -83,6 +84,13 @@ func (s *DirectMessageServer) SendDirectMessage(ctx context.Context, req *chatv1
 		return nil, err
 	}
 	in := dm.SendInput{Recipient: v[0], ClientRequestID: v[1], Session: session.Session}
+	if a := req.GetAttachmentUploadId(); a != "" {
+		u, ok := id.Parse(a)
+		if !ok {
+			return nil, validation("attachment_upload_id")
+		}
+		in.Attachment = u
+	}
 	for _, e := range req.GetEnvelopes() {
 		d, ok := id.Parse(e.GetDeviceId())
 		if !ok {

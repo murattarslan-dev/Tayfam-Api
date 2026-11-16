@@ -34,6 +34,8 @@ func TestTypesAreExplicit(t *testing.T) {
 		"tayfa.suspended", "tayfa.unsuspended",
 		// Event channels (issue #183).
 		"rsvp.changed", "rsvp.promoted", "event.updated", "event.cancelled",
+		// The platform removes a reported channel message (issue #205).
+		"report.channel_message_removed",
 	}
 	if got := Types(); !slices.Equal(got, want) {
 		t.Fatalf("Types = %v", got)

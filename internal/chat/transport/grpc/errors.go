@@ -63,6 +63,12 @@ func reasonFor(err error) (code codes.Code, reason chatv1.ErrorReason, ok bool) 
 		return codes.InvalidArgument, chatv1.ErrorReason_ERROR_REASON_NOT_TAYFA_MEMBER, true
 	case errors.Is(err, apperr.ErrEventEnded):
 		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_EVENT_ENDED, true
+	case errors.Is(err, apperr.ErrUploadNotFound):
+		return codes.NotFound, chatv1.ErrorReason_ERROR_REASON_UPLOAD_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrUploadNotReady):
+		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_UPLOAD_NOT_READY, true
+	case errors.Is(err, apperr.ErrUploadInUse):
+		return codes.FailedPrecondition, chatv1.ErrorReason_ERROR_REASON_UPLOAD_IN_USE, true
 	case errors.Is(err, apperr.ErrConversationNotFound):
 		return codes.NotFound, chatv1.ErrorReason_ERROR_REASON_CONVERSATION_NOT_FOUND, true
 	case errors.Is(err, apperr.ErrDirectMessageNotAllowed):

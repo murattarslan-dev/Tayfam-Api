@@ -40,7 +40,9 @@ service SocialService {
   // user_id: a friendship, the caller's request, or user_id's request
   // (declining it). Nobody is told. Removing nothing succeeds.
   rpc RemoveFriendship(RemoveFriendshipRequest) returns (RemoveFriendshipResponse);
-  // ListFriends lists the caller's friends.
+  // ListFriends lists the caller's friends, highest friendship score first,
+  // by user ID among equals (ADR-0030 §12). The score is in no field and not
+  // in next_page_token; it counts only while both sides have profiling on.
   rpc ListFriends(ListFriendsRequest) returns (ListFriendsResponse);
   // ListFriendRequests lists requests waiting for the caller (INCOMING) or
   // sent by the caller (OUTGOING).

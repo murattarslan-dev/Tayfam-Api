@@ -139,18 +139,53 @@ type messageJSON struct {
 	ChannelID string `json:"channel_id"`
 	// Absent when the author's account was deleted.
 	AuthorUserID string `json:"author_user_id,omitempty"`
-	// Absent when deleted.
-	Body       string    `json:"body,omitempty"`
-	Deleted    bool      `json:"deleted"`
-	Restorable bool      `json:"restorable,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
+	// text, photo or place (issue #205); unknown for a newer kind.
+	Kind string `json:"kind"`
+	// text only; absent when deleted.
+	Body string `json:"body,omitempty"`
+	// photo only; absent when deleted. Links: POST /v1/media/urls.
+	PhotoUploadID string `json:"photo_upload_id,omitempty"`
+	// place only; absent when deleted. Never logged.
+	Place      *placeJSON `json:"place,omitempty"`
+	Deleted    bool       `json:"deleted"`
+	Restorable bool       `json:"restorable,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+}
+
+// placeJSON is a place a user shared (ADR-0008: content, not the device's
+// location).
+type placeJSON struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	Name      string  `json:"name,omitempty"`
+}
+
+var messageKindNames = map[chatv1.MessageKind]string{
+	// A chat older than kinds (issue #205) sends none: every such message
+	// is text.
+	chatv1.MessageKind_MESSAGE_KIND_UNSPECIFIED: "text",
+	chatv1.MessageKind_MESSAGE_KIND_TEXT:        "text",
+	chatv1.MessageKind_MESSAGE_KIND_PHOTO:       "photo",
+	chatv1.MessageKind_MESSAGE_KIND_PLACE:       "place",
+}
+
+var messageKindValues = map[string]chatv1.MessageKind{
+	"":      chatv1.MessageKind_MESSAGE_KIND_TEXT,
+	"text":  chatv1.MessageKind_MESSAGE_KIND_TEXT,
+	"photo": chatv1.MessageKind_MESSAGE_KIND_PHOTO,
+	"place": chatv1.MessageKind_MESSAGE_KIND_PLACE,
 }
 
 func messageFrom(m *chatv1.Message) messageJSON {
-	return messageJSON{
+	out := messageJSON{
 		ID: m.GetId(), ChannelID: m.GetChannelId(), AuthorUserID: m.GetAuthorUserId(), Body: m.GetBody(),
+		Kind: nameOr(messageKindNames, m.GetKind()), PhotoUploadID: m.GetPhotoUploadId(),
 		Deleted: m.GetDeleted(), Restorable: m.GetRestorable(), CreatedAt: m.GetCreateTime().AsTime(),
 	}
+	if p := m.GetPlace(); p != nil {
+		out.Place = &placeJSON{Latitude: p.GetLatitude(), Longitude: p.GetLongitude(), Name: p.GetName()}
+	}
+	return out
 }
 
 type messageListJSON struct {
@@ -390,8 +425,31 @@ func (h chatHandlers) listMessages(ctx context.Context, w http.ResponseWriter, r
 }
 
 type messageSendBody struct {
-	Body            string `json:"body"`
-	ClientRequestID string `json:"client_request_id"`
+	// Issue #205: text (default), photo or place.
+	Kind            string     `json:"kind"`
+	Body            string     `json:"body"`
+	PhotoUploadID   string     `json:"photo_upload_id"`
+	Place           *placeJSON `json:"place"`
+	ClientRequestID string     `json:"client_request_id"`
+}
+
+// placeNameMax is the longest place name (chat checks it again).
+const placeNameMax = 120
+
+// sendShapeOK checks the fields of one kind (chat checks them again).
+func (b messageSendBody) shapeOK(kind chatv1.MessageKind) bool {
+	switch kind {
+	case chatv1.MessageKind_MESSAGE_KIND_TEXT:
+		return messageBodyOK(b.Body) && b.PhotoUploadID == "" && b.Place == nil
+	case chatv1.MessageKind_MESSAGE_KIND_PHOTO:
+		return b.Body == "" && validUUID(b.PhotoUploadID) && b.Place == nil
+	case chatv1.MessageKind_MESSAGE_KIND_PLACE:
+		p := b.Place
+		return b.Body == "" && b.PhotoUploadID == "" && p != nil &&
+			p.Latitude >= -90 && p.Latitude <= 90 && p.Longitude >= -180 && p.Longitude <= 180 &&
+			utf8.RuneCountInString(p.Name) <= placeNameMax
+	}
+	return false
 }
 
 func (h chatHandlers) sendMessage(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -403,13 +461,18 @@ func (h chatHandlers) sendMessage(ctx context.Context, w http.ResponseWriter, r 
 	if !decodeLimit(w, r, &b, maxMessageBody) {
 		return
 	}
-	if !messageBodyOK(b.Body) || !validUUID(b.ClientRequestID) {
+	kind, okK := messageKindValues[b.Kind]
+	if !okK || !b.shapeOK(kind) || !validUUID(b.ClientRequestID) {
 		badRequest(w, r)
 		return
 	}
-	resp, err := h.d.Channels.SendMessage(ctx, &chatv1.SendMessageRequest{
-		TayfaId: id, ChannelId: cid, Body: b.Body, ClientRequestId: b.ClientRequestID,
-	})
+	req := &chatv1.SendMessageRequest{
+		TayfaId: id, ChannelId: cid, Kind: kind, Body: b.Body, PhotoUploadId: b.PhotoUploadID, ClientRequestId: b.ClientRequestID,
+	}
+	if b.Place != nil {
+		req.Place = &chatv1.Place{Latitude: b.Place.Latitude, Longitude: b.Place.Longitude, Name: b.Place.Name}
+	}
+	resp, err := h.d.Channels.SendMessage(ctx, req)
 	if err != nil {
 		h.failChannel(w, r, err)
 		return

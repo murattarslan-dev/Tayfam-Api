@@ -175,8 +175,12 @@ type Config struct {
 	// SendLimit is the per-user send rate (required: there is no unlimited
 	// sending).
 	SendLimit SendLimit
-	Publisher Publisher        // optional
-	Now       func() time.Time // optional, for tests
+	// Attachments attaches encrypted attachments in core (issue #205).
+	// nil makes a message with an attachment apperr.ErrUnavailable (a
+	// local run without core).
+	Attachments Attachments
+	Publisher   Publisher        // optional
+	Now         func() time.Time // optional, for tests
 }
 
 // Service implements DirectMessageService's business logic.
@@ -226,6 +230,9 @@ type Message struct {
 	Deleted        bool  // "Bu mesaj silindi"
 	Encryption     string
 	CreatedAt      time.Time
+	// AttachmentUploadID is the encrypted attachment's upload in core
+	// (issue #205); zero when there is none or the message is deleted.
+	AttachmentUploadID id.ID
 }
 
 // EncryptionE2E is the only value of dm_messages.encryption (issue #151).
@@ -241,6 +248,18 @@ type SendInput struct {
 	// session, whose device sends.
 	Envelopes []OutgoingEnvelope
 	Session   id.ID
+	// Attachment is optional (issue #205, ADR-0031): the caller's READY
+	// dm_attachment upload, an opaque blob; the key and digest are in the
+	// envelopes.
+	Attachment id.ID
+}
+
+// Attachments attaches a direct message's encrypted attachment in core
+// with the sender's own token (core MediaService.AttachDirectMessageAttachment;
+// ADR-0031). It returns apperr.ErrUploadNotFound, apperr.ErrUploadNotReady,
+// apperr.ErrUploadInUse or apperr.ErrUnavailable.
+type Attachments interface {
+	AttachDirectMessageAttachment(ctx context.Context, upload, message id.ID) error
 }
 
 // ListInput selects a page of messages, as in channel.ListInput.
@@ -372,6 +391,7 @@ func messageOf(r msgRow) Message {
 	return Message{
 		ID: uuidOf(r.ID), ConversationID: uuidOf(r.ConversationID), SenderID: uuidOf(r.SenderID),
 		Deleted: r.DeletedAt.Valid, Encryption: r.Encryption, CreatedAt: r.CreatedAt.Time.UTC(),
+		AttachmentUploadID: uuidOf(r.AttachmentUploadID),
 	}
 }
 

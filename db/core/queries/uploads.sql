@@ -4,7 +4,7 @@
 
 -- name: CreateUpload :one
 INSERT INTO uploads (id, user_id, tayfa_id, purpose, r2_key, preview_type, preview_bytes, full_type, full_bytes, client_request_id)
-VALUES (@id, @user_id, sqlc.narg(tayfa_id), @purpose, @r2_key, @preview_type::text, @preview_bytes::bigint, @full_type::text, @full_bytes::bigint, @client_request_id)
+VALUES (@id, @user_id, sqlc.narg(tayfa_id), @purpose, @r2_key, sqlc.narg(preview_type)::text, sqlc.narg(preview_bytes)::bigint, @full_type::text, @full_bytes::bigint, @client_request_id)
 ON CONFLICT (user_id, client_request_id) DO NOTHING
 RETURNING id;
 
@@ -35,9 +35,10 @@ SELECT pg_advisory_xact_lock(hashtextextended('uploads:' || @user_id::text, 0));
 SELECT count(*) FROM uploads
 WHERE user_id = @user_id AND created_at > @since AND purpose <> 'data_export';
 
--- Kota: iki varyantın bildirilen (ve imzayla zorlanan) boyutları.
+-- Kota: iki varyantın (birebir ekte tek nesnenin) bildirilen (ve imzayla
+-- zorlanan) boyutları.
 -- name: UserStoredBytes :one
-SELECT COALESCE(sum(preview_bytes + full_bytes), 0)::bigint FROM uploads
+SELECT COALESCE(sum(COALESCE(preview_bytes, 0) + full_bytes), 0)::bigint FROM uploads
 WHERE user_id = @user_id AND status NOT IN ('rejected', 'deleting') AND purpose <> 'data_export';
 
 -- Denetimden geçti (ADR-0020). Yalnızca bekleyen kayıt; eşzamanlı ikinci
@@ -70,15 +71,68 @@ WHERE user_id = @user_id AND purpose = 'avatar' AND attached_type = 'user' AND a
   AND (sqlc.narg(keep)::uuid IS NULL OR id <> sqlc.narg(keep)::uuid);
 
 -- Hesap silme (user.deleted): kullanıcının dosyaları silinir; bağlı kapak
--- görselleri tayfanındır, yalnızca sahiplikleri kaldırılır.
+-- görselleri tayfanındır, bağlı şikâyet kanıtı platformundur (rapor
+-- durdukça, ADR-0031); yalnızca sahiplikleri kaldırılır.
 -- name: DeleteUserUploads :execrows
 UPDATE uploads SET status = 'deleting'
 WHERE user_id = @user_id AND status <> 'deleting'
-  AND NOT (purpose = 'cover' AND attached_type IS NOT NULL);
+  AND NOT (purpose IN ('cover', 'report_evidence') AND attached_type IS NOT NULL);
 
 -- name: DisownUserCovers :execrows
 UPDATE uploads SET user_id = NULL
-WHERE user_id = @user_id AND purpose = 'cover' AND attached_type IS NOT NULL;
+WHERE user_id = @user_id AND purpose IN ('cover', 'report_evidence') AND attached_type IS NOT NULL;
+
+-- Sohbet mesajı fotoğrafını ya da ekini bıraktı (chat.media_released,
+-- ADR-0031): dosya hâlâ o mesaja bağlıysa silinir; değilse bir şey olmaz
+-- (tekrar gelen olay).
+-- name: ReleaseMessageMedia :execrows
+UPDATE uploads SET status = 'deleting'
+WHERE id = @id AND attached_type IN ('channel_message', 'dm_message') AND attached_id = @message_id
+  AND status <> 'deleting';
+
+-- Onaylanmamış sohbet bağlaması (ADR-0031): chat'in henüz onaylamadığı,
+-- belki hiç yazılmamış bir mesaja bağlı dosya, aynı sahibin yeni mesajına
+-- taşınır. Çağıran satırı önce GetOwnUploadForUpdate ile kilitler.
+-- name: MoveChatAttachment :execrows
+UPDATE uploads SET attached_id = @attached_id::uuid, attached_at = @now
+WHERE id = @id AND user_id = @user_id AND purpose = @purpose AND status = 'ready'
+  AND tayfa_id IS NOT DISTINCT FROM sqlc.narg(tayfa_id)::uuid
+  AND attached_type = @attached_type::text AND attach_confirmed_at IS NULL;
+
+-- Uzlaştırma işi: onaylanmamış, before'dan eski sohbet bağlamaları.
+-- name: ListUnconfirmedChatAttachments :many
+SELECT id, attached_type::text AS attached_type, attached_id::uuid AS attached_id FROM uploads
+WHERE attached_type IN ('channel_message', 'dm_message') AND attach_confirmed_at IS NULL
+  AND status = 'ready' AND attached_at < @before
+ORDER BY attached_at
+LIMIT @n;
+
+-- chat dosyayı tutan mesajı söyledi: bağlama o mesajla onaylanır. Arada
+-- taşındıysa (asked_id değişti) bir şey olmaz.
+-- name: ConfirmChatAttachment :execrows
+UPDATE uploads SET attached_id = @holder_id::uuid, attach_confirmed_at = @now
+WHERE id = @id AND attached_type = @attached_type::text AND attached_id = @asked_id
+  AND attach_confirmed_at IS NULL AND status = 'ready';
+
+-- Hiçbir mesaj dosyayı tutmuyor: bağlama kaldırılır; dosya bağlanmamış
+-- hazır dosya olarak 7 günlük temizliğe döner (ready_at'ten sayılır).
+-- name: DetachChatAttachment :execrows
+UPDATE uploads SET attached_type = NULL, attached_id = NULL, attached_at = NULL
+WHERE id = @id AND attached_type = @attached_type::text AND attached_id = @asked_id
+  AND attach_confirmed_at IS NULL AND status = 'ready';
+
+-- Tayfa kalıcı silindi: kanal fotoğrafları da gider (kanallar chat'te
+-- tayfa.purged ile silinir; dosyanın tayfası core'da bellidir).
+-- name: ReleaseTayfaChatPhotos :execrows
+UPDATE uploads SET status = 'deleting'
+WHERE tayfa_id = @tayfa_id AND purpose = 'chat_photo' AND status <> 'deleting';
+
+-- Platform panelinde şikâyetin kanıt fotoğrafı (issue #205): yalnızca o
+-- rapora bağlı, hazır dosya.
+-- name: GetReportEvidenceUpload :one
+SELECT r2_key, full_type::text AS full_type FROM uploads
+WHERE id = @id AND purpose = 'report_evidence' AND status = 'ready'
+  AND attached_type = 'report' AND attached_id = @report_id;
 
 -- Temizlik: 24 saatte tamamlanmayan, 24 saattir reddedilmiş ve 7 gün
 -- içinde bağlanmamış görüntüler ile süresi dolan dışa aktarmalar silme
@@ -121,7 +175,7 @@ DELETE FROM uploads WHERE id = @id AND status = 'deleting';
 -- fotoğrafında ve albüm fotoğrafında etkinliğin tayfası (silinmiş içerik ve
 -- tayfa bağlam vermez).
 -- name: ListMediaForViewer :many
-SELECT u.id, u.user_id, u.purpose, u.r2_key, u.preview_type::text AS preview_type, u.full_type::text AS full_type, u.width, u.height,
+SELECT u.id, u.user_id, u.purpose, u.r2_key, COALESCE(u.preview_type, '')::text AS preview_type, u.full_type::text AS full_type, u.width, u.height,
        u.attached_type, u.attached_id,
        c.tayfa_id AS content_tayfa_id,
        m.role AS member_role, m.status AS member_status, m.muted_until AS member_muted_until,
@@ -161,6 +215,13 @@ WHERE u.id = ANY(@ids::uuid[]) AND u.status = 'ready' AND u.purpose <> 'data_exp
 -- name: GetReportedPhotoUpload :one
 SELECT r2_key, full_type::text AS full_type FROM uploads
 WHERE id = @id AND purpose = 'event_photo' AND status = 'ready';
+
+-- Platform panelinde şikâyet edilen kanal mesajının fotoğrafı (ADR-0031):
+-- şikâyetin kaydettiği upload_id, hâlâ o mesaja bağlı, hazır chat_photo.
+-- name: GetReportedMessagePhotoUpload :one
+SELECT r2_key FROM uploads
+WHERE id = @id AND purpose = 'chat_photo' AND status = 'ready'
+  AND attached_type = 'channel_message' AND attached_id = @message_id;
 
 -- İçeriğin dosyası. Kolonun trigger'ı (uploads_check_ref) dosyanın bu
 -- içeriğe bağlı ve hazır olduğunu yeniden doğrular; eski dosya
