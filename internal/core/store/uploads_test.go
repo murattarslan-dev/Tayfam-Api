@@ -47,7 +47,7 @@ func newUpload(t *testing.T, q *Queries, owner id.ID, o uploadOpts) id.ID {
 	}
 	got, err := q.CreateUpload(context.Background(), CreateUploadParams{
 		ID: id.New().PG(), UserID: owner.PG(), TayfaID: tayfa, Purpose: o.purpose, R2Key: r2Key(t),
-		PreviewType: "image/webp", PreviewBytes: 100, FullType: "image/jpeg", FullBytes: o.size, ClientRequestID: id.New().PG(),
+		PreviewType: pgtype.Text{String: "image/webp", Valid: true}, PreviewBytes: pgtype.Int8{Int64: 100, Valid: true}, FullType: "image/jpeg", FullBytes: o.size, ClientRequestID: id.New().PG(),
 	})
 	if err != nil {
 		t.Fatalf("yükleme açılamadı: %v", err)
@@ -85,7 +85,7 @@ func TestUploadCreateAndConstraints(t *testing.T) {
 	base := func() CreateUploadParams {
 		return CreateUploadParams{
 			ID: id.New().PG(), UserID: owner.PG(), Purpose: "avatar", R2Key: r2Key(t),
-			PreviewType: "image/webp", PreviewBytes: 1, FullType: "image/jpeg", FullBytes: 10 << 20, ClientRequestID: id.New().PG(),
+			PreviewType: pgtype.Text{String: "image/webp", Valid: true}, PreviewBytes: pgtype.Int8{Int64: 1, Valid: true}, FullType: "image/jpeg", FullBytes: 10 << 20, ClientRequestID: id.New().PG(),
 		}
 	}
 	p := base()
@@ -106,15 +106,29 @@ func TestUploadCreateAndConstraints(t *testing.T) {
 		mut  func(*CreateUploadParams)
 		cons string
 	}{
-		"boş önizleme":           {func(p *CreateUploadParams) { p.PreviewBytes = 0 }, "uploads_variants"},
-		"10 MiB üstü":            {func(p *CreateUploadParams) { p.FullBytes = 10<<20 + 1 }, "uploads_variants"},
-		"png":                    {func(p *CreateUploadParams) { p.FullType = "image/png" }, "uploads_variants"},
-		"heic önizleme":          {func(p *CreateUploadParams) { p.PreviewType = "image/heic" }, "uploads_variants"},
-		"bilinmeyen amaç":        {func(p *CreateUploadParams) { p.Purpose = "banner" }, "uploads_purpose"},
-		"varyantlı dışa aktarma": {func(p *CreateUploadParams) { p.Purpose = "data_export"; p.TayfaID = pgtype.UUID{} }, "uploads_variants"},
-		"tahmin edilir ad":       {func(p *CreateUploadParams) { p.R2Key = "../media/x" }, "uploads_r2_key"},
-		"avatarda tayfa":         {func(p *CreateUploadParams) { p.TayfaID = tayfa.PG() }, "uploads_tayfa"},
-		"kapakta tayfa yok":      {func(p *CreateUploadParams) { p.Purpose = "cover" }, "uploads_tayfa"},
+		"boş önizleme":        {func(p *CreateUploadParams) { p.PreviewBytes = pgtype.Int8{Int64: 0, Valid: true} }, "uploads_variants"},
+		"önizlemesiz görüntü": {func(p *CreateUploadParams) { p.PreviewType, p.PreviewBytes = pgtype.Text{}, pgtype.Int8{} }, "uploads_variants"},
+		"10 MiB üstü":         {func(p *CreateUploadParams) { p.FullBytes = 10<<20 + 1 }, "uploads_variants"},
+		"png":                 {func(p *CreateUploadParams) { p.FullType = "image/png" }, "uploads_variants"},
+		"heic önizleme":       {func(p *CreateUploadParams) { p.PreviewType = pgtype.Text{String: "image/heic", Valid: true} }, "uploads_variants"},
+		// Issue #205: the DM attachment is one opaque blob.
+		"önizlemeli blob": {func(p *CreateUploadParams) { p.Purpose, p.FullType = "dm_attachment", "application/octet-stream" }, "uploads_variants"},
+		"görüntü türünde blob": {func(p *CreateUploadParams) {
+			p.Purpose, p.PreviewType, p.PreviewBytes = "dm_attachment", pgtype.Text{}, pgtype.Int8{}
+		}, "uploads_variants"},
+		"10 MiB üstü blob": {func(p *CreateUploadParams) {
+			p.Purpose, p.PreviewType, p.PreviewBytes, p.FullType, p.FullBytes = "dm_attachment", pgtype.Text{}, pgtype.Int8{}, "application/octet-stream", 10<<20+1
+		}, "uploads_variants"},
+		"blobda tayfa": {func(p *CreateUploadParams) {
+			p.Purpose, p.PreviewType, p.PreviewBytes, p.FullType, p.TayfaID = "dm_attachment", pgtype.Text{}, pgtype.Int8{}, "application/octet-stream", tayfa.PG()
+		}, "uploads_tayfa"},
+		"sohbet fotoğrafında tayfa yok": {func(p *CreateUploadParams) { p.Purpose = "chat_photo" }, "uploads_tayfa"},
+		"kanıtta tayfa":                 {func(p *CreateUploadParams) { p.Purpose, p.TayfaID = "report_evidence", tayfa.PG() }, "uploads_tayfa"},
+		"bilinmeyen amaç":               {func(p *CreateUploadParams) { p.Purpose = "banner" }, "uploads_purpose"},
+		"varyantlı dışa aktarma":        {func(p *CreateUploadParams) { p.Purpose = "data_export"; p.TayfaID = pgtype.UUID{} }, "uploads_variants"},
+		"tahmin edilir ad":              {func(p *CreateUploadParams) { p.R2Key = "../media/x" }, "uploads_r2_key"},
+		"avatarda tayfa":                {func(p *CreateUploadParams) { p.TayfaID = tayfa.PG() }, "uploads_tayfa"},
+		"kapakta tayfa yok":             {func(p *CreateUploadParams) { p.Purpose = "cover" }, "uploads_tayfa"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			p := base()

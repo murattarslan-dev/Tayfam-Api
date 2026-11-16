@@ -188,10 +188,10 @@ DELETE FROM user_key_events WHERE user_id = @user_id;
 -- Zarflar.
 
 -- name: CreateDirectMessageE2E :one
-INSERT INTO dm_messages (id, conversation_id, sender_id, sender_device_id, encryption, client_request_id)
-VALUES (@id, @conversation_id, @sender_id, @sender_device_id, 'e2e', @client_request_id)
+INSERT INTO dm_messages (id, conversation_id, sender_id, sender_device_id, encryption, attachment_upload_id, client_request_id)
+VALUES (@id, @conversation_id, @sender_id, @sender_device_id, 'e2e', sqlc.narg(attachment_upload_id), @client_request_id)
 ON CONFLICT (sender_id, client_request_id) DO NOTHING
-RETURNING id, conversation_id, sender_id, encryption, created_at, deleted_at;
+RETURNING id, conversation_id, sender_id, encryption, created_at, deleted_at, attachment_upload_id;
 
 -- name: InsertEnvelope :exec
 INSERT INTO dm_envelopes (id, message_id, recipient_device_id, sender_id, sender_device_id, sender_device_number, message_type, ciphertext, created_at)

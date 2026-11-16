@@ -404,11 +404,15 @@ func TestPanelCannotSee(t *testing.T) {
 		"Item.TargetType", "Item.Target", "Item.Author", "Item.Title", "Item.Body", "Item.Options", "Item.CreatedAt", "Item.DeletedAt",
 		// Only a reported album photo's short link (ADR-0028 §5; platform
 		// owner 2026-11-15); the upload ID stays inside core.
-		"Item.MediaURL", "Item.MediaExpires", "Item.upload",
+		"Item.MediaURL", "Item.MediaExpires", "Item.upload", "Item.HasEvidencePhoto",
+		// A reported channel message as it was filed (ADR-0031; platform
+		// owner 2026-11-16): its channel, whether it is a photo (signed on
+		// click), and a shared place: content, not anyone's location.
+		"Item.Channel", "Item.HasMessagePhoto", "Item.Place",
 		"TayfaDetail.TayfaSummary", "TayfaDetail.Description", "TayfaDetail.City", "TayfaDetail.District", "TayfaDetail.SuspendReason", "TayfaDetail.Staff", "TayfaDetail.OpenPlatformReports",
 		"TayfaSummary.ID", "TayfaSummary.Name", "TayfaSummary.Status", "TayfaSummary.Listed", "TayfaSummary.MemberCount", "TayfaSummary.CreatedAt", "TayfaSummary.SuspendedAt", "TayfaSummary.DeletedAt", "TayfaSummary.DeletionScheduledAt",
 		"Member.User", "Member.DisplayName", "Member.Role", "Member.Status", "Member.JoinedAt", "Member.BanReason",
-		"Report.ID", "Report.Tayfa", "Report.TargetType", "Report.Target", "Report.Subject", "Report.Reporter", "Report.Reason", "Report.Description", "Report.Priority", "Report.CreatedAt", "Report.EscalatedAt", "Report.Resolved", "Report.Decision", "Report.DecidedAt", "Report.evidenceText", "Report.tayfaResolved",
+		"Report.ID", "Report.Tayfa", "Report.TargetType", "Report.Target", "Report.Subject", "Report.Reporter", "Report.Reason", "Report.Description", "Report.Priority", "Report.CreatedAt", "Report.EscalatedAt", "Report.Resolved", "Report.Decision", "Report.DecidedAt", "Report.evidenceText", "Report.evidenceUpload", "Report.tayfaResolved", "Report.message",
 	}
 	if !slices.Equal(fields, want) {
 		t.Fatalf("panelin gördüğü alanlar değişti:\n%v", fields)

@@ -51,12 +51,15 @@ func (q *Queries) CountRecentReportsByReporter(ctx context.Context, arg CountRec
 
 const createReport = `-- name: CreateReport :one
 INSERT INTO reports (
-  id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, evidence_text,
-  priority, minor_involved_at, platform_only, escalated_to_platform_at, escalation_reason, platform_status, created_at)
+  id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, evidence_text, evidence_upload_id,
+  priority, minor_involved_at, platform_only, escalated_to_platform_at, escalation_reason, platform_status, created_at,
+  channel_id, message_kind, message_body, message_photo_upload_id, place_latitude, place_longitude, place_name)
 VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9,
-  $10, $11, $12, $13,
-  $14, $15, $16)
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+  $11, $12, $13, $14,
+  $15, $16, $17,
+  $18, $19, $20, $21,
+  $22, $23, $24)
 ON CONFLICT (reporter_id, target_type, target_id) DO NOTHING
 RETURNING id
 `
@@ -71,6 +74,7 @@ type CreateReportParams struct {
 	Reason                string
 	Description           pgtype.Text
 	EvidenceText          pgtype.Text
+	EvidenceUploadID      pgtype.UUID
 	Priority              string
 	MinorInvolvedAt       pgtype.Timestamptz
 	PlatformOnly          bool
@@ -78,6 +82,13 @@ type CreateReportParams struct {
 	EscalationReason      pgtype.Text
 	PlatformStatus        pgtype.Text
 	CreatedAt             pgtype.Timestamptz
+	ChannelID             pgtype.UUID
+	MessageKind           pgtype.Text
+	MessageBody           pgtype.Text
+	MessagePhotoUploadID  pgtype.UUID
+	PlaceLatitude         pgtype.Float8
+	PlaceLongitude        pgtype.Float8
+	PlaceName             pgtype.Text
 }
 
 // Aynı hedefe ikinci şikâyet mevcut kaydı döndürür. tayfa_id ve
@@ -94,6 +105,7 @@ func (q *Queries) CreateReport(ctx context.Context, arg CreateReportParams) (pgt
 		arg.Reason,
 		arg.Description,
 		arg.EvidenceText,
+		arg.EvidenceUploadID,
 		arg.Priority,
 		arg.MinorInvolvedAt,
 		arg.PlatformOnly,
@@ -101,6 +113,13 @@ func (q *Queries) CreateReport(ctx context.Context, arg CreateReportParams) (pgt
 		arg.EscalationReason,
 		arg.PlatformStatus,
 		arg.CreatedAt,
+		arg.ChannelID,
+		arg.MessageKind,
+		arg.MessageBody,
+		arg.MessagePhotoUploadID,
+		arg.PlaceLatitude,
+		arg.PlaceLongitude,
+		arg.PlaceName,
 	)
 	var id pgtype.UUID
 	err := row.Scan(&id)
@@ -476,9 +495,35 @@ func (q *Queries) GetReportTargetQuestion(ctx context.Context, arg GetReportTarg
 	return i, err
 }
 
+const getTayfaReportTarget = `-- name: GetTayfaReportTarget :one
+SELECT target_type, target_id
+FROM reports
+WHERE tayfa_id = $1 AND id = $2 AND NOT platform_only
+  AND subject_user_id IS DISTINCT FROM $3::uuid
+`
+
+type GetTayfaReportTargetParams struct {
+	TayfaID  pgtype.UUID
+	ID       pgtype.UUID
+	ViewerID pgtype.UUID
+}
+
+type GetTayfaReportTargetRow struct {
+	TargetType string
+	TargetID   pgtype.UUID
+}
+
+// Çözümden önce, kilitsiz: dışarıya (chat) sorulacak hedef (kanal mesajı).
+func (q *Queries) GetTayfaReportTarget(ctx context.Context, arg GetTayfaReportTargetParams) (GetTayfaReportTargetRow, error) {
+	row := q.db.QueryRow(ctx, getTayfaReportTarget, arg.TayfaID, arg.ID, arg.ViewerID)
+	var i GetTayfaReportTargetRow
+	err := row.Scan(&i.TargetType, &i.TargetID)
+	return i, err
+}
+
 const listOpenTayfaReports = `-- name: ListOpenTayfaReports :many
 SELECT id, tayfa_id, target_type, target_id, subject_user_id, reason, description, status, resolution,
-       handled_by, handled_at, priority, created_at
+       handled_by, handled_at, priority, created_at, channel_id
 FROM reports
 WHERE tayfa_id = $1 AND status = 'open' AND NOT platform_only
   AND subject_user_id IS DISTINCT FROM $2::uuid
@@ -514,6 +559,7 @@ type ListOpenTayfaReportsRow struct {
 	HandledAt     pgtype.Timestamptz
 	Priority      string
 	CreatedAt     pgtype.Timestamptz
+	ChannelID     pgtype.UUID
 }
 
 // Kuyruk: tayfanın açık şikâyetleri; platforma özel olanlar ve izleyicinin
@@ -552,6 +598,7 @@ func (q *Queries) ListOpenTayfaReports(ctx context.Context, arg ListOpenTayfaRep
 			&i.HandledAt,
 			&i.Priority,
 			&i.CreatedAt,
+			&i.ChannelID,
 		); err != nil {
 			return nil, err
 		}
@@ -633,7 +680,7 @@ func (q *Queries) ListReportsOfReporter(ctx context.Context, arg ListReportsOfRe
 
 const listResolvedTayfaReports = `-- name: ListResolvedTayfaReports :many
 SELECT id, tayfa_id, target_type, target_id, subject_user_id, reason, description, status, resolution,
-       handled_by, handled_at, priority, created_at
+       handled_by, handled_at, priority, created_at, channel_id
 FROM reports
 WHERE tayfa_id = $1 AND status = 'resolved' AND NOT platform_only
   AND subject_user_id IS DISTINCT FROM $2::uuid
@@ -665,6 +712,7 @@ type ListResolvedTayfaReportsRow struct {
 	HandledAt     pgtype.Timestamptz
 	Priority      string
 	CreatedAt     pgtype.Timestamptz
+	ChannelID     pgtype.UUID
 }
 
 // Çözülmüşler, son çözülen önce.
@@ -698,6 +746,7 @@ func (q *Queries) ListResolvedTayfaReports(ctx context.Context, arg ListResolved
 			&i.HandledAt,
 			&i.Priority,
 			&i.CreatedAt,
+			&i.ChannelID,
 		); err != nil {
 			return nil, err
 		}
@@ -711,7 +760,7 @@ func (q *Queries) ListResolvedTayfaReports(ctx context.Context, arg ListResolved
 
 const lockTayfaReport = `-- name: LockTayfaReport :one
 SELECT id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, status,
-       resolution, handled_by, handled_at, priority, created_at
+       resolution, handled_by, handled_at, priority, created_at, channel_id
 FROM reports
 WHERE tayfa_id = $1 AND id = $2 AND NOT platform_only
   AND subject_user_id IS DISTINCT FROM $3::uuid
@@ -739,6 +788,7 @@ type LockTayfaReportRow struct {
 	HandledAt     pgtype.Timestamptz
 	Priority      string
 	CreatedAt     pgtype.Timestamptz
+	ChannelID     pgtype.UUID
 }
 
 // Çözüm için kilitlenir; kuyruğun kuralları aynı (platforma özel ve
@@ -761,6 +811,7 @@ func (q *Queries) LockTayfaReport(ctx context.Context, arg LockTayfaReportParams
 		&i.HandledAt,
 		&i.Priority,
 		&i.CreatedAt,
+		&i.ChannelID,
 	)
 	return i, err
 }

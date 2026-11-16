@@ -48,6 +48,9 @@ var (
 		"avatar": corev1.UploadPurpose_UPLOAD_PURPOSE_AVATAR, "catch_photo": corev1.UploadPurpose_UPLOAD_PURPOSE_CATCH_PHOTO,
 		"event_photo": corev1.UploadPurpose_UPLOAD_PURPOSE_EVENT_PHOTO,
 		"cover":       corev1.UploadPurpose_UPLOAD_PURPOSE_COVER,
+		// Issue #205 (ADR-0031).
+		"chat_photo": corev1.UploadPurpose_UPLOAD_PURPOSE_CHAT_PHOTO, "dm_attachment": corev1.UploadPurpose_UPLOAD_PURPOSE_DM_ATTACHMENT,
+		"report_evidence": corev1.UploadPurpose_UPLOAD_PURPOSE_REPORT_EVIDENCE,
 	})
 	uploadStatuses = newEnum(map[string]corev1.UploadStatus{
 		"pending": corev1.UploadStatus_UPLOAD_STATUS_PENDING, "ready": corev1.UploadStatus_UPLOAD_STATUS_READY,
@@ -64,13 +67,15 @@ var (
 	})
 	variantKinds = newEnum(map[string]corev1.VariantKind{
 		"preview": corev1.VariantKind_VARIANT_KIND_PREVIEW, "full": corev1.VariantKind_VARIANT_KIND_FULL,
+		"blob": corev1.VariantKind_VARIANT_KIND_BLOB,
 	})
 )
 
 type mediaURLsJSON struct {
-	UploadID           string    `json:"upload_id"`
-	PreviewURL         string    `json:"preview_url"`
-	PreviewContentType string    `json:"preview_content_type"`
+	UploadID string `json:"upload_id"`
+	// Absent for a dm_attachment (one encrypted blob, issue #205).
+	PreviewURL         string    `json:"preview_url,omitempty"`
+	PreviewContentType string    `json:"preview_content_type,omitempty"`
 	FullURL            string    `json:"full_url"`
 	FullContentType    string    `json:"full_content_type"`
 	Width              int32     `json:"width"`
@@ -146,14 +151,24 @@ func (h coreHandlers) createUpload(ctx context.Context, w http.ResponseWriter, r
 		return
 	}
 	purpose, ok := uploadPurposes.value(b.Purpose)
-	if !ok || len(b.Variants) != 2 || !validUUID(b.ClientRequestID) || (b.TayfaID != "" && !validUUID(b.TayfaID)) {
+	// A dm_attachment is one encrypted blob; images have two variants.
+	blob := purpose == corev1.UploadPurpose_UPLOAD_PURPOSE_DM_ATTACHMENT
+	want := 2
+	if blob {
+		want = 1
+	}
+	if !ok || len(b.Variants) != want || !validUUID(b.ClientRequestID) || (b.TayfaID != "" && !validUUID(b.TayfaID)) {
 		badRequest(w, r)
 		return
 	}
 	req := &corev1.CreateUploadRequest{Purpose: purpose, TayfaId: b.TayfaID, ClientRequestId: b.ClientRequestID}
 	for _, v := range b.Variants {
 		kind, ok := variantKinds.value(v.Kind)
-		if !ok || (v.ContentType != "image/jpeg" && v.ContentType != "image/webp") || v.SizeBytes < 1 || v.SizeBytes > maxVariantBytes {
+		typeOK := v.ContentType == "image/jpeg" || v.ContentType == "image/webp"
+		if blob {
+			typeOK = kind == corev1.VariantKind_VARIANT_KIND_BLOB && v.ContentType == "application/octet-stream"
+		}
+		if !ok || !typeOK || v.SizeBytes < 1 || v.SizeBytes > maxVariantBytes {
 			badRequest(w, r)
 			return
 		}
@@ -207,7 +222,9 @@ func (h coreHandlers) completeUpload(ctx context.Context, w http.ResponseWriter,
 	if !decodeLimit(w, r, &b, maxCompleteBody) {
 		return
 	}
-	if b.Width < 1 || b.Width > maxFullSide || b.Height < 1 || b.Height > maxFullSide {
+	// 0 × 0 only for a dm_attachment (core checks which it is).
+	blob := b.Width == 0 && b.Height == 0
+	if !blob && (b.Width < 1 || b.Width > maxFullSide || b.Height < 1 || b.Height > maxFullSide) {
 		badRequest(w, r)
 		return
 	}

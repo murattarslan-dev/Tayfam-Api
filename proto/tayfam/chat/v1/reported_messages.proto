@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package tayfam.chat.v1;
+
+// ReportedMessageService answers core about a reported channel message
+// (issue #205, ADR-0031): when a moderator resolves a report as
+// content_removed, core checks that the message is no longer visible, as it
+// does for its own content.
+//
+// Authentication: only a Kubernetes service token (ADR-0013) with audience
+// chat.tayfam.internal from the tayfam-core ServiceAccount. User tokens are
+// refused. The answer is one flag: never the message's content.
+service ReportedMessageService {
+  // GetChannelMessageStatus says whether a message of tayfa_id is removed:
+  // deleted (by its author or hidden by moderation) or gone for good. A
+  // message of another tayfa counts as gone. Invalid IDs are
+  // ERROR_REASON_VALIDATION.
+  rpc GetChannelMessageStatus(GetChannelMessageStatusRequest) returns (GetChannelMessageStatusResponse);
+}
+
+message GetChannelMessageStatusRequest {
+  string tayfa_id = 1;
+  string message_id = 2;
+}
+
+message GetChannelMessageStatusResponse {
+  bool removed = 1;
+}

@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/channel"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/channelcrypt"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -81,6 +82,17 @@ type message struct {
 	Body      *string    `json:"body"`
 	CreatedAt time.Time  `json:"created_at"`
 	DeletedAt *time.Time `json:"deleted_at"`
+	// Issue #205: the kind, a photo's upload ID (the file is not in the
+	// zip, ADR-0021) and a place the user shared.
+	Kind          string `json:"kind"`
+	PhotoUploadID string `json:"photo_upload_id,omitempty"`
+	Place         *place `json:"place,omitempty"`
+}
+
+type place struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	Name      string  `json:"name,omitempty"`
 }
 
 // chunker collects records of one section and sends them in chunks.
@@ -146,18 +158,29 @@ func (s *Service) messages(ctx context.Context, q *store.Queries, user id.ID, se
 		for _, r := range page {
 			m := message{
 				ID: id.ID(r.ID.Bytes).String(), ChannelID: id.ID(r.ChannelID.Bytes).String(), TayfaID: id.ID(r.TayfaID.Bytes).String(),
-				CreatedAt: r.CreatedAt.Time.UTC(),
+				CreatedAt: r.CreatedAt.Time.UTC(), Kind: r.Kind,
 			}
-			if r.DeletedAt.Valid {
+			switch {
+			case r.DeletedAt.Valid:
 				// The author deleted it (or a moderator did): its text is not
 				// exported, only that it existed.
 				d := r.DeletedAt.Time.UTC()
 				m.DeletedAt = &d
-			} else {
+			case r.Kind == channel.KindPhoto:
+				m.PhotoUploadID = id.ID(r.PhotoUploadID.Bytes).String()
+			default:
 				body, err := s.cfg.Cipher.Decrypt(id.ID(r.ID.Bytes), id.ID(r.ChannelID.Bytes), channelcrypt.Sealed{Version: r.KeyVersion.Int16, Data: r.BodyEncrypted})
 				if err != nil {
 					// The message ID only; never the text.
 					return fmt.Errorf("dışa aktarma: mesaj %s açılamadı: %w", m.ID, err)
+				}
+				if r.Kind == channel.KindPlace {
+					p, err := channel.DecodePlace(body)
+					if err != nil {
+						return fmt.Errorf("dışa aktarma: mesaj %s: %w", m.ID, err)
+					}
+					m.Place = &place{Latitude: p.Latitude, Longitude: p.Longitude, Name: p.Name}
+					break
 				}
 				m.Body = &body
 			}

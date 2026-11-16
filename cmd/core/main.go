@@ -12,6 +12,7 @@ import (
 	_ "time/tzdata" // series time zones: the same IANA database in every image (issue #51)
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/grpc"
 
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
 	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
@@ -22,6 +23,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/availability"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/channelaccess"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatdm"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatrelay"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/directmessage"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
@@ -122,11 +124,25 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	dmCheck, err := chatDirectMessages(rt)
+	chatConn, err := chatConnection(rt)
 	if err != nil {
 		return err
 	}
-	reports, err := report.New(report.Config{Pool: pool, Minors: minors, DirectMessages: dmCheck})
+	chatServiceConn, err := chatServiceConnection(rt)
+	if err != nil {
+		return err
+	}
+	reportCfg := report.Config{Pool: pool, Minors: minors}
+	if chatConn != nil {
+		reportCfg.DirectMessages = chatdm.New(chatv1.NewDirectMessageServiceClient(chatConn))
+		// Kanal mesajı şikâyeti (issue #205, ADR-0031): şikâyet edenin
+		// token'ıyla doğrulama; çözümde durum core'un servis token'ıyla.
+		reportCfg.ChannelMessages = chatdm.NewChannelMessages(chatv1.NewChannelServiceClient(chatConn))
+	}
+	if chatServiceConn != nil {
+		reportCfg.ChannelStatus = chatdm.NewChannelStatus(chatv1.NewReportedMessageServiceClient(chatServiceConn))
+	}
+	reports, err := report.New(reportCfg)
 	if err != nil {
 		return err
 	}
@@ -139,7 +155,7 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 
-	medias, err := mediaService(rt, pool)
+	medias, err := mediaService(rt, pool, chatConn, chatServiceConn)
 	if err != nil {
 		return err
 	}
@@ -161,6 +177,11 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
+	// chat'in olayları (issue #205, ADR-0031): mesajın bıraktığı dosya.
+	chatEvents, err := chatevents.New(pool)
+	if err != nil {
+		return err
+	}
 
 	// Kullanıcısız servis çağrıları (ADR-0013): UserEventService'in her
 	// metodu yalnızca servis token'ı kabul eder; ApplyUserEvent'i yalnızca
@@ -170,10 +191,13 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	policy := auth.ServicePolicy{Verifier: si.Verifier, Services: []string{grpcapi.UserEventServiceName}}
+	// ChatEventService'i yalnızca chat'in ServiceAccount'u çağırabilir
+	// (ADR-0031).
+	policy := auth.ServicePolicy{Verifier: si.Verifier, Services: []string{grpcapi.UserEventServiceName, grpcapi.ChatEventServiceName}}
 	if si.Verifier != nil {
 		policy.Callers = map[string][]auth.ServiceAccount{
 			corev1.UserEventService_ApplyUserEvent_FullMethodName: {si.Account("tayfam-identity")},
+			corev1.ChatEventService_ApplyChatEvent_FullMethodName: {si.Account("tayfam-chat")},
 		}
 	}
 	// Guard'a açık metod verilmez: kullanıcı metodları kullanıcının erişim
@@ -197,6 +221,7 @@ func setup(rt *service.Runtime) error {
 	corev1.RegisterTayfaServiceServer(srv, grpcapi.NewTayfaServer(tayfas, rt.Log))
 	corev1.RegisterMembershipServiceServer(srv, grpcapi.NewMembershipServer(memberships, rt.Log))
 	corev1.RegisterUserEventServiceServer(srv, grpcapi.NewUserEventServer(userEvents, rt.Log))
+	corev1.RegisterChatEventServiceServer(srv, grpcapi.NewChatEventServer(chatEvents, rt.Log))
 	corev1.RegisterAnnouncementServiceServer(srv, grpcapi.NewAnnouncementServer(announcements, rt.Log))
 	corev1.RegisterEventServiceServer(srv, grpcapi.NewEventServer(events, rt.Log))
 	corev1.RegisterQAServiceServer(srv, grpcapi.NewQAServer(questions, rt.Log))
@@ -219,6 +244,8 @@ func setup(rt *service.Runtime) error {
 	// Süresi dolan ya da içeriği silinen dosyaların R2'den silinmesi
 	// (birden fazla pod'da çalışabilir; her adım idempotent).
 	rt.AddWorker("media-cleanup", medias.RunCleanup)
+	// Hiç yazılmamış mesaja bağlı kalan sohbet dosyaları (ADR-0031).
+	rt.AddWorker("media-chat-reconcile", medias.RunReconcile)
 	// Tekrarlayan etkinliklerin önümüzdeki 8 haftalık örnekleri (issue #51).
 	// Birden fazla pod'da çalışabilir: tayfa ve seri satırı kilitlenir,
 	// örnekler (series_id, starts_at) ile tekildir.
@@ -235,12 +262,32 @@ func setup(rt *service.Runtime) error {
 	return addRelay(rt, pool)
 }
 
+// chatServiceConnection connects to chat with core's service token for chat
+// (ADR-0013), for calls without a user: the reconciliation of chat
+// attachments and a reported channel message's status (ADR-0031). Without
+// the token (local runs only) it returns nil.
+func chatServiceConnection(rt *service.Runtime) (*grpc.ClientConn, error) {
+	tok, ok := rt.ServiceToken("chat")
+	if !ok {
+		return nil, rt.Config.Err()
+	}
+	addr := rt.Config.Required("CHAT_GRPC_ADDR")
+	if err := rt.Config.Err(); err != nil {
+		return nil, err
+	}
+	return grpcx.NewClient(addr, auth.ServiceTokenFrom(tok)...)
+}
+
 // mediaService returns the media service (issue #135, ADR-0020). The R2
 // credentials come from the optional core-r2 secret; without them media is
 // off and core still starts (and has no internet egress: the core-egress-r2
 // NetworkPolicy is added to an environment together with its secret).
 // Partial or malformed values stop the start.
-func mediaService(rt *service.Runtime, pool *pgxpool.Pool) (*media.Service, error) {
+//
+// Who may see a chat message's file is chat's answer (ADR-0031), asked
+// with the caller's own token over chatConn; without chat those files are
+// visible to their owners only.
+func mediaService(rt *service.Runtime, pool *pgxpool.Pool, chatConn, chatServiceConn *grpc.ClientConn) (*media.Service, error) {
 	c := rt.Config
 	perHour := c.Int("MEDIA_UPLOADS_PER_HOUR", media.DefaultUploadsPerHour)
 	quotaMiB := c.Int("MEDIA_QUOTA_MIB", media.DefaultQuotaBytes>>20)
@@ -255,6 +302,15 @@ func mediaService(rt *service.Runtime, pool *pgxpool.Pool) (*media.Service, erro
 		return nil, errors.New("MEDIA_UPLOADS_PER_HOUR ve MEDIA_QUOTA_MIB pozitif olmalı")
 	}
 	cfg := media.Config{Pool: pool, Log: rt.Log, UploadsPerHour: perHour, QuotaBytes: int64(quotaMiB) << 20}
+	if chatConn != nil {
+		cfg.Messages = chatdm.NewMessageMedia(chatv1.NewMessageMediaServiceClient(chatConn))
+	}
+	// Sohbet bağlamalarının uzlaştırılması (ADR-0031): kullanıcısız iş,
+	// core'un chat için servis token'ıyla (ADR-0013). Token yoksa (yalnızca
+	// yerel ortam) iş kapalıdır; onaylanmamış bağlama yine taşınabilir.
+	if chatServiceConn != nil {
+		cfg.Holders = chatdm.NewHolders(chatv1.NewMediaHolderServiceClient(chatServiceConn))
+	}
 	if r2 == nil {
 		rt.Log.Info("R2 yapılandırması yok; dosya yükleme kapalı")
 	} else {
@@ -288,8 +344,8 @@ func platformAdmin(rt *service.Runtime, pool *pgxpool.Pool, medias *media.Servic
 	if err != nil {
 		return nil, nil, err
 	}
-	// medias signs the panel's short link to a reported album photo
-	// (ADR-0028 §5).
+	// medias signs the panel's short links: a reported album photo
+	// (ADR-0028 §5) and a DM report's evidence photo on click (ADR-0031).
 	svc, err := admin.New(admin.Config{Pool: pool, Log: rt.Log, Checker: identityadmin.NewChecker(identityv1.NewAdminAuthServiceClient(conn)), Media: medias})
 	if err != nil {
 		return nil, nil, err
@@ -321,22 +377,19 @@ func identityMinors(rt *service.Runtime) (report.MinorChecker, error) {
 	return identityminor.New(identityv1.NewMinorServiceClient(conn)), nil
 }
 
-// chatDirectMessages returns the check of reported direct messages with
-// chat (issue #95, ADR-0009): the connection forwards the reporter's own
-// token (auth.ForwardToken); core gets no service identity for it
-// (ADR-0013). Without CHAT_GRPC_ADDR (a local run without chat) direct
-// message reports are UNAVAILABLE.
-func chatDirectMessages(rt *service.Runtime) (report.DirectMessages, error) {
+// chatConnection returns the connection to chat that forwards the caller's
+// own token (auth.ForwardToken; core gets no service identity for it,
+// ADR-0013): reported direct messages (issue #95, ADR-0009) and who may
+// see a chat message's file (issue #205, ADR-0031). Without CHAT_GRPC_ADDR
+// (a local run without chat) direct message reports are UNAVAILABLE and
+// chat files are visible to their owners only.
+func chatConnection(rt *service.Runtime) (*grpc.ClientConn, error) {
 	addr := rt.Config.String("CHAT_GRPC_ADDR", "")
 	if addr == "" {
-		rt.Log.Warn("CHAT_GRPC_ADDR yok; birebir mesaj şikâyetleri kapalı (UNAVAILABLE)")
+		rt.Log.Warn("CHAT_GRPC_ADDR yok; birebir mesaj şikâyetleri kapalı (UNAVAILABLE), sohbet dosyaları yalnızca sahibine")
 		return nil, nil
 	}
-	conn, err := grpcx.NewClient(addr, auth.ForwardToken()...)
-	if err != nil {
-		return nil, err
-	}
-	return chatdm.New(chatv1.NewDirectMessageServiceClient(conn)), nil
+	return grpcx.NewClient(addr, auth.ForwardToken()...)
 }
 
 // addRelay starts the outbox relay that delivers core's events to chat with

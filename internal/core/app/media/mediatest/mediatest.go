@@ -34,7 +34,8 @@ func Ready(t testing.TB, pool *pgxpool.Pool, owner id.ID, purpose string, tayfa 
 	u := id.New()
 	if _, err := q.CreateUpload(ctx, store.CreateUploadParams{
 		ID: u.PG(), UserID: owner.PG(), TayfaID: tp, Purpose: purpose, R2Key: hex.EncodeToString(b[:]),
-		PreviewType: "image/webp", PreviewBytes: 100, FullType: "image/jpeg", FullBytes: 1000, ClientRequestID: id.New().PG(),
+		PreviewType: pgtype.Text{String: "image/webp", Valid: true}, PreviewBytes: pgtype.Int8{Int64: 100, Valid: true},
+		FullType: "image/jpeg", FullBytes: 1000, ClientRequestID: id.New().PG(),
 	}); err != nil {
 		t.Fatalf("yükleme: %v", err)
 	}

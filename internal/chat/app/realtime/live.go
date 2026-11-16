@@ -63,6 +63,18 @@ type MessageData struct {
 	AuthorID  string    `json:"author_user_id,omitempty"`
 	Body      string    `json:"body"`
 	CreatedAt time.Time `json:"created_at"`
+	// Kind is text, photo or place (issue #205, ADR-0031).
+	Kind          string     `json:"kind"`
+	PhotoUploadID string     `json:"photo_upload_id,omitempty"`
+	Place         *PlaceData `json:"place,omitempty"`
+}
+
+// PlaceData is a shared place in a frame: content the user chose to share
+// (ADR-0008), sent to the channel's subscribers only, never logged.
+type PlaceData struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	Name      string  `json:"name,omitempty"`
 }
 
 // DeletedData is a deleted message in a frame.
@@ -93,9 +105,18 @@ type NotificationData struct {
 
 // MessageFrom converts a message for a frame.
 func MessageFrom(tayfa id.ID, m channel.Message) MessageData {
-	d := MessageData{ID: m.ID.String(), TayfaID: tayfa.String(), ChannelID: m.ChannelID.String(), Body: m.Body, CreatedAt: m.CreatedAt}
+	d := MessageData{ID: m.ID.String(), TayfaID: tayfa.String(), ChannelID: m.ChannelID.String(), Body: m.Body, CreatedAt: m.CreatedAt, Kind: m.Kind}
+	if d.Kind == "" {
+		d.Kind = channel.KindText
+	}
 	if m.AuthorID != (id.ID{}) {
 		d.AuthorID = m.AuthorID.String()
+	}
+	if m.PhotoUploadID != (id.ID{}) {
+		d.PhotoUploadID = m.PhotoUploadID.String()
+	}
+	if m.Place != nil {
+		d.Place = &PlaceData{Latitude: m.Place.Latitude, Longitude: m.Place.Longitude, Name: m.Place.Name}
 	}
 	return d
 }

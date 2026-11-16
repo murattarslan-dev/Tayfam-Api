@@ -72,6 +72,9 @@ func TestReportRoutes(t *testing.T) {
 		{"POST", base, `{"target_type":"tayfa","target_id":"` + tayfaID + `","reason":"gambling"}`, 200,
 			&corev1.CreateReportRequest{TayfaId: tayfaID, TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_TAYFA, TargetId: tayfaID,
 				Reason: corev1.ReportReason_REPORT_REASON_GAMBLING}},
+		{"POST", base, `{"target_type":"channel_message","target_id":"` + targetID + `","reason":"harassment"}`, 201,
+			&corev1.CreateReportRequest{TayfaId: tayfaID, TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_CHANNEL_MESSAGE, TargetId: targetID,
+				Reason: corev1.ReportReason_REPORT_REASON_HARASSMENT}},
 		{"GET", base, "", 200, &corev1.ListTayfaReportsRequest{TayfaId: tayfaID}},
 		{"GET", base + "?status=resolved&page_size=5&page_token=P", "", 200, &corev1.ListTayfaReportsRequest{TayfaId: tayfaID,
 			Status: corev1.ReportStatus_REPORT_STATUS_RESOLVED, PageSize: 5, PageToken: "P"}},
@@ -106,6 +109,13 @@ func TestReportRoutes(t *testing.T) {
 		q.Reports[0].SubjectUserID != targetID || q.Reports[0].Resolution != "" || q.Reports[0].HandledByUserID != "" {
 		t.Fatalf("kuyruk: %+v", q)
 	}
+	if q.Reports[0].ChannelID != "" || strings.Contains(w.Body.String(), "channel_id") {
+		t.Fatalf("kanal mesajı olmayan şikâyette kanal: %s", w.Body)
+	}
+	// A channel message report carries its channel, to open it.
+	if r := modReportFrom(&corev1.ModerationReport{TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_CHANNEL_MESSAGE, ChannelId: tayfaID}); r.TargetType != "channel_message" || r.ChannelID != tayfaID {
+		t.Fatalf("kanal mesajı şikâyeti: %+v", r)
+	}
 	// The priority is shown; nothing else about age or the reporter.
 	body := strings.ReplaceAll(w.Body.String(), `"priority":"minor_involved"`, "")
 	for _, banned := range []string{"reporter", "minor", "escalat", "birth", `"age`} {
@@ -125,7 +135,7 @@ func TestReportBadRequests(t *testing.T) {
 	base := "/v1/tayfas/" + tayfaID + "/reports"
 	ok := `"target_id":"` + targetID + `"`
 	for name, tc := range map[string]struct{ method, path, body string }{
-		"bilinmeyen tür":        {"POST", base, `{"target_type":"channel_message",` + ok + `,"reason":"spam"}`},
+		"bilinmeyen tür":        {"POST", base, `{"target_type":"channel",` + ok + `,"reason":"spam"}`},
 		"tür yok":               {"POST", base, `{` + ok + `,"reason":"spam"}`},
 		"bilinmeyen sebep":      {"POST", base, `{"target_type":"user",` + ok + `,"reason":"boring"}`},
 		"bozuk hedef":           {"POST", base, `{"target_type":"user","target_id":"x","reason":"spam"}`},
@@ -202,6 +212,9 @@ func TestDirectMessageReportRoute(t *testing.T) {
 		"tayfasız duyuru":       {"/v1/me/reports", `{"target_type":"announcement",` + ok + `,"reason":"spam"}`},
 		"profilden kanıtlı":     {"/v1/me/reports", `{"target_type":"user",` + ok + `,"reason":"spam","evidence_text":"x"}`},
 		"üye şikâyetinde kanıt": {base, `{"target_type":"user",` + ok + `,"reason":"spam","evidence_text":"x"}`},
+		// Issue #205: the evidence photo belongs to DM reports only.
+		"üye şikâyetinde fotoğraf": {base, `{"target_type":"user",` + ok + `,"reason":"spam","evidence_upload_id":"` + targetID + `"}`},
+		"bozuk fotoğraf":           {"/v1/me/reports", `{"target_type":"dm_message",` + ok + `,"reason":"spam","evidence_upload_id":"x"}`},
 	} {
 		if w := as(h, "POST", tc.path, tc.body); w.Code != 400 || problemType(t, w) != "invalid-request" {
 			t.Errorf("%s: %d %s", name, w.Code, problemType(t, w))
@@ -212,6 +225,13 @@ func TestDirectMessageReportRoute(t *testing.T) {
 	}
 	if w := as(h, "POST", "/v1/me/reports", `{"target_type":"dm_message",`+ok+`,"reason":"spam","evidence_text":"  `+strings.Repeat("ş", 2000)+`  "}`); w.Code != 201 {
 		t.Fatalf("2000 karakter: %d %s", w.Code, w.Body)
+	}
+	// A photo alone is evidence enough (issue #205).
+	if w := as(h, "POST", "/v1/me/reports", `{"target_type":"dm_message",`+ok+`,"reason":"spam","evidence_upload_id":"`+reportID+`"}`); w.Code != 201 {
+		t.Fatalf("yalnız fotoğraf: %d %s", w.Code, w.Body)
+	}
+	if got, _, _ := f.last(); got.(*corev1.CreateReportRequest).GetEvidenceUploadId() != reportID {
+		t.Fatalf("core'a giden: %v", got)
 	}
 }
 

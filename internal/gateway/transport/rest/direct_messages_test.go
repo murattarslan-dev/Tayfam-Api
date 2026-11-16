@@ -98,6 +98,11 @@ func TestDirectMessageRoutes(t *testing.T) {
 			RecipientUserId: userID, ClientRequestId: requestID,
 			Envelopes: []*chatv1.OutgoingEnvelope{{DeviceId: deviceID, RegistrationId: 9, Type: chatv1.EnvelopeType_ENVELOPE_TYPE_PREKEY, Content: []byte{1, 2}}},
 		}},
+		// Issue #205: an encrypted attachment.
+		{"POST", "/v1/direct-messages", dmSendBody(`,"attachment_upload_id":"` + messageID + `"`), 201, &chatv1.SendDirectMessageRequest{
+			RecipientUserId: userID, ClientRequestId: requestID, AttachmentUploadId: messageID,
+			Envelopes: []*chatv1.OutgoingEnvelope{{DeviceId: deviceID, RegistrationId: 9, Type: chatv1.EnvelopeType_ENVELOPE_TYPE_PREKEY, Content: []byte{1, 2}}},
+		}},
 		{"GET", "/v1/direct-messages/conversations?page_size=10&page_token=P", "", 200, &chatv1.ListConversationsRequest{PageSize: 10, PageToken: "P"}},
 		{"GET", c, "", 200, &chatv1.GetConversationRequest{ConversationId: conversationID}},
 		{"GET", c + "/messages?page_size=20", "", 200, &chatv1.ListDirectMessagesRequest{ConversationId: conversationID, PageSize: 20}},
@@ -162,6 +167,7 @@ func TestDirectMessageBadRequests(t *testing.T) {
 		"metin ve zarf":      {"POST", "/v1/direct-messages", send(`,"body":"x"`)},
 		"istek kimliği yok":  {"POST", "/v1/direct-messages", `{"recipient_user_id":"` + userID + `","envelopes":` + dmEnvelopes + `}`},
 		"gönderen alanı":     {"POST", "/v1/direct-messages", send(`,"sender_user_id":"` + userID + `"`)},
+		"bozuk ek":           {"POST", "/v1/direct-messages", send(`,"attachment_upload_id":"x"`)},
 		"bozuk after":        {"GET", c + "/messages?after_message_id=x", ""},
 		"bozuk sayfa":        {"GET", "/v1/direct-messages/conversations?page_size=x", ""},
 		"okundu kimliği yok": {"PUT", c + "/read", `{}`},

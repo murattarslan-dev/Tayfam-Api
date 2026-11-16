@@ -4,7 +4,7 @@
 -- metni uygulamada çözülür ve hiçbir yere loglanmaz.
 
 -- name: ExportChannelMessages :many
-SELECT m.id, m.channel_id, c.tayfa_id, m.body_encrypted, m.key_version, m.created_at, m.deleted_at
+SELECT m.id, m.channel_id, c.tayfa_id, m.body_encrypted, m.key_version, m.created_at, m.deleted_at, m.kind, m.photo_upload_id
 FROM channel_messages m JOIN channels c ON c.id = m.channel_id
 WHERE m.author_id = @user_id AND m.id > @after
 ORDER BY m.id

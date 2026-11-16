@@ -108,6 +108,30 @@ func TestCreateUpload(t *testing.T) {
 			t.Errorf("%s: %d", name, w.Code)
 		}
 	}
+	// Issue #205: a DM attachment is one encrypted blob.
+	blob := `{"purpose":"dm_attachment","variants":[` + v("blob", "application/octet-stream", 2048) + `],"client_request_id":"` + uploadID + `"}`
+	if w := as(h, "POST", "/v1/uploads", blob); w.Code != http.StatusCreated {
+		t.Fatalf("blob: %d %s", w.Code, w.Body)
+	}
+	if in, _, _ := f.last(); in.(*corev1.CreateUploadRequest).GetVariants()[0].GetKind() != corev1.VariantKind_VARIANT_KIND_BLOB ||
+		in.(*corev1.CreateUploadRequest).GetPurpose() != corev1.UploadPurpose_UPLOAD_PURPOSE_DM_ATTACHMENT {
+		t.Fatalf("core'a giden: %v", in)
+	}
+	for name, vs := range map[string]string{
+		"blobda görüntü türü": `[` + v("blob", "image/jpeg", 10) + `]`,
+		"blobda önizleme":     `[` + v("preview", "application/octet-stream", 10) + `]`,
+		"iki blob":            `[` + v("blob", "application/octet-stream", 10) + `,` + v("blob", "application/octet-stream", 10) + `]`,
+		"10 MiB üstü blob":    `[` + v("blob", "application/octet-stream", 10485761) + `]`,
+	} {
+		b := `{"purpose":"dm_attachment","variants":` + vs + `,"client_request_id":"` + uploadID + `"}`
+		if w := as(h, "POST", "/v1/uploads", b); w.Code != http.StatusBadRequest {
+			t.Errorf("%s: %d", name, w.Code)
+		}
+	}
+	// A blob in an image upload is refused.
+	if w := as(h, "POST", "/v1/uploads", `{"purpose":"chat_photo","variants":[`+v("blob", "application/octet-stream", 10)+`,`+full+`],"tayfa_id":"`+tayfaID+`","client_request_id":"`+uploadID+`"}`); w.Code != http.StatusBadRequest {
+		t.Errorf("görüntüde blob: %d", w.Code)
+	}
 	for name, b := range map[string]string{
 		"bilinmeyen amaç": `{"purpose":"data_export",` + variantsJSON + `,"client_request_id":"` + uploadID + `"}`,
 		"tekrar kimliği":  `{"purpose":"avatar",` + variantsJSON + `}`,
@@ -159,7 +183,8 @@ func TestGetAndCompleteUpload(t *testing.T) {
 	if r := in.(*corev1.CompleteUploadRequest); r.GetWidth() != 1600 || r.GetHeight() != 1200 {
 		t.Fatalf("ölçüler iletilmeli: %v", r)
 	}
-	for _, b := range []string{`{}`, `{"width":1601,"height":10}`, `{"width":10,"height":0}`, `{"width":10,"height":10,"url":"x"}`} {
+	// {} is 0 × 0: only a dm_attachment's, which core tells apart (#205).
+	for _, b := range []string{`{"width":1601,"height":10}`, `{"width":10,"height":0}`, `{"width":10,"height":10,"url":"x"}`} {
 		if w := as(h, "POST", "/v1/uploads/"+uploadID+"/complete", b); w.Code != http.StatusBadRequest {
 			t.Errorf("%s: %d", b, w.Code)
 		}

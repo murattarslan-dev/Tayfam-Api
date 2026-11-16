@@ -27,7 +27,7 @@ import (
 )
 
 // Event is one core event: exactly one of Notification, Purged,
-// MemberChanged, StatusChanged, Attendance and Schedule.
+// MemberChanged, StatusChanged, Attendance, Schedule and RemovedMessage.
 type Event struct {
 	ID    id.ID // core's outbox event ID
 	Tayfa id.ID // zero only for a notification not about a tayfa
@@ -47,6 +47,10 @@ type Event struct {
 	Attendance *Attendance
 	// Schedule: an event's end moved or it was cancelled (issue #183).
 	Schedule *Schedule
+	// RemovedMessage: the platform removes a reported channel message
+	// (issue #205, ADR-0031); RemovedBy is the platform administrator.
+	RemovedMessage id.ID
+	RemovedBy      id.ID
 }
 
 // Attendance is an event_attendance_changed: whether User is in Event's
@@ -78,6 +82,7 @@ type Live interface {
 	TayfaChanged(tayfa id.ID)
 	TayfaPurged(tayfa id.ID)
 	Notified(r notification.Request)
+	MessageDeleted(tayfa, ch, message id.ID)
 }
 
 // Config wires a Service.
@@ -105,7 +110,7 @@ func New(cfg Config) (*Service, error) {
 // Apply applies e in one transaction.
 func (s *Service) Apply(ctx context.Context, e Event) error {
 	kinds := 0
-	for _, set := range []bool{e.Notification != nil, e.Purged, e.MemberChanged != (id.ID{}), e.StatusChanged, e.Attendance != nil, e.Schedule != nil} {
+	for _, set := range []bool{e.Notification != nil, e.Purged, e.MemberChanged != (id.ID{}), e.StatusChanged, e.Attendance != nil, e.Schedule != nil, e.RemovedMessage != (id.ID{})} {
 		if set {
 			kinds++
 		}
@@ -120,6 +125,8 @@ func (s *Service) Apply(ctx context.Context, e Event) error {
 		return apperr.Validation("tayfa_id")
 	}
 	switch {
+	case e.RemovedMessage != (id.ID{}):
+		return s.removeMessage(ctx, e)
 	case e.Attendance != nil:
 		return s.attendance(e)
 	case e.Schedule != nil:
@@ -187,6 +194,29 @@ func (s *Service) Apply(ctx context.Context, e Event) error {
 	}
 	if s.cfg.Live != nil {
 		s.cfg.Live.TayfaPurged(e.Tayfa)
+	}
+	return nil
+}
+
+// removeMessage hides a reported channel message on the platform's
+// decision; applying it again changes nothing.
+func (s *Service) removeMessage(ctx context.Context, e Event) error {
+	if e.RemovedBy == (id.ID{}) {
+		return apperr.Validation("actor_id")
+	}
+	var (
+		ch      id.ID
+		changed bool
+	)
+	if err := pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
+		var err error
+		ch, changed, err = channel.HideReported(ctx, tx, e.Tayfa, e.RemovedMessage, e.RemovedBy, time.Now())
+		return err
+	}); err != nil {
+		return err
+	}
+	if changed && s.cfg.Live != nil {
+		s.cfg.Live.MessageDeleted(e.Tayfa, ch, e.RemovedMessage)
 	}
 	return nil
 }

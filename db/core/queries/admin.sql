@@ -95,7 +95,8 @@ LIMIT 200;
 -- name: AdminGetPlatformReport :one
 SELECT id, tayfa_id, target_type, target_id, subject_user_id, reporter_id, reason, description,
        priority, created_at, escalated_to_platform_at, platform_status, platform_decision, platform_handled_at,
-       evidence_text, status
+       evidence_text, status, evidence_upload_id,
+       channel_id, message_kind, message_body, message_photo_upload_id, place_latitude, place_longitude, place_name
 FROM reports
 WHERE id = @id AND escalated_to_platform_at IS NOT NULL;
 

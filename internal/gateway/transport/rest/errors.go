@@ -149,9 +149,13 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_EVENT_NOT_FOUND":      {http.StatusNotFound, "event-not-found"},
 		"ERROR_REASON_NOT_TAYFA_MEMBER":     {http.StatusBadRequest, "not-tayfa-member"},
 		"ERROR_REASON_EVENT_ENDED":          {http.StatusConflict, "event-ended"},
-		"ERROR_REASON_SLOW_MODE":            {http.StatusTooManyRequests, "slow-mode"},
-		"ERROR_REASON_TAYFA_READ_ONLY":      {http.StatusConflict, "tayfa-read-only"},
-		"ERROR_REASON_ROLE_HIERARCHY":       {http.StatusForbidden, "role-hierarchy"},
+		// Photos and attachments (issue #205): core's answer via chat.
+		"ERROR_REASON_UPLOAD_NOT_FOUND": {http.StatusNotFound, "upload-not-found"},
+		"ERROR_REASON_UPLOAD_NOT_READY": {http.StatusConflict, "upload-not-ready"},
+		"ERROR_REASON_UPLOAD_IN_USE":    {http.StatusConflict, "upload-in-use"},
+		"ERROR_REASON_SLOW_MODE":        {http.StatusTooManyRequests, "slow-mode"},
+		"ERROR_REASON_TAYFA_READ_ONLY":  {http.StatusConflict, "tayfa-read-only"},
+		"ERROR_REASON_ROLE_HIERARCHY":   {http.StatusForbidden, "role-hierarchy"},
 		// Direct messages (issue #95).
 		"ERROR_REASON_CONVERSATION_NOT_FOUND":     {http.StatusNotFound, "conversation-not-found"},
 		"ERROR_REASON_DIRECT_MESSAGE_NOT_ALLOWED": {http.StatusForbidden, "direct-message-not-allowed"},

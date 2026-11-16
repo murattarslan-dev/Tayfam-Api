@@ -49,6 +49,36 @@ func (q *Queries) AttachUpload(ctx context.Context, arg AttachUploadParams) (int
 	return result.RowsAffected(), nil
 }
 
+const confirmChatAttachment = `-- name: ConfirmChatAttachment :execrows
+UPDATE uploads SET attached_id = $1::uuid, attach_confirmed_at = $2
+WHERE id = $3 AND attached_type = $4::text AND attached_id = $5
+  AND attach_confirmed_at IS NULL AND status = 'ready'
+`
+
+type ConfirmChatAttachmentParams struct {
+	HolderID     pgtype.UUID
+	Now          pgtype.Timestamptz
+	ID           pgtype.UUID
+	AttachedType string
+	AskedID      pgtype.UUID
+}
+
+// chat dosyayı tutan mesajı söyledi: bağlama o mesajla onaylanır. Arada
+// taşındıysa (asked_id değişti) bir şey olmaz.
+func (q *Queries) ConfirmChatAttachment(ctx context.Context, arg ConfirmChatAttachmentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, confirmChatAttachment,
+		arg.HolderID,
+		arg.Now,
+		arg.ID,
+		arg.AttachedType,
+		arg.AskedID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countUploadsSince = `-- name: CountUploadsSince :one
 SELECT count(*) FROM uploads
 WHERE user_id = $1 AND created_at > $2 AND purpose <> 'data_export'
@@ -108,8 +138,8 @@ type CreateUploadParams struct {
 	TayfaID         pgtype.UUID
 	Purpose         string
 	R2Key           string
-	PreviewType     string
-	PreviewBytes    int64
+	PreviewType     pgtype.Text
+	PreviewBytes    pgtype.Int8
 	FullType        string
 	FullBytes       int64
 	ClientRequestID pgtype.UUID
@@ -153,11 +183,12 @@ func (q *Queries) DeleteUploadRow(ctx context.Context, id pgtype.UUID) (int64, e
 const deleteUserUploads = `-- name: DeleteUserUploads :execrows
 UPDATE uploads SET status = 'deleting'
 WHERE user_id = $1 AND status <> 'deleting'
-  AND NOT (purpose = 'cover' AND attached_type IS NOT NULL)
+  AND NOT (purpose IN ('cover', 'report_evidence') AND attached_type IS NOT NULL)
 `
 
 // Hesap silme (user.deleted): kullanıcının dosyaları silinir; bağlı kapak
-// görselleri tayfanındır, yalnızca sahiplikleri kaldırılır.
+// görselleri tayfanındır, bağlı şikâyet kanıtı platformundur (rapor
+// durdukça, ADR-0031); yalnızca sahiplikleri kaldırılır.
 func (q *Queries) DeleteUserUploads(ctx context.Context, userID pgtype.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteUserUploads, userID)
 	if err != nil {
@@ -166,9 +197,31 @@ func (q *Queries) DeleteUserUploads(ctx context.Context, userID pgtype.UUID) (in
 	return result.RowsAffected(), nil
 }
 
+const detachChatAttachment = `-- name: DetachChatAttachment :execrows
+UPDATE uploads SET attached_type = NULL, attached_id = NULL, attached_at = NULL
+WHERE id = $1 AND attached_type = $2::text AND attached_id = $3
+  AND attach_confirmed_at IS NULL AND status = 'ready'
+`
+
+type DetachChatAttachmentParams struct {
+	ID           pgtype.UUID
+	AttachedType string
+	AskedID      pgtype.UUID
+}
+
+// Hiçbir mesaj dosyayı tutmuyor: bağlama kaldırılır; dosya bağlanmamış
+// hazır dosya olarak 7 günlük temizliğe döner (ready_at'ten sayılır).
+func (q *Queries) DetachChatAttachment(ctx context.Context, arg DetachChatAttachmentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, detachChatAttachment, arg.ID, arg.AttachedType, arg.AskedID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const disownUserCovers = `-- name: DisownUserCovers :execrows
 UPDATE uploads SET user_id = NULL
-WHERE user_id = $1 AND purpose = 'cover' AND attached_type IS NOT NULL
+WHERE user_id = $1 AND purpose IN ('cover', 'report_evidence') AND attached_type IS NOT NULL
 `
 
 func (q *Queries) DisownUserCovers(ctx context.Context, userID pgtype.UUID) (int64, error) {
@@ -257,7 +310,7 @@ func (q *Queries) ExpireUploads(ctx context.Context, arg ExpireUploadsParams) ([
 }
 
 const getExportByClientRequest = `-- name: GetExportByClientRequest :one
-SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at, export_bytes, expires_at FROM uploads
+SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at, export_bytes, expires_at, attach_confirmed_at FROM uploads
 WHERE user_id = $1 AND client_request_id = $2 AND purpose = 'data_export'
 `
 
@@ -292,12 +345,13 @@ func (q *Queries) GetExportByClientRequest(ctx context.Context, arg GetExportByC
 		&i.UpdatedAt,
 		&i.ExportBytes,
 		&i.ExpiresAt,
+		&i.AttachConfirmedAt,
 	)
 	return i, err
 }
 
 const getOwnExport = `-- name: GetOwnExport :one
-SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at, export_bytes, expires_at FROM uploads
+SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at, export_bytes, expires_at, attach_confirmed_at FROM uploads
 WHERE id = $1 AND user_id = $2 AND purpose = 'data_export' AND status <> 'deleting'
 `
 
@@ -332,12 +386,13 @@ func (q *Queries) GetOwnExport(ctx context.Context, arg GetOwnExportParams) (Upl
 		&i.UpdatedAt,
 		&i.ExportBytes,
 		&i.ExpiresAt,
+		&i.AttachConfirmedAt,
 	)
 	return i, err
 }
 
 const getOwnUpload = `-- name: GetOwnUpload :one
-SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at, export_bytes, expires_at FROM uploads
+SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at, export_bytes, expires_at, attach_confirmed_at FROM uploads
 WHERE id = $1 AND user_id = $2 AND status <> 'deleting' AND purpose <> 'data_export'
 `
 
@@ -374,12 +429,13 @@ func (q *Queries) GetOwnUpload(ctx context.Context, arg GetOwnUploadParams) (Upl
 		&i.UpdatedAt,
 		&i.ExportBytes,
 		&i.ExpiresAt,
+		&i.AttachConfirmedAt,
 	)
 	return i, err
 }
 
 const getOwnUploadForUpdate = `-- name: GetOwnUploadForUpdate :one
-SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at, export_bytes, expires_at FROM uploads
+SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at, export_bytes, expires_at, attach_confirmed_at FROM uploads
 WHERE id = $1 AND user_id = $2 AND status <> 'deleting' AND purpose <> 'data_export'
 FOR UPDATE
 `
@@ -415,8 +471,54 @@ func (q *Queries) GetOwnUploadForUpdate(ctx context.Context, arg GetOwnUploadFor
 		&i.UpdatedAt,
 		&i.ExportBytes,
 		&i.ExpiresAt,
+		&i.AttachConfirmedAt,
 	)
 	return i, err
+}
+
+const getReportEvidenceUpload = `-- name: GetReportEvidenceUpload :one
+SELECT r2_key, full_type::text AS full_type FROM uploads
+WHERE id = $1 AND purpose = 'report_evidence' AND status = 'ready'
+  AND attached_type = 'report' AND attached_id = $2
+`
+
+type GetReportEvidenceUploadParams struct {
+	ID       pgtype.UUID
+	ReportID pgtype.UUID
+}
+
+type GetReportEvidenceUploadRow struct {
+	R2Key    string
+	FullType string
+}
+
+// Platform panelinde şikâyetin kanıt fotoğrafı (issue #205): yalnızca o
+// rapora bağlı, hazır dosya.
+func (q *Queries) GetReportEvidenceUpload(ctx context.Context, arg GetReportEvidenceUploadParams) (GetReportEvidenceUploadRow, error) {
+	row := q.db.QueryRow(ctx, getReportEvidenceUpload, arg.ID, arg.ReportID)
+	var i GetReportEvidenceUploadRow
+	err := row.Scan(&i.R2Key, &i.FullType)
+	return i, err
+}
+
+const getReportedMessagePhotoUpload = `-- name: GetReportedMessagePhotoUpload :one
+SELECT r2_key FROM uploads
+WHERE id = $1 AND purpose = 'chat_photo' AND status = 'ready'
+  AND attached_type = 'channel_message' AND attached_id = $2
+`
+
+type GetReportedMessagePhotoUploadParams struct {
+	ID        pgtype.UUID
+	MessageID pgtype.UUID
+}
+
+// Platform panelinde şikâyet edilen kanal mesajının fotoğrafı (ADR-0031):
+// şikâyetin kaydettiği upload_id, hâlâ o mesaja bağlı, hazır chat_photo.
+func (q *Queries) GetReportedMessagePhotoUpload(ctx context.Context, arg GetReportedMessagePhotoUploadParams) (string, error) {
+	row := q.db.QueryRow(ctx, getReportedMessagePhotoUpload, arg.ID, arg.MessageID)
+	var r2_key string
+	err := row.Scan(&r2_key)
+	return r2_key, err
 }
 
 const getReportedPhotoUpload = `-- name: GetReportedPhotoUpload :one
@@ -439,7 +541,7 @@ func (q *Queries) GetReportedPhotoUpload(ctx context.Context, id pgtype.UUID) (G
 }
 
 const getUploadByClientRequest = `-- name: GetUploadByClientRequest :one
-SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at, export_bytes, expires_at FROM uploads
+SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at, export_bytes, expires_at, attach_confirmed_at FROM uploads
 WHERE user_id = $1 AND client_request_id = $2 AND purpose <> 'data_export'
 `
 
@@ -474,6 +576,7 @@ func (q *Queries) GetUploadByClientRequest(ctx context.Context, arg GetUploadByC
 		&i.UpdatedAt,
 		&i.ExportBytes,
 		&i.ExpiresAt,
+		&i.AttachConfirmedAt,
 	)
 	return i, err
 }
@@ -512,7 +615,7 @@ func (q *Queries) ListDeletingUploads(ctx context.Context, n int32) ([]ListDelet
 }
 
 const listMediaForViewer = `-- name: ListMediaForViewer :many
-SELECT u.id, u.user_id, u.purpose, u.r2_key, u.preview_type::text AS preview_type, u.full_type::text AS full_type, u.width, u.height,
+SELECT u.id, u.user_id, u.purpose, u.r2_key, COALESCE(u.preview_type, '')::text AS preview_type, u.full_type::text AS full_type, u.width, u.height,
        u.attached_type, u.attached_id,
        c.tayfa_id AS content_tayfa_id,
        m.role AS member_role, m.status AS member_status, m.muted_until AS member_muted_until,
@@ -617,6 +720,46 @@ func (q *Queries) ListMediaForViewer(ctx context.Context, arg ListMediaForViewer
 	return items, nil
 }
 
+const listUnconfirmedChatAttachments = `-- name: ListUnconfirmedChatAttachments :many
+SELECT id, attached_type::text AS attached_type, attached_id::uuid AS attached_id FROM uploads
+WHERE attached_type IN ('channel_message', 'dm_message') AND attach_confirmed_at IS NULL
+  AND status = 'ready' AND attached_at < $1
+ORDER BY attached_at
+LIMIT $2
+`
+
+type ListUnconfirmedChatAttachmentsParams struct {
+	Before pgtype.Timestamptz
+	N      int32
+}
+
+type ListUnconfirmedChatAttachmentsRow struct {
+	ID           pgtype.UUID
+	AttachedType string
+	AttachedID   pgtype.UUID
+}
+
+// Uzlaştırma işi: onaylanmamış, before'dan eski sohbet bağlamaları.
+func (q *Queries) ListUnconfirmedChatAttachments(ctx context.Context, arg ListUnconfirmedChatAttachmentsParams) ([]ListUnconfirmedChatAttachmentsRow, error) {
+	rows, err := q.db.Query(ctx, listUnconfirmedChatAttachments, arg.Before, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUnconfirmedChatAttachmentsRow{}
+	for rows.Next() {
+		var i ListUnconfirmedChatAttachmentsRow
+		if err := rows.Scan(&i.ID, &i.AttachedType, &i.AttachedID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockUserUploads = `-- name: LockUserUploads :exec
 SELECT pg_advisory_xact_lock(hashtextextended('uploads:' || $1::text, 0))
 `
@@ -682,6 +825,42 @@ func (q *Queries) MarkUploadReady(ctx context.Context, arg MarkUploadReadyParams
 	return result.RowsAffected(), nil
 }
 
+const moveChatAttachment = `-- name: MoveChatAttachment :execrows
+UPDATE uploads SET attached_id = $1::uuid, attached_at = $2
+WHERE id = $3 AND user_id = $4 AND purpose = $5 AND status = 'ready'
+  AND tayfa_id IS NOT DISTINCT FROM $6::uuid
+  AND attached_type = $7::text AND attach_confirmed_at IS NULL
+`
+
+type MoveChatAttachmentParams struct {
+	AttachedID   pgtype.UUID
+	Now          pgtype.Timestamptz
+	ID           pgtype.UUID
+	UserID       pgtype.UUID
+	Purpose      string
+	TayfaID      pgtype.UUID
+	AttachedType string
+}
+
+// Onaylanmamış sohbet bağlaması (ADR-0031): chat'in henüz onaylamadığı,
+// belki hiç yazılmamış bir mesaja bağlı dosya, aynı sahibin yeni mesajına
+// taşınır. Çağıran satırı önce GetOwnUploadForUpdate ile kilitler.
+func (q *Queries) MoveChatAttachment(ctx context.Context, arg MoveChatAttachmentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, moveChatAttachment,
+		arg.AttachedID,
+		arg.Now,
+		arg.ID,
+		arg.UserID,
+		arg.Purpose,
+		arg.TayfaID,
+		arg.AttachedType,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const rejectPendingUpload = `-- name: RejectPendingUpload :execrows
 UPDATE uploads SET status = 'rejected', reject_reason = $1
 WHERE id = $2 AND status = 'pending'
@@ -694,6 +873,28 @@ type RejectPendingUploadParams struct {
 
 func (q *Queries) RejectPendingUpload(ctx context.Context, arg RejectPendingUploadParams) (int64, error) {
 	result, err := q.db.Exec(ctx, rejectPendingUpload, arg.RejectReason, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const releaseMessageMedia = `-- name: ReleaseMessageMedia :execrows
+UPDATE uploads SET status = 'deleting'
+WHERE id = $1 AND attached_type IN ('channel_message', 'dm_message') AND attached_id = $2
+  AND status <> 'deleting'
+`
+
+type ReleaseMessageMediaParams struct {
+	ID        pgtype.UUID
+	MessageID pgtype.UUID
+}
+
+// Sohbet mesajı fotoğrafını ya da ekini bıraktı (chat.media_released,
+// ADR-0031): dosya hâlâ o mesaja bağlıysa silinir; değilse bir şey olmaz
+// (tekrar gelen olay).
+func (q *Queries) ReleaseMessageMedia(ctx context.Context, arg ReleaseMessageMediaParams) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseMessageMedia, arg.ID, arg.MessageID)
 	if err != nil {
 		return 0, err
 	}
@@ -740,6 +941,21 @@ type ReleaseOtherExportsParams struct {
 // silinir: identity aynı anda tek talep yürütür, eskisi artıktır.
 func (q *Queries) ReleaseOtherExports(ctx context.Context, arg ReleaseOtherExportsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, releaseOtherExports, arg.UserID, arg.ClientRequestID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const releaseTayfaChatPhotos = `-- name: ReleaseTayfaChatPhotos :execrows
+UPDATE uploads SET status = 'deleting'
+WHERE tayfa_id = $1 AND purpose = 'chat_photo' AND status <> 'deleting'
+`
+
+// Tayfa kalıcı silindi: kanal fotoğrafları da gider (kanallar chat'te
+// tayfa.purged ile silinir; dosyanın tayfası core'da bellidir).
+func (q *Queries) ReleaseTayfaChatPhotos(ctx context.Context, tayfaID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseTayfaChatPhotos, tayfaID)
 	if err != nil {
 		return 0, err
 	}
@@ -818,11 +1034,12 @@ func (q *Queries) SetTayfaCover(ctx context.Context, arg SetTayfaCoverParams) er
 }
 
 const userStoredBytes = `-- name: UserStoredBytes :one
-SELECT COALESCE(sum(preview_bytes + full_bytes), 0)::bigint FROM uploads
+SELECT COALESCE(sum(COALESCE(preview_bytes, 0) + full_bytes), 0)::bigint FROM uploads
 WHERE user_id = $1 AND status NOT IN ('rejected', 'deleting') AND purpose <> 'data_export'
 `
 
-// Kota: iki varyantın bildirilen (ve imzayla zorlanan) boyutları.
+// Kota: iki varyantın (birebir ekte tek nesnenin) bildirilen (ve imzayla
+// zorlanan) boyutları.
 func (q *Queries) UserStoredBytes(ctx context.Context, userID pgtype.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, userStoredBytes, userID)
 	var column_1 int64
