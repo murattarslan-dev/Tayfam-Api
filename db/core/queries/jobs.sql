@@ -49,23 +49,25 @@ RETURNING id;
 
 -- Uyarı iki sebeple verilir:
 --   inactive:    last_activity_at @inactive_before'dan eski (30 gün).
---   few_members: açılışından @created_before'a kadar (7 gün) geçmiş ve
+--   few_members: açılışından (dönüşen anlık tayfada dönüşümünden)
+--                @created_before'a kadar (7 gün) geçmiş ve
 --                @min_members'tan az aktif üyesi olan tayfa. Bu kural tayfa
 --                başına bir kez uygulanır: daha önce few_members uyarısı
 --                almış (audit_logs, yalnızca eklenir) tayfa bu sebeple tekrar
 --                uyarılmaz; küçük ama aktif bir arkadaş grubu her hafta uyarı
 --                almaz, hareketsiz kalırsa inactive kuralı yine işler.
--- Askıdaki ya da silme bekleyen tayfaya dokunulmaz.
+-- Askıdaki ya da silme bekleyen tayfaya dokunulmaz. Anlık tayfa bu
+-- kurallara girmez; kendi arşiv kuralı vardır (ArchiveInstantTayfas).
 -- name: WarnTayfas :many
 UPDATE tayfas t SET status = 'warned', warned_at = @now
 WHERE t.id IN (
     SELECT c.id FROM tayfas c
-    WHERE c.status = 'active' AND c.deleted_at IS NULL
+    WHERE c.status = 'active' AND c.deleted_at IS NULL AND c.kind = 'standard'
       AND c.suspended_at IS NULL AND c.deletion_requested_at IS NULL
       AND (
         c.last_activity_at <= @inactive_before
         OR (
-          c.created_at <= @created_before
+          COALESCE(c.converted_at, c.created_at) <= @created_before
           AND (SELECT count(*) FROM memberships m WHERE m.tayfa_id = c.id AND m.status = 'active') < @min_members::int
           AND NOT EXISTS (
             SELECT 1 FROM audit_logs a
@@ -76,9 +78,30 @@ WHERE t.id IN (
     LIMIT @n
     FOR NO KEY UPDATE SKIP LOCKED
   )
-  AND t.status = 'active' AND t.deleted_at IS NULL
+  AND t.status = 'active' AND t.deleted_at IS NULL AND t.kind = 'standard'
   AND t.suspended_at IS NULL AND t.deletion_requested_at IS NULL
 RETURNING t.id, (t.last_activity_at <= @inactive_before)::boolean AS inactive;
+
+-- Anlık tayfa, etkinliği bittikten (iptalde iptal anından) @ended_before'a
+-- kadar (7 gün) geçince ya da canlı etkinliği kalmayınca arşivlenir
+-- (ADR-0032 §6). Askıdaki ya da silme bekleyen tayfaya dokunulmaz.
+-- name: ArchiveInstantTayfas :many
+UPDATE tayfas t SET status = 'archived', archived_at = @now
+WHERE t.id IN (
+    SELECT c.id FROM tayfas c
+    WHERE c.kind = 'instant' AND c.status <> 'archived' AND c.deleted_at IS NULL
+      AND c.suspended_at IS NULL AND c.deletion_requested_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM events e
+        WHERE e.tayfa_id = c.id AND e.deleted_at IS NULL
+          AND COALESCE(e.cancelled_at, e.ends_at) > @ended_before)
+    ORDER BY c.id
+    LIMIT @n
+    FOR NO KEY UPDATE SKIP LOCKED
+  )
+  AND t.kind = 'instant' AND t.status <> 'archived' AND t.deleted_at IS NULL
+  AND t.suspended_at IS NULL AND t.deletion_requested_at IS NULL
+RETURNING t.id;
 
 -- Bildirim alıcıları: aktif yöneticiler ve moderatörler, yönetici önce.
 -- name: ListTayfaStaffIDs :many

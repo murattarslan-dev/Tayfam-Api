@@ -412,6 +412,8 @@ type Tayfa struct {
 	UpdatedAt              pgtype.Timestamptz
 	MembersCanCreateEvents bool
 	CoverUploadID          pgtype.UUID
+	Kind                   string
+	ConvertedAt            pgtype.Timestamptz
 }
 
 type TayfaInterest struct {
