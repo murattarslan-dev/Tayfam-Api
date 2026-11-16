@@ -59,12 +59,42 @@ service SocialService {
   rpc ListBlockedUsers(ListBlockedUsersRequest) returns (ListBlockedUsersResponse);
 
   // GetRequestResolutions answers, for the caller as the recipient, how
-  // friend requests and tayfa invitations stand now (issue #192): chat asks
-  // it for one page of FRIEND_REQUEST and TAYFA_INVITATION notifications
-  // with the caller's own token. One answer per ref, in the same order;
+  // friend requests, tayfa invitations and friend suggestions stand now
+  // (issue #192, #208): chat asks it for one page of FRIEND_REQUEST,
+  // TAYFA_INVITATION and FRIEND_SUGGESTION notifications with the caller's
+  // own token. One answer per ref, in the same order;
   // 1–100 refs (ERROR_REASON_VALIDATION otherwise). Who withdrew is never
   // said.
   rpc GetRequestResolutions(GetRequestResolutionsRequest) returns (GetRequestResolutionsResponse);
+
+  // Friend suggestions (issue #208, ADR-0030). A daily job suggests, at most
+  // once a week, someone the caller attended at least three events with
+  // and is not friends with. The friendship score behind it is never
+  // returned by any method, nor how many events were shared.
+
+  // ListFriendSuggestions lists the caller's open suggestions of the last
+  // 30 days, newest first, at most 10. A suggestion leaves the list when
+  // the two become friends or one sends a request, when either blocks or
+  // reports the other, declines the other's request or ends a friendship
+  // with them (these exclude the pair for good), when the suggested user
+  // turns off profiling, turns on hide_from_suggestions or deletes their
+  // account, or when the caller dismisses it. Empty while the caller's
+  // profiling is off.
+  rpc ListFriendSuggestions(ListFriendSuggestionsRequest) returns (ListFriendSuggestionsResponse);
+  // DismissFriendSuggestion closes the caller's suggestion of user_id
+  // ("Kapat"): the two are never suggested to each other again. Succeeds
+  // when there is no such suggestion and changes nothing then.
+  rpc DismissFriendSuggestion(DismissFriendSuggestionRequest) returns (DismissFriendSuggestionResponse);
+  // GetSocialSettings returns the caller's profiling settings; defaults
+  // when the caller never changed them.
+  rpc GetSocialSettings(GetSocialSettingsRequest) returns (GetSocialSettingsResponse);
+  // UpdateSocialSettings changes the fields that are set (at least one;
+  // ERROR_REASON_VALIDATION otherwise). Turning profiling off deletes the
+  // caller's friendship scores and withdraws the open suggestions to and
+  // of the caller at once; turning hide_from_suggestions on withdraws the
+  // open suggestions of the caller. Switching a setting off and on resets
+  // neither the weekly limit nor who was already suggested.
+  rpc UpdateSocialSettings(UpdateSocialSettingsRequest) returns (UpdateSocialSettingsResponse);
 }
 
 // FriendState is a friendship as the caller sees it.
@@ -183,6 +213,13 @@ enum RequestKind {
   REQUEST_KIND_FRIEND_REQUEST = 1;
   // ref id is the tayfa ID.
   REQUEST_KIND_TAYFA_INVITATION = 2;
+  // ref id is the suggested user's ID (FRIEND_SUGGESTION notifications,
+  // issue #208, ADR-0030). PENDING: still suggested; ACCEPTED: the two are
+  // friends or a request is waiting; DECLINED: the caller dismissed it;
+  // EXPIRED: withdrawn or no longer suggestible, for whatever reason (a
+  // block by the other side is never told apart). The client does not
+  // show a FRIEND_SUGGESTION notification that is not PENDING.
+  REQUEST_KIND_FRIEND_SUGGESTION = 3;
 }
 
 enum RequestResolution {
@@ -211,4 +248,50 @@ message GetRequestResolutionsRequest {
 message GetRequestResolutionsResponse {
   // Same order as refs.
   repeated RequestResolution resolutions = 1;
+}
+
+// FriendSuggestion is someone suggested to the caller. It never carries the
+// friendship score, the number of shared events or any other reason.
+message FriendSuggestion {
+  string user_id = 1;
+  string display_name = 2;
+  // Upload ID (UUID); empty when there is none.
+  string avatar_upload_id = 3;
+  google.protobuf.Timestamp suggest_time = 4;
+}
+
+message ListFriendSuggestionsRequest {}
+
+message ListFriendSuggestionsResponse {
+  repeated FriendSuggestion suggestions = 1;
+}
+
+message DismissFriendSuggestionRequest {
+  string user_id = 1;
+}
+
+message DismissFriendSuggestionResponse {}
+
+// SocialSettings are the caller's profiling settings (ADR-0030).
+message SocialSettings {
+  // "Profilleme": the friendship score is kept and suggestions are made.
+  // Default true.
+  bool profiling_enabled = 1;
+  // "Beni önerme": the caller is never suggested to others. Default false.
+  bool hide_from_suggestions = 2;
+}
+
+message GetSocialSettingsRequest {}
+
+message GetSocialSettingsResponse {
+  SocialSettings settings = 1;
+}
+
+message UpdateSocialSettingsRequest {
+  optional bool profiling_enabled = 1;
+  optional bool hide_from_suggestions = 2;
+}
+
+message UpdateSocialSettingsResponse {
+  SocialSettings settings = 1;
 }

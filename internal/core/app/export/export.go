@@ -47,6 +47,10 @@ const (
 	SectionAvailability    = "availability"
 	SectionReports         = "reports"
 	SectionUploads         = "uploads"
+	// Issue #208, ADR-0030 §9: the settings and how many people a score is
+	// kept with; never the scores or who they are with.
+	SectionSocialSettings    = "social_settings"
+	SectionFriendSuggestions = "friend_suggestions"
 )
 
 const (
@@ -163,6 +167,14 @@ var sections = []struct {
 	{SectionUploads, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportUploads(ctx, store.ExportUploadsParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportUploadsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionSocialSettings, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportSocialSettings(ctx, store.ExportSocialSettingsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportSocialSettingsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionFriendSuggestions, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportFriendSuggestions(ctx, store.ExportFriendSuggestionsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportFriendSuggestionsRow) row { return row{x.K, x.Data} })
 	}},
 }
 

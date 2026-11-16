@@ -68,17 +68,20 @@ type Notification struct {
 	Unread    int32
 	ReadAt    time.Time
 	CreatedAt time.Time
-	// Resolution: friend_request and tayfa_invitation only, how the request
-	// stands now (issue #192): pending, accepted, declined, withdrawn or
-	// expired. Asked of core when listing, never stored; empty when core
+	// Resolution: friend_request, tayfa_invitation and friend_suggestion
+	// only, how the request or suggestion stands now (issue #192, #208):
+	// pending, accepted, declined, withdrawn or expired. Asked of core when listing, never stored; empty when core
 	// could not answer.
 	Resolution string
 }
 
 // RequestRef names a request for Resolver: the requester of a
-// friend_request, the tayfa of a tayfa_invitation.
+// friend_request, the tayfa of a tayfa_invitation, the suggested user of a
+// friend_suggestion.
 type RequestRef struct {
 	Invitation bool // false: a friend request
+	// Suggestion: a friend_suggestion (issue #208); Invitation is false.
+	Suggestion bool
 	ID         id.ID
 }
 
@@ -222,6 +225,8 @@ func (s *Service) resolve(ctx context.Context, items []Notification) {
 			refs, at = append(refs, RequestRef{ID: n.Target}), append(at, i)
 		case TypeTayfaInvitation:
 			refs, at = append(refs, RequestRef{Invitation: true, ID: n.Target}), append(at, i)
+		case TypeFriendSuggestion:
+			refs, at = append(refs, RequestRef{Suggestion: true, ID: n.Target}), append(at, i)
 		}
 	}
 	if len(refs) == 0 {

@@ -24,7 +24,8 @@ const (
 type IsMinorRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 1–10 user IDs (UUID). A report needs two: the reporter and the
-	// reported person.
+	// reported person; a friend suggestion asks for the recipient and up to
+	// five candidates.
 	UserIds       []string `protobuf:"bytes,1,rep,name=user_ids,json=userIds,proto3" json:"user_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

@@ -31,6 +31,11 @@ type SocialClient interface {
 	BlockUser(ctx context.Context, in *corev1.BlockUserRequest, opts ...grpc.CallOption) (*corev1.BlockUserResponse, error)
 	UnblockUser(ctx context.Context, in *corev1.UnblockUserRequest, opts ...grpc.CallOption) (*corev1.UnblockUserResponse, error)
 	ListBlockedUsers(ctx context.Context, in *corev1.ListBlockedUsersRequest, opts ...grpc.CallOption) (*corev1.ListBlockedUsersResponse, error)
+	// Friend suggestions and profiling settings (issue #208, ADR-0030).
+	ListFriendSuggestions(ctx context.Context, in *corev1.ListFriendSuggestionsRequest, opts ...grpc.CallOption) (*corev1.ListFriendSuggestionsResponse, error)
+	DismissFriendSuggestion(ctx context.Context, in *corev1.DismissFriendSuggestionRequest, opts ...grpc.CallOption) (*corev1.DismissFriendSuggestionResponse, error)
+	GetSocialSettings(ctx context.Context, in *corev1.GetSocialSettingsRequest, opts ...grpc.CallOption) (*corev1.GetSocialSettingsResponse, error)
+	UpdateSocialSettings(ctx context.Context, in *corev1.UpdateSocialSettingsRequest, opts ...grpc.CallOption) (*corev1.UpdateSocialSettingsResponse, error)
 }
 
 // InvitationClient is the direct invitation part of core's
@@ -84,6 +89,10 @@ func registerSocial(mux *http.ServeMux, h coreHandlers) {
 	mux.HandleFunc("GET /v1/me/blocks", a(h.listBlocks))
 	mux.HandleFunc("PUT /v1/me/blocks/{user_id}", a(h.blockUser))
 	mux.HandleFunc("DELETE /v1/me/blocks/{user_id}", a(h.unblockUser))
+	mux.HandleFunc("GET /v1/me/friend-suggestions", a(h.listFriendSuggestions))
+	mux.HandleFunc("DELETE /v1/me/friend-suggestions/{user_id}", a(h.dismissFriendSuggestion))
+	mux.HandleFunc("GET /v1/me/social-settings", a(h.getSocialSettings))
+	mux.HandleFunc("PATCH /v1/me/social-settings", a(h.updateSocialSettings))
 }
 
 func registerInvitations(mux *http.ServeMux, h coreHandlers) {
@@ -376,6 +385,92 @@ func (h coreHandlers) unblockUser(ctx context.Context, w http.ResponseWriter, r 
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- Friend suggestions and profiling settings (issue #208, ADR-0030) ---
+
+// friendSuggestionJSON is FriendSuggestion. It has no score, no number of
+// shared events and no reason, on purpose.
+type friendSuggestionJSON struct {
+	UserID         string    `json:"user_id"`
+	DisplayName    string    `json:"display_name"`
+	AvatarUploadID string    `json:"avatar_upload_id,omitempty"`
+	SuggestedAt    time.Time `json:"suggested_at"`
+}
+
+type friendSuggestionListJSON struct {
+	Suggestions []friendSuggestionJSON `json:"suggestions"`
+}
+
+type socialSettingsJSON struct {
+	ProfilingEnabled    bool `json:"profiling_enabled"`
+	HideFromSuggestions bool `json:"hide_from_suggestions"`
+}
+
+// socialSettingsPatch is SocialSettingsUpdate: absent fields stay.
+type socialSettingsPatch struct {
+	ProfilingEnabled    *bool `json:"profiling_enabled"`
+	HideFromSuggestions *bool `json:"hide_from_suggestions"`
+}
+
+func socialSettingsFrom(s *corev1.SocialSettings) socialSettingsJSON {
+	return socialSettingsJSON{ProfilingEnabled: s.GetProfilingEnabled(), HideFromSuggestions: s.GetHideFromSuggestions()}
+}
+
+func (h coreHandlers) listFriendSuggestions(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	resp, err := h.d.Social.ListFriendSuggestions(ctx, &corev1.ListFriendSuggestionsRequest{})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := friendSuggestionListJSON{Suggestions: make([]friendSuggestionJSON, 0, len(resp.GetSuggestions()))}
+	for _, s := range resp.GetSuggestions() {
+		out.Suggestions = append(out.Suggestions, friendSuggestionJSON{
+			UserID: s.GetUserId(), DisplayName: s.GetDisplayName(), AvatarUploadID: s.GetAvatarUploadId(),
+			SuggestedAt: s.GetSuggestTime().AsTime(),
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (h coreHandlers) dismissFriendSuggestion(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	u, ok := pathUUID(w, r, "user_id")
+	if !ok {
+		return
+	}
+	if _, err := h.d.Social.DismissFriendSuggestion(ctx, &corev1.DismissFriendSuggestionRequest{UserId: u}); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h coreHandlers) getSocialSettings(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	resp, err := h.d.Social.GetSocialSettings(ctx, &corev1.GetSocialSettingsRequest{})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, socialSettingsFrom(resp.GetSettings()))
+}
+
+func (h coreHandlers) updateSocialSettings(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	var b socialSettingsPatch
+	if !decode(w, r, &b) {
+		return
+	}
+	if b.ProfilingEnabled == nil && b.HideFromSuggestions == nil {
+		badRequest(w, r)
+		return
+	}
+	resp, err := h.d.Social.UpdateSocialSettings(ctx, &corev1.UpdateSocialSettingsRequest{
+		ProfilingEnabled: b.ProfilingEnabled, HideFromSuggestions: b.HideFromSuggestions,
+	})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, socialSettingsFrom(resp.GetSettings()))
 }
 
 // --- Direct invitations ---
