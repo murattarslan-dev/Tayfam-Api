@@ -19,6 +19,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/social"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/userevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -465,8 +466,10 @@ func TestConvert(t *testing.T) {
 	must(t, err)
 	_, err = e.members.ChangeRole(ctx, org, tf, f, authz.Moderator)
 	must(t, err)
-	_, err = e.tayfas.Convert(ctx, org, tf, in)
-	wantErr(t, "ikinci dönüşüm", err, apperr.ErrPermissionDenied)
+	// A second conversion is a repeat (TestConvertRepeat), not a new one.
+	if again, err := e.tayfas.Convert(ctx, org, tf, in); err != nil || again.ID != tf {
+		t.Fatalf("ikinci dönüşüm: %+v %v", again, err)
+	}
 
 	// It counts as creating a tayfa: the organizer's daily limit is used.
 	_, err = e.tayfas.Create(ctx, org, tayfa.CreateInput{Name: "Bir Tayfa Daha", ClientRequestID: id.New().String()})
@@ -488,4 +491,129 @@ func TestConvert(t *testing.T) {
 	e.exec(t, `UPDATE tayfas SET status = 'archived', archived_at = now() WHERE id = $1`, r3.Tayfa.ID.PG())
 	_, err = e.tayfas.Convert(ctx, org3, r3.Tayfa.ID, in)
 	wantErr(t, "arşiv", err, apperr.ErrTayfaReadOnly)
+}
+
+// TestDailyLimit: at most MaxPerDay instant events in 24 hours, cancelled
+// ones included, so create and cancel cannot make hidden tayfas without end.
+func TestDailyLimit(t *testing.T) {
+	e := setup(t)
+	org := id.New()
+	for range MaxPerDay {
+		r, err := e.svc.Create(ctx, org, input("Döngü"))
+		must(t, err)
+		_, err = e.events.Cancel(ctx, org, r.Tayfa.ID, r.Event.ID, "")
+		must(t, err)
+	}
+	_, err := e.svc.Create(ctx, org, input("Altıncı"))
+	wantErr(t, "günlük sınır", err, apperr.ErrInstantEventLimit)
+	// A day later the window has moved on.
+	e.exec(t, `UPDATE tayfas SET created_at = created_at - interval '25 hours' WHERE created_by = $1`, org.PG())
+	_, err = e.svc.Create(ctx, org, input("Ertesi gün"))
+	must(t, err)
+}
+
+// TestRequestIDShared: tayfa creates and instant events share the request
+// ID space; reusing one across them is a validation error, never a 500.
+func TestRequestIDShared(t *testing.T) {
+	e := setup(t)
+	u := id.New()
+	in := input("Ortak kimlik")
+	_, err := e.tayfas.Create(ctx, u, tayfa.CreateInput{Name: "Kalıcı Tayfa", ClientRequestID: in.Event.ClientRequestID})
+	must(t, err)
+	_, err = e.svc.Create(ctx, u, in)
+	wantInvalid(t, "kalıcının kimliği", err)
+
+	v := id.New()
+	in2 := input("Önce anlık")
+	_, err = e.svc.Create(ctx, v, in2)
+	must(t, err)
+	_, err = e.tayfas.Create(ctx, v, tayfa.CreateInput{Name: "Sonra Kalıcı", ClientRequestID: in2.Event.ClientRequestID})
+	wantInvalid(t, "anlığın kimliği", err)
+}
+
+// TestDatabaseGuardsEventAndRoles: the instant event never becomes
+// discoverable and nobody becomes moderator, whatever the app does.
+func TestDatabaseGuardsEventAndRoles(t *testing.T) {
+	e := setup(t)
+	org := id.New()
+	f := e.friend(t, org)
+	r, err := e.svc.Create(ctx, org, input("Konser", f))
+	must(t, err)
+	_, err = e.members.AcceptInvitation(ctx, f, r.Tayfa.ID)
+	must(t, err)
+	if _, err := e.pool.Exec(ctx, `UPDATE events SET discoverable = true WHERE id = $1`, r.Event.ID.PG()); store.SQLState(err) != "TF120" {
+		t.Fatalf("keşfete açma: %v", err)
+	}
+	// Even with the membership trigger off (superuser), no moderator.
+	tx, err := e.admin.Begin(ctx)
+	must(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	_, err = tx.Exec(ctx, `ALTER TABLE memberships DISABLE TRIGGER memberships_guard`)
+	must(t, err)
+	if _, err := tx.Exec(ctx, `UPDATE memberships SET role = 'moderator' WHERE tayfa_id = $1 AND user_id = $2`, r.Tayfa.ID.PG(), f.PG()); store.SQLState(err) != "TF120" {
+		t.Fatalf("moderatör: %v", err)
+	}
+}
+
+// TestOrganizerDeleted: when the organizer deletes their account, the admin
+// who takes over is the organizer: they invite and convert (ADR-0032 §3).
+func TestOrganizerDeleted(t *testing.T) {
+	e := setup(t)
+	org := id.New()
+	f := e.friend(t, org)
+	r, err := e.svc.Create(ctx, org, input("Piknik", f))
+	must(t, err)
+	tf := r.Tayfa.ID
+	_, err = e.members.AcceptInvitation(ctx, f, tf)
+	must(t, err)
+
+	ue, err := userevents.New(userevents.Config{Pool: e.pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	must(t, err)
+	must(t, ue.Apply(ctx, userevents.Event{ID: id.New(), User: org, OccurredAt: time.Now(), Deleted: true}))
+	if got := e.membership(t, tf, f); got != "active/admin" {
+		t.Fatalf("devralan = %s", got)
+	}
+
+	// The heir invites and converts; the tayfa counts on their limit.
+	ff := e.friend(t, f)
+	_, err = e.members.InviteFriend(ctx, f, tf, ff)
+	must(t, err)
+	v, err := e.tayfas.Convert(ctx, f, tf, tayfa.ConvertInput{Name: "Piknikçiler"})
+	must(t, err)
+	if v.Kind != access.KindStandard {
+		t.Fatalf("tür = %s", v.Kind)
+	}
+	var by id.ID
+	must(t, e.pool.QueryRow(ctx, `SELECT created_by FROM tayfas WHERE id = $1`, tf.PG()).Scan(&by))
+	if by != f {
+		t.Fatalf("created_by = %s", by)
+	}
+	_, err = e.tayfas.Create(ctx, f, tayfa.CreateInput{Name: "Bir Tayfa Daha", ClientRequestID: id.New().String()})
+	wantErr(t, "devralanın sınırı", err, apperr.ErrTayfaCreateLimit)
+}
+
+// TestConvertRepeat: a repeat of a conversion that went through returns the
+// converted tayfa to its admin and changes nothing.
+func TestConvertRepeat(t *testing.T) {
+	e := setup(t)
+	org := id.New()
+	f := e.friend(t, org)
+	r, err := e.svc.Create(ctx, org, input("Kahvaltı", f))
+	must(t, err)
+	_, err = e.members.AcceptInvitation(ctx, f, r.Tayfa.ID)
+	must(t, err)
+	in := tayfa.ConvertInput{Name: "Kahvaltıcılar"}
+	first, err := e.tayfas.Convert(ctx, org, r.Tayfa.ID, in)
+	must(t, err)
+	again, err := e.tayfas.Convert(ctx, org, r.Tayfa.ID, tayfa.ConvertInput{Name: "Başka Ad"})
+	must(t, err)
+	if again.ID != first.ID || again.Name != "Kahvaltıcılar" {
+		t.Fatalf("tekrar = %+v", again)
+	}
+	if n := e.count(t, `SELECT count(*) FROM audit_logs WHERE tayfa_id = $1 AND action = 'tayfa.converted'`, r.Tayfa.ID.PG()); n != 1 {
+		t.Fatalf("denetim kaydı %d", n)
+	}
+	// A member still cannot.
+	_, err = e.tayfas.Convert(ctx, f, r.Tayfa.ID, in)
+	wantErr(t, "üye", err, apperr.ErrPermissionDenied)
 }

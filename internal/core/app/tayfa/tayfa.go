@@ -167,7 +167,7 @@ func (s *Service) Create(ctx context.Context, user id.ID, in CreateInput) (View,
 	err = txn.WithActor(ctx, s.cfg.Pool, user, func(tx pgx.Tx, q *store.Queries) error {
 		// Same-user creates run one at a time: neither the daily limit nor
 		// the client_request_id check can be raced.
-		if err := q.LockTayfaCreation(ctx, "tayfa_create:"+user.String()); err != nil {
+		if err := q.LockTayfaCreation(ctx, CreationLockKey(user)); err != nil {
 			return fmt.Errorf("oluşturma kilidi: %w", err)
 		}
 		prev, err := q.GetTayfaByClientRequestID(ctx, store.GetTayfaByClientRequestIDParams{CreatedBy: user.PG(), ClientRequestID: crid.PG()})
@@ -484,6 +484,10 @@ func (s *Service) CancelDeletion(ctx context.Context, user, tayfa id.ID) error {
 	})
 }
 
+// CreationLockKey is the advisory lock one user's tayfa creates,
+// conversions and instant events take, one at a time (ADR-0032 §5).
+func CreationLockKey(user id.ID) string { return "tayfa_create:" + user.String() }
+
 // ConvertInput is a "Bu ekiple tayfa kur" request (ADR-0032 §7): the
 // settings of the standard tayfa, with CreateInput's rules.
 type ConvertInput struct {
@@ -529,22 +533,30 @@ func (s *Service) Convert(ctx context.Context, user, tayfa id.ID, in ConvertInpu
 	}
 
 	now := s.now()
+	replay := false
 	err = txn.WithActor(ctx, s.cfg.Pool, user, func(tx pgx.Tx, q *store.Queries) error {
 		// The same lock as Create: the daily limit cannot be raced by a
 		// create and a conversion together.
-		if err := q.LockTayfaCreation(ctx, "tayfa_create:"+user.String()); err != nil {
+		if err := q.LockTayfaCreation(ctx, CreationLockKey(user)); err != nil {
 			return fmt.Errorf("oluşturma kilidi: %w", err)
 		}
 		t, m, err := access.Load(ctx, q, tayfa, user, true)
 		if err != nil {
 			return err
 		}
+		if !access.Instant(t) && t.ConvertedAt.Valid && m.Role == authz.Admin {
+			// A repeat of a conversion that went through: its admin gets
+			// the converted tayfa, nothing changes.
+			replay = true
+			return nil
+		}
 		if err := access.AuthorizeIn(m, authz.TayfaConvert, now, access.Settings(t)); err != nil {
 			return err
 		}
-		// The organizer is the only admin of an instant tayfa; the limit is
-		// counted on created_by.
-		if !t.CreatedBy.Valid || id.ID(t.CreatedBy.Bytes) != user {
+		// The organizer is the only admin of an instant tayfa. If their
+		// account was deleted, the admin who took over is the organizer
+		// (ADR-0032 §3); the tayfa then counts on their limit.
+		if t.CreatedBy.Valid && id.ID(t.CreatedBy.Bytes) != user {
 			return apperr.ErrPermissionDenied
 		}
 		if access.ReadOnly(t) {
@@ -559,7 +571,7 @@ func (s *Service) Convert(ctx context.Context, user, tayfa id.ID, in ConvertInpu
 		}
 		if n, err := q.ConvertInstantTayfa(ctx, store.ConvertInstantTayfaParams{
 			ID: tayfa.PG(), ConvertedAt: ts(now), Name: name, NameNormalized: normalized,
-			Description: text(desc), JoinPolicy: policy,
+			Description: text(desc), JoinPolicy: policy, ConvertedBy: user.PG(),
 		}); err != nil {
 			return fmt.Errorf("dönüştürme: %w", err)
 		} else if n != 1 {
@@ -583,7 +595,9 @@ func (s *Service) Convert(ctx context.Context, user, tayfa id.ID, in ConvertInpu
 	if err != nil {
 		return View{}, err
 	}
-	s.cfg.Log.InfoContext(ctx, "anlık tayfa dönüştürüldü", slog.String("tayfa_id", tayfa.String()), slog.String("user_id", user.String()))
+	if !replay {
+		s.cfg.Log.InfoContext(ctx, "anlık tayfa dönüştürüldü", slog.String("tayfa_id", tayfa.String()), slog.String("user_id", user.String()))
+	}
 	v, _, err := s.get(ctx, user, tayfa)
 	return v, err
 }

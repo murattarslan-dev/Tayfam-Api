@@ -435,8 +435,9 @@ paths:
       operationId: convertInstantTayfa
       summary: Anlık tayfayı kalıcı tayfaya dönüştürür ("Bu ekiple tayfa kur")
       description: |
-        Yalnızca anlık tayfanın yöneticisi (organizatör), tayfa salt okunur
-        değilken (ADR-0032). Ad, ilgi alanları, açıklama ve katılım
+        Yalnızca anlık tayfanın yöneticisi (organizatör; hesabı silindiyse
+        devralan yönetici), tayfa salt okunur değilken (ADR-0032). Dönüşmüş
+        tayfada tekrar istek, bir şey değiştirmeden tayfayı döndürür. Ad, ilgi alanları, açıklama ve katılım
         politikası tayfa açmadaki kurallarla verilir; bütün modüller açılır,
         üyeler, etkinlik ve kanal kalır. Dönüştürme tayfa açma sayılır:
         kullanıcı başına 24 saatte 1 (`tayfa-create-limit`) ve IP başına
@@ -473,7 +474,8 @@ paths:
         `invitee_user_ids`'deki kişiler doğrudan davet edilir; hepsi
         arkadaşınız olmalıdır (`not-friends`), biri davet edilemezse hiçbir
         şey açılmaz. Aynı anda en fazla 3 açık anlık etkinlik (bitmemiş,
-        iptal edilmemiş; `instant-event-limit`). Tayfa açma sınırlarına
+        iptal edilmemiş) ve 24 saatte en fazla 5 anlık etkinlik (iptal
+        edilenler de sayılır); ikisi de `instant-event-limit`. Tayfa açma sınırlarına
         sayılmaz. `event` alanının kuralları `POST
         /v1/tayfas/{tayfa_id}/events` ile aynıdır; `recurrence` ve
         `cover_upload_id` kabul edilmez (kapak sonra etkinlik

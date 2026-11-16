@@ -38,6 +38,10 @@ const (
 	// MaxOpen is how many open instant events (not ended, not cancelled) a
 	// user may organize at a time (ADR-0032 §5).
 	MaxOpen = 3
+	// MaxPerDay bounds how many instant events a user creates in 24 hours,
+	// cancelled and deleted ones included, so that create and cancel
+	// cannot make hidden tayfas without end (ADR-0032 §5).
+	MaxPerDay = 5
 	// MaxInvitees bounds the friends invited with the create request; the
 	// daily direct invitation limit applies as well.
 	MaxInvitees = 10
@@ -121,9 +125,11 @@ func (s *Service) Create(ctx context.Context, user id.ID, in Input) (Result, err
 		replay           bool
 	)
 	err = txn.WithActor(ctx, s.cfg.Pool, user, func(tx pgx.Tx, q *store.Queries) error {
-		// The same user's creates run one at a time: neither the open
-		// limit nor the retry check can be raced.
-		if err := q.LockTayfaCreation(ctx, "instant_create:"+user.String()); err != nil {
+		// The same user's creates run one at a time, together with tayfa
+		// creates and conversions (the same lock): neither the limits nor
+		// the retry check, whose request IDs both paths share, can be
+		// raced.
+		if err := q.LockTayfaCreation(ctx, tayfa.CreationLockKey(user)); err != nil {
 			return fmt.Errorf("oluşturma kilidi: %w", err)
 		}
 		prev, err := q.GetTayfaByClientRequestID(ctx, store.GetTayfaByClientRequestIDParams{CreatedBy: user.PG(), ClientRequestID: crid.PG()})
@@ -143,6 +149,13 @@ func (s *Service) Create(ctx context.Context, user id.ID, in Input) (Result, err
 			return fmt.Errorf("açık anlık etkinlikler: %w", err)
 		}
 		if n >= MaxOpen {
+			return apperr.ErrInstantEventLimit
+		}
+		n, err = q.CountInstantTayfasCreatedSince(ctx, store.CountInstantTayfasCreatedSinceParams{CreatedBy: user.PG(), Since: ts(now.Add(-24 * time.Hour))})
+		if err != nil {
+			return fmt.Errorf("günlük anlık etkinlikler: %w", err)
+		}
+		if n >= MaxPerDay {
 			return apperr.ErrInstantEventLimit
 		}
 

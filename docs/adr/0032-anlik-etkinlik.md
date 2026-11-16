@@ -60,15 +60,19 @@ Veritabanı türün değişmezlerini ayrıca korur (ihlal varsayımı, ADR-0011)
 - `kind` yalnızca `instant → standard` yönünde ve `converted_at` ile
   birlikte değişir; `converted_at` bir kez yazılır (trigger
   `tayfas_kind_guard`).
-- Anlık tayfada en fazla bir etkinlik vardır (trigger
-  `events_instant_single`, silinmiş satırlar dahil sayılır). Dönüşen tayfada
-  bu sınır kalkar.
+- Anlık tayfada en fazla bir etkinlik vardır (silinmiş satırlar dahil
+  sayılır) ve etkinlik Keşfet'e açılamaz (`events.discoverable` hiçbir zaman
+  `true` olmaz); trigger `events_instant_guard`. Dönüşen tayfada iki kural da
+  kalkar.
+- Anlık tayfada moderatör olmaz (trigger `memberships_instant_role`); bu,
+  platform panelinden ve sistem işlerinden gelen rol değişikliklerini de
+  kapsar.
 - Ad sınırı türe göre: `standard` 3–50 karakter (değişmedi), `instant` 1–120
   (etkinlik başlığıyla aynı; §2).
 
 ### 2. Oluşturma: tek transaction
 
-`POST /v1/instant-events` (`TayfaService.CreateInstantEvent`) tek bir
+`POST /v1/instant-events` (`EventService.CreateInstantEvent`) tek bir
 transaction'da:
 
 1. Kullanıcı başına advisory kilit alır (§5) ve `client_request_id` ile
@@ -124,7 +128,15 @@ Diğer her işlem kalıcı tayfadaki gibidir: üyeler etkinliği görür, cevap
 verir, check-in yapar, albüme yükler, kanala yazar, şikâyet eder;
 organizatör (yönetici) katılım isteklerini onaylar, üye susturur, çıkarır,
 banlar, şikâyet kuyruğunu görür, etkinliği düzenler ve iptal eder, tayfayı
-silebilir. Moderatör olmadığı için onay yalnızca organizatördedir.
+silebilir. Moderatör olmadığı için onay yalnızca organizatördedir; platform
+paneli de anlık tayfada moderatör atayamaz (§1 trigger'ı ayrıca korur).
+
+**Organizatör hesabını silerse:** mevcut son yönetici koruması tayfanın en
+eski üyesini yönetici yapar ve `created_by` boşalır. **Devralan yönetici
+organizatör sayılır** (mimari oturumu kararı, 2026-11-16): davet linki
+oluşturur, arkadaşlarını doğrudan davet eder, katılım isteklerini onaylar ve
+"Bu ekiple tayfa kur" dönüştürmesini yapar (§7). Organizatör hesabı
+yaşarken başka bir yönetici dönüştüremez.
 
 Tür ayarı, izin tablosunu okuyan bütün yollara gider: `access.Settings`
 `kind`'i taşır; tayfa, üyelik ve davet servisleri artık `AuthorizeIn` ile
@@ -155,15 +167,23 @@ Tablo, her rol ve işlem için iki türde de testle korunur.
   iptal edilmemiş** olanlar sayılır. Etkinliği biten ya da iptal edilen,
   7 günlük arşiv beklemesinde olsa da açık sayılmaz. Dördüncü istek
   `instant-event-limit` (429) alır.
-- Eşzamanlılık: sayım ve ekleme, kullanıcı başına advisory kilit
-  (`instant_create:<user_id>`) altında aynı transaction'da yapılır; aynı anda
-  gelen istekler sırayla işlenir, sınır aşılamaz (testli).
+- **Günde 5 anlık etkinlik:** kullanıcının son 24 saatte açtığı anlık
+  tayfalar sayılır; iptal edilen, silinen ve dönüştürülenler de sayılır.
+  Yalnızca açık etkinliği saymak, aç → iptal et döngüsüyle sınırsız gizli
+  tayfa üretmeye izin verirdi. Altıncı istek de `instant-event-limit` alır
+  (mimari oturumu kararı, 2026-11-16; değer 5 platform sahibine bilgi).
+- Eşzamanlılık: sayımlar ve ekleme, kullanıcı başına advisory kilit altında
+  aynı transaction'da yapılır. Kilit, tayfa oluşturma ve dönüştürmeyle
+  **ortaktır** (`tayfa_create:<user_id>`): iki yol `client_request_id`
+  alanını da paylaştığı için aynı kimliğin iki yolda kullanılması 500 değil,
+  doğrulama hatası verir. Aynı anda gelen istekler sırayla işlenir, sınır
+  aşılamaz (testli).
 - **Tayfa açma sınırlarına sayılmaz** (öneri kabul edildi): kullanıcı başına
   günde 1 tayfa ve gateway'deki IP başına saatte 1 sınırı anlık oluşturmaya
   uygulanmaz; anlık tayfalar da günlük tayfa sayımına girmez. Gerekçe:
   "Bir şey yapalım" sık ve hafif bir eylemdir; kötüye kullanımı 3 açık
-  sınırı, günlük 10 doğrudan davet sınırı ve linkle gelenin onaya düşmesi
-  sınırlar. Dönüştürme ise tayfa açmadır ve iki sınıra da girer (§7).
+  ve günde 5 sınırı, günlük 10 doğrudan davet sınırı ve linkle gelenin onaya
+  düşmesi sınırlar. Dönüştürme ise tayfa açmadır ve iki sınıra da girer (§7).
 
 ### 6. Arşiv ve temizlik
 
@@ -189,9 +209,14 @@ Tablo, her rol ve işlem için iki türde de testle korunur.
 
 `POST /v1/tayfas/{id}/conversion` (`TayfaService.ConvertInstantTayfa`):
 
-- Yalnızca anlık tayfanın yöneticisi (organizatör; `TayfaConvert`) ve
-  yalnızca tayfa salt okunur değilken (arşivlenmiş, askıda, silme bekleyen
-  tayfa dönüşmez).
+- Yalnızca anlık tayfanın yöneticisi (organizatör ya da organizatörün
+  hesabı silindiyse devralan yönetici, §3; `TayfaConvert`) ve yalnızca
+  tayfa salt okunur değilken (arşivlenmiş, askıda, silme bekleyen tayfa
+  dönüşmez). Devralan dönüştürürse `created_by` onun olur ve tayfa onun
+  günlük sınırına sayılır.
+- **Tekrar:** başarıyla dönüşmüş tayfada aynı istek (yöneticiden) bir şey
+  değiştirmeden dönüşmüş tayfayı döndürür; `permission-denied` vermez.
+  Hiç anlık olmamış tayfa yine `permission-denied`.
 - Gövde: ad (3–50), ilgi alanları, açıklama ve katılım politikası;
   kuralları tayfa oluşturmayla aynıdır.
 - Dönüşüm **tayfa açmadır**: kullanıcı başına 24 saatte 1 sınırı
@@ -221,7 +246,7 @@ Tablo, her rol ve işlem için iki türde de testle korunur.
 
 | Uç | gRPC | Not |
 | --- | --- | --- |
-| `POST /v1/instant-events` | `TayfaService.CreateInstantEvent` | Gövde: etkinlik oluşturma alanları + `invitee_user_ids` + `client_request_id`; cevap `{tayfa, event}` |
+| `POST /v1/instant-events` | `EventService.CreateInstantEvent` | Gövde: etkinlik oluşturma alanları + `invitee_user_ids` + `client_request_id`; cevap `{tayfa, event}` |
 | `POST /v1/tayfas/{id}/conversion` | `TayfaService.ConvertInstantTayfa` | Cevap `Tayfa` |
 | `GET /v1/tayfas`, `GET /v1/tayfas/{id}` | mevcut | `kind`, `instant_event_id` |
 

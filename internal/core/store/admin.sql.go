@@ -807,19 +807,25 @@ func (q *Queries) AdminLockPlatformReport(ctx context.Context, id pgtype.UUID) (
 }
 
 const adminLockTayfa = `-- name: AdminLockTayfa :one
-SELECT id, suspended_at, deleted_at FROM tayfas WHERE id = $1 FOR NO KEY UPDATE
+SELECT id, suspended_at, deleted_at, kind FROM tayfas WHERE id = $1 FOR NO KEY UPDATE
 `
 
 type AdminLockTayfaRow struct {
 	ID          pgtype.UUID
 	SuspendedAt pgtype.Timestamptz
 	DeletedAt   pgtype.Timestamptz
+	Kind        string
 }
 
 func (q *Queries) AdminLockTayfa(ctx context.Context, id pgtype.UUID) (AdminLockTayfaRow, error) {
 	row := q.db.QueryRow(ctx, adminLockTayfa, id)
 	var i AdminLockTayfaRow
-	err := row.Scan(&i.ID, &i.SuspendedAt, &i.DeletedAt)
+	err := row.Scan(
+		&i.ID,
+		&i.SuspendedAt,
+		&i.DeletedAt,
+		&i.Kind,
+	)
 	return i, err
 }
 

@@ -156,6 +156,9 @@ type Querier interface {
 	// satırını önce kilitler.
 	CountEventPhotos(ctx context.Context, arg CountEventPhotosParams) (CountEventPhotosRow, error)
 	CountGoing(ctx context.Context, eventID pgtype.UUID) (int64, error)
+	// Kullanıcının son @since'ten beri açtığı anlık tayfalar: iptal edilen,
+	// silinen ve dönüştürülenler de sayılır (günde 5; ADR-0032 §5).
+	CountInstantTayfasCreatedSince(ctx context.Context, arg CountInstantTayfasCreatedSinceParams) (int64, error)
 	// Kullanıcının organizatörü olduğu açık anlık etkinlikler: silinmemiş,
 	// arşivlenmemiş anlık tayfada bitmemiş ve iptal edilmemiş etkinlik.
 	CountOpenInstantEvents(ctx context.Context, arg CountOpenInstantEventsParams) (int64, error)

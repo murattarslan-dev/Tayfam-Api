@@ -11,7 +11,9 @@
 --     zaman onaylıdır (join_policy = 'approval');
 --   - tür yalnızca instant → standard yönünde, converted_at ile birlikte
 --     değişir (tayfas_kind_guard);
---   - anlık tayfada en fazla bir etkinlik olur (events_instant_single).
+--   - anlık tayfada en fazla bir etkinlik olur ve etkinlik Keşfet'e
+--     açılamaz (events_instant_guard);
+--   - anlık tayfada moderatör olmaz (memberships_instant_role).
 -- Anlık tayfanın adı etkinliğin başlığıdır (1–120); kalıcı tayfada ad
 -- sınırı değişmedi (3–50).
 --
@@ -73,11 +75,12 @@ $$;
 CREATE TRIGGER tayfas_kind_guard BEFORE INSERT OR UPDATE OF kind, converted_at ON tayfas
   FOR EACH ROW EXECUTE FUNCTION tayfas_kind_guard();
 
--- Anlık tayfada tek etkinlik; silinmiş etkinlik de sayılır. Yalnızca anlık
--- tayfanın satırı kilitlenir (aynı anda gelen iki ekleme sırayla görülür);
--- kalıcı tayfada kilit alınmaz, seri üretimiyle kilit sırası değişmez.
+-- Anlık tayfanın etkinliği: tek etkinlik (silinmiş etkinlik de sayılır) ve
+-- hiçbir zaman Keşfet'e açılmaz (discoverable). Yalnızca anlık tayfanın
+-- satırı kilitlenir (aynı anda gelen iki ekleme sırayla görülür); kalıcı
+-- tayfada kilit alınmaz, seri üretimiyle kilit sırası değişmez.
 -- +goose StatementBegin
-CREATE FUNCTION events_instant_single() RETURNS trigger
+CREATE FUNCTION events_instant_guard() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE
   k text;
@@ -86,22 +89,47 @@ BEGIN
   IF k IS DISTINCT FROM 'instant' THEN
     RETURN NEW;
   END IF;
-  -- Tür yalnızca instant → standard değişir; kilitten sonra yeniden okunur.
-  SELECT kind INTO k FROM tayfas WHERE id = NEW.tayfa_id FOR NO KEY UPDATE;
-  IF k = 'instant' AND EXISTS (SELECT 1 FROM events WHERE tayfa_id = NEW.tayfa_id) THEN
-    RAISE EXCEPTION 'anlık tayfada tek etkinlik olur' USING ERRCODE = 'TF120';
+  IF NEW.discoverable THEN
+    RAISE EXCEPTION 'anlık etkinlik Keşfet''e açılamaz' USING ERRCODE = 'TF120';
+  END IF;
+  IF TG_OP = 'INSERT' THEN
+    -- Tür yalnızca instant → standard değişir; kilitten sonra yeniden okunur.
+    SELECT kind INTO k FROM tayfas WHERE id = NEW.tayfa_id FOR NO KEY UPDATE;
+    IF k = 'instant' AND EXISTS (SELECT 1 FROM events WHERE tayfa_id = NEW.tayfa_id) THEN
+      RAISE EXCEPTION 'anlık tayfada tek etkinlik olur' USING ERRCODE = 'TF120';
+    END IF;
   END IF;
   RETURN NEW;
 END;
 $$;
 -- +goose StatementEnd
 
-CREATE TRIGGER events_instant_single BEFORE INSERT ON events
-  FOR EACH ROW EXECUTE FUNCTION events_instant_single();
+CREATE TRIGGER events_instant_guard BEFORE INSERT OR UPDATE OF discoverable ON events
+  FOR EACH ROW EXECUTE FUNCTION events_instant_guard();
+
+-- Anlık tayfada moderatör yoktur; katılım isteklerini yalnızca organizatör
+-- onaylar (ADR-0032 §3). Platform paneli ve sistem işleri de bu kurala
+-- tabidir. Dönüşen tayfada kural kalkar.
+-- +goose StatementBegin
+CREATE FUNCTION memberships_instant_role() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM tayfas WHERE id = NEW.tayfa_id AND kind = 'instant') THEN
+    RAISE EXCEPTION 'anlık tayfada moderatör olmaz' USING ERRCODE = 'TF120';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+-- +goose StatementEnd
+
+CREATE TRIGGER memberships_instant_role BEFORE INSERT OR UPDATE OF role ON memberships
+  FOR EACH ROW WHEN (NEW.role = 'moderator') EXECUTE FUNCTION memberships_instant_role();
 
 -- +goose Down
-DROP TRIGGER events_instant_single ON events;
-DROP FUNCTION events_instant_single();
+DROP TRIGGER memberships_instant_role ON memberships;
+DROP FUNCTION memberships_instant_role();
+DROP TRIGGER events_instant_guard ON events;
+DROP FUNCTION events_instant_guard();
 DROP TRIGGER tayfas_kind_guard ON tayfas;
 DROP FUNCTION tayfas_kind_guard();
 DROP INDEX tayfas_instant_created_by_idx;

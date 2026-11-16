@@ -83,8 +83,10 @@ service TayfaService {
   // ekiple tayfa kur", ADR-0032): name, interests, description and join
   // policy are set with the rules of CreateTayfa, every module is turned
   // on, and members, the event and its channel stay. From then on the
-  // standard rules apply. Admin (the organizer) of an instant tayfa only;
-  // a standard tayfa answers ERROR_REASON_PERMISSION_DENIED. It counts as
+  // standard rules apply. Admin (the organizer, or the admin who took over
+  // when the organizer's account was deleted) of an instant tayfa only; a
+  // tayfa that never was instant answers ERROR_REASON_PERMISSION_DENIED. A
+  // repeat by an admin of a tayfa already converted returns it unchanged. It counts as
   // creating a tayfa: at most once per 24 hours together with CreateTayfa
   // (per-IP limit is in gateway).
   //

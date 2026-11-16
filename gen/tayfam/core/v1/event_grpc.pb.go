@@ -100,7 +100,7 @@ type EventServiceClient interface {
 	// invitees get direct invitations like InviteFriend (they must be the
 	// caller's friends). Any signed-in user may call it; a caller may
 	// organize at most 3 open instant events at a time (not ended, not
-	// cancelled). It does not count toward the tayfa creation limits. A
+	// cancelled) and create at most 5 in 24 hours (cancelled ones count). It does not count toward the tayfa creation limits. A
 	// repeat with the same client_request_id by the same caller returns the
 	// tayfa and event created the first time and creates nothing.
 	//
@@ -613,7 +613,7 @@ type EventServiceServer interface {
 	// invitees get direct invitations like InviteFriend (they must be the
 	// caller's friends). Any signed-in user may call it; a caller may
 	// organize at most 3 open instant events at a time (not ended, not
-	// cancelled). It does not count toward the tayfa creation limits. A
+	// cancelled) and create at most 5 in 24 hours (cancelled ones count). It does not count toward the tayfa creation limits. A
 	// repeat with the same client_request_id by the same caller returns the
 	// tayfa and event created the first time and creates nothing.
 	//

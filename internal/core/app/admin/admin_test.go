@@ -467,3 +467,24 @@ func TestMemberBanReason(t *testing.T) {
 		t.Fatalf("gerekçeler = %v", got)
 	}
 }
+
+// TestSetMemberRoleInstant: an instant tayfa has no moderators, not even
+// through the panel (ADR-0032 §3); the database refuses it as well.
+func TestSetMemberRoleInstant(t *testing.T) {
+	e := setup(t)
+	c := e.crew(t)
+	_, err := e.super.Exec(ctx, `SET session_replication_role = replica;
+		UPDATE tayfas SET kind = 'instant', join_policy = 'approval', visibility = 'private' WHERE id = '`+c.tayfa.String()+`';
+		UPDATE memberships SET role = 'member' WHERE tayfa_id = '`+c.tayfa.String()+`' AND user_id = '`+c.mod.String()+`';
+		SET session_replication_role = origin;`)
+	must(t, err)
+	var v *apperr.ValidationError
+	if err := e.svc.SetMemberRole(ctx, e.claims, c.tayfa, c.member, "moderator", reason); !errors.As(err, &v) {
+		t.Fatalf("panelden moderatör: %v", err)
+	}
+	if n := e.count(t, `SELECT count(*) FROM memberships WHERE tayfa_id = $1 AND role = 'moderator'`, c.tayfa.PG()); n != 0 {
+		t.Fatalf("moderatör %d", n)
+	}
+	// Admin and member still work.
+	must(t, e.svc.SetMemberRole(ctx, e.claims, c.tayfa, c.member, "admin", reason))
+}

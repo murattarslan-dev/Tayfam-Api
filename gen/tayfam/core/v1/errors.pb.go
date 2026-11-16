@@ -260,7 +260,7 @@ const (
 	ErrorReason_ERROR_REASON_UPLOAD_QUOTA_EXCEEDED ErrorReason = 125
 	// Instant events (ADR-0032).
 	// RESOURCE_EXHAUSTED. The caller already organizes 3 open instant events
-	// (not ended, not cancelled).
+	// (not ended, not cancelled) or created 5 in the last 24 hours.
 	ErrorReason_ERROR_REASON_INSTANT_EVENT_LIMIT ErrorReason = 130
 )
 
