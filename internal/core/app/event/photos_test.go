@@ -2,11 +2,13 @@ package event
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
@@ -338,4 +340,38 @@ func TestRemovePhoto(t *testing.T) {
 	muteLong(t, e, a.tf, member)
 	err = a.svc.RemovePhoto(ctx, member, a.tf, orgEv.ID, p4.ID)
 	wantErr(t, "susturulmuş organizatör", err, apperr.ErrMuted)
+}
+
+// A refusal of the database's guard trigger becomes the same API error as
+// the app check (not a 500), even when the app check was bypassed or raced.
+func TestPhotoInsertErr(t *testing.T) {
+	for code, want := range map[string]error{
+		"TF090": apperr.ErrEventLimit,
+		"TF091": apperr.ErrNotAttended,
+		"TF092": apperr.ErrEventCancelled,
+	} {
+		err := photoInsertErr(fmt.Errorf("sarılı: %w", &pgconn.PgError{Code: code}))
+		if !errors.Is(err, want) {
+			t.Errorf("%s: %v, %v bekleniyordu", code, err, want)
+		}
+	}
+	other := photoInsertErr(&pgconn.PgError{Code: "23505"})
+	for _, sentinel := range []error{apperr.ErrEventLimit, apperr.ErrNotAttended, apperr.ErrEventCancelled} {
+		if errors.Is(other, sentinel) {
+			t.Fatalf("başka bir veritabanı hatası %v oldu", sentinel)
+		}
+	}
+}
+
+// With the app's checks passed, a photo the trigger refuses (here: the
+// attendance withdrawn in the database between the check and the insert,
+// as a concurrent correction could) comes back as not-attended.
+func TestPhotoGuardMapsThroughApp(t *testing.T) {
+	a := newAlbum(t)
+	upload := a.upload(t, a.attendee)
+	a.e.exec(t, `CREATE FUNCTION test_withdraw() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN UPDATE event_rsvps SET attendance = 'unknown', attendance_method = NULL, checked_in_at = NULL WHERE event_id = NEW.event_id AND user_id = NEW.uploader_id; RETURN NEW; END $$`)
+	a.e.exec(t, `CREATE TRIGGER a_test_withdraw BEFORE INSERT ON event_photos FOR EACH ROW EXECUTE FUNCTION test_withdraw()`)
+	_, err := a.svc.AddPhoto(ctx, a.attendee, a.tf, a.ev.ID, PhotoInput{UploadID: upload, ClientRequestID: id.New().String()})
+	wantErr(t, "trigger reddi", err, apperr.ErrNotAttended)
 }

@@ -419,6 +419,25 @@ func (q *Queries) GetOwnUploadForUpdate(ctx context.Context, arg GetOwnUploadFor
 	return i, err
 }
 
+const getReportedPhotoUpload = `-- name: GetReportedPhotoUpload :one
+SELECT r2_key, full_type::text AS full_type FROM uploads
+WHERE id = $1 AND purpose = 'event_photo' AND status = 'ready'
+`
+
+type GetReportedPhotoUploadRow struct {
+	R2Key    string
+	FullType string
+}
+
+// Platform panelinde şikâyet edilen albüm fotoğrafı (ADR-0028 §5): yalnızca
+// panelin şikâyetten okuduğu upload_id, hazır event_photo dosyası.
+func (q *Queries) GetReportedPhotoUpload(ctx context.Context, id pgtype.UUID) (GetReportedPhotoUploadRow, error) {
+	row := q.db.QueryRow(ctx, getReportedPhotoUpload, id)
+	var i GetReportedPhotoUploadRow
+	err := row.Scan(&i.R2Key, &i.FullType)
+	return i, err
+}
+
 const getUploadByClientRequest = `-- name: GetUploadByClientRequest :one
 SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at, export_bytes, expires_at FROM uploads
 WHERE user_id = $1 AND client_request_id = $2 AND purpose <> 'data_export'

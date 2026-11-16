@@ -17,9 +17,6 @@ import (
 // Tests for 00023_event_photos.sql (issue #206, ADR-0028): the database's
 // second line behind the app layer, as core_app sees it.
 
-// CodeEventPhoto is raised by event_photos_guard.
-const codeEventPhoto = "TF090"
-
 type albumFixture struct {
 	pool     *pgxpool.Pool
 	q        *Queries
@@ -90,9 +87,9 @@ func TestEventPhotoGuard(t *testing.T) {
 	going, noShow := id.New(), id.New()
 	f.rsvp(t, going, "unknown")
 	f.rsvp(t, noShow, "no_show")
-	wantCode(t, f.add(ctx, t, going), codeEventPhoto)
-	wantCode(t, f.add(ctx, t, noShow), codeEventPhoto)
-	wantCode(t, f.add(ctx, t, id.New()), codeEventPhoto)
+	wantCode(t, f.add(ctx, t, going), CodePhotoNotAttended)
+	wantCode(t, f.add(ctx, t, noShow), CodePhotoNotAttended)
+	wantCode(t, f.add(ctx, t, id.New()), CodePhotoNotAttended)
 	wantCode(t, f.add(ctx, t, f.attendee), "")
 
 	// The file must be attached to the row (uploads_check_ref).
@@ -119,7 +116,7 @@ func TestEventPhotoGuard(t *testing.T) {
 	if _, err := f.pool.Exec(ctx, `UPDATE events SET status = 'cancelled', cancelled_at = now() WHERE id = $1`, f.event.PG()); err != nil {
 		t.Fatal(err)
 	}
-	wantCode(t, f.add(ctx, t, f.attendee), codeEventPhoto)
+	wantCode(t, f.add(ctx, t, f.attendee), CodePhotoEventClosed)
 }
 
 // core_app cannot move a photo to another event or file, or change its
@@ -174,7 +171,7 @@ func TestEventPhotoLimitsConcurrent(t *testing.T) {
 		switch SQLState(err) {
 		case "":
 			ok++
-		case codeEventPhoto:
+		case CodePhotoLimit:
 		default:
 			t.Fatalf("beklenmeyen hata: %v", err)
 		}
@@ -191,7 +188,7 @@ func TestEventPhotoLimitsConcurrent(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantCode(t, f.add(ctx, t, f.attendee), "")
-	wantCode(t, f.add(ctx, t, f.attendee), codeEventPhoto)
+	wantCode(t, f.add(ctx, t, f.attendee), CodePhotoLimit)
 
 	// The album: 500 with others' photos (written with triggers off).
 	tx, err := adminOf(t, f.pool).Begin(ctx)
@@ -211,7 +208,7 @@ func TestEventPhotoLimitsConcurrent(t *testing.T) {
 	}
 	other := id.New()
 	f.rsvp(t, other, "attended")
-	wantCode(t, f.add(ctx, t, other), codeEventPhoto)
+	wantCode(t, f.add(ctx, t, other), CodePhotoLimit)
 }
 
 // Deleting the row for good (purge, account deletion, event cascade) puts

@@ -156,6 +156,12 @@ LEFT JOIN memberships m ON m.tayfa_id = c.tayfa_id AND m.user_id = @viewer_id
 LEFT JOIN tayfa_modules tm ON tm.tayfa_id = c.tayfa_id AND tm.module = 'events'
 WHERE u.id = ANY(@ids::uuid[]) AND u.status = 'ready' AND u.purpose <> 'data_export';
 
+-- Platform panelinde şikâyet edilen albüm fotoğrafı (ADR-0028 §5): yalnızca
+-- panelin şikâyetten okuduğu upload_id, hazır event_photo dosyası.
+-- name: GetReportedPhotoUpload :one
+SELECT r2_key, full_type::text AS full_type FROM uploads
+WHERE id = @id AND purpose = 'event_photo' AND status = 'ready';
+
 -- İçeriğin dosyası. Kolonun trigger'ı (uploads_check_ref) dosyanın bu
 -- içeriğe bağlı ve hazır olduğunu yeniden doğrular; eski dosya
 -- uploads_release_ref ile silme kuyruğuna girer.

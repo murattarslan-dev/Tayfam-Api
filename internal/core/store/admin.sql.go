@@ -359,7 +359,7 @@ func (q *Queries) AdminGetEvent(ctx context.Context, arg AdminGetEventParams) (A
 }
 
 const adminGetEventPhoto = `-- name: AdminGetEventPhoto :one
-SELECT p.uploader_id, p.caption, p.created_at, p.deleted_at
+SELECT p.uploader_id, p.caption, p.created_at, p.deleted_at, p.upload_id
 FROM event_photos p JOIN events e ON e.id = p.event_id
 WHERE p.id = $1 AND e.tayfa_id = $2
 `
@@ -374,6 +374,7 @@ type AdminGetEventPhotoRow struct {
 	Caption    pgtype.Text
 	CreatedAt  pgtype.Timestamptz
 	DeletedAt  pgtype.Timestamptz
+	UploadID   pgtype.UUID
 }
 
 func (q *Queries) AdminGetEventPhoto(ctx context.Context, arg AdminGetEventPhotoParams) (AdminGetEventPhotoRow, error) {
@@ -384,6 +385,7 @@ func (q *Queries) AdminGetEventPhoto(ctx context.Context, arg AdminGetEventPhoto
 		&i.Caption,
 		&i.CreatedAt,
 		&i.DeletedAt,
+		&i.UploadID,
 	)
 	return i, err
 }

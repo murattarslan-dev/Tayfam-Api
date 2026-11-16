@@ -138,7 +138,7 @@ FROM fishing_catches c JOIN events e ON e.id = c.event_id
 WHERE c.id = @id AND e.tayfa_id = @tayfa_id;
 
 -- name: AdminGetEventPhoto :one
-SELECT p.uploader_id, p.caption, p.created_at, p.deleted_at
+SELECT p.uploader_id, p.caption, p.created_at, p.deleted_at, p.upload_id
 FROM event_photos p JOIN events e ON e.id = p.event_id
 WHERE p.id = @id AND e.tayfa_id = @tayfa_id;
 

@@ -57,7 +57,9 @@ CREATE INDEX event_photos_deleted_idx ON event_photos (deleted_at) WHERE deleted
 -- Ekleme kuralı (ikinci hat): etkinlik satırı kilitlenir; iptal edilmiş ya
 -- da silinmiş etkinliğe, katılımı doğrulanmamış kişiden ve sınır dolmuşken
 -- fotoğraf eklenemez. Pencere (saat) yalnızca uygulamada denetlenir
--- (ADR-0028 §2). Mesaj kişiyi ve dosyayı adlandırmaz.
+-- (ADR-0028 §2). Mesaj kişiyi ve dosyayı adlandırmaz. Kodlar uygulama
+-- hatasına eşlenir: TF090 sınır (event-limit), TF091 katılım doğrulanmamış
+-- (not-attended), TF092 albüm kapalı etkinlik (event-cancelled).
 -- +goose StatementBegin
 CREATE FUNCTION event_photos_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
@@ -67,16 +69,16 @@ BEGIN
   WHERE id = NEW.event_id AND deleted_at IS NULL
   FOR UPDATE;
   IF NOT FOUND OR ev_status = 'cancelled' THEN
-    RAISE EXCEPTION 'albüm kapalı' USING ERRCODE = 'TF090';
+    RAISE EXCEPTION 'albüm kapalı' USING ERRCODE = 'TF092';
   END IF;
   IF NEW.deleted_at IS NOT NULL THEN
-    RAISE EXCEPTION 'silinmiş fotoğraf eklenemez' USING ERRCODE = 'TF090';
+    RAISE EXCEPTION 'silinmiş fotoğraf eklenemez' USING ERRCODE = 'TF092';
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM event_rsvps
     WHERE event_id = NEW.event_id AND user_id = NEW.uploader_id AND attendance = 'attended'
   ) THEN
-    RAISE EXCEPTION 'katılım doğrulanmamış' USING ERRCODE = 'TF090';
+    RAISE EXCEPTION 'katılım doğrulanmamış' USING ERRCODE = 'TF091';
   END IF;
   IF (SELECT count(*) FROM event_photos
       WHERE event_id = NEW.event_id AND uploader_id = NEW.uploader_id AND deleted_at IS NULL) >= 30 THEN

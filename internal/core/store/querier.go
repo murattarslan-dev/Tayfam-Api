@@ -438,6 +438,9 @@ type Querier interface {
 	GetReportTargetEventPhoto(ctx context.Context, arg GetReportTargetEventPhotoParams) (GetReportTargetEventPhotoRow, error)
 	GetReportTargetPoll(ctx context.Context, arg GetReportTargetPollParams) (GetReportTargetPollRow, error)
 	GetReportTargetQuestion(ctx context.Context, arg GetReportTargetQuestionParams) (GetReportTargetQuestionRow, error)
+	// Platform panelinde şikâyet edilen albüm fotoğrafı (ADR-0028 §5): yalnızca
+	// panelin şikâyetten okuduğu upload_id, hazır event_photo dosyası.
+	GetReportedPhotoUpload(ctx context.Context, id pgtype.UUID) (GetReportedPhotoUploadRow, error)
 	GetRsvp(ctx context.Context, arg GetRsvpParams) (GetRsvpRow, error)
 	// Katılım doğrulama, organizatör düzeltmesi, yürüyüş yoklaması, kalıcı
 	// katılım geçmişi ve av günlüğü (issue #50). Etkinlik her zaman önce tayfa

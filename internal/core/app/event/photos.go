@@ -143,7 +143,7 @@ func (s *Service) AddPhoto(ctx context.Context, user, tayfa, event id.ID, in Pho
 			p.Caption = pgtype.Text{String: caption, Valid: true}
 		}
 		if err := q.CreateEventPhoto(ctx, p); err != nil {
-			return fmt.Errorf("albüm fotoğrafı: %w", err)
+			return photoInsertErr(err)
 		}
 		out = Photo{ID: pid, EventID: event, UploaderID: user, UploadID: in.UploadID, Caption: caption, CreatedAt: c.now}
 		return nil
@@ -246,6 +246,21 @@ func (c caller) removePhoto(ev store.GetEventRow, own bool) error {
 		return c.authorize(authz.EventPhotoDeleteOwnEvent)
 	}
 	return c.authorize(authz.EventPhotoDeleteAny)
+}
+
+// photoInsertErr maps a refusal of event_photos_guard (the database's
+// second line, ADR-0028 §2) to the API error the app check would have
+// given; anything else stays an internal error.
+func photoInsertErr(err error) error {
+	switch store.SQLState(err) {
+	case store.CodePhotoLimit:
+		return apperr.ErrEventLimit
+	case store.CodePhotoNotAttended:
+		return apperr.ErrNotAttended
+	case store.CodePhotoEventClosed:
+		return apperr.ErrEventCancelled
+	}
+	return fmt.Errorf("albüm fotoğrafı: %w", err)
 }
 
 func photoOf(r store.GetEventPhotoRow) Photo {
