@@ -3,17 +3,23 @@ name: CI
 # Tüm Actions commit SHA'sıyla sabitlenmiştir (CLAUDE.md kural 9, ADR-0011).
 # Yorumdaki sürüm yalnızca okunabilirlik içindir; Dependabot ikisini birlikte günceller.
 
+# Dal modeli (ADR-0034): iş PR'ları dev'e squash ile, sürüm PR'ı dev'den
+# main'e merge commit ile birleşir. dev'de yalnızca kontroller çalışır; hiçbir
+# şey yayınlanmaz, imzalanmaz, dağıtılmaz. main prod'dur: image'lar ve dev
+# artifact'ı yalnızca main'de yayınlanıp imzalanır, ardından sürüm etiketi
+# otomatik atılır ve prod iş akışı başlatılır.
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [dev, main]
 
 permissions:
   contents: read
 
-# PR'larda yeni push eski çalışmayı iptal eder. main'de iptal edilmez: art
-# arda birleşen PR'larda öndekinin dev dağıtımı kaybolmasın; aynı gruptaki
-# çalışmalar sırayla biter ve en son yayınlanan paket en son commit'inkidir.
+# PR'larda yeni push eski çalışmayı iptal eder. dev ve main'de iptal edilmez:
+# main'de art arda birleşen sürüm PR'larında öndekinin yayını ve etiketi
+# kaybolmasın; aynı gruptaki çalışmalar sırayla biter, etiketler commit
+# sırasıyla artar ve en son yayınlanan paket en son commit'inkidir.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -113,22 +119,25 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # main'de henüz sözleşme yoksa karşılaştırılacak bir şey de yoktur; ilk
-      # proto main'e girdikten sonra breaking kontrolü kendiliğinden açılır.
-      - name: main'de sözleşme var mı
+      # Geriye uyumluluk PR'ın hedef dalına göre ölçülür: iş PR'ları dev'e,
+      # sürüm PR'ı main'e (prod'daki sözleşmeye) karşı (ADR-0034). Hedefte
+      # henüz sözleşme yoksa karşılaştırılacak bir şey de yoktur.
+      - name: Hedef dalda sözleşme var mı
         id: base
+        env:
+          BASE: ${{ github.base_ref || github.ref_name }}
         run: |
-          git fetch --quiet --depth=1 origin main
-          if git cat-file -e origin/main:buf.yaml 2>/dev/null; then
+          git fetch --quiet --depth=1 origin "$BASE"
+          if git cat-file -e FETCH_HEAD:buf.yaml 2>/dev/null; then
             echo "has_proto=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_proto=false" >> "$GITHUB_OUTPUT"
           fi
-      # lint, biçim ve main'e göre geriye uyumluluk (breaking) kontrolü
+      # lint, biçim ve hedef dala göre geriye uyumluluk (breaking) kontrolü
       - uses: bufbuild/buf-action@37ac33d8960807670a6e9719080e885197b09cc6 # v1.7.0
         with:
           breaking: ${{ steps.base.outputs.has_proto == 'true' && github.event_name == 'pull_request' }}
-          breaking_against: https://github.com/${{ github.repository }}.git#branch=main
+          breaking_against: https://github.com/${{ github.repository }}.git#branch=${{ github.base_ref || 'main' }}
           push: false
           # Sonuçlar iş çıktısında; PR yorumu için yazma izni verilmez.
           pr_comment: false
@@ -176,13 +185,16 @@ jobs:
         service: [gateway, identity, core, chat]
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/tayfam-${{ matrix.service }}
+      # Yalnızca main'e push'ta gönderilir ve imzalanır. PR'larda ve dev'de
+      # image yalnızca derlenir (ADR-0034); imza kimliği ci.yml@refs/heads/main.
+      PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: GHCR girişi
-        if: github.event_name == 'push'
+        if: env.PUBLISH == 'true'
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
@@ -196,14 +208,14 @@ jobs:
           build-args: |
             SERVICE=${{ matrix.service }}
             VERSION=${{ github.sha }}
-          push: ${{ github.event_name == 'push' }}
+          push: ${{ env.PUBLISH == 'true' }}
           tags: ${{ env.IMAGE }}:${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
       - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
-        if: github.event_name == 'push'
+        if: env.PUBLISH == 'true'
       - name: Image'ı imzala
-        if: github.event_name == 'push'
+        if: env.PUBLISH == 'true'
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: cosign sign --yes "${IMAGE}@${DIGEST}"
@@ -223,10 +235,12 @@ jobs:
           kubectl kustomize deploy/clusters/home > /dev/null
           kubectl kustomize deploy/clusters/vds > /dev/null
 
-  # main'deki her commit'ten sonra dev manifestlerini, o commit'in image'larına
-  # digest ile sabitleyerek OCI artifact olarak yayınlar ve imzalar. Ev
-  # cluster'ındaki Flux "dev" etiketini izler ve yalnızca bu iş akışının main'de
-  # attığı imzayı kabul eder (ADR-0006, ADR-0011). CI'da cluster erişim yetkisi yoktur.
+  # main'deki (prod'a giden) her commit'ten sonra dev manifestlerini, o
+  # commit'in image'larına digest ile sabitleyerek OCI artifact olarak yayınlar
+  # ve imzalar. Ev cluster'ındaki Flux "dev" etiketini izler ve yalnızca bu iş
+  # akışının main'de attığı imzayı kabul eder (ADR-0006, ADR-0011). Yeni dal
+  # modelinde dev ortamı prod'dan hemen önce aynı commit'i alır; dev dalına
+  # birleşme dağıtım yapmaz (ADR-0034). CI'da cluster erişim yetkisi yoktur.
   deploy-dev:
     name: Dev dağıtımı
     runs-on: ubuntu-latest
@@ -273,3 +287,58 @@ jobs:
           cosign sign --yes "${artifact}:${GITHUB_SHA}"
           # İmza atıldıktan sonra etiketlenir; Flux imzasız bir "dev" görmez.
           flux tag artifact "oci://${artifact}:${GITHUB_SHA}" --tag dev
+
+  # main'e her birleşme prod'a gider (ADR-0034). Dev dağıtımı bittikten sonra
+  # bu commit'e bir sonraki vX.Y.Z etiketi atılır ve prod iş akışı o etiket
+  # üzerinde workflow_dispatch ile başlatılır. GITHUB_TOKEN ile atılan etiketin
+  # push olayı iş akışı tetiklemez; workflow_dispatch bu kuralın belgelenmiş
+  # istisnasıdır. Etiket ref'inde çalışan prod.yml'in imza kimliği yine
+  # prod.yml@refs/tags/vX.Y.Z olur: PAT, uygulama anahtarı veya yeni secret
+  # gerekmez, Flux'taki doğrulama kimliği değişmez.
+  #
+  # Ele geçirilirse: bu iş etiket ve dal oluşturabilir, iş akışı başlatabilir.
+  # dev ve main kural setleriyle korunur; v* etiketleri taşınamaz ve silinemez
+  # (etiket kural seti). Rastgele bir commit'e atılan etiketi prod.yml reddeder:
+  # main'in birinci ebeveyn zincirinde olmalı ve dört image o commit için main
+  # CI'ınca imzalanmış olmalı. Üçüncü taraf Action kullanılmaz (yalnızca checkout).
+  release-tag:
+    name: Sürüm etiketi
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [deploy-dev]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write # v* etiketini oluşturmak
+      actions: write # prod.yml'i workflow_dispatch ile başlatmak
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # etiketler ve geçmiş
+          persist-credentials: false
+      - name: Etiketi at ve prod'u başlat
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          # Bu commit zaten etiketliyse (platform sahibi elle attıysa, onun
+          # push'u prod.yml'i zaten başlattı) yeni etiket atılmaz.
+          existing=$(git tag --points-at "$GITHUB_SHA" --list 'v*' | grep -E "$semver" | sort -V | tail -n1 || true)
+          if [ -n "$existing" ]; then
+            echo "::notice::$GITHUB_SHA zaten $existing etiketli; etiket atılmadı, prod.yml başlatılmadı. Gerekirse Actions → Prod sürümü → Run workflow → $existing."
+            exit 0
+          fi
+          # Sürüm numarası: en yüksek vX.Y.Z'nin yaması bir artırılır
+          # (ADR-0034). minor/major artışını platform sahibi elle etiketle yapar.
+          last=$(git tag --list 'v*' | grep -E "$semver" | sort -V | tail -n1 || true)
+          if [ -z "$last" ]; then
+            version=v0.1.0
+          else
+            IFS=. read -r major minor patch <<< "${last#v}"
+            version="v${major}.${minor}.$((patch + 1))"
+          fi
+          echo "Son sürüm: ${last:-yok} → yeni: $version ($GITHUB_SHA)"
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f "ref=refs/tags/${version}" -f "sha=${GITHUB_SHA}" > /dev/null
+          gh workflow run prod.yml --repo "$GITHUB_REPOSITORY" --ref "$version"
+          echo "### Sürüm $version" >> "$GITHUB_STEP_SUMMARY"
+          echo "Etiket $GITHUB_SHA'ya atıldı; \"Prod sürümü\" iş akışı başlatıldı." >> "$GITHUB_STEP_SUMMARY"

@@ -1,6 +1,11 @@
 name: Prod sürümü
 
-# vX.Y.Z git etiketi prod'a dağıtılır (ADR-0006, ADR-0010). Yeniden derleme
+# vX.Y.Z git etiketi prod'a dağıtılır (ADR-0006, ADR-0010, ADR-0034). Etiketi
+# main'e her birleşmeden sonra CI'ın "Sürüm etiketi" işi atar ve bu iş akışını
+# o etiket üzerinde workflow_dispatch ile başlatır (GITHUB_TOKEN'la atılan
+# etiketin push olayı iş akışı tetiklemez). Platform sahibinin elle attığı
+# etiket ise push olayıyla başlatır. İki yolda da iş akışı etiket ref'inde
+# çalışır; imza kimliği prod.yml@refs/tags/vX.Y.Z'dir. Yeniden derleme
 # yoktur: etiketin gösterdiği main commit'i için CI'ın (ci.yml) zaten üretip
 # imzaladığı image'lar digest ile sabitlenir, deploy/ OCI artifact olarak
 # yayınlanır, imzalanır ve "prod" olarak etiketlenir. VDS'teki Flux yalnızca bu
@@ -12,6 +17,8 @@ name: Prod sürümü
 on:
   push:
     tags: ["v*.*.*"]
+  # Yalnızca etiket ref'inde anlamlıdır; daldan başlatılırsa ilk adım düşer.
+  workflow_dispatch:
 
 permissions: {}
 
@@ -25,8 +32,9 @@ jobs:
     name: Prod dağıtımı
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Zorunlu onaylayıcı ve "yalnızca v* etiketleri" kuralı GitHub'daki prod
-    # ortamında tanımlanır (docs/runbooks/vds-kurulumu.md, adım i).
+    # "Yalnızca v* etiketleri" kuralı GitHub'daki prod ortamında tanımlanır
+    # (docs/runbooks/surum-cikarma.md). Onay, sürüm PR'ının birleştirilmesidir
+    # (ADR-0034); ortamda zorunlu onaylayıcı kalırsa her sürüm onu bekler.
     environment: prod
     permissions:
       contents: read
@@ -54,9 +62,10 @@ jobs:
         run: |
           commit=$(git rev-parse "${GITHUB_REF}^{commit}")
           git fetch --quiet --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          # Birinci ebeveyn zinciri: main'in gerçekten işaret ettiği (squash ile
-          # birleşmiş, CI'ı main'de çalışmış) commit'ler. Bir dalın main'e
-          # birleşmiş ara commit'leri kabul edilmez.
+          # Birinci ebeveyn zinciri: main'in gerçekten işaret ettiği (sürüm
+          # PR'ının merge commit'leri, CI'ı main'de çalışmış) commit'ler. dev'in
+          # main'e birleşmiş ara commit'leri (ikinci ebeveyn tarafı) kabul
+          # edilmez; onların image'ları main'de derlenip imzalanmamıştır.
           if ! git rev-list --first-parent origin/main | grep -qx "$commit"; then
             echo "::error::$GITHUB_REF_NAME, main'in birinci ebeveyn zincirinde olmayan bir commit'i gösteriyor ($commit). Etiket main'deki bir commit'e atılır."
             exit 1

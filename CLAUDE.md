@@ -175,8 +175,17 @@ docs/runbooks/              işletim adımları
 - Commit mesajları Conventional Commits biçimindedir (`feat:`, `fix:`,
   `docs:`, `refactor:`, `test:`, `chore:`).
 - PR şablonundaki her başlık doldurulur.
-- **`main`'e doğrudan push yapılmaz.** `main` bir kural setiyle korunur
-  (ADR-0010).
+- **Dallar (ADR-0034).** Dalını `dev`'den aç; iş PR'ları **`dev`'e** açılır ve
+  squash ile birleşir. `dev`'e birleşme hiçbir ortama dağıtılmaz, yalnızca CI
+  çalışır. `main` = prod: ona yalnızca `dev`'den açılan **sürüm PR'ı** girer
+  (merge commit; "Sürüm PR'ı kaynağı" kontrolü başka dalı reddeder). İş PR'ını
+  `main`'e açma; acil düzeltme de önce `dev`'e gider.
+- **Sürüm.** Sürüm PR'ını (`dev` → `main`) mimari oturumu, platform sahibinin
+  sohbetteki onayıyla birleştirir. Birleşince CI dev ortamına, ardından
+  otomatik `vX.Y.Z` etiketiyle prod'a dağıtır; etiketi elle atma
+  (`docs/runbooks/surum-cikarma.md`).
+- **`dev`'e ve `main`'e doğrudan push yapılmaz.** İkisi de kural setiyle
+  korunur (ADR-0010, ADR-0034).
 - **CI geçmeden hiçbir PR birleştirilmez.**
 - **Platform sahibinin işi en aza indirilir.** Cluster komutları, panel
   ayarları ve hesap işlemleri gibi yalnızca platform sahibinin yapabileceği

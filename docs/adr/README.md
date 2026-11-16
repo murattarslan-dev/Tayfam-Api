@@ -41,6 +41,7 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | [0031](0031-sohbet-ekleri-fotograf-ve-yer.md) | Sohbet ekleri: fotoğraf ve yer (kanal ve uçtan uca birebir) | Kabul edildi |
 | [0032](0032-anlik-etkinlik.md) | Anlık (bireysel) etkinlik: gizli, tek etkinlikli tayfa (v2) | Kabul edildi |
 | [0033](0033-kesfet-ilk-asama.md) | Keşfet ilk aşama: arkadaş ağı ve güvenlik ağı (v2) | Kabul edildi |
+| [0034](0034-dev-main-dal-modeli-ve-otomatik-surum.md) | dev/main dal modeli ve otomatik sürüm | Önerildi |
 
 Ürün kararları (kavram modeli, özellikler, veri modeli, KVKK metni, platform
 yönetim paneli) Notion'daki "Tayfam — Proje Planı" sayfasındadır. ADR'ler bu
