@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/store"
@@ -215,6 +216,26 @@ func (s *Service) VisiblePhotos(ctx context.Context, caller id.ID, items []Media
 		if seen {
 			out[it.Upload] = true
 		}
+	}
+	return out, nil
+}
+
+// PhotoHolders returns, for each of uploads some channel message holds,
+// that message's ID (core's reconciliation, MediaHolderService; ADR-0031).
+// A hidden message still holding its photo counts. It needs no key and no
+// user: only core's service token reaches it.
+func (s *Service) PhotoHolders(ctx context.Context, uploads []id.ID) (map[id.ID]id.ID, error) {
+	pg := make([]pgtype.UUID, len(uploads))
+	for i, u := range uploads {
+		pg[i] = u.PG()
+	}
+	rows, err := store.New(s.cfg.Pool).FindChannelPhotoHolders(ctx, pg)
+	if err != nil {
+		return nil, fmt.Errorf("fotoğraf sahipleri: %w", err)
+	}
+	out := make(map[id.ID]id.ID, len(rows))
+	for _, r := range rows {
+		out[id.ID(r.UploadID.Bytes)] = id.ID(r.ID.Bytes)
 	}
 	return out, nil
 }

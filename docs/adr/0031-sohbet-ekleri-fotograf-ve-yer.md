@@ -67,19 +67,31 @@ kimin görebileceğini chat bilir.
   okunur değil) → imzalı PUT → `CompleteUpload` başlık denetimi →
   `media/`'ya kopya. Sınırlar ve kota aynıdır (saatte 30 yükleme, 500 MiB,
   varyant 10 MiB).
-- **Bağlama:** `SendMessage{kind: photo, photo_upload_id}` geldiğinde chat,
-  mesaj satırını transaction içinde yazdıktan sonra ve commit'ten (ve
-  outbox yazımından) önce core'un `MediaService.AttachChannelPhoto`'sunu
-  **gönderenin kendi token'ıyla** çağırır. core reddederse mesaj geri
-  alınır; chat'in kendi denetimleri (izin, yavaş mod, birebirde cihaz
-  kümesi) core'a gitmeden önce biter, böylece "cihazlar değişti" gibi
-  olağan bir tekrar denemede dosya boşuna "kullanımda" kalmaz. Yalnızca
-  commit'in kendisi başarısız olursa dosya var olmayan bir mesaja bağlı
-  kalır (kabul edilen risk; kullanıcı fotoğrafı yeniden yükler): dosya gönderenin, `ready`,
-  `chat_photo`, aynı tayfanın ve bağlanmamış (ya da zaten bu mesaja bağlı)
-  olmalıdır. core `attached_type = 'channel_message'`,
-  `attached_id = <mesaj kimliği>` yazar. Bir dosya yalnızca bir mesaja
-  bağlanır.
+- **Bağlama:** `SendMessage{kind: photo, photo_upload_id}` geldiğinde chat
+  önce dosyanın kendi mesajlarından birinde olup olmadığına bakar
+  (varsa `upload-in-use`), sonra mesaj satırını yazmadan hemen önce,
+  **transaction dışında**, core'un `MediaService.AttachChannelPhoto`'sunu
+  **gönderenin kendi token'ıyla** çağırır: dosya gönderenin, `ready`,
+  `chat_photo`, aynı tayfanın olmalı. core `attached_type =
+  'channel_message'`, `attached_id = <mesaj kimliği>` yazar. Servisler
+  arası çağrı sırasında chat'te kilit ve bağlantı tutulmaz.
+- **Onaylanmamış bağlama ve uzlaştırma:** bağlama yapıldıktan sonra chat
+  mesajı yazamazsa (doğrulama, birebirde değişen cihaz kümesi, geri alma,
+  istemci kopması, core commit ettikten sonra zaman aşımı) dosya hiç var
+  olmamış bir mesaja bağlı kalır. Bu yüzden sohbet bağlaması
+  `uploads.attach_confirmed_at` boşken **onaylanmamıştır**:
+  - aynı sahibin yeni mesajına taşınabilir (tekrar deneme
+    `upload-in-use` almaz); onaylanmış bağlama taşınmaz;
+  - core'un `media-chat-reconcile` işi 10 dakikadan eski onaylanmamış
+    bağlamaları chat'in `MediaHolderService.FindMessageMediaHolders`'ına
+    **core'un servis token'ıyla** (ADR-0013; yalnızca `tayfam-core`)
+    toplu sorar. Dosyayı tutan mesaj varsa bağlama o mesajla onaylanır
+    (arada taşındıysa doğru mesaja düzeltilir); yoksa bağlama kaldırılır ve
+    dosya bağlanmamış hazır dosya gibi 7 günde silinir (kotadan düşer).
+    chat cevap veremezse hiçbir şey değişmez; ağ çağrısı sırasında core'da
+    kilit tutulmaz, her güncelleme koşulludur.
+  Mesajın commit'i ile bağlama arasındaki tek gerçek tutarlılık
+  noktası chat'in kendi tekil indeksidir (bir dosya tek mesajda).
 - **Görme:** link ucu tektir (`POST /v1/media/urls`, ADR-0020 §6). core,
   `channel_message`'a bağlı dosyalar için chat'in
   `MessageMediaService.FilterVisibleMessageMedia`'sını **çağıranın kendi
@@ -114,9 +126,9 @@ kimin görebileceğini chat bilir.
   **Anahtar ve özet sunucuya hiç gelmez**; sunucu kriptografi yapmaz
   (ADR-0018). Alıcı indirdiği blob'un özetini zarftaki özetle karşılaştırır.
 - **Bağlama:** `SendDirectMessage{attachment_upload_id}` geldiğinde chat,
-  kanaldaki gibi transaction içinde core'un
+  kanaldaki gibi transaction dışında core'un
   `MediaService.AttachDirectMessageAttachment`'ını gönderenin token'ıyla
-  çağırır (dosya gönderenin, `ready`,
+  çağırır; onay ve uzlaştırma kanaldakiyle aynıdır (dosya gönderenin, `ready`,
   `dm_attachment`, bağlanmamış ya da zaten bu mesaja bağlı).
   `attached_type = 'dm_message'`.
 - **Görme:** core `dm_message`'a bağlı dosyalar için yine
@@ -174,10 +186,13 @@ kimin görebileceğini chat bilir.
   `evidence_upload_id`'den **en az biri** gerekir (bugün metin zorunluydu).
   core dosyayı rapora bağlar (`attached_type = 'report'`,
   `reports.evidence_upload_id`). Dosyayı yalnızca platform paneli görür:
-  rapor sayfasında "Kanıt fotoğrafını aç" panelin kendi ucuna
-  (`/sikayetler/{id}/kanit-fotografi`) gider; panel core'dan her tıklamada
-  yeni, 5 dakikalık bir link alır (görüntüleme denetim kaydına yazılır) ve
-  referrer'sız yönlendirir. Sayfa depolama adresi taşımaz; panelin CSP'si
+  rapor okunurken yalnızca "kanıt fotoğrafı var" bilgisi döner
+  (`ReportedItem.has_evidence_photo`), link imzalanmaz. "Kanıt fotoğrafını
+  aç" panelin kendi ucuna (`/sikayetler/{id}/kanit-fotografi`) gider; panel
+  her tıklamada core'un `AdminService.GetReportEvidencePhotoUrl`'ünden
+  yeni, 5 dakikalık bir link alır. Açma ayrı bir denetim işlemi olarak
+  yazılır (`report.view_evidence_photo`, dosya kimliğiyle; link yazılmaz)
+  ve panel referrer'sız yönlendirir. Sayfa depolama adresi taşımaz; panelin CSP'si
   (`img-src 'self'`) değişmez. Kullanıcı uçları bu dosya için sahibi
   dışında link üretmez. Şikâyet edenin hesabı silinse de kanıt rapor
   durdukça kalır (kapaktaki gibi sahipliği kaldırılır); rapor 1 yıl sonra
@@ -201,7 +216,10 @@ kimin görebileceğini chat bilir.
 
 ### 8. Veritabanı
 
-- core `00026_chat_media.sql`: `uploads.purpose`'a `chat_photo`,
+- core `00026_chat_media.sql` (main'deki `00023_event_photos`'un
+  `event_photo` değerlerini korur, Down da onları geri almaz):
+  `uploads.attach_confirmed_at` (yalnızca sohbet bağlamasında) ve
+  uzlaştırma indeksi; `uploads.purpose`'a `chat_photo`,
   `dm_attachment`, `report_evidence`; blob tek nesnedir: `full_type =
   'application/octet-stream'`, `full_bytes` 1–10 485 760, önizleme ve
   ölçü yok (R2'de görüntünün `full` anahtarında; temizlik işi aynı
@@ -236,8 +254,9 @@ kimin görebileceğini chat bilir.
 
 ## Sonuçlar
 
-- chat yeni bir gRPC servisi (`MessageMediaService`) ve ilk outbox relay'ini
-  kazanır; chat pod'una core audience'lı projeksiyonlu servis token'ı
+- chat iki yeni gRPC servisi kazanır: `MessageMediaService` (kullanıcı
+  token'ı) ve `MediaHolderService` (yalnızca core'un servis token'ı); ilk
+  outbox relay'ini de kazanır; chat pod'una core audience'lı projeksiyonlu servis token'ı
   bağlanır (`deploy/base/chat.yaml`). Yerel ortamda token yoksa relay
   kapalıdır, olaylar outbox'ta bekler (core'daki gibi).
 - core `MediaService` iki bağlama metodu, `ChatEventService` ve chat
@@ -271,6 +290,13 @@ kimin görebileceğini chat bilir.
   istemci zarfı çözünce zaten bilir.
 - **Kanal fotoğrafına alt yazı:** yaygın, ama ürün kararında yok; ayrı
   karar (soru 1).
+- **Bağlamayı chat'in transaction'ı içinde yapmak (ilk taslak):** geri
+  almada core'daki bağlama yine kalırdı (servisler arası transaction yok)
+  ve 5 sn'ye kadar süren bir çağrı chat'te kilit ve bağlantı tutardı.
+- **Bağlamayı commit'ten sonra outbox'la yapmak:** core sahipliği
+  kullanıcının token'ıyla doğrular; relay'in servis token'ı gönderenin
+  dosyası olduğunu kanıtlayamaz. Reddedilen bir dosya için mesaj da
+  yayınlanmış olurdu.
 - **Serbest bırakmayı senkron çağrıyla yapmak (chat → core, kullanıcı
   token'ıyla):** yazarın silmesinde yeterdi, ama 30 günlük kalıcı silmede
   kullanıcı token'ı yoktur.

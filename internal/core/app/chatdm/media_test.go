@@ -55,3 +55,28 @@ func TestMessageMedia(t *testing.T) {
 		t.Fatal("chat yokken hata bekleniyordu")
 	}
 }
+
+type fakeHoldersChat struct {
+	req     *chatv1.FindMessageMediaHoldersRequest
+	holders []*chatv1.MediaHolder
+}
+
+func (f *fakeHoldersChat) FindMessageMediaHolders(_ context.Context, in *chatv1.FindMessageMediaHoldersRequest, _ ...grpc.CallOption) (*chatv1.FindMessageMediaHoldersResponse, error) {
+	f.req = in
+	return &chatv1.FindMessageMediaHoldersResponse{Holders: f.holders}, nil
+}
+
+func TestHolders(t *testing.T) {
+	asked, msg, other := id.New(), id.New(), id.New()
+	chat := &fakeHoldersChat{holders: []*chatv1.MediaHolder{
+		{UploadId: asked.String(), MessageId: msg.String()},
+		{UploadId: other.String(), MessageId: msg.String()}, // not asked: ignored
+	}}
+	got, err := NewHolders(chat).Holders(context.Background(), []media.HolderItem{{Upload: asked, Direct: true}})
+	if err != nil || len(got) != 1 || got[asked] != msg {
+		t.Fatalf("sahipler = %v %v", got, err)
+	}
+	if k := chat.req.GetItems()[0].GetKind(); k != chatv1.MessageMediaKind_MESSAGE_MEDIA_KIND_DIRECT {
+		t.Fatalf("tür = %v", k)
+	}
+}

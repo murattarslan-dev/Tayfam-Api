@@ -27,18 +27,20 @@ import (
 )
 
 const (
-	googleClient = "panel-test.apps.googleusercontent.com"
-	tayfaID      = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a60"
-	memberID     = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a61"
-	bannedID     = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a6f"
-	reportID     = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a62"
-	dmReportID   = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a63"
-	xssName      = `<script>alert("x")</script><img src=x onerror=alert(1)>`
-	evidence     = "Şikâyet edenin kendi kopyası: kanıt metni"
-	// evidencePhotoURL stands for a signed link (issue #205).
-	evidencePhotoURL = "https://r2.example/media/kanit/full?X-Amz-Signature=abc"
-	goodReason       = "Topluluk kurallarına aykırı davranış"
-	auditReason      = "Tekrarlanan taciz şikâyetleri, denetim kaydı gerekçesi"
+	googleClient  = "panel-test.apps.googleusercontent.com"
+	tayfaID       = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a60"
+	memberID      = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a61"
+	bannedID      = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a6f"
+	reportID      = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a62"
+	dmReportID    = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a63"
+	photoReportID = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a64"
+	// photoLink stands for core's short signed link to a reported album
+	// photo (ADR-0028 §5).
+	photoLink   = "https://r2.example.test/media/abc/full?X-Amz-Signature=imza&a=1"
+	xssName     = `<script>alert("x")</script><img src=x onerror=alert(1)>`
+	evidence    = "Şikâyet edenin kendi kopyası: kanıt metni"
+	goodReason  = "Topluluk kurallarına aykırı davranış"
+	auditReason = "Tekrarlanan taciz şikâyetleri, denetim kaydı gerekçesi"
 	// hidden is a value that must never appear on a page: the e-mail
 	// address an administrator searched for.
 	hidden = "gizli.kisi@ornek.test"
@@ -156,13 +158,32 @@ func (f *fakeCore) ListPlatformReports(ctx context.Context, _ *corev1.ListPlatfo
 	return &corev1.ListPlatformReportsResponse{Reports: f.reportList()}, nil
 }
 
+// evidencePhotoURL stands for core's short signed link to a DM report's
+// evidence photo (issue #205).
+const evidencePhotoURL = "https://r2.example.test/media/kanit/full?X-Amz-Signature=abc"
+
+func (f *fakeCore) GetReportEvidencePhotoUrl(ctx context.Context, in *corev1.GetReportEvidencePhotoUrlRequest, _ ...grpc.CallOption) (*corev1.GetReportEvidencePhotoUrlResponse, error) {
+	f.add(ctx, "GetReportEvidencePhotoUrl")
+	if in.GetReportId() != dmReportID {
+		return nil, status.Error(codes.NotFound, "x")
+	}
+	return &corev1.GetReportEvidencePhotoUrlResponse{Url: evidencePhotoURL, ExpireTime: timestamppb.New(time.Now().Add(5 * time.Minute))}, nil
+}
+
 func (f *fakeCore) GetReportedItem(ctx context.Context, in *corev1.GetReportedItemRequest, _ ...grpc.CallOption) (*corev1.GetReportedItemResponse, error) {
 	f.add(ctx, "GetReportedItem")
 	reps := f.reportList()
+	if in.GetReportId() == photoReportID {
+		r := reps[1]
+		r.ReportId, r.TargetType = photoReportID, corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT_PHOTO
+		return &corev1.GetReportedItemResponse{Report: r, Item: &corev1.ReportedItem{
+			TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT_PHOTO, AuthorId: memberID, Title: "Göl kenarı",
+			MediaUrl: photoLink, MediaExpireTime: timestamppb.New(time.Now().Add(5 * time.Minute))}}, nil
+	}
 	if in.GetReportId() == dmReportID {
 		return &corev1.GetReportedItemResponse{Report: reps[0], Item: &corev1.ReportedItem{
 			TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE, AuthorId: memberID, Body: evidence,
-			EvidencePhotoUrl: evidencePhotoURL}}, nil
+			HasEvidencePhoto: true}}, nil
 	}
 	return &corev1.GetReportedItemResponse{Report: reps[1], Item: &corev1.ReportedItem{
 		TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_ANNOUNCEMENT, AuthorId: memberID, Title: f.tayfaName, Body: f.tayfaName}}, nil
@@ -910,5 +931,20 @@ func TestSignOutPage(t *testing.T) {
 	w := e.do(e.form("/cikis", nil))
 	if c := cookie(w, TokenCookie); w.Code != http.StatusSeeOther || c == nil || c.MaxAge >= 0 {
 		t.Fatalf("%d %v", w.Code, c)
+	}
+}
+
+// TestReportedPhotoLink: a reported album photo is opened from the report
+// only, through core's short link, in a new tab without a referrer; other
+// reports have no image link (ADR-0028 §5).
+func TestReportedPhotoLink(t *testing.T) {
+	e := setup(t)
+	body := e.do(e.page("/sikayetler/" + photoReportID)).Body.String()
+	want := `<a href="https://r2.example.test/media/abc/full?X-Amz-Signature=imza&amp;a=1" target="_blank" rel="noopener noreferrer">`
+	if !strings.Contains(body, want) || !strings.Contains(body, "Albüm fotoğrafı") {
+		t.Fatalf("fotoğraf bağlantısı yok:\n%s", body)
+	}
+	if other := e.do(e.page("/sikayetler/" + reportID)).Body.String(); strings.Contains(other, "Fotoğrafı aç") {
+		t.Fatal("fotoğrafsız şikâyette bağlantı var")
 	}
 }

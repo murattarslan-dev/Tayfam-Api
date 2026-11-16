@@ -776,7 +776,8 @@ func (h *handlers) report(w http.ResponseWriter, r *http.Request) {
 
 // reportEvidencePhoto opens a DM report's evidence photo (issue #205,
 // ADR-0031). The page never carries the storage link: core signs a fresh
-// 5-minute link on each click (and records the viewing), and the panel
+// 5-minute link on each click (and records the opening as its own audit
+// action, report.view_evidence_photo), and the panel
 // redirects to it without a referrer. The panel's CSP keeps img-src
 // 'self'; the photo opens in its own tab.
 func (h *handlers) reportEvidencePhoto(w http.ResponseWriter, r *http.Request) {
@@ -786,12 +787,14 @@ func (h *handlers) reportEvidencePhoto(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := sessionFrom(r.Context()).upstream(r.Context())
 	defer cancel()
-	resp, err := h.cfg.Core.GetReportedItem(ctx, &corev1.GetReportedItemRequest{ReportId: id})
+	// core signs the link only now and records the opening
+	// (report.view_evidence_photo); the report page never carries it.
+	resp, err := h.cfg.Core.GetReportEvidencePhotoUrl(ctx, &corev1.GetReportEvidencePhotoUrlRequest{ReportId: id})
 	if err != nil {
 		h.failedPage(w, r, err)
 		return
 	}
-	link := resp.GetItem().GetEvidencePhotoUrl()
+	link := resp.GetUrl()
 	if !strings.HasPrefix(link, "https://") {
 		h.renderError(w, r, http.StatusNotFound, errorText("bulunamadi"))
 		return

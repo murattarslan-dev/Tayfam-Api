@@ -64,3 +64,51 @@ func (m *MessageMedia) Visible(ctx context.Context, items []media.MessageMediaIt
 	}
 	return out, nil
 }
+
+// HoldersClient is the part of chat's MediaHolderService core uses.
+type HoldersClient interface {
+	FindMessageMediaHolders(ctx context.Context, in *chatv1.FindMessageMediaHoldersRequest, opts ...grpc.CallOption) (*chatv1.FindMessageMediaHoldersResponse, error)
+}
+
+// Holders implements media.MediaHolders with chat (ADR-0031). The
+// connection carries core's service token for chat (ADR-0013): the
+// reconciliation job runs without a user.
+type Holders struct {
+	chat HoldersClient
+}
+
+// NewHolders returns a Holders.
+func NewHolders(chat HoldersClient) *Holders { return &Holders{chat: chat} }
+
+// Holders implements media.MediaHolders: only uploads that were asked
+// about are taken from the answer.
+func (h *Holders) Holders(ctx context.Context, items []media.HolderItem) (map[id.ID]id.ID, error) {
+	ctx, cancel := context.WithTimeout(ctx, callTimeout)
+	defer cancel()
+	out := make(map[id.ID]id.ID, len(items))
+	for start := 0; start < len(items); start += maxMediaItems {
+		batch := items[start:min(start+maxMediaItems, len(items))]
+		req := &chatv1.FindMessageMediaHoldersRequest{Items: make([]*chatv1.MediaHolderQuery, len(batch))}
+		asked := make(map[id.ID]bool, len(batch))
+		for i, it := range batch {
+			kind := chatv1.MessageMediaKind_MESSAGE_MEDIA_KIND_CHANNEL
+			if it.Direct {
+				kind = chatv1.MessageMediaKind_MESSAGE_MEDIA_KIND_DIRECT
+			}
+			req.Items[i] = &chatv1.MediaHolderQuery{UploadId: it.Upload.String(), Kind: kind}
+			asked[it.Upload] = true
+		}
+		resp, err := h.chat.FindMessageMediaHolders(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("chat dosya sahibi: %s", status.Code(err))
+		}
+		for _, x := range resp.GetHolders() {
+			u, ok1 := id.Parse(x.GetUploadId())
+			m, ok2 := id.Parse(x.GetMessageId())
+			if ok1 && ok2 && asked[u] {
+				out[u] = m
+			}
+		}
+	}
+	return out, nil
+}

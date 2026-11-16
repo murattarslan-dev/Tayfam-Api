@@ -13,19 +13,21 @@ import (
 // account deletion consumer and the retention job need, each limited by its
 // trigger. A new table or grant must be added here on purpose.
 var wantAppPrivileges = map[string]string{
-	"tayfas":                  "DELETE,INSERT,SELECT,UPDATE",
-	"memberships":             "DELETE,INSERT,SELECT,UPDATE",
-	"announcements":           "DELETE,INSERT,SELECT,UPDATE",
-	"questions":               "DELETE,INSERT,SELECT,UPDATE",
-	"answers":                 "DELETE,INSERT,SELECT,UPDATE",
-	"polls":                   "DELETE,INSERT,SELECT,UPDATE",
-	"events":                  "DELETE,INSERT,SELECT,UPDATE",
-	"event_rsvps":             "DELETE,INSERT,SELECT,UPDATE",
-	"event_camp_items":        "DELETE,INSERT,SELECT,UPDATE",
-	"event_convoy_vehicles":   "DELETE,INSERT,SELECT,UPDATE",
-	"event_hike_checkins":     "DELETE,INSERT,SELECT,UPDATE",
-	"user_activity_records":   "DELETE,INSERT,SELECT,UPDATE",
-	"fishing_catches":         "DELETE,INSERT,SELECT,UPDATE",
+	"tayfas":                "DELETE,INSERT,SELECT,UPDATE",
+	"memberships":           "DELETE,INSERT,SELECT,UPDATE",
+	"announcements":         "DELETE,INSERT,SELECT,UPDATE",
+	"questions":             "DELETE,INSERT,SELECT,UPDATE",
+	"answers":               "DELETE,INSERT,SELECT,UPDATE",
+	"polls":                 "DELETE,INSERT,SELECT,UPDATE",
+	"events":                "DELETE,INSERT,SELECT,UPDATE",
+	"event_rsvps":           "DELETE,INSERT,SELECT,UPDATE",
+	"event_camp_items":      "DELETE,INSERT,SELECT,UPDATE",
+	"event_convoy_vehicles": "DELETE,INSERT,SELECT,UPDATE",
+	"event_hike_checkins":   "DELETE,INSERT,SELECT,UPDATE",
+	"user_activity_records": "DELETE,INSERT,SELECT,UPDATE",
+	"fishing_catches":       "DELETE,INSERT,SELECT,UPDATE",
+	// Issue #206: a photo never moves to another event, file or uploader.
+	"event_photos":            "DELETE,INSERT,SELECT,UPDATE(deleted_at,deleted_by)",
 	"friendships":             "DELETE,INSERT,SELECT,UPDATE",
 	"friend_request_outcomes": "DELETE,INSERT,SELECT,UPDATE(outcome,resolved_at)",
 	"invitation_outcomes":     "DELETE,INSERT,SELECT,UPDATE(outcome,resolved_at)",
@@ -53,7 +55,7 @@ var wantAppPrivileges = map[string]string{
 	"user_platform_bans":      "DELETE,INSERT,SELECT,UPDATE(banned_at,event_id)",
 	"job_runs":                "INSERT,SELECT,UPDATE(changed,finished_at,last_succeeded_at,succeeded)",
 	// Issue #135: the key, purpose, declared type and size never change.
-	"uploads": "DELETE,INSERT,SELECT,UPDATE(attached_at,attached_id,attached_type,expires_at,export_bytes,height,ready_at,reject_reason,status,updated_at,user_id,width)",
+	"uploads": "DELETE,INSERT,SELECT,UPDATE(attach_confirmed_at,attached_at,attached_id,attached_type,expires_at,export_bytes,height,ready_at,reject_reason,status,updated_at,user_id,width)",
 }
 
 func TestAppRolePrivileges(t *testing.T) {

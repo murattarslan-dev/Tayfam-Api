@@ -119,7 +119,8 @@ service MediaService {
   // account is deleted. A tayfa cover is visible to ACTIVE members of the
   // tayfa (TayfaView). An event cover or a catch photo is visible to ACTIVE
   // members who may see the event (EventView, events module on, event not
-  // deleted; the catch not deleted). A CHAT_PHOTO or DM_ATTACHMENT is
+  // deleted; the catch not deleted). An event album photo likewise (the
+  // photo not deleted; ADR-0028). A CHAT_PHOTO or DM_ATTACHMENT is
   // visible when chat says the caller may see the message it is attached
   // to (channel audience; conversation parties). A REPORT_EVIDENCE is
   // visible to its owner only. For DM_ATTACHMENT the link is full_url
@@ -141,11 +142,18 @@ service MediaService {
 
   // AttachChannelPhoto attaches the caller's READY CHAT_PHOTO upload of
   // tayfa_id to the channel message message_id (issue #205). chat calls it
-  // with the caller's own token while it writes the message; the gateway
-  // exposes it nowhere. Unknown, another user's, another purpose or another
-  // tayfa's upload is ERROR_REASON_UPLOAD_NOT_FOUND; not READY is
-  // ERROR_REASON_UPLOAD_NOT_READY; attached to another message is
-  // ERROR_REASON_UPLOAD_IN_USE. A repeat for the same message succeeds.
+  // with the caller's own token just before it writes the message, outside
+  // its transaction; the gateway exposes it nowhere. Unknown, another
+  // user's, another purpose or another tayfa's upload is
+  // ERROR_REASON_UPLOAD_NOT_FOUND; not READY is
+  // ERROR_REASON_UPLOAD_NOT_READY; attached to a message chat has
+  // confirmed is ERROR_REASON_UPLOAD_IN_USE. A repeat for the same message
+  // succeeds. An attachment chat has not confirmed yet (its message may
+  // never have been written) moves to the new message, so a failed send
+  // can be retried. core's reconciliation job confirms attachments with
+  // chat (MediaHolderService, chat's service token) after 10 minutes and
+  // undoes those no message holds; the file then expires like any
+  // unattached upload.
   rpc AttachChannelPhoto(AttachChannelPhotoRequest) returns (AttachChannelPhotoResponse);
 
   // AttachDirectMessageAttachment attaches the caller's READY DM_ATTACHMENT
@@ -196,12 +204,15 @@ enum UploadPurpose {
   UPLOAD_PURPOSE_CATCH_PHOTO = 2;
   // A tayfa or event cover.
   UPLOAD_PURPOSE_COVER = 3;
-  // A photo in a channel message (issue #205).
-  UPLOAD_PURPOSE_CHAT_PHOTO = 4;
+  // An event album photo (issue #206, ADR-0028). Attached with
+  // EventService.AddEventPhoto; never a cover.
+  UPLOAD_PURPOSE_EVENT_PHOTO = 4;
+  // A photo in a channel message (issue #205, ADR-0031).
+  UPLOAD_PURPOSE_CHAT_PHOTO = 5;
   // An end-to-end encrypted direct message attachment: an opaque BLOB.
-  UPLOAD_PURPOSE_DM_ATTACHMENT = 5;
+  UPLOAD_PURPOSE_DM_ATTACHMENT = 6;
   // A photo the reporter of a direct message shares from their device.
-  UPLOAD_PURPOSE_REPORT_EVIDENCE = 6;
+  UPLOAD_PURPOSE_REPORT_EVIDENCE = 7;
 }
 
 // UploadStatus is where an upload stands (uploads.status).

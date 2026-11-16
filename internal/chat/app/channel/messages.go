@@ -114,6 +114,23 @@ func (s *Service) Send(ctx context.Context, caller, tayfa, channel id.ID, in Sen
 		ID: msgID.PG(), ChannelID: channel.PG(), AuthorID: caller.PG(), Kind: in.Kind, ClientRequestID: in.ClientRequestID.PG(),
 	}
 	if in.Kind == KindPhoto {
+		// Another message already holds the photo: nothing to ask core.
+		held, err := q.FindChannelPhotoHolders(ctx, []pgtype.UUID{in.PhotoUploadID.PG()})
+		if err != nil {
+			return Message{}, fmt.Errorf("fotoğraf: %w", err)
+		}
+		if len(held) > 0 {
+			return Message{}, apperr.ErrUploadInUse
+		}
+		// core attaches the photo to this message just before the row is
+		// written, outside chat's transaction, so no lock or connection is
+		// held during the call (ADR-0031): core checks it is the caller's,
+		// READY, a chat photo of this tayfa and free. If chat then fails to
+		// write the message, the attachment stays unconfirmed: a retry moves
+		// it to the new message, and core's reconciliation undoes it.
+		if err = s.cfg.Photos.AttachChannelPhoto(ctx, in.PhotoUploadID, tayfa, msgID); err != nil {
+			return Message{}, err
+		}
 		p.PhotoUploadID = in.PhotoUploadID.PG()
 	} else {
 		sealed := s.cfg.Cipher.Encrypt(msgID, channel, plain)
@@ -133,17 +150,6 @@ func (s *Service) Send(ctx context.Context, caller, tayfa, channel id.ID, in Sen
 			return fmt.Errorf("mesaj yazılamadı: %w", err)
 		}
 		row, created = msgRow(r), true
-		if in.Kind == KindPhoto {
-			// The photo is attached to this message in core while the row
-			// is not committed yet, after every check of chat and before
-			// the outbox write (ADR-0031): core checks it is the caller's,
-			// READY, a chat photo of this tayfa and free. If core refuses,
-			// the message is rolled back; a retry gets a new message ID
-			// and nothing was attached.
-			if err := s.cfg.Photos.AttachChannelPhoto(ctx, in.PhotoUploadID, tayfa, msgID); err != nil {
-				return err
-			}
-		}
 		return record(ctx, tx, EventMessageCreated, caller, "channel_message", msgID, map[string]any{
 			"tayfa_id": tayfa.String(), "channel_id": channel.String(),
 		})

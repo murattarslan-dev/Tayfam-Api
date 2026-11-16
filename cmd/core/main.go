@@ -225,6 +225,8 @@ func setup(rt *service.Runtime) error {
 	// Süresi dolan ya da içeriği silinen dosyaların R2'den silinmesi
 	// (birden fazla pod'da çalışabilir; her adım idempotent).
 	rt.AddWorker("media-cleanup", medias.RunCleanup)
+	// Hiç yazılmamış mesaja bağlı kalan sohbet dosyaları (ADR-0031).
+	rt.AddWorker("media-chat-reconcile", medias.RunReconcile)
 	// Tekrarlayan etkinliklerin önümüzdeki 8 haftalık örnekleri (issue #51).
 	// Birden fazla pod'da çalışabilir: tayfa ve seri satırı kilitlenir,
 	// örnekler (series_id, starts_at) ile tekildir.
@@ -267,6 +269,22 @@ func mediaService(rt *service.Runtime, pool *pgxpool.Pool, chatConn *grpc.Client
 	if chatConn != nil {
 		cfg.Messages = chatdm.NewMessageMedia(chatv1.NewMessageMediaServiceClient(chatConn))
 	}
+	// Sohbet bağlamalarının uzlaştırılması (ADR-0031): kullanıcısız iş,
+	// core'un chat için servis token'ıyla (ADR-0013). Token yoksa (yalnızca
+	// yerel ortam) iş kapalıdır; onaylanmamış bağlama yine taşınabilir.
+	if tok, ok := rt.ServiceToken("chat"); ok {
+		addr := rt.Config.Required("CHAT_GRPC_ADDR")
+		if err := rt.Config.Err(); err != nil {
+			return nil, err
+		}
+		conn, err := grpcx.NewClient(addr, auth.ServiceTokenFrom(tok)...)
+		if err != nil {
+			return nil, err
+		}
+		cfg.Holders = chatdm.NewHolders(chatv1.NewMediaHolderServiceClient(conn))
+	} else if err := rt.Config.Err(); err != nil {
+		return nil, err
+	}
 	if r2 == nil {
 		rt.Log.Info("R2 yapılandırması yok; dosya yükleme kapalı")
 	} else {
@@ -300,11 +318,9 @@ func platformAdmin(rt *service.Runtime, pool *pgxpool.Pool, medias *media.Servic
 	if err != nil {
 		return nil, nil, err
 	}
-	svc, err := admin.New(admin.Config{
-		Pool: pool, Log: rt.Log, Checker: identityadmin.NewChecker(identityv1.NewAdminAuthServiceClient(conn)),
-		// DM şikâyetinin kanıt fotoğrafı (issue #205): 5 dakikalık link.
-		Evidence: medias,
-	})
+	// medias signs the panel's short links: a reported album photo
+	// (ADR-0028 §5) and a DM report's evidence photo on click (ADR-0031).
+	svc, err := admin.New(admin.Config{Pool: pool, Log: rt.Log, Checker: identityadmin.NewChecker(identityv1.NewAdminAuthServiceClient(conn)), Media: medias})
 	if err != nil {
 		return nil, nil, err
 	}

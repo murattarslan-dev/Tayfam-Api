@@ -223,3 +223,10 @@ WHERE tayfa_id = @tayfa_id AND event_id = @event_id AND archived_at IS NULL
 -- name: ArchiveDueEventChannels :execrows
 UPDATE channels SET archived_at = archive_at
 WHERE archive_at IS NOT NULL AND archived_at IS NULL AND archive_at <= @now;
+
+-- Dosyayı tutan kanal mesajları (issue #205, ADR-0031): gönderimden önce
+-- dosyanın başka bir mesajda olup olmadığı ve core'un uzlaştırma işi.
+-- Silinmiş ama dosyasını tutan (moderatörün gizlediği) mesaj da sayılır.
+-- name: FindChannelPhotoHolders :many
+SELECT id, photo_upload_id::uuid AS upload_id FROM channel_messages
+WHERE photo_upload_id = ANY(@upload_ids::uuid[]);

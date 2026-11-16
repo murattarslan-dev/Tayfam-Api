@@ -46,6 +46,7 @@ func NewMediaServer(app Media, log *slog.Logger) *MediaServer {
 var uploadPurposes = map[corev1.UploadPurpose]string{
 	corev1.UploadPurpose_UPLOAD_PURPOSE_AVATAR:      media.PurposeAvatar,
 	corev1.UploadPurpose_UPLOAD_PURPOSE_CATCH_PHOTO: media.PurposeCatchPhoto,
+	corev1.UploadPurpose_UPLOAD_PURPOSE_EVENT_PHOTO: media.PurposeEventPhoto,
 	corev1.UploadPurpose_UPLOAD_PURPOSE_COVER:       media.PurposeCover,
 	// Issue #205 (ADR-0031).
 	corev1.UploadPurpose_UPLOAD_PURPOSE_CHAT_PHOTO:      media.PurposeChatPhoto,

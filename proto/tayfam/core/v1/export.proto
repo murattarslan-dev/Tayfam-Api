@@ -55,6 +55,9 @@ enum CoreExportSection {
   CORE_EXPORT_SECTION_REPORTS = 16;
   // Files the caller uploaded: a list only, never the files (ADR-0021).
   CORE_EXPORT_SECTION_UPLOADS = 17;
+  // Event album photos the caller added (issue #206): a list only; the
+  // files are listed in UPLOADS.
+  CORE_EXPORT_SECTION_EVENT_PHOTOS = 18;
 }
 
 message ExportMyDataRequest {}

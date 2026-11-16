@@ -77,3 +77,49 @@ func TestFilterVisibleMessageMedia(t *testing.T) {
 		t.Fatalf("çağıransız: %v", err)
 	}
 }
+
+type fakeHolders struct {
+	channel, direct map[id.ID]id.ID
+	askedC, askedD  []id.ID
+}
+
+func (f *fakeHolders) PhotoHolders(_ context.Context, uploads []id.ID) (map[id.ID]id.ID, error) {
+	f.askedC = uploads
+	return f.channel, nil
+}
+
+func (f *fakeHolders) AttachmentHolders(_ context.Context, uploads []id.ID) (map[id.ID]id.ID, error) {
+	f.askedD = uploads
+	return f.direct, nil
+}
+
+func TestFindMessageMediaHolders(t *testing.T) {
+	photo, att, msg1, msg2 := id.New(), id.New(), id.New(), id.New()
+	f := &fakeHolders{channel: map[id.ID]id.ID{photo: msg1}, direct: map[id.ID]id.ID{att: msg2}}
+	s := NewMediaHolderServer(f, f, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctx := auth.WithServiceCallerForTest(context.Background(), auth.ServiceClaims{})
+	resp, err := s.FindMessageMediaHolders(ctx, &chatv1.FindMessageMediaHoldersRequest{Items: []*chatv1.MediaHolderQuery{
+		{UploadId: photo.String(), Kind: chatv1.MessageMediaKind_MESSAGE_MEDIA_KIND_CHANNEL},
+		{UploadId: att.String(), Kind: chatv1.MessageMediaKind_MESSAGE_MEDIA_KIND_DIRECT},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, h := range resp.GetHolders() {
+		got[h.GetUploadId()] = h.GetMessageId()
+	}
+	if len(got) != 2 || got[photo.String()] != msg1.String() || got[att.String()] != msg2.String() || len(f.askedC) != 1 || len(f.askedD) != 1 {
+		t.Fatalf("cevap = %v", got)
+	}
+	if _, err := s.FindMessageMediaHolders(ctx, &chatv1.FindMessageMediaHoldersRequest{}); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("boş: %v", err)
+	}
+	// A user token never reaches it (the Guard refuses first; this is the
+	// handler's own check).
+	user := auth.WithCallerForTest(context.Background(), auth.Claims{Subject: id.New().String()})
+	if _, err := s.FindMessageMediaHolders(user, &chatv1.FindMessageMediaHoldersRequest{Items: []*chatv1.MediaHolderQuery{
+		{UploadId: photo.String(), Kind: chatv1.MessageMediaKind_MESSAGE_MEDIA_KIND_CHANNEL}}}); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("kullanıcı token'ı: %v", err)
+	}
+}

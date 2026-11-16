@@ -22,13 +22,13 @@
 --
 -- Geri alma planı: Down sohbet eklerini ve kanıt fotoğraflarını silme
 -- kuyruğuna değil doğrudan siler (R2'de kalan nesneler kullanılamaz; temizlik
--- elle), fotoğrafı olup metni olmayan şikâyetleri siler ve kısıtları 00018 /
--- 00013'teki haline döndürür.
+-- elle), fotoğrafı olup metni olmayan şikâyetleri siler ve kısıtları 00023 /
+-- 00013'teki haline döndürür (event_photo korunur).
 
 -- +goose Up
 ALTER TABLE uploads DROP CONSTRAINT uploads_purpose;
 ALTER TABLE uploads ADD CONSTRAINT uploads_purpose CHECK (purpose IN
-  ('avatar', 'catch_photo', 'cover', 'data_export', 'chat_photo', 'dm_attachment', 'report_evidence'));
+  ('avatar', 'catch_photo', 'cover', 'data_export', 'event_photo', 'chat_photo', 'dm_attachment', 'report_evidence'));
 
 -- Görüntülerin iki varyantı, blob'un tek nesnesi, dışa aktarmanın hiçbiri
 -- yoktur.
@@ -77,6 +77,7 @@ ALTER TABLE uploads ADD CONSTRAINT uploads_attached CHECK (
     OR (purpose = 'avatar' AND attached_type = 'user')
     OR (purpose = 'catch_photo' AND attached_type = 'fishing_catch')
     OR (purpose = 'cover' AND attached_type IN ('tayfa', 'event'))
+    OR (purpose = 'event_photo' AND attached_type = 'event_photo')
     OR (purpose = 'chat_photo' AND attached_type = 'channel_message')
     OR (purpose = 'dm_attachment' AND attached_type = 'dm_message')
     OR (purpose = 'report_evidence' AND attached_type = 'report'))
@@ -89,6 +90,19 @@ ALTER TABLE uploads ADD CONSTRAINT uploads_owner CHECK (
 
 -- Görme kararı için core chat'e mesaj kimliğiyle sorar; serbest bırakma
 -- olayı da mesaj kimliğiyle gelir (uploads_attached_idx yeterli).
+
+-- Sohbet bağlamasının onayı: chat dosyayı mesajı yazmadan hemen önce,
+-- transaction dışında bağlatır. Mesaj hiç yazılmadıysa (geri alma, istemci
+-- kopması) bağlama hayalet kalır; onaylanmamış bağlama aynı sahibin yeni
+-- mesajına taşınabilir ve uzlaştırma işi 10 dakika sonra chat'e sorar:
+-- mesaj dosyayı tutuyorsa onaylar, tutmuyorsa bağlamayı kaldırır (dosya
+-- bağlanmamış hazır dosya gibi 7 günde silinir).
+ALTER TABLE uploads ADD COLUMN attach_confirmed_at timestamptz;
+ALTER TABLE uploads ADD CONSTRAINT uploads_attach_confirmed CHECK (
+  attach_confirmed_at IS NULL OR attached_type IN ('channel_message', 'dm_message'));
+CREATE INDEX uploads_unconfirmed_chat_idx ON uploads (attached_at)
+  WHERE attached_type IN ('channel_message', 'dm_message') AND attach_confirmed_at IS NULL;
+GRANT UPDATE (attach_confirmed_at) ON uploads TO core_app;
 
 -- Kanıt fotoğrafı (birebir mesaj şikâyeti).
 ALTER TABLE reports ADD COLUMN evidence_upload_id uuid REFERENCES uploads (id) ON DELETE SET NULL;
@@ -199,6 +213,10 @@ DROP INDEX reports_evidence_upload_id_key;
 ALTER TABLE reports DROP COLUMN evidence_upload_id;
 
 DELETE FROM uploads WHERE purpose IN ('chat_photo', 'dm_attachment', 'report_evidence');
+REVOKE UPDATE (attach_confirmed_at) ON uploads FROM core_app;
+DROP INDEX uploads_unconfirmed_chat_idx;
+ALTER TABLE uploads DROP CONSTRAINT uploads_attach_confirmed;
+ALTER TABLE uploads DROP COLUMN attach_confirmed_at;
 ALTER TABLE uploads DROP CONSTRAINT uploads_owner;
 ALTER TABLE uploads ADD CONSTRAINT uploads_owner CHECK (user_id IS NOT NULL OR (purpose = 'cover' AND attached_type IS NOT NULL));
 ALTER TABLE uploads DROP CONSTRAINT uploads_attached;
@@ -209,7 +227,8 @@ ALTER TABLE uploads ADD CONSTRAINT uploads_attached CHECK (
   AND (attached_type IS NULL
     OR (purpose = 'avatar' AND attached_type = 'user')
     OR (purpose = 'catch_photo' AND attached_type = 'fishing_catch')
-    OR (purpose = 'cover' AND attached_type IN ('tayfa', 'event')))
+    OR (purpose = 'cover' AND attached_type IN ('tayfa', 'event'))
+    OR (purpose = 'event_photo' AND attached_type = 'event_photo'))
 );
 ALTER TABLE uploads DROP CONSTRAINT uploads_ready;
 ALTER TABLE uploads ADD CONSTRAINT uploads_ready CHECK (
@@ -231,4 +250,4 @@ ALTER TABLE uploads ADD CONSTRAINT uploads_variants CHECK (
     AND export_bytes IS NULL AND expires_at IS NULL)
 );
 ALTER TABLE uploads DROP CONSTRAINT uploads_purpose;
-ALTER TABLE uploads ADD CONSTRAINT uploads_purpose CHECK (purpose IN ('avatar', 'catch_photo', 'cover', 'data_export'));
+ALTER TABLE uploads ADD CONSTRAINT uploads_purpose CHECK (purpose IN ('avatar', 'catch_photo', 'cover', 'data_export', 'event_photo'));

@@ -4,9 +4,13 @@ import (
 	"context"
 	"log/slog"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/channel"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/dm"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
@@ -96,6 +100,84 @@ func (s *MessageMediaServer) FilterVisibleMessageMedia(ctx context.Context, req 
 			out.VisibleUploadIds = append(out.VisibleUploadIds, u.String())
 			delete(visible, u) // each once
 		}
+	}
+	return out, nil
+}
+
+// MediaHolderServiceName is the gRPC service whose methods only core's
+// service token may call (ADR-0013, ADR-0031); cmd/chat gives it to
+// auth.Guard.
+const MediaHolderServiceName = "tayfam.chat.v1.MediaHolderService"
+
+// ChannelPhotoHolders and DirectAttachmentHolders answer which message
+// holds a file (core's reconciliation, ADR-0031).
+type ChannelPhotoHolders interface {
+	PhotoHolders(ctx context.Context, uploads []id.ID) (map[id.ID]id.ID, error)
+}
+
+// DirectAttachmentHolders answers for direct messages.
+type DirectAttachmentHolders interface {
+	AttachmentHolders(ctx context.Context, uploads []id.ID) (map[id.ID]id.ID, error)
+}
+
+// MediaHolderServer implements chatv1.MediaHolderServiceServer. auth.Guard
+// lets only core's ServiceAccount reach it.
+type MediaHolderServer struct {
+	chatv1.UnimplementedMediaHolderServiceServer
+	channels ChannelPhotoHolders
+	direct   DirectAttachmentHolders
+	log      *slog.Logger
+}
+
+// NewMediaHolderServer returns a MediaHolderServer.
+func NewMediaHolderServer(channels ChannelPhotoHolders, direct DirectAttachmentHolders, log *slog.Logger) *MediaHolderServer {
+	return &MediaHolderServer{channels: channels, direct: direct, log: log}
+}
+
+// FindMessageMediaHolders implements chatv1.MediaHolderServiceServer.
+func (s *MediaHolderServer) FindMessageMediaHolders(ctx context.Context, req *chatv1.FindMessageMediaHoldersRequest) (*chatv1.FindMessageMediaHoldersResponse, error) {
+	// Defence in depth: the Guard has already checked the caller.
+	if _, ok := auth.ServiceCallerFrom(ctx); !ok {
+		return nil, status.Error(codes.Unauthenticated, msgUnauthenticated)
+	}
+	items := req.GetItems()
+	if len(items) == 0 || len(items) > maxMediaItems {
+		return nil, validation("items")
+	}
+	var chans, direct []id.ID
+	for _, it := range items {
+		u, ok := id.Parse(it.GetUploadId())
+		if !ok {
+			return nil, validation("items")
+		}
+		switch it.GetKind() {
+		case chatv1.MessageMediaKind_MESSAGE_MEDIA_KIND_CHANNEL:
+			chans = append(chans, u)
+		case chatv1.MessageMediaKind_MESSAGE_MEDIA_KIND_DIRECT:
+			direct = append(direct, u)
+		default:
+			return nil, validation("items")
+		}
+	}
+	out := &chatv1.FindMessageMediaHoldersResponse{}
+	add := func(m map[id.ID]id.ID) {
+		for u, msg := range m {
+			out.Holders = append(out.Holders, &chatv1.MediaHolder{UploadId: u.String(), MessageId: msg.String()})
+		}
+	}
+	if len(chans) > 0 {
+		m, err := s.channels.PhotoHolders(ctx, chans)
+		if err != nil {
+			return nil, errorStatus(ctx, s.log, err)
+		}
+		add(m)
+	}
+	if len(direct) > 0 {
+		m, err := s.direct.AttachmentHolders(ctx, direct)
+		if err != nil {
+			return nil, errorStatus(ctx, s.log, err)
+		}
+		add(m)
 	}
 	return out, nil
 }

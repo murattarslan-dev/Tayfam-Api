@@ -161,3 +161,137 @@ var MessageMediaService_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "tayfam/chat/v1/message_media.proto",
 }
+
+const (
+	MediaHolderService_FindMessageMediaHolders_FullMethodName = "/tayfam.chat.v1.MediaHolderService/FindMessageMediaHolders"
+)
+
+// MediaHolderServiceClient is the client API for MediaHolderService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// MediaHolderService answers core's reconciliation job (issue #205,
+// ADR-0031): core attaches a chat file before chat writes the message, so
+// an attachment whose message was never written (chat rolled back, the
+// client went away) must be undone. core asks which message, if any, now
+// holds each file.
+//
+// Authentication: only a Kubernetes service token (ADR-0013) with audience
+// chat.tayfam.internal from the tayfam-core ServiceAccount. User tokens are
+// refused. The answer is IDs only.
+type MediaHolderServiceClient interface {
+	// FindMessageMediaHolders returns, for each upload that a channel message
+	// (photo_upload_id) or a direct message (attachment_upload_id) of the
+	// given kind holds, the message's ID; uploads no message holds are left
+	// out. Deleted messages that still hold their file (a moderator's hiding)
+	// count. 1 to 100 items (ERROR_REASON_VALIDATION otherwise, field
+	// "items").
+	FindMessageMediaHolders(ctx context.Context, in *FindMessageMediaHoldersRequest, opts ...grpc.CallOption) (*FindMessageMediaHoldersResponse, error)
+}
+
+type mediaHolderServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewMediaHolderServiceClient(cc grpc.ClientConnInterface) MediaHolderServiceClient {
+	return &mediaHolderServiceClient{cc}
+}
+
+func (c *mediaHolderServiceClient) FindMessageMediaHolders(ctx context.Context, in *FindMessageMediaHoldersRequest, opts ...grpc.CallOption) (*FindMessageMediaHoldersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FindMessageMediaHoldersResponse)
+	err := c.cc.Invoke(ctx, MediaHolderService_FindMessageMediaHolders_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MediaHolderServiceServer is the server API for MediaHolderService service.
+// All implementations must embed UnimplementedMediaHolderServiceServer
+// for forward compatibility.
+//
+// MediaHolderService answers core's reconciliation job (issue #205,
+// ADR-0031): core attaches a chat file before chat writes the message, so
+// an attachment whose message was never written (chat rolled back, the
+// client went away) must be undone. core asks which message, if any, now
+// holds each file.
+//
+// Authentication: only a Kubernetes service token (ADR-0013) with audience
+// chat.tayfam.internal from the tayfam-core ServiceAccount. User tokens are
+// refused. The answer is IDs only.
+type MediaHolderServiceServer interface {
+	// FindMessageMediaHolders returns, for each upload that a channel message
+	// (photo_upload_id) or a direct message (attachment_upload_id) of the
+	// given kind holds, the message's ID; uploads no message holds are left
+	// out. Deleted messages that still hold their file (a moderator's hiding)
+	// count. 1 to 100 items (ERROR_REASON_VALIDATION otherwise, field
+	// "items").
+	FindMessageMediaHolders(context.Context, *FindMessageMediaHoldersRequest) (*FindMessageMediaHoldersResponse, error)
+	mustEmbedUnimplementedMediaHolderServiceServer()
+}
+
+// UnimplementedMediaHolderServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedMediaHolderServiceServer struct{}
+
+func (UnimplementedMediaHolderServiceServer) FindMessageMediaHolders(context.Context, *FindMessageMediaHoldersRequest) (*FindMessageMediaHoldersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method FindMessageMediaHolders not implemented")
+}
+func (UnimplementedMediaHolderServiceServer) mustEmbedUnimplementedMediaHolderServiceServer() {}
+func (UnimplementedMediaHolderServiceServer) testEmbeddedByValue()                            {}
+
+// UnsafeMediaHolderServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to MediaHolderServiceServer will
+// result in compilation errors.
+type UnsafeMediaHolderServiceServer interface {
+	mustEmbedUnimplementedMediaHolderServiceServer()
+}
+
+func RegisterMediaHolderServiceServer(s grpc.ServiceRegistrar, srv MediaHolderServiceServer) {
+	// If the following call panics, it indicates UnimplementedMediaHolderServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&MediaHolderService_ServiceDesc, srv)
+}
+
+func _MediaHolderService_FindMessageMediaHolders_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FindMessageMediaHoldersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MediaHolderServiceServer).FindMessageMediaHolders(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MediaHolderService_FindMessageMediaHolders_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MediaHolderServiceServer).FindMessageMediaHolders(ctx, req.(*FindMessageMediaHoldersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// MediaHolderService_ServiceDesc is the grpc.ServiceDesc for MediaHolderService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var MediaHolderService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "tayfam.chat.v1.MediaHolderService",
+	HandlerType: (*MediaHolderServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "FindMessageMediaHolders",
+			Handler:    _MediaHolderService_FindMessageMediaHolders_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "tayfam/chat/v1/message_media.proto",
+}

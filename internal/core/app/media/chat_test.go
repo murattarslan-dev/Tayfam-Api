@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
@@ -166,6 +167,13 @@ func TestAttachChannelPhoto(t *testing.T) {
 	}
 	must(t, e.svc.AttachChannelPhoto(ctx, e.member, u.ID, e.tayfa, msg))
 	must(t, e.svc.AttachChannelPhoto(ctx, e.member, u.ID, e.tayfa, msg)) // a repeat
+	// Unconfirmed, it moves to the owner's next message (ADR-0031); once
+	// chat confirmed it, a second message is refused.
+	next := id.New()
+	must(t, e.svc.AttachChannelPhoto(ctx, e.member, u.ID, e.tayfa, next))
+	if _, err := e.pool.Exec(ctx, "UPDATE uploads SET attach_confirmed_at = now() WHERE id = $1", u.ID.PG()); err != nil {
+		t.Fatal(err)
+	}
 	if err := e.svc.AttachChannelPhoto(ctx, e.member, u.ID, e.tayfa, id.New()); !errors.Is(err, apperr.ErrUploadInUse) {
 		t.Fatalf("ikinci mesaj: %v", err)
 	}
@@ -309,15 +317,15 @@ func TestReportEvidenceURL(t *testing.T) {
 	u := e.upload(t, e.member, PurposeReportEvidence, id.ID{}, clean(), 300, 200)
 	report := id.New()
 	// Not attached to the report: no link.
-	if link, err := e.svc.ReportEvidenceURL(ctx, report, u.ID); err != nil || link != "" {
+	if link, _, ok, err := e.svc.ReportEvidenceURL(ctx, report, u.ID); err != nil || ok || link != "" {
 		t.Fatalf("bağlanmamış: %q %v", link, err)
 	}
 	must(t, e.attach(t, e.member, u.ID, PurposeReportEvidence, id.ID{}, Target{Type: TargetReport, ID: report}))
-	link, err := e.svc.ReportEvidenceURL(ctx, report, u.ID)
-	if err != nil || !strings.Contains(link, "/media/") {
+	link, exp, ok, err := e.svc.ReportEvidenceURL(ctx, report, u.ID)
+	if err != nil || !ok || !strings.Contains(link, "/media/") || exp.Sub(e.clock.now()) > EvidenceLinkTTL+time.Second {
 		t.Fatalf("link: %v", err)
 	}
-	if other, err := e.svc.ReportEvidenceURL(ctx, id.New(), u.ID); err != nil || other != "" {
+	if other, _, _, err := e.svc.ReportEvidenceURL(ctx, id.New(), u.ID); err != nil || other != "" {
 		t.Fatalf("başka rapor: %q %v", other, err)
 	}
 	// The reporter's account goes; the evidence stays with the report.
@@ -329,4 +337,135 @@ func TestReportEvidenceURL(t *testing.T) {
 	if strings.Contains(e.logs.String(), link) {
 		t.Fatal("link log'a yazıldı")
 	}
+}
+
+// fakeHolders answers MediaHolders: upload → the message chat says holds it.
+type fakeHolders struct {
+	mu    sync.Mutex
+	held  map[id.ID]id.ID
+	err   error
+	asked []HolderItem
+}
+
+func (f *fakeHolders) Holders(_ context.Context, items []HolderItem) (map[id.ID]id.ID, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.asked = append(f.asked, items...)
+	if f.err != nil {
+		return nil, f.err
+	}
+	out := map[id.ID]id.ID{}
+	for _, it := range items {
+		if m, ok := f.held[it.Upload]; ok {
+			out[it.Upload] = m
+		}
+	}
+	return out, nil
+}
+
+// TestChatAttachmentReconcile (ADR-0031): chat has core attach a file
+// before it writes the message. An attachment chat never confirmed moves to
+// the owner's next message; after ReconcileAfter chat is asked which
+// message holds the file: a holder confirms it (correcting the message ID),
+// none undoes it so the file expires like any unattached upload.
+func TestChatAttachmentReconcile(t *testing.T) {
+	h := &fakeHolders{held: map[id.ID]id.ID{}}
+	e := setup(t, func(c *Config) { c.Holders = h })
+	attachedTo := func(u id.ID) (typ string, msg id.ID, confirmed bool) {
+		t.Helper()
+		var (
+			ty  *string
+			m   *id.ID
+			cat *time.Time
+		)
+		must(t, e.pool.QueryRow(ctx, "SELECT attached_type, attached_id, attach_confirmed_at FROM uploads WHERE id = $1", u.PG()).Scan(&ty, &m, &cat))
+		if ty != nil {
+			typ = *ty
+		}
+		if m != nil {
+			msg = *m
+		}
+		return typ, msg, cat != nil
+	}
+
+	// A send that failed after core attached: the retry moves the photo.
+	photo := e.upload(t, e.member, PurposeChatPhoto, e.tayfa, clean(), 300, 200)
+	lost, kept := id.New(), id.New()
+	must(t, e.svc.AttachChannelPhoto(ctx, e.member, photo.ID, e.tayfa, lost))
+	must(t, e.svc.AttachChannelPhoto(ctx, e.member, photo.ID, e.tayfa, kept))
+	if _, m, _ := attachedTo(photo.ID); m != kept {
+		t.Fatalf("taşınmadı: %v", m)
+	}
+	// Not across kinds: a DM attachment never becomes a channel photo.
+	att := e.blobReady(t, e.member)
+	must(t, e.svc.AttachDirectMessageAttachment(ctx, e.member, att, id.New()))
+
+	// Too young: chat is not asked yet.
+	if c, d, err := e.svc.Reconcile(ctx); err != nil || c+d != 0 || len(h.asked) != 0 {
+		t.Fatalf("erken: %d %d %v %v", c, d, err, h.asked)
+	}
+	e.clock.add(ReconcileAfter + time.Minute)
+	// chat cannot answer: nothing changes.
+	h.err = errors.New("chat kapalı")
+	if _, _, err := e.svc.Reconcile(ctx); err == nil {
+		t.Fatal("chat hatası bildirilmeli")
+	}
+	if _, m, conf := attachedTo(photo.ID); m != kept || conf {
+		t.Fatal("chat cevap vermeden değişti")
+	}
+	h.err = nil
+	// chat: the photo is held by kept; the attachment no message holds.
+	h.held[photo.ID] = kept
+	c, d, err := e.svc.Reconcile(ctx)
+	if err != nil || c != 1 || d != 1 {
+		t.Fatalf("uzlaştırma: %d onay, %d kaldırma, %v", c, d, err)
+	}
+	if typ, m, conf := attachedTo(photo.ID); typ != TargetChannelMessage || m != kept || !conf {
+		t.Fatalf("onaylanan: %s %v %v", typ, m, conf)
+	}
+	if typ, _, _ := attachedTo(att); typ != "" {
+		t.Fatalf("hayalet bağlama kalmamalı: %s", typ)
+	}
+	if s := statusOf(t, e, att); s != StatusReady {
+		t.Fatalf("bağlaması kaldırılan dosya hazır kalmalı (7 gün sonra silinir): %s", s)
+	}
+	for _, it := range h.asked {
+		if (it.Upload == att) != it.Direct {
+			t.Fatalf("tür: %+v", it)
+		}
+	}
+	// A confirmed attachment no longer moves.
+	if err := e.svc.AttachChannelPhoto(ctx, e.member, photo.ID, e.tayfa, id.New()); !errors.Is(err, apperr.ErrUploadInUse) {
+		t.Fatalf("onaylanan taşınmamalı: %v", err)
+	}
+	// chat names another message (a retry moved it between the question
+	// and the answer, say): the holder wins.
+	p2 := e.upload(t, e.member, PurposeChatPhoto, e.tayfa, clean(), 300, 200)
+	first, holder := id.New(), id.New()
+	must(t, e.svc.AttachChannelPhoto(ctx, e.member, p2.ID, e.tayfa, first))
+	e.clock.add(ReconcileAfter + time.Minute)
+	h.held[p2.ID] = holder
+	if c, _, err := e.svc.Reconcile(ctx); err != nil || c != 1 {
+		t.Fatalf("düzeltme: %d %v", c, err)
+	}
+	if _, m, conf := attachedTo(p2.ID); m != holder || !conf {
+		t.Fatalf("sahip mesaj: %v %v", m, conf)
+	}
+	// Without a chat client the job does nothing.
+	e2 := setup(t)
+	if c, d, err := e2.svc.Reconcile(ctx); err != nil || c+d != 0 {
+		t.Fatalf("istemcisiz: %d %d %v", c, d, err)
+	}
+}
+
+// blobReady uploads and completes a DM attachment.
+func (e *env) blobReady(t *testing.T, user id.ID) id.ID {
+	t.Helper()
+	c := e.blobUpload(t, user)
+	if code := objstoretest.Do(t, http.MethodPut, c.Links[0].URL, c.Links[0].Headers, blob); code != http.StatusOK {
+		t.Fatalf("PUT: %d", code)
+	}
+	u, err := e.svc.CompleteUpload(ctx, user, c.Upload.ID, 0, 0)
+	must(t, err)
+	return u.ID
 }

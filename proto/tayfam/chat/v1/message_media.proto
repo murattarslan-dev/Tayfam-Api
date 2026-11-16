@@ -49,3 +49,40 @@ message FilterVisibleMessageMediaRequest {
 message FilterVisibleMessageMediaResponse {
   repeated string visible_upload_ids = 1;
 }
+
+// MediaHolderService answers core's reconciliation job (issue #205,
+// ADR-0031): core attaches a chat file before chat writes the message, so
+// an attachment whose message was never written (chat rolled back, the
+// client went away) must be undone. core asks which message, if any, now
+// holds each file.
+//
+// Authentication: only a Kubernetes service token (ADR-0013) with audience
+// chat.tayfam.internal from the tayfam-core ServiceAccount. User tokens are
+// refused. The answer is IDs only.
+service MediaHolderService {
+  // FindMessageMediaHolders returns, for each upload that a channel message
+  // (photo_upload_id) or a direct message (attachment_upload_id) of the
+  // given kind holds, the message's ID; uploads no message holds are left
+  // out. Deleted messages that still hold their file (a moderator's hiding)
+  // count. 1 to 100 items (ERROR_REASON_VALIDATION otherwise, field
+  // "items").
+  rpc FindMessageMediaHolders(FindMessageMediaHoldersRequest) returns (FindMessageMediaHoldersResponse);
+}
+
+message MediaHolderQuery {
+  string upload_id = 1;
+  MessageMediaKind kind = 2;
+}
+
+message FindMessageMediaHoldersRequest {
+  repeated MediaHolderQuery items = 1;
+}
+
+message MediaHolder {
+  string upload_id = 1;
+  string message_id = 2;
+}
+
+message FindMessageMediaHoldersResponse {
+  repeated MediaHolder holders = 1;
+}

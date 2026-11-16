@@ -35,6 +35,9 @@ func purgeSteps() []purgeStep {
 		{"av kayıtları", func(ctx context.Context, q *store.Queries, p store.PurgeAnnouncementsParams) (int64, error) {
 			return q.PurgeFishingCatches(ctx, store.PurgeFishingCatchesParams(p))
 		}},
+		{"albüm fotoğrafları", func(ctx context.Context, q *store.Queries, p store.PurgeAnnouncementsParams) (int64, error) {
+			return q.PurgeEventPhotos(ctx, store.PurgeEventPhotosParams(p))
+		}},
 		{"etkinlikler", func(ctx context.Context, q *store.Queries, p store.PurgeAnnouncementsParams) (int64, error) {
 			return q.PurgeEvents(ctx, store.PurgeEventsParams(p))
 		}},
@@ -51,7 +54,8 @@ func purgeSteps() []purgeStep {
 // tayfa.purged tells chat to delete the tayfa's channels for good
 // (ADR-0009) while its channel photos are queued for deletion (ADR-0031).
 // Then announcements, questions (with their answers), answers,
-// polls, fishing catches and events go in batches of contentBatch.
+// polls, fishing catches, album photos and events go in batches of
+// contentBatch.
 // Activity records stay (SET NULL).
 func (s *Service) Purge(ctx context.Context) (int, error) {
 	before := ts(s.now().Add(-RetentionPeriod))

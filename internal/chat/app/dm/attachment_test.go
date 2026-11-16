@@ -27,9 +27,7 @@ func (f *fakeAttachments) AttachDirectMessageAttachment(_ context.Context, uploa
 	if !f.known[upload] {
 		return apperr.ErrUploadNotFound
 	}
-	if m, ok := f.attached[upload]; ok && m != message {
-		return apperr.ErrUploadInUse
-	}
+	// core moves an attachment chat has not confirmed (ADR-0031).
 	f.attached[upload] = message
 	return nil
 }
@@ -68,17 +66,24 @@ func TestDirectMessageAttachment(t *testing.T) {
 	if e.count(t, "SELECT count(*) FROM dm_messages") != before {
 		t.Fatal("reddedilen ekli mesaj yazıldı")
 	}
-	// A device set that changed is refused before core is asked, so a
-	// retry with the refreshed set can attach the same upload.
+	// core is asked outside chat's transaction (ADR-0031). A device set
+	// that changed refuses the message after core attached the upload to
+	// it; the retry with the refreshed set moves the attachment to its
+	// own message (core moves unconfirmed attachments).
 	up2 := id.New()
 	f.known[up2] = true
-	calls := f.calls
 	_, _, err = e.svc.Send(ctx, a, SendInput{Recipient: b, ClientRequestID: id.New(), Envelopes: []OutgoingEnvelope{envelope(db, 1), envelope(db, 2)}, Session: ca.Session, Attachment: up2})
-	if err == nil || f.calls != calls {
-		t.Fatalf("cihaz kümesi hatası core'a gitmeden dönmeli: %v, %d çağrı", err, f.calls-calls)
+	if err == nil || e.count(t, "SELECT count(*) FROM dm_messages WHERE attachment_upload_id = $1", up2.PG()) != 0 {
+		t.Fatalf("cihaz kümesi hatası: %v", err)
 	}
-	if _, err := send(up2); err != nil {
-		t.Fatalf("düzeltilmiş tekrar: %v", err)
+	m2, err := send(up2)
+	if err != nil || f.attached[up2] != m2.ID {
+		t.Fatalf("düzeltilmiş tekrar: %v, bağlı %v", err, f.attached[up2])
+	}
+	// core's reconciliation asks which message holds each file.
+	hold, err := e.svc.AttachmentHolders(ctx, []id.ID{up, up2, id.New()})
+	if err != nil || len(hold) != 2 || hold[up] != m.ID || hold[up2] != m2.ID {
+		t.Fatalf("sahipler = %v %v", hold, err)
 	}
 
 	// Who may get the link: the two parties, while the message stands.

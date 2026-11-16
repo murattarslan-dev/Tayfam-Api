@@ -148,6 +148,12 @@ type Querier interface {
 	// metni uygulamada çözülür ve hiçbir yere loglanmaz.
 	ExportChannelMessages(ctx context.Context, arg ExportChannelMessagesParams) ([]ExportChannelMessagesRow, error)
 	ExportNotificationPreferences(ctx context.Context, arg ExportNotificationPreferencesParams) ([]ExportNotificationPreferencesRow, error)
+	// Dosyayı tutan kanal mesajları (issue #205, ADR-0031): gönderimden önce
+	// dosyanın başka bir mesajda olup olmadığı ve core'un uzlaştırma işi.
+	// Silinmiş ama dosyasını tutan (moderatörün gizlediği) mesaj da sayılır.
+	FindChannelPhotoHolders(ctx context.Context, uploadIds []pgtype.UUID) ([]FindChannelPhotoHoldersRow, error)
+	// Eki tutan birebir mesajlar (issue #205, ADR-0031); kanaldaki gibi.
+	FindDirectMessageAttachmentHolders(ctx context.Context, uploadIds []pgtype.UUID) ([]FindDirectMessageAttachmentHoldersRow, error)
 	GetChannel(ctx context.Context, arg GetChannelParams) (GetChannelRow, error)
 	GetChannelForUpdate(ctx context.Context, arg GetChannelForUpdateParams) (GetChannelForUpdateRow, error)
 	// Görme kararı (MessageMediaService, issue #205): fotoğrafın bağlı olduğu

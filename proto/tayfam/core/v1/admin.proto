@@ -62,6 +62,13 @@ service AdminService {
   // GetReportedItem returns the reported item only, and records the viewing
   // in the platform audit log.
   rpc GetReportedItem(GetReportedItemRequest) returns (GetReportedItemResponse);
+  // GetReportEvidencePhotoUrl returns a GET link, valid for 5 minutes, to a
+  // direct message report's evidence photo (issue #205, ADR-0031), and
+  // records the opening in the platform audit log
+  // (report.view_evidence_photo). It is signed only when asked: a read of
+  // the report carries has_evidence_photo, never the link. A report
+  // without one, or without object storage, is ERROR_REASON_REPORT_NOT_FOUND.
+  rpc GetReportEvidencePhotoUrl(GetReportEvidencePhotoUrlRequest) returns (GetReportEvidencePhotoUrlResponse);
   // DecideReport records the platform's decision on an escalated report.
   rpc DecideReport(DecideReportRequest) returns (DecideReportResponse);
   // GetStats returns the panel dashboard's tayfa counts and the last run of
@@ -240,10 +247,26 @@ message ReportedItem {
   google.protobuf.Timestamp create_time = 7;
   // Set if the item is already deleted.
   google.protobuf.Timestamp delete_time = 8;
-  // A DM report's evidence photo (issue #205): a GET link to the full
-  // variant, valid for 5 minutes; empty when there is none or object
-  // storage is off. A bearer link: never logged.
-  string evidence_photo_url = 9;
+  // Only for a reported album photo (REPORT_TARGET_TYPE_EVENT_PHOTO,
+  // ADR-0028): a GET link to the image valid for 5 minutes, issued with
+  // every read of the report and recorded in the platform audit log. Empty
+  // without object storage or once the file is gone. Never logged.
+  string media_url = 9;
+  google.protobuf.Timestamp media_expire_time = 10;
+  // Only for a direct message report with an evidence photo (issue #205,
+  // ADR-0031): the link itself is never part of this read; the panel asks
+  // AdminService.GetReportEvidencePhotoUrl when the administrator opens it.
+  bool has_evidence_photo = 11;
+}
+
+message GetReportEvidencePhotoUrlRequest {
+  string report_id = 1;
+}
+
+message GetReportEvidencePhotoUrlResponse {
+  // A bearer link: never logged.
+  string url = 1;
+  google.protobuf.Timestamp expire_time = 2;
 }
 
 message GetReportedItemResponse {

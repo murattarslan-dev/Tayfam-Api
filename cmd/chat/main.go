@@ -136,11 +136,14 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	policy := auth.ServicePolicy{Verifier: si.Verifier, Services: []string{grpcapi.UserEventServiceName, grpcapi.CoreEventServiceName}}
+	// MediaHolderService'i (sohbet bağlamalarının uzlaştırılması,
+	// ADR-0031) yalnızca core'un ServiceAccount'u çağırabilir.
+	policy := auth.ServicePolicy{Verifier: si.Verifier, Services: []string{grpcapi.UserEventServiceName, grpcapi.CoreEventServiceName, grpcapi.MediaHolderServiceName}}
 	if si.Verifier != nil {
 		policy.Callers = map[string][]auth.ServiceAccount{
-			chatv1.UserEventService_ApplyUserEvent_FullMethodName: {si.Account("tayfam-identity")},
-			chatv1.CoreEventService_ApplyCoreEvent_FullMethodName: {si.Account("tayfam-core")},
+			chatv1.UserEventService_ApplyUserEvent_FullMethodName:            {si.Account("tayfam-identity")},
+			chatv1.CoreEventService_ApplyCoreEvent_FullMethodName:            {si.Account("tayfam-core")},
+			chatv1.MediaHolderService_FindMessageMediaHolders_FullMethodName: {si.Account("tayfam-core")},
 		}
 	}
 	guard, err := auth.NewGuard(v).WithServices(policy)
@@ -273,6 +276,7 @@ func setup(rt *service.Runtime) error {
 	// kendi token'ıyla sorar: kanal kitlesi ya da konuşmanın iki tarafı
 	// (issue #205, ADR-0031).
 	chatv1.RegisterMessageMediaServiceServer(srv, grpcapi.NewMessageMediaServer(channels, directMessages, rt.Log))
+	chatv1.RegisterMediaHolderServiceServer(srv, grpcapi.NewMediaHolderServer(channels, directMessages, rt.Log))
 	// KVKK veri dışa aktarma (issue #144, ADR-0021): çağıranın kendi kanal
 	// mesajları (çözülmüş) ve tercihleri; identity kullanıcının token'ıyla
 	// çağırır. Anahtar yoksa UNAVAILABLE.

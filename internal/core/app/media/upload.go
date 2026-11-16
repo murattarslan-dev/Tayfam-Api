@@ -31,7 +31,8 @@ type CreateInput struct {
 	Purpose string
 	// Variants holds exactly one KindPreview and one KindFull.
 	Variants []VariantInput
-	// Tayfa is required for covers and catch photos, zero for avatars.
+	// Tayfa is required for covers, catch and album photos, zero for
+	// avatars.
 	Tayfa           id.ID
 	ClientRequestID string
 }
@@ -84,7 +85,7 @@ func validate(in CreateInput) (id.ID, VariantInput, VariantInput, error) {
 		if in.Tayfa != (id.ID{}) {
 			return id.ID{}, VariantInput{}, VariantInput{}, apperr.Validation("tayfa_id")
 		}
-	case PurposeCover, PurposeCatchPhoto, PurposeChatPhoto:
+	case PurposeCover, PurposeCatchPhoto, PurposeEventPhoto, PurposeChatPhoto:
 		if in.Tayfa == (id.ID{}) {
 			return id.ID{}, VariantInput{}, VariantInput{}, apperr.Validation("tayfa_id")
 		}
@@ -466,7 +467,23 @@ func Attach(ctx context.Context, q *store.Queries, user, upload id.ID, purpose s
 		return apperr.ErrUploadNotReady
 	}
 	if row.AttachedID.Valid && (row.AttachedType.String != target.Type || id.ID(row.AttachedID.Bytes) != target.ID) {
-		return apperr.ErrUploadInUse
+		// A chat attachment chat has not confirmed may belong to a message
+		// that was never written (ADR-0031): it moves to the owner's new
+		// message, so a failed send can be retried.
+		if !chatTarget(target.Type) || row.AttachedType.String != target.Type || row.AttachConfirmedAt.Valid {
+			return apperr.ErrUploadInUse
+		}
+		n, err := q.MoveChatAttachment(ctx, store.MoveChatAttachmentParams{
+			AttachedID: target.ID.PG(), Now: ts(now), ID: upload.PG(), UserID: user.PG(), Purpose: purpose,
+			TayfaID: optional(tayfa), AttachedType: target.Type,
+		})
+		if err != nil {
+			return fmt.Errorf("bağlama: %w", err)
+		}
+		if n != 1 {
+			return apperr.ErrUploadInUse
+		}
+		return nil
 	}
 	n, err := q.AttachUpload(ctx, store.AttachUploadParams{
 		ID: upload.PG(), UserID: user.PG(), Purpose: purpose, TayfaID: optional(tayfa),
@@ -490,6 +507,8 @@ func (s *Service) AttachAvatar(ctx context.Context, user, upload id.ID) error {
 		return Attach(ctx, store.New(tx), user, upload, PurposeAvatar, id.ID{}, Target{Type: TargetUser, ID: user}, now)
 	})
 }
+
+func chatTarget(t string) bool { return t == TargetChannelMessage || t == TargetDMMessage }
 
 // AttachChannelPhoto attaches the caller's READY chat photo of tayfa to the
 // channel message (MediaService.AttachChannelPhoto; chat calls it with the

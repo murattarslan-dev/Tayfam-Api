@@ -43,6 +43,8 @@ type fakeEvents struct {
 	target   id.ID
 	attended bool
 	catch    event.CatchInput
+	photo    event.PhotoInput
+	photoID  id.ID
 }
 
 func (f *fakeEvents) rec(u, t, e id.ID) { f.calls++; f.user, f.tayfa, f.event = u, t, e }
@@ -146,6 +148,20 @@ func (f *fakeEvents) ListCatches(_ context.Context, u, t, e id.ID, _ int32, _ st
 }
 func (f *fakeEvents) RemoveCatch(_ context.Context, u, t, e, _ id.ID) error {
 	f.rec(u, t, e)
+	return f.err
+}
+func (f *fakeEvents) AddPhoto(_ context.Context, u, t, e id.ID, in event.PhotoInput) (event.Photo, error) {
+	f.rec(u, t, e)
+	f.photo = in
+	return event.Photo{ID: id.New(), EventID: e, UploaderID: u, UploadID: in.UploadID, Caption: in.Caption, CreatedAt: time.Now()}, f.err
+}
+func (f *fakeEvents) ListPhotos(_ context.Context, u, t, e id.ID, _ int32, _ string) ([]event.Photo, string, error) {
+	f.rec(u, t, e)
+	return []event.Photo{{ID: id.New(), EventID: e, UploaderID: u, UploadID: id.New(), CreatedAt: time.Now()}}, "sonraki", f.err
+}
+func (f *fakeEvents) RemovePhoto(_ context.Context, u, t, e, p id.ID) error {
+	f.rec(u, t, e)
+	f.photoID = p
 	return f.err
 }
 

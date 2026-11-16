@@ -264,6 +264,37 @@ func (q *Queries) EraseDirectMessage(ctx context.Context, arg EraseDirectMessage
 	return released_upload_id, err
 }
 
+const findDirectMessageAttachmentHolders = `-- name: FindDirectMessageAttachmentHolders :many
+SELECT id, attachment_upload_id::uuid AS upload_id FROM dm_messages
+WHERE attachment_upload_id = ANY($1::uuid[])
+`
+
+type FindDirectMessageAttachmentHoldersRow struct {
+	ID       pgtype.UUID
+	UploadID pgtype.UUID
+}
+
+// Eki tutan birebir mesajlar (issue #205, ADR-0031); kanaldaki gibi.
+func (q *Queries) FindDirectMessageAttachmentHolders(ctx context.Context, uploadIds []pgtype.UUID) ([]FindDirectMessageAttachmentHoldersRow, error) {
+	rows, err := q.db.Query(ctx, findDirectMessageAttachmentHolders, uploadIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FindDirectMessageAttachmentHoldersRow{}
+	for rows.Next() {
+		var i FindDirectMessageAttachmentHoldersRow
+		if err := rows.Scan(&i.ID, &i.UploadID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getConversationByPair = `-- name: GetConversationByPair :one
 
 

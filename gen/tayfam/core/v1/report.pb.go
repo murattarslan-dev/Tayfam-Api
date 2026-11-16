@@ -46,21 +46,25 @@ const (
 	// evidence_upload_id or both are required (issue #205). Goes to the platform only, at once; never to a tayfa's
 	// queue.
 	ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE ReportTargetType = 9
+	// target_id is an event album photo (issue #206, ADR-0028); the subject
+	// is its uploader.
+	ReportTargetType_REPORT_TARGET_TYPE_EVENT_PHOTO ReportTargetType = 10
 )
 
 // Enum value maps for ReportTargetType.
 var (
 	ReportTargetType_name = map[int32]string{
-		0: "REPORT_TARGET_TYPE_UNSPECIFIED",
-		1: "REPORT_TARGET_TYPE_USER",
-		2: "REPORT_TARGET_TYPE_TAYFA",
-		3: "REPORT_TARGET_TYPE_ANNOUNCEMENT",
-		4: "REPORT_TARGET_TYPE_EVENT",
-		5: "REPORT_TARGET_TYPE_QUESTION",
-		6: "REPORT_TARGET_TYPE_ANSWER",
-		7: "REPORT_TARGET_TYPE_POLL",
-		8: "REPORT_TARGET_TYPE_FISHING_CATCH",
-		9: "REPORT_TARGET_TYPE_DM_MESSAGE",
+		0:  "REPORT_TARGET_TYPE_UNSPECIFIED",
+		1:  "REPORT_TARGET_TYPE_USER",
+		2:  "REPORT_TARGET_TYPE_TAYFA",
+		3:  "REPORT_TARGET_TYPE_ANNOUNCEMENT",
+		4:  "REPORT_TARGET_TYPE_EVENT",
+		5:  "REPORT_TARGET_TYPE_QUESTION",
+		6:  "REPORT_TARGET_TYPE_ANSWER",
+		7:  "REPORT_TARGET_TYPE_POLL",
+		8:  "REPORT_TARGET_TYPE_FISHING_CATCH",
+		9:  "REPORT_TARGET_TYPE_DM_MESSAGE",
+		10: "REPORT_TARGET_TYPE_EVENT_PHOTO",
 	}
 	ReportTargetType_value = map[string]int32{
 		"REPORT_TARGET_TYPE_UNSPECIFIED":   0,
@@ -73,6 +77,7 @@ var (
 		"REPORT_TARGET_TYPE_POLL":          7,
 		"REPORT_TARGET_TYPE_FISHING_CATCH": 8,
 		"REPORT_TARGET_TYPE_DM_MESSAGE":    9,
+		"REPORT_TARGET_TYPE_EVENT_PHOTO":   10,
 	}
 )
 
@@ -1328,7 +1333,7 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"resolution\x18\x03 \x01(\x0e2 .tayfam.core.v1.ReportResolutionR\n" +
 	"resolution\"Q\n" +
 	"\x15ResolveReportResponse\x128\n" +
-	"\x06report\x18\x01 \x01(\v2 .tayfam.core.v1.ModerationReportR\x06report*\xda\x02\n" +
+	"\x06report\x18\x01 \x01(\v2 .tayfam.core.v1.ModerationReportR\x06report*\xfe\x02\n" +
 	"\x10ReportTargetType\x12\"\n" +
 	"\x1eREPORT_TARGET_TYPE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17REPORT_TARGET_TYPE_USER\x10\x01\x12\x1c\n" +
@@ -1339,7 +1344,9 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"\x19REPORT_TARGET_TYPE_ANSWER\x10\x06\x12\x1b\n" +
 	"\x17REPORT_TARGET_TYPE_POLL\x10\a\x12$\n" +
 	" REPORT_TARGET_TYPE_FISHING_CATCH\x10\b\x12!\n" +
-	"\x1dREPORT_TARGET_TYPE_DM_MESSAGE\x10\t*\x8d\x04\n" +
+	"\x1dREPORT_TARGET_TYPE_DM_MESSAGE\x10\t\x12\"\n" +
+	"\x1eREPORT_TARGET_TYPE_EVENT_PHOTO\x10\n" +
+	"*\x8d\x04\n" +
 	"\fReportReason\x12\x1d\n" +
 	"\x19REPORT_REASON_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18REPORT_REASON_HARASSMENT\x10\x01\x12\x1d\n" +

@@ -271,3 +271,8 @@ WITH gone AS (
 )
 DELETE FROM notification_preferences
 WHERE scope_type = 'dm_conversation' AND scope_id IN (SELECT id FROM gone);
+
+-- Eki tutan birebir mesajlar (issue #205, ADR-0031); kanaldaki gibi.
+-- name: FindDirectMessageAttachmentHolders :many
+SELECT id, attachment_upload_id::uuid AS upload_id FROM dm_messages
+WHERE attachment_upload_id = ANY(@upload_ids::uuid[]);

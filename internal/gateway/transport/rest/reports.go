@@ -49,7 +49,8 @@ var (
 		"announcement": corev1.ReportTargetType_REPORT_TARGET_TYPE_ANNOUNCEMENT, "event": corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT,
 		"question": corev1.ReportTargetType_REPORT_TARGET_TYPE_QUESTION, "answer": corev1.ReportTargetType_REPORT_TARGET_TYPE_ANSWER,
 		"poll": corev1.ReportTargetType_REPORT_TARGET_TYPE_POLL, "fishing_catch": corev1.ReportTargetType_REPORT_TARGET_TYPE_FISHING_CATCH,
-		"dm_message": corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE,
+		"event_photo": corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT_PHOTO,
+		"dm_message":  corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE,
 	})
 	reportReasons = newEnum(map[string]corev1.ReportReason{
 		"harassment":         corev1.ReportReason_REPORT_REASON_HARASSMENT,

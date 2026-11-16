@@ -89,17 +89,17 @@ type Config struct {
 	Pool    *pgxpool.Pool
 	Log     *slog.Logger
 	Checker Checker
-	// Evidence signs the link of a DM report's evidence photo (issue
-	// #205); optional (nil: no link).
-	Evidence EvidenceSigner
-	Now      func() time.Time // optional, for tests
+	// Media signs the panel's links to a reported album photo (ADR-0028
+	// §5) and to a DM report's evidence photo (ADR-0031); nil means no
+	// links.
+	Media ReportedMedia
+	Now   func() time.Time // optional, for tests
 }
 
-// EvidenceSigner returns a short GET link to the evidence photo attached
-// to report, or "" when there is none or object storage is off
-// (media.Service.ReportEvidenceURL).
-type EvidenceSigner interface {
-	ReportEvidenceURL(ctx context.Context, report, upload id.ID) (string, error)
+// ReportedMedia is media.Service's panel links.
+type ReportedMedia interface {
+	ReportedPhotoURL(ctx context.Context, upload id.ID) (link string, expires time.Time, ok bool, err error)
+	ReportEvidenceURL(ctx context.Context, report, upload id.ID) (link string, expires time.Time, ok bool, err error)
 }
 
 // Service implements the panel's core methods.

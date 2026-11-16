@@ -33,12 +33,15 @@ const (
 	UploadPurpose_UPLOAD_PURPOSE_CATCH_PHOTO UploadPurpose = 2
 	// A tayfa or event cover.
 	UploadPurpose_UPLOAD_PURPOSE_COVER UploadPurpose = 3
-	// A photo in a channel message (issue #205).
-	UploadPurpose_UPLOAD_PURPOSE_CHAT_PHOTO UploadPurpose = 4
+	// An event album photo (issue #206, ADR-0028). Attached with
+	// EventService.AddEventPhoto; never a cover.
+	UploadPurpose_UPLOAD_PURPOSE_EVENT_PHOTO UploadPurpose = 4
+	// A photo in a channel message (issue #205, ADR-0031).
+	UploadPurpose_UPLOAD_PURPOSE_CHAT_PHOTO UploadPurpose = 5
 	// An end-to-end encrypted direct message attachment: an opaque BLOB.
-	UploadPurpose_UPLOAD_PURPOSE_DM_ATTACHMENT UploadPurpose = 5
+	UploadPurpose_UPLOAD_PURPOSE_DM_ATTACHMENT UploadPurpose = 6
 	// A photo the reporter of a direct message shares from their device.
-	UploadPurpose_UPLOAD_PURPOSE_REPORT_EVIDENCE UploadPurpose = 6
+	UploadPurpose_UPLOAD_PURPOSE_REPORT_EVIDENCE UploadPurpose = 7
 )
 
 // Enum value maps for UploadPurpose.
@@ -48,18 +51,20 @@ var (
 		1: "UPLOAD_PURPOSE_AVATAR",
 		2: "UPLOAD_PURPOSE_CATCH_PHOTO",
 		3: "UPLOAD_PURPOSE_COVER",
-		4: "UPLOAD_PURPOSE_CHAT_PHOTO",
-		5: "UPLOAD_PURPOSE_DM_ATTACHMENT",
-		6: "UPLOAD_PURPOSE_REPORT_EVIDENCE",
+		4: "UPLOAD_PURPOSE_EVENT_PHOTO",
+		5: "UPLOAD_PURPOSE_CHAT_PHOTO",
+		6: "UPLOAD_PURPOSE_DM_ATTACHMENT",
+		7: "UPLOAD_PURPOSE_REPORT_EVIDENCE",
 	}
 	UploadPurpose_value = map[string]int32{
 		"UPLOAD_PURPOSE_UNSPECIFIED":     0,
 		"UPLOAD_PURPOSE_AVATAR":          1,
 		"UPLOAD_PURPOSE_CATCH_PHOTO":     2,
 		"UPLOAD_PURPOSE_COVER":           3,
-		"UPLOAD_PURPOSE_CHAT_PHOTO":      4,
-		"UPLOAD_PURPOSE_DM_ATTACHMENT":   5,
-		"UPLOAD_PURPOSE_REPORT_EVIDENCE": 6,
+		"UPLOAD_PURPOSE_EVENT_PHOTO":     4,
+		"UPLOAD_PURPOSE_CHAT_PHOTO":      5,
+		"UPLOAD_PURPOSE_DM_ATTACHMENT":   6,
+		"UPLOAD_PURPOSE_REPORT_EVIDENCE": 7,
 	}
 )
 
@@ -1812,15 +1817,16 @@ const file_tayfam_core_v1_media_proto_rawDesc = "" +
 	"\x1cGetExportDownloadUrlResponse\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12;\n" +
 	"\vexpire_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTime*\xe9\x01\n" +
+	"expireTime*\x89\x02\n" +
 	"\rUploadPurpose\x12\x1e\n" +
 	"\x1aUPLOAD_PURPOSE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15UPLOAD_PURPOSE_AVATAR\x10\x01\x12\x1e\n" +
 	"\x1aUPLOAD_PURPOSE_CATCH_PHOTO\x10\x02\x12\x18\n" +
-	"\x14UPLOAD_PURPOSE_COVER\x10\x03\x12\x1d\n" +
-	"\x19UPLOAD_PURPOSE_CHAT_PHOTO\x10\x04\x12 \n" +
-	"\x1cUPLOAD_PURPOSE_DM_ATTACHMENT\x10\x05\x12\"\n" +
-	"\x1eUPLOAD_PURPOSE_REPORT_EVIDENCE\x10\x06*}\n" +
+	"\x14UPLOAD_PURPOSE_COVER\x10\x03\x12\x1e\n" +
+	"\x1aUPLOAD_PURPOSE_EVENT_PHOTO\x10\x04\x12\x1d\n" +
+	"\x19UPLOAD_PURPOSE_CHAT_PHOTO\x10\x05\x12 \n" +
+	"\x1cUPLOAD_PURPOSE_DM_ATTACHMENT\x10\x06\x12\"\n" +
+	"\x1eUPLOAD_PURPOSE_REPORT_EVIDENCE\x10\a*}\n" +
 	"\fUploadStatus\x12\x1d\n" +
 	"\x19UPLOAD_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15UPLOAD_STATUS_PENDING\x10\x01\x12\x17\n" +

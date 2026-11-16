@@ -38,6 +38,9 @@ const (
 	EventService_AddFishingCatch_FullMethodName     = "/tayfam.core.v1.EventService/AddFishingCatch"
 	EventService_ListFishingCatches_FullMethodName  = "/tayfam.core.v1.EventService/ListFishingCatches"
 	EventService_RemoveFishingCatch_FullMethodName  = "/tayfam.core.v1.EventService/RemoveFishingCatch"
+	EventService_AddEventPhoto_FullMethodName       = "/tayfam.core.v1.EventService/AddEventPhoto"
+	EventService_ListEventPhotos_FullMethodName     = "/tayfam.core.v1.EventService/ListEventPhotos"
+	EventService_RemoveEventPhoto_FullMethodName    = "/tayfam.core.v1.EventService/RemoveEventPhoto"
 	EventService_GetEventSeries_FullMethodName      = "/tayfam.core.v1.EventService/GetEventSeries"
 	EventService_EndEventSeries_FullMethodName      = "/tayfam.core.v1.EventService/EndEventSeries"
 	EventService_ExportEvent_FullMethodName         = "/tayfam.core.v1.EventService/ExportEvent"
@@ -217,6 +220,31 @@ type EventServiceClient interface {
 	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
 	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
 	RemoveFishingCatch(ctx context.Context, in *RemoveFishingCatchRequest, opts ...grpc.CallOption) (*RemoveFishingCatchResponse, error)
+	// AddEventPhoto adds the caller's own READY EVENT_PHOTO upload, opened
+	// for this tayfa, to the event's album (issue #206, ADR-0028). The
+	// caller's attendance must be verified; photos are accepted from the
+	// start until seven days after the end (ERROR_REASON_ALBUM_CLOSED
+	// otherwise), not on a cancelled event. At most 30 photos per person and
+	// 500 per album (deleted ones do not count). A repeat with the same
+	// client_request_id returns the first photo.
+	//
+	// Errors: common, ERROR_REASON_EVENT_CANCELLED, ERROR_REASON_ALBUM_CLOSED,
+	// ERROR_REASON_NOT_ATTENDED, ERROR_REASON_EVENT_LIMIT,
+	// ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,
+	// ERROR_REASON_UPLOAD_IN_USE, ERROR_REASON_VALIDATION.
+	AddEventPhoto(ctx context.Context, in *AddEventPhotoRequest, opts ...grpc.CallOption) (*AddEventPhotoResponse, error)
+	// ListEventPhotos lists the event's album, oldest first. Every active
+	// member may read it, also while muted and on a cancelled event. The
+	// photos carry upload IDs only; links come from MediaService.GetMediaUrls.
+	//
+	// Errors: common.
+	ListEventPhotos(ctx context.Context, in *ListEventPhotosRequest, opts ...grpc.CallOption) (*ListEventPhotosResponse, error)
+	// RemoveEventPhoto removes an album photo: one's own (also while muted),
+	// any photo of one's own event for the organizer, any photo for
+	// moderators and admins. Works on cancelled and ended events too.
+	//
+	// Errors: common, ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+	RemoveEventPhoto(ctx context.Context, in *RemoveEventPhotoRequest, opts ...grpc.CallOption) (*RemoveEventPhotoResponse, error)
 	// GetEventSeries returns a series' rule (issue #51). Every active member
 	// may read it.
 	//
@@ -447,6 +475,36 @@ func (c *eventServiceClient) RemoveFishingCatch(ctx context.Context, in *RemoveF
 	return out, nil
 }
 
+func (c *eventServiceClient) AddEventPhoto(ctx context.Context, in *AddEventPhotoRequest, opts ...grpc.CallOption) (*AddEventPhotoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddEventPhotoResponse)
+	err := c.cc.Invoke(ctx, EventService_AddEventPhoto_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *eventServiceClient) ListEventPhotos(ctx context.Context, in *ListEventPhotosRequest, opts ...grpc.CallOption) (*ListEventPhotosResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListEventPhotosResponse)
+	err := c.cc.Invoke(ctx, EventService_ListEventPhotos_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *eventServiceClient) RemoveEventPhoto(ctx context.Context, in *RemoveEventPhotoRequest, opts ...grpc.CallOption) (*RemoveEventPhotoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveEventPhotoResponse)
+	err := c.cc.Invoke(ctx, EventService_RemoveEventPhoto_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *eventServiceClient) GetEventSeries(ctx context.Context, in *GetEventSeriesRequest, opts ...grpc.CallOption) (*GetEventSeriesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetEventSeriesResponse)
@@ -651,6 +709,31 @@ type EventServiceServer interface {
 	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
 	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
 	RemoveFishingCatch(context.Context, *RemoveFishingCatchRequest) (*RemoveFishingCatchResponse, error)
+	// AddEventPhoto adds the caller's own READY EVENT_PHOTO upload, opened
+	// for this tayfa, to the event's album (issue #206, ADR-0028). The
+	// caller's attendance must be verified; photos are accepted from the
+	// start until seven days after the end (ERROR_REASON_ALBUM_CLOSED
+	// otherwise), not on a cancelled event. At most 30 photos per person and
+	// 500 per album (deleted ones do not count). A repeat with the same
+	// client_request_id returns the first photo.
+	//
+	// Errors: common, ERROR_REASON_EVENT_CANCELLED, ERROR_REASON_ALBUM_CLOSED,
+	// ERROR_REASON_NOT_ATTENDED, ERROR_REASON_EVENT_LIMIT,
+	// ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,
+	// ERROR_REASON_UPLOAD_IN_USE, ERROR_REASON_VALIDATION.
+	AddEventPhoto(context.Context, *AddEventPhotoRequest) (*AddEventPhotoResponse, error)
+	// ListEventPhotos lists the event's album, oldest first. Every active
+	// member may read it, also while muted and on a cancelled event. The
+	// photos carry upload IDs only; links come from MediaService.GetMediaUrls.
+	//
+	// Errors: common.
+	ListEventPhotos(context.Context, *ListEventPhotosRequest) (*ListEventPhotosResponse, error)
+	// RemoveEventPhoto removes an album photo: one's own (also while muted),
+	// any photo of one's own event for the organizer, any photo for
+	// moderators and admins. Works on cancelled and ended events too.
+	//
+	// Errors: common, ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+	RemoveEventPhoto(context.Context, *RemoveEventPhotoRequest) (*RemoveEventPhotoResponse, error)
 	// GetEventSeries returns a series' rule (issue #51). Every active member
 	// may read it.
 	//
@@ -747,6 +830,15 @@ func (UnimplementedEventServiceServer) ListFishingCatches(context.Context, *List
 }
 func (UnimplementedEventServiceServer) RemoveFishingCatch(context.Context, *RemoveFishingCatchRequest) (*RemoveFishingCatchResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RemoveFishingCatch not implemented")
+}
+func (UnimplementedEventServiceServer) AddEventPhoto(context.Context, *AddEventPhotoRequest) (*AddEventPhotoResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddEventPhoto not implemented")
+}
+func (UnimplementedEventServiceServer) ListEventPhotos(context.Context, *ListEventPhotosRequest) (*ListEventPhotosResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListEventPhotos not implemented")
+}
+func (UnimplementedEventServiceServer) RemoveEventPhoto(context.Context, *RemoveEventPhotoRequest) (*RemoveEventPhotoResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveEventPhoto not implemented")
 }
 func (UnimplementedEventServiceServer) GetEventSeries(context.Context, *GetEventSeriesRequest) (*GetEventSeriesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetEventSeries not implemented")
@@ -1120,6 +1212,60 @@ func _EventService_RemoveFishingCatch_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _EventService_AddEventPhoto_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddEventPhotoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).AddEventPhoto(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_AddEventPhoto_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).AddEventPhoto(ctx, req.(*AddEventPhotoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EventService_ListEventPhotos_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListEventPhotosRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).ListEventPhotos(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_ListEventPhotos_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).ListEventPhotos(ctx, req.(*ListEventPhotosRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EventService_RemoveEventPhoto_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveEventPhotoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).RemoveEventPhoto(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_RemoveEventPhoto_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).RemoveEventPhoto(ctx, req.(*RemoveEventPhotoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _EventService_GetEventSeries_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetEventSeriesRequest)
 	if err := dec(in); err != nil {
@@ -1256,6 +1402,18 @@ var EventService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveFishingCatch",
 			Handler:    _EventService_RemoveFishingCatch_Handler,
+		},
+		{
+			MethodName: "AddEventPhoto",
+			Handler:    _EventService_AddEventPhoto_Handler,
+		},
+		{
+			MethodName: "ListEventPhotos",
+			Handler:    _EventService_ListEventPhotos_Handler,
+		},
+		{
+			MethodName: "RemoveEventPhoto",
+			Handler:    _EventService_RemoveEventPhoto_Handler,
 		},
 		{
 			MethodName: "GetEventSeries",

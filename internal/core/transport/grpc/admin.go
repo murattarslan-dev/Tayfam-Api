@@ -287,6 +287,24 @@ func (s *AdminServer) ListPlatformReports(ctx context.Context, req *corev1.ListP
 	return out, nil
 }
 
+// GetReportEvidencePhotoUrl implements corev1.AdminServiceServer (issue
+// #205): the link is signed only here, on request, and audited.
+func (s *AdminServer) GetReportEvidencePhotoUrl(ctx context.Context, req *corev1.GetReportEvidencePhotoUrlRequest) (*corev1.GetReportEvidencePhotoUrlResponse, error) {
+	c, err := s.claims(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rid, err := parseID(req.GetReportId(), "report_id")
+	if err != nil {
+		return nil, err
+	}
+	link, exp, err := s.app.ReportEvidencePhotoURL(ctx, c, rid)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.GetReportEvidencePhotoUrlResponse{Url: link, ExpireTime: timestamppb.New(exp)}, nil
+}
+
 // GetReportedItem implements corev1.AdminServiceServer.
 func (s *AdminServer) GetReportedItem(ctx context.Context, req *corev1.GetReportedItemRequest) (*corev1.GetReportedItemResponse, error) {
 	c, err := s.claims(ctx)
@@ -307,7 +325,8 @@ func (s *AdminServer) GetReportedItem(ctx context.Context, req *corev1.GetReport
 			TargetType: targetToProto(item.TargetType), TargetId: item.Target.String(), AuthorId: idString(item.Author),
 			Title: item.Title, Body: item.Body, Options: item.Options,
 			CreateTime: tsOrNil(item.CreatedAt), DeleteTime: tsOrNil(item.DeletedAt),
-			EvidencePhotoUrl: item.EvidencePhotoURL,
+			MediaUrl: item.MediaURL, MediaExpireTime: tsOrNil(item.MediaExpires),
+			HasEvidencePhoto: item.HasEvidencePhoto,
 		}
 	}
 	return out, nil

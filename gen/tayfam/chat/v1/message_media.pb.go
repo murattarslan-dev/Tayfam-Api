@@ -222,6 +222,198 @@ func (x *FilterVisibleMessageMediaResponse) GetVisibleUploadIds() []string {
 	return nil
 }
 
+type MediaHolderQuery struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UploadId      string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	Kind          MessageMediaKind       `protobuf:"varint,2,opt,name=kind,proto3,enum=tayfam.chat.v1.MessageMediaKind" json:"kind,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MediaHolderQuery) Reset() {
+	*x = MediaHolderQuery{}
+	mi := &file_tayfam_chat_v1_message_media_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MediaHolderQuery) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MediaHolderQuery) ProtoMessage() {}
+
+func (x *MediaHolderQuery) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_chat_v1_message_media_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MediaHolderQuery.ProtoReflect.Descriptor instead.
+func (*MediaHolderQuery) Descriptor() ([]byte, []int) {
+	return file_tayfam_chat_v1_message_media_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *MediaHolderQuery) GetUploadId() string {
+	if x != nil {
+		return x.UploadId
+	}
+	return ""
+}
+
+func (x *MediaHolderQuery) GetKind() MessageMediaKind {
+	if x != nil {
+		return x.Kind
+	}
+	return MessageMediaKind_MESSAGE_MEDIA_KIND_UNSPECIFIED
+}
+
+type FindMessageMediaHoldersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*MediaHolderQuery    `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FindMessageMediaHoldersRequest) Reset() {
+	*x = FindMessageMediaHoldersRequest{}
+	mi := &file_tayfam_chat_v1_message_media_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FindMessageMediaHoldersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FindMessageMediaHoldersRequest) ProtoMessage() {}
+
+func (x *FindMessageMediaHoldersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_chat_v1_message_media_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FindMessageMediaHoldersRequest.ProtoReflect.Descriptor instead.
+func (*FindMessageMediaHoldersRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_chat_v1_message_media_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *FindMessageMediaHoldersRequest) GetItems() []*MediaHolderQuery {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+type MediaHolder struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UploadId      string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MediaHolder) Reset() {
+	*x = MediaHolder{}
+	mi := &file_tayfam_chat_v1_message_media_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MediaHolder) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MediaHolder) ProtoMessage() {}
+
+func (x *MediaHolder) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_chat_v1_message_media_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MediaHolder.ProtoReflect.Descriptor instead.
+func (*MediaHolder) Descriptor() ([]byte, []int) {
+	return file_tayfam_chat_v1_message_media_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *MediaHolder) GetUploadId() string {
+	if x != nil {
+		return x.UploadId
+	}
+	return ""
+}
+
+func (x *MediaHolder) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+type FindMessageMediaHoldersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Holders       []*MediaHolder         `protobuf:"bytes,1,rep,name=holders,proto3" json:"holders,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FindMessageMediaHoldersResponse) Reset() {
+	*x = FindMessageMediaHoldersResponse{}
+	mi := &file_tayfam_chat_v1_message_media_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FindMessageMediaHoldersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FindMessageMediaHoldersResponse) ProtoMessage() {}
+
+func (x *FindMessageMediaHoldersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_chat_v1_message_media_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FindMessageMediaHoldersResponse.ProtoReflect.Descriptor instead.
+func (*FindMessageMediaHoldersResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_chat_v1_message_media_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *FindMessageMediaHoldersResponse) GetHolders() []*MediaHolder {
+	if x != nil {
+		return x.Holders
+	}
+	return nil
+}
+
 var File_tayfam_chat_v1_message_media_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_message_media_proto_rawDesc = "" +
@@ -235,13 +427,26 @@ const file_tayfam_chat_v1_message_media_proto_rawDesc = "" +
 	" FilterVisibleMessageMediaRequest\x126\n" +
 	"\x05items\x18\x01 \x03(\v2 .tayfam.chat.v1.MessageMediaItemR\x05items\"Q\n" +
 	"!FilterVisibleMessageMediaResponse\x12,\n" +
-	"\x12visible_upload_ids\x18\x01 \x03(\tR\x10visibleUploadIds*u\n" +
+	"\x12visible_upload_ids\x18\x01 \x03(\tR\x10visibleUploadIds\"e\n" +
+	"\x10MediaHolderQuery\x12\x1b\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\x124\n" +
+	"\x04kind\x18\x02 \x01(\x0e2 .tayfam.chat.v1.MessageMediaKindR\x04kind\"X\n" +
+	"\x1eFindMessageMediaHoldersRequest\x126\n" +
+	"\x05items\x18\x01 \x03(\v2 .tayfam.chat.v1.MediaHolderQueryR\x05items\"I\n" +
+	"\vMediaHolder\x12\x1b\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x02 \x01(\tR\tmessageId\"X\n" +
+	"\x1fFindMessageMediaHoldersResponse\x125\n" +
+	"\aholders\x18\x01 \x03(\v2\x1b.tayfam.chat.v1.MediaHolderR\aholders*u\n" +
 	"\x10MessageMediaKind\x12\"\n" +
 	"\x1eMESSAGE_MEDIA_KIND_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aMESSAGE_MEDIA_KIND_CHANNEL\x10\x01\x12\x1d\n" +
 	"\x19MESSAGE_MEDIA_KIND_DIRECT\x10\x022\x98\x01\n" +
 	"\x13MessageMediaService\x12\x80\x01\n" +
-	"\x19FilterVisibleMessageMedia\x120.tayfam.chat.v1.FilterVisibleMessageMediaRequest\x1a1.tayfam.chat.v1.FilterVisibleMessageMediaResponseB\xc3\x01\n" +
+	"\x19FilterVisibleMessageMedia\x120.tayfam.chat.v1.FilterVisibleMessageMediaRequest\x1a1.tayfam.chat.v1.FilterVisibleMessageMediaResponse2\x90\x01\n" +
+	"\x12MediaHolderService\x12z\n" +
+	"\x17FindMessageMediaHolders\x12..tayfam.chat.v1.FindMessageMediaHoldersRequest\x1a/.tayfam.chat.v1.FindMessageMediaHoldersResponseB\xc3\x01\n" +
 	"\x12com.tayfam.chat.v1B\x11MessageMediaProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1;chatv1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Chat.V1\xca\x02\x0eTayfam\\Chat\\V1\xe2\x02\x1aTayfam\\Chat\\V1\\GPBMetadata\xea\x02\x10Tayfam::Chat::V1b\x06proto3"
 
 var (
@@ -257,23 +462,32 @@ func file_tayfam_chat_v1_message_media_proto_rawDescGZIP() []byte {
 }
 
 var file_tayfam_chat_v1_message_media_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_tayfam_chat_v1_message_media_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_tayfam_chat_v1_message_media_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_tayfam_chat_v1_message_media_proto_goTypes = []any{
 	(MessageMediaKind)(0),                     // 0: tayfam.chat.v1.MessageMediaKind
 	(*MessageMediaItem)(nil),                  // 1: tayfam.chat.v1.MessageMediaItem
 	(*FilterVisibleMessageMediaRequest)(nil),  // 2: tayfam.chat.v1.FilterVisibleMessageMediaRequest
 	(*FilterVisibleMessageMediaResponse)(nil), // 3: tayfam.chat.v1.FilterVisibleMessageMediaResponse
+	(*MediaHolderQuery)(nil),                  // 4: tayfam.chat.v1.MediaHolderQuery
+	(*FindMessageMediaHoldersRequest)(nil),    // 5: tayfam.chat.v1.FindMessageMediaHoldersRequest
+	(*MediaHolder)(nil),                       // 6: tayfam.chat.v1.MediaHolder
+	(*FindMessageMediaHoldersResponse)(nil),   // 7: tayfam.chat.v1.FindMessageMediaHoldersResponse
 }
 var file_tayfam_chat_v1_message_media_proto_depIdxs = []int32{
 	0, // 0: tayfam.chat.v1.MessageMediaItem.kind:type_name -> tayfam.chat.v1.MessageMediaKind
 	1, // 1: tayfam.chat.v1.FilterVisibleMessageMediaRequest.items:type_name -> tayfam.chat.v1.MessageMediaItem
-	2, // 2: tayfam.chat.v1.MessageMediaService.FilterVisibleMessageMedia:input_type -> tayfam.chat.v1.FilterVisibleMessageMediaRequest
-	3, // 3: tayfam.chat.v1.MessageMediaService.FilterVisibleMessageMedia:output_type -> tayfam.chat.v1.FilterVisibleMessageMediaResponse
-	3, // [3:4] is the sub-list for method output_type
-	2, // [2:3] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	0, // 2: tayfam.chat.v1.MediaHolderQuery.kind:type_name -> tayfam.chat.v1.MessageMediaKind
+	4, // 3: tayfam.chat.v1.FindMessageMediaHoldersRequest.items:type_name -> tayfam.chat.v1.MediaHolderQuery
+	6, // 4: tayfam.chat.v1.FindMessageMediaHoldersResponse.holders:type_name -> tayfam.chat.v1.MediaHolder
+	2, // 5: tayfam.chat.v1.MessageMediaService.FilterVisibleMessageMedia:input_type -> tayfam.chat.v1.FilterVisibleMessageMediaRequest
+	5, // 6: tayfam.chat.v1.MediaHolderService.FindMessageMediaHolders:input_type -> tayfam.chat.v1.FindMessageMediaHoldersRequest
+	3, // 7: tayfam.chat.v1.MessageMediaService.FilterVisibleMessageMedia:output_type -> tayfam.chat.v1.FilterVisibleMessageMediaResponse
+	7, // 8: tayfam.chat.v1.MediaHolderService.FindMessageMediaHolders:output_type -> tayfam.chat.v1.FindMessageMediaHoldersResponse
+	7, // [7:9] is the sub-list for method output_type
+	5, // [5:7] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_chat_v1_message_media_proto_init() }
@@ -287,9 +501,9 @@ func file_tayfam_chat_v1_message_media_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_chat_v1_message_media_proto_rawDesc), len(file_tayfam_chat_v1_message_media_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   3,
+			NumMessages:   7,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   2,
 		},
 		GoTypes:           file_tayfam_chat_v1_message_media_proto_goTypes,
 		DependencyIndexes: file_tayfam_chat_v1_message_media_proto_depIdxs,

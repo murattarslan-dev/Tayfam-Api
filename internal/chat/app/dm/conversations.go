@@ -494,3 +494,22 @@ func (s *Service) VisibleAttachments(ctx context.Context, caller id.ID, items []
 	}
 	return out, nil
 }
+
+// AttachmentHolders returns, for each of uploads some direct message
+// holds, that message's ID (core's reconciliation, MediaHolderService;
+// ADR-0031). Only core's service token reaches it.
+func (s *Service) AttachmentHolders(ctx context.Context, uploads []id.ID) (map[id.ID]id.ID, error) {
+	pg := make([]pgtype.UUID, len(uploads))
+	for i, u := range uploads {
+		pg[i] = u.PG()
+	}
+	rows, err := store.New(s.cfg.Pool).FindDirectMessageAttachmentHolders(ctx, pg)
+	if err != nil {
+		return nil, fmt.Errorf("ek sahipleri: %w", err)
+	}
+	out := make(map[id.ID]id.ID, len(rows))
+	for _, r := range rows {
+		out[id.ID(r.UploadID.Bytes)] = id.ID(r.ID.Bytes)
+	}
+	return out, nil
+}

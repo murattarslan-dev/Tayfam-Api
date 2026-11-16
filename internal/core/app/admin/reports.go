@@ -67,9 +67,15 @@ type Item struct {
 	Options    []string
 	CreatedAt  time.Time
 	DeletedAt  time.Time
-	// EvidencePhotoURL is a DM report's evidence photo (issue #205): a
-	// 5-minute bearer link, never logged; empty when there is none.
-	EvidencePhotoURL string
+	// MediaURL is a short-lived GET link to a reported album photo (only
+	// for event_photo, ADR-0028 §5); MediaExpires is when it stops working.
+	MediaURL     string
+	MediaExpires time.Time
+	// upload is the reported photo's file.
+	upload id.ID
+	// HasEvidencePhoto: a DM report carries an evidence photo (ADR-0031);
+	// its link is signed only on request (ReportEvidencePhotoURL).
+	HasEvidencePhoto bool
 }
 
 func reportOf(r store.AdminListPlatformReportsRow) Report {
@@ -140,19 +146,67 @@ func (s *Service) GetReportedItem(ctx context.Context, c auth.AdminClaims, repor
 		if item, err = reportedItem(ctx, q, rep); err != nil {
 			return err
 		}
-		return audit(ctx, q, cl, rep.Tayfa, "report.view_item", "report", rep.ID, viewReason, nil)
+		var extra map[string]string
+		if item != nil && item.upload != (id.ID{}) && s.cfg.Media != nil {
+			link, exp, ok, err := s.cfg.Media.ReportedPhotoURL(ctx, item.upload)
+			if err != nil {
+				return err
+			}
+			if ok {
+				// Every link to the photo is in the platform audit log.
+				item.MediaURL, item.MediaExpires = link, exp
+				extra = map[string]string{"media_link": "issued", "upload_id": item.upload.String()}
+			}
+		}
+		return audit(ctx, q, cl, rep.Tayfa, "report.view_item", "report", rep.ID, viewReason, extra)
 	})
 	if err != nil {
 		return Report{}, nil, err
 	}
-	if item != nil && rep.evidenceUpload != (id.ID{}) && s.cfg.Evidence != nil {
-		u, err := s.cfg.Evidence.ReportEvidenceURL(ctx, rep.ID, rep.evidenceUpload)
-		if err != nil {
-			return Report{}, nil, err
-		}
-		item.EvidencePhotoURL = u
-	}
 	return rep, item, nil
+}
+
+// evidenceReason is the audit reason of opening a DM report's evidence
+// photo.
+const evidenceReason = "Şikâyet kanıt fotoğrafının incelenmesi"
+
+// ReportEvidencePhotoURL signs a short link to a DM report's evidence
+// photo when the administrator opens it (ADR-0031) and records the opening
+// in the platform audit log (report.view_evidence_photo). A report without
+// a photo, or without object storage, is apperr.ErrReportNotFound.
+func (s *Service) ReportEvidencePhotoURL(ctx context.Context, c auth.AdminClaims, report id.ID) (string, time.Time, error) {
+	cl, err := s.caller(ctx, c)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	var (
+		link string
+		exp  time.Time
+	)
+	err = pgx.BeginFunc(ctx, s.cfg.Pool, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		rep, err := s.report(ctx, q, report)
+		if err != nil {
+			return err
+		}
+		if rep.evidenceUpload == (id.ID{}) || s.cfg.Media == nil {
+			return apperr.ErrReportNotFound
+		}
+		l, e, ok, err := s.cfg.Media.ReportEvidenceURL(ctx, rep.ID, rep.evidenceUpload)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return apperr.ErrReportNotFound
+		}
+		link, exp = l, e
+		return audit(ctx, q, cl, rep.Tayfa, "report.view_evidence_photo", "report", rep.ID, evidenceReason,
+			map[string]string{"upload_id": rep.evidenceUpload.String()})
+	})
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return link, exp, nil
 }
 
 // reportedItem reads the one reported thing. No other content of the
@@ -166,6 +220,7 @@ func reportedItem(ctx context.Context, q *store.Queries, r Report) (*Item, error
 		// The server cannot read direct messages (end-to-end encrypted);
 		// the evidence is the reporter's own copy (ADR-0005).
 		it.Author, it.Body, it.CreatedAt = r.Subject, r.evidenceText, r.CreatedAt
+		it.HasEvidencePhoto = r.evidenceUpload != (id.ID{})
 		return it, nil
 	case "user":
 		var name pgtype.Text
@@ -202,6 +257,11 @@ func reportedItem(ctx context.Context, q *store.Queries, r Report) (*Item, error
 		var x store.AdminGetCatchRow
 		x, err = q.AdminGetCatch(ctx, store.AdminGetCatchParams{ID: r.Target.PG(), TayfaID: tf})
 		it.Author, it.Title, it.CreatedAt, it.DeletedAt = idOf(x.UserID), x.Species, timeOf(x.CreatedAt), timeOf(x.DeletedAt)
+	case "event_photo":
+		var x store.AdminGetEventPhotoRow
+		x, err = q.AdminGetEventPhoto(ctx, store.AdminGetEventPhotoParams{ID: r.Target.PG(), TayfaID: tf})
+		it.Author, it.Title, it.CreatedAt, it.DeletedAt = idOf(x.UploaderID), x.Caption.String, timeOf(x.CreatedAt), timeOf(x.DeletedAt)
+		it.upload = idOf(x.UploadID)
 	default:
 		return nil, fmt.Errorf("bilinmeyen şikâyet hedefi %q", r.TargetType)
 	}
@@ -232,6 +292,8 @@ func removeContent(ctx context.Context, q *store.Queries, r Report, by id.ID, no
 		_, err = q.AdminDeletePoll(ctx, store.AdminDeletePollParams{ID: tid, TayfaID: tf, At: at, By: b})
 	case "fishing_catch":
 		_, err = q.AdminDeleteCatch(ctx, store.AdminDeleteCatchParams{ID: tid, TayfaID: tf, At: at, By: b})
+	case "event_photo":
+		_, err = q.AdminDeleteEventPhoto(ctx, store.AdminDeleteEventPhotoParams{ID: tid, TayfaID: tf, At: at, By: b})
 	default:
 		// Users, tayfas and direct messages are not content to remove.
 		return apperr.ErrDecisionNotApplicable

@@ -36,9 +36,8 @@ func (f *fakePhotos) AttachChannelPhoto(_ context.Context, upload, tayfa, messag
 	if f.owner[upload] != tayfa {
 		return apperr.ErrUploadNotFound
 	}
-	if m, ok := f.attached[upload]; ok && m != message {
-		return apperr.ErrUploadInUse
-	}
+	// core moves an attachment chat has not confirmed (ADR-0031); these
+	// tests never confirm, so a second message of the owner takes it.
 	f.attached[upload] = message
 	return nil
 }

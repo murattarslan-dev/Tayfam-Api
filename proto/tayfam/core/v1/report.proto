@@ -140,6 +140,9 @@ enum ReportTargetType {
   // evidence_upload_id or both are required (issue #205). Goes to the platform only, at once; never to a tayfa's
   // queue.
   REPORT_TARGET_TYPE_DM_MESSAGE = 9;
+  // target_id is an event album photo (issue #206, ADR-0028); the subject
+  // is its uploader.
+  REPORT_TARGET_TYPE_EVENT_PHOTO = 10;
 }
 
 // ReportReason follows the community rules (Notion "Topluluk Kuralları").

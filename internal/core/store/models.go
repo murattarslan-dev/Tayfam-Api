@@ -176,6 +176,18 @@ type EventHikeCheckin struct {
 	UpdatedAt          pgtype.Timestamptz
 }
 
+type EventPhoto struct {
+	ID              pgtype.UUID
+	EventID         pgtype.UUID
+	UploaderID      pgtype.UUID
+	UploadID        pgtype.UUID
+	Caption         pgtype.Text
+	ClientRequestID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	DeletedBy       pgtype.UUID
+}
+
 type EventRsvp struct {
 	EventID            pgtype.UUID
 	UserID             pgtype.UUID
@@ -418,28 +430,29 @@ type TayfaModule struct {
 }
 
 type Upload struct {
-	ID              pgtype.UUID
-	UserID          pgtype.UUID
-	TayfaID         pgtype.UUID
-	Purpose         string
-	Status          string
-	R2Key           string
-	PreviewType     pgtype.Text
-	PreviewBytes    pgtype.Int8
-	FullType        pgtype.Text
-	FullBytes       pgtype.Int8
-	Width           pgtype.Int4
-	Height          pgtype.Int4
-	RejectReason    pgtype.Text
-	AttachedType    pgtype.Text
-	AttachedID      pgtype.UUID
-	AttachedAt      pgtype.Timestamptz
-	ClientRequestID pgtype.UUID
-	CreatedAt       pgtype.Timestamptz
-	ReadyAt         pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	ExportBytes     pgtype.Int8
-	ExpiresAt       pgtype.Timestamptz
+	ID                pgtype.UUID
+	UserID            pgtype.UUID
+	TayfaID           pgtype.UUID
+	Purpose           string
+	Status            string
+	R2Key             string
+	PreviewType       pgtype.Text
+	PreviewBytes      pgtype.Int8
+	FullType          pgtype.Text
+	FullBytes         pgtype.Int8
+	Width             pgtype.Int4
+	Height            pgtype.Int4
+	RejectReason      pgtype.Text
+	AttachedType      pgtype.Text
+	AttachedID        pgtype.UUID
+	AttachedAt        pgtype.Timestamptz
+	ClientRequestID   pgtype.UUID
+	CreatedAt         pgtype.Timestamptz
+	ReadyAt           pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	ExportBytes       pgtype.Int8
+	ExpiresAt         pgtype.Timestamptz
+	AttachConfirmedAt pgtype.Timestamptz
 }
 
 type UserActivityRecord struct {

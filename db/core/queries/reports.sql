@@ -42,6 +42,13 @@ FROM fishing_catches c
 JOIN events e ON e.id = c.event_id
 WHERE e.tayfa_id = @tayfa_id AND c.id = @id;
 
+-- Albüm fotoğrafı (issue #206): etkinliği de görünür olmalı.
+-- name: GetReportTargetEventPhoto :one
+SELECT p.uploader_id AS author_id, (p.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible
+FROM event_photos p
+JOIN events e ON e.id = p.event_id
+WHERE e.tayfa_id = @tayfa_id AND p.id = @id;
+
 -- Şikâyet edenin son 24 saatteki şikâyetleri (günlük sınır).
 -- name: CountRecentReportsByReporter :one
 SELECT count(*)::integer

@@ -258,6 +258,51 @@ func (q *Queries) ExportConvoyVehicles(ctx context.Context, arg ExportConvoyVehi
 	return items, nil
 }
 
+const exportEventPhotos = `-- name: ExportEventPhotos :many
+SELECT p.id AS k, jsonb_build_object(
+  'id', p.id, 'event_id', p.event_id, 'tayfa_id', e.tayfa_id, 'upload_id', p.upload_id,
+  'caption', p.caption, 'created_at', p.created_at, 'deleted_at', p.deleted_at
+) AS data
+FROM event_photos p
+JOIN events e ON e.id = p.event_id
+WHERE p.uploader_id = $1 AND p.id > $2
+ORDER BY p.id
+LIMIT $3
+`
+
+type ExportEventPhotosParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportEventPhotosRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Albüm fotoğrafları (issue #206); dosyaların kendisi zip'e girmez
+// (ADR-0021 §5), uploads bölümü onları listeler.
+func (q *Queries) ExportEventPhotos(ctx context.Context, arg ExportEventPhotosParams) ([]ExportEventPhotosRow, error) {
+	rows, err := q.db.Query(ctx, exportEventPhotos, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportEventPhotosRow{}
+	for rows.Next() {
+		var i ExportEventPhotosRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportEventRSVPs = `-- name: ExportEventRSVPs :many
 SELECT r.event_id AS k, jsonb_build_object(
   'event_id', r.event_id, 'tayfa_id', e.tayfa_id, 'event_title', e.title, 'status', r.status,

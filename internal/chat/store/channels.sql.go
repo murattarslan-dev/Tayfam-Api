@@ -289,6 +289,39 @@ func (q *Queries) EraseMessage(ctx context.Context, arg EraseMessageParams) (int
 	return result.RowsAffected(), nil
 }
 
+const findChannelPhotoHolders = `-- name: FindChannelPhotoHolders :many
+SELECT id, photo_upload_id::uuid AS upload_id FROM channel_messages
+WHERE photo_upload_id = ANY($1::uuid[])
+`
+
+type FindChannelPhotoHoldersRow struct {
+	ID       pgtype.UUID
+	UploadID pgtype.UUID
+}
+
+// Dosyayı tutan kanal mesajları (issue #205, ADR-0031): gönderimden önce
+// dosyanın başka bir mesajda olup olmadığı ve core'un uzlaştırma işi.
+// Silinmiş ama dosyasını tutan (moderatörün gizlediği) mesaj da sayılır.
+func (q *Queries) FindChannelPhotoHolders(ctx context.Context, uploadIds []pgtype.UUID) ([]FindChannelPhotoHoldersRow, error) {
+	rows, err := q.db.Query(ctx, findChannelPhotoHolders, uploadIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FindChannelPhotoHoldersRow{}
+	for rows.Next() {
+		var i FindChannelPhotoHoldersRow
+		if err := rows.Scan(&i.ID, &i.UploadID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getChannel = `-- name: GetChannel :one
 SELECT id, tayfa_id, name, visibility, slow_mode_seconds, created_by, archived_at, created_at, updated_at, event_id, archive_at
 FROM channels

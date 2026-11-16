@@ -149,7 +149,8 @@ type MediaServiceClient interface {
 	// account is deleted. A tayfa cover is visible to ACTIVE members of the
 	// tayfa (TayfaView). An event cover or a catch photo is visible to ACTIVE
 	// members who may see the event (EventView, events module on, event not
-	// deleted; the catch not deleted). A CHAT_PHOTO or DM_ATTACHMENT is
+	// deleted; the catch not deleted). An event album photo likewise (the
+	// photo not deleted; ADR-0028). A CHAT_PHOTO or DM_ATTACHMENT is
 	// visible when chat says the caller may see the message it is attached
 	// to (channel audience; conversation parties). A REPORT_EVIDENCE is
 	// visible to its owner only. For DM_ATTACHMENT the link is full_url
@@ -169,11 +170,18 @@ type MediaServiceClient interface {
 	AttachAvatar(ctx context.Context, in *AttachAvatarRequest, opts ...grpc.CallOption) (*AttachAvatarResponse, error)
 	// AttachChannelPhoto attaches the caller's READY CHAT_PHOTO upload of
 	// tayfa_id to the channel message message_id (issue #205). chat calls it
-	// with the caller's own token while it writes the message; the gateway
-	// exposes it nowhere. Unknown, another user's, another purpose or another
-	// tayfa's upload is ERROR_REASON_UPLOAD_NOT_FOUND; not READY is
-	// ERROR_REASON_UPLOAD_NOT_READY; attached to another message is
-	// ERROR_REASON_UPLOAD_IN_USE. A repeat for the same message succeeds.
+	// with the caller's own token just before it writes the message, outside
+	// its transaction; the gateway exposes it nowhere. Unknown, another
+	// user's, another purpose or another tayfa's upload is
+	// ERROR_REASON_UPLOAD_NOT_FOUND; not READY is
+	// ERROR_REASON_UPLOAD_NOT_READY; attached to a message chat has
+	// confirmed is ERROR_REASON_UPLOAD_IN_USE. A repeat for the same message
+	// succeeds. An attachment chat has not confirmed yet (its message may
+	// never have been written) moves to the new message, so a failed send
+	// can be retried. core's reconciliation job confirms attachments with
+	// chat (MediaHolderService, chat's service token) after 10 minutes and
+	// undoes those no message holds; the file then expires like any
+	// unattached upload.
 	AttachChannelPhoto(ctx context.Context, in *AttachChannelPhotoRequest, opts ...grpc.CallOption) (*AttachChannelPhotoResponse, error)
 	// AttachDirectMessageAttachment attaches the caller's READY DM_ATTACHMENT
 	// upload to the direct message message_id, like AttachChannelPhoto.
@@ -436,7 +444,8 @@ type MediaServiceServer interface {
 	// account is deleted. A tayfa cover is visible to ACTIVE members of the
 	// tayfa (TayfaView). An event cover or a catch photo is visible to ACTIVE
 	// members who may see the event (EventView, events module on, event not
-	// deleted; the catch not deleted). A CHAT_PHOTO or DM_ATTACHMENT is
+	// deleted; the catch not deleted). An event album photo likewise (the
+	// photo not deleted; ADR-0028). A CHAT_PHOTO or DM_ATTACHMENT is
 	// visible when chat says the caller may see the message it is attached
 	// to (channel audience; conversation parties). A REPORT_EVIDENCE is
 	// visible to its owner only. For DM_ATTACHMENT the link is full_url
@@ -456,11 +465,18 @@ type MediaServiceServer interface {
 	AttachAvatar(context.Context, *AttachAvatarRequest) (*AttachAvatarResponse, error)
 	// AttachChannelPhoto attaches the caller's READY CHAT_PHOTO upload of
 	// tayfa_id to the channel message message_id (issue #205). chat calls it
-	// with the caller's own token while it writes the message; the gateway
-	// exposes it nowhere. Unknown, another user's, another purpose or another
-	// tayfa's upload is ERROR_REASON_UPLOAD_NOT_FOUND; not READY is
-	// ERROR_REASON_UPLOAD_NOT_READY; attached to another message is
-	// ERROR_REASON_UPLOAD_IN_USE. A repeat for the same message succeeds.
+	// with the caller's own token just before it writes the message, outside
+	// its transaction; the gateway exposes it nowhere. Unknown, another
+	// user's, another purpose or another tayfa's upload is
+	// ERROR_REASON_UPLOAD_NOT_FOUND; not READY is
+	// ERROR_REASON_UPLOAD_NOT_READY; attached to a message chat has
+	// confirmed is ERROR_REASON_UPLOAD_IN_USE. A repeat for the same message
+	// succeeds. An attachment chat has not confirmed yet (its message may
+	// never have been written) moves to the new message, so a failed send
+	// can be retried. core's reconciliation job confirms attachments with
+	// chat (MediaHolderService, chat's service token) after 10 minutes and
+	// undoes those no message holds; the file then expires like any
+	// unattached upload.
 	AttachChannelPhoto(context.Context, *AttachChannelPhotoRequest) (*AttachChannelPhotoResponse, error)
 	// AttachDirectMessageAttachment attaches the caller's READY DM_ATTACHMENT
 	// upload to the direct message message_id, like AttachChannelPhoto.

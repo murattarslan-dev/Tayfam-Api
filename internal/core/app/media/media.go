@@ -42,6 +42,8 @@ const (
 	PurposeAvatar     = "avatar"
 	PurposeCatchPhoto = "catch_photo"
 	PurposeCover      = "cover"
+	// PurposeEventPhoto is an event album photo (issue #206, ADR-0028).
+	PurposeEventPhoto = "event_photo"
 	// PurposeChatPhoto is a channel message's photo (issue #205,
 	// ADR-0031): an image whose audience chat decides.
 	PurposeChatPhoto = "chat_photo"
@@ -67,6 +69,7 @@ const (
 	TargetTayfa        = "tayfa"
 	TargetEvent        = "event"
 	TargetFishingCatch = "fishing_catch"
+	TargetEventPhoto   = "event_photo"
 	// Chat's message IDs (ADR-0031); chat decides who sees them.
 	TargetChannelMessage = "channel_message"
 	TargetDMMessage      = "dm_message"
@@ -141,6 +144,9 @@ type Config struct {
 	// (ADR-0031). nil: those files are visible to their owners only (a
 	// local run without chat).
 	Messages MessageMedia
+	// Holders answers the reconciliation of chat attachments with core's
+	// service token (ADR-0031). nil turns the job off (local run).
+	Holders MediaHolders
 	// UploadsPerHour per user; 0 means DefaultUploadsPerHour.
 	UploadsPerHour int
 	// QuotaBytes per user; 0 means DefaultQuotaBytes.

@@ -70,6 +70,26 @@ func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message
 
 	now := s.now()
 	msgID := s.ids.next()
+	if in.Attachment != (id.ID{}) {
+		// Another message already holds the attachment: nothing to ask core.
+		held, err := q.FindDirectMessageAttachmentHolders(ctx, []pgtype.UUID{in.Attachment.PG()})
+		if err != nil {
+			return Message{}, Conversation{}, fmt.Errorf("ek: %w", err)
+		}
+		if len(held) > 0 {
+			return Message{}, Conversation{}, apperr.ErrUploadInUse
+		}
+		// core attaches the encrypted attachment to this message just
+		// before the message is written, outside chat's transaction, so no
+		// lock or connection is held during the call (ADR-0031): core
+		// checks it is the caller's, READY, a DM attachment and free. If the
+		// message is then not written (the device set changed, say), the
+		// attachment stays unconfirmed: the retry moves it to its new
+		// message, and core's reconciliation undoes an abandoned one.
+		if err := s.cfg.Attachments.AttachDirectMessageAttachment(ctx, in.Attachment, msgID); err != nil {
+			return Message{}, Conversation{}, err
+		}
+	}
 	var (
 		conv       convRow
 		accepted   bool // a request became active
@@ -118,15 +138,6 @@ func (s *Service) Send(ctx context.Context, caller id.ID, in SendInput) (Message
 				return apperr.ErrUploadInUse // another message holds the attachment
 			}
 			return fmt.Errorf("mesaj yazılamadı: %w", err)
-		}
-		if in.Attachment != (id.ID{}) {
-			// The encrypted attachment is attached to this message in core
-			// after every check above and before the outbox write
-			// (ADR-0031): core checks it is the caller's, READY, a DM
-			// attachment and free. A refusal rolls the message back.
-			if err := s.cfg.Attachments.AttachDirectMessageAttachment(ctx, in.Attachment, msgID); err != nil {
-				return err
-			}
 		}
 		if deliveries, err = keys.StoreEnvelopes(ctx, q, msgID, convID, caller, from, targets, envelopesOf(in.Envelopes), now); err != nil {
 			return err

@@ -151,6 +151,12 @@ DELETE FROM fishing_catches WHERE id IN (
   SELECT x.id FROM fishing_catches x WHERE x.deleted_at <= @deleted_before
   ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
 
+-- Albüm fotoğrafı; dosyası uploads_release_ref ile silme kuyruğuna girer.
+-- name: PurgeEventPhotos :execrows
+DELETE FROM event_photos WHERE id IN (
+  SELECT x.id FROM event_photos x WHERE x.deleted_at <= @deleted_before
+  ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
+
 -- Etkinlik soft delete'i bugün yok; kolon olduğu için iş hazırdır. Katılım,
 -- türe özel tablolar ve av kayıtları cascade ile, bağlı anket ve seri şablonu
 -- SET NULL ile.

@@ -90,6 +90,37 @@ UPDATE uploads SET status = 'deleting'
 WHERE id = @id AND attached_type IN ('channel_message', 'dm_message') AND attached_id = @message_id
   AND status <> 'deleting';
 
+-- Onaylanmamış sohbet bağlaması (ADR-0031): chat'in henüz onaylamadığı,
+-- belki hiç yazılmamış bir mesaja bağlı dosya, aynı sahibin yeni mesajına
+-- taşınır. Çağıran satırı önce GetOwnUploadForUpdate ile kilitler.
+-- name: MoveChatAttachment :execrows
+UPDATE uploads SET attached_id = @attached_id::uuid, attached_at = @now
+WHERE id = @id AND user_id = @user_id AND purpose = @purpose AND status = 'ready'
+  AND tayfa_id IS NOT DISTINCT FROM sqlc.narg(tayfa_id)::uuid
+  AND attached_type = @attached_type::text AND attach_confirmed_at IS NULL;
+
+-- Uzlaştırma işi: onaylanmamış, before'dan eski sohbet bağlamaları.
+-- name: ListUnconfirmedChatAttachments :many
+SELECT id, attached_type::text AS attached_type, attached_id::uuid AS attached_id FROM uploads
+WHERE attached_type IN ('channel_message', 'dm_message') AND attach_confirmed_at IS NULL
+  AND status = 'ready' AND attached_at < @before
+ORDER BY attached_at
+LIMIT @n;
+
+-- chat dosyayı tutan mesajı söyledi: bağlama o mesajla onaylanır. Arada
+-- taşındıysa (asked_id değişti) bir şey olmaz.
+-- name: ConfirmChatAttachment :execrows
+UPDATE uploads SET attached_id = @holder_id::uuid, attach_confirmed_at = @now
+WHERE id = @id AND attached_type = @attached_type::text AND attached_id = @asked_id
+  AND attach_confirmed_at IS NULL AND status = 'ready';
+
+-- Hiçbir mesaj dosyayı tutmuyor: bağlama kaldırılır; dosya bağlanmamış
+-- hazır dosya olarak 7 günlük temizliğe döner (ready_at'ten sayılır).
+-- name: DetachChatAttachment :execrows
+UPDATE uploads SET attached_type = NULL, attached_id = NULL, attached_at = NULL
+WHERE id = @id AND attached_type = @attached_type::text AND attached_id = @asked_id
+  AND attach_confirmed_at IS NULL AND status = 'ready';
+
 -- Tayfa kalıcı silindi: kanal fotoğrafları da gider (kanallar chat'te
 -- tayfa.purged ile silinir; dosyanın tayfası core'da bellidir).
 -- name: ReleaseTayfaChatPhotos :execrows
@@ -141,7 +172,8 @@ DELETE FROM uploads WHERE id = @id AND status = 'deleting';
 -- göremeyeceğine karar vermek için bağlam. Karar uygulama katmanında, core'un
 -- izin tablosuyla verilir (authz); burada yalnızca veri toplanır. İçeriğin
 -- tayfası: tayfa kapağında tayfanın kendisi, etkinlik kapağında ve av
--- fotoğrafında etkinliğin tayfası (silinmiş içerik ve tayfa bağlam vermez).
+-- fotoğrafında ve albüm fotoğrafında etkinliğin tayfası (silinmiş içerik ve
+-- tayfa bağlam vermez).
 -- name: ListMediaForViewer :many
 SELECT u.id, u.user_id, u.purpose, u.r2_key, COALESCE(u.preview_type, '')::text AS preview_type, u.full_type::text AS full_type, u.width, u.height,
        u.attached_type, u.attached_id,
@@ -168,10 +200,21 @@ LEFT JOIN LATERAL (
   JOIN events e ON e.id = f.event_id AND e.deleted_at IS NULL
   JOIN tayfas t ON t.id = e.tayfa_id AND t.deleted_at IS NULL
   WHERE u.attached_type = 'fishing_catch' AND f.id = u.attached_id AND f.deleted_at IS NULL
+  UNION ALL
+  SELECT e.tayfa_id FROM event_photos ph
+  JOIN events e ON e.id = ph.event_id AND e.deleted_at IS NULL
+  JOIN tayfas t ON t.id = e.tayfa_id AND t.deleted_at IS NULL
+  WHERE u.attached_type = 'event_photo' AND ph.id = u.attached_id AND ph.deleted_at IS NULL
 ) c ON true
 LEFT JOIN memberships m ON m.tayfa_id = c.tayfa_id AND m.user_id = @viewer_id
 LEFT JOIN tayfa_modules tm ON tm.tayfa_id = c.tayfa_id AND tm.module = 'events'
 WHERE u.id = ANY(@ids::uuid[]) AND u.status = 'ready' AND u.purpose <> 'data_export';
+
+-- Platform panelinde şikâyet edilen albüm fotoğrafı (ADR-0028 §5): yalnızca
+-- panelin şikâyetten okuduğu upload_id, hazır event_photo dosyası.
+-- name: GetReportedPhotoUpload :one
+SELECT r2_key, full_type::text AS full_type FROM uploads
+WHERE id = @id AND purpose = 'event_photo' AND status = 'ready';
 
 -- İçeriğin dosyası. Kolonun trigger'ı (uploads_check_ref) dosyanın bu
 -- içeriğe bağlı ve hazır olduğunu yeniden doğrular; eski dosya

@@ -137,30 +137,30 @@ const EvidenceLinkTTL = 5 * time.Minute
 
 // ReportEvidenceURL returns a GET link (EvidenceLinkTTL) to the full
 // variant of the evidence photo attached to report, for the platform panel
-// only (admin.Service; issue #205). "" when there is none, it is not READY
-// or object storage is off.
-func (s *Service) ReportEvidenceURL(ctx context.Context, report, upload id.ID) (string, error) {
+// only (admin.Service; issue #205); ok is false when there is none, it is
+// not READY or object storage is off.
+func (s *Service) ReportEvidenceURL(ctx context.Context, report, upload id.ID) (link string, expires time.Time, ok bool, err error) {
 	if !s.Enabled() {
-		return "", nil
+		return "", time.Time{}, false, nil
 	}
 	r, err := s.q.GetReportEvidenceUpload(ctx, store.GetReportEvidenceUploadParams{ID: upload.PG(), ReportID: report.PG()})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return "", nil
+		return "", time.Time{}, false, nil
 	case err != nil:
-		return "", fmt.Errorf("kanıt fotoğrafı: %w", err)
+		return "", time.Time{}, false, fmt.Errorf("kanıt fotoğrafı: %w", err)
 	}
-	link, err := s.cfg.Store.PresignGet(mediaKey(r.R2Key, KindFull), EvidenceLinkTTL)
+	p, err := s.cfg.Store.PresignGet(mediaKey(r.R2Key, KindFull), EvidenceLinkTTL)
 	if err != nil {
-		return "", fmt.Errorf("kanıt linki: %w", err)
+		return "", time.Time{}, false, fmt.Errorf("kanıt linki: %w", err)
 	}
-	return link.URL, nil
+	return p.URL, p.Expires.UTC(), true, nil
 }
 
 // canView is the visibility rule of ADR-0020 item 4. Tayfa content is
 // decided by core's permission table (authz): TayfaView for a tayfa cover,
-// EventView (with the events module on) for an event cover or a catch
-// photo. The default is no.
+// EventView (with the events module on) for an event cover, a catch photo
+// or an album photo (ADR-0028). The default is no.
 func canView(viewer id.ID, r store.ListMediaForViewerRow, now time.Time) (bool, error) {
 	if r.UserID.Valid && id.ID(r.UserID.Bytes) == viewer {
 		return true, nil
@@ -171,7 +171,7 @@ func canView(viewer id.ID, r store.ListMediaForViewerRow, now time.Time) (bool, 
 	switch r.AttachedType.String {
 	case TargetUser:
 		return !r.Blocked && !r.OwnerDeleted, nil
-	case TargetTayfa, TargetEvent, TargetFishingCatch:
+	case TargetTayfa, TargetEvent, TargetFishingCatch, TargetEventPhoto:
 		if !r.ContentTayfaID.Valid || !r.MemberStatus.Valid {
 			return false, nil
 		}
@@ -188,4 +188,31 @@ func canView(viewer id.ID, r store.ListMediaForViewerRow, now time.Time) (bool, 
 		return r.EventsModuleOn && authz.Allowed(m, authz.EventView, now), nil
 	}
 	return false, nil
+}
+
+// ReportedPhotoLinkTTL is how long the panel's link to a reported album
+// photo works (ADR-0028 §5).
+const ReportedPhotoLinkTTL = 5 * time.Minute
+
+// ReportedPhotoURL signs a short GET link to the full variant of a READY
+// album photo upload for the platform panel. Only the admin service calls
+// it, with the upload ID it read from a report escalated to the platform
+// (an unreported photo has no way in); it records the access. ok is false
+// without object storage or when the file is gone or not an album photo.
+func (s *Service) ReportedPhotoURL(ctx context.Context, upload id.ID) (link string, expires time.Time, ok bool, err error) {
+	if !s.Enabled() {
+		return "", time.Time{}, false, nil
+	}
+	r, err := s.q.GetReportedPhotoUpload(ctx, upload.PG())
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", time.Time{}, false, nil
+	case err != nil:
+		return "", time.Time{}, false, fmt.Errorf("şikâyet edilen fotoğraf: %w", err)
+	}
+	p, err := s.cfg.Store.PresignGet(mediaKey(r.R2Key, KindFull), ReportedPhotoLinkTTL)
+	if err != nil {
+		return "", time.Time{}, false, fmt.Errorf("şikâyet edilen fotoğraf linki: %w", err)
+	}
+	return p.URL, p.Expires.UTC(), true, nil
 }
