@@ -276,7 +276,12 @@ func TestFeatureDisabled(t *testing.T) {
 	if _, err := noSafety.SetSafetyContact(ctx, sc.friend, sc.tf, sc.ev, sc.viewer, 0); !errors.Is(err, apperr.ErrFeatureDisabled) {
 		t.Fatalf("kapalı güvenlik kişisi: %v", err)
 	}
-	if _, err := noSafety.GetSafetyContact(ctx, sc.friend, sc.tf, sc.ev); !errors.Is(err, apperr.ErrFeatureDisabled) {
+	// The caller's own existing row is still read (issue #221); without
+	// one reading is gated.
+	if got, err := noSafety.GetSafetyContact(ctx, sc.friend, sc.tf, sc.ev); err != nil || got.Contact.ID != sc.viewer {
+		t.Fatalf("bayrak kapalıyken kendi kaydını okuma: %+v %v", got, err)
+	}
+	if _, err := noSafety.GetSafetyContact(ctx, sc.admin, sc.tf, sc.ev); !errors.Is(err, apperr.ErrFeatureDisabled) {
 		t.Fatalf("kapalı güvenlik kişisi okuma: %v", err)
 	}
 	if _, err := noSafety.ListSafetyShares(ctx, sc.viewer); !errors.Is(err, apperr.ErrFeatureDisabled) {
@@ -1092,6 +1097,72 @@ func TestSafetyNetClosing(t *testing.T) {
 		t.Fatalf("ayrıldıktan sonra döndüm: %v", err)
 	}
 	must(t, off.ClearSafetyContact(ctx, sc.friend, sc.tf, sc.ev))
+}
+
+// TestSafetyContactReadFlagOff (issue #221, ADR-0033 §10): with
+// SAFETY_CONTACT_ENABLED off the caller reads their own existing row and
+// marks "I'm back"; a new row is refused; nobody reads another person's
+// row, and the wrong tayfa finds nothing.
+func TestSafetyContactReadFlagOff(t *testing.T) {
+	e := setup(t)
+	sc := e.scenario(t)
+	contact := e.user(t, "Anne", "tayfa")
+	e.friends(t, sc.friend, contact)
+	e.friends(t, sc.admin, contact)
+	on, off := e.svc(t, true, 0), e.svcFlags(t, true, false, 0)
+	if _, err := on.SetSafetyContact(ctx, sc.friend, sc.tf, sc.ev, contact, 30); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := off.GetSafetyContact(ctx, sc.friend, sc.tf, sc.ev)
+	if err != nil || got.Contact.ID != contact || got.Contact.DisplayName != "Anne" || got.GraceMinutes != 30 || !got.ReturnedAt.IsZero() {
+		t.Fatalf("bayrak kapalıyken okuma: %+v %v", got, err)
+	}
+	if got, err := off.MarkReturned(ctx, sc.friend, sc.tf, sc.ev); err != nil || got.ReturnedAt.IsZero() {
+		t.Fatalf("bayrak kapalıyken döndüm: %+v %v", got, err)
+	}
+	if got, err := off.GetSafetyContact(ctx, sc.friend, sc.tf, sc.ev); err != nil || got.ReturnedAt.IsZero() {
+		t.Fatalf("döndükten sonra okuma: %+v %v", got, err)
+	}
+
+	// A new row, or changing the existing one, needs the flag.
+	if _, err := off.SetSafetyContact(ctx, sc.admin, sc.tf, sc.ev, contact, 0); !errors.Is(err, apperr.ErrFeatureDisabled) {
+		t.Fatalf("bayrak kapalıyken yeni kayıt: %v", err)
+	}
+	if _, err := off.SetSafetyContact(ctx, sc.friend, sc.tf, sc.ev, contact, 60); !errors.Is(err, apperr.ErrFeatureDisabled) {
+		t.Fatalf("bayrak kapalıyken değiştirme: %v", err)
+	}
+	if n := e.one(t, `SELECT count(*)::text FROM event_safety_contacts WHERE event_id = $1`, sc.ev.PG()); n != "1" {
+		t.Fatalf("kayıt sayısı: %s", n)
+	}
+
+	// Another person's row is never read: not the contact, not another
+	// member, not someone outside the tayfa; and not through another tayfa.
+	for _, u := range []id.ID{contact, sc.admin, sc.viewer} {
+		if got, err := off.GetSafetyContact(ctx, u, sc.tf, sc.ev); err == nil || got.Contact.ID != (id.ID{}) {
+			t.Fatalf("başkasının kaydı okundu (%v): %+v", u, got)
+		}
+		if got, err := on.GetSafetyContact(ctx, u, sc.tf, sc.ev); got.Contact.ID != (id.ID{}) {
+			t.Fatalf("bayrak açıkken başkasının kaydı okundu (%v): %+v %v", u, got, err)
+		}
+	}
+	other, _ := e.listedTayfa(t, 5)
+	if _, err := off.GetSafetyContact(ctx, sc.friend, other, sc.ev); !errors.Is(err, apperr.ErrFeatureDisabled) {
+		t.Fatalf("başka tayfa, bayrak kapalı: %v", err)
+	}
+	if got, err := on.GetSafetyContact(ctx, sc.friend, other, sc.ev); err == nil || got.Contact.ID != (id.ID{}) {
+		t.Fatalf("başka tayfa, bayrak açık: %+v %v", got, err)
+	}
+
+	// After leaving the tayfa the own row is still read and closable.
+	must(t, e.members(t, true).LeaveTayfa(ctx, sc.friend, sc.tf))
+	if got, err := off.GetSafetyContact(ctx, sc.friend, sc.tf, sc.ev); err != nil || got.Contact.ID != contact {
+		t.Fatalf("ayrıldıktan sonra okuma: %+v %v", got, err)
+	}
+	must(t, off.ClearSafetyContact(ctx, sc.friend, sc.tf, sc.ev))
+	if _, err := off.GetSafetyContact(ctx, sc.friend, sc.tf, sc.ev); !errors.Is(err, apperr.ErrFeatureDisabled) {
+		t.Fatalf("kaldırıldıktan sonra okuma: %v", err)
+	}
 }
 
 // TestStaleSafetyShares: a share disappears from the contact's list when

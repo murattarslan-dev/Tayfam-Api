@@ -110,7 +110,11 @@ type DiscoverServiceClient interface {
 	// ERROR_REASON_NOT_ATTENDED, ERROR_REASON_FEEDBACK_CLOSED.
 	SetEventFeedback(ctx context.Context, in *SetEventFeedbackRequest, opts ...grpc.CallOption) (*SetEventFeedbackResponse, error)
 	// GetSafetyContact returns the caller's safety contact for the event;
-	// an empty contact when there is none.
+	// an empty contact when there is none. The caller's own existing row of
+	// an event of the tayfa is returned whatever the flag, membership or
+	// module (like MarkReturned), so "back" can always be marked; it returns
+	// nothing but that row. Without a row: ERROR_REASON_FEATURE_DISABLED
+	// while SAFETY_CONTACT_ENABLED is off, else the usual checks.
 	//
 	// Errors: ERROR_REASON_FEATURE_DISABLED, ERROR_REASON_TAYFA_NOT_FOUND,
 	// ERROR_REASON_EVENT_NOT_FOUND.
@@ -346,7 +350,11 @@ type DiscoverServiceServer interface {
 	// ERROR_REASON_NOT_ATTENDED, ERROR_REASON_FEEDBACK_CLOSED.
 	SetEventFeedback(context.Context, *SetEventFeedbackRequest) (*SetEventFeedbackResponse, error)
 	// GetSafetyContact returns the caller's safety contact for the event;
-	// an empty contact when there is none.
+	// an empty contact when there is none. The caller's own existing row of
+	// an event of the tayfa is returned whatever the flag, membership or
+	// module (like MarkReturned), so "back" can always be marked; it returns
+	// nothing but that row. Without a row: ERROR_REASON_FEATURE_DISABLED
+	// while SAFETY_CONTACT_ENABLED is off, else the usual checks.
 	//
 	// Errors: ERROR_REASON_FEATURE_DISABLED, ERROR_REASON_TAYFA_NOT_FOUND,
 	// ERROR_REASON_EVENT_NOT_FOUND.

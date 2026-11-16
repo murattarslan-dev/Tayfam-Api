@@ -118,9 +118,11 @@ func (s *Service) gate() error {
 	return nil
 }
 
-// safetyGate is SAFETY_CONTACT_ENABLED for choosing and reading a safety
-// contact and the contact's list. Closing one (MarkReturned,
-// ClearSafetyContact) and the alert job do not depend on any flag.
+// safetyGate is SAFETY_CONTACT_ENABLED for choosing a safety contact, for
+// reading when the caller has none and for the contact's list. Reading
+// and closing the caller's own existing row (GetSafetyContact,
+// MarkReturned, ClearSafetyContact) and the alert job do not depend on any
+// flag.
 func (s *Service) safetyGate() error {
 	if !s.safety {
 		return apperr.ErrFeatureDisabled
@@ -481,7 +483,27 @@ func (s *Service) contactOf(ctx context.Context, q *store.Queries, caller, event
 }
 
 // GetSafetyContact returns the caller's safety contact for the event.
+//
+// The caller's own existing row of an event of tayfa is returned with the
+// flag off, after leaving the tayfa and with the events module off, like
+// MarkReturned (ADR-0033 §10, issue #221): the client must be able to show
+// "I'm back" for a safety net that was set, or the contact gets a false
+// alarm. The query reads only the caller's row. Without one the method is
+// gated as before: FEATURE_DISABLED with the flag off, else the membership
+// and event checks and an empty contact.
 func (s *Service) GetSafetyContact(ctx context.Context, caller, tayfa, event id.ID) (SafetyContact, error) {
+	r, err := s.q.GetOwnSafetyContact(ctx, store.GetOwnSafetyContactParams{
+		EventID: event.PG(), UserID: caller.PG(), TayfaID: tayfa.PG(),
+	})
+	switch {
+	case err == nil:
+		return SafetyContact{
+			Contact:      Person{ID: idOf(r.ContactUserID), DisplayName: r.DisplayName.String, AvatarID: idOf(r.AvatarUploadID)},
+			GraceMinutes: r.GraceMinutes, ReturnedAt: r.ReturnedAt.Time, AlertSentAt: r.AlertSentAt.Time,
+		}, nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return SafetyContact{}, fmt.Errorf("güvenlik kişisi: %w", err)
+	}
 	if err := s.safetyGate(); err != nil {
 		return SafetyContact{}, err
 	}

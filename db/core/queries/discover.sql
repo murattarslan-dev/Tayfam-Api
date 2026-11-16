@@ -174,6 +174,17 @@ ON CONFLICT (event_id, user_id) DO UPDATE
 SET contact_user_id = EXCLUDED.contact_user_id, grace_minutes = EXCLUDED.grace_minutes
 WHERE event_safety_contacts.alert_sent_at IS NULL;
 
+-- Kişinin kendi satırını okuma, etkinlik bu tayfanınsa. Kurulmuş bir
+-- güvenlik ağı her zaman görülebilmeli ki "döndüm" denebilsin: üyelik,
+-- modül ve bayrak aranmaz; yalnızca çağıranın satırı döner (ADR-0033 §10).
+-- name: GetOwnSafetyContact :one
+SELECT c.contact_user_id, c.grace_minutes, c.returned_at, c.alert_sent_at,
+       p.display_name, p.avatar_upload_id
+FROM event_safety_contacts c
+JOIN events e ON e.id = c.event_id
+LEFT JOIN user_profiles p ON p.user_id = c.contact_user_id AND p.deleted_at IS NULL
+WHERE c.event_id = @event_id AND c.user_id = @user_id AND e.tayfa_id = @tayfa_id;
+
 -- Kişinin kendi satırı, etkinlik bu tayfanınsa. Kaldırma ve "döndüm"
 -- yalnızca kendi satırına dokunur; üyelik, modül ve bayrak aranmaz
 -- (ADR-0033 §10).
