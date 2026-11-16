@@ -1,11 +1,11 @@
 # ADR-0028: Etkinlik fotoğraf albümü
 
-- **Durum:** Önerildi
+- **Durum:** Kabul edildi (platform sahibi, 2026-11-15)
 - **Tarih:** 2026-11-15
 - **Karar veren:** Ürün kararları platform sahibinindir (2026-11-15, Notion
   "Faz 2 (v2) — Medya ve Sosyal" §2; issue #206). Bu ADR onların mimariye
-  taşınmasıdır; açık kalan ayrıntılar aşağıda gerekçeyle seçilmiş ve
-  "Platform sahibine sorular"da listelenmiştir.
+  taşınmasıdır; açık kalan ayrıntılar platform sahibiyle sohbette
+  kararlaştırıldı ("Açık ayrıntılarda kararlar").
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md),
   [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md),
   [ADR-0007](0007-dosyalar-ve-medya.md),
@@ -91,8 +91,9 @@ hazır `event_photo` yüklemesini albüme ekler. Sırasıyla:
    "albüm şu an kapalı" der).
 5. Çağıranın katılımı `attended` değilse → `NOT_ATTENDED`. "Check-in'i
    doğrulanmış" = `event_rsvps.attendance = 'attended'` (yöntem fark
-   etmez: konum, online, yürüyüş başlangıcı ya da organizatör düzeltmesi).
-   Av günlüğünün kuralıyla aynıdır.
+   etmez: konum, online, yürüyüş başlangıcı ya da organizatör düzeltmesi;
+   organizatörün işaretlediği katılım da doğrulanmış sayılır — platform
+   sahibi, 2026-11-15). Av günlüğünün kuralıyla aynıdır.
 6. Sınırlar: çağıranın bu etkinlikteki silinmemiş fotoğrafı 30'a ya da
    albümün silinmemiş fotoğrafı 500'e ulaştıysa → `EVENT_LIMIT`. Silinen
    fotoğraf sayılmaz (kişi yanlış fotoğrafı silip yenisini koyabilir).
@@ -100,9 +101,12 @@ hazır `event_photo` yüklemesini albüme ekler. Sırasıyla:
 
 **Veritabanı ikinci hat:** `event_photos_guard` BEFORE INSERT trigger'ı
 etkinlik satırını aynı kilitle (`FOR UPDATE`) alır, iptali, yükleyenin
-`attended` olmasını ve 30/500 sınırlarını yeniden denetler (SQLSTATE
-`TF090`). Kilit sayesinde iki eşzamanlı ekleme, uygulama katmanını atlayan
-bir yoldan gelse bile sınırı aşamaz. Pencere (saat) yalnızca Go'da
+`attended` olmasını ve 30/500 sınırlarını yeniden denetler. Kilit
+sayesinde iki eşzamanlı ekleme, uygulama katmanını atlayan bir yoldan
+gelse bile sınırı aşamaz. Reddin nedeni ayrı SQLSTATE'lerdedir ve
+uygulama onları API hatasına çevirir (500 değil): `TF090` sınır →
+`EVENT_LIMIT`, `TF091` katılım doğrulanmamış → `NOT_ATTENDED`, `TF092`
+iptal ya da silinmiş etkinlik → `EVENT_CANCELLED`. Pencere (saat) yalnızca Go'da
 denetlenir: veritabanının saati test saatinden ayrıdır ve pencere
 bir güvenlik sınırı değil, ürün kuralıdır.
 
@@ -141,7 +145,10 @@ kuralı değişmez.
 uygulanmaz: moderatör yöneticinin fotoğrafını, organizatör moderatörün
 fotoğrafını kaldırabilir (av günlüğü silmeyle aynı). Silme soft delete'tir
 (`deleted_at`, `deleted_by`) ve iptal edilmiş ya da bitmiş etkinlikte de
-çalışır. Başkasının fotoğrafının kaldırılması denetim kaydına
+çalışır. Tayfa salt okunurken (askıda, arşivde, silme bekliyor) ya da
+etkinlik modülü kapalıyken kendi fotoğrafını kaldırmak da dahil hiçbir
+silme yapılamaz; bu, tayfadaki diğer içeriklerin davranışıyla aynıdır
+(yazma yolları salt okunur tayfada ve kapalı modülde reddedilir). Başkasının fotoğrafının kaldırılması denetim kaydına
 (`event.photo_removed`) yazılır; kendi fotoğrafını silmek ve eklemek
 yazılmaz (500 kayıtlık albüm denetim kaydını boğmasın). Albüm için outbox
 olayı ve bildirim yoktur (bu turda tüketicisi yok).
@@ -159,6 +166,20 @@ gerekçe listesi, tayfa kuyruğu, `content_removed` çözümü yalnızca fotoğr
 kaldırılmışsa, platform kuyruğunda platform yöneticisinin içerik kaldırma
 kararı (`AdminDeleteEventPhoto`). Şikâyet edilen kişi yükleyendir; modül
 etkinliklerdir. Panel öğe özetinde başlık olarak açıklama (caption) döner.
+
+**Panelde fotoğrafın kendisi** (platform sahibi, 2026-11-15): platform
+paneli yalnızca platforma yükselmiş bir şikâyetin konusu olan albüm
+fotoğrafını görebilir. `AdminService.GetReportedItem` şikâyet
+`event_photo` ise, şikâyetin hedefinden okunan dosyanın full varyantı
+için **5 dakikalık** imzalı GET linki üretir (`ReportedItem.media_url`).
+Her link üretimi, şikâyeti görüntüleme kaydıyla birlikte platform denetim
+kaydına yazılır (`report.view_item`, `media_link = issued`, `upload_id`;
+link değil). Link başka hiçbir uçtan alınamaz: panelin dosya kimliğiyle
+istediği bir uç yoktur, kimlik şikâyetten core içinde okunur; şikâyet
+edilmemiş fotoğraf panelde görünmez. Panel CSP'si (`img-src 'self'`)
+değişmez: görüntü sayfaya gömülmez, `rel="noopener noreferrer"` ile yeni
+sekmede açılan bir bağlantıdır (panel adresi R2'ye gitmez). Link log'a
+yazılmaz. Dosya silme kuyruğundaysa link üretilmez.
 
 ### 6. KVKK: dışa aktarma ve hesap silme (ADR-0021)
 
@@ -188,7 +209,12 @@ etkinliklerdir. Panel öğe özetinde başlık olarak açıklama (caption) döne
   dosyaya taşınamaz, yükleyeni değiştirilemez.
 - **Link sızması:** linkler 1 saatliktir ve tek dosyaya bağlıdır; albümün
   listesi link taşımadığı için önbelleğe ya da log'a düşen bir liste
-  yanıtı dosya açmaz.
+  yanıtı dosya açmaz. Panel linki 5 dakikalıktır ve yalnızca şikâyet
+  edilmiş fotoğraf için, denetim kaydıyla üretilir.
+- **Panel ele geçirilirse:** platform yöneticisi oturumuyla (her çağrıda
+  identity'ye sorulur) yalnızca platforma yükselmiş şikâyetlerin
+  fotoğraflarına ve her birini denetim kaydında iz bırakarak ulaşılır;
+  albümler ya da şikâyetsiz fotoğraflar açılamaz.
 - **Tutulmayan veri:** Fotoğrafın metadata'sı (GPS dahil) istemcide
   silinir ve sunucu başlıklarda metadata görürse reddeder (ADR-0020);
   açıklama ve dosya anahtarı log'a yazılmaz.
@@ -204,22 +230,15 @@ etkinliklerdir. Panel öğe özetinde başlık olarak açıklama (caption) döne
   tablolarına taşınır; `uploads.purpose` ve `reports.target_type`
   listelerine `event_photo` eklenir.
 
-## Platform sahibine sorular
+## Açık ayrıntılarda kararlar
 
-Aşağıdakiler kararlarda açık kalan ayrıntılardır; bu ADR'deki seçim
-gerekçesiyle yazıldı, platform sahibi farklı karar verirse kolayca değişir.
+Platform sahibi, 2026-11-15 (sohbette):
 
-1. "Check-in'i doğrulanmış" organizatörün sonradan işaretlediği katılımı
-   (`attendance_method = organizer`) da kapsar mı? Seçim: evet (veri modeli
-   "attended kişiler"; av günlüğüyle aynı).
-2. Açıklama (caption) sınırı ve filtresi: seçim isteğe bağlı, 1–200
-   karakter; kötüye kullanım filtresi bu PR'da yok.
-3. Silmede rol hiyerarşisi: seçim "her fotoğrafı" kararı gereği yok
-   (organizatör moderatörün fotoğrafını kaldırabilir).
-4. Albüm sırası: seçim eskiden yeniye.
-5. Platform panelinde şikâyet edilen fotoğrafın kendisi gösterilsin mi?
-   Bugün panel yalnızca açıklamayı ve yükleyeni görür; görüntüyü göstermek
-   panelin medyaya erişmesi (ayrı imzalı link yetkisi) demektir ve ayrı bir
-   karardır.
-6. Bildirim: bu turda yok. Öneri (sonraki tur): etkinlik bitince
-   katılımcılara bir kez "albüme fotoğraf ekle" hatırlatması.
+1. Organizatörün sonradan işaretlediği katılım (`attendance_method =
+   organizer`) doğrulanmış sayılır (§2).
+2. Açıklama isteğe bağlı, 1–200 karakter; kötüye kullanım filtresi yok.
+3. Silmede rol hiyerarşisi yok ("her fotoğrafı").
+4. Albüm sırası eskiden yeniye.
+5. Platform paneli yalnızca şikâyet edilmiş fotoğrafı, kısa ömürlü imzalı
+   linkle ve denetim kaydıyla görür (§5).
+6. Albüm hatırlatma bildirimi ("albüme fotoğraf ekle") sonraki turdadır.
