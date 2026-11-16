@@ -14,7 +14,7 @@
 //	                year (#76)
 //	friend-suggestions  recomputes the friendship scores, suggests at most
 //	                one friend a week per user and deletes old open
-//	                suggestions (#208, ADR-0028; suggestions.go)
+//	                suggestions (#208, ADR-0030; suggestions.go)
 //
 // The outcome of every pass (finish time, success, rows changed) is written
 // to job_runs for the panel's dashboard (issue #110).

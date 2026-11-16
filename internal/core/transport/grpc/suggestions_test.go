@@ -16,7 +16,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
-// Friend suggestions and settings (issue #208, ADR-0028).
+// Friend suggestions and settings (issue #208, ADR-0030).
 
 func (f *fakeSocial) ListFriendSuggestions(_ context.Context, c id.ID) ([]social.Suggestion, error) {
 	f.caller, f.called = c, true
@@ -88,7 +88,7 @@ func TestFriendSuggestionValidationAndAuth(t *testing.T) {
 	}
 }
 
-// TestNoScoreInSocialResponses pins ADR-0028: no response message of
+// TestNoScoreInSocialResponses pins ADR-0030: no response message of
 // SocialService has a field that could carry the friendship score or the
 // number of shared events.
 func TestNoScoreInSocialResponses(t *testing.T) {

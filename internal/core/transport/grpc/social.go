@@ -22,7 +22,7 @@ type Socials interface {
 	UnblockUser(ctx context.Context, caller, target id.ID) error
 	ListBlockedUsers(ctx context.Context, caller id.ID, size int32, token string) (social.Page[social.Blocked], error)
 	Resolutions(ctx context.Context, caller id.ID, refs []social.RequestRef) ([]social.Resolution, error)
-	// Issue #208, ADR-0028.
+	// Issue #208, ADR-0030.
 	ListFriendSuggestions(ctx context.Context, caller id.ID) ([]social.Suggestion, error)
 	DismissFriendSuggestion(ctx context.Context, caller, other id.ID) error
 	GetSocialSettings(ctx context.Context, caller id.ID) (social.Settings, error)
@@ -194,8 +194,9 @@ func friendsPB(items []social.Friend) []*corev1.Friend {
 }
 
 var requestKinds = map[corev1.RequestKind]social.RequestKind{
-	corev1.RequestKind_REQUEST_KIND_FRIEND_REQUEST:   social.KindFriendRequest,
-	corev1.RequestKind_REQUEST_KIND_TAYFA_INVITATION: social.KindTayfaInvitation,
+	corev1.RequestKind_REQUEST_KIND_FRIEND_REQUEST:    social.KindFriendRequest,
+	corev1.RequestKind_REQUEST_KIND_TAYFA_INVITATION:  social.KindTayfaInvitation,
+	corev1.RequestKind_REQUEST_KIND_FRIEND_SUGGESTION: social.KindFriendSuggestion,
 }
 
 var requestResolutions = map[social.Resolution]corev1.RequestResolution{

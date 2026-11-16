@@ -12,7 +12,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
-// Friendship score and friend suggestions (issue #208, ADR-0028).
+// Friendship score and friend suggestions (issue #208, ADR-0030).
 
 // fakeMinors answers IsMinor from a map; users missing from it are not
 // answered (as identity does for unknown users).
@@ -115,6 +115,37 @@ func TestFriendSuggestionRules(t *testing.T) {
 				c := id.New()
 				e.profile(t, c)
 				must(t, e.socials(t).BlockUser(ctx, a, c))
+			}},
+		{name: "arkadaşlıktan çıkılmış", ageA: &adult, ageB: &adult, shared: 3, want: false,
+			prepare: func(t *testing.T, e *env, _, a, b id.ID) {
+				_, err := e.socials(t).SendFriendRequest(ctx, a, b)
+				must(t, err)
+				_, err = e.socials(t).AcceptFriendRequest(ctx, b, a)
+				must(t, err)
+				must(t, e.socials(t).RemoveFriendship(ctx, a, b))
+			}},
+		{name: "reddedilmiş istek, sonuç kaydı silinmiş", ageA: &adult, ageB: &adult, shared: 3, want: false,
+			prepare: func(t *testing.T, e *env, _, a, b id.ID) {
+				_, err := e.socials(t).SendFriendRequest(ctx, a, b)
+				must(t, err)
+				must(t, e.socials(t).RemoveFriendship(ctx, b, a))
+				e.exec(t, `DELETE FROM friend_request_outcomes`)
+			}},
+		{name: "geri çekilmiş istek dışlamaz", ageA: &adult, ageB: &adult, shared: 3, want: true,
+			prepare: func(t *testing.T, e *env, _, a, b id.ID) {
+				_, err := e.socials(t).SendFriendRequest(ctx, a, b)
+				must(t, err)
+				must(t, e.socials(t).RemoveFriendship(ctx, a, b))
+			}},
+		{name: "karşı tarafın profillemesi kapalı", ageA: &adult, ageB: &adult, shared: 3, want: false,
+			prepare: func(t *testing.T, e *env, _, _, b id.ID) {
+				off := false
+				_, err := e.socials(t).UpdateSocialSettings(ctx, b, social.SettingsUpdate{ProfilingEnabled: &off})
+				must(t, err)
+			}},
+		{name: "karşı taraf banlı", ageA: &adult, ageB: &adult, shared: 3, want: false,
+			prepare: func(t *testing.T, e *env, _, _, b id.ID) {
+				e.exec(t, `INSERT INTO user_platform_bans (user_id, banned_at, event_id) VALUES ($1, now(), $2)`, b.PG(), id.New().PG())
 			}},
 		{name: "zaten arkadaş", ageA: &adult, ageB: &adult, shared: 3, want: false,
 			prepare: func(t *testing.T, e *env, _, a, b id.ID) {
@@ -300,7 +331,7 @@ func TestFriendScoreDecayAndProfilingOff(t *testing.T) {
 	if n := e.count(t, `SELECT count(*) FROM friend_scores WHERE user_low_id = $1 OR user_high_id = $1`, a.PG()); n != 0 {
 		t.Fatalf("profilleme kapalıyken %d puan", n)
 	}
-	if n := e.count(t, `SELECT count(*) FROM friend_suggestions WHERE (user_id = $1 OR suggested_user_id = $1) AND dismissed_at IS NULL`, a.PG()); n != 0 {
+	if n := e.count(t, `SELECT count(*) FROM friend_suggestions WHERE (user_id = $1 OR suggested_user_id = $1) AND dismissed_at IS NULL AND withdrawn_at IS NULL`, a.PG()); n != 0 {
 		t.Fatalf("profilleme kapalıyken %d açık öneri", n)
 	}
 	if n := e.count(t, `SELECT count(*) FROM friend_suggestions WHERE user_id = $1 AND dismissed_at IS NOT NULL`, a.PG()); n != 1 {
@@ -325,5 +356,85 @@ func TestOldOpenSuggestionsExpire(t *testing.T) {
 	must(t, err)
 	if e.suggested(t, a, b) || !e.suggested(t, a, c) {
 		t.Fatal("eski açık öneri silinmeli, kapatılmış kalmalı")
+	}
+}
+
+// TestSettingToggleKeepsLimitAndMemory: switching profiling or "Beni
+// önerme" off and on resets neither the weekly limit nor who was already
+// suggested.
+func TestSettingToggleKeepsLimitAndMemory(t *testing.T) {
+	e := setup(t)
+	tf, _ := e.newTayfa(t)
+	a, b, c := id.New(), id.New(), id.New()
+	for _, u := range []id.ID{a, b, c} {
+		e.profile(t, u)
+	}
+	e.attendTogether(t, tf, 4, 20*day, a, b)
+	e.attendTogether(t, tf, 3, 20*day, a, c)
+	m := &fakeMinors{minor: map[id.ID]bool{a: false, b: false, c: false}}
+	_, err := e.suggester(t, m).SuggestFriends(ctx)
+	must(t, err)
+	if !e.suggested(t, a, b) {
+		t.Fatal("ilk öneri yok")
+	}
+	off, on := false, true
+	for _, u := range []social.SettingsUpdate{{ProfilingEnabled: &off}, {ProfilingEnabled: &on}, {HideFromSuggestions: &on}, {HideFromSuggestions: &off}} {
+		_, err := e.socials(t).UpdateSocialSettings(ctx, a, u)
+		must(t, err)
+	}
+	e.base = e.base.Add(day)
+	_, err = e.suggester(t, m).SuggestFriends(ctx)
+	must(t, err)
+	if n := e.count(t, `SELECT count(*) FROM friend_suggestions WHERE user_id = $1`, a.PG()); n != 1 {
+		t.Fatalf("aç-kapa haftalık sınırı sıfırladı: %d öneri", n)
+	}
+	// A week later the next one is c, never b again.
+	e.base = e.base.Add(7 * day)
+	_, err = e.suggester(t, m).SuggestFriends(ctx)
+	must(t, err)
+	if !e.suggested(t, a, c) || e.count(t, `SELECT count(*) FROM friend_suggestions WHERE user_id = $1 AND suggested_user_id = $2`, a.PG(), b.PG()) != 1 {
+		t.Fatal("ikinci öneri c olmalı, b yeniden önerilmemeli")
+	}
+}
+
+// TestBlockedPairHasNoScore: the daily computation does not bring back a
+// blocked pair's score.
+func TestBlockedPairHasNoScore(t *testing.T) {
+	e := setup(t)
+	tf, _ := e.newTayfa(t)
+	a, b := id.New(), id.New()
+	e.profile(t, a)
+	e.profile(t, b)
+	e.attendTogether(t, tf, 3, 5*day, a, b)
+	must(t, e.socials(t).BlockUser(ctx, a, b))
+	_, err := e.suggester(t, nil).SuggestFriends(ctx)
+	must(t, err)
+	if n := e.count(t, `SELECT count(*) FROM friend_scores`); n != 0 {
+		t.Fatalf("engelli çiftin puanı: %d", n)
+	}
+}
+
+// failingMinors counts calls and always fails, as an identity outage.
+type failingMinors struct{ calls int }
+
+func (f *failingMinors) IsMinor(context.Context, []id.ID) (map[id.ID]bool, error) {
+	f.calls++
+	return nil, errors.New("identity yok")
+}
+
+// TestIdentityOutageIsCountedNotFatal: an identity outage makes no
+// suggestion and does not fail the job; the failures are only counted.
+func TestIdentityOutageIsCountedNotFatal(t *testing.T) {
+	e := setup(t)
+	tf, _ := e.newTayfa(t)
+	a, b := id.New(), id.New()
+	e.profile(t, a)
+	e.profile(t, b)
+	e.attendTogether(t, tf, 3, 5*day, a, b)
+	f := &failingMinors{}
+	_, err := e.suggester(t, f).SuggestFriends(ctx)
+	must(t, err)
+	if f.calls != 2 || e.count(t, `SELECT count(*) FROM friend_suggestions`) != 0 {
+		t.Fatalf("çağrı %d", f.calls)
 	}
 }

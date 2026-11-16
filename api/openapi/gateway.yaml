@@ -3950,7 +3950,7 @@ paths:
       description: |
         Son 12 ayda en az 3 etkinliğe birlikte katıldığınız (check-in ile
         doğrulanmış) ve arkadaşınız olmayan kişiler; günlük bir işle, haftada
-        en fazla bir öneri (issue #208, ADR-0028). Son 30 günün kapatılmamış
+        en fazla bir öneri (issue #208, ADR-0030). Son 30 günün kapatılmamış
         önerileri, yeniden eskiye, en çok 10. Arkadaş olunca ya da istek
         gönderilince, iki taraftan biri engelleyince veya şikâyet edince,
         önerilen kişi "Beni önerme" deyince ya da hesabını silince öneri
@@ -4004,14 +4004,17 @@ paths:
         alan gerekir (yoksa `invalid-request`).
 
         **Profilleme** (`profiling_enabled`, varsayılan açık): kapatınca
-        arkadaşlık puanlarınız ve size yapılmış ya da sizin önerildiğiniz
-        açık öneriler hemen silinir; öneri almazsınız ve kimseye
-        önerilmezsiniz. Kapattığınız öneriler hatırlanır. Yeniden açınca
-        puan ertesi gün hesaplanır.
+        arkadaşlık puanlarınız hemen silinir; size yapılmış ya da sizin
+        önerildiğiniz açık öneriler hemen geri çekilir (listelenmez,
+        bildirimi `expired` olur); öneri almazsınız ve kimseye
+        önerilmezsiniz. Yeniden açınca puan ertesi gün hesaplanır.
 
         **Beni önerme** (`hide_from_suggestions`, varsayılan kapalı):
         açınca kimseye önerilmezsiniz ve sizin önerildiğiniz açık öneriler
-        silinir; siz öneri almaya devam edersiniz.
+        geri çekilir; siz öneri almaya devam edersiniz.
+
+        Ayarı kapatıp açmak haftalık öneri sınırını ve daha önce kimin
+        önerildiğini sıfırlamaz; kapattığınız öneriler de hatırlanır.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -6555,6 +6558,13 @@ components:
             `expired` artık bilinmiyor. Liste alınırken core'dan hesaplanır,
             bildirime yazılmaz; yalnızca alıcıya döner, kimin geri çektiği
             söylenmez. O an hesaplanamazsa alan yoktur.
+
+            `friend_suggestion` (issue #208, ADR-0030): `pending` öneri hâlâ
+            geçerli ("Arkadaş ekle" / "Kapat" gösterilir); `accepted`
+            arkadaş oldunuz ya da istek gönderildi; `declined` siz
+            kapattınız; `expired` öneri geri çekildi ya da artık geçerli
+            değil (neden söylenmez). İstemci `pending` olmayan öneri
+            bildirimini göstermez.
           enum: [pending, accepted, declined, withdrawn, expired, unknown]
         read: { type: boolean }
         created_at: { type: string, format: date-time }
@@ -7623,7 +7633,7 @@ components:
         next_page_token: { type: string }
     FriendSuggestion:
       type: object
-      description: Arkadaşlık puanı, ortak etkinlik sayısı ve gerekçe bilinçli olarak yoktur (ADR-0028).
+      description: Arkadaşlık puanı, ortak etkinlik sayısı ve gerekçe bilinçli olarak yoktur (ADR-0030).
       required: [user_id, display_name, suggested_at]
       additionalProperties: false
       properties:

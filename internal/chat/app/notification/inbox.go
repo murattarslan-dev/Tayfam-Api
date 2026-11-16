@@ -59,7 +59,7 @@ const (
 	// user.data_export_ready event; no tayfa, no actor.
 	TypeDataExportReady = "data_export_ready"
 	// TypeFriendSuggestion: core suggests the target user as a friend
-	// (issue #208, ADR-0028). No tayfa, no actor; in-app only: the
+	// (issue #208, ADR-0030). No tayfa, no actor; in-app only: the
 	// enqueue_push trigger opens no push job for it.
 	TypeFriendSuggestion = "friend_suggestion"
 )

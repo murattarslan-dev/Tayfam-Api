@@ -63,7 +63,7 @@ const (
 	// actor: the reporter is not told who handled the report (issue #76).
 	TypeReportResolved = "report_resolved"
 	// TypeFriendSuggestion: the friend-suggestions job suggests Target to
-	// the one recipient (issue #208, ADR-0028). No tayfa, no actor; never
+	// the one recipient (issue #208, ADR-0030). No tayfa, no actor; never
 	// the score or the reason. chat sends no push for it.
 	TypeFriendSuggestion = "friend_suggestion"
 )

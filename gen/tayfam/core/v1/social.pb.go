@@ -134,6 +134,13 @@ const (
 	RequestKind_REQUEST_KIND_FRIEND_REQUEST RequestKind = 1
 	// ref id is the tayfa ID.
 	RequestKind_REQUEST_KIND_TAYFA_INVITATION RequestKind = 2
+	// ref id is the suggested user's ID (FRIEND_SUGGESTION notifications,
+	// issue #208, ADR-0030). PENDING: still suggested; ACCEPTED: the two are
+	// friends or a request is waiting; DECLINED: the caller dismissed it;
+	// EXPIRED: withdrawn or no longer suggestible, for whatever reason (a
+	// block by the other side is never told apart). The client does not
+	// show a FRIEND_SUGGESTION notification that is not PENDING.
+	RequestKind_REQUEST_KIND_FRIEND_SUGGESTION RequestKind = 3
 )
 
 // Enum value maps for RequestKind.
@@ -142,11 +149,13 @@ var (
 		0: "REQUEST_KIND_UNSPECIFIED",
 		1: "REQUEST_KIND_FRIEND_REQUEST",
 		2: "REQUEST_KIND_TAYFA_INVITATION",
+		3: "REQUEST_KIND_FRIEND_SUGGESTION",
 	}
 	RequestKind_value = map[string]int32{
-		"REQUEST_KIND_UNSPECIFIED":      0,
-		"REQUEST_KIND_FRIEND_REQUEST":   1,
-		"REQUEST_KIND_TAYFA_INVITATION": 2,
+		"REQUEST_KIND_UNSPECIFIED":       0,
+		"REQUEST_KIND_FRIEND_REQUEST":    1,
+		"REQUEST_KIND_TAYFA_INVITATION":  2,
+		"REQUEST_KIND_FRIEND_SUGGESTION": 3,
 	}
 )
 
@@ -1508,7 +1517,7 @@ func (*DismissFriendSuggestionResponse) Descriptor() ([]byte, []int) {
 	return file_tayfam_core_v1_social_proto_rawDescGZIP(), []int{25}
 }
 
-// SocialSettings are the caller's profiling settings (ADR-0028).
+// SocialSettings are the caller's profiling settings (ADR-0030).
 type SocialSettings struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "Profilleme": the friendship score is kept and suggestions are made.
@@ -1838,11 +1847,12 @@ const file_tayfam_core_v1_social_proto_rawDesc = "" +
 	"\x10RequestDirection\x12!\n" +
 	"\x1dREQUEST_DIRECTION_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aREQUEST_DIRECTION_INCOMING\x10\x01\x12\x1e\n" +
-	"\x1aREQUEST_DIRECTION_OUTGOING\x10\x02*o\n" +
+	"\x1aREQUEST_DIRECTION_OUTGOING\x10\x02*\x93\x01\n" +
 	"\vRequestKind\x12\x1c\n" +
 	"\x18REQUEST_KIND_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bREQUEST_KIND_FRIEND_REQUEST\x10\x01\x12!\n" +
-	"\x1dREQUEST_KIND_TAYFA_INVITATION\x10\x02*\xdb\x01\n" +
+	"\x1dREQUEST_KIND_TAYFA_INVITATION\x10\x02\x12\"\n" +
+	"\x1eREQUEST_KIND_FRIEND_SUGGESTION\x10\x03*\xdb\x01\n" +
 	"\x11RequestResolution\x12\"\n" +
 	"\x1eREQUEST_RESOLUTION_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aREQUEST_RESOLUTION_PENDING\x10\x01\x12\x1f\n" +

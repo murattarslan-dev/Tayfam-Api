@@ -59,11 +59,11 @@ const (
 	// Files the caller uploaded: a list only, never the files (ADR-0021).
 	CoreExportSection_CORE_EXPORT_SECTION_UPLOADS CoreExportSection = 17
 	// One record: the caller's profiling and "do not suggest me" settings
-	// and how many people a friendship score is kept with (ADR-0028). The
+	// and how many people a friendship score is kept with (ADR-0030). The
 	// scores themselves and who they are with are not exported.
-	CoreExportSection_CORE_EXPORT_SECTION_SOCIAL_SETTINGS CoreExportSection = 18
+	CoreExportSection_CORE_EXPORT_SECTION_SOCIAL_SETTINGS CoreExportSection = 20
 	// Friend suggestions made to the caller, dismissed ones included.
-	CoreExportSection_CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS CoreExportSection = 19
+	CoreExportSection_CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS CoreExportSection = 21
 )
 
 // Enum value maps for CoreExportSection.
@@ -87,8 +87,8 @@ var (
 		15: "CORE_EXPORT_SECTION_BLOCKS",
 		16: "CORE_EXPORT_SECTION_REPORTS",
 		17: "CORE_EXPORT_SECTION_UPLOADS",
-		18: "CORE_EXPORT_SECTION_SOCIAL_SETTINGS",
-		19: "CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS",
+		20: "CORE_EXPORT_SECTION_SOCIAL_SETTINGS",
+		21: "CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS",
 	}
 	CoreExportSection_value = map[string]int32{
 		"CORE_EXPORT_SECTION_UNSPECIFIED":        0,
@@ -109,8 +109,8 @@ var (
 		"CORE_EXPORT_SECTION_BLOCKS":             15,
 		"CORE_EXPORT_SECTION_REPORTS":            16,
 		"CORE_EXPORT_SECTION_UPLOADS":            17,
-		"CORE_EXPORT_SECTION_SOCIAL_SETTINGS":    18,
-		"CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS": 19,
+		"CORE_EXPORT_SECTION_SOCIAL_SETTINGS":    20,
+		"CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS": 21,
 	}
 )
 
@@ -259,8 +259,8 @@ const file_tayfam_core_v1_export_proto_rawDesc = "" +
 	"\x1aCORE_EXPORT_SECTION_BLOCKS\x10\x0f\x12\x1f\n" +
 	"\x1bCORE_EXPORT_SECTION_REPORTS\x10\x10\x12\x1f\n" +
 	"\x1bCORE_EXPORT_SECTION_UPLOADS\x10\x11\x12'\n" +
-	"#CORE_EXPORT_SECTION_SOCIAL_SETTINGS\x10\x12\x12*\n" +
-	"&CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS\x10\x132l\n" +
+	"#CORE_EXPORT_SECTION_SOCIAL_SETTINGS\x10\x14\x12*\n" +
+	"&CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS\x10\x152l\n" +
 	"\rExportService\x12[\n" +
 	"\fExportMyData\x12#.tayfam.core.v1.ExportMyDataRequest\x1a$.tayfam.core.v1.ExportMyDataResponse0\x01B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vExportProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"

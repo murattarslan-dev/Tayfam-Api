@@ -1,16 +1,27 @@
--- Arkadaşlık puanı ve arkadaş önerisi (issue #208, ADR-0028). Puan hiçbir
+-- Arkadaşlık puanı ve arkadaş önerisi (issue #208, ADR-0030). Puan hiçbir
 -- sorgunun API'ye giden sonucunda yoktur; yalnızca aday sırası için okunur.
+-- Bir çiftin önerilebilmesi friend_suggestion_allowed (migration 00025)
+-- ile tek yerde tanımlıdır.
 
 -- ---------------------------------------------------------------------------
 -- Puan (friend-suggestions işi)
 
+-- Puan hesaplaması ile profilleme kapatma ve engelleme sıraya girer: iş
+-- özel, ayar ve engel paylaşımlı kilit alır. Böylece kapatma, hesaplanmakta
+-- olan satırları kaçırmaz.
+-- name: LockFriendScores :exec
+SELECT pg_advisory_xact_lock(hashtextextended('tayfam.core.friend_scores', 0));
+
+-- name: LockFriendScoresShared :exec
+SELECT pg_advisory_xact_lock_shared(hashtextextended('tayfam.core.friend_scores', 0));
+
 -- name: DeleteAllFriendScores :exec
 DELETE FROM friend_scores;
 
--- Son 12 ayda (@since sonrası, @now öncesi başlayan) silinmemiş ve iptal
+-- Son 12 ayda (since sonrası, now öncesi başlayan) silinmemiş ve iptal
 -- edilmemiş etkinliklerde ikisi de "attended" olan çiftler. Ağırlık
 -- 0,5 ^ (yaş / yarı ömür). Profillemesi kapalı, hesabı silinmiş ya da banlı
--- kullanıcı girmez.
+-- kullanıcı ve aralarında engel olan çift girmez.
 -- name: InsertFriendScores :execrows
 WITH att AS (
   SELECT r.user_id, e.id AS event_id, e.starts_at
@@ -29,16 +40,27 @@ SELECT a.user_id, b.user_id,
        count(*)::integer, max(a.starts_at), @now::timestamptz
 FROM att a
 JOIN att b ON b.event_id = a.event_id AND a.user_id < b.user_id
+WHERE NOT EXISTS (SELECT 1 FROM user_blocks ub
+                  WHERE (ub.blocker_id = a.user_id AND ub.blocked_id = b.user_id)
+                     OR (ub.blocker_id = b.user_id AND ub.blocked_id = a.user_id))
 GROUP BY a.user_id, b.user_id;
+
+-- Aynı transaction'da, yazılan puanlardan profillemesi kapalı olanlarınki
+-- ve engelli çiftler silinir (hesaplama sırasında değişen ayar ve engel).
+-- name: DeleteExcludedFriendScores :execrows
+DELETE FROM friend_scores fs
+WHERE EXISTS (SELECT 1 FROM social_settings s
+              WHERE s.user_id IN (fs.user_low_id, fs.user_high_id) AND NOT s.profiling_enabled)
+   OR EXISTS (SELECT 1 FROM user_blocks ub
+              WHERE (ub.blocker_id = fs.user_low_id AND ub.blocked_id = fs.user_high_id)
+                 OR (ub.blocker_id = fs.user_high_id AND ub.blocked_id = fs.user_low_id));
 
 -- ---------------------------------------------------------------------------
 -- Öneri adayları (friend-suggestions işi)
 
--- @after_user'dan sonraki alıcılar için, alıcı başına puana göre en çok
--- @per_user aday. Alıcı son 7 günde öneri almışsa hiç aday dönmez.
--- Elenenler (ADR-0028 §3): arkadaşlık ya da bekleyen istek, iki yönde engel,
--- iki yönde şikâyet, reddedilmiş istek, alıcıya daha önce önerilmiş ya da
--- karşı tarafın alıcıyı kapattığı çift, "Beni önerme", silinmiş/banlı aday.
+-- after_user'dan sonraki alıcılar için, alıcı başına puana göre en çok
+-- per_user aday. Alıcı son 7 günde öneri almışsa hiç aday dönmez; alıcıya
+-- daha önce önerilmiş kişi aday olmaz.
 -- name: ListSuggestionCandidates :many
 WITH pairs AS (
   SELECT s.user_low_id AS recipient_id, s.user_high_id AS candidate_id, s.score
@@ -54,24 +76,8 @@ WITH pairs AS (
     AND NOT EXISTS (SELECT 1 FROM friend_suggestions fs
                     WHERE fs.user_id = p.recipient_id AND fs.source = 'suggested' AND fs.created_at > @week_ago::timestamptz)
     AND NOT EXISTS (SELECT 1 FROM friend_suggestions fs
-                    WHERE (fs.user_id = p.recipient_id AND fs.suggested_user_id = p.candidate_id)
-                       OR (fs.user_id = p.candidate_id AND fs.suggested_user_id = p.recipient_id AND fs.dismissed_at IS NOT NULL))
-    AND NOT EXISTS (SELECT 1 FROM friendships f
-                    WHERE f.user_low_id = LEAST(p.recipient_id, p.candidate_id)
-                      AND f.user_high_id = GREATEST(p.recipient_id, p.candidate_id))
-    AND NOT EXISTS (SELECT 1 FROM user_blocks ub
-                    WHERE (ub.blocker_id = p.recipient_id AND ub.blocked_id = p.candidate_id)
-                       OR (ub.blocker_id = p.candidate_id AND ub.blocked_id = p.recipient_id))
-    AND NOT EXISTS (SELECT 1 FROM reports r
-                    WHERE (r.reporter_id = p.recipient_id AND r.subject_user_id = p.candidate_id)
-                       OR (r.reporter_id = p.candidate_id AND r.subject_user_id = p.recipient_id))
-    AND NOT EXISTS (SELECT 1 FROM friend_request_outcomes o
-                    WHERE o.outcome = 'declined'
-                      AND ((o.requester_id = p.recipient_id AND o.recipient_id = p.candidate_id)
-                        OR (o.requester_id = p.candidate_id AND o.recipient_id = p.recipient_id)))
-    AND NOT EXISTS (SELECT 1 FROM social_settings ss WHERE ss.user_id = p.candidate_id AND ss.hide_from_suggestions)
-    AND NOT EXISTS (SELECT 1 FROM user_profiles up WHERE up.user_id IN (p.recipient_id, p.candidate_id) AND up.deleted_at IS NOT NULL)
-    AND NOT EXISTS (SELECT 1 FROM user_platform_bans b WHERE b.user_id IN (p.recipient_id, p.candidate_id) AND b.banned_at IS NOT NULL)
+                    WHERE fs.user_id = p.recipient_id AND fs.suggested_user_id = p.candidate_id)
+    AND friend_suggestion_allowed(p.recipient_id, p.candidate_id)
 )
 SELECT recipient_id::uuid AS recipient_id, candidate_id::uuid AS candidate_id
 FROM ranked
@@ -83,58 +89,52 @@ LIMIT @n;
 -- name: LockSuggestionRecipient :exec
 SELECT pg_advisory_xact_lock(hashtextextended('tayfam.core.friend_suggestion:' || sqlc.arg(user_id)::uuid::text, 0));
 
--- Öneriyi yazar; transaction içinde haftalık sınırı, arkadaşlığı, engeli,
--- "Beni önerme"yi, kapatmayı ve profillemeyi yeniden denetler. Yazılmadıysa
--- 0 döner.
+-- Öneriyi yazar; transaction içinde aday sorgusunun bütün koşullarını
+-- (haftalık sınır, daha önce önerilmiş, friend_suggestion_allowed) yeniden
+-- denetler. Yazılmadıysa 0 döner.
 -- name: CreateFriendSuggestion :execrows
-INSERT INTO friend_suggestions (user_id, suggested_user_id, created_at)
-SELECT @user_id::uuid, @suggested_user_id::uuid, @now::timestamptz
+INSERT INTO friend_suggestions (user_id, suggested_user_id, created_at, source)
+SELECT @user_id::uuid, @suggested_user_id::uuid, @now::timestamptz, 'suggested'
 WHERE NOT EXISTS (SELECT 1 FROM friend_suggestions fs
                   WHERE fs.user_id = @user_id::uuid AND fs.source = 'suggested' AND fs.created_at > @week_ago::timestamptz)
-  AND NOT EXISTS (SELECT 1 FROM friend_suggestions fs
-                  WHERE fs.user_id = @suggested_user_id::uuid AND fs.suggested_user_id = @user_id::uuid
-                    AND fs.dismissed_at IS NOT NULL)
-  AND NOT EXISTS (SELECT 1 FROM friendships f
-                  WHERE f.user_low_id = LEAST(@user_id::uuid, @suggested_user_id::uuid)
-                    AND f.user_high_id = GREATEST(@user_id::uuid, @suggested_user_id::uuid))
-  AND NOT EXISTS (SELECT 1 FROM user_blocks ub
-                  WHERE (ub.blocker_id = @user_id::uuid AND ub.blocked_id = @suggested_user_id::uuid)
-                     OR (ub.blocker_id = @suggested_user_id::uuid AND ub.blocked_id = @user_id::uuid))
-  AND NOT EXISTS (SELECT 1 FROM social_settings ss
-                  WHERE (ss.user_id = @suggested_user_id::uuid AND (ss.hide_from_suggestions OR NOT ss.profiling_enabled))
-                     OR (ss.user_id = @user_id::uuid AND NOT ss.profiling_enabled))
+  AND friend_suggestion_allowed(@user_id::uuid, @suggested_user_id::uuid)
 ON CONFLICT (user_id, suggested_user_id) DO NOTHING;
 
--- Saklama: 365 günden eski açık öneriler (kapatılmışlar kalır).
+-- Saklama: 365 günden eski kapatılmamış satırlar (kapatılmışlar kalır).
 -- name: DeleteOldOpenFriendSuggestions :execrows
 DELETE FROM friend_suggestions
 WHERE dismissed_at IS NULL AND created_at < @before::timestamptz;
 
 -- ---------------------------------------------------------------------------
--- Öneri listesi ve kapatma (kullanıcının kendi token'ıyla)
+-- Öneri listesi, kapatma ve bildirim durumu (kullanıcının kendi token'ıyla)
 
--- Alıcının @since sonrasındaki açık önerileri; her okumada yeniden süzülür.
--- Puan ve ortak katılım sayısı okunmaz.
+-- Alıcının since sonrasındaki gösterilebilir önerileri; her okumada
+-- friend_suggestion_allowed ile yeniden süzülür. Puan ve ortak katılım
+-- sayısı okunmaz.
 -- name: ListOpenFriendSuggestions :many
 SELECT fs.suggested_user_id, fs.created_at, p.display_name, p.avatar_upload_id
 FROM friend_suggestions fs
 JOIN user_profiles p ON p.user_id = fs.suggested_user_id AND p.deleted_at IS NULL
-WHERE fs.user_id = @user_id AND fs.dismissed_at IS NULL AND fs.created_at > @since::timestamptz
-  AND NOT EXISTS (SELECT 1 FROM user_platform_bans b WHERE b.user_id = fs.suggested_user_id AND b.banned_at IS NOT NULL)
-  AND NOT EXISTS (SELECT 1 FROM friendships f
-                  WHERE f.user_low_id = LEAST(fs.user_id, fs.suggested_user_id)
-                    AND f.user_high_id = GREATEST(fs.user_id, fs.suggested_user_id))
-  AND NOT EXISTS (SELECT 1 FROM user_blocks ub
-                  WHERE (ub.blocker_id = fs.user_id AND ub.blocked_id = fs.suggested_user_id)
-                     OR (ub.blocker_id = fs.suggested_user_id AND ub.blocked_id = fs.user_id))
-  AND NOT EXISTS (SELECT 1 FROM reports r
-                  WHERE (r.reporter_id = fs.user_id AND r.subject_user_id = fs.suggested_user_id)
-                     OR (r.reporter_id = fs.suggested_user_id AND r.subject_user_id = fs.user_id))
-  AND NOT EXISTS (SELECT 1 FROM social_settings ss
-                  WHERE (ss.user_id = fs.suggested_user_id AND (ss.hide_from_suggestions OR NOT ss.profiling_enabled))
-                     OR (ss.user_id = fs.user_id AND NOT ss.profiling_enabled))
+WHERE fs.user_id = @user_id AND fs.source = 'suggested'
+  AND fs.dismissed_at IS NULL AND fs.withdrawn_at IS NULL
+  AND fs.created_at > @since::timestamptz
+  AND friend_suggestion_allowed(fs.user_id, fs.suggested_user_id)
 ORDER BY fs.created_at DESC, fs.suggested_user_id
 LIMIT @n;
+
+-- Bildirim listesindeki friend_suggestion bildirimlerinin durumu (chat
+-- GetRequestResolutions ile sorar): alıcının o kişiyle önerisi, gösterilip
+-- gösterilemeyeceği ve aralarındaki arkadaşlık satırı.
+-- name: FriendSuggestionStates :many
+SELECT u.suggested_id::uuid AS suggested_id,
+       fs.created_at, fs.dismissed_at, fs.withdrawn_at, fs.source,
+       (fs.user_id IS NOT NULL AND friend_suggestion_allowed(@user_id::uuid, u.suggested_id)
+        AND EXISTS (SELECT 1 FROM user_profiles p WHERE p.user_id = u.suggested_id AND p.deleted_at IS NULL))::boolean AS allowed,
+       (f.user_low_id IS NOT NULL)::boolean AS has_friendship
+FROM unnest(@suggested_ids::uuid[]) AS u(suggested_id)
+LEFT JOIN friend_suggestions fs ON fs.user_id = @user_id::uuid AND fs.suggested_user_id = u.suggested_id
+LEFT JOIN friendships f
+  ON f.user_low_id = LEAST(u.suggested_id, @user_id::uuid) AND f.user_high_id = GREATEST(u.suggested_id, @user_id::uuid);
 
 -- name: DismissFriendSuggestion :execrows
 UPDATE friend_suggestions SET dismissed_at = @now::timestamptz
@@ -162,32 +162,38 @@ RETURNING profiling_enabled, hide_from_suggestions;
 -- name: DeleteUserFriendScores :exec
 DELETE FROM friend_scores WHERE user_low_id = @user_id OR user_high_id = @user_id;
 
--- Profilleme kapatma: kişiye yapılmış ve kişinin önerildiği açık öneriler.
--- Kapatılmış satırlar kalır.
--- name: DeleteOpenSuggestionsInvolving :exec
-DELETE FROM friend_suggestions
-WHERE (user_id = @user_id OR suggested_user_id = @user_id) AND dismissed_at IS NULL;
+-- Profilleme kapatma: kişiye yapılmış ve kişinin önerildiği açık öneriler
+-- geri çekilir. Satırlar kalır: haftalık sınır ve "önerildi" hafızası
+-- ayarı açıp kapatmakla sıfırlanmaz.
+-- name: WithdrawSuggestionsInvolving :exec
+UPDATE friend_suggestions SET withdrawn_at = @now::timestamptz
+WHERE (user_id = @user_id OR suggested_user_id = @user_id)
+  AND dismissed_at IS NULL AND withdrawn_at IS NULL;
 
--- "Beni önerme": kişinin önerildiği açık öneriler.
--- name: DeleteOpenSuggestionsOf :exec
-DELETE FROM friend_suggestions WHERE suggested_user_id = @user_id AND dismissed_at IS NULL;
+-- "Beni önerme": kişinin önerildiği açık öneriler geri çekilir.
+-- name: WithdrawSuggestionsOf :exec
+UPDATE friend_suggestions SET withdrawn_at = @now::timestamptz
+WHERE suggested_user_id = @user_id AND dismissed_at IS NULL AND withdrawn_at IS NULL;
 
 -- ---------------------------------------------------------------------------
--- Engelleme ve hesap silme
+-- Kalıcı dışlama (engelleme, isteği reddetme, arkadaşlığı bitirme) ve
+-- hesap silme
 
 -- name: DeleteFriendScore :exec
 DELETE FROM friend_scores WHERE user_low_id = @user_low_id AND user_high_id = @user_high_id;
 
--- Engelleme: iki yöndeki açık öneriler silinir, engelleyen adına kapatılmış
--- kayıt yazılır (çift bir daha önerilmez).
--- name: DeleteOpenSuggestionsBetween :exec
-DELETE FROM friend_suggestions
-WHERE dismissed_at IS NULL
-  AND ((user_id = @a AND suggested_user_id = @b) OR (user_id = @b AND suggested_user_id = @a));
+-- Karşı tarafın actor'a yapılmış açık önerisi geri çekilir.
+-- name: WithdrawSuggestionTo :exec
+UPDATE friend_suggestions SET withdrawn_at = @now::timestamptz
+WHERE user_id = @user_id AND suggested_user_id = @suggested_user_id
+  AND dismissed_at IS NULL AND withdrawn_at IS NULL;
 
+-- actor adına kalıcı kapatma: actor'a yapılmış öneri varsa kapatılır, yoksa
+-- source ile baştan kapatılmış kayıt yazılır. Çift bir daha hiçbir yönde
+-- önerilmez.
 -- name: DismissSuggestionPair :exec
 INSERT INTO friend_suggestions (user_id, suggested_user_id, created_at, dismissed_at, source)
-VALUES (@user_id, @suggested_user_id, @now::timestamptz, @now::timestamptz, 'blocked')
+VALUES (@user_id, @suggested_user_id, @now::timestamptz, @now::timestamptz, @source::text)
 ON CONFLICT (user_id, suggested_user_id) DO UPDATE SET dismissed_at = EXCLUDED.dismissed_at
 WHERE friend_suggestions.dismissed_at IS NULL;
 

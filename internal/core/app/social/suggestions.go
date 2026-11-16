@@ -1,6 +1,6 @@
 package social
 
-// Friend suggestions and the profiling settings (issue #208, ADR-0028).
+// Friend suggestions and the profiling settings (issue #208, ADR-0030).
 //
 // The daily friend-suggestions job (package jobs) keeps the friendship
 // scores and writes the suggestions; this file is what the user does with
@@ -21,7 +21,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
-// Suggestion rules (ADR-0028).
+// Suggestion rules (ADR-0030).
 const (
 	// SuggestionListWindow: an open suggestion is listed this long.
 	SuggestionListWindow = 30 * 24 * time.Hour
@@ -104,10 +104,13 @@ func (s *Service) GetSocialSettings(ctx context.Context, caller id.ID) (Settings
 }
 
 // UpdateSocialSettings changes the given settings in one transaction.
-// Turning profiling off deletes the caller's scores and the open
+// Turning profiling off deletes the caller's scores and withdraws the open
 // suggestions to and of the caller; turning hide_from_suggestions on
-// deletes the open suggestions of the caller. The caller's own dismissals
-// stay.
+// withdraws the open suggestions of the caller. Withdrawn rows stay, so
+// switching a setting off and on resets neither the weekly limit nor the
+// memory of who was already suggested (ADR-0030 §5). The transaction waits
+// for a running score computation (shared lock), so no score written by it
+// survives turning profiling off.
 func (s *Service) UpdateSocialSettings(ctx context.Context, caller id.ID, u SettingsUpdate) (Settings, error) {
 	if u.ProfilingEnabled == nil && u.HideFromSuggestions == nil {
 		return Settings{}, apperr.Validation("settings")
@@ -115,9 +118,13 @@ func (s *Service) UpdateSocialSettings(ctx context.Context, caller id.ID, u Sett
 	var out Settings
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := store.New(tx)
+		if err := q.LockFriendScoresShared(ctx); err != nil {
+			return fmt.Errorf("puan kilidi: %w", err)
+		}
+		now := ts(s.now())
 		r, err := q.UpsertSocialSettings(ctx, store.UpsertSocialSettingsParams{
 			UserID: caller.PG(), ProfilingEnabled: optBool(u.ProfilingEnabled),
-			HideFromSuggestions: optBool(u.HideFromSuggestions), Now: ts(s.now()),
+			HideFromSuggestions: optBool(u.HideFromSuggestions), Now: now,
 		})
 		if err != nil {
 			return fmt.Errorf("sosyal ayarlar: %w", err)
@@ -127,13 +134,13 @@ func (s *Service) UpdateSocialSettings(ctx context.Context, caller id.ID, u Sett
 			if err := q.DeleteUserFriendScores(ctx, caller.PG()); err != nil {
 				return fmt.Errorf("puan silme: %w", err)
 			}
-			if err := q.DeleteOpenSuggestionsInvolving(ctx, caller.PG()); err != nil {
-				return fmt.Errorf("öneri silme: %w", err)
+			if err := q.WithdrawSuggestionsInvolving(ctx, store.WithdrawSuggestionsInvolvingParams{UserID: caller.PG(), Now: now}); err != nil {
+				return fmt.Errorf("öneri geri çekme: %w", err)
 			}
 		}
 		if out.HideFromSuggestions {
-			if err := q.DeleteOpenSuggestionsOf(ctx, caller.PG()); err != nil {
-				return fmt.Errorf("öneri silme: %w", err)
+			if err := q.WithdrawSuggestionsOf(ctx, store.WithdrawSuggestionsOfParams{UserID: caller.PG(), Now: now}); err != nil {
+				return fmt.Errorf("öneri geri çekme: %w", err)
 			}
 		}
 		return nil
@@ -141,20 +148,34 @@ func (s *Service) UpdateSocialSettings(ctx context.Context, caller id.ID, u Sett
 	return out, err
 }
 
-// forgetPairOnBlock runs in BlockUser's transaction: the pair's score and
-// open suggestions go, and a dismissal in the blocker's name keeps the two
-// from being suggested to each other again, even after an unblock
-// (ADR-0028 §6).
-func (s *Service) forgetPairOnBlock(ctx context.Context, q *store.Queries, blocker, blocked id.ID) error {
-	low, high := Pair(blocker, blocked)
+// Sources of a permanent exclusion written in the actor's name
+// (friend_suggestions.source; ADR-0030 §6).
+const (
+	excludeBlocked    = "blocked"
+	excludeDeclined   = "declined"
+	excludeUnfriended = "unfriended"
+)
+
+// excludePair runs in the transaction of a block, a declined friend request
+// or an ended friendship: the pair's score goes, the other's open
+// suggestion of actor is withdrawn, and actor's suggestion of other (or a
+// new row with source) is dismissed for good, so the two are never
+// suggested to each other again (ADR-0030 §6). It waits for a running
+// score computation, like a settings change.
+func (s *Service) excludePair(ctx context.Context, q *store.Queries, actor, other id.ID, source string) error {
+	if err := q.LockFriendScoresShared(ctx); err != nil {
+		return fmt.Errorf("puan kilidi: %w", err)
+	}
+	now := ts(s.now())
+	low, high := Pair(actor, other)
 	if err := q.DeleteFriendScore(ctx, store.DeleteFriendScoreParams{UserLowID: low.PG(), UserHighID: high.PG()}); err != nil {
 		return fmt.Errorf("puan silme: %w", err)
 	}
-	if err := q.DeleteOpenSuggestionsBetween(ctx, store.DeleteOpenSuggestionsBetweenParams{A: blocker.PG(), B: blocked.PG()}); err != nil {
-		return fmt.Errorf("öneri silme: %w", err)
+	if err := q.WithdrawSuggestionTo(ctx, store.WithdrawSuggestionToParams{UserID: other.PG(), SuggestedUserID: actor.PG(), Now: now}); err != nil {
+		return fmt.Errorf("öneri geri çekme: %w", err)
 	}
 	if err := q.DismissSuggestionPair(ctx, store.DismissSuggestionPairParams{
-		UserID: blocker.PG(), SuggestedUserID: blocked.PG(), Now: ts(s.now()),
+		UserID: actor.PG(), SuggestedUserID: other.PG(), Now: now, Source: source,
 	}); err != nil {
 		return fmt.Errorf("öneri kapatma: %w", err)
 	}

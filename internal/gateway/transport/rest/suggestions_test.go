@@ -17,7 +17,7 @@ import (
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 )
 
-// Friend suggestions and profiling settings (issue #208, ADR-0028).
+// Friend suggestions and profiling settings (issue #208, ADR-0030).
 
 func (f *fakeCore) ListFriendSuggestions(ctx context.Context, in *corev1.ListFriendSuggestionsRequest, _ ...grpc.CallOption) (*corev1.ListFriendSuggestionsResponse, error) {
 	return &corev1.ListFriendSuggestionsResponse{Suggestions: []*corev1.FriendSuggestion{
@@ -114,7 +114,7 @@ func TestFriendSuggestionRoutesValidateInput(t *testing.T) {
 	}
 }
 
-// TestFriendSuggestionContractHasNoScore pins ADR-0028 in the contract:
+// TestFriendSuggestionContractHasNoScore pins ADR-0030 in the contract:
 // the suggestion and settings schemas name no field that could carry the
 // friendship score or the number of shared events.
 func TestFriendSuggestionContractHasNoScore(t *testing.T) {

@@ -45,7 +45,7 @@ const (
 	SectionBlocks          = "blocks"
 	SectionReports         = "reports"
 	SectionUploads         = "uploads"
-	// Issue #208, ADR-0028 §9: the settings and how many people a score is
+	// Issue #208, ADR-0030 §9: the settings and how many people a score is
 	// kept with; never the scores or who they are with.
 	SectionSocialSettings    = "social_settings"
 	SectionFriendSuggestions = "friend_suggestions"

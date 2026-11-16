@@ -7,7 +7,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
-// TestFriendSuggestionNotificationHasNoPush (issue #208, ADR-0028 §8): the
+// TestFriendSuggestionNotificationHasNoPush (issue #208, ADR-0030 §8): the
 // friend_suggestion notice is stored for the in-app list, but the
 // enqueue_push trigger opens no push job for it; other types still get one.
 func TestFriendSuggestionNotificationHasNoPush(t *testing.T) {

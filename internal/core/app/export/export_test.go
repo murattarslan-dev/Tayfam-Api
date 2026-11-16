@@ -128,7 +128,7 @@ func TestExportOnlyCallersData(t *testing.T) {
 			}
 		}
 	}
-	// Issue #208, ADR-0028: the settings and how many people a score is
+	// Issue #208, ADR-0030: the settings and how many people a score is
 	// kept with; never the score or who it is with.
 	if st := got[SectionSocialSettings]; len(st) != 1 || st[0]["profiling_enabled"] != true ||
 		st[0]["hide_from_suggestions"] != false || st[0]["scored_people_count"] != float64(1) {

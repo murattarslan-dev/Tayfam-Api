@@ -1,10 +1,10 @@
--- Arkadaş önerisi bildirimi (issue #208, ADR-0028): core'un
+-- Arkadaş önerisi bildirimi (issue #208, ADR-0030): core'un
 -- friend-suggestions işi notification.requested ile ister; alıcı yalnızca
 -- öneriyi alan kişidir. Tayfası ve aktörü yoktur; hedef önerilen kişidir
 -- (target_type user). Puan ve gerekçe taşımaz.
 --
 -- Yalnızca uygulama içidir: enqueue_push bu tür için push işi açmaz
--- (ADR-0028 §8). Diğer türler değişmez.
+-- (ADR-0030 §8). Diğer türler değişmez.
 --
 -- Geri alma planı: Down bu türdeki bildirimleri siler, kısıtı 00013'teki
 -- haline ve enqueue_push'u 00011'deki haline döndürür.
@@ -22,7 +22,7 @@ ALTER TABLE notifications ADD CONSTRAINT notifications_type CHECK (type IN (
 -- +goose StatementBegin
 CREATE OR REPLACE FUNCTION enqueue_push() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  -- Arkadaş önerisi yalnızca uygulama içidir (ADR-0028).
+  -- Arkadaş önerisi yalnızca uygulama içidir (ADR-0030).
   IF NEW.type = 'friend_suggestion' THEN
     RETURN NULL;
   END IF;

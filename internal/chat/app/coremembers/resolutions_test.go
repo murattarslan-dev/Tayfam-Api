@@ -27,14 +27,15 @@ func (f *fakeResolutions) GetRequestResolutions(_ context.Context, in *corev1.Ge
 }
 
 func TestResolve(t *testing.T) {
-	a, tf := id.New(), id.New()
+	a, tf, sg := id.New(), id.New(), id.New()
 	f := &fakeResolutions{resp: &corev1.GetRequestResolutionsResponse{Resolutions: []corev1.RequestResolution{
-		corev1.RequestResolution_REQUEST_RESOLUTION_WITHDRAWN, 99,
+		corev1.RequestResolution_REQUEST_RESOLUTION_WITHDRAWN, 99, corev1.RequestResolution_REQUEST_RESOLUTION_EXPIRED,
 	}}}
-	got, err := NewResolutions(f).Resolve(context.Background(), []notification.RequestRef{{ID: a}, {Invitation: true, ID: tf}})
-	if err != nil || len(got) != 2 || got[0] != "withdrawn" || got[1] != "" ||
+	got, err := NewResolutions(f).Resolve(context.Background(), []notification.RequestRef{{ID: a}, {Invitation: true, ID: tf}, {Suggestion: true, ID: sg}})
+	if err != nil || len(got) != 3 || got[0] != "withdrawn" || got[1] != "" || got[2] != "expired" ||
 		f.req.GetRefs()[0].GetKind() != corev1.RequestKind_REQUEST_KIND_FRIEND_REQUEST || f.req.GetRefs()[0].GetId() != a.String() ||
-		f.req.GetRefs()[1].GetKind() != corev1.RequestKind_REQUEST_KIND_TAYFA_INVITATION {
+		f.req.GetRefs()[1].GetKind() != corev1.RequestKind_REQUEST_KIND_TAYFA_INVITATION ||
+		f.req.GetRefs()[2].GetKind() != corev1.RequestKind_REQUEST_KIND_FRIEND_SUGGESTION || f.req.GetRefs()[2].GetId() != sg.String() {
 		t.Fatalf("çözüm = %v %v %v", got, err, f.req)
 	}
 	f.err = status.Error(codes.Unavailable, "x")

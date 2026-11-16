@@ -96,7 +96,7 @@ const (
 	NotificationType_NOTIFICATION_TYPE_DATA_EXPORT_READY NotificationType = 21
 	// core suggests target_id as a friend: they attended at least three
 	// events together lately (target: USER, target_id is the suggested user;
-	// issue #208, ADR-0028). Not about a tayfa, no actor (the system). Never
+	// issue #208, ADR-0030). Not about a tayfa, no actor (the system). Never
 	// carries why or the score. In-app only: no push is sent for it. The
 	// client reads open suggestions from core's ListFriendSuggestions.
 	NotificationType_NOTIFICATION_TYPE_FRIEND_SUGGESTION NotificationType = 22

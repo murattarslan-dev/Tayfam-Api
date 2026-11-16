@@ -31,7 +31,7 @@ type SocialClient interface {
 	BlockUser(ctx context.Context, in *corev1.BlockUserRequest, opts ...grpc.CallOption) (*corev1.BlockUserResponse, error)
 	UnblockUser(ctx context.Context, in *corev1.UnblockUserRequest, opts ...grpc.CallOption) (*corev1.UnblockUserResponse, error)
 	ListBlockedUsers(ctx context.Context, in *corev1.ListBlockedUsersRequest, opts ...grpc.CallOption) (*corev1.ListBlockedUsersResponse, error)
-	// Friend suggestions and profiling settings (issue #208, ADR-0028).
+	// Friend suggestions and profiling settings (issue #208, ADR-0030).
 	ListFriendSuggestions(ctx context.Context, in *corev1.ListFriendSuggestionsRequest, opts ...grpc.CallOption) (*corev1.ListFriendSuggestionsResponse, error)
 	DismissFriendSuggestion(ctx context.Context, in *corev1.DismissFriendSuggestionRequest, opts ...grpc.CallOption) (*corev1.DismissFriendSuggestionResponse, error)
 	GetSocialSettings(ctx context.Context, in *corev1.GetSocialSettingsRequest, opts ...grpc.CallOption) (*corev1.GetSocialSettingsResponse, error)
@@ -384,7 +384,7 @@ func (h coreHandlers) unblockUser(ctx context.Context, w http.ResponseWriter, r 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// --- Friend suggestions and profiling settings (issue #208, ADR-0028) ---
+// --- Friend suggestions and profiling settings (issue #208, ADR-0030) ---
 
 // friendSuggestionJSON is FriendSuggestion. It has no score, no number of
 // shared events and no reason, on purpose.

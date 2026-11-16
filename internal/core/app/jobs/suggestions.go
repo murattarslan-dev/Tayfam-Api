@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -13,7 +14,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
-// Friendship score and friend suggestions (issue #208, ADR-0028).
+// Friendship score and friend suggestions (issue #208, ADR-0030).
 const (
 	// ScoreWindow: shared attendance older than this does not count.
 	ScoreWindow = 365 * 24 * time.Hour
@@ -53,12 +54,17 @@ type MinorChecker interface {
 //
 // The scores are rewritten in one transaction: a pair with a verified
 // shared attendance in the last ScoreWindow weighs 0.5^(age/ScoreHalfLife)
-// per event (ADR-0028 §2). A candidate is suggested only when identity
+// per event (ADR-0030 §2). A candidate is suggested only when identity
 // answers for both and both are on the same side of 18; without an answer
 // there is no suggestion (the safe side).
 func (s *Service) SuggestFriends(ctx context.Context) (int, error) {
 	now := s.now()
 	scores, err := s.batch(ctx, JobFriendSuggestions, func(q *store.Queries) (int, error) {
+		// Settings changes and blocks wait (shared lock) until the new
+		// scores are committed, then delete what they must.
+		if err := q.LockFriendScores(ctx); err != nil {
+			return 0, fmt.Errorf("puan kilidi: %w", err)
+		}
 		if err := q.DeleteAllFriendScores(ctx); err != nil {
 			return 0, fmt.Errorf("puan silme: %w", err)
 		}
@@ -68,7 +74,12 @@ func (s *Service) SuggestFriends(ctx context.Context) (int, error) {
 		if err != nil {
 			return 0, fmt.Errorf("puan hesaplama: %w", err)
 		}
-		return int(n), nil //nolint:gosec // row count
+		// A setting or block committed while the scores were computed.
+		gone, err := q.DeleteExcludedFriendScores(ctx)
+		if err != nil {
+			return 0, fmt.Errorf("puan temizliği: %w", err)
+		}
+		return int(n - gone), nil //nolint:gosec // row count
 	})
 	if errors.Is(err, errLocked) {
 		return 0, nil
@@ -90,11 +101,18 @@ func (s *Service) SuggestFriends(ctx context.Context) (int, error) {
 	return scores + made + expired, err
 }
 
-// makeSuggestions walks the candidates recipient by recipient.
+// makeSuggestions walks the candidates recipient by recipient. When
+// identity could not be asked, the number of failed questions is logged
+// (no IDs, no answers) so an identity outage shows.
 func (s *Service) makeSuggestions(ctx context.Context, now time.Time) (int, error) {
 	q := store.New(s.cfg.Pool)
 	after := pgtype.UUID{Valid: true} // the nil UUID: before every recipient
-	made := 0
+	made, failed := 0, 0
+	defer func() {
+		if failed > 0 {
+			s.cfg.Log.WarnContext(ctx, "arkadaş önerisi: identity IsMinor başarısız", slog.Int("adet", failed))
+		}
+	}()
 	for range maxBatches {
 		if err := ctx.Err(); err != nil {
 			return made, err
@@ -106,6 +124,19 @@ func (s *Service) makeSuggestions(ctx context.Context, now time.Time) (int, erro
 		if err != nil {
 			return made, fmt.Errorf("öneri adayları: %w", err)
 		}
+		full := len(rows) == candidateBatch
+		if full {
+			// The last recipient's candidates may be cut by LIMIT: leave
+			// them for the next page, which starts at that recipient.
+			last := rows[len(rows)-1].RecipientID
+			cut := len(rows)
+			for cut > 0 && rows[cut-1].RecipientID == last {
+				cut--
+			}
+			if cut > 0 { // a page always holds more than one recipient
+				rows = rows[:cut]
+			}
+		}
 		for start := 0; start < len(rows); {
 			end := start
 			for end < len(rows) && rows[end].RecipientID == rows[start].RecipientID {
@@ -116,16 +147,19 @@ func (s *Service) makeSuggestions(ctx context.Context, now time.Time) (int, erro
 			for _, r := range rows[start:end] {
 				candidates = append(candidates, id.ID(r.CandidateID.Bytes))
 			}
-			ok, err := s.suggestOne(ctx, now, recipient, candidates)
+			ok, askFailed, err := s.suggestOne(ctx, now, recipient, candidates)
 			if err != nil {
 				return made, err
 			}
 			if ok {
 				made++
 			}
+			if askFailed {
+				failed++
+			}
 			start = end
 		}
-		if len(rows) < candidateBatch {
+		if !full {
 			break
 		}
 		after = rows[len(rows)-1].RecipientID
@@ -135,14 +169,17 @@ func (s *Service) makeSuggestions(ctx context.Context, now time.Time) (int, erro
 
 // suggestOne asks identity about the recipient and the candidates and
 // suggests the first candidate on the recipient's side of 18. It reports
-// whether a suggestion was written.
-func (s *Service) suggestOne(ctx context.Context, now time.Time, recipient id.ID, candidates []id.ID) (bool, error) {
-	pick, ok := s.sameAgeSide(ctx, recipient, candidates)
-	if !ok {
-		return false, nil
+// whether a suggestion was written and whether identity could not be
+// asked.
+func (s *Service) suggestOne(ctx context.Context, now time.Time, recipient id.ID, candidates []id.ID) (wrote, askFailed bool, err error) {
+	pick, ok, askErr := s.sameAgeSide(ctx, recipient, candidates)
+	if askErr != nil {
+		return false, true, nil
 	}
-	wrote := false
-	_, err := s.batch(ctx, JobFriendSuggestions, func(q *store.Queries) (int, error) {
+	if !ok {
+		return false, false, nil
+	}
+	_, err = s.batch(ctx, JobFriendSuggestions, func(q *store.Queries) (int, error) {
 		if err := q.LockSuggestionRecipient(ctx, recipient.PG()); err != nil {
 			return 0, fmt.Errorf("öneri kilidi: %w", err)
 		}
@@ -163,32 +200,32 @@ func (s *Service) suggestOne(ctx context.Context, now time.Time, recipient id.ID
 		}, []id.ID{recipient})
 	})
 	if errors.Is(err, errLocked) {
-		return false, nil
+		return false, false, nil
 	}
-	return wrote, err
+	return wrote, false, err
 }
 
 // sameAgeSide returns the first candidate identity answered for that is
 // on the recipient's side of 18. Without an answer for the recipient, or
-// when identity cannot be asked, there is none. Nothing of the answer is
-// kept or logged.
-func (s *Service) sameAgeSide(ctx context.Context, recipient id.ID, candidates []id.ID) (id.ID, bool) {
+// when identity cannot be asked (the error), there is none. Nothing of the
+// answer is kept or logged.
+func (s *Service) sameAgeSide(ctx context.Context, recipient id.ID, candidates []id.ID) (id.ID, bool, error) {
 	if s.cfg.Minors == nil || len(candidates) == 0 {
-		return id.ID{}, false
+		return id.ID{}, false, nil
 	}
 	ask := append([]id.ID{recipient}, candidates...)
 	answers, err := s.cfg.Minors.IsMinor(ctx, ask)
 	if err != nil {
-		return id.ID{}, false
+		return id.ID{}, false, err
 	}
 	side, ok := answers[recipient]
 	if !ok {
-		return id.ID{}, false
+		return id.ID{}, false, nil
 	}
 	for _, c := range candidates {
 		if m, ok := answers[c]; ok && m == side {
-			return c, true
+			return c, true, nil
 		}
 	}
-	return id.ID{}, false
+	return id.ID{}, false, nil
 }

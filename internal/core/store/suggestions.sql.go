@@ -12,22 +12,11 @@ import (
 )
 
 const createFriendSuggestion = `-- name: CreateFriendSuggestion :execrows
-INSERT INTO friend_suggestions (user_id, suggested_user_id, created_at)
-SELECT $1::uuid, $2::uuid, $3::timestamptz
+INSERT INTO friend_suggestions (user_id, suggested_user_id, created_at, source)
+SELECT $1::uuid, $2::uuid, $3::timestamptz, 'suggested'
 WHERE NOT EXISTS (SELECT 1 FROM friend_suggestions fs
                   WHERE fs.user_id = $1::uuid AND fs.source = 'suggested' AND fs.created_at > $4::timestamptz)
-  AND NOT EXISTS (SELECT 1 FROM friend_suggestions fs
-                  WHERE fs.user_id = $2::uuid AND fs.suggested_user_id = $1::uuid
-                    AND fs.dismissed_at IS NOT NULL)
-  AND NOT EXISTS (SELECT 1 FROM friendships f
-                  WHERE f.user_low_id = LEAST($1::uuid, $2::uuid)
-                    AND f.user_high_id = GREATEST($1::uuid, $2::uuid))
-  AND NOT EXISTS (SELECT 1 FROM user_blocks ub
-                  WHERE (ub.blocker_id = $1::uuid AND ub.blocked_id = $2::uuid)
-                     OR (ub.blocker_id = $2::uuid AND ub.blocked_id = $1::uuid))
-  AND NOT EXISTS (SELECT 1 FROM social_settings ss
-                  WHERE (ss.user_id = $2::uuid AND (ss.hide_from_suggestions OR NOT ss.profiling_enabled))
-                     OR (ss.user_id = $1::uuid AND NOT ss.profiling_enabled))
+  AND friend_suggestion_allowed($1::uuid, $2::uuid)
 ON CONFLICT (user_id, suggested_user_id) DO NOTHING
 `
 
@@ -38,9 +27,9 @@ type CreateFriendSuggestionParams struct {
 	WeekAgo         pgtype.Timestamptz
 }
 
-// Öneriyi yazar; transaction içinde haftalık sınırı, arkadaşlığı, engeli,
-// "Beni önerme"yi, kapatmayı ve profillemeyi yeniden denetler. Yazılmadıysa
-// 0 döner.
+// Öneriyi yazar; transaction içinde aday sorgusunun bütün koşullarını
+// (haftalık sınır, daha önce önerilmiş, friend_suggestion_allowed) yeniden
+// denetler. Yazılmadıysa 0 döner.
 func (q *Queries) CreateFriendSuggestion(ctx context.Context, arg CreateFriendSuggestionParams) (int64, error) {
 	result, err := q.db.Exec(ctx, createFriendSuggestion,
 		arg.UserID,
@@ -55,18 +44,31 @@ func (q *Queries) CreateFriendSuggestion(ctx context.Context, arg CreateFriendSu
 }
 
 const deleteAllFriendScores = `-- name: DeleteAllFriendScores :exec
-
-
 DELETE FROM friend_scores
 `
 
-// Arkadaşlık puanı ve arkadaş önerisi (issue #208, ADR-0028). Puan hiçbir
-// sorgunun API'ye giden sonucunda yoktur; yalnızca aday sırası için okunur.
-// ---------------------------------------------------------------------------
-// Puan (friend-suggestions işi)
 func (q *Queries) DeleteAllFriendScores(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, deleteAllFriendScores)
 	return err
+}
+
+const deleteExcludedFriendScores = `-- name: DeleteExcludedFriendScores :execrows
+DELETE FROM friend_scores fs
+WHERE EXISTS (SELECT 1 FROM social_settings s
+              WHERE s.user_id IN (fs.user_low_id, fs.user_high_id) AND NOT s.profiling_enabled)
+   OR EXISTS (SELECT 1 FROM user_blocks ub
+              WHERE (ub.blocker_id = fs.user_low_id AND ub.blocked_id = fs.user_high_id)
+                 OR (ub.blocker_id = fs.user_high_id AND ub.blocked_id = fs.user_low_id))
+`
+
+// Aynı transaction'da, yazılan puanlardan profillemesi kapalı olanlarınki
+// ve engelli çiftler silinir (hesaplama sırasında değişen ayar ve engel).
+func (q *Queries) DeleteExcludedFriendScores(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExcludedFriendScores)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteFriendScore = `-- name: DeleteFriendScore :exec
@@ -80,7 +82,8 @@ type DeleteFriendScoreParams struct {
 }
 
 // ---------------------------------------------------------------------------
-// Engelleme ve hesap silme
+// Kalıcı dışlama (engelleme, isteği reddetme, arkadaşlığı bitirme) ve
+// hesap silme
 func (q *Queries) DeleteFriendScore(ctx context.Context, arg DeleteFriendScoreParams) error {
 	_, err := q.db.Exec(ctx, deleteFriendScore, arg.UserLowID, arg.UserHighID)
 	return err
@@ -91,53 +94,13 @@ DELETE FROM friend_suggestions
 WHERE dismissed_at IS NULL AND created_at < $1::timestamptz
 `
 
-// Saklama: 365 günden eski açık öneriler (kapatılmışlar kalır).
+// Saklama: 365 günden eski kapatılmamış satırlar (kapatılmışlar kalır).
 func (q *Queries) DeleteOldOpenFriendSuggestions(ctx context.Context, before pgtype.Timestamptz) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteOldOpenFriendSuggestions, before)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const deleteOpenSuggestionsBetween = `-- name: DeleteOpenSuggestionsBetween :exec
-DELETE FROM friend_suggestions
-WHERE dismissed_at IS NULL
-  AND ((user_id = $1 AND suggested_user_id = $2) OR (user_id = $2 AND suggested_user_id = $1))
-`
-
-type DeleteOpenSuggestionsBetweenParams struct {
-	A pgtype.UUID
-	B pgtype.UUID
-}
-
-// Engelleme: iki yöndeki açık öneriler silinir, engelleyen adına kapatılmış
-// kayıt yazılır (çift bir daha önerilmez).
-func (q *Queries) DeleteOpenSuggestionsBetween(ctx context.Context, arg DeleteOpenSuggestionsBetweenParams) error {
-	_, err := q.db.Exec(ctx, deleteOpenSuggestionsBetween, arg.A, arg.B)
-	return err
-}
-
-const deleteOpenSuggestionsInvolving = `-- name: DeleteOpenSuggestionsInvolving :exec
-DELETE FROM friend_suggestions
-WHERE (user_id = $1 OR suggested_user_id = $1) AND dismissed_at IS NULL
-`
-
-// Profilleme kapatma: kişiye yapılmış ve kişinin önerildiği açık öneriler.
-// Kapatılmış satırlar kalır.
-func (q *Queries) DeleteOpenSuggestionsInvolving(ctx context.Context, userID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteOpenSuggestionsInvolving, userID)
-	return err
-}
-
-const deleteOpenSuggestionsOf = `-- name: DeleteOpenSuggestionsOf :exec
-DELETE FROM friend_suggestions WHERE suggested_user_id = $1 AND dismissed_at IS NULL
-`
-
-// "Beni önerme": kişinin önerildiği açık öneriler.
-func (q *Queries) DeleteOpenSuggestionsOf(ctx context.Context, userID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteOpenSuggestionsOf, userID)
-	return err
 }
 
 const deleteUserFriendScores = `-- name: DeleteUserFriendScores :exec
@@ -189,7 +152,7 @@ func (q *Queries) DismissFriendSuggestion(ctx context.Context, arg DismissFriend
 
 const dismissSuggestionPair = `-- name: DismissSuggestionPair :exec
 INSERT INTO friend_suggestions (user_id, suggested_user_id, created_at, dismissed_at, source)
-VALUES ($1, $2, $3::timestamptz, $3::timestamptz, 'blocked')
+VALUES ($1, $2, $3::timestamptz, $3::timestamptz, $4::text)
 ON CONFLICT (user_id, suggested_user_id) DO UPDATE SET dismissed_at = EXCLUDED.dismissed_at
 WHERE friend_suggestions.dismissed_at IS NULL
 `
@@ -198,11 +161,78 @@ type DismissSuggestionPairParams struct {
 	UserID          pgtype.UUID
 	SuggestedUserID pgtype.UUID
 	Now             pgtype.Timestamptz
+	Source          string
 }
 
+// actor adına kalıcı kapatma: actor'a yapılmış öneri varsa kapatılır, yoksa
+// source ile baştan kapatılmış kayıt yazılır. Çift bir daha hiçbir yönde
+// önerilmez.
 func (q *Queries) DismissSuggestionPair(ctx context.Context, arg DismissSuggestionPairParams) error {
-	_, err := q.db.Exec(ctx, dismissSuggestionPair, arg.UserID, arg.SuggestedUserID, arg.Now)
+	_, err := q.db.Exec(ctx, dismissSuggestionPair,
+		arg.UserID,
+		arg.SuggestedUserID,
+		arg.Now,
+		arg.Source,
+	)
 	return err
+}
+
+const friendSuggestionStates = `-- name: FriendSuggestionStates :many
+SELECT u.suggested_id::uuid AS suggested_id,
+       fs.created_at, fs.dismissed_at, fs.withdrawn_at, fs.source,
+       (fs.user_id IS NOT NULL AND friend_suggestion_allowed($1::uuid, u.suggested_id)
+        AND EXISTS (SELECT 1 FROM user_profiles p WHERE p.user_id = u.suggested_id AND p.deleted_at IS NULL))::boolean AS allowed,
+       (f.user_low_id IS NOT NULL)::boolean AS has_friendship
+FROM unnest($2::uuid[]) AS u(suggested_id)
+LEFT JOIN friend_suggestions fs ON fs.user_id = $1::uuid AND fs.suggested_user_id = u.suggested_id
+LEFT JOIN friendships f
+  ON f.user_low_id = LEAST(u.suggested_id, $1::uuid) AND f.user_high_id = GREATEST(u.suggested_id, $1::uuid)
+`
+
+type FriendSuggestionStatesParams struct {
+	UserID       pgtype.UUID
+	SuggestedIds []pgtype.UUID
+}
+
+type FriendSuggestionStatesRow struct {
+	SuggestedID   pgtype.UUID
+	CreatedAt     pgtype.Timestamptz
+	DismissedAt   pgtype.Timestamptz
+	WithdrawnAt   pgtype.Timestamptz
+	Source        pgtype.Text
+	Allowed       bool
+	HasFriendship bool
+}
+
+// Bildirim listesindeki friend_suggestion bildirimlerinin durumu (chat
+// GetRequestResolutions ile sorar): alıcının o kişiyle önerisi, gösterilip
+// gösterilemeyeceği ve aralarındaki arkadaşlık satırı.
+func (q *Queries) FriendSuggestionStates(ctx context.Context, arg FriendSuggestionStatesParams) ([]FriendSuggestionStatesRow, error) {
+	rows, err := q.db.Query(ctx, friendSuggestionStates, arg.UserID, arg.SuggestedIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FriendSuggestionStatesRow{}
+	for rows.Next() {
+		var i FriendSuggestionStatesRow
+		if err := rows.Scan(
+			&i.SuggestedID,
+			&i.CreatedAt,
+			&i.DismissedAt,
+			&i.WithdrawnAt,
+			&i.Source,
+			&i.Allowed,
+			&i.HasFriendship,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getSocialSettings = `-- name: GetSocialSettings :one
@@ -242,6 +272,9 @@ SELECT a.user_id, b.user_id,
        count(*)::integer, max(a.starts_at), $1::timestamptz
 FROM att a
 JOIN att b ON b.event_id = a.event_id AND a.user_id < b.user_id
+WHERE NOT EXISTS (SELECT 1 FROM user_blocks ub
+                  WHERE (ub.blocker_id = a.user_id AND ub.blocked_id = b.user_id)
+                     OR (ub.blocker_id = b.user_id AND ub.blocked_id = a.user_id))
 GROUP BY a.user_id, b.user_id
 `
 
@@ -251,10 +284,10 @@ type InsertFriendScoresParams struct {
 	Since           pgtype.Timestamptz
 }
 
-// Son 12 ayda (@since sonrası, @now öncesi başlayan) silinmemiş ve iptal
+// Son 12 ayda (since sonrası, now öncesi başlayan) silinmemiş ve iptal
 // edilmemiş etkinliklerde ikisi de "attended" olan çiftler. Ağırlık
 // 0,5 ^ (yaş / yarı ömür). Profillemesi kapalı, hesabı silinmiş ya da banlı
-// kullanıcı girmez.
+// kullanıcı ve aralarında engel olan çift girmez.
 func (q *Queries) InsertFriendScores(ctx context.Context, arg InsertFriendScoresParams) (int64, error) {
 	result, err := q.db.Exec(ctx, insertFriendScores, arg.Now, arg.HalfLifeSeconds, arg.Since)
 	if err != nil {
@@ -268,20 +301,10 @@ const listOpenFriendSuggestions = `-- name: ListOpenFriendSuggestions :many
 SELECT fs.suggested_user_id, fs.created_at, p.display_name, p.avatar_upload_id
 FROM friend_suggestions fs
 JOIN user_profiles p ON p.user_id = fs.suggested_user_id AND p.deleted_at IS NULL
-WHERE fs.user_id = $1 AND fs.dismissed_at IS NULL AND fs.created_at > $2::timestamptz
-  AND NOT EXISTS (SELECT 1 FROM user_platform_bans b WHERE b.user_id = fs.suggested_user_id AND b.banned_at IS NOT NULL)
-  AND NOT EXISTS (SELECT 1 FROM friendships f
-                  WHERE f.user_low_id = LEAST(fs.user_id, fs.suggested_user_id)
-                    AND f.user_high_id = GREATEST(fs.user_id, fs.suggested_user_id))
-  AND NOT EXISTS (SELECT 1 FROM user_blocks ub
-                  WHERE (ub.blocker_id = fs.user_id AND ub.blocked_id = fs.suggested_user_id)
-                     OR (ub.blocker_id = fs.suggested_user_id AND ub.blocked_id = fs.user_id))
-  AND NOT EXISTS (SELECT 1 FROM reports r
-                  WHERE (r.reporter_id = fs.user_id AND r.subject_user_id = fs.suggested_user_id)
-                     OR (r.reporter_id = fs.suggested_user_id AND r.subject_user_id = fs.user_id))
-  AND NOT EXISTS (SELECT 1 FROM social_settings ss
-                  WHERE (ss.user_id = fs.suggested_user_id AND (ss.hide_from_suggestions OR NOT ss.profiling_enabled))
-                     OR (ss.user_id = fs.user_id AND NOT ss.profiling_enabled))
+WHERE fs.user_id = $1 AND fs.source = 'suggested'
+  AND fs.dismissed_at IS NULL AND fs.withdrawn_at IS NULL
+  AND fs.created_at > $2::timestamptz
+  AND friend_suggestion_allowed(fs.user_id, fs.suggested_user_id)
 ORDER BY fs.created_at DESC, fs.suggested_user_id
 LIMIT $3
 `
@@ -300,9 +323,10 @@ type ListOpenFriendSuggestionsRow struct {
 }
 
 // ---------------------------------------------------------------------------
-// Öneri listesi ve kapatma (kullanıcının kendi token'ıyla)
-// Alıcının @since sonrasındaki açık önerileri; her okumada yeniden süzülür.
-// Puan ve ortak katılım sayısı okunmaz.
+// Öneri listesi, kapatma ve bildirim durumu (kullanıcının kendi token'ıyla)
+// Alıcının since sonrasındaki gösterilebilir önerileri; her okumada
+// friend_suggestion_allowed ile yeniden süzülür. Puan ve ortak katılım
+// sayısı okunmaz.
 func (q *Queries) ListOpenFriendSuggestions(ctx context.Context, arg ListOpenFriendSuggestionsParams) ([]ListOpenFriendSuggestionsRow, error) {
 	rows, err := q.db.Query(ctx, listOpenFriendSuggestions, arg.UserID, arg.Since, arg.N)
 	if err != nil {
@@ -344,24 +368,8 @@ WITH pairs AS (
     AND NOT EXISTS (SELECT 1 FROM friend_suggestions fs
                     WHERE fs.user_id = p.recipient_id AND fs.source = 'suggested' AND fs.created_at > $5::timestamptz)
     AND NOT EXISTS (SELECT 1 FROM friend_suggestions fs
-                    WHERE (fs.user_id = p.recipient_id AND fs.suggested_user_id = p.candidate_id)
-                       OR (fs.user_id = p.candidate_id AND fs.suggested_user_id = p.recipient_id AND fs.dismissed_at IS NOT NULL))
-    AND NOT EXISTS (SELECT 1 FROM friendships f
-                    WHERE f.user_low_id = LEAST(p.recipient_id, p.candidate_id)
-                      AND f.user_high_id = GREATEST(p.recipient_id, p.candidate_id))
-    AND NOT EXISTS (SELECT 1 FROM user_blocks ub
-                    WHERE (ub.blocker_id = p.recipient_id AND ub.blocked_id = p.candidate_id)
-                       OR (ub.blocker_id = p.candidate_id AND ub.blocked_id = p.recipient_id))
-    AND NOT EXISTS (SELECT 1 FROM reports r
-                    WHERE (r.reporter_id = p.recipient_id AND r.subject_user_id = p.candidate_id)
-                       OR (r.reporter_id = p.candidate_id AND r.subject_user_id = p.recipient_id))
-    AND NOT EXISTS (SELECT 1 FROM friend_request_outcomes o
-                    WHERE o.outcome = 'declined'
-                      AND ((o.requester_id = p.recipient_id AND o.recipient_id = p.candidate_id)
-                        OR (o.requester_id = p.candidate_id AND o.recipient_id = p.recipient_id)))
-    AND NOT EXISTS (SELECT 1 FROM social_settings ss WHERE ss.user_id = p.candidate_id AND ss.hide_from_suggestions)
-    AND NOT EXISTS (SELECT 1 FROM user_profiles up WHERE up.user_id IN (p.recipient_id, p.candidate_id) AND up.deleted_at IS NOT NULL)
-    AND NOT EXISTS (SELECT 1 FROM user_platform_bans b WHERE b.user_id IN (p.recipient_id, p.candidate_id) AND b.banned_at IS NOT NULL)
+                    WHERE fs.user_id = p.recipient_id AND fs.suggested_user_id = p.candidate_id)
+    AND friend_suggestion_allowed(p.recipient_id, p.candidate_id)
 )
 SELECT recipient_id::uuid AS recipient_id, candidate_id::uuid AS candidate_id
 FROM ranked
@@ -385,11 +393,9 @@ type ListSuggestionCandidatesRow struct {
 
 // ---------------------------------------------------------------------------
 // Öneri adayları (friend-suggestions işi)
-// @after_user'dan sonraki alıcılar için, alıcı başına puana göre en çok
-// @per_user aday. Alıcı son 7 günde öneri almışsa hiç aday dönmez.
-// Elenenler (ADR-0028 §3): arkadaşlık ya da bekleyen istek, iki yönde engel,
-// iki yönde şikâyet, reddedilmiş istek, alıcıya daha önce önerilmiş ya da
-// karşı tarafın alıcıyı kapattığı çift, "Beni önerme", silinmiş/banlı aday.
+// after_user'dan sonraki alıcılar için, alıcı başına puana göre en çok
+// per_user aday. Alıcı son 7 günde öneri almışsa hiç aday dönmez; alıcıya
+// daha önce önerilmiş kişi aday olmaz.
 func (q *Queries) ListSuggestionCandidates(ctx context.Context, arg ListSuggestionCandidatesParams) ([]ListSuggestionCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listSuggestionCandidates,
 		arg.PerUser,
@@ -414,6 +420,35 @@ func (q *Queries) ListSuggestionCandidates(ctx context.Context, arg ListSuggesti
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockFriendScores = `-- name: LockFriendScores :exec
+
+
+SELECT pg_advisory_xact_lock(hashtextextended('tayfam.core.friend_scores', 0))
+`
+
+// Arkadaşlık puanı ve arkadaş önerisi (issue #208, ADR-0030). Puan hiçbir
+// sorgunun API'ye giden sonucunda yoktur; yalnızca aday sırası için okunur.
+// Bir çiftin önerilebilmesi friend_suggestion_allowed (migration 00025)
+// ile tek yerde tanımlıdır.
+// ---------------------------------------------------------------------------
+// Puan (friend-suggestions işi)
+// Puan hesaplaması ile profilleme kapatma ve engelleme sıraya girer: iş
+// özel, ayar ve engel paylaşımlı kilit alır. Böylece kapatma, hesaplanmakta
+// olan satırları kaçırmaz.
+func (q *Queries) LockFriendScores(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockFriendScores)
+	return err
+}
+
+const lockFriendScoresShared = `-- name: LockFriendScoresShared :exec
+SELECT pg_advisory_xact_lock_shared(hashtextextended('tayfam.core.friend_scores', 0))
+`
+
+func (q *Queries) LockFriendScoresShared(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockFriendScoresShared)
+	return err
 }
 
 const lockSuggestionRecipient = `-- name: LockSuggestionRecipient :exec
@@ -461,4 +496,57 @@ func (q *Queries) UpsertSocialSettings(ctx context.Context, arg UpsertSocialSett
 	var i UpsertSocialSettingsRow
 	err := row.Scan(&i.ProfilingEnabled, &i.HideFromSuggestions)
 	return i, err
+}
+
+const withdrawSuggestionTo = `-- name: WithdrawSuggestionTo :exec
+UPDATE friend_suggestions SET withdrawn_at = $1::timestamptz
+WHERE user_id = $2 AND suggested_user_id = $3
+  AND dismissed_at IS NULL AND withdrawn_at IS NULL
+`
+
+type WithdrawSuggestionToParams struct {
+	Now             pgtype.Timestamptz
+	UserID          pgtype.UUID
+	SuggestedUserID pgtype.UUID
+}
+
+// Karşı tarafın actor'a yapılmış açık önerisi geri çekilir.
+func (q *Queries) WithdrawSuggestionTo(ctx context.Context, arg WithdrawSuggestionToParams) error {
+	_, err := q.db.Exec(ctx, withdrawSuggestionTo, arg.Now, arg.UserID, arg.SuggestedUserID)
+	return err
+}
+
+const withdrawSuggestionsInvolving = `-- name: WithdrawSuggestionsInvolving :exec
+UPDATE friend_suggestions SET withdrawn_at = $1::timestamptz
+WHERE (user_id = $2 OR suggested_user_id = $2)
+  AND dismissed_at IS NULL AND withdrawn_at IS NULL
+`
+
+type WithdrawSuggestionsInvolvingParams struct {
+	Now    pgtype.Timestamptz
+	UserID pgtype.UUID
+}
+
+// Profilleme kapatma: kişiye yapılmış ve kişinin önerildiği açık öneriler
+// geri çekilir. Satırlar kalır: haftalık sınır ve "önerildi" hafızası
+// ayarı açıp kapatmakla sıfırlanmaz.
+func (q *Queries) WithdrawSuggestionsInvolving(ctx context.Context, arg WithdrawSuggestionsInvolvingParams) error {
+	_, err := q.db.Exec(ctx, withdrawSuggestionsInvolving, arg.Now, arg.UserID)
+	return err
+}
+
+const withdrawSuggestionsOf = `-- name: WithdrawSuggestionsOf :exec
+UPDATE friend_suggestions SET withdrawn_at = $1::timestamptz
+WHERE suggested_user_id = $2 AND dismissed_at IS NULL AND withdrawn_at IS NULL
+`
+
+type WithdrawSuggestionsOfParams struct {
+	Now    pgtype.Timestamptz
+	UserID pgtype.UUID
+}
+
+// "Beni önerme": kişinin önerildiği açık öneriler geri çekilir.
+func (q *Queries) WithdrawSuggestionsOf(ctx context.Context, arg WithdrawSuggestionsOfParams) error {
+	_, err := q.db.Exec(ctx, withdrawSuggestionsOf, arg.Now, arg.UserID)
+	return err
 }

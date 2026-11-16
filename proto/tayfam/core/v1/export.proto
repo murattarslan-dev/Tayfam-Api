@@ -56,11 +56,11 @@ enum CoreExportSection {
   // Files the caller uploaded: a list only, never the files (ADR-0021).
   CORE_EXPORT_SECTION_UPLOADS = 17;
   // One record: the caller's profiling and "do not suggest me" settings
-  // and how many people a friendship score is kept with (ADR-0028). The
+  // and how many people a friendship score is kept with (ADR-0030). The
   // scores themselves and who they are with are not exported.
-  CORE_EXPORT_SECTION_SOCIAL_SETTINGS = 18;
+  CORE_EXPORT_SECTION_SOCIAL_SETTINGS = 20;
   // Friend suggestions made to the caller, dismissed ones included.
-  CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS = 19;
+  CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS = 21;
 }
 
 message ExportMyDataRequest {}

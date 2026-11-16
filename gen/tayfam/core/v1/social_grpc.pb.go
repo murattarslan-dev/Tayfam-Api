@@ -90,18 +90,21 @@ type SocialServiceClient interface {
 	// caller is never listed.
 	ListBlockedUsers(ctx context.Context, in *ListBlockedUsersRequest, opts ...grpc.CallOption) (*ListBlockedUsersResponse, error)
 	// GetRequestResolutions answers, for the caller as the recipient, how
-	// friend requests and tayfa invitations stand now (issue #192): chat asks
-	// it for one page of FRIEND_REQUEST and TAYFA_INVITATION notifications
-	// with the caller's own token. One answer per ref, in the same order;
+	// friend requests, tayfa invitations and friend suggestions stand now
+	// (issue #192, #208): chat asks it for one page of FRIEND_REQUEST,
+	// TAYFA_INVITATION and FRIEND_SUGGESTION notifications with the caller's
+	// own token. One answer per ref, in the same order;
 	// 1–100 refs (ERROR_REASON_VALIDATION otherwise). Who withdrew is never
 	// said.
 	GetRequestResolutions(ctx context.Context, in *GetRequestResolutionsRequest, opts ...grpc.CallOption) (*GetRequestResolutionsResponse, error)
 	// ListFriendSuggestions lists the caller's open suggestions of the last
 	// 30 days, newest first, at most 10. A suggestion leaves the list when
 	// the two become friends or one sends a request, when either blocks or
-	// reports the other, when the suggested user turns on
-	// hide_from_suggestions or deletes their account, or when the caller
-	// dismisses it. Empty while the caller's profiling is off.
+	// reports the other, declines the other's request or ends a friendship
+	// with them (these exclude the pair for good), when the suggested user
+	// turns off profiling, turns on hide_from_suggestions or deletes their
+	// account, or when the caller dismisses it. Empty while the caller's
+	// profiling is off.
 	ListFriendSuggestions(ctx context.Context, in *ListFriendSuggestionsRequest, opts ...grpc.CallOption) (*ListFriendSuggestionsResponse, error)
 	// DismissFriendSuggestion closes the caller's suggestion of user_id
 	// ("Kapat"): the two are never suggested to each other again. Succeeds
@@ -112,9 +115,10 @@ type SocialServiceClient interface {
 	GetSocialSettings(ctx context.Context, in *GetSocialSettingsRequest, opts ...grpc.CallOption) (*GetSocialSettingsResponse, error)
 	// UpdateSocialSettings changes the fields that are set (at least one;
 	// ERROR_REASON_VALIDATION otherwise). Turning profiling off deletes the
-	// caller's friendship scores and open suggestions to and of the caller
-	// at once; turning hide_from_suggestions on deletes the open suggestions
-	// of the caller.
+	// caller's friendship scores and withdraws the open suggestions to and
+	// of the caller at once; turning hide_from_suggestions on withdraws the
+	// open suggestions of the caller. Switching a setting off and on resets
+	// neither the weekly limit nor who was already suggested.
 	UpdateSocialSettings(ctx context.Context, in *UpdateSocialSettingsRequest, opts ...grpc.CallOption) (*UpdateSocialSettingsResponse, error)
 }
 
@@ -312,18 +316,21 @@ type SocialServiceServer interface {
 	// caller is never listed.
 	ListBlockedUsers(context.Context, *ListBlockedUsersRequest) (*ListBlockedUsersResponse, error)
 	// GetRequestResolutions answers, for the caller as the recipient, how
-	// friend requests and tayfa invitations stand now (issue #192): chat asks
-	// it for one page of FRIEND_REQUEST and TAYFA_INVITATION notifications
-	// with the caller's own token. One answer per ref, in the same order;
+	// friend requests, tayfa invitations and friend suggestions stand now
+	// (issue #192, #208): chat asks it for one page of FRIEND_REQUEST,
+	// TAYFA_INVITATION and FRIEND_SUGGESTION notifications with the caller's
+	// own token. One answer per ref, in the same order;
 	// 1–100 refs (ERROR_REASON_VALIDATION otherwise). Who withdrew is never
 	// said.
 	GetRequestResolutions(context.Context, *GetRequestResolutionsRequest) (*GetRequestResolutionsResponse, error)
 	// ListFriendSuggestions lists the caller's open suggestions of the last
 	// 30 days, newest first, at most 10. A suggestion leaves the list when
 	// the two become friends or one sends a request, when either blocks or
-	// reports the other, when the suggested user turns on
-	// hide_from_suggestions or deletes their account, or when the caller
-	// dismisses it. Empty while the caller's profiling is off.
+	// reports the other, declines the other's request or ends a friendship
+	// with them (these exclude the pair for good), when the suggested user
+	// turns off profiling, turns on hide_from_suggestions or deletes their
+	// account, or when the caller dismisses it. Empty while the caller's
+	// profiling is off.
 	ListFriendSuggestions(context.Context, *ListFriendSuggestionsRequest) (*ListFriendSuggestionsResponse, error)
 	// DismissFriendSuggestion closes the caller's suggestion of user_id
 	// ("Kapat"): the two are never suggested to each other again. Succeeds
@@ -334,9 +341,10 @@ type SocialServiceServer interface {
 	GetSocialSettings(context.Context, *GetSocialSettingsRequest) (*GetSocialSettingsResponse, error)
 	// UpdateSocialSettings changes the fields that are set (at least one;
 	// ERROR_REASON_VALIDATION otherwise). Turning profiling off deletes the
-	// caller's friendship scores and open suggestions to and of the caller
-	// at once; turning hide_from_suggestions on deletes the open suggestions
-	// of the caller.
+	// caller's friendship scores and withdraws the open suggestions to and
+	// of the caller at once; turning hide_from_suggestions on withdraws the
+	// open suggestions of the caller. Switching a setting off and on resets
+	// neither the weekly limit nor who was already suggested.
 	UpdateSocialSettings(context.Context, *UpdateSocialSettingsRequest) (*UpdateSocialSettingsResponse, error)
 	mustEmbedUnimplementedSocialServiceServer()
 }

@@ -144,7 +144,7 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 
-	// Arkadaş önerisi (issue #208, ADR-0028): 18 yaş sınırı identity'nin
+	// Arkadaş önerisi (issue #208, ADR-0030): 18 yaş sınırı identity'nin
 	// IsMinor cevabıyla; identity yoksa (yalnızca yerel) öneri yapılmaz.
 	background, err := jobs.New(jobs.Config{Pool: pool, Log: rt.Log, Minors: minors})
 	if err != nil {

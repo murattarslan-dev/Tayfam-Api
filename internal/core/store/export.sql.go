@@ -392,7 +392,8 @@ func (q *Queries) ExportFishingCatches(ctx context.Context, arg ExportFishingCat
 
 const exportFriendSuggestions = `-- name: ExportFriendSuggestions :many
 SELECT fs.suggested_user_id AS k, jsonb_build_object(
-  'user_id', fs.suggested_user_id, 'created_at', fs.created_at, 'dismissed_at', fs.dismissed_at
+  'user_id', fs.suggested_user_id, 'created_at', fs.created_at, 'dismissed_at', fs.dismissed_at,
+  'withdrawn_at', fs.withdrawn_at
 ) AS data
 FROM friend_suggestions fs
 WHERE fs.user_id = $1 AND fs.source = 'suggested' AND fs.suggested_user_id > $2
@@ -773,7 +774,7 @@ type ExportSocialSettingsRow struct {
 }
 
 // Tek kayıt: iki ayar (satır yoksa varsayılanlar) ve kişi hakkında puan
-// tutulan kişi sayısı. Puan değerleri ve kiminle olduğu girmez (ADR-0028
+// tutulan kişi sayısı. Puan değerleri ve kiminle olduğu girmez (ADR-0030
 // §9). Ayar satırı da puanı da yoksa tutulan bir şey yoktur, kayıt da yok.
 func (q *Queries) ExportSocialSettings(ctx context.Context, arg ExportSocialSettingsParams) ([]ExportSocialSettingsRow, error) {
 	rows, err := q.db.Query(ctx, exportSocialSettings, arg.UserID, arg.After, arg.N)

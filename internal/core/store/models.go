@@ -249,6 +249,7 @@ type FriendSuggestion struct {
 	SuggestedUserID pgtype.UUID
 	CreatedAt       pgtype.Timestamptz
 	DismissedAt     pgtype.Timestamptz
+	WithdrawnAt     pgtype.Timestamptz
 	Source          string
 }
 
