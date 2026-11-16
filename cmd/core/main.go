@@ -68,9 +68,11 @@ func setup(rt *service.Runtime) error {
 	dbCfg := db.LoadConfig(c)
 	// Keşfet (issue #210, ADR-0033): kapalı gelir; açma kararı platform
 	// sahibinindir (hukukçu görüşmesinden sonra). Kapalıyken akış, Keşfet'ten
-	// katılım, geri bildirim ve güvenlik kişisi uçları feature-disabled
-	// döner; tayfa ayarı ve panel onayı çalışır.
+	// katılım ve geri bildirim uçları feature-disabled döner; tayfa ayarı ve
+	// panel onayı çalışır. Güvenlik kişisi ayrı bayraktır ve açık gelir
+	// (platform sahibi, 2026-11-16): bütün yüz yüze etkinliklerde.
 	discoverEnabled := c.OneOf("DISCOVER_ENABLED", "false", "true", "false") == "true"
+	safetyContactEnabled := c.OneOf("SAFETY_CONTACT_ENABLED", "true", "true", "false") == "true"
 	if err := c.Err(); err != nil {
 		return err
 	}
@@ -104,11 +106,11 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	discovers, err := discover.New(discover.Config{Pool: pool, Enabled: discoverEnabled})
+	discovers, err := discover.New(discover.Config{Pool: pool, Enabled: discoverEnabled, SafetyContactEnabled: safetyContactEnabled})
 	if err != nil {
 		return err
 	}
-	rt.Log.Info("keşfet bayrağı", slog.Bool("açık", discoverEnabled))
+	rt.Log.Info("keşfet bayrağı", slog.Bool("açık", discoverEnabled), slog.Bool("güvenlik_kişisi", safetyContactEnabled))
 	instants, err := instant.New(instant.Config{Pool: pool, Log: rt.Log, Tayfas: tayfas, Events: events, Memberships: memberships})
 	if err != nil {
 		return err

@@ -26,6 +26,9 @@
 --   Üyelik bitse de (ayrılma, çıkarılma, ban) 30 gün durur: eski Keşfet
 --   üyesi bu sürede tayfayı şikâyet edebilir ve katıldığı etkinliğe geri
 --   bildirim verebilir; tayfa içeriğine erişim vermez (ADR-0033 §7).
+-- social_settings.discover_visible_to_friends: "Keşfet'te arkadaşlarım
+--   görebilsin" (varsayılan açık; platform sahibi 2026-11-16). Kapalıysa
+--   kişi arkadaşlarının Keşfet akışında görünmez ve sayılmaz.
 -- event_feedback: "Her şey yolunda mıydı?" cevabı; serbest metin yok.
 -- event_safety_contacts: güvenlik kişisi; konum alanı yok.
 --
@@ -51,10 +54,12 @@
 -- temizler (ADR-0002).
 --
 -- Geri alma planı: Down trigger'ları, fonksiyonları ve tabloları kaldırır;
--- başvurular, panel kararları, geri bildirimler ve güvenlik kişileri
--- kaybolur. tayfas.visibility ve events.discoverable değerleri kalır.
+-- başvurular, panel kararları, geri bildirimler, güvenlik kişileri,
+-- Keşfet işaretleri ve "Keşfet'te arkadaşlarım görebilsin" ayarı kaybolur. tayfas.visibility ve events.discoverable değerleri kalır.
 
 -- +goose Up
+ALTER TABLE social_settings ADD COLUMN discover_visible_to_friends boolean NOT NULL DEFAULT true;
+
 CREATE TABLE tayfa_discover (
   tayfa_id          uuid PRIMARY KEY REFERENCES tayfas (id) ON DELETE CASCADE,
   status            text NOT NULL DEFAULT 'pending',
@@ -163,7 +168,8 @@ $$;
 --   - arkadaş etkinliğe going demiş ya da katılımı attended; tayfanın aktif
 --     üyesi;
 --   - arkadaşın katılım geçmişi görünürlüğü private değil (ProfileService:
---     arkadaşlar tayfa ve public'te geçmişin tamamını görür);
+--     arkadaşlar tayfa ve public'te geçmişin tamamını görür) ve "Keşfet'te
+--     arkadaşlarım görebilsin" ayarı kapalı değil (iki şart birlikte);
 --   - etkinlik "halka açık yer" işaretli, yüz yüze, planlı, silinmemiş,
 --     bitmemiş ve 30 gün içinde başlıyor; tayfanın etkinlik modülü açık;
 --     tayfa listelenebilir;
@@ -188,6 +194,7 @@ LANGUAGE sql STABLE AS $$
                       WHERE (ub.blocker_id = viewer AND ub.blocked_id = friend)
                          OR (ub.blocker_id = friend AND ub.blocked_id = viewer))
       AND NOT EXISTS (SELECT 1 FROM user_platform_bans b WHERE b.user_id = friend AND b.banned_at IS NOT NULL)
+      AND NOT EXISTS (SELECT 1 FROM social_settings ss WHERE ss.user_id = friend AND NOT ss.discover_visible_to_friends)
       AND NOT EXISTS (SELECT 1 FROM memberships vm WHERE vm.tayfa_id = e.tayfa_id AND vm.user_id = viewer)
       AND EXISTS (SELECT 1 FROM tayfa_modules tm
                   WHERE tm.tayfa_id = e.tayfa_id AND tm.module = 'events' AND tm.enabled)
@@ -321,6 +328,7 @@ GRANT UPDATE (status, drop_reason, requested_at, requested_by, reviewed_at, revi
               masked_status, masked_until, updated_at)
   ON tayfa_discover TO core_app;
 GRANT UPDATE (joined_at, left_at), DELETE ON discover_joins TO core_app;
+GRANT UPDATE (discover_visible_to_friends) ON social_settings TO core_app;
 GRANT UPDATE (answer, updated_at), DELETE ON event_feedback TO core_app;
 GRANT UPDATE (contact_user_id, grace_minutes, returned_at, alert_sent_at, updated_at), DELETE
   ON event_safety_contacts TO core_app;
@@ -343,3 +351,4 @@ DROP TABLE event_safety_contacts;
 DROP TABLE event_feedback;
 DROP TABLE discover_joins;
 DROP TABLE tayfa_discover;
+ALTER TABLE social_settings DROP COLUMN discover_visible_to_friends;

@@ -13,14 +13,15 @@ import "tayfam/core/v1/tayfa.proto";
 // Every method needs the caller's access token; the caller is always the
 // verified token subject.
 //
-// Feature flag: core's DISCOVER_ENABLED (default off). While it is off,
-// ListDiscoverFeed, JoinFromDiscover, the feedback methods,
-// GetSafetyContact, SetSafetyContact and ListSafetyShares fail with
+// Feature flags: core's DISCOVER_ENABLED (default off). While it is off,
+// ListDiscoverFeed, JoinFromDiscover and the feedback methods fail with
 // ERROR_REASON_FEATURE_DISABLED before reading anything. GetTayfaDiscover
 // and SetTayfaDiscover work regardless (the tayfa's admins may apply and
-// the platform may review before Keşfet opens), and so do
-// ClearSafetyContact and MarkReturned: a safety net that was set can
-// always be closed.
+// the platform may review before Keşfet opens). The safety contact is
+// separate (platform owner, 2026-11-16): SAFETY_CONTACT_ENABLED (default
+// on) gates GetSafetyContact, SetSafetyContact and ListSafetyShares on
+// every in-person event; ClearSafetyContact and MarkReturned work under
+// any flag: a safety net that was set can always be closed.
 //
 // Keşfet gives facts, not trust: nothing here says "trusted", "verified"
 // or "approved". The friendship score (ADR-0030) orders the feed but is
@@ -123,8 +124,7 @@ service DiscoverService {
   // 50), and only while the share still holds: still friends, no block,
   // the participant an active member and GOING, the event and tayfa
   // neither removed nor suspended (after an alert, a checked-in
-  // participant's share stays). Only the meeting point's name, never its
-  // coordinates.
+  // participant's share stays). Only who, when and the state (SafetyShare).
   //
   // Errors: ERROR_REASON_FEATURE_DISABLED.
   rpc ListSafetyShares(ListSafetySharesRequest) returns (ListSafetySharesResponse);
@@ -311,23 +311,34 @@ message MarkReturnedResponse {
   SafetyContact safety_contact = 1;
 }
 
-// SafetyShare is an event a participant shared with the caller as their
-// safety contact. Only what the participant chose to share: no
-// coordinates, no description, no other participants.
+// SafetyShare is what a participant shares with the caller as their safety
+// contact, and nothing more (platform owner, 2026-11-16; ADR-0033 §10):
+// who, the time range (start, end, grace) and the state. No tayfa, event
+// title or ID, meeting point, place, coordinates, description or other
+// participants.
 message SafetyShare {
+  reserved 2, 3, 4, 7, 8, 9;
+  reserved "tayfa_name", "event_id", "event_title", "meeting_point_name", "city", "district";
+
   DiscoverPerson participant = 1;
-  string tayfa_name = 2;
-  string event_id = 3;
-  string event_title = 4;
   google.protobuf.Timestamp start_time = 5;
   google.protobuf.Timestamp end_time = 6;
-  // The meeting point's name only.
-  string meeting_point_name = 7;
-  string city = 8;
-  string district = 9;
+  // The alert goes out at end_time plus grace_minutes.
   int32 grace_minutes = 10;
   google.protobuf.Timestamp return_time = 11;
   google.protobuf.Timestamp alert_time = 12;
+  SafetyShareState state = 13;
+}
+
+// SafetyShareState is "back / not back / alert sent".
+enum SafetyShareState {
+  SAFETY_SHARE_STATE_UNSPECIFIED = 0;
+  // Not back yet; no alert has gone out.
+  SAFETY_SHARE_STATE_NOT_RETURNED = 1;
+  // The participant marked "I'm back" (also after an alert).
+  SAFETY_SHARE_STATE_RETURNED = 2;
+  // The alert went out and the participant has not marked "I'm back".
+  SAFETY_SHARE_STATE_ALERT_SENT = 3;
 }
 
 message ListSafetySharesRequest {}

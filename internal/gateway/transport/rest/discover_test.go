@@ -75,9 +75,10 @@ func (f *fakeCore) ListSafetyShares(ctx context.Context, in *corev1.ListSafetySh
 		return nil, err
 	}
 	return &corev1.ListSafetySharesResponse{Shares: []*corev1.SafetyShare{{
-		Participant: &corev1.DiscoverPerson{UserId: userID, DisplayName: "Ayşe"}, EventId: eventID, EventTitle: "Yürüyüş",
-		StartTime: timestamppb.New(t0), EndTime: timestamppb.New(t0.Add(time.Hour)), MeetingPointName: "Bahçeköy girişi",
+		Participant: &corev1.DiscoverPerson{UserId: userID, DisplayName: "Ayşe"},
+		StartTime:   timestamppb.New(t0), EndTime: timestamppb.New(t0.Add(time.Hour)),
 		GraceMinutes: 60, AlertTime: timestamppb.New(t0.Add(2 * time.Hour)),
+		State: corev1.SafetyShareState_SAFETY_SHARE_STATE_ALERT_SENT,
 	}}}, nil
 }
 
@@ -180,10 +181,11 @@ func TestDiscoverRoutes(t *testing.T) {
 
 	w = as(h, "GET", "/v1/me/safety-shares", "")
 	v := decodeBody[safetyShareListJSON](t, w)
-	if w.Code != http.StatusOK || len(v.Shares) != 1 || v.Shares[0].MeetingPointName != "Bahçeköy girişi" || v.Shares[0].AlertSentAt == nil {
+	if w.Code != http.StatusOK || len(v.Shares) != 1 || v.Shares[0].State != "alert_sent" || v.Shares[0].AlertSentAt == nil ||
+		v.Shares[0].GraceMinutes != 60 || v.Shares[0].Participant == nil {
 		t.Fatalf("paylaşımlar: %d %s", w.Code, w.Body)
 	}
-	for _, banned := range []string{"lat", "lng", "description"} {
+	for _, banned := range []string{"lat", "lng", "description", "tayfa", "event", "title", "meeting", "city", "district"} {
 		if strings.Contains(w.Body.String(), `"`+banned) {
 			t.Errorf("paylaşımda %q var", banned)
 		}

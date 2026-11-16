@@ -237,12 +237,13 @@ func (q *Queries) FriendSuggestionStates(ctx context.Context, arg FriendSuggesti
 
 const getSocialSettings = `-- name: GetSocialSettings :one
 
-SELECT profiling_enabled, hide_from_suggestions FROM social_settings WHERE user_id = $1
+SELECT profiling_enabled, hide_from_suggestions, discover_visible_to_friends FROM social_settings WHERE user_id = $1
 `
 
 type GetSocialSettingsRow struct {
-	ProfilingEnabled    bool
-	HideFromSuggestions bool
+	ProfilingEnabled         bool
+	HideFromSuggestions      bool
+	DiscoverVisibleToFriends bool
 }
 
 // ---------------------------------------------------------------------------
@@ -250,7 +251,7 @@ type GetSocialSettingsRow struct {
 func (q *Queries) GetSocialSettings(ctx context.Context, userID pgtype.UUID) (GetSocialSettingsRow, error) {
 	row := q.db.QueryRow(ctx, getSocialSettings, userID)
 	var i GetSocialSettingsRow
-	err := row.Scan(&i.ProfilingEnabled, &i.HideFromSuggestions)
+	err := row.Scan(&i.ProfilingEnabled, &i.HideFromSuggestions, &i.DiscoverVisibleToFriends)
 	return i, err
 }
 
@@ -462,26 +463,31 @@ func (q *Queries) LockSuggestionRecipient(ctx context.Context, userID pgtype.UUI
 }
 
 const upsertSocialSettings = `-- name: UpsertSocialSettings :one
-INSERT INTO social_settings (user_id, profiling_enabled, hide_from_suggestions, updated_at)
+INSERT INTO social_settings (user_id, profiling_enabled, hide_from_suggestions, discover_visible_to_friends, updated_at)
 VALUES ($1, COALESCE($2::boolean, true),
-        COALESCE($3::boolean, false), $4::timestamptz)
+        COALESCE($3::boolean, false),
+        COALESCE($4::boolean, true), $5::timestamptz)
 ON CONFLICT (user_id) DO UPDATE SET
   profiling_enabled     = COALESCE($2::boolean, social_settings.profiling_enabled),
   hide_from_suggestions = COALESCE($3::boolean, social_settings.hide_from_suggestions),
-  updated_at            = $4::timestamptz
-RETURNING profiling_enabled, hide_from_suggestions
+  discover_visible_to_friends = COALESCE($4::boolean,
+                                         social_settings.discover_visible_to_friends),
+  updated_at            = $5::timestamptz
+RETURNING profiling_enabled, hide_from_suggestions, discover_visible_to_friends
 `
 
 type UpsertSocialSettingsParams struct {
-	UserID              pgtype.UUID
-	ProfilingEnabled    pgtype.Bool
-	HideFromSuggestions pgtype.Bool
-	Now                 pgtype.Timestamptz
+	UserID                   pgtype.UUID
+	ProfilingEnabled         pgtype.Bool
+	HideFromSuggestions      pgtype.Bool
+	DiscoverVisibleToFriends pgtype.Bool
+	Now                      pgtype.Timestamptz
 }
 
 type UpsertSocialSettingsRow struct {
-	ProfilingEnabled    bool
-	HideFromSuggestions bool
+	ProfilingEnabled         bool
+	HideFromSuggestions      bool
+	DiscoverVisibleToFriends bool
 }
 
 // Verilmeyen alan (NULL) olduğu gibi kalır; satır yoksa varsayılanlardan
@@ -491,10 +497,11 @@ func (q *Queries) UpsertSocialSettings(ctx context.Context, arg UpsertSocialSett
 		arg.UserID,
 		arg.ProfilingEnabled,
 		arg.HideFromSuggestions,
+		arg.DiscoverVisibleToFriends,
 		arg.Now,
 	)
 	var i UpsertSocialSettingsRow
-	err := row.Scan(&i.ProfilingEnabled, &i.HideFromSuggestions)
+	err := row.Scan(&i.ProfilingEnabled, &i.HideFromSuggestions, &i.DiscoverVisibleToFriends)
 	return i, err
 }
 

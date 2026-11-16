@@ -193,16 +193,17 @@ UPDATE event_safety_contacts SET returned_at = COALESCE(returned_at, @now)
 WHERE event_id = @event_id AND user_id = @user_id;
 
 -- Kişiyi güvenlik kişisi seçenlerin etkinlikleri: bitişinden 24 saat
--- geçmemiş ya da alarmı son 7 günde gitmiş. Koordinat seçilmez. Paylaşım
+-- geçmemiş ya da alarmı son 7 günde gitmiş. Yalnızca kim, saat aralığı ve
+-- durum (platform sahibi, 2026-11-16): tayfa adı, etkinlik başlığı ve
+-- kimliği, buluşma yeri ve il/ilçe seçilmez. Paylaşım
 -- yalnızca hâlâ geçerliyse görünür: ikisi arkadaş, engel yok, katılımcı
 -- tayfanın aktif üyesi ve etkinliğe going; etkinlik silinmemiş ya da
 -- iptal edilmemiş, tayfa silinmemiş ya da askıda değil. Alarm gitmişse
 -- (etkinlik sonradan iptal ya da silinmiş olsa bile) katılımcı check-in
 -- yaptıysa görünür; alarmın kendisi bildirimle gitti.
 -- name: ListSafetyShares :many
-SELECT c.user_id, p.display_name, p.avatar_upload_id, t.name AS tayfa_name,
-       e.id AS event_id, e.title, e.starts_at, e.ends_at, e.meeting_point_name, e.city, e.district,
-       c.grace_minutes, c.returned_at, c.alert_sent_at
+SELECT c.user_id, p.display_name, p.avatar_upload_id,
+       e.starts_at, e.ends_at, c.grace_minutes, c.returned_at, c.alert_sent_at
 FROM event_safety_contacts c
 JOIN events e ON e.id = c.event_id
 JOIN tayfas t ON t.id = e.tayfa_id

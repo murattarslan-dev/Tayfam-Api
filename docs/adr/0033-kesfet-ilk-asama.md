@@ -1,7 +1,7 @@
 # ADR-0033: Keşfet ilk aşama — arkadaş ağı ve güvenlik ağı (v2)
 
-- **Durum:** Önerildi (platform sahibinin kararlarına dayanır; ayrıntı
-  seçimleri "Platform sahibine sorular" bölümündedir)
+- **Durum:** Kabul edildi (2026-11-16; platform sahibi ayrıntı
+  sorularını cevapladı, "Platform sahibinin kararları" bölümü)
 - **Tarih:** 2026-11-16
 - **Karar veren:** Ürün kararları platform sahibinindir (Notion "Kötüye
   Kullanım ve Genç Kullanıcı Güvenliği" → "Keşfet tasarımı" 2026-11-12 ve
@@ -47,6 +47,11 @@ Platform sahibinin kararları:
   (ADR-0030) kullanılabilir; puan hiçbir cevapta ya da imleçte dönmez;
   profillemesi kapalı kullanıcı için puan kullanılmaz. Arkadaşın
   katılımını göstermek onun katılım geçmişi görünürlük ayarına uyar.
+- **2026-11-16 ayrıntı kararları** (bu ADR'nin sorularına cevap):
+  profilde ayrı "Keşfet'te arkadaşlarım görebilsin" ayarı (varsayılan
+  açık); güvenlik kişisi Keşfet'ten ayrı bir bayrakla bütün yüz yüze
+  etkinliklerde (varsayılan açık); güvenlik kişisi en az bilgiyi görür
+  (kim, saat aralığı, durum); diğer seçimler kabul edildi.
 
 Mevcut şema: `tayfas.visibility` (`private` / `listed`), `events.discoverable`
 ve `memberships.joined_via = 'discover'` Faz 1'den beri vardır ve "yalnızca
@@ -70,10 +75,15 @@ yalnızca olgu sayılarını döndürür.
   çalışabilir"): tayfa yöneticisinin Keşfet ayarı ve başvurusu, organizatörün
   etkinlikteki `discoverable` işareti, panel kuyruğu (onay/ret), üyeliğin
   Keşfet etiketi ve otomatik düşürme kuralları.
-- **Bayrağa bağlı olanlar:** Keşfet akışı, Keşfet'ten katılım isteği,
-  "Her şey yolunda mıydı?" geri bildirimi ve güvenlik kişisi (seçme,
-  döndüm, paylaşılanlar listesi).
-- **Alarm işi bayraktan bağımsızdır:** bayrak kapalıyken yeni güvenlik
+- **Bayrağa bağlı olanlar:** Keşfet akışı, Keşfet'ten katılım isteği ve
+  "Her şey yolunda mıydı?" geri bildirimi.
+- **Güvenlik kişisinin ayrı bayrağı: `SAFETY_CONTACT_ENABLED`** (`true` /
+  `false`, **varsayılan `true`**; platform sahibi 2026-11-16). Güvenlik
+  kişisi Keşfet'e bağlı değildir, bütün yüz yüze etkinliklerde kullanılır
+  (yürüyüş alarmının genellemesi). Kapalıyken seçme, okuma ve paylaşılanlar
+  listesi `FEATURE_DISABLED` döner. **"Döndüm" ve kaldırma hiçbir bayrağa
+  bağlı değildir** (§10).
+- **Alarm işi bayraklardan bağımsızdır:** bayrak kapalıyken yeni güvenlik
   kişisi seçilemez, ama bayrak sonradan kapatılırsa önceden seçilmiş
   kişilere alarm yine gider (bir güvenlik sinyali yarıda kesilmez).
 
@@ -88,6 +98,7 @@ Bütün girdiler (tayfa, üyelik, etkinlik, katılım, arkadaşlık, puan,
 | `discover_joins` | `tayfa_id` FK (CASCADE), `user_id` 🔗, `joined_at`, `left_at` | PK (tayfa, user). Keşfet'ten gelip aktif üye olanın kalıcı işareti (§7); trigger yazar |
 | `event_feedback` | `event_id` FK (CASCADE), `user_id` 🔗, `answer` (`ok` / `not_ok` / `serious`), `created_at`, `updated_at` | PK (event, user). Serbest metin **yok** |
 | `event_safety_contacts` | `event_id` FK (CASCADE), `user_id` 🔗, `contact_user_id` 🔗, `grace_minutes` (15–1440, varsayılan 60), `returned_at`, `alert_sent_at`, `created_at`, `updated_at` | PK (event, user); kişi kendini seçemez. **Konum alanı yok** |
+| `social_settings` (mevcut, ADR-0030) | yeni `discover_visible_to_friends` boolean, varsayılan `true` | "Keşfet'te arkadaşlarım görebilsin" (§4) |
 
 Mevcut alanların anlamı netleşir:
 
@@ -130,7 +141,12 @@ izleyicinin **en az bir görünür arkadaşı** varsa girer.
 **Görünür arkadaş** (izleyiciye göre): kabul edilmiş arkadaşlık, iki yönden
 de engel yok, hesap silinmemiş, etkinliğe `going` demiş ya da katılımı
 `attended`, o tayfanın aktif üyesi ve **katılım geçmişi görünürlüğü
-`private` değil**. Gerekçe: ProfileService'in tablosunda arkadaşlar
+`private` değil** ve **"Keşfet'te arkadaşlarım görebilsin" ayarı
+(`social_settings.discover_visible_to_friends`, varsayılan açık) kapalı
+değil**: iki şart birlikte (platform sahibi 2026-11-16). Ayar profil
+ayarlarındadır (`PATCH /v1/me/social-settings`), kapatılınca hemen etkili
+olur ve KVKK dışa aktarmasındaki sosyal ayarlarda yer alır. Gerekçe
+(geçmiş şartı için): ProfileService'in tablosunda arkadaşlar
 `tayfa` ve `public` ayarında geçmişin tamamını görür, `private`'ta hiçbir
 şey görmez; Keşfet aynı kuralı uygular. Görünmeyen arkadaş **sayılmaz da**
 ("ve 2 arkadaşın" sayısı yalnızca görünenlerdir); sayıya katmak gizli
@@ -306,7 +322,8 @@ Mevcut panel uçları ve sayfaları altında ("Keşfet" sekmesi):
   gittikten sonra kaldırılamaz** (`SAFETY_CONTACT_CLOSED`): güvenlik kişisi
   alarma göre davranıyordur, paylaşım onun listesinden kaybolmamalı.
   Etkinliğin Keşfet'te olması gerekmez (yürüyüş alarmının
-  genellemesidir); seçme bayrağa bağlıdır.
+  genellemesidir); seçme `SAFETY_CONTACT_ENABLED`'a bağlıdır (§1),
+  Keşfet bayrağına değil.
 - **"Döndüm":** kişi `returned_at`'i işaretler; alarm durur.
 - **Kapatma bayrağa bağlı değildir:** "döndüm" ve kaldırma (alarm
   gitmeden) bayrak kapalıyken, kişi tayfadan ayrıldıktan sonra ya da
@@ -326,26 +343,32 @@ Mevcut panel uçları ve sayfaları altında ("Keşfet" sekmesi):
 - **Bildirim:** yeni `safety_alert` türü (chat migration `00018`): tayfasız,
   aktörsüz, hedef `user` = katılımcı. **İçerik ve konum taşımaz.** Push
   gider ve susturma uygulanmaz (yürüyüş alarmı gibi).
-- **Güvenlik kişisinin gördüğü** (`ListSafetyShares`): kendisini seçen
-  kişilerin, bitişinden 24 saat geçmemiş ya da alarmı son 7 günde gitmiş
-  etkinlikleri: katılımcının adı ve avatarı, tayfa adı, etkinlik başlığı,
-  başlangıç/bitiş, buluşma noktası **adı**, il/ilçe, `returned_at`,
-  `alert_sent_at`. **Koordinat dönmez.** Paylaşım yalnızca hâlâ geçerliyse
+- **Güvenlik kişisinin gördüğü — en az bilgi** (`ListSafetyShares`;
+  platform sahibi 2026-11-16): kendisini seçen kişilerin, bitişinden 24
+  saat geçmemiş ya da alarmı son 7 günde gitmiş paylaşımları için
+  **yalnızca**: kim (katılımcının kimliği, adı, avatarı), saat aralığı
+  (başlangıç, bitiş, `grace_minutes`), durum (`not_returned` /
+  `returned` / `alert_sent`) ve "döndüm" ile alarm zamanları. **Tayfa adı,
+  etkinlik başlığı ve kimliği, buluşma yeri adı, il/ilçe ve koordinat
+  dönmez.** Etkinlik kimliği de dönmez: işe yaramaz (kişi tayfa üyesi
+  değildir) ve paylaşımlar arasında bağ kurmaya yarardı. `returned`,
+  alarmdan sonra "döndüm" denmişse de geçerlidir (kişi döndü). Sözleşme
+  testi `SafetyShare`'in alanlarını bu listeye sabitler. Paylaşım yalnızca hâlâ geçerliyse
   listelenir: ikisi arkadaş, engel yok, katılımcı tayfanın aktif üyesi ve
   `going`; etkinlik silinmemiş ve iptal edilmemiş; tayfa silinmemiş ya da
   askıda değil. Alarm gitmişse ve kişi check-in yaptıysa etkinlik
   sonradan iptal ya da silinmiş olsa da görünür (alarmın bağlamı).
-  Katılımcı bu paylaşımı bilerek
-  yapar; güvenlik kişisi tayfa üyesi olmadığı için diğer bilgiler
-  (açıklama, katılımcılar, kanal) ona açılmaz.
+  Güvenlik kişisi tayfa üyesi olmadığı için başka hiçbir bilgi
+  (açıklama, katılımcılar, kanal) ona açılmaz. Alarm bildirimi de yalnızca
+  katılımcının kimliğini taşır.
 - Seçilen kişiye seçildiği anda bildirim gitmez (kötüye kullanımla
   bildirim yağdırılmasın; liste yeterli).
 
 ### 11. Konum ve log
 
 - Cihaz konumu hiçbir tabloya, olaya, bildirime, log'a girmez (ADR-0008).
-  Akış koordinat döndürmez; güvenlik kişisi yalnızca buluşma noktasının
-  **adını** görür (içerik, katılımcının paylaşımı).
+  Akış koordinat döndürmez; güvenlik kişisi hiçbir yer bilgisi görmez
+  (§10).
 - İşler yalnızca sayı log'lar (gönderilen alarm sayısı). Kimlik, cevap,
   puan log'a, metriğe, trace'e girmez.
 
@@ -438,50 +461,59 @@ Tayfa yöneticisinin gördüğü durum: `off` (kapalı), `pending` (incelemede),
 - core'a dört tablo (`discover_joins` dahil), iki fonksiyon/trigger grubu,
   bir iş, bir servis; chat'e bir bildirim türü; panele bir sekme eklenir.
 - `DISCOVER_ENABLED` dağıtımda tanımlanmaz (varsayılan kapalı); açmak tek
-  bir ortam değişkenidir.
+  bir ortam değişkenidir. `SAFETY_CONTACT_ENABLED` de tanımlanmaz
+  (varsayılan açık): güvenlik kişisi bu PR birleşince bütün yüz yüze
+  etkinliklerde kullanılabilir olur.
 - Topluluk Kuralları'na "Keşfet'teki etkinlik halka açık yerde buluşur"
   maddesi eklenmeli (Notion; platform sahibi).
 - Aydınlatma metnine Keşfet (arkadaşın katılımının arkadaşlara gösterilmesi,
-  güvenlik kişisi, geri bildirim) eklenmeden bayrak açılmamalıdır
-  (hukukçu listesi).
+  geri bildirim) eklenmeden Keşfet bayrağı açılmamalıdır (hukukçu listesi).
+  Güvenlik kişisi varsayılan açık geldiği için onun maddesi (seçilen
+  arkadaşla paylaşılan en az bilgi: ad, saat aralığı, durum) aydınlatma
+  metnine **pilot açılmadan önce** eklenmelidir; kullanıcı bilerek seçer,
+  ama işlenen veri metinde yer almalı.
 - Kötüye kullanım sözlüğü (`moderation_terms`) gelip Keşfet'teki etkinlik
   başlığı ondan geçmeden bayrak açılmamalıdır (§4).
 
-## Platform sahibine sorular
+## Platform sahibinin kararları (2026-11-16)
 
-Aşağıdakiler bu ADR'de gerekçeyle seçildi; platform sahibi farklı karar
-verirse ilgili bölüm değişir.
+Bu ADR'nin ilk sorularına platform sahibinin cevapları (sohbette, mimari
+oturumunun aktarımıyla):
 
-1. **Arkadaşın görünmesi:** `activity_visibility` `private` değilse
-   (`tayfa` ya da `public`) arkadaş Keşfet'te görünür (§4). Daha sıkı
-   seçenek: yalnızca `public`. Varsayılan `tayfa` olduğu için sıkı seçenek
-   akışı neredeyse boşaltır.
-2. **Akış penceresi:** bitmemiş ve 30 gün içinde başlayan etkinlikler;
-   geçmiş etkinlikler ("katıldığı") akışa girmez, arkadaşın `attended`
-   olması yalnızca süren etkinlikte anlam taşır.
-3. **Keşfet katılımı her zaman onaylı** (açık katılımlı tayfada da) (§5).
-4. **Güvenlik kişisi bayrağa bağlı** ve Keşfet dışı etkinliklerde de
-   kullanılabilir (§10). Bayraktan ayrı açılması istenirse ayrı bir bayrak
-   eklenir.
-5. **Güvenlik kişisi yalnızca buluşma noktası adını görür**, koordinatı
-   görmez (§10). Koordinat istenirse ADR-0008 ayrımına göre (paylaşılan yer
-   içeriktir) eklenebilir, ama veri modelindeki "koordinat yalnızca aktif
-   üyelere" kuralının istisnası olur.
-6. **Tek alarm:** "döndüm" yoksa bitiş + tolerans; check-in yokluğunda
-   ayrı bir "varmadı" alarmı yok (yanlış alarm riski).
-7. **Reddedilen başvuru için bekleme süresi yok;** yönetici yeniden
-   açabilir (kuyruğa yeniden düşer).
-8. **Yöneticiye bildirim yok:** onay, ret ve düşürme için yeni bildirim
-   türü açılmadı; durum Keşfet ayarında görünür.
-9. **Geri bildirim yalnızca `discoverable` etkinliklerde;** tüm
-   etkinliklere genişletilmesi ayrı karar.
-10. **Eski Keşfet üyesinin süresi 30 gün** ve yalnızca tayfayı şikâyet +
-    katıldığı etkinliğe geri bildirim (§7). Daha uzun bir süre ya da
-    tayfanın içeriğini (ör. bir mesajı) şikâyet etme ayrı karar.
-11. **Maskenin süresi:** geri bildirimde pencere kapanışı, şikâyette 24–48
-    saat (§7). Panelin isteği varsa günlük sabit saat de olabilir.
-12. **Etkinlik başlığı kötüye kullanım filtresi** `moderation_terms`
-    gelince; o zamana kadar bayrak kapalı kalır (§4, Sonuçlar).
+1. **Arkadaşın görünmesi:** profilde ayrı bir ayar, "Keşfet'te
+   arkadaşlarım görebilsin" (`social_settings.discover_visible_to_friends`,
+   varsayılan açık). Arkadaş Keşfet'te yalnızca bu ayar açık **ve**
+   `activity_visibility` `private` değilse görünür (§4).
+2. **Güvenlik kişisi Keşfet'ten ayrı:** kendi bayrağı
+   `SAFETY_CONTACT_ENABLED` (varsayılan açık), bütün yüz yüze etkinliklerde
+   (§1, §10). "Döndüm" ve kaldırma bayraksız.
+3. **Güvenlik kişisi en az bilgiyi görür:** kim, saat aralığı (başlangıç,
+   bitiş, tolerans) ve "döndü / dönmedi / alarm gitti" durumu; tayfa adı,
+   etkinlik başlığı ve buluşma yeri gösterilmez (§10). Koordinat sorusu
+   böylece kapandı.
+4. **Kabul edilen seçimler:** akışta 30 günlük pencere (bitmemiş ve 30 gün
+   içinde başlayan etkinlikler); Keşfet'ten katılım her zaman onaylı (açık
+   katılımlı tayfada da); tek alarm ("varmadı" alarmı yok); reddedilen
+   başvuru beklemeden yeniden açılabilir; yöneticiye onay/ret/düşürme
+   bildirimi yok; geri bildirim yalnızca `discoverable` etkinliklerde;
+   bayrak kapalıyken 404 `feature-disabled`.
+
+### Açık kalan ayrıntılar
+
+İnceleme düzeltmeleriyle gelen ve yukarıdaki cevaplardan sonra eklenen
+seçimler; gerekçeleri ilgili bölümdedir, farklı karar verilirse o bölüm
+değişir:
+
+- **Eski Keşfet üyesinin süresi 30 gün** ve yalnızca tayfayı şikâyet +
+  katıldığı etkinliğe geri bildirim (§7). Daha uzun bir süre ya da
+  tayfanın içeriğini (ör. bir mesajı) şikâyet etme ayrı karar.
+- **Maskenin süresi:** geri bildirimde pencere kapanışı, şikâyette 24–48
+  saat (§7). Günlük sabit saat de olabilir.
+- **Etkinlik başlığı kötüye kullanım filtresi** `moderation_terms` gelince;
+  o zamana kadar Keşfet bayrağı kapalı kalır (§4, Sonuçlar).
+- **"Keşfet'te arkadaşlarım görebilsin" ayarının yeri:** sosyal ayarlarda
+  (`social_settings`, profilleme ayarlarının yanında) tutuldu; profil
+  ekranında hangi başlık altında gösterileceği istemcinin işidir.
 
 ## Hukukçu listesi
 

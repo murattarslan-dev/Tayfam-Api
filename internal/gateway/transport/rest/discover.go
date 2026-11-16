@@ -333,21 +333,23 @@ func (h coreHandlers) markReturned(ctx context.Context, w http.ResponseWriter, r
 	writeJSON(w, http.StatusOK, safetyContactFrom(resp.GetSafetyContact()))
 }
 
-// safetyShareJSON is what a participant shared with their safety contact:
-// the meeting point's name only, never coordinates.
+// safetyShareJSON is what a participant shares with their safety contact:
+// who, the time range and the state; no tayfa, event or place (ADR-0033
+// §10).
 type safetyShareJSON struct {
-	Participant      *discoverPersonJSON `json:"participant"`
-	TayfaName        string              `json:"tayfa_name,omitempty"`
-	EventID          string              `json:"event_id"`
-	EventTitle       string              `json:"event_title"`
-	StartsAt         time.Time           `json:"starts_at"`
-	EndsAt           time.Time           `json:"ends_at"`
-	MeetingPointName string              `json:"meeting_point_name,omitempty"`
-	City             string              `json:"city,omitempty"`
-	District         string              `json:"district,omitempty"`
-	GraceMinutes     int32               `json:"grace_minutes"`
-	ReturnedAt       *time.Time          `json:"returned_at,omitempty"`
-	AlertSentAt      *time.Time          `json:"alert_sent_at,omitempty"`
+	Participant  *discoverPersonJSON `json:"participant"`
+	StartsAt     time.Time           `json:"starts_at"`
+	EndsAt       time.Time           `json:"ends_at"`
+	GraceMinutes int32               `json:"grace_minutes"`
+	ReturnedAt   *time.Time          `json:"returned_at,omitempty"`
+	AlertSentAt  *time.Time          `json:"alert_sent_at,omitempty"`
+	State        string              `json:"state"`
+}
+
+var shareStateNames = map[corev1.SafetyShareState]string{
+	corev1.SafetyShareState_SAFETY_SHARE_STATE_NOT_RETURNED: "not_returned",
+	corev1.SafetyShareState_SAFETY_SHARE_STATE_RETURNED:     "returned",
+	corev1.SafetyShareState_SAFETY_SHARE_STATE_ALERT_SENT:   "alert_sent",
 }
 
 type safetyShareListJSON struct {
@@ -363,10 +365,10 @@ func (h coreHandlers) listSafetyShares(ctx context.Context, w http.ResponseWrite
 	out := safetyShareListJSON{Shares: make([]safetyShareJSON, 0, len(resp.GetShares()))}
 	for _, s := range resp.GetShares() {
 		out.Shares = append(out.Shares, safetyShareJSON{
-			Participant: discoverPersonFrom(s.GetParticipant()), TayfaName: s.GetTayfaName(), EventID: s.GetEventId(),
-			EventTitle: s.GetEventTitle(), StartsAt: s.GetStartTime().AsTime(), EndsAt: s.GetEndTime().AsTime(),
-			MeetingPointName: s.GetMeetingPointName(), City: s.GetCity(), District: s.GetDistrict(),
+			Participant: discoverPersonFrom(s.GetParticipant()),
+			StartsAt:    s.GetStartTime().AsTime(), EndsAt: s.GetEndTime().AsTime(),
 			GraceMinutes: s.GetGraceMinutes(), ReturnedAt: optTime(s.GetReturnTime()), AlertSentAt: optTime(s.GetAlertTime()),
+			State: shareStateNames[s.GetState()],
 		})
 	}
 	writeJSON(w, http.StatusOK, out)

@@ -143,6 +143,62 @@ func (FeedbackAnswer) EnumDescriptor() ([]byte, []int) {
 	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{1}
 }
 
+// SafetyShareState is "back / not back / alert sent".
+type SafetyShareState int32
+
+const (
+	SafetyShareState_SAFETY_SHARE_STATE_UNSPECIFIED SafetyShareState = 0
+	// Not back yet; no alert has gone out.
+	SafetyShareState_SAFETY_SHARE_STATE_NOT_RETURNED SafetyShareState = 1
+	// The participant marked "I'm back" (also after an alert).
+	SafetyShareState_SAFETY_SHARE_STATE_RETURNED SafetyShareState = 2
+	// The alert went out and the participant has not marked "I'm back".
+	SafetyShareState_SAFETY_SHARE_STATE_ALERT_SENT SafetyShareState = 3
+)
+
+// Enum value maps for SafetyShareState.
+var (
+	SafetyShareState_name = map[int32]string{
+		0: "SAFETY_SHARE_STATE_UNSPECIFIED",
+		1: "SAFETY_SHARE_STATE_NOT_RETURNED",
+		2: "SAFETY_SHARE_STATE_RETURNED",
+		3: "SAFETY_SHARE_STATE_ALERT_SENT",
+	}
+	SafetyShareState_value = map[string]int32{
+		"SAFETY_SHARE_STATE_UNSPECIFIED":  0,
+		"SAFETY_SHARE_STATE_NOT_RETURNED": 1,
+		"SAFETY_SHARE_STATE_RETURNED":     2,
+		"SAFETY_SHARE_STATE_ALERT_SENT":   3,
+	}
+)
+
+func (x SafetyShareState) Enum() *SafetyShareState {
+	p := new(SafetyShareState)
+	*p = x
+	return p
+}
+
+func (x SafetyShareState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SafetyShareState) Descriptor() protoreflect.EnumDescriptor {
+	return file_tayfam_core_v1_discover_proto_enumTypes[2].Descriptor()
+}
+
+func (SafetyShareState) Type() protoreflect.EnumType {
+	return &file_tayfam_core_v1_discover_proto_enumTypes[2]
+}
+
+func (x SafetyShareState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SafetyShareState.Descriptor instead.
+func (SafetyShareState) EnumDescriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{2}
+}
+
 // DiscoverPerson is a friend shown on a feed item.
 type DiscoverPerson struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
@@ -1523,26 +1579,23 @@ func (x *MarkReturnedResponse) GetSafetyContact() *SafetyContact {
 	return nil
 }
 
-// SafetyShare is an event a participant shared with the caller as their
-// safety contact. Only what the participant chose to share: no
-// coordinates, no description, no other participants.
+// SafetyShare is what a participant shares with the caller as their safety
+// contact, and nothing more (platform owner, 2026-11-16; ADR-0033 §10):
+// who, the time range (start, end, grace) and the state. No tayfa, event
+// title or ID, meeting point, place, coordinates, description or other
+// participants.
 type SafetyShare struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Participant *DiscoverPerson        `protobuf:"bytes,1,opt,name=participant,proto3" json:"participant,omitempty"`
-	TayfaName   string                 `protobuf:"bytes,2,opt,name=tayfa_name,json=tayfaName,proto3" json:"tayfa_name,omitempty"`
-	EventId     string                 `protobuf:"bytes,3,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	EventTitle  string                 `protobuf:"bytes,4,opt,name=event_title,json=eventTitle,proto3" json:"event_title,omitempty"`
 	StartTime   *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
 	EndTime     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
-	// The meeting point's name only.
-	MeetingPointName string                 `protobuf:"bytes,7,opt,name=meeting_point_name,json=meetingPointName,proto3" json:"meeting_point_name,omitempty"`
-	City             string                 `protobuf:"bytes,8,opt,name=city,proto3" json:"city,omitempty"`
-	District         string                 `protobuf:"bytes,9,opt,name=district,proto3" json:"district,omitempty"`
-	GraceMinutes     int32                  `protobuf:"varint,10,opt,name=grace_minutes,json=graceMinutes,proto3" json:"grace_minutes,omitempty"`
-	ReturnTime       *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=return_time,json=returnTime,proto3" json:"return_time,omitempty"`
-	AlertTime        *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=alert_time,json=alertTime,proto3" json:"alert_time,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// The alert goes out at end_time plus grace_minutes.
+	GraceMinutes  int32                  `protobuf:"varint,10,opt,name=grace_minutes,json=graceMinutes,proto3" json:"grace_minutes,omitempty"`
+	ReturnTime    *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=return_time,json=returnTime,proto3" json:"return_time,omitempty"`
+	AlertTime     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=alert_time,json=alertTime,proto3" json:"alert_time,omitempty"`
+	State         SafetyShareState       `protobuf:"varint,13,opt,name=state,proto3,enum=tayfam.core.v1.SafetyShareState" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SafetyShare) Reset() {
@@ -1582,27 +1635,6 @@ func (x *SafetyShare) GetParticipant() *DiscoverPerson {
 	return nil
 }
 
-func (x *SafetyShare) GetTayfaName() string {
-	if x != nil {
-		return x.TayfaName
-	}
-	return ""
-}
-
-func (x *SafetyShare) GetEventId() string {
-	if x != nil {
-		return x.EventId
-	}
-	return ""
-}
-
-func (x *SafetyShare) GetEventTitle() string {
-	if x != nil {
-		return x.EventTitle
-	}
-	return ""
-}
-
 func (x *SafetyShare) GetStartTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.StartTime
@@ -1615,27 +1647,6 @@ func (x *SafetyShare) GetEndTime() *timestamppb.Timestamp {
 		return x.EndTime
 	}
 	return nil
-}
-
-func (x *SafetyShare) GetMeetingPointName() string {
-	if x != nil {
-		return x.MeetingPointName
-	}
-	return ""
-}
-
-func (x *SafetyShare) GetCity() string {
-	if x != nil {
-		return x.City
-	}
-	return ""
-}
-
-func (x *SafetyShare) GetDistrict() string {
-	if x != nil {
-		return x.District
-	}
-	return ""
 }
 
 func (x *SafetyShare) GetGraceMinutes() int32 {
@@ -1657,6 +1668,13 @@ func (x *SafetyShare) GetAlertTime() *timestamppb.Timestamp {
 		return x.AlertTime
 	}
 	return nil
+}
+
+func (x *SafetyShare) GetState() SafetyShareState {
+	if x != nil {
+		return x.State
+	}
+	return SafetyShareState_SAFETY_SHARE_STATE_UNSPECIFIED
 }
 
 type ListSafetySharesRequest struct {
@@ -1834,26 +1852,21 @@ const file_tayfam_core_v1_discover_proto_rawDesc = "" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x19\n" +
 	"\bevent_id\x18\x02 \x01(\tR\aeventId\"\\\n" +
 	"\x14MarkReturnedResponse\x12D\n" +
-	"\x0esafety_contact\x18\x01 \x01(\v2\x1d.tayfam.core.v1.SafetyContactR\rsafetyContact\"\x97\x04\n" +
+	"\x0esafety_contact\x18\x01 \x01(\v2\x1d.tayfam.core.v1.SafetyContactR\rsafetyContact\"\x81\x04\n" +
 	"\vSafetyShare\x12@\n" +
-	"\vparticipant\x18\x01 \x01(\v2\x1e.tayfam.core.v1.DiscoverPersonR\vparticipant\x12\x1d\n" +
-	"\n" +
-	"tayfa_name\x18\x02 \x01(\tR\ttayfaName\x12\x19\n" +
-	"\bevent_id\x18\x03 \x01(\tR\aeventId\x12\x1f\n" +
-	"\vevent_title\x18\x04 \x01(\tR\n" +
-	"eventTitle\x129\n" +
+	"\vparticipant\x18\x01 \x01(\v2\x1e.tayfam.core.v1.DiscoverPersonR\vparticipant\x129\n" +
 	"\n" +
 	"start_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
-	"\bend_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12,\n" +
-	"\x12meeting_point_name\x18\a \x01(\tR\x10meetingPointName\x12\x12\n" +
-	"\x04city\x18\b \x01(\tR\x04city\x12\x1a\n" +
-	"\bdistrict\x18\t \x01(\tR\bdistrict\x12#\n" +
+	"\bend_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12#\n" +
 	"\rgrace_minutes\x18\n" +
 	" \x01(\x05R\fgraceMinutes\x12;\n" +
 	"\vreturn_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"returnTime\x129\n" +
 	"\n" +
-	"alert_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\talertTime\"\x19\n" +
+	"alert_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\talertTime\x126\n" +
+	"\x05state\x18\r \x01(\x0e2 .tayfam.core.v1.SafetyShareStateR\x05stateJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"R\n" +
+	"tayfa_nameR\bevent_idR\vevent_titleR\x12meeting_point_nameR\x04cityR\bdistrict\"\x19\n" +
 	"\x17ListSafetySharesRequest\"O\n" +
 	"\x18ListSafetySharesResponse\x123\n" +
 	"\x06shares\x18\x01 \x03(\v2\x1b.tayfam.core.v1.SafetyShareR\x06shares*\xe5\x01\n" +
@@ -1868,7 +1881,12 @@ const file_tayfam_core_v1_discover_proto_rawDesc = "" +
 	"\x1bFEEDBACK_ANSWER_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12FEEDBACK_ANSWER_OK\x10\x01\x12\x1a\n" +
 	"\x16FEEDBACK_ANSWER_NOT_OK\x10\x02\x12\x1b\n" +
-	"\x17FEEDBACK_ANSWER_SERIOUS\x10\x032\xf8\b\n" +
+	"\x17FEEDBACK_ANSWER_SERIOUS\x10\x03*\x9f\x01\n" +
+	"\x10SafetyShareState\x12\"\n" +
+	"\x1eSAFETY_SHARE_STATE_UNSPECIFIED\x10\x00\x12#\n" +
+	"\x1fSAFETY_SHARE_STATE_NOT_RETURNED\x10\x01\x12\x1f\n" +
+	"\x1bSAFETY_SHARE_STATE_RETURNED\x10\x02\x12!\n" +
+	"\x1dSAFETY_SHARE_STATE_ALERT_SENT\x10\x032\xf8\b\n" +
 	"\x0fDiscoverService\x12e\n" +
 	"\x10ListDiscoverFeed\x12'.tayfam.core.v1.ListDiscoverFeedRequest\x1a(.tayfam.core.v1.ListDiscoverFeedResponse\x12e\n" +
 	"\x10JoinFromDiscover\x12'.tayfam.core.v1.JoinFromDiscoverRequest\x1a(.tayfam.core.v1.JoinFromDiscoverResponse\x12e\n" +
@@ -1895,99 +1913,101 @@ func file_tayfam_core_v1_discover_proto_rawDescGZIP() []byte {
 	return file_tayfam_core_v1_discover_proto_rawDescData
 }
 
-var file_tayfam_core_v1_discover_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_tayfam_core_v1_discover_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_tayfam_core_v1_discover_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_tayfam_core_v1_discover_proto_goTypes = []any{
 	(TayfaDiscoverState)(0),            // 0: tayfam.core.v1.TayfaDiscoverState
 	(FeedbackAnswer)(0),                // 1: tayfam.core.v1.FeedbackAnswer
-	(*DiscoverPerson)(nil),             // 2: tayfam.core.v1.DiscoverPerson
-	(*DiscoverTayfa)(nil),              // 3: tayfam.core.v1.DiscoverTayfa
-	(*DiscoverEvent)(nil),              // 4: tayfam.core.v1.DiscoverEvent
-	(*DiscoverItem)(nil),               // 5: tayfam.core.v1.DiscoverItem
-	(*ListDiscoverFeedRequest)(nil),    // 6: tayfam.core.v1.ListDiscoverFeedRequest
-	(*ListDiscoverFeedResponse)(nil),   // 7: tayfam.core.v1.ListDiscoverFeedResponse
-	(*JoinFromDiscoverRequest)(nil),    // 8: tayfam.core.v1.JoinFromDiscoverRequest
-	(*JoinFromDiscoverResponse)(nil),   // 9: tayfam.core.v1.JoinFromDiscoverResponse
-	(*GetTayfaDiscoverRequest)(nil),    // 10: tayfam.core.v1.GetTayfaDiscoverRequest
-	(*GetTayfaDiscoverResponse)(nil),   // 11: tayfam.core.v1.GetTayfaDiscoverResponse
-	(*SetTayfaDiscoverRequest)(nil),    // 12: tayfam.core.v1.SetTayfaDiscoverRequest
-	(*SetTayfaDiscoverResponse)(nil),   // 13: tayfam.core.v1.SetTayfaDiscoverResponse
-	(*GetEventFeedbackRequest)(nil),    // 14: tayfam.core.v1.GetEventFeedbackRequest
-	(*GetEventFeedbackResponse)(nil),   // 15: tayfam.core.v1.GetEventFeedbackResponse
-	(*SetEventFeedbackRequest)(nil),    // 16: tayfam.core.v1.SetEventFeedbackRequest
-	(*SetEventFeedbackResponse)(nil),   // 17: tayfam.core.v1.SetEventFeedbackResponse
-	(*SafetyContact)(nil),              // 18: tayfam.core.v1.SafetyContact
-	(*GetSafetyContactRequest)(nil),    // 19: tayfam.core.v1.GetSafetyContactRequest
-	(*GetSafetyContactResponse)(nil),   // 20: tayfam.core.v1.GetSafetyContactResponse
-	(*SetSafetyContactRequest)(nil),    // 21: tayfam.core.v1.SetSafetyContactRequest
-	(*SetSafetyContactResponse)(nil),   // 22: tayfam.core.v1.SetSafetyContactResponse
-	(*ClearSafetyContactRequest)(nil),  // 23: tayfam.core.v1.ClearSafetyContactRequest
-	(*ClearSafetyContactResponse)(nil), // 24: tayfam.core.v1.ClearSafetyContactResponse
-	(*MarkReturnedRequest)(nil),        // 25: tayfam.core.v1.MarkReturnedRequest
-	(*MarkReturnedResponse)(nil),       // 26: tayfam.core.v1.MarkReturnedResponse
-	(*SafetyShare)(nil),                // 27: tayfam.core.v1.SafetyShare
-	(*ListSafetySharesRequest)(nil),    // 28: tayfam.core.v1.ListSafetySharesRequest
-	(*ListSafetySharesResponse)(nil),   // 29: tayfam.core.v1.ListSafetySharesResponse
-	(*timestamppb.Timestamp)(nil),      // 30: google.protobuf.Timestamp
-	(EventType)(0),                     // 31: tayfam.core.v1.EventType
-	(*Membership)(nil),                 // 32: tayfam.core.v1.Membership
+	(SafetyShareState)(0),              // 2: tayfam.core.v1.SafetyShareState
+	(*DiscoverPerson)(nil),             // 3: tayfam.core.v1.DiscoverPerson
+	(*DiscoverTayfa)(nil),              // 4: tayfam.core.v1.DiscoverTayfa
+	(*DiscoverEvent)(nil),              // 5: tayfam.core.v1.DiscoverEvent
+	(*DiscoverItem)(nil),               // 6: tayfam.core.v1.DiscoverItem
+	(*ListDiscoverFeedRequest)(nil),    // 7: tayfam.core.v1.ListDiscoverFeedRequest
+	(*ListDiscoverFeedResponse)(nil),   // 8: tayfam.core.v1.ListDiscoverFeedResponse
+	(*JoinFromDiscoverRequest)(nil),    // 9: tayfam.core.v1.JoinFromDiscoverRequest
+	(*JoinFromDiscoverResponse)(nil),   // 10: tayfam.core.v1.JoinFromDiscoverResponse
+	(*GetTayfaDiscoverRequest)(nil),    // 11: tayfam.core.v1.GetTayfaDiscoverRequest
+	(*GetTayfaDiscoverResponse)(nil),   // 12: tayfam.core.v1.GetTayfaDiscoverResponse
+	(*SetTayfaDiscoverRequest)(nil),    // 13: tayfam.core.v1.SetTayfaDiscoverRequest
+	(*SetTayfaDiscoverResponse)(nil),   // 14: tayfam.core.v1.SetTayfaDiscoverResponse
+	(*GetEventFeedbackRequest)(nil),    // 15: tayfam.core.v1.GetEventFeedbackRequest
+	(*GetEventFeedbackResponse)(nil),   // 16: tayfam.core.v1.GetEventFeedbackResponse
+	(*SetEventFeedbackRequest)(nil),    // 17: tayfam.core.v1.SetEventFeedbackRequest
+	(*SetEventFeedbackResponse)(nil),   // 18: tayfam.core.v1.SetEventFeedbackResponse
+	(*SafetyContact)(nil),              // 19: tayfam.core.v1.SafetyContact
+	(*GetSafetyContactRequest)(nil),    // 20: tayfam.core.v1.GetSafetyContactRequest
+	(*GetSafetyContactResponse)(nil),   // 21: tayfam.core.v1.GetSafetyContactResponse
+	(*SetSafetyContactRequest)(nil),    // 22: tayfam.core.v1.SetSafetyContactRequest
+	(*SetSafetyContactResponse)(nil),   // 23: tayfam.core.v1.SetSafetyContactResponse
+	(*ClearSafetyContactRequest)(nil),  // 24: tayfam.core.v1.ClearSafetyContactRequest
+	(*ClearSafetyContactResponse)(nil), // 25: tayfam.core.v1.ClearSafetyContactResponse
+	(*MarkReturnedRequest)(nil),        // 26: tayfam.core.v1.MarkReturnedRequest
+	(*MarkReturnedResponse)(nil),       // 27: tayfam.core.v1.MarkReturnedResponse
+	(*SafetyShare)(nil),                // 28: tayfam.core.v1.SafetyShare
+	(*ListSafetySharesRequest)(nil),    // 29: tayfam.core.v1.ListSafetySharesRequest
+	(*ListSafetySharesResponse)(nil),   // 30: tayfam.core.v1.ListSafetySharesResponse
+	(*timestamppb.Timestamp)(nil),      // 31: google.protobuf.Timestamp
+	(EventType)(0),                     // 32: tayfam.core.v1.EventType
+	(*Membership)(nil),                 // 33: tayfam.core.v1.Membership
 }
 var file_tayfam_core_v1_discover_proto_depIdxs = []int32{
-	30, // 0: tayfam.core.v1.DiscoverTayfa.create_time:type_name -> google.protobuf.Timestamp
-	31, // 1: tayfam.core.v1.DiscoverEvent.type:type_name -> tayfam.core.v1.EventType
-	30, // 2: tayfam.core.v1.DiscoverEvent.start_time:type_name -> google.protobuf.Timestamp
-	30, // 3: tayfam.core.v1.DiscoverEvent.end_time:type_name -> google.protobuf.Timestamp
-	4,  // 4: tayfam.core.v1.DiscoverItem.event:type_name -> tayfam.core.v1.DiscoverEvent
-	3,  // 5: tayfam.core.v1.DiscoverItem.tayfa:type_name -> tayfam.core.v1.DiscoverTayfa
-	2,  // 6: tayfam.core.v1.DiscoverItem.friends:type_name -> tayfam.core.v1.DiscoverPerson
-	5,  // 7: tayfam.core.v1.ListDiscoverFeedResponse.items:type_name -> tayfam.core.v1.DiscoverItem
-	32, // 8: tayfam.core.v1.JoinFromDiscoverResponse.membership:type_name -> tayfam.core.v1.Membership
+	31, // 0: tayfam.core.v1.DiscoverTayfa.create_time:type_name -> google.protobuf.Timestamp
+	32, // 1: tayfam.core.v1.DiscoverEvent.type:type_name -> tayfam.core.v1.EventType
+	31, // 2: tayfam.core.v1.DiscoverEvent.start_time:type_name -> google.protobuf.Timestamp
+	31, // 3: tayfam.core.v1.DiscoverEvent.end_time:type_name -> google.protobuf.Timestamp
+	5,  // 4: tayfam.core.v1.DiscoverItem.event:type_name -> tayfam.core.v1.DiscoverEvent
+	4,  // 5: tayfam.core.v1.DiscoverItem.tayfa:type_name -> tayfam.core.v1.DiscoverTayfa
+	3,  // 6: tayfam.core.v1.DiscoverItem.friends:type_name -> tayfam.core.v1.DiscoverPerson
+	6,  // 7: tayfam.core.v1.ListDiscoverFeedResponse.items:type_name -> tayfam.core.v1.DiscoverItem
+	33, // 8: tayfam.core.v1.JoinFromDiscoverResponse.membership:type_name -> tayfam.core.v1.Membership
 	0,  // 9: tayfam.core.v1.GetTayfaDiscoverResponse.state:type_name -> tayfam.core.v1.TayfaDiscoverState
 	0,  // 10: tayfam.core.v1.SetTayfaDiscoverResponse.state:type_name -> tayfam.core.v1.TayfaDiscoverState
 	1,  // 11: tayfam.core.v1.GetEventFeedbackResponse.answer:type_name -> tayfam.core.v1.FeedbackAnswer
-	30, // 12: tayfam.core.v1.GetEventFeedbackResponse.update_time:type_name -> google.protobuf.Timestamp
+	31, // 12: tayfam.core.v1.GetEventFeedbackResponse.update_time:type_name -> google.protobuf.Timestamp
 	1,  // 13: tayfam.core.v1.SetEventFeedbackRequest.answer:type_name -> tayfam.core.v1.FeedbackAnswer
 	1,  // 14: tayfam.core.v1.SetEventFeedbackResponse.answer:type_name -> tayfam.core.v1.FeedbackAnswer
-	30, // 15: tayfam.core.v1.SetEventFeedbackResponse.update_time:type_name -> google.protobuf.Timestamp
-	2,  // 16: tayfam.core.v1.SafetyContact.contact:type_name -> tayfam.core.v1.DiscoverPerson
-	30, // 17: tayfam.core.v1.SafetyContact.return_time:type_name -> google.protobuf.Timestamp
-	30, // 18: tayfam.core.v1.SafetyContact.alert_time:type_name -> google.protobuf.Timestamp
-	18, // 19: tayfam.core.v1.GetSafetyContactResponse.safety_contact:type_name -> tayfam.core.v1.SafetyContact
-	18, // 20: tayfam.core.v1.SetSafetyContactResponse.safety_contact:type_name -> tayfam.core.v1.SafetyContact
-	18, // 21: tayfam.core.v1.MarkReturnedResponse.safety_contact:type_name -> tayfam.core.v1.SafetyContact
-	2,  // 22: tayfam.core.v1.SafetyShare.participant:type_name -> tayfam.core.v1.DiscoverPerson
-	30, // 23: tayfam.core.v1.SafetyShare.start_time:type_name -> google.protobuf.Timestamp
-	30, // 24: tayfam.core.v1.SafetyShare.end_time:type_name -> google.protobuf.Timestamp
-	30, // 25: tayfam.core.v1.SafetyShare.return_time:type_name -> google.protobuf.Timestamp
-	30, // 26: tayfam.core.v1.SafetyShare.alert_time:type_name -> google.protobuf.Timestamp
-	27, // 27: tayfam.core.v1.ListSafetySharesResponse.shares:type_name -> tayfam.core.v1.SafetyShare
-	6,  // 28: tayfam.core.v1.DiscoverService.ListDiscoverFeed:input_type -> tayfam.core.v1.ListDiscoverFeedRequest
-	8,  // 29: tayfam.core.v1.DiscoverService.JoinFromDiscover:input_type -> tayfam.core.v1.JoinFromDiscoverRequest
-	10, // 30: tayfam.core.v1.DiscoverService.GetTayfaDiscover:input_type -> tayfam.core.v1.GetTayfaDiscoverRequest
-	12, // 31: tayfam.core.v1.DiscoverService.SetTayfaDiscover:input_type -> tayfam.core.v1.SetTayfaDiscoverRequest
-	14, // 32: tayfam.core.v1.DiscoverService.GetEventFeedback:input_type -> tayfam.core.v1.GetEventFeedbackRequest
-	16, // 33: tayfam.core.v1.DiscoverService.SetEventFeedback:input_type -> tayfam.core.v1.SetEventFeedbackRequest
-	19, // 34: tayfam.core.v1.DiscoverService.GetSafetyContact:input_type -> tayfam.core.v1.GetSafetyContactRequest
-	21, // 35: tayfam.core.v1.DiscoverService.SetSafetyContact:input_type -> tayfam.core.v1.SetSafetyContactRequest
-	23, // 36: tayfam.core.v1.DiscoverService.ClearSafetyContact:input_type -> tayfam.core.v1.ClearSafetyContactRequest
-	25, // 37: tayfam.core.v1.DiscoverService.MarkReturned:input_type -> tayfam.core.v1.MarkReturnedRequest
-	28, // 38: tayfam.core.v1.DiscoverService.ListSafetyShares:input_type -> tayfam.core.v1.ListSafetySharesRequest
-	7,  // 39: tayfam.core.v1.DiscoverService.ListDiscoverFeed:output_type -> tayfam.core.v1.ListDiscoverFeedResponse
-	9,  // 40: tayfam.core.v1.DiscoverService.JoinFromDiscover:output_type -> tayfam.core.v1.JoinFromDiscoverResponse
-	11, // 41: tayfam.core.v1.DiscoverService.GetTayfaDiscover:output_type -> tayfam.core.v1.GetTayfaDiscoverResponse
-	13, // 42: tayfam.core.v1.DiscoverService.SetTayfaDiscover:output_type -> tayfam.core.v1.SetTayfaDiscoverResponse
-	15, // 43: tayfam.core.v1.DiscoverService.GetEventFeedback:output_type -> tayfam.core.v1.GetEventFeedbackResponse
-	17, // 44: tayfam.core.v1.DiscoverService.SetEventFeedback:output_type -> tayfam.core.v1.SetEventFeedbackResponse
-	20, // 45: tayfam.core.v1.DiscoverService.GetSafetyContact:output_type -> tayfam.core.v1.GetSafetyContactResponse
-	22, // 46: tayfam.core.v1.DiscoverService.SetSafetyContact:output_type -> tayfam.core.v1.SetSafetyContactResponse
-	24, // 47: tayfam.core.v1.DiscoverService.ClearSafetyContact:output_type -> tayfam.core.v1.ClearSafetyContactResponse
-	26, // 48: tayfam.core.v1.DiscoverService.MarkReturned:output_type -> tayfam.core.v1.MarkReturnedResponse
-	29, // 49: tayfam.core.v1.DiscoverService.ListSafetyShares:output_type -> tayfam.core.v1.ListSafetySharesResponse
-	39, // [39:50] is the sub-list for method output_type
-	28, // [28:39] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	31, // 15: tayfam.core.v1.SetEventFeedbackResponse.update_time:type_name -> google.protobuf.Timestamp
+	3,  // 16: tayfam.core.v1.SafetyContact.contact:type_name -> tayfam.core.v1.DiscoverPerson
+	31, // 17: tayfam.core.v1.SafetyContact.return_time:type_name -> google.protobuf.Timestamp
+	31, // 18: tayfam.core.v1.SafetyContact.alert_time:type_name -> google.protobuf.Timestamp
+	19, // 19: tayfam.core.v1.GetSafetyContactResponse.safety_contact:type_name -> tayfam.core.v1.SafetyContact
+	19, // 20: tayfam.core.v1.SetSafetyContactResponse.safety_contact:type_name -> tayfam.core.v1.SafetyContact
+	19, // 21: tayfam.core.v1.MarkReturnedResponse.safety_contact:type_name -> tayfam.core.v1.SafetyContact
+	3,  // 22: tayfam.core.v1.SafetyShare.participant:type_name -> tayfam.core.v1.DiscoverPerson
+	31, // 23: tayfam.core.v1.SafetyShare.start_time:type_name -> google.protobuf.Timestamp
+	31, // 24: tayfam.core.v1.SafetyShare.end_time:type_name -> google.protobuf.Timestamp
+	31, // 25: tayfam.core.v1.SafetyShare.return_time:type_name -> google.protobuf.Timestamp
+	31, // 26: tayfam.core.v1.SafetyShare.alert_time:type_name -> google.protobuf.Timestamp
+	2,  // 27: tayfam.core.v1.SafetyShare.state:type_name -> tayfam.core.v1.SafetyShareState
+	28, // 28: tayfam.core.v1.ListSafetySharesResponse.shares:type_name -> tayfam.core.v1.SafetyShare
+	7,  // 29: tayfam.core.v1.DiscoverService.ListDiscoverFeed:input_type -> tayfam.core.v1.ListDiscoverFeedRequest
+	9,  // 30: tayfam.core.v1.DiscoverService.JoinFromDiscover:input_type -> tayfam.core.v1.JoinFromDiscoverRequest
+	11, // 31: tayfam.core.v1.DiscoverService.GetTayfaDiscover:input_type -> tayfam.core.v1.GetTayfaDiscoverRequest
+	13, // 32: tayfam.core.v1.DiscoverService.SetTayfaDiscover:input_type -> tayfam.core.v1.SetTayfaDiscoverRequest
+	15, // 33: tayfam.core.v1.DiscoverService.GetEventFeedback:input_type -> tayfam.core.v1.GetEventFeedbackRequest
+	17, // 34: tayfam.core.v1.DiscoverService.SetEventFeedback:input_type -> tayfam.core.v1.SetEventFeedbackRequest
+	20, // 35: tayfam.core.v1.DiscoverService.GetSafetyContact:input_type -> tayfam.core.v1.GetSafetyContactRequest
+	22, // 36: tayfam.core.v1.DiscoverService.SetSafetyContact:input_type -> tayfam.core.v1.SetSafetyContactRequest
+	24, // 37: tayfam.core.v1.DiscoverService.ClearSafetyContact:input_type -> tayfam.core.v1.ClearSafetyContactRequest
+	26, // 38: tayfam.core.v1.DiscoverService.MarkReturned:input_type -> tayfam.core.v1.MarkReturnedRequest
+	29, // 39: tayfam.core.v1.DiscoverService.ListSafetyShares:input_type -> tayfam.core.v1.ListSafetySharesRequest
+	8,  // 40: tayfam.core.v1.DiscoverService.ListDiscoverFeed:output_type -> tayfam.core.v1.ListDiscoverFeedResponse
+	10, // 41: tayfam.core.v1.DiscoverService.JoinFromDiscover:output_type -> tayfam.core.v1.JoinFromDiscoverResponse
+	12, // 42: tayfam.core.v1.DiscoverService.GetTayfaDiscover:output_type -> tayfam.core.v1.GetTayfaDiscoverResponse
+	14, // 43: tayfam.core.v1.DiscoverService.SetTayfaDiscover:output_type -> tayfam.core.v1.SetTayfaDiscoverResponse
+	16, // 44: tayfam.core.v1.DiscoverService.GetEventFeedback:output_type -> tayfam.core.v1.GetEventFeedbackResponse
+	18, // 45: tayfam.core.v1.DiscoverService.SetEventFeedback:output_type -> tayfam.core.v1.SetEventFeedbackResponse
+	21, // 46: tayfam.core.v1.DiscoverService.GetSafetyContact:output_type -> tayfam.core.v1.GetSafetyContactResponse
+	23, // 47: tayfam.core.v1.DiscoverService.SetSafetyContact:output_type -> tayfam.core.v1.SetSafetyContactResponse
+	25, // 48: tayfam.core.v1.DiscoverService.ClearSafetyContact:output_type -> tayfam.core.v1.ClearSafetyContactResponse
+	27, // 49: tayfam.core.v1.DiscoverService.MarkReturned:output_type -> tayfam.core.v1.MarkReturnedResponse
+	30, // 50: tayfam.core.v1.DiscoverService.ListSafetyShares:output_type -> tayfam.core.v1.ListSafetySharesResponse
+	40, // [40:51] is the sub-list for method output_type
+	29, // [29:40] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_discover_proto_init() }
@@ -2002,7 +2022,7 @@ func file_tayfam_core_v1_discover_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_discover_proto_rawDesc), len(file_tayfam_core_v1_discover_proto_rawDesc)),
-			NumEnums:      2,
+			NumEnums:      3,
 			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,

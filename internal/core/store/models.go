@@ -429,10 +429,11 @@ type Report struct {
 }
 
 type SocialSetting struct {
-	UserID              pgtype.UUID
-	ProfilingEnabled    bool
-	HideFromSuggestions bool
-	UpdatedAt           pgtype.Timestamptz
+	UserID                   pgtype.UUID
+	ProfilingEnabled         bool
+	HideFromSuggestions      bool
+	UpdatedAt                pgtype.Timestamptz
+	DiscoverVisibleToFriends bool
 }
 
 type Tag struct {

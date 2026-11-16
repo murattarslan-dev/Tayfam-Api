@@ -163,4 +163,13 @@ func TestDiscoverContractHasNoScore(t *testing.T) {
 	if len(seen) < 10 {
 		t.Fatalf("yalnızca %d mesaj tarandı", len(seen))
 	}
+	// The safety contact sees the least (ADR-0033 §10): who, when, state.
+	share := (&corev1.SafetyShare{}).ProtoReflect().Descriptor().Fields()
+	for i := range share.Len() {
+		switch name := string(share.Get(i).Name()); name {
+		case "participant", "start_time", "end_time", "grace_minutes", "return_time", "alert_time", "state":
+		default:
+			t.Errorf("SafetyShare.%s", name)
+		}
+	}
 }

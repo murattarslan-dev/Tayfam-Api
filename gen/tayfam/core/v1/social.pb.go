@@ -1537,8 +1537,12 @@ type SocialSettings struct {
 	ProfilingEnabled bool `protobuf:"varint,1,opt,name=profiling_enabled,json=profilingEnabled,proto3" json:"profiling_enabled,omitempty"`
 	// "Beni önerme": the caller is never suggested to others. Default false.
 	HideFromSuggestions bool `protobuf:"varint,2,opt,name=hide_from_suggestions,json=hideFromSuggestions,proto3" json:"hide_from_suggestions,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// "Keşfet'te arkadaşlarım görebilsin": the caller's going to or attending
+	// an event may be shown to their friends in Keşfet (ADR-0033 §4); it is
+	// also never shown while activity visibility is PRIVATE. Default true.
+	DiscoverVisibleToFriends bool `protobuf:"varint,3,opt,name=discover_visible_to_friends,json=discoverVisibleToFriends,proto3" json:"discover_visible_to_friends,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *SocialSettings) Reset() {
@@ -1581,6 +1585,13 @@ func (x *SocialSettings) GetProfilingEnabled() bool {
 func (x *SocialSettings) GetHideFromSuggestions() bool {
 	if x != nil {
 		return x.HideFromSuggestions
+	}
+	return false
+}
+
+func (x *SocialSettings) GetDiscoverVisibleToFriends() bool {
+	if x != nil {
+		return x.DiscoverVisibleToFriends
 	}
 	return false
 }
@@ -1666,11 +1677,12 @@ func (x *GetSocialSettingsResponse) GetSettings() *SocialSettings {
 }
 
 type UpdateSocialSettingsRequest struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	ProfilingEnabled    *bool                  `protobuf:"varint,1,opt,name=profiling_enabled,json=profilingEnabled,proto3,oneof" json:"profiling_enabled,omitempty"`
-	HideFromSuggestions *bool                  `protobuf:"varint,2,opt,name=hide_from_suggestions,json=hideFromSuggestions,proto3,oneof" json:"hide_from_suggestions,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	ProfilingEnabled         *bool                  `protobuf:"varint,1,opt,name=profiling_enabled,json=profilingEnabled,proto3,oneof" json:"profiling_enabled,omitempty"`
+	HideFromSuggestions      *bool                  `protobuf:"varint,2,opt,name=hide_from_suggestions,json=hideFromSuggestions,proto3,oneof" json:"hide_from_suggestions,omitempty"`
+	DiscoverVisibleToFriends *bool                  `protobuf:"varint,3,opt,name=discover_visible_to_friends,json=discoverVisibleToFriends,proto3,oneof" json:"discover_visible_to_friends,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *UpdateSocialSettingsRequest) Reset() {
@@ -1713,6 +1725,13 @@ func (x *UpdateSocialSettingsRequest) GetProfilingEnabled() bool {
 func (x *UpdateSocialSettingsRequest) GetHideFromSuggestions() bool {
 	if x != nil && x.HideFromSuggestions != nil {
 		return *x.HideFromSuggestions
+	}
+	return false
+}
+
+func (x *UpdateSocialSettingsRequest) GetDiscoverVisibleToFriends() bool {
+	if x != nil && x.DiscoverVisibleToFriends != nil {
+		return *x.DiscoverVisibleToFriends
 	}
 	return false
 }
@@ -1838,18 +1857,21 @@ const file_tayfam_core_v1_social_proto_rawDesc = "" +
 	"\vsuggestions\x18\x01 \x03(\v2 .tayfam.core.v1.FriendSuggestionR\vsuggestions\"9\n" +
 	"\x1eDismissFriendSuggestionRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\"!\n" +
-	"\x1fDismissFriendSuggestionResponse\"q\n" +
+	"\x1fDismissFriendSuggestionResponse\"\xb0\x01\n" +
 	"\x0eSocialSettings\x12+\n" +
 	"\x11profiling_enabled\x18\x01 \x01(\bR\x10profilingEnabled\x122\n" +
-	"\x15hide_from_suggestions\x18\x02 \x01(\bR\x13hideFromSuggestions\"\x1a\n" +
+	"\x15hide_from_suggestions\x18\x02 \x01(\bR\x13hideFromSuggestions\x12=\n" +
+	"\x1bdiscover_visible_to_friends\x18\x03 \x01(\bR\x18discoverVisibleToFriends\"\x1a\n" +
 	"\x18GetSocialSettingsRequest\"W\n" +
 	"\x19GetSocialSettingsResponse\x12:\n" +
-	"\bsettings\x18\x01 \x01(\v2\x1e.tayfam.core.v1.SocialSettingsR\bsettings\"\xb8\x01\n" +
+	"\bsettings\x18\x01 \x01(\v2\x1e.tayfam.core.v1.SocialSettingsR\bsettings\"\x9c\x02\n" +
 	"\x1bUpdateSocialSettingsRequest\x120\n" +
 	"\x11profiling_enabled\x18\x01 \x01(\bH\x00R\x10profilingEnabled\x88\x01\x01\x127\n" +
-	"\x15hide_from_suggestions\x18\x02 \x01(\bH\x01R\x13hideFromSuggestions\x88\x01\x01B\x14\n" +
+	"\x15hide_from_suggestions\x18\x02 \x01(\bH\x01R\x13hideFromSuggestions\x88\x01\x01\x12B\n" +
+	"\x1bdiscover_visible_to_friends\x18\x03 \x01(\bH\x02R\x18discoverVisibleToFriends\x88\x01\x01B\x14\n" +
 	"\x12_profiling_enabledB\x18\n" +
-	"\x16_hide_from_suggestions\"Z\n" +
+	"\x16_hide_from_suggestionsB\x1e\n" +
+	"\x1c_discover_visible_to_friends\"Z\n" +
 	"\x1cUpdateSocialSettingsResponse\x12:\n" +
 	"\bsettings\x18\x01 \x01(\v2\x1e.tayfam.core.v1.SocialSettingsR\bsettings*{\n" +
 	"\vFriendState\x12\x1c\n" +

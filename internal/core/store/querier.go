@@ -432,7 +432,7 @@ type Querier interface {
 	ExportQuestions(ctx context.Context, arg ExportQuestionsParams) ([]ExportQuestionsRow, error)
 	// Şikâyeti işleyen, öncelik ve platform alanları girmez (ADR-0021 madde 7).
 	ExportReports(ctx context.Context, arg ExportReportsParams) ([]ExportReportsRow, error)
-	// Tek kayıt: iki ayar (satır yoksa varsayılanlar) ve kişi hakkında puan
+	// Tek kayıt: üç ayar (satır yoksa varsayılanlar) ve kişi hakkında puan
 	// tutulan kişi sayısı. Puan değerleri ve kiminle olduğu girmez (ADR-0030
 	// §9). Ayar satırı da puanı da yoksa tutulan bir şey yoktur, kayıt da yok.
 	ExportSocialSettings(ctx context.Context, arg ExportSocialSettingsParams) ([]ExportSocialSettingsRow, error)
@@ -788,7 +788,9 @@ type Querier interface {
 	// Çözülmüşler, son çözülen önce.
 	ListResolvedTayfaReports(ctx context.Context, arg ListResolvedTayfaReportsParams) ([]ListResolvedTayfaReportsRow, error)
 	// Kişiyi güvenlik kişisi seçenlerin etkinlikleri: bitişinden 24 saat
-	// geçmemiş ya da alarmı son 7 günde gitmiş. Koordinat seçilmez. Paylaşım
+	// geçmemiş ya da alarmı son 7 günde gitmiş. Yalnızca kim, saat aralığı ve
+	// durum (platform sahibi, 2026-11-16): tayfa adı, etkinlik başlığı ve
+	// kimliği, buluşma yeri ve il/ilçe seçilmez. Paylaşım
 	// yalnızca hâlâ geçerliyse görünür: ikisi arkadaş, engel yok, katılımcı
 	// tayfanın aktif üyesi ve etkinliğe going; etkinlik silinmemiş ya da
 	// iptal edilmemiş, tayfa silinmemiş ya da askıda değil. Alarm gitmişse

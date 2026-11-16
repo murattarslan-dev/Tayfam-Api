@@ -4196,7 +4196,7 @@ paths:
         "503": { $ref: "#/components/responses/Problem" }
     patch:
       operationId: updateSocialSettings
-      summary: Profilleme ve "Beni önerme" ayarlarını değiştirir
+      summary: Profilleme, "Beni önerme" ve Keşfet görünürlüğü ayarlarını değiştirir
       description: |
         Gövdedeki alanlar değişir, olmayanlar olduğu gibi kalır; en az bir
         alan gerekir (yoksa `invalid-request`).
@@ -4210,6 +4210,10 @@ paths:
         **Beni önerme** (`hide_from_suggestions`, varsayılan kapalı):
         açınca kimseye önerilmezsiniz ve sizin önerildiğiniz açık öneriler
         geri çekilir; siz öneri almaya devam edersiniz.
+
+        **Keşfet'te arkadaşlarım görebilsin** (`discover_visible_to_friends`,
+        varsayılan açık): kapatınca etkinliklere katılımınız arkadaşlarınızın
+        Keşfet akışında gösterilmez ve sayılmaz (hemen).
 
         Ayarı kapatıp açmak haftalık öneri sınırını ve daha önce kimin
         önerildiğini sıfırlamaz; kapattığınız öneriler de hatırlanır.
@@ -4351,9 +4355,12 @@ paths:
 
   # --- Keşfet ilk aşama (core DiscoverService, #210, ADR-0033) ---
   # Sunucu bayrağı DISCOVER_ENABLED kapalıyken (varsayılan) akış, Keşfet'ten
-  # katılım, geri bildirim ve güvenlik kişisi uçları hiçbir şey okumadan
-  # 404 `feature-disabled` döner; istemci girişleri gizler. Tayfanın Keşfet
+  # katılım ve geri bildirim uçları hiçbir şey okumadan 404
+  # `feature-disabled` döner; istemci girişleri gizler. Tayfanın Keşfet
   # ayarı (`/v1/tayfas/{tayfa_id}/discover`) bayraktan bağımsız çalışır.
+  # Güvenlik kişisi ayrı bayraktır (SAFETY_CONTACT_ENABLED, varsayılan açık):
+  # kapalıyken seçme, okuma ve paylaşımlar `feature-disabled`; "Döndüm" ve
+  # kaldırma her zaman çalışır.
   # Keşfet güven vermez, bilgi verir: "onaylı" ya da "güvenilir" alanı
   # yoktur, yalnızca olgular döner.
 
@@ -4537,9 +4544,12 @@ paths:
         (`safety-contact-closed`). Kişi kabul edilmiş arkadaşınız olmalı
         (`not-friends`). Bitiş + `grace_minutes` geçtiğinde "Döndüm"
         işaretlenmemişse yalnızca bu kişiye `safety_alert` bildirimi gider.
-        Kişi etkinliğin adını, zamanını, buluşma noktasının **adını** ve
-        ilini/ilçesini görür (`GET /v1/me/safety-shares`); koordinat görmez.
-        Seçildiğinde kişiye bildirim gitmez.
+        Kişi yalnızca sizi, etkinliğin başlangıç ve bitiş saatini, toleransı
+        ve "döndü / dönmedi / alarm gitti" durumunu görür
+        (`GET /v1/me/safety-shares`); tayfa, etkinlik başlığı ve yer görmez.
+        Seçildiğinde kişiye bildirim gitmez. Keşfet'ten bağımsızdır (sunucu
+        bayrağı `SAFETY_CONTACT_ENABLED`, varsayılan açık); bütün yüz yüze
+        etkinliklerde çalışır.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -4611,10 +4621,9 @@ paths:
         hâlâ geçerliyse görünür: arkadaşlık sürüyor, engel yok, katılımcı
         tayfanın aktif üyesi ve `going`; etkinlik ve tayfa silinmemiş, iptal
         edilmemiş ya da askıda değil (alarm gittiyse ve katılımcı check-in
-        yaptıysa kalır). Yalnızca katılımcının
-        paylaştığı: ad, tayfa adı, etkinlik başlığı ve zamanı, buluşma
-        noktasının adı, il/ilçe, "Döndüm" ve alarm zamanı. Koordinat,
-        açıklama ve diğer katılımcılar yoktur.
+        yaptıysa kalır). Yalnızca en az bilgi: kim, saat aralığı
+        (başlangıç, bitiş, tolerans) ve durum. Tayfa, etkinlik başlığı,
+        buluşma yeri, il/ilçe ve koordinat yoktur.
       responses:
         "200":
           description: Paylaşımlar
@@ -8440,7 +8449,7 @@ components:
           items: { $ref: "#/components/schemas/FriendSuggestion" }
     SocialSettings:
       type: object
-      required: [profiling_enabled, hide_from_suggestions]
+      required: [profiling_enabled, hide_from_suggestions, discover_visible_to_friends]
       additionalProperties: false
       properties:
         profiling_enabled:
@@ -8449,6 +8458,13 @@ components:
         hide_from_suggestions:
           type: boolean
           description: '"Beni önerme": kimseye önerilmezsiniz.'
+        discover_visible_to_friends:
+          type: boolean
+          description: |
+            "Keşfet'te arkadaşlarım görebilsin" (varsayılan açık): bir
+            etkinliğe gideceğiniz ya da katıldığınız, arkadaşlarınıza
+            Keşfet'te gösterilebilir. Katılım geçmişiniz `private` ise bu
+            ayar açık olsa da gösterilmez.
     SocialSettingsUpdate:
       type: object
       minProperties: 1
@@ -8456,6 +8472,7 @@ components:
       properties:
         profiling_enabled: { type: boolean }
         hide_from_suggestions: { type: boolean }
+        discover_visible_to_friends: { type: boolean }
     DaySlot:
       type: string
       description: Günün kaba bir bölümü; saat değil. `all_day` başka dilimle birlikte olmaz.
@@ -8593,20 +8610,28 @@ components:
           description: Bitişten sonra beklenecek dakika; yoksa 60.
     SafetyShare:
       type: object
-      required: [participant, event_id, event_title, starts_at, ends_at, grace_minutes]
+      description: |
+        Katılımcının güvenlik kişisiyle paylaştığı en az bilgi: kim, saat
+        aralığı (başlangıç, bitiş, tolerans) ve durum. Tayfa, etkinlik
+        başlığı ya da kimliği, buluşma yeri, il/ilçe ve koordinat yoktur.
+      required: [participant, starts_at, ends_at, grace_minutes, state]
+      additionalProperties: false
       properties:
         participant: { $ref: "#/components/schemas/DiscoverPerson" }
-        tayfa_name: { type: string }
-        event_id: { type: string, format: uuid }
-        event_title: { type: string }
         starts_at: { type: string, format: date-time }
         ends_at: { type: string, format: date-time }
-        meeting_point_name: { type: string, description: Yalnızca ad; koordinat yok. }
-        city: { type: string }
-        district: { type: string }
-        grace_minutes: { type: integer }
+        grace_minutes:
+          type: integer
+          description: Alarm `ends_at` + bu süre sonunda gider.
         returned_at: { type: string, format: date-time }
         alert_sent_at: { type: string, format: date-time }
+        state:
+          type: string
+          description: |
+            `not_returned`: henüz dönmedi, alarm gitmedi. `returned`: "Döndüm"
+            dedi (alarmdan sonra da olabilir). `alert_sent`: alarm gitti,
+            "Döndüm" yok.
+          enum: [not_returned, returned, alert_sent]
     SafetyShareList:
       type: object
       required: [shares]

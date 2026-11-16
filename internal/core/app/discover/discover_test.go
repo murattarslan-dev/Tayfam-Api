@@ -17,6 +17,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/report"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/social"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
@@ -45,10 +46,17 @@ func must(t *testing.T, err error) {
 	}
 }
 
+// svc has DISCOVER_ENABLED = enabled and SAFETY_CONTACT_ENABLED on (its
+// default).
 func (e *env) svc(t *testing.T, enabled bool, d time.Duration) *Service {
 	t.Helper()
+	return e.svcFlags(t, enabled, true, d)
+}
+
+func (e *env) svcFlags(t *testing.T, discover, safety bool, d time.Duration) *Service {
+	t.Helper()
 	now := e.base.Add(d)
-	s, err := New(Config{Pool: e.pool, Enabled: enabled, Now: func() time.Time { return now }})
+	s, err := New(Config{Pool: e.pool, Enabled: discover, SafetyContactEnabled: safety, Now: func() time.Time { return now }})
 	must(t, err)
 	return s
 }
@@ -237,8 +245,8 @@ func (e *env) feed(t *testing.T, viewer id.ID) []Item {
 }
 
 // TestFeatureDisabled: with DISCOVER_ENABLED off nothing is listed and the
-// user-facing methods fail before reading anything; the tayfa setting
-// works.
+// Keşfet methods fail before reading anything; the tayfa setting works.
+// SAFETY_CONTACT_ENABLED is separate.
 func TestFeatureDisabled(t *testing.T) {
 	e := setup(t)
 	sc := e.scenario(t)
@@ -256,12 +264,29 @@ func TestFeatureDisabled(t *testing.T) {
 	if _, err := off.SetFeedback(ctx, sc.friend, sc.tf, sc.ev, AnswerOK); !errors.Is(err, apperr.ErrFeatureDisabled) {
 		t.Fatalf("kapalı geri bildirim: %v", err)
 	}
-	if _, err := off.SetSafetyContact(ctx, sc.friend, sc.tf, sc.ev, sc.viewer, 0); !errors.Is(err, apperr.ErrFeatureDisabled) {
+	// The safety contact has its own flag (on by default) and works on
+	// every in-person event while Keşfet is off.
+	if _, err := off.SetSafetyContact(ctx, sc.friend, sc.tf, sc.ev, sc.viewer, 0); err != nil {
+		t.Fatalf("Keşfet kapalıyken güvenlik kişisi: %v", err)
+	}
+	if got, err := off.ListSafetyShares(ctx, sc.viewer); err != nil || len(got) != 1 {
+		t.Fatalf("Keşfet kapalıyken paylaşımlar: %+v %v", got, err)
+	}
+	noSafety := e.svcFlags(t, true, false, 0)
+	if _, err := noSafety.SetSafetyContact(ctx, sc.friend, sc.tf, sc.ev, sc.viewer, 0); !errors.Is(err, apperr.ErrFeatureDisabled) {
 		t.Fatalf("kapalı güvenlik kişisi: %v", err)
 	}
-	if _, err := off.ListSafetyShares(ctx, sc.viewer); !errors.Is(err, apperr.ErrFeatureDisabled) {
+	if _, err := noSafety.GetSafetyContact(ctx, sc.friend, sc.tf, sc.ev); !errors.Is(err, apperr.ErrFeatureDisabled) {
+		t.Fatalf("kapalı güvenlik kişisi okuma: %v", err)
+	}
+	if _, err := noSafety.ListSafetyShares(ctx, sc.viewer); !errors.Is(err, apperr.ErrFeatureDisabled) {
 		t.Fatalf("kapalı paylaşımlar: %v", err)
 	}
+	// A safety net that was set can still be closed.
+	if _, err := noSafety.MarkReturned(ctx, sc.friend, sc.tf, sc.ev); err != nil {
+		t.Fatalf("bayrak kapalıyken döndüm: %v", err)
+	}
+	must(t, noSafety.ClearSafetyContact(ctx, sc.friend, sc.tf, sc.ev))
 	// The admins' setting does not depend on the flag.
 	if st, err := off.GetTayfa(ctx, sc.admin, sc.tf); err != nil || st.State != StateListed {
 		t.Fatalf("kapalıyken ayar: %+v %v", st, err)
@@ -293,6 +318,23 @@ func TestFeedListing(t *testing.T) {
 		"düşürüldü": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE tayfa_discover SET status = 'dropped', drop_reason = 'member_report' WHERE tayfa_id = $1`, sc.tf.PG())
 		}, false},
+		"arkadaş Keşfet'te görünmek istemiyor": {func(t *testing.T, sc scenario) {
+			off := false
+			s, err := social.New(social.Config{Pool: e.pool})
+			must(t, err)
+			_, err = s.UpdateSocialSettings(ctx, sc.friend, social.SettingsUpdate{DiscoverVisibleToFriends: &off})
+			must(t, err)
+		}, false},
+		"arkadaş Keşfet ayarını açık bıraktı": {func(t *testing.T, sc scenario) {
+			on := true
+			s, err := social.New(social.Config{Pool: e.pool})
+			must(t, err)
+			st, err := s.UpdateSocialSettings(ctx, sc.friend, social.SettingsUpdate{DiscoverVisibleToFriends: &on})
+			must(t, err)
+			if !st.DiscoverVisibleToFriends || !st.ProfilingEnabled {
+				t.Fatalf("ayarlar: %+v", st)
+			}
+		}, true},
 		"etkinlik modülü kapalı": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE tayfa_modules SET enabled = false WHERE tayfa_id = $1 AND module = 'events'`, sc.tf.PG())
 		}, false},
@@ -956,7 +998,9 @@ func TestSafetyContact(t *testing.T) {
 		t.Fatalf("seçim: %+v %v", c, err)
 	}
 	shares, err := s.ListSafetyShares(ctx, contact)
-	if err != nil || len(shares) != 1 || shares[0].MeetingPointName != "Bahçeköy girişi" || shares[0].Participant.ID != sc.friend {
+	if err != nil || len(shares) != 1 || shares[0].Participant.ID != sc.friend || shares[0].Participant.DisplayName != "Ayşe" ||
+		shares[0].GraceMinutes != DefaultGrace || shares[0].State != ShareNotReturned ||
+		!shares[0].StartsAt.Equal(e.base.Add(48*time.Hour)) || !shares[0].EndsAt.Equal(e.base.Add(50*time.Hour)) {
 		t.Fatalf("paylaşımlar: %+v %v", shares, err)
 	}
 	for _, u := range []id.ID{sc.viewer, notFriend, sc.admin} {
@@ -964,13 +1008,26 @@ func TestSafetyContact(t *testing.T) {
 			t.Fatalf("başkası paylaşımı gördü: %+v", other)
 		}
 	}
-	// The share type has no coordinates.
+	// The contact sees the least (platform owner, 2026-11-16): who, the
+	// time range and the state; no tayfa, event, place or coordinates.
 	typ := reflect.TypeOf(Share{})
 	for i := range typ.NumField() {
-		if n := strings.ToLower(typ.Field(i).Name); strings.Contains(n, "lat") || strings.Contains(n, "lng") {
-			t.Errorf("Share alanı %s", typ.Field(i).Name)
+		n := strings.ToLower(typ.Field(i).Name)
+		for _, bad := range []string{"tayfa", "event", "title", "meeting", "point", "city", "district", "lat", "lng", "description"} {
+			if strings.Contains(n, bad) {
+				t.Errorf("Share alanı %s", typ.Field(i).Name)
+			}
 		}
 	}
+	e.exec(t, `UPDATE event_safety_contacts SET alert_sent_at = now() WHERE event_id = $1`, sc.ev.PG())
+	if got, _ := s.ListSafetyShares(ctx, contact); len(got) != 1 || got[0].State != ShareAlertSent {
+		t.Fatalf("alarm durumu: %+v", got)
+	}
+	e.exec(t, `UPDATE event_safety_contacts SET returned_at = now() WHERE event_id = $1`, sc.ev.PG())
+	if got, _ := s.ListSafetyShares(ctx, contact); len(got) != 1 || got[0].State != ShareReturned {
+		t.Fatalf("döndü durumu: %+v", got)
+	}
+	e.exec(t, `UPDATE event_safety_contacts SET returned_at = NULL, alert_sent_at = NULL WHERE event_id = $1`, sc.ev.PG())
 	got, err := s.MarkReturned(ctx, sc.friend, sc.tf, sc.ev)
 	if err != nil || got.ReturnedAt.IsZero() {
 		t.Fatalf("döndüm: %+v %v", got, err)

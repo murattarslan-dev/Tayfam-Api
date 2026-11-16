@@ -33,7 +33,7 @@ var wantAppPrivileges = map[string]string{
 	// a suggestion only gets its dismissal and withdrawal times.
 	"friend_scores":           "DELETE,INSERT,SELECT",
 	"friend_suggestions":      "DELETE,INSERT,SELECT,UPDATE(dismissed_at,withdrawn_at)",
-	"social_settings":         "DELETE,INSERT,SELECT,UPDATE(hide_from_suggestions,profiling_enabled,updated_at)",
+	"social_settings":         "DELETE,INSERT,SELECT,UPDATE(discover_visible_to_friends,hide_from_suggestions,profiling_enabled,updated_at)",
 	"friend_request_outcomes": "DELETE,INSERT,SELECT,UPDATE(outcome,resolved_at)",
 	// Issue #210, ADR-0033: an application is never deleted (it goes with
 	// the tayfa); feedback carries no text; a safety contact row never

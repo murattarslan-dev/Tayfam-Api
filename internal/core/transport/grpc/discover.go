@@ -266,6 +266,12 @@ func (s *DiscoverServer) MarkReturned(ctx context.Context, req *corev1.MarkRetur
 	return &corev1.MarkReturnedResponse{SafetyContact: safetyContactPB(c)}, nil
 }
 
+var shareStates = map[string]corev1.SafetyShareState{
+	discover.ShareNotReturned: corev1.SafetyShareState_SAFETY_SHARE_STATE_NOT_RETURNED,
+	discover.ShareReturned:    corev1.SafetyShareState_SAFETY_SHARE_STATE_RETURNED,
+	discover.ShareAlertSent:   corev1.SafetyShareState_SAFETY_SHARE_STATE_ALERT_SENT,
+}
+
 // ListSafetyShares implements corev1.DiscoverServiceServer.
 func (s *DiscoverServer) ListSafetyShares(ctx context.Context, _ *corev1.ListSafetySharesRequest) (*corev1.ListSafetySharesResponse, error) {
 	u, err := callerID(ctx)
@@ -279,10 +285,10 @@ func (s *DiscoverServer) ListSafetyShares(ctx context.Context, _ *corev1.ListSaf
 	out := &corev1.ListSafetySharesResponse{Shares: make([]*corev1.SafetyShare, 0, len(shares))}
 	for _, sh := range shares {
 		out.Shares = append(out.Shares, &corev1.SafetyShare{
-			Participant: personPB(sh.Participant), TayfaName: sh.TayfaName, EventId: sh.EventID.String(), EventTitle: sh.EventTitle,
-			StartTime: timestamppb.New(sh.StartsAt), EndTime: timestamppb.New(sh.EndsAt), MeetingPointName: sh.MeetingPointName,
-			City: sh.City, District: sh.District, GraceMinutes: sh.GraceMinutes,
+			Participant: personPB(sh.Participant),
+			StartTime:   timestamppb.New(sh.StartsAt), EndTime: timestamppb.New(sh.EndsAt), GraceMinutes: sh.GraceMinutes,
 			ReturnTime: optionalTime(sh.ReturnedAt), AlertTime: optionalTime(sh.AlertSentAt),
+			State: shareStates[sh.State],
 		})
 	}
 	return out, nil

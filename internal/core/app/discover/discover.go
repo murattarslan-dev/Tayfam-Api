@@ -78,9 +78,13 @@ const (
 // Config wires a Service.
 type Config struct {
 	Pool *pgxpool.Pool
-	// Enabled is DISCOVER_ENABLED.
+	// Enabled is DISCOVER_ENABLED (default off).
 	Enabled bool
-	Now     func() time.Time // optional, for tests
+	// SafetyContactEnabled is SAFETY_CONTACT_ENABLED (default on): the
+	// safety contact works on every in-person event, apart from Keşfet
+	// (platform owner, 2026-11-16; ADR-0033 §1).
+	SafetyContactEnabled bool
+	Now                  func() time.Time // optional, for tests
 }
 
 // Service implements DiscoverService except JoinFromDiscover (package
@@ -88,6 +92,7 @@ type Config struct {
 type Service struct {
 	pool    *pgxpool.Pool
 	enabled bool
+	safety  bool
 	now     func() time.Time
 	q       *store.Queries
 }
@@ -101,13 +106,23 @@ func New(cfg Config) (*Service, error) {
 		cfg.Now = time.Now
 	}
 	return &Service{
-		pool: cfg.Pool, enabled: cfg.Enabled, q: store.New(cfg.Pool),
+		pool: cfg.Pool, enabled: cfg.Enabled, safety: cfg.SafetyContactEnabled, q: store.New(cfg.Pool),
 		now: func() time.Time { return cfg.Now().UTC().Truncate(time.Microsecond) },
 	}, nil
 }
 
 func (s *Service) gate() error {
 	if !s.enabled {
+		return apperr.ErrFeatureDisabled
+	}
+	return nil
+}
+
+// safetyGate is SAFETY_CONTACT_ENABLED for choosing and reading a safety
+// contact and the contact's list. Closing one (MarkReturned,
+// ClearSafetyContact) and the alert job do not depend on any flag.
+func (s *Service) safetyGate() error {
+	if !s.safety {
 		return apperr.ErrFeatureDisabled
 	}
 	return nil
@@ -467,7 +482,7 @@ func (s *Service) contactOf(ctx context.Context, q *store.Queries, caller, event
 
 // GetSafetyContact returns the caller's safety contact for the event.
 func (s *Service) GetSafetyContact(ctx context.Context, caller, tayfa, event id.ID) (SafetyContact, error) {
-	if err := s.gate(); err != nil {
+	if err := s.safetyGate(); err != nil {
 		return SafetyContact{}, err
 	}
 	if _, err := s.eventFor(ctx, s.q, caller, tayfa, event, authz.EventSafetyContact, false); err != nil {
@@ -480,7 +495,7 @@ func (s *Service) GetSafetyContact(ctx context.Context, caller, tayfa, event id.
 // SetSafetyContact chooses or replaces the caller's safety contact. grace
 // 0 means DefaultGrace.
 func (s *Service) SetSafetyContact(ctx context.Context, caller, tayfa, event, contact id.ID, grace int32) (SafetyContact, error) {
-	if err := s.gate(); err != nil {
+	if err := s.safetyGate(); err != nil {
 		return SafetyContact{}, err
 	}
 	if grace == 0 {
@@ -590,24 +605,39 @@ func (s *Service) MarkReturned(ctx context.Context, caller, tayfa, event id.ID) 
 	return out, err
 }
 
-// Share is an event a participant shared with the caller as their safety
-// contact: the meeting point's name only, never coordinates.
+// Share is what a participant shares with the caller as their safety
+// contact: who, the time range and the state, nothing more (platform
+// owner, 2026-11-16; ADR-0033 §10). No tayfa, event title or ID, place or
+// coordinates.
 type Share struct {
 	Participant      Person
-	TayfaName        string
-	EventID          id.ID
-	EventTitle       string
 	StartsAt, EndsAt time.Time
-	MeetingPointName string
-	City, District   string
 	GraceMinutes     int32
 	ReturnedAt       time.Time
 	AlertSentAt      time.Time
+	State            string // Share*
+}
+
+// Share states.
+const (
+	ShareNotReturned = "not_returned"
+	ShareReturned    = "returned"
+	ShareAlertSent   = "alert_sent"
+)
+
+func shareState(returned, alerted time.Time) string {
+	switch {
+	case !returned.IsZero():
+		return ShareReturned
+	case !alerted.IsZero():
+		return ShareAlertSent
+	}
+	return ShareNotReturned
 }
 
 // ListSafetyShares lists the events whose participants chose the caller.
 func (s *Service) ListSafetyShares(ctx context.Context, caller id.ID) ([]Share, error) {
-	if err := s.gate(); err != nil {
+	if err := s.safetyGate(); err != nil {
 		return nil, err
 	}
 	now := s.now()
@@ -621,10 +651,9 @@ func (s *Service) ListSafetyShares(ctx context.Context, caller id.ID) ([]Share, 
 	for i, r := range rows {
 		out[i] = Share{
 			Participant: Person{ID: idOf(r.UserID), DisplayName: r.DisplayName.String, AvatarID: idOf(r.AvatarUploadID)},
-			TayfaName:   r.TayfaName, EventID: idOf(r.EventID), EventTitle: r.Title,
-			StartsAt: r.StartsAt.Time, EndsAt: r.EndsAt.Time, MeetingPointName: r.MeetingPointName.String,
-			City: r.City.String, District: r.District.String, GraceMinutes: r.GraceMinutes,
+			StartsAt:    r.StartsAt.Time, EndsAt: r.EndsAt.Time, GraceMinutes: r.GraceMinutes,
 			ReturnedAt: r.ReturnedAt.Time, AlertSentAt: r.AlertSentAt.Time,
+			State: shareState(r.ReturnedAt.Time, r.AlertSentAt.Time),
 		}
 	}
 	return out, nil

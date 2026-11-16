@@ -43,14 +43,15 @@ const (
 // Every method needs the caller's access token; the caller is always the
 // verified token subject.
 //
-// Feature flag: core's DISCOVER_ENABLED (default off). While it is off,
-// ListDiscoverFeed, JoinFromDiscover, the feedback methods,
-// GetSafetyContact, SetSafetyContact and ListSafetyShares fail with
+// Feature flags: core's DISCOVER_ENABLED (default off). While it is off,
+// ListDiscoverFeed, JoinFromDiscover and the feedback methods fail with
 // ERROR_REASON_FEATURE_DISABLED before reading anything. GetTayfaDiscover
 // and SetTayfaDiscover work regardless (the tayfa's admins may apply and
-// the platform may review before Keşfet opens), and so do
-// ClearSafetyContact and MarkReturned: a safety net that was set can
-// always be closed.
+// the platform may review before Keşfet opens). The safety contact is
+// separate (platform owner, 2026-11-16): SAFETY_CONTACT_ENABLED (default
+// on) gates GetSafetyContact, SetSafetyContact and ListSafetyShares on
+// every in-person event; ClearSafetyContact and MarkReturned work under
+// any flag: a safety net that was set can always be closed.
 //
 // Keşfet gives facts, not trust: nothing here says "trusted", "verified"
 // or "approved". The friendship score (ADR-0030) orders the feed but is
@@ -143,8 +144,7 @@ type DiscoverServiceClient interface {
 	// 50), and only while the share still holds: still friends, no block,
 	// the participant an active member and GOING, the event and tayfa
 	// neither removed nor suspended (after an alert, a checked-in
-	// participant's share stays). Only the meeting point's name, never its
-	// coordinates.
+	// participant's share stays). Only who, when and the state (SafetyShare).
 	//
 	// Errors: ERROR_REASON_FEATURE_DISABLED.
 	ListSafetyShares(ctx context.Context, in *ListSafetySharesRequest, opts ...grpc.CallOption) (*ListSafetySharesResponse, error)
@@ -279,14 +279,15 @@ func (c *discoverServiceClient) ListSafetyShares(ctx context.Context, in *ListSa
 // Every method needs the caller's access token; the caller is always the
 // verified token subject.
 //
-// Feature flag: core's DISCOVER_ENABLED (default off). While it is off,
-// ListDiscoverFeed, JoinFromDiscover, the feedback methods,
-// GetSafetyContact, SetSafetyContact and ListSafetyShares fail with
+// Feature flags: core's DISCOVER_ENABLED (default off). While it is off,
+// ListDiscoverFeed, JoinFromDiscover and the feedback methods fail with
 // ERROR_REASON_FEATURE_DISABLED before reading anything. GetTayfaDiscover
 // and SetTayfaDiscover work regardless (the tayfa's admins may apply and
-// the platform may review before Keşfet opens), and so do
-// ClearSafetyContact and MarkReturned: a safety net that was set can
-// always be closed.
+// the platform may review before Keşfet opens). The safety contact is
+// separate (platform owner, 2026-11-16): SAFETY_CONTACT_ENABLED (default
+// on) gates GetSafetyContact, SetSafetyContact and ListSafetyShares on
+// every in-person event; ClearSafetyContact and MarkReturned work under
+// any flag: a safety net that was set can always be closed.
 //
 // Keşfet gives facts, not trust: nothing here says "trusted", "verified"
 // or "approved". The friendship score (ADR-0030) orders the feed but is
@@ -379,8 +380,7 @@ type DiscoverServiceServer interface {
 	// 50), and only while the share still holds: still friends, no block,
 	// the participant an active member and GOING, the event and tayfa
 	// neither removed nor suspended (after an alert, a checked-in
-	// participant's share stays). Only the meeting point's name, never its
-	// coordinates.
+	// participant's share stays). Only who, when and the state (SafetyShare).
 	//
 	// Errors: ERROR_REASON_FEATURE_DISABLED.
 	ListSafetyShares(context.Context, *ListSafetySharesRequest) (*ListSafetySharesResponse, error)
