@@ -233,7 +233,7 @@ func (q *Queries) ListInvitationsSentByUser(ctx context.Context, userID pgtype.U
 }
 
 const listMembersPage = `-- name: ListMembersPage :many
-SELECT m.user_id, m.role, m.status, m.muted_until, m.joined_at,
+SELECT m.user_id, m.role, m.status, m.muted_until, m.joined_at, m.joined_via,
        COALESCE(m.joined_at, m.created_at)::timestamptz AS sort_time
 FROM memberships m
 WHERE m.tayfa_id = $1
@@ -260,6 +260,7 @@ type ListMembersPageRow struct {
 	Status     string
 	MutedUntil pgtype.Timestamptz
 	JoinedAt   pgtype.Timestamptz
+	JoinedVia  string
 	SortTime   pgtype.Timestamptz
 }
 
@@ -289,6 +290,7 @@ func (q *Queries) ListMembersPage(ctx context.Context, arg ListMembersPageParams
 			&i.Status,
 			&i.MutedUntil,
 			&i.JoinedAt,
+			&i.JoinedVia,
 			&i.SortTime,
 		); err != nil {
 			return nil, err

@@ -89,6 +89,7 @@ var notificationTypeNames = map[chatv1.NotificationType]string{
 	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_REQUEST:           "friend_request",
 	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_ACCEPTED:          "friend_accepted",
 	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_SUGGESTION:        "friend_suggestion",
+	chatv1.NotificationType_NOTIFICATION_TYPE_SAFETY_ALERT:             "safety_alert",
 	chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_INVITATION:         "tayfa_invitation",
 	chatv1.NotificationType_NOTIFICATION_TYPE_REPORT_RESOLVED:          "report_resolved",
 	chatv1.NotificationType_NOTIFICATION_TYPE_DM_REQUEST:               "dm_request",

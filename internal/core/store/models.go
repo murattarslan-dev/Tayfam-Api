@@ -141,6 +141,14 @@ type EventConvoyVehicle struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type EventFeedback struct {
+	EventID   pgtype.UUID
+	UserID    pgtype.UUID
+	Answer    string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
 type EventFishing struct {
 	EventID        pgtype.UUID
 	Type           string
@@ -201,6 +209,17 @@ type EventRsvp struct {
 	UpdatedAt          pgtype.Timestamptz
 	StatusChangedAt    pgtype.Timestamptz
 	CheckInAttempts    int32
+}
+
+type EventSafetyContact struct {
+	EventID       pgtype.UUID
+	UserID        pgtype.UUID
+	ContactUserID pgtype.UUID
+	GraceMinutes  int32
+	ReturnedAt    pgtype.Timestamptz
+	AlertSentAt   pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
 }
 
 type EventSeries struct {
@@ -437,6 +456,19 @@ type Tayfa struct {
 	UpdatedAt              pgtype.Timestamptz
 	MembersCanCreateEvents bool
 	CoverUploadID          pgtype.UUID
+}
+
+type TayfaDiscover struct {
+	TayfaID         pgtype.UUID
+	Status          string
+	DropReason      pgtype.Text
+	RequestedAt     pgtype.Timestamptz
+	RequestedBy     pgtype.UUID
+	ReviewedAt      pgtype.Timestamptz
+	ReviewedBy      pgtype.UUID
+	StatusChangedAt pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
 }
 
 type TayfaInterest struct {

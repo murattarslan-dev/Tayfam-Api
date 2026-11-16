@@ -100,6 +100,10 @@ type Member struct {
 	// MutedUntil is zero when not muted, or when the caller may not see
 	// mutes (only the member and moderators and admins see them).
 	MutedUntil time.Time
+	// FromDiscover: the user asked to join from Keşfet (joined_via =
+	// discover; ADR-0033 §6). Set only for callers allowed to see join
+	// requests (moderators and admins); always false for anyone else.
+	FromDiscover bool
 }
 
 // Pending is a join request as moderators see it.
@@ -538,6 +542,7 @@ func (s *Service) ListMembers(ctx context.Context, caller, tayfa id.ID, st authz
 	// Banned members: the roles allowed to ban. This is a read, so a mute
 	// does not hide it.
 	seesMod := authz.Allowed(unmuted(m), authz.MemberBan, now)
+	seesSource := authz.Allowed(unmuted(m), authz.MemberListPending, now)
 	if st == authz.StatusBanned && !seesMod {
 		return Page[Member]{}, apperr.ErrPermissionDenied
 	}
@@ -567,6 +572,7 @@ func (s *Service) ListMembers(ctx context.Context, caller, tayfa id.ID, st authz
 		if err != nil {
 			return Page[Member]{}, err
 		}
+		mem.FromDiscover = seesSource && r.JoinedVia == joinedViaDiscover
 		out.Items = append(out.Items, mem)
 	}
 	return out, nil
@@ -659,7 +665,12 @@ func (s *Service) GetMember(ctx context.Context, caller, tayfa, target id.ID) (M
 	default:
 		return Member{}, apperr.ErrMemberNotFound
 	}
-	return toMember(tayfa, target, r.Role, r.Status, r.JoinedAt, r.MutedUntil, now, seesMod || target == caller)
+	mem, err := toMember(tayfa, target, r.Role, r.Status, r.JoinedAt, r.MutedUntil, now, seesMod || target == caller)
+	if err != nil {
+		return Member{}, err
+	}
+	mem.FromDiscover = authz.Allowed(unmuted(m), authz.MemberListPending, now) && r.JoinedVia == joinedViaDiscover
+	return mem, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -1033,6 +1044,10 @@ func toMember(tayfa, user id.ID, role, st string, joined, muted pgtype.Timestamp
 
 // Membership change kinds, in membership.changed payloads and as audit
 // actions "member.<kind>".
+// joinedViaDiscover is memberships.joined_via for a request from Keşfet
+// (ADR-0033).
+const joinedViaDiscover = "discover"
+
 const (
 	changeJoined      = "joined"
 	changeRequested   = "requested"

@@ -66,6 +66,10 @@ const (
 	// the one recipient (issue #208, ADR-0030). No tayfa, no actor; never
 	// the score or the reason. chat sends no push for it.
 	TypeFriendSuggestion = "friend_suggestion"
+	// TypeSafetyAlert: the safety-alerts job tells the one chosen safety
+	// contact that Target (the participant) did not mark "back" in time
+	// (issue #210, ADR-0033). No tayfa, no actor, no content, no location.
+	TypeSafetyAlert = "safety_alert"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -88,7 +92,7 @@ const (
 
 // WithoutTayfa reports whether a notification type is not about a tayfa.
 func WithoutTayfa(typ string) bool {
-	return typ == TypeFriendRequest || typ == TypeFriendAccepted || typ == TypeFriendSuggestion
+	return typ == TypeFriendRequest || typ == TypeFriendAccepted || typ == TypeFriendSuggestion || typ == TypeSafetyAlert
 }
 
 // Request is one notification for many recipients.
