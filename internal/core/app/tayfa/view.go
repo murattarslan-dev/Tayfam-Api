@@ -27,8 +27,11 @@ type viewRow struct {
 	UpdatedAt              pgtype.Timestamptz
 	CoverUploadID          pgtype.UUID
 	// Kind is tayfas.kind (ADR-0032).
-	Kind   string
-	Member authz.Membership
+	Kind string
+	// ConvertedAt is tayfas.converted_at: set only once an instant tayfa
+	// became standard (ADR-0032 §7).
+	ConvertedAt pgtype.Timestamptz
+	Member      authz.Membership
 }
 
 func (r viewRow) settings() authz.Settings {
@@ -40,7 +43,7 @@ func fromTayfa(t access.Tayfa, m authz.Membership) viewRow {
 		ID: id.ID(t.ID.Bytes), Name: t.Name, Description: t.Description, JoinCode: t.JoinCode,
 		Status: t.Status, JoinPolicy: t.JoinPolicy, SuspendedAt: t.SuspendedAt,
 		DeletionScheduledFor: t.DeletionScheduledFor, MembersCanCreateEvents: t.MembersCanCreateEvents,
-		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, CoverUploadID: t.CoverUploadID, Kind: t.Kind, Member: m,
+		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, CoverUploadID: t.CoverUploadID, Kind: t.Kind, ConvertedAt: t.ConvertedAt, Member: m,
 	}
 }
 
@@ -144,6 +147,9 @@ func (s *Service) views(ctx context.Context, rows []viewRow) ([]View, error) {
 		}
 		if r.DeletionScheduledFor.Valid {
 			v.DeletionAt = r.DeletionScheduledFor.Time.UTC()
+		}
+		if r.ConvertedAt.Valid {
+			v.ConvertedAt = r.ConvertedAt.Time.UTC()
 		}
 		for _, e := range Interests {
 			if byInterest[r.ID][e] {

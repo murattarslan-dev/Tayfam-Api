@@ -120,6 +120,9 @@ type View struct {
 	// InstantEventID is the single event of an instant tayfa; zero
 	// otherwise.
 	InstantEventID id.ID
+	// ConvertedAt is when an instant tayfa became standard ("Bu ekiple
+	// tayfa kur"); zero for every other tayfa (ADR-0032 §7).
+	ConvertedAt time.Time
 }
 
 // CreateInput is a create request.

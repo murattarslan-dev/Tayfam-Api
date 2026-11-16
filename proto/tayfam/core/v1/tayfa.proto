@@ -190,6 +190,10 @@ message Tayfa {
   TayfaKind kind = 17;
   // Set only for TAYFA_KIND_INSTANT: the tayfa's single event.
   string instant_event_id = 18;
+  // Set only for a tayfa converted from TAYFA_KIND_INSTANT to
+  // TAYFA_KIND_STANDARD ("Bu ekiple tayfa kur"): when it was converted
+  // (ADR-0032 §7). Unset for every other tayfa.
+  google.protobuf.Timestamp convert_time = 19;
 }
 
 message CreateTayfaRequest {

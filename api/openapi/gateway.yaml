@@ -6110,6 +6110,12 @@ components:
           type: string
           format: uuid
           description: Yalnızca anlık tayfada; tayfanın tek etkinliği.
+        converted_at:
+          type: string
+          format: date-time
+          description: |
+            Yalnızca anlık tayfadan "Bu ekiple tayfa kur" ile kalıcıya dönmüş
+            tayfada: dönüşüm anı (ADR-0032 §7). Kurulum dönemi bu andan sayılır.
         description: { type: string }
         interests:
           type: array

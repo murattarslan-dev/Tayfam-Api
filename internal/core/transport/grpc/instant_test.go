@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc/codes"
 
@@ -111,7 +112,8 @@ func TestCreateInstantEvent(t *testing.T) {
 }
 
 func TestConvertInstantTayfa(t *testing.T) {
-	f := &fakeTayfas{view: tayfa.View{ID: id.New(), Name: "Tayfa", Kind: "standard", JoinPolicy: "open", Status: "active"}}
+	converted := time.Date(2026, 11, 16, 9, 30, 0, 0, time.UTC)
+	f := &fakeTayfas{view: tayfa.View{ID: id.New(), Name: "Tayfa", Kind: "standard", JoinPolicy: "open", Status: "active", ConvertedAt: converted}}
 	srv := NewTayfaServer(f, discard)
 	user, tf := id.New(), id.New()
 	resp, err := srv.ConvertInstantTayfa(callerCtx(user), &corev1.ConvertInstantTayfaRequest{
@@ -125,8 +127,12 @@ func TestConvertInstantTayfa(t *testing.T) {
 		len(f.convert.Interests) != 1 || f.convert.Interests[0] != "sports" || f.convert.JoinPolicy != "open" {
 		t.Fatalf("app'e giden = %+v", f.convert)
 	}
-	if resp.GetTayfa().GetKind() != corev1.TayfaKind_TAYFA_KIND_STANDARD {
-		t.Fatalf("tür = %v", resp.GetTayfa().GetKind())
+	if resp.GetTayfa().GetKind() != corev1.TayfaKind_TAYFA_KIND_STANDARD || !resp.GetTayfa().GetConvertTime().AsTime().Equal(converted) {
+		t.Fatalf("tür = %v, dönüşüm %v", resp.GetTayfa().GetKind(), resp.GetTayfa().GetConvertTime())
+	}
+	// A tayfa never converted carries no conversion time.
+	if p := tayfaToProto(tayfa.View{ID: id.New(), Kind: "standard"}); p.GetConvertTime() != nil {
+		t.Fatalf("dönüşmemiş tayfa = %v", p.GetConvertTime())
 	}
 	_, err = srv.ConvertInstantTayfa(callerCtx(user), &corev1.ConvertInstantTayfaRequest{TayfaId: tf.String(), Name: "X", Interests: []corev1.EventType{0}})
 	if code, info := infoOf(t, err); code != codes.InvalidArgument || info.GetMetadata()["field"] != "interests" {

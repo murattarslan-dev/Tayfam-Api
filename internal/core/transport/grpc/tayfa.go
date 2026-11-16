@@ -272,6 +272,9 @@ func tayfaToProto(v tayfa.View) *corev1.Tayfa {
 	if !v.DeletionAt.IsZero() {
 		out.DeletionTime = timestamppb.New(v.DeletionAt)
 	}
+	if !v.ConvertedAt.IsZero() {
+		out.ConvertTime = timestamppb.New(v.ConvertedAt)
+	}
 	return out
 }
 

@@ -98,7 +98,26 @@ func TestMyTayfasKind(t *testing.T) {
 	w := as(coreRouter(f), "GET", "/v1/tayfas", "")
 	b := decodeBody[myTayfaListJSON](t, w)
 	if w.Code != 200 || len(b.Tayfas) != 2 || b.Tayfas[0].Tayfa == nil || b.Tayfas[0].Tayfa.Kind != "standard" ||
-		strings.Contains(w.Body.String(), "instant_event_id") {
+		strings.Contains(w.Body.String(), "instant_event_id") || strings.Contains(w.Body.String(), "converted_at") {
 		t.Fatalf("liste = %d %s", w.Code, w.Body)
+	}
+}
+
+// TestTayfaConvertedAt: converted_at is passed on only when core sets it
+// (#219).
+func TestTayfaConvertedAt(t *testing.T) {
+	f := &fakeCore{tayfa: testTayfa()}
+	f.tayfa.Kind = corev1.TayfaKind_TAYFA_KIND_STANDARD
+	at := time.Date(2026, 11, 16, 9, 30, 0, 0, time.UTC)
+	f.tayfa.ConvertTime = timestamppb.New(at)
+	w := as(coreRouter(f), "GET", "/v1/tayfas", "")
+	b := decodeBody[myTayfaListJSON](t, w)
+	if w.Code != 200 || len(b.Tayfas) == 0 || b.Tayfas[0].Tayfa == nil || b.Tayfas[0].Tayfa.ConvertedAt == nil ||
+		!b.Tayfas[0].Tayfa.ConvertedAt.Equal(at) {
+		t.Fatalf("liste = %d %s", w.Code, w.Body)
+	}
+	w = as(coreRouter(f), "GET", "/v1/tayfas/"+tayfaID, "")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"converted_at":"2026-11-16T09:30:00Z"`) {
+		t.Fatalf("tayfa = %d %s", w.Code, w.Body)
 	}
 }

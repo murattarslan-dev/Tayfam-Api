@@ -617,3 +617,70 @@ func TestConvertRepeat(t *testing.T) {
 	_, err = e.tayfas.Convert(ctx, f, r.Tayfa.ID, in)
 	wantErr(t, "üye", err, apperr.ErrPermissionDenied)
 }
+
+// TestConvertedAt: the conversion time is in every view of a converted
+// tayfa (convert, get, list) and in no view of any other tayfa (#219).
+func TestConvertedAt(t *testing.T) {
+	e := setup(t)
+	org := id.New()
+	f := e.friend(t, org)
+	r, err := e.svc.Create(ctx, org, input("Yürüyüş", f))
+	must(t, err)
+	tf := r.Tayfa.ID
+	_, err = e.members.AcceptInvitation(ctx, f, tf)
+	must(t, err)
+	if !r.Tayfa.ConvertedAt.IsZero() {
+		t.Fatalf("anlık tayfada dönüşüm zamanı: %v", r.Tayfa.ConvertedAt)
+	}
+	std, err := e.tayfas.Create(ctx, org, tayfa.CreateInput{Name: "Kalıcı Tayfa", ClientRequestID: id.New().String()})
+	must(t, err)
+	if !std.ConvertedAt.IsZero() {
+		t.Fatalf("kalıcı tayfada dönüşüm zamanı: %v", std.ConvertedAt)
+	}
+
+	// Converting uses the daily create limit; move the standard tayfa out
+	// of the last 24 hours so the organizer may convert.
+	e.exec(t, `UPDATE tayfas SET created_at = now() - interval '2 days' WHERE id = $1`, std.ID.PG())
+	v, err := e.tayfas.Convert(ctx, org, tf, tayfa.ConvertInput{Name: "Yürüyüşçüler"})
+	must(t, err)
+	var at time.Time
+	must(t, e.pool.QueryRow(ctx, `SELECT converted_at FROM tayfas WHERE id = $1`, tf.PG()).Scan(&at))
+	if !v.ConvertedAt.Equal(at) || v.ConvertedAt.Location() != time.UTC {
+		t.Fatalf("dönüşüm = %v, veritabanı %v", v.ConvertedAt, at)
+	}
+	// A repeat returns the same time.
+	again, err := e.tayfas.Convert(ctx, org, tf, tayfa.ConvertInput{Name: "Yürüyüşçüler"})
+	must(t, err)
+	if !again.ConvertedAt.Equal(at) {
+		t.Fatalf("tekrar = %v", again.ConvertedAt)
+	}
+	// Any member sees it, in the tayfa and in the list.
+	got, _, err := e.tayfas.Get(ctx, f, tf)
+	must(t, err)
+	if !got.ConvertedAt.Equal(at) {
+		t.Fatalf("Get = %v", got.ConvertedAt)
+	}
+	list, _, err := e.tayfas.ListMine(ctx, org, 10, "")
+	must(t, err)
+	seen := 0
+	for _, m := range list {
+		if m.Tayfa == nil {
+			t.Fatalf("liste girdisi görünümsüz: %+v", m)
+		}
+		switch m.TayfaID {
+		case tf:
+			seen++
+			if !m.Tayfa.ConvertedAt.Equal(at) {
+				t.Fatalf("liste: dönüşen = %v", m.Tayfa.ConvertedAt)
+			}
+		case std.ID:
+			seen++
+			if !m.Tayfa.ConvertedAt.IsZero() {
+				t.Fatalf("liste: kalıcı = %v", m.Tayfa.ConvertedAt)
+			}
+		}
+	}
+	if seen != 2 {
+		t.Fatalf("liste = %+v", list)
+	}
+}
