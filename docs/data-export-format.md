@@ -68,6 +68,7 @@ adları içeriktir ve yer alır.
 | `core/fishing_catches.json` | `id`, `event_id`, `species`, `length_cm`, `lat`, `lng`, `visibility`, `photo_upload_id`, `created_at`, `deleted_at` |
 | `core/friendships.json` | `user_id` (karşı taraf), `status`, `requested_by_me`, `created_at`, `accepted_at` |
 | `core/blocks.json` | `user_id` (engellenen), `created_at` |
+| `core/availability.json` | "Boşum" (#207): `date` (YYYY-MM-DD), `slots`, `note` (yoksa null), `created_at`, `updated_at`. Geçmiş günler saklanmadığı için yalnızca bugün ve sonrası |
 | `core/reports.json` | `id`, `tayfa_id`, `target_type`, `target_id`, `reason`, `description`, `evidence_text`, `status`, `resolution`, `created_at` |
 | `core/uploads.json` | `id`, `purpose`, `status`, `tayfa_id`, `width`, `height`, `attached_type`, `attached_id`, `created_at`, `ready_at` (dosyaların kendisi yoktur; istemci kendi dosyalarını `POST /v1/media/urls` ile indirir) |
 

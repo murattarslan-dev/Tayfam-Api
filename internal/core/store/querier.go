@@ -233,6 +233,7 @@ type Querier interface {
 	CreateUpload(ctx context.Context, arg CreateUploadParams) (pgtype.UUID, error)
 	DeleteActivityRecord(ctx context.Context, arg DeleteActivityRecordParams) (int64, error)
 	DeleteAnswerVotes(ctx context.Context, answerID pgtype.UUID) error
+	DeleteAvailability(ctx context.Context, arg DeleteAvailabilityParams) (int64, error)
 	DeleteBlock(ctx context.Context, arg DeleteBlockParams) (int64, error)
 	DeleteCampItem(ctx context.Context, arg DeleteCampItemParams) (int64, error)
 	DeleteCatch(ctx context.Context, arg DeleteCatchParams) (int64, error)
@@ -249,6 +250,8 @@ type Querier interface {
 	DeleteOldInvitationOutcomes(ctx context.Context, before pgtype.Timestamptz) (int64, error)
 	// Oy değiştirmek eski oyu siler (v14).
 	DeleteOwnPollVotes(ctx context.Context, arg DeleteOwnPollVotesParams) (int64, error)
+	// Saklama işi: geçmiş günler (bugün hariç) kalıcı silinir.
+	DeletePastAvailability(ctx context.Context, today pgtype.Date) (int64, error)
 	DeletePoll(ctx context.Context, arg DeletePollParams) (int64, error)
 	// Silinen anketin oyları hemen silinir; geri alma yoktur.
 	DeletePollVotes(ctx context.Context, pollID pgtype.UUID) error
@@ -265,6 +268,8 @@ type Querier interface {
 	// oy sayıları aynı transaction'da düşer. Bir kişinin bir cevapta en fazla
 	// bir oyu olduğu için her cevap en fazla bir azalır.
 	DeleteUserAnswerVotes(ctx context.Context, userID pgtype.UUID) error
+	// Hesap silme (user.deleted).
+	DeleteUserAvailability(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserBan(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserBlocks(ctx context.Context, userID pgtype.UUID) error
 	// Av kayıtları konum içerebilir; kişiyle birlikte silinir.
@@ -314,6 +319,9 @@ type Querier interface {
 	ExportAnnouncements(ctx context.Context, arg ExportAnnouncementsParams) ([]ExportAnnouncementsRow, error)
 	ExportAnswerVotes(ctx context.Context, arg ExportAnswerVotesParams) ([]ExportAnswerVotesRow, error)
 	ExportAnswers(ctx context.Context, arg ExportAnswersParams) ([]ExportAnswersRow, error)
+	// "Boşum" (issue #207): kişinin kaydedilmiş boş günleri (geçmişi saklama
+	// işi siler).
+	ExportAvailability(ctx context.Context, arg ExportAvailabilityParams) ([]ExportAvailabilityRow, error)
 	ExportBlocks(ctx context.Context, arg ExportBlocksParams) ([]ExportBlocksRow, error)
 	ExportConvoyVehicles(ctx context.Context, arg ExportConvoyVehiclesParams) ([]ExportConvoyVehiclesRow, error)
 	// Albüm fotoğrafları (issue #206); dosyaların kendisi zip'e girmez
@@ -501,6 +509,8 @@ type Querier interface {
 	// terfi sırasıdır.
 	ListAttendees(ctx context.Context, arg ListAttendeesParams) ([]ListAttendeesRow, error)
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error)
+	// Kişinin bugünden itibaren günleri (en fazla 31).
+	ListAvailability(ctx context.Context, arg ListAvailabilityParams) ([]ListAvailabilityRow, error)
 	// Kişinin engelledikleri (yalnızca kendisi görür); engellenen kişinin
 	// profili silinmiş olsa da kayıt listelenir ki kaldırılabilsin.
 	ListBlocksPage(ctx context.Context, arg ListBlocksPageParams) ([]ListBlocksPageRow, error)
@@ -521,7 +531,10 @@ type Querier interface {
 	ListFishingVisibility(ctx context.Context, eventIds []pgtype.UUID) ([]ListFishingVisibilityRow, error)
 	// Kişinin arkadaşları ve istekleri; karşı tarafın kimliğine göre sayfalanır.
 	// Silinmiş hesapların satırı hesap silmede gider; profili henüz gelmemiş
-	// kişi listede adsız görünmez, atlanır.
+	// kişi listede adsız görünmez, atlanır. Kabul edilmiş arkadaşlıkta
+	// arkadaşın @today ile @badge_until (dahil) arasındaki en yakın boş günü de
+	// döner ("Boşum" rozeti, issue #207; not dönmez). Engel arkadaşlığı zaten
+	// siler; rozet yine de iki yönlü engelde dönmez (savunma derinliği).
 	ListFriendshipsPage(ctx context.Context, arg ListFriendshipsPageParams) ([]ListFriendshipsPageRow, error)
 	// Alarmın alıcıları: organizatör (tayfada hâlâ aktif üyeyse) ve aktif
 	// yöneticiler ve moderatörler; dönmeyen kişinin kendisi hariç. Organizatör
@@ -828,6 +841,12 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// Kalıcı katılım geçmişi
 	UpsertActivityRecord(ctx context.Context, arg UpsertActivityRecordParams) error
+	// "Boşum": boş vakit (issue #207, ADR-0029). day takvim günüdür; "bugün"
+	// (@today) uygulamada Europe/Istanbul tarihine göre hesaplanır ve her
+	// sorguya verilir. Görünürlük kuralı (arkadaşlık, engel) app katmanında,
+	// aynı veritabanında okunur.
+	// Günü ekler ya da bütünüyle değiştirir; id yalnızca yeni satırda kullanılır.
+	UpsertAvailability(ctx context.Context, arg UpsertAvailabilityParams) (UpsertAvailabilityRow, error)
 	// Profil kopyası (ADR-0009). Yalnızca UserEventService yazar.
 	// Daha yeni bir olay uygulanmışsa ya da profil silinmişse değişmez; etkilenen
 	// satır 0 olur.

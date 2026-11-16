@@ -44,6 +44,7 @@ const (
 	SectionEventPhotos     = "event_photos"
 	SectionFriendships     = "friendships"
 	SectionBlocks          = "blocks"
+	SectionAvailability    = "availability"
 	SectionReports         = "reports"
 	SectionUploads         = "uploads"
 )
@@ -150,6 +151,10 @@ var sections = []struct {
 	{SectionBlocks, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportBlocks(ctx, store.ExportBlocksParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportBlocksRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionAvailability, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportAvailability(ctx, store.ExportAvailabilityParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportAvailabilityRow) row { return row{x.K, x.Data} })
 	}},
 	{SectionReports, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportReports(ctx, store.ExportReportsParams{UserID: u, After: a, N: n})

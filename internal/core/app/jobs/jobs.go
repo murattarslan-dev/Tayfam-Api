@@ -11,7 +11,7 @@
 //	plates          clears convoy plates 30 days after the event ended
 //	report-escalation  sends reports open for 7 days to the platform (#76)
 //	retention       deletes resolved reports and audit records after a
-//	                year (#76)
+//	                year (#76), and past "Boşum" days (#207)
 //
 // The outcome of every pass (finish time, success, rows changed) is written
 // to job_runs for the panel's dashboard (issue #110).

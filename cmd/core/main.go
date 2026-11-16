@@ -19,6 +19,7 @@ import (
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/admin"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/announcement"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/availability"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/channelaccess"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatdm"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatrelay"
@@ -108,6 +109,11 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
+	// "Boşum" (issue #207, ADR-0029).
+	availabilities, err := availability.New(availability.Config{Pool: pool})
+	if err != nil {
+		return err
+	}
 	profiles, err := profile.New(profile.Config{Pool: pool})
 	if err != nil {
 		return err
@@ -194,6 +200,7 @@ func setup(rt *service.Runtime) error {
 	corev1.RegisterQAServiceServer(srv, grpcapi.NewQAServer(questions, rt.Log))
 	corev1.RegisterPollServiceServer(srv, grpcapi.NewPollServer(polls, rt.Log))
 	corev1.RegisterSocialServiceServer(srv, grpcapi.NewSocialServer(socials, rt.Log))
+	corev1.RegisterAvailabilityServiceServer(srv, grpcapi.NewAvailabilityServer(availabilities, rt.Log))
 	corev1.RegisterProfileServiceServer(srv, grpcapi.NewProfileServer(profiles, rt.Log))
 	corev1.RegisterReportServiceServer(srv, grpcapi.NewReportServer(reports, rt.Log))
 	corev1.RegisterAdminServiceServer(srv, grpcapi.NewAdminServer(admins, rt.Log))
