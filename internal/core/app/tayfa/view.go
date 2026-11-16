@@ -26,7 +26,13 @@ type viewRow struct {
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	CoverUploadID          pgtype.UUID
-	Member                 authz.Membership
+	// Kind is tayfas.kind (ADR-0032).
+	Kind   string
+	Member authz.Membership
+}
+
+func (r viewRow) settings() authz.Settings {
+	return authz.Settings{MembersCanCreateEvents: r.MembersCanCreateEvents, Instant: r.Kind == access.KindInstant}
 }
 
 func fromTayfa(t access.Tayfa, m authz.Membership) viewRow {
@@ -34,7 +40,7 @@ func fromTayfa(t access.Tayfa, m authz.Membership) viewRow {
 		ID: id.ID(t.ID.Bytes), Name: t.Name, Description: t.Description, JoinCode: t.JoinCode,
 		Status: t.Status, JoinPolicy: t.JoinPolicy, SuspendedAt: t.SuspendedAt,
 		DeletionScheduledFor: t.DeletionScheduledFor, MembersCanCreateEvents: t.MembersCanCreateEvents,
-		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, CoverUploadID: t.CoverUploadID, Member: m,
+		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, CoverUploadID: t.CoverUploadID, Kind: t.Kind, Member: m,
 	}
 }
 
@@ -92,6 +98,24 @@ func (s *Service) views(ctx context.Context, rows []viewRow) ([]View, error) {
 			approvable = append(approvable, r.ID.PG())
 		}
 	}
+	// The single event of each instant tayfa.
+	var instant []pgtype.UUID
+	for _, r := range rows {
+		if r.Kind == access.KindInstant {
+			instant = append(instant, r.ID.PG())
+		}
+	}
+	byEvent := map[id.ID]id.ID{}
+	if len(instant) > 0 {
+		evs, err := s.q.ListInstantEventIDs(ctx, instant)
+		if err != nil {
+			return nil, fmt.Errorf("anlık etkinlik: %w", err)
+		}
+		for _, e := range evs {
+			byEvent[id.ID(e.TayfaID.Bytes)] = id.ID(e.ID.Bytes)
+		}
+	}
+
 	byPending := map[id.ID]int64{}
 	if len(approvable) > 0 {
 		pending, err := s.q.CountPendingMembersForTayfas(ctx, approvable)
@@ -110,7 +134,7 @@ func (s *Service) views(ctx context.Context, rows []viewRow) ([]View, error) {
 			JoinPolicy: r.JoinPolicy, Status: r.Status, MemberCount: byCount[r.ID],
 			MembersCanCreateEvents: r.MembersCanCreateEvents,
 			CreatedAt:              r.CreatedAt.Time.UTC(), UpdatedAt: r.UpdatedAt.Time.UTC(),
-			Interests: []string{},
+			Interests: []string{}, Kind: r.Kind, InstantEventID: byEvent[r.ID],
 		}
 		if r.CoverUploadID.Valid {
 			v.CoverUploadID = id.ID(r.CoverUploadID.Bytes)
@@ -130,7 +154,7 @@ func (s *Service) views(ctx context.Context, rows []viewRow) ([]View, error) {
 		for _, m := range Modules {
 			v.Modules = append(v.Modules, ModuleState{Module: m, Enabled: byModule[r.ID][m]})
 		}
-		if authz.Allowed(r.Member, authz.TayfaRotateJoinCode, now) {
+		if authz.AllowedIn(r.Member, authz.TayfaRotateJoinCode, now, r.settings()) {
 			v.JoinCode = r.JoinCode
 		}
 		if authz.Allowed(r.Member, authz.MemberApprove, now) {

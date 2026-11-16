@@ -33,6 +33,7 @@ type TayfaClient interface {
 	RotateJoinCode(ctx context.Context, in *corev1.RotateJoinCodeRequest, opts ...grpc.CallOption) (*corev1.RotateJoinCodeResponse, error)
 	RequestDeletion(ctx context.Context, in *corev1.RequestDeletionRequest, opts ...grpc.CallOption) (*corev1.RequestDeletionResponse, error)
 	CancelDeletion(ctx context.Context, in *corev1.CancelDeletionRequest, opts ...grpc.CallOption) (*corev1.CancelDeletionResponse, error)
+	ConvertInstantTayfa(ctx context.Context, in *corev1.ConvertInstantTayfaRequest, opts ...grpc.CallOption) (*corev1.ConvertInstantTayfaResponse, error)
 }
 
 // MembershipClient is the part of core's MembershipService the gateway
@@ -143,6 +144,7 @@ func registerCore(mux *http.ServeMux, d CoreDeps) {
 	mux.HandleFunc("POST /v1/tayfas", a(h.createTayfa))
 	mux.HandleFunc("GET /v1/tayfas/{tayfa_id}", a(h.getTayfa))
 	mux.HandleFunc("PATCH /v1/tayfas/{tayfa_id}", a(h.updateTayfa))
+	mux.HandleFunc("POST /v1/tayfas/{tayfa_id}/conversion", a(h.convertInstantTayfa))
 	mux.HandleFunc("PUT /v1/tayfas/{tayfa_id}/modules/{module}", a(h.setModule))
 	mux.HandleFunc("POST /v1/tayfas/{tayfa_id}/join-code", a(h.rotateJoinCode))
 	mux.HandleFunc("POST /v1/tayfas/{tayfa_id}/deletion", a(h.requestDeletion))
@@ -298,6 +300,44 @@ func (h coreHandlers) createTayfa(ctx context.Context, w http.ResponseWriter, r 
 	writeJSON(w, http.StatusCreated, t)
 }
 
+type tayfaConvertBody struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Interests   []string `json:"interests"`
+	JoinPolicy  string   `json:"join_policy"`
+}
+
+// convertInstantTayfa turns an instant tayfa into a standard one
+// (ADR-0032 §7). It counts as creating a tayfa: the per-IP limit applies.
+func (h coreHandlers) convertInstantTayfa(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	id, ok := pathUUID(w, r, "tayfa_id")
+	if !ok {
+		return
+	}
+	var b tayfaConvertBody
+	if !decode(w, r, &b) {
+		return
+	}
+	interests, ok := eventTypes.values(b.Interests)
+	policy, okP := joinPolicies.valueOrUnspecified(b.JoinPolicy)
+	if !ok || !okP || !nameLengthOK(b.Name) || utf8.RuneCountInString(strings.TrimSpace(b.Description)) > 500 {
+		badRequest(w, r)
+		return
+	}
+	if !h.d.CreateTayfaLimit.Allow(clientIP(r, h.d.TrustCFConnectingIP)) {
+		rateLimited(w, r)
+		return
+	}
+	resp, err := h.d.Tayfas.ConvertInstantTayfa(ctx, &corev1.ConvertInstantTayfaRequest{
+		TayfaId: id, Name: b.Name, Description: b.Description, Interests: interests, JoinPolicy: policy,
+	})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, tayfaFrom(resp.GetTayfa()))
+}
+
 type tayfaViewJSON struct {
 	Tayfa      tayfaJSON `json:"tayfa"`
 	CallerRole string    `json:"caller_role"`
@@ -319,6 +359,7 @@ func (h coreHandlers) getTayfa(ctx context.Context, w http.ResponseWriter, r *ht
 type myTayfaJSON struct {
 	TayfaID string     `json:"tayfa_id"`
 	Name    string     `json:"name"`
+	Kind    string     `json:"kind"`
 	Role    string     `json:"role"`
 	Status  string     `json:"status"`
 	Tayfa   *tayfaJSON `json:"tayfa,omitempty"`
@@ -341,7 +382,7 @@ func (h coreHandlers) listMyTayfas(ctx context.Context, w http.ResponseWriter, r
 	}
 	out := myTayfaListJSON{Tayfas: make([]myTayfaJSON, 0, len(resp.GetTayfas())), NextPageToken: resp.GetNextPageToken()}
 	for _, m := range resp.GetTayfas() {
-		e := myTayfaJSON{TayfaID: m.GetTayfaId(), Name: m.GetName(), Role: roles.name(m.GetRole()), Status: membershipStatuses.name(m.GetStatus())}
+		e := myTayfaJSON{TayfaID: m.GetTayfaId(), Name: m.GetName(), Kind: tayfaKinds.name(m.GetKind()), Role: roles.name(m.GetRole()), Status: membershipStatuses.name(m.GetStatus())}
 		if m.GetTayfa() != nil {
 			t := tayfaFrom(m.GetTayfa())
 			e.Tayfa = &t

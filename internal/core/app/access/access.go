@@ -131,10 +131,19 @@ func RequireModule(ctx context.Context, q *store.Queries, tayfa id.ID, module st
 	return nil
 }
 
+// Kinds of tayfa (tayfas.kind, ADR-0032).
+const (
+	KindStandard = "standard"
+	KindInstant  = "instant"
+)
+
 // Settings returns the tayfa settings the permission table depends on.
 func Settings(t Tayfa) authz.Settings {
-	return authz.Settings{MembersCanCreateEvents: t.MembersCanCreateEvents}
+	return authz.Settings{MembersCanCreateEvents: t.MembersCanCreateEvents, Instant: t.Kind == KindInstant}
 }
+
+// Instant reports whether t is the hidden tayfa of an instant event.
+func Instant(t Tayfa) bool { return t.Kind == KindInstant }
 
 // Suspended reports whether the platform has suspended the tayfa.
 func Suspended(t Tayfa) bool { return t.SuspendedAt.Valid }

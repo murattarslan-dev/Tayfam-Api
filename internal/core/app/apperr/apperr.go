@@ -24,7 +24,10 @@ var (
 
 // TayfaService errors.
 var (
-	ErrTayfaCreateLimit         = errors.New("günlük tayfa açma sınırı")
+	ErrTayfaCreateLimit = errors.New("günlük tayfa açma sınırı")
+	// ErrInstantEventLimit: the caller already organizes the most open
+	// instant events (ADR-0032 §5).
+	ErrInstantEventLimit        = errors.New("açık anlık etkinlik sınırı")
 	ErrDeletionAlreadyRequested = errors.New("silme talebi zaten var")
 	ErrDeletionNotRequested     = errors.New("silme talebi yok")
 )

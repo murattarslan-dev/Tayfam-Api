@@ -42,6 +42,44 @@ func (q *Queries) CancelTayfaDeletion(ctx context.Context, id pgtype.UUID) (int6
 	return result.RowsAffected(), nil
 }
 
+const convertInstantTayfa = `-- name: ConvertInstantTayfa :execrows
+UPDATE tayfas
+SET kind = 'standard', converted_at = $1, name = $2,
+    name_normalized = $3, description = $4,
+    join_policy = $5, last_activity_at = $1,
+    -- Organizatör hesabını sildiyse devralan yönetici dönüştürür; tayfa
+    -- onun günlük açma sınırına sayılır (ADR-0032 §7).
+    created_by = COALESCE(created_by, $6::uuid)
+WHERE id = $7 AND kind = 'instant' AND deleted_at IS NULL
+`
+
+type ConvertInstantTayfaParams struct {
+	ConvertedAt    pgtype.Timestamptz
+	Name           string
+	NameNormalized string
+	Description    pgtype.Text
+	JoinPolicy     string
+	ConvertedBy    pgtype.UUID
+	ID             pgtype.UUID
+}
+
+// "Bu ekiple tayfa kur": tür, ad ve ayarlar; hareketsizlik saati sıfırlanır.
+func (q *Queries) ConvertInstantTayfa(ctx context.Context, arg ConvertInstantTayfaParams) (int64, error) {
+	result, err := q.db.Exec(ctx, convertInstantTayfa,
+		arg.ConvertedAt,
+		arg.Name,
+		arg.NameNormalized,
+		arg.Description,
+		arg.JoinPolicy,
+		arg.ConvertedBy,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countActiveMembersForTayfas = `-- name: CountActiveMembersForTayfas :many
 SELECT tayfa_id, count(*) AS member_count FROM memberships
 WHERE tayfa_id = ANY($1::uuid[]) AND status = 'active'
@@ -71,6 +109,48 @@ func (q *Queries) CountActiveMembersForTayfas(ctx context.Context, tayfaIds []pg
 		return nil, err
 	}
 	return items, nil
+}
+
+const countInstantTayfasCreatedSince = `-- name: CountInstantTayfasCreatedSince :one
+SELECT count(*) FROM tayfas
+WHERE created_by = $1 AND (kind = 'instant' OR converted_at IS NOT NULL)
+  AND created_at > $2
+`
+
+type CountInstantTayfasCreatedSinceParams struct {
+	CreatedBy pgtype.UUID
+	Since     pgtype.Timestamptz
+}
+
+// Kullanıcının son @since'ten beri açtığı anlık tayfalar: iptal edilen,
+// silinen ve dönüştürülenler de sayılır (günde 5; ADR-0032 §5).
+func (q *Queries) CountInstantTayfasCreatedSince(ctx context.Context, arg CountInstantTayfasCreatedSinceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countInstantTayfasCreatedSince, arg.CreatedBy, arg.Since)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countOpenInstantEvents = `-- name: CountOpenInstantEvents :one
+SELECT count(*) FROM tayfas t
+JOIN events e ON e.tayfa_id = t.id
+WHERE t.created_by = $1 AND t.kind = 'instant'
+  AND t.deleted_at IS NULL AND t.status <> 'archived'
+  AND e.deleted_at IS NULL AND e.status = 'scheduled' AND e.ends_at > $2
+`
+
+type CountOpenInstantEventsParams struct {
+	CreatedBy pgtype.UUID
+	Now       pgtype.Timestamptz
+}
+
+// Kullanıcının organizatörü olduğu açık anlık etkinlikler: silinmemiş,
+// arşivlenmemiş anlık tayfada bitmemiş ve iptal edilmemiş etkinlik.
+func (q *Queries) CountOpenInstantEvents(ctx context.Context, arg CountOpenInstantEventsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOpenInstantEvents, arg.CreatedBy, arg.Now)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const countPendingMembersForTayfas = `-- name: CountPendingMembersForTayfas :many
@@ -107,7 +187,8 @@ func (q *Queries) CountPendingMembersForTayfas(ctx context.Context, tayfaIds []p
 
 const countTayfasCreatedSince = `-- name: CountTayfasCreatedSince :one
 SELECT count(*) FROM tayfas
-WHERE created_by = $1 AND created_at > $2
+WHERE created_by = $1 AND kind = 'standard'
+  AND COALESCE(converted_at, created_at) > $2
 `
 
 type CountTayfasCreatedSinceParams struct {
@@ -116,12 +197,44 @@ type CountTayfasCreatedSinceParams struct {
 }
 
 // Kullanıcı başına günlük tayfa açma sınırı. Silinen tayfalar da sayılır;
-// açıp silerek sınır aşılamaz.
+// açıp silerek sınır aşılamaz. Anlık tayfa sayılmaz; kalıcıya dönüştürülen
+// dönüşüm anında açılmış sayılır (ADR-0032 §5, §7).
 func (q *Queries) CountTayfasCreatedSince(ctx context.Context, arg CountTayfasCreatedSinceParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countTayfasCreatedSince, arg.CreatedBy, arg.Since)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const createInstantTayfa = `-- name: CreateInstantTayfa :exec
+
+INSERT INTO tayfas (id, name, name_normalized, join_code, join_policy, kind, created_by, client_request_id)
+VALUES ($1, $2, $3, $4, 'approval', 'instant', $5, $6)
+`
+
+type CreateInstantTayfaParams struct {
+	ID              pgtype.UUID
+	Name            string
+	NameNormalized  string
+	JoinCode        string
+	CreatedBy       pgtype.UUID
+	ClientRequestID pgtype.UUID
+}
+
+// ---------------------------------------------------------------------------
+// Anlık etkinlik (ADR-0032)
+// ---------------------------------------------------------------------------
+// Anlık tayfa: gizli, onaylı katılım; adı etkinlik başlığıdır.
+func (q *Queries) CreateInstantTayfa(ctx context.Context, arg CreateInstantTayfaParams) error {
+	_, err := q.db.Exec(ctx, createInstantTayfa,
+		arg.ID,
+		arg.Name,
+		arg.NameNormalized,
+		arg.JoinCode,
+		arg.CreatedBy,
+		arg.ClientRequestID,
+	)
+	return err
 }
 
 const createTayfa = `-- name: CreateTayfa :exec
@@ -169,7 +282,7 @@ const getTayfa = `-- name: GetTayfa :one
 SELECT id, name, name_normalized, description, join_code, status, visibility,
        join_policy, city, district, created_by, last_activity_at, suspended_at,
        deletion_requested_at, deletion_scheduled_for, members_can_create_events,
-       created_at, updated_at, cover_upload_id
+       created_at, updated_at, cover_upload_id, kind, converted_at
 FROM tayfas
 WHERE id = $1 AND deleted_at IS NULL
 `
@@ -194,6 +307,8 @@ type GetTayfaRow struct {
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	CoverUploadID          pgtype.UUID
+	Kind                   string
+	ConvertedAt            pgtype.Timestamptz
 }
 
 func (q *Queries) GetTayfa(ctx context.Context, id pgtype.UUID) (GetTayfaRow, error) {
@@ -219,6 +334,8 @@ func (q *Queries) GetTayfa(ctx context.Context, id pgtype.UUID) (GetTayfaRow, er
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CoverUploadID,
+		&i.Kind,
+		&i.ConvertedAt,
 	)
 	return i, err
 }
@@ -264,7 +381,7 @@ func (q *Queries) GetTayfaByClientRequestID(ctx context.Context, arg GetTayfaByC
 }
 
 const getTayfaByJoinCode = `-- name: GetTayfaByJoinCode :one
-SELECT id, join_policy, status, suspended_at
+SELECT id, join_policy, status, suspended_at, kind
 FROM tayfas
 WHERE join_code = $1 AND deleted_at IS NULL
 `
@@ -274,6 +391,7 @@ type GetTayfaByJoinCodeRow struct {
 	JoinPolicy  string
 	Status      string
 	SuspendedAt pgtype.Timestamptz
+	Kind        string
 }
 
 func (q *Queries) GetTayfaByJoinCode(ctx context.Context, joinCode string) (GetTayfaByJoinCodeRow, error) {
@@ -284,6 +402,7 @@ func (q *Queries) GetTayfaByJoinCode(ctx context.Context, joinCode string) (GetT
 		&i.JoinPolicy,
 		&i.Status,
 		&i.SuspendedAt,
+		&i.Kind,
 	)
 	return i, err
 }
@@ -292,7 +411,7 @@ const getTayfaForUpdate = `-- name: GetTayfaForUpdate :one
 SELECT id, name, name_normalized, description, join_code, status, visibility,
        join_policy, city, district, created_by, last_activity_at, suspended_at,
        deletion_requested_at, deletion_scheduled_for, members_can_create_events,
-       created_at, updated_at, cover_upload_id
+       created_at, updated_at, cover_upload_id, kind, converted_at
 FROM tayfas
 WHERE id = $1 AND deleted_at IS NULL
 FOR NO KEY UPDATE
@@ -318,6 +437,8 @@ type GetTayfaForUpdateRow struct {
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	CoverUploadID          pgtype.UUID
+	Kind                   string
+	ConvertedAt            pgtype.Timestamptz
 }
 
 // Yazan işlemler tayfa satırını kilitleyerek okur; memberships trigger'ı da
@@ -345,6 +466,8 @@ func (q *Queries) GetTayfaForUpdate(ctx context.Context, id pgtype.UUID) (GetTay
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CoverUploadID,
+		&i.Kind,
+		&i.ConvertedAt,
 	)
 	return i, err
 }
@@ -367,6 +490,38 @@ func (q *Queries) IsTayfaModuleEnabled(ctx context.Context, arg IsTayfaModuleEna
 	var enabled bool
 	err := row.Scan(&enabled)
 	return enabled, err
+}
+
+const listInstantEventIDs = `-- name: ListInstantEventIDs :many
+SELECT e.tayfa_id, e.id FROM events e
+JOIN tayfas t ON t.id = e.tayfa_id
+WHERE e.tayfa_id = ANY($1::uuid[]) AND t.kind = 'instant' AND e.deleted_at IS NULL
+`
+
+type ListInstantEventIDsRow struct {
+	TayfaID pgtype.UUID
+	ID      pgtype.UUID
+}
+
+// Anlık tayfanın tek etkinliği (silinmişler dahil en fazla bir satır).
+func (q *Queries) ListInstantEventIDs(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListInstantEventIDsRow, error) {
+	rows, err := q.db.Query(ctx, listInstantEventIDs, tayfaIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListInstantEventIDsRow{}
+	for rows.Next() {
+		var i ListInstantEventIDsRow
+		if err := rows.Scan(&i.TayfaID, &i.ID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listInterestsForTayfas = `-- name: ListInterestsForTayfas :many
@@ -433,7 +588,7 @@ func (q *Queries) ListModulesForTayfas(ctx context.Context, tayfaIds []pgtype.UU
 const listMyTayfas = `-- name: ListMyTayfas :many
 SELECT t.id, t.name, t.name_normalized, t.description, t.join_code, t.status,
        t.join_policy, t.suspended_at, t.deletion_scheduled_for,
-       t.members_can_create_events, t.created_at, t.updated_at, t.cover_upload_id,
+       t.members_can_create_events, t.created_at, t.updated_at, t.cover_upload_id, t.kind,
        m.role, m.status AS membership_status, m.muted_until,
        m.created_at AS membership_created_at
 FROM memberships m
@@ -467,6 +622,7 @@ type ListMyTayfasRow struct {
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	CoverUploadID          pgtype.UUID
+	Kind                   string
 	Role                   string
 	MembershipStatus       string
 	MutedUntil             pgtype.Timestamptz
@@ -503,6 +659,7 @@ func (q *Queries) ListMyTayfas(ctx context.Context, arg ListMyTayfasParams) ([]L
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.CoverUploadID,
+			&i.Kind,
 			&i.Role,
 			&i.MembershipStatus,
 			&i.MutedUntil,
@@ -665,6 +822,26 @@ func (q *Queries) RequestTayfaDeletion(ctx context.Context, arg RequestTayfaDele
 		arg.ScheduledFor,
 		arg.ID,
 	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setInstantTayfaName = `-- name: SetInstantTayfaName :execrows
+UPDATE tayfas SET name = $1, name_normalized = $2
+WHERE id = $3 AND kind = 'instant' AND deleted_at IS NULL
+`
+
+type SetInstantTayfaNameParams struct {
+	Name           string
+	NameNormalized string
+	ID             pgtype.UUID
+}
+
+// Etkinlik başlığı değişince anlık tayfanın adı da değişir.
+func (q *Queries) SetInstantTayfaName(ctx context.Context, arg SetInstantTayfaNameParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setInstantTayfaName, arg.Name, arg.NameNormalized, arg.ID)
 	if err != nil {
 		return 0, err
 	}

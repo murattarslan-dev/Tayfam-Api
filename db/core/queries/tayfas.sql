@@ -8,7 +8,7 @@ VALUES (@id, @name, @name_normalized, @description, @join_code, @join_policy, @c
 SELECT id, name, name_normalized, description, join_code, status, visibility,
        join_policy, city, district, created_by, last_activity_at, suspended_at,
        deletion_requested_at, deletion_scheduled_for, members_can_create_events,
-       created_at, updated_at, cover_upload_id
+       created_at, updated_at, cover_upload_id, kind, converted_at
 FROM tayfas
 WHERE id = @id AND deleted_at IS NULL;
 
@@ -18,7 +18,7 @@ SELECT id FROM tayfas
 WHERE created_by = @created_by AND client_request_id = @client_request_id;
 
 -- name: GetTayfaByJoinCode :one
-SELECT id, join_policy, status, suspended_at
+SELECT id, join_policy, status, suspended_at, kind
 FROM tayfas
 WHERE join_code = @join_code AND deleted_at IS NULL;
 
@@ -36,10 +36,12 @@ ORDER BY t.id
 LIMIT @page_size;
 
 -- Kullanıcı başına günlük tayfa açma sınırı. Silinen tayfalar da sayılır;
--- açıp silerek sınır aşılamaz.
+-- açıp silerek sınır aşılamaz. Anlık tayfa sayılmaz; kalıcıya dönüştürülen
+-- dönüşüm anında açılmış sayılır (ADR-0032 §5, §7).
 -- name: CountTayfasCreatedSince :one
 SELECT count(*) FROM tayfas
-WHERE created_by = @created_by AND created_at > @since;
+WHERE created_by = @created_by AND kind = 'standard'
+  AND COALESCE(converted_at, created_at) > @since;
 
 -- name: AddTayfaInterest :exec
 INSERT INTO tayfa_interests (tayfa_id, event_type)
@@ -66,7 +68,7 @@ SELECT module, enabled FROM tayfa_modules WHERE tayfa_id = @tayfa_id ORDER BY mo
 SELECT id, name, name_normalized, description, join_code, status, visibility,
        join_policy, city, district, created_by, last_activity_at, suspended_at,
        deletion_requested_at, deletion_scheduled_for, members_can_create_events,
-       created_at, updated_at, cover_upload_id
+       created_at, updated_at, cover_upload_id, kind, converted_at
 FROM tayfas
 WHERE id = @id AND deleted_at IS NULL
 FOR NO KEY UPDATE;
@@ -108,7 +110,7 @@ WHERE id = @id AND deleted_at IS NULL AND deletion_requested_at IS NOT NULL;
 -- name: ListMyTayfas :many
 SELECT t.id, t.name, t.name_normalized, t.description, t.join_code, t.status,
        t.join_policy, t.suspended_at, t.deletion_scheduled_for,
-       t.members_can_create_events, t.created_at, t.updated_at, t.cover_upload_id,
+       t.members_can_create_events, t.created_at, t.updated_at, t.cover_upload_id, t.kind,
        m.role, m.status AS membership_status, m.muted_until,
        m.created_at AS membership_created_at
 FROM memberships m
@@ -153,3 +155,50 @@ SELECT EXISTS (
 -- name: TouchTayfaActivity :execrows
 UPDATE tayfas SET last_activity_at = @at
 WHERE id = @id AND deleted_at IS NULL AND last_activity_at <= @not_after;
+
+-- ---------------------------------------------------------------------------
+-- Anlık etkinlik (ADR-0032)
+-- ---------------------------------------------------------------------------
+
+-- Anlık tayfa: gizli, onaylı katılım; adı etkinlik başlığıdır.
+-- name: CreateInstantTayfa :exec
+INSERT INTO tayfas (id, name, name_normalized, join_code, join_policy, kind, created_by, client_request_id)
+VALUES (@id, @name, @name_normalized, @join_code, 'approval', 'instant', @created_by, @client_request_id);
+
+-- Kullanıcının organizatörü olduğu açık anlık etkinlikler: silinmemiş,
+-- arşivlenmemiş anlık tayfada bitmemiş ve iptal edilmemiş etkinlik.
+-- name: CountOpenInstantEvents :one
+SELECT count(*) FROM tayfas t
+JOIN events e ON e.tayfa_id = t.id
+WHERE t.created_by = @created_by AND t.kind = 'instant'
+  AND t.deleted_at IS NULL AND t.status <> 'archived'
+  AND e.deleted_at IS NULL AND e.status = 'scheduled' AND e.ends_at > @now;
+
+-- Kullanıcının son @since'ten beri açtığı anlık tayfalar: iptal edilen,
+-- silinen ve dönüştürülenler de sayılır (günde 5; ADR-0032 §5).
+-- name: CountInstantTayfasCreatedSince :one
+SELECT count(*) FROM tayfas
+WHERE created_by = @created_by AND (kind = 'instant' OR converted_at IS NOT NULL)
+  AND created_at > @since;
+
+-- Anlık tayfanın tek etkinliği (silinmişler dahil en fazla bir satır).
+-- name: ListInstantEventIDs :many
+SELECT e.tayfa_id, e.id FROM events e
+JOIN tayfas t ON t.id = e.tayfa_id
+WHERE e.tayfa_id = ANY(@tayfa_ids::uuid[]) AND t.kind = 'instant' AND e.deleted_at IS NULL;
+
+-- Etkinlik başlığı değişince anlık tayfanın adı da değişir.
+-- name: SetInstantTayfaName :execrows
+UPDATE tayfas SET name = @name, name_normalized = @name_normalized
+WHERE id = @id AND kind = 'instant' AND deleted_at IS NULL;
+
+-- "Bu ekiple tayfa kur": tür, ad ve ayarlar; hareketsizlik saati sıfırlanır.
+-- name: ConvertInstantTayfa :execrows
+UPDATE tayfas
+SET kind = 'standard', converted_at = @converted_at, name = @name,
+    name_normalized = @name_normalized, description = @description,
+    join_policy = @join_policy, last_activity_at = @converted_at,
+    -- Organizatör hesabını sildiyse devralan yönetici dönüştürür; tayfa
+    -- onun günlük açma sınırına sayılır (ADR-0032 §7).
+    created_by = COALESCE(created_by, @converted_by::uuid)
+WHERE id = @id AND kind = 'instant' AND deleted_at IS NULL;

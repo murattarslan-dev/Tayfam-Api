@@ -26,7 +26,9 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -261,13 +263,19 @@ func (s *Service) write(ctx context.Context, user, tayfa id.ID, fn writeFunc) er
 		if err := fn(q, c, b); err != nil {
 			return err
 		}
-		for _, e := range b.events {
-			if err := txn.Event(ctx, q, e.typ, tayfa, user, txn.Target{Type: "event", ID: e.subject}, e.payload); err != nil {
-				return err
-			}
-		}
-		return notifyBatch(ctx, q, b)
+		return flush(ctx, q, b)
 	})
+}
+
+// flush writes a write's queued outbox events and then their notification
+// requests (outbox.Write ordering).
+func flush(ctx context.Context, q *store.Queries, b *batch) error {
+	for _, e := range b.events {
+		if err := txn.Event(ctx, q, e.typ, b.tayfa, b.actor, txn.Target{Type: "event", ID: e.subject}, e.payload); err != nil {
+			return err
+		}
+	}
+	return notifyBatch(ctx, q, b)
 }
 
 // notifyBatch writes the notification requests of a write's events, after
@@ -374,51 +382,75 @@ func audit(ctx context.Context, q *store.Queries, c caller, action string, event
 // ---------------------------------------------------------------------------
 // Create, update, cancel
 
+// Plan is a validated create request (Prepare).
+type Plan struct {
+	in       Input
+	title    string
+	desc     string
+	start    time.Time
+	end      time.Time
+	loc      Location
+	capacity int32
+	details  Details
+	crid     id.ID
+	rec      *recurrence
+}
+
+// Title is the cleaned title: the name of an instant event's tayfa
+// (ADR-0032 §2).
+func (p Plan) Title() string { return p.title }
+
+// ClientRequestID is the request's retry key.
+func (p Plan) ClientRequestID() id.ID { return p.crid }
+
+// Prepare validates a create request.
+func (s *Service) Prepare(in Input) (Plan, error) {
+	if !slices.Contains(Types, in.Type) {
+		return Plan{}, apperr.Validation("type")
+	}
+	p := Plan{in: in}
+	var err error
+	if p.title, err = cleanText(in.Title, "title", 1, titleMax, false); err != nil {
+		return Plan{}, err
+	}
+	if p.desc, err = cleanText(in.Description, "description", 0, descriptionMax, true); err != nil {
+		return Plan{}, err
+	}
+	if p.start, p.end, err = cleanTime(in.StartsAt, in.EndsAt, s.now()); err != nil {
+		return Plan{}, err
+	}
+	if p.loc, err = cleanLocation(in.Location); err != nil {
+		return Plan{}, err
+	}
+	if p.capacity, err = cleanCapacity(in.Capacity); err != nil {
+		return Plan{}, err
+	}
+	if p.details, err = cleanDetails(in.Type, in.Details, p.start, true); err != nil {
+		return Plan{}, err
+	}
+	var ok bool
+	if p.crid, ok = id.Parse(in.ClientRequestID); !ok {
+		return Plan{}, apperr.Validation("client_request_id")
+	}
+	if p.rec, err = cleanRecurrence(in.Recurrence, p.start); err != nil {
+		return Plan{}, err
+	}
+	return p, nil
+}
+
 // Create creates an event with user as organizer. A repeat with the same
 // ClientRequestID returns the first event.
 func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in Input) (Event, error) {
-	if !slices.Contains(Types, in.Type) {
-		return Event{}, apperr.Validation("type")
-	}
-	title, err := cleanText(in.Title, "title", 1, titleMax, false)
+	p, err := s.Prepare(in)
 	if err != nil {
 		return Event{}, err
 	}
-	desc, err := cleanText(in.Description, "description", 0, descriptionMax, true)
-	if err != nil {
-		return Event{}, err
-	}
-	start, end, err := cleanTime(in.StartsAt, in.EndsAt, s.now())
-	if err != nil {
-		return Event{}, err
-	}
-	loc, err := cleanLocation(in.Location)
-	if err != nil {
-		return Event{}, err
-	}
-	capacity, err := cleanCapacity(in.Capacity)
-	if err != nil {
-		return Event{}, err
-	}
-	details, err := cleanDetails(in.Type, in.Details, start, true)
-	if err != nil {
-		return Event{}, err
-	}
-	crid, ok := id.Parse(in.ClientRequestID)
-	if !ok {
-		return Event{}, apperr.Validation("client_request_id")
-	}
-	rec, err := cleanRecurrence(in.Recurrence, start)
-	if err != nil {
-		return Event{}, err
-	}
-
 	var eventID, seriesID id.ID
 	err = s.write(ctx, user, tayfa, func(q *store.Queries, c caller, b *batch) error {
 		if err := c.authorize(authz.EventCreate); err != nil {
 			return err
 		}
-		prev, err := q.GetEventByClientRequest(ctx, store.GetEventByClientRequestParams{CreatedBy: user.PG(), ClientRequestID: crid.PG()})
+		prev, err := q.GetEventByClientRequest(ctx, store.GetEventByClientRequestParams{CreatedBy: user.PG(), ClientRequestID: p.crid.PG()})
 		switch {
 		case err == nil:
 			if prev.DeletedAt.Valid || id.ID(prev.TayfaID.Bytes) != tayfa {
@@ -429,37 +461,8 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in Input) (Even
 		case !errors.Is(err, pgx.ErrNoRows):
 			return fmt.Errorf("tekrar gönderim: %w", err)
 		}
-
-		eventID = id.New()
-		p := store.CreateEventParams{
-			ID: eventID.PG(), TayfaID: tayfa.PG(), Type: in.Type, Title: title, Description: text(desc),
-			StartsAt: ts(start), EndsAt: ts(end), Capacity: int4(capacity), Discoverable: in.Discoverable,
-			CreatedBy: user.PG(), ClientRequestID: crid.PG(),
-		}
-		setLocation(&p.Mode, &p.MeetingPointName, &p.MeetingLat, &p.MeetingLng, &p.City, &p.District, &p.OnlineUrl, loc)
-		if err := q.CreateEvent(ctx, p); err != nil {
-			return fmt.Errorf("etkinlik: %w", err)
-		}
-		if err := setDetails(ctx, q, eventID, details); err != nil {
-			return err
-		}
-		if in.CoverUploadID != (id.ID{}) {
-			if err := setCover(ctx, q, c, tayfa, eventID, in.CoverUploadID); err != nil {
-				return err
-			}
-		}
-		if err := audit(ctx, q, c, EventCreated, eventID, map[string]any{"type": in.Type}); err != nil {
-			return err
-		}
-		payload := map[string]any{"event_id": eventID.String(), "type": in.Type}
-		if rec != nil {
-			if seriesID, err = createSeries(ctx, q, c, eventID, start, rec); err != nil {
-				return err
-			}
-			payload["series_id"] = seriesID.String()
-		}
-		b.add(EventCreated, eventID, payload)
-		return txn.TouchTayfa(ctx, q, tayfa, c.now)
+		eventID, seriesID, err = createIn(ctx, q, c, b, p)
+		return err
 	})
 	if err != nil {
 		return Event{}, err
@@ -472,6 +475,73 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in Input) (Even
 		}
 	}
 	return s.Get(ctx, user, tayfa, eventID)
+}
+
+// CreateInstantTx creates the single event of a new instant tayfa inside
+// the caller's transaction q (package instant, ADR-0032 §2), with user as
+// organizer, and writes its outbox events. The caller created the tayfa in
+// the same transaction with user as its only admin; EventCreate is not
+// asked, because the permission table refuses it in instant tayfas for
+// every later event. A recurrence or a cover is refused.
+func (s *Service) CreateInstantTx(ctx context.Context, q *store.Queries, user, tayfa id.ID, p Plan) (id.ID, error) {
+	if p.rec != nil {
+		return id.ID{}, apperr.Validation("recurrence")
+	}
+	if p.in.CoverUploadID != (id.ID{}) {
+		return id.ID{}, apperr.Validation("cover_upload_id")
+	}
+	if p.in.Discoverable {
+		return id.ID{}, apperr.Validation("discoverable")
+	}
+	c, err := s.load(ctx, q, user, tayfa, true)
+	if err != nil {
+		return id.ID{}, err
+	}
+	if !access.Instant(c.tayfa) || access.ReadOnly(c.tayfa) {
+		return id.ID{}, apperr.ErrPermissionDenied
+	}
+	b := &batch{tayfa: tayfa, actor: user}
+	eventID, _, err := createIn(ctx, q, c, b, p)
+	if err != nil {
+		return id.ID{}, err
+	}
+	return eventID, flush(ctx, q, b)
+}
+
+// createIn writes a new event (and, with a recurrence, its series) of the
+// caller's tayfa and queues its outbox events.
+func createIn(ctx context.Context, q *store.Queries, c caller, b *batch, p Plan) (eventID, seriesID id.ID, err error) {
+	tayfa := id.ID(c.tayfa.ID.Bytes)
+	eventID = id.New()
+	cp := store.CreateEventParams{
+		ID: eventID.PG(), TayfaID: tayfa.PG(), Type: p.in.Type, Title: p.title, Description: text(p.desc),
+		StartsAt: ts(p.start), EndsAt: ts(p.end), Capacity: int4(p.capacity), Discoverable: p.in.Discoverable,
+		CreatedBy: c.user.PG(), ClientRequestID: p.crid.PG(),
+	}
+	setLocation(&cp.Mode, &cp.MeetingPointName, &cp.MeetingLat, &cp.MeetingLng, &cp.City, &cp.District, &cp.OnlineUrl, p.loc)
+	if err := q.CreateEvent(ctx, cp); err != nil {
+		return id.ID{}, id.ID{}, fmt.Errorf("etkinlik: %w", err)
+	}
+	if err := setDetails(ctx, q, eventID, p.details); err != nil {
+		return id.ID{}, id.ID{}, err
+	}
+	if p.in.CoverUploadID != (id.ID{}) {
+		if err := setCover(ctx, q, c, tayfa, eventID, p.in.CoverUploadID); err != nil {
+			return id.ID{}, id.ID{}, err
+		}
+	}
+	if err := audit(ctx, q, c, EventCreated, eventID, map[string]any{"type": p.in.Type}); err != nil {
+		return id.ID{}, id.ID{}, err
+	}
+	payload := map[string]any{"event_id": eventID.String(), "type": p.in.Type}
+	if p.rec != nil {
+		if seriesID, err = createSeries(ctx, q, c, eventID, p.start, p.rec); err != nil {
+			return id.ID{}, id.ID{}, err
+		}
+		payload["series_id"] = seriesID.String()
+	}
+	b.add(EventCreated, eventID, payload)
+	return eventID, seriesID, txn.TouchTayfa(ctx, q, tayfa, c.now)
 }
 
 // Update changes the fields named in in.Fields (update mask paths).
@@ -578,6 +648,10 @@ func (s *Service) Update(ctx context.Context, user, tayfa, event id.ID, fields [
 			p.Capacity = int4(capacity)
 		}
 		if set[FieldDiscoverable] {
+			// An instant tayfa's event never reaches discovery (ADR-0032).
+			if in.Discoverable && access.Instant(c.tayfa) {
+				return apperr.Validation("discoverable")
+			}
 			p.Discoverable = in.Discoverable
 		}
 		if set[FieldDetails] {
@@ -607,6 +681,14 @@ func (s *Service) Update(ctx context.Context, user, tayfa, event id.ID, fields [
 		if set[FieldCover] {
 			if err := setCover(ctx, q, c, tayfa, event, in.CoverUploadID); err != nil {
 				return err
+			}
+		}
+		if set[FieldTitle] && access.Instant(c.tayfa) {
+			// An instant tayfa is named after its event (ADR-0032 §2).
+			if _, err := q.SetInstantTayfaName(ctx, store.SetInstantTayfaNameParams{
+				ID: tayfa.PG(), Name: title, NameNormalized: strings.ToLowerSpecial(unicode.TurkishCase, title),
+			}); err != nil {
+				return fmt.Errorf("anlık tayfa adı: %w", err)
 			}
 		}
 		if err := audit(ctx, q, c, EventUpdated, event, map[string]any{"fields": changed}); err != nil {

@@ -147,6 +147,13 @@ func (f *fakeCore) CancelDeletion(ctx context.Context, in *corev1.CancelDeletion
 	return &corev1.CancelDeletionResponse{}, f.record(ctx, in)
 }
 
+func (f *fakeCore) ConvertInstantTayfa(ctx context.Context, in *corev1.ConvertInstantTayfaRequest, _ ...grpc.CallOption) (*corev1.ConvertInstantTayfaResponse, error) {
+	if err := f.record(ctx, in); err != nil {
+		return nil, err
+	}
+	return &corev1.ConvertInstantTayfaResponse{Tayfa: f.t()}, nil
+}
+
 func (f *fakeCore) JoinByCode(ctx context.Context, in *corev1.JoinByCodeRequest, _ ...grpc.CallOption) (*corev1.JoinByCodeResponse, error) {
 	return &corev1.JoinByCodeResponse{Membership: testMembership()}, f.record(ctx, in)
 }

@@ -78,6 +78,22 @@ service TayfaService {
   // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
   // ERROR_REASON_MUTED, ERROR_REASON_DELETION_NOT_REQUESTED.
   rpc CancelDeletion(CancelDeletionRequest) returns (CancelDeletionResponse);
+
+  // ConvertInstantTayfa turns an instant tayfa into a standard one ("Bu
+  // ekiple tayfa kur", ADR-0032): name, interests, description and join
+  // policy are set with the rules of CreateTayfa, every module is turned
+  // on, and members, the event and its channel stay. From then on the
+  // standard rules apply. Admin (the organizer, or the admin who took over
+  // when the organizer's account was deleted) of an instant tayfa only; a
+  // tayfa that never was instant answers ERROR_REASON_PERMISSION_DENIED. A
+  // repeat by an admin of a tayfa already converted returns it unchanged. It counts as
+  // creating a tayfa: at most once per 24 hours together with CreateTayfa
+  // (per-IP limit is in gateway).
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY,
+  // ERROR_REASON_VALIDATION, ERROR_REASON_TAYFA_CREATE_LIMIT.
+  rpc ConvertInstantTayfa(ConvertInstantTayfaRequest) returns (ConvertInstantTayfaResponse);
 }
 
 enum JoinPolicy {
@@ -119,6 +135,16 @@ enum TayfaStatus {
   TAYFA_STATUS_ARCHIVED = 3;
 }
 
+// Kind of a tayfa (tayfas.kind, ADR-0032).
+enum TayfaKind {
+  TAYFA_KIND_UNSPECIFIED = 0;
+  // A tayfa created with CreateTayfa, or a converted instant tayfa.
+  TAYFA_KIND_STANDARD = 1;
+  // The hidden single-event tayfa of an instant event. Never listed in
+  // discovery; archived 7 days after its event ended or was cancelled.
+  TAYFA_KIND_INSTANT = 2;
+}
+
 message ModuleState {
   Module module = 1;
   bool enabled = 2;
@@ -128,7 +154,8 @@ message ModuleState {
 // it; the invite preview uses its own narrow message (PreviewInviteResponse).
 message Tayfa {
   string id = 1;
-  // 3–50 characters.
+  // 3–50 characters. An instant tayfa is named after its event's title
+  // (1–120 characters).
   string name = 2;
   // Up to 500 characters; may be empty.
   string description = 3;
@@ -160,6 +187,9 @@ message Tayfa {
   // PENDING join requests; set only for callers who may approve them
   // (moderator, admin), unset for everyone else.
   optional int32 pending_join_request_count = 16;
+  TayfaKind kind = 17;
+  // Set only for TAYFA_KIND_INSTANT: the tayfa's single event.
+  string instant_event_id = 18;
 }
 
 message CreateTayfaRequest {
@@ -212,6 +242,8 @@ message MyTayfa {
   MembershipStatus status = 4;
   // Set only when status is MEMBERSHIP_STATUS_ACTIVE.
   Tayfa tayfa = 5;
+  // Always set, also for pending requests (ADR-0032).
+  TayfaKind kind = 6;
 }
 
 message UpdateTayfaRequest {
@@ -273,3 +305,19 @@ message CancelDeletionRequest {
 }
 
 message CancelDeletionResponse {}
+
+message ConvertInstantTayfaRequest {
+  string tayfa_id = 1;
+  // Same rules as CreateTayfaRequest.name.
+  string name = 2;
+  // Same rules as CreateTayfaRequest.description.
+  string description = 3;
+  // Same rules as CreateTayfaRequest.interests.
+  repeated EventType interests = 4;
+  // UNSPECIFIED means JOIN_POLICY_APPROVAL.
+  JoinPolicy join_policy = 5;
+}
+
+message ConvertInstantTayfaResponse {
+  Tayfa tayfa = 1;
+}

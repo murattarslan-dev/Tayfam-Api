@@ -4,7 +4,9 @@
 // plan §7):
 //
 //	tayfa-cleanup   inactive tayfas: active → warned → archived, and back to
-//	                active on activity (weekly)
+//	                active on activity (weekly; standard tayfas only)
+//	instant-archive archives instant tayfas 7 days after their event ended
+//	                or was cancelled (hourly, ADR-0032)
 //	tayfa-deletion  soft deletes tayfas whose 72-hour deletion wait is over
 //	purge           hard deletes tayfas and content soft deleted 30 days ago
 //	hike-alert      raises hike.overdue for hikers who did not return
@@ -54,11 +56,12 @@ import (
 
 // Job names: worker names, advisory lock keys and log fields.
 const (
-	JobTayfaCleanup  = "tayfa-cleanup"
-	JobTayfaDeletion = "tayfa-deletion"
-	JobPurge         = "purge"
-	JobHikeAlert     = "hike-alert"
-	JobPlates        = "plates"
+	JobTayfaCleanup   = "tayfa-cleanup"
+	JobInstantArchive = "instant-archive"
+	JobTayfaDeletion  = "tayfa-deletion"
+	JobPurge          = "purge"
+	JobHikeAlert      = "hike-alert"
+	JobPlates         = "plates"
 	// Issue #76.
 	JobReportEscalation = "report-escalation"
 	JobRetention        = "retention"
@@ -71,7 +74,10 @@ const (
 	// DefaultTayfaCleanupInterval: the cleanup is weekly (project plan §7).
 	DefaultTayfaCleanupInterval  = 7 * 24 * time.Hour
 	DefaultTayfaDeletionInterval = 10 * time.Minute
-	DefaultPurgeInterval         = time.Hour
+	// DefaultInstantArchiveInterval: an instant tayfa is archived at most
+	// an hour after its seventh day (ADR-0032 §6).
+	DefaultInstantArchiveInterval = time.Hour
+	DefaultPurgeInterval          = time.Hour
 	// DefaultHikeAlertInterval: every five minutes (v14).
 	DefaultHikeAlertInterval = 5 * time.Minute
 	DefaultPlatesInterval    = 24 * time.Hour
@@ -95,6 +101,9 @@ const (
 	// RetentionPeriod: soft deleted tayfas and content are deleted for good
 	// after this long (CLAUDE.md "Silme").
 	RetentionPeriod = 30 * 24 * time.Hour
+	// InstantArchiveDelay: an instant tayfa is archived this long after
+	// its event ended or was cancelled (ADR-0032 §6).
+	InstantArchiveDelay = 7 * 24 * time.Hour
 	// PlateRetention: convoy plates are cleared this long after the event
 	// ended.
 	PlateRetention = 30 * 24 * time.Hour
@@ -125,7 +134,7 @@ const (
 // tayfa_id is the tayfa. Payloads (IDs and classification only):
 //
 //	tayfa.warned       tayfa_id, reason (inactive|few_members)
-//	tayfa.archived     tayfa_id
+//	tayfa.archived     tayfa_id (an instant tayfa's adds kind: instant)
 //	tayfa.reactivated  tayfa_id
 //	tayfa.deleted      tayfa_id
 //	tayfa.purged       tayfa_id
@@ -155,11 +164,12 @@ const (
 // Intervals sets how often each job runs. A zero field keeps the default;
 // tests set short ones.
 type Intervals struct {
-	TayfaCleanup  time.Duration
-	TayfaDeletion time.Duration
-	Purge         time.Duration
-	HikeAlert     time.Duration
-	Plates        time.Duration
+	TayfaCleanup   time.Duration
+	InstantArchive time.Duration
+	TayfaDeletion  time.Duration
+	Purge          time.Duration
+	HikeAlert      time.Duration
+	Plates         time.Duration
 	// Issue #76.
 	ReportEscalation time.Duration
 	Retention        time.Duration
@@ -174,6 +184,7 @@ func (i Intervals) withDefaults() Intervals {
 		}
 	}
 	def(&i.TayfaCleanup, DefaultTayfaCleanupInterval)
+	def(&i.InstantArchive, DefaultInstantArchiveInterval)
 	def(&i.TayfaDeletion, DefaultTayfaDeletionInterval)
 	def(&i.Purge, DefaultPurgeInterval)
 	def(&i.HikeAlert, DefaultHikeAlertInterval)
@@ -228,6 +239,7 @@ func (s *Service) Workers() []Worker {
 	iv := s.cfg.Intervals
 	return []Worker{
 		{JobTayfaCleanup, s.every(JobTayfaCleanup, iv.TayfaCleanup, s.CleanupTayfas)},
+		{JobInstantArchive, s.every(JobInstantArchive, iv.InstantArchive, s.ArchiveInstantTayfas)},
 		{JobTayfaDeletion, s.every(JobTayfaDeletion, iv.TayfaDeletion, s.DeleteDueTayfas)},
 		{JobPurge, s.every(JobPurge, iv.Purge, s.Purge)},
 		{JobHikeAlert, s.every(JobHikeAlert, iv.HikeAlert, s.AlertOverdueHikes)},

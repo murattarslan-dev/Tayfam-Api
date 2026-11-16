@@ -78,6 +78,10 @@ type Querier interface {
 	ApplyUserBan(ctx context.Context, arg ApplyUserBanParams) (int64, error)
 	// Başvuru onayı.
 	ApproveMembership(ctx context.Context, arg ApproveMembershipParams) (int64, error)
+	// Anlık tayfa, etkinliği bittikten (iptalde iptal anından) @ended_before'a
+	// kadar (7 gün) geçince ya da canlı etkinliği kalmayınca arşivlenir
+	// (ADR-0032 §6). Askıdaki ya da silme bekleyen tayfaya dokunulmaz.
+	ArchiveInstantTayfas(ctx context.Context, arg ArchiveInstantTayfasParams) ([]pgtype.UUID, error)
 	// Uyarıdan sonra @warned_before'a kadar aktivite olmayan tayfa arşivlenir
 	// (salt okunur). Askıdaki ya da silme bekleyen tayfaya dokunulmaz.
 	ArchiveWarnedTayfas(ctx context.Context, arg ArchiveWarnedTayfasParams) ([]pgtype.UUID, error)
@@ -142,6 +146,8 @@ type Querier interface {
 	// chat dosyayı tutan mesajı söyledi: bağlama o mesajla onaylanır. Arada
 	// taşındıysa (asked_id değişti) bir şey olmaz.
 	ConfirmChatAttachment(ctx context.Context, arg ConfirmChatAttachmentParams) (int64, error)
+	// "Bu ekiple tayfa kur": tür, ad ve ayarlar; hareketsizlik saati sıfırlanır.
+	ConvertInstantTayfa(ctx context.Context, arg ConvertInstantTayfaParams) (int64, error)
 	CountActiveMembers(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
 	CountActiveMembersForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]CountActiveMembersForTayfasRow, error)
 	// ---------------------------------------------------------------------------
@@ -153,6 +159,12 @@ type Querier interface {
 	// satırını önce kilitler.
 	CountEventPhotos(ctx context.Context, arg CountEventPhotosParams) (CountEventPhotosRow, error)
 	CountGoing(ctx context.Context, eventID pgtype.UUID) (int64, error)
+	// Kullanıcının son @since'ten beri açtığı anlık tayfalar: iptal edilen,
+	// silinen ve dönüştürülenler de sayılır (günde 5; ADR-0032 §5).
+	CountInstantTayfasCreatedSince(ctx context.Context, arg CountInstantTayfasCreatedSinceParams) (int64, error)
+	// Kullanıcının organizatörü olduğu açık anlık etkinlikler: silinmemiş,
+	// arşivlenmemiş anlık tayfada bitmemiş ve iptal edilmemiş etkinlik.
+	CountOpenInstantEvents(ctx context.Context, arg CountOpenInstantEventsParams) (int64, error)
 	// Son yönetici kontrolü; çağıran tayfa satırını kilitlemiş olmalıdır.
 	CountOtherActiveAdmins(ctx context.Context, arg CountOtherActiveAdminsParams) (int64, error)
 	// Onay bekleyen katılım istekleri (issue #150); memberships_pending_idx.
@@ -170,7 +182,8 @@ type Querier interface {
 	// Etiketler.
 	CountTags(ctx context.Context, tayfaID pgtype.UUID) (int32, error)
 	// Kullanıcı başına günlük tayfa açma sınırı. Silinen tayfalar da sayılır;
-	// açıp silerek sınır aşılamaz.
+	// açıp silerek sınır aşılamaz. Anlık tayfa sayılmaz; kalıcıya dönüştürülen
+	// dönüşüm anında açılmış sayılır (ADR-0032 §5, §7).
 	CountTayfasCreatedSince(ctx context.Context, arg CountTayfasCreatedSinceParams) (int64, error)
 	// Saatlik sıklık sınırı: son bir saatte açılan kayıtlar (silinenler
 	// sayılmaz; pending kayıtlar 24 saat durduğu için yeterli bir alt sınırdır).
@@ -202,6 +215,11 @@ type Querier interface {
 	// (haftalık sınır, daha önce önerilmiş, friend_suggestion_allowed) yeniden
 	// denetler. Yazılmadıysa 0 döner.
 	CreateFriendSuggestion(ctx context.Context, arg CreateFriendSuggestionParams) (int64, error)
+	// ---------------------------------------------------------------------------
+	// Anlık etkinlik (ADR-0032)
+	// ---------------------------------------------------------------------------
+	// Anlık tayfa: gizli, onaylı katılım; adı etkinlik başlığıdır.
+	CreateInstantTayfa(ctx context.Context, arg CreateInstantTayfaParams) error
 	CreateInvite(ctx context.Context, arg CreateInviteParams) error
 	// Üyelik değişiklikleri transaction içinde SetActor ya da SetSystemJob'dan
 	// sonra yapılır; aksi halde trigger reddeder.
@@ -610,6 +628,8 @@ type Querier interface {
 	// yöneticiler ve moderatörler; dönmeyen kişinin kendisi hariç. Organizatör
 	// önce, sonra yönetici, sonra moderatör.
 	ListHikeAlertRecipients(ctx context.Context, arg ListHikeAlertRecipientsParams) ([]pgtype.UUID, error)
+	// Anlık tayfanın tek etkinliği (silinmişler dahil en fazla bir satır).
+	ListInstantEventIDs(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListInstantEventIDsRow, error)
 	ListInterestsForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListInterestsForTayfasRow, error)
 	// Hesap silme: kişinin gönderdiği, henüz cevaplanmamış davetler. Tayfalar
 	// kimlik sırasıyla işlenir (kilit sırası).
@@ -890,6 +910,8 @@ type Querier interface {
 	// İstek ve davet sonuçları (issue #192). Okuma yalnızca alıcının
 	// (doğrulanmış çağıran) kendi kayıtları üzerinedir.
 	SetFriendRequestOutcome(ctx context.Context, arg SetFriendRequestOutcomeParams) error
+	// Etkinlik başlığı değişince anlık tayfanın adı da değişir.
+	SetInstantTayfaName(ctx context.Context, arg SetInstantTayfaNameParams) (int64, error)
 	SetInvitationOutcome(ctx context.Context, arg SetInvitationOutcomeParams) error
 	SetMembershipRole(ctx context.Context, arg SetMembershipRoleParams) (int64, error)
 	SetRsvp(ctx context.Context, arg SetRsvpParams) error
@@ -969,13 +991,15 @@ type Querier interface {
 	UserStoredBytes(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// Uyarı iki sebeple verilir:
 	//   inactive:    last_activity_at @inactive_before'dan eski (30 gün).
-	//   few_members: açılışından @created_before'a kadar (7 gün) geçmiş ve
+	//   few_members: açılışından (dönüşen anlık tayfada dönüşümünden)
+	//                @created_before'a kadar (7 gün) geçmiş ve
 	//                @min_members'tan az aktif üyesi olan tayfa. Bu kural tayfa
 	//                başına bir kez uygulanır: daha önce few_members uyarısı
 	//                almış (audit_logs, yalnızca eklenir) tayfa bu sebeple tekrar
 	//                uyarılmaz; küçük ama aktif bir arkadaş grubu her hafta uyarı
 	//                almaz, hareketsiz kalırsa inactive kuralı yine işler.
-	// Askıdaki ya da silme bekleyen tayfaya dokunulmaz.
+	// Askıdaki ya da silme bekleyen tayfaya dokunulmaz. Anlık tayfa bu
+	// kurallara girmez; kendi arşiv kuralı vardır (ArchiveInstantTayfas).
 	WarnTayfas(ctx context.Context, arg WarnTayfasParams) ([]WarnTayfasRow, error)
 	// Karşı tarafın actor'a yapılmış açık önerisi geri çekilir.
 	WithdrawSuggestionTo(ctx context.Context, arg WithdrawSuggestionToParams) error

@@ -25,13 +25,14 @@ import (
 
 // fakeTayfas records what transport passed on and returns err.
 type fakeTayfas struct {
-	err    error
-	user   id.ID
-	tayfa  id.ID
-	create tayfa.CreateInput
-	update tayfa.UpdateInput
-	module string
-	view   tayfa.View
+	err     error
+	user    id.ID
+	tayfa   id.ID
+	create  tayfa.CreateInput
+	update  tayfa.UpdateInput
+	module  string
+	view    tayfa.View
+	convert tayfa.ConvertInput
 }
 
 func (f *fakeTayfas) Create(_ context.Context, u id.ID, in tayfa.CreateInput) (tayfa.View, error) {
@@ -52,6 +53,10 @@ func (f *fakeTayfas) ListMine(_ context.Context, u id.ID, _ int32, _ string) ([]
 }
 func (f *fakeTayfas) Update(_ context.Context, u, t id.ID, in tayfa.UpdateInput) (tayfa.View, error) {
 	f.user, f.tayfa, f.update = u, t, in
+	return f.view, f.err
+}
+func (f *fakeTayfas) Convert(_ context.Context, u, t id.ID, in tayfa.ConvertInput) (tayfa.View, error) {
+	f.user, f.tayfa, f.convert = u, t, in
 	return f.view, f.err
 }
 func (f *fakeTayfas) SetModule(_ context.Context, u, t id.ID, m string, _ bool) error {
@@ -87,6 +92,7 @@ func callAll(ctx context.Context, c corev1.TayfaServiceServer, tayfaID string) m
 	_, out["RotateJoinCode"] = c.RotateJoinCode(ctx, &corev1.RotateJoinCodeRequest{TayfaId: tayfaID})
 	_, out["RequestDeletion"] = c.RequestDeletion(ctx, &corev1.RequestDeletionRequest{TayfaId: tayfaID})
 	_, out["CancelDeletion"] = c.CancelDeletion(ctx, &corev1.CancelDeletionRequest{TayfaId: tayfaID})
+	_, out["ConvertInstantTayfa"] = c.ConvertInstantTayfa(ctx, &corev1.ConvertInstantTayfaRequest{TayfaId: tayfaID, Name: "Yeni Tayfa"})
 	return out
 }
 
@@ -282,6 +288,10 @@ func (s clientServer) RequestDeletion(ctx context.Context, r *corev1.RequestDele
 }
 func (s clientServer) CancelDeletion(ctx context.Context, r *corev1.CancelDeletionRequest) (*corev1.CancelDeletionResponse, error) {
 	return s.c.CancelDeletion(ctx, r)
+}
+
+func (s clientServer) ConvertInstantTayfa(ctx context.Context, r *corev1.ConvertInstantTayfaRequest) (*corev1.ConvertInstantTayfaResponse, error) {
+	return s.c.ConvertInstantTayfa(ctx, r)
 }
 
 func TestTayfaServiceBehindGuard(t *testing.T) {

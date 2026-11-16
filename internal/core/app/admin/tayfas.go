@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/access"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
@@ -303,6 +304,11 @@ func (s *Service) SetMemberRole(ctx context.Context, c auth.AdminClaims, tayfa, 
 		}
 		if t.DeletedAt.Valid {
 			return apperr.ErrTayfaNotFound
+		}
+		// An instant tayfa has no moderators: the organizer alone approves
+		// (ADR-0032 §3). The database refuses it too.
+		if t.Kind == access.KindInstant && role == "moderator" {
+			return apperr.Validation("role")
 		}
 		m, err := q.AdminMemberRole(ctx, store.AdminMemberRoleParams{TayfaID: tayfa.PG(), UserID: user.PG()})
 		if err != nil || m.Status != "active" {

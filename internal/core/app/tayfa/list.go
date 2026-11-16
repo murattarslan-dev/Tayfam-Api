@@ -33,6 +33,8 @@ type MyTayfa struct {
 	Role    authz.Role
 	// Status is StatusActive or StatusPending.
 	Status authz.Status
+	// Kind is the tayfa's kind (access.KindStandard, access.KindInstant).
+	Kind string
 	// Tayfa is set only for active memberships.
 	Tayfa *View
 }
@@ -75,13 +77,13 @@ func (s *Service) ListMine(ctx context.Context, user id.ID, pageSize int32, page
 		if err != nil {
 			return nil, "", err
 		}
-		out[i] = MyTayfa{TayfaID: id.ID(r.ID.Bytes), Name: r.Name, Role: m.Role, Status: m.Status}
+		out[i] = MyTayfa{TayfaID: id.ID(r.ID.Bytes), Name: r.Name, Role: m.Role, Status: m.Status, Kind: r.Kind}
 		if m.Status == authz.StatusActive {
 			active = append(active, viewRow{
 				ID: id.ID(r.ID.Bytes), Name: r.Name, Description: r.Description, JoinCode: r.JoinCode,
 				Status: r.Status, JoinPolicy: r.JoinPolicy, SuspendedAt: r.SuspendedAt,
 				DeletionScheduledFor: r.DeletionScheduledFor, MembersCanCreateEvents: r.MembersCanCreateEvents,
-				CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, CoverUploadID: r.CoverUploadID, Member: m,
+				CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, CoverUploadID: r.CoverUploadID, Kind: r.Kind, Member: m,
 			})
 			activeIdx = append(activeIdx, i)
 		}

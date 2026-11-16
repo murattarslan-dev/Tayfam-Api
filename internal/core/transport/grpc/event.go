@@ -6,11 +6,14 @@ import (
 	"math"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event/ical"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/instant"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
@@ -43,13 +46,26 @@ type Events interface {
 	Export(ctx context.Context, user, t, e id.ID) ([]byte, error)
 }
 
+// Instants is what EventServer needs to create instant events (ADR-0032).
+type Instants interface {
+	Create(ctx context.Context, user id.ID, in instant.Input) (instant.Result, error)
+}
+
 // EventServer implements corev1.EventServiceServer. The acting user always
 // comes from the verified token (auth.Guard), never from the request.
 // Locations, URLs and plates are converted here and never logged.
 type EventServer struct {
 	corev1.UnimplementedEventServiceServer
-	app Events
-	log *slog.Logger
+	app     Events
+	instant Instants
+	log     *slog.Logger
+}
+
+// WithInstant enables CreateInstantEvent; without it the method is
+// unimplemented.
+func (s *EventServer) WithInstant(i Instants) *EventServer {
+	s.instant = i
+	return s
 }
 
 // NewEventServer returns an EventServer.
@@ -76,23 +92,19 @@ func scope(ctx context.Context, tayfa string, eventID *string) (user, t, e id.ID
 
 func ptr(s string) *string { return &s }
 
-// CreateEvent implements corev1.EventServiceServer.
-func (s *EventServer) CreateEvent(ctx context.Context, req *corev1.CreateEventRequest) (*corev1.CreateEventResponse, error) {
-	user, t, _, err := scope(ctx, req.GetTayfaId(), nil)
-	if err != nil {
-		return nil, err
-	}
+// createInput converts a CreateEventRequest without its tayfa_id.
+func createInput(req *corev1.CreateEventRequest) (event.Input, error) {
 	typ, ok := interestFromProto(req.GetType())
 	if !ok {
-		return nil, validation("type")
+		return event.Input{}, validation("type")
 	}
 	loc, err := locationFromProto(req.GetMode(), req.GetMeetingPointName(), req.GetMeetingPoint(), req.GetCity(), req.GetDistrict(), req.GetOnlineUrl())
 	if err != nil {
-		return nil, err
+		return event.Input{}, err
 	}
 	d, err := detailsFromProto(req.GetConvoy(), req.GetCamp(), req.GetHike(), req.GetFishing(), req.GetGaming(), req.GetSports())
 	if err != nil {
-		return nil, err
+		return event.Input{}, err
 	}
 	in := event.Input{
 		Type: typ, Title: req.GetTitle(), Description: req.GetDescription(),
@@ -104,6 +116,19 @@ func (s *EventServer) CreateEvent(ctx context.Context, req *corev1.CreateEventRe
 		in.Recurrence = &event.Recurrence{RRule: r.GetRrule(), TimeZone: r.GetTimeZone()}
 	}
 	if in.CoverUploadID, err = optionalUploadID(req.GetCoverUploadId(), "cover_upload_id"); err != nil {
+		return event.Input{}, err
+	}
+	return in, nil
+}
+
+// CreateEvent implements corev1.EventServiceServer.
+func (s *EventServer) CreateEvent(ctx context.Context, req *corev1.CreateEventRequest) (*corev1.CreateEventResponse, error) {
+	user, t, _, err := scope(ctx, req.GetTayfaId(), nil)
+	if err != nil {
+		return nil, err
+	}
+	in, err := createInput(req)
+	if err != nil {
 		return nil, err
 	}
 	v, err := s.app.Create(ctx, user, t, in)
@@ -111,6 +136,51 @@ func (s *EventServer) CreateEvent(ctx context.Context, req *corev1.CreateEventRe
 		return nil, errorStatus(ctx, s.log, err)
 	}
 	return &corev1.CreateEventResponse{Event: eventToProto(v)}, nil
+}
+
+// CreateInstantEvent implements corev1.EventServiceServer (ADR-0032).
+func (s *EventServer) CreateInstantEvent(ctx context.Context, req *corev1.CreateInstantEventRequest) (*corev1.CreateInstantEventResponse, error) {
+	user, err := callerID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if s.instant == nil {
+		return nil, status.Error(codes.Unimplemented, msgRejected)
+	}
+	er := req.GetEvent()
+	if er == nil {
+		return nil, validation("event")
+	}
+	// The tayfa does not exist yet; a cover is set later with UpdateEvent.
+	if er.GetTayfaId() != "" {
+		return nil, validation("event.tayfa_id")
+	}
+	if er.GetRecurrence() != nil {
+		return nil, validation("event.recurrence")
+	}
+	if er.GetCoverUploadId() != "" {
+		return nil, validation("event.cover_upload_id")
+	}
+	in, err := createInput(er)
+	if err != nil {
+		return nil, err
+	}
+	if len(req.GetInviteeUserIds()) > instant.MaxInvitees {
+		return nil, validation("invitee_user_ids")
+	}
+	invitees := make([]id.ID, 0, len(req.GetInviteeUserIds()))
+	for _, u := range req.GetInviteeUserIds() {
+		v, ok := id.Parse(u)
+		if !ok {
+			return nil, validation("invitee_user_ids")
+		}
+		invitees = append(invitees, v)
+	}
+	r, err := s.instant.Create(ctx, user, instant.Input{Event: in, Invitees: invitees})
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.CreateInstantEventResponse{Tayfa: tayfaToProto(r.Tayfa), Event: eventToProto(r.Event)}, nil
 }
 
 // UpdateEvent implements corev1.EventServiceServer.

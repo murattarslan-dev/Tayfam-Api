@@ -428,6 +428,88 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  /v1/tayfas/{tayfa_id}/conversion:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    post:
+      operationId: convertInstantTayfa
+      summary: Anlık tayfayı kalıcı tayfaya dönüştürür ("Bu ekiple tayfa kur")
+      description: |
+        Yalnızca anlık tayfanın yöneticisi (organizatör; hesabı silindiyse
+        devralan yönetici), tayfa salt okunur değilken (ADR-0032). Dönüşmüş
+        tayfada tekrar istek, bir şey değiştirmeden tayfayı döndürür. Ad, ilgi alanları, açıklama ve katılım
+        politikası tayfa açmadaki kurallarla verilir; bütün modüller açılır,
+        üyeler, etkinlik ve kanal kalır. Dönüştürme tayfa açma sayılır:
+        kullanıcı başına 24 saatte 1 (`tayfa-create-limit`) ve IP başına
+        saatte 1 (`rate-limited`). Kalıcı tayfada `permission-denied`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TayfaConvertRequest" }
+      responses:
+        "200":
+          description: Dönüşen tayfa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tayfa" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/instant-events:
+    post:
+      operationId: createInstantEvent
+      summary: Anlık (bireysel) etkinlik açar; arka planda gizli bir tayfa açılır
+      description: |
+        Tek istekte gizli, tek etkinlikli bir tayfa (`kind: instant`) ve
+        etkinliği açılır; açan kişi tayfanın tek yöneticisi ve etkinliğin
+        organizatörüdür (ADR-0032). Yalnızca etkinlik modülü açıktır.
+        `invitee_user_ids`'deki kişiler doğrudan davet edilir; hepsi
+        arkadaşınız olmalıdır (`not-friends`), biri davet edilemezse hiçbir
+        şey açılmaz. Aynı anda en fazla 3 açık anlık etkinlik (bitmemiş,
+        iptal edilmemiş) ve 24 saatte en fazla 5 anlık etkinlik (iptal
+        edilenler de sayılır); ikisi de `instant-event-limit`. Tayfa açma sınırlarına
+        sayılmaz. `event` alanının kuralları `POST
+        /v1/tayfas/{tayfa_id}/events` ile aynıdır; `recurrence` ve
+        `cover_upload_id` kabul edilmez (kapak sonra etkinlik
+        düzenlemesiyle eklenir), `discoverable` `true` olamaz (sonradan da). Aynı `event.client_request_id` ile tekrar
+        gönderim ilk açılanı döndürür.
+
+        Etkinlik bitince (iptalde iptal anından) 7 gün sonra tayfa
+        arşivlenir. Davet linkiyle gelen her zaman katılım isteği bırakır,
+        organizatör onaylar; katılım koduyla katılım yoktur. Etkinlik
+        kanalını istemci `POST /v1/tayfas/{tayfa_id}/channels`
+        (`visibility: event`) ile açar.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InstantEventCreateRequest" }
+      responses:
+        "201":
+          description: Açılan tayfa ve etkinlik (ya da tekrar gönderimde ilk açılanlar)
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstantEvent" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /v1/tayfas/{tayfa_id}/modules/{module}:
     parameters:
       - $ref: "#/components/parameters/TayfaID"
@@ -5307,6 +5389,7 @@ components:
         - muted
         - tayfa-read-only
         - tayfa-create-limit
+        - instant-event-limit
         - deletion-already-requested
         - deletion-not-requested
         # core: katılım ve davet
@@ -5647,6 +5730,59 @@ components:
           format: uuid
           description: İstemcinin her açma denemesi için bir kez ürettiği, tekrar gönderimde aynen kullandığı UUID.
 
+    TayfaConvertRequest:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 50
+          description: Baştaki ve sondaki boşluklar atıldıktan sonra 3–50 karakter.
+        description: { type: string, maxLength: 500 }
+        interests:
+          type: array
+          maxItems: 7
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/EventType" }
+        join_policy:
+          allOf: [{ $ref: "#/components/schemas/JoinPolicy" }]
+          default: approval
+
+    TayfaKind:
+      type: string
+      description: |
+        `standard`: tayfa. `instant`: anlık etkinliğin gizli, tek etkinlikli
+        tayfası; Keşfet'e çıkmaz, etkinlik bitince 7 gün sonra arşivlenir
+        (ADR-0032).
+      enum: [standard, instant]
+
+    InstantEventCreateRequest:
+      type: object
+      required: [event]
+      additionalProperties: false
+      properties:
+        event:
+          allOf: [{ $ref: "#/components/schemas/EventCreateRequest" }]
+          description: |
+            Etkinlik; kuralları tayfa etkinliğiyle aynı. `recurrence` ve
+            `cover_upload_id` verilemez, `discoverable` `true` olamaz. `client_request_id` isteğin tekrar
+            gönderim anahtarıdır.
+        invitee_user_ids:
+          type: array
+          maxItems: 10
+          uniqueItems: true
+          items: { type: string, format: uuid }
+          description: Doğrudan davet edilecek arkadaşlarınız (en fazla 10, siz değil).
+
+    InstantEvent:
+      type: object
+      required: [tayfa, event]
+      properties:
+        tayfa: { $ref: "#/components/schemas/Tayfa" }
+        event: { $ref: "#/components/schemas/Event" }
+
     TayfaUpdateRequest:
       type: object
       additionalProperties: false
@@ -5671,11 +5807,18 @@ components:
 
     Tayfa:
       type: object
-      required: [id, name, description, interests, join_policy, modules, status, member_count, members_can_create_events, created_at, updated_at]
+      required: [id, name, description, interests, join_policy, modules, status, member_count, members_can_create_events, created_at, updated_at, kind]
       properties:
         cover_upload_id: { type: string, format: uuid, description: "Kapak; linkleri `POST /v1/media/urls`." }
         id: { type: string, format: uuid }
-        name: { type: string }
+        name:
+          type: string
+          description: 3–50 karakter; anlık tayfada etkinliğin başlığıdır (1–120).
+        kind: { $ref: "#/components/schemas/TayfaKind" }
+        instant_event_id:
+          type: string
+          format: uuid
+          description: Yalnızca anlık tayfada; tayfanın tek etkinliği.
         description: { type: string }
         interests:
           type: array
@@ -5730,10 +5873,11 @@ components:
 
     MyTayfa:
       type: object
-      required: [tayfa_id, name, role, status]
+      required: [tayfa_id, name, role, status, kind]
       properties:
         tayfa_id: { type: string, format: uuid }
         name: { type: string }
+        kind: { $ref: "#/components/schemas/TayfaKind" }
         role: { $ref: "#/components/schemas/Role" }
         status: { type: string, enum: [active, pending] }
         tayfa:

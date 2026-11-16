@@ -30,9 +30,9 @@ func newJoinCode() string {
 	return string(b[:])
 }
 
-// withJoinCode runs fn with a fresh join code inside a savepoint and retries
+// WithJoinCode runs fn with a fresh join code inside a savepoint and retries
 // with a new code when the code is already taken.
-func withJoinCode(ctx context.Context, tx pgx.Tx, fn func(q *store.Queries, code string) error) error {
+func WithJoinCode(ctx context.Context, tx pgx.Tx, fn func(q *store.Queries, code string) error) error {
 	for range joinCodeAttempts {
 		sp, err := tx.Begin(ctx)
 		if err != nil {

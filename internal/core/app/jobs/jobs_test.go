@@ -758,12 +758,12 @@ func TestWorkersStop(t *testing.T) {
 
 	now := e.base
 	s, err := New(Config{Pool: e.pool, Log: e.log, Now: func() time.Time { return now },
-		Intervals: Intervals{TayfaCleanup: time.Millisecond, TayfaDeletion: time.Millisecond, Purge: time.Millisecond, HikeAlert: time.Millisecond, Plates: time.Millisecond,
+		Intervals: Intervals{TayfaCleanup: time.Millisecond, InstantArchive: time.Millisecond, TayfaDeletion: time.Millisecond, Purge: time.Millisecond, HikeAlert: time.Millisecond, Plates: time.Millisecond,
 			ReportEscalation: time.Millisecond, Retention: time.Millisecond, FriendSuggestions: time.Millisecond}})
 	must(t, err)
 	wctx, cancel := context.WithCancel(ctx)
 	workers := s.Workers()
-	if len(workers) != 8 {
+	if len(workers) != 9 {
 		t.Fatalf("worker sayısı %d", len(workers))
 	}
 	errs := make(chan error, len(workers))

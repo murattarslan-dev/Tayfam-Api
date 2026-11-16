@@ -8,6 +8,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/access"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -23,6 +24,7 @@ type Tayfas interface {
 	RotateJoinCode(ctx context.Context, user, t id.ID) (string, error)
 	RequestDeletion(ctx context.Context, user, t id.ID) (time.Time, error)
 	CancelDeletion(ctx context.Context, user, t id.ID) error
+	Convert(ctx context.Context, user, t id.ID, in tayfa.ConvertInput) (tayfa.View, error)
 }
 
 // TayfaServer implements corev1.TayfaServiceServer. The acting user always
@@ -64,6 +66,35 @@ func (s *TayfaServer) CreateTayfa(ctx context.Context, req *corev1.CreateTayfaRe
 	return &corev1.CreateTayfaResponse{Tayfa: tayfaToProto(v)}, nil
 }
 
+// ConvertInstantTayfa implements corev1.TayfaServiceServer.
+func (s *TayfaServer) ConvertInstantTayfa(ctx context.Context, req *corev1.ConvertInstantTayfaRequest) (*corev1.ConvertInstantTayfaResponse, error) {
+	user, err := callerID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	t, err := tayfaID(req.GetTayfaId())
+	if err != nil {
+		return nil, err
+	}
+	interests, ok := interestsFromProto(req.GetInterests())
+	if !ok {
+		return nil, validation("interests")
+	}
+	policy := ""
+	if req.GetJoinPolicy() != corev1.JoinPolicy_JOIN_POLICY_UNSPECIFIED {
+		if policy, ok = joinPolicyFromProto(req.GetJoinPolicy()); !ok {
+			return nil, validation("join_policy")
+		}
+	}
+	v, err := s.app.Convert(ctx, user, t, tayfa.ConvertInput{
+		Name: req.GetName(), Description: req.GetDescription(), Interests: interests, JoinPolicy: policy,
+	})
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.ConvertInstantTayfaResponse{Tayfa: tayfaToProto(v)}, nil
+}
+
 // GetTayfa implements corev1.TayfaServiceServer.
 func (s *TayfaServer) GetTayfa(ctx context.Context, req *corev1.GetTayfaRequest) (*corev1.GetTayfaResponse, error) {
 	user, err := callerID(ctx)
@@ -93,7 +124,7 @@ func (s *TayfaServer) ListMyTayfas(ctx context.Context, req *corev1.ListMyTayfas
 	}
 	resp := &corev1.ListMyTayfasResponse{NextPageToken: next, Tayfas: make([]*corev1.MyTayfa, 0, len(list))}
 	for _, e := range list {
-		m := &corev1.MyTayfa{TayfaId: e.TayfaID.String(), Name: e.Name, Role: roleToProto(e.Role), Status: statusToProto(e.Status)}
+		m := &corev1.MyTayfa{TayfaId: e.TayfaID.String(), Name: e.Name, Role: roleToProto(e.Role), Status: statusToProto(e.Status), Kind: tayfaKindToProto(e.Kind)}
 		if e.Tayfa != nil {
 			m.Tayfa = tayfaToProto(*e.Tayfa)
 		}
@@ -223,6 +254,7 @@ func tayfaToProto(v tayfa.View) *corev1.Tayfa {
 		MembersCanCreateEvents: v.MembersCanCreateEvents,
 		CreateTime:             timestamppb.New(v.CreatedAt), UpdateTime: timestamppb.New(v.UpdatedAt),
 		CoverUploadId: optionalID(v.CoverUploadID),
+		Kind:          tayfaKindToProto(v.Kind), InstantEventId: optionalID(v.InstantEventID),
 	}
 	if v.PendingJoinRequests != nil {
 		n := int32(min(*v.PendingJoinRequests, 1<<31-1)) //nolint:gosec // clamped above
@@ -241,4 +273,15 @@ func tayfaToProto(v tayfa.View) *corev1.Tayfa {
 		out.DeletionTime = timestamppb.New(v.DeletionAt)
 	}
 	return out
+}
+
+// tayfaKindToProto converts tayfas.kind (ADR-0032).
+func tayfaKindToProto(k string) corev1.TayfaKind {
+	switch k {
+	case access.KindStandard:
+		return corev1.TayfaKind_TAYFA_KIND_STANDARD
+	case access.KindInstant:
+		return corev1.TayfaKind_TAYFA_KIND_INSTANT
+	}
+	return corev1.TayfaKind_TAYFA_KIND_UNSPECIFIED
 }
