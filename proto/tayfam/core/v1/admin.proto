@@ -67,6 +67,28 @@ service AdminService {
   // GetStats returns the panel dashboard's tayfa counts and the last run of
   // each background job (issue #110). Counts and times only.
   rpc GetStats(GetStatsRequest) returns (GetStatsResponse);
+
+  // Keşfet review (issue #210, ADR-0033). The review covers metadata only:
+  // name, description, city and district. Approval never reaches users as
+  // "approved" or "trusted".
+
+  // ListDiscoverQueue lists the tayfas waiting for a Keşfet decision:
+  // PENDING applications and DROPPED tayfas, oldest first, at most 200.
+  // Metadata and counts only.
+  rpc ListDiscoverQueue(ListDiscoverQueueRequest) returns (ListDiscoverQueueResponse);
+  // ApproveDiscover approves a PENDING or DROPPED tayfa for Keşfet. It is
+  // listed while its admins keep Keşfet on and the listing rules hold.
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_TAYFA_STATE_CONFLICT
+  // (no application, or already approved or rejected),
+  // ERROR_REASON_REASON_REQUIRED, ERROR_REASON_REAUTHENTICATION_REQUIRED.
+  rpc ApproveDiscover(ApproveDiscoverRequest) returns (ApproveDiscoverResponse);
+  // RejectDiscover declines an application or takes an approved or dropped
+  // tayfa out of Keşfet.
+  //
+  // Errors: as ApproveDiscover (STATE_CONFLICT: no application, or already
+  // rejected).
+  rpc RejectDiscover(RejectDiscoverRequest) returns (RejectDiscoverResponse);
 }
 
 message AdminTayfaSummary {
@@ -293,3 +315,65 @@ message JobRun {
   // The last run that succeeded; unset if none did.
   google.protobuf.Timestamp last_success_time = 5;
 }
+
+// DiscoverReviewStatus is tayfa_discover.status.
+enum DiscoverReviewStatus {
+  DISCOVER_REVIEW_STATUS_UNSPECIFIED = 0;
+  DISCOVER_REVIEW_STATUS_PENDING = 1;
+  DISCOVER_REVIEW_STATUS_APPROVED = 2;
+  DISCOVER_REVIEW_STATUS_REJECTED = 3;
+  // Taken out automatically until reviewed (drop_reason says why).
+  DISCOVER_REVIEW_STATUS_DROPPED = 4;
+}
+
+// DiscoverDropReason is why a tayfa was taken out of Keşfet.
+enum DiscoverDropReason {
+  DISCOVER_DROP_REASON_UNSPECIFIED = 0;
+  // A member who came from Keşfet filed a report in the tayfa.
+  DISCOVER_DROP_REASON_MEMBER_REPORT = 1;
+  // An attendee answered SERIOUS to "Was everything all right?".
+  DISCOVER_DROP_REASON_NEGATIVE_FEEDBACK = 2;
+}
+
+// DiscoverQueueEntry is a tayfa waiting for a Keşfet decision.
+message DiscoverQueueEntry {
+  string tayfa_id = 1;
+  string name = 2;
+  string description = 3;
+  string city = 4;
+  string district = 5;
+  google.protobuf.Timestamp create_time = 6;
+  int32 member_count = 7;
+  // Active members who came from Keşfet.
+  int32 discover_member_count = 8;
+  int32 open_platform_reports = 9;
+  // NOT_OK and SERIOUS answers in the last 90 days; never who gave them.
+  int32 not_ok_feedback_count = 10;
+  int32 serious_feedback_count = 11;
+  DiscoverReviewStatus status = 12;
+  DiscoverDropReason drop_reason = 13;
+  google.protobuf.Timestamp request_time = 14;
+  google.protobuf.Timestamp status_change_time = 15;
+  // The admins' wish (tayfas.visibility = listed).
+  bool enabled = 16;
+}
+
+message ListDiscoverQueueRequest {}
+
+message ListDiscoverQueueResponse {
+  repeated DiscoverQueueEntry entries = 1;
+}
+
+message ApproveDiscoverRequest {
+  string tayfa_id = 1;
+  string reason = 2;
+}
+
+message ApproveDiscoverResponse {}
+
+message RejectDiscoverRequest {
+  string tayfa_id = 1;
+  string reason = 2;
+}
+
+message RejectDiscoverResponse {}

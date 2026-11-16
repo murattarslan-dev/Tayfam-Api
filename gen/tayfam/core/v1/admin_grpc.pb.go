@@ -31,6 +31,9 @@ const (
 	AdminService_GetReportedItem_FullMethodName     = "/tayfam.core.v1.AdminService/GetReportedItem"
 	AdminService_DecideReport_FullMethodName        = "/tayfam.core.v1.AdminService/DecideReport"
 	AdminService_GetStats_FullMethodName            = "/tayfam.core.v1.AdminService/GetStats"
+	AdminService_ListDiscoverQueue_FullMethodName   = "/tayfam.core.v1.AdminService/ListDiscoverQueue"
+	AdminService_ApproveDiscover_FullMethodName     = "/tayfam.core.v1.AdminService/ApproveDiscover"
+	AdminService_RejectDiscover_FullMethodName      = "/tayfam.core.v1.AdminService/RejectDiscover"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -95,6 +98,23 @@ type AdminServiceClient interface {
 	// GetStats returns the panel dashboard's tayfa counts and the last run of
 	// each background job (issue #110). Counts and times only.
 	GetStats(ctx context.Context, in *GetStatsRequest, opts ...grpc.CallOption) (*GetStatsResponse, error)
+	// ListDiscoverQueue lists the tayfas waiting for a Keşfet decision:
+	// PENDING applications and DROPPED tayfas, oldest first, at most 200.
+	// Metadata and counts only.
+	ListDiscoverQueue(ctx context.Context, in *ListDiscoverQueueRequest, opts ...grpc.CallOption) (*ListDiscoverQueueResponse, error)
+	// ApproveDiscover approves a PENDING or DROPPED tayfa for Keşfet. It is
+	// listed while its admins keep Keşfet on and the listing rules hold.
+	//
+	// Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_TAYFA_STATE_CONFLICT
+	// (no application, or already approved or rejected),
+	// ERROR_REASON_REASON_REQUIRED, ERROR_REASON_REAUTHENTICATION_REQUIRED.
+	ApproveDiscover(ctx context.Context, in *ApproveDiscoverRequest, opts ...grpc.CallOption) (*ApproveDiscoverResponse, error)
+	// RejectDiscover declines an application or takes an approved or dropped
+	// tayfa out of Keşfet.
+	//
+	// Errors: as ApproveDiscover (STATE_CONFLICT: no application, or already
+	// rejected).
+	RejectDiscover(ctx context.Context, in *RejectDiscoverRequest, opts ...grpc.CallOption) (*RejectDiscoverResponse, error)
 }
 
 type adminServiceClient struct {
@@ -225,6 +245,36 @@ func (c *adminServiceClient) GetStats(ctx context.Context, in *GetStatsRequest, 
 	return out, nil
 }
 
+func (c *adminServiceClient) ListDiscoverQueue(ctx context.Context, in *ListDiscoverQueueRequest, opts ...grpc.CallOption) (*ListDiscoverQueueResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListDiscoverQueueResponse)
+	err := c.cc.Invoke(ctx, AdminService_ListDiscoverQueue_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) ApproveDiscover(ctx context.Context, in *ApproveDiscoverRequest, opts ...grpc.CallOption) (*ApproveDiscoverResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApproveDiscoverResponse)
+	err := c.cc.Invoke(ctx, AdminService_ApproveDiscover_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) RejectDiscover(ctx context.Context, in *RejectDiscoverRequest, opts ...grpc.CallOption) (*RejectDiscoverResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RejectDiscoverResponse)
+	err := c.cc.Invoke(ctx, AdminService_RejectDiscover_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations must embed UnimplementedAdminServiceServer
 // for forward compatibility.
@@ -287,6 +337,23 @@ type AdminServiceServer interface {
 	// GetStats returns the panel dashboard's tayfa counts and the last run of
 	// each background job (issue #110). Counts and times only.
 	GetStats(context.Context, *GetStatsRequest) (*GetStatsResponse, error)
+	// ListDiscoverQueue lists the tayfas waiting for a Keşfet decision:
+	// PENDING applications and DROPPED tayfas, oldest first, at most 200.
+	// Metadata and counts only.
+	ListDiscoverQueue(context.Context, *ListDiscoverQueueRequest) (*ListDiscoverQueueResponse, error)
+	// ApproveDiscover approves a PENDING or DROPPED tayfa for Keşfet. It is
+	// listed while its admins keep Keşfet on and the listing rules hold.
+	//
+	// Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_TAYFA_STATE_CONFLICT
+	// (no application, or already approved or rejected),
+	// ERROR_REASON_REASON_REQUIRED, ERROR_REASON_REAUTHENTICATION_REQUIRED.
+	ApproveDiscover(context.Context, *ApproveDiscoverRequest) (*ApproveDiscoverResponse, error)
+	// RejectDiscover declines an application or takes an approved or dropped
+	// tayfa out of Keşfet.
+	//
+	// Errors: as ApproveDiscover (STATE_CONFLICT: no application, or already
+	// rejected).
+	RejectDiscover(context.Context, *RejectDiscoverRequest) (*RejectDiscoverResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -332,6 +399,15 @@ func (UnimplementedAdminServiceServer) DecideReport(context.Context, *DecideRepo
 }
 func (UnimplementedAdminServiceServer) GetStats(context.Context, *GetStatsRequest) (*GetStatsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetStats not implemented")
+}
+func (UnimplementedAdminServiceServer) ListDiscoverQueue(context.Context, *ListDiscoverQueueRequest) (*ListDiscoverQueueResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListDiscoverQueue not implemented")
+}
+func (UnimplementedAdminServiceServer) ApproveDiscover(context.Context, *ApproveDiscoverRequest) (*ApproveDiscoverResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ApproveDiscover not implemented")
+}
+func (UnimplementedAdminServiceServer) RejectDiscover(context.Context, *RejectDiscoverRequest) (*RejectDiscoverResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RejectDiscover not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 func (UnimplementedAdminServiceServer) testEmbeddedByValue()                      {}
@@ -570,6 +646,60 @@ func _AdminService_GetStats_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_ListDiscoverQueue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListDiscoverQueueRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ListDiscoverQueue(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ListDiscoverQueue_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ListDiscoverQueue(ctx, req.(*ListDiscoverQueueRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_ApproveDiscover_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApproveDiscoverRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ApproveDiscover(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ApproveDiscover_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ApproveDiscover(ctx, req.(*ApproveDiscoverRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_RejectDiscover_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RejectDiscoverRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).RejectDiscover(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_RejectDiscover_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).RejectDiscover(ctx, req.(*RejectDiscoverRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -624,6 +754,18 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetStats",
 			Handler:    _AdminService_GetStats_Handler,
+		},
+		{
+			MethodName: "ListDiscoverQueue",
+			Handler:    _AdminService_ListDiscoverQueue_Handler,
+		},
+		{
+			MethodName: "ApproveDiscover",
+			Handler:    _AdminService_ApproveDiscover_Handler,
+		},
+		{
+			MethodName: "RejectDiscover",
+			Handler:    _AdminService_RejectDiscover_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

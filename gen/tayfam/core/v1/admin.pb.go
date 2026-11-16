@@ -87,6 +87,115 @@ func (PlatformDecision) EnumDescriptor() ([]byte, []int) {
 	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{0}
 }
 
+// DiscoverReviewStatus is tayfa_discover.status.
+type DiscoverReviewStatus int32
+
+const (
+	DiscoverReviewStatus_DISCOVER_REVIEW_STATUS_UNSPECIFIED DiscoverReviewStatus = 0
+	DiscoverReviewStatus_DISCOVER_REVIEW_STATUS_PENDING     DiscoverReviewStatus = 1
+	DiscoverReviewStatus_DISCOVER_REVIEW_STATUS_APPROVED    DiscoverReviewStatus = 2
+	DiscoverReviewStatus_DISCOVER_REVIEW_STATUS_REJECTED    DiscoverReviewStatus = 3
+	// Taken out automatically until reviewed (drop_reason says why).
+	DiscoverReviewStatus_DISCOVER_REVIEW_STATUS_DROPPED DiscoverReviewStatus = 4
+)
+
+// Enum value maps for DiscoverReviewStatus.
+var (
+	DiscoverReviewStatus_name = map[int32]string{
+		0: "DISCOVER_REVIEW_STATUS_UNSPECIFIED",
+		1: "DISCOVER_REVIEW_STATUS_PENDING",
+		2: "DISCOVER_REVIEW_STATUS_APPROVED",
+		3: "DISCOVER_REVIEW_STATUS_REJECTED",
+		4: "DISCOVER_REVIEW_STATUS_DROPPED",
+	}
+	DiscoverReviewStatus_value = map[string]int32{
+		"DISCOVER_REVIEW_STATUS_UNSPECIFIED": 0,
+		"DISCOVER_REVIEW_STATUS_PENDING":     1,
+		"DISCOVER_REVIEW_STATUS_APPROVED":    2,
+		"DISCOVER_REVIEW_STATUS_REJECTED":    3,
+		"DISCOVER_REVIEW_STATUS_DROPPED":     4,
+	}
+)
+
+func (x DiscoverReviewStatus) Enum() *DiscoverReviewStatus {
+	p := new(DiscoverReviewStatus)
+	*p = x
+	return p
+}
+
+func (x DiscoverReviewStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DiscoverReviewStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_tayfam_core_v1_admin_proto_enumTypes[1].Descriptor()
+}
+
+func (DiscoverReviewStatus) Type() protoreflect.EnumType {
+	return &file_tayfam_core_v1_admin_proto_enumTypes[1]
+}
+
+func (x DiscoverReviewStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DiscoverReviewStatus.Descriptor instead.
+func (DiscoverReviewStatus) EnumDescriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{1}
+}
+
+// DiscoverDropReason is why a tayfa was taken out of Keşfet.
+type DiscoverDropReason int32
+
+const (
+	DiscoverDropReason_DISCOVER_DROP_REASON_UNSPECIFIED DiscoverDropReason = 0
+	// A member who came from Keşfet filed a report in the tayfa.
+	DiscoverDropReason_DISCOVER_DROP_REASON_MEMBER_REPORT DiscoverDropReason = 1
+	// An attendee answered SERIOUS to "Was everything all right?".
+	DiscoverDropReason_DISCOVER_DROP_REASON_NEGATIVE_FEEDBACK DiscoverDropReason = 2
+)
+
+// Enum value maps for DiscoverDropReason.
+var (
+	DiscoverDropReason_name = map[int32]string{
+		0: "DISCOVER_DROP_REASON_UNSPECIFIED",
+		1: "DISCOVER_DROP_REASON_MEMBER_REPORT",
+		2: "DISCOVER_DROP_REASON_NEGATIVE_FEEDBACK",
+	}
+	DiscoverDropReason_value = map[string]int32{
+		"DISCOVER_DROP_REASON_UNSPECIFIED":       0,
+		"DISCOVER_DROP_REASON_MEMBER_REPORT":     1,
+		"DISCOVER_DROP_REASON_NEGATIVE_FEEDBACK": 2,
+	}
+)
+
+func (x DiscoverDropReason) Enum() *DiscoverDropReason {
+	p := new(DiscoverDropReason)
+	*p = x
+	return p
+}
+
+func (x DiscoverDropReason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DiscoverDropReason) Descriptor() protoreflect.EnumDescriptor {
+	return file_tayfam_core_v1_admin_proto_enumTypes[2].Descriptor()
+}
+
+func (DiscoverDropReason) Type() protoreflect.EnumType {
+	return &file_tayfam_core_v1_admin_proto_enumTypes[2]
+}
+
+func (x DiscoverDropReason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DiscoverDropReason.Descriptor instead.
+func (DiscoverDropReason) EnumDescriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{2}
+}
+
 type AdminTayfaSummary struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	TayfaId     string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
@@ -1829,6 +1938,430 @@ func (x *JobRun) GetLastSuccessTime() *timestamppb.Timestamp {
 	return nil
 }
 
+// DiscoverQueueEntry is a tayfa waiting for a Keşfet decision.
+type DiscoverQueueEntry struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	TayfaId     string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	Name        string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	City        string                 `protobuf:"bytes,4,opt,name=city,proto3" json:"city,omitempty"`
+	District    string                 `protobuf:"bytes,5,opt,name=district,proto3" json:"district,omitempty"`
+	CreateTime  *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	MemberCount int32                  `protobuf:"varint,7,opt,name=member_count,json=memberCount,proto3" json:"member_count,omitempty"`
+	// Active members who came from Keşfet.
+	DiscoverMemberCount int32 `protobuf:"varint,8,opt,name=discover_member_count,json=discoverMemberCount,proto3" json:"discover_member_count,omitempty"`
+	OpenPlatformReports int32 `protobuf:"varint,9,opt,name=open_platform_reports,json=openPlatformReports,proto3" json:"open_platform_reports,omitempty"`
+	// NOT_OK and SERIOUS answers in the last 90 days; never who gave them.
+	NotOkFeedbackCount   int32                  `protobuf:"varint,10,opt,name=not_ok_feedback_count,json=notOkFeedbackCount,proto3" json:"not_ok_feedback_count,omitempty"`
+	SeriousFeedbackCount int32                  `protobuf:"varint,11,opt,name=serious_feedback_count,json=seriousFeedbackCount,proto3" json:"serious_feedback_count,omitempty"`
+	Status               DiscoverReviewStatus   `protobuf:"varint,12,opt,name=status,proto3,enum=tayfam.core.v1.DiscoverReviewStatus" json:"status,omitempty"`
+	DropReason           DiscoverDropReason     `protobuf:"varint,13,opt,name=drop_reason,json=dropReason,proto3,enum=tayfam.core.v1.DiscoverDropReason" json:"drop_reason,omitempty"`
+	RequestTime          *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=request_time,json=requestTime,proto3" json:"request_time,omitempty"`
+	StatusChangeTime     *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=status_change_time,json=statusChangeTime,proto3" json:"status_change_time,omitempty"`
+	// The admins' wish (tayfas.visibility = listed).
+	Enabled       bool `protobuf:"varint,16,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiscoverQueueEntry) Reset() {
+	*x = DiscoverQueueEntry{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiscoverQueueEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiscoverQueueEntry) ProtoMessage() {}
+
+func (x *DiscoverQueueEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiscoverQueueEntry.ProtoReflect.Descriptor instead.
+func (*DiscoverQueueEntry) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *DiscoverQueueEntry) GetTayfaId() string {
+	if x != nil {
+		return x.TayfaId
+	}
+	return ""
+}
+
+func (x *DiscoverQueueEntry) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DiscoverQueueEntry) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *DiscoverQueueEntry) GetCity() string {
+	if x != nil {
+		return x.City
+	}
+	return ""
+}
+
+func (x *DiscoverQueueEntry) GetDistrict() string {
+	if x != nil {
+		return x.District
+	}
+	return ""
+}
+
+func (x *DiscoverQueueEntry) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *DiscoverQueueEntry) GetMemberCount() int32 {
+	if x != nil {
+		return x.MemberCount
+	}
+	return 0
+}
+
+func (x *DiscoverQueueEntry) GetDiscoverMemberCount() int32 {
+	if x != nil {
+		return x.DiscoverMemberCount
+	}
+	return 0
+}
+
+func (x *DiscoverQueueEntry) GetOpenPlatformReports() int32 {
+	if x != nil {
+		return x.OpenPlatformReports
+	}
+	return 0
+}
+
+func (x *DiscoverQueueEntry) GetNotOkFeedbackCount() int32 {
+	if x != nil {
+		return x.NotOkFeedbackCount
+	}
+	return 0
+}
+
+func (x *DiscoverQueueEntry) GetSeriousFeedbackCount() int32 {
+	if x != nil {
+		return x.SeriousFeedbackCount
+	}
+	return 0
+}
+
+func (x *DiscoverQueueEntry) GetStatus() DiscoverReviewStatus {
+	if x != nil {
+		return x.Status
+	}
+	return DiscoverReviewStatus_DISCOVER_REVIEW_STATUS_UNSPECIFIED
+}
+
+func (x *DiscoverQueueEntry) GetDropReason() DiscoverDropReason {
+	if x != nil {
+		return x.DropReason
+	}
+	return DiscoverDropReason_DISCOVER_DROP_REASON_UNSPECIFIED
+}
+
+func (x *DiscoverQueueEntry) GetRequestTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RequestTime
+	}
+	return nil
+}
+
+func (x *DiscoverQueueEntry) GetStatusChangeTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StatusChangeTime
+	}
+	return nil
+}
+
+func (x *DiscoverQueueEntry) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+type ListDiscoverQueueRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDiscoverQueueRequest) Reset() {
+	*x = ListDiscoverQueueRequest{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDiscoverQueueRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDiscoverQueueRequest) ProtoMessage() {}
+
+func (x *ListDiscoverQueueRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDiscoverQueueRequest.ProtoReflect.Descriptor instead.
+func (*ListDiscoverQueueRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{30}
+}
+
+type ListDiscoverQueueResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entries       []*DiscoverQueueEntry  `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDiscoverQueueResponse) Reset() {
+	*x = ListDiscoverQueueResponse{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDiscoverQueueResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDiscoverQueueResponse) ProtoMessage() {}
+
+func (x *ListDiscoverQueueResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDiscoverQueueResponse.ProtoReflect.Descriptor instead.
+func (*ListDiscoverQueueResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *ListDiscoverQueueResponse) GetEntries() []*DiscoverQueueEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+type ApproveDiscoverRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TayfaId       string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApproveDiscoverRequest) Reset() {
+	*x = ApproveDiscoverRequest{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApproveDiscoverRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApproveDiscoverRequest) ProtoMessage() {}
+
+func (x *ApproveDiscoverRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApproveDiscoverRequest.ProtoReflect.Descriptor instead.
+func (*ApproveDiscoverRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *ApproveDiscoverRequest) GetTayfaId() string {
+	if x != nil {
+		return x.TayfaId
+	}
+	return ""
+}
+
+func (x *ApproveDiscoverRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type ApproveDiscoverResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApproveDiscoverResponse) Reset() {
+	*x = ApproveDiscoverResponse{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApproveDiscoverResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApproveDiscoverResponse) ProtoMessage() {}
+
+func (x *ApproveDiscoverResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApproveDiscoverResponse.ProtoReflect.Descriptor instead.
+func (*ApproveDiscoverResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{33}
+}
+
+type RejectDiscoverRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TayfaId       string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RejectDiscoverRequest) Reset() {
+	*x = RejectDiscoverRequest{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RejectDiscoverRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RejectDiscoverRequest) ProtoMessage() {}
+
+func (x *RejectDiscoverRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RejectDiscoverRequest.ProtoReflect.Descriptor instead.
+func (*RejectDiscoverRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *RejectDiscoverRequest) GetTayfaId() string {
+	if x != nil {
+		return x.TayfaId
+	}
+	return ""
+}
+
+func (x *RejectDiscoverRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type RejectDiscoverResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RejectDiscoverResponse) Reset() {
+	*x = RejectDiscoverResponse{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RejectDiscoverResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RejectDiscoverResponse) ProtoMessage() {}
+
+func (x *RejectDiscoverResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RejectDiscoverResponse.ProtoReflect.Descriptor instead.
+func (*RejectDiscoverResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{35}
+}
+
 type ListUserTayfasResponse_Entry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tayfa         *AdminTayfaSummary     `protobuf:"bytes,1,opt,name=tayfa,proto3" json:"tayfa,omitempty"`
@@ -1839,7 +2372,7 @@ type ListUserTayfasResponse_Entry struct {
 
 func (x *ListUserTayfasResponse_Entry) Reset() {
 	*x = ListUserTayfasResponse_Entry{}
-	mi := &file_tayfam_core_v1_admin_proto_msgTypes[29]
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1851,7 +2384,7 @@ func (x *ListUserTayfasResponse_Entry) String() string {
 func (*ListUserTayfasResponse_Entry) ProtoMessage() {}
 
 func (x *ListUserTayfasResponse_Entry) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_admin_proto_msgTypes[29]
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2012,14 +2545,55 @@ const file_tayfam_core_v1_admin_proto_rawDesc = "" +
 	"finishTime\x12\x1c\n" +
 	"\tsucceeded\x18\x03 \x01(\bR\tsucceeded\x12\x18\n" +
 	"\achanged\x18\x04 \x01(\x03R\achanged\x12F\n" +
-	"\x11last_success_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x0flastSuccessTime*\xe5\x01\n" +
+	"\x11last_success_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x0flastSuccessTime\"\xec\x05\n" +
+	"\x12DiscoverQueueEntry\x12\x19\n" +
+	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x12\n" +
+	"\x04city\x18\x04 \x01(\tR\x04city\x12\x1a\n" +
+	"\bdistrict\x18\x05 \x01(\tR\bdistrict\x12;\n" +
+	"\vcreate_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12!\n" +
+	"\fmember_count\x18\a \x01(\x05R\vmemberCount\x122\n" +
+	"\x15discover_member_count\x18\b \x01(\x05R\x13discoverMemberCount\x122\n" +
+	"\x15open_platform_reports\x18\t \x01(\x05R\x13openPlatformReports\x121\n" +
+	"\x15not_ok_feedback_count\x18\n" +
+	" \x01(\x05R\x12notOkFeedbackCount\x124\n" +
+	"\x16serious_feedback_count\x18\v \x01(\x05R\x14seriousFeedbackCount\x12<\n" +
+	"\x06status\x18\f \x01(\x0e2$.tayfam.core.v1.DiscoverReviewStatusR\x06status\x12C\n" +
+	"\vdrop_reason\x18\r \x01(\x0e2\".tayfam.core.v1.DiscoverDropReasonR\n" +
+	"dropReason\x12=\n" +
+	"\frequest_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\vrequestTime\x12H\n" +
+	"\x12status_change_time\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\x10statusChangeTime\x12\x18\n" +
+	"\aenabled\x18\x10 \x01(\bR\aenabled\"\x1a\n" +
+	"\x18ListDiscoverQueueRequest\"Y\n" +
+	"\x19ListDiscoverQueueResponse\x12<\n" +
+	"\aentries\x18\x01 \x03(\v2\".tayfam.core.v1.DiscoverQueueEntryR\aentries\"K\n" +
+	"\x16ApproveDiscoverRequest\x12\x19\n" +
+	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x19\n" +
+	"\x17ApproveDiscoverResponse\"J\n" +
+	"\x15RejectDiscoverRequest\x12\x19\n" +
+	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x18\n" +
+	"\x16RejectDiscoverResponse*\xe5\x01\n" +
 	"\x10PlatformDecision\x12!\n" +
 	"\x1dPLATFORM_DECISION_UNSPECIFIED\x10\x00\x12%\n" +
 	"!PLATFORM_DECISION_CONTENT_REMOVED\x10\x01\x12\x1c\n" +
 	"\x18PLATFORM_DECISION_WARNED\x10\x02\x12%\n" +
 	"!PLATFORM_DECISION_TAYFA_SUSPENDED\x10\x03\x12!\n" +
 	"\x1dPLATFORM_DECISION_USER_BANNED\x10\x04\x12\x1f\n" +
-	"\x1bPLATFORM_DECISION_DISMISSED\x10\x052\xa0\t\n" +
+	"\x1bPLATFORM_DECISION_DISMISSED\x10\x05*\xd0\x01\n" +
+	"\x14DiscoverReviewStatus\x12&\n" +
+	"\"DISCOVER_REVIEW_STATUS_UNSPECIFIED\x10\x00\x12\"\n" +
+	"\x1eDISCOVER_REVIEW_STATUS_PENDING\x10\x01\x12#\n" +
+	"\x1fDISCOVER_REVIEW_STATUS_APPROVED\x10\x02\x12#\n" +
+	"\x1fDISCOVER_REVIEW_STATUS_REJECTED\x10\x03\x12\"\n" +
+	"\x1eDISCOVER_REVIEW_STATUS_DROPPED\x10\x04*\x8e\x01\n" +
+	"\x12DiscoverDropReason\x12$\n" +
+	" DISCOVER_DROP_REASON_UNSPECIFIED\x10\x00\x12&\n" +
+	"\"DISCOVER_DROP_REASON_MEMBER_REPORT\x10\x01\x12*\n" +
+	"&DISCOVER_DROP_REASON_NEGATIVE_FEEDBACK\x10\x022\xcf\v\n" +
 	"\fAdminService\x12Y\n" +
 	"\fSearchTayfas\x12#.tayfam.core.v1.SearchTayfasRequest\x1a$.tayfam.core.v1.SearchTayfasResponse\x12e\n" +
 	"\bGetTayfa\x12+.tayfam.core.v1.AdminServiceGetTayfaRequest\x1a,.tayfam.core.v1.AdminServiceGetTayfaResponse\x12e\n" +
@@ -2032,7 +2606,10 @@ const file_tayfam_core_v1_admin_proto_rawDesc = "" +
 	"\x13ListPlatformReports\x12*.tayfam.core.v1.ListPlatformReportsRequest\x1a+.tayfam.core.v1.ListPlatformReportsResponse\x12b\n" +
 	"\x0fGetReportedItem\x12&.tayfam.core.v1.GetReportedItemRequest\x1a'.tayfam.core.v1.GetReportedItemResponse\x12Y\n" +
 	"\fDecideReport\x12#.tayfam.core.v1.DecideReportRequest\x1a$.tayfam.core.v1.DecideReportResponse\x12M\n" +
-	"\bGetStats\x12\x1f.tayfam.core.v1.GetStatsRequest\x1a .tayfam.core.v1.GetStatsResponseB\xbc\x01\n" +
+	"\bGetStats\x12\x1f.tayfam.core.v1.GetStatsRequest\x1a .tayfam.core.v1.GetStatsResponse\x12h\n" +
+	"\x11ListDiscoverQueue\x12(.tayfam.core.v1.ListDiscoverQueueRequest\x1a).tayfam.core.v1.ListDiscoverQueueResponse\x12b\n" +
+	"\x0fApproveDiscover\x12&.tayfam.core.v1.ApproveDiscoverRequest\x1a'.tayfam.core.v1.ApproveDiscoverResponse\x12_\n" +
+	"\x0eRejectDiscover\x12%.tayfam.core.v1.RejectDiscoverRequest\x1a&.tayfam.core.v1.RejectDiscoverResponseB\xbc\x01\n" +
 	"\x12com.tayfam.core.v1B\n" +
 	"AdminProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
@@ -2048,113 +2625,134 @@ func file_tayfam_core_v1_admin_proto_rawDescGZIP() []byte {
 	return file_tayfam_core_v1_admin_proto_rawDescData
 }
 
-var file_tayfam_core_v1_admin_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_tayfam_core_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_tayfam_core_v1_admin_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_tayfam_core_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
 var file_tayfam_core_v1_admin_proto_goTypes = []any{
 	(PlatformDecision)(0),                   // 0: tayfam.core.v1.PlatformDecision
-	(*AdminTayfaSummary)(nil),               // 1: tayfam.core.v1.AdminTayfaSummary
-	(*SearchTayfasRequest)(nil),             // 2: tayfam.core.v1.SearchTayfasRequest
-	(*SearchTayfasResponse)(nil),            // 3: tayfam.core.v1.SearchTayfasResponse
-	(*AdminServiceGetTayfaRequest)(nil),     // 4: tayfam.core.v1.AdminServiceGetTayfaRequest
-	(*AdminMember)(nil),                     // 5: tayfam.core.v1.AdminMember
-	(*AdminServiceGetTayfaResponse)(nil),    // 6: tayfam.core.v1.AdminServiceGetTayfaResponse
-	(*ListTayfaMembersRequest)(nil),         // 7: tayfam.core.v1.ListTayfaMembersRequest
-	(*ListTayfaMembersResponse)(nil),        // 8: tayfam.core.v1.ListTayfaMembersResponse
-	(*ListUserTayfasRequest)(nil),           // 9: tayfam.core.v1.ListUserTayfasRequest
-	(*ListUserTayfasResponse)(nil),          // 10: tayfam.core.v1.ListUserTayfasResponse
-	(*SuspendTayfaRequest)(nil),             // 11: tayfam.core.v1.SuspendTayfaRequest
-	(*SuspendTayfaResponse)(nil),            // 12: tayfam.core.v1.SuspendTayfaResponse
-	(*UnsuspendTayfaRequest)(nil),           // 13: tayfam.core.v1.UnsuspendTayfaRequest
-	(*UnsuspendTayfaResponse)(nil),          // 14: tayfam.core.v1.UnsuspendTayfaResponse
-	(*AdminServiceDeleteTayfaRequest)(nil),  // 15: tayfam.core.v1.AdminServiceDeleteTayfaRequest
-	(*AdminServiceDeleteTayfaResponse)(nil), // 16: tayfam.core.v1.AdminServiceDeleteTayfaResponse
-	(*SetMemberRoleRequest)(nil),            // 17: tayfam.core.v1.SetMemberRoleRequest
-	(*SetMemberRoleResponse)(nil),           // 18: tayfam.core.v1.SetMemberRoleResponse
-	(*ListPlatformReportsRequest)(nil),      // 19: tayfam.core.v1.ListPlatformReportsRequest
-	(*PlatformReport)(nil),                  // 20: tayfam.core.v1.PlatformReport
-	(*ListPlatformReportsResponse)(nil),     // 21: tayfam.core.v1.ListPlatformReportsResponse
-	(*GetReportedItemRequest)(nil),          // 22: tayfam.core.v1.GetReportedItemRequest
-	(*ReportedItem)(nil),                    // 23: tayfam.core.v1.ReportedItem
-	(*GetReportedItemResponse)(nil),         // 24: tayfam.core.v1.GetReportedItemResponse
-	(*DecideReportRequest)(nil),             // 25: tayfam.core.v1.DecideReportRequest
-	(*DecideReportResponse)(nil),            // 26: tayfam.core.v1.DecideReportResponse
-	(*GetStatsRequest)(nil),                 // 27: tayfam.core.v1.GetStatsRequest
-	(*GetStatsResponse)(nil),                // 28: tayfam.core.v1.GetStatsResponse
-	(*JobRun)(nil),                          // 29: tayfam.core.v1.JobRun
-	(*ListUserTayfasResponse_Entry)(nil),    // 30: tayfam.core.v1.ListUserTayfasResponse.Entry
-	(TayfaStatus)(0),                        // 31: tayfam.core.v1.TayfaStatus
-	(*timestamppb.Timestamp)(nil),           // 32: google.protobuf.Timestamp
-	(Role)(0),                               // 33: tayfam.core.v1.Role
-	(MembershipStatus)(0),                   // 34: tayfam.core.v1.MembershipStatus
-	(ReportReason)(0),                       // 35: tayfam.core.v1.ReportReason
-	(ReportTargetType)(0),                   // 36: tayfam.core.v1.ReportTargetType
-	(ReportPriority)(0),                     // 37: tayfam.core.v1.ReportPriority
+	(DiscoverReviewStatus)(0),               // 1: tayfam.core.v1.DiscoverReviewStatus
+	(DiscoverDropReason)(0),                 // 2: tayfam.core.v1.DiscoverDropReason
+	(*AdminTayfaSummary)(nil),               // 3: tayfam.core.v1.AdminTayfaSummary
+	(*SearchTayfasRequest)(nil),             // 4: tayfam.core.v1.SearchTayfasRequest
+	(*SearchTayfasResponse)(nil),            // 5: tayfam.core.v1.SearchTayfasResponse
+	(*AdminServiceGetTayfaRequest)(nil),     // 6: tayfam.core.v1.AdminServiceGetTayfaRequest
+	(*AdminMember)(nil),                     // 7: tayfam.core.v1.AdminMember
+	(*AdminServiceGetTayfaResponse)(nil),    // 8: tayfam.core.v1.AdminServiceGetTayfaResponse
+	(*ListTayfaMembersRequest)(nil),         // 9: tayfam.core.v1.ListTayfaMembersRequest
+	(*ListTayfaMembersResponse)(nil),        // 10: tayfam.core.v1.ListTayfaMembersResponse
+	(*ListUserTayfasRequest)(nil),           // 11: tayfam.core.v1.ListUserTayfasRequest
+	(*ListUserTayfasResponse)(nil),          // 12: tayfam.core.v1.ListUserTayfasResponse
+	(*SuspendTayfaRequest)(nil),             // 13: tayfam.core.v1.SuspendTayfaRequest
+	(*SuspendTayfaResponse)(nil),            // 14: tayfam.core.v1.SuspendTayfaResponse
+	(*UnsuspendTayfaRequest)(nil),           // 15: tayfam.core.v1.UnsuspendTayfaRequest
+	(*UnsuspendTayfaResponse)(nil),          // 16: tayfam.core.v1.UnsuspendTayfaResponse
+	(*AdminServiceDeleteTayfaRequest)(nil),  // 17: tayfam.core.v1.AdminServiceDeleteTayfaRequest
+	(*AdminServiceDeleteTayfaResponse)(nil), // 18: tayfam.core.v1.AdminServiceDeleteTayfaResponse
+	(*SetMemberRoleRequest)(nil),            // 19: tayfam.core.v1.SetMemberRoleRequest
+	(*SetMemberRoleResponse)(nil),           // 20: tayfam.core.v1.SetMemberRoleResponse
+	(*ListPlatformReportsRequest)(nil),      // 21: tayfam.core.v1.ListPlatformReportsRequest
+	(*PlatformReport)(nil),                  // 22: tayfam.core.v1.PlatformReport
+	(*ListPlatformReportsResponse)(nil),     // 23: tayfam.core.v1.ListPlatformReportsResponse
+	(*GetReportedItemRequest)(nil),          // 24: tayfam.core.v1.GetReportedItemRequest
+	(*ReportedItem)(nil),                    // 25: tayfam.core.v1.ReportedItem
+	(*GetReportedItemResponse)(nil),         // 26: tayfam.core.v1.GetReportedItemResponse
+	(*DecideReportRequest)(nil),             // 27: tayfam.core.v1.DecideReportRequest
+	(*DecideReportResponse)(nil),            // 28: tayfam.core.v1.DecideReportResponse
+	(*GetStatsRequest)(nil),                 // 29: tayfam.core.v1.GetStatsRequest
+	(*GetStatsResponse)(nil),                // 30: tayfam.core.v1.GetStatsResponse
+	(*JobRun)(nil),                          // 31: tayfam.core.v1.JobRun
+	(*DiscoverQueueEntry)(nil),              // 32: tayfam.core.v1.DiscoverQueueEntry
+	(*ListDiscoverQueueRequest)(nil),        // 33: tayfam.core.v1.ListDiscoverQueueRequest
+	(*ListDiscoverQueueResponse)(nil),       // 34: tayfam.core.v1.ListDiscoverQueueResponse
+	(*ApproveDiscoverRequest)(nil),          // 35: tayfam.core.v1.ApproveDiscoverRequest
+	(*ApproveDiscoverResponse)(nil),         // 36: tayfam.core.v1.ApproveDiscoverResponse
+	(*RejectDiscoverRequest)(nil),           // 37: tayfam.core.v1.RejectDiscoverRequest
+	(*RejectDiscoverResponse)(nil),          // 38: tayfam.core.v1.RejectDiscoverResponse
+	(*ListUserTayfasResponse_Entry)(nil),    // 39: tayfam.core.v1.ListUserTayfasResponse.Entry
+	(TayfaStatus)(0),                        // 40: tayfam.core.v1.TayfaStatus
+	(*timestamppb.Timestamp)(nil),           // 41: google.protobuf.Timestamp
+	(Role)(0),                               // 42: tayfam.core.v1.Role
+	(MembershipStatus)(0),                   // 43: tayfam.core.v1.MembershipStatus
+	(ReportReason)(0),                       // 44: tayfam.core.v1.ReportReason
+	(ReportTargetType)(0),                   // 45: tayfam.core.v1.ReportTargetType
+	(ReportPriority)(0),                     // 46: tayfam.core.v1.ReportPriority
 }
 var file_tayfam_core_v1_admin_proto_depIdxs = []int32{
-	31, // 0: tayfam.core.v1.AdminTayfaSummary.status:type_name -> tayfam.core.v1.TayfaStatus
-	32, // 1: tayfam.core.v1.AdminTayfaSummary.create_time:type_name -> google.protobuf.Timestamp
-	32, // 2: tayfam.core.v1.AdminTayfaSummary.suspend_time:type_name -> google.protobuf.Timestamp
-	32, // 3: tayfam.core.v1.AdminTayfaSummary.delete_time:type_name -> google.protobuf.Timestamp
-	32, // 4: tayfam.core.v1.AdminTayfaSummary.deletion_scheduled_time:type_name -> google.protobuf.Timestamp
-	1,  // 5: tayfam.core.v1.SearchTayfasResponse.tayfas:type_name -> tayfam.core.v1.AdminTayfaSummary
-	33, // 6: tayfam.core.v1.AdminMember.role:type_name -> tayfam.core.v1.Role
-	34, // 7: tayfam.core.v1.AdminMember.status:type_name -> tayfam.core.v1.MembershipStatus
-	32, // 8: tayfam.core.v1.AdminMember.join_time:type_name -> google.protobuf.Timestamp
-	35, // 9: tayfam.core.v1.AdminMember.ban_reason:type_name -> tayfam.core.v1.ReportReason
-	1,  // 10: tayfam.core.v1.AdminServiceGetTayfaResponse.tayfa:type_name -> tayfam.core.v1.AdminTayfaSummary
-	5,  // 11: tayfam.core.v1.AdminServiceGetTayfaResponse.staff:type_name -> tayfam.core.v1.AdminMember
-	5,  // 12: tayfam.core.v1.ListTayfaMembersResponse.members:type_name -> tayfam.core.v1.AdminMember
-	30, // 13: tayfam.core.v1.ListUserTayfasResponse.tayfas:type_name -> tayfam.core.v1.ListUserTayfasResponse.Entry
-	33, // 14: tayfam.core.v1.SetMemberRoleRequest.role:type_name -> tayfam.core.v1.Role
-	36, // 15: tayfam.core.v1.PlatformReport.target_type:type_name -> tayfam.core.v1.ReportTargetType
-	35, // 16: tayfam.core.v1.PlatformReport.reason:type_name -> tayfam.core.v1.ReportReason
-	37, // 17: tayfam.core.v1.PlatformReport.priority:type_name -> tayfam.core.v1.ReportPriority
-	32, // 18: tayfam.core.v1.PlatformReport.create_time:type_name -> google.protobuf.Timestamp
-	32, // 19: tayfam.core.v1.PlatformReport.escalate_time:type_name -> google.protobuf.Timestamp
+	40, // 0: tayfam.core.v1.AdminTayfaSummary.status:type_name -> tayfam.core.v1.TayfaStatus
+	41, // 1: tayfam.core.v1.AdminTayfaSummary.create_time:type_name -> google.protobuf.Timestamp
+	41, // 2: tayfam.core.v1.AdminTayfaSummary.suspend_time:type_name -> google.protobuf.Timestamp
+	41, // 3: tayfam.core.v1.AdminTayfaSummary.delete_time:type_name -> google.protobuf.Timestamp
+	41, // 4: tayfam.core.v1.AdminTayfaSummary.deletion_scheduled_time:type_name -> google.protobuf.Timestamp
+	3,  // 5: tayfam.core.v1.SearchTayfasResponse.tayfas:type_name -> tayfam.core.v1.AdminTayfaSummary
+	42, // 6: tayfam.core.v1.AdminMember.role:type_name -> tayfam.core.v1.Role
+	43, // 7: tayfam.core.v1.AdminMember.status:type_name -> tayfam.core.v1.MembershipStatus
+	41, // 8: tayfam.core.v1.AdminMember.join_time:type_name -> google.protobuf.Timestamp
+	44, // 9: tayfam.core.v1.AdminMember.ban_reason:type_name -> tayfam.core.v1.ReportReason
+	3,  // 10: tayfam.core.v1.AdminServiceGetTayfaResponse.tayfa:type_name -> tayfam.core.v1.AdminTayfaSummary
+	7,  // 11: tayfam.core.v1.AdminServiceGetTayfaResponse.staff:type_name -> tayfam.core.v1.AdminMember
+	7,  // 12: tayfam.core.v1.ListTayfaMembersResponse.members:type_name -> tayfam.core.v1.AdminMember
+	39, // 13: tayfam.core.v1.ListUserTayfasResponse.tayfas:type_name -> tayfam.core.v1.ListUserTayfasResponse.Entry
+	42, // 14: tayfam.core.v1.SetMemberRoleRequest.role:type_name -> tayfam.core.v1.Role
+	45, // 15: tayfam.core.v1.PlatformReport.target_type:type_name -> tayfam.core.v1.ReportTargetType
+	44, // 16: tayfam.core.v1.PlatformReport.reason:type_name -> tayfam.core.v1.ReportReason
+	46, // 17: tayfam.core.v1.PlatformReport.priority:type_name -> tayfam.core.v1.ReportPriority
+	41, // 18: tayfam.core.v1.PlatformReport.create_time:type_name -> google.protobuf.Timestamp
+	41, // 19: tayfam.core.v1.PlatformReport.escalate_time:type_name -> google.protobuf.Timestamp
 	0,  // 20: tayfam.core.v1.PlatformReport.decision:type_name -> tayfam.core.v1.PlatformDecision
-	32, // 21: tayfam.core.v1.PlatformReport.decide_time:type_name -> google.protobuf.Timestamp
-	20, // 22: tayfam.core.v1.ListPlatformReportsResponse.reports:type_name -> tayfam.core.v1.PlatformReport
-	36, // 23: tayfam.core.v1.ReportedItem.target_type:type_name -> tayfam.core.v1.ReportTargetType
-	32, // 24: tayfam.core.v1.ReportedItem.create_time:type_name -> google.protobuf.Timestamp
-	32, // 25: tayfam.core.v1.ReportedItem.delete_time:type_name -> google.protobuf.Timestamp
-	32, // 26: tayfam.core.v1.ReportedItem.media_expire_time:type_name -> google.protobuf.Timestamp
-	20, // 27: tayfam.core.v1.GetReportedItemResponse.report:type_name -> tayfam.core.v1.PlatformReport
-	23, // 28: tayfam.core.v1.GetReportedItemResponse.item:type_name -> tayfam.core.v1.ReportedItem
+	41, // 21: tayfam.core.v1.PlatformReport.decide_time:type_name -> google.protobuf.Timestamp
+	22, // 22: tayfam.core.v1.ListPlatformReportsResponse.reports:type_name -> tayfam.core.v1.PlatformReport
+	45, // 23: tayfam.core.v1.ReportedItem.target_type:type_name -> tayfam.core.v1.ReportTargetType
+	41, // 24: tayfam.core.v1.ReportedItem.create_time:type_name -> google.protobuf.Timestamp
+	41, // 25: tayfam.core.v1.ReportedItem.delete_time:type_name -> google.protobuf.Timestamp
+	41, // 26: tayfam.core.v1.ReportedItem.media_expire_time:type_name -> google.protobuf.Timestamp
+	22, // 27: tayfam.core.v1.GetReportedItemResponse.report:type_name -> tayfam.core.v1.PlatformReport
+	25, // 28: tayfam.core.v1.GetReportedItemResponse.item:type_name -> tayfam.core.v1.ReportedItem
 	0,  // 29: tayfam.core.v1.DecideReportRequest.decision:type_name -> tayfam.core.v1.PlatformDecision
-	29, // 30: tayfam.core.v1.GetStatsResponse.job_runs:type_name -> tayfam.core.v1.JobRun
-	32, // 31: tayfam.core.v1.JobRun.finish_time:type_name -> google.protobuf.Timestamp
-	32, // 32: tayfam.core.v1.JobRun.last_success_time:type_name -> google.protobuf.Timestamp
-	1,  // 33: tayfam.core.v1.ListUserTayfasResponse.Entry.tayfa:type_name -> tayfam.core.v1.AdminTayfaSummary
-	33, // 34: tayfam.core.v1.ListUserTayfasResponse.Entry.role:type_name -> tayfam.core.v1.Role
-	2,  // 35: tayfam.core.v1.AdminService.SearchTayfas:input_type -> tayfam.core.v1.SearchTayfasRequest
-	4,  // 36: tayfam.core.v1.AdminService.GetTayfa:input_type -> tayfam.core.v1.AdminServiceGetTayfaRequest
-	7,  // 37: tayfam.core.v1.AdminService.ListTayfaMembers:input_type -> tayfam.core.v1.ListTayfaMembersRequest
-	9,  // 38: tayfam.core.v1.AdminService.ListUserTayfas:input_type -> tayfam.core.v1.ListUserTayfasRequest
-	11, // 39: tayfam.core.v1.AdminService.SuspendTayfa:input_type -> tayfam.core.v1.SuspendTayfaRequest
-	13, // 40: tayfam.core.v1.AdminService.UnsuspendTayfa:input_type -> tayfam.core.v1.UnsuspendTayfaRequest
-	15, // 41: tayfam.core.v1.AdminService.DeleteTayfa:input_type -> tayfam.core.v1.AdminServiceDeleteTayfaRequest
-	17, // 42: tayfam.core.v1.AdminService.SetMemberRole:input_type -> tayfam.core.v1.SetMemberRoleRequest
-	19, // 43: tayfam.core.v1.AdminService.ListPlatformReports:input_type -> tayfam.core.v1.ListPlatformReportsRequest
-	22, // 44: tayfam.core.v1.AdminService.GetReportedItem:input_type -> tayfam.core.v1.GetReportedItemRequest
-	25, // 45: tayfam.core.v1.AdminService.DecideReport:input_type -> tayfam.core.v1.DecideReportRequest
-	27, // 46: tayfam.core.v1.AdminService.GetStats:input_type -> tayfam.core.v1.GetStatsRequest
-	3,  // 47: tayfam.core.v1.AdminService.SearchTayfas:output_type -> tayfam.core.v1.SearchTayfasResponse
-	6,  // 48: tayfam.core.v1.AdminService.GetTayfa:output_type -> tayfam.core.v1.AdminServiceGetTayfaResponse
-	8,  // 49: tayfam.core.v1.AdminService.ListTayfaMembers:output_type -> tayfam.core.v1.ListTayfaMembersResponse
-	10, // 50: tayfam.core.v1.AdminService.ListUserTayfas:output_type -> tayfam.core.v1.ListUserTayfasResponse
-	12, // 51: tayfam.core.v1.AdminService.SuspendTayfa:output_type -> tayfam.core.v1.SuspendTayfaResponse
-	14, // 52: tayfam.core.v1.AdminService.UnsuspendTayfa:output_type -> tayfam.core.v1.UnsuspendTayfaResponse
-	16, // 53: tayfam.core.v1.AdminService.DeleteTayfa:output_type -> tayfam.core.v1.AdminServiceDeleteTayfaResponse
-	18, // 54: tayfam.core.v1.AdminService.SetMemberRole:output_type -> tayfam.core.v1.SetMemberRoleResponse
-	21, // 55: tayfam.core.v1.AdminService.ListPlatformReports:output_type -> tayfam.core.v1.ListPlatformReportsResponse
-	24, // 56: tayfam.core.v1.AdminService.GetReportedItem:output_type -> tayfam.core.v1.GetReportedItemResponse
-	26, // 57: tayfam.core.v1.AdminService.DecideReport:output_type -> tayfam.core.v1.DecideReportResponse
-	28, // 58: tayfam.core.v1.AdminService.GetStats:output_type -> tayfam.core.v1.GetStatsResponse
-	47, // [47:59] is the sub-list for method output_type
-	35, // [35:47] is the sub-list for method input_type
-	35, // [35:35] is the sub-list for extension type_name
-	35, // [35:35] is the sub-list for extension extendee
-	0,  // [0:35] is the sub-list for field type_name
+	31, // 30: tayfam.core.v1.GetStatsResponse.job_runs:type_name -> tayfam.core.v1.JobRun
+	41, // 31: tayfam.core.v1.JobRun.finish_time:type_name -> google.protobuf.Timestamp
+	41, // 32: tayfam.core.v1.JobRun.last_success_time:type_name -> google.protobuf.Timestamp
+	41, // 33: tayfam.core.v1.DiscoverQueueEntry.create_time:type_name -> google.protobuf.Timestamp
+	1,  // 34: tayfam.core.v1.DiscoverQueueEntry.status:type_name -> tayfam.core.v1.DiscoverReviewStatus
+	2,  // 35: tayfam.core.v1.DiscoverQueueEntry.drop_reason:type_name -> tayfam.core.v1.DiscoverDropReason
+	41, // 36: tayfam.core.v1.DiscoverQueueEntry.request_time:type_name -> google.protobuf.Timestamp
+	41, // 37: tayfam.core.v1.DiscoverQueueEntry.status_change_time:type_name -> google.protobuf.Timestamp
+	32, // 38: tayfam.core.v1.ListDiscoverQueueResponse.entries:type_name -> tayfam.core.v1.DiscoverQueueEntry
+	3,  // 39: tayfam.core.v1.ListUserTayfasResponse.Entry.tayfa:type_name -> tayfam.core.v1.AdminTayfaSummary
+	42, // 40: tayfam.core.v1.ListUserTayfasResponse.Entry.role:type_name -> tayfam.core.v1.Role
+	4,  // 41: tayfam.core.v1.AdminService.SearchTayfas:input_type -> tayfam.core.v1.SearchTayfasRequest
+	6,  // 42: tayfam.core.v1.AdminService.GetTayfa:input_type -> tayfam.core.v1.AdminServiceGetTayfaRequest
+	9,  // 43: tayfam.core.v1.AdminService.ListTayfaMembers:input_type -> tayfam.core.v1.ListTayfaMembersRequest
+	11, // 44: tayfam.core.v1.AdminService.ListUserTayfas:input_type -> tayfam.core.v1.ListUserTayfasRequest
+	13, // 45: tayfam.core.v1.AdminService.SuspendTayfa:input_type -> tayfam.core.v1.SuspendTayfaRequest
+	15, // 46: tayfam.core.v1.AdminService.UnsuspendTayfa:input_type -> tayfam.core.v1.UnsuspendTayfaRequest
+	17, // 47: tayfam.core.v1.AdminService.DeleteTayfa:input_type -> tayfam.core.v1.AdminServiceDeleteTayfaRequest
+	19, // 48: tayfam.core.v1.AdminService.SetMemberRole:input_type -> tayfam.core.v1.SetMemberRoleRequest
+	21, // 49: tayfam.core.v1.AdminService.ListPlatformReports:input_type -> tayfam.core.v1.ListPlatformReportsRequest
+	24, // 50: tayfam.core.v1.AdminService.GetReportedItem:input_type -> tayfam.core.v1.GetReportedItemRequest
+	27, // 51: tayfam.core.v1.AdminService.DecideReport:input_type -> tayfam.core.v1.DecideReportRequest
+	29, // 52: tayfam.core.v1.AdminService.GetStats:input_type -> tayfam.core.v1.GetStatsRequest
+	33, // 53: tayfam.core.v1.AdminService.ListDiscoverQueue:input_type -> tayfam.core.v1.ListDiscoverQueueRequest
+	35, // 54: tayfam.core.v1.AdminService.ApproveDiscover:input_type -> tayfam.core.v1.ApproveDiscoverRequest
+	37, // 55: tayfam.core.v1.AdminService.RejectDiscover:input_type -> tayfam.core.v1.RejectDiscoverRequest
+	5,  // 56: tayfam.core.v1.AdminService.SearchTayfas:output_type -> tayfam.core.v1.SearchTayfasResponse
+	8,  // 57: tayfam.core.v1.AdminService.GetTayfa:output_type -> tayfam.core.v1.AdminServiceGetTayfaResponse
+	10, // 58: tayfam.core.v1.AdminService.ListTayfaMembers:output_type -> tayfam.core.v1.ListTayfaMembersResponse
+	12, // 59: tayfam.core.v1.AdminService.ListUserTayfas:output_type -> tayfam.core.v1.ListUserTayfasResponse
+	14, // 60: tayfam.core.v1.AdminService.SuspendTayfa:output_type -> tayfam.core.v1.SuspendTayfaResponse
+	16, // 61: tayfam.core.v1.AdminService.UnsuspendTayfa:output_type -> tayfam.core.v1.UnsuspendTayfaResponse
+	18, // 62: tayfam.core.v1.AdminService.DeleteTayfa:output_type -> tayfam.core.v1.AdminServiceDeleteTayfaResponse
+	20, // 63: tayfam.core.v1.AdminService.SetMemberRole:output_type -> tayfam.core.v1.SetMemberRoleResponse
+	23, // 64: tayfam.core.v1.AdminService.ListPlatformReports:output_type -> tayfam.core.v1.ListPlatformReportsResponse
+	26, // 65: tayfam.core.v1.AdminService.GetReportedItem:output_type -> tayfam.core.v1.GetReportedItemResponse
+	28, // 66: tayfam.core.v1.AdminService.DecideReport:output_type -> tayfam.core.v1.DecideReportResponse
+	30, // 67: tayfam.core.v1.AdminService.GetStats:output_type -> tayfam.core.v1.GetStatsResponse
+	34, // 68: tayfam.core.v1.AdminService.ListDiscoverQueue:output_type -> tayfam.core.v1.ListDiscoverQueueResponse
+	36, // 69: tayfam.core.v1.AdminService.ApproveDiscover:output_type -> tayfam.core.v1.ApproveDiscoverResponse
+	38, // 70: tayfam.core.v1.AdminService.RejectDiscover:output_type -> tayfam.core.v1.RejectDiscoverResponse
+	56, // [56:71] is the sub-list for method output_type
+	41, // [41:56] is the sub-list for method input_type
+	41, // [41:41] is the sub-list for extension type_name
+	41, // [41:41] is the sub-list for extension extendee
+	0,  // [0:41] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_admin_proto_init() }
@@ -2170,8 +2768,8 @@ func file_tayfam_core_v1_admin_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_admin_proto_rawDesc), len(file_tayfam_core_v1_admin_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   30,
+			NumEnums:      3,
+			NumMessages:   37,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

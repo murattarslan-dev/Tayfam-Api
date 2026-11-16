@@ -634,7 +634,8 @@ type NotificationRequested struct {
 	// Users chosen by core, never the actor (UUIDs, 1–200; a large audience
 	// comes as several events): active members for tayfa notifications, the
 	// one person concerned for FRIEND_REQUEST, FRIEND_ACCEPTED,
-	// FRIEND_SUGGESTION and TAYFA_INVITATION.
+	// FRIEND_SUGGESTION, TAYFA_INVITATION and SAFETY_ALERT (the chosen
+	// safety contact).
 	RecipientIds []string `protobuf:"bytes,4,rep,name=recipient_ids,json=recipientIds,proto3" json:"recipient_ids,omitempty"`
 	// ANSWER_RECEIVED: the answered question.
 	QuestionId string `protobuf:"bytes,5,opt,name=question_id,json=questionId,proto3" json:"question_id,omitempty"`

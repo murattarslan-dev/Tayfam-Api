@@ -66,6 +66,10 @@ enum CoreExportSection {
   CORE_EXPORT_SECTION_SOCIAL_SETTINGS = 20;
   // Friend suggestions made to the caller, dismissed ones included.
   CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS = 21;
+  // One record: the caller's "Was everything all right?" answers and the
+  // safety contacts they chose (issue #210, ADR-0033). Being someone
+  // else's safety contact is that person's data and is not exported.
+  CORE_EXPORT_SECTION_DISCOVER = 23;
 }
 
 message ExportMyDataRequest {}

@@ -283,6 +283,10 @@ message Membership {
   // caller is the member themself or a moderator or admin of the tayfa;
   // other members never see who is muted.
   google.protobuf.Timestamp mute_expire_time = 6;
+  // The user asked to join from Keşfet (joined_via = discover; ADR-0033).
+  // Filled only when the caller is a moderator or admin of the tayfa;
+  // other members never see where someone came from.
+  bool joined_via_discover = 7;
 }
 
 // PendingMember is a join request as moderators see it.
