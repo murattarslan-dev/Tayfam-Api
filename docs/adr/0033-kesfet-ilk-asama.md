@@ -251,7 +251,7 @@ Mevcut panel uçları ve sayfaları altında ("Keşfet" sekmesi):
   Etkinlik başlamadan iptal ya da silindiyse ve kişi check-in yapmadıysa
   gitmez; check-in yaptıysa yine gider (kişi dışarıda olabilir). Check-in
   alarmı durdurmaz: varmak dönmek değildir.
-- **Bildirim:** yeni `safety_alert` türü (chat migration `00019`): tayfasız,
+- **Bildirim:** yeni `safety_alert` türü (chat migration `00018`): tayfasız,
   aktörsüz, hedef `user` = katılımcı. **İçerik ve konum taşımaz.** Push
   gider ve susturma uygulanmaz (yürüyüş alarmı gibi).
 - **Güvenlik kişisinin gördüğü** (`ListSafetyShares`): kendisini seçen

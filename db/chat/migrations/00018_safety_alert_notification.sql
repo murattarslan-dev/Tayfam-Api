@@ -7,10 +7,6 @@
 -- trigger'ı (enqueue_push, 00016) değişmez: yalnızca friend_suggestion'ı
 -- atlar.
 --
--- Numara: 00017 #214'te (sohbet ekleri); 00018 #209'a (anlık etkinlik)
--- bırakıldı. Mimari oturumunun dağıtımında chat numarası verilmediği için
--- seçildi; çakışırsa birleştirmede yeniden numaralanır.
---
 -- Geri alma planı: Down bu türdeki bildirimleri siler ve kısıtı 00016'daki
 -- haline döndürür.
 
