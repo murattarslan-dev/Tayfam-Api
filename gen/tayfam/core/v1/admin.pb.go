@@ -1360,9 +1360,15 @@ type ReportedItem struct {
 	Options    []string               `protobuf:"bytes,6,rep,name=options,proto3" json:"options,omitempty"`
 	CreateTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	// Set if the item is already deleted.
-	DeleteTime    *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=delete_time,json=deleteTime,proto3" json:"delete_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	DeleteTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=delete_time,json=deleteTime,proto3" json:"delete_time,omitempty"`
+	// Only for a reported album photo (REPORT_TARGET_TYPE_EVENT_PHOTO,
+	// ADR-0028): a GET link to the image valid for 5 minutes, issued with
+	// every read of the report and recorded in the platform audit log. Empty
+	// without object storage or once the file is gone. Never logged.
+	MediaUrl        string                 `protobuf:"bytes,9,opt,name=media_url,json=mediaUrl,proto3" json:"media_url,omitempty"`
+	MediaExpireTime *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=media_expire_time,json=mediaExpireTime,proto3" json:"media_expire_time,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ReportedItem) Reset() {
@@ -1447,6 +1453,20 @@ func (x *ReportedItem) GetCreateTime() *timestamppb.Timestamp {
 func (x *ReportedItem) GetDeleteTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.DeleteTime
+	}
+	return nil
+}
+
+func (x *ReportedItem) GetMediaUrl() string {
+	if x != nil {
+		return x.MediaUrl
+	}
+	return ""
+}
+
+func (x *ReportedItem) GetMediaExpireTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.MediaExpireTime
 	}
 	return nil
 }
@@ -1954,7 +1974,7 @@ const file_tayfam_core_v1_admin_proto_rawDesc = "" +
 	"\x1bListPlatformReportsResponse\x128\n" +
 	"\areports\x18\x01 \x03(\v2\x1e.tayfam.core.v1.PlatformReportR\areports\"5\n" +
 	"\x16GetReportedItemRequest\x12\x1b\n" +
-	"\treport_id\x18\x01 \x01(\tR\breportId\"\xc9\x02\n" +
+	"\treport_id\x18\x01 \x01(\tR\breportId\"\xae\x03\n" +
 	"\fReportedItem\x12A\n" +
 	"\vtarget_type\x18\x01 \x01(\x0e2 .tayfam.core.v1.ReportTargetTypeR\n" +
 	"targetType\x12\x1b\n" +
@@ -1966,7 +1986,10 @@ const file_tayfam_core_v1_admin_proto_rawDesc = "" +
 	"\vcreate_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12;\n" +
 	"\vdelete_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"deleteTime\"\x83\x01\n" +
+	"deleteTime\x12\x1b\n" +
+	"\tmedia_url\x18\t \x01(\tR\bmediaUrl\x12F\n" +
+	"\x11media_expire_time\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\x0fmediaExpireTime\"\x83\x01\n" +
 	"\x17GetReportedItemResponse\x126\n" +
 	"\x06report\x18\x01 \x01(\v2\x1e.tayfam.core.v1.PlatformReportR\x06report\x120\n" +
 	"\x04item\x18\x02 \x01(\v2\x1c.tayfam.core.v1.ReportedItemR\x04item\"\x88\x01\n" +
@@ -2094,43 +2117,44 @@ var file_tayfam_core_v1_admin_proto_depIdxs = []int32{
 	36, // 23: tayfam.core.v1.ReportedItem.target_type:type_name -> tayfam.core.v1.ReportTargetType
 	32, // 24: tayfam.core.v1.ReportedItem.create_time:type_name -> google.protobuf.Timestamp
 	32, // 25: tayfam.core.v1.ReportedItem.delete_time:type_name -> google.protobuf.Timestamp
-	20, // 26: tayfam.core.v1.GetReportedItemResponse.report:type_name -> tayfam.core.v1.PlatformReport
-	23, // 27: tayfam.core.v1.GetReportedItemResponse.item:type_name -> tayfam.core.v1.ReportedItem
-	0,  // 28: tayfam.core.v1.DecideReportRequest.decision:type_name -> tayfam.core.v1.PlatformDecision
-	29, // 29: tayfam.core.v1.GetStatsResponse.job_runs:type_name -> tayfam.core.v1.JobRun
-	32, // 30: tayfam.core.v1.JobRun.finish_time:type_name -> google.protobuf.Timestamp
-	32, // 31: tayfam.core.v1.JobRun.last_success_time:type_name -> google.protobuf.Timestamp
-	1,  // 32: tayfam.core.v1.ListUserTayfasResponse.Entry.tayfa:type_name -> tayfam.core.v1.AdminTayfaSummary
-	33, // 33: tayfam.core.v1.ListUserTayfasResponse.Entry.role:type_name -> tayfam.core.v1.Role
-	2,  // 34: tayfam.core.v1.AdminService.SearchTayfas:input_type -> tayfam.core.v1.SearchTayfasRequest
-	4,  // 35: tayfam.core.v1.AdminService.GetTayfa:input_type -> tayfam.core.v1.AdminServiceGetTayfaRequest
-	7,  // 36: tayfam.core.v1.AdminService.ListTayfaMembers:input_type -> tayfam.core.v1.ListTayfaMembersRequest
-	9,  // 37: tayfam.core.v1.AdminService.ListUserTayfas:input_type -> tayfam.core.v1.ListUserTayfasRequest
-	11, // 38: tayfam.core.v1.AdminService.SuspendTayfa:input_type -> tayfam.core.v1.SuspendTayfaRequest
-	13, // 39: tayfam.core.v1.AdminService.UnsuspendTayfa:input_type -> tayfam.core.v1.UnsuspendTayfaRequest
-	15, // 40: tayfam.core.v1.AdminService.DeleteTayfa:input_type -> tayfam.core.v1.AdminServiceDeleteTayfaRequest
-	17, // 41: tayfam.core.v1.AdminService.SetMemberRole:input_type -> tayfam.core.v1.SetMemberRoleRequest
-	19, // 42: tayfam.core.v1.AdminService.ListPlatformReports:input_type -> tayfam.core.v1.ListPlatformReportsRequest
-	22, // 43: tayfam.core.v1.AdminService.GetReportedItem:input_type -> tayfam.core.v1.GetReportedItemRequest
-	25, // 44: tayfam.core.v1.AdminService.DecideReport:input_type -> tayfam.core.v1.DecideReportRequest
-	27, // 45: tayfam.core.v1.AdminService.GetStats:input_type -> tayfam.core.v1.GetStatsRequest
-	3,  // 46: tayfam.core.v1.AdminService.SearchTayfas:output_type -> tayfam.core.v1.SearchTayfasResponse
-	6,  // 47: tayfam.core.v1.AdminService.GetTayfa:output_type -> tayfam.core.v1.AdminServiceGetTayfaResponse
-	8,  // 48: tayfam.core.v1.AdminService.ListTayfaMembers:output_type -> tayfam.core.v1.ListTayfaMembersResponse
-	10, // 49: tayfam.core.v1.AdminService.ListUserTayfas:output_type -> tayfam.core.v1.ListUserTayfasResponse
-	12, // 50: tayfam.core.v1.AdminService.SuspendTayfa:output_type -> tayfam.core.v1.SuspendTayfaResponse
-	14, // 51: tayfam.core.v1.AdminService.UnsuspendTayfa:output_type -> tayfam.core.v1.UnsuspendTayfaResponse
-	16, // 52: tayfam.core.v1.AdminService.DeleteTayfa:output_type -> tayfam.core.v1.AdminServiceDeleteTayfaResponse
-	18, // 53: tayfam.core.v1.AdminService.SetMemberRole:output_type -> tayfam.core.v1.SetMemberRoleResponse
-	21, // 54: tayfam.core.v1.AdminService.ListPlatformReports:output_type -> tayfam.core.v1.ListPlatformReportsResponse
-	24, // 55: tayfam.core.v1.AdminService.GetReportedItem:output_type -> tayfam.core.v1.GetReportedItemResponse
-	26, // 56: tayfam.core.v1.AdminService.DecideReport:output_type -> tayfam.core.v1.DecideReportResponse
-	28, // 57: tayfam.core.v1.AdminService.GetStats:output_type -> tayfam.core.v1.GetStatsResponse
-	46, // [46:58] is the sub-list for method output_type
-	34, // [34:46] is the sub-list for method input_type
-	34, // [34:34] is the sub-list for extension type_name
-	34, // [34:34] is the sub-list for extension extendee
-	0,  // [0:34] is the sub-list for field type_name
+	32, // 26: tayfam.core.v1.ReportedItem.media_expire_time:type_name -> google.protobuf.Timestamp
+	20, // 27: tayfam.core.v1.GetReportedItemResponse.report:type_name -> tayfam.core.v1.PlatformReport
+	23, // 28: tayfam.core.v1.GetReportedItemResponse.item:type_name -> tayfam.core.v1.ReportedItem
+	0,  // 29: tayfam.core.v1.DecideReportRequest.decision:type_name -> tayfam.core.v1.PlatformDecision
+	29, // 30: tayfam.core.v1.GetStatsResponse.job_runs:type_name -> tayfam.core.v1.JobRun
+	32, // 31: tayfam.core.v1.JobRun.finish_time:type_name -> google.protobuf.Timestamp
+	32, // 32: tayfam.core.v1.JobRun.last_success_time:type_name -> google.protobuf.Timestamp
+	1,  // 33: tayfam.core.v1.ListUserTayfasResponse.Entry.tayfa:type_name -> tayfam.core.v1.AdminTayfaSummary
+	33, // 34: tayfam.core.v1.ListUserTayfasResponse.Entry.role:type_name -> tayfam.core.v1.Role
+	2,  // 35: tayfam.core.v1.AdminService.SearchTayfas:input_type -> tayfam.core.v1.SearchTayfasRequest
+	4,  // 36: tayfam.core.v1.AdminService.GetTayfa:input_type -> tayfam.core.v1.AdminServiceGetTayfaRequest
+	7,  // 37: tayfam.core.v1.AdminService.ListTayfaMembers:input_type -> tayfam.core.v1.ListTayfaMembersRequest
+	9,  // 38: tayfam.core.v1.AdminService.ListUserTayfas:input_type -> tayfam.core.v1.ListUserTayfasRequest
+	11, // 39: tayfam.core.v1.AdminService.SuspendTayfa:input_type -> tayfam.core.v1.SuspendTayfaRequest
+	13, // 40: tayfam.core.v1.AdminService.UnsuspendTayfa:input_type -> tayfam.core.v1.UnsuspendTayfaRequest
+	15, // 41: tayfam.core.v1.AdminService.DeleteTayfa:input_type -> tayfam.core.v1.AdminServiceDeleteTayfaRequest
+	17, // 42: tayfam.core.v1.AdminService.SetMemberRole:input_type -> tayfam.core.v1.SetMemberRoleRequest
+	19, // 43: tayfam.core.v1.AdminService.ListPlatformReports:input_type -> tayfam.core.v1.ListPlatformReportsRequest
+	22, // 44: tayfam.core.v1.AdminService.GetReportedItem:input_type -> tayfam.core.v1.GetReportedItemRequest
+	25, // 45: tayfam.core.v1.AdminService.DecideReport:input_type -> tayfam.core.v1.DecideReportRequest
+	27, // 46: tayfam.core.v1.AdminService.GetStats:input_type -> tayfam.core.v1.GetStatsRequest
+	3,  // 47: tayfam.core.v1.AdminService.SearchTayfas:output_type -> tayfam.core.v1.SearchTayfasResponse
+	6,  // 48: tayfam.core.v1.AdminService.GetTayfa:output_type -> tayfam.core.v1.AdminServiceGetTayfaResponse
+	8,  // 49: tayfam.core.v1.AdminService.ListTayfaMembers:output_type -> tayfam.core.v1.ListTayfaMembersResponse
+	10, // 50: tayfam.core.v1.AdminService.ListUserTayfas:output_type -> tayfam.core.v1.ListUserTayfasResponse
+	12, // 51: tayfam.core.v1.AdminService.SuspendTayfa:output_type -> tayfam.core.v1.SuspendTayfaResponse
+	14, // 52: tayfam.core.v1.AdminService.UnsuspendTayfa:output_type -> tayfam.core.v1.UnsuspendTayfaResponse
+	16, // 53: tayfam.core.v1.AdminService.DeleteTayfa:output_type -> tayfam.core.v1.AdminServiceDeleteTayfaResponse
+	18, // 54: tayfam.core.v1.AdminService.SetMemberRole:output_type -> tayfam.core.v1.SetMemberRoleResponse
+	21, // 55: tayfam.core.v1.AdminService.ListPlatformReports:output_type -> tayfam.core.v1.ListPlatformReportsResponse
+	24, // 56: tayfam.core.v1.AdminService.GetReportedItem:output_type -> tayfam.core.v1.GetReportedItemResponse
+	26, // 57: tayfam.core.v1.AdminService.DecideReport:output_type -> tayfam.core.v1.DecideReportResponse
+	28, // 58: tayfam.core.v1.AdminService.GetStats:output_type -> tayfam.core.v1.GetStatsResponse
+	47, // [47:59] is the sub-list for method output_type
+	35, // [35:47] is the sub-list for method input_type
+	35, // [35:35] is the sub-list for extension type_name
+	35, // [35:35] is the sub-list for extension extendee
+	0,  // [0:35] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_admin_proto_init() }

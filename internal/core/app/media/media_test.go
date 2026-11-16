@@ -671,3 +671,27 @@ func TestEventPhotoVisibility(t *testing.T) {
 		t.Fatal("silinen fotoğraf yalnızca yükleyene görünmeli")
 	}
 }
+
+// ReportedPhotoURL signs only a READY album photo's full variant, for 5
+// minutes (the panel's link, ADR-0028 §5).
+func TestReportedPhotoURL(t *testing.T) {
+	e := setup(t)
+	f := clean()
+	photo := e.upload(t, e.member, PurposeEventPhoto, e.tayfa, f, 300, 200)
+	link, exp, ok, err := e.svc.ReportedPhotoURL(ctx, photo.ID)
+	must(t, err)
+	if !ok || !strings.Contains(link, "/full") || exp.After(e.clock.now().Add(ReportedPhotoLinkTTL+time.Minute)) {
+		t.Fatalf("bağlantı = %q %v %v", link, exp, ok)
+	}
+	cover := e.upload(t, e.owner, PurposeCover, e.tayfa, f, 300, 200)
+	for name, u := range map[string]id.ID{"kapak": cover.ID, "bilinmeyen": id.New()} {
+		if _, _, ok, err := e.svc.ReportedPhotoURL(ctx, u); err != nil || ok {
+			t.Errorf("%s: bağlantı verildi (%v)", name, err)
+		}
+	}
+	_, err = e.pool.Exec(ctx, `UPDATE uploads SET status = 'deleting' WHERE id = $1`, photo.ID.PG())
+	must(t, err)
+	if _, _, ok, _ := e.svc.ReportedPhotoURL(ctx, photo.ID); ok {
+		t.Fatal("silinen dosyaya bağlantı verildi")
+	}
+}

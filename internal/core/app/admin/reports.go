@@ -66,6 +66,12 @@ type Item struct {
 	Options    []string
 	CreatedAt  time.Time
 	DeletedAt  time.Time
+	// MediaURL is a short-lived GET link to a reported album photo (only
+	// for event_photo, ADR-0028 §5); MediaExpires is when it stops working.
+	MediaURL     string
+	MediaExpires time.Time
+	// upload is the reported photo's file.
+	upload id.ID
 }
 
 func reportOf(r store.AdminListPlatformReportsRow) Report {
@@ -135,7 +141,19 @@ func (s *Service) GetReportedItem(ctx context.Context, c auth.AdminClaims, repor
 		if item, err = reportedItem(ctx, q, rep); err != nil {
 			return err
 		}
-		return audit(ctx, q, cl, rep.Tayfa, "report.view_item", "report", rep.ID, viewReason, nil)
+		var extra map[string]string
+		if item != nil && item.upload != (id.ID{}) && s.cfg.Media != nil {
+			link, exp, ok, err := s.cfg.Media.ReportedPhotoURL(ctx, item.upload)
+			if err != nil {
+				return err
+			}
+			if ok {
+				// Every link to the photo is in the platform audit log.
+				item.MediaURL, item.MediaExpires = link, exp
+				extra = map[string]string{"media_link": "issued", "upload_id": item.upload.String()}
+			}
+		}
+		return audit(ctx, q, cl, rep.Tayfa, "report.view_item", "report", rep.ID, viewReason, extra)
 	})
 	if err != nil {
 		return Report{}, nil, err
@@ -194,6 +212,7 @@ func reportedItem(ctx context.Context, q *store.Queries, r Report) (*Item, error
 		var x store.AdminGetEventPhotoRow
 		x, err = q.AdminGetEventPhoto(ctx, store.AdminGetEventPhotoParams{ID: r.Target.PG(), TayfaID: tf})
 		it.Author, it.Title, it.CreatedAt, it.DeletedAt = idOf(x.UploaderID), x.Caption.String, timeOf(x.CreatedAt), timeOf(x.DeletedAt)
+		it.upload = idOf(x.UploadID)
 	default:
 		return nil, fmt.Errorf("bilinmeyen şikâyet hedefi %q", r.TargetType)
 	}
