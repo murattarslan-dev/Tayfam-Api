@@ -58,6 +58,10 @@ const (
 	// downloaded (issue #144, ADR-0021). identity asks for it with its
 	// user.data_export_ready event; no tayfa, no actor.
 	TypeDataExportReady = "data_export_ready"
+	// TypeFriendSuggestion: core suggests the target user as a friend
+	// (issue #208, ADR-0030). No tayfa, no actor; in-app only: the
+	// enqueue_push trigger opens no push job for it.
+	TypeFriendSuggestion = "friend_suggestion"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -101,7 +105,7 @@ func targetOf(typ string) (string, bool) {
 	case TypeJoinApproved, TypeTayfaDeletionRequested, TypeTayfaWarned, TypeTayfaArchived, TypeTayfaInvitation,
 		TypeTayfaSuspended, TypeTayfaUnsuspended:
 		return TargetTayfa, true
-	case TypeFriendRequest, TypeFriendAccepted:
+	case TypeFriendRequest, TypeFriendAccepted, TypeFriendSuggestion:
 		return TargetUser, true
 	case TypeDMRequest, TypeDMMessage:
 		return TargetDMConversation, true
@@ -113,7 +117,8 @@ func targetOf(typ string) (string, bool) {
 
 // withoutTayfa reports whether a notification type is not about a tayfa.
 func withoutTayfa(typ string) bool {
-	return typ == TypeFriendRequest || typ == TypeFriendAccepted || typ == TypeDataExportReady || IsDirect(typ)
+	return typ == TypeFriendRequest || typ == TypeFriendAccepted || typ == TypeFriendSuggestion ||
+		typ == TypeDataExportReady || IsDirect(typ)
 }
 
 // IsDirect reports whether a notification type is about a direct message.
@@ -168,7 +173,7 @@ func (r Request) Validate() error {
 	}
 	// The reporter is never told who handled their report; a direct
 	// message notice does not say who wrote.
-	if (r.Type == TypeReportResolved || r.Type == TypeDataExportReady || IsDirect(r.Type)) && r.Actor != (id.ID{}) {
+	if (r.Type == TypeReportResolved || r.Type == TypeDataExportReady || r.Type == TypeFriendSuggestion || IsDirect(r.Type)) && r.Actor != (id.ID{}) {
 		return apperr.Validation("actor_id")
 	}
 	if IsDirect(r.Type) != (r.Unread > 0) || r.Unread > MaxDirectUnread {

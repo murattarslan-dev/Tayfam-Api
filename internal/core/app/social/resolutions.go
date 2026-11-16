@@ -27,6 +27,8 @@ type RequestKind int
 const (
 	KindFriendRequest   RequestKind = iota + 1 // ref: the requester
 	KindTayfaInvitation                        // ref: the tayfa
+	// KindFriendSuggestion: ref: the suggested user (issue #208, ADR-0030).
+	KindFriendSuggestion
 )
 
 // Resolution is how a request stands.
@@ -52,7 +54,7 @@ func (s *Service) Resolutions(ctx context.Context, caller id.ID, refs []RequestR
 	if len(refs) == 0 || len(refs) > MaxResolutionRefs {
 		return nil, apperr.Validation("refs")
 	}
-	var requesters, tayfas []pgtype.UUID
+	var requesters, tayfas, suggested []pgtype.UUID
 	for _, r := range refs {
 		switch {
 		case r.ID == (id.ID{}):
@@ -61,6 +63,8 @@ func (s *Service) Resolutions(ctx context.Context, caller id.ID, refs []RequestR
 			requesters = append(requesters, r.ID.PG())
 		case r.Kind == KindTayfaInvitation:
 			tayfas = append(tayfas, r.ID.PG())
+		case r.Kind == KindFriendSuggestion:
+			suggested = append(suggested, r.ID.PG())
 		default:
 			return nil, apperr.Validation("refs.kind")
 		}
@@ -106,17 +110,56 @@ func (s *Service) Resolutions(ctx context.Context, caller id.ID, refs []RequestR
 			}
 		}
 	}
+	suggestion, err := s.suggestionResolutions(ctx, caller, suggested)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]Resolution, 0, len(refs))
 	for _, r := range refs {
 		m := friend
-		if r.Kind == KindTayfaInvitation {
+		switch r.Kind {
+		case KindTayfaInvitation:
 			m = invite
+		case KindFriendSuggestion:
+			m = suggestion
 		}
 		v, ok := m[r.ID]
 		if !ok {
 			v = ResolutionExpired
 		}
 		out = append(out, v)
+	}
+	return out, nil
+}
+
+// suggestionResolutions answers for friend_suggestion notifications: a
+// suggestion still shown is pending; one that became a friendship or a
+// request is accepted; one the caller dismissed is declined; anything else
+// (withdrawn, excluded by a block, report or setting, the other account
+// gone) is expired, so the client drops the notification without learning
+// why (ADR-0030 §8).
+func (s *Service) suggestionResolutions(ctx context.Context, caller id.ID, suggested []pgtype.UUID) (map[id.ID]Resolution, error) {
+	out := map[id.ID]Resolution{}
+	if len(suggested) == 0 {
+		return out, nil
+	}
+	rows, err := s.q.FriendSuggestionStates(ctx, store.FriendSuggestionStatesParams{UserID: caller.PG(), SuggestedIds: suggested})
+	if err != nil {
+		return nil, fmt.Errorf("öneri durumu: %w", err)
+	}
+	since := s.now().Add(-SuggestionListWindow)
+	for _, r := range rows {
+		u := id.ID(r.SuggestedID.Bytes)
+		switch {
+		case r.HasFriendship:
+			out[u] = ResolutionAccepted
+		case r.Source.Valid && r.Source.String == "suggested" && r.DismissedAt.Valid:
+			out[u] = ResolutionDeclined
+		case r.Allowed && !r.WithdrawnAt.Valid && !r.DismissedAt.Valid && r.CreatedAt.Valid && r.CreatedAt.Time.After(since):
+			out[u] = ResolutionPending
+		default:
+			out[u] = ResolutionExpired
+		}
 	}
 	return out, nil
 }

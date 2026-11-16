@@ -42,8 +42,11 @@ func (r *Resolutions) Resolve(ctx context.Context, refs []notification.RequestRe
 	req := &corev1.GetRequestResolutionsRequest{Refs: make([]*corev1.RequestRef, 0, len(refs))}
 	for _, x := range refs {
 		kind := corev1.RequestKind_REQUEST_KIND_FRIEND_REQUEST
-		if x.Invitation {
+		switch {
+		case x.Invitation:
 			kind = corev1.RequestKind_REQUEST_KIND_TAYFA_INVITATION
+		case x.Suggestion:
+			kind = corev1.RequestKind_REQUEST_KIND_FRIEND_SUGGESTION
 		}
 		req.Refs = append(req.Refs, &corev1.RequestRef{Kind: kind, Id: x.ID.String()})
 	}

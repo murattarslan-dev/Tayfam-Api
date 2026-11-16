@@ -62,6 +62,10 @@ const (
 	// TypeReportResolved goes to the reporter alone, always without an
 	// actor: the reporter is not told who handled the report (issue #76).
 	TypeReportResolved = "report_resolved"
+	// TypeFriendSuggestion: the friend-suggestions job suggests Target to
+	// the one recipient (issue #208, ADR-0030). No tayfa, no actor; never
+	// the score or the reason. chat sends no push for it.
+	TypeFriendSuggestion = "friend_suggestion"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -84,7 +88,7 @@ const (
 
 // WithoutTayfa reports whether a notification type is not about a tayfa.
 func WithoutTayfa(typ string) bool {
-	return typ == TypeFriendRequest || typ == TypeFriendAccepted
+	return typ == TypeFriendRequest || typ == TypeFriendAccepted || typ == TypeFriendSuggestion
 }
 
 // Request is one notification for many recipients.

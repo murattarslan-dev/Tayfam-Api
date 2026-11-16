@@ -27,8 +27,13 @@ var wantAppPrivileges = map[string]string{
 	"user_activity_records": "DELETE,INSERT,SELECT,UPDATE",
 	"fishing_catches":       "DELETE,INSERT,SELECT,UPDATE",
 	// Issue #206: a photo never moves to another event, file or uploader.
-	"event_photos":            "DELETE,INSERT,SELECT,UPDATE(deleted_at,deleted_by)",
-	"friendships":             "DELETE,INSERT,SELECT,UPDATE",
+	"event_photos": "DELETE,INSERT,SELECT,UPDATE(deleted_at,deleted_by)",
+	"friendships":  "DELETE,INSERT,SELECT,UPDATE",
+	// Issue #208, ADR-0030: scores are rewritten daily, never updated;
+	// a suggestion only gets its dismissal and withdrawal times.
+	"friend_scores":           "DELETE,INSERT,SELECT",
+	"friend_suggestions":      "DELETE,INSERT,SELECT,UPDATE(dismissed_at,withdrawn_at)",
+	"social_settings":         "DELETE,INSERT,SELECT,UPDATE(hide_from_suggestions,profiling_enabled,updated_at)",
 	"friend_request_outcomes": "DELETE,INSERT,SELECT,UPDATE(outcome,resolved_at)",
 	"invitation_outcomes":     "DELETE,INSERT,SELECT,UPDATE(outcome,resolved_at)",
 	"reports":                 "DELETE,INSERT,SELECT,UPDATE",

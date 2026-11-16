@@ -4106,6 +4106,95 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  /v1/me/friend-suggestions:
+    get:
+      operationId: listFriendSuggestions
+      summary: Size yapılan arkadaş önerileri (yalnızca size görünür)
+      description: |
+        Son 12 ayda en az 3 etkinliğe birlikte katıldığınız (check-in ile
+        doğrulanmış) ve arkadaşınız olmayan kişiler; günlük bir işle, haftada
+        en fazla bir öneri (issue #208, ADR-0030). Son 30 günün kapatılmamış
+        önerileri, yeniden eskiye, en çok 10. Arkadaş olunca ya da istek
+        gönderilince, iki taraftan biri engelleyince veya şikâyet edince,
+        önerilen kişi "Beni önerme" deyince ya da hesabını silince öneri
+        listeden düşer. 18 yaşından küçük biriyle 18 yaşından büyük biri
+        birbirine önerilmez.
+
+        **Arkadaşlık puanı, ortak etkinlik sayısı ve önerinin gerekçesi
+        hiçbir zaman dönmez.** Profillemeniz kapalıysa liste boştur. "Arkadaş
+        ekle" `POST /v1/me/friend-requests`'tir.
+      responses:
+        "200":
+          description: Öneriler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FriendSuggestionList" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/friend-suggestions/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/UserID"
+    delete:
+      operationId: dismissFriendSuggestion
+      summary: Öneriyi kapatır; ikiniz bir daha birbirinize önerilmezsiniz
+      description: Karşı tarafa bildirilmez. Böyle bir öneri yoksa da başarılıdır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Kapatıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/social-settings:
+    get:
+      operationId: getSocialSettings
+      summary: Profilleme ve "Beni önerme" ayarlarınız
+      responses:
+        "200":
+          description: Ayarlar (hiç değiştirmediyseniz varsayılanlar)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SocialSettings" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: updateSocialSettings
+      summary: Profilleme ve "Beni önerme" ayarlarını değiştirir
+      description: |
+        Gövdedeki alanlar değişir, olmayanlar olduğu gibi kalır; en az bir
+        alan gerekir (yoksa `invalid-request`).
+
+        **Profilleme** (`profiling_enabled`, varsayılan açık): kapatınca
+        arkadaşlık puanlarınız hemen silinir; size yapılmış ya da sizin
+        önerildiğiniz açık öneriler hemen geri çekilir (listelenmez,
+        bildirimi `expired` olur); öneri almazsınız ve kimseye
+        önerilmezsiniz. Yeniden açınca puan ertesi gün hesaplanır.
+
+        **Beni önerme** (`hide_from_suggestions`, varsayılan kapalı):
+        açınca kimseye önerilmezsiniz ve sizin önerildiğiniz açık öneriler
+        geri çekilir; siz öneri almaya devam edersiniz.
+
+        Ayarı kapatıp açmak haftalık öneri sınırını ve daha önce kimin
+        önerildiğini sıfırlamaz; kapattığınız öneriler de hatırlanır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SocialSettingsUpdate" }
+      responses:
+        "200":
+          description: Güncel ayarlar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SocialSettings" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /v1/me/blocks:
     get:
       operationId: listBlockedUsers
@@ -6754,8 +6843,11 @@ components:
             veri dışa aktarmanız 7 gün indirilebilir; hedef `data_export`,
             `tayfa_id` ve `actor_id` yoktur; push çeviri anahtarları
             `push_data_export_ready_title` ve `push_data_export_ready_body`).
+            `friend_suggestion` (arkadaş önerisi; `target_id` önerilen kişi,
+            `tayfa_id` ve `actor_id` yoktur; yalnızca uygulama içi, push
+            gitmez; açık öneriler `GET /v1/me/friend-suggestions`).
             Tanınmayan değer `unknown`.
-          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, tayfa_suspended, tayfa_unsuspended, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, data_export_ready, unknown]
+          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, tayfa_suspended, tayfa_unsuspended, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, data_export_ready, friend_suggestion, unknown]
         tayfa_id:
           type: string
           format: uuid
@@ -6808,6 +6900,13 @@ components:
             `expired` artık bilinmiyor. Liste alınırken core'dan hesaplanır,
             bildirime yazılmaz; yalnızca alıcıya döner, kimin geri çektiği
             söylenmez. O an hesaplanamazsa alan yoktur.
+
+            `friend_suggestion` (issue #208, ADR-0030): `pending` öneri hâlâ
+            geçerli ("Arkadaş ekle" / "Kapat" gösterilir); `accepted`
+            arkadaş oldunuz ya da istek gönderildi; `declined` siz
+            kapattınız; `expired` öneri geri çekildi ya da artık geçerli
+            değil (neden söylenmez). İstemci `pending` olmayan öneri
+            bildirimini göstermez.
           enum: [pending, accepted, declined, withdrawn, expired, unknown]
         read: { type: boolean }
         created_at: { type: string, format: date-time }
@@ -7886,6 +7985,43 @@ components:
           type: array
           items: { $ref: "#/components/schemas/Friend" }
         next_page_token: { type: string }
+    FriendSuggestion:
+      type: object
+      description: Arkadaşlık puanı, ortak etkinlik sayısı ve gerekçe bilinçli olarak yoktur (ADR-0030).
+      required: [user_id, display_name, suggested_at]
+      additionalProperties: false
+      properties:
+        user_id: { type: string, format: uuid }
+        display_name: { type: string }
+        avatar_upload_id: { type: string, format: uuid }
+        suggested_at: { type: string, format: date-time }
+    FriendSuggestionList:
+      type: object
+      required: [suggestions]
+      additionalProperties: false
+      properties:
+        suggestions:
+          type: array
+          maxItems: 10
+          items: { $ref: "#/components/schemas/FriendSuggestion" }
+    SocialSettings:
+      type: object
+      required: [profiling_enabled, hide_from_suggestions]
+      additionalProperties: false
+      properties:
+        profiling_enabled:
+          type: boolean
+          description: '"Profilleme": ortak katılımdan arkadaşlık puanı hesaplanır ve öneri yapılır.'
+        hide_from_suggestions:
+          type: boolean
+          description: '"Beni önerme": kimseye önerilmezsiniz.'
+    SocialSettingsUpdate:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        profiling_enabled: { type: boolean }
+        hide_from_suggestions: { type: boolean }
     DaySlot:
       type: string
       description: Günün kaba bir bölümü; saat değil. `all_day` başka dilimle birlikte olmaz.
