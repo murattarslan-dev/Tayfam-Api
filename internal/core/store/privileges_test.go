@@ -26,7 +26,9 @@ var wantAppPrivileges = map[string]string{
 	"event_hike_checkins":   "DELETE,INSERT,SELECT,UPDATE",
 	"user_activity_records": "DELETE,INSERT,SELECT,UPDATE",
 	"fishing_catches":       "DELETE,INSERT,SELECT,UPDATE",
-	"friendships":           "DELETE,INSERT,SELECT,UPDATE",
+	// Issue #206: a photo never moves to another event, file or uploader.
+	"event_photos": "DELETE,INSERT,SELECT,UPDATE(deleted_at,deleted_by)",
+	"friendships":  "DELETE,INSERT,SELECT,UPDATE",
 	// Issue #208, ADR-0030: scores are rewritten daily, never updated;
 	// a suggestion only gets its dismissal and withdrawal times.
 	"friend_scores":           "DELETE,INSERT,SELECT",
@@ -59,6 +61,8 @@ var wantAppPrivileges = map[string]string{
 	"job_runs":                "INSERT,SELECT,UPDATE(changed,finished_at,last_succeeded_at,succeeded)",
 	// Issue #135: the key, purpose, declared type and size never change.
 	"uploads": "DELETE,INSERT,SELECT,UPDATE(attached_at,attached_id,attached_type,expires_at,export_bytes,height,ready_at,reject_reason,status,updated_at,user_id,width)",
+	// Issue #207: user_id and day never change.
+	"user_availability": "DELETE,INSERT,SELECT,UPDATE(note,slots,updated_at)",
 }
 
 func TestAppRolePrivileges(t *testing.T) {

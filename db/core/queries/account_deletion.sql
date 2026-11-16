@@ -132,6 +132,14 @@ DELETE FROM fishing_catches WHERE user_id = @user_id;
 -- name: ClearCatchDeleter :exec
 UPDATE fishing_catches SET deleted_by = NULL WHERE deleted_by = @user_id;
 
+-- Albüm fotoğrafları kişiseldir; kişiyle birlikte silinir, dosyaları
+-- silme kuyruğuna girer (issue #206).
+-- name: DeleteUserEventPhotos :exec
+DELETE FROM event_photos WHERE uploader_id = @user_id;
+
+-- name: ClearEventPhotoDeleter :exec
+UPDATE event_photos SET deleted_by = NULL WHERE deleted_by = @user_id;
+
 -- Sorular ve cevaplar kalır, yazar "Silinmiş kullanıcı" olur (v14
 -- "İlişkiler ve Silme Davranışı").
 -- name: ClearQuestionUserFields :exec

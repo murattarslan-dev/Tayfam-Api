@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/availability"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/report"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
@@ -82,7 +83,13 @@ func (s *Service) ExpireRecords(ctx context.Context) (int, error) {
 	if err != nil {
 		return reports + audits, fmt.Errorf("davet sonuçları: %w", err)
 	}
-	return reports + audits + int(nf) + int(ni), nil //nolint:gosec // row counts
+	// "Boşum": past days go (issue #207, ADR-0029). Reads already skip
+	// them; at most 31 rows per user exist, so one statement is enough.
+	na, err := availability.DeletePast(ctx, q, s.now())
+	if err != nil {
+		return reports + audits + int(nf) + int(ni), err //nolint:gosec // row counts
+	}
+	return reports + audits + int(nf) + int(ni) + int(na), nil //nolint:gosec // row counts
 }
 
 // OutcomeRetention is how long the outcome of a friend request or an

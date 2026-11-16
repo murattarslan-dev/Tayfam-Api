@@ -51,6 +51,9 @@ COMMIT;
 INSERT INTO poll_votes (poll_id, option_id, user_id) VALUES ('%[6]s', '%[7]s', '%[2]s'), ('%[6]s', '%[8]s', '%[3]s');
 INSERT INTO friendships (user_low_id, user_high_id, status, requested_by, accepted_at) VALUES ('%[9]s', '%[10]s', 'accepted', '%[3]s', now());
 INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ('%[2]s', gen_random_uuid()), ('%[3]s', '%[2]s');
+INSERT INTO user_availability (id, user_id, day, slots, note) VALUES
+  (gen_random_uuid(), '%[2]s', (now() AT TIME ZONE 'Europe/Istanbul')::date + 1, '{morning,evening}', 'Kahve?'),
+  (gen_random_uuid(), '%[3]s', (now() AT TIME ZONE 'Europe/Istanbul')::date + 1, '{all_day}', 'onun notu');
 INSERT INTO reports (id, tayfa_id, reporter_id, target_type, target_id, reason) VALUES
   (gen_random_uuid(), '%[1]s', '%[2]s', 'announcement', '%[5]s', 'spam'),
   (gen_random_uuid(), '%[1]s', '%[3]s', 'announcement', '%[4]s', 'spam');
@@ -61,7 +64,15 @@ INSERT INTO friend_suggestions (user_id, suggested_user_id, created_at, dismisse
   ('%[2]s', gen_random_uuid(), now(), now(), 'blocked'),
   ('%[3]s', '%[2]s', now(), now(), 'suggested');
 INSERT INTO social_settings (user_id, hide_from_suggestions) VALUES ('%[3]s', true);
-`, tf, me, other, id.New(), id.New(), poll, optA, optB, low, high)
+BEGIN;
+SET LOCAL session_replication_role = replica;
+INSERT INTO events (id, tayfa_id, type, mode, title, starts_at, ends_at, online_url, created_by)
+  VALUES ('%[11]s', '%[1]s', 'general', 'online', 'Göl', now(), now() + interval '1 hour', 'https://example.test/g', '%[3]s');
+INSERT INTO event_photos (id, event_id, uploader_id, upload_id, caption, client_request_id) VALUES
+  (gen_random_uuid(), '%[11]s', '%[2]s', gen_random_uuid(), 'Benim fotoğrafım', gen_random_uuid()),
+  (gen_random_uuid(), '%[11]s', '%[3]s', gen_random_uuid(), 'Onun fotoğrafı', gen_random_uuid());
+COMMIT;
+`, tf, me, other, id.New(), id.New(), poll, optA, optB, low, high, id.New())
 	if _, err := d.Admin.Exec(ctx, sql); err != nil {
 		t.Fatalf("veri: %v", err)
 	}
@@ -118,6 +129,9 @@ func TestExportOnlyCallersData(t *testing.T) {
 	if b := got[SectionBlocks]; len(b) != 1 || b[0]["user_id"] == me.String() {
 		t.Fatalf("engellemeler yalnızca kendi engelledikleri: %v", b)
 	}
+	if a := got[SectionAvailability]; len(a) != 1 || a[0]["note"] != "Kahve?" || len(a[0]["slots"].([]any)) != 2 {
+		t.Fatalf("boş vakit yalnızca kendi günleri: %v", a)
+	}
 	if r := got[SectionReports]; len(r) != 1 {
 		t.Fatalf("şikâyetler yalnızca kendi açtıkları: %v", r)
 	}
@@ -141,6 +155,9 @@ func TestExportOnlyCallersData(t *testing.T) {
 	}
 	if sg := got[SectionFriendSuggestions]; len(sg) != 1 || sg[0]["user_id"] != other.String() || sg[0]["dismissed_at"] != nil {
 		t.Fatalf("öneriler yalnızca kendisine yapılanlar, engel kaydı değil: %v", sg)
+	}
+	if ph := got[SectionEventPhotos]; len(ph) != 1 || ph[0]["caption"] != "Benim fotoğrafım" || ph[0]["tayfa_id"] == nil || ph[0]["upload_id"] == nil {
+		t.Fatalf("albüm fotoğrafları yalnızca kendi yükledikleri: %v", ph)
 	}
 	if m := got[SectionMemberships]; len(m) != 1 || m[0]["role"] != "admin" || m[0]["tayfa_name"] != "Kamp Tayfası" {
 		t.Fatalf("üyelikler: %v", m)

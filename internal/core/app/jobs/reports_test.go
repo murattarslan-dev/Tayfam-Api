@@ -122,3 +122,37 @@ func TestExpireRecords(t *testing.T) {
 		t.Fatal("saklama işi yeni denetim kaydını silebildi")
 	}
 }
+
+// TestExpirePastAvailability (issue #207): the retention job deletes
+// "Boşum" days before today (Europe/Istanbul) and keeps today's and later
+// ones.
+func TestExpirePastAvailability(t *testing.T) {
+	e := setup(t)
+	u := id.New()
+	past, today, later := id.New(), id.New(), id.New()
+	e.exec(t, `INSERT INTO user_availability (id, user_id, day, slots) VALUES
+		($1, $4, (now() AT TIME ZONE 'Europe/Istanbul')::date, '{morning}'),
+		($2, $4, (now() AT TIME ZONE 'Europe/Istanbul')::date + 1, '{morning}'),
+		($3, $4, (now() AT TIME ZONE 'Europe/Istanbul')::date + 2, '{evening}')`,
+		past.PG(), today.PG(), later.PG(), u.PG())
+	// core_app cannot move a day; the fixture does it as the owner.
+	if _, err := e.pool.Exec(ctx, `UPDATE user_availability SET day = day - 1 WHERE id = $1`, past.PG()); err == nil {
+		t.Fatal("core_app günü değiştirdi")
+	}
+	if _, err := e.admin.Exec(ctx, `UPDATE user_availability SET day = day - 3 WHERE id = $1`, past.PG()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.admin.Exec(ctx, `UPDATE user_availability SET day = day - 1 WHERE id = $1`, today.PG()); err != nil {
+		t.Fatal(err)
+	}
+
+	run(t, "saklama", e.at(t, 0).ExpireRecords, 1)
+	for name, tc := range map[string]struct {
+		r    id.ID
+		want int
+	}{"geçmiş gün": {past, 0}, "bugün": {today, 1}, "ileri gün": {later, 1}} {
+		if n := e.count(t, `SELECT count(*) FROM user_availability WHERE id = $1`, tc.r.PG()); n != tc.want {
+			t.Errorf("%s: %d", name, n)
+		}
+	}
+}

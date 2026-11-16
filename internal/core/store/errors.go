@@ -33,8 +33,17 @@ const (
 	// upload of the right purpose attached to that content (uploads_check_ref,
 	// issue #135).
 	CodeMediaRef = "TF080"
+	// event_photos_guard (issue #206): CodePhotoLimit, the 30 per person or
+	// 500 per album limit; CodePhotoNotAttended, the uploader's attendance is
+	// not verified; CodePhotoEventClosed, the event is cancelled or deleted
+	// (or the row was written deleted).
+	CodePhotoLimit       = "TF090"
+	CodePhotoNotAttended = "TF091"
+	CodePhotoEventClosed = "TF092"
 	// CodeUniqueViolation is Postgres' unique_violation.
 	CodeUniqueViolation = "23505"
+	// CodeCheckViolation is Postgres' check_violation.
+	CodeCheckViolation = "23514"
 )
 
 // SystemJobAccountDeletion is the only system job the membership trigger

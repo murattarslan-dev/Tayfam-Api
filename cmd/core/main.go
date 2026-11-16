@@ -19,6 +19,7 @@ import (
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/admin"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/announcement"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/availability"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/channelaccess"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatdm"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatrelay"
@@ -108,6 +109,11 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
+	// "Boşum" (issue #207, ADR-0029).
+	availabilities, err := availability.New(availability.Config{Pool: pool})
+	if err != nil {
+		return err
+	}
 	profiles, err := profile.New(profile.Config{Pool: pool})
 	if err != nil {
 		return err
@@ -179,7 +185,7 @@ func setup(rt *service.Runtime) error {
 	// Platform yönetim paneli (ADR-0008, issue #104): AdminService yalnızca
 	// admin token'ını kabul eder; her çağrıda identity'ye aynı token'la
 	// yöneticilik sorulur. Diğer bütün metodlar admin token'ını reddeder.
-	admins, adminV, err := platformAdmin(rt, pool)
+	admins, adminV, err := platformAdmin(rt, pool, medias)
 	if err != nil {
 		return err
 	}
@@ -196,6 +202,7 @@ func setup(rt *service.Runtime) error {
 	corev1.RegisterQAServiceServer(srv, grpcapi.NewQAServer(questions, rt.Log))
 	corev1.RegisterPollServiceServer(srv, grpcapi.NewPollServer(polls, rt.Log))
 	corev1.RegisterSocialServiceServer(srv, grpcapi.NewSocialServer(socials, rt.Log))
+	corev1.RegisterAvailabilityServiceServer(srv, grpcapi.NewAvailabilityServer(availabilities, rt.Log))
 	corev1.RegisterProfileServiceServer(srv, grpcapi.NewProfileServer(profiles, rt.Log))
 	corev1.RegisterReportServiceServer(srv, grpcapi.NewReportServer(reports, rt.Log))
 	corev1.RegisterAdminServiceServer(srv, grpcapi.NewAdminServer(admins, rt.Log))
@@ -265,7 +272,7 @@ func mediaService(rt *service.Runtime, pool *pgxpool.Pool) (*media.Service, erro
 // both with identity: its public keys check the admin token, and a
 // connection that forwards the caller's admin token asks whether the
 // caller is still a platform administrator.
-func platformAdmin(rt *service.Runtime, pool *pgxpool.Pool) (*admin.Service, *auth.AdminVerifier, error) {
+func platformAdmin(rt *service.Runtime, pool *pgxpool.Pool, medias *media.Service) (*admin.Service, *auth.AdminVerifier, error) {
 	addr := rt.Config.Required("IDENTITY_GRPC_ADDR")
 	issuer := rt.Config.Required("AUTH_ISSUER")
 	if err := rt.Config.Err(); err != nil {
@@ -281,7 +288,9 @@ func platformAdmin(rt *service.Runtime, pool *pgxpool.Pool) (*admin.Service, *au
 	if err != nil {
 		return nil, nil, err
 	}
-	svc, err := admin.New(admin.Config{Pool: pool, Log: rt.Log, Checker: identityadmin.NewChecker(identityv1.NewAdminAuthServiceClient(conn))})
+	// medias signs the panel's short link to a reported album photo
+	// (ADR-0028 §5).
+	svc, err := admin.New(admin.Config{Pool: pool, Log: rt.Log, Checker: identityadmin.NewChecker(identityv1.NewAdminAuthServiceClient(conn)), Media: medias})
 	if err != nil {
 		return nil, nil, err
 	}

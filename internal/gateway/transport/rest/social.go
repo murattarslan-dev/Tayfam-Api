@@ -134,12 +134,15 @@ type friendJSON struct {
 	State          string     `json:"state"`
 	RequestedAt    time.Time  `json:"requested_at"`
 	AcceptedAt     *time.Time `json:"accepted_at,omitempty"`
+	// "Boşum" badge (issue #207); only in the friend list.
+	NextAvailable *availabilitySummaryJSON `json:"next_available,omitempty"`
 }
 
 func friendFrom(f *corev1.Friend) friendJSON {
 	return friendJSON{
 		UserID: f.GetUserId(), DisplayName: f.GetDisplayName(), AvatarUploadID: f.GetAvatarUploadId(),
 		State: friendStates.name(f.GetState()), RequestedAt: f.GetRequestTime().AsTime(), AcceptedAt: optTime(f.GetAcceptTime()),
+		NextAvailable: availabilitySummaryFrom(f.GetNextAvailable()),
 	}
 }
 

@@ -240,6 +240,12 @@ message ReportedItem {
   google.protobuf.Timestamp create_time = 7;
   // Set if the item is already deleted.
   google.protobuf.Timestamp delete_time = 8;
+  // Only for a reported album photo (REPORT_TARGET_TYPE_EVENT_PHOTO,
+  // ADR-0028): a GET link to the image valid for 5 minutes, issued with
+  // every read of the report and recorded in the platform audit log. Empty
+  // without object storage or once the file is gone. Never logged.
+  string media_url = 9;
+  google.protobuf.Timestamp media_expire_time = 10;
 }
 
 message GetReportedItemResponse {

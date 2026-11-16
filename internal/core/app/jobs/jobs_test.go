@@ -353,6 +353,7 @@ func (e *env) content(t *testing.T, tf id.ID, deletedAt pgtype.Timestamptz) map[
 	ids := map[string]id.ID{
 		"announcements": id.New(), "questions": id.New(), "answers": id.New(),
 		"polls": id.New(), "events": id.New(), "fishing_catches": id.New(),
+		"event_photos": id.New(),
 	}
 	author := id.New()
 	tx, err := e.pool.Begin(ctx)
@@ -389,6 +390,18 @@ func (e *env) content(t *testing.T, tf id.ID, deletedAt pgtype.Timestamptz) map[
 	ex(`INSERT INTO event_fishing (event_id) VALUES ($1)`, fe.PG())
 	ex(`INSERT INTO fishing_catches (id, event_id, user_id, species, length_cm, client_request_id, deleted_at) VALUES ($1, $2, $3, 'Levrek', 42, $4, $5)`,
 		ids["fishing_catches"].PG(), fe.PG(), author.PG(), id.New().PG(), deletedAt)
+	// An album photo of an attendee on the live event (issue #206): added
+	// live (the guard trigger), then soft deleted.
+	upload := id.New()
+	ex(`INSERT INTO event_rsvps (event_id, user_id, status, attendance, attendance_method, checked_in_at) VALUES ($1, $2, 'going', 'attended', 'location', $3)`,
+		fe.PG(), author.PG(), e.base.Add(-60*day))
+	ex(`INSERT INTO uploads (id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes,
+	    width, height, ready_at, attached_type, attached_id, attached_at, client_request_id)
+	    VALUES ($1, $2, $3, 'event_photo', 'ready', replace(gen_random_uuid()::text, '-', ''), 'image/webp', 100, 'image/jpeg', 1000,
+	    10, 10, now(), 'event_photo', $4, now(), gen_random_uuid())`, upload.PG(), author.PG(), tf.PG(), ids["event_photos"].PG())
+	ex(`INSERT INTO event_photos (id, event_id, uploader_id, upload_id, client_request_id) VALUES ($1, $2, $3, $4, $5)`,
+		ids["event_photos"].PG(), fe.PG(), author.PG(), upload.PG(), id.New().PG())
+	ex(`UPDATE event_photos SET deleted_at = $2 WHERE id = $1`, ids["event_photos"].PG(), deletedAt)
 	must(t, tx.Commit(ctx))
 	return ids
 }
@@ -402,6 +415,7 @@ var (
 		"polls":           `SELECT count(*) FROM polls WHERE id = $1`,
 		"events":          `SELECT count(*) FROM events WHERE id = $1`,
 		"fishing_catches": `SELECT count(*) FROM fishing_catches WHERE id = $1`,
+		"event_photos":    `SELECT count(*) FROM event_photos WHERE id = $1`,
 	}
 	byTayfaSQL = map[string]string{
 		"memberships":     `SELECT count(*) FROM memberships WHERE tayfa_id = $1`,
@@ -458,8 +472,11 @@ func TestPurge(t *testing.T) {
 	membersBefore := e.count(t, `SELECT count(*) FROM memberships WHERE tayfa_id = $1`, live.PG())
 	eventsBefore := e.count(t, `SELECT count(*) FROM events WHERE tayfa_id = $1`, live.PG())
 
-	// 1 tayfa + 6 content rows.
-	run(t, "kalıcı silme", e.at(t, 0).Purge, 7)
+	// 1 tayfa + 7 content rows.
+	run(t, "kalıcı silme", e.at(t, 0).Purge, 8)
+	if n := e.count(t, `SELECT count(*) FROM uploads WHERE attached_id = $1 AND status = 'deleting'`, old["event_photos"].PG()); n != 1 {
+		t.Error("kalıcı silinen albüm fotoğrafının dosyası silme kuyruğunda değil")
+	}
 
 	if n := e.count(t, `SELECT count(*) FROM tayfas WHERE id = $1`, gone.PG()); n != 0 {
 		t.Error("silinen tayfa duruyor")
@@ -509,7 +526,7 @@ func TestPurge(t *testing.T) {
 
 	run(t, "tekrar", e.at(t, 0).Purge, 0)
 	// A day later, recent's turn.
-	run(t, "ertesi gün", e.at(t, day+time.Minute).Purge, 1+6)
+	run(t, "ertesi gün", e.at(t, day+time.Minute).Purge, 1+7)
 }
 
 // ---------------------------------------------------------------------------

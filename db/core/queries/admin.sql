@@ -137,6 +137,11 @@ SELECT c.user_id, c.species, c.created_at, c.deleted_at
 FROM fishing_catches c JOIN events e ON e.id = c.event_id
 WHERE c.id = @id AND e.tayfa_id = @tayfa_id;
 
+-- name: AdminGetEventPhoto :one
+SELECT p.uploader_id, p.caption, p.created_at, p.deleted_at, p.upload_id
+FROM event_photos p JOIN events e ON e.id = p.event_id
+WHERE p.id = @id AND e.tayfa_id = @tayfa_id;
+
 -- name: AdminGetProfileName :one
 SELECT display_name FROM user_profiles WHERE user_id = @user_id AND deleted_at IS NULL;
 
@@ -161,6 +166,11 @@ UPDATE polls SET deleted_at = @at, deleted_by = @by WHERE id = @id AND tayfa_id 
 UPDATE fishing_catches c SET deleted_at = @at, deleted_by = @by
 FROM events e
 WHERE c.id = @id AND e.id = c.event_id AND e.tayfa_id = @tayfa_id AND c.deleted_at IS NULL;
+
+-- name: AdminDeleteEventPhoto :execrows
+UPDATE event_photos p SET deleted_at = @at, deleted_by = @by
+FROM events e
+WHERE p.id = @id AND e.id = p.event_id AND e.tayfa_id = @tayfa_id AND p.deleted_at IS NULL;
 
 -- Platform banı (identity'nin user.banned / user.unbanned olayları). Eski
 -- olay yenisini ezmez; aynı olay ikinci kez uygulanınca değişmez.

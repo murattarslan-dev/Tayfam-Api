@@ -29,6 +29,7 @@ type Querier interface {
 	AdminDeleteAnswer(ctx context.Context, arg AdminDeleteAnswerParams) (int64, error)
 	AdminDeleteCatch(ctx context.Context, arg AdminDeleteCatchParams) (int64, error)
 	AdminDeleteEvent(ctx context.Context, arg AdminDeleteEventParams) (int64, error)
+	AdminDeleteEventPhoto(ctx context.Context, arg AdminDeleteEventPhotoParams) (int64, error)
 	AdminDeletePoll(ctx context.Context, arg AdminDeletePollParams) (int64, error)
 	AdminDeleteQuestion(ctx context.Context, arg AdminDeleteQuestionParams) (int64, error)
 	// 72 saat beklemeden soft delete; 30 gün sonra mevcut iş kalıcı siler.
@@ -38,6 +39,7 @@ type Querier interface {
 	AdminGetAnswer(ctx context.Context, arg AdminGetAnswerParams) (AdminGetAnswerRow, error)
 	AdminGetCatch(ctx context.Context, arg AdminGetCatchParams) (AdminGetCatchRow, error)
 	AdminGetEvent(ctx context.Context, arg AdminGetEventParams) (AdminGetEventRow, error)
+	AdminGetEventPhoto(ctx context.Context, arg AdminGetEventPhotoParams) (AdminGetEventPhotoRow, error)
 	AdminGetPlatformReport(ctx context.Context, id pgtype.UUID) (AdminGetPlatformReportRow, error)
 	AdminGetPoll(ctx context.Context, arg AdminGetPollParams) (AdminGetPollRow, error)
 	AdminGetPollOptions(ctx context.Context, pollID pgtype.UUID) ([]string, error)
@@ -104,6 +106,7 @@ type Querier interface {
 	ClearCampItemUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearCatchDeleter(ctx context.Context, userID pgtype.UUID) error
 	ClearEventActor(ctx context.Context, userID pgtype.UUID) error
+	ClearEventPhotoDeleter(ctx context.Context, userID pgtype.UUID) error
 	ClearEventSeriesCreator(ctx context.Context, userID pgtype.UUID) error
 	// Etkinlikler kalır, organizatör ve iptal eden "Silinmiş kullanıcı" olur;
 	// seriler de öyle (v14 "İlişkiler ve Silme Davranışı": yazar kolonları
@@ -143,6 +146,9 @@ type Querier interface {
 	CountCampItems(ctx context.Context, eventID pgtype.UUID) (int64, error)
 	// Deneme yalnızca sınırın altındayken sayılır; 0 satır: sınır dolmuş.
 	CountCheckInAttempt(ctx context.Context, arg CountCheckInAttemptParams) (int64, error)
+	// Kişinin ve albümün silinmemiş fotoğrafları (sınırlar). Çağıran etkinlik
+	// satırını önce kilitler.
+	CountEventPhotos(ctx context.Context, arg CountEventPhotosParams) (CountEventPhotosRow, error)
 	CountGoing(ctx context.Context, eventID pgtype.UUID) (int64, error)
 	// Son yönetici kontrolü; çağıran tayfa satırını kilitlemiş olmalıdır.
 	CountOtherActiveAdmins(ctx context.Context, arg CountOtherActiveAdminsParams) (int64, error)
@@ -182,6 +188,7 @@ type Querier interface {
 	// yüklenmiş bir etkinliğin kimliğiyle çalışır (IDOR); yetki kontrolü app
 	// katmanındadır (authz).
 	CreateEvent(ctx context.Context, arg CreateEventParams) error
+	CreateEventPhoto(ctx context.Context, arg CreateEventPhotoParams) error
 	// Tekrarlayan etkinlik serileri (issue #51). Kullanıcı istekleri her sorguyu
 	// tayfa_id ile çalıştırır (IDOR); üretim işi seriyi kendi listesinden alır.
 	CreateEventSeries(ctx context.Context, arg CreateEventSeriesParams) error
@@ -231,10 +238,12 @@ type Querier interface {
 	DeleteActivityRecord(ctx context.Context, arg DeleteActivityRecordParams) (int64, error)
 	DeleteAllFriendScores(ctx context.Context) error
 	DeleteAnswerVotes(ctx context.Context, answerID pgtype.UUID) error
+	DeleteAvailability(ctx context.Context, arg DeleteAvailabilityParams) (int64, error)
 	DeleteBlock(ctx context.Context, arg DeleteBlockParams) (int64, error)
 	DeleteCampItem(ctx context.Context, arg DeleteCampItemParams) (int64, error)
 	DeleteCatch(ctx context.Context, arg DeleteCatchParams) (int64, error)
 	DeleteConvoyVehicle(ctx context.Context, arg DeleteConvoyVehicleParams) (int64, error)
+	DeleteEventPhoto(ctx context.Context, arg DeleteEventPhotoParams) (int64, error)
 	// Aynı transaction'da, yazılan puanlardan profillemesi kapalı olanlarınki
 	// ve engelli çiftler silinir (hesaplama sırasında değişen ayar ve engel).
 	DeleteExcludedFriendScores(ctx context.Context) (int64, error)
@@ -255,6 +264,8 @@ type Querier interface {
 	DeleteOldOpenFriendSuggestions(ctx context.Context, before pgtype.Timestamptz) (int64, error)
 	// Oy değiştirmek eski oyu siler (v14).
 	DeleteOwnPollVotes(ctx context.Context, arg DeleteOwnPollVotesParams) (int64, error)
+	// Saklama işi: geçmiş günler (bugün hariç) kalıcı silinir.
+	DeletePastAvailability(ctx context.Context, today pgtype.Date) (int64, error)
 	DeletePoll(ctx context.Context, arg DeletePollParams) (int64, error)
 	// Silinen anketin oyları hemen silinir; geri alma yoktur.
 	DeletePollVotes(ctx context.Context, pollID pgtype.UUID) error
@@ -271,6 +282,8 @@ type Querier interface {
 	// oy sayıları aynı transaction'da düşer. Bir kişinin bir cevapta en fazla
 	// bir oyu olduğu için her cevap en fazla bir azalır.
 	DeleteUserAnswerVotes(ctx context.Context, userID pgtype.UUID) error
+	// Hesap silme (user.deleted).
+	DeleteUserAvailability(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserBan(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserBlocks(ctx context.Context, userID pgtype.UUID) error
 	// Av kayıtları konum içerebilir; kişiyle birlikte silinir.
@@ -279,6 +292,9 @@ type Querier interface {
 	DeleteUserConvoyVehicle(ctx context.Context, arg DeleteUserConvoyVehicleParams) (int64, error)
 	// Araç (plaka dahil) kişisel veridir ve kişiye aittir: silinir.
 	DeleteUserConvoyVehicles(ctx context.Context, userID pgtype.UUID) error
+	// Albüm fotoğrafları kişiseldir; kişiyle birlikte silinir, dosyaları
+	// silme kuyruğuna girer (issue #206).
+	DeleteUserEventPhotos(ctx context.Context, userID pgtype.UUID) error
 	// Profilleme kapatma ve hesap silme: kişinin bütün puanları.
 	DeleteUserFriendScores(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserFriendSuggestions(ctx context.Context, userID pgtype.UUID) error
@@ -326,8 +342,14 @@ type Querier interface {
 	ExportAnnouncements(ctx context.Context, arg ExportAnnouncementsParams) ([]ExportAnnouncementsRow, error)
 	ExportAnswerVotes(ctx context.Context, arg ExportAnswerVotesParams) ([]ExportAnswerVotesRow, error)
 	ExportAnswers(ctx context.Context, arg ExportAnswersParams) ([]ExportAnswersRow, error)
+	// "Boşum" (issue #207): kişinin kaydedilmiş boş günleri (geçmişi saklama
+	// işi siler).
+	ExportAvailability(ctx context.Context, arg ExportAvailabilityParams) ([]ExportAvailabilityRow, error)
 	ExportBlocks(ctx context.Context, arg ExportBlocksParams) ([]ExportBlocksRow, error)
 	ExportConvoyVehicles(ctx context.Context, arg ExportConvoyVehiclesParams) ([]ExportConvoyVehiclesRow, error)
+	// Albüm fotoğrafları (issue #206); dosyaların kendisi zip'e girmez
+	// (ADR-0021 §5), uploads bölümü onları listeler.
+	ExportEventPhotos(ctx context.Context, arg ExportEventPhotosParams) ([]ExportEventPhotosRow, error)
 	ExportEventRSVPs(ctx context.Context, arg ExportEventRSVPsParams) ([]ExportEventRSVPsRow, error)
 	ExportEvents(ctx context.Context, arg ExportEventsParams) ([]ExportEventsRow, error)
 	ExportFishingCatches(ctx context.Context, arg ExportFishingCatchesParams) ([]ExportFishingCatchesRow, error)
@@ -395,6 +417,11 @@ type Querier interface {
 	GetEventForUpdate(ctx context.Context, arg GetEventForUpdateParams) (GetEventForUpdateRow, error)
 	GetEventGaming(ctx context.Context, eventID pgtype.UUID) (GetEventGamingRow, error)
 	GetEventHike(ctx context.Context, eventID pgtype.UUID) (GetEventHikeRow, error)
+	GetEventPhoto(ctx context.Context, arg GetEventPhotoParams) (GetEventPhotoRow, error)
+	// Etkinlik fotoğraf albümü (issue #206, ADR-0028; internal/core/app/event).
+	// Yetki, pencere ve sınırlar uygulama katmanında; trigger'lar ikinci hat
+	// (00023_event_photos.sql).
+	GetEventPhotoByClientRequest(ctx context.Context, arg GetEventPhotoByClientRequestParams) (GetEventPhotoByClientRequestRow, error)
 	GetEventSeries(ctx context.Context, arg GetEventSeriesParams) (GetEventSeriesRow, error)
 	// Seriyi değiştiren istekler ve üretim işi aynı satırı kilitler; çağıran
 	// tayfa satırını önceden kilitlemiştir (kilit sırası: tayfa, seri,
@@ -449,8 +476,13 @@ type Querier interface {
 	GetReportTargetCatch(ctx context.Context, arg GetReportTargetCatchParams) (GetReportTargetCatchRow, error)
 	// İptal edilmiş etkinlik görünür kalır; kaldırılmış sayılır (çözüm için).
 	GetReportTargetEvent(ctx context.Context, arg GetReportTargetEventParams) (GetReportTargetEventRow, error)
+	// Albüm fotoğrafı (issue #206): etkinliği de görünür olmalı.
+	GetReportTargetEventPhoto(ctx context.Context, arg GetReportTargetEventPhotoParams) (GetReportTargetEventPhotoRow, error)
 	GetReportTargetPoll(ctx context.Context, arg GetReportTargetPollParams) (GetReportTargetPollRow, error)
 	GetReportTargetQuestion(ctx context.Context, arg GetReportTargetQuestionParams) (GetReportTargetQuestionRow, error)
+	// Platform panelinde şikâyet edilen albüm fotoğrafı (ADR-0028 §5): yalnızca
+	// panelin şikâyetten okuduğu upload_id, hazır event_photo dosyası.
+	GetReportedPhotoUpload(ctx context.Context, id pgtype.UUID) (GetReportedPhotoUploadRow, error)
 	GetRsvp(ctx context.Context, arg GetRsvpParams) (GetRsvpRow, error)
 	// Katılım doğrulama, organizatör düzeltmesi, yürüyüş yoklaması, kalıcı
 	// katılım geçmişi ve av günlüğü (issue #50). Etkinlik her zaman önce tayfa
@@ -519,6 +551,8 @@ type Querier interface {
 	// terfi sırasıdır.
 	ListAttendees(ctx context.Context, arg ListAttendeesParams) ([]ListAttendeesRow, error)
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error)
+	// Kişinin bugünden itibaren günleri (en fazla 31).
+	ListAvailability(ctx context.Context, arg ListAvailabilityParams) ([]ListAvailabilityRow, error)
 	// Kişinin engelledikleri (yalnızca kendisi görür); engellenen kişinin
 	// profili silinmiş olsa da kayıt listelenir ki kaldırılabilsin.
 	ListBlocksPage(ctx context.Context, arg ListBlocksPageParams) ([]ListBlocksPageRow, error)
@@ -533,11 +567,16 @@ type Querier interface {
 	// Etkinlik kanalının kitlesi (gidecekler ve organizatör; kanalı açan Go'da
 	// eklenir), kullanıcı kimliğine göre sıralı, imleçten sonrası.
 	ListEventAudience(ctx context.Context, arg ListEventAudienceParams) ([]pgtype.UUID, error)
+	// (created_at, id) ile sayfalanır, eskiden yeniye.
+	ListEventPhotos(ctx context.Context, arg ListEventPhotosParams) ([]ListEventPhotosRow, error)
 	// Liste görünümünde mera gizliliği için.
 	ListFishingVisibility(ctx context.Context, eventIds []pgtype.UUID) ([]ListFishingVisibilityRow, error)
 	// Kişinin arkadaşları ve istekleri; karşı tarafın kimliğine göre sayfalanır.
 	// Silinmiş hesapların satırı hesap silmede gider; profili henüz gelmemiş
-	// kişi listede adsız görünmez, atlanır.
+	// kişi listede adsız görünmez, atlanır. Kabul edilmiş arkadaşlıkta
+	// arkadaşın @today ile @badge_until (dahil) arasındaki en yakın boş günü de
+	// döner ("Boşum" rozeti, issue #207; not dönmez). Engel arkadaşlığı zaten
+	// siler; rozet yine de iki yönlü engelde dönmez (savunma derinliği).
 	ListFriendshipsPage(ctx context.Context, arg ListFriendshipsPageParams) ([]ListFriendshipsPageRow, error)
 	// Alarmın alıcıları: organizatör (tayfada hâlâ aktif üyeyse) ve aktif
 	// yöneticiler ve moderatörler; dönmeyen kişinin kendisi hariç. Organizatör
@@ -556,7 +595,8 @@ type Querier interface {
 	// göremeyeceğine karar vermek için bağlam. Karar uygulama katmanında, core'un
 	// izin tablosuyla verilir (authz); burada yalnızca veri toplanır. İçeriğin
 	// tayfası: tayfa kapağında tayfanın kendisi, etkinlik kapağında ve av
-	// fotoğrafında etkinliğin tayfası (silinmiş içerik ve tayfa bağlam vermez).
+	// fotoğrafında ve albüm fotoğrafında etkinliğin tayfası (silinmiş içerik ve
+	// tayfa bağlam vermez).
 	ListMediaForViewer(ctx context.Context, arg ListMediaForViewerParams) ([]ListMediaForViewerRow, error)
 	// Üye listesi: önce rol (yönetici başta), sonra katılım zamanı, sonra
 	// kullanıcı ID'si. Katılmadan banlanan kişinin katılım zamanı yoktur; onun
@@ -728,6 +768,8 @@ type Querier interface {
 	PromoteRsvp(ctx context.Context, arg PromoteRsvpParams) (int64, error)
 	PurgeAnnouncements(ctx context.Context, arg PurgeAnnouncementsParams) (int64, error)
 	PurgeAnswers(ctx context.Context, arg PurgeAnswersParams) (int64, error)
+	// Albüm fotoğrafı; dosyası uploads_release_ref ile silme kuyruğuna girer.
+	PurgeEventPhotos(ctx context.Context, arg PurgeEventPhotosParams) (int64, error)
 	// Etkinlik soft delete'i bugün yok; kolon olduğu için iş hazırdır. Katılım,
 	// türe özel tablolar ve av kayıtları cascade ile, bağlı anket ve seri şablonu
 	// SET NULL ile.
@@ -866,6 +908,12 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// Kalıcı katılım geçmişi
 	UpsertActivityRecord(ctx context.Context, arg UpsertActivityRecordParams) error
+	// "Boşum": boş vakit (issue #207, ADR-0029). day takvim günüdür; "bugün"
+	// (@today) uygulamada Europe/Istanbul tarihine göre hesaplanır ve her
+	// sorguya verilir. Görünürlük kuralı (arkadaşlık, engel) app katmanında,
+	// aynı veritabanında okunur.
+	// Günü ekler ya da bütünüyle değiştirir; id yalnızca yeni satırda kullanılır.
+	UpsertAvailability(ctx context.Context, arg UpsertAvailabilityParams) (UpsertAvailabilityRow, error)
 	// Verilmeyen alan (NULL) olduğu gibi kalır; satır yoksa varsayılanlardan
 	// açılır.
 	UpsertSocialSettings(ctx context.Context, arg UpsertSocialSettingsParams) (UpsertSocialSettingsRow, error)

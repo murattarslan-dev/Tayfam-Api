@@ -2,9 +2,11 @@ package media
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/access"
@@ -66,8 +68,8 @@ func (s *Service) MediaURLs(ctx context.Context, viewer id.ID, ids []id.ID) ([]U
 
 // canView is the visibility rule of ADR-0020 item 4. Tayfa content is
 // decided by core's permission table (authz): TayfaView for a tayfa cover,
-// EventView (with the events module on) for an event cover or a catch
-// photo. The default is no.
+// EventView (with the events module on) for an event cover, a catch photo
+// or an album photo (ADR-0028). The default is no.
 func canView(viewer id.ID, r store.ListMediaForViewerRow, now time.Time) (bool, error) {
 	if r.UserID.Valid && id.ID(r.UserID.Bytes) == viewer {
 		return true, nil
@@ -78,7 +80,7 @@ func canView(viewer id.ID, r store.ListMediaForViewerRow, now time.Time) (bool, 
 	switch r.AttachedType.String {
 	case TargetUser:
 		return !r.Blocked && !r.OwnerDeleted, nil
-	case TargetTayfa, TargetEvent, TargetFishingCatch:
+	case TargetTayfa, TargetEvent, TargetFishingCatch, TargetEventPhoto:
 		if !r.ContentTayfaID.Valid || !r.MemberStatus.Valid {
 			return false, nil
 		}
@@ -95,4 +97,31 @@ func canView(viewer id.ID, r store.ListMediaForViewerRow, now time.Time) (bool, 
 		return r.EventsModuleOn && authz.Allowed(m, authz.EventView, now), nil
 	}
 	return false, nil
+}
+
+// ReportedPhotoLinkTTL is how long the panel's link to a reported album
+// photo works (ADR-0028 §5).
+const ReportedPhotoLinkTTL = 5 * time.Minute
+
+// ReportedPhotoURL signs a short GET link to the full variant of a READY
+// album photo upload for the platform panel. Only the admin service calls
+// it, with the upload ID it read from a report escalated to the platform
+// (an unreported photo has no way in); it records the access. ok is false
+// without object storage or when the file is gone or not an album photo.
+func (s *Service) ReportedPhotoURL(ctx context.Context, upload id.ID) (link string, expires time.Time, ok bool, err error) {
+	if !s.Enabled() {
+		return "", time.Time{}, false, nil
+	}
+	r, err := s.q.GetReportedPhotoUpload(ctx, upload.PG())
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", time.Time{}, false, nil
+	case err != nil:
+		return "", time.Time{}, false, fmt.Errorf("şikâyet edilen fotoğraf: %w", err)
+	}
+	p, err := s.cfg.Store.PresignGet(mediaKey(r.R2Key, KindFull), ReportedPhotoLinkTTL)
+	if err != nil {
+		return "", time.Time{}, false, fmt.Errorf("şikâyet edilen fotoğraf linki: %w", err)
+	}
+	return p.URL, p.Expires.UTC(), true, nil
 }

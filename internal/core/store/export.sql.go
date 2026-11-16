@@ -177,6 +177,50 @@ func (q *Queries) ExportAnswers(ctx context.Context, arg ExportAnswersParams) ([
 	return items, nil
 }
 
+const exportAvailability = `-- name: ExportAvailability :many
+SELECT a.id AS k, jsonb_build_object(
+  'date', a.day, 'slots', a.slots, 'note', a.note,
+  'created_at', a.created_at, 'updated_at', a.updated_at
+) AS data
+FROM user_availability a
+WHERE a.user_id = $1 AND a.id > $2
+ORDER BY a.id
+LIMIT $3
+`
+
+type ExportAvailabilityParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportAvailabilityRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// "Boşum" (issue #207): kişinin kaydedilmiş boş günleri (geçmişi saklama
+// işi siler).
+func (q *Queries) ExportAvailability(ctx context.Context, arg ExportAvailabilityParams) ([]ExportAvailabilityRow, error) {
+	rows, err := q.db.Query(ctx, exportAvailability, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportAvailabilityRow{}
+	for rows.Next() {
+		var i ExportAvailabilityRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportBlocks = `-- name: ExportBlocks :many
 SELECT b.blocked_id AS k, jsonb_build_object('user_id', b.blocked_id, 'created_at', b.created_at) AS data
 FROM user_blocks b
@@ -247,6 +291,51 @@ func (q *Queries) ExportConvoyVehicles(ctx context.Context, arg ExportConvoyVehi
 	items := []ExportConvoyVehiclesRow{}
 	for rows.Next() {
 		var i ExportConvoyVehiclesRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportEventPhotos = `-- name: ExportEventPhotos :many
+SELECT p.id AS k, jsonb_build_object(
+  'id', p.id, 'event_id', p.event_id, 'tayfa_id', e.tayfa_id, 'upload_id', p.upload_id,
+  'caption', p.caption, 'created_at', p.created_at, 'deleted_at', p.deleted_at
+) AS data
+FROM event_photos p
+JOIN events e ON e.id = p.event_id
+WHERE p.uploader_id = $1 AND p.id > $2
+ORDER BY p.id
+LIMIT $3
+`
+
+type ExportEventPhotosParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportEventPhotosRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Albüm fotoğrafları (issue #206); dosyaların kendisi zip'e girmez
+// (ADR-0021 §5), uploads bölümü onları listeler.
+func (q *Queries) ExportEventPhotos(ctx context.Context, arg ExportEventPhotosParams) ([]ExportEventPhotosRow, error) {
+	rows, err := q.db.Query(ctx, exportEventPhotos, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportEventPhotosRow{}
+	for rows.Next() {
+		var i ExportEventPhotosRow
 		if err := rows.Scan(&i.K, &i.Data); err != nil {
 			return nil, err
 		}

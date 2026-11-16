@@ -265,11 +265,13 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			q.ClearTayfaUserFields, q.ClearInviteCreator, q.ClearMembershipUserFields,
 			q.ClearAnnouncementUserFields, q.ClearEventUserFields, q.ClearEventSeriesCreator,
 			q.ClearRsvpMarker, q.DeleteUserRsvps, q.DeleteUserConvoyVehicles, q.ClearCampItemUserFields,
-			q.DeleteUserHikeCheckins, q.DeleteUserCatches, q.ClearCatchDeleter, q.DeleteUserActivityRecords,
+			q.DeleteUserHikeCheckins, q.DeleteUserCatches, q.ClearCatchDeleter,
+			q.DeleteUserEventPhotos, q.ClearEventPhotoDeleter, q.DeleteUserActivityRecords,
 			q.ClearQuestionUserFields, q.ClearAnswerUserFields, q.DeleteUserAnswerVotes,
 			q.ClearPollUserFields, q.DeleteUserPollVotes,
 			q.DeleteUserFriendships, q.DeleteUserBlocks, q.DeleteUserRequestOutcomes,
 			q.DeleteUserFriendScores, q.DeleteUserFriendSuggestions, q.DeleteUserSocialSettings,
+			q.DeleteUserAvailability,
 			q.ClearAuditActor, q.ClearEventActor, q.ClearReportUserFields,
 		} {
 			if err := clear(ctx, e.User.PG()); err != nil {

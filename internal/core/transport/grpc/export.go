@@ -48,6 +48,8 @@ var exportSections = map[string]corev1.CoreExportSection{
 	export.SectionBlocks:            corev1.CoreExportSection_CORE_EXPORT_SECTION_BLOCKS,
 	export.SectionReports:           corev1.CoreExportSection_CORE_EXPORT_SECTION_REPORTS,
 	export.SectionUploads:           corev1.CoreExportSection_CORE_EXPORT_SECTION_UPLOADS,
+	export.SectionEventPhotos:       corev1.CoreExportSection_CORE_EXPORT_SECTION_EVENT_PHOTOS,
+	export.SectionAvailability:      corev1.CoreExportSection_CORE_EXPORT_SECTION_AVAILABILITY,
 	export.SectionSocialSettings:    corev1.CoreExportSection_CORE_EXPORT_SECTION_SOCIAL_SETTINGS,
 	export.SectionFriendSuggestions: corev1.CoreExportSection_CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS,
 }

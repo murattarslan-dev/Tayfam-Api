@@ -68,6 +68,7 @@ adları içeriktir ve yer alır.
 | `core/fishing_catches.json` | `id`, `event_id`, `species`, `length_cm`, `lat`, `lng`, `visibility`, `photo_upload_id`, `created_at`, `deleted_at` |
 | `core/friendships.json` | `user_id` (karşı taraf), `status`, `requested_by_me`, `created_at`, `accepted_at` |
 | `core/blocks.json` | `user_id` (engellenen), `created_at` |
+| `core/availability.json` | "Boşum" (#207): `date` (YYYY-MM-DD), `slots`, `note` (yoksa null), `created_at`, `updated_at`. Geçmiş günler saklanmadığı için yalnızca bugün ve sonrası |
 | `core/reports.json` | `id`, `tayfa_id`, `target_type`, `target_id`, `reason`, `description`, `evidence_text`, `status`, `resolution`, `created_at` |
 | `core/social_settings.json` | Ayar değiştirildiyse ya da puan tutuluyorsa tek kayıt: `profiling_enabled`, `hide_from_suggestions`, `updated_at` (hiç değiştirilmediyse `null`), `scored_people_count` (hakkınızda arkadaşlık puanı tutulan kişi sayısı; puan değerleri ve kişiler girmez, ADR-0030) |
 | `core/friend_suggestions.json` | `user_id` (önerilen kişi), `created_at`, `dismissed_at` (kapatılmadıysa `null`), `withdrawn_at` (geri çekilmediyse `null`) |

@@ -11,7 +11,7 @@
 //	plates          clears convoy plates 30 days after the event ended
 //	report-escalation  sends reports open for 7 days to the platform (#76)
 //	retention       deletes resolved reports and audit records after a
-//	                year (#76)
+//	                year (#76), and past "Boşum" days (#207)
 //	friend-suggestions  recomputes the friendship scores, suggests at most
 //	                one friend a week per user and deletes old open
 //	                suggestions (#208, ADR-0030; suggestions.go)

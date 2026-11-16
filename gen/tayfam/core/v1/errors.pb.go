@@ -128,10 +128,11 @@ const (
 	// a convoy vehicle, checking in; online check-in also needs it given
 	// before the start).
 	ErrorReason_ERROR_REASON_EVENT_NOT_GOING ErrorReason = 33
-	// NOT_FOUND. No camp item, convoy vehicle or fishing catch with this ID
-	// on this event that the caller may remove.
+	// NOT_FOUND. No camp item, convoy vehicle, fishing catch or album photo
+	// with this ID on this event that the caller may remove.
 	ErrorReason_ERROR_REASON_EVENT_ITEM_NOT_FOUND ErrorReason = 34
-	// RESOURCE_EXHAUSTED. The event's list is full (200 camp items).
+	// RESOURCE_EXHAUSTED. The event's list is full (200 camp items; 30 album
+	// photos per person or 500 per album).
 	ErrorReason_ERROR_REASON_EVENT_LIMIT ErrorReason = 35
 	// FAILED_PRECONDITION. The method is for another event type (for example
 	// AddCampItem on a convoy event).
@@ -154,8 +155,11 @@ const (
 	// FAILED_PRECONDITION. FinishHike without StartHike.
 	ErrorReason_ERROR_REASON_HIKE_NOT_STARTED ErrorReason = 44
 	// FAILED_PRECONDITION. The action needs the caller's verified attendance
-	// (AddFishingCatch).
+	// (AddFishingCatch, AddEventPhoto).
 	ErrorReason_ERROR_REASON_NOT_ATTENDED ErrorReason = 45
+	// FAILED_PRECONDITION. The event's album takes no photos now: before the
+	// start, or from seven days after the end (AddEventPhoto; ADR-0028).
+	ErrorReason_ERROR_REASON_ALBUM_CLOSED ErrorReason = 46
 	// NOT_FOUND. No event series with this ID in this tayfa.
 	ErrorReason_ERROR_REASON_EVENT_SERIES_NOT_FOUND ErrorReason = 50
 	// FAILED_PRECONDITION. The series was ended; it no longer changes.
@@ -297,6 +301,7 @@ var (
 		43:  "ERROR_REASON_CORRECTION_CLOSED",
 		44:  "ERROR_REASON_HIKE_NOT_STARTED",
 		45:  "ERROR_REASON_NOT_ATTENDED",
+		46:  "ERROR_REASON_ALBUM_CLOSED",
 		50:  "ERROR_REASON_EVENT_SERIES_NOT_FOUND",
 		51:  "ERROR_REASON_EVENT_SERIES_ENDED",
 		60:  "ERROR_REASON_QUESTION_NOT_FOUND",
@@ -372,6 +377,7 @@ var (
 		"ERROR_REASON_CORRECTION_CLOSED":           43,
 		"ERROR_REASON_HIKE_NOT_STARTED":            44,
 		"ERROR_REASON_NOT_ATTENDED":                45,
+		"ERROR_REASON_ALBUM_CLOSED":                46,
 		"ERROR_REASON_EVENT_SERIES_NOT_FOUND":      50,
 		"ERROR_REASON_EVENT_SERIES_ENDED":          51,
 		"ERROR_REASON_QUESTION_NOT_FOUND":          60,
@@ -441,7 +447,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\x9d\x14\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xbc\x14\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -481,7 +487,8 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"(ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED\x10*\x12\"\n" +
 	"\x1eERROR_REASON_CORRECTION_CLOSED\x10+\x12!\n" +
 	"\x1dERROR_REASON_HIKE_NOT_STARTED\x10,\x12\x1d\n" +
-	"\x19ERROR_REASON_NOT_ATTENDED\x10-\x12'\n" +
+	"\x19ERROR_REASON_NOT_ATTENDED\x10-\x12\x1d\n" +
+	"\x19ERROR_REASON_ALBUM_CLOSED\x10.\x12'\n" +
 	"#ERROR_REASON_EVENT_SERIES_NOT_FOUND\x102\x12#\n" +
 	"\x1fERROR_REASON_EVENT_SERIES_ENDED\x103\x12#\n" +
 	"\x1fERROR_REASON_QUESTION_NOT_FOUND\x10<\x12!\n" +

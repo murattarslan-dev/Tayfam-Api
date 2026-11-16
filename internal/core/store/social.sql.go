@@ -274,24 +274,39 @@ func (q *Queries) ListBlocksPage(ctx context.Context, arg ListBlocksPageParams) 
 
 const listFriendshipsPage = `-- name: ListFriendshipsPage :many
 SELECT p.user_id AS other_id, f.status, f.requested_by, f.created_at, f.accepted_at,
-       p.display_name, p.avatar_upload_id
+       p.display_name, p.avatar_upload_id,
+       na.day AS next_available_day, na.slots AS next_available_slots
 FROM friendships f
 JOIN user_profiles p
   ON p.user_id = (CASE WHEN f.user_low_id = $1 THEN f.user_high_id ELSE f.user_low_id END)
  AND p.deleted_at IS NULL
  AND NOT EXISTS (SELECT 1 FROM user_platform_bans b WHERE b.user_id = p.user_id AND b.banned_at IS NOT NULL)
+LEFT JOIN LATERAL (
+  SELECT a.day, a.slots FROM user_availability a
+  WHERE f.status = 'accepted' AND a.user_id = p.user_id
+    AND a.day >= $2::date AND a.day <= $3::date
+    AND NOT EXISTS (
+      SELECT 1 FROM user_blocks ub
+      WHERE (ub.blocker_id = $1 AND ub.blocked_id = p.user_id)
+         OR (ub.blocker_id = p.user_id AND ub.blocked_id = $1)
+    )
+  ORDER BY a.day
+  LIMIT 1
+) na ON true
 WHERE (f.user_low_id = $1 OR f.user_high_id = $1)
-  AND f.status = $2
-  AND ($3::text = ''
-       OR ($3::text = 'incoming' AND f.requested_by <> $1)
-       OR ($3::text = 'outgoing' AND f.requested_by = $1))
-  AND p.user_id > $4
+  AND f.status = $4
+  AND ($5::text = ''
+       OR ($5::text = 'incoming' AND f.requested_by <> $1)
+       OR ($5::text = 'outgoing' AND f.requested_by = $1))
+  AND p.user_id > $6
 ORDER BY p.user_id
-LIMIT $5
+LIMIT $7
 `
 
 type ListFriendshipsPageParams struct {
 	UserID      pgtype.UUID
+	Today       pgtype.Date
+	BadgeUntil  pgtype.Date
 	Status      string
 	Direction   string
 	AfterUserID pgtype.UUID
@@ -299,21 +314,28 @@ type ListFriendshipsPageParams struct {
 }
 
 type ListFriendshipsPageRow struct {
-	OtherID        pgtype.UUID
-	Status         string
-	RequestedBy    pgtype.UUID
-	CreatedAt      pgtype.Timestamptz
-	AcceptedAt     pgtype.Timestamptz
-	DisplayName    pgtype.Text
-	AvatarUploadID pgtype.UUID
+	OtherID            pgtype.UUID
+	Status             string
+	RequestedBy        pgtype.UUID
+	CreatedAt          pgtype.Timestamptz
+	AcceptedAt         pgtype.Timestamptz
+	DisplayName        pgtype.Text
+	AvatarUploadID     pgtype.UUID
+	NextAvailableDay   pgtype.Date
+	NextAvailableSlots []string
 }
 
 // Kişinin arkadaşları ve istekleri; karşı tarafın kimliğine göre sayfalanır.
 // Silinmiş hesapların satırı hesap silmede gider; profili henüz gelmemiş
-// kişi listede adsız görünmez, atlanır.
+// kişi listede adsız görünmez, atlanır. Kabul edilmiş arkadaşlıkta
+// arkadaşın @today ile @badge_until (dahil) arasındaki en yakın boş günü de
+// döner ("Boşum" rozeti, issue #207; not dönmez). Engel arkadaşlığı zaten
+// siler; rozet yine de iki yönlü engelde dönmez (savunma derinliği).
 func (q *Queries) ListFriendshipsPage(ctx context.Context, arg ListFriendshipsPageParams) ([]ListFriendshipsPageRow, error) {
 	rows, err := q.db.Query(ctx, listFriendshipsPage,
 		arg.UserID,
+		arg.Today,
+		arg.BadgeUntil,
 		arg.Status,
 		arg.Direction,
 		arg.AfterUserID,
@@ -334,6 +356,8 @@ func (q *Queries) ListFriendshipsPage(ctx context.Context, arg ListFriendshipsPa
 			&i.AcceptedAt,
 			&i.DisplayName,
 			&i.AvatarUploadID,
+			&i.NextAvailableDay,
+			&i.NextAvailableSlots,
 		); err != nil {
 			return nil, err
 		}

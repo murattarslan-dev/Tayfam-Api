@@ -28,6 +28,7 @@
 </dl>
 {{if .Body}}<p class="item-body">{{.Body}}</p>{{end}}
 {{if .Options}}<ul>{{range .Options}}<li>{{.}}</li>{{end}}</ul>{{end}}
+{{if .MediaUrl}}<p><a href="{{.MediaUrl}}" target="_blank" rel="noopener noreferrer">Fotoğrafı aç</a> <span class="hint">(bağlantı {{ts .MediaExpireTime}} tarihine kadar geçerli; her açılış denetim kaydında)</span></p>{{end}}
 </div>
 {{else}}
 <p>Öğe artık yok.</p>
