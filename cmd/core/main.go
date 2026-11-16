@@ -183,7 +183,7 @@ func setup(rt *service.Runtime) error {
 	// Platform yönetim paneli (ADR-0008, issue #104): AdminService yalnızca
 	// admin token'ını kabul eder; her çağrıda identity'ye aynı token'la
 	// yöneticilik sorulur. Diğer bütün metodlar admin token'ını reddeder.
-	admins, adminV, err := platformAdmin(rt, pool)
+	admins, adminV, err := platformAdmin(rt, pool, medias)
 	if err != nil {
 		return err
 	}
@@ -269,7 +269,7 @@ func mediaService(rt *service.Runtime, pool *pgxpool.Pool) (*media.Service, erro
 // both with identity: its public keys check the admin token, and a
 // connection that forwards the caller's admin token asks whether the
 // caller is still a platform administrator.
-func platformAdmin(rt *service.Runtime, pool *pgxpool.Pool) (*admin.Service, *auth.AdminVerifier, error) {
+func platformAdmin(rt *service.Runtime, pool *pgxpool.Pool, medias *media.Service) (*admin.Service, *auth.AdminVerifier, error) {
 	addr := rt.Config.Required("IDENTITY_GRPC_ADDR")
 	issuer := rt.Config.Required("AUTH_ISSUER")
 	if err := rt.Config.Err(); err != nil {
@@ -285,7 +285,9 @@ func platformAdmin(rt *service.Runtime, pool *pgxpool.Pool) (*admin.Service, *au
 	if err != nil {
 		return nil, nil, err
 	}
-	svc, err := admin.New(admin.Config{Pool: pool, Log: rt.Log, Checker: identityadmin.NewChecker(identityv1.NewAdminAuthServiceClient(conn))})
+	// medias signs the panel's short link to a reported album photo
+	// (ADR-0028 §5).
+	svc, err := admin.New(admin.Config{Pool: pool, Log: rt.Log, Checker: identityadmin.NewChecker(identityv1.NewAdminAuthServiceClient(conn)), Media: medias})
 	if err != nil {
 		return nil, nil, err
 	}

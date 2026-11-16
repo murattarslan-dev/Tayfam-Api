@@ -89,7 +89,15 @@ type Config struct {
 	Pool    *pgxpool.Pool
 	Log     *slog.Logger
 	Checker Checker
-	Now     func() time.Time // optional, for tests
+	// Media signs the panel's link to a reported album photo (ADR-0028
+	// §5); nil means no links.
+	Media ReportedMedia
+	Now   func() time.Time // optional, for tests
+}
+
+// ReportedMedia is media.Service's panel link.
+type ReportedMedia interface {
+	ReportedPhotoURL(ctx context.Context, upload id.ID) (link string, expires time.Time, ok bool, err error)
 }
 
 // Service implements the panel's core methods.

@@ -31,7 +31,8 @@ type CreateInput struct {
 	Purpose string
 	// Variants holds exactly one KindPreview and one KindFull.
 	Variants []VariantInput
-	// Tayfa is required for covers and catch photos, zero for avatars.
+	// Tayfa is required for covers, catch and album photos, zero for
+	// avatars.
 	Tayfa           id.ID
 	ClientRequestID string
 }
@@ -76,7 +77,7 @@ func validate(in CreateInput) (id.ID, VariantInput, VariantInput, error) {
 		if in.Tayfa != (id.ID{}) {
 			return id.ID{}, VariantInput{}, VariantInput{}, apperr.Validation("tayfa_id")
 		}
-	case PurposeCover, PurposeCatchPhoto:
+	case PurposeCover, PurposeCatchPhoto, PurposeEventPhoto:
 		if in.Tayfa == (id.ID{}) {
 			return id.ID{}, VariantInput{}, VariantInput{}, apperr.Validation("tayfa_id")
 		}

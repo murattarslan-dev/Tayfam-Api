@@ -405,6 +405,31 @@ func (q *Queries) GetReportTargetEvent(ctx context.Context, arg GetReportTargetE
 	return i, err
 }
 
+const getReportTargetEventPhoto = `-- name: GetReportTargetEventPhoto :one
+SELECT p.uploader_id AS author_id, (p.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible
+FROM event_photos p
+JOIN events e ON e.id = p.event_id
+WHERE e.tayfa_id = $1 AND p.id = $2
+`
+
+type GetReportTargetEventPhotoParams struct {
+	TayfaID pgtype.UUID
+	ID      pgtype.UUID
+}
+
+type GetReportTargetEventPhotoRow struct {
+	AuthorID pgtype.UUID
+	Visible  bool
+}
+
+// Albüm fotoğrafı (issue #206): etkinliği de görünür olmalı.
+func (q *Queries) GetReportTargetEventPhoto(ctx context.Context, arg GetReportTargetEventPhotoParams) (GetReportTargetEventPhotoRow, error) {
+	row := q.db.QueryRow(ctx, getReportTargetEventPhoto, arg.TayfaID, arg.ID)
+	var i GetReportTargetEventPhotoRow
+	err := row.Scan(&i.AuthorID, &i.Visible)
+	return i, err
+}
+
 const getReportTargetPoll = `-- name: GetReportTargetPoll :one
 SELECT created_by AS author_id, (deleted_at IS NULL)::boolean AS visible
 FROM polls

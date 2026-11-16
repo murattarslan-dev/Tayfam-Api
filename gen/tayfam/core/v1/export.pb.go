@@ -58,6 +58,9 @@ const (
 	CoreExportSection_CORE_EXPORT_SECTION_REPORTS CoreExportSection = 16
 	// Files the caller uploaded: a list only, never the files (ADR-0021).
 	CoreExportSection_CORE_EXPORT_SECTION_UPLOADS CoreExportSection = 17
+	// Event album photos the caller added (issue #206): a list only; the
+	// files are listed in UPLOADS.
+	CoreExportSection_CORE_EXPORT_SECTION_EVENT_PHOTOS CoreExportSection = 18
 	// "Boşum" free days the caller saved, today on (issue #207).
 	CoreExportSection_CORE_EXPORT_SECTION_AVAILABILITY CoreExportSection = 19
 )
@@ -83,6 +86,7 @@ var (
 		15: "CORE_EXPORT_SECTION_BLOCKS",
 		16: "CORE_EXPORT_SECTION_REPORTS",
 		17: "CORE_EXPORT_SECTION_UPLOADS",
+		18: "CORE_EXPORT_SECTION_EVENT_PHOTOS",
 		19: "CORE_EXPORT_SECTION_AVAILABILITY",
 	}
 	CoreExportSection_value = map[string]int32{
@@ -104,6 +108,7 @@ var (
 		"CORE_EXPORT_SECTION_BLOCKS":           15,
 		"CORE_EXPORT_SECTION_REPORTS":          16,
 		"CORE_EXPORT_SECTION_UPLOADS":          17,
+		"CORE_EXPORT_SECTION_EVENT_PHOTOS":     18,
 		"CORE_EXPORT_SECTION_AVAILABILITY":     19,
 	}
 )
@@ -232,7 +237,7 @@ const file_tayfam_core_v1_export_proto_rawDesc = "" +
 	"\x13ExportMyDataRequest\"m\n" +
 	"\x14ExportMyDataResponse\x12;\n" +
 	"\asection\x18\x01 \x01(\x0e2!.tayfam.core.v1.CoreExportSectionR\asection\x12\x18\n" +
-	"\arecords\x18\x02 \x03(\fR\arecords*\xc6\x05\n" +
+	"\arecords\x18\x02 \x03(\fR\arecords*\xec\x05\n" +
 	"\x11CoreExportSection\x12#\n" +
 	"\x1fCORE_EXPORT_SECTION_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fCORE_EXPORT_SECTION_MEMBERSHIPS\x10\x01\x12#\n" +
@@ -253,6 +258,7 @@ const file_tayfam_core_v1_export_proto_rawDesc = "" +
 	"\x1aCORE_EXPORT_SECTION_BLOCKS\x10\x0f\x12\x1f\n" +
 	"\x1bCORE_EXPORT_SECTION_REPORTS\x10\x10\x12\x1f\n" +
 	"\x1bCORE_EXPORT_SECTION_UPLOADS\x10\x11\x12$\n" +
+	" CORE_EXPORT_SECTION_EVENT_PHOTOS\x10\x12\x12$\n" +
 	" CORE_EXPORT_SECTION_AVAILABILITY\x10\x132l\n" +
 	"\rExportService\x12[\n" +
 	"\fExportMyData\x12#.tayfam.core.v1.ExportMyDataRequest\x1a$.tayfam.core.v1.ExportMyDataResponse0\x01B\xbd\x01\n" +

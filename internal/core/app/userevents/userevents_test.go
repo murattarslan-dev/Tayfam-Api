@@ -193,6 +193,7 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"event_camp_items":               `SELECT count(*) FROM event_camp_items WHERE $1 IN (assigned_user_id, created_by)`,
 		"event_hike_checkins.user_id":    `SELECT count(*) FROM event_hike_checkins WHERE user_id = $1`,
 		"fishing_catches":                `SELECT count(*) FROM fishing_catches WHERE $1 IN (user_id, deleted_by)`,
+		"event_photos":                   `SELECT count(*) FROM event_photos WHERE $1 IN (uploader_id, deleted_by)`,
 		"user_activity_records.user_id":  `SELECT count(*) FROM user_activity_records WHERE user_id = $1`,
 		"questions":                      `SELECT count(*) FROM questions WHERE $1 IN (author_id, deleted_by)`,
 		"answers":                        `SELECT count(*) FROM answers WHERE $1 IN (author_id, deleted_by)`,
@@ -509,8 +510,17 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 		id.New().PG(), fishing.PG(), u.PG(), id.New().PG())
 	e.seed(t, `INSERT INTO fishing_catches (id, event_id, user_id, species, length_cm, client_request_id, deleted_at, deleted_by) VALUES ($1, $2, $3, 'Çipura', 30, $4, now(), $5)`,
 		id.New().PG(), fishing.PG(), a.PG(), id.New().PG(), u.PG())
+	// Album photos (issue #206): u's own go; a's photo that u removed stays
+	// without its remover.
+	e.seed(t, `INSERT INTO event_photos (id, event_id, uploader_id, upload_id, caption, client_request_id) VALUES ($1, $2, $3, $4, 'Zirve', $5)`,
+		id.New().PG(), hike.PG(), u.PG(), id.New().PG(), id.New().PG())
+	e.seed(t, `INSERT INTO event_photos (id, event_id, uploader_id, upload_id, client_request_id, deleted_at, deleted_by) VALUES ($1, $2, $3, $4, $5, now(), $6)`,
+		id.New().PG(), hike.PG(), a.PG(), id.New().PG(), id.New().PG(), u.PG())
 
 	must(t, e.svc.Apply(ctx, Event{ID: id.New(), User: u, Deleted: true}))
+	if n := e.count(t, `SELECT count(*) FROM event_photos WHERE uploader_id = $1 AND deleted_at IS NOT NULL AND deleted_by IS NULL`, a.PG()); n != 1 {
+		t.Error("başkasının albüm fotoğrafı silindi ya da silen boşalmadı")
+	}
 
 	if refs := e.userRefs(t, u); len(refs) != 0 {
 		t.Fatalf("core'da kullanıcıya ait kayıt kaldı: %v", refs)

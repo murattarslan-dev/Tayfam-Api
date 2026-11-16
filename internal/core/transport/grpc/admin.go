@@ -307,6 +307,7 @@ func (s *AdminServer) GetReportedItem(ctx context.Context, req *corev1.GetReport
 			TargetType: targetToProto(item.TargetType), TargetId: item.Target.String(), AuthorId: idString(item.Author),
 			Title: item.Title, Body: item.Body, Options: item.Options,
 			CreateTime: tsOrNil(item.CreatedAt), DeleteTime: tsOrNil(item.DeletedAt),
+			MediaUrl: item.MediaURL, MediaExpireTime: tsOrNil(item.MediaExpires),
 		}
 	}
 	return out, nil

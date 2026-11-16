@@ -77,6 +77,15 @@ func (q *Queries) ClearEventActor(ctx context.Context, userID pgtype.UUID) error
 	return err
 }
 
+const clearEventPhotoDeleter = `-- name: ClearEventPhotoDeleter :exec
+UPDATE event_photos SET deleted_by = NULL WHERE deleted_by = $1
+`
+
+func (q *Queries) ClearEventPhotoDeleter(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearEventPhotoDeleter, userID)
+	return err
+}
+
 const clearEventSeriesCreator = `-- name: ClearEventSeriesCreator :exec
 UPDATE event_series SET created_by = NULL WHERE created_by = $1
 `
@@ -251,6 +260,17 @@ DELETE FROM event_convoy_vehicles WHERE user_id = $1
 // Araç (plaka dahil) kişisel veridir ve kişiye aittir: silinir.
 func (q *Queries) DeleteUserConvoyVehicles(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserConvoyVehicles, userID)
+	return err
+}
+
+const deleteUserEventPhotos = `-- name: DeleteUserEventPhotos :exec
+DELETE FROM event_photos WHERE uploader_id = $1
+`
+
+// Albüm fotoğrafları kişiseldir; kişiyle birlikte silinir, dosyaları
+// silme kuyruğuna girer (issue #206).
+func (q *Queries) DeleteUserEventPhotos(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserEventPhotos, userID)
 	return err
 }
 

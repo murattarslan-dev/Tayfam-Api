@@ -419,6 +419,25 @@ func (q *Queries) GetOwnUploadForUpdate(ctx context.Context, arg GetOwnUploadFor
 	return i, err
 }
 
+const getReportedPhotoUpload = `-- name: GetReportedPhotoUpload :one
+SELECT r2_key, full_type::text AS full_type FROM uploads
+WHERE id = $1 AND purpose = 'event_photo' AND status = 'ready'
+`
+
+type GetReportedPhotoUploadRow struct {
+	R2Key    string
+	FullType string
+}
+
+// Platform panelinde şikâyet edilen albüm fotoğrafı (ADR-0028 §5): yalnızca
+// panelin şikâyetten okuduğu upload_id, hazır event_photo dosyası.
+func (q *Queries) GetReportedPhotoUpload(ctx context.Context, id pgtype.UUID) (GetReportedPhotoUploadRow, error) {
+	row := q.db.QueryRow(ctx, getReportedPhotoUpload, id)
+	var i GetReportedPhotoUploadRow
+	err := row.Scan(&i.R2Key, &i.FullType)
+	return i, err
+}
+
 const getUploadByClientRequest = `-- name: GetUploadByClientRequest :one
 SELECT id, user_id, tayfa_id, purpose, status, r2_key, preview_type, preview_bytes, full_type, full_bytes, width, height, reject_reason, attached_type, attached_id, attached_at, client_request_id, created_at, ready_at, updated_at, export_bytes, expires_at FROM uploads
 WHERE user_id = $1 AND client_request_id = $2 AND purpose <> 'data_export'
@@ -518,6 +537,11 @@ LEFT JOIN LATERAL (
   JOIN events e ON e.id = f.event_id AND e.deleted_at IS NULL
   JOIN tayfas t ON t.id = e.tayfa_id AND t.deleted_at IS NULL
   WHERE u.attached_type = 'fishing_catch' AND f.id = u.attached_id AND f.deleted_at IS NULL
+  UNION ALL
+  SELECT e.tayfa_id FROM event_photos ph
+  JOIN events e ON e.id = ph.event_id AND e.deleted_at IS NULL
+  JOIN tayfas t ON t.id = e.tayfa_id AND t.deleted_at IS NULL
+  WHERE u.attached_type = 'event_photo' AND ph.id = u.attached_id AND ph.deleted_at IS NULL
 ) c ON true
 LEFT JOIN memberships m ON m.tayfa_id = c.tayfa_id AND m.user_id = $1
 LEFT JOIN tayfa_modules tm ON tm.tayfa_id = c.tayfa_id AND tm.module = 'events'
@@ -553,7 +577,8 @@ type ListMediaForViewerRow struct {
 // göremeyeceğine karar vermek için bağlam. Karar uygulama katmanında, core'un
 // izin tablosuyla verilir (authz); burada yalnızca veri toplanır. İçeriğin
 // tayfası: tayfa kapağında tayfanın kendisi, etkinlik kapağında ve av
-// fotoğrafında etkinliğin tayfası (silinmiş içerik ve tayfa bağlam vermez).
+// fotoğrafında ve albüm fotoğrafında etkinliğin tayfası (silinmiş içerik ve
+// tayfa bağlam vermez).
 func (q *Queries) ListMediaForViewer(ctx context.Context, arg ListMediaForViewerParams) ([]ListMediaForViewerRow, error) {
 	rows, err := q.db.Query(ctx, listMediaForViewer, arg.ViewerID, arg.Ids)
 	if err != nil {

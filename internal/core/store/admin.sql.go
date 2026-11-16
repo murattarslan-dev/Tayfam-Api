@@ -144,6 +144,32 @@ func (q *Queries) AdminDeleteEvent(ctx context.Context, arg AdminDeleteEventPara
 	return result.RowsAffected(), nil
 }
 
+const adminDeleteEventPhoto = `-- name: AdminDeleteEventPhoto :execrows
+UPDATE event_photos p SET deleted_at = $1, deleted_by = $2
+FROM events e
+WHERE p.id = $3 AND e.id = p.event_id AND e.tayfa_id = $4 AND p.deleted_at IS NULL
+`
+
+type AdminDeleteEventPhotoParams struct {
+	At      pgtype.Timestamptz
+	By      pgtype.UUID
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+func (q *Queries) AdminDeleteEventPhoto(ctx context.Context, arg AdminDeleteEventPhotoParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adminDeleteEventPhoto,
+		arg.At,
+		arg.By,
+		arg.ID,
+		arg.TayfaID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const adminDeletePoll = `-- name: AdminDeletePoll :execrows
 UPDATE polls SET deleted_at = $1, deleted_by = $2 WHERE id = $3 AND tayfa_id = $4 AND deleted_at IS NULL
 `
@@ -328,6 +354,38 @@ func (q *Queries) AdminGetEvent(ctx context.Context, arg AdminGetEventParams) (A
 		&i.Description,
 		&i.CreatedAt,
 		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const adminGetEventPhoto = `-- name: AdminGetEventPhoto :one
+SELECT p.uploader_id, p.caption, p.created_at, p.deleted_at, p.upload_id
+FROM event_photos p JOIN events e ON e.id = p.event_id
+WHERE p.id = $1 AND e.tayfa_id = $2
+`
+
+type AdminGetEventPhotoParams struct {
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+type AdminGetEventPhotoRow struct {
+	UploaderID pgtype.UUID
+	Caption    pgtype.Text
+	CreatedAt  pgtype.Timestamptz
+	DeletedAt  pgtype.Timestamptz
+	UploadID   pgtype.UUID
+}
+
+func (q *Queries) AdminGetEventPhoto(ctx context.Context, arg AdminGetEventPhotoParams) (AdminGetEventPhotoRow, error) {
+	row := q.db.QueryRow(ctx, adminGetEventPhoto, arg.ID, arg.TayfaID)
+	var i AdminGetEventPhotoRow
+	err := row.Scan(
+		&i.UploaderID,
+		&i.Caption,
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UploadID,
 	)
 	return i, err
 }

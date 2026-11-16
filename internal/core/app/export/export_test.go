@@ -57,7 +57,15 @@ INSERT INTO user_availability (id, user_id, day, slots, note) VALUES
 INSERT INTO reports (id, tayfa_id, reporter_id, target_type, target_id, reason) VALUES
   (gen_random_uuid(), '%[1]s', '%[2]s', 'announcement', '%[5]s', 'spam'),
   (gen_random_uuid(), '%[1]s', '%[3]s', 'announcement', '%[4]s', 'spam');
-`, tf, me, other, id.New(), id.New(), poll, optA, optB, low, high)
+BEGIN;
+SET LOCAL session_replication_role = replica;
+INSERT INTO events (id, tayfa_id, type, mode, title, starts_at, ends_at, online_url, created_by)
+  VALUES ('%[11]s', '%[1]s', 'general', 'online', 'Göl', now(), now() + interval '1 hour', 'https://example.test/g', '%[3]s');
+INSERT INTO event_photos (id, event_id, uploader_id, upload_id, caption, client_request_id) VALUES
+  (gen_random_uuid(), '%[11]s', '%[2]s', gen_random_uuid(), 'Benim fotoğrafım', gen_random_uuid()),
+  (gen_random_uuid(), '%[11]s', '%[3]s', gen_random_uuid(), 'Onun fotoğrafı', gen_random_uuid());
+COMMIT;
+`, tf, me, other, id.New(), id.New(), poll, optA, optB, low, high, id.New())
 	if _, err := d.Admin.Exec(ctx, sql); err != nil {
 		t.Fatalf("veri: %v", err)
 	}
@@ -126,6 +134,9 @@ func TestExportOnlyCallersData(t *testing.T) {
 				t.Errorf("şikâyette %s olmamalı", k)
 			}
 		}
+	}
+	if ph := got[SectionEventPhotos]; len(ph) != 1 || ph[0]["caption"] != "Benim fotoğrafım" || ph[0]["tayfa_id"] == nil || ph[0]["upload_id"] == nil {
+		t.Fatalf("albüm fotoğrafları yalnızca kendi yükledikleri: %v", ph)
 	}
 	if m := got[SectionMemberships]; len(m) != 1 || m[0]["role"] != "admin" || m[0]["tayfa_name"] != "Kamp Tayfası" {
 		t.Fatalf("üyelikler: %v", m)

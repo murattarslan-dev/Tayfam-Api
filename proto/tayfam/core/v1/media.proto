@@ -95,7 +95,8 @@ service MediaService {
   // account is deleted. A tayfa cover is visible to ACTIVE members of the
   // tayfa (TayfaView). An event cover or a catch photo is visible to ACTIVE
   // members who may see the event (EventView, events module on, event not
-  // deleted; the catch not deleted).
+  // deleted; the catch not deleted). An event album photo likewise (the
+  // photo not deleted; ADR-0028).
   // 1 to 100 distinct upload IDs.
   rpc GetMediaUrls(GetMediaUrlsRequest) returns (GetMediaUrlsResponse);
 
@@ -154,6 +155,9 @@ enum UploadPurpose {
   UPLOAD_PURPOSE_CATCH_PHOTO = 2;
   // A tayfa or event cover.
   UPLOAD_PURPOSE_COVER = 3;
+  // An event album photo (issue #206, ADR-0028). Attached with
+  // EventService.AddEventPhoto; never a cover.
+  UPLOAD_PURPOSE_EVENT_PHOTO = 4;
 }
 
 // UploadStatus is where an upload stands (uploads.status).

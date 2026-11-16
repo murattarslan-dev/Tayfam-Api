@@ -35,6 +35,9 @@ type Events interface {
 	AddCatch(ctx context.Context, user, t, e id.ID, in event.CatchInput) (event.Catch, error)
 	ListCatches(ctx context.Context, user, t, e id.ID, pageSize int32, pageToken string) ([]event.Catch, string, error)
 	RemoveCatch(ctx context.Context, user, t, e, catch id.ID) error
+	AddPhoto(ctx context.Context, user, t, e id.ID, in event.PhotoInput) (event.Photo, error)
+	ListPhotos(ctx context.Context, user, t, e id.ID, pageSize int32, pageToken string) ([]event.Photo, string, error)
+	RemovePhoto(ctx context.Context, user, t, e, photo id.ID) error
 	GetSeries(ctx context.Context, user, t, series id.ID) (event.Series, error)
 	EndSeries(ctx context.Context, user, t, series id.ID) (event.Series, int, error)
 	Export(ctx context.Context, user, t, e id.ID) ([]byte, error)
