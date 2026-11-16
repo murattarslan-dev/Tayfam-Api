@@ -111,7 +111,7 @@ WHERE id = @id AND deleted_at IS NULL AND deletion_requested_at IS NOT NULL;
 SELECT t.id, t.name, t.name_normalized, t.description, t.join_code, t.status,
        t.join_policy, t.suspended_at, t.deletion_scheduled_for,
        t.members_can_create_events, t.created_at, t.updated_at, t.cover_upload_id, t.kind,
-       m.role, m.status AS membership_status, m.muted_until,
+       t.converted_at, m.role, m.status AS membership_status, m.muted_until,
        m.created_at AS membership_created_at
 FROM memberships m
 JOIN tayfas t ON t.id = m.tayfa_id

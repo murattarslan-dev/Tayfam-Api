@@ -139,6 +139,8 @@ type tayfaJSON struct {
 	// instant.
 	Kind           string `json:"kind"`
 	InstantEventID string `json:"instant_event_id,omitempty"`
+	// ConvertedAt: only for a tayfa converted from instant (ADR-0032 §7).
+	ConvertedAt *time.Time `json:"converted_at,omitempty"`
 }
 
 func tayfaFrom(t *corev1.Tayfa) tayfaJSON {
@@ -157,6 +159,7 @@ func tayfaFrom(t *corev1.Tayfa) tayfaJSON {
 		CreatedAt: t.GetCreateTime().AsTime(), UpdatedAt: t.GetUpdateTime().AsTime(),
 		CoverUploadID: t.GetCoverUploadId(), PendingJoinRequestCount: t.PendingJoinRequestCount,
 		Kind: tayfaKinds.name(t.GetKind()), InstantEventID: t.GetInstantEventId(),
+		ConvertedAt: optTime(t.GetConvertTime()),
 	}
 }
 
