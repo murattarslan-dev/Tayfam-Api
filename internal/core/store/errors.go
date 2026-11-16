@@ -42,6 +42,8 @@ const (
 	CodePhotoEventClosed = "TF092"
 	// CodeUniqueViolation is Postgres' unique_violation.
 	CodeUniqueViolation = "23505"
+	// CodeCheckViolation is Postgres' check_violation.
+	CodeCheckViolation = "23514"
 )
 
 // SystemJobAccountDeletion is the only system job the membership trigger

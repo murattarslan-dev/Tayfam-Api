@@ -51,6 +51,9 @@ COMMIT;
 INSERT INTO poll_votes (poll_id, option_id, user_id) VALUES ('%[6]s', '%[7]s', '%[2]s'), ('%[6]s', '%[8]s', '%[3]s');
 INSERT INTO friendships (user_low_id, user_high_id, status, requested_by, accepted_at) VALUES ('%[9]s', '%[10]s', 'accepted', '%[3]s', now());
 INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ('%[2]s', gen_random_uuid()), ('%[3]s', '%[2]s');
+INSERT INTO user_availability (id, user_id, day, slots, note) VALUES
+  (gen_random_uuid(), '%[2]s', (now() AT TIME ZONE 'Europe/Istanbul')::date + 1, '{morning,evening}', 'Kahve?'),
+  (gen_random_uuid(), '%[3]s', (now() AT TIME ZONE 'Europe/Istanbul')::date + 1, '{all_day}', 'onun notu');
 INSERT INTO reports (id, tayfa_id, reporter_id, target_type, target_id, reason) VALUES
   (gen_random_uuid(), '%[1]s', '%[2]s', 'announcement', '%[5]s', 'spam'),
   (gen_random_uuid(), '%[1]s', '%[3]s', 'announcement', '%[4]s', 'spam');
@@ -118,6 +121,9 @@ func TestExportOnlyCallersData(t *testing.T) {
 	}
 	if b := got[SectionBlocks]; len(b) != 1 || b[0]["user_id"] == me.String() {
 		t.Fatalf("engellemeler yalnızca kendi engelledikleri: %v", b)
+	}
+	if a := got[SectionAvailability]; len(a) != 1 || a[0]["note"] != "Kahve?" || len(a[0]["slots"].([]any)) != 2 {
+		t.Fatalf("boş vakit yalnızca kendi günleri: %v", a)
 	}
 	if r := got[SectionReports]; len(r) != 1 {
 		t.Fatalf("şikâyetler yalnızca kendi açtıkları: %v", r)

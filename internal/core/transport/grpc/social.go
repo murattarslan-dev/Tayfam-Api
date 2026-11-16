@@ -7,6 +7,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/availability"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/social"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -176,6 +177,11 @@ func friendPB(f social.Friend) *corev1.Friend {
 	}
 	if !f.AcceptedAt.IsZero() {
 		out.AcceptTime = timestamppb.New(f.AcceptedAt)
+	}
+	if !f.NextAvailable.Date.IsZero() {
+		out.NextAvailable = dayPB(availability.Day{
+			Date: f.NextAvailable.Date, Slots: availability.SlotsOf(f.NextAvailable.Slots),
+		}, false)
 	}
 	return out
 }

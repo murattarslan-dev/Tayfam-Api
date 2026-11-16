@@ -58,6 +58,8 @@ enum CoreExportSection {
   // Event album photos the caller added (issue #206): a list only; the
   // files are listed in UPLOADS.
   CORE_EXPORT_SECTION_EVENT_PHOTOS = 18;
+  // "Boşum" free days the caller saved, today on (issue #207).
+  CORE_EXPORT_SECTION_AVAILABILITY = 19;
 }
 
 message ExportMyDataRequest {}

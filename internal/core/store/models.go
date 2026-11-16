@@ -472,6 +472,16 @@ type UserActivityRecord struct {
 	UpdatedAt        pgtype.Timestamptz
 }
 
+type UserAvailability struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	Day       pgtype.Date
+	Slots     []string
+	Note      pgtype.Text
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
 type UserBlock struct {
 	BlockerID pgtype.UUID
 	BlockedID pgtype.UUID

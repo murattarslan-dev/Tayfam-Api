@@ -41,6 +41,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/localday"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
@@ -110,6 +111,22 @@ type Friend struct {
 	State          State
 	RequestedAt    time.Time
 	AcceptedAt     time.Time // zero unless friends
+	// NextAvailable is the friend's nearest free day within BadgeDays
+	// ("Boşum" badge, issue #207); zero Date when there is none. Only in
+	// ListFriends.
+	NextAvailable NextAvailable
+}
+
+// BadgeDays is the "Boşum" badge window: the nearest free day within the
+// next seven calendar days, today included (platform owner, 2026-11-15).
+// Opening a friend's days still shows all thirty.
+const BadgeDays = 7
+
+// NextAvailable is a friend's nearest free day, without the note.
+type NextAvailable struct {
+	// Date at midnight UTC (a calendar date; package localday).
+	Date  time.Time
+	Slots []string
 }
 
 // Blocked is one row of the caller's block list.
@@ -396,8 +413,10 @@ func (s *Service) listFriendships(ctx context.Context, caller id.ID, status, dir
 	if err != nil {
 		return Page[Friend]{}, err
 	}
+	today := localday.Today(s.now())
 	rows, err := s.q.ListFriendshipsPage(ctx, store.ListFriendshipsPageParams{
 		UserID: caller.PG(), Status: status, Direction: dir, AfterUserID: after.PG(), PageSize: size + 1,
+		Today: pgtype.Date{Time: today, Valid: true}, BadgeUntil: pgtype.Date{Time: today.AddDate(0, 0, BadgeDays-1), Valid: true},
 	})
 	if err != nil {
 		return Page[Friend]{}, fmt.Errorf("arkadaşlar: %w", err)
@@ -418,6 +437,12 @@ func (s *Service) listFriendships(ctx context.Context, caller id.ID, status, dir
 		}
 		if r.AcceptedAt.Valid {
 			f.AcceptedAt = r.AcceptedAt.Time.UTC()
+		}
+		if r.NextAvailableDay.Valid {
+			d := r.NextAvailableDay.Time
+			f.NextAvailable = NextAvailable{
+				Date: time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC), Slots: r.NextAvailableSlots,
+			}
 		}
 		out.Items = append(out.Items, f)
 	}
