@@ -592,7 +592,7 @@ type Querier interface {
 	ListConvoyVehicles(ctx context.Context, eventID pgtype.UUID) ([]ListConvoyVehiclesRow, error)
 	ListDeletingUploads(ctx context.Context, n int32) ([]ListDeletingUploadsRow, error)
 	// Keşfet ilk aşama (issue #210, ADR-0033). Listelenebilirlik
-	// tayfa_discover_listable, "görünür arkadaş" discover_visible_friends
+	// tayfa_discover_listable, "görünür arkadaş" discover_friend_visible
 	// (migration 00028) ile tek yerde tanımlıdır. Arkadaşlık puanı yalnızca
 	// sıralamada kullanılır; hiçbir sorgunun sonucunda yoktur.
 	// ---------------------------------------------------------------------------
