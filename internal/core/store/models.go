@@ -54,6 +54,13 @@ type AuditLog struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type DiscoverJoin struct {
+	TayfaID  pgtype.UUID
+	UserID   pgtype.UUID
+	JoinedAt pgtype.Timestamptz
+	LeftAt   pgtype.Timestamptz
+}
+
 type DomainEvent struct {
 	ID          pgtype.UUID
 	Type        string
@@ -141,6 +148,14 @@ type EventConvoyVehicle struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type EventFeedback struct {
+	EventID   pgtype.UUID
+	UserID    pgtype.UUID
+	Answer    string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
 type EventFishing struct {
 	EventID        pgtype.UUID
 	Type           string
@@ -201,6 +216,17 @@ type EventRsvp struct {
 	UpdatedAt          pgtype.Timestamptz
 	StatusChangedAt    pgtype.Timestamptz
 	CheckInAttempts    int32
+}
+
+type EventSafetyContact struct {
+	EventID       pgtype.UUID
+	UserID        pgtype.UUID
+	ContactUserID pgtype.UUID
+	GraceMinutes  int32
+	ReturnedAt    pgtype.Timestamptz
+	AlertSentAt   pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
 }
 
 type EventSeries struct {
@@ -403,10 +429,11 @@ type Report struct {
 }
 
 type SocialSetting struct {
-	UserID              pgtype.UUID
-	ProfilingEnabled    bool
-	HideFromSuggestions bool
-	UpdatedAt           pgtype.Timestamptz
+	UserID                   pgtype.UUID
+	ProfilingEnabled         bool
+	HideFromSuggestions      bool
+	UpdatedAt                pgtype.Timestamptz
+	DiscoverVisibleToFriends bool
 }
 
 type Tag struct {
@@ -447,6 +474,21 @@ type Tayfa struct {
 	CoverUploadID          pgtype.UUID
 	Kind                   string
 	ConvertedAt            pgtype.Timestamptz
+}
+
+type TayfaDiscover struct {
+	TayfaID         pgtype.UUID
+	Status          string
+	DropReason      pgtype.Text
+	RequestedAt     pgtype.Timestamptz
+	RequestedBy     pgtype.UUID
+	ReviewedAt      pgtype.Timestamptz
+	ReviewedBy      pgtype.UUID
+	StatusChangedAt pgtype.Timestamptz
+	MaskedStatus    pgtype.Text
+	MaskedUntil     pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
 }
 
 type TayfaInterest struct {

@@ -178,6 +178,16 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_UPLOAD_RATE_LIMITED, true
 	case errors.Is(err, apperr.ErrUploadQuotaExceeded):
 		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_UPLOAD_QUOTA_EXCEEDED, true
+	case errors.Is(err, apperr.ErrFeatureDisabled):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_FEATURE_DISABLED, true
+	case errors.Is(err, apperr.ErrDiscoverTooFewMembers):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DISCOVER_TOO_FEW_MEMBERS, true
+	case errors.Is(err, apperr.ErrFeedbackClosed):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_FEEDBACK_CLOSED, true
+	case errors.Is(err, apperr.ErrSafetyContactClosed):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SAFETY_CONTACT_CLOSED, true
+	case errors.Is(err, apperr.ErrSafetyContactNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_SAFETY_CONTACT_NOT_FOUND, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

@@ -207,8 +207,12 @@ type Membership struct {
 	// caller is the member themself or a moderator or admin of the tayfa;
 	// other members never see who is muted.
 	MuteExpireTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=mute_expire_time,json=muteExpireTime,proto3" json:"mute_expire_time,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The user asked to join from Keşfet (joined_via = discover; ADR-0033).
+	// Filled only when the caller is a moderator or admin of the tayfa;
+	// other members never see where someone came from.
+	JoinedViaDiscover bool `protobuf:"varint,7,opt,name=joined_via_discover,json=joinedViaDiscover,proto3" json:"joined_via_discover,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Membership) Reset() {
@@ -281,6 +285,13 @@ func (x *Membership) GetMuteExpireTime() *timestamppb.Timestamp {
 		return x.MuteExpireTime
 	}
 	return nil
+}
+
+func (x *Membership) GetJoinedViaDiscover() bool {
+	if x != nil {
+		return x.JoinedViaDiscover
+	}
+	return false
 }
 
 // PendingMember is a join request as moderators see it.
@@ -2918,7 +2929,7 @@ var File_tayfam_core_v1_membership_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_membership_proto_rawDesc = "" +
 	"\n" +
-	"\x1ftayfam/core/v1/membership.proto\x12\x0etayfam.core.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1btayfam/core/v1/report.proto\"\xa3\x02\n" +
+	"\x1ftayfam/core/v1/membership.proto\x12\x0etayfam.core.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1btayfam/core/v1/report.proto\"\xd3\x02\n" +
 	"\n" +
 	"Membership\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x17\n" +
@@ -2926,7 +2937,8 @@ const file_tayfam_core_v1_membership_proto_rawDesc = "" +
 	"\x04role\x18\x03 \x01(\x0e2\x14.tayfam.core.v1.RoleR\x04role\x128\n" +
 	"\x06status\x18\x04 \x01(\x0e2 .tayfam.core.v1.MembershipStatusR\x06status\x127\n" +
 	"\tjoin_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\bjoinTime\x12D\n" +
-	"\x10mute_expire_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x0emuteExpireTime\"\x83\x02\n" +
+	"\x10mute_expire_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x0emuteExpireTime\x12.\n" +
+	"\x13joined_via_discover\x18\a \x01(\bR\x11joinedViaDiscover\"\x83\x02\n" +
 	"\rPendingMember\x12:\n" +
 	"\n" +
 	"membership\x18\x01 \x01(\v2\x1a.tayfam.core.v1.MembershipR\n" +

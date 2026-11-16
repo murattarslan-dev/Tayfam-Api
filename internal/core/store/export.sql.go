@@ -840,6 +840,7 @@ const exportSocialSettings = `-- name: ExportSocialSettings :many
 SELECT $1::uuid AS k, jsonb_build_object(
   'profiling_enabled', COALESCE(s.profiling_enabled, true),
   'hide_from_suggestions', COALESCE(s.hide_from_suggestions, false),
+  'discover_visible_to_friends', COALESCE(s.discover_visible_to_friends, true),
   'updated_at', s.updated_at,
   'scored_people_count', (SELECT count(*) FROM friend_scores f
                           WHERE f.user_low_id = $1::uuid OR f.user_high_id = $1::uuid)
@@ -863,7 +864,7 @@ type ExportSocialSettingsRow struct {
 	Data []byte
 }
 
-// Tek kayıt: iki ayar (satır yoksa varsayılanlar) ve kişi hakkında puan
+// Tek kayıt: üç ayar (satır yoksa varsayılanlar) ve kişi hakkında puan
 // tutulan kişi sayısı. Puan değerleri ve kiminle olduğu girmez (ADR-0030
 // §9). Ayar satırı da puanı da yoksa tutulan bir şey yoktur, kayıt da yok.
 func (q *Queries) ExportSocialSettings(ctx context.Context, arg ExportSocialSettingsParams) ([]ExportSocialSettingsRow, error) {

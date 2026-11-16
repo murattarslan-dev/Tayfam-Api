@@ -394,6 +394,7 @@ func memberPB(m membership.Member) *corev1.Membership {
 	if !m.MutedUntil.IsZero() {
 		out.MuteExpireTime = timestamppb.New(m.MutedUntil)
 	}
+	out.JoinedViaDiscover = m.FromDiscover
 	return out
 }
 

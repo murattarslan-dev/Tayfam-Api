@@ -100,6 +100,26 @@ func label(v any) string {
 		case corev1.PlatformDecision_PLATFORM_DECISION_DISMISSED:
 			return "Reddedildi"
 		}
+	case corev1.DiscoverReviewStatus:
+		switch x {
+		case corev1.DiscoverReviewStatus_DISCOVER_REVIEW_STATUS_PENDING:
+			return "Başvuru bekliyor"
+		case corev1.DiscoverReviewStatus_DISCOVER_REVIEW_STATUS_APPROVED:
+			return "Onaylandı"
+		case corev1.DiscoverReviewStatus_DISCOVER_REVIEW_STATUS_REJECTED:
+			return "Reddedildi"
+		case corev1.DiscoverReviewStatus_DISCOVER_REVIEW_STATUS_DROPPED:
+			return "Otomatik düşürüldü"
+		}
+	case corev1.DiscoverDropReason:
+		switch x {
+		case corev1.DiscoverDropReason_DISCOVER_DROP_REASON_MEMBER_REPORT:
+			return "Keşfet üyesinden şikâyet"
+		case corev1.DiscoverDropReason_DISCOVER_DROP_REASON_NEGATIVE_FEEDBACK:
+			return "Ciddi olumsuz geri bildirim"
+		case corev1.DiscoverDropReason_DISCOVER_DROP_REASON_MEMBER_REMOVED:
+			return "Keşfet üyesi çıkarıldı"
+		}
 	case identityv1.SanctionType:
 		switch x {
 		case identityv1.SanctionType_SANCTION_TYPE_SUSPEND:

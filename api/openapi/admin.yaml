@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Tayfam Platform Yönetim Paneli
-  version: 0.3.0
+  version: 0.4.0
   description: |
     1. aşama: erişim katmanı (`/auth/*` JSON uçları). 3. aşama: sunucuda
     render edilen panel sayfaları (`text/html`, aşağıda "Sayfalar"). Sayfalar
@@ -402,6 +402,35 @@ paths:
         `ban`: önce identity `SanctionUser` (ban, şikâyet kimliğiyle), sonra
         core `DecideReport`. İkinci çağrı başarısız olursa ban geçerli kalır;
         karar yeniden gönderilebilir (var olan ban kabul edilir).
+      parameters: [{ $ref: "#/components/parameters/ID" }]
+      requestBody: { $ref: "#/components/requestBodies/Change" }
+      responses: { "303": { $ref: "#/components/responses/Changed" }, "403": { $ref: "#/components/responses/Page" } }
+
+  /kesfet:
+    get:
+      operationId: adminDiscoverQueue
+      summary: Keşfet inceleme kuyruğu (bekleyen başvurular ve otomatik düşürülenler, eskiden yeniye)
+      description: |
+        Yalnızca meta veri ve sayılar (ADR-0033 §8): ad, açıklama, il/ilçe,
+        kuruluş, üye sayısı, Keşfet'ten gelen üye sayısı, açık platform
+        şikâyetleri, son 90 günün olumsuz geri bildirim sayıları, düşürme
+        nedeni. Tayfa içeriği ve geri bildirimi kimin verdiği görünmez.
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+        "303": { description: /giris }
+
+  /tayfalar/{id}/kesfet-onay:
+    post:
+      operationId: adminApproveDiscover
+      summary: Keşfet başvurusunu onaylar (bekleyen ya da düşürülmüş; yalnızca meta veri incelemesi)
+      parameters: [{ $ref: "#/components/parameters/ID" }]
+      requestBody: { $ref: "#/components/requestBodies/Change" }
+      responses: { "303": { $ref: "#/components/responses/Changed" }, "403": { $ref: "#/components/responses/Page" } }
+
+  /tayfalar/{id}/kesfet-ret:
+    post:
+      operationId: adminRejectDiscover
+      summary: Keşfet başvurusunu reddeder ya da tayfayı Keşfet'ten çıkarır
       parameters: [{ $ref: "#/components/parameters/ID" }]
       requestBody: { $ref: "#/components/requestBodies/Change" }
       responses: { "303": { $ref: "#/components/responses/Changed" }, "403": { $ref: "#/components/responses/Page" } }

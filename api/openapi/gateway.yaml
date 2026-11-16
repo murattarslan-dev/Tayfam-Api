@@ -4196,7 +4196,7 @@ paths:
         "503": { $ref: "#/components/responses/Problem" }
     patch:
       operationId: updateSocialSettings
-      summary: Profilleme ve "Beni önerme" ayarlarını değiştirir
+      summary: Profilleme, "Beni önerme" ve Keşfet görünürlüğü ayarlarını değiştirir
       description: |
         Gövdedeki alanlar değişir, olmayanlar olduğu gibi kalır; en az bir
         alan gerekir (yoksa `invalid-request`).
@@ -4210,6 +4210,10 @@ paths:
         **Beni önerme** (`hide_from_suggestions`, varsayılan kapalı):
         açınca kimseye önerilmezsiniz ve sizin önerildiğiniz açık öneriler
         geri çekilir; siz öneri almaya devam edersiniz.
+
+        **Keşfet'te arkadaşlarım görebilsin** (`discover_visible_to_friends`,
+        varsayılan açık): kapatınca etkinliklere katılımınız arkadaşlarınızın
+        Keşfet akışında gösterilmez ve sayılmaz (hemen).
 
         Ayarı kapatıp açmak haftalık öneri sınırını ve daha önce kimin
         önerildiğini sıfırlamaz; kapattığınız öneriler de hatırlanır.
@@ -4345,6 +4349,287 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AvailabilityDayList" }
         "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  # --- Keşfet ilk aşama (core DiscoverService, #210, ADR-0033) ---
+  # Sunucu bayrağı DISCOVER_ENABLED kapalıyken (varsayılan) akış, Keşfet'ten
+  # katılım ve geri bildirim uçları hiçbir şey okumadan 404
+  # `feature-disabled` döner; istemci girişleri gizler. Tayfanın Keşfet
+  # ayarı (`/v1/tayfas/{tayfa_id}/discover`) bayraktan bağımsız çalışır.
+  # Güvenlik kişisi ayrı bayraktır (SAFETY_CONTACT_ENABLED, varsayılan açık):
+  # kapalıyken seçme, okuma ve paylaşımlar `feature-disabled`; "Döndüm" ve
+  # kaldırma her zaman çalışır.
+  # Keşfet güven vermez, bilgi verir: "onaylı" ya da "güvenilir" alanı
+  # yoktur, yalnızca olgular döner.
+
+  /v1/discover/events:
+    get:
+      operationId: listDiscoverFeed
+      summary: Arkadaşlarınızın gittiği, Keşfet'e açık tayfaların etkinlikleri (en fazla 50; sayfalanmaz)
+      description: |
+        Bitmemiş ve 30 gün içinde başlayan, organizatörün "halka açık yerde
+        buluşur" diye işaretlediği (`discoverable`) yüz yüze etkinlikler;
+        yalnızca Keşfet'e açık ve platform incelemesinden geçmiş, en az 5
+        aktif üyeli tayfalardan ve üyesi olmadığınız tayfalardan.
+
+        Bir etkinlik yalnızca en az bir **görünür arkadaşınız** varsa
+        listelenir: kabul edilmiş arkadaş, iki yönden engel yok, tayfanın
+        aktif üyesi, etkinliğe `going` demiş ya da katılımı doğrulanmış ve
+        katılım geçmişi görünürlüğü `private` değil. `friend_count` yalnızca
+        görünür arkadaşları sayar.
+
+        Sıra gizli sinyallerden gelir (arkadaşlık puanı; profillemesi
+        kapalı kişide kullanılmaz); puan ya da sıra numarası dönmez.
+        Açıklama, buluşma noktası ve koordinat dönmez; tayfaya katılınca
+        mevcut uçlardan okunur.
+      responses:
+        "200":
+          description: Akış, en iyi önce
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DiscoverFeed" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/discover/tayfas/{tayfa_id}/join:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    post:
+      operationId: joinFromDiscover
+      summary: Akışınızdaki bir tayfaya katılım isteği (her zaman onay bekler)
+      description: |
+        Tayfa şu anda akışınızda değilse (ya da orada banlıysanız) cevap
+        `tayfa-not-found`'dur: Keşfet'teki tayfalar yabancılara açık
+        listelenmez. İstek, tayfa açık katılımlı olsa da yöneticilerin
+        onayına düşer ve onlara "Keşfet'ten" etiketiyle görünür. Saatte en
+        fazla 10 deneme.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "201":
+          description: Bekleyen üyelik
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Membership" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/discover:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: getTayfaDiscover
+      summary: Tayfanın Keşfet durumu (yönetici)
+      responses:
+        "200":
+          description: Durum
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TayfaDiscover" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: setTayfaDiscover
+      summary: Tayfayı Keşfet'e açar ya da kapatır (yönetici)
+      description: |
+        Açmak en az 5 aktif üye ister (`discover-too-few-members`) ve
+        tayfayı platformun meta veri incelemesine gönderir (`pending`).
+        Kapatmak tayfayı hemen gizler. Platform tayfayı Keşfet'ten
+        çıkardıysa durum `under_review`'dur; neden söylenmez. Reddedilmiş
+        bir tayfayı yeniden açmak yeniden incelemeye gönderir. Ad, açıklama,
+        il ya da ilçe değişirse tayfa yeniden incelemeye düşer.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TayfaDiscoverInput" }
+      responses:
+        "200":
+          description: Yeni durum
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TayfaDiscover" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/feedback:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+    get:
+      operationId: getEventFeedback
+      summary: '"Her şey yolunda mıydı?" cevabınız'
+      description: |
+        Cevap yoksa `answer` yoktur. Geri bildirim uçları, tayfaya Keşfet'ten
+        gelip üyeliği son 30 günde biten kişiye de açıktır (yalnızca
+        katıldığı etkinlik için).
+      responses:
+        "200":
+          description: Cevabınız
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventFeedback" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: setEventFeedback
+      summary: '"Her şey yolunda mıydı?" cevabını verir ya da değiştirir'
+      description: |
+        Yalnızca katılımı doğrulanmış (`not-attended`) katılımcı, "halka açık
+        yerde buluşur" işaretli yüz yüze etkinlikte, bitişten bitiş + 7 güne
+        kadar (`feedback-closed`). Serbest metin yoktur; anlatmak için şikâyet
+        akışını kullanın. Cevabı yalnızca siz görürsünüz; `serious` tayfayı
+        inceleme bitene kadar Keşfet'ten çıkarır ve tayfaya nedeni söylenmez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventFeedbackInput" }
+      responses:
+        "200":
+          description: Kaydedilen cevap
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventFeedback" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/safety-contact:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+    get:
+      operationId: getSafetyContact
+      summary: Bu etkinlik için güvenlik kişiniz
+      description: Seçilmemişse `contact` yoktur.
+      responses:
+        "200":
+          description: Güvenlik kişisi
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SafetyContact" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: setSafetyContact
+      summary: Güvenlik kişisi seçer ya da değiştirir
+      description: |
+        Etkinliğe `going` demiş olmalısınız (`event-not-going`); etkinlik yüz
+        yüze, iptal edilmemiş ve bitmemiş olmalı, alarm gitmemiş olmalı
+        (`safety-contact-closed`). Kişi kabul edilmiş arkadaşınız olmalı
+        (`not-friends`). Bitiş + `grace_minutes` geçtiğinde "Döndüm"
+        işaretlenmemişse yalnızca bu kişiye `safety_alert` bildirimi gider.
+        Kişi yalnızca sizi, etkinliğin başlangıç ve bitiş saatini, toleransı
+        ve "döndü / dönmedi / alarm gitti" durumunu görür
+        (`GET /v1/me/safety-shares`); tayfa, etkinlik başlığı ve yer görmez.
+        Seçildiğinde kişiye bildirim gitmez. Keşfet'ten bağımsızdır (sunucu
+        bayrağı `SAFETY_CONTACT_ENABLED`, varsayılan açık); bütün yüz yüze
+        etkinliklerde çalışır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SafetyContactInput" }
+      responses:
+        "200":
+          description: Güvenlik kişisi
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SafetyContact" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: clearSafetyContact
+      summary: Güvenlik kişisini kaldırır
+      description: |
+        Kaldırılacak bir şey yoksa da başarılıdır. Alarm gittikten sonra
+        kaldırılamaz (`safety-contact-closed`). Keşfet kapalıyken, tayfadan
+        ayrıldıktan sonra ya da etkinlik modülü kapalıyken de çalışır;
+        yalnızca kendi kaydınıza dokunur.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Kaldırıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/safety-contact/return:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+    post:
+      operationId: markReturned
+      summary: '"Döndüm": güvenlik alarmını durdurur'
+      description: |
+        Güvenlik kişisi seçilmemişse `safety-contact-not-found`. Tekrar
+        çağrı ilk zamanı korur. Keşfet kapalıyken, susturulmuşken, tayfadan
+        ayrıldıktan sonra ya da etkinlik modülü kapalıyken de çalışır;
+        yalnızca kendi kaydınıza dokunur.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Güvenlik kişisi
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SafetyContact" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/safety-shares:
+    get:
+      operationId: listSafetyShares
+      summary: Sizi güvenlik kişisi seçenlerin etkinlikleri
+      description: |
+        Bitişinden 24 saat geçmemiş ya da alarmı son 7 günde gitmiş
+        etkinlikler, en yeni başlangıç önce (en fazla 50). Paylaşım yalnızca
+        hâlâ geçerliyse görünür: arkadaşlık sürüyor, engel yok, katılımcı
+        tayfanın aktif üyesi ve `going`; etkinlik ve tayfa silinmemiş, iptal
+        edilmemiş ya da askıda değil (alarm gittiyse ve katılımcı check-in
+        yaptıysa kalır). Yalnızca en az bilgi: kim, saat aralığı
+        (başlangıç, bitiş, tolerans) ve durum. Tayfa, etkinlik başlığı,
+        buluşma yeri, il/ilçe ve koordinat yoktur.
+      responses:
+        "200":
+          description: Paylaşımlar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SafetyShareList" }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
@@ -5427,6 +5712,12 @@ components:
         - not-attended
         # core: etkinlik albümü (#206)
         - album-closed
+        # core: Keşfet (#210, ADR-0033); feature-disabled 404'tür
+        - feature-disabled
+        - discover-too-few-members
+        - feedback-closed
+        - safety-contact-closed
+        - safety-contact-not-found
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -5930,6 +6221,11 @@ components:
           type: string
           format: date-time
           description: Susturma bitişi; yalnızca üyenin kendisine, moderatöre ve yöneticiye döner.
+        joined_via_discover:
+          type: boolean
+          description: |
+            Kişi Keşfet'ten katılım istedi (ADR-0033). Yalnızca moderatör ve
+            yöneticiye döner; diğer üyelere hiç dönmez.
 
     MemberList:
       type: object
@@ -6588,7 +6884,12 @@ components:
         status: { type: string, enum: [scheduled, cancelled] }
         cancelled_at: { type: string, format: date-time }
         cancel_reason: { type: string }
-        discoverable: { type: boolean }
+        discoverable:
+          type: boolean
+          description: |
+            Organizatörün işareti: etkinlik halka açık bir yerde buluşur ve
+            Keşfet'te görünebilir (ADR-0033). Yalnızca yüz yüze etkinlikte
+            etkilidir; özel adreste buluşan etkinlik işaretlenmez.
         created_by_user_id:
           type: string
           format: uuid
@@ -6652,7 +6953,12 @@ components:
         district: { type: string, maxLength: 50 }
         online_url: { type: string, maxLength: 2048 }
         capacity: { type: integer, minimum: 0, maximum: 10000, description: "0: sınırsız." }
-        discoverable: { type: boolean }
+        discoverable:
+          type: boolean
+          description: |
+            Organizatörün işareti: etkinlik halka açık bir yerde buluşur ve
+            Keşfet'te görünebilir (ADR-0033). Yalnızca yüz yüze etkinlikte
+            etkilidir; özel adreste buluşan etkinlik işaretlenmez.
         convoy: { $ref: "#/components/schemas/ConvoyDetailsInput" }
         camp: { $ref: "#/components/schemas/CampDetailsInput" }
         hike: { $ref: "#/components/schemas/HikeDetails" }
@@ -6687,7 +6993,12 @@ components:
         district: { type: string, maxLength: 50 }
         online_url: { type: string, maxLength: 2048 }
         capacity: { type: integer, minimum: 0, maximum: 10000 }
-        discoverable: { type: boolean }
+        discoverable:
+          type: boolean
+          description: |
+            Organizatörün işareti: etkinlik halka açık bir yerde buluşur ve
+            Keşfet'te görünebilir (ADR-0033). Yalnızca yüz yüze etkinlikte
+            etkilidir; özel adreste buluşan etkinlik işaretlenmez.
         convoy: { $ref: "#/components/schemas/ConvoyDetailsInput" }
         camp: { $ref: "#/components/schemas/CampDetailsInput" }
         hike: { $ref: "#/components/schemas/HikeDetails" }
@@ -6915,8 +7226,13 @@ components:
             `friend_suggestion` (arkadaş önerisi; `target_id` önerilen kişi,
             `tayfa_id` ve `actor_id` yoktur; yalnızca uygulama içi, push
             gitmez; açık öneriler `GET /v1/me/friend-suggestions`).
+            `safety_alert` (#210, ADR-0033): sizi güvenlik kişisi seçen
+            `target_id` (hedef `user`) etkinliğin bitişi ve toleransı geçtiği
+            halde "Döndüm" demedi; `tayfa_id` ve `actor_id` yoktur, içerik ve
+            konum taşımaz; etkinliği `GET /v1/me/safety-shares` verir.
+            Susturma uygulanmaz, push gider.
             Tanınmayan değer `unknown`.
-          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, tayfa_suspended, tayfa_unsuspended, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, data_export_ready, friend_suggestion, unknown]
+          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, tayfa_suspended, tayfa_unsuspended, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, data_export_ready, friend_suggestion, safety_alert, unknown]
         tayfa_id:
           type: string
           format: uuid
@@ -8133,7 +8449,7 @@ components:
           items: { $ref: "#/components/schemas/FriendSuggestion" }
     SocialSettings:
       type: object
-      required: [profiling_enabled, hide_from_suggestions]
+      required: [profiling_enabled, hide_from_suggestions, discover_visible_to_friends]
       additionalProperties: false
       properties:
         profiling_enabled:
@@ -8142,6 +8458,13 @@ components:
         hide_from_suggestions:
           type: boolean
           description: '"Beni önerme": kimseye önerilmezsiniz.'
+        discover_visible_to_friends:
+          type: boolean
+          description: |
+            "Keşfet'te arkadaşlarım görebilsin" (varsayılan açık): bir
+            etkinliğe gideceğiniz ya da katıldığınız, arkadaşlarınıza
+            Keşfet'te gösterilebilir. Katılım geçmişiniz `private` ise bu
+            ayar açık olsa da gösterilmez.
     SocialSettingsUpdate:
       type: object
       minProperties: 1
@@ -8149,6 +8472,7 @@ components:
       properties:
         profiling_enabled: { type: boolean }
         hide_from_suggestions: { type: boolean }
+        discover_visible_to_friends: { type: boolean }
     DaySlot:
       type: string
       description: Günün kaba bir bölümü; saat değil. `all_day` başka dilimle birlikte olmaz.
@@ -8182,6 +8506,140 @@ components:
           description: Not yoksa alan yoktur.
           maxLength: 60
         updated_at: { type: string, format: date-time }
+    DiscoverPerson:
+      type: object
+      required: [user_id, display_name]
+      properties:
+        user_id: { type: string, format: uuid }
+        display_name: { type: string }
+        avatar_upload_id: { type: string, format: uuid }
+    DiscoverFeed:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items: { $ref: "#/components/schemas/DiscoverItem" }
+    DiscoverItem:
+      type: object
+      required: [event, tayfa, friends, friend_count]
+      properties:
+        event:
+          type: object
+          required: [id, type, title, starts_at, ends_at]
+          description: Açıklama, buluşma noktası ve koordinat yoktur.
+          properties:
+            id: { type: string, format: uuid }
+            type: { $ref: "#/components/schemas/EventType" }
+            title: { type: string }
+            starts_at: { type: string, format: date-time }
+            ends_at: { type: string, format: date-time }
+            city: { type: string }
+            district: { type: string }
+        tayfa:
+          type: object
+          required: [id, name, created_at, event_count, attendance_count]
+          description: |
+            Yalnızca olgular. `event_count` bitişinden 7 gün geçmiş, iptal
+            edilmemiş etkinlikler; `attendance_count` bu etkinliklerdeki
+            doğrulanmış katılımlar.
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            description: { type: string }
+            city: { type: string }
+            created_at: { type: string, format: date-time }
+            event_count: { type: integer, minimum: 0 }
+            attendance_count: { type: integer, minimum: 0 }
+        friends:
+          type: array
+          maxItems: 3
+          items: { $ref: "#/components/schemas/DiscoverPerson" }
+        friend_count:
+          type: integer
+          minimum: 1
+          description: Görünür arkadaşların tamamı (`friends` dahil).
+    TayfaDiscover:
+      type: object
+      required: [state, enabled]
+      properties:
+        state:
+          type: string
+          description: |
+            `off` kapalı; `pending` incelemede; `listed` açık (Keşfet'te
+            görünebilir); `under_review` platform Keşfet'ten çıkardı, yeniden
+            inceleniyor (neden söylenmez); `rejected` kabul edilmedi.
+          enum: [off, pending, listed, under_review, rejected, unknown]
+        enabled: { type: boolean, description: Yöneticilerin Keşfet isteği. }
+    TayfaDiscoverInput:
+      type: object
+      required: [enabled]
+      additionalProperties: false
+      properties:
+        enabled: { type: boolean }
+    EventFeedback:
+      type: object
+      properties:
+        answer: { type: string, enum: [ok, not_ok, serious, unknown] }
+        updated_at: { type: string, format: date-time }
+    EventFeedbackInput:
+      type: object
+      required: [answer]
+      additionalProperties: false
+      properties:
+        answer: { type: string, enum: [ok, not_ok, serious] }
+    SafetyContact:
+      type: object
+      required: [grace_minutes]
+      properties:
+        contact: { $ref: "#/components/schemas/DiscoverPerson" }
+        grace_minutes: { type: integer, minimum: 0, maximum: 1440, description: "Seçilmemişse 0." }
+        returned_at: { type: string, format: date-time }
+        alert_sent_at: { type: string, format: date-time }
+    SafetyContactInput:
+      type: object
+      required: [contact_user_id]
+      additionalProperties: false
+      properties:
+        contact_user_id: { type: string, format: uuid }
+        grace_minutes:
+          type: integer
+          minimum: 15
+          maximum: 1440
+          description: Bitişten sonra beklenecek dakika; yoksa 60.
+    SafetyShare:
+      type: object
+      description: |
+        Katılımcının güvenlik kişisiyle paylaştığı en az bilgi: kim, saat
+        aralığı (başlangıç, bitiş, tolerans) ve durum. Tayfa, etkinlik
+        başlığı ya da kimliği, buluşma yeri, il/ilçe ve koordinat yoktur.
+      required: [participant, starts_at, ends_at, grace_minutes, state]
+      additionalProperties: false
+      properties:
+        participant: { $ref: "#/components/schemas/DiscoverPerson" }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        grace_minutes:
+          type: integer
+          description: Alarm `ends_at` + bu süre sonunda gider.
+        returned_at: { type: string, format: date-time }
+        alert_sent_at: { type: string, format: date-time }
+        state:
+          type: string
+          description: |
+            `not_returned`: henüz dönmedi, alarm gitmedi. `returned`: "Döndüm"
+            dedi (alarmdan sonra da olabilir). `alert_sent`: alarm gitti,
+            "Döndüm" yok.
+          enum: [not_returned, returned, alert_sent]
+    SafetyShareList:
+      type: object
+      required: [shares]
+      properties:
+        shares:
+          type: array
+          maxItems: 50
+          items: { $ref: "#/components/schemas/SafetyShare" }
     AvailabilityDayList:
       type: object
       required: [days]

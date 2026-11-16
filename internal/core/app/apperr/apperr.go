@@ -94,6 +94,24 @@ var (
 	ErrAlbumClosed = errors.New("albüm kapalı")
 )
 
+// Keşfet (issue #210, ADR-0033).
+var (
+	// ErrFeatureDisabled: the feature is turned off on this server
+	// (DISCOVER_ENABLED); nothing was read.
+	ErrFeatureDisabled = errors.New("özellik kapalı")
+	// ErrDiscoverTooFewMembers: Keşfet needs at least five active members.
+	ErrDiscoverTooFewMembers = errors.New("keşfet için üye sayısı yetersiz")
+	// ErrFeedbackClosed: the event takes no "Was everything all right?"
+	// answer (not a discoverable in-person event, not ended, or more than
+	// seven days after the end).
+	ErrFeedbackClosed = errors.New("geri bildirim kapalı")
+	// ErrSafetyContactClosed: no safety contact can be chosen or changed
+	// (online, cancelled or ended event, or the alert went out).
+	ErrSafetyContactClosed = errors.New("güvenlik kişisi değiştirilemez")
+	// ErrSafetyContactNotFound: no safety contact was chosen.
+	ErrSafetyContactNotFound = errors.New("güvenlik kişisi yok")
+)
+
 // Event series errors (issue #51).
 var (
 	ErrEventSeriesNotFound = errors.New("etkinlik serisi bulunamadı")

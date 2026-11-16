@@ -62,6 +62,11 @@ const (
 	// (issue #208, ADR-0030). No tayfa, no actor; in-app only: the
 	// enqueue_push trigger opens no push job for it.
 	TypeFriendSuggestion = "friend_suggestion"
+	// TypeSafetyAlert: the recipient is someone's safety contact and that
+	// person did not mark "back" in time (issue #210, ADR-0033). No tayfa,
+	// no actor, no content; the target is the participant. Like
+	// hike_overdue it cannot be muted and is pushed even while online.
+	TypeSafetyAlert = "safety_alert"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -105,7 +110,7 @@ func targetOf(typ string) (string, bool) {
 	case TypeJoinApproved, TypeTayfaDeletionRequested, TypeTayfaWarned, TypeTayfaArchived, TypeTayfaInvitation,
 		TypeTayfaSuspended, TypeTayfaUnsuspended:
 		return TargetTayfa, true
-	case TypeFriendRequest, TypeFriendAccepted, TypeFriendSuggestion:
+	case TypeFriendRequest, TypeFriendAccepted, TypeFriendSuggestion, TypeSafetyAlert:
 		return TargetUser, true
 	case TypeDMRequest, TypeDMMessage:
 		return TargetDMConversation, true
@@ -118,7 +123,7 @@ func targetOf(typ string) (string, bool) {
 // withoutTayfa reports whether a notification type is not about a tayfa.
 func withoutTayfa(typ string) bool {
 	return typ == TypeFriendRequest || typ == TypeFriendAccepted || typ == TypeFriendSuggestion ||
-		typ == TypeDataExportReady || IsDirect(typ)
+		typ == TypeSafetyAlert || typ == TypeDataExportReady || IsDirect(typ)
 }
 
 // IsDirect reports whether a notification type is about a direct message.
@@ -173,7 +178,8 @@ func (r Request) Validate() error {
 	}
 	// The reporter is never told who handled their report; a direct
 	// message notice does not say who wrote.
-	if (r.Type == TypeReportResolved || r.Type == TypeDataExportReady || r.Type == TypeFriendSuggestion || IsDirect(r.Type)) && r.Actor != (id.ID{}) {
+	if (r.Type == TypeReportResolved || r.Type == TypeDataExportReady || r.Type == TypeFriendSuggestion ||
+		r.Type == TypeSafetyAlert || IsDirect(r.Type)) && r.Actor != (id.ID{}) {
 		return apperr.Validation("actor_id")
 	}
 	if IsDirect(r.Type) != (r.Unread > 0) || r.Unread > MaxDirectUnread {

@@ -299,6 +299,7 @@ func (s *SocialServer) UpdateSocialSettings(ctx context.Context, req *corev1.Upd
 	}
 	st, err := s.app.UpdateSocialSettings(ctx, u, social.SettingsUpdate{
 		ProfilingEnabled: req.ProfilingEnabled, HideFromSuggestions: req.HideFromSuggestions,
+		DiscoverVisibleToFriends: req.DiscoverVisibleToFriends,
 	})
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
@@ -307,5 +308,8 @@ func (s *SocialServer) UpdateSocialSettings(ctx context.Context, req *corev1.Upd
 }
 
 func settingsPB(st social.Settings) *corev1.SocialSettings {
-	return &corev1.SocialSettings{ProfilingEnabled: st.ProfilingEnabled, HideFromSuggestions: st.HideFromSuggestions}
+	return &corev1.SocialSettings{
+		ProfilingEnabled: st.ProfilingEnabled, HideFromSuggestions: st.HideFromSuggestions,
+		DiscoverVisibleToFriends: st.DiscoverVisibleToFriends,
+	}
 }

@@ -67,15 +67,19 @@ type Config struct {
 	// JoinLimiter limits JoinByCode attempts per user against code
 	// guessing.
 	JoinLimiter Limiter
-	Now         func() time.Time
+	// DiscoverEnabled is DISCOVER_ENABLED (ADR-0033): without it
+	// JoinFromDiscover returns apperr.ErrFeatureDisabled.
+	DiscoverEnabled bool
+	Now             func() time.Time
 }
 
 // Service implements the membership operations.
 type Service struct {
-	pool    *pgxpool.Pool
-	limiter Limiter
-	now     func() time.Time
-	q       *store.Queries
+	pool     *pgxpool.Pool
+	limiter  Limiter
+	discover bool
+	now      func() time.Time
+	q        *store.Queries
 }
 
 // New returns a Service.
@@ -86,7 +90,10 @@ func New(cfg Config) (*Service, error) {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	return &Service{pool: cfg.Pool, limiter: cfg.JoinLimiter, now: func() time.Time { return cfg.Now().UTC() }, q: store.New(cfg.Pool)}, nil
+	return &Service{
+		pool: cfg.Pool, limiter: cfg.JoinLimiter, discover: cfg.DiscoverEnabled,
+		now: func() time.Time { return cfg.Now().UTC() }, q: store.New(cfg.Pool),
+	}, nil
 }
 
 // Member is one user's membership in one tayfa as the caller may see it.
@@ -100,6 +107,10 @@ type Member struct {
 	// MutedUntil is zero when not muted, or when the caller may not see
 	// mutes (only the member and moderators and admins see them).
 	MutedUntil time.Time
+	// FromDiscover: the user asked to join from Keşfet (joined_via =
+	// discover; ADR-0033 §6). Set only for callers allowed to see join
+	// requests (moderators and admins); always false for anyone else.
+	FromDiscover bool
 }
 
 // Pending is a join request as moderators see it.
@@ -189,6 +200,49 @@ func (s *Service) JoinByCode(ctx context.Context, caller id.ID, code string) (Me
 			st = authz.StatusActive
 		}
 		out, err = s.join(ctx, q, t.id, caller, st, "code", id.ID{})
+		return err
+	})
+	return out, err
+}
+
+// JoinFromDiscover asks to join a tayfa that is in the caller's Keşfet
+// feed right now (issue #210, ADR-0033 §5). The request is always PENDING
+// with joined_via = discover, even in an open tayfa: the staff see where it
+// came from before approving. A tayfa the caller cannot see in Keşfet, an
+// unknown one and one where the caller is banned are all
+// apperr.ErrTayfaNotFound: listed tayfas are not open to strangers. The
+// memberships_discover_guard trigger checks the same again.
+func (s *Service) JoinFromDiscover(ctx context.Context, caller, tayfa id.ID) (Member, error) {
+	if !s.discover {
+		return Member{}, apperr.ErrFeatureDisabled
+	}
+	if !s.limiter.Allow("discover:" + caller.String()) {
+		return Member{}, apperr.ErrRateLimited
+	}
+	var out Member
+	err := txn.WithActor(ctx, s.pool, caller, func(_ pgx.Tx, q *store.Queries) error {
+		t, err := lockTayfa(ctx, q, tayfa)
+		if err != nil {
+			return err
+		}
+		if t.readOnly {
+			return apperr.ErrTayfaNotFound
+		}
+		if err := s.checkNotMember(ctx, q, t.id, caller, apperr.ErrTayfaNotFound); err != nil {
+			return err
+		}
+		// Checked after the membership: the feed leaves out tayfas the
+		// caller is in, so "already a member" would read as not found.
+		ok, err := q.DiscoverTayfaVisible(ctx, store.DiscoverTayfaVisibleParams{
+			Viewer: caller.PG(), Now: pgtype.Timestamptz{Time: s.now(), Valid: true}, TayfaID: tayfa.PG(),
+		})
+		if err != nil {
+			return fmt.Errorf("keşfet: %w", err)
+		}
+		if !ok {
+			return apperr.ErrTayfaNotFound
+		}
+		out, err = s.join(ctx, q, t.id, caller, authz.StatusPending, joinedViaDiscover, id.ID{})
 		return err
 	})
 	return out, err
@@ -545,6 +599,7 @@ func (s *Service) ListMembers(ctx context.Context, caller, tayfa id.ID, st authz
 	// Banned members: the roles allowed to ban. This is a read, so a mute
 	// does not hide it.
 	seesMod := authz.Allowed(unmuted(m), authz.MemberBan, now)
+	seesSource := authz.Allowed(unmuted(m), authz.MemberListPending, now)
 	if st == authz.StatusBanned && !seesMod {
 		return Page[Member]{}, apperr.ErrPermissionDenied
 	}
@@ -574,6 +629,7 @@ func (s *Service) ListMembers(ctx context.Context, caller, tayfa id.ID, st authz
 		if err != nil {
 			return Page[Member]{}, err
 		}
+		mem.FromDiscover = seesSource && r.JoinedVia == joinedViaDiscover
 		out.Items = append(out.Items, mem)
 	}
 	return out, nil
@@ -666,7 +722,12 @@ func (s *Service) GetMember(ctx context.Context, caller, tayfa, target id.ID) (M
 	default:
 		return Member{}, apperr.ErrMemberNotFound
 	}
-	return toMember(tayfa, target, r.Role, r.Status, r.JoinedAt, r.MutedUntil, now, seesMod || target == caller)
+	mem, err := toMember(tayfa, target, r.Role, r.Status, r.JoinedAt, r.MutedUntil, now, seesMod || target == caller)
+	if err != nil {
+		return Member{}, err
+	}
+	mem.FromDiscover = authz.Allowed(unmuted(m), authz.MemberListPending, now) && r.JoinedVia == joinedViaDiscover
+	return mem, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -856,6 +917,9 @@ func (s *Service) BanMember(ctx context.Context, caller, tayfa, target id.ID, re
 			return apperr.ErrMemberNotFound
 		}
 		meta["from_status"] = tm.Status
+		if err := s.dropDiscover(ctx, q, tayfa, target); err != nil {
+			return err
+		}
 		return s.membershipChanged(ctx, q, tayfa, caller, target, changeBanned, meta)
 	})
 }
@@ -873,8 +937,28 @@ func (s *Service) RemoveMember(ctx context.Context, caller, tayfa, target id.ID)
 		if n != 1 {
 			return apperr.ErrMemberNotFound
 		}
+		if err := s.dropDiscover(ctx, q, tayfa, target); err != nil {
+			return err
+		}
 		return s.membershipChanged(ctx, q, tayfa, caller, target, changeRemoved, nil)
 	})
+}
+
+// dropDiscover takes the tayfa out of Keşfet for the platform's review
+// when its admins remove or ban a member who came from Keşfet while that
+// member's feedback window is open: an event they were going to or
+// attended ends after now - FeedbackWindow (ADR-0033 §7). Otherwise
+// removing the one who might report would close the safety net. Leaving
+// by oneself does not drop.
+func (s *Service) dropDiscover(ctx context.Context, q *store.Queries, tayfa, target id.ID) error {
+	now := s.now()
+	if _, err := q.DropDiscoverForRemovedMember(ctx, store.DropDiscoverForRemovedMemberParams{
+		TayfaID: tayfa.PG(), UserID: target.PG(), Now: pgtype.Timestamptz{Time: now, Valid: true},
+		WindowStart: pgtype.Timestamptz{Time: now.Add(-access.DiscoverFeedbackWindow), Valid: true},
+	}); err != nil {
+		return fmt.Errorf("keşfet düşürme: %w", err)
+	}
+	return nil
 }
 
 // LeaveTayfa ends the caller's active membership or withdraws their pending
@@ -1048,6 +1132,10 @@ func toMember(tayfa, user id.ID, role, st string, joined, muted pgtype.Timestamp
 
 // Membership change kinds, in membership.changed payloads and as audit
 // actions "member.<kind>".
+// joinedViaDiscover is memberships.joined_via for a request from Keşfet
+// (ADR-0033).
+const joinedViaDiscover = "discover"
+
 const (
 	changeJoined      = "joined"
 	changeRequested   = "requested"

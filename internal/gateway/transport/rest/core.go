@@ -79,6 +79,9 @@ type CoreDeps struct {
 	Social SocialClient
 	// Availability enables the "Boşum" routes when set (issue #207).
 	Availability AvailabilityClient
+	// Discover enables the Keşfet routes when set (issue #210). core
+	// decides whether Keşfet is on (DISCOVER_ENABLED); the gateway does not.
+	Discover DiscoverClient
 	// Invitations enables the direct invitation routes when set.
 	Invitations InvitationClient
 	// Profiles enables the profile routes when set.
@@ -184,6 +187,9 @@ func registerCore(mux *http.ServeMux, d CoreDeps) {
 	}
 	if d.Availability != nil {
 		registerAvailability(mux, h)
+	}
+	if d.Discover != nil {
+		registerDiscover(mux, h)
 	}
 	if d.Invitations != nil {
 		registerInvitations(mux, h)

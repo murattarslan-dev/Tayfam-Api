@@ -403,18 +403,23 @@ type friendSuggestionListJSON struct {
 }
 
 type socialSettingsJSON struct {
-	ProfilingEnabled    bool `json:"profiling_enabled"`
-	HideFromSuggestions bool `json:"hide_from_suggestions"`
+	ProfilingEnabled         bool `json:"profiling_enabled"`
+	HideFromSuggestions      bool `json:"hide_from_suggestions"`
+	DiscoverVisibleToFriends bool `json:"discover_visible_to_friends"`
 }
 
 // socialSettingsPatch is SocialSettingsUpdate: absent fields stay.
 type socialSettingsPatch struct {
-	ProfilingEnabled    *bool `json:"profiling_enabled"`
-	HideFromSuggestions *bool `json:"hide_from_suggestions"`
+	ProfilingEnabled         *bool `json:"profiling_enabled"`
+	HideFromSuggestions      *bool `json:"hide_from_suggestions"`
+	DiscoverVisibleToFriends *bool `json:"discover_visible_to_friends"`
 }
 
 func socialSettingsFrom(s *corev1.SocialSettings) socialSettingsJSON {
-	return socialSettingsJSON{ProfilingEnabled: s.GetProfilingEnabled(), HideFromSuggestions: s.GetHideFromSuggestions()}
+	return socialSettingsJSON{
+		ProfilingEnabled: s.GetProfilingEnabled(), HideFromSuggestions: s.GetHideFromSuggestions(),
+		DiscoverVisibleToFriends: s.GetDiscoverVisibleToFriends(),
+	}
 }
 
 func (h coreHandlers) listFriendSuggestions(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -459,12 +464,13 @@ func (h coreHandlers) updateSocialSettings(ctx context.Context, w http.ResponseW
 	if !decode(w, r, &b) {
 		return
 	}
-	if b.ProfilingEnabled == nil && b.HideFromSuggestions == nil {
+	if b.ProfilingEnabled == nil && b.HideFromSuggestions == nil && b.DiscoverVisibleToFriends == nil {
 		badRequest(w, r)
 		return
 	}
 	resp, err := h.d.Social.UpdateSocialSettings(ctx, &corev1.UpdateSocialSettingsRequest{
 		ProfilingEnabled: b.ProfilingEnabled, HideFromSuggestions: b.HideFromSuggestions,
+		DiscoverVisibleToFriends: b.DiscoverVisibleToFriends,
 	})
 	if err != nil {
 		h.fail(w, r, err)

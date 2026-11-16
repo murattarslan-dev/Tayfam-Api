@@ -50,6 +50,11 @@ func TestErrorStatus(t *testing.T) {
 		reason corev1.ErrorReason
 	}{
 		{apperr.ErrTayfaNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_TAYFA_NOT_FOUND},
+		{apperr.ErrFeatureDisabled, codes.NotFound, corev1.ErrorReason_ERROR_REASON_FEATURE_DISABLED},
+		{apperr.ErrDiscoverTooFewMembers, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DISCOVER_TOO_FEW_MEMBERS},
+		{apperr.ErrFeedbackClosed, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_FEEDBACK_CLOSED},
+		{apperr.ErrSafetyContactClosed, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SAFETY_CONTACT_CLOSED},
+		{apperr.ErrSafetyContactNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_SAFETY_CONTACT_NOT_FOUND},
 		{apperr.ErrPermissionDenied, codes.PermissionDenied, corev1.ErrorReason_ERROR_REASON_PERMISSION_DENIED},
 		{apperr.ErrMuted, codes.PermissionDenied, corev1.ErrorReason_ERROR_REASON_MUTED},
 		{apperr.ErrTayfaReadOnly, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_TAYFA_READ_ONLY},

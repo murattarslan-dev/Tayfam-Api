@@ -28,10 +28,13 @@ func (f *fakeCore) DismissFriendSuggestion(ctx context.Context, in *corev1.Dismi
 	return &corev1.DismissFriendSuggestionResponse{}, f.record(ctx, in)
 }
 func (f *fakeCore) GetSocialSettings(ctx context.Context, in *corev1.GetSocialSettingsRequest, _ ...grpc.CallOption) (*corev1.GetSocialSettingsResponse, error) {
-	return &corev1.GetSocialSettingsResponse{Settings: &corev1.SocialSettings{ProfilingEnabled: true}}, f.record(ctx, in)
+	return &corev1.GetSocialSettingsResponse{Settings: &corev1.SocialSettings{ProfilingEnabled: true, DiscoverVisibleToFriends: true}}, f.record(ctx, in)
 }
 func (f *fakeCore) UpdateSocialSettings(ctx context.Context, in *corev1.UpdateSocialSettingsRequest, _ ...grpc.CallOption) (*corev1.UpdateSocialSettingsResponse, error) {
-	st := &corev1.SocialSettings{ProfilingEnabled: true}
+	st := &corev1.SocialSettings{ProfilingEnabled: true, DiscoverVisibleToFriends: true}
+	if in.DiscoverVisibleToFriends != nil {
+		st.DiscoverVisibleToFriends = in.GetDiscoverVisibleToFriends()
+	}
 	if in.ProfilingEnabled != nil {
 		st.ProfilingEnabled = in.GetProfilingEnabled()
 	}
@@ -78,7 +81,7 @@ func TestFriendSuggestionRoutes(t *testing.T) {
 	}
 
 	w = as(h, "GET", "/v1/me/social-settings", "")
-	if v := decodeBody[socialSettingsJSON](t, w); w.Code != 200 || !v.ProfilingEnabled || v.HideFromSuggestions {
+	if v := decodeBody[socialSettingsJSON](t, w); w.Code != 200 || !v.ProfilingEnabled || v.HideFromSuggestions || !v.DiscoverVisibleToFriends {
 		t.Fatalf("ayarlar: %d %+v", w.Code, v)
 	}
 	w = as(h, "PATCH", "/v1/me/social-settings", `{"hide_from_suggestions":true}`)
@@ -86,7 +89,15 @@ func TestFriendSuggestionRoutes(t *testing.T) {
 		t.Fatalf("güncelleme: %d %+v", w.Code, v)
 	}
 	got, _, _ = f.last()
-	if in := got.(*corev1.UpdateSocialSettingsRequest); in.ProfilingEnabled != nil || !in.GetHideFromSuggestions() {
+	if in := got.(*corev1.UpdateSocialSettingsRequest); in.ProfilingEnabled != nil || !in.GetHideFromSuggestions() || in.DiscoverVisibleToFriends != nil {
+		t.Fatalf("core'a giden: %v", in)
+	}
+	w = as(h, "PATCH", "/v1/me/social-settings", `{"discover_visible_to_friends":false}`)
+	if v := decodeBody[socialSettingsJSON](t, w); w.Code != 200 || v.DiscoverVisibleToFriends {
+		t.Fatalf("Keşfet görünürlüğü: %d %+v", w.Code, v)
+	}
+	got, _, _ = f.last()
+	if in := got.(*corev1.UpdateSocialSettingsRequest); in.DiscoverVisibleToFriends == nil || in.GetDiscoverVisibleToFriends() {
 		t.Fatalf("core'a giden: %v", in)
 	}
 }

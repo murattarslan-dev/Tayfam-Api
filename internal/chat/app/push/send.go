@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -135,7 +134,7 @@ func (s *Service) process(ctx context.Context, j store.ClaimPushJobsRow) (Outcom
 		return done(Outcome{Skipped: "attempts"})
 	case j.QueuedAt.Valid && now.Sub(j.QueuedAt.Time) > MaxAge:
 		return done(Outcome{Skipped: "old"})
-	case n.Type != notification.TypeHikeOverdue && s.cfg.Presence.Online(n.User):
+	case !Alert(n.Type) && s.cfg.Presence.Online(n.User):
 		// Delivered live over the connection (ADR-0005). hike_overdue is a
 		// safety alert and goes out even then: the app may be open but not
 		// on screen (ADR-0019 item 2).

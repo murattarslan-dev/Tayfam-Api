@@ -69,7 +69,7 @@ WHERE tayfa_id = @tayfa_id AND user_id <> @user_id
 -- yerine başvuru zamanı kullanılır. Sayfa imleci (after_rank, after_time,
 -- after_user_id); ilk sayfa için after_rank = 4.
 -- name: ListMembersPage :many
-SELECT m.user_id, m.role, m.status, m.muted_until, m.joined_at,
+SELECT m.user_id, m.role, m.status, m.muted_until, m.joined_at, m.joined_via,
        COALESCE(m.joined_at, m.created_at)::timestamptz AS sort_time
 FROM memberships m
 WHERE m.tayfa_id = @tayfa_id

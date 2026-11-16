@@ -79,6 +79,13 @@ enum NotificationType {
   // carries why or the score. In-app only: no push is sent for it. The
   // client reads open suggestions from core's ListFriendSuggestions.
   NOTIFICATION_TYPE_FRIEND_SUGGESTION = 22;
+  // The recipient is someone's safety contact for an event, and that person
+  // did not mark "back" by the event's end plus their grace time (issue
+  // #210, ADR-0033). Only the chosen contact gets it. Target: USER,
+  // target_id is the participant. Not about a tayfa, no actor, no content,
+  // no location; the client reads the shared event from core's
+  // DiscoverService.ListSafetyShares. Muting does not apply; push is sent.
+  NOTIFICATION_TYPE_SAFETY_ALERT = 23;
 }
 
 enum NotificationTargetType {

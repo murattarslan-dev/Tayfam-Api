@@ -43,15 +43,19 @@ type Settings struct {
 	ProfilingEnabled bool
 	// HideFromSuggestions ("Beni önerme"): never suggested to others.
 	HideFromSuggestions bool
+	// DiscoverVisibleToFriends ("Keşfet'te arkadaşlarım görebilsin"):
+	// friends may see the user's participation in Keşfet (ADR-0033 §4).
+	DiscoverVisibleToFriends bool
 }
 
 // DefaultSettings apply while the user never changed them.
-var DefaultSettings = Settings{ProfilingEnabled: true}
+var DefaultSettings = Settings{ProfilingEnabled: true, DiscoverVisibleToFriends: true}
 
 // SettingsUpdate holds the settings to change; nil fields stay.
 type SettingsUpdate struct {
-	ProfilingEnabled    *bool
-	HideFromSuggestions *bool
+	ProfilingEnabled         *bool
+	HideFromSuggestions      *bool
+	DiscoverVisibleToFriends *bool
 }
 
 // ListFriendSuggestions lists the caller's open suggestions of the last
@@ -100,7 +104,8 @@ func (s *Service) GetSocialSettings(ctx context.Context, caller id.ID) (Settings
 	if err != nil {
 		return Settings{}, fmt.Errorf("sosyal ayarlar: %w", err)
 	}
-	return Settings{ProfilingEnabled: r.ProfilingEnabled, HideFromSuggestions: r.HideFromSuggestions}, nil
+	return Settings{ProfilingEnabled: r.ProfilingEnabled, HideFromSuggestions: r.HideFromSuggestions,
+		DiscoverVisibleToFriends: r.DiscoverVisibleToFriends}, nil
 }
 
 // UpdateSocialSettings changes the given settings in one transaction.
@@ -112,7 +117,7 @@ func (s *Service) GetSocialSettings(ctx context.Context, caller id.ID) (Settings
 // for a running score computation (shared lock), so no score written by it
 // survives turning profiling off.
 func (s *Service) UpdateSocialSettings(ctx context.Context, caller id.ID, u SettingsUpdate) (Settings, error) {
-	if u.ProfilingEnabled == nil && u.HideFromSuggestions == nil {
+	if u.ProfilingEnabled == nil && u.HideFromSuggestions == nil && u.DiscoverVisibleToFriends == nil {
 		return Settings{}, apperr.Validation("settings")
 	}
 	var out Settings
@@ -124,12 +129,13 @@ func (s *Service) UpdateSocialSettings(ctx context.Context, caller id.ID, u Sett
 		now := ts(s.now())
 		r, err := q.UpsertSocialSettings(ctx, store.UpsertSocialSettingsParams{
 			UserID: caller.PG(), ProfilingEnabled: optBool(u.ProfilingEnabled),
-			HideFromSuggestions: optBool(u.HideFromSuggestions), Now: now,
+			HideFromSuggestions: optBool(u.HideFromSuggestions), DiscoverVisibleToFriends: optBool(u.DiscoverVisibleToFriends), Now: now,
 		})
 		if err != nil {
 			return fmt.Errorf("sosyal ayarlar: %w", err)
 		}
-		out = Settings{ProfilingEnabled: r.ProfilingEnabled, HideFromSuggestions: r.HideFromSuggestions}
+		out = Settings{ProfilingEnabled: r.ProfilingEnabled, HideFromSuggestions: r.HideFromSuggestions,
+			DiscoverVisibleToFriends: r.DiscoverVisibleToFriends}
 		if !out.ProfilingEnabled {
 			if err := q.DeleteUserFriendScores(ctx, caller.PG()); err != nil {
 				return fmt.Errorf("puan silme: %w", err)

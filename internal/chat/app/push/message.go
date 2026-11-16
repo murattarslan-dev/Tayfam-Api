@@ -71,7 +71,7 @@ func content(n note) Message {
 		// no sender, no content, no unread count (ADR-0005).
 		m.Channel, m.High = ChannelMessages, true
 		return m
-	case n.Type == notification.TypeHikeOverdue:
+	case Alert(n.Type):
 		m.Channel, m.High, m.TimeSensitive = ChannelAlerts, true, true
 	}
 	if n.Tayfa != (id.ID{}) {
@@ -129,7 +129,7 @@ func scope(n note) (typ string, scopeID id.ID, ok bool) {
 // level with a muted_until in the past is back to all; hike_overdue is
 // never muted (v14).
 func allowed(typ, level string, until, now time.Time) bool {
-	if typ == notification.TypeHikeOverdue {
+	if Alert(typ) {
 		return true
 	}
 	if !until.IsZero() && !now.Before(until) {
@@ -142,4 +142,12 @@ func allowed(typ, level string, until, now time.Time) bool {
 		return personal[typ]
 	}
 	return true
+}
+
+// Alert reports whether a notification type is a safety alert: the hike
+// alarm and the safety contact alarm (ADR-0033). Alerts go to the alerts
+// channel at high priority, are never muted and are pushed even while the
+// recipient is online.
+func Alert(typ string) bool {
+	return typ == notification.TypeHikeOverdue || typ == notification.TypeSafetyAlert
 }

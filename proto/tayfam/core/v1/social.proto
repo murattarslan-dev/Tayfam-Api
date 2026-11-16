@@ -281,6 +281,10 @@ message SocialSettings {
   bool profiling_enabled = 1;
   // "Beni önerme": the caller is never suggested to others. Default false.
   bool hide_from_suggestions = 2;
+  // "Keşfet'te arkadaşlarım görebilsin": the caller's going to or attending
+  // an event may be shown to their friends in Keşfet (ADR-0033 §4); it is
+  // also never shown while activity visibility is PRIVATE. Default true.
+  bool discover_visible_to_friends = 3;
 }
 
 message GetSocialSettingsRequest {}
@@ -292,6 +296,7 @@ message GetSocialSettingsResponse {
 message UpdateSocialSettingsRequest {
   optional bool profiling_enabled = 1;
   optional bool hide_from_suggestions = 2;
+  optional bool discover_visible_to_friends = 3;
 }
 
 message UpdateSocialSettingsResponse {

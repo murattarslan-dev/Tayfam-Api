@@ -239,6 +239,14 @@ const (
 	// TayfaConvert turns an instant tayfa into a standard one ("Bu ekiple
 	// tayfa kur", ADR-0032). Allowed only with Settings.Instant.
 	TayfaConvert
+	// Keşfet (issue #210, ADR-0033). TayfaDiscoverManage turns Keşfet on
+	// or off and reads its state. EventFeedback is one's own "Was
+	// everything all right?" answer; EventSafetyContact is one's own
+	// safety contact and "I'm back". Both are safety signals that publish
+	// nothing, so a mute never refuses them.
+	TayfaDiscoverManage
+	EventFeedback
+	EventSafetyContact
 
 	actionEnd // sentinel; keep last
 )
@@ -324,6 +332,9 @@ var actionNames = [...]string{
 	ChannelRestore:           "channel.restore",
 	ChannelMarkRead:          "channel.mark_read",
 	TayfaConvert:             "tayfa.convert",
+	TayfaDiscoverManage:      "tayfa.discover_manage",
+	EventFeedback:            "event.feedback",
+	EventSafetyContact:       "event.safety_contact",
 	actionEnd:                "",
 }
 
@@ -359,6 +370,9 @@ var permissions = map[Action]Role{
 	// correction of their own event, one's own fishing catches.
 	EventCheckIn:       Member,
 	EventAttendanceOwn: Member,
+	// Keşfet safety net (ADR-0033): one's own feedback and safety contact.
+	EventFeedback:      Member,
+	EventSafetyContact: Member,
 	EventCatchAdd:      Member,
 	// Event album (issue #206, Notion Faz 2 §2): a verified attendee adds
 	// photos; the uploader removes their own and the organizer any photo
@@ -453,6 +467,8 @@ var permissions = map[Action]Role{
 	TayfaRequestDeletion: Admin,
 	TayfaCancelDeletion:  Admin,
 	InviteRevokeAny:      Admin,
+	// Keşfet: the admins apply (ADR-0033 §14).
+	TayfaDiscoverManage: Admin,
 	// "Yönetici her daveti ve davet linkini iptal edebilir" (v14).
 	InviteDirectCancel: Admin,
 	MemberChangeRole:   Admin,
@@ -531,6 +547,10 @@ var allowedWhileMuted = map[Action]bool{
 	ChannelViewStaff: true,
 	ChannelDeleteOwn: true,
 	ChannelMarkRead:  true,
+	// Keşfet safety net (ADR-0033 §14): feedback and the safety contact
+	// publish nothing; "I'm back" must never be refused.
+	EventFeedback:      true,
+	EventSafetyContact: true,
 }
 
 // Settings are the tayfa settings that change the permission table. The zero

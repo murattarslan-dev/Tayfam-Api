@@ -17,6 +17,9 @@
 //	friend-suggestions  recomputes the friendship scores, suggests at most
 //	                one friend a week per user and deletes old open
 //	                suggestions (#208, ADR-0030; suggestions.go)
+//	safety-alert    tells a chosen safety contact that the participant did
+//	                not mark "back" in time (#210, ADR-0033; safety.go);
+//	                retention also deletes old safety contacts and feedback
 //
 // The outcome of every pass (finish time, success, rows changed) is written
 // to job_runs for the panel's dashboard (issue #110).
@@ -175,6 +178,8 @@ type Intervals struct {
 	Retention        time.Duration
 	// Issue #208.
 	FriendSuggestions time.Duration
+	// Issue #210.
+	SafetyAlert time.Duration
 }
 
 func (i Intervals) withDefaults() Intervals {
@@ -192,6 +197,7 @@ func (i Intervals) withDefaults() Intervals {
 	def(&i.ReportEscalation, DefaultReportEscalationInterval)
 	def(&i.Retention, DefaultRetentionInterval)
 	def(&i.FriendSuggestions, DefaultFriendSuggestionsInterval)
+	def(&i.SafetyAlert, DefaultSafetyAlertInterval)
 	return i
 }
 
@@ -247,6 +253,7 @@ func (s *Service) Workers() []Worker {
 		{JobReportEscalation, s.every(JobReportEscalation, iv.ReportEscalation, s.EscalateReports)},
 		{JobRetention, s.every(JobRetention, iv.Retention, s.ExpireRecords)},
 		{JobFriendSuggestions, s.every(JobFriendSuggestions, iv.FriendSuggestions, s.SuggestFriends)},
+		{JobSafetyAlert, s.every(JobSafetyAlert, iv.SafetyAlert, s.AlertMissedReturns)},
 	}
 }
 
