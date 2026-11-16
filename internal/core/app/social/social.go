@@ -398,7 +398,11 @@ const (
 	OutcomeWithdrawn = "withdrawn"
 )
 
-// ListFriends lists the caller's friends.
+// ListFriends lists the caller's friends, highest friendship score first
+// and by user ID among equals (ADR-0030 §12). The score itself never leaves
+// the database: it is not a result column, and the page token names only the
+// last friend of the page, whose place the query looks up again. A score
+// counts only while both sides have profiling on.
 func (s *Service) ListFriends(ctx context.Context, caller id.ID, size int32, token string) (Page[Friend], error) {
 	return s.listFriendships(ctx, caller, "accepted", "", "ListFriends", size, token)
 }
@@ -424,7 +428,7 @@ func (s *Service) listFriendships(ctx context.Context, caller id.ID, status, dir
 	}
 	today := localday.Today(s.now())
 	rows, err := s.q.ListFriendshipsPage(ctx, store.ListFriendshipsPageParams{
-		UserID: caller.PG(), Status: status, Direction: dir, AfterUserID: after.PG(), PageSize: size + 1,
+		UserID: caller.PG(), Status: status, Direction: dir, AfterUserID: after.PG(), FirstPage: after == (id.ID{}), PageSize: size + 1,
 		Today: pgtype.Date{Time: today, Valid: true}, BadgeUntil: pgtype.Date{Time: today.AddDate(0, 0, BadgeDays-1), Valid: true},
 	})
 	if err != nil {
@@ -584,7 +588,10 @@ func pageSize(n int32) (int32, error) {
 
 // cursor is the position after the last row of a page: the other user's
 // ID. It names its list, so a token only works for the list it came from;
-// it carries nothing the caller could not already see.
+// it carries nothing the caller could not already see. In ListFriends the
+// order also depends on the friendship score; the score is deliberately not
+// in the cursor (ADR-0030 §12): the query reads the named friend's place
+// again, and a user who is not the caller's friend counts as unscored.
 type cursor struct {
 	Method string `json:"m"`
 	User   string `json:"u"`

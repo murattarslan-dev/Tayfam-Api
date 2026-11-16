@@ -3932,6 +3932,15 @@ paths:
     get:
       operationId: listFriends
       summary: Arkadaşlarınız (yalnızca size görünür)
+      description: |
+        Sıra: arkadaşlık puanına göre (ortak doğrulanmış katılım; ADR-0030
+        §12), eşitlikte ve puanı olmayanlarda kullanıcı kimliğine göre. Puan
+        hiçbir alanda ve `next_page_token`'da dönmez. Sizin ya da arkadaşın
+        profillemesi kapalıysa o arkadaşın puanı sıraya girmez; sizin
+        profillemeniz kapalıysa liste yalnızca kimliğe göredir. Sıra günlük
+        değişebildiği için sayfalar arasında bir kişi iki kez görünebilir;
+        istemci `user_id`'ye göre tekilleştirir. Tayfa davetinde kişi seçimi
+        bu listeyle yapılır.
       parameters:
         - $ref: "#/components/parameters/PageSize"
         - $ref: "#/components/parameters/PageToken"
