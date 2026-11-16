@@ -71,8 +71,11 @@ yalnızca olgu sayılarını döndürür.
   etkinlikteki `discoverable` işareti, panel kuyruğu (onay/ret), üyeliğin
   Keşfet etiketi ve otomatik düşürme kuralları.
 - **Bayrağa bağlı olanlar:** Keşfet akışı, Keşfet'ten katılım isteği,
-  "Her şey yolunda mıydı?" geri bildirimi, güvenlik kişisi (seçme, döndüm,
-  paylaşılanlar listesi) ve güvenlik kişisi alarmı işi.
+  "Her şey yolunda mıydı?" geri bildirimi ve güvenlik kişisi (seçme,
+  döndüm, paylaşılanlar listesi).
+- **Alarm işi bayraktan bağımsızdır:** bayrak kapalıyken yeni güvenlik
+  kişisi seçilemez, ama bayrak sonradan kapatılırsa önceden seçilmiş
+  kişilere alarm yine gider (bir güvenlik sinyali yarıda kesilmez).
 
 ### 2. Veri (core, migration `00028`)
 
@@ -99,8 +102,10 @@ Mevcut alanların anlamı netleşir:
 ### 3. Listelenebilirlik: tek fonksiyon
 
 Bir tayfanın Keşfet'te görünebilmesi tek yerde, `tayfa_discover_listable(
-tayfa_id)` SQL fonksiyonunda tanımlıdır; akış, katılım isteği ve
-veritabanı trigger'ı aynı fonksiyonu çağırır (ADR-0030'daki
+tayfa_id)` SQL fonksiyonunda tanımlıdır; "görünür arkadaş" kuralı (§4) da
+tek yerde, `discover_friend_visible(izleyici, arkadaş, etkinlik, an)`
+fonksiyonundadır. Akış, katılım isteği ve veritabanı trigger'ı aynı
+fonksiyonları çağırır (ADR-0030'daki
 `friend_suggestion_allowed` gibi kurallar sorgular arasında kaymaz):
 
 - `visibility = 'listed'` (yönetici açmış);

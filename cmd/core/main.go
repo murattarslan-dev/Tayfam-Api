@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 	_ "time/tzdata" // series time zones: the same IANA database in every image (issue #51)
 
@@ -24,6 +25,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatdm"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatrelay"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/directmessage"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/discover"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/export"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/identityadmin"
@@ -61,6 +63,11 @@ func setup(rt *service.Runtime) error {
 	// Veritabanı parolası core-db secret'ından (deploy/apps/<ortam>/secrets,
 	// SOPS). core yalnızca kendi veritabanına bağlanır (ADR-0002).
 	dbCfg := db.LoadConfig(c)
+	// Keşfet (issue #210, ADR-0033): kapalı gelir; açma kararı platform
+	// sahibinindir (hukukçu görüşmesinden sonra). Kapalıyken akış, Keşfet'ten
+	// katılım, geri bildirim ve güvenlik kişisi uçları feature-disabled
+	// döner; tayfa ayarı ve panel onayı çalışır.
+	discoverEnabled := c.OneOf("DISCOVER_ENABLED", "false", "true", "false") == "true"
 	if err := c.Err(); err != nil {
 		return err
 	}
@@ -87,12 +94,18 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 	memberships, err := membership.New(membership.Config{
-		Pool:        pool,
-		JoinLimiter: ratelimit.NewPer(joinCodeAttemptsPerHour, time.Hour),
+		Pool:            pool,
+		JoinLimiter:     ratelimit.NewPer(joinCodeAttemptsPerHour, time.Hour),
+		DiscoverEnabled: discoverEnabled,
 	})
 	if err != nil {
 		return err
 	}
+	discovers, err := discover.New(discover.Config{Pool: pool, Enabled: discoverEnabled})
+	if err != nil {
+		return err
+	}
+	rt.Log.Info("keşfet bayrağı", slog.Bool("açık", discoverEnabled))
 	announcements, err := announcement.New(announcement.Config{Pool: pool})
 	if err != nil {
 		return err
@@ -203,6 +216,7 @@ func setup(rt *service.Runtime) error {
 	corev1.RegisterPollServiceServer(srv, grpcapi.NewPollServer(polls, rt.Log))
 	corev1.RegisterSocialServiceServer(srv, grpcapi.NewSocialServer(socials, rt.Log))
 	corev1.RegisterAvailabilityServiceServer(srv, grpcapi.NewAvailabilityServer(availabilities, rt.Log))
+	corev1.RegisterDiscoverServiceServer(srv, grpcapi.NewDiscoverServer(discovers, memberships, rt.Log))
 	corev1.RegisterProfileServiceServer(srv, grpcapi.NewProfileServer(profiles, rt.Log))
 	corev1.RegisterReportServiceServer(srv, grpcapi.NewReportServer(reports, rt.Log))
 	corev1.RegisterAdminServiceServer(srv, grpcapi.NewAdminServer(admins, rt.Log))
@@ -226,7 +240,9 @@ func setup(rt *service.Runtime) error {
 	// Pasif tayfa temizliği, 72 saatlik tayfa silme, 30 günlük kalıcı silme,
 	// yürüyüş dönmeme alarmı ve plaka temizliği (issue #66); şikâyetlerin
 	// 7 gün sonra platforma yükselmesi ve 1 yıllık saklama süresi (#76);
-	// arkadaşlık puanı ve haftalık arkadaş önerisi (#208). Her biri ayrı
+	// arkadaşlık puanı ve haftalık arkadaş önerisi (#208); güvenlik kişisi
+	// alarmı (#210; bayraktan bağımsız: seçilmiş kişiye alarm her zaman
+	// gider). Her biri ayrı
 	// bir worker; birden fazla pod'da her partiyi advisory kilidi alan tek
 	// pod işler.
 	for _, w := range background.Workers() {

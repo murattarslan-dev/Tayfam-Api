@@ -132,6 +132,27 @@ func (f *fakeCore) UnsuspendTayfa(ctx context.Context, _ *corev1.UnsuspendTayfaR
 	return &corev1.UnsuspendTayfaResponse{}, nil
 }
 
+// Keşfet review (issue #210): metadata and counts only.
+func (f *fakeCore) ListDiscoverQueue(ctx context.Context, _ *corev1.ListDiscoverQueueRequest, _ ...grpc.CallOption) (*corev1.ListDiscoverQueueResponse, error) {
+	f.add(ctx, "ListDiscoverQueue")
+	return &corev1.ListDiscoverQueueResponse{Entries: []*corev1.DiscoverQueueEntry{{
+		TayfaId: tayfaID, Name: f.tayfaName, Description: "Hafta sonu yürüyüşleri", City: "İzmir",
+		MemberCount: 12, DiscoverMemberCount: 2, SeriousFeedbackCount: 1, Enabled: true,
+		Status:     corev1.DiscoverReviewStatus_DISCOVER_REVIEW_STATUS_DROPPED,
+		DropReason: corev1.DiscoverDropReason_DISCOVER_DROP_REASON_NEGATIVE_FEEDBACK,
+	}}}, f.err["ListDiscoverQueue"]
+}
+
+func (f *fakeCore) ApproveDiscover(ctx context.Context, _ *corev1.ApproveDiscoverRequest, _ ...grpc.CallOption) (*corev1.ApproveDiscoverResponse, error) {
+	f.add(ctx, "ApproveDiscover")
+	return &corev1.ApproveDiscoverResponse{}, f.err["ApproveDiscover"]
+}
+
+func (f *fakeCore) RejectDiscover(ctx context.Context, _ *corev1.RejectDiscoverRequest, _ ...grpc.CallOption) (*corev1.RejectDiscoverResponse, error) {
+	f.add(ctx, "RejectDiscover")
+	return &corev1.RejectDiscoverResponse{}, f.err["RejectDiscover"]
+}
+
 func (f *fakeCore) DeleteTayfa(ctx context.Context, _ *corev1.AdminServiceDeleteTayfaRequest, _ ...grpc.CallOption) (*corev1.AdminServiceDeleteTayfaResponse, error) {
 	f.add(ctx, "DeleteTayfa")
 	return &corev1.AdminServiceDeleteTayfaResponse{}, nil
@@ -305,6 +326,7 @@ var getPages = []string{
 	"/", "/tayfalar", "/tayfalar?q=klasik", "/tayfalar/" + tayfaID, "/kullanicilar", "/kullanicilar/" + memberID,
 	"/sikayetler", "/sikayetler?tumu=1", "/sikayetler/" + reportID, "/sikayetler/" + dmReportID,
 	"/denetim", "/denetim?islem=tayfa.suspend&tur=tayfa&ilgili=" + tayfaID + "&baslangic=2026-11-01&bitis=2026-11-09",
+	"/kesfet",
 }
 
 // changes are every state-changing page request with a valid form.
@@ -326,6 +348,8 @@ func changes() map[string]url.Values {
 		"/kullanicilar/" + memberID + "/yaptirim":        r("tur", "aski", "sure", "7"),
 		"/kullanicilar/" + memberID + "/yaptirim-kaldir": r(),
 		"/sikayetler/" + reportID + "/karar":             r("karar", "kaldir"),
+		"/tayfalar/" + tayfaID + "/kesfet-onay":          r(),
+		"/tayfalar/" + tayfaID + "/kesfet-ret":           r(),
 	}
 }
 
@@ -586,6 +610,9 @@ func TestChangeNeedsRecentSignIn(t *testing.T) {
 			t.Errorf("%s: %d %s", path, w.Code, loc)
 		}
 		page := path[:strings.LastIndex(path, "/")]
+		if strings.Contains(path, "/kesfet-") { // the Keşfet queue's forms return to it
+			page = "/kesfet"
+		}
 		if got := loc.Query().Get("devam"); got != page {
 			t.Errorf("%s: devam %q", path, got)
 		}
@@ -921,5 +948,24 @@ func TestReportedPhotoLink(t *testing.T) {
 	}
 	if other := e.do(e.page("/sikayetler/" + reportID)).Body.String(); strings.Contains(other, "Fotoğrafı aç") {
 		t.Fatal("fotoğrafsız şikâyette bağlantı var")
+	}
+}
+
+// TestDiscoverQueue (issue #210): the queue shows the drop reason and
+// counts; approving goes to core with the reason and returns to /kesfet.
+func TestDiscoverQueue(t *testing.T) {
+	e := setup(t)
+	w := e.do(e.page("/kesfet"))
+	body := w.Body.String()
+	if w.Code != http.StatusOK || !strings.Contains(body, "Ciddi olumsuz geri bildirim") || !strings.Contains(body, "Keşfet'ten gelen: 2") {
+		t.Fatalf("kuyruk: %d %s", w.Code, body)
+	}
+	e.resetCalls()
+	w = e.do(e.form("/tayfalar/"+tayfaID+"/kesfet-onay", url.Values{"gerekce": {goodReason}}))
+	if loc := w.Header().Get("Location"); w.Code != http.StatusSeeOther || !strings.HasPrefix(loc, "/kesfet?sonuc=kesfet-onaylandi") {
+		t.Fatalf("onay: %d %s", w.Code, loc)
+	}
+	if got := e.upstreamCalls(); len(got) != 1 || got[0] != "ApproveDiscover" {
+		t.Fatalf("çağrılar: %v", got)
 	}
 }

@@ -67,15 +67,19 @@ type Config struct {
 	// JoinLimiter limits JoinByCode attempts per user against code
 	// guessing.
 	JoinLimiter Limiter
-	Now         func() time.Time
+	// DiscoverEnabled is DISCOVER_ENABLED (ADR-0033): without it
+	// JoinFromDiscover returns apperr.ErrFeatureDisabled.
+	DiscoverEnabled bool
+	Now             func() time.Time
 }
 
 // Service implements the membership operations.
 type Service struct {
-	pool    *pgxpool.Pool
-	limiter Limiter
-	now     func() time.Time
-	q       *store.Queries
+	pool     *pgxpool.Pool
+	limiter  Limiter
+	discover bool
+	now      func() time.Time
+	q        *store.Queries
 }
 
 // New returns a Service.
@@ -86,7 +90,10 @@ func New(cfg Config) (*Service, error) {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	return &Service{pool: cfg.Pool, limiter: cfg.JoinLimiter, now: func() time.Time { return cfg.Now().UTC() }, q: store.New(cfg.Pool)}, nil
+	return &Service{
+		pool: cfg.Pool, limiter: cfg.JoinLimiter, discover: cfg.DiscoverEnabled,
+		now: func() time.Time { return cfg.Now().UTC() }, q: store.New(cfg.Pool),
+	}, nil
 }
 
 // Member is one user's membership in one tayfa as the caller may see it.
@@ -191,6 +198,49 @@ func (s *Service) JoinByCode(ctx context.Context, caller id.ID, code string) (Me
 			st = authz.StatusActive
 		}
 		out, err = s.join(ctx, q, t.id, caller, st, "code", id.ID{})
+		return err
+	})
+	return out, err
+}
+
+// JoinFromDiscover asks to join a tayfa that is in the caller's Keşfet
+// feed right now (issue #210, ADR-0033 §5). The request is always PENDING
+// with joined_via = discover, even in an open tayfa: the staff see where it
+// came from before approving. A tayfa the caller cannot see in Keşfet, an
+// unknown one and one where the caller is banned are all
+// apperr.ErrTayfaNotFound: listed tayfas are not open to strangers. The
+// memberships_discover_guard trigger checks the same again.
+func (s *Service) JoinFromDiscover(ctx context.Context, caller, tayfa id.ID) (Member, error) {
+	if !s.discover {
+		return Member{}, apperr.ErrFeatureDisabled
+	}
+	if !s.limiter.Allow("discover:" + caller.String()) {
+		return Member{}, apperr.ErrRateLimited
+	}
+	var out Member
+	err := txn.WithActor(ctx, s.pool, caller, func(_ pgx.Tx, q *store.Queries) error {
+		t, err := lockTayfa(ctx, q, tayfa)
+		if err != nil {
+			return err
+		}
+		if t.readOnly {
+			return apperr.ErrTayfaNotFound
+		}
+		if err := s.checkNotMember(ctx, q, t.id, caller, apperr.ErrTayfaNotFound); err != nil {
+			return err
+		}
+		// Checked after the membership: the feed leaves out tayfas the
+		// caller is in, so "already a member" would read as not found.
+		ok, err := q.DiscoverTayfaVisible(ctx, store.DiscoverTayfaVisibleParams{
+			Viewer: caller.PG(), Now: pgtype.Timestamptz{Time: s.now(), Valid: true}, TayfaID: tayfa.PG(),
+		})
+		if err != nil {
+			return fmt.Errorf("keşfet: %w", err)
+		}
+		if !ok {
+			return apperr.ErrTayfaNotFound
+		}
+		out, err = s.join(ctx, q, t.id, caller, authz.StatusPending, joinedViaDiscover, id.ID{})
 		return err
 	})
 	return out, err

@@ -51,6 +51,9 @@ const (
 	// kept with; never the scores or who they are with.
 	SectionSocialSettings    = "social_settings"
 	SectionFriendSuggestions = "friend_suggestions"
+	// Issue #210, ADR-0033 §13: one's feedback answers and the safety
+	// contacts one chose; being someone else's contact is their data.
+	SectionDiscover = "discover"
 )
 
 const (
@@ -175,6 +178,10 @@ var sections = []struct {
 	{SectionFriendSuggestions, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportFriendSuggestions(ctx, store.ExportFriendSuggestionsParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportFriendSuggestionsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionDiscover, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportDiscover(ctx, store.ExportDiscoverParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportDiscoverRow) row { return row{x.K, x.Data} })
 	}},
 }
 

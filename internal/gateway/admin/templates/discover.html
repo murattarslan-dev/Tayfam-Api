@@ -1,0 +1,36 @@
+{{define "content"}}
+{{$csrf := .CSRF}}
+<h1>Keşfet incelemesi</h1>
+<p class="hint">Bekleyen başvurular ve otomatik olarak Keşfet'ten düşürülen tayfalar, eskiden yeniye. İnceleme yalnızca meta veridir (ad, açıklama, il/ilçe); tayfanın içeriği ve geri bildirimi kimin verdiği görünmez. Onay kullanıcıya "onaylı" ya da "güvenilir" diye yansımaz.</p>
+{{template "reauth" .}}
+{{if .Data.Entries}}
+{{range .Data.Entries}}
+<div class="card">
+<h2><a href="/tayfalar/{{.TayfaId}}">{{.Name}}</a></h2>
+<dl class="meta">
+  <dt>Durum</dt><dd>{{label .Status}}{{if .DropReason}} <span class="tag danger">{{label .DropReason}}</span>{{end}}{{if not .Enabled}} <span class="tag">Yönetici kapattı</span>{{end}}</dd>
+  <dt>Açıklama</dt><dd>{{if .Description}}{{.Description}}{{else}}—{{end}}</dd>
+  <dt>Şehir</dt><dd>{{if .City}}{{.City}}{{if .District}} / {{.District}}{{end}}{{else}}—{{end}}</dd>
+  <dt>Açıldı</dt><dd>{{ts .CreateTime}}</dd>
+  <dt>Aktif üye</dt><dd>{{.MemberCount}} (Keşfet'ten gelen: {{.DiscoverMemberCount}})</dd>
+  <dt>Açık platform şikâyeti</dt><dd>{{.OpenPlatformReports}}</dd>
+  <dt>Son 90 gün geri bildirim</dt><dd>Sorun vardı: {{.NotOkFeedbackCount}} · Ciddi: {{.SeriousFeedbackCount}}</dd>
+  <dt>Başvuru</dt><dd>{{ts .RequestTime}}</dd>
+  <dt>Son durum değişikliği</dt><dd>{{ts .StatusChangeTime}}</dd>
+</dl>
+<form class="stack" method="post" action="/tayfalar/{{.TayfaId}}/kesfet-onay">
+  <input type="hidden" name="csrf" value="{{$csrf}}">
+  {{template "reason" (print "onay-" .TayfaId)}}
+  <button type="submit">Onayla</button>
+</form>
+<form class="stack" method="post" action="/tayfalar/{{.TayfaId}}/kesfet-ret">
+  <input type="hidden" name="csrf" value="{{$csrf}}">
+  {{template "reason" (print "ret-" .TayfaId)}}
+  <button type="submit" class="danger">Reddet / Keşfet'ten çıkar</button>
+</form>
+</div>
+{{end}}
+{{else}}
+<p>İnceleme bekleyen tayfa yok.</p>
+{{end}}
+{{end}}

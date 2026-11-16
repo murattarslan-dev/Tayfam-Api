@@ -356,3 +356,57 @@ func (s *AdminServer) GetStats(ctx context.Context, _ *corev1.GetStatsRequest) (
 	}
 	return out, nil
 }
+
+// Keşfet review (issue #210, ADR-0033 §8).
+
+var discoverReviewStatuses = map[string]corev1.DiscoverReviewStatus{
+	"pending":  corev1.DiscoverReviewStatus_DISCOVER_REVIEW_STATUS_PENDING,
+	"approved": corev1.DiscoverReviewStatus_DISCOVER_REVIEW_STATUS_APPROVED,
+	"rejected": corev1.DiscoverReviewStatus_DISCOVER_REVIEW_STATUS_REJECTED,
+	"dropped":  corev1.DiscoverReviewStatus_DISCOVER_REVIEW_STATUS_DROPPED,
+}
+
+var discoverDropReasons = map[string]corev1.DiscoverDropReason{
+	"member_report":     corev1.DiscoverDropReason_DISCOVER_DROP_REASON_MEMBER_REPORT,
+	"negative_feedback": corev1.DiscoverDropReason_DISCOVER_DROP_REASON_NEGATIVE_FEEDBACK,
+}
+
+func clamp32(n int) int32 { return int32(min(max(n, 0), 1<<30)) } // #nosec G115 -- bounded
+
+// ListDiscoverQueue implements corev1.AdminServiceServer.
+func (s *AdminServer) ListDiscoverQueue(ctx context.Context, _ *corev1.ListDiscoverQueueRequest) (*corev1.ListDiscoverQueueResponse, error) {
+	c, err := s.claims(ctx)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := s.app.ListDiscoverQueue(ctx, c)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	out := &corev1.ListDiscoverQueueResponse{Entries: make([]*corev1.DiscoverQueueEntry, 0, len(entries))}
+	for _, e := range entries {
+		out.Entries = append(out.Entries, &corev1.DiscoverQueueEntry{
+			TayfaId: e.TayfaID.String(), Name: e.Name, Description: e.Description, City: e.City, District: e.District,
+			CreateTime: tsOrNil(e.CreatedAt), MemberCount: clamp32(e.MemberCount), DiscoverMemberCount: clamp32(e.DiscoverMemberCount),
+			OpenPlatformReports: clamp32(e.OpenPlatformReports), NotOkFeedbackCount: clamp32(e.NotOKFeedback),
+			SeriousFeedbackCount: clamp32(e.SeriousFeedback), Status: discoverReviewStatuses[e.Status],
+			DropReason: discoverDropReasons[e.DropReason], RequestTime: tsOrNil(e.RequestedAt),
+			StatusChangeTime: tsOrNil(e.StatusChangedAt), Enabled: e.Enabled,
+		})
+	}
+	return out, nil
+}
+
+// ApproveDiscover implements corev1.AdminServiceServer.
+func (s *AdminServer) ApproveDiscover(ctx context.Context, req *corev1.ApproveDiscoverRequest) (*corev1.ApproveDiscoverResponse, error) {
+	return run(ctx, s, req.GetTayfaId(), func(c auth.AdminClaims, tf id.ID) error {
+		return s.app.ApproveDiscover(ctx, c, tf, req.GetReason())
+	}, &corev1.ApproveDiscoverResponse{})
+}
+
+// RejectDiscover implements corev1.AdminServiceServer.
+func (s *AdminServer) RejectDiscover(ctx context.Context, req *corev1.RejectDiscoverRequest) (*corev1.RejectDiscoverResponse, error) {
+	return run(ctx, s, req.GetTayfaId(), func(c auth.AdminClaims, tf id.ID) error {
+		return s.app.RejectDiscover(ctx, c, tf, req.GetReason())
+	}, &corev1.RejectDiscoverResponse{})
+}

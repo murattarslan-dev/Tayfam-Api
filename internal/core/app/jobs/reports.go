@@ -89,7 +89,12 @@ func (s *Service) ExpireRecords(ctx context.Context) (int, error) {
 	if err != nil {
 		return reports + audits + int(nf) + int(ni), err //nolint:gosec // row counts
 	}
-	return reports + audits + int(nf) + int(ni) + int(na), nil //nolint:gosec // row counts
+	// Keşfet safety net (issue #210, ADR-0033 §13).
+	nd, err := s.expireDiscover(ctx, q)
+	if err != nil {
+		return reports + audits + int(nf) + int(ni) + int(na) + nd, err //nolint:gosec // row counts
+	}
+	return reports + audits + int(nf) + int(ni) + int(na) + nd, nil //nolint:gosec // row counts
 }
 
 // OutcomeRetention is how long the outcome of a friend request or an

@@ -131,6 +131,12 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_UPLOAD_NOT_RECEIVED":   {http.StatusConflict, "upload-not-received"},
 		"ERROR_REASON_UPLOAD_RATE_LIMITED":   {http.StatusTooManyRequests, "upload-rate-limited"},
 		"ERROR_REASON_UPLOAD_QUOTA_EXCEEDED": {http.StatusConflict, "upload-quota-exceeded"},
+		// Keşfet (issue #210, ADR-0033).
+		"ERROR_REASON_FEATURE_DISABLED":         {http.StatusNotFound, "feature-disabled"},
+		"ERROR_REASON_DISCOVER_TOO_FEW_MEMBERS": {http.StatusConflict, "discover-too-few-members"},
+		"ERROR_REASON_FEEDBACK_CLOSED":          {http.StatusConflict, "feedback-closed"},
+		"ERROR_REASON_SAFETY_CONTACT_CLOSED":    {http.StatusConflict, "safety-contact-closed"},
+		"ERROR_REASON_SAFETY_CONTACT_NOT_FOUND": {http.StatusNotFound, "safety-contact-not-found"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

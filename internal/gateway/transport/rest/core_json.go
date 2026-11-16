@@ -159,6 +159,9 @@ type membershipJSON struct {
 	Status     string     `json:"status"`
 	JoinedAt   *time.Time `json:"joined_at,omitempty"`
 	MutedUntil *time.Time `json:"muted_until,omitempty"`
+	// JoinedViaDiscover: only for moderators and admins (core fills it);
+	// absent otherwise (ADR-0033 §6).
+	JoinedViaDiscover bool `json:"joined_via_discover,omitempty"`
 }
 
 func membershipFrom(m *corev1.Membership) membershipJSON {
@@ -166,6 +169,7 @@ func membershipFrom(m *corev1.Membership) membershipJSON {
 		TayfaID: m.GetTayfaId(), UserID: m.GetUserId(),
 		Role: roles.name(m.GetRole()), Status: membershipStatuses.name(m.GetStatus()),
 		JoinedAt: optTime(m.GetJoinTime()), MutedUntil: optTime(m.GetMuteExpireTime()),
+		JoinedViaDiscover: m.GetJoinedViaDiscover(),
 	}
 }
 

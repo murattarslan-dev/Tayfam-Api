@@ -462,7 +462,7 @@ func TestRoutesMatchContract(t *testing.T) {
 			t.Errorf("sözleşmedeki %s %s sunulmuyor (%d)", m[1], path, w.Code)
 		}
 	}
-	if ops != 26 {
+	if ops != 29 {
 		t.Fatalf("sözleşmede %d işlem bulundu", ops)
 	}
 }

@@ -443,6 +443,37 @@ var expected = []struct {
 	{invited, EventPhotoDeleteOwnEvent, false},
 	{banned, EventPhotoDeleteOwnEvent, false},
 	{nonMember, EventPhotoDeleteOwnEvent, false},
+	// TayfaDiscoverManage (issue #210): admins only.
+	{admin, TayfaDiscoverManage, true},
+	{moderator, TayfaDiscoverManage, false},
+	{member, TayfaDiscoverManage, false},
+	{mutedMember, TayfaDiscoverManage, false},
+	{mutedModerator, TayfaDiscoverManage, false},
+	{pending, TayfaDiscoverManage, false},
+	{invited, TayfaDiscoverManage, false},
+	{banned, TayfaDiscoverManage, false},
+	{nonMember, TayfaDiscoverManage, false},
+	// EventFeedback: every active member, muted too (a safety signal).
+	{admin, EventFeedback, true},
+	{moderator, EventFeedback, true},
+	{member, EventFeedback, true},
+	{mutedMember, EventFeedback, true},
+	{mutedModerator, EventFeedback, true},
+	{pending, EventFeedback, false},
+	{invited, EventFeedback, false},
+	{banned, EventFeedback, false},
+	{nonMember, EventFeedback, false},
+	// EventSafetyContact: every active member, muted too ("I'm back" is
+	// never refused).
+	{admin, EventSafetyContact, true},
+	{moderator, EventSafetyContact, true},
+	{member, EventSafetyContact, true},
+	{mutedMember, EventSafetyContact, true},
+	{mutedModerator, EventSafetyContact, true},
+	{pending, EventSafetyContact, false},
+	{invited, EventSafetyContact, false},
+	{banned, EventSafetyContact, false},
+	{nonMember, EventSafetyContact, false},
 	// EventPhotoDeleteAny
 	{admin, EventPhotoDeleteAny, true},
 	{moderator, EventPhotoDeleteAny, true},
@@ -949,6 +980,10 @@ func TestMutedAdmin(t *testing.T) {
 		ChannelViewStaff: true,
 		ChannelDeleteOwn: true,
 		ChannelMarkRead:  true,
+		// Keşfet safety net (issue #210): feedback and the safety contact
+		// publish nothing.
+		EventFeedback:      true,
+		EventSafetyContact: true,
 	}
 	for a := Action(1); a < actionEnd; a++ {
 		if got := Allowed(m, a, now); got != want[a] {

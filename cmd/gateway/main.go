@@ -110,6 +110,7 @@ func setup(rt *service.Runtime) error {
 			Polls:               corev1.NewPollServiceClient(conn),
 			Social:              corev1.NewSocialServiceClient(conn),
 			Availability:        corev1.NewAvailabilityServiceClient(conn),
+			Discover:            corev1.NewDiscoverServiceClient(conn),
 			Invitations:         corev1.NewMembershipServiceClient(conn),
 			Profiles:            corev1.NewProfileServiceClient(conn),
 			Reports:             corev1.NewReportServiceClient(conn),

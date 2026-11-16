@@ -41,6 +41,8 @@ func auditActions() []option {
 		{"membership.set_role", "Rol düzeltme"},
 		{"report.view_item", "Şikâyet edilen öğeyi görüntüleme"},
 		{"report.decide", "Şikâyet kararı"},
+		{"tayfa.discover_approve", "Keşfet onayı"},
+		{"tayfa.discover_reject", "Keşfet reddi / çıkarma"},
 		{"user.revoke_sessions", "Oturumları kapatma"},
 		{"user.suspend", "Kullanıcı askısı"},
 		{"user.ban", "Kullanıcı banı"},
@@ -200,6 +202,10 @@ func jobLabel(job string) string {
 		return "Şikâyetleri platforma yükseltme"
 	case "retention":
 		return "Saklama süresi temizliği"
+	case "friend-suggestions":
+		return "Arkadaşlık puanı ve öneri"
+	case "safety-alert":
+		return "Güvenlik kişisi alarmı"
 	}
 	return job
 }

@@ -69,7 +69,7 @@ const (
 
 func parseTemplates() (map[string]*template.Template, error) {
 	// The page templates; each is parsed with layout.html.
-	pageNames := []string{"login", "continue", "error", "dashboard", "tayfas", "tayfa", "users", "user", "reports", "report", "audit"}
+	pageNames := []string{"login", "continue", "error", "dashboard", "tayfas", "tayfa", "users", "user", "reports", "report", "audit", "discover"}
 	out := make(map[string]*template.Template, len(pageNames))
 	for _, name := range pageNames {
 		t, err := template.New("layout.html").Funcs(templateFuncs()).ParseFS(templateFS, "templates/layout.html", "templates/"+name+".html")
@@ -545,6 +545,59 @@ func parseRole(v string) corev1.Role {
 	return corev1.Role_ROLE_UNSPECIFIED
 }
 
+// --- Keşfet (issue #210, ADR-0033 §8) ---
+
+type discoverData struct {
+	Entries []*corev1.DiscoverQueueEntry
+}
+
+func (h *handlers) discoverQueue(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := sessionFrom(r.Context()).upstream(r.Context())
+	defer cancel()
+	resp, err := h.cfg.Core.ListDiscoverQueue(ctx, &corev1.ListDiscoverQueueRequest{})
+	if err != nil {
+		h.failedPage(w, r, err)
+		return
+	}
+	p := h.newPage(w, r, "kesfet", "Keşfet incelemesi")
+	p.Data = discoverData{Entries: resp.GetEntries()}
+	h.render(w, r, http.StatusOK, "discover", p)
+}
+
+func (h *handlers) approveDiscover(w http.ResponseWriter, r *http.Request) {
+	h.discoverChange(w, r, "kesfet-onaylandi", func(ctx context.Context, id, reason string) error {
+		_, err := h.cfg.Core.ApproveDiscover(ctx, &corev1.ApproveDiscoverRequest{TayfaId: id, Reason: reason})
+		return err
+	})
+}
+
+func (h *handlers) rejectDiscover(w http.ResponseWriter, r *http.Request) {
+	h.discoverChange(w, r, "kesfet-reddedildi", func(ctx context.Context, id, reason string) error {
+		_, err := h.cfg.Core.RejectDiscover(ctx, &corev1.RejectDiscoverRequest{TayfaId: id, Reason: reason})
+		return err
+	})
+}
+
+// discoverChange is tayfaChange for the Keşfet queue: it returns to /kesfet.
+func (h *handlers) discoverChange(w http.ResponseWriter, r *http.Request, notice string, do func(ctx context.Context, id, reason string) error) {
+	id, ok := h.pathID(w, r)
+	if !ok {
+		return
+	}
+	const back = "/kesfet"
+	reason, ok := h.change(w, r, back, maxReason)
+	if !ok {
+		return
+	}
+	ctx, cancel := sessionFrom(r.Context()).upstream(r.Context())
+	defer cancel()
+	if err := do(ctx, id, reason); err != nil {
+		h.failed(w, r, back, err)
+		return
+	}
+	done(w, r, back, "sonuc", notice)
+}
+
 // --- Kullanıcılar ---
 
 type usersData struct {
@@ -865,6 +918,10 @@ func noticeText(code string) string {
 		return "Yaptırım kaldırıldı."
 	case "karar-verildi":
 		return "Karar kaydedildi."
+	case "kesfet-onaylandi":
+		return "Keşfet başvurusu onaylandı."
+	case "kesfet-reddedildi":
+		return "Tayfa Keşfet'ten çıkarıldı."
 	}
 	return ""
 }

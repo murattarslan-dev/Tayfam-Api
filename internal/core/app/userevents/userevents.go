@@ -272,6 +272,9 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			q.DeleteUserFriendships, q.DeleteUserBlocks, q.DeleteUserRequestOutcomes,
 			q.DeleteUserFriendScores, q.DeleteUserFriendSuggestions, q.DeleteUserSocialSettings,
 			q.DeleteUserAvailability,
+			// Keşfet (issue #210): feedback, safety contacts both ways, and
+			// the person on an application or review.
+			q.DeleteUserEventFeedback, q.DeleteUserSafetyContacts, q.ClearTayfaDiscoverUser,
 			q.ClearAuditActor, q.ClearEventActor, q.ClearReportUserFields,
 		} {
 			if err := clear(ctx, e.User.PG()); err != nil {
