@@ -50,6 +50,21 @@ service EventService {
   // Errors: common, ERROR_REASON_VALIDATION.
   rpc CreateEvent(CreateEventRequest) returns (CreateEventResponse);
 
+  // CreateInstantEvent creates an instant event (ADR-0032): a hidden tayfa
+  // of kind TAYFA_KIND_INSTANT with the caller as its only admin and this
+  // single event, in one transaction. Only the events module is on. The
+  // invitees get direct invitations like InviteFriend (they must be the
+  // caller's friends). Any signed-in user may call it; a caller may
+  // organize at most 3 open instant events at a time (not ended, not
+  // cancelled) and create at most 5 in 24 hours (cancelled ones count). It does not count toward the tayfa creation limits. A
+  // repeat with the same client_request_id by the same caller returns the
+  // tayfa and event created the first time and creates nothing.
+  //
+  // Errors: ERROR_REASON_VALIDATION, ERROR_REASON_INSTANT_EVENT_LIMIT,
+  // ERROR_REASON_USER_NOT_FOUND, ERROR_REASON_NOT_FRIENDS,
+  // ERROR_REASON_DIRECT_INVITE_LIMIT.
+  rpc CreateInstantEvent(CreateInstantEventRequest) returns (CreateInstantEventResponse);
+
   // UpdateEvent changes the fields named in update_mask. Raising the
   // capacity (or removing it) moves the oldest waitlisted RSVPs to GOING in
   // the same transaction; lowering it below the current GOING count moves
@@ -593,6 +608,25 @@ message EventSeries {
 
 message CreateEventResponse {
   Event event = 1;
+}
+
+message CreateInstantEventRequest {
+  // The event, with the rules of CreateEventRequest, except: tayfa_id,
+  // recurrence and cover_upload_id must be empty (a cover is set later with
+  // UpdateEvent) and discoverable must be false (an instant event never
+  // reaches discovery, not even later with UpdateEvent).
+  // event.client_request_id is the request's retry key.
+  CreateEventRequest event = 1;
+  // Optional: friends of the caller to invite directly, at most 10
+  // distinct IDs, not the caller. If one cannot be invited nothing is
+  // created.
+  repeated string invitee_user_ids = 2;
+}
+
+message CreateInstantEventResponse {
+  // The hidden tayfa (kind TAYFA_KIND_INSTANT, instant_event_id set).
+  Tayfa tayfa = 1;
+  Event event = 2;
 }
 
 message UpdateEventRequest {

@@ -32,6 +32,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/export"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/identityadmin"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/identityminor"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/instant"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/jobs"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
@@ -108,6 +109,10 @@ func setup(rt *service.Runtime) error {
 		return err
 	}
 	rt.Log.Info("keşfet bayrağı", slog.Bool("açık", discoverEnabled))
+	instants, err := instant.New(instant.Config{Pool: pool, Log: rt.Log, Tayfas: tayfas, Events: events, Memberships: memberships})
+	if err != nil {
+		return err
+	}
 	announcements, err := announcement.New(announcement.Config{Pool: pool})
 	if err != nil {
 		return err
@@ -236,7 +241,7 @@ func setup(rt *service.Runtime) error {
 	corev1.RegisterUserEventServiceServer(srv, grpcapi.NewUserEventServer(userEvents, rt.Log))
 	corev1.RegisterChatEventServiceServer(srv, grpcapi.NewChatEventServer(chatEvents, rt.Log))
 	corev1.RegisterAnnouncementServiceServer(srv, grpcapi.NewAnnouncementServer(announcements, rt.Log))
-	corev1.RegisterEventServiceServer(srv, grpcapi.NewEventServer(events, rt.Log))
+	corev1.RegisterEventServiceServer(srv, grpcapi.NewEventServer(events, rt.Log).WithInstant(instants))
 	corev1.RegisterQAServiceServer(srv, grpcapi.NewQAServer(questions, rt.Log))
 	corev1.RegisterPollServiceServer(srv, grpcapi.NewPollServer(polls, rt.Log))
 	corev1.RegisterSocialServiceServer(srv, grpcapi.NewSocialServer(socials, rt.Log))

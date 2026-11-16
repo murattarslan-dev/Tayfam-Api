@@ -39,6 +39,7 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | [0029](0029-bosum-bos-vakit.md) | "Boşum": arkadaşlara görünen boş vakit (v2) | Kabul edildi |
 | [0030](0030-arkadaslik-puani-ve-arkadas-onerisi.md) | Arkadaşlık puanı ve arkadaş önerisi (v2) | Kabul edildi |
 | [0031](0031-sohbet-ekleri-fotograf-ve-yer.md) | Sohbet ekleri: fotoğraf ve yer (kanal ve uçtan uca birebir) | Kabul edildi |
+| [0032](0032-anlik-etkinlik.md) | Anlık (bireysel) etkinlik: gizli, tek etkinlikli tayfa (v2) | Kabul edildi |
 | [0033](0033-kesfet-ilk-asama.md) | Keşfet ilk aşama: arkadaş ağı ve güvenlik ağı (v2) | Önerildi |
 
 Ürün kararları (kavram modeli, özellikler, veri modeli, KVKK metni, platform

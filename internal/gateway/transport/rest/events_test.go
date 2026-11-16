@@ -65,6 +65,14 @@ func testSeries() *corev1.EventSeries {
 func (f *fakeCore) CreateEvent(ctx context.Context, in *corev1.CreateEventRequest, _ ...grpc.CallOption) (*corev1.CreateEventResponse, error) {
 	return &corev1.CreateEventResponse{Event: testEvent()}, f.record(ctx, in)
 }
+func (f *fakeCore) CreateInstantEvent(ctx context.Context, in *corev1.CreateInstantEventRequest, _ ...grpc.CallOption) (*corev1.CreateInstantEventResponse, error) {
+	if err := f.record(ctx, in); err != nil {
+		return nil, err
+	}
+	t := f.t()
+	t.Kind, t.InstantEventId = corev1.TayfaKind_TAYFA_KIND_INSTANT, eventID
+	return &corev1.CreateInstantEventResponse{Tayfa: t, Event: testEvent()}, nil
+}
 func (f *fakeCore) UpdateEvent(ctx context.Context, in *corev1.UpdateEventRequest, _ ...grpc.CallOption) (*corev1.UpdateEventResponse, error) {
 	return &corev1.UpdateEventResponse{Event: testEvent()}, f.record(ctx, in)
 }

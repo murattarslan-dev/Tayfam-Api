@@ -187,7 +187,9 @@ func (s *Service) JoinByCode(ctx context.Context, caller id.ID, code string) (Me
 			}
 			return err
 		}
-		if t.readOnly {
+		// An instant tayfa has no usable join code (ADR-0032 §4): its code
+		// is never shown and answers like an unknown one.
+		if t.readOnly || t.instant {
 			return apperr.ErrInvalidJoinCode
 		}
 		if err := s.checkNotMember(ctx, q, t.id, caller, apperr.ErrInvalidJoinCode); err != nil {
@@ -326,11 +328,16 @@ func (s *Service) JoinByInvite(ctx context.Context, caller id.ID, token string) 
 		}
 
 		// v14 "Tayfaya davet": active when the tayfa is open, or when the
-		// link's creator is an active moderator or admin right now.
+		// link's creator is an active moderator or admin right now. In an
+		// instant tayfa a link always leaves a join request for the
+		// organizer (ADR-0032 §4).
 		st := authz.StatusPending
-		if t.joinPolicy == "open" {
+		switch {
+		case t.instant:
+			// Always a join request.
+		case t.joinPolicy == "open":
 			st = authz.StatusActive
-		} else if inv.CreatedBy.Valid {
+		case inv.CreatedBy.Valid:
 			cm, err := q.GetMembership(ctx, store.GetMembershipParams{TayfaID: inv.TayfaID, UserID: inv.CreatedBy})
 			switch {
 			case errors.Is(err, pgx.ErrNoRows):
@@ -1032,10 +1039,16 @@ type tayfaState struct {
 	id         id.ID
 	joinPolicy string
 	readOnly   bool
+	// instant: the hidden tayfa of an instant event (ADR-0032).
+	instant  bool
+	settings authz.Settings
 }
 
 func stateOf(tayfa id.ID, t access.Tayfa) tayfaState {
-	return tayfaState{id: tayfa, joinPolicy: t.JoinPolicy, readOnly: access.ReadOnly(t)}
+	return tayfaState{
+		id: tayfa, joinPolicy: t.JoinPolicy, readOnly: access.ReadOnly(t),
+		instant: access.Instant(t), settings: access.Settings(t),
+	}
 }
 
 // lockTayfa locks the tayfa row for a membership change (the same lock the
@@ -1059,7 +1072,9 @@ func (s *Service) actorFor(ctx context.Context, q *store.Queries, tayfa, caller 
 	if err != nil {
 		return tayfaState{}, authz.Membership{}, err
 	}
-	if err := access.Authorize(m, a, s.now()); err != nil {
+	// The tayfa's settings: an instant tayfa changes who may invite and
+	// change roles (ADR-0032 §3).
+	if err := access.AuthorizeIn(m, a, s.now(), access.Settings(t)); err != nil {
 		return tayfaState{}, authz.Membership{}, err
 	}
 	return stateOf(tayfa, t), m, nil

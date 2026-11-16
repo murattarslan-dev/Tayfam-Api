@@ -276,6 +276,11 @@ enum ErrorReason {
   // RESOURCE_EXHAUSTED. The caller's stored media would exceed the quota.
   ERROR_REASON_UPLOAD_QUOTA_EXCEEDED = 125;
 
+  // Instant events (ADR-0032).
+  // RESOURCE_EXHAUSTED. The caller already organizes 3 open instant events
+  // (not ended, not cancelled) or created 5 in the last 24 hours.
+  ERROR_REASON_INSTANT_EVENT_LIMIT = 130;
+
   // Keşfet (DiscoverService, issue #210, ADR-0033).
 
   // NOT_FOUND. The feature is turned off on this server (DISCOVER_ENABLED);
@@ -292,5 +297,5 @@ enum ErrorReason {
   // the event is online, cancelled or over, or the alert already went out.
   ERROR_REASON_SAFETY_CONTACT_CLOSED = 129;
   // NOT_FOUND. The caller chose no safety contact for this event.
-  ERROR_REASON_SAFETY_CONTACT_NOT_FOUND = 130;
+  ERROR_REASON_SAFETY_CONTACT_NOT_FOUND = 131;
 }

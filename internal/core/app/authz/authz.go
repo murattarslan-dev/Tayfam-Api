@@ -236,6 +236,9 @@ const (
 	ChannelModerate
 	ChannelRestore
 	ChannelMarkRead
+	// TayfaConvert turns an instant tayfa into a standard one ("Bu ekiple
+	// tayfa kur", ADR-0032). Allowed only with Settings.Instant.
+	TayfaConvert
 	// Keşfet (issue #210, ADR-0033). TayfaDiscoverManage turns Keşfet on
 	// or off and reads its state. EventFeedback is one's own "Was
 	// everything all right?" answer; EventSafetyContact is one's own
@@ -328,6 +331,7 @@ var actionNames = [...]string{
 	ChannelModerate:          "channel.moderate",
 	ChannelRestore:           "channel.restore",
 	ChannelMarkRead:          "channel.mark_read",
+	TayfaConvert:             "tayfa.convert",
 	TayfaDiscoverManage:      "tayfa.discover_manage",
 	EventFeedback:            "event.feedback",
 	EventSafetyContact:       "event.safety_contact",
@@ -475,6 +479,28 @@ var permissions = map[Action]Role{
 	QuestionRestore:     Admin,
 	AnswerRestore:       Admin,
 	ChannelRestore:      Admin,
+	// "Bu ekiple tayfa kur" is the organizer's (ADR-0032); minRole refuses
+	// it outside instant tayfas.
+	TayfaConvert: Admin,
+}
+
+// nobody is the minimum role of an action no role may perform.
+const nobody Role = Admin + 1
+
+// instantRules overrides the minimum role of actions in an instant tayfa
+// (tayfas.kind = 'instant', ADR-0032 §3): the hidden single-event tayfa of
+// an instant event. Its organizer is the only admin and the only one who
+// invites; the name comes from the event title, the event is the only one
+// and only the events module is on.
+var instantRules = map[Action]Role{
+	TayfaUpdateSettings: nobody,
+	TayfaRotateJoinCode: nobody,
+	TayfaManageModules:  nobody,
+	EventCreate:         nobody,
+	// No moderators: the organizer alone approves join requests.
+	MemberChangeRole: nobody,
+	InviteCreate:     Admin,
+	InviteDirect:     Admin,
 }
 
 // allowedWhileMuted lists the actions a muted member may still perform: reads,
@@ -533,6 +559,9 @@ type Settings struct {
 	// MembersCanCreateEvents (tayfas.members_can_create_events) lets every
 	// active member perform EventCreate.
 	MembersCanCreateEvents bool
+	// Instant (tayfas.kind = 'instant') applies instantRules and allows
+	// TayfaConvert (ADR-0032).
+	Instant bool
 }
 
 // minRole returns the lowest role that may perform a under s; ok is false
@@ -545,6 +574,16 @@ func minRole(a Action, s Settings) (need Role, ok bool) {
 	}
 	if a == EventCreate && s.MembersCanCreateEvents {
 		need = Member
+	}
+	if s.Instant {
+		if r, ok := instantRules[a]; ok {
+			need = r
+		}
+	} else if a == TayfaConvert {
+		return 0, false
+	}
+	if need == nobody {
+		return 0, false
 	}
 	return need, true
 }
@@ -560,8 +599,9 @@ func Allowed(m Membership, a Action, now time.Time) bool {
 }
 
 // AllowedIn is Allowed for a tayfa with settings s. Actions whose rule
-// depends on a setting (EventCreate) must be checked with AllowedIn and the
-// tayfa's current settings; Allowed assumes the defaults.
+// depends on a setting (EventCreate, and every action in instantRules) must
+// be checked with AllowedIn and the tayfa's current settings; Allowed
+// assumes a standard tayfa with the defaults.
 func AllowedIn(m Membership, a Action, now time.Time, s Settings) bool {
 	if m.Status != StatusActive || !m.Role.Valid() {
 		return false

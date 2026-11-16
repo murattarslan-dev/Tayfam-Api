@@ -52,7 +52,7 @@ ORDER BY t.name_normalized, t.id
 LIMIT 500;
 
 -- name: AdminLockTayfa :one
-SELECT id, suspended_at, deleted_at FROM tayfas WHERE id = @id FOR NO KEY UPDATE;
+SELECT id, suspended_at, deleted_at, kind FROM tayfas WHERE id = @id FOR NO KEY UPDATE;
 
 -- name: AdminSuspendTayfa :execrows
 UPDATE tayfas SET suspended_at = @at, suspended_reason = @reason, suspended_by = @by

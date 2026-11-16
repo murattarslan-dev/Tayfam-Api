@@ -19,14 +19,15 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	TayfaService_CreateTayfa_FullMethodName     = "/tayfam.core.v1.TayfaService/CreateTayfa"
-	TayfaService_GetTayfa_FullMethodName        = "/tayfam.core.v1.TayfaService/GetTayfa"
-	TayfaService_ListMyTayfas_FullMethodName    = "/tayfam.core.v1.TayfaService/ListMyTayfas"
-	TayfaService_UpdateTayfa_FullMethodName     = "/tayfam.core.v1.TayfaService/UpdateTayfa"
-	TayfaService_SetModule_FullMethodName       = "/tayfam.core.v1.TayfaService/SetModule"
-	TayfaService_RotateJoinCode_FullMethodName  = "/tayfam.core.v1.TayfaService/RotateJoinCode"
-	TayfaService_RequestDeletion_FullMethodName = "/tayfam.core.v1.TayfaService/RequestDeletion"
-	TayfaService_CancelDeletion_FullMethodName  = "/tayfam.core.v1.TayfaService/CancelDeletion"
+	TayfaService_CreateTayfa_FullMethodName         = "/tayfam.core.v1.TayfaService/CreateTayfa"
+	TayfaService_GetTayfa_FullMethodName            = "/tayfam.core.v1.TayfaService/GetTayfa"
+	TayfaService_ListMyTayfas_FullMethodName        = "/tayfam.core.v1.TayfaService/ListMyTayfas"
+	TayfaService_UpdateTayfa_FullMethodName         = "/tayfam.core.v1.TayfaService/UpdateTayfa"
+	TayfaService_SetModule_FullMethodName           = "/tayfam.core.v1.TayfaService/SetModule"
+	TayfaService_RotateJoinCode_FullMethodName      = "/tayfam.core.v1.TayfaService/RotateJoinCode"
+	TayfaService_RequestDeletion_FullMethodName     = "/tayfam.core.v1.TayfaService/RequestDeletion"
+	TayfaService_CancelDeletion_FullMethodName      = "/tayfam.core.v1.TayfaService/CancelDeletion"
+	TayfaService_ConvertInstantTayfa_FullMethodName = "/tayfam.core.v1.TayfaService/ConvertInstantTayfa"
 )
 
 // TayfaServiceClient is the client API for TayfaService service.
@@ -98,6 +99,21 @@ type TayfaServiceClient interface {
 	// Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
 	// ERROR_REASON_MUTED, ERROR_REASON_DELETION_NOT_REQUESTED.
 	CancelDeletion(ctx context.Context, in *CancelDeletionRequest, opts ...grpc.CallOption) (*CancelDeletionResponse, error)
+	// ConvertInstantTayfa turns an instant tayfa into a standard one ("Bu
+	// ekiple tayfa kur", ADR-0032): name, interests, description and join
+	// policy are set with the rules of CreateTayfa, every module is turned
+	// on, and members, the event and its channel stay. From then on the
+	// standard rules apply. Admin (the organizer, or the admin who took over
+	// when the organizer's account was deleted) of an instant tayfa only; a
+	// tayfa that never was instant answers ERROR_REASON_PERMISSION_DENIED. A
+	// repeat by an admin of a tayfa already converted returns it unchanged. It counts as
+	// creating a tayfa: at most once per 24 hours together with CreateTayfa
+	// (per-IP limit is in gateway).
+	//
+	// Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+	// ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY,
+	// ERROR_REASON_VALIDATION, ERROR_REASON_TAYFA_CREATE_LIMIT.
+	ConvertInstantTayfa(ctx context.Context, in *ConvertInstantTayfaRequest, opts ...grpc.CallOption) (*ConvertInstantTayfaResponse, error)
 }
 
 type tayfaServiceClient struct {
@@ -188,6 +204,16 @@ func (c *tayfaServiceClient) CancelDeletion(ctx context.Context, in *CancelDelet
 	return out, nil
 }
 
+func (c *tayfaServiceClient) ConvertInstantTayfa(ctx context.Context, in *ConvertInstantTayfaRequest, opts ...grpc.CallOption) (*ConvertInstantTayfaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConvertInstantTayfaResponse)
+	err := c.cc.Invoke(ctx, TayfaService_ConvertInstantTayfa_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // TayfaServiceServer is the server API for TayfaService service.
 // All implementations must embed UnimplementedTayfaServiceServer
 // for forward compatibility.
@@ -257,6 +283,21 @@ type TayfaServiceServer interface {
 	// Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
 	// ERROR_REASON_MUTED, ERROR_REASON_DELETION_NOT_REQUESTED.
 	CancelDeletion(context.Context, *CancelDeletionRequest) (*CancelDeletionResponse, error)
+	// ConvertInstantTayfa turns an instant tayfa into a standard one ("Bu
+	// ekiple tayfa kur", ADR-0032): name, interests, description and join
+	// policy are set with the rules of CreateTayfa, every module is turned
+	// on, and members, the event and its channel stay. From then on the
+	// standard rules apply. Admin (the organizer, or the admin who took over
+	// when the organizer's account was deleted) of an instant tayfa only; a
+	// tayfa that never was instant answers ERROR_REASON_PERMISSION_DENIED. A
+	// repeat by an admin of a tayfa already converted returns it unchanged. It counts as
+	// creating a tayfa: at most once per 24 hours together with CreateTayfa
+	// (per-IP limit is in gateway).
+	//
+	// Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+	// ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY,
+	// ERROR_REASON_VALIDATION, ERROR_REASON_TAYFA_CREATE_LIMIT.
+	ConvertInstantTayfa(context.Context, *ConvertInstantTayfaRequest) (*ConvertInstantTayfaResponse, error)
 	mustEmbedUnimplementedTayfaServiceServer()
 }
 
@@ -290,6 +331,9 @@ func (UnimplementedTayfaServiceServer) RequestDeletion(context.Context, *Request
 }
 func (UnimplementedTayfaServiceServer) CancelDeletion(context.Context, *CancelDeletionRequest) (*CancelDeletionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CancelDeletion not implemented")
+}
+func (UnimplementedTayfaServiceServer) ConvertInstantTayfa(context.Context, *ConvertInstantTayfaRequest) (*ConvertInstantTayfaResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConvertInstantTayfa not implemented")
 }
 func (UnimplementedTayfaServiceServer) mustEmbedUnimplementedTayfaServiceServer() {}
 func (UnimplementedTayfaServiceServer) testEmbeddedByValue()                      {}
@@ -456,6 +500,24 @@ func _TayfaService_CancelDeletion_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TayfaService_ConvertInstantTayfa_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConvertInstantTayfaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TayfaServiceServer).ConvertInstantTayfa(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TayfaService_ConvertInstantTayfa_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TayfaServiceServer).ConvertInstantTayfa(ctx, req.(*ConvertInstantTayfaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // TayfaService_ServiceDesc is the grpc.ServiceDesc for TayfaService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -494,6 +556,10 @@ var TayfaService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelDeletion",
 			Handler:    _TayfaService_CancelDeletion_Handler,
+		},
+		{
+			MethodName: "ConvertInstantTayfa",
+			Handler:    _TayfaService_ConvertInstantTayfa_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -62,6 +62,7 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_MUTED":                       {http.StatusForbidden, "muted"},
 		"ERROR_REASON_TAYFA_READ_ONLY":             {http.StatusConflict, "tayfa-read-only"},
 		"ERROR_REASON_TAYFA_CREATE_LIMIT":          {http.StatusTooManyRequests, "tayfa-create-limit"},
+		"ERROR_REASON_INSTANT_EVENT_LIMIT":         {http.StatusTooManyRequests, "instant-event-limit"},
 		"ERROR_REASON_RATE_LIMITED":                {http.StatusTooManyRequests, "rate-limited"},
 		"ERROR_REASON_INVALID_JOIN_CODE":           {http.StatusNotFound, "invalid-join-code"},
 		"ERROR_REASON_INVITE_INVALID":              {http.StatusNotFound, "invite-invalid"},

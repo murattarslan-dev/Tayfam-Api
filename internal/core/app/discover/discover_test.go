@@ -341,21 +341,58 @@ func TestFeedListing(t *testing.T) {
 	}
 }
 
-// TestInstantTayfaNeverListed (ADR-0033 §12): until #209 adds the tayfa
-// kind, an instant tayfa is a private tayfa; a private tayfa is never
-// listed, even with an approved application. Whichever of #209 and #210
-// merges second extends this test with the kind column.
+// TestInstantTayfaNeverListed (ADR-0033 §12, ADR-0032): an instant tayfa
+// is never listed, even with an approved application and listed
+// visibility forced around its CHECK; its admin cannot apply; a private
+// tayfa is never listed either.
 func TestInstantTayfaNeverListed(t *testing.T) {
 	e := setup(t)
+	listable := func(tf id.ID) bool {
+		var ok bool
+		must(t, e.admin.QueryRow(ctx, `SELECT tayfa_discover_listable($1)`, tf.PG()).Scan(&ok))
+		return ok
+	}
+
+	// Private (the admins turned Keşfet off).
 	sc := e.scenario(t)
 	e.seedExec(t, `UPDATE tayfas SET visibility = 'private' WHERE id = $1`, sc.tf.PG())
-	if items := e.feed(t, sc.viewer); len(items) != 0 {
+	if items := e.feed(t, sc.viewer); len(items) != 0 || listable(sc.tf) {
 		t.Fatalf("gizli tayfa listelendi: %d", len(items))
 	}
-	var listable bool
-	must(t, e.admin.QueryRow(ctx, `SELECT tayfa_discover_listable($1)`, sc.tf.PG()).Scan(&listable))
-	if listable {
-		t.Fatal("gizli tayfa listelenebilir sayıldı")
+
+	// Instant: the kind alone keeps it out. The test database is this
+	// test's own, so the CHECK that keeps instant tayfas private is dropped
+	// to stand for a row that slipped past it.
+	sc = e.scenario(t)
+	e.seedExec(t, `ALTER TABLE tayfas DROP CONSTRAINT tayfas_instant_private`)
+	e.seedExec(t, `UPDATE tayfas SET kind = 'instant' WHERE id = $1`, sc.tf.PG())
+	if items := e.feed(t, sc.viewer); len(items) != 0 || listable(sc.tf) {
+		t.Fatalf("anlık tayfa listelendi: %d", len(items))
+	}
+	e.seedExec(t, `UPDATE tayfas SET kind = 'standard' WHERE id = $1`, sc.tf.PG())
+	if !listable(sc.tf) {
+		t.Fatal("aynı tayfa standart iken listelenmeli")
+	}
+	e.seedExec(t, `ALTER TABLE tayfas ADD CONSTRAINT tayfas_instant_private CHECK (kind <> 'instant' OR (visibility = 'private' AND join_policy = 'approval'))`)
+
+	// The CHECK of 00027: an instant tayfa cannot be made listed.
+	if _, err := e.admin.Exec(ctx, `UPDATE tayfas SET kind = 'instant', visibility = 'listed' WHERE id = $1`, sc.tf.PG()); err == nil {
+		t.Fatal("anlık tayfa listed yapılabildi")
+	}
+}
+
+// TestInstantTayfaCannotApply: the admin of an instant tayfa gets
+// tayfa-not-found from the Keşfet setting.
+func TestInstantTayfaCannotApply(t *testing.T) {
+	e := setup(t)
+	sc := e.scenario(t)
+	e.seedExec(t, `UPDATE tayfas SET kind = 'instant', visibility = 'private', join_policy = 'approval' WHERE id = $1`, sc.tf.PG())
+	s := e.svc(t, true, 0)
+	if _, err := s.SetTayfa(ctx, sc.admin, sc.tf, true); !errors.Is(err, apperr.ErrTayfaNotFound) {
+		t.Fatalf("anlık tayfa başvurdu: %v", err)
+	}
+	if _, err := s.GetTayfa(ctx, sc.admin, sc.tf); !errors.Is(err, apperr.ErrTayfaNotFound) {
+		t.Fatalf("anlık tayfa durumu: %v", err)
 	}
 }
 

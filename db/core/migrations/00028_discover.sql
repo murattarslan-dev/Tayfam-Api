@@ -33,9 +33,9 @@
 --   tayfas_discover_rereview          onaylı tayfanın adı, açıklaması, ili ya
 --                                     da ilçesi değişirse yeniden incelemeye.
 --
--- Anlık tayfalar (#209) hiçbir zaman listelenmez: bugün listelenebilirlik
--- visibility = 'listed' ister ve anlık tayfa gizlidir. #209 birleşince
--- tayfa türü fonksiyona eklenir (ADR-0033 §12).
+-- Anlık tayfalar (#209, ADR-0032) hiçbir zaman listelenmez: listelenebilirlik
+-- kind = 'standard' ister; ayrıca 00027'deki tayfas_instant_private CHECK'i
+-- anlık tayfayı visibility = 'private' tutar (ADR-0033 §12).
 --
 -- Kullanıcı kimlikleri identity'dedir; FK yoktur, user.deleted tüketicisi
 -- temizler (ADR-0002).
@@ -115,6 +115,7 @@ LANGUAGE sql STABLE AS $$
     FROM tayfas x
     JOIN tayfa_discover d ON d.tayfa_id = x.id
     WHERE x.id = t
+      AND x.kind = 'standard'
       AND x.visibility = 'listed'
       AND d.status = 'approved'
       AND x.status IN ('active', 'warned')

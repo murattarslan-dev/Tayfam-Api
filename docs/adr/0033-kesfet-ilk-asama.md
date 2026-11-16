@@ -272,20 +272,21 @@ Mevcut panel uçları ve sayfaları altında ("Keşfet" sekmesi):
 - İşler yalnızca sayı log'lar (gönderilen alarm sayısı). Kimlik, cevap,
   puan log'a, metriğe, trace'e girmez.
 
-### 12. Anlık tayfalar (#209)
+### 12. Anlık tayfalar (#209, ADR-0032)
 
-Anlık tayfa hiçbir zaman listelenmez. #209 henüz birleşmediği için tayfa
-türü alanı yoktur; kural iki katmanda bağlanır:
+Anlık tayfa hiçbir zaman listelenmez. Kural üç katmandadır:
 
-1. **Bugün:** `tayfa_discover_listable` `visibility = 'listed'` ister.
-   #209'un kararına göre anlık tayfa gizlidir (`private`) ve Keşfet ayarı
-   yalnızca bu ADR'nin `SetTayfaDiscover` ucundan açılır.
-2. **#209 birleşince** (hangi PR ikinci birleşirse o yapar): fonksiyona
-   `AND t.kind = 'standard'` (ya da #209'un seçtiği ad) eklenir,
-   `SetTayfaDiscover` anlık tayfada `TAYFA_NOT_FOUND` döner ve
-   `tayfa_discover` için anlık tayfaya satır eklemeyi reddeden bir CHECK
-   ya da trigger eklenir. `TestInstantTayfaNeverListed` (store testi)
-   bugün gizli tayfayla çalışır; ikinci PR onu tür alanıyla genişletir.
+1. `tayfa_discover_listable` `tayfas.kind = 'standard'` ister (ADR-0032'nin
+   alanı, migration 00027).
+2. 00027'deki `tayfas_instant_private` CHECK'i anlık tayfayı
+   `visibility = 'private'` tutar; yöneticinin Keşfet isteği ona yazılamaz.
+3. `GetTayfaDiscover` ve `SetTayfaDiscover` anlık tayfada `TAYFA_NOT_FOUND`
+   döner.
+
+"Bu ekiple tayfa kur" ile kalıcıya dönen tayfa standart olur ve normal
+kurallara (yönetici açar, panel onaylar, en az 5 üye) girer.
+`TestInstantTayfaNeverListed` tür alanı tek başına (CHECK düşürülmüş olsa
+bile) tayfayı dışarıda tuttuğunu sabitler.
 
 ### 13. Saklama, hesap silme, dışa aktarma
 

@@ -104,6 +104,26 @@ func (s *Service) CleanupTayfas(ctx context.Context) (int, error) {
 	return total, err
 }
 
+// ArchiveInstantTayfas archives the instant tayfas whose event ended (or
+// was cancelled) InstantArchiveDelay ago, or that have no live event, and
+// returns how many (ADR-0032 §6): an audit record and tayfa.archived, no
+// notification. Suspended tayfas and tayfas waiting for deletion are left
+// alone, like in CleanupTayfas.
+func (s *Service) ArchiveInstantTayfas(ctx context.Context) (int, error) {
+	now := s.now()
+	return s.drain(ctx, JobInstantArchive, tayfaBatch, func(q *store.Queries) (int, error) {
+		rows, err := q.ArchiveInstantTayfas(ctx, store.ArchiveInstantTayfasParams{
+			Now: ts(now), EndedBefore: ts(now.Add(-InstantArchiveDelay)), N: tayfaBatch,
+		})
+		if err != nil {
+			return 0, fmt.Errorf("anlık tayfa arşivi: %w", err)
+		}
+		return len(rows), s.recordTayfas(ctx, q, rows, EventTayfaArchived, "", func(id.ID) (map[string]any, []byte, []id.ID, error) {
+			return map[string]any{"kind": "instant"}, []byte(`{"kind":"instant"}`), nil, nil
+		})
+	})
+}
+
 // DeleteDueTayfas soft deletes the tayfas whose deletion wait (72 hours,
 // v14 "Tayfa silmede bekleme") is over and returns how many. A cancelled
 // request has no deletion_scheduled_for and is not touched. The tayfa is

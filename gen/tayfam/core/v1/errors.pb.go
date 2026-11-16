@@ -258,6 +258,10 @@ const (
 	ErrorReason_ERROR_REASON_UPLOAD_RATE_LIMITED ErrorReason = 124
 	// RESOURCE_EXHAUSTED. The caller's stored media would exceed the quota.
 	ErrorReason_ERROR_REASON_UPLOAD_QUOTA_EXCEEDED ErrorReason = 125
+	// Instant events (ADR-0032).
+	// RESOURCE_EXHAUSTED. The caller already organizes 3 open instant events
+	// (not ended, not cancelled) or created 5 in the last 24 hours.
+	ErrorReason_ERROR_REASON_INSTANT_EVENT_LIMIT ErrorReason = 130
 	// NOT_FOUND. The feature is turned off on this server (DISCOVER_ENABLED);
 	// the client hides its entry points. Nothing was read.
 	ErrorReason_ERROR_REASON_FEATURE_DISABLED ErrorReason = 126
@@ -272,7 +276,7 @@ const (
 	// the event is online, cancelled or over, or the alert already went out.
 	ErrorReason_ERROR_REASON_SAFETY_CONTACT_CLOSED ErrorReason = 129
 	// NOT_FOUND. The caller chose no safety contact for this event.
-	ErrorReason_ERROR_REASON_SAFETY_CONTACT_NOT_FOUND ErrorReason = 130
+	ErrorReason_ERROR_REASON_SAFETY_CONTACT_NOT_FOUND ErrorReason = 131
 )
 
 // Enum value maps for ErrorReason.
@@ -352,11 +356,12 @@ var (
 		123: "ERROR_REASON_UPLOAD_NOT_RECEIVED",
 		124: "ERROR_REASON_UPLOAD_RATE_LIMITED",
 		125: "ERROR_REASON_UPLOAD_QUOTA_EXCEEDED",
+		130: "ERROR_REASON_INSTANT_EVENT_LIMIT",
 		126: "ERROR_REASON_FEATURE_DISABLED",
 		127: "ERROR_REASON_DISCOVER_TOO_FEW_MEMBERS",
 		128: "ERROR_REASON_FEEDBACK_CLOSED",
 		129: "ERROR_REASON_SAFETY_CONTACT_CLOSED",
-		130: "ERROR_REASON_SAFETY_CONTACT_NOT_FOUND",
+		131: "ERROR_REASON_SAFETY_CONTACT_NOT_FOUND",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                 0,
@@ -433,11 +438,12 @@ var (
 		"ERROR_REASON_UPLOAD_NOT_RECEIVED":         123,
 		"ERROR_REASON_UPLOAD_RATE_LIMITED":         124,
 		"ERROR_REASON_UPLOAD_QUOTA_EXCEEDED":       125,
+		"ERROR_REASON_INSTANT_EVENT_LIMIT":         130,
 		"ERROR_REASON_FEATURE_DISABLED":            126,
 		"ERROR_REASON_DISCOVER_TOO_FEW_MEMBERS":    127,
 		"ERROR_REASON_FEEDBACK_CLOSED":             128,
 		"ERROR_REASON_SAFETY_CONTACT_CLOSED":       129,
-		"ERROR_REASON_SAFETY_CONTACT_NOT_FOUND":    130,
+		"ERROR_REASON_SAFETY_CONTACT_NOT_FOUND":    131,
 	}
 )
 
@@ -472,7 +478,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\x82\x16\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xa9\x16\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -548,12 +554,13 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\x1aERROR_REASON_UPLOAD_IN_USE\x10z\x12$\n" +
 	" ERROR_REASON_UPLOAD_NOT_RECEIVED\x10{\x12$\n" +
 	" ERROR_REASON_UPLOAD_RATE_LIMITED\x10|\x12&\n" +
-	"\"ERROR_REASON_UPLOAD_QUOTA_EXCEEDED\x10}\x12!\n" +
+	"\"ERROR_REASON_UPLOAD_QUOTA_EXCEEDED\x10}\x12%\n" +
+	" ERROR_REASON_INSTANT_EVENT_LIMIT\x10\x82\x01\x12!\n" +
 	"\x1dERROR_REASON_FEATURE_DISABLED\x10~\x12)\n" +
 	"%ERROR_REASON_DISCOVER_TOO_FEW_MEMBERS\x10\x7f\x12!\n" +
 	"\x1cERROR_REASON_FEEDBACK_CLOSED\x10\x80\x01\x12'\n" +
 	"\"ERROR_REASON_SAFETY_CONTACT_CLOSED\x10\x81\x01\x12*\n" +
-	"%ERROR_REASON_SAFETY_CONTACT_NOT_FOUND\x10\x82\x01B\xbd\x01\n" +
+	"%ERROR_REASON_SAFETY_CONTACT_NOT_FOUND\x10\x83\x01B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

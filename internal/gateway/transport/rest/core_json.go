@@ -88,6 +88,9 @@ var (
 		"active": corev1.TayfaStatus_TAYFA_STATUS_ACTIVE, "warned": corev1.TayfaStatus_TAYFA_STATUS_WARNED,
 		"archived": corev1.TayfaStatus_TAYFA_STATUS_ARCHIVED,
 	})
+	tayfaKinds = newEnum(map[string]corev1.TayfaKind{
+		"standard": corev1.TayfaKind_TAYFA_KIND_STANDARD, "instant": corev1.TayfaKind_TAYFA_KIND_INSTANT,
+	})
 	roles = newEnum(map[string]corev1.Role{
 		"member": corev1.Role_ROLE_MEMBER, "moderator": corev1.Role_ROLE_MODERATOR, "admin": corev1.Role_ROLE_ADMIN,
 	})
@@ -132,6 +135,10 @@ type tayfaJSON struct {
 	UpdatedAt               time.Time `json:"updated_at"`
 	// CoverUploadID: links with POST /v1/media/urls (issue #135).
 	CoverUploadID string `json:"cover_upload_id,omitempty"`
+	// Kind: standard or instant (ADR-0032); InstantEventID only for
+	// instant.
+	Kind           string `json:"kind"`
+	InstantEventID string `json:"instant_event_id,omitempty"`
 }
 
 func tayfaFrom(t *corev1.Tayfa) tayfaJSON {
@@ -149,6 +156,7 @@ func tayfaFrom(t *corev1.Tayfa) tayfaJSON {
 		MemberCount: t.GetMemberCount(), MembersCanCreateEvents: t.GetMembersCanCreateEvents(), JoinCode: t.GetJoinCode(),
 		CreatedAt: t.GetCreateTime().AsTime(), UpdatedAt: t.GetUpdateTime().AsTime(),
 		CoverUploadID: t.GetCoverUploadId(), PendingJoinRequestCount: t.PendingJoinRequestCount,
+		Kind: tayfaKinds.name(t.GetKind()), InstantEventID: t.GetInstantEventId(),
 	}
 }
 

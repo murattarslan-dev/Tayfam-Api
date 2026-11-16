@@ -42,6 +42,8 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_TAYFA_READ_ONLY, true
 	case errors.Is(err, apperr.ErrTayfaCreateLimit):
 		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_TAYFA_CREATE_LIMIT, true
+	case errors.Is(err, apperr.ErrInstantEventLimit):
+		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_INSTANT_EVENT_LIMIT, true
 	case errors.Is(err, apperr.ErrRateLimited):
 		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_RATE_LIMITED, true
 	case errors.Is(err, apperr.ErrInvalidJoinCode):

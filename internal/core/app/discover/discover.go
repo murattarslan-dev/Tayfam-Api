@@ -216,11 +216,19 @@ func stateOf(visibility string, review pgtype.Text) TayfaState {
 	return TayfaState{State: st, Enabled: enabled}
 }
 
-// GetTayfa returns the tayfa's Keşfet state. Admins only.
+// KindStandard is tayfas.kind of a tayfa that may be in Keşfet; an
+// instant tayfa (ADR-0032) never is (ADR-0033 §12).
+const KindStandard = "standard"
+
+// GetTayfa returns the tayfa's Keşfet state. Admins only. An instant
+// tayfa has no Keşfet state: it is apperr.ErrTayfaNotFound here.
 func (s *Service) GetTayfa(ctx context.Context, caller, tayfa id.ID) (TayfaState, error) {
-	_, m, err := access.Load(ctx, s.q, tayfa, caller, false)
+	t, m, err := access.Load(ctx, s.q, tayfa, caller, false)
 	if err != nil {
 		return TayfaState{}, err
+	}
+	if t.Kind != KindStandard {
+		return TayfaState{}, apperr.ErrTayfaNotFound
 	}
 	if err := access.Authorize(m, authz.TayfaDiscoverManage, s.now()); err != nil {
 		return TayfaState{}, err
@@ -243,6 +251,9 @@ func (s *Service) SetTayfa(ctx context.Context, caller, tayfa id.ID, enabled boo
 		t, m, err := access.Load(ctx, q, tayfa, caller, true)
 		if err != nil {
 			return err
+		}
+		if t.Kind != KindStandard {
+			return apperr.ErrTayfaNotFound // instant tayfas never enter Keşfet
 		}
 		now := s.now()
 		if err := access.Authorize(m, authz.TayfaDiscoverManage, now); err != nil {

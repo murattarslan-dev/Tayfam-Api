@@ -11,6 +11,54 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const archiveInstantTayfas = `-- name: ArchiveInstantTayfas :many
+UPDATE tayfas t SET status = 'archived', archived_at = $1
+WHERE t.id IN (
+    SELECT c.id FROM tayfas c
+    WHERE c.kind = 'instant' AND c.status <> 'archived' AND c.deleted_at IS NULL
+      AND c.suspended_at IS NULL AND c.deletion_requested_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM events e
+        WHERE e.tayfa_id = c.id AND e.deleted_at IS NULL
+          AND COALESCE(e.cancelled_at, e.ends_at) > $2)
+    ORDER BY c.id
+    LIMIT $3
+    FOR NO KEY UPDATE SKIP LOCKED
+  )
+  AND t.kind = 'instant' AND t.status <> 'archived' AND t.deleted_at IS NULL
+  AND t.suspended_at IS NULL AND t.deletion_requested_at IS NULL
+RETURNING t.id
+`
+
+type ArchiveInstantTayfasParams struct {
+	Now         pgtype.Timestamptz
+	EndedBefore pgtype.Timestamptz
+	N           int32
+}
+
+// Anlık tayfa, etkinliği bittikten (iptalde iptal anından) @ended_before'a
+// kadar (7 gün) geçince ya da canlı etkinliği kalmayınca arşivlenir
+// (ADR-0032 §6). Askıdaki ya da silme bekleyen tayfaya dokunulmaz.
+func (q *Queries) ArchiveInstantTayfas(ctx context.Context, arg ArchiveInstantTayfasParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, archiveInstantTayfas, arg.Now, arg.EndedBefore, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const archiveWarnedTayfas = `-- name: ArchiveWarnedTayfas :many
 UPDATE tayfas SET status = 'archived', archived_at = $1
 WHERE id IN (
@@ -578,12 +626,12 @@ const warnTayfas = `-- name: WarnTayfas :many
 UPDATE tayfas t SET status = 'warned', warned_at = $1
 WHERE t.id IN (
     SELECT c.id FROM tayfas c
-    WHERE c.status = 'active' AND c.deleted_at IS NULL
+    WHERE c.status = 'active' AND c.deleted_at IS NULL AND c.kind = 'standard'
       AND c.suspended_at IS NULL AND c.deletion_requested_at IS NULL
       AND (
         c.last_activity_at <= $2
         OR (
-          c.created_at <= $3
+          COALESCE(c.converted_at, c.created_at) <= $3
           AND (SELECT count(*) FROM memberships m WHERE m.tayfa_id = c.id AND m.status = 'active') < $4::int
           AND NOT EXISTS (
             SELECT 1 FROM audit_logs a
@@ -594,7 +642,7 @@ WHERE t.id IN (
     LIMIT $5
     FOR NO KEY UPDATE SKIP LOCKED
   )
-  AND t.status = 'active' AND t.deleted_at IS NULL
+  AND t.status = 'active' AND t.deleted_at IS NULL AND t.kind = 'standard'
   AND t.suspended_at IS NULL AND t.deletion_requested_at IS NULL
 RETURNING t.id, (t.last_activity_at <= $2)::boolean AS inactive
 `
@@ -615,14 +663,16 @@ type WarnTayfasRow struct {
 // Uyarı iki sebeple verilir:
 //
 //	inactive:    last_activity_at @inactive_before'dan eski (30 gün).
-//	few_members: açılışından @created_before'a kadar (7 gün) geçmiş ve
+//	few_members: açılışından (dönüşen anlık tayfada dönüşümünden)
+//	             @created_before'a kadar (7 gün) geçmiş ve
 //	             @min_members'tan az aktif üyesi olan tayfa. Bu kural tayfa
 //	             başına bir kez uygulanır: daha önce few_members uyarısı
 //	             almış (audit_logs, yalnızca eklenir) tayfa bu sebeple tekrar
 //	             uyarılmaz; küçük ama aktif bir arkadaş grubu her hafta uyarı
 //	             almaz, hareketsiz kalırsa inactive kuralı yine işler.
 //
-// Askıdaki ya da silme bekleyen tayfaya dokunulmaz.
+// Askıdaki ya da silme bekleyen tayfaya dokunulmaz. Anlık tayfa bu
+// kurallara girmez; kendi arşiv kuralı vardır (ArchiveInstantTayfas).
 func (q *Queries) WarnTayfas(ctx context.Context, arg WarnTayfasParams) ([]WarnTayfasRow, error) {
 	rows, err := q.db.Query(ctx, warnTayfas,
 		arg.Now,
