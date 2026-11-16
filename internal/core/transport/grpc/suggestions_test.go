@@ -121,7 +121,11 @@ func TestNoScoreInSocialResponses(t *testing.T) {
 	for i := range methods.Len() {
 		walk(methods.Get(i).Output())
 	}
-	if !seen["tayfam.core.v1.FriendSuggestion"] {
-		t.Fatal("FriendSuggestion denetlenmedi")
+	// Friend (ListFriends) is ordered by the score but must not carry it
+	// (issue #215, ADR-0030 §12).
+	for _, m := range []protoreflect.FullName{"tayfam.core.v1.FriendSuggestion", "tayfam.core.v1.Friend", "tayfam.core.v1.ListFriendsResponse"} {
+		if !seen[m] {
+			t.Fatalf("%s denetlenmedi", m)
+		}
 	}
 }

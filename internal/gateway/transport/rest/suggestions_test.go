@@ -125,7 +125,11 @@ func TestFriendSuggestionContractHasNoScore(t *testing.T) {
 	lines := strings.Split(string(spec), "\n")
 	schemaRe := regexp.MustCompile(`^    ([A-Za-z]+):$`)
 	propRe := regexp.MustCompile(`^        ([a-z_]+):`)
-	want := map[string]bool{"FriendSuggestion": true, "FriendSuggestionList": true, "SocialSettings": true, "SocialSettingsUpdate": true}
+	want := map[string]bool{
+		"FriendSuggestion": true, "FriendSuggestionList": true, "SocialSettings": true, "SocialSettingsUpdate": true,
+		// GET /v1/me/friends is ordered by the score (issue #215).
+		"Friend": true, "FriendList": true,
+	}
 	found := map[string]bool{}
 	cur := ""
 	for _, l := range lines {

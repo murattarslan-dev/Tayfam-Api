@@ -571,12 +571,25 @@ type Querier interface {
 	ListEventPhotos(ctx context.Context, arg ListEventPhotosParams) ([]ListEventPhotosRow, error)
 	// Liste görünümünde mera gizliliği için.
 	ListFishingVisibility(ctx context.Context, eventIds []pgtype.UUID) ([]ListFishingVisibilityRow, error)
-	// Kişinin arkadaşları ve istekleri; karşı tarafın kimliğine göre sayfalanır.
-	// Silinmiş hesapların satırı hesap silmede gider; profili henüz gelmemiş
-	// kişi listede adsız görünmez, atlanır. Kabul edilmiş arkadaşlıkta
-	// arkadaşın @today ile @badge_until (dahil) arasındaki en yakın boş günü de
-	// döner ("Boşum" rozeti, issue #207; not dönmez). Engel arkadaşlığı zaten
-	// siler; rozet yine de iki yönlü engelde dönmez (savunma derinliği).
+	// Kişinin arkadaşları ve istekleri. Silinmiş hesapların satırı hesap
+	// silmede gider; profili henüz gelmemiş kişi listede adsız görünmez, atlanır.
+	// Kabul edilmiş arkadaşlıkta arkadaşın @today ile @badge_until (dahil)
+	// arasındaki en yakın boş günü de döner ("Boşum" rozeti, issue #207; not
+	// dönmez). Engel arkadaşlığı zaten siler; rozet yine de iki yönlü engelde
+	// dönmez (savunma derinliği).
+	//
+	// Sıra (ADR-0030 §12, issue #215): kabul edilmiş arkadaşlar arkadaşlık
+	// puanına göre azalan, eşitlikte karşı tarafın kimliğine göre. Puan yalnızca
+	// arkadaşlık kabul edilmişse ve iki tarafın da profillemesi açıksa sayılır;
+	// yoksa 0'dır. İsteklerde puan hiç sayılmaz (sıra kimliğe göredir). Puan
+	// sonuç sütunu değildir: yalnızca ORDER BY ve WHERE'de kullanılır, Go'ya
+	// gelmez.
+	//
+	// Sayfalama: imleç yalnızca önceki sayfanın son kişisini taşır
+	// (@after_user_id). O kişinin konumu (puanı) burada, aynı kurallarla yeniden
+	// okunur. İmleçteki kişi çağıranın kabul edilmiş arkadaşı değilse (uydurma
+	// ya da sayfalar arasında biten arkadaşlık) puanı 0 sayılır: imleç başka
+	// birinin puanını sorgulamak için kullanılamaz.
 	ListFriendshipsPage(ctx context.Context, arg ListFriendshipsPageParams) ([]ListFriendshipsPageRow, error)
 	// Alarmın alıcıları: organizatör (tayfada hâlâ aktif üyeyse) ve aktif
 	// yöneticiler ve moderatörler; dönmeyen kişinin kendisi hariç. Organizatör
