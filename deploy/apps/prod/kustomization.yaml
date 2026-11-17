@@ -79,6 +79,10 @@ configMapGenerator:
       - CLIENT_LATEST_VERSION_IOS=0.1.0
       # CLIENT_*_WEB prod'da yok (ADR-0017): web platformu hizmet almaz;
       # verilirse gateway başlamaz.
+      # core: Keşfet (ADR-0033). Platform sahibi 2026-11-17'de pilot öncesi
+      # test için açtı; başlık sözlüğü ve hukukçu görüşmesi pilottan önce
+      # tamamlanır (issue #224). Kapatmak (false) veri silmez.
+      - DISCOVER_ENABLED=true
 
 # Sürüm etiketiyle çalışan prod iş akışı her satırı, etiketin gösterdiği
 # commit'in imzalı image digest'iyle değiştirir (scripts/pin-images.sh). Bu
