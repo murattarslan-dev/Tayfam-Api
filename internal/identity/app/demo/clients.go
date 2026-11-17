@@ -15,6 +15,10 @@ import (
 type TayfaAPI interface {
 	CreateTayfa(ctx context.Context, in *corev1.CreateTayfaRequest, opts ...grpc.CallOption) (*corev1.CreateTayfaResponse, error)
 	GetTayfa(ctx context.Context, in *corev1.GetTayfaRequest, opts ...grpc.CallOption) (*corev1.GetTayfaResponse, error)
+	// The purge finds a demo founder's tayfas and deletes them through the
+	// normal path (ADR-0035).
+	ListMyTayfas(ctx context.Context, in *corev1.ListMyTayfasRequest, opts ...grpc.CallOption) (*corev1.ListMyTayfasResponse, error)
+	RequestDeletion(ctx context.Context, in *corev1.RequestDeletionRequest, opts ...grpc.CallOption) (*corev1.RequestDeletionResponse, error)
 }
 
 type MembershipAPI interface {
@@ -48,6 +52,21 @@ type PollAPI interface {
 	VotePoll(ctx context.Context, in *corev1.VotePollRequest, opts ...grpc.CallOption) (*corev1.VotePollResponse, error)
 }
 
+// DiscoverAPI: a Keşfet demo tayfa applies to Keşfet like any tayfa; the
+// platform owner approves it in the panel (ADR-0035).
+type DiscoverAPI interface {
+	GetTayfaDiscover(ctx context.Context, in *corev1.GetTayfaDiscoverRequest, opts ...grpc.CallOption) (*corev1.GetTayfaDiscoverResponse, error)
+	SetTayfaDiscover(ctx context.Context, in *corev1.SetTayfaDiscoverRequest, opts ...grpc.CallOption) (*corev1.SetTayfaDiscoverResponse, error)
+}
+
+// SocialAPI: friendships with the platform owner and blocks (ADR-0035).
+type SocialAPI interface {
+	SendFriendRequest(ctx context.Context, in *corev1.SendFriendRequestRequest, opts ...grpc.CallOption) (*corev1.SendFriendRequestResponse, error)
+	AcceptFriendRequest(ctx context.Context, in *corev1.AcceptFriendRequestRequest, opts ...grpc.CallOption) (*corev1.AcceptFriendRequestResponse, error)
+	BlockUser(ctx context.Context, in *corev1.BlockUserRequest, opts ...grpc.CallOption) (*corev1.BlockUserResponse, error)
+	ListBlockedUsers(ctx context.Context, in *corev1.ListBlockedUsersRequest, opts ...grpc.CallOption) (*corev1.ListBlockedUsersResponse, error)
+}
+
 type ChannelAPI interface {
 	ListChannels(ctx context.Context, in *chatv1.ListChannelsRequest, opts ...grpc.CallOption) (*chatv1.ListChannelsResponse, error)
 	CreateChannel(ctx context.Context, in *chatv1.CreateChannelRequest, opts ...grpc.CallOption) (*chatv1.CreateChannelResponse, error)
@@ -62,11 +81,14 @@ type Core struct {
 	Announcements AnnouncementAPI
 	QA            QAAPI
 	Polls         PollAPI
+	Discover      DiscoverAPI
+	Social        SocialAPI
 }
 
 func (c Core) complete() bool {
 	return c.Tayfas != nil && c.Memberships != nil && c.Events != nil &&
-		c.Announcements != nil && c.QA != nil && c.Polls != nil
+		c.Announcements != nil && c.QA != nil && c.Polls != nil &&
+		c.Discover != nil && c.Social != nil
 }
 
 // NewCore returns the Core for a connection to core.
@@ -78,6 +100,8 @@ func NewCore(conn grpc.ClientConnInterface) Core {
 		Announcements: corev1.NewAnnouncementServiceClient(conn),
 		QA:            corev1.NewQAServiceClient(conn),
 		Polls:         corev1.NewPollServiceClient(conn),
+		Discover:      corev1.NewDiscoverServiceClient(conn),
+		Social:        corev1.NewSocialServiceClient(conn),
 	}
 }
 

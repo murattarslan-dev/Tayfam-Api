@@ -36,9 +36,9 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// DiscoverService is the first stage of Keşfet: events of tayfas opened to
-// Keşfet that the caller's friends go to, and the safety net around it
-// (issue #210, ADR-0033).
+// DiscoverService is Keşfet: events of tayfas opened to Keşfet, open to
+// every user since 2026-11-17 (issue #227, ADR-0035), with the friends who
+// go to them, and the safety net around it (issue #210, ADR-0033).
 //
 // Every method needs the caller's access token; the caller is always the
 // verified token subject.
@@ -60,21 +60,28 @@ const (
 // and no coordinates.
 type DiscoverServiceClient interface {
 	// ListDiscoverFeed lists at most 50 upcoming events (not ended, starting
-	// within 30 days) of listable tayfas the caller is not in, where at least
-	// one of the caller's friends is visible: an accepted friend, no block
-	// either way, an active member of the tayfa, GOING to or attended the
-	// event, and whose attendance history visibility is not PRIVATE. No
-	// paging.
+	// within 30 days) of listable tayfas the caller is not in. No friend is
+	// needed (ADR-0035): an event with no visible friend has an empty friends
+	// list and friend_count 0. A friend is visible when they are an accepted
+	// friend, with no block either way, an active member of the tayfa, GOING
+	// to or attended the event, whose attendance history visibility is not
+	// PRIVATE and who did not turn off being shown in Keşfet. A tayfa is left
+	// out when the caller and any of its active members blocked each other
+	// (either way). Items with visible friends come first (private signals,
+	// then their number); the rest by start time and ID. No paging.
 	//
 	// Errors: ERROR_REASON_FEATURE_DISABLED.
 	ListDiscoverFeed(ctx context.Context, in *ListDiscoverFeedRequest, opts ...grpc.CallOption) (*ListDiscoverFeedResponse, error)
-	// JoinFromDiscover asks to join a tayfa that is in the caller's feed
-	// right now. The membership is always PENDING with JOIN_SOURCE_DISCOVER,
-	// even in an open tayfa; the tayfa's staff approve it.
+	// JoinFromDiscover asks to join a tayfa that is in the caller's Keşfet
+	// right now (it has an event the feed would show the caller; no friend
+	// is needed, ADR-0035). The membership is always PENDING with
+	// JOIN_SOURCE_DISCOVER, even in an open tayfa; the tayfa's staff approve
+	// it. Staff are never shown the caller's age or an "under 18" mark.
 	//
 	// Errors: ERROR_REASON_FEATURE_DISABLED, ERROR_REASON_TAYFA_NOT_FOUND
-	// (not in the caller's feed, unknown, or the caller is banned there; all
-	// the same), ERROR_REASON_ALREADY_MEMBER, ERROR_REASON_ALREADY_PENDING,
+	// (not in the caller's Keşfet, a block either way with an active member,
+	// unknown, or the caller is banned there; all the same),
+	// ERROR_REASON_ALREADY_MEMBER, ERROR_REASON_ALREADY_PENDING,
 	// ERROR_REASON_RATE_LIMITED.
 	JoinFromDiscover(ctx context.Context, in *JoinFromDiscoverRequest, opts ...grpc.CallOption) (*JoinFromDiscoverResponse, error)
 	// GetTayfaDiscover returns the tayfa's Keşfet state. Admin of the tayfa
@@ -276,9 +283,9 @@ func (c *discoverServiceClient) ListSafetyShares(ctx context.Context, in *ListSa
 // All implementations must embed UnimplementedDiscoverServiceServer
 // for forward compatibility.
 //
-// DiscoverService is the first stage of Keşfet: events of tayfas opened to
-// Keşfet that the caller's friends go to, and the safety net around it
-// (issue #210, ADR-0033).
+// DiscoverService is Keşfet: events of tayfas opened to Keşfet, open to
+// every user since 2026-11-17 (issue #227, ADR-0035), with the friends who
+// go to them, and the safety net around it (issue #210, ADR-0033).
 //
 // Every method needs the caller's access token; the caller is always the
 // verified token subject.
@@ -300,21 +307,28 @@ func (c *discoverServiceClient) ListSafetyShares(ctx context.Context, in *ListSa
 // and no coordinates.
 type DiscoverServiceServer interface {
 	// ListDiscoverFeed lists at most 50 upcoming events (not ended, starting
-	// within 30 days) of listable tayfas the caller is not in, where at least
-	// one of the caller's friends is visible: an accepted friend, no block
-	// either way, an active member of the tayfa, GOING to or attended the
-	// event, and whose attendance history visibility is not PRIVATE. No
-	// paging.
+	// within 30 days) of listable tayfas the caller is not in. No friend is
+	// needed (ADR-0035): an event with no visible friend has an empty friends
+	// list and friend_count 0. A friend is visible when they are an accepted
+	// friend, with no block either way, an active member of the tayfa, GOING
+	// to or attended the event, whose attendance history visibility is not
+	// PRIVATE and who did not turn off being shown in Keşfet. A tayfa is left
+	// out when the caller and any of its active members blocked each other
+	// (either way). Items with visible friends come first (private signals,
+	// then their number); the rest by start time and ID. No paging.
 	//
 	// Errors: ERROR_REASON_FEATURE_DISABLED.
 	ListDiscoverFeed(context.Context, *ListDiscoverFeedRequest) (*ListDiscoverFeedResponse, error)
-	// JoinFromDiscover asks to join a tayfa that is in the caller's feed
-	// right now. The membership is always PENDING with JOIN_SOURCE_DISCOVER,
-	// even in an open tayfa; the tayfa's staff approve it.
+	// JoinFromDiscover asks to join a tayfa that is in the caller's Keşfet
+	// right now (it has an event the feed would show the caller; no friend
+	// is needed, ADR-0035). The membership is always PENDING with
+	// JOIN_SOURCE_DISCOVER, even in an open tayfa; the tayfa's staff approve
+	// it. Staff are never shown the caller's age or an "under 18" mark.
 	//
 	// Errors: ERROR_REASON_FEATURE_DISABLED, ERROR_REASON_TAYFA_NOT_FOUND
-	// (not in the caller's feed, unknown, or the caller is banned there; all
-	// the same), ERROR_REASON_ALREADY_MEMBER, ERROR_REASON_ALREADY_PENDING,
+	// (not in the caller's Keşfet, a block either way with an active member,
+	// unknown, or the caller is banned there; all the same),
+	// ERROR_REASON_ALREADY_MEMBER, ERROR_REASON_ALREADY_PENDING,
 	// ERROR_REASON_RATE_LIMITED.
 	JoinFromDiscover(context.Context, *JoinFromDiscoverRequest) (*JoinFromDiscoverResponse, error)
 	// GetTayfaDiscover returns the tayfa's Keşfet state. Admin of the tayfa

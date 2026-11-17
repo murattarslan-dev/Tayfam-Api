@@ -28,7 +28,8 @@ type tayfaSpec struct {
 	Interests   []corev1.EventType
 	Founder     string         // person key; creates the tayfa (admin)
 	Members     []memberSpec   // joined by code, approved by the founder
-	OwnerRole   corev1.Role    // the platform owner's role, added last
+	OwnerRole   corev1.Role    // the platform owner's role, added last; UNSPECIFIED: not added
+	Discover    bool           // applies to Keşfet once its members are in (ADR-0035)
 	Events      []eventSpec    // created by the founder
 	Notices     []noticeSpec   // announcements, by the founder
 	Questions   []questionSpec // Q&A
@@ -48,28 +49,29 @@ type at struct {
 }
 
 type eventSpec struct {
-	Key         string
-	Type        corev1.EventType
-	Online      bool
-	Title       string
-	Description string
-	Start       at
-	Hours       int // duration
-	PlaceName   string
-	Lat, Lng    float64
-	City        string
-	District    string
-	OnlineURL   string
-	Capacity    int32
-	Convoy      *corev1.ConvoyDetails
-	Camp        *corev1.CampDetails
-	Hike        *hikeSpec
-	Fishing     *corev1.FishingDetails
-	Gaming      *corev1.GamingDetails
-	Sports      *corev1.SportsDetails
-	RSVPs       []rsvpSpec
-	Vehicles    []vehicleSpec  // convoy: members who answered GOING
-	CampItems   []campItemSpec // camp: added by the founder
+	Key          string
+	Type         corev1.EventType
+	Online       bool
+	Discoverable bool // "meets in a public place": may show in Keşfet
+	Title        string
+	Description  string
+	Start        at
+	Hours        int // duration
+	PlaceName    string
+	Lat, Lng     float64
+	City         string
+	District     string
+	OnlineURL    string
+	Capacity     int32
+	Convoy       *corev1.ConvoyDetails
+	Camp         *corev1.CampDetails
+	Hike         *hikeSpec
+	Fishing      *corev1.FishingDetails
+	Gaming       *corev1.GamingDetails
+	Sports       *corev1.SportsDetails
+	RSVPs        []rsvpSpec
+	Vehicles     []vehicleSpec  // convoy: members who answered GOING
+	CampItems    []campItemSpec // camp: added by the founder
 }
 
 type hikeSpec struct {

@@ -140,6 +140,10 @@ const (
 	// member who came from Keşfet may still report the tayfa and give
 	// feedback on events they attended (discover_joins).
 	DiscoverFormerMemberWindow = 30 * 24 * time.Hour
+	// DiscoverFeedAhead is how far ahead Keşfet looks: an event shows when
+	// it starts within this window (discover_event_visible, 30 days). The
+	// queries use it only to narrow the scan; the SQL function decides.
+	DiscoverFeedAhead = 30 * 24 * time.Hour
 )
 
 // Kinds of tayfa (tayfas.kind, ADR-0032).

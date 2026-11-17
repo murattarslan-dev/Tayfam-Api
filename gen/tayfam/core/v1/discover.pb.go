@@ -458,9 +458,10 @@ type DiscoverItem struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Event *DiscoverEvent         `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
 	Tayfa *DiscoverTayfa         `protobuf:"bytes,2,opt,name=tayfa,proto3" json:"tayfa,omitempty"`
-	// At most three visible friends.
+	// At most three visible friends; empty when there is none.
 	Friends []*DiscoverPerson `protobuf:"bytes,3,rep,name=friends,proto3" json:"friends,omitempty"`
-	// All visible friends at the event (friends' size included).
+	// All visible friends at the event (friends' size included); 0 when
+	// there is none.
 	FriendCount   int32 `protobuf:"varint,4,opt,name=friend_count,json=friendCount,proto3" json:"friend_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

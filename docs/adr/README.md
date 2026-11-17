@@ -30,7 +30,7 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | [0020](0020-goruntu-isleme-ve-medya-sunumu.md) | Görüntü işleme istemcide, sunucuda başlık denetimi; medya bağlama ve sunumu | Kabul edildi |
 | [0021](0021-kvkk-veri-disa-aktarma.md) | KVKK veri dışa aktarma: toplama, şifreleme ve depolama | Kabul edildi |
 | [0022](0022-uygulama-butunlugu.md) | Uygulama bütünlüğü (Play Integrity / App Attest) oturuma bağlanır | Kabul edildi |
-| [0023](0023-demo-verisi.md) | Prod'da kalıcı demo tayfaları ve sahte hesaplar | Kabul edildi |
+| [0023](0023-demo-verisi.md) | Prod'da kalıcı demo tayfaları ve sahte hesaplar | Kabul edildi; kısmen 0035 |
 | [0024](0024-kanal-kitlesi.md) | Kanal kitlesi: etkinlik ve seçili üye kanalları | Kabul edildi |
 | [0025](0025-etkinlik-turu-katalogu-ve-bilesenler.md) | Etkinlik türü kataloğu ve bileşen modeli (v3) | Kabul edildi |
 | [0026](0026-tayfa-istatistikleri-ve-vitrin.md) | Tayfa istatistikleri, kişisel istatistik ve Keşfet vitrini (v3) | Kabul edildi |
@@ -40,8 +40,9 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | [0030](0030-arkadaslik-puani-ve-arkadas-onerisi.md) | Arkadaşlık puanı ve arkadaş önerisi (v2) | Kabul edildi |
 | [0031](0031-sohbet-ekleri-fotograf-ve-yer.md) | Sohbet ekleri: fotoğraf ve yer (kanal ve uçtan uca birebir) | Kabul edildi |
 | [0032](0032-anlik-etkinlik.md) | Anlık (bireysel) etkinlik: gizli, tek etkinlikli tayfa (v2) | Kabul edildi |
-| [0033](0033-kesfet-ilk-asama.md) | Keşfet ilk aşama: arkadaş ağı ve güvenlik ağı (v2) | Kabul edildi |
+| [0033](0033-kesfet-ilk-asama.md) | Keşfet ilk aşama: arkadaş ağı ve güvenlik ağı (v2) | Kabul edildi; kısmen 0035 |
 | [0034](0034-dev-main-dal-modeli-ve-otomatik-surum.md) | dev/main dal modeli ve otomatik sürüm | Önerildi |
+| [0035](0035-kesfet-herkese-acik-ve-demo-temizligi.md) | Keşfet herkese açık, Keşfet demo verisi ve demo temizleme komutu | Kabul edildi |
 
 Ürün kararları (kavram modeli, özellikler, veri modeli, KVKK metni, platform
 yönetim paneli) Notion'daki "Tayfam — Proje Planı" sayfasındadır. ADR'ler bu

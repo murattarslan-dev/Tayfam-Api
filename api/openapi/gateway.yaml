@@ -4353,7 +4353,7 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
-  # --- Keşfet ilk aşama (core DiscoverService, #210, ADR-0033) ---
+  # --- Keşfet (core DiscoverService, #210, ADR-0033; herkese açık: #227, ADR-0035) ---
   # Sunucu bayrağı DISCOVER_ENABLED kapalıyken (varsayılan) akış, Keşfet'ten
   # katılım ve geri bildirim uçları hiçbir şey okumadan 404
   # `feature-disabled` döner; istemci girişleri gizler. Tayfanın Keşfet
@@ -4367,21 +4367,27 @@ paths:
   /v1/discover/events:
     get:
       operationId: listDiscoverFeed
-      summary: Arkadaşlarınızın gittiği, Keşfet'e açık tayfaların etkinlikleri (en fazla 50; sayfalanmaz)
+      summary: Keşfet'e açık tayfaların etkinlikleri, gidecek arkadaşlarınızla (en fazla 50; sayfalanmaz)
       description: |
         Bitmemiş ve 30 gün içinde başlayan, organizatörün "halka açık yerde
         buluşur" diye işaretlediği (`discoverable`) yüz yüze etkinlikler;
         yalnızca Keşfet'e açık ve platform incelemesinden geçmiş, en az 5
         aktif üyeli tayfalardan ve üyesi olmadığınız tayfalardan.
 
-        Bir etkinlik yalnızca en az bir **görünür arkadaşınız** varsa
-        listelenir: kabul edilmiş arkadaş, iki yönden engel yok, tayfanın
-        aktif üyesi, etkinliğe `going` demiş ya da katılımı doğrulanmış ve
-        katılım geçmişi görünürlüğü `private` değil. `friend_count` yalnızca
-        görünür arkadaşları sayar.
+        Keşfet herkese açıktır (ADR-0035): arkadaş gerekmez. Etkinlikte
+        **görünür arkadaşınız** yoksa `friends` boş, `friend_count` 0 döner.
+        Görünür arkadaş: kabul edilmiş arkadaş, iki yönden engel yok,
+        tayfanın aktif üyesi, etkinliğe `going` demiş ya da katılımı
+        doğrulanmış, katılım geçmişi görünürlüğü `private` değil ve
+        "Keşfet'te arkadaşlarım görebilsin" ayarı açık. `friend_count`
+        yalnızca görünür arkadaşları sayar. Tayfanın herhangi bir aktif
+        üyesiyle aranızda (iki yönden) engel varsa tayfanın etkinlikleri
+        listelenmez.
 
-        Sıra gizli sinyallerden gelir (arkadaşlık puanı; profillemesi
-        kapalı kişide kullanılmaz); puan ya da sıra numarası dönmez.
+        Sıra: görünür arkadaşı olan öğeler önce (gizli sinyaller, sonra
+        arkadaş sayısı); diğerleri başlangıç zamanına ve kimliğe göre.
+        Arkadaşlık puanı profillemesi kapalı kişide kullanılmaz; puan ya da
+        sıra numarası dönmez.
         Açıklama, buluşma noktası ve koordinat dönmez; tayfaya katılınca
         mevcut uçlardan okunur.
       responses:
@@ -4399,13 +4405,14 @@ paths:
       - $ref: "#/components/parameters/TayfaID"
     post:
       operationId: joinFromDiscover
-      summary: Akışınızdaki bir tayfaya katılım isteği (her zaman onay bekler)
+      summary: Keşfet'te gördüğünüz bir tayfaya katılım isteği (her zaman onay bekler)
       description: |
-        Tayfa şu anda akışınızda değilse (ya da orada banlıysanız) cevap
-        `tayfa-not-found`'dur: Keşfet'teki tayfalar yabancılara açık
-        listelenmez. İstek, tayfa açık katılımlı olsa da yöneticilerin
-        onayına düşer ve onlara "Keşfet'ten" etiketiyle görünür. Saatte en
-        fazla 10 deneme.
+        Tayfanın Keşfet'te size görünen bir etkinliği yoksa (tayfanın bir
+        aktif üyesiyle aranızda engel varsa ya da orada banlıysanız da)
+        cevap `tayfa-not-found`'dur. Arkadaş gerekmez (ADR-0035). İstek,
+        tayfa açık katılımlı olsa da yöneticilerin onayına düşer ve onlara
+        "Keşfet'ten" etiketiyle görünür; yöneticilere yaşınız ya da "18 yaş
+        altı" gibi bir işaret gösterilmez. Saatte en fazla 10 deneme.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       responses:
@@ -8567,11 +8574,14 @@ components:
         friends:
           type: array
           maxItems: 3
+          description: En çok 3 görünür arkadaş; yoksa boş dizi.
           items: { $ref: "#/components/schemas/DiscoverPerson" }
         friend_count:
           type: integer
-          minimum: 1
-          description: Görünür arkadaşların tamamı (`friends` dahil).
+          minimum: 0
+          description: |
+            Görünür arkadaşların tamamı (`friends` dahil); yoksa 0
+            (ADR-0035; önceden en az 1'di).
     TayfaDiscover:
       type: object
       required: [state, enabled]

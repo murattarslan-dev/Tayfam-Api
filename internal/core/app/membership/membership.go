@@ -233,8 +233,13 @@ func (s *Service) JoinFromDiscover(ctx context.Context, caller, tayfa id.ID) (Me
 		}
 		// Checked after the membership: the feed leaves out tayfas the
 		// caller is in, so "already a member" would read as not found.
+		// No friend is needed (ADR-0035): the tayfa has an event the caller
+		// sees in Keşfet.
+		now := s.now()
 		ok, err := q.DiscoverTayfaVisible(ctx, store.DiscoverTayfaVisibleParams{
-			Viewer: caller.PG(), Now: pgtype.Timestamptz{Time: s.now(), Valid: true}, TayfaID: tayfa.PG(),
+			Viewer: caller.PG(), Now: pgtype.Timestamptz{Time: now, Valid: true},
+			Until:   pgtype.Timestamptz{Time: now.Add(access.DiscoverFeedAhead), Valid: true},
+			TayfaID: tayfa.PG(),
 		})
 		if err != nil {
 			return fmt.Errorf("keşfet: %w", err)

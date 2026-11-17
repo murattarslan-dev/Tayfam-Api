@@ -267,25 +267,29 @@ func (q *Queries) DiscoverFormerMember(ctx context.Context, arg DiscoverFormerMe
 
 const discoverTayfaVisible = `-- name: DiscoverTayfaVisible :one
 SELECT EXISTS (
-  SELECT 1
-  FROM friendships f
-  JOIN event_rsvps r ON r.user_id = CASE WHEN f.user_low_id = $1::uuid THEN f.user_high_id ELSE f.user_low_id END
-  JOIN events e ON e.id = r.event_id AND e.tayfa_id = $2::uuid
-  WHERE (f.user_low_id = $1::uuid OR f.user_high_id = $1::uuid) AND f.status = 'accepted'
-    AND discover_friend_visible($1::uuid, r.user_id, r.event_id, $3::timestamptz)
+  SELECT 1 FROM events e
+  WHERE e.tayfa_id = $1::uuid AND e.discoverable AND e.deleted_at IS NULL
+    AND e.starts_at < $2::timestamptz AND e.ends_at > $3::timestamptz
+    AND discover_event_visible($4::uuid, e.id, $3::timestamptz)
 )::boolean
 `
 
 type DiscoverTayfaVisibleParams struct {
-	Viewer  pgtype.UUID
 	TayfaID pgtype.UUID
+	Until   pgtype.Timestamptz
 	Now     pgtype.Timestamptz
+	Viewer  pgtype.UUID
 }
 
-// Tayfa şu anda izleyicinin akışında mı (Keşfet'ten katılım): tayfanın
-// bir etkinliğinde görünür bir arkadaş var.
+// Tayfa şu anda izleyicinin Keşfet'inde mi (Keşfet'ten katılım): tayfanın
+// izleyiciye görünen bir etkinliği var. Arkadaş gerekmez (ADR-0035).
 func (q *Queries) DiscoverTayfaVisible(ctx context.Context, arg DiscoverTayfaVisibleParams) (bool, error) {
-	row := q.db.QueryRow(ctx, discoverTayfaVisible, arg.Viewer, arg.TayfaID, arg.Now)
+	row := q.db.QueryRow(ctx, discoverTayfaVisible,
+		arg.TayfaID,
+		arg.Until,
+		arg.Now,
+		arg.Viewer,
+	)
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -580,24 +584,31 @@ const listDiscoverFeed = `-- name: ListDiscoverFeed :many
 
 WITH me AS (
   SELECT NOT EXISTS (SELECT 1 FROM social_settings s WHERE s.user_id = $3::uuid AND NOT s.profiling_enabled) AS profiling
+), cand AS (
+  SELECT e.id AS event_id, e.starts_at
+  FROM events e
+  WHERE e.discoverable AND e.deleted_at IS NULL
+    AND e.starts_at < $4::timestamptz AND e.ends_at > $5::timestamptz
+    AND discover_event_visible($3::uuid, e.id, $5::timestamptz)
 ), vis AS (
   SELECT r.event_id, r.user_id AS friend_id,
          CASE WHEN me.profiling
                    AND NOT EXISTS (SELECT 1 FROM social_settings s WHERE s.user_id = r.user_id AND NOT s.profiling_enabled)
               THEN COALESCE(fs.score, 0) ELSE 0 END::float8 AS score
-  FROM friendships f
+  FROM cand
   CROSS JOIN me
-  JOIN event_rsvps r ON r.user_id = CASE WHEN f.user_low_id = $3::uuid THEN f.user_high_id ELSE f.user_low_id END
-                    AND (r.status = 'going' OR r.attendance = 'attended')
+  JOIN event_rsvps r ON r.event_id = cand.event_id AND (r.status = 'going' OR r.attendance = 'attended')
+  JOIN friendships f ON f.user_low_id = LEAST($3::uuid, r.user_id) AND f.user_high_id = GREATEST($3::uuid, r.user_id)
+                    AND f.status = 'accepted'
   LEFT JOIN friend_scores fs ON fs.user_low_id = f.user_low_id AND fs.user_high_id = f.user_high_id
-  WHERE (f.user_low_id = $3::uuid OR f.user_high_id = $3::uuid) AND f.status = 'accepted'
-    AND discover_friend_visible($3::uuid, r.user_id, r.event_id, $4::timestamptz)
+  WHERE discover_friend_visible($3::uuid, r.user_id, r.event_id, $5::timestamptz)
 ), ranked AS (
-  SELECT vis.event_id, count(*) AS n,
-         row_number() OVER (ORDER BY sum(vis.score) DESC, count(*) DESC, min(e.starts_at), vis.event_id) AS pos
-  FROM vis
-  JOIN events e ON e.id = vis.event_id
-  GROUP BY vis.event_id
+  SELECT cand.event_id, count(vis.friend_id) AS n,
+         row_number() OVER (ORDER BY COALESCE(sum(vis.score), 0) DESC, count(vis.friend_id) DESC,
+                                     cand.starts_at, cand.event_id) AS pos
+  FROM cand
+  LEFT JOIN vis ON vis.event_id = cand.event_id
+  GROUP BY cand.event_id, cand.starts_at
 )
 SELECT e.id AS event_id, e.type, e.title, e.starts_at, e.ends_at, e.city AS event_city, e.district AS event_district,
        t.id AS tayfa_id, t.name AS tayfa_name, t.description AS tayfa_description, t.city AS tayfa_city,
@@ -628,6 +639,7 @@ type ListDiscoverFeedParams struct {
 	FrozenBefore pgtype.Timestamptz
 	N            int64
 	Viewer       pgtype.UUID
+	Until        pgtype.Timestamptz
 	Now          pgtype.Timestamptz
 }
 
@@ -650,21 +662,26 @@ type ListDiscoverFeedRow struct {
 	Friends          []byte
 }
 
-// Keşfet ilk aşama (issue #210, ADR-0033). Listelenebilirlik
-// tayfa_discover_listable, "görünür arkadaş" discover_friend_visible
-// (migration 00028) ile tek yerde tanımlıdır. Arkadaşlık puanı yalnızca
-// sıralamada kullanılır; hiçbir sorgunun sonucunda yoktur.
+// Keşfet (issue #210, ADR-0033; herkese açık: issue #227, ADR-0035).
+// Listelenebilirlik tayfa_discover_listable (00028), etkinliğin izleyiciye
+// görünmesi discover_event_visible ve "görünür arkadaş"
+// discover_friend_visible (00029) ile tek yerde tanımlıdır. Arkadaşlık
+// puanı yalnızca sıralamada kullanılır; hiçbir sorgunun sonucunda yoktur.
 // ---------------------------------------------------------------------------
 // Akış
-// En iyi n etkinlik: görünür arkadaşlarla puan toplamı, görünür arkadaş
-// sayısı, başlangıç, kimlik. Tayfa olguları donmuş etkinliklerden (bitişten
-// 7 gün geçmiş, iptal edilmemiş, silinmemiş; ADR-0026 §1). En çok 3 arkadaş
-// (puan, sonra ad sırasıyla); puan dönmez.
+// En iyi n etkinlik (Keşfet herkese açık, issue #227, ADR-0035): izleyiciye
+// görünen bütün uygun etkinlikler (discover_event_visible); arkadaşı
+// olmayan da listelenir. Sıra: görünür arkadaşlarla puan toplamı, görünür
+// arkadaş sayısı, başlangıç, kimlik; arkadaşı olmayanlar yalnızca başlangıç
+// ve kimlikle sıralanır. Tayfa olguları donmuş etkinliklerden (bitişten 7
+// gün geçmiş, iptal edilmemiş, silinmemiş; ADR-0026 §1). En çok 3 arkadaş
+// (puan, sonra ad sırasıyla); arkadaş yoksa boş liste ve 0. Puan dönmez.
 func (q *Queries) ListDiscoverFeed(ctx context.Context, arg ListDiscoverFeedParams) ([]ListDiscoverFeedRow, error) {
 	rows, err := q.db.Query(ctx, listDiscoverFeed,
 		arg.FrozenBefore,
 		arg.N,
 		arg.Viewer,
+		arg.Until,
 		arg.Now,
 	)
 	if err != nil {
