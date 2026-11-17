@@ -71,10 +71,65 @@ func (PushPlatform) EnumDescriptor() ([]byte, []int) {
 	return file_tayfam_chat_v1_push_proto_rawDescGZIP(), []int{0}
 }
 
+// PushTokenType is what RegisterPushTokenRequest.token holds (ADR-0036).
+type PushTokenType int32
+
+const (
+	// Unset: an FCM registration token (clients before token types).
+	PushTokenType_PUSH_TOKEN_TYPE_UNSPECIFIED PushTokenType = 0
+	// An FCM registration token (getToken; deprecated by Firebase).
+	PushTokenType_PUSH_TOKEN_TYPE_REGISTRATION_TOKEN PushTokenType = 1
+	// A Firebase Installation ID (register()/onRegistered).
+	PushTokenType_PUSH_TOKEN_TYPE_FID PushTokenType = 2
+)
+
+// Enum value maps for PushTokenType.
+var (
+	PushTokenType_name = map[int32]string{
+		0: "PUSH_TOKEN_TYPE_UNSPECIFIED",
+		1: "PUSH_TOKEN_TYPE_REGISTRATION_TOKEN",
+		2: "PUSH_TOKEN_TYPE_FID",
+	}
+	PushTokenType_value = map[string]int32{
+		"PUSH_TOKEN_TYPE_UNSPECIFIED":        0,
+		"PUSH_TOKEN_TYPE_REGISTRATION_TOKEN": 1,
+		"PUSH_TOKEN_TYPE_FID":                2,
+	}
+)
+
+func (x PushTokenType) Enum() *PushTokenType {
+	p := new(PushTokenType)
+	*p = x
+	return p
+}
+
+func (x PushTokenType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PushTokenType) Descriptor() protoreflect.EnumDescriptor {
+	return file_tayfam_chat_v1_push_proto_enumTypes[1].Descriptor()
+}
+
+func (PushTokenType) Type() protoreflect.EnumType {
+	return &file_tayfam_chat_v1_push_proto_enumTypes[1]
+}
+
+func (x PushTokenType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PushTokenType.Descriptor instead.
+func (PushTokenType) EnumDescriptor() ([]byte, []int) {
+	return file_tayfam_chat_v1_push_proto_rawDescGZIP(), []int{1}
+}
+
 type RegisterPushTokenRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	Platform      PushPlatform           `protobuf:"varint,2,opt,name=platform,proto3,enum=tayfam.chat.v1.PushPlatform" json:"platform,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Token    string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	Platform PushPlatform           `protobuf:"varint,2,opt,name=platform,proto3,enum=tayfam.chat.v1.PushPlatform" json:"platform,omitempty"`
+	// Unset means PUSH_TOKEN_TYPE_REGISTRATION_TOKEN.
+	TokenType     PushTokenType `protobuf:"varint,3,opt,name=token_type,json=tokenType,proto3,enum=tayfam.chat.v1.PushTokenType" json:"token_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -121,6 +176,13 @@ func (x *RegisterPushTokenRequest) GetPlatform() PushPlatform {
 		return x.Platform
 	}
 	return PushPlatform_PUSH_PLATFORM_UNSPECIFIED
+}
+
+func (x *RegisterPushTokenRequest) GetTokenType() PushTokenType {
+	if x != nil {
+		return x.TokenType
+	}
+	return PushTokenType_PUSH_TOKEN_TYPE_UNSPECIFIED
 }
 
 type RegisterPushTokenResponse struct {
@@ -235,17 +297,23 @@ var File_tayfam_chat_v1_push_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_push_proto_rawDesc = "" +
 	"\n" +
-	"\x19tayfam/chat/v1/push.proto\x12\x0etayfam.chat.v1\"j\n" +
+	"\x19tayfam/chat/v1/push.proto\x12\x0etayfam.chat.v1\"\xa8\x01\n" +
 	"\x18RegisterPushTokenRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x128\n" +
-	"\bplatform\x18\x02 \x01(\x0e2\x1c.tayfam.chat.v1.PushPlatformR\bplatform\"\x1b\n" +
+	"\bplatform\x18\x02 \x01(\x0e2\x1c.tayfam.chat.v1.PushPlatformR\bplatform\x12<\n" +
+	"\n" +
+	"token_type\x18\x03 \x01(\x0e2\x1d.tayfam.chat.v1.PushTokenTypeR\ttokenType\"\x1b\n" +
 	"\x19RegisterPushTokenResponse\"\x1c\n" +
 	"\x1aUnregisterPushTokenRequest\"\x1d\n" +
 	"\x1bUnregisterPushTokenResponse*_\n" +
 	"\fPushPlatform\x12\x1d\n" +
 	"\x19PUSH_PLATFORM_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15PUSH_PLATFORM_ANDROID\x10\x01\x12\x15\n" +
-	"\x11PUSH_PLATFORM_IOS\x10\x022\xe7\x01\n" +
+	"\x11PUSH_PLATFORM_IOS\x10\x02*q\n" +
+	"\rPushTokenType\x12\x1f\n" +
+	"\x1bPUSH_TOKEN_TYPE_UNSPECIFIED\x10\x00\x12&\n" +
+	"\"PUSH_TOKEN_TYPE_REGISTRATION_TOKEN\x10\x01\x12\x17\n" +
+	"\x13PUSH_TOKEN_TYPE_FID\x10\x022\xe7\x01\n" +
 	"\vPushService\x12h\n" +
 	"\x11RegisterPushToken\x12(.tayfam.chat.v1.RegisterPushTokenRequest\x1a).tayfam.chat.v1.RegisterPushTokenResponse\x12n\n" +
 	"\x13UnregisterPushToken\x12*.tayfam.chat.v1.UnregisterPushTokenRequest\x1a+.tayfam.chat.v1.UnregisterPushTokenResponseB\xbb\x01\n" +
@@ -263,26 +331,28 @@ func file_tayfam_chat_v1_push_proto_rawDescGZIP() []byte {
 	return file_tayfam_chat_v1_push_proto_rawDescData
 }
 
-var file_tayfam_chat_v1_push_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_tayfam_chat_v1_push_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_tayfam_chat_v1_push_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_tayfam_chat_v1_push_proto_goTypes = []any{
 	(PushPlatform)(0),                   // 0: tayfam.chat.v1.PushPlatform
-	(*RegisterPushTokenRequest)(nil),    // 1: tayfam.chat.v1.RegisterPushTokenRequest
-	(*RegisterPushTokenResponse)(nil),   // 2: tayfam.chat.v1.RegisterPushTokenResponse
-	(*UnregisterPushTokenRequest)(nil),  // 3: tayfam.chat.v1.UnregisterPushTokenRequest
-	(*UnregisterPushTokenResponse)(nil), // 4: tayfam.chat.v1.UnregisterPushTokenResponse
+	(PushTokenType)(0),                  // 1: tayfam.chat.v1.PushTokenType
+	(*RegisterPushTokenRequest)(nil),    // 2: tayfam.chat.v1.RegisterPushTokenRequest
+	(*RegisterPushTokenResponse)(nil),   // 3: tayfam.chat.v1.RegisterPushTokenResponse
+	(*UnregisterPushTokenRequest)(nil),  // 4: tayfam.chat.v1.UnregisterPushTokenRequest
+	(*UnregisterPushTokenResponse)(nil), // 5: tayfam.chat.v1.UnregisterPushTokenResponse
 }
 var file_tayfam_chat_v1_push_proto_depIdxs = []int32{
 	0, // 0: tayfam.chat.v1.RegisterPushTokenRequest.platform:type_name -> tayfam.chat.v1.PushPlatform
-	1, // 1: tayfam.chat.v1.PushService.RegisterPushToken:input_type -> tayfam.chat.v1.RegisterPushTokenRequest
-	3, // 2: tayfam.chat.v1.PushService.UnregisterPushToken:input_type -> tayfam.chat.v1.UnregisterPushTokenRequest
-	2, // 3: tayfam.chat.v1.PushService.RegisterPushToken:output_type -> tayfam.chat.v1.RegisterPushTokenResponse
-	4, // 4: tayfam.chat.v1.PushService.UnregisterPushToken:output_type -> tayfam.chat.v1.UnregisterPushTokenResponse
-	3, // [3:5] is the sub-list for method output_type
-	1, // [1:3] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	1, // 1: tayfam.chat.v1.RegisterPushTokenRequest.token_type:type_name -> tayfam.chat.v1.PushTokenType
+	2, // 2: tayfam.chat.v1.PushService.RegisterPushToken:input_type -> tayfam.chat.v1.RegisterPushTokenRequest
+	4, // 3: tayfam.chat.v1.PushService.UnregisterPushToken:input_type -> tayfam.chat.v1.UnregisterPushTokenRequest
+	3, // 4: tayfam.chat.v1.PushService.RegisterPushToken:output_type -> tayfam.chat.v1.RegisterPushTokenResponse
+	5, // 5: tayfam.chat.v1.PushService.UnregisterPushToken:output_type -> tayfam.chat.v1.UnregisterPushTokenResponse
+	4, // [4:6] is the sub-list for method output_type
+	2, // [2:4] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_chat_v1_push_proto_init() }
@@ -295,7 +365,7 @@ func file_tayfam_chat_v1_push_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_chat_v1_push_proto_rawDesc), len(file_tayfam_chat_v1_push_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
