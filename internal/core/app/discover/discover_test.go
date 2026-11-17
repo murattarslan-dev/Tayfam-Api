@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +14,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"google.golang.org/protobuf/proto"
+
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
+	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/access"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/report"
@@ -298,38 +303,45 @@ func TestFeatureDisabled(t *testing.T) {
 	}
 }
 
-// TestFeedListing is the listing table: the base case is listed; every
-// rule takes it out (ADR-0033 §3, §4).
+// TestFeedListing is the listing table: the base case is listed with its
+// one visible friend; every rule of the tayfa and the event takes it out
+// (ADR-0033 §3); the friend rules only change who is shown (ADR-0035:
+// Keşfet is open to everyone, a hidden friend is neither shown nor
+// counted). A block between the viewer and any active member hides the
+// tayfa (ADR-0035 §3). Subtests share one database, so every viewer sees
+// every other subtest's listable events too: the check looks for the
+// scenario's own event.
 func TestFeedListing(t *testing.T) {
 	e := setup(t)
 	for name, tc := range map[string]struct {
-		change func(t *testing.T, sc scenario)
-		listed bool
+		change  func(t *testing.T, sc scenario)
+		listed  bool
+		friends int32 // visible friends when listed
 	}{
-		"temel durum": {func(*testing.T, scenario) {}, true},
+		"temel durum": {func(*testing.T, scenario) {}, true, 1},
 		"5 üyenin altı": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `DELETE FROM memberships WHERE tayfa_id = $1 AND role = 'member' AND user_id <> $2 AND user_id IN
 			    (SELECT user_id FROM memberships WHERE tayfa_id = $1 AND role = 'member' AND user_id <> $2 LIMIT 1)`, sc.tf.PG(), sc.friend.PG())
-		}, false},
+		}, false, 0},
 		"panel onayı bekliyor": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE tayfa_discover SET status = 'pending' WHERE tayfa_id = $1`, sc.tf.PG())
-		}, false},
+		}, false, 0},
 		"başvuru yok": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `DELETE FROM tayfa_discover WHERE tayfa_id = $1`, sc.tf.PG())
-		}, false},
+		}, false, 0},
 		"reddedildi": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE tayfa_discover SET status = 'rejected' WHERE tayfa_id = $1`, sc.tf.PG())
-		}, false},
+		}, false, 0},
 		"düşürüldü": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE tayfa_discover SET status = 'dropped', drop_reason = 'member_report' WHERE tayfa_id = $1`, sc.tf.PG())
-		}, false},
+		}, false, 0},
 		"arkadaş Keşfet'te görünmek istemiyor": {func(t *testing.T, sc scenario) {
 			off := false
 			s, err := social.New(social.Config{Pool: e.pool})
 			must(t, err)
 			_, err = s.UpdateSocialSettings(ctx, sc.friend, social.SettingsUpdate{DiscoverVisibleToFriends: &off})
 			must(t, err)
-		}, false},
+		}, true, 0},
 		"arkadaş Keşfet ayarını açık bıraktı": {func(t *testing.T, sc scenario) {
 			on := true
 			s, err := social.New(social.Config{Pool: e.pool})
@@ -339,79 +351,114 @@ func TestFeedListing(t *testing.T) {
 			if !st.DiscoverVisibleToFriends || !st.ProfilingEnabled {
 				t.Fatalf("ayarlar: %+v", st)
 			}
-		}, true},
+		}, true, 1},
 		"etkinlik modülü kapalı": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE tayfa_modules SET enabled = false WHERE tayfa_id = $1 AND module = 'events'`, sc.tf.PG())
-		}, false},
+		}, false, 0},
 		"yönetici kapattı (gizli tayfa)": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE tayfas SET visibility = 'private' WHERE id = $1`, sc.tf.PG())
-		}, false},
+		}, false, 0},
 		"askıda": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE tayfas SET suspended_at = now(), suspended_reason = 'inceleme', suspended_by = $2 WHERE id = $1`, sc.tf.PG(), id.New().PG())
-		}, false},
+		}, false, 0},
 		"arşivlendi": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE tayfas SET status = 'archived', warned_at = now(), archived_at = now() WHERE id = $1`, sc.tf.PG())
-		}, false},
+		}, false, 0},
 		"etkinlik işaretsiz (özel adres)": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE events SET discoverable = false WHERE id = $1`, sc.ev.PG())
-		}, false},
+		}, false, 0},
 		"etkinlik iptal": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE events SET status = 'cancelled', cancelled_at = now(), cancel_reason = 'x', cancelled_by = $2 WHERE id = $1`, sc.ev.PG(), sc.admin.PG())
-		}, false},
+		}, false, 0},
 		"etkinlik silindi": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE events SET deleted_at = now(), deleted_by = $2 WHERE id = $1`, sc.ev.PG(), sc.admin.PG())
-		}, false},
+		}, false, 0},
 		"etkinlik bitti": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE events SET starts_at = $2, ends_at = $3 WHERE id = $1`, sc.ev.PG(), e.base.Add(-3*time.Hour), e.base.Add(-time.Hour))
-		}, false},
+		}, false, 0},
 		"30 günden sonra": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE events SET starts_at = $2, ends_at = $3 WHERE id = $1`, sc.ev.PG(), e.base.Add(31*24*time.Hour), e.base.Add(31*24*time.Hour+time.Hour))
-		}, false},
+		}, false, 0},
 		"süren etkinlikte katıldı": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE events SET starts_at = $2, ends_at = $3 WHERE id = $1`, sc.ev.PG(), e.base.Add(-time.Hour), e.base.Add(time.Hour))
 			e.seedExec(t, `UPDATE event_rsvps SET status = 'maybe', attendance = 'attended', attendance_method = 'organizer' WHERE event_id = $1`, sc.ev.PG())
-		}, true},
+		}, true, 1},
 		"arkadaş belki dedi": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE event_rsvps SET status = 'maybe' WHERE event_id = $1`, sc.ev.PG())
-		}, false},
+		}, true, 0},
 		"arkadaşın geçmişi gizli": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE user_profiles SET activity_visibility = 'private' WHERE user_id = $1`, sc.friend.PG())
-		}, false},
+		}, true, 0},
 		"arkadaşın geçmişi herkese açık": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE user_profiles SET activity_visibility = 'public' WHERE user_id = $1`, sc.friend.PG())
-		}, true},
+		}, true, 1},
 		"arkadaşlık isteği bekliyor": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `UPDATE friendships SET status = 'pending', accepted_at = NULL`)
-		}, false},
+		}, true, 0},
 		"arkadaş engelledi": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)`, sc.friend.PG(), sc.viewer.PG())
-		}, false},
+		}, false, 0},
 		"arkadaş platformda banlı": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `INSERT INTO user_platform_bans (user_id, banned_at, event_id) VALUES ($1, now(), $2)`, sc.friend.PG(), id.New().PG())
-		}, false},
+		}, true, 0},
 		"arkadaş tayfadan ayrıldı": {func(t *testing.T, sc scenario) {
 			e.seedExec(t, `DELETE FROM memberships WHERE tayfa_id = $1 AND user_id = $2`, sc.tf.PG(), sc.friend.PG())
 			e.member(t, sc.tf, e.user(t, "Yeni", "tayfa"), "member", "active", "code")
-		}, false},
+		}, true, 0},
+		"arkadaşlık yok": {func(t *testing.T, sc scenario) {
+			e.seedExec(t, `DELETE FROM friendships WHERE $1 IN (user_low_id, user_high_id)`, sc.viewer.PG())
+		}, true, 0},
+		"izleyici arkadaşı engelledi": {func(t *testing.T, sc scenario) {
+			e.seedExec(t, `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)`, sc.viewer.PG(), sc.friend.PG())
+		}, false, 0},
+		"izleyici bir üyeyi engelledi": {func(t *testing.T, sc scenario) {
+			e.seedExec(t, `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)`, sc.viewer.PG(), sc.admin.PG())
+		}, false, 0},
+		"bir üye izleyiciyi engelledi": {func(t *testing.T, sc scenario) {
+			e.seedExec(t, `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)`, sc.admin.PG(), sc.viewer.PG())
+		}, false, 0},
+		"tayfa dışından biriyle engel": {func(t *testing.T, sc scenario) {
+			e.seedExec(t, `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)`, sc.viewer.PG(), e.user(t, "Yabancı", "tayfa").PG())
+		}, true, 1},
+		"engellenen tayfadan ayrıldı": {func(t *testing.T, sc scenario) {
+			other := e.user(t, "Eski üye", "tayfa")
+			e.member(t, sc.tf, other, "member", "active", "code")
+			e.seedExec(t, `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)`, other.PG(), sc.viewer.PG())
+			e.seedExec(t, `DELETE FROM memberships WHERE tayfa_id = $1 AND user_id = $2`, sc.tf.PG(), other.PG())
+		}, true, 1},
+		"engellenenin isteği bekliyor": {func(t *testing.T, sc scenario) {
+			other := e.user(t, "Bekleyen", "tayfa")
+			e.member(t, sc.tf, other, "member", "pending", "code")
+			e.seedExec(t, `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)`, sc.viewer.PG(), other.PG())
+		}, true, 1},
 		"izleyici zaten üye": {func(t *testing.T, sc scenario) {
 			e.member(t, sc.tf, sc.viewer, "member", "active", "code")
-		}, false},
+		}, false, 0},
 		"izleyicinin isteği bekliyor": {func(t *testing.T, sc scenario) {
 			e.member(t, sc.tf, sc.viewer, "member", "pending", "code")
-		}, false},
+		}, false, 0},
 		"izleyici tayfada banlı": {func(t *testing.T, sc scenario) {
 			e.member(t, sc.tf, sc.viewer, "member", "banned", "code")
-		}, false},
+		}, false, 0},
 	} {
 		t.Run(name, func(t *testing.T) {
 			sc := e.scenario(t)
 			tc.change(t, sc)
-			items := e.feed(t, sc.viewer)
-			if got := len(items) == 1; got != tc.listed {
-				t.Fatalf("listelendi mi = %v, beklenen %v (%d öğe)", got, tc.listed, len(items))
+			var it *Item
+			for _, x := range e.feed(t, sc.viewer) {
+				if x.EventID == sc.ev {
+					it = &x
+				}
+			}
+			if got := it != nil; got != tc.listed {
+				t.Fatalf("listelendi mi = %v, beklenen %v", got, tc.listed)
+			}
+			if it != nil && (it.FriendCount != tc.friends || int32(len(it.Friends)) != tc.friends) {
+				t.Fatalf("görünür arkadaş = %d %v, beklenen %d", it.FriendCount, it.Friends, tc.friends)
 			}
 			ok, err := store.New(e.pool).DiscoverTayfaVisible(ctx, store.DiscoverTayfaVisibleParams{
-				Viewer: sc.viewer.PG(), Now: pgtype.Timestamptz{Time: e.base, Valid: true}, TayfaID: sc.tf.PG(),
+				Viewer: sc.viewer.PG(), Now: pgtype.Timestamptz{Time: e.base, Valid: true},
+				Until: pgtype.Timestamptz{Time: e.base.Add(access.DiscoverFeedAhead), Valid: true}, TayfaID: sc.tf.PG(),
 			})
 			must(t, err)
 			if ok != tc.listed {
@@ -527,7 +574,8 @@ func TestFeedItem(t *testing.T) {
 }
 
 // TestFeedRanking: the friendship score orders the feed while both sides
-// profile; with the viewer's profiling off, the number of friends decides.
+// profile; with the viewer's profiling off, the number of friends decides;
+// events with no visible friend follow by start and ID (ADR-0035).
 func TestFeedRanking(t *testing.T) {
 	e := setup(t)
 	sc := e.scenario(t) // event 1: Ayşe, in two days
@@ -578,6 +626,37 @@ func TestFeedRanking(t *testing.T) {
 	e.seedExec(t, `INSERT INTO social_settings (user_id, profiling_enabled) VALUES ($1, false)`, sc.friend.PG())
 	if got := order(); got[0] != ev2 {
 		t.Fatalf("arkadaşın profillemesi kapalı: %v", got)
+	}
+
+	// Keşfet is open to everyone (ADR-0035): events with no visible friend
+	// are listed too, after those with friends, by start and then ID, even
+	// when they start sooner.
+	tf3, admin3 := e.listedTayfa(t, 5)
+	o.start, o.end = 12*time.Hour, 14*time.Hour
+	soon := e.event(t, tf3, admin3, o)
+	o.start, o.end = 24*time.Hour, 26*time.Hour
+	tieA, tieB := e.event(t, tf3, admin3, o), e.event(t, tf3, admin3, o)
+	if strings.Compare(tieB.String(), tieA.String()) < 0 {
+		tieA, tieB = tieB, tieA
+	}
+	got := order()
+	want := []id.ID{ev2, sc.ev, soon, tieA, tieB}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("arkadaşsız öğelerle sıra: %v, beklenen %v", got, want)
+	}
+	for _, it := range e.feed(t, sc.viewer) {
+		if it.TayfaID == tf3 && (it.FriendCount != 0 || len(it.Friends) != 0) {
+			t.Fatalf("arkadaşsız öğe: %+v", it)
+		}
+	}
+	// A viewer with no friends at all sees the same events, by start.
+	lonely := e.user(t, "Yalnız", "tayfa")
+	var lonelyOrder []id.ID
+	for _, it := range e.feed(t, lonely) {
+		lonelyOrder = append(lonelyOrder, it.EventID)
+	}
+	if want := []id.ID{soon, tieA, tieB, sc.ev, ev2}; !reflect.DeepEqual(lonelyOrder, want) {
+		t.Fatalf("arkadaşı olmayan izleyicinin sırası: %v, beklenen %v", lonelyOrder, want)
 	}
 }
 
@@ -841,10 +920,30 @@ func TestJoinFromDiscover(t *testing.T) {
 	e.exec(t, `UPDATE tayfas SET join_policy = 'open' WHERE id = $1`, sc.tf.PG())
 	m := e.members(t, true)
 
+	// Keşfet is open to everyone (ADR-0035): a user with no friend there
+	// may ask too, and it is pending like any Keşfet request.
 	stranger := e.user(t, "Yabancı", "tayfa")
-	if _, err := m.JoinFromDiscover(ctx, stranger, sc.tf); !errors.Is(err, apperr.ErrTayfaNotFound) {
-		t.Fatalf("akışında olmayan katıldı: %v", err)
+	if got, err := m.JoinFromDiscover(ctx, stranger, sc.tf); err != nil || got.Status != "pending" {
+		t.Fatalf("arkadaşsız katılım: %+v %v", got, err)
 	}
+	// A block either way with an active member hides the tayfa: the
+	// request reads as not found (ADR-0035 §3).
+	blocked := e.user(t, "Engellenen", "tayfa")
+	e.seedExec(t, `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)`, sc.friend.PG(), blocked.PG())
+	if _, err := m.JoinFromDiscover(ctx, blocked, sc.tf); !errors.Is(err, apperr.ErrTayfaNotFound) {
+		t.Fatalf("engellenen katıldı: %v", err)
+	}
+	blocker := e.user(t, "Engelleyen", "tayfa")
+	e.seedExec(t, `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)`, blocker.PG(), sc.admin.PG())
+	if _, err := m.JoinFromDiscover(ctx, blocker, sc.tf); !errors.Is(err, apperr.ErrTayfaNotFound) {
+		t.Fatalf("engelleyen katıldı: %v", err)
+	}
+	// A tayfa with no event in Keşfet is not open to a request.
+	e.seedExec(t, `UPDATE events SET discoverable = false WHERE id = $1`, sc.ev.PG())
+	if _, err := m.JoinFromDiscover(ctx, e.user(t, "Geç", "tayfa"), sc.tf); !errors.Is(err, apperr.ErrTayfaNotFound) {
+		t.Fatalf("Keşfet'te etkinliği olmayan tayfaya katıldı: %v", err)
+	}
+	e.seedExec(t, `UPDATE events SET discoverable = true WHERE id = $1`, sc.ev.PG())
 	if _, err := m.JoinFromDiscover(ctx, sc.viewer, id.New()); !errors.Is(err, apperr.ErrTayfaNotFound) {
 		t.Fatalf("bilinmeyen tayfa: %v", err)
 	}
@@ -860,7 +959,7 @@ func TestJoinFromDiscover(t *testing.T) {
 	}
 	// Staff see the label, members do not.
 	page, err := m.ListPending(ctx, sc.admin, sc.tf, 0, "")
-	if err != nil || len(page.Items) != 1 || page.Items[0].JoinedVia != "discover" {
+	if err != nil || len(page.Items) != 2 || page.Items[0].JoinedVia != "discover" || page.Items[1].JoinedVia != "discover" {
 		t.Fatalf("bekleyenler: %+v %v", page, err)
 	}
 	_, err = m.ApproveMember(ctx, sc.admin, sc.tf, sc.viewer)
@@ -1242,5 +1341,42 @@ func TestExportAndAccountDeletion(t *testing.T) {
 	must(t, q.DeleteUserDiscoverJoins(ctx, newcomer.PG()))
 	if n := e.one(t, `SELECT count(*)::text FROM discover_joins`); n != "0" {
 		t.Fatalf("hesap silmede işaret kaldı: %s", n)
+	}
+}
+
+// TestNoAgeSignalToStaff (ADR-0035 §5; platform owner 2026-11-17): a
+// Keşfet join request and its approval never show the tayfa's staff an
+// age, "under 18" or any such mark. The types staff read (the app's member
+// and join request, the gRPC messages and the feed item) have no field for
+// it, and the request path never asks identity (MinorService) about the
+// caller: a change adding one fails here.
+func TestNoAgeSignalToStaff(t *testing.T) {
+	ageLike := regexp.MustCompile(`(?i)(minor|birth|adult|under_?18|over_?18|^age$|_age$|[a-z]Age$)`)
+	var types []reflect.Type
+	for _, v := range []any{membership.Member{}, membership.Pending{}, Item{}, Person{}} {
+		types = append(types, reflect.TypeOf(v))
+	}
+	for _, typ := range types {
+		for i := range typ.NumField() {
+			if n := typ.Field(i).Name; ageLike.MatchString(n) {
+				t.Errorf("%s.%s yaşa dair bir alan", typ.Name(), n)
+			}
+		}
+	}
+	for _, m := range []proto.Message{&corev1.Membership{}, &corev1.PendingMember{}, &corev1.JoinFromDiscoverResponse{}, &corev1.DiscoverItem{}, &corev1.DiscoverPerson{}} {
+		fields := m.ProtoReflect().Descriptor().Fields()
+		for i := range fields.Len() {
+			if n := string(fields.Get(i).Name()); ageLike.MatchString(n) {
+				t.Errorf("%s.%s yaşa dair bir alan", m.ProtoReflect().Descriptor().Name(), n)
+			}
+		}
+	}
+	// membership.Config has no identity minor client: the join path cannot
+	// ask about age.
+	cfg := reflect.TypeOf(membership.Config{})
+	for i := range cfg.NumField() {
+		if f := cfg.Field(i); ageLike.MatchString(f.Name) || strings.Contains(strings.ToLower(f.Type.String()), "minor") {
+			t.Errorf("membership.Config.%s yaş bilgisine erişim", f.Name)
+		}
 	}
 }

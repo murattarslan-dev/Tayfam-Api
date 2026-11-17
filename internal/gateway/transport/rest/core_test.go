@@ -57,6 +57,8 @@ type fakeCore struct {
 	got   proto.Message
 	token string
 	tayfa *corev1.Tayfa
+	// feed replaces the Keşfet feed's items when set.
+	feed []*corev1.DiscoverItem
 }
 
 func (f *fakeCore) record(ctx context.Context, in proto.Message) error {
