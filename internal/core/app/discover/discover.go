@@ -168,7 +168,8 @@ func (s *Service) Feed(ctx context.Context, viewer id.ID) ([]Item, error) {
 	}
 	now := s.now()
 	rows, err := s.q.ListDiscoverFeed(ctx, store.ListDiscoverFeedParams{
-		Viewer: viewer.PG(), Now: ts(now), FrozenBefore: ts(now.Add(-FrozenAfter)), N: FeedSize,
+		Viewer: viewer.PG(), Now: ts(now), Until: ts(now.Add(access.DiscoverFeedAhead)),
+		FrozenBefore: ts(now.Add(-FrozenAfter)), N: FeedSize,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("keşfet akışı: %w", err)

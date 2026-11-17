@@ -1,7 +1,11 @@
 # ADR-0033: Keşfet ilk aşama — arkadaş ağı ve güvenlik ağı (v2)
 
 - **Durum:** Kabul edildi (2026-11-16; platform sahibi ayrıntı
-  sorularını cevapladı, "Platform sahibinin kararları" bölümü)
+  sorularını cevapladı, "Platform sahibinin kararları" bölümü). **Kısmen
+  yerini aldı:** [ADR-0035](0035-kesfet-herkese-acik-ve-demo-temizligi.md)
+  (2026-11-17): §4 ve §5'teki "en az bir görünür arkadaş" şartı kalktı,
+  engel kuralı genişledi, "Hukukçu listesi"ndeki 16–17 yaş hafif önlemleri
+  kapandı.
 - **Tarih:** 2026-11-16
 - **Karar veren:** Ürün kararları platform sahibinindir (Notion "Kötüye
   Kullanım ve Genç Kullanıcı Güvenliği" → "Keşfet tasarımı" 2026-11-12 ve
@@ -136,6 +140,11 @@ Bir etkinliğin akışa girmesi ayrıca: `discoverable`, `mode = 'in_person'`,
 
 ### 4. Akış: `ListDiscoverFeed`
 
+> **2026-11-17:** arkadaş şartı kalktı; akış herkese açık, arkadaşsız öğe
+> `friend_count` 0 ile döner, izleyiciyle tayfanın bir aktif üyesi
+> arasında engel varsa tayfa görünmez
+> ([ADR-0035](0035-kesfet-herkese-acik-ve-demo-temizligi.md) §1–§3).
+
 Tek sayfa, en çok 50 öğe; **imleç yoktur** (sıralama puandan türediği için
 imleç puanı sızdırabilirdi; 2026-11-16 kararı). Bir etkinlik akışa yalnızca
 izleyicinin **en az bir görünür arkadaşı** varsa girer.
@@ -198,6 +207,9 @@ listelenen tayfa panelden geçmiştir, öğe yalnızca arkadaşı olan izleyiciy
 görünür, başlık uzunluğu sınırlıdır ve şikâyet + düşürme akışı açıktır.
 
 ### 5. Keşfet'ten katılım: `JoinFromDiscover`
+
+> **2026-11-17:** arkadaş gerekmez; tayfanın izleyiciye görünen bir
+> etkinliği yeterlidir ([ADR-0035](0035-kesfet-herkese-acik-ve-demo-temizligi.md) §1).
 
 - Yalnızca tayfa **o anda izleyicinin akışında** ise (aynı SQL koşulu;
   listelenebilir tayfa + uygun etkinlik + görünür arkadaş). Değilse
@@ -551,8 +563,9 @@ değişir:
   incelemesidir (ad, açıklama, il/ilçe; içerik okunmaz). Bunun 5651
   kapsamında yer sağlayıcı konumunu etkileyip etkilemediği (ön denetim =
   içerik sağlayıcıya yaklaşma riski) sorulmalı.
-- **16–17 yaş:** yaşa göre özellik kuralı yoktur (ürün ilkesi) ve bu ADR
-  yaş kullanmaz. Değerlendirilecek hafif önlemler: organizatörün "18+"
+- **16–17 yaş:** *(2026-11-17'de kapandı: yöneticiye yaş ya da "18 yaş
+  altı" işareti gösterilmez, ADR-0035 §4.)* Yaşa göre özellik kuralı
+  yoktur (ürün ilkesi) ve bu ADR yaş kullanmaz. Değerlendirilecek hafif önlemler: organizatörün "18+"
   işareti, Keşfet'ten gelen 18 yaş altı isteğinde yöneticiye uyarı
   (identity `IsMinor` evet/hayır, saklanmadan). 5651 ek m. 4 yaş doğrulama
   yönetmeliğiyle birlikte görüşülmeli; bayrak bu netleşmeden açılmaz.

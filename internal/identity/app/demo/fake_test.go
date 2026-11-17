@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	chatv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/chat/v1"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
@@ -50,6 +51,8 @@ type fakeServices struct {
 	polls    map[string]*fPoll
 	channels map[string][]*chatv1.Channel // tayfa ID → channels
 	plates   int
+	friends  map[[2]string]string       // {from, to} → "pending" | "friends" (friends stored both ways)
+	blocks   map[string]map[string]bool // blocker → blocked
 }
 
 type fCall struct{ Caller, Method string }
@@ -59,6 +62,9 @@ type fTayfa struct {
 	roles          map[string]corev1.Role // active members
 	pending        map[string]bool
 	readOnly       bool
+	deleting       bool // deletion requested (read-only too)
+	discover       bool // the admins' Keşfet wish
+	discoverState  corev1.TayfaDiscoverState
 }
 
 type fEvent struct {
@@ -79,11 +85,12 @@ func newFake() *fakeServices {
 		events: map[string]*fEvent{}, notices: map[string]*corev1.Announcement{},
 		answers: map[string]string{}, ansVotes: map[string]map[string]bool{},
 		polls: map[string]*fPoll{}, channels: map[string][]*chatv1.Channel{},
+		friends: map[[2]string]string{}, blocks: map[string]map[string]bool{},
 	}
 }
 
 func (f *fakeServices) core() Core {
-	return Core{Tayfas: f, Memberships: f, Events: f, Announcements: f, QA: f, Polls: f}
+	return Core{Tayfas: f, Memberships: f, Events: f, Announcements: f, QA: f, Polls: f, Discover: f, Social: f}
 }
 
 func fail(code codes.Code, reason string) error {
@@ -174,6 +181,20 @@ func (f *fakeServices) snapshot() map[string]int {
 	for _, n := range f.notices {
 		if n.GetPinned() {
 			out["pinned"]++
+		}
+	}
+	for _, v := range f.friends {
+		out["friendship:"+v]++
+	}
+	for _, b := range f.blocks {
+		out["blocks"] += len(b)
+	}
+	for _, t := range f.tayfas {
+		if t.discover {
+			out["discover:"+t.discoverState.String()]++
+		}
+		if t.deleting {
+			out["deleting"]++
 		}
 	}
 	return out
@@ -321,7 +342,8 @@ func (f *fakeServices) CreateEvent(ctx context.Context, in *corev1.CreateEventRe
 		return nil, fail(codes.InvalidArgument, "ERROR_REASON_VALIDATION")
 	}
 	e := &fEvent{
-		ev:    &corev1.Event{Id: f.newID(), TayfaId: in.GetTayfaId(), Type: in.GetType(), Mode: in.GetMode(), StartTime: in.GetStartTime()},
+		ev: &corev1.Event{Id: f.newID(), TayfaId: in.GetTayfaId(), Type: in.GetType(), Mode: in.GetMode(), StartTime: in.GetStartTime(),
+			Discoverable: in.GetDiscoverable()},
 		rsvps: map[string]corev1.RsvpStatus{}, vehicles: map[string]*corev1.ConvoyVehicle{},
 	}
 	f.events[e.ev.Id] = e
@@ -654,4 +676,168 @@ func (f *fakeServices) SendMessage(ctx context.Context, in *chatv1.SendMessageRe
 	m := f.newID()
 	f.created(caller, "message", in.GetClientRequestId(), m)
 	return &chatv1.SendMessageResponse{Message: &chatv1.Message{Id: m}}, nil
+}
+
+// TayfaService: the purge's calls
+
+func (f *fakeServices) ListMyTayfas(ctx context.Context, in *corev1.ListMyTayfasRequest, _ ...grpc.CallOption) (*corev1.ListMyTayfasResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	caller, err := f.begin(ctx, "ListMyTayfas")
+	if err != nil {
+		return nil, err
+	}
+	out := &corev1.ListMyTayfasResponse{}
+	for _, t := range f.tayfas {
+		r, ok := t.roles[caller]
+		if !ok {
+			continue
+		}
+		tf := &corev1.Tayfa{Id: t.id, Name: t.name}
+		if t.deleting {
+			tf.DeletionTime = timestamppb.New(time.Now().Add(72 * time.Hour))
+		}
+		out.Tayfas = append(out.Tayfas, &corev1.MyTayfa{
+			TayfaId: t.id, Name: t.name, Role: r, Status: corev1.MembershipStatus_MEMBERSHIP_STATUS_ACTIVE,
+			Tayfa: tf, Kind: corev1.TayfaKind_TAYFA_KIND_STANDARD,
+		})
+	}
+	return out, nil
+}
+
+func (f *fakeServices) RequestDeletion(ctx context.Context, in *corev1.RequestDeletionRequest, _ ...grpc.CallOption) (*corev1.RequestDeletionResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	caller, err := f.begin(ctx, "RequestDeletion")
+	if err != nil {
+		return nil, err
+	}
+	t, err := f.member(in.GetTayfaId(), caller, corev1.Role_ROLE_ADMIN, false)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case t.deleting:
+		return nil, fail(codes.FailedPrecondition, "ERROR_REASON_DELETION_ALREADY_REQUESTED")
+	case t.readOnly:
+		return nil, fail(codes.FailedPrecondition, "ERROR_REASON_TAYFA_READ_ONLY")
+	}
+	t.deleting, t.readOnly = true, true
+	return &corev1.RequestDeletionResponse{DeletionTime: timestamppb.New(time.Now().Add(72 * time.Hour))}, nil
+}
+
+// DiscoverService
+
+func (f *fakeServices) GetTayfaDiscover(ctx context.Context, in *corev1.GetTayfaDiscoverRequest, _ ...grpc.CallOption) (*corev1.GetTayfaDiscoverResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	caller, err := f.begin(ctx, "GetTayfaDiscover")
+	if err != nil {
+		return nil, err
+	}
+	t, err := f.member(in.GetTayfaId(), caller, corev1.Role_ROLE_ADMIN, false)
+	if err != nil {
+		return nil, err
+	}
+	state := t.discoverState
+	if !t.discover && state == corev1.TayfaDiscoverState_TAYFA_DISCOVER_STATE_UNSPECIFIED {
+		state = corev1.TayfaDiscoverState_TAYFA_DISCOVER_STATE_OFF
+	}
+	return &corev1.GetTayfaDiscoverResponse{State: state, Enabled: t.discover}, nil
+}
+
+func (f *fakeServices) SetTayfaDiscover(ctx context.Context, in *corev1.SetTayfaDiscoverRequest, _ ...grpc.CallOption) (*corev1.SetTayfaDiscoverResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	caller, err := f.begin(ctx, "SetTayfaDiscover")
+	if err != nil {
+		return nil, err
+	}
+	t, err := f.member(in.GetTayfaId(), caller, corev1.Role_ROLE_ADMIN, true)
+	if err != nil {
+		return nil, err
+	}
+	if in.GetEnabled() && len(t.roles) < 5 {
+		return nil, fail(codes.FailedPrecondition, "ERROR_REASON_DISCOVER_TOO_FEW_MEMBERS")
+	}
+	t.discover = in.GetEnabled()
+	if t.discover && (t.discoverState == corev1.TayfaDiscoverState_TAYFA_DISCOVER_STATE_UNSPECIFIED ||
+		t.discoverState == corev1.TayfaDiscoverState_TAYFA_DISCOVER_STATE_REJECTED) {
+		t.discoverState = corev1.TayfaDiscoverState_TAYFA_DISCOVER_STATE_PENDING
+	}
+	return &corev1.SetTayfaDiscoverResponse{State: t.discoverState, Enabled: t.discover}, nil
+}
+
+// SocialService
+
+func (f *fakeServices) blockedEither(a, b string) bool { return f.blocks[a][b] || f.blocks[b][a] }
+
+func (f *fakeServices) SendFriendRequest(ctx context.Context, in *corev1.SendFriendRequestRequest, _ ...grpc.CallOption) (*corev1.SendFriendRequestResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	caller, err := f.begin(ctx, "SendFriendRequest")
+	if err != nil {
+		return nil, err
+	}
+	to := in.GetUserId()
+	switch {
+	case f.blockedEither(caller, to):
+		return nil, fail(codes.NotFound, "ERROR_REASON_USER_NOT_FOUND")
+	case f.friends[[2]string{caller, to}] == "friends":
+		return nil, fail(codes.AlreadyExists, "ERROR_REASON_ALREADY_FRIENDS")
+	case f.friends[[2]string{caller, to}] == "pending":
+		return nil, fail(codes.AlreadyExists, "ERROR_REASON_FRIEND_REQUEST_PENDING")
+	case f.friends[[2]string{to, caller}] == "pending":
+		delete(f.friends, [2]string{to, caller})
+		f.friends[[2]string{caller, to}], f.friends[[2]string{to, caller}] = "friends", "friends"
+		return &corev1.SendFriendRequestResponse{Friend: &corev1.Friend{UserId: to, State: corev1.FriendState_FRIEND_STATE_FRIENDS}}, nil
+	}
+	f.friends[[2]string{caller, to}] = "pending"
+	return &corev1.SendFriendRequestResponse{Friend: &corev1.Friend{UserId: to, State: corev1.FriendState_FRIEND_STATE_OUTGOING}}, nil
+}
+
+func (f *fakeServices) AcceptFriendRequest(ctx context.Context, in *corev1.AcceptFriendRequestRequest, _ ...grpc.CallOption) (*corev1.AcceptFriendRequestResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	caller, err := f.begin(ctx, "AcceptFriendRequest")
+	if err != nil {
+		return nil, err
+	}
+	from := in.GetUserId()
+	if f.friends[[2]string{from, caller}] != "pending" {
+		return nil, fail(codes.NotFound, "ERROR_REASON_FRIEND_REQUEST_NOT_FOUND")
+	}
+	f.friends[[2]string{from, caller}], f.friends[[2]string{caller, from}] = "friends", "friends"
+	return &corev1.AcceptFriendRequestResponse{Friend: &corev1.Friend{UserId: from, State: corev1.FriendState_FRIEND_STATE_FRIENDS}}, nil
+}
+
+func (f *fakeServices) BlockUser(ctx context.Context, in *corev1.BlockUserRequest, _ ...grpc.CallOption) (*corev1.BlockUserResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	caller, err := f.begin(ctx, "BlockUser")
+	if err != nil {
+		return nil, err
+	}
+	to := in.GetUserId()
+	if f.blocks[caller] == nil {
+		f.blocks[caller] = map[string]bool{}
+	}
+	f.blocks[caller][to] = true
+	delete(f.friends, [2]string{caller, to})
+	delete(f.friends, [2]string{to, caller})
+	return &corev1.BlockUserResponse{}, nil
+}
+
+func (f *fakeServices) ListBlockedUsers(ctx context.Context, in *corev1.ListBlockedUsersRequest, _ ...grpc.CallOption) (*corev1.ListBlockedUsersResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	caller, err := f.begin(ctx, "ListBlockedUsers")
+	if err != nil {
+		return nil, err
+	}
+	out := &corev1.ListBlockedUsersResponse{}
+	for u := range f.blocks[caller] {
+		out.Users = append(out.Users, &corev1.BlockedUser{UserId: u})
+	}
+	return out, nil
 }

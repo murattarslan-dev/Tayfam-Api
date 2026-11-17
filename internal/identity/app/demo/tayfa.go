@@ -15,9 +15,10 @@ import (
 
 // seedTayfa creates one demo tayfa (or replays its create), lets the demo
 // members in, writes the content and adds the owner last, so the owner's
-// devices are not notified of every demo record. A tayfa that no longer
-// takes changes (archived, suspended, deletion pending) is reported and
-// left as it is.
+// devices are not notified of every demo record. A Keşfet demo tayfa
+// applies to Keşfet instead and the owner is not added. A tayfa that no
+// longer takes changes (archived, suspended, deletion pending) is reported
+// and left as it is.
 func (s *Seeder) seedTayfa(ctx context.Context, t tayfaSpec, users map[string]id.ID, owner id.ID) (TayfaResult, error) {
 	res := TayfaResult{Name: t.Name, OwnerRole: t.OwnerRole.String()}
 	founder := users[t.Founder]
@@ -34,7 +35,7 @@ func (s *Seeder) seedTayfa(ctx context.Context, t tayfaSpec, users map[string]id
 	tayfaID := created.GetTayfa().GetId()
 	res.ID = tayfaID
 
-	err = s.fillTayfa(ctx, t, tayfaID, users, owner)
+	res.DiscoverState, err = s.fillTayfa(ctx, t, tayfaID, users, owner)
 	if errors.Is(err, errReadOnly) {
 		res.ReadOnly = true
 		s.cfg.Log.WarnContext(ctx, "demo tayfası salt okunur; kalan adımlar atlandı", "tayfa_id", tayfaID)
@@ -43,39 +44,75 @@ func (s *Seeder) seedTayfa(ctx context.Context, t tayfaSpec, users map[string]id
 	return res, err
 }
 
-func (s *Seeder) fillTayfa(ctx context.Context, t tayfaSpec, tayfaID string, users map[string]id.ID, owner id.ID) error {
+// fillTayfa writes the tayfa's members and content. It returns the tayfa's
+// Keşfet state for a Keşfet demo tayfa, "" otherwise.
+func (s *Seeder) fillTayfa(ctx context.Context, t tayfaSpec, tayfaID string, users map[string]id.ID, owner id.ID) (string, error) {
 	founder := users[t.Founder]
 	for _, m := range t.Members {
 		if err := s.ensureMember(ctx, tayfaID, founder, users[m.Person], m.Role); err != nil {
-			return err
+			return "", err
 		}
 	}
 	for _, e := range t.Events {
 		if err := s.seedEvent(ctx, t, e, tayfaID, users); err != nil {
-			return err
+			return "", err
 		}
 	}
 	for _, n := range t.Notices {
 		if err := s.seedNotice(ctx, t, n, tayfaID, founder); err != nil {
-			return err
+			return "", err
 		}
 	}
 	for _, q := range t.Questions {
 		if err := s.seedQuestion(ctx, t, q, tayfaID, users); err != nil {
-			return err
+			return "", err
 		}
 	}
 	for _, p := range t.Polls {
 		if err := s.seedPoll(ctx, t, p, tayfaID, users); err != nil {
-			return err
+			return "", err
 		}
 	}
 	for _, c := range t.Channels {
 		if err := s.seedChannel(ctx, t, c, tayfaID, users); err != nil {
-			return err
+			return "", err
 		}
 	}
-	return s.ensureMember(ctx, tayfaID, founder, owner, t.OwnerRole)
+	state := ""
+	if t.Discover {
+		var err error
+		if state, err = s.ensureDiscover(ctx, tayfaID, founder); err != nil {
+			return "", err
+		}
+	}
+	if t.OwnerRole == corev1.Role_ROLE_UNSPECIFIED {
+		return state, nil
+	}
+	return state, s.ensureMember(ctx, tayfaID, founder, owner, t.OwnerRole)
+}
+
+// ensureDiscover makes the founder apply to Keşfet the normal way
+// (SetTayfaDiscover, at least five active members): the tayfa waits in the
+// platform panel's queue until the platform owner approves it there. Once
+// the admins' wish is on it is left alone, so a second run does not ask
+// again after the panel rejected it. The tool never approves.
+func (s *Seeder) ensureDiscover(ctx context.Context, tayfaID string, founder id.ID) (string, error) {
+	got, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.GetTayfaDiscoverResponse, error) {
+		return s.cfg.Core.Discover.GetTayfaDiscover(ctx, &corev1.GetTayfaDiscoverRequest{TayfaId: tayfaID})
+	})
+	if err != nil {
+		return "", check("keşfet durumu", err)
+	}
+	if got.GetEnabled() {
+		return got.GetState().String(), nil
+	}
+	set, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.SetTayfaDiscoverResponse, error) {
+		return s.cfg.Core.Discover.SetTayfaDiscover(ctx, &corev1.SetTayfaDiscoverRequest{TayfaId: tayfaID, Enabled: true})
+	})
+	if err != nil {
+		return "", check("keşfet başvurusu", err)
+	}
+	return set.GetState().String(), nil
 }
 
 // activeMembers lists the tayfa's active members and their roles.
@@ -145,7 +182,7 @@ func (s *Seeder) seedEvent(ctx context.Context, t tayfaSpec, e eventSpec, tayfaI
 	start := s.startTime(e.Start)
 	req := &corev1.CreateEventRequest{
 		TayfaId: tayfaID, Type: e.Type, Mode: corev1.EventMode_EVENT_MODE_IN_PERSON,
-		Title: e.Title, Description: e.Description,
+		Title: e.Title, Description: e.Description, Discoverable: e.Discoverable,
 		StartTime: timestamppb.New(start), EndTime: timestamppb.New(start.Add(time.Duration(e.Hours) * time.Hour)),
 		Capacity:        e.Capacity,
 		ClientRequestId: requestID(keyOf(t.Key, "event", e.Key)),

@@ -1,6 +1,10 @@
 # ADR-0023: Prod'da kalıcı demo tayfaları ve sahte hesaplar
 
-- **Durum:** Kabul edildi (platform sahibi, 2026-11-13)
+- **Durum:** Kabul edildi (platform sahibi, 2026-11-13). **Kısmen yerini
+  aldı:** [ADR-0035](0035-kesfet-herkese-acik-ve-demo-temizligi.md)
+  (2026-11-17): Keşfet demo seti eklendi; §1'deki "silme yoktur" yerine
+  `identity demo-purge` (normal silme yollarıyla, yalnızca demo verisi);
+  §5'te sahibin token'ı arkadaşlık kabulü ve engel için de kullanılır.
 - **Tarih:** 2026-11-13
 - **Karar veren:** Murat Arslan (kararlar sohbette verildi, 2026-11-13;
   issue #179)

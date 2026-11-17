@@ -358,8 +358,8 @@ type Querier interface {
 	// bitmiş mi; tayfa silinmemiş. Tayfa içeriğine erişim vermez: yalnızca
 	// tayfayı şikâyet ve katıldığı etkinliğe geri bildirim.
 	DiscoverFormerMember(ctx context.Context, arg DiscoverFormerMemberParams) (bool, error)
-	// Tayfa şu anda izleyicinin akışında mı (Keşfet'ten katılım): tayfanın
-	// bir etkinliğinde görünür bir arkadaş var.
+	// Tayfa şu anda izleyicinin Keşfet'inde mi (Keşfet'ten katılım): tayfanın
+	// izleyiciye görünen bir etkinliği var. Arkadaş gerekmez (ADR-0035).
 	DiscoverTayfaVisible(ctx context.Context, arg DiscoverTayfaVisibleParams) (bool, error)
 	DismissFriendSuggestion(ctx context.Context, arg DismissFriendSuggestionParams) (int64, error)
 	// actor adına kalıcı kapatma: actor'a yapılmış öneri varsa kapatılır, yoksa
@@ -648,16 +648,20 @@ type Querier interface {
 	ListCatches(ctx context.Context, arg ListCatchesParams) ([]ListCatchesRow, error)
 	ListConvoyVehicles(ctx context.Context, eventID pgtype.UUID) ([]ListConvoyVehiclesRow, error)
 	ListDeletingUploads(ctx context.Context, n int32) ([]ListDeletingUploadsRow, error)
-	// Keşfet ilk aşama (issue #210, ADR-0033). Listelenebilirlik
-	// tayfa_discover_listable, "görünür arkadaş" discover_friend_visible
-	// (migration 00028) ile tek yerde tanımlıdır. Arkadaşlık puanı yalnızca
-	// sıralamada kullanılır; hiçbir sorgunun sonucunda yoktur.
+	// Keşfet (issue #210, ADR-0033; herkese açık: issue #227, ADR-0035).
+	// Listelenebilirlik tayfa_discover_listable (00028), etkinliğin izleyiciye
+	// görünmesi discover_event_visible ve "görünür arkadaş"
+	// discover_friend_visible (00029) ile tek yerde tanımlıdır. Arkadaşlık
+	// puanı yalnızca sıralamada kullanılır; hiçbir sorgunun sonucunda yoktur.
 	// ---------------------------------------------------------------------------
 	// Akış
-	// En iyi n etkinlik: görünür arkadaşlarla puan toplamı, görünür arkadaş
-	// sayısı, başlangıç, kimlik. Tayfa olguları donmuş etkinliklerden (bitişten
-	// 7 gün geçmiş, iptal edilmemiş, silinmemiş; ADR-0026 §1). En çok 3 arkadaş
-	// (puan, sonra ad sırasıyla); puan dönmez.
+	// En iyi n etkinlik (Keşfet herkese açık, issue #227, ADR-0035): izleyiciye
+	// görünen bütün uygun etkinlikler (discover_event_visible); arkadaşı
+	// olmayan da listelenir. Sıra: görünür arkadaşlarla puan toplamı, görünür
+	// arkadaş sayısı, başlangıç, kimlik; arkadaşı olmayanlar yalnızca başlangıç
+	// ve kimlikle sıralanır. Tayfa olguları donmuş etkinliklerden (bitişten 7
+	// gün geçmiş, iptal edilmemiş, silinmemiş; ADR-0026 §1). En çok 3 arkadaş
+	// (puan, sonra ad sırasıyla); arkadaş yoksa boş liste ve 0. Puan dönmez.
 	ListDiscoverFeed(ctx context.Context, arg ListDiscoverFeedParams) ([]ListDiscoverFeedRow, error)
 	// Üretim sırası gelen seriler: bitmemiş, şablonu olan ve generated_until'ı
 	// verilen zamandan önce kalanlar.

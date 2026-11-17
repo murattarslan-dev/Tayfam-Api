@@ -100,13 +100,14 @@ func TestRunWritesDemoDataOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rep.UsersCreated != len(people) || rep.UsersExisting != 0 || len(rep.Tayfas) != len(tayfas) {
+	all := allPeople()
+	if rep.UsersCreated != len(all) || rep.UsersExisting != 0 || len(rep.Tayfas) != len(tayfas) || len(rep.Discover) != len(discoverTayfas) {
 		t.Fatalf("rapor = %+v", rep)
 	}
 
 	// identity: registered demo accounts with the marker e-mail, an adult
 	// encrypted birth date, a referral code and one profile event each.
-	if n := e.count(t, `SELECT count(*) FROM auth_identities WHERE provider = 'demo' AND email LIKE '%@demo.tayfam.app'`); n != len(people) {
+	if n := e.count(t, `SELECT count(*) FROM auth_identities WHERE provider = 'demo' AND email LIKE '%@demo.tayfam.app'`); n != len(all) {
 		t.Errorf("demo kimliği = %d", n)
 	}
 	rows, err := e.pool.Query(ctx, `
@@ -137,15 +138,15 @@ func TestRunWritesDemoDataOnce(t *testing.T) {
 		t.Errorf("demo hesapları adına onay kaydı yazıldı: %d", n)
 	}
 	profileEvents := `SELECT count(*) FROM domain_events WHERE type = 'user.profile_updated'`
-	if n := e.count(t, profileEvents); n != len(people) {
+	if n := e.count(t, profileEvents); n != len(all) {
 		t.Errorf("profil olayı = %d", n)
 	}
 
 	// core and chat: the owner's roles, every event type, the content.
 	got := e.fake.snapshot()
 	wantRoles := map[string]corev1.Role{}
-	for _, ts := range tayfas {
-		wantRoles[ts.Name] = ts.OwnerRole
+	for _, ts := range append(append([]tayfaSpec{}, tayfas...), discoverTayfas...) {
+		wantRoles[ts.Name] = ts.OwnerRole // UNSPECIFIED: not a member
 	}
 	for _, ft := range e.fake.tayfas {
 		if !strings.Contains(ft.name, "Demo") {
@@ -189,15 +190,20 @@ func TestRunWritesDemoDataOnce(t *testing.T) {
 	if got["pending"] != 0 {
 		t.Errorf("onay bekleyen kaldı: %d", got["pending"])
 	}
-	// The owner's token is used only to ask to join.
+	// The owner's token is used only to ask to join a closed demo tayfa,
+	// to accept the demo friends' requests and to block (ADR-0023 §5,
+	// ADR-0035).
+	ownerMethods := map[string]bool{"JoinByCode": true, "AcceptFriendRequest": true, "ListBlockedUsers": true, "BlockUser": true}
 	for _, c := range e.fake.calls {
-		if c.Caller == owner.String() && c.Method != "JoinByCode" {
+		if c.Caller == owner.String() && !ownerMethods[c.Method] {
 			t.Errorf("sahibin hesabıyla %s çağrıldı", c.Method)
 		}
 	}
+	e.checkDiscoverSet(t, owner, rep)
 	// No code, name or text in the logs.
 	logs := e.logs.String()
-	for _, secret := range []string{code, "tok-", people[0].Name, tayfas[0].Name, "demo-01"} {
+	for _, secret := range []string{code, "tok-", people[0].Name, tayfas[0].Name, "demo-01",
+		discoverPeople[0].Name, discoverTayfas[0].Name, "demo-21"} {
 		if strings.Contains(logs, secret) {
 			t.Errorf("log %q içeriyor", secret)
 		}
@@ -209,7 +215,7 @@ func TestRunWritesDemoDataOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rep2.UsersCreated != 0 || rep2.UsersExisting != len(people) {
+	if rep2.UsersCreated != 0 || rep2.UsersExisting != len(all) {
 		t.Fatalf("ikinci rapor = %+v", rep2)
 	}
 	for i := range rep.Tayfas {
@@ -220,13 +226,102 @@ func TestRunWritesDemoDataOnce(t *testing.T) {
 	if again := e.fake.snapshot(); !maps.Equal(got, again) {
 		t.Errorf("ikinci çalıştırma veri değiştirdi:\nilk   %v\nikinci %v", got, again)
 	}
-	if n := e.count(t, profileEvents); n != len(people) {
+	for i := range rep.Discover {
+		if rep.Discover[i].ID != rep2.Discover[i].ID {
+			t.Errorf("keşfet tayfası yeniden oluşturuldu: %s → %s", rep.Discover[i].ID, rep2.Discover[i].ID)
+		}
+	}
+	if rep2.Social != rep.Social {
+		t.Errorf("ikinci çalıştırmada sosyal sonuç: %+v, ilk %+v", rep2.Social, rep.Social)
+	}
+	if n := e.count(t, profileEvents); n != len(all) {
 		t.Errorf("ikinci çalıştırmada profil olayı = %d", n)
 	}
+	// The owner's token only reads the owner's own block list.
 	for _, c := range e.fake.calls[callsBefore:] {
-		if c.Caller == owner.String() {
+		if c.Caller == owner.String() && c.Method != "ListBlockedUsers" {
 			t.Errorf("ikinci çalıştırmada sahibin hesabıyla %s çağrıldı", c.Method)
 		}
+		if c.Method == "SetTayfaDiscover" {
+			t.Errorf("ikinci çalıştırmada Keşfet başvurusu yeniden yapıldı")
+		}
+	}
+}
+
+// checkDiscoverSet: the Keşfet demo set as the platform owner's feed
+// needs it (ADR-0035): every tayfa applied (waiting for the panel, never
+// approved by the tool), has a discoverable future event and at least five
+// members; the owner is in none; the owner's friends go to events; the
+// blocks are in place both ways.
+func (e *env) checkDiscoverSet(t *testing.T, owner id.ID, rep Report) {
+	t.Helper()
+	users := map[string]string{}
+	rows, err := e.pool.Query(context.Background(), `SELECT subject, user_id::text FROM auth_identities WHERE provider = 'demo'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	subjects := map[string]string{}
+	for rows.Next() {
+		var sub, u string
+		if err := rows.Scan(&sub, &u); err != nil {
+			t.Fatal(err)
+		}
+		subjects[sub] = u
+	}
+	for _, p := range allPeople() {
+		users[p.Key] = subjects[p.Subject]
+	}
+	for _, r := range rep.Discover {
+		if r.DiscoverState != corev1.TayfaDiscoverState_TAYFA_DISCOVER_STATE_PENDING.String() {
+			t.Errorf("%s: keşfet durumu %s", r.Name, r.DiscoverState)
+		}
+		ft := e.fake.tayfas[r.ID]
+		if !ft.discover || len(ft.roles) < 5 {
+			t.Errorf("%s: başvuru %v, üye %d", r.Name, ft.discover, len(ft.roles))
+		}
+		if _, in := ft.roles[owner.String()]; in {
+			t.Errorf("%s: sahip üye", r.Name)
+		}
+		var listed bool
+		for _, ev := range e.fake.events {
+			if ev.ev.GetTayfaId() == r.ID && ev.ev.GetDiscoverable() && ev.ev.GetMode() == corev1.EventMode_EVENT_MODE_IN_PERSON &&
+				ev.ev.GetStartTime().AsTime().After(now) {
+				listed = true
+			}
+		}
+		if !listed {
+			t.Errorf("%s: Keşfet'e uygun etkinlik yok", r.Name)
+		}
+	}
+	for _, c := range e.fake.calls {
+		if c.Method == "ApproveDiscover" {
+			t.Error("araç panel onayı verdi")
+		}
+	}
+	for _, k := range ownerFriends {
+		if e.fake.friends[[2]string{users[k], owner.String()}] != "friends" {
+			t.Errorf("%s sahibin arkadaşı değil", k)
+		}
+		going := false
+		for _, ev := range e.fake.events {
+			going = going || (ev.ev.GetDiscoverable() && ev.rsvps[users[k]] == corev1.RsvpStatus_RSVP_STATUS_GOING)
+		}
+		if !going {
+			t.Errorf("%s hiçbir Keşfet etkinliğine gitmiyor", k)
+		}
+	}
+	for _, k := range ownerBlocks {
+		if !e.fake.blocks[owner.String()][users[k]] {
+			t.Errorf("sahip %s'i engellemedi", k)
+		}
+	}
+	for _, k := range blocksOwner {
+		if !e.fake.blocks[users[k]][owner.String()] {
+			t.Errorf("%s sahibi engellemedi", k)
+		}
+	}
+	if rep.Social.Friends != len(ownerFriends) || rep.Social.Blocks != len(ownerBlocks)+len(blocksOwner) || rep.Social.Skipped != 0 {
+		t.Errorf("sosyal sonuç: %+v", rep.Social)
 	}
 }
 
@@ -456,5 +551,148 @@ func TestDataSet(t *testing.T) {
 		if typ := corev1.EventType(v); typ != corev1.EventType_EVENT_TYPE_UNSPECIFIED && !types[typ] {
 			t.Errorf("etkinlik türü yok: %v", typ)
 		}
+	}
+}
+
+// TestDiscoverDataSet: the Keşfet demo set follows issue #227: 6–8 tayfas
+// with "Demo" in the name, each of its own accounts (apart from
+// demo-01..demo-18), at least five members, different types, discoverable
+// in-person events within Keşfet's 30 days, RSVPs and a few
+// announcements; the owner's friends go to events of tayfas without a
+// block; the blocked and blocking accounts are members; one tayfa has
+// neither (an item with no friends).
+func TestDiscoverDataSet(t *testing.T) {
+	if n := len(discoverTayfas); n < 6 || n > 8 {
+		t.Errorf("%d Keşfet demo tayfası; 6–8 olmalı", n)
+	}
+	keys, subjects := map[string]bool{}, map[string]bool{}
+	for _, p := range people {
+		keys[p.Key], subjects[p.Subject] = true, true
+	}
+	closed := maps.Clone(keys)
+	subject := regexp.MustCompile(`^demo-[0-9]{2}$`)
+	for _, p := range discoverPeople {
+		if keys[p.Key] || subjects[p.Subject] {
+			t.Errorf("tekrarlanan ya da kapalı setle ortak hesap: %s", p.Key)
+		}
+		keys[p.Key], subjects[p.Subject] = true, true
+		if !subject.MatchString(p.Subject) || p.Subject <= "demo-18" {
+			t.Errorf("%s: subject %q (demo-01..18 dışında olmalı)", p.Key, p.Subject)
+		}
+		if n := utf8.RuneCountInString(p.Name); n < 1 || n > 40 {
+			t.Errorf("%s: ad uzunluğu %d", p.Key, n)
+		}
+		d, err := birthdate.Parse(p.BirthDate)
+		if err != nil || d.IsMinor(time.Now()) {
+			t.Errorf("%s: doğum tarihi yetişkin değil (%v)", p.Key, err)
+		}
+	}
+	tayfaOf := map[string]string{} // person → Keşfet tayfa key
+	goingTo := map[string]bool{}   // person going to a discoverable event
+	types := map[corev1.EventType]bool{}
+	notices := 0
+	for _, ts := range discoverTayfas {
+		if !ts.Discover || ts.OwnerRole != corev1.Role_ROLE_UNSPECIFIED {
+			t.Errorf("%s: Keşfet'e başvurmalı ve sahip üye olmamalı", ts.Key)
+		}
+		if !strings.Contains(ts.Name, "Demo") || !strings.Contains(ts.Description, "demo") {
+			t.Errorf("%s: adda ya da açıklamada demo işareti yok", ts.Key)
+		}
+		if n := utf8.RuneCountInString(ts.Name); n < 3 || n > 50 {
+			t.Errorf("%s: ad uzunluğu %d", ts.Key, n)
+		}
+		if utf8.RuneCountInString(ts.Description) > 500 {
+			t.Errorf("%s: açıklama uzun", ts.Key)
+		}
+		in := append([]string{ts.Founder}, func() (out []string) {
+			for _, m := range ts.Members {
+				out = append(out, m.Person)
+			}
+			return
+		}()...)
+		if len(in) < 5 {
+			t.Errorf("%s: %d üye; en az 5", ts.Key, len(in))
+		}
+		for _, k := range in {
+			if closed[k] || !keys[k] {
+				t.Errorf("%s: %s Keşfet hesabı değil", ts.Key, k)
+			}
+			if other, dup := tayfaOf[k]; dup {
+				t.Errorf("%s: %s %s tayfasında da var", ts.Key, k, other)
+			}
+			tayfaOf[k] = ts.Key
+		}
+		notices += len(ts.Notices)
+		listed := false
+		for _, ev := range ts.Events {
+			types[ev.Type] = true
+			if ev.Online || !ev.Discoverable || ev.City == "" || ev.District == "" || ev.PlaceName == "" {
+				t.Errorf("%s/%s: halka açık yerde yüz yüze ve Keşfet işaretli olmalı", ts.Key, ev.Key)
+			}
+			// Keşfet shows events starting within 30 days.
+			if ev.Start.Days < 2 || ev.Start.Days > 25 || ev.Hours < 1 {
+				t.Errorf("%s/%s: zaman", ts.Key, ev.Key)
+			}
+			listed = listed || ev.Discoverable
+			for _, r := range ev.RSVPs {
+				if tayfaOf[r.Person] != ts.Key {
+					t.Errorf("%s/%s: katılımcı %s tayfada değil", ts.Key, ev.Key, r.Person)
+				}
+				if r.Status == corev1.RsvpStatus_RSVP_STATUS_GOING {
+					goingTo[r.Person] = true
+				}
+			}
+			if len(ev.RSVPs) == 0 {
+				t.Errorf("%s/%s: katılım yanıtı yok", ts.Key, ev.Key)
+			}
+		}
+		if !listed {
+			t.Errorf("%s: Keşfet'e uygun etkinlik yok", ts.Key)
+		}
+	}
+	if len(types) < 5 {
+		t.Errorf("yalnızca %d etkinlik türü", len(types))
+	}
+	if notices < 2 {
+		t.Errorf("%d duyuru", notices)
+	}
+
+	role := map[string]string{}
+	mark := func(list []string, what string) {
+		for _, k := range list {
+			if role[k] != "" {
+				t.Errorf("%s hem %s hem %s", k, role[k], what)
+			}
+			role[k] = what
+			if tayfaOf[k] == "" {
+				t.Errorf("%s (%s) bir Keşfet tayfasında değil", k, what)
+			}
+		}
+	}
+	mark(ownerFriends, "arkadaş")
+	mark(ownerBlocks, "sahibin engellediği")
+	mark(blocksOwner, "sahibi engelleyen")
+	if len(ownerFriends) < 2 || len(ownerBlocks) != 2 || len(blocksOwner) != 2 {
+		t.Errorf("arkadaş %d, engel %d + %d", len(ownerFriends), len(ownerBlocks), len(blocksOwner))
+	}
+	blockedTayfa, friendTayfa := map[string]bool{}, map[string]bool{}
+	for _, k := range append(append([]string{}, ownerBlocks...), blocksOwner...) {
+		blockedTayfa[tayfaOf[k]] = true
+	}
+	for _, k := range ownerFriends {
+		friendTayfa[tayfaOf[k]] = true
+		if !goingTo[k] {
+			t.Errorf("arkadaş %s hiçbir Keşfet etkinliğine gitmiyor", k)
+		}
+		if blockedTayfa[tayfaOf[k]] {
+			t.Errorf("arkadaş %s engelli bir hesabın tayfasında; Keşfet'te görünmez", k)
+		}
+	}
+	plain := false
+	for _, ts := range discoverTayfas {
+		plain = plain || (!blockedTayfa[ts.Key] && !friendTayfa[ts.Key])
+	}
+	if !plain {
+		t.Error("arkadaşsız ve engelsiz bir Keşfet tayfası yok")
 	}
 }

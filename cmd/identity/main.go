@@ -3,12 +3,14 @@
 //
 //	identity             runs the service
 //	identity migrate     applies database migrations and exits (init container)
-//	identity demo-seed   writes the demo tayfas once (by hand; ADR-0023)
+//	identity demo-seed   writes the demo tayfas once (by hand; ADR-0023, ADR-0035)
+//	identity demo-purge  removes demo data (by hand; ADR-0035)
 package main
 
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -52,12 +54,17 @@ import (
 const accessTokenTTL = 15 * time.Minute
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == demoCommand {
-		if err := runDemoSeed(os.Args[2:], os.Stdout, os.Stderr); err != nil {
-			fmt.Fprintf(os.Stderr, "identity %s: %v\n", demoCommand, err)
-			os.Exit(1)
+	if len(os.Args) > 1 {
+		run := map[string]func([]string, io.Writer, io.Writer) error{
+			demoCommand: runDemoSeed, demoPurgeCommand: runDemoPurge,
+		}[os.Args[1]]
+		if run != nil {
+			if err := run(os.Args[2:], os.Stdout, os.Stderr); err != nil {
+				fmt.Fprintf(os.Stderr, "identity %s: %v\n", os.Args[1], err)
+				os.Exit(1)
+			}
+			return
 		}
-		return
 	}
 	service.MainWithMigrations("identity", identitydb.Migrations(), setup)
 }

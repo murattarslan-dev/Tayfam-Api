@@ -85,6 +85,48 @@ type Caller struct {
 	IssuedAt time.Time // iat
 }
 
+// Erase clears a live, registered account the caller has locked in tx
+// (LockLiveUser): the steps of the account deletion flow, without its
+// sign-in checks. Delete uses it for the user's own request; the demo
+// purge (identity demo-purge, ADR-0035) for demo accounts, which have no
+// session. It writes user.deleted to the outbox last, so core and chat
+// remove their records (memberships, friendships, blocks, profile copies)
+// the same way. It returns the number of devices removed.
+func Erase(ctx context.Context, tx pgx.Tx, user id.ID) (devices int64, err error) {
+	q := store.New(tx)
+	if n, err := q.SoftDeleteUser(ctx, user.PG()); err != nil || n != 1 {
+		return 0, fmt.Errorf("hesap silme: n=%d: %w", n, err)
+	}
+	if err := q.DeleteUserAuthIdentities(ctx, user.PG()); err != nil {
+		return 0, fmt.Errorf("giriş kimlikleri: %w", err)
+	}
+	// Sessions and refresh tokens go with the devices (ON DELETE
+	// CASCADE): every session of the account ends here, the caller's
+	// included.
+	if devices, err = q.DeleteUserDevices(ctx, user.PG()); err != nil {
+		return 0, fmt.Errorf("cihazlar: %w", err)
+	}
+	if err := q.DeleteUserRefCodeLookups(ctx, user.PG()); err != nil {
+		return 0, fmt.Errorf("arama kayıtları: %w", err)
+	}
+	if err := q.DeleteUserDisplayNameChanges(ctx, user.PG()); err != nil {
+		return 0, fmt.Errorf("ad değişiklikleri: %w", err)
+	}
+	// Profile completion fields (issue #186) are personal data: they go
+	// at once, not with the row 30 days later.
+	if err := profilefields.Delete(ctx, q, user); err != nil {
+		return 0, err
+	}
+	// Data export requests and their keys go at once (ADR-0021): a
+	// file left in storage can no longer be opened; core deletes it
+	// with the user's files.
+	if err := q.DeleteUserDataExports(ctx, user.PG()); err != nil {
+		return 0, fmt.Errorf("dışa aktarma talepleri: %w", err)
+	}
+	// Written last, see outbox.Write.
+	return devices, userevents.Deleted(ctx, tx, user)
+}
+
 // Delete deletes the caller's account.
 func (s *Service) Delete(ctx context.Context, c Caller) error {
 	now := s.now()
@@ -118,37 +160,8 @@ func (s *Service) Delete(ctx context.Context, c Caller) error {
 			return ErrReauthenticationRequired
 		}
 
-		if n, err := q.SoftDeleteUser(ctx, c.User.PG()); err != nil || n != 1 {
-			return fmt.Errorf("hesap silme: n=%d: %w", n, err)
-		}
-		if err := q.DeleteUserAuthIdentities(ctx, c.User.PG()); err != nil {
-			return fmt.Errorf("giriş kimlikleri: %w", err)
-		}
-		// Sessions and refresh tokens go with the devices (ON DELETE
-		// CASCADE): every session of the account ends here, the caller's
-		// included.
-		if devices, err = q.DeleteUserDevices(ctx, c.User.PG()); err != nil {
-			return fmt.Errorf("cihazlar: %w", err)
-		}
-		if err := q.DeleteUserRefCodeLookups(ctx, c.User.PG()); err != nil {
-			return fmt.Errorf("arama kayıtları: %w", err)
-		}
-		if err := q.DeleteUserDisplayNameChanges(ctx, c.User.PG()); err != nil {
-			return fmt.Errorf("ad değişiklikleri: %w", err)
-		}
-		// Profile completion fields (issue #186) are personal data: they go
-		// at once, not with the row 30 days later.
-		if err := profilefields.Delete(ctx, q, c.User); err != nil {
-			return err
-		}
-		// Data export requests and their keys go at once (ADR-0021): a
-		// file left in storage can no longer be opened; core deletes it
-		// with the user's files.
-		if err := q.DeleteUserDataExports(ctx, c.User.PG()); err != nil {
-			return fmt.Errorf("dışa aktarma talepleri: %w", err)
-		}
-		// Written last, see outbox.Write.
-		return userevents.Deleted(ctx, tx, c.User)
+		devices, err = Erase(ctx, tx, c.User)
+		return err
 	})
 	if err != nil {
 		return err

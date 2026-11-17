@@ -37,6 +37,9 @@ func (f *fakeCore) ListDiscoverFeed(ctx context.Context, in *corev1.ListDiscover
 	if err := f.record(ctx, in); err != nil {
 		return nil, err
 	}
+	if f.feed != nil {
+		return &corev1.ListDiscoverFeedResponse{Items: f.feed}, nil
+	}
 	return &corev1.ListDiscoverFeedResponse{Items: []*corev1.DiscoverItem{testDiscoverItem()}}, nil
 }
 func (f *fakeCore) JoinFromDiscover(ctx context.Context, in *corev1.JoinFromDiscoverRequest, _ ...grpc.CallOption) (*corev1.JoinFromDiscoverResponse, error) {
@@ -104,6 +107,23 @@ func TestDiscoverFeed(t *testing.T) {
 		if strings.Contains(body, `"`+banned) {
 			t.Errorf("akışta %q alanı var: %s", banned, body)
 		}
+	}
+}
+
+// TestDiscoverFeedNoFriends: Keşfet is open to everyone (ADR-0035); an
+// item with no visible friend still carries both fields, as an empty list
+// and 0, so the client can tell "no friend" from a missing field.
+func TestDiscoverFeedNoFriends(t *testing.T) {
+	it := testDiscoverItem()
+	it.Friends, it.FriendCount = nil, 0
+	h := coreRouter(&fakeCore{feed: []*corev1.DiscoverItem{it}})
+	w := as(h, "GET", "/v1/discover/events", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("akış: %d %s", w.Code, w.Body)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `"friends":[]`) || !strings.Contains(body, `"friend_count":0`) {
+		t.Fatalf("arkadaşsız öğe: %s", body)
 	}
 }
 
