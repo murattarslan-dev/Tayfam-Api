@@ -17,13 +17,14 @@ SELECT pg_advisory_xact_lock(hashtextextended('push:' || sqlc.arg(key)::uuid::te
 -- name: DeletePushTokenElsewhere :exec
 DELETE FROM push_tokens WHERE token = @token AND session_id <> @session_id;
 
--- Oturumun token'ı (oturum başına bir). Oturum başka kullanıcıya ait
--- olamaz; olursa satır değişmez.
+-- Oturumun token'ı (oturum başına bir) ve türü (registration_token | fid;
+-- ADR-0036). Oturum başka kullanıcıya ait olamaz; olursa satır değişmez.
 -- name: UpsertPushToken :execrows
-INSERT INTO push_tokens (session_id, user_id, platform, token, refreshed_at)
-VALUES (@session_id, @user_id, @platform, @token, @now)
+INSERT INTO push_tokens (session_id, user_id, platform, token, token_type, refreshed_at)
+VALUES (@session_id, @user_id, @platform, @token, @token_type, @now)
 ON CONFLICT (session_id) DO UPDATE
-SET platform = EXCLUDED.platform, token = EXCLUDED.token, refreshed_at = EXCLUDED.refreshed_at
+SET platform = EXCLUDED.platform, token = EXCLUDED.token, token_type = EXCLUDED.token_type,
+  refreshed_at = EXCLUDED.refreshed_at
 WHERE push_tokens.user_id = EXCLUDED.user_id;
 
 -- Kullanıcı başına en çok @keep token (en son yenilenenler) kalır.
@@ -47,9 +48,10 @@ DELETE FROM push_tokens WHERE user_id = @user_id;
 -- name: DeleteInvalidPushToken :execrows
 DELETE FROM push_tokens WHERE session_id = @session_id AND token = @token;
 
--- Gönderim için kullanıcının token'ları, en son yenilenen önce.
+-- Gönderim için kullanıcının token'ları, en son yenilenen önce. Tür,
+-- FCM'deki hedef alanını seçer (message.token ya da message.fid).
 -- name: ListUserPushTokens :many
-SELECT session_id, platform, token
+SELECT session_id, platform, token, token_type
 FROM push_tokens
 WHERE user_id = @user_id
 ORDER BY refreshed_at DESC, session_id DESC

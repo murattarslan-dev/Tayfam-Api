@@ -16,6 +16,12 @@ package tayfam.chat.v1;
 // (UNAUTHENTICATED). A token not refreshed for 60 days is removed; clients
 // register it again on every start and when FCM rotates it.
 //
+// Token types (ADR-0036): newer clients (firebase_messaging 17+,
+// register()/onRegistered) register a Firebase Installation ID (FID) and
+// say so with token_type; older clients send an FCM registration token and
+// leave token_type unset. Chat sends each to FCM in its own field
+// (message.fid or message.token).
+//
 // The token never appears in logs, events, metrics or error messages.
 // Rate limit: 10 registrations a minute per user (bursts of 5;
 // ERROR_REASON_RATE_LIMITED).
@@ -25,7 +31,9 @@ service PushService {
   // session (the device signed in with another account) moves to this one.
   // A user keeps at most 10 tokens; the least recently refreshed go first.
   // token: 1 to 1024 bytes of letters, digits and ":_-." (an FCM
-  // registration token); platform is required.
+  // registration token or a Firebase Installation ID, as token_type says);
+  // platform is required. Changing the type of a session's token replaces
+  // it like any new value.
   rpc RegisterPushToken(RegisterPushTokenRequest) returns (RegisterPushTokenResponse);
 
   // UnregisterPushToken removes the push token of the caller's session (on
@@ -41,9 +49,21 @@ enum PushPlatform {
   PUSH_PLATFORM_IOS = 2;
 }
 
+// PushTokenType is what RegisterPushTokenRequest.token holds (ADR-0036).
+enum PushTokenType {
+  // Unset: an FCM registration token (clients before token types).
+  PUSH_TOKEN_TYPE_UNSPECIFIED = 0;
+  // An FCM registration token (getToken; deprecated by Firebase).
+  PUSH_TOKEN_TYPE_REGISTRATION_TOKEN = 1;
+  // A Firebase Installation ID (register()/onRegistered).
+  PUSH_TOKEN_TYPE_FID = 2;
+}
+
 message RegisterPushTokenRequest {
   string token = 1;
   PushPlatform platform = 2;
+  // Unset means PUSH_TOKEN_TYPE_REGISTRATION_TOKEN.
+  PushTokenType token_type = 3;
 }
 
 message RegisterPushTokenResponse {}

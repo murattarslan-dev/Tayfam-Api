@@ -110,6 +110,47 @@ func TestSendAndroidAndIOS(t *testing.T) {
 	}
 }
 
+// A Firebase Installation ID goes in message.fid, a registration token in
+// message.token; never both (FCM's target is a oneof; ADR-0036).
+func TestSendTargetByTokenType(t *testing.T) {
+	s := fcmtest.New(t)
+	c := client(t, s, nil)
+	for _, tc := range []struct {
+		typ, platform, field, other string
+	}{
+		{push.TokenTypeFID, push.PlatformAndroid, "fid", "token"},
+		{push.TokenTypeFID, push.PlatformIOS, "fid", "token"},
+		{push.TokenTypeRegistration, push.PlatformAndroid, "token", "fid"},
+		{"", push.PlatformIOS, "token", "fid"},
+	} {
+		m := msg(tc.platform, "id:"+tc.typ+tc.platform)
+		m.TokenType = tc.typ
+		if err := c.Send(ctx, m); err != nil {
+			t.Fatalf("%+v: %v", tc, err)
+		}
+		sent := s.Sent()
+		got := sent[len(sent)-1]
+		if got[tc.field] != "id:"+tc.typ+tc.platform {
+			t.Errorf("%+v: %s = %v", tc, tc.field, got[tc.field])
+		}
+		if _, ok := got[tc.other]; ok {
+			t.Errorf("%+v: %s da gönderildi: %v", tc, tc.other, got)
+		}
+	}
+	// The whole Android body of an FID message.
+	m := msg(push.PlatformAndroid, "fidA")
+	m.TokenType = push.TokenTypeFID
+	if err := c.Send(ctx, m); err != nil {
+		t.Fatal(err)
+	}
+	sent := s.Sent()
+	a, _ := json.Marshal(sent[len(sent)-1])
+	want := `{"android":{"notification":{"body_loc_key":"push_dm_message_body","channel_id":"tayfam_messages","tag":"c","title_loc_key":"push_dm_message_title"},"priority":"HIGH","ttl":"3600s"},"data":{"target_id":"c","type":"dm_message"},"fid":"fidA"}`
+	if string(a) != want {
+		t.Fatalf("android fid:\n%s\nbeklenen:\n%s", a, want)
+	}
+}
+
 func TestAccessTokenIsCachedAndRenewed(t *testing.T) {
 	s := fcmtest.New(t)
 	now := time.Now().UTC()
@@ -150,6 +191,7 @@ func TestErrorsAreClassified(t *testing.T) {
 	}{
 		"kayıtsız":         {fcmtest.Unregistered, push.InvalidToken, "UNREGISTERED", 0},
 		"geçersiz token":   {fcmtest.BadToken, push.InvalidToken, "INVALID_ARGUMENT", 0},
+		"geçersiz FID":     {fcmtest.BadFID, push.InvalidToken, "INVALID_ARGUMENT", 0},
 		"bozuk içerik":     {fcmtest.BadPayload, push.Rejected, "INVALID_ARGUMENT", 0},
 		"başka gönderen":   {fcmtest.Mismatch, push.InvalidToken, "SENDER_ID_MISMATCH", 0},
 		"geçici":           {fcmtest.Unavailable, push.Transient, "UNAVAILABLE", 2 * time.Minute},

@@ -266,7 +266,8 @@ type Querier interface {
 	ListUnseenDevices(ctx context.Context, arg ListUnseenDevicesParams) ([]ListUnseenDevicesRow, error)
 	// Kullanıcının cihazları, numaraya göre.
 	ListUserDevices(ctx context.Context, userID pgtype.UUID) ([]ListUserDevicesRow, error)
-	// Gönderim için kullanıcının token'ları, en son yenilenen önce.
+	// Gönderim için kullanıcının token'ları, en son yenilenen önce. Tür,
+	// FCM'deki hedef alanını seçer (message.token ya da message.fid).
 	ListUserPushTokens(ctx context.Context, arg ListUserPushTokensParams) ([]ListUserPushTokensRow, error)
 	// Aynı iki kişinin eşzamanlı gönderimleri sırayla işlenir.
 	LockConversationByPair(ctx context.Context, arg LockConversationByPairParams) (LockConversationByPairRow, error)
@@ -354,8 +355,8 @@ type Querier interface {
 	UpdateKyberLastResortPreKey(ctx context.Context, arg UpdateKyberLastResortPreKeyParams) error
 	UpdateSignedPreKey(ctx context.Context, arg UpdateSignedPreKeyParams) error
 	UpsertNotificationPreference(ctx context.Context, arg UpsertNotificationPreferenceParams) error
-	// Oturumun token'ı (oturum başına bir). Oturum başka kullanıcıya ait
-	// olamaz; olursa satır değişmez.
+	// Oturumun token'ı (oturum başına bir) ve türü (registration_token | fid;
+	// ADR-0036). Oturum başka kullanıcıya ait olamaz; olursa satır değişmez.
 	UpsertPushToken(ctx context.Context, arg UpsertPushTokenParams) (int64, error)
 	// Profil kopyası (ADR-0009). Yalnızca identity'nin kullanıcı olaylarını
 	// uygulayan tüketici yazar.

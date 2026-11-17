@@ -160,21 +160,27 @@ func TestRegister(t *testing.T) {
 		"uzun token": {"ios", strings.Repeat("a", push.MaxTokenBytes+1), "token"},
 	} {
 		var v *apperr.ValidationError
-		if err := e.svc.Register(ctx, c, tc.platform, tc.token); !errors.As(err, &v) || v.Field != tc.field {
+		if err := e.svc.Register(ctx, c, tc.platform, tc.token, push.TokenTypeRegistration); !errors.As(err, &v) || v.Field != tc.field {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	must(t, e.svc.Register(ctx, c, push.PlatformAndroid, "tok:a"))
-	must(t, e.svc.Register(ctx, c, push.PlatformIOS, "tok:b"))
+	for _, typ := range []string{"", "apns", "FID"} {
+		var v *apperr.ValidationError
+		if err := e.svc.Register(ctx, c, push.PlatformAndroid, "tok:a", typ); !errors.As(err, &v) || v.Field != "token_type" {
+			t.Errorf("tür %q: %v", typ, err)
+		}
+	}
+	must(t, e.svc.Register(ctx, c, push.PlatformAndroid, "tok:a", push.TokenTypeRegistration))
+	must(t, e.svc.Register(ctx, c, push.PlatformIOS, "tok:b", push.TokenTypeRegistration))
 	if got := e.tokens(t, u); len(got) != 1 || got[0].Token != "tok:b" || got[0].Platform != push.PlatformIOS {
 		t.Fatalf("token'lar = %+v", got)
 	}
 	// Another user's session (a stolen sid cannot be reused across users).
-	if err := e.svc.Register(ctx, push.Caller{User: id.New(), Session: c.Session, IssuedAt: c.IssuedAt}, "android", "tok:c"); !errors.Is(err, apperr.ErrSessionEnded) {
+	if err := e.svc.Register(ctx, push.Caller{User: id.New(), Session: c.Session, IssuedAt: c.IssuedAt}, "android", "tok:c", push.TokenTypeRegistration); !errors.Is(err, apperr.ErrSessionEnded) {
 		t.Fatalf("başkasının oturumu: %v", err)
 	}
 	e.limit.deny = true
-	if err := e.svc.Register(ctx, c, push.PlatformAndroid, "tok:a"); !errors.Is(err, apperr.ErrRateLimited) {
+	if err := e.svc.Register(ctx, c, push.PlatformAndroid, "tok:a", push.TokenTypeRegistration); !errors.Is(err, apperr.ErrRateLimited) {
 		t.Fatalf("hız sınırı: %v", err)
 	}
 	e.limit.deny = false
@@ -185,7 +191,7 @@ func TestRegister(t *testing.T) {
 	}
 	// At most ten per user.
 	for range push.MaxTokensPerUser + 2 {
-		must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:"+id.New().String()))
+		must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:"+id.New().String(), push.TokenTypeRegistration))
 	}
 	if got := e.tokens(t, u); len(got) != push.MaxTokensPerUser {
 		t.Fatalf("sınır: %d", len(got))
@@ -199,15 +205,15 @@ func TestEndedSessions(t *testing.T) {
 	e := setup(t, false)
 	u := id.New()
 	c1, c2 := caller(u), caller(u)
-	must(t, e.svc.Register(ctx, c1, push.PlatformAndroid, "tok:1"))
-	must(t, e.svc.Register(ctx, c2, push.PlatformAndroid, "tok:2"))
+	must(t, e.svc.Register(ctx, c1, push.PlatformAndroid, "tok:1", push.TokenTypeRegistration))
+	must(t, e.svc.Register(ctx, c2, push.PlatformAndroid, "tok:2", push.TokenTypeRegistration))
 
 	must(t, e.svc.SessionEnded(ctx, c1.Session))
 	must(t, e.svc.SessionEnded(ctx, c1.Session)) // repeated event
 	if got := e.tokens(t, u); len(got) != 1 || got[0].Token != "tok:2" {
 		t.Fatalf("oturum bitti: %+v", got)
 	}
-	if err := e.svc.Register(ctx, c1, push.PlatformAndroid, "tok:1"); !errors.Is(err, apperr.ErrSessionEnded) {
+	if err := e.svc.Register(ctx, c1, push.PlatformAndroid, "tok:1", push.TokenTypeRegistration); !errors.Is(err, apperr.ErrSessionEnded) {
 		t.Fatalf("biten oturum kaydetti: %v", err)
 	}
 
@@ -215,12 +221,12 @@ func TestEndedSessions(t *testing.T) {
 	if got := e.tokens(t, u); len(got) != 0 {
 		t.Fatalf("yaptırım: %+v", got)
 	}
-	if err := e.svc.Register(ctx, c2, push.PlatformAndroid, "tok:2"); !errors.Is(err, apperr.ErrSessionEnded) {
+	if err := e.svc.Register(ctx, c2, push.PlatformAndroid, "tok:2", push.TokenTypeRegistration); !errors.Is(err, apperr.ErrSessionEnded) {
 		t.Fatalf("yaptırımdan önceki token kaydetti: %v", err)
 	}
 	// A token issued after the sanction (the user signed in again) may.
 	later := push.Caller{User: u, Session: id.New(), IssuedAt: e.now.Add(time.Second)}
-	must(t, e.svc.Register(ctx, later, push.PlatformAndroid, "tok:3"))
+	must(t, e.svc.Register(ctx, later, push.PlatformAndroid, "tok:3", push.TokenTypeRegistration))
 
 	must(t, pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error { return push.Cleanup(ctx, store.New(tx), u) }))
 	if got := e.tokens(t, u); len(got) != 0 {
@@ -233,8 +239,8 @@ func TestEndedSessions(t *testing.T) {
 func TestPushOnlyWhenNotConnected(t *testing.T) {
 	e := setup(t, true)
 	on, off := id.New(), id.New()
-	must(t, e.svc.Register(ctx, caller(on), push.PlatformAndroid, "tok:on"))
-	must(t, e.svc.Register(ctx, caller(off), push.PlatformIOS, "tok:off"))
+	must(t, e.svc.Register(ctx, caller(on), push.PlatformAndroid, "tok:on", push.TokenTypeRegistration))
+	must(t, e.svc.Register(ctx, caller(off), push.PlatformIOS, "tok:off", push.TokenTypeRegistration))
 	e.pres.online[on] = true
 	e.announce(t, on, off)
 	e.drain(t)
@@ -289,7 +295,7 @@ func TestPreferences(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			e := setup(t, true)
 			u := id.New()
-			must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:u"))
+			must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:u", push.TokenTypeRegistration))
 			r := notification.Request{Type: tc.typ, Tayfa: e.tayfa, Target: id.New(), Recipients: []id.ID{u}}
 			scopeType, scopeID := "tayfa", e.tayfa
 			switch tc.typ {
@@ -334,8 +340,8 @@ func TestPreferences(t *testing.T) {
 func TestDirectMessagePushHasNoContent(t *testing.T) {
 	e := setup(t, true)
 	u, conv := id.New(), id.New()
-	must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:a"))
-	must(t, e.svc.Register(ctx, caller(u), push.PlatformIOS, "tok:i"))
+	must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:a", push.TokenTypeRegistration))
+	must(t, e.svc.Register(ctx, caller(u), push.PlatformIOS, "tok:i", push.TokenTypeRegistration))
 	e.notify(t, notification.Request{Type: notification.TypeDMRequest, TargetType: notification.TargetDMConversation, Target: conv, Recipients: []id.ID{u}, Unread: 3})
 	e.drain(t)
 	sent := e.fcm.Sent()
@@ -368,7 +374,7 @@ func TestDirectMessagePushHasNoContent(t *testing.T) {
 func TestPushCarriesIDs(t *testing.T) {
 	e := setup(t, true)
 	u, hiker, ev := id.New(), id.New(), id.New()
-	must(t, e.svc.Register(ctx, caller(u), push.PlatformIOS, "tok:i"))
+	must(t, e.svc.Register(ctx, caller(u), push.PlatformIOS, "tok:i", push.TokenTypeRegistration))
 	e.notify(t, notification.Request{Type: notification.TypeHikeOverdue, Tayfa: e.tayfa, TargetType: notification.TargetEvent, Target: ev, Subject: hiker, Recipients: []id.ID{u}})
 	e.drain(t)
 	sent := e.fcm.Sent()
@@ -393,8 +399,8 @@ func TestInvalidTokenIsRemoved(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			e := setup(t, true)
 			u := id.New()
-			must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:gone"))
-			must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:ok"))
+			must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:gone", push.TokenTypeRegistration))
+			must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:ok", push.TokenTypeRegistration))
 			e.fcm.Answer("tok:gone", r)
 			e.announce(t, u)
 			e.drain(t)
@@ -409,7 +415,7 @@ func TestInvalidTokenIsRemoved(t *testing.T) {
 	// A broken payload is not the token's fault.
 	e := setup(t, true)
 	u := id.New()
-	must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:a"))
+	must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:a", push.TokenTypeRegistration))
 	e.fcm.Answer("tok:a", fcmtest.BadPayload)
 	e.announce(t, u)
 	e.drain(t)
@@ -423,8 +429,8 @@ func TestInvalidTokenIsRemoved(t *testing.T) {
 func TestTransientFailureIsRetried(t *testing.T) {
 	e := setup(t, true)
 	u := id.New()
-	must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:flaky"))
-	must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:ok"))
+	must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:flaky", push.TokenTypeRegistration))
+	must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:ok", push.TokenTypeRegistration))
 	e.fcm.Answer("tok:flaky", fcmtest.Unavailable, fcmtest.Unavailable)
 	e.announce(t, u)
 	e.drain(t)
@@ -486,7 +492,7 @@ func TestDisabled(t *testing.T) {
 		t.Fatal("yapılandırmasız push açık")
 	}
 	u := id.New()
-	must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:a"))
+	must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:a", push.TokenTypeRegistration))
 	e.announce(t, u)
 	if n, err := e.svc.Drain(ctx); err != nil || n != 0 {
 		t.Fatalf("kapalıyken gönderim: %d %v", n, err)
@@ -512,7 +518,7 @@ func TestDisabled(t *testing.T) {
 func TestReadNotificationIsNotPushed(t *testing.T) {
 	e := setup(t, true)
 	u := id.New()
-	must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:a"))
+	must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:a", push.TokenTypeRegistration))
 	e.announce(t, u)
 	_, err := e.pool.Exec(ctx, `UPDATE notifications SET read_at = now() WHERE user_id = $1`, u.PG())
 	must(t, err)
@@ -529,7 +535,7 @@ func TestNothingSecretIsLogged(t *testing.T) {
 	u := id.New()
 	toks := []string{"tok:SECRETa", "tok:SECRETb", "tok:SECRETc", "tok:SECRETd", "tok:SECRETe"}
 	for _, tok := range toks {
-		must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, tok))
+		must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, tok, push.TokenTypeRegistration))
 	}
 	e.fcm.Answer(toks[0], fcmtest.Unregistered)
 	e.fcm.Answer(toks[1], fcmtest.BadPayload)
@@ -576,8 +582,8 @@ func TestDirectConversationMute(t *testing.T) {
 		Conversations: partyOf{{muted, u}: true, {open, u}: true, {muted, peer}: true},
 	})
 	must(t, err)
-	must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:u"))
-	must(t, e.svc.Register(ctx, caller(peer), push.PlatformAndroid, "tok:peer"))
+	must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:u", push.TokenTypeRegistration))
+	must(t, e.svc.Register(ctx, caller(peer), push.PlatformAndroid, "tok:peer", push.TokenTypeRegistration))
 	_, err = prefs.SetConversationPreference(ctx, u, muted, notification.LevelNone, time.Time{})
 	must(t, err)
 
@@ -642,5 +648,98 @@ func TestDirectConversationMute(t *testing.T) {
 	// Nothing personal in the logs: no conversation ID, no token.
 	if l := e.log.String(); strings.Contains(l, muted.String()) || strings.Contains(l, "tok:") {
 		t.Fatalf("log kişisel veri taşıyor: %s", l)
+	}
+}
+
+// Both token types are accepted and sent in their own FCM field; a
+// session moving from a registration token to an FID (the client upgraded
+// to firebase_messaging 17) replaces its row (ADR-0036).
+func TestTokenTypes(t *testing.T) {
+	e := setup(t, true)
+	u := id.New()
+	old, upgraded := caller(u), caller(u)
+	must(t, e.svc.Register(ctx, old, push.PlatformAndroid, "tok:legacy", push.TokenTypeRegistration))
+	must(t, e.svc.Register(ctx, upgraded, push.PlatformIOS, "tok:before", push.TokenTypeRegistration))
+	must(t, e.svc.Register(ctx, upgraded, push.PlatformIOS, "fidUpgraded", push.TokenTypeFID))
+	types := map[string]string{}
+	for _, r := range e.tokens(t, u) {
+		types[r.Token] = r.TokenType
+	}
+	if len(types) != 2 || types["tok:legacy"] != push.TokenTypeRegistration || types["fidUpgraded"] != push.TokenTypeFID {
+		t.Fatalf("token'lar = %v", types)
+	}
+	e.announce(t, u)
+	e.drain(t)
+	sent := e.fcm.Sent()
+	if len(sent) != 2 {
+		t.Fatalf("gönderilen = %d", len(sent))
+	}
+	for _, m := range sent {
+		tok, hasTok := m["token"]
+		fid, hasFID := m["fid"]
+		switch {
+		case hasTok && !hasFID && tok == "tok:legacy" && m["android"] != nil:
+		case hasFID && !hasTok && fid == "fidUpgraded" && m["apns"] != nil:
+		default:
+			t.Fatalf("hedef yanlış: %v", m)
+		}
+	}
+	// Neither value reaches the log.
+	if l := e.log.String(); strings.Contains(l, "tok:legacy") || strings.Contains(l, "fidUpgraded") {
+		t.Fatalf("log kimlik içeriyor: %s", l)
+	}
+	// Back to a registration token (a client downgrade) works the same way.
+	must(t, e.svc.Register(ctx, upgraded, push.PlatformIOS, "tok:again", push.TokenTypeRegistration))
+	for _, r := range e.tokens(t, u) {
+		if r.Token == "tok:again" && r.TokenType != push.TokenTypeRegistration {
+			t.Fatalf("tür = %s", r.TokenType)
+		}
+	}
+}
+
+// FCM says an FID is gone or invalid: it is removed like a token.
+func TestInvalidFIDIsRemoved(t *testing.T) {
+	for name, r := range map[string]fcmtest.Response{
+		"UNREGISTERED": fcmtest.Unregistered, "INVALID_ARGUMENT fid": fcmtest.BadFID,
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := setup(t, true)
+			u := id.New()
+			must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "fidGone", push.TokenTypeFID))
+			must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "fidOk", push.TokenTypeFID))
+			e.fcm.Answer("fidGone", r)
+			e.announce(t, u)
+			e.drain(t)
+			if got := e.tokens(t, u); len(got) != 1 || got[0].Token != "fidOk" {
+				t.Fatalf("token'lar = %+v", got)
+			}
+			if n := e.queued(t); n != 0 {
+				t.Fatalf("iş kaldı: %d", n)
+			}
+		})
+	}
+}
+
+// Sign-out, an ended session and account deletion remove an FID like a
+// token.
+func TestFIDRemovedWithSession(t *testing.T) {
+	e := setup(t, false)
+	u := id.New()
+	c := caller(u)
+	must(t, e.svc.Register(ctx, c, push.PlatformAndroid, "fidOut", push.TokenTypeFID))
+	must(t, e.svc.Unregister(ctx, c))
+	if got := e.tokens(t, u); len(got) != 0 {
+		t.Fatalf("çıkışta kaldı: %+v", got)
+	}
+	ended := caller(u)
+	must(t, e.svc.Register(ctx, ended, push.PlatformAndroid, "fidEnded", push.TokenTypeFID))
+	must(t, e.svc.SessionEnded(ctx, ended.Session))
+	if got := e.tokens(t, u); len(got) != 0 {
+		t.Fatalf("oturum bitince kaldı: %+v", got)
+	}
+	must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "fidDel", push.TokenTypeFID))
+	must(t, push.Cleanup(ctx, store.New(e.pool), u))
+	if got := e.tokens(t, u); len(got) != 0 {
+		t.Fatalf("hesap silmede kaldı: %+v", got)
 	}
 }

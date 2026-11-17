@@ -3383,7 +3383,8 @@ paths:
       operationId: putPushToken
       summary: Bu oturumun push (FCM) token'ını kaydeder ya da yeniler
       description: |
-        Uygulama her açılışta ve FCM token'ı yenilediğinde çağırır; 60 gün
+        Uygulama her açılışta ve FCM kimliği değiştiğinde (`onRegistered`;
+        eski istemcide `onTokenRefresh`) çağırır; 60 gün
         yenilenmeyen token silinir. Oturum başına bir token: yeni değer
         eskisinin yerine geçer. Aynı token başka bir oturumda kayıtlıysa
         (cihazda başka hesapla giriş) oraya bağlı kayıt silinir. Hesap
@@ -7979,8 +7980,21 @@ components:
           minLength: 1
           maxLength: 1024
           pattern: "^[A-Za-z0-9:_.-]+$"
-          description: FCM kayıt token'ı. Log'a yazılmaz.
+          description: |
+            `token_type`'a göre FCM kayıt token'ı (`getToken`) ya da Firebase
+            Installation ID (FID; firebase_messaging 17+ `register()` /
+            `onRegistered`). Log'a yazılmaz.
         platform: { type: string, enum: [android, ios] }
+        token_type:
+          type: string
+          enum: [registration_token, fid]
+          default: registration_token
+          description: |
+            `token`'ın türü (ADR-0036). Gönderilmezse `registration_token`
+            sayılır (eski istemciler). firebase_messaging 17+ istemcileri
+            `onRegistered`'ın verdiği FID'i `fid` ile kaydeder. Oturumun
+            kaydı türüyle birlikte yenilenir: aynı oturumda token'dan FID'e
+            geçmek için yeniden `PUT` yeterlidir.
     E2EDeviceRegistration:
       type: object
       required: [registration_id, identity_key, signed_prekey, kyber_last_resort_prekey]

@@ -17,6 +17,14 @@
   aktörsüz); çeviri anahtarları `push_data_export_ready_title` /
   `push_data_export_ready_body`, kanal `tayfam_general`; kişisel olduğu
   için `mentions` seviyesinde de geçer (madde 3 listesine eklendi).
+- **Revizyon:** 2026-11-17 (platform sahibi, sohbette; issue #230,
+  [ADR-0036](0036-push-firebase-installation-id.md)): push kimliği bir FCM
+  kayıt token'ı ya da bir Firebase Installation ID (FID) olabilir; tür
+  kayıtta `token_type` ile belirtilir (yoksa kayıt token'ı) ve
+  `push_tokens.token_type`'ta tutulur. Gönderimde FID `message.fid`, kayıt
+  token'ı `message.token` ile gider; alan ihlali `message.fid` olan
+  `INVALID_ARGUMENT` da kimliği siler (madde 5). Bu ADR'deki "push
+  token'ı" ikisini de kapsar.
 - **Karar veren:** Murat Arslan
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0005](0005-gercek-zamanli-iletisim-ve-chat.md) (bu ADR "Bildirimler" bölümünü uygular), [ADR-0006](0006-dagitim-ve-ortamlar.md), [ADR-0009](0009-veri-modelinin-servislere-dagilimi.md) (`push_tokens`), [ADR-0011](0011-guvenlik-ilkesi-ihlal-varsayimi.md), [ADR-0015](0015-veritabani-rolleri.md), [ADR-0018](0018-birebir-mesaj-e2e-sunucu-tarafi.md) (cihaz = oturum); issue #134
 - **Kaynak:** Notion: Veri Modeli (taslak v14) "Bildirimler", "Senaryo Kuralları → Bildirimler"

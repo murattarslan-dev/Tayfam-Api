@@ -29,12 +29,13 @@ type fakePush struct {
 	caller   push.Caller
 	platform string
 	token    string
+	typ      string
 	removed  bool
 	err      error
 }
 
-func (f *fakePush) Register(_ context.Context, c push.Caller, platform, token string) error {
-	f.caller, f.platform, f.token = c, platform, token
+func (f *fakePush) Register(_ context.Context, c push.Caller, platform, token, tokenType string) error {
+	f.caller, f.platform, f.token, f.typ = c, platform, token, tokenType
 	return f.err
 }
 
@@ -85,8 +86,21 @@ func TestPushServer(t *testing.T) {
 	if _, err := c.RegisterPushToken(ctx, &chatv1.RegisterPushTokenRequest{Token: "tok:SECRET", Platform: chatv1.PushPlatform_PUSH_PLATFORM_IOS}); err != nil {
 		t.Fatal(err)
 	}
-	if f.caller.User != user || f.caller.Session != session || f.caller.IssuedAt.IsZero() || f.platform != push.PlatformIOS || f.token != "tok:SECRET" {
+	if f.caller.User != user || f.caller.Session != session || f.caller.IssuedAt.IsZero() || f.platform != push.PlatformIOS || f.token != "tok:SECRET" ||
+		f.typ != push.TokenTypeRegistration {
 		t.Fatalf("iletilen = %+v", f)
+	}
+	// Token types (ADR-0036): unset is a registration token.
+	for in, want := range map[chatv1.PushTokenType]string{
+		chatv1.PushTokenType_PUSH_TOKEN_TYPE_REGISTRATION_TOKEN: push.TokenTypeRegistration,
+		chatv1.PushTokenType_PUSH_TOKEN_TYPE_FID:                push.TokenTypeFID,
+	} {
+		if _, err := c.RegisterPushToken(ctx, &chatv1.RegisterPushTokenRequest{Token: "fid:SECRET", Platform: chatv1.PushPlatform_PUSH_PLATFORM_ANDROID, TokenType: in}); err != nil || f.typ != want {
+			t.Fatalf("%v: %v %+v", in, err, f)
+		}
+	}
+	if _, err := c.RegisterPushToken(ctx, &chatv1.RegisterPushTokenRequest{Token: "tok:SECRET", Platform: chatv1.PushPlatform_PUSH_PLATFORM_ANDROID, TokenType: 99}); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("bilinmeyen tür: %v", err)
 	}
 	if _, err := c.RegisterPushToken(ctx, &chatv1.RegisterPushTokenRequest{Token: "tok:SECRET"}); status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("platformsuz: %v", err)

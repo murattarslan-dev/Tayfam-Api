@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	chatdb "github.com/murattarslan-dev/tayfam-api/db/chat"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
@@ -23,7 +25,7 @@ func putToken(t *testing.T, q *Queries, user, session id.ID, token string, at ti
 		t.Fatal(err)
 	}
 	n, err := q.UpsertPushToken(ctx, UpsertPushTokenParams{
-		SessionID: session.PG(), UserID: user.PG(), Platform: "android", Token: token, Now: tsAt(at),
+		SessionID: session.PG(), UserID: user.PG(), Platform: "android", Token: token, TokenType: "registration_token", Now: tsAt(at),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -313,5 +315,38 @@ func TestLockPushKey(t *testing.T) {
 	}
 	if got {
 		t.Fatal("kilit alınmamış")
+	}
+}
+
+// 00019 (ADR-0036): rows written before token types are registration
+// tokens; only the two known types are stored; a session's refresh writes
+// its type.
+func TestPushTokenType(t *testing.T) {
+	d := dbtest.Open(t, "chat", chatdb.Migrations())
+	q := New(d.App)
+	ctx := context.Background()
+	u, s1, s2 := id.New(), id.New(), id.New()
+	now := time.Now().UTC()
+
+	// A row as 00011 wrote it: no token_type.
+	if _, err := d.Admin.Exec(ctx, `INSERT INTO push_tokens (session_id, user_id, platform, token) VALUES ($1, $2, 'ios', 'tok:old')`, s1.PG(), u.PG()); err != nil {
+		t.Fatal(err)
+	}
+	if got := tokensOf(t, q, u); len(got) != 1 || got[0].TokenType != "registration_token" {
+		t.Fatalf("eski satır = %+v", got)
+	}
+	// The same session moves to a Firebase Installation ID.
+	if n, err := q.UpsertPushToken(ctx, UpsertPushTokenParams{
+		SessionID: s1.PG(), UserID: u.PG(), Platform: "ios", Token: "fid1", TokenType: "fid", Now: tsAt(now),
+	}); err != nil || n != 1 {
+		t.Fatalf("fid: %d %v", n, err)
+	}
+	if got := tokensOf(t, q, u); len(got) != 1 || got[0].Token != "fid1" || got[0].TokenType != "fid" {
+		t.Fatalf("fid satırı = %+v", got)
+	}
+	if _, err := q.UpsertPushToken(ctx, UpsertPushTokenParams{
+		SessionID: s2.PG(), UserID: u.PG(), Platform: "ios", Token: "x", TokenType: "apns", Now: tsAt(now),
+	}); err == nil || !strings.Contains(err.Error(), "push_tokens_token_type") {
+		t.Fatalf("bilinmeyen tür kabul edildi: %v", err)
 	}
 }

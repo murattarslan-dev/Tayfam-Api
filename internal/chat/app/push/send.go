@@ -164,7 +164,7 @@ func (s *Service) process(ctx context.Context, j store.ClaimPushJobsRow) (Outcom
 			continue
 		}
 		m := base
-		m.Token, m.Platform = t.Token, t.Platform
+		m.Token, m.TokenType, m.Platform = t.Token, t.TokenType, t.Platform
 		sctx, cancel := context.WithTimeout(ctx, sendTimeout)
 		err := s.cfg.Sender.Send(sctx, m)
 		cancel()

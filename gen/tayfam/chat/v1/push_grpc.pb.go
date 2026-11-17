@@ -41,6 +41,12 @@ const (
 // (UNAUTHENTICATED). A token not refreshed for 60 days is removed; clients
 // register it again on every start and when FCM rotates it.
 //
+// Token types (ADR-0036): newer clients (firebase_messaging 17+,
+// register()/onRegistered) register a Firebase Installation ID (FID) and
+// say so with token_type; older clients send an FCM registration token and
+// leave token_type unset. Chat sends each to FCM in its own field
+// (message.fid or message.token).
+//
 // The token never appears in logs, events, metrics or error messages.
 // Rate limit: 10 registrations a minute per user (bursts of 5;
 // ERROR_REASON_RATE_LIMITED).
@@ -50,7 +56,9 @@ type PushServiceClient interface {
 	// session (the device signed in with another account) moves to this one.
 	// A user keeps at most 10 tokens; the least recently refreshed go first.
 	// token: 1 to 1024 bytes of letters, digits and ":_-." (an FCM
-	// registration token); platform is required.
+	// registration token or a Firebase Installation ID, as token_type says);
+	// platform is required. Changing the type of a session's token replaces
+	// it like any new value.
 	RegisterPushToken(ctx context.Context, in *RegisterPushTokenRequest, opts ...grpc.CallOption) (*RegisterPushTokenResponse, error)
 	// UnregisterPushToken removes the push token of the caller's session (on
 	// sign-out, or when the user turns notifications off on the device).
@@ -104,6 +112,12 @@ func (c *pushServiceClient) UnregisterPushToken(ctx context.Context, in *Unregis
 // (UNAUTHENTICATED). A token not refreshed for 60 days is removed; clients
 // register it again on every start and when FCM rotates it.
 //
+// Token types (ADR-0036): newer clients (firebase_messaging 17+,
+// register()/onRegistered) register a Firebase Installation ID (FID) and
+// say so with token_type; older clients send an FCM registration token and
+// leave token_type unset. Chat sends each to FCM in its own field
+// (message.fid or message.token).
+//
 // The token never appears in logs, events, metrics or error messages.
 // Rate limit: 10 registrations a minute per user (bursts of 5;
 // ERROR_REASON_RATE_LIMITED).
@@ -113,7 +127,9 @@ type PushServiceServer interface {
 	// session (the device signed in with another account) moves to this one.
 	// A user keeps at most 10 tokens; the least recently refreshed go first.
 	// token: 1 to 1024 bytes of letters, digits and ":_-." (an FCM
-	// registration token); platform is required.
+	// registration token or a Firebase Installation ID, as token_type says);
+	// platform is required. Changing the type of a session's token replaces
+	// it like any new value.
 	RegisterPushToken(context.Context, *RegisterPushTokenRequest) (*RegisterPushTokenResponse, error)
 	// UnregisterPushToken removes the push token of the caller's session (on
 	// sign-out, or when the user turns notifications off on the device).
