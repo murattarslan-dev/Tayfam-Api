@@ -10,7 +10,7 @@ import (
 
 // Push is what PushServer needs from the app layer (push.Service).
 type Push interface {
-	Register(ctx context.Context, c push.Caller, platform, token string) error
+	Register(ctx context.Context, c push.Caller, platform, token, tokenType string) error
 	Unregister(ctx context.Context, c push.Caller) error
 }
 
@@ -33,6 +33,14 @@ var pushPlatforms = map[chatv1.PushPlatform]string{
 	chatv1.PushPlatform_PUSH_PLATFORM_IOS:     push.PlatformIOS,
 }
 
+// pushTokenTypes: unset is a registration token (clients before token
+// types; ADR-0036).
+var pushTokenTypes = map[chatv1.PushTokenType]string{
+	chatv1.PushTokenType_PUSH_TOKEN_TYPE_UNSPECIFIED:        push.TokenTypeRegistration,
+	chatv1.PushTokenType_PUSH_TOKEN_TYPE_REGISTRATION_TOKEN: push.TokenTypeRegistration,
+	chatv1.PushTokenType_PUSH_TOKEN_TYPE_FID:                push.TokenTypeFID,
+}
+
 func pushCaller(ctx context.Context) (push.Caller, error) {
 	c, err := callerSession(ctx)
 	if err != nil {
@@ -51,7 +59,11 @@ func (s *PushServer) RegisterPushToken(ctx context.Context, req *chatv1.Register
 	if !ok {
 		return nil, validation("platform")
 	}
-	if err := s.app.Register(ctx, c, platform, req.GetToken()); err != nil {
+	tokenType, ok := pushTokenTypes[req.GetTokenType()]
+	if !ok {
+		return nil, validation("token_type")
+	}
+	if err := s.app.Register(ctx, c, platform, req.GetToken(), tokenType); err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}
 	return &chatv1.RegisterPushTokenResponse{}, nil

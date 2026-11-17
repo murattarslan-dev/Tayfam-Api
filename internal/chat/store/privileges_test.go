@@ -36,9 +36,9 @@ var wantAppPrivileges = map[string]string{
 	"dm_archive_entries":      "DELETE,INSERT,SELECT",
 	"device_link_requests":    "DELETE,INSERT,SELECT,UPDATE(answer,answered_at,answered_by_device_id,history_key_version)",
 	"history_key_shares":      "DELETE,INSERT,SELECT",
-	// Push (00011, ADR-0019): a token stays with its session and user; a
-	// queued push stays with its notification.
-	"push_tokens": "DELETE,INSERT,SELECT,UPDATE(platform,refreshed_at,token)",
+	// Push (00011, ADR-0019; token_type 00019, ADR-0036): a token stays
+	// with its session and user; a queued push stays with its notification.
+	"push_tokens": "DELETE,INSERT,SELECT,UPDATE(platform,refreshed_at,token,token_type)",
 	"push_queue":  "DELETE,INSERT,SELECT,UPDATE(attempts,next_attempt_at,session_ids)",
 }
 

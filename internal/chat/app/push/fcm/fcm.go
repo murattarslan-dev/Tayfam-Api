@@ -218,7 +218,7 @@ func classify(status int, raw []byte) *push.SendError {
 			code = d.ErrorCode
 		}
 		for _, v := range d.FieldViolations {
-			if v.Field == "message.token" {
+			if v.Field == "message.token" || v.Field == "message.fid" {
 				tokenField = true
 			}
 		}
@@ -351,8 +351,12 @@ type request struct {
 	Message wireMessage `json:"message"`
 }
 
+// wireMessage carries exactly one target: token (an FCM registration
+// token) or fid (a Firebase Installation ID; ADR-0036). FCM's target field
+// is a oneof.
 type wireMessage struct {
-	Token   string            `json:"token"`
+	Token   string            `json:"token,omitempty"`
+	FID     string            `json:"fid,omitempty"`
 	Data    map[string]string `json:"data,omitempty"`
 	Android *android          `json:"android,omitempty"`
 	APNS    *apns             `json:"apns,omitempty"`
@@ -394,7 +398,12 @@ type apsAlert struct {
 
 // message is the wire form of m; only m's platform gets its block.
 func message(m push.Message, now time.Time) wireMessage {
-	w := wireMessage{Token: m.Token, Data: m.Data}
+	w := wireMessage{Data: m.Data}
+	if m.TokenType == push.TokenTypeFID {
+		w.FID = m.Token
+	} else {
+		w.Token = m.Token
+	}
 	ttl := m.TTL
 	if ttl <= 0 {
 		ttl = push.TTL

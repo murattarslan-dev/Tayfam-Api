@@ -214,6 +214,7 @@ type PushToken struct {
 	Token       string
 	CreatedAt   pgtype.Timestamptz
 	RefreshedAt pgtype.Timestamptz
+	TokenType   string
 }
 
 type UserE2eState struct {

@@ -95,7 +95,8 @@ type roundTrip func(*http.Request) (*http.Response, error)
 
 func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
-// Answer queues answers for a push token; once used up, sends succeed.
+// Answer queues answers for a push target (a registration token or an FID);
+// once used up, sends succeed.
 func (s *Server) Answer(token string, rs ...Response) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -202,6 +203,16 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 	}
 	msg, _ := body["message"].(map[string]any)
 	token, _ := msg["token"].(string)
+	fid, _ := msg["fid"].(string)
+	// The target is a oneof (token, fid, topic, condition): exactly one.
+	if (token == "") == (fid == "") {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"error":{"code":400,"status":"INVALID_ARGUMENT"}}`)
+		return
+	}
+	if fid != "" {
+		token = fid
+	}
 	s.mu.Lock()
 	s.sent = append(s.sent, msg)
 	var a *Response
@@ -224,9 +235,11 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 var (
 	Unregistered = Response{Status: 404, Body: `{"error":{"code":404,"message":"Requested entity was not found.","status":"NOT_FOUND","details":[{"@type":"type.googleapis.com/google.firebase.fcm.v1.FcmError","errorCode":"UNREGISTERED"}]}}`}
 	BadToken     = Response{Status: 400, Body: `{"error":{"code":400,"message":"The registration token is not a valid FCM registration token","status":"INVALID_ARGUMENT","details":[{"@type":"type.googleapis.com/google.firebase.fcm.v1.FcmError","errorCode":"INVALID_ARGUMENT"},{"@type":"type.googleapis.com/google.rpc.BadRequest","fieldViolations":[{"field":"message.token","description":"Invalid registration token"}]}]}}`}
-	BadPayload   = Response{Status: 400, Body: `{"error":{"code":400,"message":"Invalid value","status":"INVALID_ARGUMENT","details":[{"@type":"type.googleapis.com/google.firebase.fcm.v1.FcmError","errorCode":"INVALID_ARGUMENT"},{"@type":"type.googleapis.com/google.rpc.BadRequest","fieldViolations":[{"field":"message.android.ttl"}]}]}}`}
-	Mismatch     = Response{Status: 403, Body: `{"error":{"code":403,"status":"PERMISSION_DENIED","details":[{"@type":"type.googleapis.com/google.firebase.fcm.v1.FcmError","errorCode":"SENDER_ID_MISMATCH"}]}}`}
-	Unavailable  = Response{Status: 503, Body: `{"error":{"code":503,"status":"UNAVAILABLE","details":[{"@type":"type.googleapis.com/google.firebase.fcm.v1.FcmError","errorCode":"UNAVAILABLE"}]}}`, RetryAfter: "120"}
-	Quota        = Response{Status: 429, Body: `{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","details":[{"@type":"type.googleapis.com/google.firebase.fcm.v1.FcmError","errorCode":"QUOTA_EXCEEDED"}]}}`}
-	APNsAuth     = Response{Status: 401, Body: `{"error":{"code":401,"status":"UNAUTHENTICATED","details":[{"@type":"type.googleapis.com/google.firebase.fcm.v1.FcmError","errorCode":"THIRD_PARTY_AUTH_ERROR"}]}}`}
+	// BadFID is BadToken for a message sent to a Firebase Installation ID.
+	BadFID      = Response{Status: 400, Body: `{"error":{"code":400,"message":"Invalid Firebase Installation ID","status":"INVALID_ARGUMENT","details":[{"@type":"type.googleapis.com/google.firebase.fcm.v1.FcmError","errorCode":"INVALID_ARGUMENT"},{"@type":"type.googleapis.com/google.rpc.BadRequest","fieldViolations":[{"field":"message.fid","description":"Invalid FID"}]}]}}`}
+	BadPayload  = Response{Status: 400, Body: `{"error":{"code":400,"message":"Invalid value","status":"INVALID_ARGUMENT","details":[{"@type":"type.googleapis.com/google.firebase.fcm.v1.FcmError","errorCode":"INVALID_ARGUMENT"},{"@type":"type.googleapis.com/google.rpc.BadRequest","fieldViolations":[{"field":"message.android.ttl"}]}]}}`}
+	Mismatch    = Response{Status: 403, Body: `{"error":{"code":403,"status":"PERMISSION_DENIED","details":[{"@type":"type.googleapis.com/google.firebase.fcm.v1.FcmError","errorCode":"SENDER_ID_MISMATCH"}]}}`}
+	Unavailable = Response{Status: 503, Body: `{"error":{"code":503,"status":"UNAVAILABLE","details":[{"@type":"type.googleapis.com/google.firebase.fcm.v1.FcmError","errorCode":"UNAVAILABLE"}]}}`, RetryAfter: "120"}
+	Quota       = Response{Status: 429, Body: `{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","details":[{"@type":"type.googleapis.com/google.firebase.fcm.v1.FcmError","errorCode":"QUOTA_EXCEEDED"}]}}`}
+	APNsAuth    = Response{Status: 401, Body: `{"error":{"code":401,"status":"UNAUTHENTICATED","details":[{"@type":"type.googleapis.com/google.firebase.fcm.v1.FcmError","errorCode":"THIRD_PARTY_AUTH_ERROR"}]}}`}
 )

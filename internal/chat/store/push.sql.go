@@ -191,7 +191,7 @@ func (q *Queries) GetNotificationPreference(ctx context.Context, arg GetNotifica
 }
 
 const listUserPushTokens = `-- name: ListUserPushTokens :many
-SELECT session_id, platform, token
+SELECT session_id, platform, token, token_type
 FROM push_tokens
 WHERE user_id = $1
 ORDER BY refreshed_at DESC, session_id DESC
@@ -207,9 +207,11 @@ type ListUserPushTokensRow struct {
 	SessionID pgtype.UUID
 	Platform  string
 	Token     string
+	TokenType string
 }
 
-// Gönderim için kullanıcının token'ları, en son yenilenen önce.
+// Gönderim için kullanıcının token'ları, en son yenilenen önce. Tür,
+// FCM'deki hedef alanını seçer (message.token ya da message.fid).
 func (q *Queries) ListUserPushTokens(ctx context.Context, arg ListUserPushTokensParams) ([]ListUserPushTokensRow, error) {
 	rows, err := q.db.Query(ctx, listUserPushTokens, arg.UserID, arg.N)
 	if err != nil {
@@ -219,7 +221,12 @@ func (q *Queries) ListUserPushTokens(ctx context.Context, arg ListUserPushTokens
 	items := []ListUserPushTokensRow{}
 	for rows.Next() {
 		var i ListUserPushTokensRow
-		if err := rows.Scan(&i.SessionID, &i.Platform, &i.Token); err != nil {
+		if err := rows.Scan(
+			&i.SessionID,
+			&i.Platform,
+			&i.Token,
+			&i.TokenType,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -315,10 +322,11 @@ func (q *Queries) TrimUserPushTokens(ctx context.Context, arg TrimUserPushTokens
 }
 
 const upsertPushToken = `-- name: UpsertPushToken :execrows
-INSERT INTO push_tokens (session_id, user_id, platform, token, refreshed_at)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO push_tokens (session_id, user_id, platform, token, token_type, refreshed_at)
+VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (session_id) DO UPDATE
-SET platform = EXCLUDED.platform, token = EXCLUDED.token, refreshed_at = EXCLUDED.refreshed_at
+SET platform = EXCLUDED.platform, token = EXCLUDED.token, token_type = EXCLUDED.token_type,
+  refreshed_at = EXCLUDED.refreshed_at
 WHERE push_tokens.user_id = EXCLUDED.user_id
 `
 
@@ -327,17 +335,19 @@ type UpsertPushTokenParams struct {
 	UserID    pgtype.UUID
 	Platform  string
 	Token     string
+	TokenType string
 	Now       pgtype.Timestamptz
 }
 
-// Oturumun token'ı (oturum başına bir). Oturum başka kullanıcıya ait
-// olamaz; olursa satır değişmez.
+// Oturumun token'ı (oturum başına bir) ve türü (registration_token | fid;
+// ADR-0036). Oturum başka kullanıcıya ait olamaz; olursa satır değişmez.
 func (q *Queries) UpsertPushToken(ctx context.Context, arg UpsertPushTokenParams) (int64, error) {
 	result, err := q.db.Exec(ctx, upsertPushToken,
 		arg.SessionID,
 		arg.UserID,
 		arg.Platform,
 		arg.Token,
+		arg.TokenType,
 		arg.Now,
 	)
 	if err != nil {
