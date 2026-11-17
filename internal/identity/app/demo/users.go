@@ -95,7 +95,7 @@ func (s *Seeder) findOwner(ctx context.Context, code string) (id.ID, error) {
 	}
 	owner, _ := id.FromPG(u.ID)
 	// A demo account is not the platform owner.
-	for _, p := range people {
+	for _, p := range allPeople() {
 		ident, err := q.GetAuthIdentity(ctx, store.GetAuthIdentityParams{Provider: Provider, Subject: p.Subject})
 		if err == nil && ident.UserID == u.ID {
 			return id.ID{}, ErrOwnerNotFound

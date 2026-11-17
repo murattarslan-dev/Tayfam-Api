@@ -105,7 +105,9 @@ func New(cfg Config) (*Seeder, error) {
 type Report struct {
 	UsersCreated  int
 	UsersExisting int
-	Tayfas        []TayfaResult
+	Tayfas        []TayfaResult // the closed set
+	Discover      []TayfaResult // the Keşfet set, for the panel approval
+	Social        SocialResult
 }
 
 // TayfaResult is one demo tayfa after the run.
@@ -116,6 +118,9 @@ type TayfaResult struct {
 	// ReadOnly: the tayfa was archived, suspended or is being deleted; its
 	// remaining steps were skipped.
 	ReadOnly bool
+	// DiscoverState is the Keşfet state of a Keşfet demo tayfa
+	// (TayfaDiscoverState name); "" for the closed set.
+	DiscoverState string
 }
 
 // Run writes the demo data and adds the owner (found by referral code) to
@@ -127,8 +132,9 @@ func (s *Seeder) Run(ctx context.Context, ownerRefCode string) (Report, error) {
 	if err != nil {
 		return rep, err
 	}
-	users := make(map[string]id.ID, len(people))
-	for _, p := range people {
+	all := allPeople()
+	users := make(map[string]id.ID, len(all))
+	for _, p := range all {
 		u, created, err := s.ensureUser(ctx, p)
 		if err != nil {
 			return rep, err
@@ -152,6 +158,21 @@ func (s *Seeder) Run(ctx context.Context, ownerRefCode string) (Report, error) {
 		s.cfg.Log.InfoContext(ctx, "demo tayfası hazır",
 			slog.String("tayfa_id", res.ID), slog.Bool("read_only", res.ReadOnly))
 	}
+	for _, t := range discoverTayfas {
+		res, err := s.seedTayfa(ctx, t, users, owner)
+		if err != nil {
+			return rep, fmt.Errorf("tayfa %s: %w", t.Key, err)
+		}
+		rep.Discover = append(rep.Discover, res)
+		s.cfg.Log.InfoContext(ctx, "keşfet demo tayfası hazır",
+			slog.String("tayfa_id", res.ID), slog.Bool("read_only", res.ReadOnly))
+	}
+	if rep.Social, err = s.seedSocial(ctx, users, owner); err != nil {
+		return rep, err
+	}
+	s.cfg.Log.InfoContext(ctx, "demo arkadaşlıkları ve engeller hazır",
+		slog.Int("friends", rep.Social.Friends), slog.Int("blocks", rep.Social.Blocks),
+		slog.Int("skipped", rep.Social.Skipped))
 	return rep, nil
 }
 
