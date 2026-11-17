@@ -1,8 +1,10 @@
 version: 2
-# Güncellemeler ekosistem başına tek PR'da toplanır.
+# Güncellemeler ekosistem başına tek PR'da toplanır. Bütün iş PR'ları gibi
+# dev'e açılır (ADR-0034); prod'a sürüm PR'ıyla gider.
 updates:
   - package-ecosystem: gomod
     directory: /
+    target-branch: dev
     schedule:
       interval: weekly
     commit-message:
@@ -13,6 +15,7 @@ updates:
 
   - package-ecosystem: github-actions
     directory: /
+    target-branch: dev
     schedule:
       interval: weekly
     commit-message:
@@ -23,6 +26,7 @@ updates:
 
   - package-ecosystem: docker
     directory: /
+    target-branch: dev
     schedule:
       interval: weekly
     commit-message:

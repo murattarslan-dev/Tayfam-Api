@@ -12,6 +12,14 @@
 - **Revizyon:** 2026-11-10: Esnemenin süresi platform sahibinin kararıyla
   "ikinci bir emre kadar" oldu; pilot veya prod'un açılması onu kendiliğinden
   bitirmez.
+- **Revizyon:** 2026-11-16, dal modeli
+  ([ADR-0034](0034-dev-main-dal-modeli-ve-otomatik-surum.md)): iş PR'ları
+  varsayılan dal `dev`'e squash ile birleşir; `main` = prod ve yalnızca
+  `dev`'den sürüm PR'ıyla, merge commit ile birleşir. Sürüm PR'ını mimari
+  oturumu platform sahibinin sohbetteki onayıyla birleştirir; etiket otomatik
+  atılır. Aşağıdaki "main" kuralları (koruma, zorunlu kontroller, hassas
+  alanlar) iş PR'ları için artık `dev`'e uygulanır; "Dal koruması" ve
+  "Sürümleme" ADR-0034'e göre okunur.
 - **Karar veren:** Murat Arslan
 - **İlgili:** [ADR-0003](0003-kod-yapisi-ve-sozlesmeler.md), [ADR-0006](0006-dagitim-ve-ortamlar.md)
 - **Kaynak:** Notion: Proje Planı, "Geliştirme İş Akışı" bölümü
@@ -141,6 +149,9 @@ sahibinin hesabını kullanıyor olsa da bu PR'ları birleştirmez.
 > bölüm silinir ve yukarıdaki kural tam olarak geri gelir. Esneme prod
 > dağıtımını kapsamaz: prod'a yalnızca platform sahibinin attığı `vX.Y.Z`
 > etiketleri gider (ADR-0006).
+> *2026-11-16 (ADR-0034):* prod'a giden yol artık sürüm PR'ıdır; onu mimari
+> oturumu yalnızca platform sahibinin sohbetteki onayıyla birleştirir, etiketi
+> CI atar.
 
 Henüz gerçek kullanıcı verisi yoktur ve `main` yalnızca ev cluster'ındaki dev
 ortamına dağıtılır; bir hatanın verebileceği zarar sınırlıdır. Bu dönemde
@@ -169,6 +180,11 @@ platform sahibinin her PR'ı birleştirmesi işi gereksiz yavaşlattığı için
 
 - `main` dev ortamına otomatik dağıtılır; prod'a yalnızca `vX.Y.Z` etiketleri
   dağıtılır (ADR-0006). Etiketi platform sahibi atar.
+- *Revizyon 2026-11-16 (ADR-0034):* `dev` hiçbir yere dağıtılmaz. `main`'e
+  her birleşme (sürüm PR'ı) önce dev ortamına, ardından otomatik atılan
+  `vX.Y.Z` etiketiyle prod'a gider. Sürüm PR'ını platform sahibinin
+  sohbetteki onayıyla mimari oturumu birleştirir; bu, esnemenin "prod
+  dağıtımını kapsamaz" sınırının yerine geçen açık karardır.
 
 ## Gerekçe
 

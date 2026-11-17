@@ -1,0 +1,43 @@
+name: Sürüm PR'ı
+
+# main = prod; main'e yalnızca bu reponun dev dalından açılan sürüm PR'ı
+# girer (ADR-0034). GitHub kural setleri PR'ın kaynak dalını sınırlayamadığı
+# için bu iş main kural setinde zorunlu kontroldür ("Sürüm PR'ı kaynağı").
+#
+# Ayrı dosyadadır: PR'ın hedef dalı sonradan main'e çevrilirse ("edited")
+# kontrol yeniden çalışsın, ama başlık düzenlemeleri bütün CI'ı yeniden
+# başlatmasın. Kod checkout edilmez, token'a hiçbir izin verilmez.
+#
+# Tüm Actions commit SHA'sıyla sabitlenmiştir (CLAUDE.md kural 9); bu dosya
+# hiç Action kullanmaz.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions: {}
+
+jobs:
+  source:
+    name: Sürüm PR'ı kaynağı
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Kaynak dal bu reponun dev'i
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          # Geçiş: dev dalı henüz yoksa dal modeli başlamamıştır (ADR-0034'ü
+          # getiren PR'ın kendisi). dev, kural setiyle silinmeye karşı
+          # korunduğu için bu yol bir kez, geçişte kullanılır.
+          if [ -z "$(git ls-remote --heads "https://github.com/${GITHUB_REPOSITORY}.git" dev)" ]; then
+            echo "::warning::dev dalı yok; dal modeli henüz başlamadı, kontrol geçildi (geçiş, ADR-0034)."
+            exit 0
+          fi
+          if [ "$HEAD_REF" != "dev" ] || [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
+            echo "::error::main'e yalnızca ${GITHUB_REPOSITORY}'nin dev dalından sürüm PR'ı açılır (ADR-0034). Bu PR'ın kaynağı: ${HEAD_REPO}:${HEAD_REF}. Hedef dalı dev yap."
+            exit 1
+          fi
+          echo "Kaynak: ${HEAD_REPO}:${HEAD_REF}"

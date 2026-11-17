@@ -1,7 +1,9 @@
 # Flux kurulumu (ev cluster'ı)
 
 Ev cluster'ının `main`'deki her değişikliği kendiliğinden almasını sağlar
-(ADR-0006). Önce [ev cluster'ı kurulumu](ev-cluster-kurulumu.md) tamamlanmış ve
+(ADR-0006). 2026-11-16'dan itibaren `main`'e yalnızca `dev`'den sürüm PR'ları
+girer; dev ortamı her iş PR'ını değil her sürümü, prod'dan hemen önce alır
+(ADR-0034). Önce [ev cluster'ı kurulumu](ev-cluster-kurulumu.md) tamamlanmış ve
 `cloudflared-token` secret'ı oluşturulmuş olmalı.
 
 ## Nasıl çalışır

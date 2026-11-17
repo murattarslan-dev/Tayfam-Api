@@ -13,6 +13,13 @@
 - **Revizyon:** 2026-11-10, web istemcisi yok
   ([ADR-0017](0017-yalnizca-mobil-istemci.md)): `tayfam.app` tanıtım ve
   link karşılama sayfasıdır; web derlemesi yayınlanmaz.
+- **Revizyon:** 2026-11-16, dal modeli
+  ([ADR-0034](0034-dev-main-dal-modeli-ve-otomatik-surum.md)): iş PR'ları
+  `dev` dalına birleşir ve hiçbir yere dağıtılmaz; `main` prod'dur. `main`'e
+  her birleşmede önce dev ortamı (`dev` artifact'ı), ardından otomatik atılan
+  `vX.Y.Z` etiketiyle prod yayınlanır. Aşağıdaki "main'e giren her commit"
+  ifadeleri artık sürüm PR'larının merge commit'leri demektir. prod imza
+  kimliği (`prod.yml@refs/tags/v*`) ve `deploy/clusters/` değişmedi.
 - **Karar veren:** Murat Arslan
 - **İlgili:** [ADR-0001](0001-mikroservis-mimarisi.md), [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md)
 
@@ -104,7 +111,9 @@ başka bir node'a kod ve manifest değişmeden taşınabilmeli.
   izler. CI yine cluster'a erişmez; yalnızca registry'ye yazar.
 - **prod:** Yalnızca `vX.Y.Z` formatındaki git etiketleri dağıtılır; aynı
   artifact akışı `prod` etiketiyle kullanılır. Sürüm çıkarmak bilinçli bir
-  adımdır.
+  adımdır. *Revizyon 2026-11-16 (ADR-0034):* bilinçli adım sürüm PR'ının
+  (`dev` → `main`) birleştirilmesidir; etiketi CI atar ve prod iş akışını o
+  etiket üzerinde `workflow_dispatch` ile başlatır.
 - Migration'lar, her servisin pod'unda servis binary'sinin `migrate` alt
   komutunu çalıştıran bir init container ile uygulanır (ADR-0003). goose aynı
   anda yalnızca bir migration'ın çalışmasını kilitle garanti eder.

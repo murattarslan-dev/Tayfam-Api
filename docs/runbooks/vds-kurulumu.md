@@ -478,7 +478,9 @@ nc -vz -w 5 "$VDS_IP" 6443 || echo "6443 kapalı (beklenen)"
 `GOOGLE_CLIENT_IDS` (adım h); core/chat için servis token'ı JWKS'i, yani
 ufw'nin cni0 kuralı (adım b) ve `kubectl -n tayfam-prod logs deploy/core`.
 
-**Sonraki sürümler:** yalnızca yeni bir `vX.Y.Z` etiketi. **Geri dönüş:**
+**Sonraki sürümler (2026-11-16'dan itibaren, ADR-0034):** etiket elle atılmaz;
+`dev` → `main` sürüm PR'ı birleşince CI etiketi atar ve bu iş akışını başlatır
+([Sürüm çıkarma](surum-cikarma.md)). **Geri dönüş:**
 GitHub → Actions → önceki etiketin "Prod sürümü" çalışması → *Re-run all
 jobs*; o sürümün artifact'ı yeniden `prod` olarak etiketlenir. Migration'lar
 geri alınmaz; şemayı değiştiren sürümlerde geri dönüş ayrıca planlanır.
@@ -518,7 +520,8 @@ Prod ilk gerçek kullanıcı verisini almadan önce (ADR-0006, ADR-0010, ADR-001
       (ADR-0006, ADR-0011 ilke 7).
 - [ ] ADR-0010 "Pilot öncesi esneme": platform sahibinin ikinci bir emrine
       kadar sürer (2026-11-10); pilotta sürüp sürmeyeceği onun kararıdır.
-- [ ] GitHub `prod` ortamında zorunlu onay ve `v*` etiket kural seti (adım i).
+- [ ] GitHub `prod` ortamında `v*` etiket kuralı ve `v*` etiket kural seti
+      (adım i); zorunlu onaylayıcı ADR-0034 açık soru 1'e göre.
 - [ ] Gözlem kararı (cluster içi ya da Grafana Cloud) ve şüpheli olay
       bildirimleri (ADR-0011 madde 10).
 - [ ] Google OAuth consent screen *In production* ve doğrulama; hukuki
