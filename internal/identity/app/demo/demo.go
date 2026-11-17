@@ -1,7 +1,10 @@
 // Package demo writes the closed demo tayfas and their content to an
 // environment once (issue #179, ADR-0023): for store review, screenshots and
-// demos. The platform owner runs it by hand (`identity demo-seed`,
-// docs/runbooks/demo-verisi.md); nothing runs it on its own.
+// demos; and the Keşfet demo set around the platform owner's account
+// (issue #227, ADR-0035). The platform owner runs it by hand (`identity
+// demo-seed`, docs/runbooks/demo-verisi.md); nothing runs it on its own.
+// `identity demo-purge` (purge.go) removes demo data through the normal
+// deletion paths.
 //
 // How it writes, and why:
 //   - Demo accounts are made in identity's own database the way
@@ -22,9 +25,9 @@
 //   - Running it again creates no copies: accounts are found by their demo
 //     subject, every create carries a client_request_id derived from the
 //     record's key (requestID), and lists (members, channels, camp items)
-//     are read before adding. Nothing is refreshed or deleted: a record
-//     that exists stays as it is, and the inactive tayfa cleanup archives
-//     the tayfas when they go quiet.
+//     are read before adding. Nothing is refreshed: a record that exists
+//     stays as it is, and the inactive tayfa cleanup archives the tayfas
+//     when they go quiet. Only demo-purge deletes.
 //
 // Logs carry counts, IDs and error reasons only: no names, texts, join
 // codes, referral codes or tokens.
