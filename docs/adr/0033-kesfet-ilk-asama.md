@@ -493,6 +493,18 @@ Tayfa yöneticisinin gördüğü durum: `off` (kapalı), `pending` (incelemede),
 - Kötüye kullanım sözlüğü (`moderation_terms`) gelip Keşfet'teki etkinlik
   başlığı ondan geçmeden bayrak açılmamalıdır (§4).
 
+### 2026-11-17 ek kararı: bayrak pilot öncesi açıldı
+
+Platform sahibi `DISCOVER_ENABLED`'ın prod'da (yayın öncesi test ortamı
+olarak kullanılan VDS) şimdi açılmasını istedi. Yukarıdaki iki ön koşul
+(kötüye kullanım sözlüğüyle başlık filtresi ve hukukçu görüşmesi) kalkmadı,
+**ilk gerçek kullanıcıdan (pilot) önceye** ertelendi; izleme issue #224.
+Bu arada riski sınırlayanlar aynıdır: tayfa panel onayından geçmeden
+listelenmez, öğe yalnızca arkadaşı olan izleyiciye görünür, başlık
+uzunluğu sınırlıdır, şikâyet ve düşürme akışı açıktır. Bayrak
+`deploy/apps/prod/kustomization.yaml`'dan kapatılabilir; kapatmak veri
+silmez.
+
 ## Platform sahibinin kararları (2026-11-16)
 
 Bu ADR'nin ilk sorularına platform sahibinin cevapları (sohbette, mimari
