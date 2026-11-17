@@ -27,9 +27,20 @@ func TestPushTokenRoutes(t *testing.T) {
 
 	w := do(h, "PUT", "/v1/me/push-token", `{"token":"tok:abc","platform":"ios"}`, auth)
 	got, tok, _ := f.last()
-	want := &chatv1.RegisterPushTokenRequest{Token: "tok:abc", Platform: chatv1.PushPlatform_PUSH_PLATFORM_IOS}
+	want := &chatv1.RegisterPushTokenRequest{Token: "tok:abc", Platform: chatv1.PushPlatform_PUSH_PLATFORM_IOS, TokenType: chatv1.PushTokenType_PUSH_TOKEN_TYPE_REGISTRATION_TOKEN}
 	if w.Code != 204 || tok != "USERTOKEN" || !proto.Equal(got, want) {
 		t.Fatalf("kayıt: %d %q %v", w.Code, tok, got)
+	}
+	// Token types (ADR-0036): absent is a registration token.
+	for body, typ := range map[string]chatv1.PushTokenType{
+		`{"token":"fidabc","platform":"android","token_type":"fid"}`:                 chatv1.PushTokenType_PUSH_TOKEN_TYPE_FID,
+		`{"token":"tok:abc","platform":"android","token_type":"registration_token"}`: chatv1.PushTokenType_PUSH_TOKEN_TYPE_REGISTRATION_TOKEN,
+	} {
+		w := do(h, "PUT", "/v1/me/push-token", body, auth)
+		got, _, _ := f.last()
+		if r, ok := got.(*chatv1.RegisterPushTokenRequest); w.Code != 204 || !ok || r.GetTokenType() != typ {
+			t.Fatalf("%s: %d %v", body, w.Code, got)
+		}
 	}
 	w = do(h, "DELETE", "/v1/me/push-token", "", auth)
 	got, _, _ = f.last()
@@ -44,6 +55,7 @@ func TestPushTokenRoutes(t *testing.T) {
 		"web":          `{"token":"tok:abc","platform":"web"}`,
 		"token yok":    `{"platform":"android"}`,
 		"bilinmeyen":   `{"token":"tok:abc","platform":"android","user_id":"x"}`,
+		"tür":          `{"token":"tok:abc","platform":"android","token_type":"apns"}`,
 	} {
 		if w := do(h, "PUT", "/v1/me/push-token", body, auth); w.Code != 400 {
 			t.Errorf("%s: %d", name, w.Code)

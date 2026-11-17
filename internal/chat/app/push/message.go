@@ -19,8 +19,11 @@ const (
 // only: no text, no names, no places (ADR-0019 item 4). Sender
 // implementations must not log any field of it.
 type Message struct {
-	Token    string
-	Platform string
+	Token string
+	// TokenType is TokenTypeRegistration or TokenTypeFID: it picks the FCM
+	// target field (message.token or message.fid; ADR-0036).
+	TokenType string
+	Platform  string
 	// TitleKey and BodyKey are the client's translation keys
 	// (push_<type>_title, push_<type>_body). There are no arguments.
 	TitleKey, BodyKey string

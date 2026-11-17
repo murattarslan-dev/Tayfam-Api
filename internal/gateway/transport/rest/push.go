@@ -31,9 +31,18 @@ var pushPlatformValues = map[string]chatv1.PushPlatform{
 	"ios":     chatv1.PushPlatform_PUSH_PLATFORM_IOS,
 }
 
+// pushTokenTypeValues: an absent token_type is a registration token
+// (clients before token types; ADR-0036).
+var pushTokenTypeValues = map[string]chatv1.PushTokenType{
+	"":                   chatv1.PushTokenType_PUSH_TOKEN_TYPE_REGISTRATION_TOKEN,
+	"registration_token": chatv1.PushTokenType_PUSH_TOKEN_TYPE_REGISTRATION_TOKEN,
+	"fid":                chatv1.PushTokenType_PUSH_TOKEN_TYPE_FID,
+}
+
 type pushTokenBody struct {
-	Token    string `json:"token"`
-	Platform string `json:"platform"`
+	Token     string `json:"token"`
+	Platform  string `json:"platform"`
+	TokenType string `json:"token_type"`
 }
 
 func (h chatHandlers) putPushToken(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -42,11 +51,12 @@ func (h chatHandlers) putPushToken(ctx context.Context, w http.ResponseWriter, r
 		return
 	}
 	platform, ok := pushPlatformValues[b.Platform]
-	if !ok || b.Token == "" || len(b.Token) > 1024 {
+	tokenType, typeOK := pushTokenTypeValues[b.TokenType]
+	if !ok || !typeOK || b.Token == "" || len(b.Token) > 1024 {
 		badRequest(w, r)
 		return
 	}
-	if _, err := h.d.Push.RegisterPushToken(ctx, &chatv1.RegisterPushTokenRequest{Token: b.Token, Platform: platform}); err != nil {
+	if _, err := h.d.Push.RegisterPushToken(ctx, &chatv1.RegisterPushTokenRequest{Token: b.Token, Platform: platform, TokenType: tokenType}); err != nil {
 		h.fail(w, r, err)
 		return
 	}

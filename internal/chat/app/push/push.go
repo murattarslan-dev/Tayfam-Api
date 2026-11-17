@@ -67,11 +67,28 @@ const (
 	PlatformIOS     = "ios"
 )
 
-// tokenPattern is an FCM registration token's alphabet (the same CHECK is
-// in the database).
+// Token types (push_tokens.token_type, ADR-0036): what a token is decides
+// the field FCM HTTP v1 targets it with.
+const (
+	// TokenTypeRegistration is an FCM registration token (getToken; clients
+	// before firebase_messaging 17). Sent as message.token.
+	TokenTypeRegistration = "registration_token"
+	// TokenTypeFID is a Firebase Installation ID (register()/onRegistered).
+	// Sent as message.fid.
+	TokenTypeFID = "fid"
+)
+
+// ValidTokenType reports whether s is a known token type.
+func ValidTokenType(s string) bool {
+	return s == TokenTypeRegistration || s == TokenTypeFID
+}
+
+// tokenPattern is the alphabet of FCM registration tokens and Firebase
+// Installation IDs (the same CHECK is in the database).
 var tokenPattern = regexp.MustCompile(`^[A-Za-z0-9:_.-]+$`)
 
-// ValidToken reports whether s looks like an FCM registration token.
+// ValidToken reports whether s looks like an FCM registration token or a
+// Firebase Installation ID.
 func ValidToken(s string) bool {
 	return len(s) > 0 && len(s) <= MaxTokenBytes && tokenPattern.MatchString(s)
 }
@@ -131,12 +148,16 @@ func (s *Service) Enabled() bool { return s.cfg.Sender != nil }
 func (s *Service) now() time.Time { return s.cfg.Now().UTC() }
 
 // Register stores the push token of the caller's session (replacing an
-// older one) and marks it fresh. The same token held by another session
-// moves here; the user keeps at most MaxTokensPerUser tokens. A session that
-// ended cannot register (apperr.ErrSessionEnded).
-func (s *Service) Register(ctx context.Context, c Caller, platform, token string) error {
+// older one, whatever its type) and marks it fresh. tokenType is
+// TokenTypeRegistration or TokenTypeFID. The same token held by another
+// session moves here; the user keeps at most MaxTokensPerUser tokens. A
+// session that ended cannot register (apperr.ErrSessionEnded).
+func (s *Service) Register(ctx context.Context, c Caller, platform, token, tokenType string) error {
 	if platform != PlatformAndroid && platform != PlatformIOS {
 		return apperr.Validation("platform")
+	}
+	if !ValidTokenType(tokenType) {
+		return apperr.Validation("token_type")
 	}
 	if !ValidToken(token) {
 		return apperr.Validation("token")
@@ -161,7 +182,7 @@ func (s *Service) Register(ctx context.Context, c Caller, platform, token string
 			return fmt.Errorf("push token'ı: %w", err)
 		}
 		n, err := q.UpsertPushToken(ctx, store.UpsertPushTokenParams{
-			SessionID: c.Session.PG(), UserID: c.User.PG(), Platform: platform, Token: token, Now: ts(now),
+			SessionID: c.Session.PG(), UserID: c.User.PG(), Platform: platform, Token: token, TokenType: tokenType, Now: ts(now),
 		})
 		if err != nil {
 			return fmt.Errorf("push token'ı: %w", err)
