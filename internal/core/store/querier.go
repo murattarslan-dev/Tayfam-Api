@@ -461,6 +461,14 @@ type Querier interface {
 	// Kilit, aynı malzemeyi aynı anda üstlenen iki kişiden ikincisinin
 	// güncel atamayı görmesini sağlar (issue #198).
 	GetCampItemForUpdate(ctx context.Context, arg GetCampItemForUpdateParams) (GetCampItemForUpdateRow, error)
+	// Bir türün bir sürümü; eski etkinlikler için (emekli türler dahil).
+	// İlgi alanları ve durum türün güncel halinden gelir.
+	GetCatalogEventTypeVersion(ctx context.Context, arg GetCatalogEventTypeVersionParams) (GetCatalogEventTypeVersionRow, error)
+	// Etkinlik türü kataloğu (issue #237; ADR-0025 §2, §8). core_app bu
+	// tabloları yalnızca okur; katalog migration'la (ileride platform paneliyle)
+	// değişir.
+	// Kataloğun bütününün sürümü; GET /v1/catalog'un ETag'i.
+	GetCatalogVersion(ctx context.Context) (int64, error)
 	GetCatch(ctx context.Context, arg GetCatchParams) (GetCatchRow, error)
 	// ---------------------------------------------------------------------------
 	// Av günlüğü
@@ -622,6 +630,8 @@ type Querier interface {
 	IsBlockedEitherWay(ctx context.Context, arg IsBlockedEitherWayParams) (bool, error)
 	// Kapalı ya da kaydı olmayan modül kapalı sayılır (varsayılan "hayır").
 	IsTayfaModuleEnabled(ctx context.Context, arg IsTayfaModuleEnabledParams) (bool, error)
+	// Aktif türlerin güncel tanımları.
+	ListActiveCatalogEventTypes(ctx context.Context) ([]ListActiveCatalogEventTypesRow, error)
 	// Kişinin katılım geçmişi, yeniden eskiye; started_at @not_after'dan yeni
 	// kayıtlar dönmez (14 günlük gecikme). Tayfa adı ve viewer_member yalnızca
 	// izleyici o tayfanın aktif üyesiyse doludur; uygulama diğer alanları da
@@ -644,6 +654,8 @@ type Querier interface {
 	// profili silinmiş olsa da kayıt listelenir ki kaldırılabilsin.
 	ListBlocksPage(ctx context.Context, arg ListBlocksPageParams) ([]ListBlocksPageRow, error)
 	ListCampItems(ctx context.Context, eventID pgtype.UUID) ([]ListCampItemsRow, error)
+	// Emekliye ayrılanlar dahil: eski tayfalar ve profiller onları gösterir.
+	ListCatalogInterests(ctx context.Context) ([]ListCatalogInterestsRow, error)
 	// (created_at, id) ile sayfalanır.
 	ListCatches(ctx context.Context, arg ListCatchesParams) ([]ListCatchesRow, error)
 	ListConvoyVehicles(ctx context.Context, eventID pgtype.UUID) ([]ListConvoyVehiclesRow, error)
