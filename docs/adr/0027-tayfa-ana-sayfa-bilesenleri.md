@@ -2,6 +2,9 @@
 
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-15)
 - **Tarih:** 2026-11-15
+- **Revizyon:** 2026-11-18 ([ADR-0040](0040-tayfa-modulleri-v3.md)): dört
+  modül bileşeninin (ortak kütüphane, soru havuzu, materyal kütüphanesi,
+  üye garajı) veri modeli ve ders-konu listesi.
 - **Karar veren:** Ürün kararları platform sahibinindir (2026-11-15, Notion
   "Faz 3 (v3)" §5a ve §4.15). Bu ADR onların mimariye taşınmasıdır.
 - **İlgili:** [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md),
