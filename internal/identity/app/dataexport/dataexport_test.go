@@ -319,7 +319,7 @@ func TestExportFlow(t *testing.T) {
 	e := setup(t)
 	c, _ := e.user(t)
 	// Profile completion fields (issue #186) are in identity/profile.json.
-	if _, err := e.pool.Exec(ctx, `INSERT INTO profile_details (user_id, team, interests, declined_fields) VALUES ($1, 'Bursaspor', '{hike}', '{about}')`, c.User.PG()); err != nil {
+	if _, err := e.pool.Exec(ctx, `INSERT INTO profile_details (user_id, team, interests, declined_fields) VALUES ($1, 'Bursaspor', '{nature}', '{about}')`, c.User.PG()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.pool.Exec(ctx, `INSERT INTO user_social_accounts (user_id, platform, username) VALUES ($1, 'x', 'ece_su')`, c.User.PG()); err != nil {
@@ -376,7 +376,7 @@ func TestExportFlow(t *testing.T) {
 		t.Fatalf("profil: %v", profile)
 	}
 	if fmt.Sprintf("%v %v %v %v %v", profile[0]["team"], profile[0]["interests"], profile[0]["declined_profile_fields"], profile[0]["social_accounts"], profile[0]["about_visibility"]) !=
-		"Bursaspor [hike] [about] [map[platform:x username:ece_su]] friends_and_mutual" {
+		"Bursaspor [nature] [about] [map[platform:x username:ece_su]] friends_and_mutual" {
 		t.Fatalf("profil alanları: %v", profile)
 	}
 	var events, votes []map[string]any

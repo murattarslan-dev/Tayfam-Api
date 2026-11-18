@@ -25,7 +25,7 @@ type tayfaSpec struct {
 	Key         string
 	Name        string // contains "Demo" (ADR-0023)
 	Description string
-	Interests   []corev1.EventType
+	Interests   []string       // catalog interest keys
 	Founder     string         // person key; creates the tayfa (admin)
 	Members     []memberSpec   // joined by code, approved by the founder
 	OwnerRole   corev1.Role    // the platform owner's role, added last; UNSPECIFIED: not added
@@ -193,7 +193,7 @@ var tayfas = []tayfaSpec{
 		Name: "Ege Klasikleri Demo",
 		Description: "Klasik otomobil tutkunlarının Ege turları, bakım sohbetleri ve buluşmaları. " +
 			"Bu tayfa tanıtım amaçlı örnek (demo) içerik barındırır.",
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_CONVOY, corev1.EventType_EVENT_TYPE_GENERAL},
+		Interests: []string{"automotive", "general"},
 		Founder:   "elif",
 		Members: []memberSpec{
 			{Person: "can", Role: moderator}, {Person: "kaan", Role: member}, {Person: "onur", Role: member},
@@ -302,7 +302,7 @@ var tayfas = []tayfaSpec{
 		Name: "Kazdağı Kampçıları Demo",
 		Description: "Kazdağları eteklerinde kamp, doğa ve kıyıda akşam balığı. " +
 			"Bu tayfa tanıtım amaçlı örnek (demo) içerik barındırır.",
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_CAMP, corev1.EventType_EVENT_TYPE_FISHING},
+		Interests: []string{"nature", "water"},
 		Founder:   "burak",
 		Members: []memberSpec{
 			{Person: "deniz", Role: moderator}, {Person: "mert", Role: member}, {Person: "ece", Role: member},
@@ -405,7 +405,7 @@ var tayfas = []tayfaSpec{
 		Name: "Nif Yürüyüş Demo",
 		Description: "İzmir çevresinde hafta sonu doğa yürüyüşleri; her seviyeye uygun rotalar. " +
 			"Bu tayfa tanıtım amaçlı örnek (demo) içerik barındırır.",
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_HIKE, corev1.EventType_EVENT_TYPE_GENERAL},
+		Interests: []string{"nature", "general"},
 		Founder:   "zeynep",
 		Members: []memberSpec{
 			{Person: "selin", Role: moderator}, {Person: "ceren", Role: member}, {Person: "merve", Role: member},
@@ -502,7 +502,7 @@ var tayfas = []tayfaSpec{
 		Name: "Urla Halısaha Demo",
 		Description: "Haftalık halı saha maçı ve hafta içi çevrim içi oyun akşamları. " +
 			"Bu tayfa tanıtım amaçlı örnek (demo) içerik barındırır.",
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_SPORTS, corev1.EventType_EVENT_TYPE_GAMING},
+		Interests: []string{"sports", "games"},
 		Founder:   "emre",
 		Members: []memberSpec{
 			{Person: "mert", Role: moderator}, {Person: "kaan", Role: member}, {Person: "baris", Role: member},

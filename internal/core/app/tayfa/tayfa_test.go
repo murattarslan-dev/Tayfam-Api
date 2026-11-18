@@ -3,6 +3,7 @@ package tayfa
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"regexp"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -27,7 +29,10 @@ import (
 type env struct {
 	svc  *Service
 	pool *pgxpool.Pool
-	q    *store.Queries
+	// admin is a superuser pool, for fixtures the service cannot write
+	// (the catalog).
+	admin *pgxpool.Pool
+	q     *store.Queries
 	// shift moves the service clock; the daily limit is counted against the
 	// database's created_at.
 	shift time.Duration
@@ -35,8 +40,9 @@ type env struct {
 
 func setup(t *testing.T) *env {
 	t.Helper()
-	pool := dbtest.New(t, "core", coredb.Migrations())
-	e := &env{pool: pool, q: store.New(pool)}
+	d := dbtest.Open(t, "core", coredb.Migrations())
+	pool := d.App
+	e := &env{pool: pool, admin: d.Admin, q: store.New(pool)}
 	svc, err := New(Config{Pool: pool, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: func() time.Time { return time.Now().Add(e.shift) }})
 	if err != nil {
 		t.Fatal(err)
@@ -121,7 +127,7 @@ func TestCreate(t *testing.T) {
 	user := id.New()
 	in := CreateInput{
 		Name: "  İSTANBUL Işıklı Tayfa ", Description: " Hafta sonu kamp ",
-		Interests: []string{"general", "camp", "convoy"}, JoinPolicy: JoinOpen,
+		Interests: []string{"general", "nature", "automotive"}, JoinPolicy: JoinOpen,
 		ClientRequestID: id.New().String(),
 	}
 	v, err := e.svc.Create(ctx, user, in)
@@ -129,7 +135,8 @@ func TestCreate(t *testing.T) {
 	if v.Name != "İSTANBUL Işıklı Tayfa" || v.Description != "Hafta sonu kamp" || v.JoinPolicy != JoinOpen || v.Status != "active" {
 		t.Fatalf("görünüm = %+v", v)
 	}
-	if !slices.Equal(v.Interests, []string{"convoy", "camp", "general"}) {
+	// Catalog order (catalog_interests.position).
+	if !slices.Equal(v.Interests, []string{"automotive", "nature", "general"}) {
 		t.Fatalf("ilgi alanları = %v", v.Interests)
 	}
 	if len(v.Modules) != len(Modules) {
@@ -258,8 +265,13 @@ func TestCreateValidation(t *testing.T) {
 		{"satır sonu adda", CreateInput{Name: "Tay\nfa"}, FieldName},
 		{"geçersiz utf-8", CreateInput{Name: "Tay\xfffa"}, FieldName},
 		{"uzun açıklama", CreateInput{Name: "Tayfa", Description: strings.Repeat("a", 501)}, FieldDescription},
-		{"tekrar eden ilgi", CreateInput{Name: "Tayfa", Interests: []string{"camp", "camp"}}, FieldInterests},
+		{"tekrar eden ilgi", CreateInput{Name: "Tayfa", Interests: []string{"nature", "nature"}}, FieldInterests},
 		{"bilinmeyen ilgi", CreateInput{Name: "Tayfa", Interests: []string{"dance"}}, FieldInterests},
+		// An event type is not an interest.
+		{"etkinlik türü", CreateInput{Name: "Tayfa", Interests: []string{"camp"}}, FieldInterests},
+		{"bozuk anahtar", CreateInput{Name: "Tayfa", Interests: []string{"Nature"}}, FieldInterests},
+		{"boş anahtar", CreateInput{Name: "Tayfa", Interests: []string{""}}, FieldInterests},
+		{"çok fazla ilgi", CreateInput{Name: "Tayfa", Interests: manyKeys(MaxInterests + 1)}, FieldInterests},
 		{"bilinmeyen katılım", CreateInput{Name: "Tayfa", JoinPolicy: "invite"}, FieldJoinPolicy},
 		{"istek kimliği yok", CreateInput{Name: "Tayfa"}, "client_request_id"},
 	} {
@@ -375,11 +387,11 @@ func TestUpdate(t *testing.T) {
 
 	v, err := e.svc.Update(ctx, admin, tayfa, UpdateInput{
 		Fields: []string{FieldInterests, FieldName, FieldJoinPolicy},
-		Name:   "Yeni Ad", Interests: []string{"hike"}, JoinPolicy: JoinOpen,
+		Name:   "Yeni Ad", Interests: []string{"nature"}, JoinPolicy: JoinOpen,
 		Description: "maskede yok",
 	})
 	must(t, err)
-	if v.Name != "Yeni Ad" || v.Description != "" || v.JoinPolicy != JoinOpen || !slices.Equal(v.Interests, []string{"hike"}) {
+	if v.Name != "Yeni Ad" || v.Description != "" || v.JoinPolicy != JoinOpen || !slices.Equal(v.Interests, []string{"nature"}) {
 		t.Fatalf("güncel = %+v", v)
 	}
 	v, err = e.svc.Update(ctx, admin, tayfa, UpdateInput{Fields: []string{FieldDescription, FieldInterests}, Description: "Açıklama"})
@@ -403,11 +415,86 @@ func TestUpdate(t *testing.T) {
 		{UpdateInput{Fields: []string{FieldName}, Name: "a"}, FieldName},
 		{UpdateInput{Fields: []string{FieldJoinPolicy}}, FieldJoinPolicy},
 		{UpdateInput{Fields: []string{FieldInterests}, Interests: []string{"x"}}, FieldInterests},
+		{UpdateInput{Fields: []string{FieldInterests}, Interests: []string{"hike"}}, FieldInterests},
+		{UpdateInput{Fields: []string{FieldInterests}, Interests: []string{"nature", "dance"}}, FieldInterests},
 	} {
 		var ve *apperr.ValidationError
 		if _, err := e.svc.Update(ctx, admin, tayfa, tc.in); !errors.As(err, &ve) || ve.Field != tc.field {
 			t.Errorf("%+v: %v", tc.in, err)
 		}
+	}
+}
+
+// manyKeys returns n distinct, well-formed keys.
+func manyKeys(n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = fmt.Sprintf("key_%d", i)
+	}
+	return out
+}
+
+// Interests are the catalog's (ADR-0025 §2): a retired interest stays on
+// the tayfa that chose it and can be kept in an update, but it cannot be
+// chosen; a refused update changes nothing.
+func TestRetiredInterestIsKeptNotChosen(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	tayfa, admin := e.create(t, JoinApproval)
+	_, err := e.svc.Update(ctx, admin, tayfa, UpdateInput{Fields: []string{FieldInterests}, Interests: []string{"water", "games"}})
+	must(t, err)
+	_, err = e.admin.Exec(ctx, `UPDATE catalog_interests SET status = 'retired' WHERE key IN ('water', 'sports')`)
+	must(t, err)
+
+	// Still shown, and kept next to a new choice.
+	v, _, err := e.svc.get(ctx, admin, tayfa)
+	must(t, err)
+	if !slices.Equal(v.Interests, []string{"water", "games"}) {
+		t.Fatalf("emekli ilgi alanı görünmüyor: %v", v.Interests)
+	}
+	v, err = e.svc.Update(ctx, admin, tayfa, UpdateInput{Fields: []string{FieldInterests}, Interests: []string{"games", "water", "nature"}})
+	must(t, err)
+	if !slices.Equal(v.Interests, []string{"nature", "water", "games"}) {
+		t.Fatalf("ilgi alanları = %v", v.Interests)
+	}
+
+	// Not chosen: the tayfa does not have "sports".
+	var ve *apperr.ValidationError
+	if _, err := e.svc.Update(ctx, admin, tayfa, UpdateInput{Fields: []string{FieldInterests}, Interests: []string{"sports"}}); !errors.As(err, &ve) || ve.Field != FieldInterests {
+		t.Fatalf("emekli ilgi alanı seçildi: %v", err)
+	}
+	v, _, err = e.svc.get(ctx, admin, tayfa)
+	must(t, err)
+	if !slices.Equal(v.Interests, []string{"nature", "water", "games"}) {
+		t.Fatalf("reddedilen güncelleme ilgi alanlarını değiştirdi: %v", v.Interests)
+	}
+	// Once dropped, it cannot come back.
+	_, err = e.svc.Update(ctx, admin, tayfa, UpdateInput{Fields: []string{FieldInterests}, Interests: []string{"nature"}})
+	must(t, err)
+	if _, err := e.svc.Update(ctx, admin, tayfa, UpdateInput{Fields: []string{FieldInterests}, Interests: []string{"water"}}); !errors.As(err, &ve) || ve.Field != FieldInterests {
+		t.Fatalf("bırakılan emekli ilgi alanı geri seçildi: %v", err)
+	}
+	// A new tayfa cannot choose it either; nothing is created.
+	in := input("Emekli İlgi Alanı")
+	in.Interests = []string{"water"}
+	founder := id.New()
+	if _, err := e.svc.Create(ctx, founder, in); !errors.As(err, &ve) || ve.Field != FieldInterests {
+		t.Fatalf("yeni tayfa emekli ilgi alanı seçti: %v", err)
+	}
+	if n := e.count(t, `SELECT count(*) FROM tayfas WHERE created_by = $1`, founder.PG()); n != 0 {
+		t.Fatalf("reddedilen istek tayfa açtı: %d", n)
+	}
+}
+
+// The database refuses an interest the catalog does not have, whatever the
+// service checked (the second line of defence).
+func TestInterestForeignKey(t *testing.T) {
+	e := setup(t)
+	tayfa, _ := e.create(t, JoinApproval)
+	_, err := e.pool.Exec(context.Background(), `INSERT INTO tayfa_interests (tayfa_id, interest_key) VALUES ($1, 'dance')`, tayfa.PG())
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.ConstraintName != "tayfa_interests_interest_key_fkey" {
+		t.Fatalf("katalogda olmayan ilgi alanı yazıldı: %v", err)
 	}
 }
 

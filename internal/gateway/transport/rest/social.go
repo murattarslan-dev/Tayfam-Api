@@ -178,7 +178,7 @@ type invitationJSON struct {
 	// Absent when the inviter's account was deleted.
 	InviterUserID string    `json:"inviter_user_id,omitempty"`
 	InvitedAt     time.Time `json:"invited_at"`
-	// Issue #194: the tayfa's interests (EventType names).
+	// Issue #194: the tayfa's interests (catalog interest keys).
 	Interests []string `json:"interests"`
 }
 
@@ -638,7 +638,7 @@ func (h coreHandlers) listActivity(ctx context.Context, w http.ResponseWriter, r
 	out := activityListJSON{Records: make([]activityJSON, 0, len(resp.GetRecords())), NextPageToken: resp.GetNextPageToken()}
 	for _, a := range resp.GetRecords() {
 		out.Records = append(out.Records, activityJSON{
-			EventType: eventTypes.name(a.GetEventType()), Mode: eventModes.name(a.GetMode()),
+			EventType: a.GetEventTypeKey(), Mode: eventModes.name(a.GetMode()),
 			City: a.GetCity(), District: a.GetDistrict(), StartedAt: a.GetStartTime().AsTime(),
 			TayfaMember: a.GetTayfaMember(), TayfaID: a.GetTayfaId(), TayfaName: a.GetTayfaName(),
 			EventID: a.GetEventId(), EventTitle: a.GetEventTitle(), DurationMinutes: a.GetDurationMinutes(),

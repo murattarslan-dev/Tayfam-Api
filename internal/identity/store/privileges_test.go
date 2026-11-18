@@ -34,6 +34,9 @@ var wantAppPrivileges = map[string]string{
 	"data_export_requests": "DELETE,INSERT,SELECT,UPDATE",
 	"domain_events":        "DELETE,INSERT,SELECT,UPDATE(actor_id)",
 	"event_consumers":      "INSERT,SELECT,UPDATE",
+	// core'un kataloğunun salt okunur kopyası (00014, ADR-0025 §10).
+	"catalog_copy":      "SELECT",
+	"catalog_interests": "SELECT",
 
 	"platform_admins":     "SELECT",
 	"platform_audit_logs": "DELETE,INSERT,SELECT",

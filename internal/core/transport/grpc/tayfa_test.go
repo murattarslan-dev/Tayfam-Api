@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -135,13 +136,30 @@ func TestTayfaServerValidatesRequest(t *testing.T) {
 		t.Fatal("geçersiz tayfa_id app katmanına ulaştı")
 	}
 
-	_, err := srv.CreateTayfa(ctx, &corev1.CreateTayfaRequest{Name: "Tayfa", Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_UNSPECIFIED}})
+	// Interests are catalog keys (interest_keys); the Faz 1 enum list is
+	// refused rather than dropped, on every method that takes interests.
+	f.create = tayfa.CreateInput{}
+	_, err := srv.CreateTayfa(ctx, &corev1.CreateTayfaRequest{Name: "Tayfa", Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_HIKE}})
 	if field(err) != "interests" {
-		t.Error("belirtilmemiş ilgi alanı")
+		t.Error("Faz 1 ilgi alanı listesi kabul edildi (create)")
 	}
-	_, err = srv.CreateTayfa(ctx, &corev1.CreateTayfaRequest{Name: "Tayfa", Interests: []corev1.EventType{99}})
+	_, err = srv.UpdateTayfa(ctx, &corev1.UpdateTayfaRequest{
+		TayfaId: id.New().String(), Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_HIKE},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"interests"}},
+	})
 	if field(err) != "interests" {
-		t.Error("bilinmeyen ilgi alanı")
+		t.Error("Faz 1 ilgi alanı listesi kabul edildi (update)")
+	}
+	tooMany := make([]string, tayfa.MaxInterests+1)
+	for i := range tooMany {
+		tooMany[i] = fmt.Sprintf("key_%d", i)
+	}
+	_, err = srv.CreateTayfa(ctx, &corev1.CreateTayfaRequest{Name: "Tayfa", InterestKeys: tooMany})
+	if field(err) != "interests" {
+		t.Error("çok fazla ilgi alanı")
+	}
+	if f.create.Name != "" {
+		t.Fatal("geçersiz ilgi alanı app katmanına ulaştı")
 	}
 	_, err = srv.CreateTayfa(ctx, &corev1.CreateTayfaRequest{Name: "Tayfa", JoinPolicy: 7})
 	if field(err) != "join_policy" {
@@ -158,11 +176,19 @@ func TestTayfaServerValidatesRequest(t *testing.T) {
 	}
 
 	// UNSPECIFIED join policy on create means approval: passed on as "".
-	if _, err := srv.CreateTayfa(ctx, &corev1.CreateTayfaRequest{Name: "Tayfa", Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_HIKE}}); err != nil {
+	if _, err := srv.CreateTayfa(ctx, &corev1.CreateTayfaRequest{Name: "Tayfa", InterestKeys: []string{"nature"}}); err != nil {
 		t.Fatal(err)
 	}
-	if f.create.JoinPolicy != "" || len(f.create.Interests) != 1 || f.create.Interests[0] != "hike" {
+	if f.create.JoinPolicy != "" || len(f.create.Interests) != 1 || f.create.Interests[0] != "nature" {
 		t.Fatalf("girdi = %+v", f.create)
+	}
+	// Interests replace the tayfa's with their mask path; the keys go on
+	// as they are (the app layer checks them against the catalog).
+	if _, err := srv.UpdateTayfa(ctx, &corev1.UpdateTayfaRequest{TayfaId: tid, InterestKeys: []string{"water", "games"}, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"interests"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.update.Interests) != 2 || f.update.Interests[0] != "water" || f.update.Interests[1] != "games" {
+		t.Fatalf("girdi = %+v", f.update)
 	}
 	// Fields outside the mask are not converted.
 	if _, err := srv.UpdateTayfa(ctx, &corev1.UpdateTayfaRequest{TayfaId: tid, JoinPolicy: 9, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"name"}}}); err != nil {
@@ -180,7 +206,7 @@ func TestTayfaServerValidatesRequest(t *testing.T) {
 func TestTayfaServerConverts(t *testing.T) {
 	user := id.New()
 	view := tayfa.View{
-		ID: id.New(), Name: "Tayfa", Interests: []string{"camp", "general"}, JoinPolicy: "open", Status: "archived",
+		ID: id.New(), Name: "Tayfa", Interests: []string{"nature", "general"}, JoinPolicy: "open", Status: "archived",
 		Modules:     []tayfa.ModuleState{{Module: "announcements", Enabled: true}, {Module: "events"}, {Module: "qa", Enabled: true}, {Module: "polls"}},
 		MemberCount: 3, JoinCode: "ABCDEFGH", DeletionAt: time.Now(), CreatedAt: time.Now(), UpdatedAt: time.Now(),
 		MembersCanCreateEvents: true, PendingJoinRequests: new(int64(4)),
@@ -197,7 +223,7 @@ func TestTayfaServerConverts(t *testing.T) {
 	p := resp.GetTayfa()
 	if resp.GetCallerRole() != corev1.Role_ROLE_MODERATOR || p.GetId() != view.ID.String() ||
 		p.GetJoinPolicy() != corev1.JoinPolicy_JOIN_POLICY_OPEN || p.GetStatus() != corev1.TayfaStatus_TAYFA_STATUS_ARCHIVED ||
-		len(p.GetInterests()) != 2 || p.GetInterests()[1] != corev1.EventType_EVENT_TYPE_GENERAL ||
+		len(p.GetInterestKeys()) != 2 || p.GetInterestKeys()[0] != "nature" || p.GetInterestKeys()[1] != "general" || len(p.GetInterests()) != 0 ||
 		len(p.GetModules()) != 4 || p.GetModules()[2].GetModule() != corev1.Module_MODULE_QA || !p.GetModules()[2].GetEnabled() ||
 		p.GetMemberCount() != 3 || p.GetSuspendTime() != nil || p.GetDeletionTime() == nil || !p.GetMembersCanCreateEvents() ||
 		p.PendingJoinRequestCount == nil || p.GetPendingJoinRequestCount() != 4 {

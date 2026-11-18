@@ -6081,10 +6081,17 @@ components:
 
     # --- core ---
 
-    EventType:
+    InterestKey:
       type: string
-      description: Tayfanın ilgi alanları etkinlik türleriyle aynı değerleri kullanır.
-      enum: [convoy, camp, hike, fishing, gaming, sports, general]
+      description: |
+        İlgi alanı: katalogdaki bir ilgi alanının anahtarı (`GET /v1/catalog`,
+        `CatalogInterest.key`). Kapalı liste değildir; yeni ilgi alanı sürüm
+        çıkmadan eklenir (ADR-0025). Etkinlik türü değildir: türler ilgi
+        alanlarının altında gruplanır. Katalogda olmayan anahtar ve yeni
+        seçilen emekli (`retired`) ilgi alanı `validation` hatasıdır; emekli
+        ilgi alanı, onu daha önce seçmiş tayfada ve profilde görünmeye devam
+        eder.
+      pattern: "^[a-z][a-z0-9_]{1,39}$"
     JoinPolicy:
       type: string
       description: "`approval`: yeni üyeler onay bekler. `open`: hemen etkin olur."
@@ -6109,9 +6116,9 @@ components:
         description: { type: string, maxLength: 500 }
         interests:
           type: array
-          maxItems: 7
+          maxItems: 20
           uniqueItems: true
-          items: { $ref: "#/components/schemas/EventType" }
+          items: { $ref: "#/components/schemas/InterestKey" }
         join_policy:
           allOf: [{ $ref: "#/components/schemas/JoinPolicy" }]
           default: approval
@@ -6133,9 +6140,9 @@ components:
         description: { type: string, maxLength: 500 }
         interests:
           type: array
-          maxItems: 7
+          maxItems: 20
           uniqueItems: true
-          items: { $ref: "#/components/schemas/EventType" }
+          items: { $ref: "#/components/schemas/InterestKey" }
         join_policy:
           allOf: [{ $ref: "#/components/schemas/JoinPolicy" }]
           default: approval
@@ -6187,9 +6194,9 @@ components:
         description: { type: string, maxLength: 500 }
         interests:
           type: array
-          maxItems: 7
+          maxItems: 20
           uniqueItems: true
-          items: { $ref: "#/components/schemas/EventType" }
+          items: { $ref: "#/components/schemas/InterestKey" }
         join_policy: { $ref: "#/components/schemas/JoinPolicy" }
         members_can_create_events:
           type: boolean
@@ -6218,7 +6225,7 @@ components:
         description: { type: string }
         interests:
           type: array
-          items: { $ref: "#/components/schemas/EventType" }
+          items: { $ref: "#/components/schemas/InterestKey" }
         join_policy: { $ref: "#/components/schemas/JoinPolicy" }
         modules:
           type: object
@@ -6459,7 +6466,7 @@ components:
           description: |
             Tayfanın ilgi alanları (issue #194; avatar rengi). Yalnızca geçerli
             davette döner; geçersiz davette hiçbir tayfa bilgisi dönmez.
-          items: { $ref: "#/components/schemas/EventType" }
+          items: { $ref: "#/components/schemas/InterestKey" }
 
     Announcement:
       type: object
@@ -8437,7 +8444,7 @@ components:
         birthday_visibility: { $ref: "#/components/schemas/BirthdayVisibility" }
         interests:
           type: array
-          items: { $ref: "#/components/schemas/EventType" }
+          items: { $ref: "#/components/schemas/InterestKey" }
         about: { type: string, description: Boşsa alan yoktur. }
         occupation: { type: string, description: Boşsa alan yoktur. }
         team: { type: string, description: Boşsa alan yoktur. }
@@ -8474,10 +8481,10 @@ components:
         birthday_visibility: { $ref: "#/components/schemas/BirthdayVisibility" }
         interests:
           type: array
-          description: Etkinlik türlerinden tekrarsız çoklu seçim.
-          maxItems: 7
+          description: Katalogdaki ilgi alanlarından tekrarsız çoklu seçim.
+          maxItems: 20
           uniqueItems: true
-          items: { $ref: "#/components/schemas/EventType" }
+          items: { $ref: "#/components/schemas/InterestKey" }
         about:
           type: string
           maxLength: 160
@@ -8666,7 +8673,7 @@ components:
           description: Açıklama, buluşma noktası ve koordinat yoktur.
           properties:
             id: { type: string, format: uuid }
-            type: { $ref: "#/components/schemas/EventType" }
+            type: { $ref: "#/components/schemas/EventTypeKey" }
             title: { type: string }
             starts_at: { type: string, format: date-time }
             ends_at: { type: string, format: date-time }
@@ -9053,7 +9060,7 @@ components:
         interests:
           type: array
           description: Tayfanın ilgi alanları (issue #194).
-          items: { $ref: "#/components/schemas/EventType" }
+          items: { $ref: "#/components/schemas/InterestKey" }
     InvitationList:
       type: object
       required: [invitations]
@@ -9092,7 +9099,7 @@ components:
           $ref: "#/components/schemas/Birthday"
         interests:
           type: array
-          items: { $ref: "#/components/schemas/EventType" }
+          items: { $ref: "#/components/schemas/InterestKey" }
         about: { type: string }
         occupation: { type: string }
         team: { type: string }
@@ -9121,7 +9128,7 @@ components:
       type: object
       required: [event_type, mode, started_at, tayfa_member]
       properties:
-        event_type: { $ref: "#/components/schemas/EventType" }
+        event_type: { $ref: "#/components/schemas/EventTypeKey" }
         mode: { type: string, enum: [in_person, online] }
         city: { type: string }
         district: { type: string }

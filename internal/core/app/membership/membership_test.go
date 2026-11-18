@@ -913,11 +913,11 @@ func TestBanReason(t *testing.T) {
 func TestPreviewInterests(t *testing.T) {
 	e := setup(t)
 	tf := e.newTayfa(t, "approval")
-	e.exec(t, `INSERT INTO tayfa_interests (tayfa_id, event_type) VALUES ($1, 'hike'), ($1, 'camp')`, tf.id.PG())
+	e.exec(t, `INSERT INTO tayfa_interests (tayfa_id, interest_key) VALUES ($1, 'water'), ($1, 'nature')`, tf.id.PG())
 	_, tok, err := e.svc.CreateInviteLink(ctx, tf.admin, tf.id, 24*time.Hour, 5)
 	must(t, err)
 	pv, err := e.svc.PreviewInvite(ctx, id.New(), tok)
-	if err != nil || len(pv.Interests) != 2 || pv.Interests[0] != "camp" || pv.Interests[1] != "hike" {
+	if err != nil || len(pv.Interests) != 2 || pv.Interests[0] != "nature" || pv.Interests[1] != "water" {
 		t.Fatalf("önizleme = %+v %v", pv, err)
 	}
 }

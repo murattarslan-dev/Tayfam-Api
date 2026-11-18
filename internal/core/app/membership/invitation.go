@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -48,11 +47,13 @@ type Invitation struct {
 	UserID    id.ID
 	InviterID id.ID // zero when the inviter's account was deleted
 	InvitedAt time.Time
-	// Interests are the tayfa's (issue #194).
+	// Interests are the tayfa's catalog interest keys, in catalog order
+	// (issue #194, ADR-0025 §2).
 	Interests []string
 }
 
-// withInterests fills the tayfa interests of items with one query.
+// withInterests fills the tayfa interests of items with one query; the
+// rows come in catalog order.
 func withInterests(ctx context.Context, q *store.Queries, items []Invitation) ([]Invitation, error) {
 	if len(items) == 0 {
 		return items, nil
@@ -68,11 +69,10 @@ func withInterests(ctx context.Context, q *store.Queries, items []Invitation) ([
 	by := map[id.ID][]string{}
 	for _, r := range rows {
 		t := id.ID(r.TayfaID.Bytes)
-		by[t] = append(by[t], r.EventType)
+		by[t] = append(by[t], r.InterestKey)
 	}
 	for i := range items {
 		items[i].Interests = by[items[i].TayfaID]
-		slices.Sort(items[i].Interests)
 	}
 	return items, nil
 }

@@ -80,7 +80,7 @@ var discoverTayfas = []tayfaSpec{
 		Name: "Belgrad Ormanı Yürüyüş Demo",
 		Description: "Hafta sonu sabahları Belgrad Ormanı'nda tempolu yürüyüşler; yeni gelenlere kısa rota. " +
 			demoNote,
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_HIKE},
+		Interests: []string{"nature"},
 		Founder:   "asli",
 		Members: []memberSpec{
 			{Person: "oguz", Role: moderator}, {Person: "nazli", Role: member}, {Person: "volkan", Role: member},
@@ -123,7 +123,7 @@ var discoverTayfas = []tayfaSpec{
 		Name: "Moda Sahil Voleybol Demo",
 		Description: "Moda sahilinde hafta içi akşam ve pazar sabahı plaj voleybolu. Seviye fark etmez. " +
 			demoNote,
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_SPORTS},
+		Interests: []string{"sports"},
 		Founder:   "sinan",
 		Members: []memberSpec{
 			{Person: "ipek", Role: moderator}, {Person: "hakan", Role: member}, {Person: "defne", Role: member},
@@ -154,7 +154,7 @@ var discoverTayfas = []tayfaSpec{
 		Name: "Abant Gölü Kamp Demo",
 		Description: "Abant Gölü çevresinde aile dostu, sakin kamplar. Kamp alanının kurallarına uyulur. " +
 			demoNote,
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_CAMP},
+		Interests: []string{"nature"},
 		Founder:   "tuncay",
 		Members: []memberSpec{
 			{Person: "sevgi", Role: moderator}, {Person: "arda", Role: member}, {Person: "eda", Role: member},
@@ -185,7 +185,7 @@ var discoverTayfas = []tayfaSpec{
 		Name: "Ankara Fotoğraf Yürüyüşü Demo",
 		Description: "Ankara'nın tarihi sokaklarında fotoğraf yürüyüşleri ve sonrasında kısa bir değerlendirme. " +
 			demoNote,
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_GENERAL},
+		Interests: []string{"general"},
 		Founder:   "levent",
 		Members: []memberSpec{
 			{Person: "buse", Role: moderator}, {Person: "orhan", Role: member}, {Person: "yasemin", Role: member},
@@ -212,7 +212,7 @@ var discoverTayfas = []tayfaSpec{
 		Name: "Bodrum Kıyı Balıkçıları Demo",
 		Description: "Bodrum kıyılarında akşam olta balıkçılığı. Kurallara ve av yasaklarına uyulur. " +
 			demoNote,
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_FISHING},
+		Interests: []string{"water"},
 		Founder:   "riza",
 		Members: []memberSpec{
 			{Person: "esra", Role: moderator}, {Person: "taner", Role: member}, {Person: "dilek", Role: member},
@@ -243,7 +243,7 @@ var discoverTayfas = []tayfaSpec{
 		Name: "Kapadokya Klasik Konvoy Demo",
 		Description: "Kapadokya vadilerinde klasik otomobillerle sakin tempolu konvoy turları. " +
 			demoNote,
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_CONVOY},
+		Interests: []string{"automotive"},
 		Founder:   "ozan",
 		Members: []memberSpec{
 			{Person: "ebru", Role: moderator}, {Person: "cihan", Role: member}, {Person: "irem", Role: member},

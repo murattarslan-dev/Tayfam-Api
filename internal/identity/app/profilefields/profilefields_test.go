@@ -3,6 +3,8 @@ package profilefields
 import (
 	"errors"
 	"reflect"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +14,7 @@ func p[T any](v T) *T { return &v }
 
 func TestApplyCleans(t *testing.T) {
 	got, err := Apply(Values{}, Update{
-		Interests:  p([]string{"hike", "convoy"}),
+		Interests:  p([]string{"nature", "automotive"}),
 		About:      p("  Doğa   yürüyüşü\r\n\n  ve kamp  "),
 		Occupation: p("  Yazılım   geliştirici "),
 		Team:       p("Bursa\nspor"),
@@ -22,7 +24,7 @@ func TestApplyCleans(t *testing.T) {
 		}),
 	})
 	want := Values{
-		Interests: []string{"convoy", "hike"}, About: "Doğa yürüyüşü\n\nve kamp", Occupation: "Yazılım geliştirici",
+		Interests: []string{"automotive", "nature"}, About: "Doğa yürüyüşü\n\nve kamp", Occupation: "Yazılım geliştirici",
 		Team: "Bursa spor", Languages: []string{"tr", "en"},
 		SocialAccounts: []SocialAccount{{"instagram", "ece.su"}, {"x", "ece_su"}}, Declined: []string{},
 	}
@@ -34,10 +36,34 @@ func TestApplyCleans(t *testing.T) {
 	}
 }
 
+// distinctKeys returns n distinct, well-formed interest keys.
+func distinctKeys(n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = "key_" + strconv.Itoa(i)
+	}
+	return out
+}
+
+// Any key of the catalog's form passes Apply: a new interest needs no
+// release (ADR-0025). The limit is MaxInterests.
+func TestApplyTakesCatalogKeys(t *testing.T) {
+	keys := distinctKeys(MaxInterests)
+	got, err := Apply(Values{}, Update{Interests: p(slices.Clone(keys))})
+	slices.Sort(keys)
+	if err != nil || !slices.Equal(got.Interests, keys) {
+		t.Fatalf("Apply = %v %v", got.Interests, err)
+	}
+}
+
 func TestApplyRejects(t *testing.T) {
 	for name, u := range map[string]Update{
-		"bilinmeyen ilgi":        {Interests: p([]string{"chess"})},
-		"tekrar eden ilgi":       {Interests: p([]string{"hike", "hike"})},
+		// Interests are catalog keys: Apply checks the shape, CheckInterests
+		// the catalog copy (package account's tests).
+		"bozuk ilgi anahtarı":    {Interests: p([]string{"Nature"})},
+		"boş ilgi anahtarı":      {Interests: p([]string{""})},
+		"tekrar eden ilgi":       {Interests: p([]string{"nature", "nature"})},
+		"çok fazla ilgi":         {Interests: p(distinctKeys(MaxInterests + 1))},
 		"161 karakter hakkımda":  {About: p(strings.Repeat("ş", 161))},
 		"61 karakter meslek":     {Occupation: p(strings.Repeat("a", 61))},
 		"kontrol karakteri":      {About: p("a\u0007b")},

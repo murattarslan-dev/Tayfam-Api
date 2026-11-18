@@ -144,8 +144,8 @@ type Preview struct {
 	Name          string
 	MemberCount   int32
 	AlreadyMember bool
-	// Interests are the tayfa's (issue #194); only a valid invite gets this
-	// far.
+	// Interests are the tayfa's catalog interest keys (issue #194,
+	// ADR-0025 §2); only a valid invite gets this far.
 	Interests []string
 }
 

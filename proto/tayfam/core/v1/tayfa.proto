@@ -104,7 +104,11 @@ enum JoinPolicy {
   JOIN_POLICY_OPEN = 2;
 }
 
-// Event types; a tayfa's interests use the same values as events.type.
+// The seven Faz 1 event types. Event types are catalog keys now (ADR-0025):
+// new code uses the string key fields (Event.type_key,
+// DiscoverEvent.type_key, ActivityRecord.event_type_key). A tayfa's
+// interests are catalog interest keys (Tayfa.interest_keys), not event
+// types. The enum stays because fields that used it cannot be removed.
 enum EventType {
   EVENT_TYPE_UNSPECIFIED = 0;
   EVENT_TYPE_CONVOY = 1;
@@ -159,7 +163,7 @@ message Tayfa {
   string name = 2;
   // Up to 500 characters; may be empty.
   string description = 3;
-  // Distinct values, in EventType order.
+  // Faz 1; never filled. See interest_keys.
   repeated EventType interests = 4;
   JoinPolicy join_policy = 5;
   // One entry per Module value, in Module order.
@@ -194,6 +198,10 @@ message Tayfa {
   // TAYFA_KIND_STANDARD ("Bu ekiple tayfa kur"): when it was converted
   // (ADR-0032 §7). Unset for every other tayfa.
   google.protobuf.Timestamp convert_time = 19;
+  // The tayfa's interests: keys of the catalog's interests
+  // (CatalogInterest.key; ADR-0025 §2), distinct, in catalog order. A
+  // retired interest stays on the tayfas that chose it.
+  repeated string interest_keys = 20;
 }
 
 message CreateTayfaRequest {
@@ -201,14 +209,16 @@ message CreateTayfaRequest {
   string name = 1;
   // Up to 500 characters; may be empty.
   string description = 2;
-  // 0–7 distinct values; UNSPECIFIED or a repeated value is
-  // ERROR_REASON_VALIDATION.
+  // Faz 1; must be empty (ERROR_REASON_VALIDATION). See interest_keys.
   repeated EventType interests = 3;
   // UNSPECIFIED means JOIN_POLICY_APPROVAL.
   JoinPolicy join_policy = 4;
   // Required. A UUID the client generates once per create attempt and
   // reuses on retry (offline write protection).
   string client_request_id = 5;
+  // 0–20 distinct keys of ACTIVE catalog interests (CatalogInterest.key).
+  // An unknown, retired or repeated key is ERROR_REASON_VALIDATION.
+  repeated string interest_keys = 6;
 }
 
 message CreateTayfaResponse {
@@ -256,7 +266,7 @@ message UpdateTayfaRequest {
   string name = 2;
   // Same rules as CreateTayfaRequest.description.
   string description = 3;
-  // Replaces all interests. Same rules as CreateTayfaRequest.interests.
+  // Faz 1; must be empty (ERROR_REASON_VALIDATION). See interest_keys.
   repeated EventType interests = 4;
   // Must not be UNSPECIFIED when named in update_mask.
   JoinPolicy join_policy = 5;
@@ -271,6 +281,10 @@ message UpdateTayfaRequest {
   // ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE); empty
   // removes the cover. The previous cover is deleted.
   string cover_upload_id = 8;
+  // With "interests" in update_mask: replaces all interests. Same rules as
+  // CreateTayfaRequest.interest_keys, except that a retired interest the
+  // tayfa already has may be kept.
+  repeated string interest_keys = 9;
 }
 
 message UpdateTayfaResponse {
@@ -316,10 +330,12 @@ message ConvertInstantTayfaRequest {
   string name = 2;
   // Same rules as CreateTayfaRequest.description.
   string description = 3;
-  // Same rules as CreateTayfaRequest.interests.
+  // Faz 1; must be empty (ERROR_REASON_VALIDATION). See interest_keys.
   repeated EventType interests = 4;
   // UNSPECIFIED means JOIN_POLICY_APPROVAL.
   JoinPolicy join_policy = 5;
+  // Same rules as CreateTayfaRequest.interest_keys.
+  repeated string interest_keys = 6;
 }
 
 message ConvertInstantTayfaResponse {

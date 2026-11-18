@@ -92,7 +92,8 @@ type View struct {
 	ID          id.ID
 	Name        string
 	Description string
-	// Interests in EventType order.
+	// Interests are catalog interest keys (catalog_interests), in catalog
+	// order.
 	Interests  []string
 	JoinPolicy string
 	// MembersCanCreateEvents lets every active member create events; when
@@ -214,10 +215,8 @@ func (s *Service) Create(ctx context.Context, user id.ID, in CreateInput) (View,
 				return fmt.Errorf("modül: %w", err)
 			}
 		}
-		for _, v := range interests {
-			if err := q.AddTayfaInterest(ctx, store.AddTayfaInterestParams{TayfaID: tayfaID.PG(), EventType: v}); err != nil {
-				return fmt.Errorf("ilgi alanı: %w", err)
-			}
+		if err := setInterests(ctx, q, tayfaID, interests); err != nil {
+			return err
 		}
 		return record(ctx, q, tayfaID, user, EventCreated, EventCreated, nil)
 	})
@@ -360,13 +359,8 @@ func (s *Service) Update(ctx context.Context, user, tayfa id.ID, in UpdateInput)
 			}
 		}
 		if set[FieldInterests] {
-			if err := q.DeleteTayfaInterests(ctx, tayfa.PG()); err != nil {
-				return fmt.Errorf("ilgi alanları: %w", err)
-			}
-			for _, v := range interests {
-				if err := q.AddTayfaInterest(ctx, store.AddTayfaInterestParams{TayfaID: tayfa.PG(), EventType: v}); err != nil {
-					return fmt.Errorf("ilgi alanı: %w", err)
-				}
+			if err := setInterests(ctx, q, tayfa, interests); err != nil {
+				return err
 			}
 		}
 		return record(ctx, q, tayfa, user, EventUpdated, EventUpdated, map[string]any{"fields": fields})
@@ -580,13 +574,8 @@ func (s *Service) Convert(ctx context.Context, user, tayfa id.ID, in ConvertInpu
 		} else if n != 1 {
 			return apperr.ErrTayfaNotFound
 		}
-		if err := q.DeleteTayfaInterests(ctx, tayfa.PG()); err != nil {
-			return fmt.Errorf("ilgi alanları: %w", err)
-		}
-		for _, v := range interests {
-			if err := q.AddTayfaInterest(ctx, store.AddTayfaInterestParams{TayfaID: tayfa.PG(), EventType: v}); err != nil {
-				return fmt.Errorf("ilgi alanı: %w", err)
-			}
+		if err := setInterests(ctx, q, tayfa, interests); err != nil {
+			return err
 		}
 		for _, mod := range Modules {
 			if err := q.SetTayfaModule(ctx, store.SetTayfaModuleParams{TayfaID: tayfa.PG(), Module: mod, Enabled: true}); err != nil {

@@ -7,7 +7,10 @@ package tayfam.identity.v1;
 // through AccountService (the user's own) and ProfileService (others, by
 // AboutVisibility); they are not in the profile copies of core and chat.
 
-// ProfileInterest is an event type the user is interested in.
+// ProfileInterest is the Faz 1 list of interests (event types). Interests
+// are keys of core's catalog now (ADR-0025 §10): see
+// ProfileFields.interest_keys and InterestList.keys. The enum stays because
+// fields that used it cannot be removed.
 enum ProfileInterest {
   PROFILE_INTEREST_UNSPECIFIED = 0;
   PROFILE_INTEREST_CONVOY = 1;
@@ -59,7 +62,7 @@ message SocialAccount {
 // ProfileFields are the values; an empty value is unanswered (or declined,
 // which only the user's own account tells).
 message ProfileFields {
-  // No repeats.
+  // Faz 1; never filled. See interest_keys.
   repeated ProfileInterest interests = 1;
   // 1–160 characters.
   string about = 2;
@@ -71,10 +74,18 @@ message ProfileFields {
   repeated string languages = 5;
   // One per platform.
   repeated SocialAccount social_accounts = 6;
+  // Keys of the catalog's interests (core CatalogInterest.key), no repeats,
+  // sorted. A retired interest stays on the profiles that chose it.
+  repeated string interest_keys = 7;
 }
 
 message InterestList {
+  // Faz 1; must be empty (ERROR_REASON_VALIDATION). See keys.
   repeated ProfileInterest values = 1;
+  // At most 20 distinct keys of the catalog's interests. A key identity's
+  // copy of the catalog does not know, or a retired one the user does not
+  // already have, is ERROR_REASON_VALIDATION.
+  repeated string keys = 2;
 }
 
 message LanguageList {

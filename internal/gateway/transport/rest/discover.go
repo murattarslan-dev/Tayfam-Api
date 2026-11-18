@@ -116,7 +116,7 @@ func (h coreHandlers) listDiscoverFeed(ctx context.Context, w http.ResponseWrite
 		e, t := it.GetEvent(), it.GetTayfa()
 		item := discoverItemJSON{
 			Event: discoverEventJSON{
-				ID: e.GetEventId(), Type: eventTypes.name(e.GetType()), Title: e.GetTitle(),
+				ID: e.GetEventId(), Type: e.GetTypeKey(), Title: e.GetTitle(),
 				StartsAt: e.GetStartTime().AsTime(), EndsAt: e.GetEndTime().AsTime(), City: e.GetCity(), District: e.GetDistrict(),
 			},
 			Tayfa: discoverTayfaJSON{

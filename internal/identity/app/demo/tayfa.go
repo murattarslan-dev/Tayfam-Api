@@ -24,7 +24,7 @@ func (s *Seeder) seedTayfa(ctx context.Context, t tayfaSpec, users map[string]id
 	founder := users[t.Founder]
 	created, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.CreateTayfaResponse, error) {
 		return s.cfg.Core.Tayfas.CreateTayfa(ctx, &corev1.CreateTayfaRequest{
-			Name: t.Name, Description: t.Description, Interests: t.Interests,
+			Name: t.Name, Description: t.Description, InterestKeys: t.Interests,
 			JoinPolicy:      corev1.JoinPolicy_JOIN_POLICY_APPROVAL,
 			ClientRequestId: requestID(keyOf(t.Key, "tayfa")),
 		})

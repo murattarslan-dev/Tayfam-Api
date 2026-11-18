@@ -152,7 +152,7 @@ func tayfaFrom(t *corev1.Tayfa) tayfaJSON {
 	}
 	return tayfaJSON{
 		ID: t.GetId(), Name: t.GetName(), Description: t.GetDescription(),
-		Interests: eventTypes.names(t.GetInterests()), JoinPolicy: joinPolicies.name(t.GetJoinPolicy()),
+		Interests: interestNames(t.GetInterestKeys()), JoinPolicy: joinPolicies.name(t.GetJoinPolicy()),
 		Modules: mods, Status: tayfaStatuses.name(t.GetStatus()),
 		SuspendedAt: optTime(t.GetSuspendTime()), DeletionAt: optTime(t.GetDeletionTime()),
 		MemberCount: t.GetMemberCount(), MembersCanCreateEvents: t.GetMembersCanCreateEvents(), JoinCode: t.GetJoinCode(),
