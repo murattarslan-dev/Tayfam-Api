@@ -2,6 +2,8 @@
 
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-15)
 - **Tarih:** 2026-11-15
+- **Revizyon:** 2026-11-18 ([ADR-0039](0039-rozetler.md)): §6'daki rozetler
+  ayrı ADR'de karara bağlandı.
 - **Revizyon:** 2026-11-18 (platform sahibi, sohbette;
   [ADR-0037](0037-katalog-ayrintilari-ve-sema-ekleri.md) §7): `log`
   metrikleri, organizatörün girdiği kişisel ölçümler,

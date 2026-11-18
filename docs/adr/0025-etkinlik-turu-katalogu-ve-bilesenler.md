@@ -3,6 +3,9 @@
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-15)
 - **Tarih:** 2026-11-15
 - **Revizyon:** 2026-11-18 (platform sahibi, sohbette;
+  [ADR-0041](0041-v3-tek-seferde-gecis-ve-yayin.md)): §10'daki aşamalı
+  taşıma ve §8'deki geriye uyumluluk kaldırıldı; v3 tek seferde yayınlanır.
+- **Revizyon:** 2026-11-18 (platform sahibi, sohbette;
   [ADR-0037](0037-katalog-ayrintilari-ve-sema-ekleri.md)): `interest_keys`,
   `optional` / `organizer_choice` / `prefill_from`, tür bayrakları,
   bileşen listesi (`timer`, `pool_link`), masa ve ön ayar, misafir oyuncu,
