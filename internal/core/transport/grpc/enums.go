@@ -3,11 +3,14 @@ package grpc
 import (
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 )
 
 // Conversions between proto enums and the stored forms. An UNSPECIFIED or
 // unknown value never converts (ok = false).
 
+// interestFromProto converts a Faz 1 event type; only Event.type still
+// carries the enum, next to type_key.
 func interestFromProto(e corev1.EventType) (string, bool) {
 	switch e {
 	case corev1.EventType_EVENT_TYPE_CONVOY:
@@ -37,21 +40,15 @@ func interestToProto(s string) corev1.EventType {
 	return corev1.EventType_EVENT_TYPE_UNSPECIFIED
 }
 
-// interestsFromProto converts a request's interests; duplicates are left
-// for the app layer to refuse.
-func interestsFromProto(in []corev1.EventType) ([]string, bool) {
-	if len(in) > 16 {
+// interestKeysFromProto takes a request's interests: keys of the catalog's
+// interests (ADR-0025 §2). The Faz 1 enum list must be empty: an event
+// type is not an interest, so it is refused rather than dropped. Duplicates
+// and unknown keys are left for the app layer to refuse.
+func interestKeysFromProto(keys []string, faz1 []corev1.EventType) ([]string, bool) {
+	if len(faz1) > 0 || len(keys) > tayfa.MaxInterests {
 		return nil, false
 	}
-	out := make([]string, 0, len(in))
-	for _, e := range in {
-		v, ok := interestFromProto(e)
-		if !ok {
-			return nil, false
-		}
-		out = append(out, v)
-	}
-	return out, true
+	return append([]string{}, keys...), true
 }
 
 func moduleFromProto(m corev1.Module) (string, bool) {

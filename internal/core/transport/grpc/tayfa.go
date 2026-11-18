@@ -46,7 +46,7 @@ func (s *TayfaServer) CreateTayfa(ctx context.Context, req *corev1.CreateTayfaRe
 	if err != nil {
 		return nil, err
 	}
-	interests, ok := interestsFromProto(req.GetInterests())
+	interests, ok := interestKeysFromProto(req.GetInterestKeys(), req.GetInterests())
 	if !ok {
 		return nil, validation("interests")
 	}
@@ -76,7 +76,7 @@ func (s *TayfaServer) ConvertInstantTayfa(ctx context.Context, req *corev1.Conve
 	if err != nil {
 		return nil, err
 	}
-	interests, ok := interestsFromProto(req.GetInterests())
+	interests, ok := interestKeysFromProto(req.GetInterestKeys(), req.GetInterests())
 	if !ok {
 		return nil, validation("interests")
 	}
@@ -151,7 +151,7 @@ func (s *TayfaServer) UpdateTayfa(ctx context.Context, req *corev1.UpdateTayfaRe
 		switch f {
 		case tayfa.FieldInterests:
 			var ok bool
-			if in.Interests, ok = interestsFromProto(req.GetInterests()); !ok {
+			if in.Interests, ok = interestKeysFromProto(req.GetInterestKeys(), req.GetInterests()); !ok {
 				return nil, validation("interests")
 			}
 		case tayfa.FieldJoinPolicy:
@@ -260,9 +260,7 @@ func tayfaToProto(v tayfa.View) *corev1.Tayfa {
 		n := int32(min(*v.PendingJoinRequests, 1<<31-1)) //nolint:gosec // clamped above
 		out.PendingJoinRequestCount = &n
 	}
-	for _, i := range v.Interests {
-		out.Interests = append(out.Interests, interestToProto(i))
-	}
+	out.InterestKeys = append(out.InterestKeys, v.Interests...)
 	for _, m := range v.Modules {
 		out.Modules = append(out.Modules, &corev1.ModuleState{Module: moduleToProto(m.Module), Enabled: m.Enabled})
 	}

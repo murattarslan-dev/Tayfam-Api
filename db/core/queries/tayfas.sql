@@ -43,16 +43,26 @@ SELECT count(*) FROM tayfas
 WHERE created_by = @created_by AND kind = 'standard'
   AND COALESCE(converted_at, created_at) > @since;
 
+-- İlgi alanı katalog anahtarıdır (catalog_interests, ADR-0025 §2).
 -- name: AddTayfaInterest :exec
-INSERT INTO tayfa_interests (tayfa_id, event_type)
-VALUES (@tayfa_id, @event_type)
+INSERT INTO tayfa_interests (tayfa_id, interest_key)
+VALUES (@tayfa_id, @interest_key)
 ON CONFLICT DO NOTHING;
 
 -- name: DeleteTayfaInterests :exec
 DELETE FROM tayfa_interests WHERE tayfa_id = @tayfa_id;
 
+-- Katalog sırasıyla.
 -- name: ListTayfaInterests :many
-SELECT event_type FROM tayfa_interests WHERE tayfa_id = @tayfa_id ORDER BY event_type;
+SELECT ti.interest_key
+FROM tayfa_interests ti
+JOIN catalog_interests ci ON ci.key = ti.interest_key
+WHERE ti.tayfa_id = @tayfa_id
+ORDER BY ci.position, ci.key;
+
+-- İlgi alanı doğrulaması için: anahtar ve durum (emekliler dahil).
+-- name: ListCatalogInterestStatuses :many
+SELECT key, status FROM catalog_interests;
 
 -- name: SetTayfaModule :exec
 INSERT INTO tayfa_modules (tayfa_id, module, enabled)
@@ -122,9 +132,13 @@ WHERE m.user_id = @user_id
 ORDER BY m.created_at DESC, m.tayfa_id DESC
 LIMIT @page_size;
 
+-- Her tayfanın ilgi alanları katalog sırasıyla.
 -- name: ListInterestsForTayfas :many
-SELECT tayfa_id, event_type FROM tayfa_interests
-WHERE tayfa_id = ANY(@tayfa_ids::uuid[]);
+SELECT ti.tayfa_id, ti.interest_key
+FROM tayfa_interests ti
+JOIN catalog_interests ci ON ci.key = ti.interest_key
+WHERE ti.tayfa_id = ANY(@tayfa_ids::uuid[])
+ORDER BY ti.tayfa_id, ci.position, ci.key;
 
 -- name: ListModulesForTayfas :many
 SELECT tayfa_id, module, enabled FROM tayfa_modules

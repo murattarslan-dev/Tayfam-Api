@@ -299,13 +299,13 @@ func TestInvitedUserIsNotAMember(t *testing.T) {
 func TestInvitationInterests(t *testing.T) {
 	e := setup(t)
 	tf := e.newTayfa(t, "approval")
-	e.exec(t, `INSERT INTO tayfa_interests (tayfa_id, event_type) VALUES ($1, 'fishing'), ($1, 'convoy')`, tf.id.PG())
+	e.exec(t, `INSERT INTO tayfa_interests (tayfa_id, interest_key) VALUES ($1, 'water'), ($1, 'automotive')`, tf.id.PG())
 	plain := e.newTayfa(t, "approval")
 	f := e.friend(t, tf.admin)
 	e.friends(t, plain.admin, f)
 
 	inv, err := e.svc.InviteFriend(ctx, tf.admin, tf.id, f)
-	if err != nil || len(inv.Interests) != 2 || inv.Interests[0] != "convoy" {
+	if err != nil || len(inv.Interests) != 2 || inv.Interests[0] != "automotive" {
 		t.Fatalf("davet: %+v %v", inv, err)
 	}
 	_, err = e.svc.InviteFriend(ctx, plain.admin, plain.id, f)
@@ -316,7 +316,7 @@ func TestInvitationInterests(t *testing.T) {
 	for _, i := range my.Items {
 		got[i.TayfaID] = i.Interests
 	}
-	if len(got[tf.id]) != 2 || got[tf.id][1] != "fishing" || len(got[plain.id]) != 0 {
+	if len(got[tf.id]) != 2 || got[tf.id][1] != "water" || len(got[plain.id]) != 0 {
 		t.Fatalf("davetlerim = %+v", got)
 	}
 	list, err := e.svc.ListInvitations(ctx, tf.admin, tf.id, 0, "")

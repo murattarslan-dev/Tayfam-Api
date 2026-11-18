@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -50,7 +51,46 @@ func Load(ctx context.Context, q *store.Queries, user id.ID) (Stored, error) {
 	return out, nil
 }
 
-// Save writes user's fields and visibility; the snooze stays.
+// Stored values of catalog_interests.status (identity's copy of core's
+// catalog).
+const (
+	interestActive  = "active"
+	interestRetired = "retired"
+)
+
+// CheckInterests checks next, the interests about to be stored, against
+// identity's copy of the catalog (ADR-0025 §10, ADR-0009 copy model): every
+// key is an interest the copy knows, and a retired interest can only be
+// kept, not chosen: it passes only when the user already has it (cur). A
+// key that fails is ErrInvalid.
+func CheckInterests(ctx context.Context, q *store.Queries, cur, next []string) error {
+	if len(next) == 0 {
+		return nil
+	}
+	rows, err := q.ListCatalogInterests(ctx)
+	if err != nil {
+		return fmt.Errorf("katalog kopyası: %w", err)
+	}
+	status := make(map[string]string, len(rows))
+	for _, r := range rows {
+		status[r.Key] = r.Status
+	}
+	for _, k := range next {
+		switch status[k] {
+		case interestActive:
+		case interestRetired:
+			if !slices.Contains(cur, k) {
+				return fmt.Errorf("%w: emekli ilgi alanı", ErrInvalid)
+			}
+		default:
+			return fmt.Errorf("%w: bilinmeyen ilgi alanı", ErrInvalid)
+		}
+	}
+	return nil
+}
+
+// Save writes user's fields and visibility; the snooze stays. The caller
+// checks changed interests with CheckInterests first.
 func Save(ctx context.Context, q *store.Queries, user id.ID, v Values, vis AboutVisibility) error {
 	text := func(s string) pgtype.Text { return pgtype.Text{String: s, Valid: s != ""} }
 	if err := q.UpsertProfileDetails(ctx, store.UpsertProfileDetailsParams{

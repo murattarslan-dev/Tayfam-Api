@@ -118,7 +118,7 @@ func TestConvertInstantTayfa(t *testing.T) {
 	user, tf := id.New(), id.New()
 	resp, err := srv.ConvertInstantTayfa(callerCtx(user), &corev1.ConvertInstantTayfaRequest{
 		TayfaId: tf.String(), Name: "Bisikletçiler", Description: "Hafta sonu",
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_SPORTS}, JoinPolicy: corev1.JoinPolicy_JOIN_POLICY_OPEN,
+		InterestKeys: []string{"sports"}, JoinPolicy: corev1.JoinPolicy_JOIN_POLICY_OPEN,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -134,7 +134,7 @@ func TestConvertInstantTayfa(t *testing.T) {
 	if p := tayfaToProto(tayfa.View{ID: id.New(), Kind: "standard"}); p.GetConvertTime() != nil {
 		t.Fatalf("dönüşmemiş tayfa = %v", p.GetConvertTime())
 	}
-	_, err = srv.ConvertInstantTayfa(callerCtx(user), &corev1.ConvertInstantTayfaRequest{TayfaId: tf.String(), Name: "X", Interests: []corev1.EventType{0}})
+	_, err = srv.ConvertInstantTayfa(callerCtx(user), &corev1.ConvertInstantTayfaRequest{TayfaId: tf.String(), Name: "X", Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_SPORTS}})
 	if code, info := infoOf(t, err); code != codes.InvalidArgument || info.GetMetadata()["field"] != "interests" {
 		t.Fatalf("ilgi alanı: %v", err)
 	}

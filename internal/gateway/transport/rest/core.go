@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -283,7 +284,7 @@ func (h coreHandlers) createTayfa(ctx context.Context, w http.ResponseWriter, r 
 	if !decode(w, r, &b) {
 		return
 	}
-	interests, ok := eventTypes.values(b.Interests)
+	interests, ok := interestKeys(b.Interests)
 	policy, okP := joinPolicies.valueOrUnspecified(b.JoinPolicy)
 	if !ok || !okP || !validUUID(b.ClientRequestID) || !nameLengthOK(b.Name) ||
 		utf8.RuneCountInString(strings.TrimSpace(b.Description)) > 500 {
@@ -299,7 +300,7 @@ func (h coreHandlers) createTayfa(ctx context.Context, w http.ResponseWriter, r 
 	}
 	h.retries.remember(ip, b.ClientRequestID)
 	resp, err := h.d.Tayfas.CreateTayfa(ctx, &corev1.CreateTayfaRequest{
-		Name: b.Name, Description: b.Description, Interests: interests,
+		Name: b.Name, Description: b.Description, InterestKeys: interests,
 		JoinPolicy: policy, ClientRequestId: b.ClientRequestID,
 	})
 	if err != nil {
@@ -329,7 +330,7 @@ func (h coreHandlers) convertInstantTayfa(ctx context.Context, w http.ResponseWr
 	if !decode(w, r, &b) {
 		return
 	}
-	interests, ok := eventTypes.values(b.Interests)
+	interests, ok := interestKeys(b.Interests)
 	policy, okP := joinPolicies.valueOrUnspecified(b.JoinPolicy)
 	if !ok || !okP || !nameLengthOK(b.Name) || utf8.RuneCountInString(strings.TrimSpace(b.Description)) > 500 {
 		badRequest(w, r)
@@ -340,7 +341,7 @@ func (h coreHandlers) convertInstantTayfa(ctx context.Context, w http.ResponseWr
 		return
 	}
 	resp, err := h.d.Tayfas.ConvertInstantTayfa(ctx, &corev1.ConvertInstantTayfaRequest{
-		TayfaId: id, Name: b.Name, Description: b.Description, Interests: interests, JoinPolicy: policy,
+		TayfaId: id, Name: b.Name, Description: b.Description, InterestKeys: interests, JoinPolicy: policy,
 	})
 	if err != nil {
 		h.fail(w, r, err)
@@ -440,12 +441,12 @@ func (h coreHandlers) updateTayfa(ctx context.Context, w http.ResponseWriter, r 
 		req.UpdateMask.Paths = append(req.UpdateMask.Paths, "description")
 	}
 	if b.Interests != nil {
-		v, ok := eventTypes.values(*b.Interests)
+		v, ok := interestKeys(*b.Interests)
 		if !ok {
 			badRequest(w, r)
 			return
 		}
-		req.Interests = v
+		req.InterestKeys = v
 		req.UpdateMask.Paths = append(req.UpdateMask.Paths, "interests")
 	}
 	if b.JoinPolicy != nil {
@@ -910,16 +911,38 @@ type invitePreviewJSON struct {
 	Name          string `json:"name"`
 	MemberCount   int32  `json:"member_count"`
 	AlreadyMember bool   `json:"already_member"`
-	// Issue #194: the tayfa's interests (EventType names).
+	// Issue #194: the tayfa's interests (catalog interest keys).
 	Interests []string `json:"interests"`
 }
 
-// interestNames passes core's interest names through, keeping only the
-// EventType values the contract knows.
+// maxInterests bounds a request's interests before core or identity
+// (tayfa.MaxInterests, profilefields.MaxInterests).
+const maxInterests = 20
+
+// interestKeys checks the shape of a request's interests: at most
+// maxInterests distinct catalog keys (InterestKey in the contract). Whether
+// a key is an interest of the catalog is core's answer (identity's for the
+// profile).
+func interestKeys(in []string) ([]string, bool) {
+	if len(in) > maxInterests {
+		return nil, false
+	}
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if !catalogKeyPattern.MatchString(s) || slices.Contains(out, s) {
+			return nil, false
+		}
+		out = append(out, s)
+	}
+	return out, true
+}
+
+// interestNames passes interest keys through, keeping only values of the
+// contract's form; never nil.
 func interestNames(in []string) []string {
 	out := make([]string, 0, len(in))
 	for _, s := range in {
-		if _, ok := eventTypes.value(s); ok {
+		if catalogKeyPattern.MatchString(s) {
 			out = append(out, s)
 		}
 	}

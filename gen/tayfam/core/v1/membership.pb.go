@@ -920,10 +920,10 @@ type PreviewInviteResponse struct {
 	// True when the caller is already an ACTIVE member or has a PENDING
 	// request in this tayfa.
 	AlreadyMember bool `protobuf:"varint,4,opt,name=already_member,json=alreadyMember,proto3" json:"already_member,omitempty"`
-	// The tayfa's interests (issue #194), as EventType names in lower case
-	// ("convoy", "camp", "hike", "fishing", "gaming", "sports", "general";
-	// tayfa.proto cannot be imported here). Only for a valid invite: an
-	// invalid one returns an error and no tayfa information at all.
+	// The tayfa's interests (issue #194): keys of the catalog's interests
+	// (CatalogInterest.key, ADR-0025 §2), in catalog order. Only for a valid
+	// invite: an invalid one returns an error and no tayfa information at
+	// all.
 	Interests     []string `protobuf:"bytes,5,rep,name=interests,proto3" json:"interests,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

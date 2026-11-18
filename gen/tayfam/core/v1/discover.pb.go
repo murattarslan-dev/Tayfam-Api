@@ -362,14 +362,18 @@ func (x *DiscoverTayfa) GetAttendanceCount() int32 {
 // DiscoverEvent is an event as the feed shows it: no description, no
 // meeting point, no coordinates (they are for members only).
 type DiscoverEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	Type          EventType              `protobuf:"varint,2,opt,name=type,proto3,enum=tayfam.core.v1.EventType" json:"type,omitempty"`
-	Title         string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
-	StartTime     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	EndTime       *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
-	City          string                 `protobuf:"bytes,6,opt,name=city,proto3" json:"city,omitempty"`
-	District      string                 `protobuf:"bytes,7,opt,name=district,proto3" json:"district,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	EventId string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	// Faz 1; never filled. See type_key.
+	Type      EventType              `protobuf:"varint,2,opt,name=type,proto3,enum=tayfam.core.v1.EventType" json:"type,omitempty"`
+	Title     string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	StartTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime   *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	City      string                 `protobuf:"bytes,6,opt,name=city,proto3" json:"city,omitempty"`
+	District  string                 `protobuf:"bytes,7,opt,name=district,proto3" json:"district,omitempty"`
+	// The event's type: a key of the catalog (CatalogEventType.key,
+	// ADR-0025).
+	TypeKey       string `protobuf:"bytes,8,opt,name=type_key,json=typeKey,proto3" json:"type_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -449,6 +453,13 @@ func (x *DiscoverEvent) GetCity() string {
 func (x *DiscoverEvent) GetDistrict() string {
 	if x != nil {
 		return x.District
+	}
+	return ""
+}
+
+func (x *DiscoverEvent) GetTypeKey() string {
+	if x != nil {
+		return x.TypeKey
 	}
 	return ""
 }
@@ -1776,7 +1787,7 @@ const file_tayfam_core_v1_discover_proto_rawDesc = "" +
 	"createTime\x12\x1f\n" +
 	"\vevent_count\x18\x06 \x01(\x05R\n" +
 	"eventCount\x12)\n" +
-	"\x10attendance_count\x18\a \x01(\x05R\x0fattendanceCount\"\x91\x02\n" +
+	"\x10attendance_count\x18\a \x01(\x05R\x0fattendanceCount\"\xac\x02\n" +
 	"\rDiscoverEvent\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12-\n" +
 	"\x04type\x18\x02 \x01(\x0e2\x19.tayfam.core.v1.EventTypeR\x04type\x12\x14\n" +
@@ -1785,7 +1796,8 @@ const file_tayfam_core_v1_discover_proto_rawDesc = "" +
 	"start_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
 	"\bend_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12\x12\n" +
 	"\x04city\x18\x06 \x01(\tR\x04city\x12\x1a\n" +
-	"\bdistrict\x18\a \x01(\tR\bdistrict\"\xd5\x01\n" +
+	"\bdistrict\x18\a \x01(\tR\bdistrict\x12\x19\n" +
+	"\btype_key\x18\b \x01(\tR\atypeKey\"\xd5\x01\n" +
 	"\fDiscoverItem\x123\n" +
 	"\x05event\x18\x01 \x01(\v2\x1d.tayfam.core.v1.DiscoverEventR\x05event\x123\n" +
 	"\x05tayfa\x18\x02 \x01(\v2\x1d.tayfam.core.v1.DiscoverTayfaR\x05tayfa\x128\n" +

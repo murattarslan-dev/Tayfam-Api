@@ -77,7 +77,7 @@ func TestConvertInstantTayfa(t *testing.T) {
 		t.Fatalf("dönüştürme: %d %s", w.Code, w.Body)
 	}
 	want := &corev1.ConvertInstantTayfaRequest{
-		TayfaId: tayfaID, Name: "Film Tayfası", Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_GENERAL},
+		TayfaId: tayfaID, Name: "Film Tayfası", InterestKeys: []string{"general"},
 		JoinPolicy: corev1.JoinPolicy_JOIN_POLICY_OPEN,
 	}
 	if got, _, _ := f.last(); !proto.Equal(got, want) {

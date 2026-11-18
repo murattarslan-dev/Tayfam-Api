@@ -20,7 +20,7 @@ const contactID = "0193b2a4-7c3e-7a10-8b2c-3d4e5f607182"
 func testDiscoverItem() *corev1.DiscoverItem {
 	return &corev1.DiscoverItem{
 		Event: &corev1.DiscoverEvent{
-			EventId: eventID, Type: corev1.EventType_EVENT_TYPE_HIKE, Title: "Belgrad yürüyüşü",
+			EventId: eventID, TypeKey: "hike", Title: "Belgrad yürüyüşü",
 			StartTime: timestamppb.New(t0.Add(48 * time.Hour)), EndTime: timestamppb.New(t0.Add(52 * time.Hour)),
 			City: "İstanbul", District: "Sarıyer",
 		},

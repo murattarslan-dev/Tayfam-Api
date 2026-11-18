@@ -89,7 +89,7 @@ func TestDiscoverMethods(t *testing.T) {
 
 	feed, err := srv.ListDiscoverFeed(ctx, &corev1.ListDiscoverFeedRequest{})
 	if err != nil || f.caller != u || len(feed.GetItems()) != 1 || feed.GetItems()[0].GetFriendCount() != 2 ||
-		feed.GetItems()[0].GetEvent().GetType() != corev1.EventType_EVENT_TYPE_HIKE {
+		feed.GetItems()[0].GetEvent().GetTypeKey() != "hike" || feed.GetItems()[0].GetEvent().GetType() != corev1.EventType_EVENT_TYPE_UNSPECIFIED {
 		t.Fatalf("akış: %v %v", feed, err)
 	}
 	st, err := srv.GetTayfaDiscover(ctx, &corev1.GetTayfaDiscoverRequest{TayfaId: tf.String()})

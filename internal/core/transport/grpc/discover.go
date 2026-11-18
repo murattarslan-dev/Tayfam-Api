@@ -82,7 +82,7 @@ func (s *DiscoverServer) ListDiscoverFeed(ctx context.Context, _ *corev1.ListDis
 	for _, it := range items {
 		pb := &corev1.DiscoverItem{
 			Event: &corev1.DiscoverEvent{
-				EventId: it.EventID.String(), Type: interestToProto(it.Type), Title: it.Title,
+				EventId: it.EventID.String(), TypeKey: it.Type, Title: it.Title,
 				StartTime: timestamppb.New(it.StartsAt), EndTime: timestamppb.New(it.EndsAt),
 				City: it.City, District: it.District,
 			},

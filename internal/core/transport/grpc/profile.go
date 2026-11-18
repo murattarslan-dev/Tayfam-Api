@@ -66,7 +66,7 @@ func (s *ProfileServer) ListUserActivity(ctx context.Context, req *corev1.ListUs
 	out := &corev1.ListUserActivityResponse{Records: make([]*corev1.ActivityRecord, 0, len(p.Items)), NextPageToken: p.Next}
 	for _, a := range p.Items {
 		r := &corev1.ActivityRecord{
-			EventType: interestToProto(a.EventType), City: a.City, District: a.District,
+			EventTypeKey: a.EventType, City: a.City, District: a.District,
 			StartTime: timestamppb.New(a.StartedAt), TayfaMember: a.Member,
 		}
 		switch a.Mode {

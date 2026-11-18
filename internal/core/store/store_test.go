@@ -982,7 +982,7 @@ func TestConstraints(t *testing.T) {
 		"planlanmamış silme":      {`UPDATE tayfas SET deletion_requested_at = now() WHERE id = $1`, "tayfas_deletion_request"},
 		"geçmişe planlanan silme": {`UPDATE tayfas SET deletion_requested_at = now(), deletion_scheduled_for = now() - interval '1 hour' WHERE id = $1`, "tayfas_deletion_request"},
 		"silinmeden silen":        {`UPDATE tayfas SET deleted_by = created_by WHERE id = $1`, "tayfas_deleted_by"},
-		"bilinmeyen ilgi alanı":   {`INSERT INTO tayfa_interests (tayfa_id, event_type) VALUES ($1, 'cycling')`, "tayfa_interests_event_type"},
+		"bilinmeyen ilgi alanı":   {`INSERT INTO tayfa_interests (tayfa_id, interest_key) VALUES ($1, 'cycling')`, "tayfa_interests_interest_key_fkey"},
 		"bilinmeyen modül":        {`INSERT INTO tayfa_modules (tayfa_id, module, enabled) VALUES ($1, 'garage', true)`, "tayfa_modules_module"},
 		"sohbet modül değildir":   {`INSERT INTO tayfa_modules (tayfa_id, module, enabled) VALUES ($1, 'channels', true)`, "tayfa_modules_module"},
 		"kısa davet hash'i":       {`INSERT INTO invites (id, tayfa_id, token_hash, expires_at) VALUES (gen_random_uuid(), $1, '\x01'::bytea, now() + interval '1 day')`, "invites_token_hash_len"},
@@ -1254,13 +1254,18 @@ func TestModulesAndInterests(t *testing.T) {
 	pool, q := setup(t)
 	ctx := context.Background()
 	tayfa := newTayfa(t, pool, id.New(), tayfaOpts{})
-	for _, e := range []string{"camp", "hike", "camp"} {
-		if err := q.AddTayfaInterest(ctx, AddTayfaInterestParams{TayfaID: tayfa.PG(), EventType: e}); err != nil {
+	// Catalog interest keys; listed in catalog order (position).
+	for _, e := range []string{"water", "nature", "water"} {
+		if err := q.AddTayfaInterest(ctx, AddTayfaInterestParams{TayfaID: tayfa.PG(), InterestKey: e}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if got, _ := q.ListTayfaInterests(ctx, tayfa.PG()); len(got) != 2 {
+	if got, _ := q.ListTayfaInterests(ctx, tayfa.PG()); len(got) != 2 || got[0] != "nature" || got[1] != "water" {
 		t.Fatalf("ilgi alanları = %v", got)
+	}
+	rows, err := q.ListInterestsForTayfas(ctx, []pgtype.UUID{tayfa.PG()})
+	if err != nil || len(rows) != 2 || rows[0].InterestKey != "nature" || rows[1].InterestKey != "water" {
+		t.Fatalf("toplu ilgi alanları = %v, %v", rows, err)
 	}
 	if err := q.DeleteTayfaInterests(ctx, tayfa.PG()); err != nil {
 		t.Fatal(err)

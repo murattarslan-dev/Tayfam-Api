@@ -71,13 +71,11 @@ func (s *Service) views(ctx context.Context, rows []viewRow) ([]View, error) {
 		return nil, fmt.Errorf("üye sayısı: %w", err)
 	}
 
-	byInterest := map[id.ID]map[string]bool{}
+	// The rows come in catalog order.
+	byInterest := map[id.ID][]string{}
 	for _, r := range interests {
 		k := id.ID(r.TayfaID.Bytes)
-		if byInterest[k] == nil {
-			byInterest[k] = map[string]bool{}
-		}
-		byInterest[k][r.EventType] = true
+		byInterest[k] = append(byInterest[k], r.InterestKey)
 	}
 	byModule := map[id.ID]map[string]bool{}
 	for _, r := range modules {
@@ -151,11 +149,7 @@ func (s *Service) views(ctx context.Context, rows []viewRow) ([]View, error) {
 		if r.ConvertedAt.Valid {
 			v.ConvertedAt = r.ConvertedAt.Time.UTC()
 		}
-		for _, e := range Interests {
-			if byInterest[r.ID][e] {
-				v.Interests = append(v.Interests, e)
-			}
-		}
+		v.Interests = append(v.Interests, byInterest[r.ID]...)
 		// A module without a row counts as off: the safe default.
 		for _, m := range Modules {
 			v.Modules = append(v.Modules, ModuleState{Module: m, Enabled: byModule[r.ID][m]})

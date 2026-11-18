@@ -467,6 +467,16 @@ func (s *Service) updateProfile(ctx context.Context, q *store.Queries, caller id
 	if err != nil {
 		return ErrInvalidProfile
 	}
+	if c.Profile.Interests != nil {
+		// Interests are keys of core's catalog; identity checks them
+		// against its copy (ADR-0025 §10).
+		if err := profilefields.CheckInterests(ctx, q, st.Values.Interests, next.Interests); err != nil {
+			if errors.Is(err, profilefields.ErrInvalid) {
+				return ErrInvalidProfile
+			}
+			return err
+		}
+	}
 	vis := st.Visibility
 	if c.AboutVisibility != nil {
 		vis = *c.AboutVisibility

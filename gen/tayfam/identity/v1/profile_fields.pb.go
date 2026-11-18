@@ -21,7 +21,10 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ProfileInterest is an event type the user is interested in.
+// ProfileInterest is the Faz 1 list of interests (event types). Interests
+// are keys of core's catalog now (ADR-0025 §10): see
+// ProfileFields.interest_keys and InterestList.keys. The enum stays because
+// fields that used it cannot be removed.
 type ProfileInterest int32
 
 const (
@@ -317,7 +320,7 @@ func (x *SocialAccount) GetUsername() string {
 // which only the user's own account tells).
 type ProfileFields struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// No repeats.
+	// Faz 1; never filled. See interest_keys.
 	Interests []ProfileInterest `protobuf:"varint,1,rep,packed,name=interests,proto3,enum=tayfam.identity.v1.ProfileInterest" json:"interests,omitempty"`
 	// 1–160 characters.
 	About string `protobuf:"bytes,2,opt,name=about,proto3" json:"about,omitempty"`
@@ -329,8 +332,11 @@ type ProfileFields struct {
 	Languages []string `protobuf:"bytes,5,rep,name=languages,proto3" json:"languages,omitempty"`
 	// One per platform.
 	SocialAccounts []*SocialAccount `protobuf:"bytes,6,rep,name=social_accounts,json=socialAccounts,proto3" json:"social_accounts,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Keys of the catalog's interests (core CatalogInterest.key), no repeats,
+	// sorted. A retired interest stays on the profiles that chose it.
+	InterestKeys  []string `protobuf:"bytes,7,rep,name=interest_keys,json=interestKeys,proto3" json:"interest_keys,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ProfileFields) Reset() {
@@ -405,9 +411,21 @@ func (x *ProfileFields) GetSocialAccounts() []*SocialAccount {
 	return nil
 }
 
+func (x *ProfileFields) GetInterestKeys() []string {
+	if x != nil {
+		return x.InterestKeys
+	}
+	return nil
+}
+
 type InterestList struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Values        []ProfileInterest      `protobuf:"varint,1,rep,packed,name=values,proto3,enum=tayfam.identity.v1.ProfileInterest" json:"values,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Faz 1; must be empty (ERROR_REASON_VALIDATION). See keys.
+	Values []ProfileInterest `protobuf:"varint,1,rep,packed,name=values,proto3,enum=tayfam.identity.v1.ProfileInterest" json:"values,omitempty"`
+	// At most 20 distinct keys of the catalog's interests. A key identity's
+	// copy of the catalog does not know, or a retired one the user does not
+	// already have, is ERROR_REASON_VALIDATION.
+	Keys          []string `protobuf:"bytes,2,rep,name=keys,proto3" json:"keys,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -445,6 +463,13 @@ func (*InterestList) Descriptor() ([]byte, []int) {
 func (x *InterestList) GetValues() []ProfileInterest {
 	if x != nil {
 		return x.Values
+	}
+	return nil
+}
+
+func (x *InterestList) GetKeys() []string {
+	if x != nil {
+		return x.Keys
 	}
 	return nil
 }
@@ -688,7 +713,7 @@ const file_tayfam_identity_v1_profile_fields_proto_rawDesc = "" +
 	"'tayfam/identity/v1/profile_fields.proto\x12\x12tayfam.identity.v1\"k\n" +
 	"\rSocialAccount\x12>\n" +
 	"\bplatform\x18\x01 \x01(\x0e2\".tayfam.identity.v1.SocialPlatformR\bplatform\x12\x1a\n" +
-	"\busername\x18\x02 \x01(\tR\busername\"\x86\x02\n" +
+	"\busername\x18\x02 \x01(\tR\busername\"\xab\x02\n" +
 	"\rProfileFields\x12A\n" +
 	"\tinterests\x18\x01 \x03(\x0e2#.tayfam.identity.v1.ProfileInterestR\tinterests\x12\x14\n" +
 	"\x05about\x18\x02 \x01(\tR\x05about\x12\x1e\n" +
@@ -697,9 +722,11 @@ const file_tayfam_identity_v1_profile_fields_proto_rawDesc = "" +
 	"occupation\x12\x12\n" +
 	"\x04team\x18\x04 \x01(\tR\x04team\x12\x1c\n" +
 	"\tlanguages\x18\x05 \x03(\tR\tlanguages\x12J\n" +
-	"\x0fsocial_accounts\x18\x06 \x03(\v2!.tayfam.identity.v1.SocialAccountR\x0esocialAccounts\"K\n" +
+	"\x0fsocial_accounts\x18\x06 \x03(\v2!.tayfam.identity.v1.SocialAccountR\x0esocialAccounts\x12#\n" +
+	"\rinterest_keys\x18\a \x03(\tR\finterestKeys\"_\n" +
 	"\fInterestList\x12;\n" +
-	"\x06values\x18\x01 \x03(\x0e2#.tayfam.identity.v1.ProfileInterestR\x06values\"&\n" +
+	"\x06values\x18\x01 \x03(\x0e2#.tayfam.identity.v1.ProfileInterestR\x06values\x12\x12\n" +
+	"\x04keys\x18\x02 \x03(\tR\x04keys\"&\n" +
 	"\fLanguageList\x12\x16\n" +
 	"\x06values\x18\x01 \x03(\tR\x06values\"N\n" +
 	"\x11SocialAccountList\x129\n" +

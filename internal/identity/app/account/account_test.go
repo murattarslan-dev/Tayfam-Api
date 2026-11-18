@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -25,14 +26,22 @@ type env struct {
 
 func setup(t *testing.T) *env {
 	t.Helper()
-	pool := dbtest.New(t, "identity", identitydb.Migrations())
-	e := &env{pool: pool, now: time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)}
-	svc, err := New(Config{Pool: pool, Now: func() time.Time { return e.now }})
+	e, _ := setupWithAdmin(t)
+	return e
+}
+
+// setupWithAdmin is setup with a superuser pool of the same database, for
+// fixtures the service cannot write (the copy of core's catalog).
+func setupWithAdmin(t *testing.T) (*env, *pgxpool.Pool) {
+	t.Helper()
+	d := dbtest.Open(t, "identity", identitydb.Migrations())
+	e := &env{pool: d.App, now: time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)}
+	svc, err := New(Config{Pool: d.App, Now: func() time.Time { return e.now }})
 	if err != nil {
 		t.Fatal(err)
 	}
 	e.svc = svc
-	return e
+	return e, d.Admin
 }
 
 // registered creates a registered user with a referral code.
@@ -455,6 +464,83 @@ func TestUpdateBirthdayVisibility(t *testing.T) {
 	}
 }
 
+// Profile interests are keys of core's catalog, checked against identity's
+// copy of it (ADR-0025 §10): a key the copy does not have is refused and
+// changes nothing; a retired interest stays on the profile that has it and
+// can be kept, but it cannot be chosen; an interest that arrives in the
+// copy can be chosen without a release.
+func TestProfileInterestsFollowCatalogCopy(t *testing.T) {
+	e, admin := setupWithAdmin(t)
+	ctx := context.Background()
+	u, _ := e.registered(t, "Deniz")
+	set := func(keys ...string) error {
+		return e.svc.Update(ctx, u, Changes{Profile: profilefields.Update{Interests: &keys}})
+	}
+	want := func(step string, keys ...string) {
+		t.Helper()
+		a, err := e.svc.Get(ctx, u)
+		if err != nil || !slices.Equal(a.Profile.Interests, keys) {
+			t.Fatalf("%s: ilgi alanları = %v, %v; beklenen %v", step, a.Profile.Interests, err, keys)
+		}
+	}
+	if err := set("water", "nature"); err != nil {
+		t.Fatal(err)
+	}
+	want("seçim", "nature", "water")
+	for name, bad := range map[string][]string{
+		"katalogda yok":     {"nature", "dance"},
+		"etkinlik türü":     {"hike"},
+		"bozuk anahtar":     {"Nature"},
+		"tekrar eden":       {"nature", "nature"},
+		"yalnız bilinmeyen": {"chess"},
+	} {
+		if err := set(bad...); !errors.Is(err, ErrInvalidProfile) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	want("reddedilen istekler", "nature", "water")
+
+	if _, err := admin.Exec(ctx, `UPDATE catalog_interests SET status = 'retired' WHERE key IN ('water', 'sports')`); err != nil {
+		t.Fatal(err)
+	}
+	// Still shown, and kept next to a new choice.
+	want("emekli ilgi alanı", "nature", "water")
+	if err := set("water", "games"); err != nil {
+		t.Fatalf("emekli ilgi alanı korunamadı: %v", err)
+	}
+	want("korunan", "games", "water")
+	// Another field can change while the profile has a retired interest.
+	team := "Bursaspor"
+	if err := e.svc.Update(ctx, u, Changes{Profile: profilefields.Update{Team: &team}}); err != nil {
+		t.Fatalf("emekli ilgi alanı varken başka alan: %v", err)
+	}
+	// Not chosen: the user does not have "sports"; once dropped, "water"
+	// cannot come back.
+	if err := set("sports"); !errors.Is(err, ErrInvalidProfile) {
+		t.Fatalf("emekli ilgi alanı seçildi: %v", err)
+	}
+	if err := set("games"); err != nil {
+		t.Fatal(err)
+	}
+	if err := set("water"); !errors.Is(err, ErrInvalidProfile) {
+		t.Fatalf("bırakılan emekli ilgi alanı geri seçildi: %v", err)
+	}
+	want("emekli reddi", "games")
+
+	if _, err := admin.Exec(ctx, `INSERT INTO catalog_interests (key) VALUES ('environment')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := set("environment", "games"); err != nil {
+		t.Fatalf("kopyaya gelen ilgi alanı seçilemedi: %v", err)
+	}
+	want("yeni ilgi alanı", "environment", "games")
+	// Clearing needs no catalog.
+	if err := set(); err != nil {
+		t.Fatal(err)
+	}
+	want("temizleme")
+}
+
 // TestProfileCompletion (issue #186): fields are saved and cleaned, an
 // invalid one changes nothing, declined answers a field, the form is due
 // until every field is answered, a snooze holds it back 7 days, and a
@@ -485,7 +571,7 @@ func TestProfileCompletion(t *testing.T) {
 	}
 
 	social := []profilefields.SocialAccount{{Platform: "x", Username: "@deniz"}}
-	interests := []string{"camp"}
+	interests := []string{"nature"}
 	vis := profilefields.VisibleFriends
 	if err := e.svc.Update(ctx, u, Changes{
 		Profile:         profilefields.Update{Team: &team, SocialAccounts: &social, Interests: &interests},

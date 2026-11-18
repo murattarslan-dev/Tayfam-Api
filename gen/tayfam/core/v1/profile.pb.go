@@ -331,9 +331,10 @@ func (x *ListUserActivityRequest) GetPageToken() string {
 
 // ActivityRecord is one attendance as the caller may see it.
 type ActivityRecord struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	EventType EventType              `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=tayfam.core.v1.EventType" json:"event_type,omitempty"`
-	Mode      EventMode              `protobuf:"varint,2,opt,name=mode,proto3,enum=tayfam.core.v1.EventMode" json:"mode,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Faz 1; never filled. See event_type_key.
+	EventType EventType `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=tayfam.core.v1.EventType" json:"event_type,omitempty"`
+	Mode      EventMode `protobuf:"varint,2,opt,name=mode,proto3,enum=tayfam.core.v1.EventMode" json:"mode,omitempty"`
 	// Province and district of an in-person event; empty for online ones.
 	City      string                 `protobuf:"bytes,3,opt,name=city,proto3" json:"city,omitempty"`
 	District  string                 `protobuf:"bytes,4,opt,name=district,proto3" json:"district,omitempty"`
@@ -347,8 +348,11 @@ type ActivityRecord struct {
 	EventId         string `protobuf:"bytes,9,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
 	EventTitle      string `protobuf:"bytes,10,opt,name=event_title,json=eventTitle,proto3" json:"event_title,omitempty"`
 	DurationMinutes int32  `protobuf:"varint,11,opt,name=duration_minutes,json=durationMinutes,proto3" json:"duration_minutes,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The event's type: a key of the catalog (CatalogEventType.key,
+	// ADR-0025).
+	EventTypeKey  string `protobuf:"bytes,12,opt,name=event_type_key,json=eventTypeKey,proto3" json:"event_type_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ActivityRecord) Reset() {
@@ -458,6 +462,13 @@ func (x *ActivityRecord) GetDurationMinutes() int32 {
 	return 0
 }
 
+func (x *ActivityRecord) GetEventTypeKey() string {
+	if x != nil {
+		return x.EventTypeKey
+	}
+	return ""
+}
+
 type ListUserActivityResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Records       []*ActivityRecord      `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
@@ -535,7 +546,7 @@ const file_tayfam_core_v1_profile_proto_rawDesc = "" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"\xa8\x03\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"\xce\x03\n" +
 	"\x0eActivityRecord\x128\n" +
 	"\n" +
 	"event_type\x18\x01 \x01(\x0e2\x19.tayfam.core.v1.EventTypeR\teventType\x12-\n" +
@@ -552,7 +563,8 @@ const file_tayfam_core_v1_profile_proto_rawDesc = "" +
 	"\vevent_title\x18\n" +
 	" \x01(\tR\n" +
 	"eventTitle\x12)\n" +
-	"\x10duration_minutes\x18\v \x01(\x05R\x0fdurationMinutes\"|\n" +
+	"\x10duration_minutes\x18\v \x01(\x05R\x0fdurationMinutes\x12$\n" +
+	"\x0eevent_type_key\x18\f \x01(\tR\feventTypeKey\"|\n" +
 	"\x18ListUserActivityResponse\x128\n" +
 	"\arecords\x18\x01 \x03(\v2\x1e.tayfam.core.v1.ActivityRecordR\arecords\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\xd8\x01\n" +

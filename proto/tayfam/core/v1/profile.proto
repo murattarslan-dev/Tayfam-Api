@@ -74,6 +74,7 @@ message ListUserActivityRequest {
 
 // ActivityRecord is one attendance as the caller may see it.
 message ActivityRecord {
+  // Faz 1; never filled. See event_type_key.
   EventType event_type = 1;
   EventMode mode = 2;
   // Province and district of an in-person event; empty for online ones.
@@ -89,6 +90,9 @@ message ActivityRecord {
   string event_id = 9;
   string event_title = 10;
   int32 duration_minutes = 11;
+  // The event's type: a key of the catalog (CatalogEventType.key,
+  // ADR-0025).
+  string event_type_key = 12;
 }
 
 message ListUserActivityResponse {

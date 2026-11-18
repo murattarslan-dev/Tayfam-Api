@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -82,7 +83,7 @@ func (f *fakeCore) GetUserProfile(ctx context.Context, in *corev1.GetUserProfile
 }
 func (f *fakeCore) ListUserActivity(ctx context.Context, in *corev1.ListUserActivityRequest, _ ...grpc.CallOption) (*corev1.ListUserActivityResponse, error) {
 	return &corev1.ListUserActivityResponse{Records: []*corev1.ActivityRecord{
-		{EventType: corev1.EventType_EVENT_TYPE_HIKE, Mode: corev1.EventMode_EVENT_MODE_IN_PERSON, City: "Bursa", StartTime: timestamppb.New(time.Unix(1, 0))},
+		{EventTypeKey: "hike", Mode: corev1.EventMode_EVENT_MODE_IN_PERSON, City: "Bursa", StartTime: timestamppb.New(time.Unix(1, 0))},
 	}}, f.record(ctx, in)
 }
 
@@ -325,12 +326,15 @@ func TestProfileDetails(t *testing.T) {
 func TestProfileFieldRoutes(t *testing.T) {
 	f := &fakeCore{}
 	h := coreRouter(f)
-	w := as(h, "PATCH", "/v1/me/account", `{"interests":["hike","camp"],"team":"Bursaspor","languages":[],
+	w := as(h, "PATCH", "/v1/me/account", `{"interests":["nature","board_games_2"],"team":"Bursaspor","languages":[],
 		"social_accounts":[{"platform":"x","username":"ece"}],"declined_profile_fields":["about"],"about_visibility":"friends"}`)
 	got, _, _ := f.last()
 	req := got.(*identityv1.UpdateAccountRequest)
 	p := req.GetProfile()
-	if w.Code != 200 || len(p.GetInterests().GetValues()) != 2 || p.GetTeam() != "Bursaspor" || p.Languages == nil ||
+	// Interests are catalog keys: any key of the catalog's form goes on to
+	// identity, which checks it against its copy of the catalog.
+	if w.Code != 200 || !slices.Equal(p.GetInterests().GetKeys(), []string{"nature", "board_games_2"}) || len(p.GetInterests().GetValues()) != 0 ||
+		p.GetTeam() != "Bursaspor" || p.Languages == nil ||
 		p.GetSocialAccounts().GetValues()[0].GetPlatform() != identityv1.SocialPlatform_SOCIAL_PLATFORM_X ||
 		p.GetDeclined().GetValues()[0] != identityv1.ProfileField_PROFILE_FIELD_ABOUT || p.About != nil ||
 		req.GetAboutVisibility() != identityv1.AboutVisibility_ABOUT_VISIBILITY_FRIENDS || req.DisplayName != nil {
@@ -344,8 +348,9 @@ func TestProfileFieldRoutes(t *testing.T) {
 	}
 	n0 := func() int { _, _, n := f.last(); return n }()
 	for _, body := range []string{
-		`{"interests":["chess"]}`,
-		`{"interests":["hike","hike"]}`,
+		`{"interests":["Chess"]}`,
+		`{"interests":["nature","nature"]}`,
+		`{"interests":["` + strings.Join(manyInterestKeys(maxInterests+1), `","`) + `"]}`,
 		`{"social_accounts":[{"platform":"facebook","username":"ece"}]}`,
 		`{"declined_profile_fields":["birth_date"]}`,
 		`{"about_visibility":"public"}`,
@@ -372,7 +377,7 @@ func TestProfileFieldRoutes(t *testing.T) {
 
 func TestAccountProfileJSON(t *testing.T) {
 	a := accountFrom(&identityv1.GetAccountResponse{
-		Profile:               &identityv1.ProfileFields{Team: "Bursaspor", Interests: []identityv1.ProfileInterest{identityv1.ProfileInterest_PROFILE_INTEREST_HIKE}},
+		Profile:               &identityv1.ProfileFields{Team: "Bursaspor", InterestKeys: []string{"nature", "Bozuk Anahtar"}},
 		DeclinedProfileFields: []identityv1.ProfileField{identityv1.ProfileField_PROFILE_FIELD_ABOUT},
 		AboutVisibility:       identityv1.AboutVisibility_ABOUT_VISIBILITY_FRIENDS_AND_MUTUAL, ProfileCompletionPending: true,
 	})
@@ -380,7 +385,7 @@ func TestAccountProfileJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"team":"Bursaspor"`, `"interests":["hike"]`, `"languages":[]`, `"social_accounts":[]`,
+	for _, want := range []string{`"team":"Bursaspor"`, `"interests":["nature"]`, `"languages":[]`, `"social_accounts":[]`,
 		`"declined_profile_fields":["about"]`, `"about_visibility":"friends_and_mutual"`, `"profile_completion_pending":true`} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("%s yok: %s", want, b)

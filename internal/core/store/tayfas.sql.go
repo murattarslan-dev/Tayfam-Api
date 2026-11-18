@@ -12,18 +12,19 @@ import (
 )
 
 const addTayfaInterest = `-- name: AddTayfaInterest :exec
-INSERT INTO tayfa_interests (tayfa_id, event_type)
+INSERT INTO tayfa_interests (tayfa_id, interest_key)
 VALUES ($1, $2)
 ON CONFLICT DO NOTHING
 `
 
 type AddTayfaInterestParams struct {
-	TayfaID   pgtype.UUID
-	EventType string
+	TayfaID     pgtype.UUID
+	InterestKey string
 }
 
+// İlgi alanı katalog anahtarıdır (catalog_interests, ADR-0025 §2).
 func (q *Queries) AddTayfaInterest(ctx context.Context, arg AddTayfaInterestParams) error {
-	_, err := q.db.Exec(ctx, addTayfaInterest, arg.TayfaID, arg.EventType)
+	_, err := q.db.Exec(ctx, addTayfaInterest, arg.TayfaID, arg.InterestKey)
 	return err
 }
 
@@ -492,6 +493,36 @@ func (q *Queries) IsTayfaModuleEnabled(ctx context.Context, arg IsTayfaModuleEna
 	return enabled, err
 }
 
+const listCatalogInterestStatuses = `-- name: ListCatalogInterestStatuses :many
+SELECT key, status FROM catalog_interests
+`
+
+type ListCatalogInterestStatusesRow struct {
+	Key    string
+	Status string
+}
+
+// İlgi alanı doğrulaması için: anahtar ve durum (emekliler dahil).
+func (q *Queries) ListCatalogInterestStatuses(ctx context.Context) ([]ListCatalogInterestStatusesRow, error) {
+	rows, err := q.db.Query(ctx, listCatalogInterestStatuses)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCatalogInterestStatusesRow{}
+	for rows.Next() {
+		var i ListCatalogInterestStatusesRow
+		if err := rows.Scan(&i.Key, &i.Status); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listInstantEventIDs = `-- name: ListInstantEventIDs :many
 SELECT e.tayfa_id, e.id FROM events e
 JOIN tayfas t ON t.id = e.tayfa_id
@@ -525,15 +556,19 @@ func (q *Queries) ListInstantEventIDs(ctx context.Context, tayfaIds []pgtype.UUI
 }
 
 const listInterestsForTayfas = `-- name: ListInterestsForTayfas :many
-SELECT tayfa_id, event_type FROM tayfa_interests
-WHERE tayfa_id = ANY($1::uuid[])
+SELECT ti.tayfa_id, ti.interest_key
+FROM tayfa_interests ti
+JOIN catalog_interests ci ON ci.key = ti.interest_key
+WHERE ti.tayfa_id = ANY($1::uuid[])
+ORDER BY ti.tayfa_id, ci.position, ci.key
 `
 
 type ListInterestsForTayfasRow struct {
-	TayfaID   pgtype.UUID
-	EventType string
+	TayfaID     pgtype.UUID
+	InterestKey string
 }
 
+// Her tayfanın ilgi alanları katalog sırasıyla.
 func (q *Queries) ListInterestsForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListInterestsForTayfasRow, error) {
 	rows, err := q.db.Query(ctx, listInterestsForTayfas, tayfaIds)
 	if err != nil {
@@ -543,7 +578,7 @@ func (q *Queries) ListInterestsForTayfas(ctx context.Context, tayfaIds []pgtype.
 	items := []ListInterestsForTayfasRow{}
 	for rows.Next() {
 		var i ListInterestsForTayfasRow
-		if err := rows.Scan(&i.TayfaID, &i.EventType); err != nil {
+		if err := rows.Scan(&i.TayfaID, &i.InterestKey); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -678,9 +713,14 @@ func (q *Queries) ListMyTayfas(ctx context.Context, arg ListMyTayfasParams) ([]L
 }
 
 const listTayfaInterests = `-- name: ListTayfaInterests :many
-SELECT event_type FROM tayfa_interests WHERE tayfa_id = $1 ORDER BY event_type
+SELECT ti.interest_key
+FROM tayfa_interests ti
+JOIN catalog_interests ci ON ci.key = ti.interest_key
+WHERE ti.tayfa_id = $1
+ORDER BY ci.position, ci.key
 `
 
+// Katalog sırasıyla.
 func (q *Queries) ListTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) ([]string, error) {
 	rows, err := q.db.Query(ctx, listTayfaInterests, tayfaID)
 	if err != nil {
@@ -689,11 +729,11 @@ func (q *Queries) ListTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) (
 	defer rows.Close()
 	items := []string{}
 	for rows.Next() {
-		var event_type string
-		if err := rows.Scan(&event_type); err != nil {
+		var interest_key string
+		if err := rows.Scan(&interest_key); err != nil {
 			return nil, err
 		}
-		items = append(items, event_type)
+		items = append(items, interest_key)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

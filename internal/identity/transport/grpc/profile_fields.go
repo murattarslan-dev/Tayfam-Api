@@ -7,16 +7,6 @@ import (
 
 // Profile completion form (issue #186): proto enums ↔ the stored names.
 
-var interestNames = map[identityv1.ProfileInterest]string{
-	identityv1.ProfileInterest_PROFILE_INTEREST_CONVOY:  "convoy",
-	identityv1.ProfileInterest_PROFILE_INTEREST_CAMP:    "camp",
-	identityv1.ProfileInterest_PROFILE_INTEREST_HIKE:    "hike",
-	identityv1.ProfileInterest_PROFILE_INTEREST_FISHING: "fishing",
-	identityv1.ProfileInterest_PROFILE_INTEREST_GAMING:  "gaming",
-	identityv1.ProfileInterest_PROFILE_INTEREST_SPORTS:  "sports",
-	identityv1.ProfileInterest_PROFILE_INTEREST_GENERAL: "general",
-}
-
 var platformNamesPB = map[identityv1.SocialPlatform]string{
 	identityv1.SocialPlatform_SOCIAL_PLATFORM_INSTAGRAM: "instagram",
 	identityv1.SocialPlatform_SOCIAL_PLATFORM_X:         "x",
@@ -48,7 +38,6 @@ func invert[K, V comparable](m map[K]V) map[V]K {
 }
 
 var (
-	interestValues        = invert(interestNames)
 	platformValues        = invert(platformNamesPB)
 	fieldValues           = invert(fieldNames)
 	aboutVisibilityValues = invert(aboutVisibilityNames)
@@ -69,7 +58,9 @@ func mapAll[K comparable, V any](in []K, m map[K]V) ([]V, bool) {
 
 func profileFieldsToPB(interests []string, about, occupation, team string, languages []string, social []profilefields.SocialAccount) *identityv1.ProfileFields {
 	out := &identityv1.ProfileFields{About: about, Occupation: occupation, Team: team, Languages: languages}
-	out.Interests, _ = mapAll(interests, interestValues)
+	// Interests are catalog interest keys (ADR-0025 §10); the Faz 1 enum
+	// list is never filled.
+	out.InterestKeys = append(out.InterestKeys, interests...)
 	for _, a := range social {
 		out.SocialAccounts = append(out.SocialAccounts, &identityv1.SocialAccount{Platform: platformValues[a.Platform], Username: a.Username})
 	}
@@ -84,10 +75,12 @@ func profileUpdateFromPB(p *identityv1.ProfileUpdate) (profilefields.Update, boo
 		return u, true
 	}
 	if p.Interests != nil {
-		v, ok := mapAll(p.GetInterests().GetValues(), interestNames)
-		if !ok {
+		// Catalog interest keys; the Faz 1 enum list must be empty (an
+		// event type is not an interest). The app layer checks the keys.
+		if len(p.GetInterests().GetValues()) > 0 {
 			return u, false
 		}
+		v := append([]string{}, p.GetInterests().GetKeys()...)
 		u.Interests = &v
 	}
 	if p.Languages != nil {
@@ -125,6 +118,6 @@ func profileUpdateTooLarge(p *identityv1.ProfileUpdate) bool {
 		return false
 	}
 	return len(p.GetAbout()) > maxProfileText || len(p.GetOccupation()) > maxProfileText || len(p.GetTeam()) > maxProfileText ||
-		len(p.GetInterests().GetValues()) > 32 || len(p.GetLanguages().GetValues()) > 32 ||
+		len(p.GetInterests().GetKeys()) > 32 || len(p.GetInterests().GetValues()) > 32 || len(p.GetLanguages().GetValues()) > 32 ||
 		len(p.GetSocialAccounts().GetValues()) > 32 || len(p.GetDeclined().GetValues()) > 32
 }

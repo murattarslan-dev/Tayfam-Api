@@ -428,7 +428,7 @@ func TestConvert(t *testing.T) {
 	_, err = e.members.AcceptInvitation(ctx, f, tf)
 	must(t, err)
 
-	in := tayfa.ConvertInput{Name: "Bisiklet Tayfası", Interests: []string{"sports", "hike"}}
+	in := tayfa.ConvertInput{Name: "Bisiklet Tayfası", Interests: []string{"sports", "nature"}}
 	// Members cannot convert; a standard tayfa cannot be converted.
 	_, err = e.tayfas.Convert(ctx, f, tf, in)
 	wantErr(t, "üye", err, apperr.ErrPermissionDenied)

@@ -169,12 +169,16 @@ message DiscoverTayfa {
 // meeting point, no coordinates (they are for members only).
 message DiscoverEvent {
   string event_id = 1;
+  // Faz 1; never filled. See type_key.
   EventType type = 2;
   string title = 3;
   google.protobuf.Timestamp start_time = 4;
   google.protobuf.Timestamp end_time = 5;
   string city = 6;
   string district = 7;
+  // The event's type: a key of the catalog (CatalogEventType.key,
+  // ADR-0025).
+  string type_key = 8;
 }
 
 // DiscoverItem is one feed entry: "Ayşe and 2 friends are at this event".
