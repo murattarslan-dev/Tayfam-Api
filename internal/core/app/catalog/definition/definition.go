@@ -302,15 +302,6 @@ type kindSpec struct {
 	params []paramSpec
 }
 
-func (k kindSpec) param(name string) (paramSpec, bool) {
-	for _, p := range k.params {
-		if p.name == name {
-			return p, true
-		}
-	}
-	return paramSpec{}, false
-}
-
 // Enumerated parameter values.
 var (
 	ChecklistLabels = []string{"gear", "task", "section", "duty", "item"}
@@ -561,6 +552,25 @@ func (p *parser) integer(v any, path string, lo, hi int64) int64 {
 	return i
 }
 
+// small is integer for a value that is kept as an int.
+func (p *parser) small(v any, path string, lo, hi int) int {
+	n, ok := v.(json.Number)
+	if !ok {
+		p.fail(path, "tam sayı olmalı")
+		return 0
+	}
+	i, err := strconv.Atoi(n.String())
+	if err != nil {
+		p.fail(path, "tam sayı olmalı")
+		return 0
+	}
+	if i < lo || i > hi {
+		p.fail(path, fmt.Sprintf("%d–%d aralığında olmalı", lo, hi))
+		return 0
+	}
+	return i
+}
+
 func (p *parser) number(v any, path string, lo, hi float64) float64 {
 	n, ok := v.(json.Number)
 	if !ok {
@@ -655,7 +665,7 @@ func ValidLabel(s string) bool {
 		return false
 	}
 	for _, r := range s {
-		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || r == ' ' || r == ' ' {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || r == '\u2028' || r == '\u2029' {
 			return false
 		}
 	}
@@ -761,7 +771,7 @@ func (p *parser) field(v any, path string) Field {
 		}
 		f.MaxLength = limit
 		if lv, ok := m["max_length"]; ok {
-			f.MaxLength = int(p.integer(lv, join(path, "max_length"), 1, int64(limit)))
+			f.MaxLength = p.small(lv, join(path, "max_length"), 1, limit)
 		}
 		if vv, ok := m["vocabulary"]; ok {
 			vm := p.object(vv, join(path, "vocabulary"), "namespace")
@@ -794,7 +804,7 @@ func (p *parser) field(v any, path string) Field {
 		if f.Kind == KindDecimal {
 			f.Decimals = 2
 			if dv, ok := m["decimals"]; ok {
-				f.Decimals = int(p.integer(dv, join(path, "decimals"), 1, decimalsMax))
+				f.Decimals = p.small(dv, join(path, "decimals"), 1, decimalsMax)
 			}
 		}
 		if uv, ok := m["unit"]; ok {
@@ -843,7 +853,7 @@ func (p *parser) field(v any, path string) Field {
 		if f.Kind == KindMultiChoice && !p.failed() {
 			f.MaxSelected = len(f.Options)
 			if sv, ok := m["max_selected"]; ok {
-				f.MaxSelected = int(p.integer(sv, join(path, "max_selected"), 1, int64(len(f.Options))))
+				f.MaxSelected = p.small(sv, join(path, "max_selected"), 1, len(f.Options))
 			}
 		}
 	}

@@ -178,7 +178,7 @@ func TestParseFieldKinds(t *testing.T) {
 		{"etiket boş", `{"key":"game","kind":"text","labels":{"tr":""}}`, false},
 		{"etiket boşluklu", `{"key":"game","kind":"text","labels":{"tr":" Oyun"}}`, false},
 		{"etiket satır sonu", `{"key":"game","kind":"text","labels":{"tr":"Oy\nun"}}`, false},
-		{"etiket yön kontrolü", `{"key":"game","kind":"text","labels":{"tr":"Oy‮un"}}`, false},
+		{"etiket yön kontrolü", `{"key":"game","kind":"text","labels":{"tr":"Oy\u202eun"}}`, false},
 		{"etiket uzun", `{"key":"game","kind":"text","labels":{"tr":"` + strings.Repeat("a", 61) + `"}}`, false},
 		{"etiket dil bozuk", `{"key":"game","kind":"text","labels":{"tr":"Oyun","TR":"Oyun"}}`, false},
 		{"required metin", `{"key":"game","kind":"text","required":"yes",` + trLabel + `}`, false},

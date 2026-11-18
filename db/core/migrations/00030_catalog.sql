@@ -20,6 +20,8 @@
 --     (internal/core/app/catalog/definition): bilinmeyen anahtar reddedilir,
 --     16 KiB sınırı vardır. Buradaki CHECK'ler ikinci savunma hattıdır;
 --     jsonb metni boşluk eklediği için boyut sınırı burada gevşektir.
+--     Olmayan anahtarın jsonb_typeof'u NULL'dır ve CHECK NULL'ı kabul eder;
+--     ad kontrolü bu yüzden COALESCE ile yazılır.
 --
 -- Yetki (ADR-0015, en az yetki): core_app bu tabloları yalnızca OKUR.
 -- Katalog şimdilik yalnızca migration'la değişir; platform paneli (#262)
@@ -77,7 +79,7 @@ CREATE TABLE catalog_interests (
   CONSTRAINT catalog_interests_key CHECK (key ~ '^[a-z][a-z0-9_]{1,39}$'),
   CONSTRAINT catalog_interests_position CHECK (position BETWEEN 0 AND 9999),
   CONSTRAINT catalog_interests_labels CHECK (
-    jsonb_typeof(labels) = 'object' AND jsonb_typeof(labels -> 'tr') = 'string'),
+    jsonb_typeof(labels) = 'object' AND COALESCE(jsonb_typeof(labels -> 'tr') = 'string', false)),
   CONSTRAINT catalog_interests_icon CHECK (icon ~ '^[a-z][a-z0-9_]{1,39}$'),
   CONSTRAINT catalog_interests_status CHECK (status IN ('active', 'retired')),
   CONSTRAINT catalog_interests_default_widgets CHECK (
@@ -111,7 +113,7 @@ CREATE TABLE catalog_event_types (
     AND (cardinality(interest_keys) < 3 OR (interest_keys[1] <> interest_keys[3] AND interest_keys[2] <> interest_keys[3]))),
   CONSTRAINT catalog_event_types_position CHECK (position BETWEEN 0 AND 9999),
   CONSTRAINT catalog_event_types_labels CHECK (
-    jsonb_typeof(labels) = 'object' AND jsonb_typeof(labels -> 'tr') = 'string'),
+    jsonb_typeof(labels) = 'object' AND COALESCE(jsonb_typeof(labels -> 'tr') = 'string', false)),
   CONSTRAINT catalog_event_types_icon CHECK (icon ~ '^[a-z][a-z0-9_]{1,39}$'),
   CONSTRAINT catalog_event_types_modes CHECK (
     cardinality(modes) BETWEEN 1 AND 2
@@ -161,7 +163,7 @@ CREATE TABLE catalog_event_type_versions (
   PRIMARY KEY (type_key, version),
   CONSTRAINT catalog_event_type_versions_version CHECK (version >= 1),
   CONSTRAINT catalog_event_type_versions_labels CHECK (
-    jsonb_typeof(labels) = 'object' AND jsonb_typeof(labels -> 'tr') = 'string'),
+    jsonb_typeof(labels) = 'object' AND COALESCE(jsonb_typeof(labels -> 'tr') = 'string', false)),
   CONSTRAINT catalog_event_type_versions_icon CHECK (icon ~ '^[a-z][a-z0-9_]{1,39}$'),
   CONSTRAINT catalog_event_type_versions_modes CHECK (
     cardinality(modes) BETWEEN 1 AND 2
