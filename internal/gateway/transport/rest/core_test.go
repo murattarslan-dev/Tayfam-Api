@@ -59,6 +59,8 @@ type fakeCore struct {
 	tayfa *corev1.Tayfa
 	// feed replaces the Keşfet feed's items when set.
 	feed []*corev1.DiscoverItem
+	// catalogDefinition replaces the catalog types' definition when set.
+	catalogDefinition string
 }
 
 func (f *fakeCore) record(ctx context.Context, in proto.Message) error {
@@ -223,7 +225,7 @@ func (f *fakeCore) LeaveTayfa(ctx context.Context, in *corev1.LeaveTayfaRequest,
 func testCoreDeps(f *fakeCore, burst int) CoreDeps {
 	return CoreDeps{
 		Tayfas: f, Members: f, Announcements: f, Events: f, QA: f, Polls: f, Verifier: fakeVerifier{},
-		Social: f, Availability: f, Discover: f, Invitations: f, Profiles: f, Accounts: f, Reports: f, Media: f, Avatars: f, DataExports: f,
+		Social: f, Availability: f, Catalog: f, Discover: f, Invitations: f, Profiles: f, Accounts: f, Reports: f, Media: f, Avatars: f, DataExports: f,
 		Log:                 slog.New(slog.NewTextHandler(io.Discard, nil)),
 		TrustCFConnectingIP: true,
 		CreateTayfaLimit:    ratelimit.New(60, burst),

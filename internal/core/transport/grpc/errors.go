@@ -188,6 +188,8 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SAFETY_CONTACT_CLOSED, true
 	case errors.Is(err, apperr.ErrSafetyContactNotFound):
 		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_SAFETY_CONTACT_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrCatalogTypeNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_CATALOG_TYPE_NOT_FOUND, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

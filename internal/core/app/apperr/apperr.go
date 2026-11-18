@@ -69,6 +69,13 @@ var (
 	ErrEventItemTaken = errors.New("malzeme başkasında")
 )
 
+// CatalogService errors (issue #237, ADR-0025).
+var (
+	// ErrCatalogTypeNotFound: the catalog has no event type with this key
+	// and version.
+	ErrCatalogTypeNotFound = errors.New("katalogda tür sürümü yok")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (

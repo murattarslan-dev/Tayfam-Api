@@ -138,6 +138,8 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_FEEDBACK_CLOSED":          {http.StatusConflict, "feedback-closed"},
 		"ERROR_REASON_SAFETY_CONTACT_CLOSED":    {http.StatusConflict, "safety-contact-closed"},
 		"ERROR_REASON_SAFETY_CONTACT_NOT_FOUND": {http.StatusNotFound, "safety-contact-not-found"},
+		// Event type catalog (issue #237, ADR-0025).
+		"ERROR_REASON_CATALOG_TYPE_NOT_FOUND": {http.StatusNotFound, "catalog-type-not-found"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

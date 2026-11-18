@@ -79,6 +79,8 @@ type CoreDeps struct {
 	Social SocialClient
 	// Availability enables the "Boşum" routes when set (issue #207).
 	Availability AvailabilityClient
+	// Catalog enables the event type catalog routes when set (issue #237).
+	Catalog CatalogClient
 	// Discover enables the Keşfet routes when set (issue #210). core
 	// decides whether Keşfet is on (DISCOVER_ENABLED); the gateway does not.
 	Discover DiscoverClient
@@ -187,6 +189,9 @@ func registerCore(mux *http.ServeMux, d CoreDeps) {
 	}
 	if d.Availability != nil {
 		registerAvailability(mux, h)
+	}
+	if d.Catalog != nil {
+		registerCatalog(mux, h)
 	}
 	if d.Discover != nil {
 		registerDiscover(mux, h)
