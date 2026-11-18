@@ -167,7 +167,13 @@ jobs:
           if [ -n "$(git status --porcelain gen internal/*/store)" ]; then
             echo "::error::Üretilen kod güncel değil; make generate çalıştırıp commit et"
             git status --porcelain gen internal/*/store
-            git diff gen internal/*/store | head -100
+            # Farkın tamamı, `git apply` ile birebir uygulanabilir biçimde
+            # (buf/sqlc çalıştıramayan ortamlar için). Bu iş dala yazmaz.
+            git add --intent-to-add gen internal/*/store
+            git diff --stat -- gen internal/*/store
+            echo "----- BEGIN GEN PATCH (gzip+base64) -----"
+            git diff --binary -- gen internal/*/store | gzip -9n | base64 -w 76
+            echo "----- END GEN PATCH -----"
             exit 1
           fi
 
