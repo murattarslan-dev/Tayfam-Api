@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"math"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalog/definition"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event/ical"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/instant"
@@ -94,9 +96,17 @@ func ptr(s string) *string { return &s }
 
 // createInput converts a CreateEventRequest without its tayfa_id.
 func createInput(req *corev1.CreateEventRequest) (event.Input, error) {
-	typ, ok := interestFromProto(req.GetType())
-	if !ok {
-		return event.Input{}, validation("type")
+	// type_key is the catalog key; the Faz 1 enum is read only without it.
+	typ := req.GetTypeKey()
+	if typ == "" {
+		var ok bool
+		if typ, ok = interestFromProto(req.GetType()); !ok {
+			return event.Input{}, validation("type")
+		}
+	}
+	fields, err := fieldsFromProto(req.GetFields())
+	if err != nil {
+		return event.Input{}, err
 	}
 	loc, err := locationFromProto(req.GetMode(), req.GetMeetingPointName(), req.GetMeetingPoint(), req.GetCity(), req.GetDistrict(), req.GetOnlineUrl())
 	if err != nil {
@@ -109,7 +119,7 @@ func createInput(req *corev1.CreateEventRequest) (event.Input, error) {
 	in := event.Input{
 		Type: typ, Title: req.GetTitle(), Description: req.GetDescription(),
 		StartsAt: timeOf(req.GetStartTime()), EndsAt: timeOf(req.GetEndTime()), Location: loc,
-		Capacity: req.GetCapacity(), Discoverable: req.GetDiscoverable(), Details: d,
+		Capacity: req.GetCapacity(), Discoverable: req.GetDiscoverable(), Details: d, Fields: fields,
 		ClientRequestID: req.GetClientRequestId(),
 	}
 	if r := req.GetRecurrence(); r != nil {
@@ -204,6 +214,10 @@ func (s *EventServer) UpdateEvent(ctx context.Context, req *corev1.UpdateEventRe
 			}
 		case event.FieldDetails:
 			if in.Details, err = detailsFromProto(req.GetConvoy(), req.GetCamp(), req.GetHike(), req.GetFishing(), req.GetGaming(), req.GetSports()); err != nil {
+				return nil, err
+			}
+		case event.FieldFields:
+			if in.Fields, err = fieldsFromProto(req.GetFields()); err != nil {
 				return nil, err
 			}
 		case event.FieldCover:
@@ -554,25 +568,37 @@ func detailsFromProto(cv *corev1.ConvoyDetails, cp *corev1.CampDetails, h *corev
 			return event.Details{}, validation("spot_visibility")
 		}
 		d.Fishing = fi
-	case g != nil:
-		p, ok := platformFromProto(g.GetPlatform())
-		if !ok {
-			return event.Details{}, validation("platform")
-		}
-		d.Gaming = &event.Gaming{Game: g.GetGame(), Platform: p}
-	case sp != nil:
-		v, ok := sportFromProto(sp.GetSport())
-		if !ok {
-			return event.Details{}, validation("sport")
-		}
-		d.Sports = &event.Sports{Sport: v, VenueName: sp.GetVenueName()}
+	case g != nil, sp != nil:
+		// Gaming and sports have no detail table any more; their data is
+		// in the type's fields (issue #237).
+		return event.Details{}, validation("details")
 	}
 	return d, nil
 }
 
+// maxFieldValueBytes bounds one field value before the app layer reads it.
+const maxFieldValueBytes = 8 << 10
+
+// fieldsFromProto converts a request's field values (JSON text by field
+// key). The app layer checks them against the event's type version; here
+// only their number and size are bounded.
+func fieldsFromProto(in map[string]string) (map[string]json.RawMessage, error) {
+	if len(in) > definition.MaxFields {
+		return nil, validation("fields")
+	}
+	out := make(map[string]json.RawMessage, len(in))
+	for k, v := range in {
+		if !definition.ValidKey(k) || v == "" || len(v) > maxFieldValueBytes {
+			return nil, validation("fields")
+		}
+		out[k] = json.RawMessage(v)
+	}
+	return out, nil
+}
+
 func eventToProto(v event.Event) *corev1.Event {
 	out := &corev1.Event{
-		Id: v.ID.String(), TayfaId: v.TayfaID.String(), Type: interestToProto(v.Type), Title: v.Title,
+		Id: v.ID.String(), TayfaId: v.TayfaID.String(), Type: interestToProto(v.Type), TypeKey: v.Type, TypeVersion: v.TypeVersion, Title: v.Title,
 		Description: v.Description, StartTime: timestamppb.New(v.StartsAt), EndTime: timestamppb.New(v.EndsAt),
 		MeetingPointName: v.MeetingPointName, City: v.City, District: v.District, OnlineUrl: v.OnlineURL,
 		Capacity: v.Capacity, CancelReason: v.CancelReason, Discoverable: v.Discoverable,
@@ -638,10 +664,12 @@ func eventToProto(v event.Event) *corev1.Event {
 			vis = corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS
 		}
 		out.Details = &corev1.Event_Fishing{Fishing: &corev1.FishingDetails{SpotVisibility: vis}}
-	case d.Gaming != nil:
-		out.Details = &corev1.Event_Gaming{Gaming: &corev1.GamingDetails{Game: d.Gaming.Game, Platform: platformToProto(d.Gaming.Platform)}}
-	case d.Sports != nil:
-		out.Details = &corev1.Event_Sports{Sports: &corev1.SportsDetails{Sport: sportToProto(d.Sports.Sport), VenueName: d.Sports.VenueName}}
+	}
+	if len(v.Fields) > 0 {
+		out.Fields = make(map[string]string, len(v.Fields))
+		for k, raw := range v.Fields {
+			out.Fields[k] = string(raw)
+		}
 	}
 	return out
 }
@@ -677,51 +705,4 @@ func rsvpToProto(s string) corev1.RsvpStatus {
 		}
 	}
 	return corev1.RsvpStatus_RSVP_STATUS_UNSPECIFIED
-}
-
-var platformValues = map[corev1.GamingPlatform]string{
-	corev1.GamingPlatform_GAMING_PLATFORM_PC:          "pc",
-	corev1.GamingPlatform_GAMING_PLATFORM_PLAYSTATION: "playstation",
-	corev1.GamingPlatform_GAMING_PLATFORM_XBOX:        "xbox",
-	corev1.GamingPlatform_GAMING_PLATFORM_SWITCH:      "switch",
-	corev1.GamingPlatform_GAMING_PLATFORM_MOBILE:      "mobile",
-	corev1.GamingPlatform_GAMING_PLATFORM_OTHER:       "other",
-}
-
-func platformFromProto(p corev1.GamingPlatform) (string, bool) {
-	v, ok := platformValues[p]
-	return v, ok
-}
-
-func platformToProto(s string) corev1.GamingPlatform {
-	for k, v := range platformValues {
-		if v == s {
-			return k
-		}
-	}
-	return corev1.GamingPlatform_GAMING_PLATFORM_UNSPECIFIED
-}
-
-var sportValues = map[corev1.Sport]string{
-	corev1.Sport_SPORT_FOOTBALL:       "football",
-	corev1.Sport_SPORT_TABLE_FOOTBALL: "table_football",
-	corev1.Sport_SPORT_BASKETBALL:     "basketball",
-	corev1.Sport_SPORT_VOLLEYBALL:     "volleyball",
-	corev1.Sport_SPORT_TENNIS:         "tennis",
-	corev1.Sport_SPORT_TABLE_TENNIS:   "table_tennis",
-	corev1.Sport_SPORT_OTHER:          "other",
-}
-
-func sportFromProto(s corev1.Sport) (string, bool) {
-	v, ok := sportValues[s]
-	return v, ok
-}
-
-func sportToProto(s string) corev1.Sport {
-	for k, v := range sportValues {
-		if v == s {
-			return k
-		}
-	}
-	return corev1.Sport_SPORT_UNSPECIFIED
 }

@@ -156,6 +156,8 @@ type Querier interface {
 	ConfirmChatAttachment(ctx context.Context, arg ConfirmChatAttachmentParams) (int64, error)
 	// "Bu ekiple tayfa kur": tür, ad ve ayarlar; hareketsizlik saati sıfırlanır.
 	ConvertInstantTayfa(ctx context.Context, arg ConvertInstantTayfaParams) (int64, error)
+	// Seri örneği şablonun alan değerlerini alır.
+	CopyEventFieldValues(ctx context.Context, arg CopyEventFieldValuesParams) error
 	CountActiveMembers(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
 	CountActiveMembersForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]CountActiveMembersForTayfasRow, error)
 	// ---------------------------------------------------------------------------
@@ -272,6 +274,7 @@ type Querier interface {
 	DeleteCampItem(ctx context.Context, arg DeleteCampItemParams) (int64, error)
 	DeleteCatch(ctx context.Context, arg DeleteCatchParams) (int64, error)
 	DeleteConvoyVehicle(ctx context.Context, arg DeleteConvoyVehicleParams) (int64, error)
+	DeleteEventFieldValues(ctx context.Context, eventID pgtype.UUID) error
 	DeleteEventPhoto(ctx context.Context, arg DeleteEventPhotoParams) (int64, error)
 	// Aynı transaction'da, yazılan puanlardan profillemesi kapalı olanlarınki
 	// ve engelli çiftler silinir (hesaplama sırasında değişen ayar ve engel).
@@ -461,6 +464,9 @@ type Querier interface {
 	// Kilit, aynı malzemeyi aynı anda üstlenen iki kişiden ikincisinin
 	// güncel atamayı görmesini sağlar (issue #198).
 	GetCampItemForUpdate(ctx context.Context, arg GetCampItemForUpdateParams) (GetCampItemForUpdateRow, error)
+	// Bir türün güncel hali; yeni etkinlik bu sürümle oluşturulur. Emekli türü
+	// app katmanı reddeder.
+	GetCatalogEventType(ctx context.Context, key string) (GetCatalogEventTypeRow, error)
 	// Bir türün bir sürümü; eski etkinlikler için (emekli türler dahil).
 	// İlgi alanları ve durum türün güncel halinden gelir.
 	GetCatalogEventTypeVersion(ctx context.Context, arg GetCatalogEventTypeVersionParams) (GetCatalogEventTypeVersionRow, error)
@@ -486,7 +492,6 @@ type Querier interface {
 	// Katılım ve düzenleme aynı etkinlik satırını kilitleyerek okur; kapasite
 	// ve bekleme sırası iki eşzamanlı istekte birden aşılamaz.
 	GetEventForUpdate(ctx context.Context, arg GetEventForUpdateParams) (GetEventForUpdateRow, error)
-	GetEventGaming(ctx context.Context, eventID pgtype.UUID) (GetEventGamingRow, error)
 	GetEventHike(ctx context.Context, eventID pgtype.UUID) (GetEventHikeRow, error)
 	GetEventPhoto(ctx context.Context, arg GetEventPhotoParams) (GetEventPhotoRow, error)
 	// Etkinlik fotoğraf albümü (issue #206, ADR-0028; internal/core/app/event).
@@ -498,7 +503,6 @@ type Querier interface {
 	// tayfa satırını önceden kilitlemiştir (kilit sırası: tayfa, seri,
 	// etkinlikler).
 	GetEventSeriesForUpdate(ctx context.Context, arg GetEventSeriesForUpdateParams) (GetEventSeriesForUpdateRow, error)
-	GetEventSports(ctx context.Context, eventID pgtype.UUID) (GetEventSportsRow, error)
 	GetExportByClientRequest(ctx context.Context, arg GetExportByClientRequestParams) (Upload, error)
 	// Arkadaşlık ve engelleme (issue #71, veri modeli v14 "Arkadaşlık ve
 	// Davet (v11)"). friendships satırı iki kişi için tektir: user_low_id <
@@ -681,6 +685,11 @@ type Querier interface {
 	// Etkinlik kanalının kitlesi (gidecekler ve organizatör; kanalı açan Go'da
 	// eklenir), kullanıcı kimliğine göre sıralı, imleçten sonrası.
 	ListEventAudience(ctx context.Context, arg ListEventAudienceParams) ([]pgtype.UUID, error)
+	// ---------------------------------------------------------------------------
+	// Türe özel alan değerleri (issue #237, ADR-0025 §3). Değerler app
+	// katmanında etkinliğin tür sürümüne göre doğrulanmış halleriyle yazılır;
+	// trigger alanın o tür sürümünde olduğunu ayrıca denetler.
+	ListEventFieldValues(ctx context.Context, eventID pgtype.UUID) ([]ListEventFieldValuesRow, error)
 	// (created_at, id) ile sayfalanır, eskiden yeniye.
 	ListEventPhotos(ctx context.Context, arg ListEventPhotosParams) ([]ListEventPhotosRow, error)
 	// Liste görünümünde mera gizliliği için.
@@ -1006,12 +1015,11 @@ type Querier interface {
 	// key yanlış türü reddeder.
 	SetEventConvoy(ctx context.Context, arg SetEventConvoyParams) error
 	SetEventCover(ctx context.Context, arg SetEventCoverParams) error
+	SetEventFieldValue(ctx context.Context, arg SetEventFieldValueParams) error
 	SetEventFishing(ctx context.Context, arg SetEventFishingParams) error
-	SetEventGaming(ctx context.Context, arg SetEventGamingParams) error
 	SetEventHike(ctx context.Context, arg SetEventHikeParams) error
 	SetEventSeriesID(ctx context.Context, arg SetEventSeriesIDParams) (int64, error)
 	SetEventSeriesTemplate(ctx context.Context, arg SetEventSeriesTemplateParams) error
-	SetEventSports(ctx context.Context, arg SetEventSportsParams) error
 	// Boyut bir kez yazılır (trigger uploads_export_bytes_once); aynı boyut
 	// tekrar yazılabilir.
 	SetExportBytes(ctx context.Context, arg SetExportBytesParams) (int64, error)

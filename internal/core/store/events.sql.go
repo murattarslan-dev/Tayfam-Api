@@ -40,6 +40,23 @@ func (q *Queries) CancelEvent(ctx context.Context, arg CancelEventParams) (int64
 	return result.RowsAffected(), nil
 }
 
+const copyEventFieldValues = `-- name: CopyEventFieldValues :exec
+INSERT INTO event_field_values (event_id, field_key, value)
+SELECT $1::uuid, src.field_key, src.value FROM event_field_values AS src
+WHERE src.event_id = $2
+`
+
+type CopyEventFieldValuesParams struct {
+	ToEventID   pgtype.UUID
+	FromEventID pgtype.UUID
+}
+
+// Seri örneği şablonun alan değerlerini alır.
+func (q *Queries) CopyEventFieldValues(ctx context.Context, arg CopyEventFieldValuesParams) error {
+	_, err := q.db.Exec(ctx, copyEventFieldValues, arg.ToEventID, arg.FromEventID)
+	return err
+}
+
 const countCampItems = `-- name: CountCampItems :one
 
 SELECT count(*) FROM event_camp_items WHERE event_id = $1
@@ -130,13 +147,13 @@ func (q *Queries) CreateCampItem(ctx context.Context, arg CreateCampItemParams) 
 const createEvent = `-- name: CreateEvent :exec
 
 INSERT INTO events (
-  id, tayfa_id, type, mode, title, description, starts_at, ends_at,
+  id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
   meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
   capacity, discoverable, created_by, client_request_id
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8,
-  $9, $10, $11, $12, $13, $14,
-  $15, $16, $17, $18
+  $1, $2, $3, $4, $5, $6, $7, $8, $9,
+  $10, $11, $12, $13, $14, $15,
+  $16, $17, $18, $19
 )
 `
 
@@ -144,6 +161,7 @@ type CreateEventParams struct {
 	ID               pgtype.UUID
 	TayfaID          pgtype.UUID
 	Type             string
+	TypeVersion      int32
 	Mode             string
 	Title            string
 	Description      pgtype.Text
@@ -169,6 +187,7 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) error 
 		arg.ID,
 		arg.TayfaID,
 		arg.Type,
+		arg.TypeVersion,
 		arg.Mode,
 		arg.Title,
 		arg.Description,
@@ -220,6 +239,15 @@ func (q *Queries) DeleteConvoyVehicle(ctx context.Context, arg DeleteConvoyVehic
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const deleteEventFieldValues = `-- name: DeleteEventFieldValues :exec
+DELETE FROM event_field_values WHERE event_id = $1
+`
+
+func (q *Queries) DeleteEventFieldValues(ctx context.Context, eventID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteEventFieldValues, eventID)
+	return err
 }
 
 const deleteUserConvoyVehicle = `-- name: DeleteUserConvoyVehicle :execrows
@@ -289,7 +317,7 @@ func (q *Queries) GetConvoyVehicleOwner(ctx context.Context, arg GetConvoyVehicl
 }
 
 const getEvent = `-- name: GetEvent :one
-SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
+SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
        created_by, created_at, updated_at, cover_upload_id
@@ -306,6 +334,7 @@ type GetEventRow struct {
 	ID               pgtype.UUID
 	TayfaID          pgtype.UUID
 	Type             string
+	TypeVersion      int32
 	Mode             string
 	Title            string
 	Description      pgtype.Text
@@ -337,6 +366,7 @@ func (q *Queries) GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow
 		&i.ID,
 		&i.TayfaID,
 		&i.Type,
+		&i.TypeVersion,
 		&i.Mode,
 		&i.Title,
 		&i.Description,
@@ -433,7 +463,7 @@ func (q *Queries) GetEventFishing(ctx context.Context, eventID pgtype.UUID) (str
 }
 
 const getEventForUpdate = `-- name: GetEventForUpdate :one
-SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
+SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
        created_by, created_at, updated_at, cover_upload_id
@@ -451,6 +481,7 @@ type GetEventForUpdateRow struct {
 	ID               pgtype.UUID
 	TayfaID          pgtype.UUID
 	Type             string
+	TypeVersion      int32
 	Mode             string
 	Title            string
 	Description      pgtype.Text
@@ -484,6 +515,7 @@ func (q *Queries) GetEventForUpdate(ctx context.Context, arg GetEventForUpdatePa
 		&i.ID,
 		&i.TayfaID,
 		&i.Type,
+		&i.TypeVersion,
 		&i.Mode,
 		&i.Title,
 		&i.Description,
@@ -510,22 +542,6 @@ func (q *Queries) GetEventForUpdate(ctx context.Context, arg GetEventForUpdatePa
 	return i, err
 }
 
-const getEventGaming = `-- name: GetEventGaming :one
-SELECT game, platform FROM event_gaming WHERE event_id = $1
-`
-
-type GetEventGamingRow struct {
-	Game     string
-	Platform string
-}
-
-func (q *Queries) GetEventGaming(ctx context.Context, eventID pgtype.UUID) (GetEventGamingRow, error) {
-	row := q.db.QueryRow(ctx, getEventGaming, eventID)
-	var i GetEventGamingRow
-	err := row.Scan(&i.Game, &i.Platform)
-	return i, err
-}
-
 const getEventHike = `-- name: GetEventHike :one
 SELECT difficulty, COALESCE(distance_km, 0)::float8 AS distance_km, elevation_m, expected_return_at, return_grace_minutes
 FROM event_hike WHERE event_id = $1
@@ -549,22 +565,6 @@ func (q *Queries) GetEventHike(ctx context.Context, eventID pgtype.UUID) (GetEve
 		&i.ExpectedReturnAt,
 		&i.ReturnGraceMinutes,
 	)
-	return i, err
-}
-
-const getEventSports = `-- name: GetEventSports :one
-SELECT sport, venue_name FROM event_sports WHERE event_id = $1
-`
-
-type GetEventSportsRow struct {
-	Sport     string
-	VenueName pgtype.Text
-}
-
-func (q *Queries) GetEventSports(ctx context.Context, eventID pgtype.UUID) (GetEventSportsRow, error) {
-	row := q.db.QueryRow(ctx, getEventSports, eventID)
-	var i GetEventSportsRow
-	err := row.Scan(&i.Sport, &i.VenueName)
 	return i, err
 }
 
@@ -731,6 +731,42 @@ func (q *Queries) ListConvoyVehicles(ctx context.Context, eventID pgtype.UUID) (
 	return items, nil
 }
 
+const listEventFieldValues = `-- name: ListEventFieldValues :many
+
+SELECT field_key, value FROM event_field_values
+WHERE event_id = $1
+ORDER BY field_key
+`
+
+type ListEventFieldValuesRow struct {
+	FieldKey string
+	Value    []byte
+}
+
+// ---------------------------------------------------------------------------
+// Türe özel alan değerleri (issue #237, ADR-0025 §3). Değerler app
+// katmanında etkinliğin tür sürümüne göre doğrulanmış halleriyle yazılır;
+// trigger alanın o tür sürümünde olduğunu ayrıca denetler.
+func (q *Queries) ListEventFieldValues(ctx context.Context, eventID pgtype.UUID) ([]ListEventFieldValuesRow, error) {
+	rows, err := q.db.Query(ctx, listEventFieldValues, eventID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEventFieldValuesRow{}
+	for rows.Next() {
+		var i ListEventFieldValuesRow
+		if err := rows.Scan(&i.FieldKey, &i.Value); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listFishingVisibility = `-- name: ListFishingVisibility :many
 SELECT event_id, spot_visibility FROM event_fishing
 WHERE event_id = ANY($1::uuid[])
@@ -763,7 +799,7 @@ func (q *Queries) ListFishingVisibility(ctx context.Context, eventIds []pgtype.U
 }
 
 const listUpcomingEvents = `-- name: ListUpcomingEvents :many
-SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
+SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
        created_by, created_at, updated_at, cover_upload_id
@@ -788,6 +824,7 @@ type ListUpcomingEventsRow struct {
 	ID               pgtype.UUID
 	TayfaID          pgtype.UUID
 	Type             string
+	TypeVersion      int32
 	Mode             string
 	Title            string
 	Description      pgtype.Text
@@ -833,6 +870,7 @@ func (q *Queries) ListUpcomingEvents(ctx context.Context, arg ListUpcomingEvents
 			&i.ID,
 			&i.TayfaID,
 			&i.Type,
+			&i.TypeVersion,
 			&i.Mode,
 			&i.Title,
 			&i.Description,
@@ -1057,6 +1095,22 @@ func (q *Queries) SetEventConvoy(ctx context.Context, arg SetEventConvoyParams) 
 	return err
 }
 
+const setEventFieldValue = `-- name: SetEventFieldValue :exec
+INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, $2, $3)
+ON CONFLICT (event_id, field_key) DO UPDATE SET value = EXCLUDED.value
+`
+
+type SetEventFieldValueParams struct {
+	EventID  pgtype.UUID
+	FieldKey string
+	Value    []byte
+}
+
+func (q *Queries) SetEventFieldValue(ctx context.Context, arg SetEventFieldValueParams) error {
+	_, err := q.db.Exec(ctx, setEventFieldValue, arg.EventID, arg.FieldKey, arg.Value)
+	return err
+}
+
 const setEventFishing = `-- name: SetEventFishing :exec
 INSERT INTO event_fishing (event_id, spot_visibility) VALUES ($1, $2)
 ON CONFLICT (event_id) DO UPDATE SET spot_visibility = EXCLUDED.spot_visibility
@@ -1069,22 +1123,6 @@ type SetEventFishingParams struct {
 
 func (q *Queries) SetEventFishing(ctx context.Context, arg SetEventFishingParams) error {
 	_, err := q.db.Exec(ctx, setEventFishing, arg.EventID, arg.SpotVisibility)
-	return err
-}
-
-const setEventGaming = `-- name: SetEventGaming :exec
-INSERT INTO event_gaming (event_id, game, platform) VALUES ($1, $2, $3)
-ON CONFLICT (event_id) DO UPDATE SET game = EXCLUDED.game, platform = EXCLUDED.platform
-`
-
-type SetEventGamingParams struct {
-	EventID  pgtype.UUID
-	Game     string
-	Platform string
-}
-
-func (q *Queries) SetEventGaming(ctx context.Context, arg SetEventGamingParams) error {
-	_, err := q.db.Exec(ctx, setEventGaming, arg.EventID, arg.Game, arg.Platform)
 	return err
 }
 
@@ -1115,22 +1153,6 @@ func (q *Queries) SetEventHike(ctx context.Context, arg SetEventHikeParams) erro
 		arg.ExpectedReturnAt,
 		arg.ReturnGraceMinutes,
 	)
-	return err
-}
-
-const setEventSports = `-- name: SetEventSports :exec
-INSERT INTO event_sports (event_id, sport, venue_name) VALUES ($1, $2, $3)
-ON CONFLICT (event_id) DO UPDATE SET sport = EXCLUDED.sport, venue_name = EXCLUDED.venue_name
-`
-
-type SetEventSportsParams struct {
-	EventID   pgtype.UUID
-	Sport     string
-	VenueName pgtype.Text
-}
-
-func (q *Queries) SetEventSports(ctx context.Context, arg SetEventSportsParams) error {
-	_, err := q.db.Exec(ctx, setEventSports, arg.EventID, arg.Sport, arg.VenueName)
 	return err
 }
 

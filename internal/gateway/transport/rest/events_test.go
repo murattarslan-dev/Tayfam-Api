@@ -82,6 +82,9 @@ func (f *fakeCore) CancelEvent(ctx context.Context, in *corev1.CancelEventReques
 	return &corev1.CancelEventResponse{Event: e}, f.record(ctx, in)
 }
 func (f *fakeCore) GetEvent(ctx context.Context, in *corev1.GetEventRequest, _ ...grpc.CallOption) (*corev1.GetEventResponse, error) {
+	if f.event != nil {
+		return &corev1.GetEventResponse{Event: f.event}, f.record(ctx, in)
+	}
 	return &corev1.GetEventResponse{Event: testEvent()}, f.record(ctx, in)
 }
 func (f *fakeCore) ListUpcomingEvents(ctx context.Context, in *corev1.ListUpcomingEventsRequest, _ ...grpc.CallOption) (*corev1.ListUpcomingEventsResponse, error) {
@@ -318,7 +321,7 @@ func TestCreateEvent(t *testing.T) {
 		t.Fatalf("açma: %d %v %s", w.Code, w.Header(), w.Body)
 	}
 	want := &corev1.CreateEventRequest{
-		TayfaId: tayfaID, Type: corev1.EventType_EVENT_TYPE_HIKE, Mode: corev1.EventMode_EVENT_MODE_IN_PERSON,
+		TayfaId: tayfaID, TypeKey: "hike", Mode: corev1.EventMode_EVENT_MODE_IN_PERSON,
 		Title: "Belgrad turu", Description: "Kolay", StartTime: timestamppb.New(start), EndTime: timestamppb.New(end),
 		MeetingPointName: "Bahçeköy girişi", MeetingPoint: &corev1.LatLng{Lat: 41.17, Lng: 28.98},
 		City: "İstanbul", District: "Sarıyer", Capacity: 15, Discoverable: true,
@@ -334,12 +337,18 @@ func TestCreateEvent(t *testing.T) {
 	times := `"starts_at":"` + start.Format(time.RFC3339) + `","ends_at":"` + end.Format(time.RFC3339) + `"`
 	for _, tc := range []struct {
 		body string
-		want *corev1.CreateEventRequest // only Details
+		want *corev1.CreateEventRequest // only Details and Fields
 	}{
-		{`{"type":"gaming","mode":"online","title":"T",` + times + `,"online_url":"https://x","gaming":{"game":"Satranç","platform":"pc"},"client_request_id":"` + reqID + `"}`,
-			&corev1.CreateEventRequest{Details: &corev1.CreateEventRequest_Gaming{Gaming: &corev1.GamingDetails{Game: "Satranç", Platform: corev1.GamingPlatform_GAMING_PLATFORM_PC}}}},
-		{`{"type":"sports","mode":"in_person","title":"T",` + times + `,"sports":{"sport":"table_tennis","venue_name":"Salon"},"client_request_id":"` + reqID + `"}`,
-			&corev1.CreateEventRequest{Details: &corev1.CreateEventRequest_Sports{Sports: &corev1.SportsDetails{Sport: corev1.Sport_SPORT_TABLE_TENNIS, VenueName: "Salon"}}}},
+		// The type's own data travels as field values, as the JSON the
+		// client wrote (issue #237).
+		{`{"type":"gaming","mode":"online","title":"T",` + times + `,"online_url":"https://x","fields":{"game":"Satranç","platform":"pc"},"client_request_id":"` + reqID + `"}`,
+			&corev1.CreateEventRequest{Fields: map[string]string{"game": `"Satranç"`, "platform": `"pc"`}}},
+		{`{"type":"sports","mode":"in_person","title":"T",` + times + `,"fields":{"sport":"table_tennis","venue_name":"Salon"},"client_request_id":"` + reqID + `"}`,
+			&corev1.CreateEventRequest{Fields: map[string]string{"sport": `"table_tennis"`, "venue_name": `"Salon"`}}},
+		// Any key may be a type: the catalog decides, in core.
+		{`{"type":"board_game_night","mode":"in_person","title":"T",` + times + `,"fields":{"players":4,"langs":["tr","en"],"rated":true,"avg":1.5},"client_request_id":"` + reqID + `"}`,
+			&corev1.CreateEventRequest{Fields: map[string]string{"players": `4`, "langs": `["tr","en"]`, "rated": `true`, "avg": `1.5`}}},
+		{`{"type":"general","mode":"in_person","title":"T",` + times + `,"fields":{},"client_request_id":"` + reqID + `"}`, &corev1.CreateEventRequest{}},
 		{`{"type":"fishing","mode":"in_person","title":"T",` + times + `,"fishing":{"spot_visibility":"participants"},"client_request_id":"` + reqID + `"}`,
 			&corev1.CreateEventRequest{Details: &corev1.CreateEventRequest_Fishing{Fishing: &corev1.FishingDetails{SpotVisibility: corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS}}}},
 		{`{"type":"camp","mode":"in_person","title":"T",` + times + `,"camp":{"site_name":"Göl","has_water":false},"client_request_id":"` + reqID + `"}`,
@@ -352,9 +361,9 @@ func TestCreateEvent(t *testing.T) {
 		got, _, _ := f.last()
 		req := got.(*corev1.CreateEventRequest)
 		if w.Code != 201 || !proto.Equal(req, &corev1.CreateEventRequest{
-			TayfaId: req.GetTayfaId(), Type: req.GetType(), Mode: req.GetMode(), Title: "T", StartTime: timestamppb.New(start),
-			EndTime: timestamppb.New(end), OnlineUrl: req.GetOnlineUrl(), ClientRequestId: reqID, Details: tc.want.Details,
-		}) {
+			TayfaId: req.GetTayfaId(), TypeKey: req.GetTypeKey(), Mode: req.GetMode(), Title: "T", StartTime: timestamppb.New(start),
+			EndTime: timestamppb.New(end), OnlineUrl: req.GetOnlineUrl(), ClientRequestId: reqID, Details: tc.want.Details, Fields: tc.want.Fields,
+		}) || req.GetTypeKey() == "" || req.GetType() != corev1.EventType_EVENT_TYPE_UNSPECIFIED {
 			t.Errorf("%s: %d; core'a giden %v", tc.body, w.Code, got)
 		}
 	}
@@ -370,21 +379,28 @@ func TestEventBadRequests(t *testing.T) {
 		return `{"type":"general","mode":"in_person","title":"T",` + times + `,"client_request_id":"` + reqID + `"` + extra + `}`
 	}
 	for name, tc := range map[string]struct{ method, path, body string }{
-		"bilinmeyen tür":        {"POST", base, strings.Replace(create(""), "general", "golf", 1)},
-		"bilinmeyen biçim":      {"POST", base, strings.Replace(create(""), "in_person", "hybrid", 1)},
-		"boş başlık":            {"POST", base, strings.Replace(create(""), `"title":"T"`, `"title":" "`, 1)},
-		"uzun başlık":           {"POST", base, strings.Replace(create(""), `"title":"T"`, `"title":"`+strings.Repeat("ş", 121)+`"`, 1)},
-		"uzun açıklama":         {"POST", base, create(`,"description":"` + strings.Repeat("a", 5001) + `"`)},
-		"başlangıç yok":         {"POST", base, `{"type":"general","mode":"online","title":"T","ends_at":"2027-01-02T12:00:00Z","client_request_id":"` + reqID + `"}`},
-		"istek kimliği yok":     {"POST", base, `{"type":"general","mode":"online","title":"T",` + times + `}`},
-		"enlem dışı":            {"POST", base, create(`,"meeting_point":{"lat":90.5,"lng":0}`)},
-		"boylam dışı":           {"POST", base, create(`,"meeting_point":{"lat":0,"lng":-181}`)},
-		"kapasite":              {"POST", base, create(`,"capacity":10001`)},
-		"eksi kapasite":         {"POST", base, create(`,"capacity":-1`)},
-		"tür ayrıntısı uymuyor": {"POST", base, create(`,"camp":{}`)},
-		"iki ayrıntı":           {"POST", base, strings.Replace(create(`,"camp":{},"hike":{}`), "general", "camp", 1)},
-		"bilinmeyen platform":   {"POST", base, strings.Replace(create(`,"gaming":{"game":"x","platform":"amiga"}`), "general", "gaming", 1)},
-		"bilinmeyen spor":       {"POST", base, strings.Replace(create(`,"sports":{"sport":"golf"}`), "general", "sports", 1)},
+		"bozuk tür anahtarı":     {"POST", base, strings.Replace(create(""), "general", "Golf", 1)},
+		"boş tür":                {"POST", base, strings.Replace(create(""), "general", "", 1)},
+		"null alan değeri":       {"POST", base, create(`,"fields":{"game":null}`)},
+		"bozuk alan anahtarı":    {"POST", base, create(`,"fields":{"Game":"x"}`)},
+		"alanlar dizi":           {"POST", base, create(`,"fields":["game"]`)},
+		"dev alan değeri":        {"POST", base, create(`,"fields":{"game":"` + strings.Repeat("a", 9000) + `"}`)},
+		"düzenlemede bozuk alan": {"PATCH", one, `{"fields":{"Game":"x"}}`},
+		"bilinmeyen biçim":       {"POST", base, strings.Replace(create(""), "in_person", "hybrid", 1)},
+		"boş başlık":             {"POST", base, strings.Replace(create(""), `"title":"T"`, `"title":" "`, 1)},
+		"uzun başlık":            {"POST", base, strings.Replace(create(""), `"title":"T"`, `"title":"`+strings.Repeat("ş", 121)+`"`, 1)},
+		"uzun açıklama":          {"POST", base, create(`,"description":"` + strings.Repeat("a", 5001) + `"`)},
+		"başlangıç yok":          {"POST", base, `{"type":"general","mode":"online","title":"T","ends_at":"2027-01-02T12:00:00Z","client_request_id":"` + reqID + `"}`},
+		"istek kimliği yok":      {"POST", base, `{"type":"general","mode":"online","title":"T",` + times + `}`},
+		"enlem dışı":             {"POST", base, create(`,"meeting_point":{"lat":90.5,"lng":0}`)},
+		"boylam dışı":            {"POST", base, create(`,"meeting_point":{"lat":0,"lng":-181}`)},
+		"kapasite":               {"POST", base, create(`,"capacity":10001`)},
+		"eksi kapasite":          {"POST", base, create(`,"capacity":-1`)},
+		"tür ayrıntısı uymuyor":  {"POST", base, create(`,"camp":{}`)},
+		"iki ayrıntı":            {"POST", base, strings.Replace(create(`,"camp":{},"hike":{}`), "general", "camp", 1)},
+		// The Faz 1 gaming and sports objects are gone (ADR-0041).
+		"eski oyun ayrıntısı":   {"POST", base, strings.Replace(create(`,"gaming":{"game":"x","platform":"pc"}`), "general", "gaming", 1)},
+		"eski spor ayrıntısı":   {"POST", base, strings.Replace(create(`,"sports":{"sport":"football"}`), "general", "sports", 1)},
 		"bilinmeyen görünürlük": {"POST", base, strings.Replace(create(`,"fishing":{"spot_visibility":"herkes"}`), "general", "fishing", 1)},
 		"rota noktası bozuk":    {"POST", base, strings.Replace(create(`,"convoy":{"route":[{"lat":0,"lng":0},{"lat":95,"lng":0}]}`), "general", "convoy", 1)},
 		"araçlar girdi değil":   {"POST", base, strings.Replace(create(`,"convoy":{"vehicles":[]}`), "general", "convoy", 1)},
@@ -471,6 +487,13 @@ func TestUpdateEventMask(t *testing.T) {
 			}},
 		{`{"hike":{"difficulty":3},"apply_to_series":true}`, []string{"details"},
 			func(r *corev1.UpdateEventRequest) bool { return r.GetHike().GetDifficulty() == 3 && r.GetSeries() }},
+		{`{"fields":{"game":"Okey","players":4}}`, []string{"fields"},
+			func(r *corev1.UpdateEventRequest) bool {
+				return len(r.GetFields()) == 2 && r.GetFields()["game"] == `"Okey"` && r.GetFields()["players"] == `4`
+			}},
+		// An empty object removes every value; null leaves them alone.
+		{`{"fields":{}}`, []string{"fields"}, func(r *corev1.UpdateEventRequest) bool { return len(r.GetFields()) == 0 }},
+		{`{"title":"Yeni","fields":null}`, []string{"title"}, nil},
 	} {
 		w := as(h, "PATCH", one, tc.body)
 		got, _, _ := f.last()
@@ -687,5 +710,33 @@ func TestTayfaMembersCanCreateEvents(t *testing.T) {
 	w = as(coreRouter(&fakeCore{}), "GET", "/v1/tayfas/"+tayfaID, "")
 	if !strings.Contains(w.Body.String(), `"members_can_create_events":false`) {
 		t.Fatalf("alan yok: %s", w.Body)
+	}
+}
+
+// An event answers with its catalog type, the version it was created with
+// and the values of the type's fields (issue #237).
+func TestEventTypeVersionAndFields(t *testing.T) {
+	ev := testEvent()
+	ev.Type, ev.TypeKey, ev.TypeVersion, ev.Details = corev1.EventType_EVENT_TYPE_UNSPECIFIED, "board_game_night", 3, nil
+	ev.Fields = map[string]string{"game": `"Tavla"`, "players": `4`, "langs": `["tr","en"]`, "rated": `true`, "bozuk": `{"a":`}
+	h := coreRouter(&fakeCore{event: ev})
+	w := as(h, "GET", "/v1/tayfas/"+tayfaID+"/events/"+eventID, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("etkinlik: %d %s", w.Code, w.Body)
+	}
+	v := decodeBody[eventJSON](t, w)
+	if v.Type != "board_game_night" || v.TypeVersion != 3 || len(v.Fields) != 4 ||
+		string(v.Fields["game"]) != `"Tavla"` || string(v.Fields["players"]) != `4` || string(v.Fields["langs"]) != `["tr","en"]` || string(v.Fields["rated"]) != `true` {
+		t.Fatalf("gövde: %s", w.Body)
+	}
+	// Values are JSON in the body, not JSON inside a string.
+	if !strings.Contains(w.Body.String(), `"players":4`) || strings.Contains(w.Body.String(), "bozuk") {
+		t.Fatalf("alan değerleri: %s", w.Body)
+	}
+
+	// A Faz 1 event: the key of its enum, version from core, no fields.
+	w = as(coreRouter(&fakeCore{}), "GET", "/v1/tayfas/"+tayfaID+"/events/"+eventID, "")
+	if v := decodeBody[eventJSON](t, w); v.Type != "convoy" || v.Fields != nil || strings.Contains(w.Body.String(), `"fields"`) {
+		t.Fatalf("Faz 1 etkinliği: %s", w.Body)
 	}
 }

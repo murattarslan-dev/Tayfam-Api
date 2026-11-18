@@ -36,7 +36,23 @@ func (s *Service) Get(ctx context.Context, user, tayfa, event id.ID) (Event, err
 	if v.Details, err = s.details(ctx, c, ev, v); err != nil {
 		return Event{}, err
 	}
+	if v.Fields, err = loadFields(ctx, s.q, event); err != nil {
+		return Event{}, err
+	}
 	return v, nil
+}
+
+// loadFields loads an event's field values by field key; never nil.
+func loadFields(ctx context.Context, q *store.Queries, event id.ID) (map[string]json.RawMessage, error) {
+	rows, err := q.ListEventFieldValues(ctx, event.PG())
+	if err != nil {
+		return nil, fmt.Errorf("alan değerleri: %w", err)
+	}
+	out := make(map[string]json.RawMessage, len(rows))
+	for _, r := range rows {
+		out[r.FieldKey] = r.Value
+	}
+	return out, nil
 }
 
 // ListUpcoming lists the tayfa's events that have not ended, cancelled ones
@@ -125,7 +141,7 @@ func (s *Service) views(ctx context.Context, c caller, rows []store.GetEventRow)
 	for i, r := range rows {
 		k := id.ID(r.ID.Bytes)
 		v := Event{
-			ID: k, TayfaID: id.ID(r.TayfaID.Bytes), Type: r.Type, Title: r.Title, Description: r.Description.String,
+			ID: k, TayfaID: id.ID(r.TayfaID.Bytes), Type: r.Type, TypeVersion: r.TypeVersion, Title: r.Title, Description: r.Description.String,
 			StartsAt: r.StartsAt.Time.UTC(), EndsAt: r.EndsAt.Time.UTC(),
 			Location: Location{
 				Mode: r.Mode, MeetingPointName: r.MeetingPointName.String, City: r.City.String,
@@ -285,17 +301,9 @@ func typeDetails(ctx context.Context, q *store.Queries, ev store.GetEventRow) (D
 		var vis string
 		vis, err = q.GetEventFishing(ctx, evID)
 		d.Fishing = &Fishing{SpotVisibility: vis}
-	case TypeGaming:
-		var r store.GetEventGamingRow
-		r, err = q.GetEventGaming(ctx, evID)
-		d.Gaming = &Gaming{Game: r.Game, Platform: r.Platform}
-	case TypeSports:
-		var r store.GetEventSportsRow
-		r, err = q.GetEventSports(ctx, evID)
-		d.Sports = &Sports{Sport: r.Sport, VenueName: r.VenueName.String}
 	}
-	// Every event except a general one is created with its detail row; a
-	// missing row means an inconsistency, not a client error.
+	// Every event of a type in detailTypes is created with its detail row;
+	// a missing row means an inconsistency, not a client error.
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Details{}, fmt.Errorf("etkinlik detayı yok: %w", err)
 	}

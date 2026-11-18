@@ -146,20 +146,17 @@ type eventDetailsInput struct {
 	Camp    *campInput   `json:"camp"`
 	Hike    *hikeJSON    `json:"hike"`
 	Fishing *fishingJSON `json:"fishing"`
-	Gaming  *gamingJSON  `json:"gaming"`
-	Sports  *sportsJSON  `json:"sports"`
 }
 
 // eventDetails is the checked details: the type they belong to and the
 // proto message, or the zero value when none was given.
 type eventDetails struct {
-	typ     corev1.EventType
+	// typ is the catalog key of the type the details belong to.
+	typ     string
 	convoy  *corev1.ConvoyDetails
 	camp    *corev1.CampDetails
 	hike    *corev1.HikeDetails
 	fishing *corev1.FishingDetails
-	gaming  *corev1.GamingDetails
-	sports  *corev1.SportsDetails
 }
 
 // details checks the cheap rules (enum names, coordinates, counts) and
@@ -172,7 +169,7 @@ func (in eventDetailsInput) details() (eventDetails, bool) {
 		if len(in.Convoy.Route) > convoyRouteMax {
 			return d, false
 		}
-		d.typ, d.convoy = corev1.EventType_EVENT_TYPE_CONVOY, &corev1.ConvoyDetails{}
+		d.typ, d.convoy = "convoy", &corev1.ConvoyDetails{}
 		for _, p := range in.Convoy.Route {
 			if !p.valid() {
 				return d, false
@@ -182,13 +179,13 @@ func (in eventDetailsInput) details() (eventDetails, bool) {
 	}
 	if in.Camp != nil {
 		n++
-		d.typ, d.camp = corev1.EventType_EVENT_TYPE_CAMP, &corev1.CampDetails{
+		d.typ, d.camp = "camp", &corev1.CampDetails{
 			SiteName: in.Camp.SiteName, HasWater: in.Camp.HasWater, HasToilet: in.Camp.HasToilet, Notes: in.Camp.Notes,
 		}
 	}
 	if in.Hike != nil {
 		n++
-		d.typ, d.hike = corev1.EventType_EVENT_TYPE_HIKE, &corev1.HikeDetails{
+		d.typ, d.hike = "hike", &corev1.HikeDetails{
 			Difficulty: in.Hike.Difficulty, DistanceKm: in.Hike.DistanceKm, ElevationM: in.Hike.ElevationM,
 			ExpectedReturnTime: optTimestamp(in.Hike.ExpectedReturnAt), ReturnGraceMinutes: in.Hike.ReturnGraceMinutes,
 		}
@@ -199,25 +196,36 @@ func (in eventDetailsInput) details() (eventDetails, bool) {
 		if !ok {
 			return d, false
 		}
-		d.typ, d.fishing = corev1.EventType_EVENT_TYPE_FISHING, &corev1.FishingDetails{SpotVisibility: v}
-	}
-	if in.Gaming != nil {
-		n++
-		p, ok := gamingPlatforms.value(in.Gaming.Platform)
-		if !ok {
-			return d, false
-		}
-		d.typ, d.gaming = corev1.EventType_EVENT_TYPE_GAMING, &corev1.GamingDetails{Game: in.Gaming.Game, Platform: p}
-	}
-	if in.Sports != nil {
-		n++
-		s, ok := sports.value(in.Sports.Sport)
-		if !ok {
-			return d, false
-		}
-		d.typ, d.sports = corev1.EventType_EVENT_TYPE_SPORTS, &corev1.SportsDetails{Sport: s, VenueName: in.Sports.VenueName}
+		d.typ, d.fishing = "fishing", &corev1.FishingDetails{SpotVisibility: v}
 	}
 	return d, n <= 1
+}
+
+// Limits of the field values of a body; core checks the values themselves
+// against the event's type version.
+const (
+	maxEventFields     = 20
+	maxFieldValueBytes = 8 << 10
+)
+
+// eventFields converts a body's field values (JSON by field key) to the
+// JSON text core takes; ok is false for a bad key, a null or an oversized
+// value, or too many values. nil stays nil.
+func eventFields(in map[string]json.RawMessage) (map[string]string, bool) {
+	if in == nil {
+		return nil, true
+	}
+	if len(in) > maxEventFields {
+		return nil, false
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		if !catalogKeyPattern.MatchString(k) || len(v) == 0 || len(v) > maxFieldValueBytes || string(v) == "null" {
+			return nil, false
+		}
+		out[k] = string(v)
+	}
+	return out, true
 }
 
 // setCreate sets req's type details, if any.
@@ -231,10 +239,6 @@ func (d eventDetails) setCreate(req *corev1.CreateEventRequest) {
 		req.Details = &corev1.CreateEventRequest_Hike{Hike: d.hike}
 	case d.fishing != nil:
 		req.Details = &corev1.CreateEventRequest_Fishing{Fishing: d.fishing}
-	case d.gaming != nil:
-		req.Details = &corev1.CreateEventRequest_Gaming{Gaming: d.gaming}
-	case d.sports != nil:
-		req.Details = &corev1.CreateEventRequest_Sports{Sports: d.sports}
 	}
 }
 
@@ -249,10 +253,6 @@ func (d eventDetails) setUpdate(req *corev1.UpdateEventRequest) {
 		req.Details = &corev1.UpdateEventRequest_Hike{Hike: d.hike}
 	case d.fishing != nil:
 		req.Details = &corev1.UpdateEventRequest_Fishing{Fishing: d.fishing}
-	case d.gaming != nil:
-		req.Details = &corev1.UpdateEventRequest_Gaming{Gaming: d.gaming}
-	case d.sports != nil:
-		req.Details = &corev1.UpdateEventRequest_Sports{Sports: d.sports}
 	}
 }
 
@@ -306,6 +306,8 @@ type eventCreateBody struct {
 	OnlineURL        string      `json:"online_url"`
 	Capacity         int32       `json:"capacity"`
 	Discoverable     bool        `json:"discoverable"`
+	// Fields holds the values of the type's fields by field key.
+	Fields map[string]json.RawMessage `json:"fields"`
 	eventDetailsInput
 	Recurrence      *recurrenceJSON `json:"recurrence"`
 	ClientRequestID string          `json:"client_request_id"`
@@ -315,17 +317,19 @@ type eventCreateBody struct {
 // request checks the body and converts it for core; ok is false for a bad
 // request.
 func (b eventCreateBody) request(tayfaID string) (*corev1.CreateEventRequest, bool) {
-	typ, okT := eventTypes.value(b.Type)
+	// The type is a key of the catalog; core knows which keys exist.
+	okT := catalogKeyPattern.MatchString(b.Type)
 	mode, okM := eventModes.value(b.Mode)
 	det, okD := b.details()
-	if !okT || !okM || !okD || (det.typ != 0 && det.typ != typ) ||
+	fields, okF := eventFields(b.Fields)
+	if !okT || !okM || !okD || !okF || (det.typ != "" && det.typ != b.Type) ||
 		!eventTitleOK(b.Title) || !eventDescOK(b.Description) || b.StartsAt.IsZero() || b.EndsAt.IsZero() ||
 		!pointOK(b.MeetingPoint) || !capacityOK(b.Capacity) || !validUUID(b.ClientRequestID) ||
 		(b.CoverUploadID != "" && !validUUID(b.CoverUploadID)) {
 		return nil, false
 	}
 	req := &corev1.CreateEventRequest{
-		TayfaId: tayfaID, Type: typ, Mode: mode, Title: b.Title, Description: b.Description,
+		TayfaId: tayfaID, TypeKey: b.Type, Fields: fields, Mode: mode, Title: b.Title, Description: b.Description,
 		StartTime: timestamppb.New(b.StartsAt), EndTime: timestamppb.New(b.EndsAt),
 		MeetingPointName: b.MeetingPointName, MeetingPoint: b.MeetingPoint.proto(),
 		City: b.City, District: b.District, OnlineUrl: b.OnlineURL,
@@ -441,6 +445,8 @@ type eventUpdateBody struct {
 	OnlineURL        *string     `json:"online_url"`
 	Capacity         *int32      `json:"capacity"`
 	Discoverable     *bool       `json:"discoverable"`
+	// Fields: the complete new set of field values; {} removes them all.
+	Fields map[string]json.RawMessage `json:"fields"`
 	eventDetailsInput
 	ApplyToSeries bool `json:"apply_to_series"`
 	// CoverUploadID: "" removes the cover (issue #135).
@@ -520,9 +526,18 @@ func (h coreHandlers) updateEvent(ctx context.Context, w http.ResponseWriter, r 
 		badRequest(w, r)
 		return
 	}
-	if det.typ != 0 {
+	if det.typ != "" {
 		det.setUpdate(req)
 		add("details")
+	}
+	if b.Fields != nil {
+		fields, ok := eventFields(b.Fields)
+		if !ok {
+			badRequest(w, r)
+			return
+		}
+		req.Fields = fields
+		add("fields")
 	}
 	if b.CoverUploadID != nil {
 		if *b.CoverUploadID != "" && !validUUID(*b.CoverUploadID) {

@@ -101,13 +101,13 @@ func (q *Queries) CreateEventSeries(ctx context.Context, arg CreateEventSeriesPa
 
 const createSeriesEvent = `-- name: CreateSeriesEvent :execrows
 INSERT INTO events (
-  id, tayfa_id, type, mode, title, description, starts_at, ends_at,
+  id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
   meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
   capacity, discoverable, created_by, series_id
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8,
-  $9, $10, $11, $12, $13, $14,
-  $15, $16, $17, $18
+  $1, $2, $3, $4, $5, $6, $7, $8, $9,
+  $10, $11, $12, $13, $14, $15,
+  $16, $17, $18, $19
 )
 ON CONFLICT (series_id, starts_at) WHERE series_id IS NOT NULL DO NOTHING
 `
@@ -116,6 +116,7 @@ type CreateSeriesEventParams struct {
 	ID               pgtype.UUID
 	TayfaID          pgtype.UUID
 	Type             string
+	TypeVersion      int32
 	Mode             string
 	Title            string
 	Description      pgtype.Text
@@ -140,6 +141,7 @@ func (q *Queries) CreateSeriesEvent(ctx context.Context, arg CreateSeriesEventPa
 		arg.ID,
 		arg.TayfaID,
 		arg.Type,
+		arg.TypeVersion,
 		arg.Mode,
 		arg.Title,
 		arg.Description,

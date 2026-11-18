@@ -39,15 +39,16 @@ const (
 	SpotParticipants = "participants"
 )
 
-// Types are the event types, in EventType order.
+// Types are the seven Faz 1 event types, in EventType order. The type of
+// an event is a catalog key (ADR-0025): any active type of the catalog can
+// be created, not only these.
 var Types = []string{TypeConvoy, TypeCamp, TypeHike, TypeFishing, TypeGaming, TypeSports, TypeGeneral}
 
-// Platforms and SportKinds are the allowed values of event_gaming.platform and
-// event_sports.sport.
-var (
-	Platforms  = []string{"pc", "playstation", "xbox", "switch", "mobile", "other"}
-	SportKinds = []string{"football", "table_football", "basketball", "volleyball", "tennis", "table_tennis", "other"}
-)
+// detailTypes are the types that still keep data in a Faz 1 detail table
+// (event_convoy, event_camp, event_hike, event_fishing) until their
+// components move it (issues #239–#243). Every other type has only the
+// fields of its catalog definition (event_field_values).
+var detailTypes = []string{TypeConvoy, TypeCamp, TypeHike, TypeFishing}
 
 // Limits (data model v14 and 00004_events.sql; the same CHECKs are in the
 // database).
@@ -60,7 +61,6 @@ const (
 	capacityMax     = 10000
 	cancelReasonMax = 500
 	campNotesMax    = 1000
-	gameMax         = 60
 	itemNameMax     = 60
 	itemQuantityMax = 999
 	makeMax         = 40
@@ -108,15 +108,13 @@ type Location struct {
 	OnlineURL    string
 }
 
-// Details are the type-specific fields; at most one is set and it matches
-// the event's type.
+// Details are the Faz 1 type details of the types in detailTypes; at most
+// one is set and it matches the event's type.
 type Details struct {
 	Convoy  *Convoy
 	Camp    *Camp
 	Hike    *Hike
 	Fishing *Fishing
-	Gaming  *Gaming
-	Sports  *Sports
 }
 
 // typ returns the event type the set field belongs to, "" when none is set,
@@ -128,7 +126,7 @@ func (d Details) typ() string {
 		typ string
 	}{
 		{d.Convoy != nil, TypeConvoy}, {d.Camp != nil, TypeCamp}, {d.Hike != nil, TypeHike},
-		{d.Fishing != nil, TypeFishing}, {d.Gaming != nil, TypeGaming}, {d.Sports != nil, TypeSports},
+		{d.Fishing != nil, TypeFishing},
 	} {
 		if c.set {
 			if t != "" {
@@ -189,18 +187,6 @@ type Hike struct {
 type Fishing struct {
 	// SpotVisibility is SpotTayfa or SpotParticipants; "" means SpotTayfa.
 	SpotVisibility string
-}
-
-// Gaming holds the game and platform.
-type Gaming struct {
-	Game     string
-	Platform string
-}
-
-// Sports holds the sport and venue.
-type Sports struct {
-	Sport     string
-	VenueName string
 }
 
 // cleanText trims s and checks its length in characters. Empty is allowed
@@ -334,7 +320,11 @@ func cleanDetails(typ string, d Details, start time.Time, create bool) (Details,
 	switch {
 	case dt == "?":
 		return Details{}, bad
-	case dt == "" && typ == TypeGeneral:
+	case !slices.Contains(detailTypes, typ):
+		// No detail table: the type's data is in its fields.
+		if dt != "" {
+			return Details{}, bad
+		}
 		return Details{}, nil
 	case dt == "" && create:
 		switch typ {
@@ -346,9 +336,6 @@ func cleanDetails(typ string, d Details, start time.Time, create bool) (Details,
 			d.Hike = &Hike{}
 		case TypeFishing:
 			d.Fishing = &Fishing{}
-		default:
-			// Gaming and sports have required fields.
-			return Details{}, bad
 		}
 	case dt != typ:
 		return Details{}, bad
@@ -413,24 +400,6 @@ func cleanDetails(typ string, d Details, start time.Time, create bool) (Details,
 			return Details{}, apperr.Validation("spot_visibility")
 		}
 		out.Fishing = &f
-	case TypeGaming:
-		g := Gaming{Platform: d.Gaming.Platform}
-		if g.Game, err = cleanText(d.Gaming.Game, "game", 1, gameMax, false); err != nil {
-			return Details{}, err
-		}
-		if !slices.Contains(Platforms, g.Platform) {
-			return Details{}, apperr.Validation("platform")
-		}
-		out.Gaming = &g
-	case TypeSports:
-		sp := Sports{Sport: d.Sports.Sport}
-		if !slices.Contains(SportKinds, sp.Sport) {
-			return Details{}, apperr.Validation("sport")
-		}
-		if sp.VenueName, err = cleanText(d.Sports.VenueName, "venue_name", 0, placeNameMax, false); err != nil {
-			return Details{}, err
-		}
-		out.Sports = &sp
 	default:
 		return Details{}, bad
 	}

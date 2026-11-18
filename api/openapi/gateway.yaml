@@ -6932,18 +6932,21 @@ components:
           description: |
             `participants`: buluşma noktasını yalnızca organizatör, moderatör,
             yönetici ve `going`/`maybe` cevabı verenler görür. Yoksa `tayfa`.
-    GamingDetails:
+    EventTypeKey:
+      type: string
+      description: |
+        Etkinlik türü: katalogdaki bir türün anahtarı (`GET /v1/catalog`).
+        Kapalı liste değildir; yeni tür sürüm çıkmadan eklenir (ADR-0025).
+      pattern: "^[a-z][a-z0-9_]{1,39}$"
+    EventFieldValues:
       type: object
-      required: [game, platform]
-      properties:
-        game: { type: string, minLength: 1, maxLength: 60 }
-        platform: { type: string, enum: [pc, playstation, xbox, switch, mobile, other] }
-    SportsDetails:
-      type: object
-      required: [sport]
-      properties:
-        sport: { type: string, enum: [football, table_football, basketball, volleyball, tennis, table_tennis, other] }
-        venue_name: { type: string, maxLength: 120 }
+      description: |
+        Türün alanlarının değerleri: alan anahtarı → değer. Alanlar
+        etkinliğin tür sürümünün tanımındadır (`CatalogDefinition.fields`);
+        değerin biçimi alanın `kind`'ine göredir (`CatalogField` tablosu):
+        metin, sayı, `true`/`false`, `YYYY-MM-DD` ya da metin dizisi. Değeri
+        olmayan alan nesnede yer almaz; `null` gönderilmez.
+      additionalProperties: true
 
     Recurrence:
       type: object
@@ -6965,16 +6968,26 @@ components:
 
     Event:
       type: object
-      required: [id, tayfa_id, type, mode, title, description, starts_at, ends_at, capacity, status, discoverable, going_count, maybe_count, waitlist_count, caller_can_manage, series_override, created_at, updated_at]
+      required: [id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at, capacity, status, discoverable, going_count, maybe_count, waitlist_count, caller_can_manage, series_override, created_at, updated_at]
       description: |
-        Bir etkin üyenin gördüğü etkinlik. Türe özel ayrıntı (`convoy`,
-        `camp`, `hike`, `fishing`, `gaming`, `sports`) yalnızca tek etkinlik
-        yanıtında ve en fazla biri dolu gelir.
+        Bir etkin üyenin gördüğü etkinlik. `type` katalog anahtarıdır;
+        etkinlik oluşturulduğu tür sürümüne (`type_version`) bağlıdır ve o
+        sürümün tanımıyla gösterilir (güncel katalogda yoksa
+        `GET /v1/catalog/event-types/{key}/versions/{version}`). `fields`
+        ve Faz 1'den kalan türe özel ayrıntı (`convoy`, `camp`, `hike`,
+        `fishing`; bileşenlere taşınana kadar) yalnızca tek etkinlik
+        yanıtında gelir; ayrıntılardan en fazla biri doludur.
       properties:
         cover_upload_id: { type: string, format: uuid, description: "Kapak; linkleri `POST /v1/media/urls`. Serinin ürettiği etkinliklerde yoktur." }
         id: { type: string, format: uuid }
         tayfa_id: { type: string, format: uuid }
-        type: { $ref: "#/components/schemas/EventType" }
+        type: { $ref: "#/components/schemas/EventTypeKey" }
+        type_version:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Etkinliğin oluşturulduğu tür sürümü; etkinlik boyunca değişmez.
+        fields: { $ref: "#/components/schemas/EventFieldValues" }
         mode: { $ref: "#/components/schemas/EventMode" }
         title: { type: string }
         description: { type: string }
@@ -7019,8 +7032,6 @@ components:
         camp: { $ref: "#/components/schemas/CampDetails" }
         hike: { $ref: "#/components/schemas/HikeDetails" }
         fishing: { $ref: "#/components/schemas/FishingDetails" }
-        gaming: { $ref: "#/components/schemas/GamingDetails" }
-        sports: { $ref: "#/components/schemas/SportsDetails" }
 
     EventList:
       type: object
@@ -7038,11 +7049,17 @@ components:
       description: |
         Yüz yüze: `meeting_point`, `city`, `district` zorunlu; `online_url`
         boş. Çevrimiçi: `online_url` (https) zorunlu; yer alanları boş.
-        Türe özel ayrıntı en fazla bir tane ve türle aynı olur; `gaming` ve
-        `sports` için zorunlu, `general` için yoktur.
+        `type` katalogdaki aktif bir türün anahtarıdır; etkinlik türün
+        güncel sürümüyle oluşturulur ve `mode` türün izin verdiği modlardan
+        biri olmalıdır. `fields` türün tanımına göre doğrulanır: zorunlu
+        alanlar verilir, tanımda olmayan alan gönderilmez (ör. `gaming`:
+        `game`, `platform`; `sports`: `sport`, `venue_name`). Faz 1'den
+        kalan ayrıntılar (`convoy`, `camp`, `hike`, `fishing`) yalnızca kendi
+        türlerinde, en fazla bir tane verilir.
       properties:
         cover_upload_id: { type: string, format: uuid, description: "İsteğe bağlı: kendi hazır `cover` yüklemeniz (bu tayfa için açılmış). Yalnızca bu etkinliğe bağlanır." }
-        type: { $ref: "#/components/schemas/EventType" }
+        type: { $ref: "#/components/schemas/EventTypeKey" }
+        fields: { $ref: "#/components/schemas/EventFieldValues" }
         mode: { $ref: "#/components/schemas/EventMode" }
         title:
           type: string
@@ -7068,8 +7085,6 @@ components:
         camp: { $ref: "#/components/schemas/CampDetailsInput" }
         hike: { $ref: "#/components/schemas/HikeDetails" }
         fishing: { $ref: "#/components/schemas/FishingDetails" }
-        gaming: { $ref: "#/components/schemas/GamingDetails" }
-        sports: { $ref: "#/components/schemas/SportsDetails" }
         recurrence: { $ref: "#/components/schemas/Recurrence" }
         client_request_id:
           type: string
@@ -7080,8 +7095,12 @@ components:
       type: object
       additionalProperties: false
       minProperties: 1
-      description: Kurallar açmadakiyle aynıdır; tür değişmez.
+      description: |
+        Kurallar açmadakiyle aynıdır; tür ve tür sürümü değişmez. `fields`
+        verilirse alan değerlerinin TAMAMI yerine geçer (etkinliğin kendi tür
+        sürümüne göre doğrulanır); `{}` bütün değerleri kaldırır.
       properties:
+        fields: { $ref: "#/components/schemas/EventFieldValues" }
         cover_upload_id:
           type: string
           description: |
@@ -7108,8 +7127,6 @@ components:
         camp: { $ref: "#/components/schemas/CampDetailsInput" }
         hike: { $ref: "#/components/schemas/HikeDetails" }
         fishing: { $ref: "#/components/schemas/FishingDetails" }
-        gaming: { $ref: "#/components/schemas/GamingDetails" }
-        sports: { $ref: "#/components/schemas/SportsDetails" }
         apply_to_series:
           type: boolean
           description: "`true` yalnızca seriye ait etkinlikte geçerlidir; yoksa `false`."

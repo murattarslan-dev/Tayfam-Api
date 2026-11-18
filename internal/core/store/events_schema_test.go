@@ -66,8 +66,6 @@ func TestEventTypeIntegrity(t *testing.T) {
 		"camp":    `INSERT INTO event_camp (event_id) VALUES ($1)`,
 		"hike":    `INSERT INTO event_hike (event_id) VALUES ($1)`,
 		"fishing": `INSERT INTO event_fishing (event_id) VALUES ($1)`,
-		"gaming":  `INSERT INTO event_gaming (event_id, game, platform) VALUES ($1, 'CS2', 'pc')`,
-		"sports":  `INSERT INTO event_sports (event_id, sport) VALUES ($1, 'football')`,
 	}
 	for typ, sql := range details {
 		// Every other event type is refused by the composite foreign key.
@@ -172,8 +170,12 @@ func TestEventConstraints(t *testing.T) {
 		}
 	}
 
-	if _, err := insertEvent(ctx, pool, tayfa, "cycling", "in_person", nil); constraintOf(err) != "events_type" {
+	// The type is a catalog key at a version the catalog has (issue #237).
+	if _, err := insertEvent(ctx, pool, tayfa, "cycling", "in_person", nil); constraintOf(err) != "events_type_version_fkey" {
 		t.Errorf("bilinmeyen tür: %v", err)
+	}
+	if _, err := insertEvent(ctx, pool, tayfa, "general", "in_person", map[string]string{"type_version": "2"}); constraintOf(err) != "events_type_version_fkey" {
+		t.Errorf("bilinmeyen tür sürümü: %v", err)
 	}
 	if _, err := insertEvent(ctx, pool, tayfa, "general", "hybrid", nil); constraintOf(err) != "events_mode" {
 		t.Errorf("bilinmeyen biçim: %v", err)
@@ -239,9 +241,9 @@ func TestEventDetailConstraints(t *testing.T) {
 		"negatif yükseklik":     {`INSERT INTO event_hike (event_id, elevation_m) VALUES ($1, -5)`, event("hike"), "event_hike_elevation_m"},
 		"uzun bekleme payı":     {`INSERT INTO event_hike (event_id, return_grace_minutes) VALUES ($1, 2000)`, event("hike"), "event_hike_return_grace_minutes"},
 		"bilinmeyen görünürlük": {`INSERT INTO event_fishing (event_id, spot_visibility) VALUES ($1, 'public')`, event("fishing"), "event_fishing_spot_visibility"},
-		"bilinmeyen platform":   {`INSERT INTO event_gaming (event_id, game, platform) VALUES ($1, 'CS2', 'amiga')`, event("gaming"), "event_gaming_platform"},
-		"boş oyun":              {`INSERT INTO event_gaming (event_id, game, platform) VALUES ($1, '', 'pc')`, event("gaming"), "event_gaming_game_len"},
-		"bilinmeyen spor":       {`INSERT INTO event_sports (event_id, sport) VALUES ($1, 'golf')`, event("sports"), "event_sports_sport"},
+		"türde olmayan alan":    {`INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, 'stake', '100')`, event("gaming"), "event_field_values_guard"},
+		"alansız türde alan":    {`INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, 'game', '"CS2"')`, event("hike"), "event_field_values_guard"},
+		"nesne alan değeri":     {`INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, 'game', '{}')`, event("gaming"), "event_field_values_value"},
 		"1001 karakter not":     {`INSERT INTO event_camp (event_id, notes) VALUES ($1, repeat('n', 1001))`, event("camp"), "event_camp_notes_len"},
 		"sıfır adet":            {`INSERT INTO event_camp_items (id, event_id, name, quantity) VALUES (gen_random_uuid(), $1, 'Çadır', 0)`, camp, "event_camp_items_quantity"},
 		"boş malzeme":           {`INSERT INTO event_camp_items (id, event_id, name) VALUES (gen_random_uuid(), $1, '')`, camp, "event_camp_items_name_len"},

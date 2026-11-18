@@ -26,7 +26,7 @@ func TestCreateInstantEvent(t *testing.T) {
 	}
 	want := &corev1.CreateInstantEventRequest{
 		Event: &corev1.CreateEventRequest{
-			Type: corev1.EventType_EVENT_TYPE_GENERAL, Mode: corev1.EventMode_EVENT_MODE_ONLINE, Title: "Film gecesi",
+			TypeKey: "general", Mode: corev1.EventMode_EVENT_MODE_ONLINE, Title: "Film gecesi",
 			StartTime: timestamppb.New(start), EndTime: timestamppb.New(end), OnlineUrl: "https://example.org/film",
 			ClientRequestId: reqID,
 		},

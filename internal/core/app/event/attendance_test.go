@@ -321,7 +321,7 @@ func TestCheckInOnline(t *testing.T) {
 	in := input()
 	in.Type = TypeGaming
 	in.Location = Location{Mode: ModeOnline, OnlineURL: "https://discord.gg/tayfa"}
-	in.Details = Details{Gaming: &Gaming{Game: "CS2", Platform: "pc"}}
+	in.Fields = values("game", `"CS2"`, "platform", `"pc"`)
 	ev := e.create(t, tf, admin, in)
 	early := e.going(t, tf, ev.ID, authz.Member)
 	tooLate := e.going(t, tf, ev.ID, authz.Member)

@@ -67,11 +67,13 @@ type eventSpec struct {
 	Camp         *corev1.CampDetails
 	Hike         *hikeSpec
 	Fishing      *corev1.FishingDetails
-	Gaming       *corev1.GamingDetails
-	Sports       *corev1.SportsDetails
-	RSVPs        []rsvpSpec
-	Vehicles     []vehicleSpec  // convoy: members who answered GOING
-	CampItems    []campItemSpec // camp: added by the founder
+	// Fields holds the values of the type's fields by field key, as JSON
+	// text (CreateEventRequest.fields): the data of the types without a
+	// Faz 1 detail message (gaming, sports).
+	Fields    map[string]string
+	RSVPs     []rsvpSpec
+	Vehicles  []vehicleSpec  // convoy: members who answered GOING
+	CampItems []campItemSpec // camp: added by the founder
 }
 
 type hikeSpec struct {
@@ -517,7 +519,7 @@ var tayfas = []tayfaSpec{
 				PlaceName: "Urla halı saha", Lat: 38.3227, Lng: 26.7647,
 				City: "İzmir", District: "Urla",
 				Capacity: 14,
-				Sports:   &corev1.SportsDetails{Sport: corev1.Sport_SPORT_FOOTBALL, VenueName: "Urla halı saha"},
+				Fields:   map[string]string{"sport": `"football"`, "venue_name": `"Urla halı saha"`},
 				RSVPs: []rsvpSpec{
 					{Person: "emre", Status: going}, {Person: "mert", Status: going}, {Person: "kaan", Status: going},
 					{Person: "baris", Status: going}, {Person: "tolga", Status: going}, {Person: "serkan", Status: maybe},
@@ -530,7 +532,7 @@ var tayfas = []tayfaSpec{
 				Description: "Eleme usulü, maç başına 2 x 6 dakika. Eşleşmeler etkinlik günü kanalda paylaşılır.",
 				Start:       at{Days: 10, Hour: 21}, Hours: 3,
 				OnlineURL: "https://example.com/tayfam-demo/turnuva",
-				Gaming:    &corev1.GamingDetails{Game: "Futbol simülasyonu", Platform: corev1.GamingPlatform_GAMING_PLATFORM_PLAYSTATION},
+				Fields:    map[string]string{"game": `"Futbol simülasyonu"`, "platform": `"playstation"`},
 				RSVPs: []rsvpSpec{
 					{Person: "emre", Status: going}, {Person: "kaan", Status: going}, {Person: "ceren", Status: going},
 					{Person: "tolga", Status: maybe}, {Person: "onur", Status: going},

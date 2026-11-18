@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -37,6 +38,8 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/access"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalog"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalog/definition"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
@@ -62,11 +65,14 @@ const (
 	FieldCapacity     = "capacity"
 	FieldDiscoverable = "discoverable"
 	FieldDetails      = "details"
+	// FieldFields replaces the values of the type's fields
+	// (event_field_values, issue #237).
+	FieldFields = "fields"
 	// FieldCover is the cover image (events.cover_upload_id, issue #135).
 	FieldCover = "cover_upload_id"
 )
 
-var updateFields = []string{FieldTitle, FieldDescription, FieldTime, FieldLocation, FieldCapacity, FieldDiscoverable, FieldDetails, FieldCover}
+var updateFields = []string{FieldTitle, FieldDescription, FieldTime, FieldLocation, FieldCapacity, FieldDiscoverable, FieldDetails, FieldFields, FieldCover}
 
 // Config wires a Service.
 type Config struct {
@@ -97,9 +103,12 @@ func (s *Service) now() time.Time { return s.cfg.Now().UTC().Truncate(time.Micro
 
 // Event is an event as an active member of its tayfa sees it.
 type Event struct {
-	ID          id.ID
-	TayfaID     id.ID
+	ID      id.ID
+	TayfaID id.ID
+	// Type is the catalog key of the event's type; TypeVersion the version
+	// of the type the event was created with (ADR-0025 §2).
 	Type        string
+	TypeVersion int32
 	Title       string
 	Description string
 	StartsAt    time.Time
@@ -133,6 +142,9 @@ type Event struct {
 	CoverUploadID id.ID
 	// Details are filled by Get only.
 	Details Details
+	// Fields holds the values of the type's fields by field key, as JSON
+	// (definition.CleanValues); filled by Get only, never nil there.
+	Fields map[string]json.RawMessage
 }
 
 // Input is a create request, and the new values of an update.
@@ -146,6 +158,9 @@ type Input struct {
 	Capacity     int32
 	Discoverable bool
 	Details      Details
+	// Fields holds the values of the type's fields by field key, as JSON.
+	// They are checked against the event's type version.
+	Fields map[string]json.RawMessage
 	// ClientRequestID is required on create and ignored on update.
 	ClientRequestID string
 	// Recurrence, on create only, makes the event the first of a series.
@@ -405,8 +420,13 @@ func (p Plan) ClientRequestID() id.ID { return p.crid }
 
 // Prepare validates a create request.
 func (s *Service) Prepare(in Input) (Plan, error) {
-	if !slices.Contains(Types, in.Type) {
+	// Whether the catalog has the type is checked in the transaction that
+	// creates the event (createIn).
+	if !definition.ValidKey(in.Type) {
 		return Plan{}, apperr.Validation("type")
+	}
+	if len(in.Fields) > definition.MaxFields {
+		return Plan{}, apperr.Validation("fields")
 	}
 	p := Plan{in: in}
 	var err error
@@ -512,9 +532,19 @@ func (s *Service) CreateInstantTx(ctx context.Context, q *store.Queries, user, t
 // caller's tayfa and queues its outbox events.
 func createIn(ctx context.Context, q *store.Queries, c caller, b *batch, p Plan) (eventID, seriesID id.ID, err error) {
 	tayfa := id.ID(c.tayfa.ID.Bytes)
+	// The event is bound to the type's current version and checked against
+	// it (ADR-0025 §2).
+	et, err := currentType(ctx, q, p.in.Type, p.loc.Mode)
+	if err != nil {
+		return id.ID{}, id.ID{}, err
+	}
+	values, err := cleanFields(et, p.in.Fields)
+	if err != nil {
+		return id.ID{}, id.ID{}, err
+	}
 	eventID = id.New()
 	cp := store.CreateEventParams{
-		ID: eventID.PG(), TayfaID: tayfa.PG(), Type: p.in.Type, Title: p.title, Description: text(p.desc),
+		ID: eventID.PG(), TayfaID: tayfa.PG(), Type: et.Key, TypeVersion: et.Version, Title: p.title, Description: text(p.desc),
 		StartsAt: ts(p.start), EndsAt: ts(p.end), Capacity: int4(p.capacity), Discoverable: p.in.Discoverable,
 		CreatedBy: c.user.PG(), ClientRequestID: p.crid.PG(),
 	}
@@ -523,6 +553,9 @@ func createIn(ctx context.Context, q *store.Queries, c caller, b *batch, p Plan)
 		return id.ID{}, id.ID{}, fmt.Errorf("etkinlik: %w", err)
 	}
 	if err := setDetails(ctx, q, eventID, p.details); err != nil {
+		return id.ID{}, id.ID{}, err
+	}
+	if err := setFields(ctx, q, eventID, values, false); err != nil {
 		return id.ID{}, id.ID{}, err
 	}
 	if p.in.CoverUploadID != (id.ID{}) {
@@ -610,6 +643,12 @@ func (s *Service) Update(ctx context.Context, user, tayfa, event id.ID, fields [
 		if err := changeable(ev, c.now); err != nil {
 			return err
 		}
+		if set[FieldLocation] {
+			// The mode must be one the event's type version allows.
+			if err := modeAllowed(ctx, q, ev, loc.Mode); err != nil {
+				return err
+			}
+		}
 		if in.Series {
 			if !ev.SeriesID.Valid {
 				return apperr.Validation("series")
@@ -655,7 +694,7 @@ func (s *Service) Update(ctx context.Context, user, tayfa, event id.ID, fields [
 			p.Discoverable = in.Discoverable
 		}
 		if set[FieldDetails] {
-			if ev.Type == TypeGeneral {
+			if !slices.Contains(detailTypes, ev.Type) {
 				return apperr.Validation("details")
 			}
 			d, err := cleanDetails(ev.Type, in.Details, p.StartsAt.Time, false)
@@ -666,6 +705,15 @@ func (s *Service) Update(ctx context.Context, user, tayfa, event id.ID, fields [
 				return apperr.Validation("details")
 			}
 			if err := setDetails(ctx, q, event, d); err != nil {
+				return err
+			}
+		}
+		if set[FieldFields] {
+			values, err := cleanEventFields(ctx, q, ev, in.Fields)
+			if err != nil {
+				return err
+			}
+			if err := setFields(ctx, q, event, values, true); err != nil {
 				return err
 			}
 		}
@@ -758,8 +806,89 @@ func (s *Service) Cancel(ctx context.Context, user, tayfa, event id.ID, reason s
 	return s.Get(ctx, user, tayfa, event)
 }
 
+// currentType returns the catalog's current version of the type key for a
+// new event with the given mode. An unknown or retired type and a mode the
+// type does not allow are validation errors: the client sent a type the
+// catalog it holds should not have offered.
+func currentType(ctx context.Context, q *store.Queries, key, mode string) (catalog.EventType, error) {
+	et, err := catalog.CurrentType(ctx, q, key)
+	if errors.Is(err, apperr.ErrCatalogTypeNotFound) {
+		return catalog.EventType{}, apperr.Validation("type")
+	}
+	if err != nil {
+		return catalog.EventType{}, err
+	}
+	if et.Status != catalog.StatusActive {
+		return catalog.EventType{}, apperr.Validation("type")
+	}
+	if !slices.Contains(et.Modes, mode) {
+		return catalog.EventType{}, apperr.Validation("mode")
+	}
+	return et, nil
+}
+
+// modeAllowed checks a new mode of ev against the modes of the type
+// version it was created with.
+func modeAllowed(ctx context.Context, q *store.Queries, ev store.GetEventRow, mode string) error {
+	et, err := catalog.TypeVersion(ctx, q, ev.Type, ev.TypeVersion)
+	if err != nil {
+		// The foreign key guarantees the version exists.
+		return fmt.Errorf("etkinliğin tür sürümü: %w", err)
+	}
+	if !slices.Contains(et.Modes, mode) {
+		return apperr.Validation("mode")
+	}
+	return nil
+}
+
+// cleanFields checks a complete set of field values against a type
+// version's definition. The error names the field ("fields.platform"),
+// never its value.
+func cleanFields(et catalog.EventType, in map[string]json.RawMessage) (map[string]json.RawMessage, error) {
+	values, err := et.Parsed.CleanValues(in, true)
+	var ve *definition.ValueError
+	switch {
+	case errors.As(err, &ve) && ve.Field != "":
+		return nil, apperr.Validation("fields." + ve.Field)
+	case err != nil:
+		return nil, apperr.Validation("fields")
+	}
+	return values, nil
+}
+
+// cleanEventFields is cleanFields against the type version ev was created
+// with, which may be older than the catalog's current one.
+func cleanEventFields(ctx context.Context, q *store.Queries, ev store.GetEventRow, in map[string]json.RawMessage) (map[string]json.RawMessage, error) {
+	if len(in) > definition.MaxFields {
+		return nil, apperr.Validation("fields")
+	}
+	et, err := catalog.TypeVersion(ctx, q, ev.Type, ev.TypeVersion)
+	if err != nil {
+		// The foreign key guarantees the version exists.
+		return nil, fmt.Errorf("etkinliğin tür sürümü: %w", err)
+	}
+	return cleanFields(et, in)
+}
+
+// setFields writes an event's field values; replace first removes the
+// values it had. The values were cleaned by cleanFields.
+func setFields(ctx context.Context, q *store.Queries, event id.ID, values map[string]json.RawMessage, replace bool) error {
+	if replace {
+		if err := q.DeleteEventFieldValues(ctx, event.PG()); err != nil {
+			return fmt.Errorf("alan değerleri: %w", err)
+		}
+	}
+	// In key order, so that concurrent writers lock rows in one order.
+	for _, k := range slices.Sorted(maps.Keys(values)) {
+		if err := q.SetEventFieldValue(ctx, store.SetEventFieldValueParams{EventID: event.PG(), FieldKey: k, Value: values[k]}); err != nil {
+			return fmt.Errorf("alan değeri: %w", err)
+		}
+	}
+	return nil
+}
+
 // setDetails writes the type details; d has exactly one field set, or none
-// for a general event.
+// for a type without a detail table.
 func setDetails(ctx context.Context, q *store.Queries, event id.ID, d Details) error {
 	var err error
 	switch {
@@ -795,10 +924,6 @@ func setDetails(ctx context.Context, q *store.Queries, event id.ID, d Details) e
 		err = q.SetEventHike(ctx, p)
 	case d.Fishing != nil:
 		err = q.SetEventFishing(ctx, store.SetEventFishingParams{EventID: event.PG(), SpotVisibility: d.Fishing.SpotVisibility})
-	case d.Gaming != nil:
-		err = q.SetEventGaming(ctx, store.SetEventGamingParams{EventID: event.PG(), Game: d.Gaming.Game, Platform: d.Gaming.Platform})
-	case d.Sports != nil:
-		err = q.SetEventSports(ctx, store.SetEventSportsParams{EventID: event.PG(), Sport: d.Sports.Sport, VenueName: text(d.Sports.VenueName)})
 	}
 	if err != nil {
 		return fmt.Errorf("etkinlik detayı: %w", err)
