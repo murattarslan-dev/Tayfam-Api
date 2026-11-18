@@ -1119,9 +1119,10 @@ func (x *SportsDetails) GetVenueName() string {
 
 // Event is an event as an active member of its tayfa sees it.
 type Event struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	TayfaId     string                 `protobuf:"bytes,2,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Id      string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	TayfaId string                 `protobuf:"bytes,2,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	// The Faz 1 enum of type_key; UNSPECIFIED for any other type.
 	Type        EventType              `protobuf:"varint,3,opt,name=type,proto3,enum=tayfam.core.v1.EventType" json:"type,omitempty"`
 	Mode        EventMode              `protobuf:"varint,4,opt,name=mode,proto3,enum=tayfam.core.v1.EventMode" json:"mode,omitempty"`
 	Title       string                 `protobuf:"bytes,5,opt,name=title,proto3" json:"title,omitempty"`
@@ -1160,8 +1161,10 @@ type Event struct {
 	// The event was edited on its own (UpdateEvent without series): changes
 	// to the series and ending it leave it alone.
 	SeriesOverride bool `protobuf:"varint,29,opt,name=series_override,json=seriesOverride,proto3" json:"series_override,omitempty"`
-	// Set by GetEvent for every type except GENERAL; never by
-	// ListUpcomingEvents.
+	// The Faz 1 details of the convoy, camp, hike and fishing types, until
+	// their components replace them (ADR-0025 §10). Set by GetEvent; never by
+	// ListUpcomingEvents. gaming and sports are never set: their data is in
+	// fields.
 	//
 	// Types that are valid to be assigned to Details:
 	//
@@ -1175,6 +1178,22 @@ type Event struct {
 	// The cover image (a READY COVER upload, MediaService); empty when there
 	// is none. Events a series generates have no cover of their own.
 	CoverUploadId string `protobuf:"bytes,36,opt,name=cover_upload_id,json=coverUploadId,proto3" json:"cover_upload_id,omitempty"`
+	// The event's type: a key of the catalog (CatalogService, ADR-0025),
+	// ^[a-z][a-z0-9_]{1,39}$. `type` above is the Faz 1 enum and is set only
+	// for the seven Faz 1 types; new code reads type_key.
+	TypeKey string `protobuf:"bytes,37,opt,name=type_key,json=typeKey,proto3" json:"type_key,omitempty"`
+	// The version of the type the event was created with; the event is shown
+	// with that version's definition
+	// (CatalogService.GetEventTypeVersion).
+	TypeVersion int32 `protobuf:"varint,38,opt,name=type_version,json=typeVersion,proto3" json:"type_version,omitempty"`
+	// The values of the type's fields (the definition's "fields") by field
+	// key. Each value is the JSON text of the stored form: a string for text,
+	// long_text, choice and date ("YYYY-MM-DD"), a number for integer,
+	// decimal and duration (minutes), true or false for boolean, a list of
+	// strings for multi_choice. A field without a value is not in the map.
+	// Set by GetEvent and the methods that return the event they changed;
+	// never by ListUpcomingEvents.
+	Fields        map[string]string `protobuf:"bytes,39,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1480,6 +1499,27 @@ func (x *Event) GetCoverUploadId() string {
 	return ""
 }
 
+func (x *Event) GetTypeKey() string {
+	if x != nil {
+		return x.TypeKey
+	}
+	return ""
+}
+
+func (x *Event) GetTypeVersion() int32 {
+	if x != nil {
+		return x.TypeVersion
+	}
+	return 0
+}
+
+func (x *Event) GetFields() map[string]string {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
 type isEvent_Details interface {
 	isEvent_Details()
 }
@@ -1523,9 +1563,10 @@ func (*Event_Sports) isEvent_Details() {}
 type CreateEventRequest struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	TayfaId string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
-	// Must not be UNSPECIFIED.
+	// The Faz 1 enum; read only when type_key is empty. One of the two is
+	// required.
 	Type EventType `protobuf:"varint,2,opt,name=type,proto3,enum=tayfam.core.v1.EventType" json:"type,omitempty"`
-	// Must not be UNSPECIFIED.
+	// Must not be UNSPECIFIED, and one of the modes the type allows.
 	Mode EventMode `protobuf:"varint,3,opt,name=mode,proto3,enum=tayfam.core.v1.EventMode" json:"mode,omitempty"`
 	// 1–120 characters after trimming surrounding spaces.
 	Title string `protobuf:"bytes,4,opt,name=title,proto3" json:"title,omitempty"`
@@ -1549,9 +1590,10 @@ type CreateEventRequest struct {
 	// 0: no limit; otherwise 1–10000.
 	Capacity     int32 `protobuf:"varint,13,opt,name=capacity,proto3" json:"capacity,omitempty"`
 	Discoverable bool  `protobuf:"varint,14,opt,name=discoverable,proto3" json:"discoverable,omitempty"`
-	// Must match type; may be unset for every type except GAMING and SPORTS,
-	// which need theirs. Must be unset for GENERAL. Output-only fields
-	// (vehicles, items) are ignored.
+	// Only for the convoy, camp, hike and fishing types, and must match the
+	// type; may be unset. gaming and sports must be unset
+	// (ERROR_REASON_VALIDATION, field "details"): their data goes in fields.
+	// Output-only fields (vehicles, items) are ignored.
 	//
 	// Types that are valid to be assigned to Details:
 	//
@@ -1574,6 +1616,16 @@ type CreateEventRequest struct {
 	// ERROR_REASON_UPLOAD_IN_USE). Only this event gets it, not the rest of a
 	// series.
 	CoverUploadId string `protobuf:"bytes,17,opt,name=cover_upload_id,json=coverUploadId,proto3" json:"cover_upload_id,omitempty"`
+	// The event's type: the key of an active type of the catalog
+	// (ERROR_REASON_VALIDATION, field "type", for an unknown or retired
+	// one). The event is created with the type's current version.
+	TypeKey string `protobuf:"bytes,18,opt,name=type_key,json=typeKey,proto3" json:"type_key,omitempty"`
+	// The values of the type's fields by field key, each as JSON text (see
+	// Event.fields). Checked against the type's current definition: every
+	// required field must be there, and nothing the type does not define. A
+	// bad value is ERROR_REASON_VALIDATION, field "fields.<key>"; an unknown
+	// key or too many values, field "fields".
+	Fields        map[string]string `protobuf:"bytes,19,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1786,6 +1838,20 @@ func (x *CreateEventRequest) GetCoverUploadId() string {
 		return x.CoverUploadId
 	}
 	return ""
+}
+
+func (x *CreateEventRequest) GetTypeKey() string {
+	if x != nil {
+		return x.TypeKey
+	}
+	return ""
+}
+
+func (x *CreateEventRequest) GetFields() map[string]string {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
 }
 
 type isCreateEventRequest_Details interface {
@@ -2202,9 +2268,10 @@ type UpdateEventRequest struct {
 	// (start_time and end_time together), "location" (mode,
 	// meeting_point_name, meeting_point, city, district and online_url
 	// together), "capacity", "discoverable", "details" (replaces the type
-	// details; vehicles and camp items stay), "cover_upload_id" (not with
-	// series = true: ERROR_REASON_VALIDATION, field "update_mask"). Any
-	// other path is ERROR_REASON_VALIDATION.
+	// details of a convoy, camp, hike or fishing event; vehicles and camp
+	// items stay), "fields" (replaces the field values), "cover_upload_id"
+	// (not with series = true: ERROR_REASON_VALIDATION, field
+	// "update_mask"). Any other path is ERROR_REASON_VALIDATION.
 	UpdateMask *fieldmaskpb.FieldMask `protobuf:"bytes,15,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	// Only for an event of a series (otherwise ERROR_REASON_VALIDATION, field
 	// "series"). false: only this event changes and it is marked
@@ -2220,6 +2287,11 @@ type UpdateEventRequest struct {
 	// CreateEventRequest.cover_upload_id; empty removes the cover. The
 	// previous cover is deleted.
 	CoverUploadId string `protobuf:"bytes,17,opt,name=cover_upload_id,json=coverUploadId,proto3" json:"cover_upload_id,omitempty"`
+	// With "fields" in update_mask: the complete new set of field values,
+	// with the rules of CreateEventRequest.fields. They are checked against
+	// the type version the event was created with, not the catalog's current
+	// one. The previous values are replaced.
+	Fields        map[string]string `protobuf:"bytes,18,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2432,6 +2504,13 @@ func (x *UpdateEventRequest) GetCoverUploadId() string {
 		return x.CoverUploadId
 	}
 	return ""
+}
+
+func (x *UpdateEventRequest) GetFields() map[string]string {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
 }
 
 type isUpdateEventRequest_Details interface {
@@ -5461,7 +5540,7 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\rSportsDetails\x12+\n" +
 	"\x05sport\x18\x01 \x01(\x0e2\x15.tayfam.core.v1.SportR\x05sport\x12\x1d\n" +
 	"\n" +
-	"venue_name\x18\x02 \x01(\tR\tvenueName\"\xcb\f\n" +
+	"venue_name\x18\x02 \x01(\tR\tvenueName\"\xff\r\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\btayfa_id\x18\x02 \x01(\tR\atayfaId\x12-\n" +
@@ -5508,8 +5587,14 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\afishing\x18! \x01(\v2\x1e.tayfam.core.v1.FishingDetailsH\x00R\afishing\x127\n" +
 	"\x06gaming\x18\" \x01(\v2\x1d.tayfam.core.v1.GamingDetailsH\x00R\x06gaming\x127\n" +
 	"\x06sports\x18# \x01(\v2\x1d.tayfam.core.v1.SportsDetailsH\x00R\x06sports\x12&\n" +
-	"\x0fcover_upload_id\x18$ \x01(\tR\rcoverUploadIdB\t\n" +
-	"\adetails\"\x99\b\n" +
+	"\x0fcover_upload_id\x18$ \x01(\tR\rcoverUploadId\x12\x19\n" +
+	"\btype_key\x18% \x01(\tR\atypeKey\x12!\n" +
+	"\ftype_version\x18& \x01(\x05R\vtypeVersion\x129\n" +
+	"\x06fields\x18' \x03(\v2!.tayfam.core.v1.Event.FieldsEntryR\x06fields\x1a9\n" +
+	"\vFieldsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\t\n" +
+	"\adetails\"\xb7\t\n" +
 	"\x12CreateEventRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12-\n" +
 	"\x04type\x18\x02 \x01(\x0e2\x19.tayfam.core.v1.EventTypeR\x04type\x12-\n" +
@@ -5538,7 +5623,12 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\n" +
 	"recurrence\x18\x10 \x01(\v2\x1a.tayfam.core.v1.RecurrenceR\n" +
 	"recurrence\x12&\n" +
-	"\x0fcover_upload_id\x18\x11 \x01(\tR\rcoverUploadIdB\t\n" +
+	"\x0fcover_upload_id\x18\x11 \x01(\tR\rcoverUploadId\x12\x19\n" +
+	"\btype_key\x18\x12 \x01(\tR\atypeKey\x12F\n" +
+	"\x06fields\x18\x13 \x03(\v2..tayfam.core.v1.CreateEventRequest.FieldsEntryR\x06fields\x1a9\n" +
+	"\vFieldsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\t\n" +
 	"\adetails\"?\n" +
 	"\n" +
 	"Recurrence\x12\x14\n" +
@@ -5564,7 +5654,7 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\x10invitee_user_ids\x18\x02 \x03(\tR\x0einviteeUserIds\"v\n" +
 	"\x1aCreateInstantEventResponse\x12+\n" +
 	"\x05tayfa\x18\x01 \x01(\v2\x15.tayfam.core.v1.TayfaR\x05tayfa\x12+\n" +
-	"\x05event\x18\x02 \x01(\v2\x15.tayfam.core.v1.EventR\x05event\"\xf2\a\n" +
+	"\x05event\x18\x02 \x01(\v2\x15.tayfam.core.v1.EventR\x05event\"\xf5\b\n" +
 	"\x12UpdateEventRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x19\n" +
 	"\bevent_id\x18\x02 \x01(\tR\aeventId\x12\x14\n" +
@@ -5592,7 +5682,11 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\vupdate_mask\x18\x0f \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
 	"updateMask\x12\x16\n" +
 	"\x06series\x18\x10 \x01(\bR\x06series\x12&\n" +
-	"\x0fcover_upload_id\x18\x11 \x01(\tR\rcoverUploadIdB\t\n" +
+	"\x0fcover_upload_id\x18\x11 \x01(\tR\rcoverUploadId\x12F\n" +
+	"\x06fields\x18\x12 \x03(\v2..tayfam.core.v1.UpdateEventRequest.FieldsEntryR\x06fields\x1a9\n" +
+	"\vFieldsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\t\n" +
 	"\adetails\"B\n" +
 	"\x13UpdateEventResponse\x12+\n" +
 	"\x05event\x18\x01 \x01(\v2\x15.tayfam.core.v1.EventR\x05event\"b\n" +
@@ -5893,7 +5987,7 @@ func file_tayfam_core_v1_event_proto_rawDescGZIP() []byte {
 }
 
 var file_tayfam_core_v1_event_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
-var file_tayfam_core_v1_event_proto_msgTypes = make([]protoimpl.MessageInfo, 68)
+var file_tayfam_core_v1_event_proto_msgTypes = make([]protoimpl.MessageInfo, 71)
 var file_tayfam_core_v1_event_proto_goTypes = []any{
 	(EventMode)(0),                      // 0: tayfam.core.v1.EventMode
 	(EventStatus)(0),                    // 1: tayfam.core.v1.EventStatus
@@ -5972,28 +6066,31 @@ var file_tayfam_core_v1_event_proto_goTypes = []any{
 	(*EndEventSeriesResponse)(nil),      // 74: tayfam.core.v1.EndEventSeriesResponse
 	(*ExportEventRequest)(nil),          // 75: tayfam.core.v1.ExportEventRequest
 	(*ExportEventResponse)(nil),         // 76: tayfam.core.v1.ExportEventResponse
-	(*timestamppb.Timestamp)(nil),       // 77: google.protobuf.Timestamp
-	(EventType)(0),                      // 78: tayfam.core.v1.EventType
-	(*Tayfa)(nil),                       // 79: tayfam.core.v1.Tayfa
-	(*fieldmaskpb.FieldMask)(nil),       // 80: google.protobuf.FieldMask
+	nil,                                 // 77: tayfam.core.v1.Event.FieldsEntry
+	nil,                                 // 78: tayfam.core.v1.CreateEventRequest.FieldsEntry
+	nil,                                 // 79: tayfam.core.v1.UpdateEventRequest.FieldsEntry
+	(*timestamppb.Timestamp)(nil),       // 80: google.protobuf.Timestamp
+	(EventType)(0),                      // 81: tayfam.core.v1.EventType
+	(*Tayfa)(nil),                       // 82: tayfam.core.v1.Tayfa
+	(*fieldmaskpb.FieldMask)(nil),       // 83: google.protobuf.FieldMask
 }
 var file_tayfam_core_v1_event_proto_depIdxs = []int32{
 	9,   // 0: tayfam.core.v1.ConvoyDetails.route:type_name -> tayfam.core.v1.LatLng
 	11,  // 1: tayfam.core.v1.ConvoyDetails.vehicles:type_name -> tayfam.core.v1.ConvoyVehicle
 	13,  // 2: tayfam.core.v1.CampDetails.items:type_name -> tayfam.core.v1.CampItem
-	77,  // 3: tayfam.core.v1.HikeDetails.expected_return_time:type_name -> google.protobuf.Timestamp
+	80,  // 3: tayfam.core.v1.HikeDetails.expected_return_time:type_name -> google.protobuf.Timestamp
 	6,   // 4: tayfam.core.v1.FishingDetails.spot_visibility:type_name -> tayfam.core.v1.SpotVisibility
 	7,   // 5: tayfam.core.v1.GamingDetails.platform:type_name -> tayfam.core.v1.GamingPlatform
 	8,   // 6: tayfam.core.v1.SportsDetails.sport:type_name -> tayfam.core.v1.Sport
-	78,  // 7: tayfam.core.v1.Event.type:type_name -> tayfam.core.v1.EventType
+	81,  // 7: tayfam.core.v1.Event.type:type_name -> tayfam.core.v1.EventType
 	0,   // 8: tayfam.core.v1.Event.mode:type_name -> tayfam.core.v1.EventMode
-	77,  // 9: tayfam.core.v1.Event.start_time:type_name -> google.protobuf.Timestamp
-	77,  // 10: tayfam.core.v1.Event.end_time:type_name -> google.protobuf.Timestamp
+	80,  // 9: tayfam.core.v1.Event.start_time:type_name -> google.protobuf.Timestamp
+	80,  // 10: tayfam.core.v1.Event.end_time:type_name -> google.protobuf.Timestamp
 	9,   // 11: tayfam.core.v1.Event.meeting_point:type_name -> tayfam.core.v1.LatLng
 	1,   // 12: tayfam.core.v1.Event.status:type_name -> tayfam.core.v1.EventStatus
-	77,  // 13: tayfam.core.v1.Event.cancel_time:type_name -> google.protobuf.Timestamp
-	77,  // 14: tayfam.core.v1.Event.create_time:type_name -> google.protobuf.Timestamp
-	77,  // 15: tayfam.core.v1.Event.update_time:type_name -> google.protobuf.Timestamp
+	80,  // 13: tayfam.core.v1.Event.cancel_time:type_name -> google.protobuf.Timestamp
+	80,  // 14: tayfam.core.v1.Event.create_time:type_name -> google.protobuf.Timestamp
+	80,  // 15: tayfam.core.v1.Event.update_time:type_name -> google.protobuf.Timestamp
 	2,   // 16: tayfam.core.v1.Event.caller_rsvp:type_name -> tayfam.core.v1.RsvpStatus
 	3,   // 17: tayfam.core.v1.Event.caller_attendance:type_name -> tayfam.core.v1.AttendanceStatus
 	10,  // 18: tayfam.core.v1.Event.convoy:type_name -> tayfam.core.v1.ConvoyDetails
@@ -6002,129 +6099,132 @@ var file_tayfam_core_v1_event_proto_depIdxs = []int32{
 	15,  // 21: tayfam.core.v1.Event.fishing:type_name -> tayfam.core.v1.FishingDetails
 	16,  // 22: tayfam.core.v1.Event.gaming:type_name -> tayfam.core.v1.GamingDetails
 	17,  // 23: tayfam.core.v1.Event.sports:type_name -> tayfam.core.v1.SportsDetails
-	78,  // 24: tayfam.core.v1.CreateEventRequest.type:type_name -> tayfam.core.v1.EventType
-	0,   // 25: tayfam.core.v1.CreateEventRequest.mode:type_name -> tayfam.core.v1.EventMode
-	77,  // 26: tayfam.core.v1.CreateEventRequest.start_time:type_name -> google.protobuf.Timestamp
-	77,  // 27: tayfam.core.v1.CreateEventRequest.end_time:type_name -> google.protobuf.Timestamp
-	9,   // 28: tayfam.core.v1.CreateEventRequest.meeting_point:type_name -> tayfam.core.v1.LatLng
-	10,  // 29: tayfam.core.v1.CreateEventRequest.convoy:type_name -> tayfam.core.v1.ConvoyDetails
-	12,  // 30: tayfam.core.v1.CreateEventRequest.camp:type_name -> tayfam.core.v1.CampDetails
-	14,  // 31: tayfam.core.v1.CreateEventRequest.hike:type_name -> tayfam.core.v1.HikeDetails
-	15,  // 32: tayfam.core.v1.CreateEventRequest.fishing:type_name -> tayfam.core.v1.FishingDetails
-	16,  // 33: tayfam.core.v1.CreateEventRequest.gaming:type_name -> tayfam.core.v1.GamingDetails
-	17,  // 34: tayfam.core.v1.CreateEventRequest.sports:type_name -> tayfam.core.v1.SportsDetails
-	20,  // 35: tayfam.core.v1.CreateEventRequest.recurrence:type_name -> tayfam.core.v1.Recurrence
-	77,  // 36: tayfam.core.v1.EventSeries.start_time:type_name -> google.protobuf.Timestamp
-	77,  // 37: tayfam.core.v1.EventSeries.end_time:type_name -> google.protobuf.Timestamp
-	77,  // 38: tayfam.core.v1.EventSeries.create_time:type_name -> google.protobuf.Timestamp
-	18,  // 39: tayfam.core.v1.CreateEventResponse.event:type_name -> tayfam.core.v1.Event
-	19,  // 40: tayfam.core.v1.CreateInstantEventRequest.event:type_name -> tayfam.core.v1.CreateEventRequest
-	79,  // 41: tayfam.core.v1.CreateInstantEventResponse.tayfa:type_name -> tayfam.core.v1.Tayfa
-	18,  // 42: tayfam.core.v1.CreateInstantEventResponse.event:type_name -> tayfam.core.v1.Event
-	77,  // 43: tayfam.core.v1.UpdateEventRequest.start_time:type_name -> google.protobuf.Timestamp
-	77,  // 44: tayfam.core.v1.UpdateEventRequest.end_time:type_name -> google.protobuf.Timestamp
-	0,   // 45: tayfam.core.v1.UpdateEventRequest.mode:type_name -> tayfam.core.v1.EventMode
-	9,   // 46: tayfam.core.v1.UpdateEventRequest.meeting_point:type_name -> tayfam.core.v1.LatLng
-	10,  // 47: tayfam.core.v1.UpdateEventRequest.convoy:type_name -> tayfam.core.v1.ConvoyDetails
-	12,  // 48: tayfam.core.v1.UpdateEventRequest.camp:type_name -> tayfam.core.v1.CampDetails
-	14,  // 49: tayfam.core.v1.UpdateEventRequest.hike:type_name -> tayfam.core.v1.HikeDetails
-	15,  // 50: tayfam.core.v1.UpdateEventRequest.fishing:type_name -> tayfam.core.v1.FishingDetails
-	16,  // 51: tayfam.core.v1.UpdateEventRequest.gaming:type_name -> tayfam.core.v1.GamingDetails
-	17,  // 52: tayfam.core.v1.UpdateEventRequest.sports:type_name -> tayfam.core.v1.SportsDetails
-	80,  // 53: tayfam.core.v1.UpdateEventRequest.update_mask:type_name -> google.protobuf.FieldMask
-	18,  // 54: tayfam.core.v1.UpdateEventResponse.event:type_name -> tayfam.core.v1.Event
-	18,  // 55: tayfam.core.v1.CancelEventResponse.event:type_name -> tayfam.core.v1.Event
-	18,  // 56: tayfam.core.v1.GetEventResponse.event:type_name -> tayfam.core.v1.Event
-	18,  // 57: tayfam.core.v1.ListUpcomingEventsResponse.events:type_name -> tayfam.core.v1.Event
-	2,   // 58: tayfam.core.v1.SetRsvpRequest.status:type_name -> tayfam.core.v1.RsvpStatus
-	2,   // 59: tayfam.core.v1.SetRsvpResponse.status:type_name -> tayfam.core.v1.RsvpStatus
-	2,   // 60: tayfam.core.v1.ListAttendeesRequest.status:type_name -> tayfam.core.v1.RsvpStatus
-	2,   // 61: tayfam.core.v1.Attendee.status:type_name -> tayfam.core.v1.RsvpStatus
-	77,  // 62: tayfam.core.v1.Attendee.update_time:type_name -> google.protobuf.Timestamp
-	3,   // 63: tayfam.core.v1.Attendee.attendance:type_name -> tayfam.core.v1.AttendanceStatus
-	4,   // 64: tayfam.core.v1.Attendee.attendance_method:type_name -> tayfam.core.v1.AttendanceMethod
-	36,  // 65: tayfam.core.v1.ListAttendeesResponse.attendees:type_name -> tayfam.core.v1.Attendee
-	13,  // 66: tayfam.core.v1.AddCampItemResponse.item:type_name -> tayfam.core.v1.CampItem
-	13,  // 67: tayfam.core.v1.AssignCampItemResponse.item:type_name -> tayfam.core.v1.CampItem
-	11,  // 68: tayfam.core.v1.AddConvoyVehicleResponse.vehicle:type_name -> tayfam.core.v1.ConvoyVehicle
-	9,   // 69: tayfam.core.v1.CheckInRequest.location:type_name -> tayfam.core.v1.LatLng
-	3,   // 70: tayfam.core.v1.CheckInResponse.attendance:type_name -> tayfam.core.v1.AttendanceStatus
-	4,   // 71: tayfam.core.v1.CheckInResponse.method:type_name -> tayfam.core.v1.AttendanceMethod
-	77,  // 72: tayfam.core.v1.HikeCheckin.start_time:type_name -> google.protobuf.Timestamp
-	77,  // 73: tayfam.core.v1.HikeCheckin.return_time:type_name -> google.protobuf.Timestamp
-	77,  // 74: tayfam.core.v1.StartHikeRequest.start_time:type_name -> google.protobuf.Timestamp
-	50,  // 75: tayfam.core.v1.StartHikeResponse.checkin:type_name -> tayfam.core.v1.HikeCheckin
-	77,  // 76: tayfam.core.v1.FinishHikeRequest.return_time:type_name -> google.protobuf.Timestamp
-	50,  // 77: tayfam.core.v1.FinishHikeResponse.checkin:type_name -> tayfam.core.v1.HikeCheckin
-	9,   // 78: tayfam.core.v1.FishingCatch.location:type_name -> tayfam.core.v1.LatLng
-	5,   // 79: tayfam.core.v1.FishingCatch.visibility:type_name -> tayfam.core.v1.CatchVisibility
-	77,  // 80: tayfam.core.v1.FishingCatch.create_time:type_name -> google.protobuf.Timestamp
-	9,   // 81: tayfam.core.v1.AddFishingCatchRequest.location:type_name -> tayfam.core.v1.LatLng
-	5,   // 82: tayfam.core.v1.AddFishingCatchRequest.visibility:type_name -> tayfam.core.v1.CatchVisibility
-	57,  // 83: tayfam.core.v1.AddFishingCatchResponse.catch:type_name -> tayfam.core.v1.FishingCatch
-	57,  // 84: tayfam.core.v1.ListFishingCatchesResponse.catches:type_name -> tayfam.core.v1.FishingCatch
-	77,  // 85: tayfam.core.v1.EventPhoto.create_time:type_name -> google.protobuf.Timestamp
-	64,  // 86: tayfam.core.v1.AddEventPhotoResponse.photo:type_name -> tayfam.core.v1.EventPhoto
-	64,  // 87: tayfam.core.v1.ListEventPhotosResponse.photos:type_name -> tayfam.core.v1.EventPhoto
-	21,  // 88: tayfam.core.v1.GetEventSeriesResponse.series:type_name -> tayfam.core.v1.EventSeries
-	21,  // 89: tayfam.core.v1.EndEventSeriesResponse.series:type_name -> tayfam.core.v1.EventSeries
-	19,  // 90: tayfam.core.v1.EventService.CreateEvent:input_type -> tayfam.core.v1.CreateEventRequest
-	23,  // 91: tayfam.core.v1.EventService.CreateInstantEvent:input_type -> tayfam.core.v1.CreateInstantEventRequest
-	25,  // 92: tayfam.core.v1.EventService.UpdateEvent:input_type -> tayfam.core.v1.UpdateEventRequest
-	27,  // 93: tayfam.core.v1.EventService.CancelEvent:input_type -> tayfam.core.v1.CancelEventRequest
-	29,  // 94: tayfam.core.v1.EventService.GetEvent:input_type -> tayfam.core.v1.GetEventRequest
-	31,  // 95: tayfam.core.v1.EventService.ListUpcomingEvents:input_type -> tayfam.core.v1.ListUpcomingEventsRequest
-	33,  // 96: tayfam.core.v1.EventService.SetRsvp:input_type -> tayfam.core.v1.SetRsvpRequest
-	35,  // 97: tayfam.core.v1.EventService.ListAttendees:input_type -> tayfam.core.v1.ListAttendeesRequest
-	38,  // 98: tayfam.core.v1.EventService.AddCampItem:input_type -> tayfam.core.v1.AddCampItemRequest
-	40,  // 99: tayfam.core.v1.EventService.RemoveCampItem:input_type -> tayfam.core.v1.RemoveCampItemRequest
-	42,  // 100: tayfam.core.v1.EventService.AssignCampItem:input_type -> tayfam.core.v1.AssignCampItemRequest
-	44,  // 101: tayfam.core.v1.EventService.AddConvoyVehicle:input_type -> tayfam.core.v1.AddConvoyVehicleRequest
-	46,  // 102: tayfam.core.v1.EventService.RemoveConvoyVehicle:input_type -> tayfam.core.v1.RemoveConvoyVehicleRequest
-	48,  // 103: tayfam.core.v1.EventService.CheckIn:input_type -> tayfam.core.v1.CheckInRequest
-	51,  // 104: tayfam.core.v1.EventService.StartHike:input_type -> tayfam.core.v1.StartHikeRequest
-	53,  // 105: tayfam.core.v1.EventService.FinishHike:input_type -> tayfam.core.v1.FinishHikeRequest
-	55,  // 106: tayfam.core.v1.EventService.SetAttendance:input_type -> tayfam.core.v1.SetAttendanceRequest
-	58,  // 107: tayfam.core.v1.EventService.AddFishingCatch:input_type -> tayfam.core.v1.AddFishingCatchRequest
-	60,  // 108: tayfam.core.v1.EventService.ListFishingCatches:input_type -> tayfam.core.v1.ListFishingCatchesRequest
-	62,  // 109: tayfam.core.v1.EventService.RemoveFishingCatch:input_type -> tayfam.core.v1.RemoveFishingCatchRequest
-	65,  // 110: tayfam.core.v1.EventService.AddEventPhoto:input_type -> tayfam.core.v1.AddEventPhotoRequest
-	67,  // 111: tayfam.core.v1.EventService.ListEventPhotos:input_type -> tayfam.core.v1.ListEventPhotosRequest
-	69,  // 112: tayfam.core.v1.EventService.RemoveEventPhoto:input_type -> tayfam.core.v1.RemoveEventPhotoRequest
-	71,  // 113: tayfam.core.v1.EventService.GetEventSeries:input_type -> tayfam.core.v1.GetEventSeriesRequest
-	73,  // 114: tayfam.core.v1.EventService.EndEventSeries:input_type -> tayfam.core.v1.EndEventSeriesRequest
-	75,  // 115: tayfam.core.v1.EventService.ExportEvent:input_type -> tayfam.core.v1.ExportEventRequest
-	22,  // 116: tayfam.core.v1.EventService.CreateEvent:output_type -> tayfam.core.v1.CreateEventResponse
-	24,  // 117: tayfam.core.v1.EventService.CreateInstantEvent:output_type -> tayfam.core.v1.CreateInstantEventResponse
-	26,  // 118: tayfam.core.v1.EventService.UpdateEvent:output_type -> tayfam.core.v1.UpdateEventResponse
-	28,  // 119: tayfam.core.v1.EventService.CancelEvent:output_type -> tayfam.core.v1.CancelEventResponse
-	30,  // 120: tayfam.core.v1.EventService.GetEvent:output_type -> tayfam.core.v1.GetEventResponse
-	32,  // 121: tayfam.core.v1.EventService.ListUpcomingEvents:output_type -> tayfam.core.v1.ListUpcomingEventsResponse
-	34,  // 122: tayfam.core.v1.EventService.SetRsvp:output_type -> tayfam.core.v1.SetRsvpResponse
-	37,  // 123: tayfam.core.v1.EventService.ListAttendees:output_type -> tayfam.core.v1.ListAttendeesResponse
-	39,  // 124: tayfam.core.v1.EventService.AddCampItem:output_type -> tayfam.core.v1.AddCampItemResponse
-	41,  // 125: tayfam.core.v1.EventService.RemoveCampItem:output_type -> tayfam.core.v1.RemoveCampItemResponse
-	43,  // 126: tayfam.core.v1.EventService.AssignCampItem:output_type -> tayfam.core.v1.AssignCampItemResponse
-	45,  // 127: tayfam.core.v1.EventService.AddConvoyVehicle:output_type -> tayfam.core.v1.AddConvoyVehicleResponse
-	47,  // 128: tayfam.core.v1.EventService.RemoveConvoyVehicle:output_type -> tayfam.core.v1.RemoveConvoyVehicleResponse
-	49,  // 129: tayfam.core.v1.EventService.CheckIn:output_type -> tayfam.core.v1.CheckInResponse
-	52,  // 130: tayfam.core.v1.EventService.StartHike:output_type -> tayfam.core.v1.StartHikeResponse
-	54,  // 131: tayfam.core.v1.EventService.FinishHike:output_type -> tayfam.core.v1.FinishHikeResponse
-	56,  // 132: tayfam.core.v1.EventService.SetAttendance:output_type -> tayfam.core.v1.SetAttendanceResponse
-	59,  // 133: tayfam.core.v1.EventService.AddFishingCatch:output_type -> tayfam.core.v1.AddFishingCatchResponse
-	61,  // 134: tayfam.core.v1.EventService.ListFishingCatches:output_type -> tayfam.core.v1.ListFishingCatchesResponse
-	63,  // 135: tayfam.core.v1.EventService.RemoveFishingCatch:output_type -> tayfam.core.v1.RemoveFishingCatchResponse
-	66,  // 136: tayfam.core.v1.EventService.AddEventPhoto:output_type -> tayfam.core.v1.AddEventPhotoResponse
-	68,  // 137: tayfam.core.v1.EventService.ListEventPhotos:output_type -> tayfam.core.v1.ListEventPhotosResponse
-	70,  // 138: tayfam.core.v1.EventService.RemoveEventPhoto:output_type -> tayfam.core.v1.RemoveEventPhotoResponse
-	72,  // 139: tayfam.core.v1.EventService.GetEventSeries:output_type -> tayfam.core.v1.GetEventSeriesResponse
-	74,  // 140: tayfam.core.v1.EventService.EndEventSeries:output_type -> tayfam.core.v1.EndEventSeriesResponse
-	76,  // 141: tayfam.core.v1.EventService.ExportEvent:output_type -> tayfam.core.v1.ExportEventResponse
-	116, // [116:142] is the sub-list for method output_type
-	90,  // [90:116] is the sub-list for method input_type
-	90,  // [90:90] is the sub-list for extension type_name
-	90,  // [90:90] is the sub-list for extension extendee
-	0,   // [0:90] is the sub-list for field type_name
+	77,  // 24: tayfam.core.v1.Event.fields:type_name -> tayfam.core.v1.Event.FieldsEntry
+	81,  // 25: tayfam.core.v1.CreateEventRequest.type:type_name -> tayfam.core.v1.EventType
+	0,   // 26: tayfam.core.v1.CreateEventRequest.mode:type_name -> tayfam.core.v1.EventMode
+	80,  // 27: tayfam.core.v1.CreateEventRequest.start_time:type_name -> google.protobuf.Timestamp
+	80,  // 28: tayfam.core.v1.CreateEventRequest.end_time:type_name -> google.protobuf.Timestamp
+	9,   // 29: tayfam.core.v1.CreateEventRequest.meeting_point:type_name -> tayfam.core.v1.LatLng
+	10,  // 30: tayfam.core.v1.CreateEventRequest.convoy:type_name -> tayfam.core.v1.ConvoyDetails
+	12,  // 31: tayfam.core.v1.CreateEventRequest.camp:type_name -> tayfam.core.v1.CampDetails
+	14,  // 32: tayfam.core.v1.CreateEventRequest.hike:type_name -> tayfam.core.v1.HikeDetails
+	15,  // 33: tayfam.core.v1.CreateEventRequest.fishing:type_name -> tayfam.core.v1.FishingDetails
+	16,  // 34: tayfam.core.v1.CreateEventRequest.gaming:type_name -> tayfam.core.v1.GamingDetails
+	17,  // 35: tayfam.core.v1.CreateEventRequest.sports:type_name -> tayfam.core.v1.SportsDetails
+	20,  // 36: tayfam.core.v1.CreateEventRequest.recurrence:type_name -> tayfam.core.v1.Recurrence
+	78,  // 37: tayfam.core.v1.CreateEventRequest.fields:type_name -> tayfam.core.v1.CreateEventRequest.FieldsEntry
+	80,  // 38: tayfam.core.v1.EventSeries.start_time:type_name -> google.protobuf.Timestamp
+	80,  // 39: tayfam.core.v1.EventSeries.end_time:type_name -> google.protobuf.Timestamp
+	80,  // 40: tayfam.core.v1.EventSeries.create_time:type_name -> google.protobuf.Timestamp
+	18,  // 41: tayfam.core.v1.CreateEventResponse.event:type_name -> tayfam.core.v1.Event
+	19,  // 42: tayfam.core.v1.CreateInstantEventRequest.event:type_name -> tayfam.core.v1.CreateEventRequest
+	82,  // 43: tayfam.core.v1.CreateInstantEventResponse.tayfa:type_name -> tayfam.core.v1.Tayfa
+	18,  // 44: tayfam.core.v1.CreateInstantEventResponse.event:type_name -> tayfam.core.v1.Event
+	80,  // 45: tayfam.core.v1.UpdateEventRequest.start_time:type_name -> google.protobuf.Timestamp
+	80,  // 46: tayfam.core.v1.UpdateEventRequest.end_time:type_name -> google.protobuf.Timestamp
+	0,   // 47: tayfam.core.v1.UpdateEventRequest.mode:type_name -> tayfam.core.v1.EventMode
+	9,   // 48: tayfam.core.v1.UpdateEventRequest.meeting_point:type_name -> tayfam.core.v1.LatLng
+	10,  // 49: tayfam.core.v1.UpdateEventRequest.convoy:type_name -> tayfam.core.v1.ConvoyDetails
+	12,  // 50: tayfam.core.v1.UpdateEventRequest.camp:type_name -> tayfam.core.v1.CampDetails
+	14,  // 51: tayfam.core.v1.UpdateEventRequest.hike:type_name -> tayfam.core.v1.HikeDetails
+	15,  // 52: tayfam.core.v1.UpdateEventRequest.fishing:type_name -> tayfam.core.v1.FishingDetails
+	16,  // 53: tayfam.core.v1.UpdateEventRequest.gaming:type_name -> tayfam.core.v1.GamingDetails
+	17,  // 54: tayfam.core.v1.UpdateEventRequest.sports:type_name -> tayfam.core.v1.SportsDetails
+	83,  // 55: tayfam.core.v1.UpdateEventRequest.update_mask:type_name -> google.protobuf.FieldMask
+	79,  // 56: tayfam.core.v1.UpdateEventRequest.fields:type_name -> tayfam.core.v1.UpdateEventRequest.FieldsEntry
+	18,  // 57: tayfam.core.v1.UpdateEventResponse.event:type_name -> tayfam.core.v1.Event
+	18,  // 58: tayfam.core.v1.CancelEventResponse.event:type_name -> tayfam.core.v1.Event
+	18,  // 59: tayfam.core.v1.GetEventResponse.event:type_name -> tayfam.core.v1.Event
+	18,  // 60: tayfam.core.v1.ListUpcomingEventsResponse.events:type_name -> tayfam.core.v1.Event
+	2,   // 61: tayfam.core.v1.SetRsvpRequest.status:type_name -> tayfam.core.v1.RsvpStatus
+	2,   // 62: tayfam.core.v1.SetRsvpResponse.status:type_name -> tayfam.core.v1.RsvpStatus
+	2,   // 63: tayfam.core.v1.ListAttendeesRequest.status:type_name -> tayfam.core.v1.RsvpStatus
+	2,   // 64: tayfam.core.v1.Attendee.status:type_name -> tayfam.core.v1.RsvpStatus
+	80,  // 65: tayfam.core.v1.Attendee.update_time:type_name -> google.protobuf.Timestamp
+	3,   // 66: tayfam.core.v1.Attendee.attendance:type_name -> tayfam.core.v1.AttendanceStatus
+	4,   // 67: tayfam.core.v1.Attendee.attendance_method:type_name -> tayfam.core.v1.AttendanceMethod
+	36,  // 68: tayfam.core.v1.ListAttendeesResponse.attendees:type_name -> tayfam.core.v1.Attendee
+	13,  // 69: tayfam.core.v1.AddCampItemResponse.item:type_name -> tayfam.core.v1.CampItem
+	13,  // 70: tayfam.core.v1.AssignCampItemResponse.item:type_name -> tayfam.core.v1.CampItem
+	11,  // 71: tayfam.core.v1.AddConvoyVehicleResponse.vehicle:type_name -> tayfam.core.v1.ConvoyVehicle
+	9,   // 72: tayfam.core.v1.CheckInRequest.location:type_name -> tayfam.core.v1.LatLng
+	3,   // 73: tayfam.core.v1.CheckInResponse.attendance:type_name -> tayfam.core.v1.AttendanceStatus
+	4,   // 74: tayfam.core.v1.CheckInResponse.method:type_name -> tayfam.core.v1.AttendanceMethod
+	80,  // 75: tayfam.core.v1.HikeCheckin.start_time:type_name -> google.protobuf.Timestamp
+	80,  // 76: tayfam.core.v1.HikeCheckin.return_time:type_name -> google.protobuf.Timestamp
+	80,  // 77: tayfam.core.v1.StartHikeRequest.start_time:type_name -> google.protobuf.Timestamp
+	50,  // 78: tayfam.core.v1.StartHikeResponse.checkin:type_name -> tayfam.core.v1.HikeCheckin
+	80,  // 79: tayfam.core.v1.FinishHikeRequest.return_time:type_name -> google.protobuf.Timestamp
+	50,  // 80: tayfam.core.v1.FinishHikeResponse.checkin:type_name -> tayfam.core.v1.HikeCheckin
+	9,   // 81: tayfam.core.v1.FishingCatch.location:type_name -> tayfam.core.v1.LatLng
+	5,   // 82: tayfam.core.v1.FishingCatch.visibility:type_name -> tayfam.core.v1.CatchVisibility
+	80,  // 83: tayfam.core.v1.FishingCatch.create_time:type_name -> google.protobuf.Timestamp
+	9,   // 84: tayfam.core.v1.AddFishingCatchRequest.location:type_name -> tayfam.core.v1.LatLng
+	5,   // 85: tayfam.core.v1.AddFishingCatchRequest.visibility:type_name -> tayfam.core.v1.CatchVisibility
+	57,  // 86: tayfam.core.v1.AddFishingCatchResponse.catch:type_name -> tayfam.core.v1.FishingCatch
+	57,  // 87: tayfam.core.v1.ListFishingCatchesResponse.catches:type_name -> tayfam.core.v1.FishingCatch
+	80,  // 88: tayfam.core.v1.EventPhoto.create_time:type_name -> google.protobuf.Timestamp
+	64,  // 89: tayfam.core.v1.AddEventPhotoResponse.photo:type_name -> tayfam.core.v1.EventPhoto
+	64,  // 90: tayfam.core.v1.ListEventPhotosResponse.photos:type_name -> tayfam.core.v1.EventPhoto
+	21,  // 91: tayfam.core.v1.GetEventSeriesResponse.series:type_name -> tayfam.core.v1.EventSeries
+	21,  // 92: tayfam.core.v1.EndEventSeriesResponse.series:type_name -> tayfam.core.v1.EventSeries
+	19,  // 93: tayfam.core.v1.EventService.CreateEvent:input_type -> tayfam.core.v1.CreateEventRequest
+	23,  // 94: tayfam.core.v1.EventService.CreateInstantEvent:input_type -> tayfam.core.v1.CreateInstantEventRequest
+	25,  // 95: tayfam.core.v1.EventService.UpdateEvent:input_type -> tayfam.core.v1.UpdateEventRequest
+	27,  // 96: tayfam.core.v1.EventService.CancelEvent:input_type -> tayfam.core.v1.CancelEventRequest
+	29,  // 97: tayfam.core.v1.EventService.GetEvent:input_type -> tayfam.core.v1.GetEventRequest
+	31,  // 98: tayfam.core.v1.EventService.ListUpcomingEvents:input_type -> tayfam.core.v1.ListUpcomingEventsRequest
+	33,  // 99: tayfam.core.v1.EventService.SetRsvp:input_type -> tayfam.core.v1.SetRsvpRequest
+	35,  // 100: tayfam.core.v1.EventService.ListAttendees:input_type -> tayfam.core.v1.ListAttendeesRequest
+	38,  // 101: tayfam.core.v1.EventService.AddCampItem:input_type -> tayfam.core.v1.AddCampItemRequest
+	40,  // 102: tayfam.core.v1.EventService.RemoveCampItem:input_type -> tayfam.core.v1.RemoveCampItemRequest
+	42,  // 103: tayfam.core.v1.EventService.AssignCampItem:input_type -> tayfam.core.v1.AssignCampItemRequest
+	44,  // 104: tayfam.core.v1.EventService.AddConvoyVehicle:input_type -> tayfam.core.v1.AddConvoyVehicleRequest
+	46,  // 105: tayfam.core.v1.EventService.RemoveConvoyVehicle:input_type -> tayfam.core.v1.RemoveConvoyVehicleRequest
+	48,  // 106: tayfam.core.v1.EventService.CheckIn:input_type -> tayfam.core.v1.CheckInRequest
+	51,  // 107: tayfam.core.v1.EventService.StartHike:input_type -> tayfam.core.v1.StartHikeRequest
+	53,  // 108: tayfam.core.v1.EventService.FinishHike:input_type -> tayfam.core.v1.FinishHikeRequest
+	55,  // 109: tayfam.core.v1.EventService.SetAttendance:input_type -> tayfam.core.v1.SetAttendanceRequest
+	58,  // 110: tayfam.core.v1.EventService.AddFishingCatch:input_type -> tayfam.core.v1.AddFishingCatchRequest
+	60,  // 111: tayfam.core.v1.EventService.ListFishingCatches:input_type -> tayfam.core.v1.ListFishingCatchesRequest
+	62,  // 112: tayfam.core.v1.EventService.RemoveFishingCatch:input_type -> tayfam.core.v1.RemoveFishingCatchRequest
+	65,  // 113: tayfam.core.v1.EventService.AddEventPhoto:input_type -> tayfam.core.v1.AddEventPhotoRequest
+	67,  // 114: tayfam.core.v1.EventService.ListEventPhotos:input_type -> tayfam.core.v1.ListEventPhotosRequest
+	69,  // 115: tayfam.core.v1.EventService.RemoveEventPhoto:input_type -> tayfam.core.v1.RemoveEventPhotoRequest
+	71,  // 116: tayfam.core.v1.EventService.GetEventSeries:input_type -> tayfam.core.v1.GetEventSeriesRequest
+	73,  // 117: tayfam.core.v1.EventService.EndEventSeries:input_type -> tayfam.core.v1.EndEventSeriesRequest
+	75,  // 118: tayfam.core.v1.EventService.ExportEvent:input_type -> tayfam.core.v1.ExportEventRequest
+	22,  // 119: tayfam.core.v1.EventService.CreateEvent:output_type -> tayfam.core.v1.CreateEventResponse
+	24,  // 120: tayfam.core.v1.EventService.CreateInstantEvent:output_type -> tayfam.core.v1.CreateInstantEventResponse
+	26,  // 121: tayfam.core.v1.EventService.UpdateEvent:output_type -> tayfam.core.v1.UpdateEventResponse
+	28,  // 122: tayfam.core.v1.EventService.CancelEvent:output_type -> tayfam.core.v1.CancelEventResponse
+	30,  // 123: tayfam.core.v1.EventService.GetEvent:output_type -> tayfam.core.v1.GetEventResponse
+	32,  // 124: tayfam.core.v1.EventService.ListUpcomingEvents:output_type -> tayfam.core.v1.ListUpcomingEventsResponse
+	34,  // 125: tayfam.core.v1.EventService.SetRsvp:output_type -> tayfam.core.v1.SetRsvpResponse
+	37,  // 126: tayfam.core.v1.EventService.ListAttendees:output_type -> tayfam.core.v1.ListAttendeesResponse
+	39,  // 127: tayfam.core.v1.EventService.AddCampItem:output_type -> tayfam.core.v1.AddCampItemResponse
+	41,  // 128: tayfam.core.v1.EventService.RemoveCampItem:output_type -> tayfam.core.v1.RemoveCampItemResponse
+	43,  // 129: tayfam.core.v1.EventService.AssignCampItem:output_type -> tayfam.core.v1.AssignCampItemResponse
+	45,  // 130: tayfam.core.v1.EventService.AddConvoyVehicle:output_type -> tayfam.core.v1.AddConvoyVehicleResponse
+	47,  // 131: tayfam.core.v1.EventService.RemoveConvoyVehicle:output_type -> tayfam.core.v1.RemoveConvoyVehicleResponse
+	49,  // 132: tayfam.core.v1.EventService.CheckIn:output_type -> tayfam.core.v1.CheckInResponse
+	52,  // 133: tayfam.core.v1.EventService.StartHike:output_type -> tayfam.core.v1.StartHikeResponse
+	54,  // 134: tayfam.core.v1.EventService.FinishHike:output_type -> tayfam.core.v1.FinishHikeResponse
+	56,  // 135: tayfam.core.v1.EventService.SetAttendance:output_type -> tayfam.core.v1.SetAttendanceResponse
+	59,  // 136: tayfam.core.v1.EventService.AddFishingCatch:output_type -> tayfam.core.v1.AddFishingCatchResponse
+	61,  // 137: tayfam.core.v1.EventService.ListFishingCatches:output_type -> tayfam.core.v1.ListFishingCatchesResponse
+	63,  // 138: tayfam.core.v1.EventService.RemoveFishingCatch:output_type -> tayfam.core.v1.RemoveFishingCatchResponse
+	66,  // 139: tayfam.core.v1.EventService.AddEventPhoto:output_type -> tayfam.core.v1.AddEventPhotoResponse
+	68,  // 140: tayfam.core.v1.EventService.ListEventPhotos:output_type -> tayfam.core.v1.ListEventPhotosResponse
+	70,  // 141: tayfam.core.v1.EventService.RemoveEventPhoto:output_type -> tayfam.core.v1.RemoveEventPhotoResponse
+	72,  // 142: tayfam.core.v1.EventService.GetEventSeries:output_type -> tayfam.core.v1.GetEventSeriesResponse
+	74,  // 143: tayfam.core.v1.EventService.EndEventSeries:output_type -> tayfam.core.v1.EndEventSeriesResponse
+	76,  // 144: tayfam.core.v1.EventService.ExportEvent:output_type -> tayfam.core.v1.ExportEventResponse
+	119, // [119:145] is the sub-list for method output_type
+	93,  // [93:119] is the sub-list for method input_type
+	93,  // [93:93] is the sub-list for extension type_name
+	93,  // [93:93] is the sub-list for extension extendee
+	0,   // [0:93] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_event_proto_init() }
@@ -6164,7 +6264,7 @@ func file_tayfam_core_v1_event_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_event_proto_rawDesc), len(file_tayfam_core_v1_event_proto_rawDesc)),
 			NumEnums:      9,
-			NumMessages:   68,
+			NumMessages:   71,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

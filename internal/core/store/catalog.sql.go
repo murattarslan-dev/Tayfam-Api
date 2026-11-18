@@ -9,6 +9,41 @@ import (
 	"context"
 )
 
+const getCatalogEventType = `-- name: GetCatalogEventType :one
+SELECT key, interest_keys, labels, icon, modes, version, definition, status
+FROM catalog_event_types
+WHERE key = $1
+`
+
+type GetCatalogEventTypeRow struct {
+	Key          string
+	InterestKeys []string
+	Labels       []byte
+	Icon         string
+	Modes        []string
+	Version      int32
+	Definition   []byte
+	Status       string
+}
+
+// Bir türün güncel hali; yeni etkinlik bu sürümle oluşturulur. Emekli türü
+// app katmanı reddeder.
+func (q *Queries) GetCatalogEventType(ctx context.Context, key string) (GetCatalogEventTypeRow, error) {
+	row := q.db.QueryRow(ctx, getCatalogEventType, key)
+	var i GetCatalogEventTypeRow
+	err := row.Scan(
+		&i.Key,
+		&i.InterestKeys,
+		&i.Labels,
+		&i.Icon,
+		&i.Modes,
+		&i.Version,
+		&i.Definition,
+		&i.Status,
+	)
+	return i, err
+}
+
 const getCatalogEventTypeVersion = `-- name: GetCatalogEventTypeVersion :one
 SELECT v.type_key, v.version, v.labels, v.icon, v.modes, v.definition, t.interest_keys, t.status
 FROM catalog_event_type_versions v

@@ -143,6 +143,7 @@ type Event struct {
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	CoverUploadID    pgtype.UUID
+	TypeVersion      int32
 }
 
 type EventCamp struct {
@@ -197,17 +198,18 @@ type EventFeedback struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type EventFieldValue struct {
+	EventID   pgtype.UUID
+	FieldKey  string
+	Value     []byte
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
 type EventFishing struct {
 	EventID        pgtype.UUID
 	Type           string
 	SpotVisibility string
-}
-
-type EventGaming struct {
-	EventID  pgtype.UUID
-	Type     string
-	Game     string
-	Platform string
 }
 
 type EventHike struct {
@@ -282,13 +284,6 @@ type EventSeries struct {
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	Dtstart         pgtype.Timestamptz
-}
-
-type EventSport struct {
-	EventID   pgtype.UUID
-	Type      string
-	Sport     string
-	VenueName pgtype.Text
 }
 
 type FishingCatch struct {
