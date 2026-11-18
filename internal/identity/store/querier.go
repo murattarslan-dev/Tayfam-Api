@@ -89,6 +89,8 @@ type Querier interface {
 	// created_at, hesap silmede yeniden kimlik doğrulama için girişin
 	// (sağlayıcı token'ının doğrulandığı an) zamanıdır; yenileme onu değiştirmez.
 	GetCallerSession(ctx context.Context, arg GetCallerSessionParams) (GetCallerSessionRow, error)
+	// Kopyanın yansıttığı katalog sürümü (core'daki catalog_version).
+	GetCatalogCopyVersion(ctx context.Context) (int64, error)
 	GetDataExportByClientRequest(ctx context.Context, arg GetDataExportByClientRequestParams) (DataExportRequest, error)
 	// Kullanıcının kaldırılmamış yaptırımı (süresi dolmuş askı dahil).
 	GetOpenSanction(ctx context.Context, userID pgtype.UUID) (GetOpenSanctionRow, error)
@@ -127,6 +129,12 @@ type Querier interface {
 	// silinmemiş hesapların şifreli doğum tarihi okunur; cevap yalnızca
 	// evet/hayır olarak servisten çıkar.
 	ListBirthDatesForMinorCheck(ctx context.Context, ids []pgtype.UUID) ([]ListBirthDatesForMinorCheckRow, error)
+	// core'daki etkinlik türü kataloğunun identity'deki salt okunur kopyası
+	// (issue #237; ADR-0025 §10, ADR-0009 kopya modeli). identity_app yalnızca
+	// okur; kopya migration'la gelir.
+	// Profil ilgi alanlarının doğrulaması için: anahtar ve durum (emekliler
+	// dahil).
+	ListCatalogInterests(ctx context.Context) ([]CatalogInterest, error)
 	// Son 30 günün talepleri, yeni önce.
 	ListOwnDataExports(ctx context.Context, arg ListOwnDataExportsParams) ([]DataExportRequest, error)
 	// Panelde denetim kaydı (issue #110). En yeni önce, imleçli. related_id

@@ -74,7 +74,11 @@ func (JoinPolicy) EnumDescriptor() ([]byte, []int) {
 	return file_tayfam_core_v1_tayfa_proto_rawDescGZIP(), []int{0}
 }
 
-// Event types; a tayfa's interests use the same values as events.type.
+// The seven Faz 1 event types. Event types are catalog keys now (ADR-0025):
+// new code uses the string key fields (Event.type_key,
+// DiscoverEvent.type_key, ActivityRecord.event_type_key). A tayfa's
+// interests are catalog interest keys (Tayfa.interest_keys), not event
+// types. The enum stays because fields that used it cannot be removed.
 type EventType int32
 
 const (
@@ -365,7 +369,7 @@ type Tayfa struct {
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// Up to 500 characters; may be empty.
 	Description string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	// Distinct values, in EventType order.
+	// Faz 1; never filled. See interest_keys.
 	Interests  []EventType `protobuf:"varint,4,rep,packed,name=interests,proto3,enum=tayfam.core.v1.EventType" json:"interests,omitempty"`
 	JoinPolicy JoinPolicy  `protobuf:"varint,5,opt,name=join_policy,json=joinPolicy,proto3,enum=tayfam.core.v1.JoinPolicy" json:"join_policy,omitempty"`
 	// One entry per Module value, in Module order.
@@ -399,7 +403,11 @@ type Tayfa struct {
 	// Set only for a tayfa converted from TAYFA_KIND_INSTANT to
 	// TAYFA_KIND_STANDARD ("Bu ekiple tayfa kur"): when it was converted
 	// (ADR-0032 §7). Unset for every other tayfa.
-	ConvertTime   *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=convert_time,json=convertTime,proto3" json:"convert_time,omitempty"`
+	ConvertTime *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=convert_time,json=convertTime,proto3" json:"convert_time,omitempty"`
+	// The tayfa's interests: keys of the catalog's interests
+	// (CatalogInterest.key; ADR-0025 §2), distinct, in catalog order. A
+	// retired interest stays on the tayfas that chose it.
+	InterestKeys  []string `protobuf:"bytes,20,rep,name=interest_keys,json=interestKeys,proto3" json:"interest_keys,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -567,22 +575,31 @@ func (x *Tayfa) GetConvertTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Tayfa) GetInterestKeys() []string {
+	if x != nil {
+		return x.InterestKeys
+	}
+	return nil
+}
+
 type CreateTayfaRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 3–50 characters after trimming surrounding spaces.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Up to 500 characters; may be empty.
 	Description string `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	// 0–7 distinct values; UNSPECIFIED or a repeated value is
-	// ERROR_REASON_VALIDATION.
+	// Faz 1; must be empty (ERROR_REASON_VALIDATION). See interest_keys.
 	Interests []EventType `protobuf:"varint,3,rep,packed,name=interests,proto3,enum=tayfam.core.v1.EventType" json:"interests,omitempty"`
 	// UNSPECIFIED means JOIN_POLICY_APPROVAL.
 	JoinPolicy JoinPolicy `protobuf:"varint,4,opt,name=join_policy,json=joinPolicy,proto3,enum=tayfam.core.v1.JoinPolicy" json:"join_policy,omitempty"`
 	// Required. A UUID the client generates once per create attempt and
 	// reuses on retry (offline write protection).
 	ClientRequestId string `protobuf:"bytes,5,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// 0–20 distinct keys of ACTIVE catalog interests (CatalogInterest.key).
+	// An unknown, retired or repeated key is ERROR_REASON_VALIDATION.
+	InterestKeys  []string `protobuf:"bytes,6,rep,name=interest_keys,json=interestKeys,proto3" json:"interest_keys,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateTayfaRequest) Reset() {
@@ -648,6 +665,13 @@ func (x *CreateTayfaRequest) GetClientRequestId() string {
 		return x.ClientRequestId
 	}
 	return ""
+}
+
+func (x *CreateTayfaRequest) GetInterestKeys() []string {
+	if x != nil {
+		return x.InterestKeys
+	}
+	return nil
 }
 
 type CreateTayfaResponse struct {
@@ -992,7 +1016,7 @@ type UpdateTayfaRequest struct {
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// Same rules as CreateTayfaRequest.description.
 	Description string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	// Replaces all interests. Same rules as CreateTayfaRequest.interests.
+	// Faz 1; must be empty (ERROR_REASON_VALIDATION). See interest_keys.
 	Interests []EventType `protobuf:"varint,4,rep,packed,name=interests,proto3,enum=tayfam.core.v1.EventType" json:"interests,omitempty"`
 	// Must not be UNSPECIFIED when named in update_mask.
 	JoinPolicy JoinPolicy `protobuf:"varint,5,opt,name=join_policy,json=joinPolicy,proto3,enum=tayfam.core.v1.JoinPolicy" json:"join_policy,omitempty"`
@@ -1007,6 +1031,10 @@ type UpdateTayfaRequest struct {
 	// ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE); empty
 	// removes the cover. The previous cover is deleted.
 	CoverUploadId string `protobuf:"bytes,8,opt,name=cover_upload_id,json=coverUploadId,proto3" json:"cover_upload_id,omitempty"`
+	// With "interests" in update_mask: replaces all interests. Same rules as
+	// CreateTayfaRequest.interest_keys, except that a retired interest the
+	// tayfa already has may be kept.
+	InterestKeys  []string `protobuf:"bytes,9,rep,name=interest_keys,json=interestKeys,proto3" json:"interest_keys,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1095,6 +1123,13 @@ func (x *UpdateTayfaRequest) GetCoverUploadId() string {
 		return x.CoverUploadId
 	}
 	return ""
+}
+
+func (x *UpdateTayfaRequest) GetInterestKeys() []string {
+	if x != nil {
+		return x.InterestKeys
+	}
+	return nil
 }
 
 type UpdateTayfaResponse struct {
@@ -1503,10 +1538,12 @@ type ConvertInstantTayfaRequest struct {
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// Same rules as CreateTayfaRequest.description.
 	Description string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	// Same rules as CreateTayfaRequest.interests.
+	// Faz 1; must be empty (ERROR_REASON_VALIDATION). See interest_keys.
 	Interests []EventType `protobuf:"varint,4,rep,packed,name=interests,proto3,enum=tayfam.core.v1.EventType" json:"interests,omitempty"`
 	// UNSPECIFIED means JOIN_POLICY_APPROVAL.
-	JoinPolicy    JoinPolicy `protobuf:"varint,5,opt,name=join_policy,json=joinPolicy,proto3,enum=tayfam.core.v1.JoinPolicy" json:"join_policy,omitempty"`
+	JoinPolicy JoinPolicy `protobuf:"varint,5,opt,name=join_policy,json=joinPolicy,proto3,enum=tayfam.core.v1.JoinPolicy" json:"join_policy,omitempty"`
+	// Same rules as CreateTayfaRequest.interest_keys.
+	InterestKeys  []string `protobuf:"bytes,6,rep,name=interest_keys,json=interestKeys,proto3" json:"interest_keys,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1576,6 +1613,13 @@ func (x *ConvertInstantTayfaRequest) GetJoinPolicy() JoinPolicy {
 	return JoinPolicy_JOIN_POLICY_UNSPECIFIED
 }
 
+func (x *ConvertInstantTayfaRequest) GetInterestKeys() []string {
+	if x != nil {
+		return x.InterestKeys
+	}
+	return nil
+}
+
 type ConvertInstantTayfaResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tayfa         *Tayfa                 `protobuf:"bytes,1,opt,name=tayfa,proto3" json:"tayfa,omitempty"`
@@ -1627,7 +1671,7 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\x1atayfam/core/v1/tayfa.proto\x12\x0etayfam.core.v1\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1ftayfam/core/v1/membership.proto\"W\n" +
 	"\vModuleState\x12.\n" +
 	"\x06module\x18\x01 \x01(\x0e2\x16.tayfam.core.v1.ModuleR\x06module\x12\x18\n" +
-	"\aenabled\x18\x02 \x01(\bR\aenabled\"\xc5\a\n" +
+	"\aenabled\x18\x02 \x01(\bR\aenabled\"\xea\a\n" +
 	"\x05Tayfa\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1651,15 +1695,17 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\x1apending_join_request_count\x18\x10 \x01(\x05H\x00R\x17pendingJoinRequestCount\x88\x01\x01\x12-\n" +
 	"\x04kind\x18\x11 \x01(\x0e2\x19.tayfam.core.v1.TayfaKindR\x04kind\x12(\n" +
 	"\x10instant_event_id\x18\x12 \x01(\tR\x0einstantEventId\x12=\n" +
-	"\fconvert_time\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\vconvertTimeB\x1d\n" +
-	"\x1b_pending_join_request_count\"\xec\x01\n" +
+	"\fconvert_time\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\vconvertTime\x12#\n" +
+	"\rinterest_keys\x18\x14 \x03(\tR\finterestKeysB\x1d\n" +
+	"\x1b_pending_join_request_count\"\x91\x02\n" +
 	"\x12CreateTayfaRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x127\n" +
 	"\tinterests\x18\x03 \x03(\x0e2\x19.tayfam.core.v1.EventTypeR\tinterests\x12;\n" +
 	"\vjoin_policy\x18\x04 \x01(\x0e2\x1a.tayfam.core.v1.JoinPolicyR\n" +
 	"joinPolicy\x12*\n" +
-	"\x11client_request_id\x18\x05 \x01(\tR\x0fclientRequestId\"B\n" +
+	"\x11client_request_id\x18\x05 \x01(\tR\x0fclientRequestId\x12#\n" +
+	"\rinterest_keys\x18\x06 \x03(\tR\finterestKeys\"B\n" +
 	"\x13CreateTayfaResponse\x12+\n" +
 	"\x05tayfa\x18\x01 \x01(\v2\x15.tayfam.core.v1.TayfaR\x05tayfa\",\n" +
 	"\x0fGetTayfaRequest\x12\x19\n" +
@@ -1681,7 +1727,7 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\x04role\x18\x03 \x01(\x0e2\x14.tayfam.core.v1.RoleR\x04role\x128\n" +
 	"\x06status\x18\x04 \x01(\x0e2 .tayfam.core.v1.MembershipStatusR\x06status\x12+\n" +
 	"\x05tayfa\x18\x05 \x01(\v2\x15.tayfam.core.v1.TayfaR\x05tayfa\x12-\n" +
-	"\x04kind\x18\x06 \x01(\x0e2\x19.tayfam.core.v1.TayfaKindR\x04kind\"\xfb\x02\n" +
+	"\x04kind\x18\x06 \x01(\x0e2\x19.tayfam.core.v1.TayfaKindR\x04kind\"\xa0\x03\n" +
 	"\x12UpdateTayfaRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1692,7 +1738,8 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\vupdate_mask\x18\x06 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
 	"updateMask\x129\n" +
 	"\x19members_can_create_events\x18\a \x01(\bR\x16membersCanCreateEvents\x12&\n" +
-	"\x0fcover_upload_id\x18\b \x01(\tR\rcoverUploadId\"B\n" +
+	"\x0fcover_upload_id\x18\b \x01(\tR\rcoverUploadId\x12#\n" +
+	"\rinterest_keys\x18\t \x03(\tR\finterestKeys\"B\n" +
 	"\x13UpdateTayfaResponse\x12+\n" +
 	"\x05tayfa\x18\x01 \x01(\v2\x15.tayfam.core.v1.TayfaR\x05tayfa\"w\n" +
 	"\x10SetModuleRequest\x12\x19\n" +
@@ -1710,14 +1757,15 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\rdeletion_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\fdeletionTime\"2\n" +
 	"\x15CancelDeletionRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\"\x18\n" +
-	"\x16CancelDeletionResponse\"\xe3\x01\n" +
+	"\x16CancelDeletionResponse\"\x88\x02\n" +
 	"\x1aConvertInstantTayfaRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x127\n" +
 	"\tinterests\x18\x04 \x03(\x0e2\x19.tayfam.core.v1.EventTypeR\tinterests\x12;\n" +
 	"\vjoin_policy\x18\x05 \x01(\x0e2\x1a.tayfam.core.v1.JoinPolicyR\n" +
-	"joinPolicy\"J\n" +
+	"joinPolicy\x12#\n" +
+	"\rinterest_keys\x18\x06 \x03(\tR\finterestKeys\"J\n" +
 	"\x1bConvertInstantTayfaResponse\x12+\n" +
 	"\x05tayfa\x18\x01 \x01(\v2\x15.tayfam.core.v1.TayfaR\x05tayfa*Y\n" +
 	"\n" +

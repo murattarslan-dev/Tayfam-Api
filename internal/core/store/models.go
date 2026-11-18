@@ -528,9 +528,9 @@ type TayfaDiscover struct {
 }
 
 type TayfaInterest struct {
-	TayfaID   pgtype.UUID
-	EventType string
-	CreatedAt pgtype.Timestamptz
+	TayfaID     pgtype.UUID
+	CreatedAt   pgtype.Timestamptz
+	InterestKey string
 }
 
 type TayfaModule struct {

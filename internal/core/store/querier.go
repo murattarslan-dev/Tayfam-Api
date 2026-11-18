@@ -19,6 +19,7 @@ type Querier interface {
 	// ikinci oyu PK'ye takılır, sayaç değişmez.
 	AddAnswerVote(ctx context.Context, arg AddAnswerVoteParams) (int64, error)
 	AddQuestionTag(ctx context.Context, arg AddQuestionTagParams) error
+	// İlgi alanı katalog anahtarıdır (catalog_interests, ADR-0025 §2).
 	AddTayfaInterest(ctx context.Context, arg AddTayfaInterestParams) error
 	AdjustAnswerVoteCount(ctx context.Context, arg AdjustAnswerVoteCountParams) (int64, error)
 	// Panel kararı maskeyi kaldırır.
@@ -658,6 +659,8 @@ type Querier interface {
 	// profili silinmiş olsa da kayıt listelenir ki kaldırılabilsin.
 	ListBlocksPage(ctx context.Context, arg ListBlocksPageParams) ([]ListBlocksPageRow, error)
 	ListCampItems(ctx context.Context, eventID pgtype.UUID) ([]ListCampItemsRow, error)
+	// İlgi alanı doğrulaması için: anahtar ve durum (emekliler dahil).
+	ListCatalogInterestStatuses(ctx context.Context) ([]ListCatalogInterestStatusesRow, error)
 	// Emekliye ayrılanlar dahil: eski tayfalar ve profiller onları gösterir.
 	ListCatalogInterests(ctx context.Context) ([]ListCatalogInterestsRow, error)
 	// (created_at, id) ile sayfalanır.
@@ -720,6 +723,7 @@ type Querier interface {
 	ListHikeAlertRecipients(ctx context.Context, arg ListHikeAlertRecipientsParams) ([]pgtype.UUID, error)
 	// Anlık tayfanın tek etkinliği (silinmişler dahil en fazla bir satır).
 	ListInstantEventIDs(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListInstantEventIDsRow, error)
+	// Her tayfanın ilgi alanları katalog sırasıyla.
 	ListInterestsForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListInterestsForTayfasRow, error)
 	// Hesap silme: kişinin gönderdiği, henüz cevaplanmamış davetler. Tayfalar
 	// kimlik sırasıyla işlenir (kilit sırası).
@@ -836,6 +840,7 @@ type Querier interface {
 	// daha önce önerilmiş kişi aday olmaz.
 	ListSuggestionCandidates(ctx context.Context, arg ListSuggestionCandidatesParams) ([]ListSuggestionCandidatesRow, error)
 	ListTags(ctx context.Context, tayfaID pgtype.UUID) ([]ListTagsRow, error)
+	// Katalog sırasıyla.
 	ListTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) ([]string, error)
 	// Tayfanın bekleyen davetleri (yönetici), yeniden eskiye.
 	ListTayfaInvitationsPage(ctx context.Context, arg ListTayfaInvitationsPageParams) ([]ListTayfaInvitationsPageRow, error)
