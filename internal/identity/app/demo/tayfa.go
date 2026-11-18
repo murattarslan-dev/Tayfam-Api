@@ -206,11 +206,8 @@ func (s *Seeder) seedEvent(ctx context.Context, t tayfaSpec, e eventSpec, tayfaI
 		req.Details = &corev1.CreateEventRequest_Hike{Hike: hike}
 	case e.Fishing != nil:
 		req.Details = &corev1.CreateEventRequest_Fishing{Fishing: e.Fishing}
-	case e.Gaming != nil:
-		req.Details = &corev1.CreateEventRequest_Gaming{Gaming: e.Gaming}
-	case e.Sports != nil:
-		req.Details = &corev1.CreateEventRequest_Sports{Sports: e.Sports}
 	}
+	req.Fields = e.Fields
 	created, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.CreateEventResponse, error) {
 		return s.cfg.Core.Events.CreateEvent(ctx, req)
 	})

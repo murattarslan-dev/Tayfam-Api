@@ -4,11 +4,11 @@
 
 -- name: CreateEvent :exec
 INSERT INTO events (
-  id, tayfa_id, type, mode, title, description, starts_at, ends_at,
+  id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
   meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
   capacity, discoverable, created_by, client_request_id
 ) VALUES (
-  @id, @tayfa_id, @type, @mode, @title, @description, @starts_at, @ends_at,
+  @id, @tayfa_id, @type, @type_version, @mode, @title, @description, @starts_at, @ends_at,
   @meeting_point_name, @meeting_lat, @meeting_lng, @city, @district, @online_url,
   @capacity, @discoverable, @created_by, @client_request_id
 );
@@ -19,7 +19,7 @@ SELECT id, tayfa_id, deleted_at FROM events
 WHERE created_by = @created_by AND client_request_id = @client_request_id;
 
 -- name: GetEvent :one
-SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
+SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
        created_by, created_at, updated_at, cover_upload_id
@@ -29,7 +29,7 @@ WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL;
 -- Katılım ve düzenleme aynı etkinlik satırını kilitleyerek okur; kapasite
 -- ve bekleme sırası iki eşzamanlı istekte birden aşılamaz.
 -- name: GetEventForUpdate :one
-SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
+SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
        created_by, created_at, updated_at, cover_upload_id
@@ -56,7 +56,7 @@ WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL AND status = 'sch
 -- Bitmemiş etkinlikler, başlangıç zamanına göre; (starts_at, id) ile
 -- sayfalanır.
 -- name: ListUpcomingEvents :many
-SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
+SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
        created_by, created_at, updated_at, cover_upload_id
@@ -161,19 +161,28 @@ SELECT spot_visibility FROM event_fishing WHERE event_id = @event_id;
 SELECT event_id, spot_visibility FROM event_fishing
 WHERE event_id = ANY(@event_ids::uuid[]);
 
--- name: SetEventGaming :exec
-INSERT INTO event_gaming (event_id, game, platform) VALUES (@event_id, @game, @platform)
-ON CONFLICT (event_id) DO UPDATE SET game = EXCLUDED.game, platform = EXCLUDED.platform;
+-- ---------------------------------------------------------------------------
+-- Türe özel alan değerleri (issue #237, ADR-0025 §3). Değerler app
+-- katmanında etkinliğin tür sürümüne göre doğrulanmış halleriyle yazılır;
+-- trigger alanın o tür sürümünde olduğunu ayrıca denetler.
 
--- name: GetEventGaming :one
-SELECT game, platform FROM event_gaming WHERE event_id = @event_id;
+-- name: ListEventFieldValues :many
+SELECT field_key, value FROM event_field_values
+WHERE event_id = @event_id
+ORDER BY field_key;
 
--- name: SetEventSports :exec
-INSERT INTO event_sports (event_id, sport, venue_name) VALUES (@event_id, @sport, @venue_name)
-ON CONFLICT (event_id) DO UPDATE SET sport = EXCLUDED.sport, venue_name = EXCLUDED.venue_name;
+-- name: SetEventFieldValue :exec
+INSERT INTO event_field_values (event_id, field_key, value) VALUES (@event_id, @field_key, @value)
+ON CONFLICT (event_id, field_key) DO UPDATE SET value = EXCLUDED.value;
 
--- name: GetEventSports :one
-SELECT sport, venue_name FROM event_sports WHERE event_id = @event_id;
+-- name: DeleteEventFieldValues :exec
+DELETE FROM event_field_values WHERE event_id = @event_id;
+
+-- Seri örneği şablonun alan değerlerini alır.
+-- name: CopyEventFieldValues :exec
+INSERT INTO event_field_values (event_id, field_key, value)
+SELECT @to_event_id::uuid, field_key, value FROM event_field_values
+WHERE event_id = @from_event_id;
 
 -- ---------------------------------------------------------------------------
 -- Kamp malzemeleri

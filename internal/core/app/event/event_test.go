@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -212,25 +213,29 @@ func TestCreateAndGet(t *testing.T) {
 	_, err = e.svc.Create(ctx, admin, other, in)
 	wantField(t, "başka tayfada aynı istek kimliği", err, "client_request_id")
 
-	// Every type is created with its detail row.
+	// Every Faz 1 type is created at the catalog's version, the types with
+	// a detail table with their detail row.
 	for _, typ := range Types {
 		in := input()
 		in.Type = typ
 		switch typ {
 		case TypeGaming:
-			in.Details.Gaming = &Gaming{Game: "CS2", Platform: "pc"}
+			in.Fields = values("game", `"CS2"`, "platform", `"pc"`)
 		case TypeSports:
-			in.Details.Sports = &Sports{Sport: "football", VenueName: "Halısaha"}
+			in.Fields = values("sport", `"football"`, "venue_name", `"Halısaha"`)
 		}
 		v := e.create(t, tf, admin, in)
 		got, err := e.svc.Get(ctx, admin, tf, v.ID)
 		must(t, err)
-		want := typ
-		if typ == TypeGeneral {
-			want = "" // general events have no detail row
+		want := ""
+		if slices.Contains(detailTypes, typ) {
+			want = typ
 		}
 		if got.Details.typ() != want {
 			t.Errorf("%s: detay %+v", typ, got.Details)
+		}
+		if got.Type != typ || got.TypeVersion != 1 || got.Fields == nil || len(got.Fields) != len(in.Fields) {
+			t.Errorf("%s: tür %q sürüm %d alanlar %v", typ, got.Type, got.TypeVersion, got.Fields)
 		}
 	}
 	got, err := e.svc.Get(ctx, admin, tf, e.create(t, tf, admin, func() Input { i := input(); i.Type = TypeHike; return i }()).ID)
@@ -283,10 +288,17 @@ func TestCreateValidation(t *testing.T) {
 		{"genel türde detay", func(i *Input) { i.Details.Camp = &Camp{} }, "details"},
 		{"yanlış türde detay", func(i *Input) { i.Type = TypeHike; i.Details.Camp = &Camp{} }, "details"},
 		{"iki detay", func(i *Input) { i.Type = TypeCamp; i.Details = Details{Camp: &Camp{}, Hike: &Hike{}} }, "details"},
-		{"detaysız oyun", func(i *Input) { i.Type = TypeGaming }, "details"},
-		{"detaysız spor", func(i *Input) { i.Type = TypeSports }, "details"},
-		{"bilinmeyen platform", func(i *Input) { i.Type = TypeGaming; i.Details.Gaming = &Gaming{Game: "x", Platform: "amiga"} }, "platform"},
-		{"bilinmeyen spor", func(i *Input) { i.Type = TypeSports; i.Details.Sports = &Sports{Sport: "golf"} }, "sport"},
+		{"bozuk tür anahtarı", func(i *Input) { i.Type = "Hike Night" }, "type"},
+		{"alansız oyun", func(i *Input) { i.Type = TypeGaming }, "fields.game"},
+		{"alansız spor", func(i *Input) { i.Type = TypeSports }, "fields.sport"},
+		{"bilinmeyen platform", func(i *Input) { i.Type = TypeGaming; i.Fields = values("game", `"x"`, "platform", `"amiga"`) }, "fields.platform"},
+		{"bilinmeyen spor", func(i *Input) { i.Type = TypeSports; i.Fields = values("sport", `"golf"`) }, "fields.sport"},
+		{"oyun türünde detay", func(i *Input) {
+			i.Type = TypeGaming
+			i.Fields = values("game", `"x"`, "platform", `"pc"`)
+			i.Details.Camp = &Camp{}
+		}, "details"},
+		{"türde olmayan alan", func(i *Input) { i.Fields = values("stake", `100`) }, "fields"},
 		{"tek noktalı rota", func(i *Input) { i.Type = TypeConvoy; i.Details.Convoy = &Convoy{Route: route(1)} }, "route"},
 		{"501 noktalı rota", func(i *Input) { i.Type = TypeConvoy; i.Details.Convoy = &Convoy{Route: route(501)} }, "route"},
 		{"aralık dışı rota", func(i *Input) {

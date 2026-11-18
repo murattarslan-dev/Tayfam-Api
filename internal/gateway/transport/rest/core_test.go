@@ -61,6 +61,8 @@ type fakeCore struct {
 	feed []*corev1.DiscoverItem
 	// catalogDefinition replaces the catalog types' definition when set.
 	catalogDefinition string
+	// event replaces GetEvent's answer when set.
+	event *corev1.Event
 }
 
 func (f *fakeCore) record(ctx context.Context, in proto.Message) error {

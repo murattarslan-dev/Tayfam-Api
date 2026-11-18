@@ -26,3 +26,10 @@ SELECT v.type_key, v.version, v.labels, v.icon, v.modes, v.definition, t.interes
 FROM catalog_event_type_versions v
 JOIN catalog_event_types t ON t.key = v.type_key
 WHERE v.type_key = @type_key AND v.version = @version;
+
+-- Bir türün güncel hali; yeni etkinlik bu sürümle oluşturulur. Emekli türü
+-- app katmanı reddeder.
+-- name: GetCatalogEventType :one
+SELECT key, interest_keys, labels, icon, modes, version, definition, status
+FROM catalog_event_types
+WHERE key = @key;

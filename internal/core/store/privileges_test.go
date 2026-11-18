@@ -58,8 +58,6 @@ var wantAppPrivileges = map[string]string{
 	"event_convoy":          "INSERT,SELECT,UPDATE",
 	"event_hike":            "INSERT,SELECT,UPDATE",
 	"event_fishing":         "INSERT,SELECT,UPDATE",
-	"event_gaming":          "INSERT,SELECT,UPDATE",
-	"event_sports":          "INSERT,SELECT,UPDATE",
 	"poll_options":          "INSERT,SELECT",
 	"event_consumers":       "INSERT,SELECT,UPDATE",
 	"domain_events":         "INSERT,SELECT,UPDATE(actor_id,tayfa_id)",
@@ -76,6 +74,8 @@ var wantAppPrivileges = map[string]string{
 	"catalog_interests":           "SELECT",
 	"catalog_event_types":         "SELECT",
 	"catalog_event_type_versions": "SELECT",
+	// Issue #237: a value never moves to another event or field.
+	"event_field_values": "DELETE,INSERT,SELECT,UPDATE(updated_at,value)",
 }
 
 func TestAppRolePrivileges(t *testing.T) {

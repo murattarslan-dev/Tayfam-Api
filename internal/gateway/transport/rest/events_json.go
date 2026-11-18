@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"encoding/json"
 	"math"
 	"time"
 
@@ -35,17 +36,6 @@ var (
 	})
 	spotVisibilities = newEnum(map[string]corev1.SpotVisibility{
 		"tayfa": corev1.SpotVisibility_SPOT_VISIBILITY_TAYFA, "participants": corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS,
-	})
-	gamingPlatforms = newEnum(map[string]corev1.GamingPlatform{
-		"pc": corev1.GamingPlatform_GAMING_PLATFORM_PC, "playstation": corev1.GamingPlatform_GAMING_PLATFORM_PLAYSTATION,
-		"xbox": corev1.GamingPlatform_GAMING_PLATFORM_XBOX, "switch": corev1.GamingPlatform_GAMING_PLATFORM_SWITCH,
-		"mobile": corev1.GamingPlatform_GAMING_PLATFORM_MOBILE, "other": corev1.GamingPlatform_GAMING_PLATFORM_OTHER,
-	})
-	sports = newEnum(map[string]corev1.Sport{
-		"football": corev1.Sport_SPORT_FOOTBALL, "table_football": corev1.Sport_SPORT_TABLE_FOOTBALL,
-		"basketball": corev1.Sport_SPORT_BASKETBALL, "volleyball": corev1.Sport_SPORT_VOLLEYBALL,
-		"tennis": corev1.Sport_SPORT_TENNIS, "table_tennis": corev1.Sport_SPORT_TABLE_TENNIS,
-		"other": corev1.Sport_SPORT_OTHER,
 	})
 )
 
@@ -148,22 +138,13 @@ type fishingJSON struct {
 	SpotVisibility string `json:"spot_visibility,omitempty"`
 }
 
-// gamingJSON is used for both input and output.
-type gamingJSON struct {
-	Game     string `json:"game"`
-	Platform string `json:"platform"`
-}
-
-// sportsJSON is used for both input and output.
-type sportsJSON struct {
-	Sport     string `json:"sport"`
-	VenueName string `json:"venue_name"`
-}
-
 type eventJSON struct {
-	ID               string      `json:"id"`
-	TayfaID          string      `json:"tayfa_id"`
+	ID      string `json:"id"`
+	TayfaID string `json:"tayfa_id"`
+	// Type is the catalog key of the event's type; TypeVersion the version
+	// it was created with (GET /v1/catalog/event-types/{key}/versions/{version}).
 	Type             string      `json:"type"`
+	TypeVersion      int32       `json:"type_version"`
 	Mode             string      `json:"mode"`
 	Title            string      `json:"title"`
 	Description      string      `json:"description"`
@@ -197,14 +178,41 @@ type eventJSON struct {
 	Camp    *campJSON    `json:"camp,omitempty"`
 	Hike    *hikeJSON    `json:"hike,omitempty"`
 	Fishing *fishingJSON `json:"fishing,omitempty"`
-	Gaming  *gamingJSON  `json:"gaming,omitempty"`
-	Sports  *sportsJSON  `json:"sports,omitempty"`
+
+	// Fields holds the values of the type's fields by field key; left out
+	// when the event has none and in lists.
+	Fields map[string]json.RawMessage `json:"fields,omitempty"`
+}
+
+// eventTypeKey is the event's catalog key. An older core sends only the
+// Faz 1 enum.
+func eventTypeKey(e *corev1.Event) string {
+	if k := e.GetTypeKey(); k != "" {
+		return k
+	}
+	return eventTypes.name(e.GetType())
+}
+
+// eventFieldsFrom passes core's field values (JSON text by field key) on
+// as JSON. core wrote them itself; a value that is not valid JSON is left
+// out rather than breaking the body.
+func eventFieldsFrom(in map[string]string) map[string]json.RawMessage {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]json.RawMessage, len(in))
+	for k, v := range in {
+		if json.Valid([]byte(v)) {
+			out[k] = json.RawMessage(v)
+		}
+	}
+	return out
 }
 
 func eventFrom(e *corev1.Event) eventJSON {
 	out := eventJSON{
-		ID: e.GetId(), TayfaID: e.GetTayfaId(), Type: eventTypes.name(e.GetType()), Mode: eventModes.name(e.GetMode()),
-		Title: e.GetTitle(), Description: e.GetDescription(),
+		ID: e.GetId(), TayfaID: e.GetTayfaId(), Type: eventTypeKey(e), TypeVersion: e.GetTypeVersion(), Mode: eventModes.name(e.GetMode()),
+		Title: e.GetTitle(), Description: e.GetDescription(), Fields: eventFieldsFrom(e.GetFields()),
 		StartsAt: e.GetStartTime().AsTime(), EndsAt: e.GetEndTime().AsTime(),
 		MeetingPointName: e.GetMeetingPointName(), MeetingPoint: latLngFrom(e.GetMeetingPoint()),
 		City: e.GetCity(), District: e.GetDistrict(), OnlineURL: e.GetOnlineUrl(),
@@ -240,10 +248,6 @@ func eventFrom(e *corev1.Event) eventJSON {
 		}
 	case *corev1.Event_Fishing:
 		out.Fishing = &fishingJSON{SpotVisibility: spotVisibilities.name(d.Fishing.GetSpotVisibility())}
-	case *corev1.Event_Gaming:
-		out.Gaming = &gamingJSON{Game: d.Gaming.GetGame(), Platform: gamingPlatforms.name(d.Gaming.GetPlatform())}
-	case *corev1.Event_Sports:
-		out.Sports = &sportsJSON{Sport: sports.name(d.Sports.GetSport()), VenueName: d.Sports.GetVenueName()}
 	}
 	return out
 }

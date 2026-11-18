@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"math"
 	"net"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -276,12 +279,23 @@ func TestEventServerValidatesRequest(t *testing.T) {
 		"boş rota noktası": {func(r *corev1.CreateEventRequest) {
 			r.Details = &corev1.CreateEventRequest_Convoy{Convoy: &corev1.ConvoyDetails{Route: []*corev1.LatLng{nil, nil}}}
 		}, "route"},
-		"belirsiz platform": {func(r *corev1.CreateEventRequest) {
-			r.Details = &corev1.CreateEventRequest_Gaming{Gaming: &corev1.GamingDetails{Game: "x"}}
-		}, "platform"},
-		"belirsiz spor": {func(r *corev1.CreateEventRequest) {
-			r.Details = &corev1.CreateEventRequest_Sports{Sports: &corev1.SportsDetails{}}
-		}, "sport"},
+		"oyun detayı": {func(r *corev1.CreateEventRequest) {
+			r.Details = &corev1.CreateEventRequest_Gaming{Gaming: &corev1.GamingDetails{Game: "x", Platform: corev1.GamingPlatform_GAMING_PLATFORM_PC}}
+		}, "details"},
+		"spor detayı": {func(r *corev1.CreateEventRequest) {
+			r.Details = &corev1.CreateEventRequest_Sports{Sports: &corev1.SportsDetails{Sport: corev1.Sport_SPORT_FOOTBALL}}
+		}, "details"},
+		"bozuk alan anahtarı": {func(r *corev1.CreateEventRequest) { r.Fields = map[string]string{"Game": `"x"`} }, "fields"},
+		"boş alan değeri":     {func(r *corev1.CreateEventRequest) { r.Fields = map[string]string{"game": ""} }, "fields"},
+		"dev alan değeri": {func(r *corev1.CreateEventRequest) {
+			r.Fields = map[string]string{"game": `"` + strings.Repeat("a", 9000) + `"`}
+		}, "fields"},
+		"çok fazla alan": {func(r *corev1.CreateEventRequest) {
+			r.Fields = map[string]string{}
+			for i := range 21 {
+				r.Fields["f"+strings.Repeat("x", i+1)] = `1`
+			}
+		}, "fields"},
 		"NaN mesafe": {func(r *corev1.CreateEventRequest) {
 			r.Details = &corev1.CreateEventRequest_Hike{Hike: &corev1.HikeDetails{DistanceKm: math.NaN()}}
 		}, "distance_km"},
@@ -389,10 +403,6 @@ func TestEventServerConverts(t *testing.T) {
 		d     any
 		check func(event.Details) bool
 	}{
-		{&corev1.CreateEventRequest_Gaming{Gaming: &corev1.GamingDetails{Game: "CS2", Platform: corev1.GamingPlatform_GAMING_PLATFORM_SWITCH}},
-			func(d event.Details) bool { return d.Gaming != nil && d.Gaming.Platform == "switch" }},
-		{&corev1.CreateEventRequest_Sports{Sports: &corev1.SportsDetails{Sport: corev1.Sport_SPORT_TABLE_FOOTBALL}},
-			func(d event.Details) bool { return d.Sports != nil && d.Sports.Sport == "table_football" }},
 		{&corev1.CreateEventRequest_Fishing{Fishing: &corev1.FishingDetails{SpotVisibility: corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS}},
 			func(d event.Details) bool {
 				return d.Fishing != nil && d.Fishing.SpotVisibility == event.SpotParticipants
@@ -404,10 +414,6 @@ func TestEventServerConverts(t *testing.T) {
 	} {
 		r := createReq(view.TayfaID.String())
 		switch d := tc.d.(type) {
-		case *corev1.CreateEventRequest_Gaming:
-			r.Details = d
-		case *corev1.CreateEventRequest_Sports:
-			r.Details = d
 		case *corev1.CreateEventRequest_Fishing:
 			r.Details = d
 		case *corev1.CreateEventRequest_Hike:
@@ -420,6 +426,39 @@ func TestEventServerConverts(t *testing.T) {
 			t.Errorf("detay = %+v", f.in.Details)
 		}
 	}
+
+	// The type is a catalog key and the type's data its field values
+	// (issue #237); the key wins over the Faz 1 enum.
+	r = createReq(view.TayfaID.String())
+	r.TypeKey, r.Fields = "board_game_night", map[string]string{"game": `"Tavla"`, "players": `4`}
+	if _, err := srv.CreateEvent(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	if f.in.Type != "board_game_night" || len(f.in.Fields) != 2 || string(f.in.Fields["game"]) != `"Tavla"` || string(f.in.Fields["players"]) != `4` {
+		t.Fatalf("girdi = %+v", f.in)
+	}
+	up := &corev1.UpdateEventRequest{
+		TayfaId: view.TayfaID.String(), EventId: view.ID.String(), Fields: map[string]string{"game": `"Okey"`},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{event.FieldFields}},
+	}
+	if _, err := srv.UpdateEvent(ctx, up); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(f.fields, []string{event.FieldFields}) || string(f.in.Fields["game"]) != `"Okey"` {
+		t.Fatalf("güncelleme girdisi = %v %+v", f.fields, f.in)
+	}
+	// ... and comes back the same way, with the type version.
+	f.view.Type, f.view.TypeVersion = "board_game_night", 3
+	f.view.Fields = map[string]json.RawMessage{"game": json.RawMessage(`"Okey"`), "players": json.RawMessage(`4`)}
+	resp, err = srv.GetEvent(ctx, &corev1.GetEventRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := resp.GetEvent(); p.GetTypeKey() != "board_game_night" || p.GetTypeVersion() != 3 || p.GetType() != corev1.EventType_EVENT_TYPE_UNSPECIFIED ||
+		len(p.GetFields()) != 2 || p.GetFields()["game"] != `"Okey"` || p.GetFields()["players"] != `4` {
+		t.Fatalf("alanlar = %v", p)
+	}
+	f.view = view
 
 	rs, err := srv.SetRsvp(ctx, &corev1.SetRsvpRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String(), Status: corev1.RsvpStatus_RSVP_STATUS_NOT_GOING})
 	if err != nil || f.status != event.RSVPNotGoing || rs.GetStatus() != corev1.RsvpStatus_RSVP_STATUS_WAITLIST {

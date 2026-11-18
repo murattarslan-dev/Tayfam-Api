@@ -173,6 +173,24 @@ func TypeVersion(ctx context.Context, q *store.Queries, key string, version int3
 	return eventType(r.TypeKey, r.Version, r.InterestKeys, r.Modes, r.Icon, r.Status, r.Labels, r.Definition)
 }
 
+// CurrentType returns the current version of an event type inside the
+// caller's transaction: the version a new event is created with. An
+// unknown key is apperr.ErrCatalogTypeNotFound; a retired type is returned
+// with StatusRetired, and the caller refuses it.
+func CurrentType(ctx context.Context, q *store.Queries, key string) (EventType, error) {
+	if !definition.ValidKey(key) {
+		return EventType{}, apperr.ErrCatalogTypeNotFound
+	}
+	r, err := q.GetCatalogEventType(ctx, key)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return EventType{}, apperr.ErrCatalogTypeNotFound
+	}
+	if err != nil {
+		return EventType{}, fmt.Errorf("tür: %w", err)
+	}
+	return eventType(r.Key, r.Version, r.InterestKeys, r.Modes, r.Icon, r.Status, r.Labels, r.Definition)
+}
+
 // eventType checks a type row and parses its definition.
 func eventType(key string, version int32, interests, modes []string, icon, status string, labels, def []byte) (EventType, error) {
 	t := EventType{Key: key, InterestKeys: interests, Icon: icon, Modes: modes, Status: status, Version: version}

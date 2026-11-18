@@ -138,7 +138,7 @@ var discoverTayfas = []tayfaSpec{
 				Start:       at{Days: 6, Hour: 10}, Hours: 3,
 				PlaceName: "Moda sahili çay bahçesi önü", Lat: 40.9817, Lng: 29.0259,
 				City: "İstanbul", District: "Kadıköy",
-				Sports: &corev1.SportsDetails{Sport: corev1.Sport_SPORT_VOLLEYBALL, VenueName: "Moda sahili"},
+				Fields: map[string]string{"sport": `"volleyball"`, "venue_name": `"Moda sahili"`},
 				RSVPs: []rsvpSpec{
 					{Person: "sinan", Status: going}, {Person: "hakan", Status: going}, {Person: "ipek", Status: going},
 					{Person: "defne", Status: going}, {Person: "erdem", Status: notGoing},

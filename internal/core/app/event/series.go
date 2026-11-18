@@ -2,6 +2,7 @@ package event
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -226,7 +227,7 @@ func updateSeries(ctx context.Context, q *store.Queries, c caller, b *batch, ev 
 	}
 	var details Details
 	if set[FieldDetails] {
-		if ev.Type == TypeGeneral {
+		if !slices.Contains(detailTypes, ev.Type) {
 			return apperr.Validation("details")
 		}
 		if details, err = cleanDetails(ev.Type, in.Details, ev.StartsAt.Time, false); err != nil {
@@ -234,6 +235,13 @@ func updateSeries(ctx context.Context, q *store.Queries, c caller, b *batch, ev 
 		}
 		if details.typ() == "" {
 			return apperr.Validation("details")
+		}
+	}
+	var values map[string]json.RawMessage
+	if set[FieldFields] {
+		// Every event of a series has the template's type version.
+		if values, err = cleanEventFields(ctx, q, ev, in.Fields); err != nil {
+			return err
 		}
 	}
 	upcoming, err := q.ListSeriesUpcomingEvents(ctx, store.ListSeriesUpcomingEventsParams{TayfaID: tayfa.PG(), SeriesID: s.ID, Now: ts(c.now)})
@@ -301,6 +309,11 @@ func updateSeries(ctx context.Context, q *store.Queries, c caller, b *batch, ev 
 		}
 		if set[FieldDetails] {
 			if err := setDetails(ctx, q, t, shiftDetails(details, row.StartsAt.Time.Sub(ev.StartsAt.Time))); err != nil {
+				return err
+			}
+		}
+		if set[FieldFields] && row.Type == ev.Type && row.TypeVersion == ev.TypeVersion {
+			if err := setFields(ctx, q, t, values, true); err != nil {
 				return err
 			}
 		}
@@ -515,7 +528,7 @@ func (s *Service) GenerateSeries(ctx context.Context, tayfa, series id.ID) (int,
 			eid := id.New()
 			start := o.UTC().Truncate(time.Microsecond)
 			n, err := q.CreateSeriesEvent(ctx, store.CreateSeriesEventParams{
-				ID: eid.PG(), TayfaID: tayfa.PG(), Type: tmpl.Type, Mode: tmpl.Mode, Title: tmpl.Title,
+				ID: eid.PG(), TayfaID: tayfa.PG(), Type: tmpl.Type, TypeVersion: tmpl.TypeVersion, Mode: tmpl.Mode, Title: tmpl.Title,
 				Description: tmpl.Description, StartsAt: ts(start), EndsAt: ts(start.Add(duration)),
 				MeetingPointName: tmpl.MeetingPointName, MeetingLat: tmpl.MeetingLat, MeetingLng: tmpl.MeetingLng,
 				City: tmpl.City, District: tmpl.District, OnlineUrl: tmpl.OnlineUrl, Capacity: tmpl.Capacity,
@@ -530,6 +543,11 @@ func (s *Service) GenerateSeries(ctx context.Context, tayfa, series id.ID) (int,
 			}
 			if err := setDetails(ctx, q, eid, shiftDetails(details, start.Sub(tmpl.StartsAt.Time))); err != nil {
 				return err
+			}
+			// The occurrence gets the template's type version and its field
+			// values.
+			if err := q.CopyEventFieldValues(ctx, store.CopyEventFieldValuesParams{ToEventID: eid.PG(), FromEventID: tmpl.ID}); err != nil {
+				return fmt.Errorf("seri örneğinin alan değerleri: %w", err)
 			}
 			events = append(events, made{eid})
 		}

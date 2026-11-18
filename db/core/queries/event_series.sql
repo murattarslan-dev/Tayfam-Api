@@ -52,11 +52,11 @@ WHERE tayfa_id = @tayfa_id AND id = @id AND ended_at IS NULL;
 -- yazılmaz (events_series_starts_at_key); iki pod aynı örneği üretemez.
 -- name: CreateSeriesEvent :execrows
 INSERT INTO events (
-  id, tayfa_id, type, mode, title, description, starts_at, ends_at,
+  id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
   meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
   capacity, discoverable, created_by, series_id
 ) VALUES (
-  @id, @tayfa_id, @type, @mode, @title, @description, @starts_at, @ends_at,
+  @id, @tayfa_id, @type, @type_version, @mode, @title, @description, @starts_at, @ends_at,
   @meeting_point_name, @meeting_lat, @meeting_lng, @city, @district, @online_url,
   @capacity, @discoverable, @created_by, @series_id
 )

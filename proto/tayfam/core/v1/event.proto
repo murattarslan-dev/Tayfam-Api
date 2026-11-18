@@ -456,6 +456,7 @@ message SportsDetails {
 message Event {
   string id = 1;
   string tayfa_id = 2;
+  // The Faz 1 enum of type_key; UNSPECIFIED for any other type.
   EventType type = 3;
   EventMode mode = 4;
   string title = 5;
@@ -494,8 +495,10 @@ message Event {
   // The event was edited on its own (UpdateEvent without series): changes
   // to the series and ending it leave it alone.
   bool series_override = 29;
-  // Set by GetEvent for every type except GENERAL; never by
-  // ListUpcomingEvents.
+  // The Faz 1 details of the convoy, camp, hike and fishing types, until
+  // their components replace them (ADR-0025 §10). Set by GetEvent; never by
+  // ListUpcomingEvents. gaming and sports are never set: their data is in
+  // fields.
   oneof details {
     ConvoyDetails convoy = 30;
     CampDetails camp = 31;
@@ -507,13 +510,30 @@ message Event {
   // The cover image (a READY COVER upload, MediaService); empty when there
   // is none. Events a series generates have no cover of their own.
   string cover_upload_id = 36;
+  // The event's type: a key of the catalog (CatalogService, ADR-0025),
+  // ^[a-z][a-z0-9_]{1,39}$. `type` above is the Faz 1 enum and is set only
+  // for the seven Faz 1 types; new code reads type_key.
+  string type_key = 37;
+  // The version of the type the event was created with; the event is shown
+  // with that version's definition
+  // (CatalogService.GetEventTypeVersion).
+  int32 type_version = 38;
+  // The values of the type's fields (the definition's "fields") by field
+  // key. Each value is the JSON text of the stored form: a string for text,
+  // long_text, choice and date ("YYYY-MM-DD"), a number for integer,
+  // decimal and duration (minutes), true or false for boolean, a list of
+  // strings for multi_choice. A field without a value is not in the map.
+  // Set by GetEvent and the methods that return the event they changed;
+  // never by ListUpcomingEvents.
+  map<string, string> fields = 39;
 }
 
 message CreateEventRequest {
   string tayfa_id = 1;
-  // Must not be UNSPECIFIED.
+  // The Faz 1 enum; read only when type_key is empty. One of the two is
+  // required.
   EventType type = 2;
-  // Must not be UNSPECIFIED.
+  // Must not be UNSPECIFIED, and one of the modes the type allows.
   EventMode mode = 3;
   // 1–120 characters after trimming surrounding spaces.
   string title = 4;
@@ -537,9 +557,10 @@ message CreateEventRequest {
   // 0: no limit; otherwise 1–10000.
   int32 capacity = 13;
   bool discoverable = 14;
-  // Must match type; may be unset for every type except GAMING and SPORTS,
-  // which need theirs. Must be unset for GENERAL. Output-only fields
-  // (vehicles, items) are ignored.
+  // Only for the convoy, camp, hike and fishing types, and must match the
+  // type; may be unset. gaming and sports must be unset
+  // (ERROR_REASON_VALIDATION, field "details"): their data goes in fields.
+  // Output-only fields (vehicles, items) are ignored.
   oneof details {
     ConvoyDetails convoy = 20;
     CampDetails camp = 21;
@@ -560,6 +581,16 @@ message CreateEventRequest {
   // ERROR_REASON_UPLOAD_IN_USE). Only this event gets it, not the rest of a
   // series.
   string cover_upload_id = 17;
+  // The event's type: the key of an active type of the catalog
+  // (ERROR_REASON_VALIDATION, field "type", for an unknown or retired
+  // one). The event is created with the type's current version.
+  string type_key = 18;
+  // The values of the type's fields by field key, each as JSON text (see
+  // Event.fields). Checked against the type's current definition: every
+  // required field must be there, and nothing the type does not define. A
+  // bad value is ERROR_REASON_VALIDATION, field "fields.<key>"; an unknown
+  // key or too many values, field "fields".
+  map<string, string> fields = 19;
 }
 
 // Recurrence is how a series repeats (issue #51; data model v14
@@ -657,9 +688,10 @@ message UpdateEventRequest {
   // (start_time and end_time together), "location" (mode,
   // meeting_point_name, meeting_point, city, district and online_url
   // together), "capacity", "discoverable", "details" (replaces the type
-  // details; vehicles and camp items stay), "cover_upload_id" (not with
-  // series = true: ERROR_REASON_VALIDATION, field "update_mask"). Any
-  // other path is ERROR_REASON_VALIDATION.
+  // details of a convoy, camp, hike or fishing event; vehicles and camp
+  // items stay), "fields" (replaces the field values), "cover_upload_id"
+  // (not with series = true: ERROR_REASON_VALIDATION, field
+  // "update_mask"). Any other path is ERROR_REASON_VALIDATION.
   google.protobuf.FieldMask update_mask = 15;
   // Only for an event of a series (otherwise ERROR_REASON_VALIDATION, field
   // "series"). false: only this event changes and it is marked
@@ -675,6 +707,11 @@ message UpdateEventRequest {
   // CreateEventRequest.cover_upload_id; empty removes the cover. The
   // previous cover is deleted.
   string cover_upload_id = 17;
+  // With "fields" in update_mask: the complete new set of field values,
+  // with the rules of CreateEventRequest.fields. They are checked against
+  // the type version the event was created with, not the catalog's current
+  // one. The previous values are replaced.
+  map<string, string> fields = 18;
 }
 
 message UpdateEventResponse {
