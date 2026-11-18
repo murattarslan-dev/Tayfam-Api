@@ -22,6 +22,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/admin"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/announcement"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/availability"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalog"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/channelaccess"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatdm"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatevents"
@@ -133,6 +134,11 @@ func setup(rt *service.Runtime) error {
 	}
 	// "Boşum" (issue #207, ADR-0029).
 	availabilities, err := availability.New(availability.Config{Pool: pool})
+	if err != nil {
+		return err
+	}
+	// Etkinlik türü kataloğu (issue #237, ADR-0025).
+	catalogs, err := catalog.New(catalog.Config{Pool: pool})
 	if err != nil {
 		return err
 	}
@@ -248,6 +254,7 @@ func setup(rt *service.Runtime) error {
 	corev1.RegisterPollServiceServer(srv, grpcapi.NewPollServer(polls, rt.Log))
 	corev1.RegisterSocialServiceServer(srv, grpcapi.NewSocialServer(socials, rt.Log))
 	corev1.RegisterAvailabilityServiceServer(srv, grpcapi.NewAvailabilityServer(availabilities, rt.Log))
+	corev1.RegisterCatalogServiceServer(srv, grpcapi.NewCatalogServer(catalogs, rt.Log))
 	corev1.RegisterDiscoverServiceServer(srv, grpcapi.NewDiscoverServer(discovers, memberships, rt.Log))
 	corev1.RegisterProfileServiceServer(srv, grpcapi.NewProfileServer(profiles, rt.Log))
 	corev1.RegisterReportServiceServer(srv, grpcapi.NewReportServer(reports, rt.Log))

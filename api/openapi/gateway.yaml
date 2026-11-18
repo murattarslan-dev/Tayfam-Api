@@ -4354,6 +4354,77 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Etkinlik türü kataloğu (core CatalogService, #237, ADR-0025, ADR-0037) ---
+  # Tür veridir: ad, ikon, ilgi alanları, alanlar, bileşenler ve parametreleri
+  # katalogdan gelir; istemci etkinliği tanıma göre çizer. Katalog herkese
+  # aynıdır ama açık uç değildir: erişim token'ı ister.
+
+  /v1/catalog:
+    get:
+      operationId: getCatalog
+      summary: İlgi alanları ve aktif etkinlik türlerinin güncel tanımları
+      description: |
+        `ETag` başlığı kataloğun sürümüdür (`"<catalog_version>"`). İstemci
+        elindeki sürümü `If-None-Match` ile gönderir; katalog değişmediyse
+        yanıt gövdesiz **304**'tür (aynı `ETag` ile). Katalog her
+        değiştiğinde `catalog_version` artar.
+
+        İlgi alanlarının hepsi döner (emekliye ayrılanlar `status: retired`
+        ile: eski tayfalar ve profiller onları göstermeye devam eder).
+        Türlerden yalnızca aktif olanlar, güncel sürümleriyle döner; eski bir
+        etkinliğin tür sürümü için
+        `GET /v1/catalog/event-types/{key}/versions/{version}`.
+
+        `labels` platform sahibinin yazdığı içeriktir (dil → metin; `tr` her
+        zaman vardır) ve düz metin olarak gösterilir. `icon` istemcinin sabit
+        ikon setinden bir anahtardır; bilinmeyen anahtar için ilgi alanının
+        ikonu, o da yoksa genel ikon gösterilir.
+      parameters:
+        - name: If-None-Match
+          in: header
+          required: false
+          description: Elinizdeki kataloğun `ETag` değeri (`"7"`).
+          schema: { type: string, maxLength: 128 }
+      responses:
+        "200":
+          description: Katalog
+          headers:
+            ETag:
+              description: 'Kataloğun sürümü, tırnak içinde: `"7"`'
+              schema: { type: string }
+            Cache-Control:
+              description: "`private, no-cache`"
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Catalog" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/catalog/event-types/{key}/versions/{version}:
+    parameters:
+      - $ref: "#/components/parameters/CatalogTypeKey"
+      - $ref: "#/components/parameters/CatalogTypeVersion"
+    get:
+      operationId: getCatalogEventTypeVersion
+      summary: Bir etkinlik türünün bir sürümü
+      description: |
+        Etkinlik oluşturulduğu andaki tür sürümüne bağlıdır (`type`,
+        `type_version`) ve o tanımla gösterilir. Güncel katalogda olmayan
+        sürüm (tür sonradan değişti ya da emekliye ayrıldı) buradan alınır.
+        Bir tür sürümü hiç değişmez; istemci oturum boyunca bellekte
+        tutabilir. Bilinmeyen tür ya da sürüm `catalog-type-not-found`.
+      responses:
+        "200":
+          description: Tür sürümü
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CatalogEventType" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   # --- Keşfet (core DiscoverService, #210, ADR-0033; herkese açık: #227, ADR-0035) ---
   # Sunucu bayrağı DISCOVER_ENABLED kapalıyken (varsayılan) akış, Keşfet'ten
   # katılım ve geri bildirim uçları hiçbir şey okumadan 404
@@ -5640,6 +5711,18 @@ components:
       required: true
       description: Takvim günü (YYYY-MM-DD), saat değil; "bugün" Europe/Istanbul tarihidir.
       schema: { type: string, format: date }
+    CatalogTypeKey:
+      name: key
+      in: path
+      required: true
+      description: Etkinlik türünün anahtarı (`hike`).
+      schema: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+    CatalogTypeVersion:
+      name: version
+      in: path
+      required: true
+      description: Tür sürümü; 1 ya da büyük, yalnızca rakam.
+      schema: { type: integer, format: int32, minimum: 1 }
     PageToken:
       name: page_token
       in: query
@@ -5732,6 +5815,8 @@ components:
         - feedback-closed
         - safety-contact-closed
         - safety-contact-not-found
+        # core: etkinlik türü kataloğu (#237, ADR-0025)
+        - catalog-type-not-found
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -8704,6 +8789,217 @@ components:
             gibi) içeremez; emoji dizileri (U+200D) serbesttir. Baştaki ve
             sondaki boşluk kırpılır.
           maxLength: 60
+    Catalog:
+      type: object
+      required: [catalog_version, interests, event_types]
+      properties:
+        catalog_version:
+          type: integer
+          format: int64
+          description: Kataloğun bütününün sürümü; her değişiklikte artar. `ETag` ile aynıdır.
+        interests:
+          type: array
+          description: Bütün ilgi alanları (emekliler dahil), `position` sırasıyla.
+          items: { $ref: "#/components/schemas/CatalogInterest" }
+        event_types:
+          type: array
+          description: Aktif türlerin güncel sürümleri, listeleme sırasıyla.
+          items: { $ref: "#/components/schemas/CatalogEventType" }
+    CatalogStatus:
+      type: string
+      description: |
+        `retired`: yeni etkinlikte, tayfada ya da profilde seçilemez; eski
+        kayıtlar göstermeye devam eder. Katalog kaydı hiç silinmez.
+      enum: [active, retired]
+    CatalogLabels:
+      type: object
+      description: "Dil → metin (`{\"tr\": \"Doğa\"}`). `tr` her zaman vardır; her metin 1–60 karakter, tek satır."
+      additionalProperties: { type: string }
+    CatalogInterest:
+      type: object
+      required: [key, position, labels, icon, status, default_widgets]
+      properties:
+        key: { type: string, description: "Değişmez anahtar: `^[a-z][a-z0-9_]{1,39}$`." }
+        position: { type: integer, format: int32, description: "Listeleme sırası (küçükten büyüğe)." }
+        labels: { $ref: "#/components/schemas/CatalogLabels" }
+        icon: { type: string, description: "İstemcinin sabit ikon setinden bir anahtar." }
+        status: { $ref: "#/components/schemas/CatalogStatus" }
+        default_widgets:
+          type: array
+          description: Bu ilgi alanını seçen tayfada varsayılan açık gelen ana sayfa bileşenleri (ADR-0027).
+          items: { type: string }
+    CatalogEventType:
+      type: object
+      description: Bir etkinlik türünün bir sürümü.
+      required: [key, interest_keys, labels, icon, modes, status, version, definition]
+      properties:
+        key: { type: string, description: "Değişmez anahtar: `^[a-z][a-z0-9_]{1,39}$`." }
+        interest_keys:
+          type: array
+          description: 1–3 ilgi alanı; ilki ana ilgi alanıdır. Tür hepsinde listelenir.
+          minItems: 1
+          maxItems: 3
+          items: { type: string }
+        labels: { $ref: "#/components/schemas/CatalogLabels" }
+        icon: { type: string, description: "İstemcinin sabit ikon setinden bir anahtar." }
+        modes:
+          type: array
+          description: Bu türde etkinliğin alabileceği modlar.
+          minItems: 1
+          maxItems: 2
+          items: { $ref: "#/components/schemas/EventMode" }
+        status: { $ref: "#/components/schemas/CatalogStatus" }
+        version: { type: integer, format: int32, minimum: 1, description: "Türün her değişikliğinde artar." }
+        definition: { $ref: "#/components/schemas/CatalogDefinition" }
+    CatalogDefinition:
+      type: object
+      description: |
+        Tür tanımı (ADR-0025 §3, ADR-0037 §2). Tamamen bildirimseldir:
+        çalıştırılabilir kural, ifade, şablon, HTML ya da URL içermez. Sunucu
+        tanımı kapalı bir şemaya karşı doğrular (bilinmeyen anahtar
+        reddedilir, en fazla 16 KiB); istemci de yalnızca bildiği anahtarları
+        yorumlar. Üç anahtar da isteğe bağlıdır: boş nesne, alanı ve
+        bileşeni olmayan türdür ("Genel").
+      properties:
+        fields:
+          type: array
+          description: Etkinliğin türe özel alanları (en fazla 20). Değerleri etkinliğin `fields` nesnesindedir.
+          maxItems: 20
+          items: { $ref: "#/components/schemas/CatalogField" }
+        components:
+          type: array
+          description: Etkinliğin bileşenleri, gösterim sırasıyla (en fazla 20).
+          maxItems: 20
+          items: { $ref: "#/components/schemas/CatalogComponent" }
+        flags: { $ref: "#/components/schemas/CatalogTypeFlags" }
+    CatalogTypeFlags:
+      type: object
+      description: Tür bayrakları (ADR-0037 §1). Olmayan bayrak `false`tur.
+      properties:
+        sensitive_attendance:
+          type: boolean
+          description: Katılım kişisel geçmişe, istatistiğe ve arkadaşlık puanına girmez; katılımcı listesini yalnızca organizatör görür.
+        album_notice:
+          type: boolean
+          description: Albüme yüklemeden önce izin onayı istenir.
+        personal_scope_forbidden:
+          type: boolean
+          description: Bu türde kişi bazında değer tutulmaz (kişisel ölçüm ve günlük tanımlanamaz).
+    CatalogField:
+      type: object
+      description: |
+        Bir alan: türün alanı ya da `log` bileşeninin kayıt alanı. `kind`
+        kapalı listedir; para, URL, dosya, konum ve kişi alanı yoktur.
+        İstemci tanımadığı bir `kind` görürse alanı göstermez ve o türde
+        etkinlik oluşturmayı kapatır (ADR-0025 §9).
+
+        | `kind` | Değer (JSON) | Ek anahtarlar |
+        |--------|--------------|---------------|
+        | `text` | metin, tek satır | `max_length` (≤ 120), `vocabulary` |
+        | `long_text` | metin, çok satırlı | `max_length` (≤ 1000) |
+        | `integer` | tam sayı | `min`, `max`, `unit` |
+        | `decimal` | sayı | `min`, `max`, `decimals` (1–3), `unit` |
+        | `choice` | `options`'tan biri | `options`, `option_labels` |
+        | `multi_choice` | `options`'tan liste | `options`, `option_labels`, `max_selected` |
+        | `boolean` | `true` / `false` | — |
+        | `date` | `YYYY-MM-DD` | — |
+        | `duration` | dakika, tam sayı | `min`, `max` |
+      required: [key, kind, labels]
+      properties:
+        key: { type: string, description: "Tür içinde tekil: `^[a-z][a-z0-9_]{1,39}$`." }
+        kind:
+          type: string
+          description: "`text`, `long_text`, `integer`, `decimal`, `choice`, `multi_choice`, `boolean`, `date`, `duration`."
+        required: { type: boolean, description: "Etkinlik oluştururken zorunlu mu; yoksa `false`." }
+        labels: { $ref: "#/components/schemas/CatalogLabels" }
+        max_length: { type: integer, format: int32, description: "`text`, `long_text`: en fazla karakter." }
+        min: { type: number, description: "`integer`, `decimal`, `duration`: en küçük değer; yoksa 0 (`duration`: 1)." }
+        max: { type: number, description: "`integer`, `decimal`, `duration`: en büyük değer." }
+        decimals: { type: integer, format: int32, description: "`decimal`: ondalık basamak sayısı; yoksa 2." }
+        unit:
+          type: string
+          description: "`integer`, `decimal`: isteğe bağlı birim (birim listesi `CatalogComponent`'te); adı çeviri dosyasındadır."
+        options:
+          type: array
+          description: "`choice`, `multi_choice`: seçenek anahtarları (`^[a-z0-9][a-z0-9_]{0,39}$`), en fazla 50."
+          maxItems: 50
+          items: { type: string }
+        option_labels:
+          type: object
+          description: Seçenek anahtarı → adlar (dil → metin). Adı olmayan seçenek olduğu gibi gösterilir (`"1"` … `"5"`).
+          additionalProperties: { $ref: "#/components/schemas/CatalogLabels" }
+        max_selected: { type: integer, format: int32, description: "`multi_choice`: en fazla seçim; yoksa seçenek sayısı." }
+        vocabulary: { $ref: "#/components/schemas/CatalogVocabulary" }
+    CatalogVocabulary:
+      type: object
+      description: |
+        `text` alanı tayfa sözlüğüne bağlıdır (ADR-0037 §4): serbest metin +
+        tayfanın önceki değerlerinden otomatik tamamlama.
+      required: [namespace]
+      properties:
+        namespace: { type: string, description: "Sözlüğün ad alanı; türler paylaşabilir." }
+    CatalogComponentOptional:
+      type: object
+      description: Bileşen isteğe bağlıdır; organizatör etkinliği kurarken açıp kapatır (ADR-0037 §2).
+      required: [default]
+      properties:
+        default: { type: boolean, description: "Varsayılan olarak açık mı." }
+    CatalogComponent:
+      type: object
+      description: |
+        Bir bileşen (ADR-0025 §4, ADR-0037 §3). `kind` kapalı listedir ve
+        kodla büyür; istemci tanımadığı bir `kind` görürse o bölümde
+        "uygulamayı güncelle" gösterir, etkinliğin geri kalanı çalışır
+        (ADR-0025 §9). Katılım, kontenjan, check-in ve albüm her etkinliğin
+        temelidir; bileşen değildir.
+
+        `params` bileşene göre değişir; bilinmeyen parametre yok sayılır.
+        "seçimli" işaretli parametre, değer yerine organizatöre bırakılan bir
+        liste olabilir: `{"organizer_choice": ["elimination", "league",
+        "swiss"], "default": "swiss"}` (ADR-0037 §2).
+
+        | `kind` | `params` |
+        |--------|----------|
+        | `route` | — |
+        | `meeting_point` | — |
+        | `schedule` | `max_items` (1–100) |
+        | `checklist` | `label` (`gear`, `task`, `section`, `duty`, `item`), `assignment`, `quantity` (boolean) |
+        | `roll_call` | `alarm` (boolean), `return_grace_minutes` (1–1440) |
+        | `vehicles` | `plate`, `seats` (boolean) |
+        | `teams` | `mode` (`random`, `balanced`, `manual`; seçimli), `team_size` (1–50), `team_count` (2–50) |
+        | `draw` | — |
+        | `bracket` | `format` (`elimination`, `league`, `swiss`; seçimli), `best_of` (1, 3, 5; seçimli) |
+        | `scoreboard` | `side` (`player`, `team`), `tables` (boolean), `presets` (ön ayar anahtarları), `rounds` (`round`, `single`, `first_to`; seçimli), `target` (1–100000), `winner` (`high`, `low`, `first`; seçimli), `result` (`points`, `wdl`), `best_of` (1, 3, 5; seçimli), `guests` (boolean) |
+        | `ranking` | `source` (bir ölçümün `key`'i), `metric` (`duration`, `rank`), `direction` (`asc`, `desc`) |
+        | `vote` | `source` (`free`, `participants`, `vehicles`, `album`, `route_stops`; zorunlu) |
+        | `celebration` | `source` (bir `scoreboard`, `bracket`, `ranking` ya da `vote` bileşeninin `key`'i) |
+        | `measure` | `unit`, `scope` (`personal`, `total`), `entered_by` (`self`, `organizer`) zorunlu; `min`, `max`, `decimals` (0–3), `showcase`, `sensitive` (boolean), `prefill_from` (bir alanın `key`'i) |
+        | `goal` | `measure` (bir ölçümün `key`'i; zorunlu), `default_target` |
+        | `log` | `fields` (`CatalogField` listesi, 1–8; zorunlu), `location` (boolean), `location_default` (`self`, `participants`, `tayfa`), `stat` (en fazla 3: `count`, `distinct:<alan>`, `sum:<alan>`), `max_entries` (1–500) |
+        | `questions` | `anonymous` (boolean) |
+        | `timer` | `mode` (`countdown`, `stopwatch`, `chess_clock`; seçimli), `presets` (saniye, en fazla 6) |
+        | `pool_link` | `max_links` (1–50) |
+
+        Birimler (`unit`, kapalı liste; adları çeviri dosyasında): `kg`,
+        `piece`, `bag`, `km`, `m`, `altitude_m`, `page`, `minute`, `hour`,
+        `unit`, `goal`, `point`, `night`, `nm`, `box`, `section`, `net`.
+        Para birimi yoktur; hiçbir bileşende para, bahis ya da ödül
+        parametresi yoktur.
+      required: [kind]
+      properties:
+        kind: { type: string, description: "Bileşen türü (yukarıdaki tablo)." }
+        key:
+          type: string
+          description: |
+            Bileşenin tür içindeki anahtarı; yoksa `kind` ile aynıdır. Aynı
+            `kind` bir türde birden fazla kez kullanılıyorsa (iki ölçüm) her
+            biri kendi anahtarını taşır. `measure` ve `log` için zorunludur.
+        labels: { $ref: "#/components/schemas/CatalogLabels" }
+        optional: { $ref: "#/components/schemas/CatalogComponentOptional" }
+        params:
+          type: object
+          description: Bileşenin parametreleri (yukarıdaki tablo); bileşene göre değişen serbest nesne.
+          additionalProperties: true
     BlockedUser:
       type: object
       required: [user_id, blocked_at]

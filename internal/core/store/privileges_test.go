@@ -70,6 +70,12 @@ var wantAppPrivileges = map[string]string{
 	"uploads": "DELETE,INSERT,SELECT,UPDATE(attach_confirmed_at,attached_at,attached_id,attached_type,expires_at,export_bytes,height,ready_at,reject_reason,status,updated_at,user_id,width)",
 	// Issue #207: user_id and day never change.
 	"user_availability": "DELETE,INSERT,SELECT,UPDATE(note,slots,updated_at)",
+	// Issue #237, ADR-0025: the service only reads the catalog; it changes
+	// through migrations (and later the platform panel, #262).
+	"catalog_meta":                "SELECT",
+	"catalog_interests":           "SELECT",
+	"catalog_event_types":         "SELECT",
+	"catalog_event_type_versions": "SELECT",
 }
 
 func TestAppRolePrivileges(t *testing.T) {

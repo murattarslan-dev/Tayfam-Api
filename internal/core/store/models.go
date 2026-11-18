@@ -54,6 +54,47 @@ type AuditLog struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type CatalogEventType struct {
+	Key          string
+	InterestKeys []string
+	Position     int32
+	Labels       []byte
+	Icon         string
+	Modes        []string
+	Status       string
+	Version      int32
+	Definition   []byte
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type CatalogEventTypeVersion struct {
+	TypeKey    string
+	Version    int32
+	Labels     []byte
+	Icon       string
+	Modes      []string
+	Definition []byte
+	CreatedAt  pgtype.Timestamptz
+}
+
+type CatalogInterest struct {
+	Key            string
+	Position       int32
+	Labels         []byte
+	Icon           string
+	Status         string
+	DefaultWidgets []string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type CatalogMetum struct {
+	ID             bool
+	CatalogVersion int64
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type DiscoverJoin struct {
 	TayfaID  pgtype.UUID
 	UserID   pgtype.UUID

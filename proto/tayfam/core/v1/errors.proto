@@ -298,4 +298,9 @@ enum ErrorReason {
   ERROR_REASON_SAFETY_CONTACT_CLOSED = 129;
   // NOT_FOUND. The caller chose no safety contact for this event.
   ERROR_REASON_SAFETY_CONTACT_NOT_FOUND = 131;
+
+  // Event type catalog (CatalogService, issue #237, ADR-0025).
+
+  // NOT_FOUND. The catalog has no event type with this key and version.
+  ERROR_REASON_CATALOG_TYPE_NOT_FOUND = 132;
 }
