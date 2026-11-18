@@ -2,6 +2,10 @@
 
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-15)
 - **Tarih:** 2026-11-15
+- **Revizyon:** 2026-11-18 (platform sahibi, sohbette;
+  [ADR-0037](0037-katalog-ayrintilari-ve-sema-ekleri.md) §7): `log`
+  metrikleri, organizatörün girdiği kişisel ölçümler,
+  `sensitive_attendance` türleri.
 - **Karar veren:** Ürün kararları platform sahibinindir (2026-11-15, Notion
   "Faz 3 (v3)" §5). Bu ADR onların mimariye taşınmasıdır.
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md),
