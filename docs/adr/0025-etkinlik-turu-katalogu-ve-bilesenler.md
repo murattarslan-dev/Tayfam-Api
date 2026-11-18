@@ -2,6 +2,11 @@
 
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-15)
 - **Tarih:** 2026-11-15
+- **Revizyon:** 2026-11-18 (platform sahibi, sohbette;
+  [ADR-0037](0037-katalog-ayrintilari-ve-sema-ekleri.md)): `interest_keys`,
+  `optional` / `organizer_choice` / `prefill_from`, tür bayrakları,
+  bileşen listesi (`timer`, `pool_link`), masa ve ön ayar, misafir oyuncu,
+  tayfa sözlüğü, yeni birimler; kişisel ölçümü organizatör girebilir.
 - **Karar veren:** Ürün kararları platform sahibinindir (2026-11-15, Notion
   "Faz 3 (v3) — Dinamik Etkinlik Kataloğu ve Bileşenler"). Bu ADR onların
   mimariye taşınmasıdır.

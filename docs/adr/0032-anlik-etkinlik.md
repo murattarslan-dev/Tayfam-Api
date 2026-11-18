@@ -4,6 +4,10 @@
   mimari oturumunun aktarımıyla). Açık kalan ayrıntılar aşağıda "Platform
   sahibine sorular"da; cevap gelene kadar bu ADR'deki seçim geçerlidir.
 - **Tarih:** 2026-11-16
+- **Revizyon:** 2026-11-18 (platform sahibi, sohbette;
+  [ADR-0038](0038-simdi-baslat.md)): başlangıç "şimdi" olabilir
+  (`starts_now`); anlık tayfada QR ile onaysız katılım; arkadaşlara şimdi
+  bildirimi.
 - **Karar veren:** Ürün kararları platform sahibinindir (2026-11-15, Notion
   "Faz 2 (v2) — Medya ve Sosyal" §5, Özellik Haritası "Sosyal"; issue #209).
   Bu ADR onların mimariye taşınmasıdır.
