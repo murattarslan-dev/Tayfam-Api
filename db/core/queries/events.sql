@@ -181,8 +181,8 @@ DELETE FROM event_field_values WHERE event_id = @event_id;
 -- Seri örneği şablonun alan değerlerini alır.
 -- name: CopyEventFieldValues :exec
 INSERT INTO event_field_values (event_id, field_key, value)
-SELECT @to_event_id::uuid, field_key, value FROM event_field_values
-WHERE event_id = @from_event_id;
+SELECT @to_event_id::uuid, src.field_key, src.value FROM event_field_values AS src
+WHERE src.event_id = @from_event_id;
 
 -- ---------------------------------------------------------------------------
 -- Kamp malzemeleri
