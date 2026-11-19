@@ -39,9 +39,11 @@ import (
 
 // Purposes (uploads.purpose).
 const (
-	PurposeAvatar     = "avatar"
-	PurposeCatchPhoto = "catch_photo"
-	PurposeCover      = "cover"
+	PurposeAvatar = "avatar"
+	// PurposeLogPhoto is a log entry's photo (issue #243; a fishing catch
+	// photo before it).
+	PurposeLogPhoto = "log_photo"
+	PurposeCover    = "cover"
 	// PurposeEventPhoto is an event album photo (issue #206, ADR-0028).
 	PurposeEventPhoto = "event_photo"
 	// PurposeChatPhoto is a channel message's photo (issue #205,
@@ -65,11 +67,11 @@ const (
 
 // Attachment target types (uploads.attached_type).
 const (
-	TargetUser         = "user"
-	TargetTayfa        = "tayfa"
-	TargetEvent        = "event"
-	TargetFishingCatch = "fishing_catch"
-	TargetEventPhoto   = "event_photo"
+	TargetUser       = "user"
+	TargetTayfa      = "tayfa"
+	TargetEvent      = "event"
+	TargetLogEntry   = "log_entry"
+	TargetEventPhoto = "event_photo"
 	// Chat's message IDs (ADR-0031); chat decides who sees them.
 	TargetChannelMessage = "channel_message"
 	TargetDMMessage      = "dm_message"

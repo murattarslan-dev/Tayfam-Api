@@ -352,7 +352,7 @@ func (e *env) content(t *testing.T, tf id.ID, deletedAt pgtype.Timestamptz) map[
 	t.Helper()
 	ids := map[string]id.ID{
 		"announcements": id.New(), "questions": id.New(), "answers": id.New(),
-		"polls": id.New(), "events": id.New(), "fishing_catches": id.New(),
+		"polls": id.New(), "events": id.New(), "event_log_entries": id.New(),
 		"event_photos": id.New(),
 	}
 	author := id.New()
@@ -382,14 +382,15 @@ func (e *env) content(t *testing.T, tf id.ID, deletedAt pgtype.Timestamptz) map[
 	ex(`INSERT INTO events (id, tayfa_id, type, mode, title, starts_at, ends_at, online_url, created_by, deleted_at)
 	    VALUES ($1, $2, 'general', 'online', 'Toplantı', $3, $4, 'https://example.test/t', $5, $6)`,
 		ids["events"].PG(), tf.PG(), e.base.Add(-60*day), e.base.Add(-60*day+time.Hour), author.PG(), deletedAt)
-	// A live fishing event holds the soft deleted catch.
+	// A live fishing event holds the soft deleted catch (a log entry,
+	// issue #243).
 	fe := id.New()
 	ex(`INSERT INTO events (id, tayfa_id, type, mode, title, starts_at, ends_at, online_url, created_by)
 	    VALUES ($1, $2, 'fishing', 'online', 'Av', $3, $4, 'https://example.test/f', $5)`,
 		fe.PG(), tf.PG(), e.base.Add(-60*day), e.base.Add(-60*day+time.Hour), author.PG())
-	ex(`INSERT INTO event_fishing (event_id) VALUES ($1)`, fe.PG())
-	ex(`INSERT INTO fishing_catches (id, event_id, user_id, species, length_cm, client_request_id, deleted_at) VALUES ($1, $2, $3, 'Levrek', 42, $4, $5)`,
-		ids["fishing_catches"].PG(), fe.PG(), author.PG(), id.New().PG(), deletedAt)
+	ex(`INSERT INTO event_log_entries (id, event_id, component_key, user_id, field_values, client_request_id, deleted_at)
+	    VALUES ($1, $2, 'catches', $3, '{"species": "Levrek", "length_cm": 42}', $4, $5)`,
+		ids["event_log_entries"].PG(), fe.PG(), author.PG(), id.New().PG(), deletedAt)
 	// An album photo of an attendee on the live event (issue #206): added
 	// live (the guard trigger), then soft deleted.
 	upload := id.New()
@@ -409,13 +410,13 @@ func (e *env) content(t *testing.T, tf id.ID, deletedAt pgtype.Timestamptz) map[
 // Fixed queries per table; no SQL is assembled from strings.
 var (
 	existsSQL = map[string]string{
-		"announcements":   `SELECT count(*) FROM announcements WHERE id = $1`,
-		"questions":       `SELECT count(*) FROM questions WHERE id = $1`,
-		"answers":         `SELECT count(*) FROM answers WHERE id = $1`,
-		"polls":           `SELECT count(*) FROM polls WHERE id = $1`,
-		"events":          `SELECT count(*) FROM events WHERE id = $1`,
-		"fishing_catches": `SELECT count(*) FROM fishing_catches WHERE id = $1`,
-		"event_photos":    `SELECT count(*) FROM event_photos WHERE id = $1`,
+		"announcements":     `SELECT count(*) FROM announcements WHERE id = $1`,
+		"questions":         `SELECT count(*) FROM questions WHERE id = $1`,
+		"answers":           `SELECT count(*) FROM answers WHERE id = $1`,
+		"polls":             `SELECT count(*) FROM polls WHERE id = $1`,
+		"events":            `SELECT count(*) FROM events WHERE id = $1`,
+		"event_log_entries": `SELECT count(*) FROM event_log_entries WHERE id = $1`,
+		"event_photos":      `SELECT count(*) FROM event_photos WHERE id = $1`,
 	}
 	byTayfaSQL = map[string]string{
 		"memberships":     `SELECT count(*) FROM memberships WHERE tayfa_id = $1`,

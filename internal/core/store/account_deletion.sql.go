@@ -46,15 +46,6 @@ func (q *Queries) ClearAuditActor(ctx context.Context, userID pgtype.UUID) error
 	return err
 }
 
-const clearCatchDeleter = `-- name: ClearCatchDeleter :exec
-UPDATE fishing_catches SET deleted_by = NULL WHERE deleted_by = $1
-`
-
-func (q *Queries) ClearCatchDeleter(ctx context.Context, userID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, clearCatchDeleter, userID)
-	return err
-}
-
 const clearChecklistItemUserFields = `-- name: ClearChecklistItemUserFields :exec
 UPDATE event_checklist_items
 SET assigned_user_id = NULLIF(assigned_user_id, $1),
@@ -118,6 +109,15 @@ UPDATE invites SET created_by = NULL WHERE created_by = $1
 
 func (q *Queries) ClearInviteCreator(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, clearInviteCreator, userID)
+	return err
+}
+
+const clearLogEntryDeleter = `-- name: ClearLogEntryDeleter :exec
+UPDATE event_log_entries SET deleted_by = NULL WHERE deleted_by = $1
+`
+
+func (q *Queries) ClearLogEntryDeleter(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearLogEntryDeleter, userID)
 	return err
 }
 
@@ -244,16 +244,6 @@ func (q *Queries) DeleteUserAnswerVotes(ctx context.Context, userID pgtype.UUID)
 	return err
 }
 
-const deleteUserCatches = `-- name: DeleteUserCatches :exec
-DELETE FROM fishing_catches WHERE user_id = $1
-`
-
-// Av kayıtları konum içerebilir; kişiyle birlikte silinir.
-func (q *Queries) DeleteUserCatches(ctx context.Context, userID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteUserCatches, userID)
-	return err
-}
-
 const deleteUserEventPhotos = `-- name: DeleteUserEventPhotos :exec
 DELETE FROM event_photos WHERE uploader_id = $1
 `
@@ -262,6 +252,17 @@ DELETE FROM event_photos WHERE uploader_id = $1
 // silme kuyruğuna girer (issue #206).
 func (q *Queries) DeleteUserEventPhotos(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserEventPhotos, userID)
+	return err
+}
+
+const deleteUserLogEntries = `-- name: DeleteUserLogEntries :exec
+DELETE FROM event_log_entries WHERE user_id = $1
+`
+
+// Günlük kayıtları (av kayıtları dahil) konum içerebilir; kişiyle birlikte
+// silinir, fotoğrafları silme kuyruğuna girer (issue #243).
+func (q *Queries) DeleteUserLogEntries(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserLogEntries, userID)
 	return err
 }
 

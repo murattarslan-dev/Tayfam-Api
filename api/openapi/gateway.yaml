@@ -1678,7 +1678,7 @@ paths:
       summary: Bitmemiş etkinlikler, başlangıç zamanına göre
       description: |
         Her etkin üyeye açıktır (susturulmuş üye de okur). İptal edilenler
-        de listededir. Türe özel ayrıntı (`fishing`) listede dolmaz; tek
+        de listededir. Türün alan değerleri (`fields`) listede dolmaz; tek
         etkinlik ucunu kullanın.
       parameters:
         - $ref: "#/components/parameters/PageSize"
@@ -1734,8 +1734,8 @@ paths:
       operationId: getEvent
       summary: Tek etkinlik, türe özel ayrıntılarıyla
       description: |
-        Katılımcılara özel balık noktasında (`spot_visibility=participants`)
-        katılmayan üye `meeting_point` ve `meeting_point_name` almaz. Araçlar
+        Balık etkinliğinin av günlüğü ve mera gizliliği `log` bileşenindedir
+        (`GET …/components/{component_key}/entries`, #243). Araçlar
         (ve plakalar) burada değildir; `vehicles` bileşenindedir
         (`GET …/components/{component_key}/vehicles`, #240). Kamp listesi
         `checklist` bileşenindedir (`GET …/components/{component_key}/items`,
@@ -1761,12 +1761,13 @@ paths:
         - Yer: `mode`, `meeting_point_name`, `meeting_point`, `city`,
           `district`, `online_url` birlikte değişir; bunlardan biri
           gönderilirse `mode` zorunludur ve gönderilmeyenler boşalır.
-        - Türe özel ayrıntı (`fishing`) tamamen değişir. Konvoyun
+        - Türe özel ayrıntı yoktur (#243). Konvoyun
           rotası `route` bileşenindedir
           (`PUT …/components/{component_key}/route`); kampın ve yürüyüşün
           ayrıntıları `fields`'tadır, yürüyüşün beklenen dönüşü `roll_call`
           bileşenindedir
-          (`PUT …/components/{component_key}/roll-call/expected-return`).
+          (`PUT …/components/{component_key}/roll-call/expected-return`);
+          balık etkinliğinin av günlüğü `log` bileşenindedir.
 
         Kapasiteyi artırmak bekleme listesindekileri sırayla `going` yapar.
         Seriye ait bir etkinlikte `apply_to_series` `false` (varsayılan) ise
@@ -2002,81 +2003,6 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
-        "503": { $ref: "#/components/responses/Problem" }
-
-  /v1/tayfas/{tayfa_id}/events/{event_id}/fishing-catches:
-    parameters:
-      - $ref: "#/components/parameters/TayfaID"
-      - $ref: "#/components/parameters/EventID"
-    get:
-      operationId: listFishingCatches
-      summary: Av günlüğü, eskiden yeniye
-      description: |
-        Yalnızca balık etkinliğinde. Bir avın konumu avcıya, `tayfa`
-        görünürlüğünde noktayı görebilen herkese döner; diğerlerinde yoktur.
-      parameters:
-        - $ref: "#/components/parameters/PageSize"
-        - $ref: "#/components/parameters/PageToken"
-      responses:
-        "200":
-          description: Avlar
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/FishingCatchList" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "404": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-        "503": { $ref: "#/components/responses/Problem" }
-    post:
-      operationId: addFishingCatch
-      summary: Av günlüğüne av ekler
-      description: |
-        Katılımınız doğrulanmış olmalıdır (`not-attended`); bitişten sonraki
-        yedi güne kadar (`event-ended`). Avcı ve etkinlik başına en fazla 100
-        (`event-limit`). Aynı `client_request_id` ile tekrar gönderim ilk
-        avı döndürür. Konum isteğe bağlıdır; log'a yazılmaz.
-      parameters:
-        - $ref: "#/components/parameters/ClientHeader"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/FishingCatchCreateRequest" }
-      responses:
-        "201":
-          description: Eklenen av (ya da tekrar gönderimde ilk eklenen)
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/FishingCatch" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "404": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-        "503": { $ref: "#/components/responses/Problem" }
-
-  /v1/tayfas/{tayfa_id}/events/{event_id}/fishing-catches/{catch_id}:
-    parameters:
-      - $ref: "#/components/parameters/TayfaID"
-      - $ref: "#/components/parameters/EventID"
-      - name: catch_id
-        in: path
-        required: true
-        schema: { type: string, format: uuid }
-    delete:
-      operationId: removeFishingCatch
-      summary: Av günlüğünden av çıkarır
-      description: Kendi avınızı; moderatör ve yönetici herkesinkini.
-      parameters:
-        - $ref: "#/components/parameters/ClientHeader"
-      responses:
-        "204": { description: Av çıkarıldı }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "404": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
   /v1/tayfas/{tayfa_id}/events/{event_id}/photos:
@@ -2835,6 +2761,109 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/EventRollCall" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  # --- Etkinlik bileşenleri: günlük (`log`; core LogComponentService, #243, ADR-0025 §4, §5, ADR-0037 §3) ---
+  # Etkinlikte tutulan kayıtlar (av, kitap, kuş, zirve…). Kaydın alanları
+  # tür tanımındaki bileşenin `fields` parametresindendir (`CatalogField`
+  # türleri); değerler `values`'ta alan anahtarına göre durur. Konum isteğe
+  # bağlıdır (bileşenin `location` parametresi) ve kişinin bilerek
+  # paylaştığı içeriktir (ADR-0008): cihazın anlık konumu alınmaz, istemci
+  # kişinin seçtiği noktayı gönderir; konum log'a, denetim kaydına ve olaya
+  # yazılmaz. Konumu kimin göreceği kayıt başına `location_visibility`'dir:
+  # `self` (yalnızca kaydı giren), `participants` (ayrıca `going`/`maybe`
+  # cevabı verenler, katılımı doğrulananlar, organizatör, moderatör ve
+  # yönetici) ya da `tayfa` (kaydı gören herkes); varsayılanı bileşenin
+  # `location_default` parametresidir. Balıkçılığın av günlüğü (`catches`)
+  # Faz 1'deki `fishing-catches` uçlarının ve mera gizliliğinin yerini alır.
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/entries:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: listEventLogEntries
+      summary: Günlüğün kayıtları, eskiden yeniye
+      description: |
+        Her etkin üyeye açıktır (susturulmuş üye de okur); iptal edilmiş ve
+        donmuş etkinlikte de okunur. Kayıtları herkes görür; bir kaydın
+        konumu kaydı girene, diğerlerine `location_visibility`'nin izin
+        verdiği kadar döner. Bileşen uçlarının ortak kuralları geçerlidir
+        (`component-not-found`, `component-disabled`).
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Kayıtlar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventLogEntryList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: addEventLogEntry
+      summary: Günlüğe kayıt ekler
+      description: |
+        Katılımınız doğrulanmış olmalıdır (`not-attended`). Kişi başına en
+        fazla bileşenin `max_entries` kadar (yoksa 100) kayıt
+        (`event-limit`). Değerler tanıma göre doğrulanır
+        (`invalid-request`, alan `values.<anahtar>`); zorunlu alanlar
+        verilir, tanımda olmayan alan gönderilmez. Konum yalnızca `location`
+        parametresi açık günlükte verilir. Aynı `client_request_id` ile
+        tekrar gönderim ilk kaydı döndürür. Bitişten 7 gün sonra donar
+        (`component-frozen`); iptal edilmiş etkinliğe yazılmaz. Bileşen
+        uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventLogEntryCreateRequest" }
+      responses:
+        "201":
+          description: Eklenen kayıt (ya da tekrar gönderimde ilk eklenen)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventLogEntry" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/entries/{entry_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - name: entry_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      operationId: removeEventLogEntry
+      summary: Günlükten kayıt çıkarır
+      description: |
+        Kendi kaydınızı yazma penceresi içinde (`component-frozen`);
+        moderatör ve yönetici herkesinkini her zaman (iptal edilmiş ve
+        donmuş etkinlikte de). Kayıt 30 gün sonra fotoğrafıyla kalıcı
+        silinir. Bilinmeyen kayıt `event-item-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Kayıt çıkarıldı }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -5559,7 +5588,7 @@ paths:
         geçerlidir ve yalnızca o varyantın nesnesi, türü ve boyutu içindir:
         `headers`'taki `Content-Type` ve `Content-Length` aynen
         gönderilmelidir; başka tür ya da boyutla R2 isteği reddeder. Anahtarı
-        sunucu belirler. Kapak, av fotoğrafı, albüm fotoğrafı ve `chat_photo`'da
+        sunucu belirler. Kapak, günlük fotoğrafı (`log_photo`), albüm fotoğrafı ve `chat_photo`'da
         `tayfa_id` zorunludur (aktif üye olunmalı, tayfa salt okunur
         olmamalı); avatar, `dm_attachment` ve `report_evidence`'ta verilmez.
         Aynı `client_request_id` ile tekrar, kayıt `pending` iken aynı
@@ -5656,7 +5685,7 @@ paths:
         hazır olmayan, silinmiş ve yetkisiz aynıdır). Kurallar: kendi
         dosyanız her zaman; avatar oturum açmış herkese (iki taraftan biri
         engellediyse ya da hesap silindiyse kimseye); tayfa kapağı aktif
-        üyelere; etkinlik kapağı, av fotoğrafı ve albüm fotoğrafı etkinliği
+        üyelere; etkinlik kapağı, günlük fotoğrafı ve albüm fotoğrafı etkinliği
         görebilen aktif üyelere; kanal fotoğrafı (`chat_photo`) mesajın
         kanalının kitlesine (mesaj silinmemişken; chat'e sorulur); birebir
         mesaj eki (`dm_attachment`) konuşmanın iki tarafına (mesaj
@@ -7540,16 +7569,74 @@ components:
           type: string
           format: date-time
           description: İstemcinin dönüş zamanı; yoksa şimdi. Çıkıştan önce olamaz.
-
-    FishingDetails:
+    LogLocationVisibility:
+      type: string
+      enum: [self, participants, tayfa]
+      description: |
+        Bir günlük kaydının konumunu kaydı girenin dışında kim görür:
+        `self` kimse; `participants` `going`/`maybe` cevabı verenler,
+        katılımı doğrulananlar, organizatör, moderatör ve yönetici; `tayfa`
+        kaydı gören herkes.
+    EventLogEntry:
       type: object
+      required: [id, user_id, values, created_at, caller_can_remove]
+      description: Bir günlük kaydı, isteği yapanın gördüğü haliyle (#243).
       properties:
-        spot_visibility:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid, description: Kaydı giren. }
+        values:
+          allOf: [{ $ref: "#/components/schemas/EventFieldValues" }]
+          description: Kaydın alan değerleri; alanlar bileşenin `fields` parametresindedir.
+        location:
+          allOf: [{ $ref: "#/components/schemas/LatLng" }]
+          description: Kaydın konumu; yoksa ya da görmeniz gerekmiyorsa yoktur.
+        location_visibility:
+          allOf: [{ $ref: "#/components/schemas/LogLocationVisibility" }]
+          description: Yalnızca kendi konumlu kayıtlarınızda.
+        photo_upload_id: { type: string, format: uuid, description: "Fotoğraf; linkleri `POST /v1/media/urls`. Kaydı gören her üye görür." }
+        created_at: { type: string, format: date-time }
+        caller_can_remove: { type: boolean, description: Kaydı şu an çıkarabilirsiniz. }
+    EventLogEntryList:
+      type: object
+      required: [entries, location_enabled, max_entries, caller_can_add]
+      description: Bir etkinliğin bir günlük bileşeninin kayıtları, eskiden yeniye (#243).
+      properties:
+        entries:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/EventLogEntry" }
+        next_page_token: { type: string }
+        location_enabled: { type: boolean, description: Bileşenin `location` parametresi; kapalıysa kayda konum verilmez. }
+        location_default:
+          allOf: [{ $ref: "#/components/schemas/LogLocationVisibility" }]
+          description: Yeni kaydın konum görünürlüğünün varsayılanı; konum kapalıysa yoktur.
+        max_entries: { type: integer, minimum: 1, maximum: 500, description: Kişi başına en fazla kayıt. }
+        caller_can_add:
+          type: boolean
+          description: Şu an kayıt ekleyebilirsiniz (katılımınız doğrulanmış, susturulmamış; etkinlik iptal değil, donmamış, tayfa salt okunur değil). Sayı sınırı ayrıca denetlenir.
+    EventLogEntryCreateRequest:
+      type: object
+      required: [values, client_request_id]
+      additionalProperties: false
+      properties:
+        values:
+          allOf: [{ $ref: "#/components/schemas/EventFieldValues" }]
+          description: Kaydın alan değerleri (en fazla 8); zorunlu alanlar verilir.
+        location:
+          allOf: [{ $ref: "#/components/schemas/LatLng" }]
+          description: İsteğe bağlı; yalnızca `location_enabled` günlükte. Kişinin seçtiği nokta.
+        location_visibility:
+          allOf: [{ $ref: "#/components/schemas/LogLocationVisibility" }]
+          description: Yalnızca konumla; yoksa günlüğün varsayılanı.
+        photo_upload_id:
           type: string
-          enum: [tayfa, participants]
+          format: uuid
           description: |
-            `participants`: buluşma noktasını yalnızca organizatör, moderatör,
-            yönetici ve `going`/`maybe` cevabı verenler görür. Yoksa `tayfa`.
+            İsteğe bağlı: kendi hazır `log_photo` yüklemeniz (bu tayfa için).
+            Fotoğrafın konum bilgisi (EXIF/GPS) işlemede silinmiştir; kaydın
+            konumu yalnızca `location` ile paylaşılır.
+        client_request_id: { type: string, format: uuid }
+
     EventTypeKey:
       type: string
       description: |
@@ -7681,14 +7768,14 @@ components:
         etkinlik oluşturulduğu tür sürümüne (`type_version`) bağlıdır ve o
         sürümün tanımıyla gösterilir (güncel katalogda yoksa
         `GET /v1/catalog/event-types/{key}/versions/{version}`). `fields`
-        ve Faz 1'den kalan türe özel ayrıntı (`fishing`; bileşene taşınana
-        kadar) yalnızca tek etkinlik yanıtında gelir. Konvoyun rotası ve
+        yalnızca tek etkinlik yanıtında gelir. Konvoyun rotası ve
         araçları bileşenlerindedir (`route`, `vehicles`); kampın listesi
         `checklist` bileşenindedir, kamp yeri, su, tuvalet ve notlar
         `fields`'tadır (`site_name`, `has_water`, `has_toilet`, `notes`;
         #241). Yürüyüşün yoklaması ve beklenen dönüşü `roll_call`
         bileşenindedir; zorluk, planlanan mesafe ve irtifa `fields`'tadır
         (`difficulty`, `planned_distance`, `planned_elevation`; #242).
+        Balık etkinliğinin av günlüğü `log` bileşenindedir (`catches`; #243).
       properties:
         cover_upload_id: { type: string, format: uuid, description: "Kapak; linkleri `POST /v1/media/urls`. Serinin ürettiği etkinliklerde yoktur." }
         id: { type: string, format: uuid }
@@ -7740,7 +7827,6 @@ components:
         series_override: { type: boolean, description: Seriden ayrı düzenlendi; seri değişiklikleri ona dokunmaz. }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
-        fishing: { $ref: "#/components/schemas/FishingDetails" }
 
     EventList:
       type: object
@@ -7764,8 +7850,8 @@ components:
         alanlar verilir, tanımda olmayan alan gönderilmez (ör. `gaming`:
         `game`, `platform`; `sports`: `sport`, `venue_name`; `camp`:
         `site_name`, `has_water`, `has_toilet`, `notes`; `hike`:
-        `difficulty`, `planned_distance`, `planned_elevation`). Faz 1'den
-        kalan ayrıntı (`fishing`) yalnızca kendi türünde verilir. Rota ve
+        `difficulty`, `planned_distance`, `planned_elevation`). Türe özel
+        ayrıntı nesnesi yoktur (#243). Rota ve
         yürüyüşün beklenen dönüşü etkinlik oluşturulduktan sonra
         bileşenlerinden (`route`, `roll_call`) yazılır.
       properties:
@@ -7805,7 +7891,6 @@ components:
             Organizatörün işareti: etkinlik halka açık bir yerde buluşur ve
             Keşfet'te görünebilir (ADR-0033). Yalnızca yüz yüze etkinlikte
             etkilidir; özel adreste buluşan etkinlik işaretlenmez.
-        fishing: { $ref: "#/components/schemas/FishingDetails" }
         recurrence: { $ref: "#/components/schemas/Recurrence" }
         client_request_id:
           type: string
@@ -7844,7 +7929,6 @@ components:
             Organizatörün işareti: etkinlik halka açık bir yerde buluşur ve
             Keşfet'te görünebilir (ADR-0033). Yalnızca yüz yüze etkinlikte
             etkilidir; özel adreste buluşan etkinlik işaretlenmez.
-        fishing: { $ref: "#/components/schemas/FishingDetails" }
         apply_to_series:
           type: boolean
           description: "`true` yalnızca seriye ait etkinlikte geçerlidir; yoksa `false`."
@@ -7903,50 +7987,6 @@ components:
       properties:
         attendance: { $ref: "#/components/schemas/AttendanceStatus" }
         method: { $ref: "#/components/schemas/AttendanceMethod" }
-
-    FishingCatch:
-      type: object
-      required: [id, user_id, species, length_cm, visibility, created_at]
-      properties:
-        photo_upload_id: { type: string, format: uuid, description: "Fotoğraf; linkleri `POST /v1/media/urls`. Av kaydını gören her üye görür." }
-        id: { type: string, format: uuid }
-        user_id: { type: string, format: uuid }
-        species: { type: string }
-        length_cm: { type: number }
-        location:
-          allOf: [{ $ref: "#/components/schemas/LatLng" }]
-          description: Avcıya, `tayfa` görünürlüğünde noktayı görebilenlere döner.
-        visibility: { type: string, enum: [self, tayfa] }
-        created_at: { type: string, format: date-time }
-    FishingCatchCreateRequest:
-      type: object
-      required: [species, length_cm, client_request_id]
-      additionalProperties: false
-      properties:
-        photo_upload_id:
-          type: string
-          format: uuid
-          description: |
-            İsteğe bağlı: kendi hazır `catch_photo` yüklemeniz (bu tayfa için).
-            Fotoğrafın konum bilgisi (EXIF/GPS) işlemede silinmiştir; avın
-            konumu yalnızca `location` ve `visibility` ile paylaşılır.
-        species: { type: string, minLength: 1, maxLength: 60 }
-        length_cm: { type: number, exclusiveMinimum: 0, maximum: 1000, description: Bir ondalık. }
-        location: { $ref: "#/components/schemas/LatLng" }
-        visibility:
-          type: string
-          enum: [self, tayfa]
-          default: self
-          description: Konumu kim görür; av kendisi her etkin üyeye görünür.
-        client_request_id: { type: string, format: uuid }
-    FishingCatchList:
-      type: object
-      required: [catches]
-      properties:
-        catches:
-          type: array
-          items: { $ref: "#/components/schemas/FishingCatch" }
-        next_page_token: { type: string }
 
     EventPhoto:
       type: object
@@ -8559,7 +8599,7 @@ components:
         low: { type: boolean, description: Bir türden 10'dan az kaldı; yükleyin. }
     UploadPurpose:
       type: string
-      enum: [avatar, catch_photo, cover, event_photo, chat_photo, dm_attachment, report_evidence]
+      enum: [avatar, log_photo, cover, event_photo, chat_photo, dm_attachment, report_evidence]
       description: |
         `cover` tayfa ya da etkinlik kapağıdır. `event_photo` etkinlik
         albümünün fotoğrafıdır (`POST .../events/{event_id}/photos`); kapak
@@ -8612,7 +8652,7 @@ components:
         tayfa_id:
           type: string
           format: uuid
-          description: "`cover`, `catch_photo`, `event_photo` ve `chat_photo` için zorunlu; `avatar`, `dm_attachment` ve `report_evidence`'ta verilmez."
+          description: "`cover`, `log_photo`, `event_photo` ve `chat_photo` için zorunlu; `avatar`, `dm_attachment` ve `report_evidence`'ta verilmez."
         client_request_id:
           type: string
           format: uuid
@@ -9846,8 +9886,9 @@ components:
       description: |
         `dm_message` (birebir mesaj) yalnızca `POST /v1/me/reports` ile;
         diğerleri yalnızca tayfa ucuyla. `channel_message` kanal mesajıdır
-        (metin, fotoğraf ya da yer; #205).
-      enum: [user, tayfa, announcement, event, question, answer, poll, fishing_catch, dm_message, event_photo, channel_message]
+        (metin, fotoğraf ya da yer; #205). `log_entry` bir günlük bileşeni
+        kaydıdır (#243; eskiden `fishing_catch`).
+      enum: [user, tayfa, announcement, event, question, answer, poll, log_entry, dm_message, event_photo, channel_message]
 
     BanRequest:
       type: object

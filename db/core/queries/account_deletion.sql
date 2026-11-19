@@ -132,12 +132,13 @@ DELETE FROM user_activity_records WHERE user_id = @user_id;
 -- name: DeleteUserRollCallCheckins :exec
 DELETE FROM event_roll_call_checkins WHERE user_id = @user_id;
 
--- Av kayıtları konum içerebilir; kişiyle birlikte silinir.
--- name: DeleteUserCatches :exec
-DELETE FROM fishing_catches WHERE user_id = @user_id;
+-- Günlük kayıtları (av kayıtları dahil) konum içerebilir; kişiyle birlikte
+-- silinir, fotoğrafları silme kuyruğuna girer (issue #243).
+-- name: DeleteUserLogEntries :exec
+DELETE FROM event_log_entries WHERE user_id = @user_id;
 
--- name: ClearCatchDeleter :exec
-UPDATE fishing_catches SET deleted_by = NULL WHERE deleted_by = @user_id;
+-- name: ClearLogEntryDeleter :exec
+UPDATE event_log_entries SET deleted_by = NULL WHERE deleted_by = @user_id;
 
 -- Albüm fotoğrafları kişiseldir; kişiyle birlikte silinir, dosyaları
 -- silme kuyruğuna girer (issue #206).

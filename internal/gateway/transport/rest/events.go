@@ -27,9 +27,6 @@ type EventClient interface {
 	ListAttendees(ctx context.Context, in *corev1.ListAttendeesRequest, opts ...grpc.CallOption) (*corev1.ListAttendeesResponse, error)
 	CheckIn(ctx context.Context, in *corev1.CheckInRequest, opts ...grpc.CallOption) (*corev1.CheckInResponse, error)
 	SetAttendance(ctx context.Context, in *corev1.SetAttendanceRequest, opts ...grpc.CallOption) (*corev1.SetAttendanceResponse, error)
-	AddFishingCatch(ctx context.Context, in *corev1.AddFishingCatchRequest, opts ...grpc.CallOption) (*corev1.AddFishingCatchResponse, error)
-	ListFishingCatches(ctx context.Context, in *corev1.ListFishingCatchesRequest, opts ...grpc.CallOption) (*corev1.ListFishingCatchesResponse, error)
-	RemoveFishingCatch(ctx context.Context, in *corev1.RemoveFishingCatchRequest, opts ...grpc.CallOption) (*corev1.RemoveFishingCatchResponse, error)
 	AddEventPhoto(ctx context.Context, in *corev1.AddEventPhotoRequest, opts ...grpc.CallOption) (*corev1.AddEventPhotoResponse, error)
 	ListEventPhotos(ctx context.Context, in *corev1.ListEventPhotosRequest, opts ...grpc.CallOption) (*corev1.ListEventPhotosResponse, error)
 	RemoveEventPhoto(ctx context.Context, in *corev1.RemoveEventPhotoRequest, opts ...grpc.CallOption) (*corev1.RemoveEventPhotoResponse, error)
@@ -48,8 +45,6 @@ const (
 	rruleMax         = 256
 	timeZoneMax      = 64
 	cancelReasonMax  = 500
-	catchSpeciesMax  = 60
-	catchLengthMaxCm = 1000
 	// photoCaptionMax: album photo caption (core trims and checks again).
 	photoCaptionMax   = 200
 	calendarMediaType = "text/calendar; charset=utf-8"
@@ -71,9 +66,6 @@ func registerEvents(mux *http.ServeMux, h coreHandlers) {
 	mux.HandleFunc("PUT "+one+"/attendees/{user_id}/attendance", a(h.setAttendance(true)))
 	mux.HandleFunc("DELETE "+one+"/attendees/{user_id}/attendance", a(h.setAttendance(false)))
 	mux.HandleFunc("POST "+one+"/check-in", a(h.checkIn))
-	mux.HandleFunc("GET "+one+"/fishing-catches", a(h.listFishingCatches))
-	mux.HandleFunc("POST "+one+"/fishing-catches", a(h.addFishingCatch))
-	mux.HandleFunc("DELETE "+one+"/fishing-catches/{catch_id}", a(h.removeFishingCatch))
 	mux.HandleFunc("GET "+one+"/photos", a(h.listEventPhotos))
 	mux.HandleFunc("POST "+one+"/photos", a(h.addEventPhoto))
 	mux.HandleFunc("DELETE "+one+"/photos/{photo_id}", a(h.removeEventPhoto))
@@ -105,37 +97,6 @@ func pathTayfaEvent(w http.ResponseWriter, r *http.Request) (tayfaID, eventID st
 // runes counts characters after trimming surrounding spaces, as core does.
 func runes(s string) int { return utf8.RuneCountInString(strings.TrimSpace(s)) }
 
-// --- Input: type details ---
-
-// eventDetailsInput is the type details of a create or update body. A
-// camp's and a hike's details are fields (issues #241, #242): "camp" and
-// "hike" are unknown fields here and fail decoding.
-type eventDetailsInput struct {
-	Fishing *fishingJSON `json:"fishing"`
-}
-
-// eventDetails is the checked details: the type they belong to and the
-// proto message, or the zero value when none was given.
-type eventDetails struct {
-	// typ is the catalog key of the type the details belong to.
-	typ     string
-	fishing *corev1.FishingDetails
-}
-
-// details checks the cheap rules (enum names) and converts. core checks
-// everything again.
-func (in eventDetailsInput) details() (eventDetails, bool) {
-	var d eventDetails
-	if in.Fishing != nil {
-		v, ok := spotVisibilities.valueOrUnspecified(in.Fishing.SpotVisibility)
-		if !ok {
-			return d, false
-		}
-		d.typ, d.fishing = "fishing", &corev1.FishingDetails{SpotVisibility: v}
-	}
-	return d, true
-}
-
 // Limits of the field values of a body; core checks the values themselves
 // against the event's type version.
 const (
@@ -161,20 +122,6 @@ func eventFields(in map[string]json.RawMessage) (map[string]string, bool) {
 		out[k] = string(v)
 	}
 	return out, true
-}
-
-// setCreate sets req's type details, if any.
-func (d eventDetails) setCreate(req *corev1.CreateEventRequest) {
-	if d.fishing != nil {
-		req.Details = &corev1.CreateEventRequest_Fishing{Fishing: d.fishing}
-	}
-}
-
-// setUpdate sets req's type details, if any.
-func (d eventDetails) setUpdate(req *corev1.UpdateEventRequest) {
-	if d.fishing != nil {
-		req.Details = &corev1.UpdateEventRequest_Fishing{Fishing: d.fishing}
-	}
 }
 
 func eventTitleOK(s string) bool { n := runes(s); return n >= 1 && n <= eventTitleMax }
@@ -228,11 +175,10 @@ type eventCreateBody struct {
 	Capacity         int32       `json:"capacity"`
 	Discoverable     bool        `json:"discoverable"`
 	// Fields holds the values of the type's fields by field key.
-	Fields map[string]json.RawMessage `json:"fields"`
-	eventDetailsInput
-	Recurrence      *recurrenceJSON `json:"recurrence"`
-	ClientRequestID string          `json:"client_request_id"`
-	CoverUploadID   string          `json:"cover_upload_id"`
+	Fields          map[string]json.RawMessage `json:"fields"`
+	Recurrence      *recurrenceJSON            `json:"recurrence"`
+	ClientRequestID string                     `json:"client_request_id"`
+	CoverUploadID   string                     `json:"cover_upload_id"`
 	// Components are the organizer's selections for the type's components
 	// (issue #238, ADR-0037 §2).
 	Components []componentSelectionJSON `json:"components"`
@@ -244,10 +190,9 @@ func (b eventCreateBody) request(tayfaID string) (*corev1.CreateEventRequest, bo
 	// The type is a key of the catalog; core knows which keys exist.
 	okT := catalogKeyPattern.MatchString(b.Type)
 	mode, okM := eventModes.value(b.Mode)
-	det, okD := b.details()
 	fields, okF := eventFields(b.Fields)
 	components, okC := componentSelections(b.Components)
-	if !okT || !okM || !okD || !okF || !okC || (det.typ != "" && det.typ != b.Type) ||
+	if !okT || !okM || !okF || !okC ||
 		!eventTitleOK(b.Title) || !eventDescOK(b.Description) || b.StartsAt.IsZero() || b.EndsAt.IsZero() ||
 		!pointOK(b.MeetingPoint) || !capacityOK(b.Capacity) || !validUUID(b.ClientRequestID) ||
 		(b.CoverUploadID != "" && !validUUID(b.CoverUploadID)) {
@@ -262,7 +207,6 @@ func (b eventCreateBody) request(tayfaID string) (*corev1.CreateEventRequest, bo
 		ClientRequestId: b.ClientRequestID, CoverUploadId: b.CoverUploadID,
 		Components: components,
 	}
-	det.setCreate(req)
 	if rc := b.Recurrence; rc != nil {
 		if rc.RRule == "" || len(rc.RRule) > rruleMax || len(rc.TimeZone) > timeZoneMax {
 			return nil, false
@@ -372,9 +316,8 @@ type eventUpdateBody struct {
 	Capacity         *int32      `json:"capacity"`
 	Discoverable     *bool       `json:"discoverable"`
 	// Fields: the complete new set of field values; {} removes them all.
-	Fields map[string]json.RawMessage `json:"fields"`
-	eventDetailsInput
-	ApplyToSeries bool `json:"apply_to_series"`
+	Fields        map[string]json.RawMessage `json:"fields"`
+	ApplyToSeries bool                       `json:"apply_to_series"`
 	// CoverUploadID: "" removes the cover (issue #135).
 	CoverUploadID *string `json:"cover_upload_id"`
 }
@@ -446,15 +389,6 @@ func (h coreHandlers) updateEvent(ctx context.Context, w http.ResponseWriter, r 
 	if b.Discoverable != nil {
 		req.Discoverable = *b.Discoverable
 		add("discoverable")
-	}
-	det, ok := b.details()
-	if !ok {
-		badRequest(w, r)
-		return
-	}
-	if det.typ != "" {
-		det.setUpdate(req)
-		add("details")
 	}
 	if b.Fields != nil {
 		fields, ok := eventFields(b.Fields)
@@ -641,78 +575,6 @@ func (h coreHandlers) checkIn(ctx context.Context, w http.ResponseWriter, r *htt
 		return
 	}
 	writeJSON(w, http.StatusOK, checkInJSON{attendanceStatuses.name(resp.GetAttendance()), attendanceMethods.name(resp.GetMethod())})
-}
-
-// --- Fishing log ---
-
-func (h coreHandlers) listFishingCatches(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	id, eid, ok := pathTayfaEvent(w, r)
-	if !ok {
-		return
-	}
-	size, token, ok := paging(w, r)
-	if !ok {
-		return
-	}
-	resp, err := h.d.Events.ListFishingCatches(ctx, &corev1.ListFishingCatchesRequest{TayfaId: id, EventId: eid, PageSize: size, PageToken: token})
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	out := fishingCatchListJSON{Catches: make([]fishingCatchJSON, 0, len(resp.GetCatches())), NextPageToken: resp.GetNextPageToken()}
-	for _, c := range resp.GetCatches() {
-		out.Catches = append(out.Catches, fishingCatchFrom(c))
-	}
-	writeJSON(w, http.StatusOK, out)
-}
-
-type fishingCatchBody struct {
-	Species         string      `json:"species"`
-	LengthCm        float64     `json:"length_cm"`
-	Location        *latLngJSON `json:"location"`
-	Visibility      string      `json:"visibility"`
-	ClientRequestID string      `json:"client_request_id"`
-	PhotoUploadID   string      `json:"photo_upload_id"`
-}
-
-// addFishingCatch passes the catch's location to core in the body only,
-// like checkIn.
-func (h coreHandlers) addFishingCatch(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	id, eid, ok := pathTayfaEvent(w, r)
-	if !ok {
-		return
-	}
-	var b fishingCatchBody
-	if !decode(w, r, &b) {
-		return
-	}
-	vis, okV := catchVisibilities.valueOrUnspecified(b.Visibility)
-	if n := runes(b.Species); !okV || n < 1 || n > catchSpeciesMax || !(b.LengthCm > 0 && b.LengthCm <= catchLengthMaxCm) ||
-		!pointOK(b.Location) || !validUUID(b.ClientRequestID) || (b.PhotoUploadID != "" && !validUUID(b.PhotoUploadID)) {
-		badRequest(w, r)
-		return
-	}
-	resp, err := h.d.Events.AddFishingCatch(ctx, &corev1.AddFishingCatchRequest{
-		TayfaId: id, EventId: eid, Species: b.Species, LengthCm: b.LengthCm,
-		Location: b.Location.proto(), Visibility: vis, ClientRequestId: b.ClientRequestID, PhotoUploadId: b.PhotoUploadID,
-	})
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, fishingCatchFrom(resp.GetCatch()))
-}
-
-func (h coreHandlers) removeFishingCatch(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	ids, ok := pathIDs(w, r, "tayfa_id", "event_id", "catch_id")
-	if !ok {
-		return
-	}
-	if _, err := h.d.Events.RemoveFishingCatch(ctx, &corev1.RemoveFishingCatchRequest{TayfaId: ids[0], EventId: ids[1], CatchId: ids[2]}); err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- Album (issue #206) ---

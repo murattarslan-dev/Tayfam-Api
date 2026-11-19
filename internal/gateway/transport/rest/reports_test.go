@@ -66,7 +66,7 @@ func TestReportRoutes(t *testing.T) {
 		code               int
 		want               proto.Message
 	}{
-		{"POST", base, `{"target_type":"fishing_catch","target_id":"` + targetID + `","reason":"child_safety","description":"Açıklama\nsatırı"}`, 201,
+		{"POST", base, `{"target_type":"log_entry","target_id":"` + targetID + `","reason":"child_safety","description":"Açıklama\nsatırı"}`, 201,
 			&corev1.CreateReportRequest{TayfaId: tayfaID, TargetType: corev1.ReportTargetType_REPORT_TARGET_TYPE_FISHING_CATCH, TargetId: targetID,
 				Reason: corev1.ReportReason_REPORT_REASON_CHILD_SAFETY, Description: "Açıklama\nsatırı"}},
 		{"POST", base, `{"target_type":"tayfa","target_id":"` + tayfaID + `","reason":"gambling"}`, 200,

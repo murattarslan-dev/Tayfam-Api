@@ -196,10 +196,10 @@ LEFT JOIN LATERAL (
   SELECT e.tayfa_id FROM events e JOIN tayfas t ON t.id = e.tayfa_id AND t.deleted_at IS NULL
   WHERE u.attached_type = 'event' AND e.id = u.attached_id AND e.deleted_at IS NULL
   UNION ALL
-  SELECT e.tayfa_id FROM fishing_catches f
+  SELECT e.tayfa_id FROM event_log_entries f
   JOIN events e ON e.id = f.event_id AND e.deleted_at IS NULL
   JOIN tayfas t ON t.id = e.tayfa_id AND t.deleted_at IS NULL
-  WHERE u.attached_type = 'fishing_catch' AND f.id = u.attached_id AND f.deleted_at IS NULL
+  WHERE u.attached_type = 'log_entry' AND f.id = u.attached_id AND f.deleted_at IS NULL
   UNION ALL
   SELECT e.tayfa_id FROM event_photos ph
   JOIN events e ON e.id = ph.event_id AND e.deleted_at IS NULL
@@ -233,10 +233,6 @@ WHERE id = @id AND deleted_at IS NULL;
 -- name: SetEventCover :exec
 UPDATE events SET cover_upload_id = sqlc.narg(cover_upload_id)
 WHERE id = @id AND tayfa_id = @tayfa_id AND deleted_at IS NULL;
-
--- name: SetCatchPhoto :exec
-UPDATE fishing_catches SET photo_upload_id = sqlc.narg(photo_upload_id)
-WHERE id = @id AND deleted_at IS NULL;
 
 -- KVKK veri dışa aktarma dosyası (issue #144, ADR-0021). Yalnızca çağıranın
 -- kendi data_export kaydı; görüntü yolları bu kayıtları görmez.

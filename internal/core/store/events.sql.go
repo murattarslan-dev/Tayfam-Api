@@ -277,17 +277,6 @@ func (q *Queries) GetEventByClientRequest(ctx context.Context, arg GetEventByCli
 	return i, err
 }
 
-const getEventFishing = `-- name: GetEventFishing :one
-SELECT spot_visibility FROM event_fishing WHERE event_id = $1
-`
-
-func (q *Queries) GetEventFishing(ctx context.Context, eventID pgtype.UUID) (string, error) {
-	row := q.db.QueryRow(ctx, getEventFishing, eventID)
-	var spot_visibility string
-	err := row.Scan(&spot_visibility)
-	return spot_visibility, err
-}
-
 const getEventForUpdate = `-- name: GetEventForUpdate :one
 SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
@@ -475,37 +464,6 @@ func (q *Queries) ListEventFieldValues(ctx context.Context, eventID pgtype.UUID)
 	for rows.Next() {
 		var i ListEventFieldValuesRow
 		if err := rows.Scan(&i.FieldKey, &i.Value); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listFishingVisibility = `-- name: ListFishingVisibility :many
-SELECT event_id, spot_visibility FROM event_fishing
-WHERE event_id = ANY($1::uuid[])
-`
-
-type ListFishingVisibilityRow struct {
-	EventID        pgtype.UUID
-	SpotVisibility string
-}
-
-// Liste görünümünde mera gizliliği için.
-func (q *Queries) ListFishingVisibility(ctx context.Context, eventIds []pgtype.UUID) ([]ListFishingVisibilityRow, error) {
-	rows, err := q.db.Query(ctx, listFishingVisibility, eventIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListFishingVisibilityRow{}
-	for rows.Next() {
-		var i ListFishingVisibilityRow
-		if err := rows.Scan(&i.EventID, &i.SpotVisibility); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -724,25 +682,6 @@ type SetEventFieldValueParams struct {
 
 func (q *Queries) SetEventFieldValue(ctx context.Context, arg SetEventFieldValueParams) error {
 	_, err := q.db.Exec(ctx, setEventFieldValue, arg.EventID, arg.FieldKey, arg.Value)
-	return err
-}
-
-const setEventFishing = `-- name: SetEventFishing :exec
-
-INSERT INTO event_fishing (event_id, spot_visibility) VALUES ($1, $2)
-ON CONFLICT (event_id) DO UPDATE SET spot_visibility = EXCLUDED.spot_visibility
-`
-
-type SetEventFishingParams struct {
-	EventID        pgtype.UUID
-	SpotVisibility string
-}
-
-// ---------------------------------------------------------------------------
-// Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
-// key yanlış türü reddeder.
-func (q *Queries) SetEventFishing(ctx context.Context, arg SetEventFishingParams) error {
-	_, err := q.db.Exec(ctx, setEventFishing, arg.EventID, arg.SpotVisibility)
 	return err
 }
 

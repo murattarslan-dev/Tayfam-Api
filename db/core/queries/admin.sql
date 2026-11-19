@@ -133,10 +133,12 @@ SELECT created_by, question, created_at, deleted_at FROM polls WHERE id = @id AN
 -- name: AdminGetPollOptions :many
 SELECT text FROM poll_options WHERE poll_id = @poll_id ORDER BY position;
 
--- name: AdminGetCatch :one
-SELECT c.user_id, c.species, c.created_at, c.deleted_at
-FROM fishing_catches c JOIN events e ON e.id = c.event_id
-WHERE c.id = @id AND e.tayfa_id = @tayfa_id;
+-- Günlük kaydı (issue #243): panel kaydın değerlerini gösterir; konumu
+-- göstermez.
+-- name: AdminGetLogEntry :one
+SELECT l.user_id, l.component_key, l.field_values, l.created_at, l.deleted_at
+FROM event_log_entries l JOIN events e ON e.id = l.event_id
+WHERE l.id = @id AND e.tayfa_id = @tayfa_id;
 
 -- name: AdminGetEventPhoto :one
 SELECT p.uploader_id, p.caption, p.created_at, p.deleted_at, p.upload_id
@@ -163,10 +165,10 @@ UPDATE answers SET deleted_at = @at, deleted_by = @by WHERE id = @id AND tayfa_i
 -- name: AdminDeletePoll :execrows
 UPDATE polls SET deleted_at = @at, deleted_by = @by WHERE id = @id AND tayfa_id = @tayfa_id AND deleted_at IS NULL;
 
--- name: AdminDeleteCatch :execrows
-UPDATE fishing_catches c SET deleted_at = @at, deleted_by = @by
+-- name: AdminDeleteLogEntry :execrows
+UPDATE event_log_entries l SET deleted_at = @at, deleted_by = @by
 FROM events e
-WHERE c.id = @id AND e.id = c.event_id AND e.tayfa_id = @tayfa_id AND c.deleted_at IS NULL;
+WHERE l.id = @id AND e.id = l.event_id AND e.tayfa_id = @tayfa_id AND l.deleted_at IS NULL;
 
 -- name: AdminDeleteEventPhoto :execrows
 UPDATE event_photos p SET deleted_at = @at, deleted_by = @by

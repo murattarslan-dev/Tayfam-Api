@@ -123,7 +123,7 @@ var (
 	// ErrHikeNotStarted: a hike return without a start.
 	ErrHikeNotStarted = errors.New("yürüyüş başlamamış")
 	// ErrNotAttended: the action needs the caller's verified attendance
-	// (logging a fishing catch, adding an album photo).
+	// (adding a log entry, adding an album photo).
 	ErrNotAttended = errors.New("katılım doğrulanmamış")
 	// ErrAlbumClosed: the event's album takes no photos now (before the
 	// start, or from seven days after the end; issue #206).

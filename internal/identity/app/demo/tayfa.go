@@ -193,9 +193,6 @@ func (s *Seeder) seedEvent(ctx context.Context, t tayfaSpec, e eventSpec, tayfaI
 		req.MeetingPointName, req.City, req.District = e.PlaceName, e.City, e.District
 		req.MeetingPoint = &corev1.LatLng{Lat: e.Lat, Lng: e.Lng}
 	}
-	if e.Fishing != nil {
-		req.Details = &corev1.CreateEventRequest_Fishing{Fishing: e.Fishing}
-	}
 	req.Fields = e.Fields
 	if e.Hike != nil {
 		req.Fields = e.Hike.fields()

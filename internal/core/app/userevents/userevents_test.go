@@ -194,7 +194,7 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"event_referees.user_id":         `SELECT count(*) FROM event_referees WHERE user_id = $1`,
 		"event_checklist_items":          `SELECT count(*) FROM event_checklist_items WHERE $1 IN (assigned_user_id, created_by)`,
 		"event_roll_call_checkins":       `SELECT count(*) FROM event_roll_call_checkins WHERE user_id = $1`,
-		"fishing_catches":                `SELECT count(*) FROM fishing_catches WHERE $1 IN (user_id, deleted_by)`,
+		"event_log_entries":              `SELECT count(*) FROM event_log_entries WHERE $1 IN (user_id, deleted_by)`,
 		"event_photos":                   `SELECT count(*) FROM event_photos WHERE $1 IN (uploader_id, deleted_by)`,
 		"user_activity_records.user_id":  `SELECT count(*) FROM user_activity_records WHERE user_id = $1`,
 		"questions":                      `SELECT count(*) FROM questions WHERE $1 IN (author_id, deleted_by)`,
@@ -485,7 +485,7 @@ func (e *env) status(t *testing.T, ev, u id.ID) string {
 // were going to, the oldest waitlisted answer becomes going in the same
 // transaction, with an rsvp.promoted event and audit record by the system
 // (issue #50). Ended, cancelled and not-going events are left alone. The
-// user's roll calls, catches and activity records go too.
+// user's roll calls, log entries (catches) and activity records go too.
 func TestDeletedPromotesWaitlist(t *testing.T) {
 	e := setup(t)
 	u, admin, a, w1, w2 := id.New(), id.New(), id.New(), id.New(), id.New()
@@ -525,10 +525,11 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 	e.seed(t, `INSERT INTO user_activity_records (id, user_id, event_id, tayfa_id, event_type, mode, event_title, started_at, duration_minutes, attendance_method)
 		VALUES ($1, $2, $3, $4, 'hike', 'in_person', 'Etkinlik', $5, 240, 'hike_start')`, id.New().PG(), u.PG(), hike.PG(), tf.PG(), now.Add(-4*time.Hour))
 	fishing := e.eventAt(t, tf, "fishing", now.Add(-5*time.Hour), now.Add(-time.Hour), nil, "scheduled")
-	e.seed(t, `INSERT INTO event_fishing (event_id) VALUES ($1)`, fishing.PG())
-	e.seed(t, `INSERT INTO fishing_catches (id, event_id, user_id, species, length_cm, lat, lng, client_request_id) VALUES ($1, $2, $3, 'Levrek', 40, 38.1, 26.9, $4)`,
+	e.seed(t, `INSERT INTO event_log_entries (id, event_id, component_key, user_id, field_values, lat, lng, location_visibility, client_request_id)
+		VALUES ($1, $2, 'catches', $3, '{"species": "Levrek"}', 38.1, 26.9, 'self', $4)`,
 		id.New().PG(), fishing.PG(), u.PG(), id.New().PG())
-	e.seed(t, `INSERT INTO fishing_catches (id, event_id, user_id, species, length_cm, client_request_id, deleted_at, deleted_by) VALUES ($1, $2, $3, 'Çipura', 30, $4, now(), $5)`,
+	e.seed(t, `INSERT INTO event_log_entries (id, event_id, component_key, user_id, field_values, client_request_id, deleted_at, deleted_by)
+		VALUES ($1, $2, 'catches', $3, '{"species": "Çipura"}', $4, now(), $5)`,
 		id.New().PG(), fishing.PG(), a.PG(), id.New().PG(), u.PG())
 	// Album photos (issue #206): u's own go; a's photo that u removed stays
 	// without its remover.
@@ -556,7 +557,7 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 			t.Errorf("%s etkinlikte terfi oldu: %s", name, got)
 		}
 	}
-	if n := e.count(t, `SELECT count(*) FROM fishing_catches WHERE user_id = $1 AND deleted_at IS NOT NULL AND deleted_by IS NULL`, a.PG()); n != 1 {
+	if n := e.count(t, `SELECT count(*) FROM event_log_entries WHERE user_id = $1 AND deleted_at IS NOT NULL AND deleted_by IS NULL`, a.PG()); n != 1 {
 		t.Error("başkasının av kaydı silindi ya da silen boşalmadı")
 	}
 	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'rsvp.promoted' AND actor_id IS NULL AND tayfa_id = $1 AND subject_id = $2 AND payload->>'user_id' = $3`,

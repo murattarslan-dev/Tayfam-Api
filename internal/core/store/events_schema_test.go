@@ -64,40 +64,10 @@ func TestEventTypeIntegrity(t *testing.T) {
 		ids[typ] = eid
 	}
 
-	details := map[string]string{
-		"fishing": `INSERT INTO event_fishing (event_id) VALUES ($1)`,
-	}
-	for typ, sql := range details {
-		// Every other event type is refused by the composite foreign key.
-		for other, eid := range ids {
-			if other == typ {
-				continue
-			}
-			_, err := pool.Exec(ctx, sql, eid.PG())
-			if c := constraintOf(err); c != "event_"+typ+"_event_fkey" {
-				t.Errorf("%s detayı %s etkinliğine eklendi ya da başka hata: %v", typ, other, err)
-			}
-		}
-		if _, err := pool.Exec(ctx, sql, ids[typ].PG()); err != nil {
-			t.Errorf("%s detayı kendi türüne eklenemedi: %v", typ, err)
-		}
-	}
-
-	// The fixed type column cannot be changed to point elsewhere.
-	_, err := pool.Exec(ctx, `UPDATE event_fishing SET type = 'hike' WHERE event_id = $1`, ids["fishing"].PG())
-	if c := constraintOf(err); c != "event_fishing_type" {
-		t.Errorf("event_fishing.type değişti: %v", err)
-	}
-	// The event's type cannot change while a detail row points at it.
-	_, err = pool.Exec(ctx, `UPDATE events SET type = 'hike' WHERE id = $1`, ids["fishing"].PG())
-	if c := constraintOf(err); c != "event_fishing_event_fkey" {
-		t.Errorf("detaylı etkinliğin türü değişti: %v", err)
-	}
-
 	// Vehicles and list items are components' (event_vehicles, 00035;
 	// event_checklist_items, 00036): the component guard refuses a type
 	// without the component.
-	_, err = pool.Exec(ctx, `INSERT INTO event_vehicles (id, event_id, component_key, user_id, make) VALUES (gen_random_uuid(), $1, 'vehicles', gen_random_uuid(), 'Murat')`, ids["camp"].PG())
+	_, err := pool.Exec(ctx, `INSERT INTO event_vehicles (id, event_id, component_key, user_id, make) VALUES (gen_random_uuid(), $1, 'vehicles', gen_random_uuid(), 'Murat')`, ids["camp"].PG())
 	if c := constraintOf(err); c != "event_component_guard" {
 		t.Errorf("kamp etkinliğine araç eklendi: %v", err)
 	}
@@ -206,7 +176,6 @@ func TestEventConstraints(t *testing.T) {
 		"bilinmeyen yoklama":  {`INSERT INTO event_rsvps (event_id, user_id, status, attendance) VALUES ($1, gen_random_uuid(), 'going', 'late')`, "event_rsvps_attendance"},
 		"bilinmeyen yöntem":   {`INSERT INTO event_rsvps (event_id, user_id, status, attendance_method) VALUES ($1, gen_random_uuid(), 'going', 'qr')`, "event_rsvps_attendance_method"},
 		"zamansız işaretleme": {`INSERT INTO event_rsvps (event_id, user_id, status, attendance_marked_by) VALUES ($1, gen_random_uuid(), 'going', gen_random_uuid())`, "event_rsvps_attendance_marked"},
-		"yanlış tür sütunu":   {`INSERT INTO event_fishing (event_id, type) VALUES ($1, 'general')`, "event_fishing_type"},
 	} {
 		_, err := pool.Exec(ctx, tc.sql, eid.PG())
 		if got := constraintOf(err); got != tc.constraint {
@@ -231,10 +200,9 @@ func TestEventDetailConstraints(t *testing.T) {
 		on         id.ID
 		constraint string
 	}{
-		"bilinmeyen görünürlük": {`INSERT INTO event_fishing (event_id, spot_visibility) VALUES ($1, 'public')`, event("fishing"), "event_fishing_spot_visibility"},
-		"türde olmayan alan":    {`INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, 'stake', '100')`, event("gaming"), "event_field_values_guard"},
-		"alansız türde alan":    {`INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, 'game', '"CS2"')`, event("general"), "event_field_values_guard"},
-		"nesne alan değeri":     {`INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, 'game', '{}')`, event("gaming"), "event_field_values_value"},
+		"türde olmayan alan": {`INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, 'stake', '100')`, event("gaming"), "event_field_values_guard"},
+		"alansız türde alan": {`INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, 'game', '"CS2"')`, event("general"), "event_field_values_guard"},
+		"nesne alan değeri":  {`INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, 'game', '{}')`, event("gaming"), "event_field_values_value"},
 	} {
 		_, err := pool.Exec(ctx, tc.sql, tc.on.PG())
 		if got := constraintOf(err); got != tc.constraint {

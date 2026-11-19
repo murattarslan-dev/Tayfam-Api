@@ -91,4 +91,10 @@
 //   - The demo seeder (internal/identity/app/demo) calls core's services
 //     as users do; data that moved to a component is seeded through the
 //     component's service (demo.Core).
+//   - Content with a photo (a log entry, issue #243) attaches the upload
+//     with media.Attach before it writes the row with the photo column; the
+//     column's trigger checks it again and a hard delete queues the file.
+//     A moderator's removal of someone else's content is moderation, made
+//     with BySafetySignal(<the any-action>) so that it also works on a
+//     cancelled or frozen event; the author's own removal keeps the window.
 package component

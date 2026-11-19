@@ -439,49 +439,6 @@ func (q *Queries) ExportEvents(ctx context.Context, arg ExportEventsParams) ([]E
 	return items, nil
 }
 
-const exportFishingCatches = `-- name: ExportFishingCatches :many
-SELECT f.id AS k, jsonb_build_object(
-  'id', f.id, 'event_id', f.event_id, 'species', f.species, 'length_cm', f.length_cm,
-  'lat', f.lat, 'lng', f.lng, 'visibility', f.visibility, 'photo_upload_id', f.photo_upload_id,
-  'created_at', f.created_at, 'deleted_at', f.deleted_at
-) AS data
-FROM fishing_catches f
-WHERE f.user_id = $1 AND f.id > $2
-ORDER BY f.id
-LIMIT $3
-`
-
-type ExportFishingCatchesParams struct {
-	UserID pgtype.UUID
-	After  pgtype.UUID
-	N      int32
-}
-
-type ExportFishingCatchesRow struct {
-	K    pgtype.UUID
-	Data []byte
-}
-
-func (q *Queries) ExportFishingCatches(ctx context.Context, arg ExportFishingCatchesParams) ([]ExportFishingCatchesRow, error) {
-	rows, err := q.db.Query(ctx, exportFishingCatches, arg.UserID, arg.After, arg.N)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ExportFishingCatchesRow{}
-	for rows.Next() {
-		var i ExportFishingCatchesRow
-		if err := rows.Scan(&i.K, &i.Data); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const exportFriendSuggestions = `-- name: ExportFriendSuggestions :many
 SELECT fs.suggested_user_id AS k, jsonb_build_object(
   'user_id', fs.suggested_user_id, 'created_at', fs.created_at, 'dismissed_at', fs.dismissed_at,
@@ -608,6 +565,50 @@ func (q *Queries) ExportHikeCheckins(ctx context.Context, arg ExportHikeCheckins
 	items := []ExportHikeCheckinsRow{}
 	for rows.Next() {
 		var i ExportHikeCheckinsRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportLogEntries = `-- name: ExportLogEntries :many
+SELECT f.id AS k, jsonb_build_object(
+  'id', f.id, 'event_id', f.event_id, 'component_key', f.component_key, 'values', f.field_values,
+  'lat', f.lat, 'lng', f.lng, 'location_visibility', f.location_visibility, 'photo_upload_id', f.photo_upload_id,
+  'created_at', f.created_at, 'deleted_at', f.deleted_at
+) AS data
+FROM event_log_entries f
+WHERE f.user_id = $1 AND f.id > $2
+ORDER BY f.id
+LIMIT $3
+`
+
+type ExportLogEntriesParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportLogEntriesRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Günlük kayıtları (issue #243); bölümün adı Faz 1'den (fishing_catches).
+func (q *Queries) ExportLogEntries(ctx context.Context, arg ExportLogEntriesParams) ([]ExportLogEntriesRow, error) {
+	rows, err := q.db.Query(ctx, exportLogEntries, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportLogEntriesRow{}
+	for rows.Next() {
+		var i ExportLogEntriesRow
 		if err := rows.Scan(&i.K, &i.Data); err != nil {
 			return nil, err
 		}

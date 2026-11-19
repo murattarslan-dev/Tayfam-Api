@@ -126,7 +126,7 @@ func TestAddPhotoUpload(t *testing.T) {
 	wantErr(t, "başkasının yüklemesi", err, apperr.ErrUploadNotFound)
 	_, err = add(mediatest.Ready(t, e.pool, a.attendee, media.PurposeCover, a.tf), "")
 	wantErr(t, "kapak albüm fotoğrafı olamaz", err, apperr.ErrUploadNotFound)
-	_, err = add(mediatest.Ready(t, e.pool, a.attendee, media.PurposeCatchPhoto, a.tf), "")
+	_, err = add(mediatest.Ready(t, e.pool, a.attendee, media.PurposeLogPhoto, a.tf), "")
 	wantErr(t, "av fotoğrafı albüm fotoğrafı olamaz", err, apperr.ErrUploadNotFound)
 	otherTf, _ := e.newTayfa(t)
 	e.seedAs(t, otherTf, a.attendee, authz.Member)

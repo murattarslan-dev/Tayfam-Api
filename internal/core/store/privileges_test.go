@@ -22,7 +22,6 @@ var wantAppPrivileges = map[string]string{
 	"events":                "DELETE,INSERT,SELECT,UPDATE",
 	"event_rsvps":           "DELETE,INSERT,SELECT,UPDATE",
 	"user_activity_records": "DELETE,INSERT,SELECT,UPDATE",
-	"fishing_catches":       "DELETE,INSERT,SELECT,UPDATE",
 	// Issue #206: a photo never moves to another event, file or uploader.
 	"event_photos": "DELETE,INSERT,SELECT,UPDATE(deleted_at,deleted_by)",
 	"friendships":  "DELETE,INSERT,SELECT,UPDATE",
@@ -51,7 +50,6 @@ var wantAppPrivileges = map[string]string{
 	"tayfa_modules":         "INSERT,SELECT,UPDATE",
 	"user_profiles":         "INSERT,SELECT,UPDATE",
 	"event_series":          "INSERT,SELECT,UPDATE",
-	"event_fishing":         "INSERT,SELECT,UPDATE",
 	"poll_options":          "INSERT,SELECT",
 	"event_consumers":       "INSERT,SELECT,UPDATE",
 	"domain_events":         "INSERT,SELECT,UPDATE(actor_id,tayfa_id)",
@@ -90,6 +88,10 @@ var wantAppPrivileges = map[string]string{
 	// return and alarm are written.
 	"event_roll_calls":         "DELETE,INSERT,SELECT,UPDATE(expected_return_at,updated_at)",
 	"event_roll_call_checkins": "DELETE,INSERT,SELECT,UPDATE(alert_sent_at,returned_at,returned_received_at,updated_at)",
+	// Issue #243: a log entry never moves to another event, component or
+	// person, and its values, location and photo do not change; it is only
+	// soft deleted (account deletion clears who deleted it).
+	"event_log_entries": "DELETE,INSERT,SELECT,UPDATE(deleted_at,deleted_by)",
 }
 
 func TestAppRolePrivileges(t *testing.T) {

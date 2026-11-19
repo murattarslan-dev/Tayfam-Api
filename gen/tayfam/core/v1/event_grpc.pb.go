@@ -196,24 +196,18 @@ type EventServiceClient interface {
 	// Errors: common, ERROR_REASON_CORRECTION_CLOSED,
 	// ERROR_REASON_MEMBER_NOT_FOUND, ERROR_REASON_VALIDATION (user_id).
 	SetAttendance(ctx context.Context, in *SetAttendanceRequest, opts ...grpc.CallOption) (*SetAttendanceResponse, error)
-	// AddFishingCatch logs a catch on a fishing event. The caller's attendance
-	// must be verified; catches are accepted until seven days after the end
-	// (ERROR_REASON_EVENT_ENDED afterwards). At most 100 per angler and event.
-	// A repeat with the same client_request_id returns the first catch.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_NOT_ATTENDED, ERROR_REASON_EVENT_LIMIT,
-	// ERROR_REASON_VALIDATION.
+	// AddFishingCatch is not served any more: the fishing catch log is the
+	// log component's (LogComponentService.AddLogEntry, component_log.proto;
+	// issue #243). It answers UNIMPLEMENTED; the method stays because it
+	// cannot be removed.
 	AddFishingCatch(ctx context.Context, in *AddFishingCatchRequest, opts ...grpc.CallOption) (*AddFishingCatchResponse, error)
-	// ListFishingCatches lists an event's catches, oldest first.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH.
+	// ListFishingCatches is not served any more
+	// (LogComponentService.ListLogEntries; issue #243). It answers
+	// UNIMPLEMENTED; the method stays because it cannot be removed.
 	ListFishingCatches(ctx context.Context, in *ListFishingCatchesRequest, opts ...grpc.CallOption) (*ListFishingCatchesResponse, error)
-	// RemoveFishingCatch removes a catch: one's own, or anyone's for
-	// moderators and admins.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+	// RemoveFishingCatch is not served any more
+	// (LogComponentService.RemoveLogEntry; issue #243). It answers
+	// UNIMPLEMENTED; the method stays because it cannot be removed.
 	RemoveFishingCatch(ctx context.Context, in *RemoveFishingCatchRequest, opts ...grpc.CallOption) (*RemoveFishingCatchResponse, error)
 	// AddEventPhoto adds the caller's own READY EVENT_PHOTO upload, opened
 	// for this tayfa, to the event's album (issue #206, ADR-0028). The
@@ -689,24 +683,18 @@ type EventServiceServer interface {
 	// Errors: common, ERROR_REASON_CORRECTION_CLOSED,
 	// ERROR_REASON_MEMBER_NOT_FOUND, ERROR_REASON_VALIDATION (user_id).
 	SetAttendance(context.Context, *SetAttendanceRequest) (*SetAttendanceResponse, error)
-	// AddFishingCatch logs a catch on a fishing event. The caller's attendance
-	// must be verified; catches are accepted until seven days after the end
-	// (ERROR_REASON_EVENT_ENDED afterwards). At most 100 per angler and event.
-	// A repeat with the same client_request_id returns the first catch.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_NOT_ATTENDED, ERROR_REASON_EVENT_LIMIT,
-	// ERROR_REASON_VALIDATION.
+	// AddFishingCatch is not served any more: the fishing catch log is the
+	// log component's (LogComponentService.AddLogEntry, component_log.proto;
+	// issue #243). It answers UNIMPLEMENTED; the method stays because it
+	// cannot be removed.
 	AddFishingCatch(context.Context, *AddFishingCatchRequest) (*AddFishingCatchResponse, error)
-	// ListFishingCatches lists an event's catches, oldest first.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH.
+	// ListFishingCatches is not served any more
+	// (LogComponentService.ListLogEntries; issue #243). It answers
+	// UNIMPLEMENTED; the method stays because it cannot be removed.
 	ListFishingCatches(context.Context, *ListFishingCatchesRequest) (*ListFishingCatchesResponse, error)
-	// RemoveFishingCatch removes a catch: one's own, or anyone's for
-	// moderators and admins.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+	// RemoveFishingCatch is not served any more
+	// (LogComponentService.RemoveLogEntry; issue #243). It answers
+	// UNIMPLEMENTED; the method stays because it cannot be removed.
 	RemoveFishingCatch(context.Context, *RemoveFishingCatchRequest) (*RemoveFishingCatchResponse, error)
 	// AddEventPhoto adds the caller's own READY EVENT_PHOTO upload, opened
 	// for this tayfa, to the event's album (issue #206, ADR-0028). The

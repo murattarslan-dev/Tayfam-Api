@@ -70,6 +70,7 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 		registerRollCallComponent,
 
 		// log (#243)
+		registerLogComponent,
 
 		// tayfa vocabulary (#244)
 

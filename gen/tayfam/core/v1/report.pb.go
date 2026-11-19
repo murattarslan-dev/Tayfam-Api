@@ -30,12 +30,14 @@ const (
 	// target_id is a user ID: an active member of the tayfa.
 	ReportTargetType_REPORT_TARGET_TYPE_USER ReportTargetType = 1
 	// target_id is the tayfa ID itself. Goes to the platform only.
-	ReportTargetType_REPORT_TARGET_TYPE_TAYFA         ReportTargetType = 2
-	ReportTargetType_REPORT_TARGET_TYPE_ANNOUNCEMENT  ReportTargetType = 3
-	ReportTargetType_REPORT_TARGET_TYPE_EVENT         ReportTargetType = 4
-	ReportTargetType_REPORT_TARGET_TYPE_QUESTION      ReportTargetType = 5
-	ReportTargetType_REPORT_TARGET_TYPE_ANSWER        ReportTargetType = 6
-	ReportTargetType_REPORT_TARGET_TYPE_POLL          ReportTargetType = 7
+	ReportTargetType_REPORT_TARGET_TYPE_TAYFA        ReportTargetType = 2
+	ReportTargetType_REPORT_TARGET_TYPE_ANNOUNCEMENT ReportTargetType = 3
+	ReportTargetType_REPORT_TARGET_TYPE_EVENT        ReportTargetType = 4
+	ReportTargetType_REPORT_TARGET_TYPE_QUESTION     ReportTargetType = 5
+	ReportTargetType_REPORT_TARGET_TYPE_ANSWER       ReportTargetType = 6
+	ReportTargetType_REPORT_TARGET_TYPE_POLL         ReportTargetType = 7
+	// target_id is a log component entry (issue #243; stored as log_entry).
+	// The name is from Faz 1, when the only log was the fishing catch log.
 	ReportTargetType_REPORT_TARGET_TYPE_FISHING_CATCH ReportTargetType = 8
 	// target_id is a direct message ID (issue #95). Not about a tayfa:
 	// tayfa_id is empty. core asks chat with the reporter's own token

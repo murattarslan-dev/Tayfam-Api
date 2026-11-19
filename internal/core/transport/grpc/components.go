@@ -33,6 +33,7 @@ func componentRegistrars() []componentRegistrar {
 		registerRollCallComponent,
 
 		// log (#243)
+		registerLogComponent,
 
 		// tayfa vocabulary (#244)
 

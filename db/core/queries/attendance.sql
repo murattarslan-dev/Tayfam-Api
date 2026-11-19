@@ -74,37 +74,3 @@ DELETE FROM user_activity_records WHERE user_id = @user_id AND event_id = @event
 SELECT user_id, attendance_method FROM user_activity_records
 WHERE event_id = @event_id
 ORDER BY user_id;
-
--- ---------------------------------------------------------------------------
--- Av günlüğü
-
--- name: GetCatchByClientRequest :one
-SELECT id, event_id, deleted_at FROM fishing_catches
-WHERE user_id = @user_id AND client_request_id = @client_request_id;
-
--- name: CountUserCatches :one
-SELECT count(*) FROM fishing_catches
-WHERE event_id = @event_id AND user_id = @user_id AND deleted_at IS NULL;
-
--- name: CreateCatch :exec
-INSERT INTO fishing_catches (id, event_id, user_id, species, length_cm, lat, lng, visibility, client_request_id)
-VALUES (@id, @event_id, @user_id, @species, sqlc.arg(length_cm)::float8, @lat, @lng, @visibility, @client_request_id);
-
--- name: GetCatch :one
-SELECT id, user_id, species, length_cm::float8 AS length_cm, lat, lng, visibility, created_at, photo_upload_id
-FROM fishing_catches
-WHERE event_id = @event_id AND id = @id AND deleted_at IS NULL;
-
--- (created_at, id) ile sayfalanır.
--- name: ListCatches :many
-SELECT id, user_id, species, length_cm::float8 AS length_cm, lat, lng, visibility, created_at, photo_upload_id
-FROM fishing_catches
-WHERE event_id = @event_id
-  AND deleted_at IS NULL
-  AND (created_at, id) > (@after_time::timestamptz, @after_id::uuid)
-ORDER BY created_at, id
-LIMIT @page_size;
-
--- name: DeleteCatch :execrows
-UPDATE fishing_catches SET deleted_at = @deleted_at, deleted_by = @deleted_by
-WHERE event_id = @event_id AND id = @id AND deleted_at IS NULL;

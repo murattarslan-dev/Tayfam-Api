@@ -157,10 +157,11 @@ const (
 	// the same on every event of the tayfa.
 	EventAttendanceOwn
 	EventAttendanceAny
-	// EventCatchAdd adds and removes one's own fishing catches;
-	// EventCatchDeleteAny removes anyone's.
-	EventCatchAdd
-	EventCatchDeleteAny
+	// EventLogAdd adds and removes one's own entries of a log component
+	// (issue #243; the caller also checks verified attendance);
+	// EventLogDeleteAny removes anyone's.
+	EventLogAdd
+	EventLogDeleteAny
 	// Event album (issue #206, ADR-0028). EventPhotoAdd adds a photo (the
 	// caller also checks verified attendance, the window and the limits);
 	// viewing is EventView. EventPhotoDeleteOwn removes one's own photo;
@@ -319,8 +320,8 @@ var actionNames = [...]string{
 	EventCheckIn:             "event.check_in",
 	EventAttendanceOwn:       "event.attendance_own",
 	EventAttendanceAny:       "event.attendance_any",
-	EventCatchAdd:            "event.catch_add",
-	EventCatchDeleteAny:      "event.catch_delete_any",
+	EventLogAdd:              "event.log_add",
+	EventLogDeleteAny:        "event.log_delete_any",
 	EventPhotoAdd:            "event.photo_add",
 	EventPhotoDeleteOwn:      "event.photo_delete_own",
 	EventPhotoDeleteOwnEvent: "event.photo_delete_own_event",
@@ -405,13 +406,13 @@ var permissions = map[Action]Role{
 	EventEditOwn:       Member,
 	EventCancelOwn:     Member,
 	// Attendance (issue #50): one's own check-in, the organizer's
-	// correction of their own event, one's own fishing catches.
+	// correction of their own event, one's own log entries.
 	EventCheckIn:       Member,
 	EventAttendanceOwn: Member,
 	// Keşfet safety net (ADR-0033): one's own feedback and safety contact.
 	EventFeedback:      Member,
 	EventSafetyContact: Member,
-	EventCatchAdd:      Member,
+	EventLogAdd:        Member,
 	// Event album (issue #206, Notion Faz 2 §2): a verified attendee adds
 	// photos; the uploader removes their own and the organizer any photo
 	// of their own event.
@@ -479,9 +480,9 @@ var permissions = map[Action]Role{
 	EventEditAny:   Moderator,
 	EventCancelAny: Moderator,
 	// Correcting attendance on every event (v14 "Organizatör düzeltmesi")
-	// and removing anyone's fishing catch.
-	EventAttendanceAny:  Moderator,
-	EventCatchDeleteAny: Moderator,
+	// and removing anyone's log entry.
+	EventAttendanceAny: Moderator,
+	EventLogDeleteAny:  Moderator,
 	// "Yönetim her fotoğrafı" (Notion Faz 2 §2).
 	EventPhotoDeleteAny: Moderator,
 	// Components and referees of every event, like editing every event.

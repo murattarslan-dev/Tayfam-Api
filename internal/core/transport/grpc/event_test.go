@@ -43,7 +43,6 @@ type fakeEvents struct {
 	at       *event.Point
 	target   id.ID
 	attended bool
-	catch    event.CatchInput
 	photo    event.PhotoInput
 	photoID  id.ID
 }
@@ -105,19 +104,6 @@ func (f *fakeEvents) SetAttendance(_ context.Context, u, t, e, target id.ID, att
 	f.target, f.attended = target, attended
 	return f.err
 }
-func (f *fakeEvents) AddCatch(_ context.Context, u, t, e id.ID, in event.CatchInput) (event.Catch, error) {
-	f.rec(u, t, e)
-	f.catch = in
-	return event.Catch{ID: id.New(), UserID: u, Species: in.Species, LengthCm: in.LengthCm, Location: in.Location, Visibility: event.CatchTayfa}, f.err
-}
-func (f *fakeEvents) ListCatches(_ context.Context, u, t, e id.ID, _ int32, _ string) ([]event.Catch, string, error) {
-	f.rec(u, t, e)
-	return []event.Catch{{ID: id.New(), UserID: u, Species: "Levrek", LengthCm: 42.5, Visibility: event.CatchSelf}}, "", f.err
-}
-func (f *fakeEvents) RemoveCatch(_ context.Context, u, t, e, _ id.ID) error {
-	f.rec(u, t, e)
-	return f.err
-}
 func (f *fakeEvents) AddPhoto(_ context.Context, u, t, e id.ID, in event.PhotoInput) (event.Photo, error) {
 	f.rec(u, t, e)
 	f.photo = in
@@ -160,9 +146,6 @@ func callAllEvents(ctx context.Context, c corev1.EventServiceServer, tayfaID, ev
 	_, out["ListAttendees"] = c.ListAttendees(ctx, &corev1.ListAttendeesRequest{TayfaId: tayfaID, EventId: eventID})
 	_, out["CheckIn"] = c.CheckIn(ctx, &corev1.CheckInRequest{TayfaId: tayfaID, EventId: eventID, Location: &corev1.LatLng{Lat: 38.42, Lng: 27.14}})
 	_, out["SetAttendance"] = c.SetAttendance(ctx, &corev1.SetAttendanceRequest{TayfaId: tayfaID, EventId: eventID, UserId: id.New().String(), Attended: true})
-	_, out["AddFishingCatch"] = c.AddFishingCatch(ctx, &corev1.AddFishingCatchRequest{TayfaId: tayfaID, EventId: eventID, Species: "Levrek", LengthCm: 40, ClientRequestId: id.New().String()})
-	_, out["ListFishingCatches"] = c.ListFishingCatches(ctx, &corev1.ListFishingCatchesRequest{TayfaId: tayfaID, EventId: eventID})
-	_, out["RemoveFishingCatch"] = c.RemoveFishingCatch(ctx, &corev1.RemoveFishingCatchRequest{TayfaId: tayfaID, EventId: eventID, CatchId: id.New().String()})
 	// Series methods take the same ID as series_id.
 	_, out["GetEventSeries"] = c.GetEventSeries(ctx, &corev1.GetEventSeriesRequest{TayfaId: tayfaID, SeriesId: eventID})
 	_, out["EndEventSeries"] = c.EndEventSeries(ctx, &corev1.EndEventSeriesRequest{TayfaId: tayfaID, SeriesId: eventID})
@@ -251,9 +234,10 @@ func TestEventServerValidatesRequest(t *testing.T) {
 		"yürüyüş ayrıntısı": {func(r *corev1.CreateEventRequest) {
 			r.Details = &corev1.CreateEventRequest_Hike{Hike: &corev1.HikeDetails{Difficulty: 3}}
 		}, "details"},
-		"bozuk görünürlük": {func(r *corev1.CreateEventRequest) {
-			r.Details = &corev1.CreateEventRequest_Fishing{Fishing: &corev1.FishingDetails{SpotVisibility: 9}}
-		}, "spot_visibility"},
+		// No type has Faz 1 details any more (issue #243).
+		"balık ayrıntısı": {func(r *corev1.CreateEventRequest) {
+			r.Details = &corev1.CreateEventRequest_Fishing{Fishing: &corev1.FishingDetails{SpotVisibility: corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS}}
+		}, "details"},
 	} {
 		r := createReq(good)
 		tc.edit(r)
@@ -341,7 +325,7 @@ func TestEventServerConverts(t *testing.T) {
 	if _, err := srv.CreateEvent(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	if f.in.Type != event.TypeConvoy || f.in.Details != (event.Details{}) ||
+	if f.in.Type != event.TypeConvoy ||
 		f.in.Location.MeetingPoint == nil || !f.in.StartsAt.Equal(r.GetStartTime().AsTime()) {
 		t.Fatalf("girdi = %+v", f.in)
 	}
@@ -369,27 +353,6 @@ func TestEventServerConverts(t *testing.T) {
 	if _, err := srv.AssignCampItem(ctx, &corev1.AssignCampItemRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String(), ItemId: id.New().String()}); status.Code(err) != codes.Unimplemented {
 		t.Fatalf("kaldırılan AssignCampItem: %v", err)
 	}
-	for _, tc := range []struct {
-		d     any
-		check func(event.Details) bool
-	}{
-		{&corev1.CreateEventRequest_Fishing{Fishing: &corev1.FishingDetails{SpotVisibility: corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS}},
-			func(d event.Details) bool {
-				return d.Fishing != nil && d.Fishing.SpotVisibility == event.SpotParticipants
-			}},
-	} {
-		r := createReq(view.TayfaID.String())
-		if d, ok := tc.d.(*corev1.CreateEventRequest_Fishing); ok {
-			r.Details = d
-		}
-		if _, err := srv.CreateEvent(ctx, r); err != nil {
-			t.Fatal(err)
-		}
-		if !tc.check(f.in.Details) {
-			t.Errorf("detay = %+v", f.in.Details)
-		}
-	}
-
 	// The type is a catalog key and the type's data its field values
 	// (issue #237); the key wins over the Faz 1 enum.
 	r = createReq(view.TayfaID.String())

@@ -48,7 +48,7 @@ var (
 		"user": corev1.ReportTargetType_REPORT_TARGET_TYPE_USER, "tayfa": corev1.ReportTargetType_REPORT_TARGET_TYPE_TAYFA,
 		"announcement": corev1.ReportTargetType_REPORT_TARGET_TYPE_ANNOUNCEMENT, "event": corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT,
 		"question": corev1.ReportTargetType_REPORT_TARGET_TYPE_QUESTION, "answer": corev1.ReportTargetType_REPORT_TARGET_TYPE_ANSWER,
-		"poll": corev1.ReportTargetType_REPORT_TARGET_TYPE_POLL, "fishing_catch": corev1.ReportTargetType_REPORT_TARGET_TYPE_FISHING_CATCH,
+		"poll": corev1.ReportTargetType_REPORT_TARGET_TYPE_POLL, "log_entry": corev1.ReportTargetType_REPORT_TARGET_TYPE_FISHING_CATCH,
 		"event_photo":     corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT_PHOTO,
 		"channel_message": corev1.ReportTargetType_REPORT_TARGET_TYPE_CHANNEL_MESSAGE,
 		"dm_message":      corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE,

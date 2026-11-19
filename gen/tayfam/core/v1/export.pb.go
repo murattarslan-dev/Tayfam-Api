@@ -51,7 +51,8 @@ const (
 	// The caller's own votes, anonymous polls included (v14: the only place
 	// an anonymous vote ever leaves the database).
 	CoreExportSection_CORE_EXPORT_SECTION_POLL_VOTES CoreExportSection = 12
-	// Fishing catches, the shared catch place included.
+	// Every log component entry (issue #243; fishing catches among them),
+	// the location included. The name is from Faz 1.
 	CoreExportSection_CORE_EXPORT_SECTION_FISHING_CATCHES CoreExportSection = 13
 	CoreExportSection_CORE_EXPORT_SECTION_FRIENDSHIPS     CoreExportSection = 14
 	// Users the caller blocked.

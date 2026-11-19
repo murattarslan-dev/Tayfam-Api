@@ -94,32 +94,6 @@ func (q *Queries) AdminDeleteAnswer(ctx context.Context, arg AdminDeleteAnswerPa
 	return result.RowsAffected(), nil
 }
 
-const adminDeleteCatch = `-- name: AdminDeleteCatch :execrows
-UPDATE fishing_catches c SET deleted_at = $1, deleted_by = $2
-FROM events e
-WHERE c.id = $3 AND e.id = c.event_id AND e.tayfa_id = $4 AND c.deleted_at IS NULL
-`
-
-type AdminDeleteCatchParams struct {
-	At      pgtype.Timestamptz
-	By      pgtype.UUID
-	ID      pgtype.UUID
-	TayfaID pgtype.UUID
-}
-
-func (q *Queries) AdminDeleteCatch(ctx context.Context, arg AdminDeleteCatchParams) (int64, error) {
-	result, err := q.db.Exec(ctx, adminDeleteCatch,
-		arg.At,
-		arg.By,
-		arg.ID,
-		arg.TayfaID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const adminDeleteEvent = `-- name: AdminDeleteEvent :execrows
 UPDATE events SET deleted_at = $1, deleted_by = $2 WHERE id = $3 AND tayfa_id = $4 AND deleted_at IS NULL
 `
@@ -159,6 +133,32 @@ type AdminDeleteEventPhotoParams struct {
 
 func (q *Queries) AdminDeleteEventPhoto(ctx context.Context, arg AdminDeleteEventPhotoParams) (int64, error) {
 	result, err := q.db.Exec(ctx, adminDeleteEventPhoto,
+		arg.At,
+		arg.By,
+		arg.ID,
+		arg.TayfaID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const adminDeleteLogEntry = `-- name: AdminDeleteLogEntry :execrows
+UPDATE event_log_entries l SET deleted_at = $1, deleted_by = $2
+FROM events e
+WHERE l.id = $3 AND e.id = l.event_id AND e.tayfa_id = $4 AND l.deleted_at IS NULL
+`
+
+type AdminDeleteLogEntryParams struct {
+	At      pgtype.Timestamptz
+	By      pgtype.UUID
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+func (q *Queries) AdminDeleteLogEntry(ctx context.Context, arg AdminDeleteLogEntryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adminDeleteLogEntry,
 		arg.At,
 		arg.By,
 		arg.ID,
@@ -298,36 +298,6 @@ func (q *Queries) AdminGetAnswer(ctx context.Context, arg AdminGetAnswerParams) 
 	return i, err
 }
 
-const adminGetCatch = `-- name: AdminGetCatch :one
-SELECT c.user_id, c.species, c.created_at, c.deleted_at
-FROM fishing_catches c JOIN events e ON e.id = c.event_id
-WHERE c.id = $1 AND e.tayfa_id = $2
-`
-
-type AdminGetCatchParams struct {
-	ID      pgtype.UUID
-	TayfaID pgtype.UUID
-}
-
-type AdminGetCatchRow struct {
-	UserID    pgtype.UUID
-	Species   string
-	CreatedAt pgtype.Timestamptz
-	DeletedAt pgtype.Timestamptz
-}
-
-func (q *Queries) AdminGetCatch(ctx context.Context, arg AdminGetCatchParams) (AdminGetCatchRow, error) {
-	row := q.db.QueryRow(ctx, adminGetCatch, arg.ID, arg.TayfaID)
-	var i AdminGetCatchRow
-	err := row.Scan(
-		&i.UserID,
-		&i.Species,
-		&i.CreatedAt,
-		&i.DeletedAt,
-	)
-	return i, err
-}
-
 const adminGetEvent = `-- name: AdminGetEvent :one
 SELECT created_by, title, description, created_at, deleted_at FROM events WHERE id = $1 AND tayfa_id = $2
 `
@@ -386,6 +356,40 @@ func (q *Queries) AdminGetEventPhoto(ctx context.Context, arg AdminGetEventPhoto
 		&i.CreatedAt,
 		&i.DeletedAt,
 		&i.UploadID,
+	)
+	return i, err
+}
+
+const adminGetLogEntry = `-- name: AdminGetLogEntry :one
+SELECT l.user_id, l.component_key, l.field_values, l.created_at, l.deleted_at
+FROM event_log_entries l JOIN events e ON e.id = l.event_id
+WHERE l.id = $1 AND e.tayfa_id = $2
+`
+
+type AdminGetLogEntryParams struct {
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+type AdminGetLogEntryRow struct {
+	UserID       pgtype.UUID
+	ComponentKey string
+	FieldValues  []byte
+	CreatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+}
+
+// Günlük kaydı (issue #243): panel kaydın değerlerini gösterir; konumu
+// göstermez.
+func (q *Queries) AdminGetLogEntry(ctx context.Context, arg AdminGetLogEntryParams) (AdminGetLogEntryRow, error) {
+	row := q.db.QueryRow(ctx, adminGetLogEntry, arg.ID, arg.TayfaID)
+	var i AdminGetLogEntryRow
+	err := row.Scan(
+		&i.UserID,
+		&i.ComponentKey,
+		&i.FieldValues,
+		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
