@@ -279,6 +279,18 @@ const (
 	ErrorReason_ERROR_REASON_SAFETY_CONTACT_NOT_FOUND ErrorReason = 131
 	// NOT_FOUND. The catalog has no event type with this key and version.
 	ErrorReason_ERROR_REASON_CATALOG_TYPE_NOT_FOUND ErrorReason = 132
+	// NOT_FOUND. The event's type version has no component with this key, or
+	// the component is of another kind than the method.
+	ErrorReason_ERROR_REASON_COMPONENT_NOT_FOUND ErrorReason = 133
+	// FAILED_PRECONDITION. The component is optional and turned off for this
+	// event. Reads are refused too.
+	ErrorReason_ERROR_REASON_COMPONENT_DISABLED ErrorReason = 134
+	// FAILED_PRECONDITION. The organizer's selections (optional components,
+	// chosen parameters) cannot change once the event has started.
+	ErrorReason_ERROR_REASON_COMPONENT_LOCKED ErrorReason = 135
+	// FAILED_PRECONDITION. Component data cannot change from seven days after
+	// the event's end.
+	ErrorReason_ERROR_REASON_COMPONENT_FROZEN ErrorReason = 136
 )
 
 // Enum value maps for ErrorReason.
@@ -365,6 +377,10 @@ var (
 		129: "ERROR_REASON_SAFETY_CONTACT_CLOSED",
 		131: "ERROR_REASON_SAFETY_CONTACT_NOT_FOUND",
 		132: "ERROR_REASON_CATALOG_TYPE_NOT_FOUND",
+		133: "ERROR_REASON_COMPONENT_NOT_FOUND",
+		134: "ERROR_REASON_COMPONENT_DISABLED",
+		135: "ERROR_REASON_COMPONENT_LOCKED",
+		136: "ERROR_REASON_COMPONENT_FROZEN",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                 0,
@@ -448,6 +464,10 @@ var (
 		"ERROR_REASON_SAFETY_CONTACT_CLOSED":       129,
 		"ERROR_REASON_SAFETY_CONTACT_NOT_FOUND":    131,
 		"ERROR_REASON_CATALOG_TYPE_NOT_FOUND":      132,
+		"ERROR_REASON_COMPONENT_NOT_FOUND":         133,
+		"ERROR_REASON_COMPONENT_DISABLED":          134,
+		"ERROR_REASON_COMPONENT_LOCKED":            135,
+		"ERROR_REASON_COMPONENT_FROZEN":            136,
 	}
 )
 
@@ -482,7 +502,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xd3\x16\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xe8\x17\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -565,7 +585,11 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\x1cERROR_REASON_FEEDBACK_CLOSED\x10\x80\x01\x12'\n" +
 	"\"ERROR_REASON_SAFETY_CONTACT_CLOSED\x10\x81\x01\x12*\n" +
 	"%ERROR_REASON_SAFETY_CONTACT_NOT_FOUND\x10\x83\x01\x12(\n" +
-	"#ERROR_REASON_CATALOG_TYPE_NOT_FOUND\x10\x84\x01B\xbd\x01\n" +
+	"#ERROR_REASON_CATALOG_TYPE_NOT_FOUND\x10\x84\x01\x12%\n" +
+	" ERROR_REASON_COMPONENT_NOT_FOUND\x10\x85\x01\x12$\n" +
+	"\x1fERROR_REASON_COMPONENT_DISABLED\x10\x86\x01\x12\"\n" +
+	"\x1dERROR_REASON_COMPONENT_LOCKED\x10\x87\x01\x12\"\n" +
+	"\x1dERROR_REASON_COMPONENT_FROZEN\x10\x88\x01B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

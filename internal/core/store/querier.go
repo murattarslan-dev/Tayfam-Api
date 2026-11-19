@@ -157,6 +157,8 @@ type Querier interface {
 	ConfirmChatAttachment(ctx context.Context, arg ConfirmChatAttachmentParams) (int64, error)
 	// "Bu ekiple tayfa kur": tür, ad ve ayarlar; hareketsizlik saati sıfırlanır.
 	ConvertInstantTayfa(ctx context.Context, arg ConvertInstantTayfaParams) (int64, error)
+	// Seri örneği şablonun seçimlerini alır.
+	CopyEventComponents(ctx context.Context, arg CopyEventComponentsParams) error
 	// Seri örneği şablonun alan değerlerini alır.
 	CopyEventFieldValues(ctx context.Context, arg CopyEventFieldValuesParams) error
 	CountActiveMembers(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
@@ -169,6 +171,7 @@ type Querier interface {
 	// Kişinin ve albümün silinmemiş fotoğrafları (sınırlar). Çağıran etkinlik
 	// satırını önce kilitler.
 	CountEventPhotos(ctx context.Context, arg CountEventPhotosParams) (CountEventPhotosRow, error)
+	CountEventReferees(ctx context.Context, eventID pgtype.UUID) (int64, error)
 	CountGoing(ctx context.Context, eventID pgtype.UUID) (int64, error)
 	// Kullanıcının son @since'ten beri açtığı anlık tayfalar: iptal edilen,
 	// silinen ve dönüştürülenler de sayılır (günde 5; ADR-0032 §5).
@@ -216,6 +219,8 @@ type Querier interface {
 	// katmanındadır (authz).
 	CreateEvent(ctx context.Context, arg CreateEventParams) error
 	CreateEventPhoto(ctx context.Context, arg CreateEventPhotoParams) error
+	// Aynı atama varsa hiçbir şey yapmaz; etkilenen satır 0 olur.
+	CreateEventReferee(ctx context.Context, arg CreateEventRefereeParams) (int64, error)
 	// Tekrarlayan etkinlik serileri (issue #51). Kullanıcı istekleri her sorguyu
 	// tayfa_id ile çalıştırır (IDOR); üretim işi seriyi kendi listesinden alır.
 	CreateEventSeries(ctx context.Context, arg CreateEventSeriesParams) error
@@ -277,6 +282,10 @@ type Querier interface {
 	DeleteConvoyVehicle(ctx context.Context, arg DeleteConvoyVehicleParams) (int64, error)
 	DeleteEventFieldValues(ctx context.Context, eventID pgtype.UUID) error
 	DeleteEventPhoto(ctx context.Context, arg DeleteEventPhotoParams) (int64, error)
+	DeleteEventReferee(ctx context.Context, arg DeleteEventRefereeParams) (int64, error)
+	// Bileşen bir kapsamı (masa, maç) silerken o kapsamın hakem atamalarını da
+	// siler.
+	DeleteEventScopeReferees(ctx context.Context, arg DeleteEventScopeRefereesParams) error
 	// Aynı transaction'da, yazılan puanlardan profillemesi kapalı olanlarınki
 	// ve engelli çiftler silinir (hesaplama sırasında değişen ayar ve engel).
 	DeleteExcludedFriendScores(ctx context.Context) (int64, error)
@@ -337,6 +346,8 @@ type Querier interface {
 	// Albüm fotoğrafları kişiseldir; kişiyle birlikte silinir, dosyaları
 	// silme kuyruğuna girer (issue #206).
 	DeleteUserEventPhotos(ctx context.Context, userID pgtype.UUID) error
+	// Hesap silme: kişinin hakem atamaları silinir.
+	DeleteUserEventReferees(ctx context.Context, userID pgtype.UUID) error
 	// Profilleme kapatma ve hesap silme: kişinin bütün puanları.
 	DeleteUserFriendScores(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserFriendSuggestions(ctx context.Context, userID pgtype.UUID) error
@@ -446,6 +457,7 @@ type Querier interface {
 	// Verilen kullanıcılardan hâlâ etkin üye olanlar (tek alıcılı bildirimler
 	// ve arka plan işlerinin seçtiği alıcılar).
 	FilterNotifyActive(ctx context.Context, arg FilterNotifyActiveParams) ([]pgtype.UUID, error)
+	FindEventReferee(ctx context.Context, arg FindEventRefereeParams) (FindEventRefereeRow, error)
 	// Alıcının bir sayfadaki istek bildirimleri için: isteyenlerle arasındaki
 	// arkadaşlık satırı ve kayıtlı sonuç.
 	FriendRequestStates(ctx context.Context, arg FriendRequestStatesParams) ([]FriendRequestStatesRow, error)
@@ -485,6 +497,7 @@ type Querier interface {
 	// Tekrar gönderilen oluşturma isteği aynı etkinliği döndürür.
 	GetEventByClientRequest(ctx context.Context, arg GetEventByClientRequestParams) (GetEventByClientRequestRow, error)
 	GetEventCamp(ctx context.Context, eventID pgtype.UUID) (GetEventCampRow, error)
+	GetEventComponent(ctx context.Context, arg GetEventComponentParams) (GetEventComponentRow, error)
 	GetEventConvoy(ctx context.Context, eventID pgtype.UUID) ([]byte, error)
 	// ---------------------------------------------------------------------------
 	// "Her şey yolunda mıydı?"
@@ -494,6 +507,9 @@ type Querier interface {
 	// ve bekleme sırası iki eşzamanlı istekte birden aşılamaz.
 	GetEventForUpdate(ctx context.Context, arg GetEventForUpdateParams) (GetEventForUpdateRow, error)
 	GetEventHike(ctx context.Context, eventID pgtype.UUID) (GetEventHikeRow, error)
+	// Kişinin etkinlikteki cevabı ve doğrulanmış katılımı (bileşenlerin
+	// "katılımcı" ve "check-in'i doğrulanmış katılımcı" kuralları).
+	GetEventParticipation(ctx context.Context, arg GetEventParticipationParams) (GetEventParticipationRow, error)
 	GetEventPhoto(ctx context.Context, arg GetEventPhotoParams) (GetEventPhotoRow, error)
 	// Etkinlik fotoğraf albümü (issue #206, ADR-0028; internal/core/app/event).
 	// Yetki, pencere ve sınırlar uygulama katmanında; trigger'lar ikinci hat
@@ -633,6 +649,10 @@ type Querier interface {
 	InvitationStates(ctx context.Context, arg InvitationStatesParams) ([]InvitationStatesRow, error)
 	IsActiveMember(ctx context.Context, arg IsActiveMemberParams) (bool, error)
 	IsBlockedEitherWay(ctx context.Context, arg IsBlockedEitherWayParams) (bool, error)
+	// Kişi bu bileşende (ve verilmişse bu kapsamda) hakem mi: etkinliğin
+	// tamamına, bileşenin tamamına ya da tam bu kapsama yapılmış bir atama.
+	// Kapsam verilmemişse yalnızca kapsamsız atamalar sayılır.
+	IsEventReferee(ctx context.Context, arg IsEventRefereeParams) (bool, error)
 	// Kapalı ya da kaydı olmayan modül kapalı sayılır (varsayılan "hayır").
 	IsTayfaModuleEnabled(ctx context.Context, arg IsTayfaModuleEnabledParams) (bool, error)
 	// Aktif türlerin güncel tanımları.
@@ -688,6 +708,12 @@ type Querier interface {
 	// Etkinlik kanalının kitlesi (gidecekler ve organizatör; kanalı açan Go'da
 	// eklenir), kullanıcı kimliğine göre sıralı, imleçten sonrası.
 	ListEventAudience(ctx context.Context, arg ListEventAudienceParams) ([]pgtype.UUID, error)
+	// Bileşen çerçevesi (issue #238; ADR-0025 §4–§6, ADR-0037 §2): etkinliğin
+	// bileşen seçimleri ve hakemleri. Etkinlik her zaman önce tayfa kapsamında
+	// yüklenir (GetEvent / GetEventForUpdate); buradaki sorgular o etkinliğin
+	// kimliğiyle çalışır (IDOR). Yetki app katmanındadır
+	// (internal/core/app/component).
+	ListEventComponents(ctx context.Context, eventID pgtype.UUID) ([]ListEventComponentsRow, error)
 	// ---------------------------------------------------------------------------
 	// Türe özel alan değerleri (issue #237, ADR-0025 §3). Değerler app
 	// katmanında etkinliğin tür sürümüne göre doğrulanmış halleriyle yazılır;
@@ -695,6 +721,9 @@ type Querier interface {
 	ListEventFieldValues(ctx context.Context, eventID pgtype.UUID) ([]ListEventFieldValuesRow, error)
 	// (created_at, id) ile sayfalanır, eskiden yeniye.
 	ListEventPhotos(ctx context.Context, arg ListEventPhotosParams) ([]ListEventPhotosRow, error)
+	// ---------------------------------------------------------------------------
+	// Hakemler
+	ListEventReferees(ctx context.Context, eventID pgtype.UUID) ([]ListEventRefereesRow, error)
 	// Liste görünümünde mera gizliliği için.
 	ListFishingVisibility(ctx context.Context, eventIds []pgtype.UUID) ([]ListFishingVisibilityRow, error)
 	// Kişinin arkadaşları ve istekleri. Silinmiş hesapların satırı hesap
@@ -1015,6 +1044,9 @@ type Querier interface {
 	// core'a özgü tayfa_id kolonu aynı transaction'da hemen ardından doldurulur.
 	SetDomainEventTayfa(ctx context.Context, arg SetDomainEventTayfaParams) (int64, error)
 	SetEventCamp(ctx context.Context, arg SetEventCampParams) error
+	// Seçim app katmanında tür sürümüne göre doğrulanmış haliyle yazılır;
+	// trigger (event_components_guard) aynı kuralı ayrıca denetler.
+	SetEventComponent(ctx context.Context, arg SetEventComponentParams) error
 	// ---------------------------------------------------------------------------
 	// Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
 	// key yanlış türü reddeder.
