@@ -309,6 +309,15 @@ const (
 	ErrorReason_ERROR_REASON_VOCABULARY_MERGED ErrorReason = 2441
 	// FAILED_PRECONDITION. The value is not merged; there is nothing to undo.
 	ErrorReason_ERROR_REASON_VOCABULARY_NOT_MERGED ErrorReason = 2442
+	// FAILED_PRECONDITION. A measurement is entered once the event has
+	// started.
+	ErrorReason_ERROR_REASON_MEASUREMENT_NOT_STARTED ErrorReason = 2450
+	// FAILED_PRECONDITION. The person is not a participant of the event: they
+	// did not answer "going" and their attendance was not verified.
+	ErrorReason_ERROR_REASON_MEASUREMENT_NOT_PARTICIPANT ErrorReason = 2451
+	// FAILED_PRECONDITION. The measure is of the other scope: a total measure
+	// has no per-person values, a personal one no total.
+	ErrorReason_ERROR_REASON_MEASUREMENT_SCOPE ErrorReason = 2452
 )
 
 // Enum value maps for ErrorReason.
@@ -405,6 +414,9 @@ var (
 		2440: "ERROR_REASON_VOCABULARY_NOT_FOUND",
 		2441: "ERROR_REASON_VOCABULARY_MERGED",
 		2442: "ERROR_REASON_VOCABULARY_NOT_MERGED",
+		2450: "ERROR_REASON_MEASUREMENT_NOT_STARTED",
+		2451: "ERROR_REASON_MEASUREMENT_NOT_PARTICIPANT",
+		2452: "ERROR_REASON_MEASUREMENT_SCOPE",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                 0,
@@ -498,6 +510,9 @@ var (
 		"ERROR_REASON_VOCABULARY_NOT_FOUND":        2440,
 		"ERROR_REASON_VOCABULARY_MERGED":           2441,
 		"ERROR_REASON_VOCABULARY_NOT_MERGED":       2442,
+		"ERROR_REASON_MEASUREMENT_NOT_STARTED":     2450,
+		"ERROR_REASON_MEASUREMENT_NOT_PARTICIPANT": 2451,
+		"ERROR_REASON_MEASUREMENT_SCOPE":           2452,
 	}
 )
 
@@ -532,7 +547,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xcc\x19\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xcb\x1a\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -625,7 +640,10 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	" ERROR_REASON_SEAT_REQUEST_DRIVER\x10\xe2\x12\x12&\n" +
 	"!ERROR_REASON_VOCABULARY_NOT_FOUND\x10\x88\x13\x12#\n" +
 	"\x1eERROR_REASON_VOCABULARY_MERGED\x10\x89\x13\x12'\n" +
-	"\"ERROR_REASON_VOCABULARY_NOT_MERGED\x10\x8a\x13B\xbd\x01\n" +
+	"\"ERROR_REASON_VOCABULARY_NOT_MERGED\x10\x8a\x13\x12)\n" +
+	"$ERROR_REASON_MEASUREMENT_NOT_STARTED\x10\x92\x13\x12-\n" +
+	"(ERROR_REASON_MEASUREMENT_NOT_PARTICIPANT\x10\x93\x13\x12#\n" +
+	"\x1eERROR_REASON_MEASUREMENT_SCOPE\x10\x94\x13B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

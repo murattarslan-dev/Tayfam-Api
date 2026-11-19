@@ -350,4 +350,17 @@ enum ErrorReason {
   ERROR_REASON_VOCABULARY_MERGED = 2441;
   // FAILED_PRECONDITION. The value is not merged; there is nothing to undo.
   ERROR_REASON_VOCABULARY_NOT_MERGED = 2442;
+
+  // Measure component (MeasureComponentService, component_measure.proto;
+  // issue #245: 2450–2459).
+
+  // FAILED_PRECONDITION. A measurement is entered once the event has
+  // started.
+  ERROR_REASON_MEASUREMENT_NOT_STARTED = 2450;
+  // FAILED_PRECONDITION. The person is not a participant of the event: they
+  // did not answer "going" and their attendance was not verified.
+  ERROR_REASON_MEASUREMENT_NOT_PARTICIPANT = 2451;
+  // FAILED_PRECONDITION. The measure is of the other scope: a total measure
+  // has no per-person values, a personal one no total.
+  ERROR_REASON_MEASUREMENT_SCOPE = 2452;
 }

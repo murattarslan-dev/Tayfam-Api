@@ -2875,6 +2875,155 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Etkinlik bileşenleri: ölçüm (`measure`; core MeasureComponentService, #245, ADR-0025 §4, §5, ADR-0037 §2, §3) ---
+  # Birimli bir değer: etkinliğin tamamı için (`scope: total`, ör. yürüyüşün
+  # mesafesi) ya da katılımcı başına (`scope: personal`, ör. gol, okunan
+  # sayfa). Birim, sınırlar, ondalık basamak ve değeri kimin girdiği
+  # (`entered_by`) tür tanımındaki bileşenin parametreleridir. Toplamı
+  # organizatör, moderatör ve yönetici girer; kişisel değeri `entered_by:
+  # self` ise katılımı doğrulanmış katılımcı yalnızca kendi adına,
+  # `entered_by: organizer` ise organizatör, moderatör, yönetici ve
+  # organizatörün atadığı hakemler katılımcı başına girer. Değer etkinlik
+  # başladıktan (`measurement-not-started`) bitişten 7 gün sonrasına kadar
+  # (`component-frozen`) yazılır; tanımdaki ondalık basamağa yuvarlanır,
+  # sınır dışı değer `invalid-request` alır. Diğer kapsamın ucu
+  # `measurement-scope` alır. Değerler log'a yazılmaz. Yazan her uç ölçümü
+  # güncel haliyle döner.
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/measure:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: getEventMeasure
+      summary: Etkinliğin ölçümü
+      description: |
+        Her etkin üyeye açıktır (susturulmuş üye de okur); iptal edilmiş ve
+        donmuş etkinlikte de okunur. Hassas ölçümde (`sensitive`) herkes
+        yalnızca kendi değerini görür; başkası adına değer girebilenler
+        hepsini görür. Bileşen uçlarının ortak kuralları geçerlidir
+        (`component-not-found`, `component-disabled`).
+      responses:
+        "200":
+          description: Ölçüm
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventMeasure" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/measure/total:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    put:
+      operationId: setEventMeasureTotal
+      summary: Toplam ölçümü yazar (organizatör, moderatör, yönetici)
+      description: |
+        Önerilen değeri (`suggested`) onaylamak da düzeltmek de bu uçtur;
+        onaylanmamış öneri istatistiğe girmez. Aynı değeri yeniden yazmak
+        bir şey değiştirmez. Kişisel ölçümde `measurement-scope`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventMeasureValueRequest" }
+      responses:
+        "200":
+          description: Ölçüm, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventMeasure" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: removeEventMeasureTotal
+      summary: Toplam ölçümü kaldırır (organizatör, moderatör, yönetici)
+      description: |
+        Olmayan değeri kaldırmak hata değildir. Kişisel ölçümde
+        `measurement-scope`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Ölçüm, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventMeasure" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/measure/entries/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/UserID"
+    put:
+      operationId: setEventMeasureEntry
+      summary: Bir katılımcının kişisel ölçümünü yazar
+      description: |
+        `entered_by: self` ölçümde yalnızca kendi kimliğinizle ve katılımınız
+        doğrulanmışsa (`not-attended`); başkasının değeri `permission-denied`.
+        `entered_by: organizer` ölçümde organizatör, moderatör, yönetici ve
+        atanmış hakem; `going` cevabı vermemiş ve katılımı doğrulanmamış
+        kişi `measurement-not-participant`. Aynı değeri yeniden yazmak bir
+        şey değiştirmez. Toplam ölçümde `measurement-scope`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventMeasureValueRequest" }
+      responses:
+        "200":
+          description: Ölçüm, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventMeasure" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: removeEventMeasureEntry
+      summary: Bir katılımcının kişisel ölçümünü kaldırır
+      description: |
+        Değeri yazabilen kaldırır (katılım denetimi olmadan). Olmayan değeri
+        kaldırmak hata değildir. Toplam ölçümde `measurement-scope`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Ölçüm, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventMeasure" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   # --- Tayfa sözlüğü (core TayfaVocabularyService, #244, ADR-0037 §4) ---
   # Tayfanın kendi değer listesi: bir ad alanındaki (`fish_species`, `book`
   # …) değerler. Tanımda `vocabulary` olan metin alanı (`CatalogVocabulary`)
@@ -6487,6 +6636,10 @@ components:
         - vocabulary-not-found
         - vocabulary-merged
         - vocabulary-not-merged
+        # core: ölçüm bileşeni (#245, ADR-0025 §4, §5)
+        - measurement-not-started
+        - measurement-not-participant
+        - measurement-scope
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -7761,6 +7914,55 @@ components:
           description: |
             Tayfa sözlüğüne bağlı alanlar için var olan değerler (en fazla
             8); aynı alan `values`'ta da verilmez.
+    EventMeasure:
+      type: object
+      required: [unit, scope, entered_by, min, max, decimals, entries, caller_can_edit]
+      description: Bir etkinliğin bir ölçüm bileşeni, isteği yapanın gördüğü haliyle (#245).
+      properties:
+        unit: { type: string, description: "Tanımdaki birim (kapalı liste, `CatalogComponent`); adı istemcinin çeviri dosyasında." }
+        scope:
+          type: string
+          enum: [total, personal]
+          description: "`total` etkinlik başına tek değer, `personal` katılımcı başına."
+        entered_by:
+          type: string
+          enum: [self, organizer]
+          description: "`self` katılımcı kendi adına girer; `organizer` organizatör ve atanmış hakem girer."
+        min: { type: number, description: Değerin alt sınırı (tanımda yoksa 0). }
+        max: { type: number, description: Değerin üst sınırı (tanımda yoksa 1000000000). }
+        decimals: { type: integer, minimum: 0, maximum: 3, description: Değerin yuvarlandığı ondalık basamak. }
+        total: { type: number, description: Toplam ölçümün değeri; yoksa ya da kişisel ölçümde yoktur. }
+        total_updated_at: { type: string, format: date-time, description: Toplamın son yazıldığı an; değer yoksa yoktur. }
+        entries:
+          type: array
+          description: Kişisel ölçümün görebildiğiniz değerleri, en eski değişiklik önce; toplam ölçümde boş.
+          items: { $ref: "#/components/schemas/EventMeasureEntry" }
+        suggested:
+          type: number
+          description: |
+            Önerilen değer (`prefill_from`): etkinlik bittikten sonra, toplam
+            ölçümün değeri yokken etkinliğin ilgili alanının değeri. Biri
+            yazana kadar ölçüm sayılmaz.
+        caller_can_edit:
+          type: boolean
+          description: Şu an yazabilirsiniz (toplamı, kendi değerinizi ya da herkesinkini; ölçümün kuralına göre). Etkinlik başlamış, iptal değil, donmamış, tayfa salt okunur değil.
+    EventMeasureEntry:
+      type: object
+      required: [user_id, value]
+      properties:
+        user_id: { type: string, format: uuid, description: Değerin ait olduğu katılımcı. }
+        value: { type: number }
+        updated_at: { type: string, format: date-time }
+    EventMeasureValueRequest:
+      type: object
+      required: [value]
+      additionalProperties: false
+      properties:
+        value:
+          type: number
+          minimum: -1000000000
+          maximum: 1000000000
+          description: Tanımdaki sınırlar içinde; ondalık basamağa yuvarlanır.
     VocabularyIds:
       type: object
       description: Alan anahtarı → tayfa sözlüğündeki değerin kimliği (#244).

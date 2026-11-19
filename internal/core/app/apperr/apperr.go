@@ -116,6 +116,18 @@ var (
 	ErrVocabularyNotMerged = errors.New("sözlük değeri birleştirilmemiş")
 )
 
+// Measure component errors (issue #245; ADR-0025 §4, §5).
+var (
+	// ErrMeasurementNotStarted: a measurement before the event's start.
+	ErrMeasurementNotStarted = errors.New("etkinlik başlamadan ölçüm girilmez")
+	// ErrMeasurementNotParticipant: a value for someone who is not a
+	// participant of the event.
+	ErrMeasurementNotParticipant = errors.New("kişi etkinliğin katılımcısı değil")
+	// ErrMeasurementScope: a total for a personal measure or a person's
+	// value for a total one.
+	ErrMeasurementScope = errors.New("ölçümün kapsamı farklı")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (

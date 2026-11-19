@@ -76,6 +76,7 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 		registerTayfaVocabulary,
 
 		// measure (#245)
+		registerMeasureComponent,
 
 		// goal (#246)
 

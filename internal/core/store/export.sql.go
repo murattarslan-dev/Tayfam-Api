@@ -626,6 +626,52 @@ func (q *Queries) ExportLogEntries(ctx context.Context, arg ExportLogEntriesPara
 	return items, nil
 }
 
+const exportMeasurements = `-- name: ExportMeasurements :many
+SELECT m.id AS k, jsonb_build_object(
+  'event_id', m.event_id, 'component_key', m.component_key, 'value', m.value,
+  'entered_by_self', m.entered_by IS NOT DISTINCT FROM m.user_id,
+  'created_at', m.created_at, 'updated_at', m.updated_at
+) AS data
+FROM event_measurements m
+WHERE m.user_id = $1 AND m.id > $2
+ORDER BY m.id
+LIMIT $3
+`
+
+type ExportMeasurementsParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportMeasurementsRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Kişisel ölçüm değerleri (`measure` bileşeni, issue #245): kendi
+// girdikleriniz ve organizatörün ya da hakemin sizin adınıza girdikleri. Kimin
+// girdiği yalnızca "kendim mi" olarak yer alır; toplam ölçümler etkinliğindir.
+func (q *Queries) ExportMeasurements(ctx context.Context, arg ExportMeasurementsParams) ([]ExportMeasurementsRow, error) {
+	rows, err := q.db.Query(ctx, exportMeasurements, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportMeasurementsRow{}
+	for rows.Next() {
+		var i ExportMeasurementsRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportMemberships = `-- name: ExportMemberships :many
 
 SELECT m.tayfa_id AS k, jsonb_build_object(

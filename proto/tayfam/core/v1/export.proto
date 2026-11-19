@@ -77,6 +77,10 @@ enum CoreExportSection {
   // vehicles component, issue #240). The vehicle's owner and plate are the
   // owner's data and are not exported.
   CORE_EXPORT_SECTION_VEHICLE_SEAT_REQUESTS = 24;
+  // The caller's personal measurements (the measure component, issue #245):
+  // their own entries and those an organizer or referee entered for them.
+  // Total measurements belong to the event and are not exported.
+  CORE_EXPORT_SECTION_MEASUREMENTS = 25;
 }
 
 message ExportMyDataRequest {}

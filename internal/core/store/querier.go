@@ -133,6 +133,7 @@ type Querier interface {
 	ClearInvitationOutcome(ctx context.Context, arg ClearInvitationOutcomeParams) error
 	ClearInviteCreator(ctx context.Context, userID pgtype.UUID) error
 	ClearLogEntryDeleter(ctx context.Context, userID pgtype.UUID) error
+	ClearMeasurementEnteredBy(ctx context.Context, userID pgtype.UUID) error
 	ClearMembershipUserFields(ctx context.Context, userID pgtype.UUID) error
 	// ---------------------------------------------------------------------------
 	// Plaka temizliği (v14 "Konvoy aracı", "Saklama süreleri"; `vehicles`
@@ -297,6 +298,8 @@ type Querier interface {
 	DeleteBlock(ctx context.Context, arg DeleteBlockParams) (int64, error)
 	DeleteChecklistItem(ctx context.Context, arg DeleteChecklistItemParams) (int64, error)
 	DeleteEventFieldValues(ctx context.Context, eventID pgtype.UUID) error
+	DeleteEventMeasurement(ctx context.Context, arg DeleteEventMeasurementParams) (int64, error)
+	DeleteEventMeasurementTotal(ctx context.Context, arg DeleteEventMeasurementTotalParams) (int64, error)
 	DeleteEventPhoto(ctx context.Context, arg DeleteEventPhotoParams) (int64, error)
 	DeleteEventReferee(ctx context.Context, arg DeleteEventRefereeParams) (int64, error)
 	DeleteEventRoute(ctx context.Context, arg DeleteEventRouteParams) (int64, error)
@@ -377,6 +380,9 @@ type Querier interface {
 	// Günlük kayıtları (av kayıtları dahil) konum içerebilir; kişiyle birlikte
 	// silinir, fotoğrafları silme kuyruğuna girer (issue #243).
 	DeleteUserLogEntries(ctx context.Context, userID pgtype.UUID) error
+	// Kişisel ölçüm değerleri kişiye aittir; kişiyle birlikte silinir. Toplam
+	// ölçüm etkinliğindir: kalır, yazan boşalır (issue #245; ADR-0025 §11).
+	DeleteUserMeasurements(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserPollVotes(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserRequestOutcomes(ctx context.Context, userID pgtype.UUID) error
 	// Yoklama satırları (`roll_call` bileşeni, issue #242) kişiye aittir.
@@ -470,6 +476,10 @@ type Querier interface {
 	// Sözlüğe bağlı alanlar (issue #244) `vocabulary`'de: alan anahtarı →
 	// seçilen ya da eklenen sözlük değeri (ADR-0037 §4).
 	ExportLogEntries(ctx context.Context, arg ExportLogEntriesParams) ([]ExportLogEntriesRow, error)
+	// Kişisel ölçüm değerleri (`measure` bileşeni, issue #245): kendi
+	// girdikleriniz ve organizatörün ya da hakemin sizin adınıza girdikleri. Kimin
+	// girdiği yalnızca "kendim mi" olarak yer alır; toplam ölçümler etkinliğindir.
+	ExportMeasurements(ctx context.Context, arg ExportMeasurementsParams) ([]ExportMeasurementsRow, error)
 	// KVKK veri dışa aktarma (issue #144, ADR-0021; alanlar
 	// docs/data-export-format.md). Her sorgu yalnızca @user_id'nin (doğrulanmış
 	// çağıran) kendi kayıtlarını, @after'dan büyük anahtarla, anahtar sırasıyla
@@ -540,6 +550,15 @@ type Querier interface {
 	// Katılım ve düzenleme aynı etkinlik satırını kilitleyerek okur; kapasite
 	// ve bekleme sırası iki eşzamanlı istekte birden aşılamaz.
 	GetEventForUpdate(ctx context.Context, arg GetEventForUpdateParams) (GetEventForUpdateRow, error)
+	GetEventMeasurement(ctx context.Context, arg GetEventMeasurementParams) (GetEventMeasurementRow, error)
+	// Ölçüm bileşeni (`measure`; issue #245; ADR-0025 §4, §5; ADR-0037 §2, §3).
+	// Etkinlik her zaman önce tayfa kapsamında yüklenir ve bileşen etkinliğin tür
+	// sürümünde çözülür (internal/core/app/component: View / Change); buradaki
+	// sorgular o etkinliğin kimliği ve bileşenin anahtarıyla çalışır (IDOR). Yetki,
+	// sınırlar ve kimin değerini kimin gördüğü app katmanındadır
+	// (internal/core/app/component/measure). Değerler float8 olarak okunur ve
+	// yazılır; kolon numeric(13, 3)'tür.
+	GetEventMeasurementTotal(ctx context.Context, arg GetEventMeasurementTotalParams) (GetEventMeasurementTotalRow, error)
 	// Kişinin etkinlikteki cevabı ve doğrulanmış katılımı (bileşenlerin
 	// "katılımcı" ve "check-in'i doğrulanmış katılımcı" kuralları).
 	GetEventParticipation(ctx context.Context, arg GetEventParticipationParams) (GetEventParticipationRow, error)
@@ -580,6 +599,8 @@ type Querier interface {
 	// etkinliğin kimliği ve bileşenin anahtarıyla çalışır (IDOR). Yetki ve konum
 	// görünürlüğü app katmanındadır (internal/core/app/component/logbook).
 	GetLogEntryByClientRequest(ctx context.Context, arg GetLogEntryByClientRequestParams) (GetLogEntryByClientRequestRow, error)
+	// Önerilen değerin kaynağı (`prefill_from`): etkinliğin bir alanının değeri.
+	GetMeasurementPrefill(ctx context.Context, arg GetMeasurementPrefillParams) ([]byte, error)
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
 	GetOwnExport(ctx context.Context, arg GetOwnExportParams) (Upload, error)
 	// Kişinin kendi satırını okuma, etkinlik bu tayfanınsa. Kurulmuş bir
@@ -782,6 +803,9 @@ type Querier interface {
 	// katmanında etkinliğin tür sürümüne göre doğrulanmış halleriyle yazılır;
 	// trigger alanın o tür sürümünde olduğunu ayrıca denetler.
 	ListEventFieldValues(ctx context.Context, eventID pgtype.UUID) ([]ListEventFieldValuesRow, error)
+	// (updated_at, id) sırasıyla; bir etkinliğin kişisel değerleri katılımcı
+	// sayısıyla sınırlıdır.
+	ListEventMeasurements(ctx context.Context, arg ListEventMeasurementsParams) ([]ListEventMeasurementsRow, error)
 	// (created_at, id) ile sayfalanır, eskiden yeniye.
 	ListEventPhotos(ctx context.Context, arg ListEventPhotosParams) ([]ListEventPhotosRow, error)
 	// ---------------------------------------------------------------------------
@@ -1132,6 +1156,8 @@ type Querier interface {
 	SetEventComponent(ctx context.Context, arg SetEventComponentParams) error
 	SetEventCover(ctx context.Context, arg SetEventCoverParams) error
 	SetEventFieldValue(ctx context.Context, arg SetEventFieldValueParams) error
+	SetEventMeasurement(ctx context.Context, arg SetEventMeasurementParams) error
+	SetEventMeasurementTotal(ctx context.Context, arg SetEventMeasurementTotalParams) error
 	// Rota app katmanında doğrulanmış haliyle yazılır; event_routes_points
 	// CHECK'i ve event_component_guard aynı kuralları ayrıca denetler.
 	SetEventRoute(ctx context.Context, arg SetEventRouteParams) error
