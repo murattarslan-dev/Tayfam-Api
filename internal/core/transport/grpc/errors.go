@@ -190,6 +190,14 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_SAFETY_CONTACT_NOT_FOUND, true
 	case errors.Is(err, apperr.ErrCatalogTypeNotFound):
 		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_CATALOG_TYPE_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrComponentNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_COMPONENT_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrComponentDisabled):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_COMPONENT_DISABLED, true
+	case errors.Is(err, apperr.ErrComponentLocked):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_COMPONENT_LOCKED, true
+	case errors.Is(err, apperr.ErrComponentFrozen):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_COMPONENT_FROZEN, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

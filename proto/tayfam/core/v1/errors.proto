@@ -303,4 +303,25 @@ enum ErrorReason {
 
   // NOT_FOUND. The catalog has no event type with this key and version.
   ERROR_REASON_CATALOG_TYPE_NOT_FOUND = 132;
+
+  // Event components: the framework every component shares
+  // (EventComponentService, component.proto; issue #238, ADR-0025 §4–§6,
+  // ADR-0037 §2).
+  //
+  // Numbering of component reasons: the reasons of the component of issue
+  // #N are numbered N*10 … N*10+9 (route, #239: 2390–2399), so that
+  // components developed side by side never take the same number.
+
+  // NOT_FOUND. The event's type version has no component with this key, or
+  // the component is of another kind than the method.
+  ERROR_REASON_COMPONENT_NOT_FOUND = 133;
+  // FAILED_PRECONDITION. The component is optional and turned off for this
+  // event. Reads are refused too.
+  ERROR_REASON_COMPONENT_DISABLED = 134;
+  // FAILED_PRECONDITION. The organizer's selections (optional components,
+  // chosen parameters) cannot change once the event has started.
+  ERROR_REASON_COMPONENT_LOCKED = 135;
+  // FAILED_PRECONDITION. Component data cannot change from seven days after
+  // the event's end.
+  ERROR_REASON_COMPONENT_FROZEN = 136;
 }

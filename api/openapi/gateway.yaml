@@ -2360,6 +2360,162 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Etkinlik bileşenleri: çerçeve (core EventComponentService, #238, ADR-0025 §4–§6, ADR-0037 §2) ---
+  # Her bileşenin kendi uçları bu bölümün altına, kendi başlığıyla eklenir:
+  # /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/…
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+    get:
+      operationId: listEventComponents
+      summary: Etkinliğin bileşenleri ve organizatörün seçimleri
+      description: |
+        Etkinliğin tür sürümündeki her bileşen, tanımdaki sırayla ve bu
+        etkinlikteki haliyle: açık mı (`optional` bileşeni organizatör
+        açıp kapatır) ve organizatöre bırakılan (`organizer_choice`) her
+        parametrede geçerli seçenek (ADR-0037 §2). Bileşenin diğer
+        parametreleri ve adı tür tanımındadır (`CatalogComponent`). Her
+        etkin üyeye açıktır (susturulmuş üye de okur).
+
+        **Bileşen uçlarının ortak kuralları** (her bileşenin
+        `…/components/{component_key}/…` uçları için): etkinliğin tür
+        sürümünde o anahtarla bir bileşen yoksa ya da bileşen ucun türünden
+        değilse `component-not-found`; kapalı bileşenin bütün uçları
+        (okuma dahil) `component-disabled`; iptal edilmiş etkinlikte yazma
+        `event-cancelled`, salt okunur tayfada `tayfa-read-only`;
+        etkinliğin bitiminden 7 gün sonra bileşen verisi donar
+        (`component-frozen`, ADR-0025 §5). "Organizatör" yetkisi etkinliği
+        açana ve her etkinlikte olduğu gibi moderatör ve yöneticilere
+        aittir; hakemler `…/referees` ile atanır.
+
+        **Canlı güncelleme:** bir bileşen, seçimler ya da hakemler
+        değişince etkinliği izleyen bağlantılara `event.component_changed`
+        çerçevesi gider (`GET /v1/realtime`, `event.watch`); istemci
+        bileşeni REST'ten yeniden çeker.
+      responses:
+        "200":
+          description: Bileşenler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventComponentList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    put:
+      operationId: setEventComponent
+      summary: Organizatörün bir bileşen için seçimini değiştirir
+      description: |
+        `optional` bileşeni açar ya da kapatır ve organizatöre bırakılan
+        parametrelerde seçenek belirler (ADR-0037 §2). Gövdede en az biri
+        bulunur; gönderilmeyen seçim olduğu gibi kalır. Organizatör,
+        moderatör ve yönetici; yalnızca etkinlik **başlamadan önce**
+        (`component-locked`). `optional` olmayan bileşeni kapatmak,
+        organizatöre bırakılmamış bir parametre ya da listede olmayan bir
+        seçenek `invalid-request`. Seriye ait etkinlikte yalnızca bu
+        etkinlik değişir. Yeni etkinlikte seçimler `POST …/events`
+        gövdesindeki `components` ile verilir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventComponentSelectionRequest" }
+      responses:
+        "200":
+          description: Etkinliğin bileşenleri, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventComponentList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/referees:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+    get:
+      operationId: listEventReferees
+      summary: Etkinliğin hakemleri
+      description: Atama sırasıyla. Her etkin üyeye açıktır.
+      responses:
+        "200":
+          description: Hakem atamaları
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventRefereeList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: assignEventReferee
+      summary: Hakem atar
+      description: |
+        Tayfanın etkin bir üyesini etkinliğin tamamına, bir bileşenine
+        (`component_key`) ya da bileşenin bir kapsamına (`scope_id`: masa,
+        maç) hakem yapar. Hakem, organizatörle birlikte sonuç girer
+        (ADR-0025 §5). Organizatör, moderatör ve yönetici. Aynı atama
+        tekrar gönderilirse ilk atama döner. Etkinlik başına en fazla 50
+        atama (`event-limit`). Etkin üye olmayan kişi `member-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventRefereeAssignRequest" }
+      responses:
+        "201":
+          description: Atama (ya da tekrar gönderimde ilk atama)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventReferee" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/referees/{referee_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - name: referee_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      operationId: removeEventReferee
+      summary: Hakem atamasını kaldırır
+      description: Organizatör, moderatör ve yönetici. Olmayan atamayı kaldırmak hata değildir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Atama kaldırıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /v1/tayfas/{tayfa_id}/event-series/{series_id}:
     parameters:
       - $ref: "#/components/parameters/TayfaID"
@@ -5503,6 +5659,15 @@ paths:
           Bu bağlantının cihazına (oturumuna) ait teslim alınmış zarfları
           siler (`POST /v1/me/e2e/envelopes/ack` ile aynı). Cihaz yoksa
           `e2e_device_not_registered`.
+        - `event.watch` `{tayfa_id, event_id}` → `event.watching`. Etkinliğin
+          bileşen değişikliklerini izler (#238, ADR-0025 §6). Yetki her
+          izlemede core'a sorulur: üye olunmayan tayfa `tayfa_not_found`,
+          bilinmeyen etkinlik (ya da etkinlik modülü kapalı tayfa)
+          `event_not_found`. Bağlantı başına en fazla 20 izleme
+          (`too_many_watches`). İzleme bağlantıyla birlikte biter; yeniden
+          bağlanan istemci yeniden izler ve bileşenleri REST'ten çeker.
+        - `event.unwatch` `{tayfa_id, event_id}` → `event.unwatched`
+          (`reason: requested`).
 
         Sunucu çerçeveleri:
         - `ready`: bağlantı hazır; `data.heartbeat_seconds` ping aralığı,
@@ -5520,6 +5685,14 @@ paths:
           olunabilir).
         - `notification`: yeni bildirim `{type, tayfa_id, target_type,
           target_id}`; içerik yok, liste REST'ten çekilir.
+        - `event.component_changed`: izlenen etkinlikte bir bileşen değişti
+          `{tayfa_id, event_id, component_key}`; içerik yok, bileşen
+          REST'ten yeniden çekilir. `component_key` yoksa etkinliğin
+          bileşen seçimleri ya da hakemleri değişmiştir
+          (`GET …/components`, `GET …/referees`).
+        - `event.unwatched`: sunucunun kestiği izleme `{tayfa_id, event_id,
+          reason}`; nedenler `unsubscribed` ile aynıdır (`access_lost`,
+          `recheck_failed`).
         - `dm.message_created`: birebir mesaj `{id, conversation_id,
           sender_user_id, encryption, created_at}`; konuşmanın iki
           tarafının tüm bağlantılarına gider (gönderenin diğer cihazları
@@ -5630,6 +5803,12 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    ComponentKey:
+      name: component_key
+      in: path
+      required: true
+      description: Bileşenin, etkinliğin tür sürümündeki anahtarı (`CatalogComponent.key`; yoksa `kind`).
+      schema: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
     SeriesID:
       name: series_id
       in: path
@@ -5817,6 +5996,11 @@ components:
         - safety-contact-not-found
         # core: etkinlik türü kataloğu (#237, ADR-0025)
         - catalog-type-not-found
+        # core: etkinlik bileşenleri, ortak (#238, ADR-0025 §4–§6)
+        - component-not-found
+        - component-disabled
+        - component-locked
+        - component-frozen
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -6955,6 +7139,95 @@ components:
         olmayan alan nesnede yer almaz; `null` gönderilmez.
       additionalProperties: true
 
+    ComponentChoice:
+      type: object
+      required: [param, value]
+      additionalProperties: false
+      description: |
+        Organizatöre bırakılan bir parametre için seçim (ADR-0037 §2).
+        `value` seçeneğin metin halidir: seçeneğin kendisi ya da tam sayı
+        seçeneğin rakamları (`"swiss"`, `"3"`).
+      properties:
+        param: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+        value: { type: string, minLength: 1, maxLength: 40 }
+    EventComponentSelection:
+      type: object
+      required: [key]
+      additionalProperties: false
+      description: Yeni etkinlikte bir bileşen için organizatörün seçimi.
+      properties:
+        key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$", description: "Bileşenin anahtarı (`CatalogComponent.key`; yoksa `kind`)." }
+        enabled: { type: boolean, description: "`optional` bileşeni açar ya da kapatır; gönderilmezse tanımdaki varsayılan." }
+        choices:
+          type: array
+          maxItems: 20
+          items: { $ref: "#/components/schemas/ComponentChoice" }
+    EventComponentSelectionRequest:
+      type: object
+      additionalProperties: false
+      description: En az biri bulunur.
+      properties:
+        enabled: { type: boolean, description: "`optional` bileşeni açar ya da kapatır." }
+        choices:
+          type: array
+          maxItems: 20
+          items: { $ref: "#/components/schemas/ComponentChoice" }
+    EventComponentChoiceState:
+      type: object
+      required: [param, value, options]
+      properties:
+        param: { type: string }
+        value: { type: string, description: "Geçerli seçenek: organizatörün seçimi ya da tanımdaki varsayılan." }
+        options:
+          type: array
+          description: Tanımdaki seçenekler, tanımdaki sırayla.
+          items: { type: string }
+    EventComponentState:
+      type: object
+      required: [key, kind, optional, enabled, choices]
+      properties:
+        key: { type: string }
+        kind: { type: string, description: "Bileşen türü (`CatalogComponent.kind`)." }
+        optional: { type: boolean, description: "Organizatör bileşeni açıp kapatabilir." }
+        enabled: { type: boolean, description: "Yalnızca kapatılmış `optional` bileşende `false`." }
+        choices:
+          type: array
+          description: Organizatöre bırakılan her parametre, ada göre.
+          items: { $ref: "#/components/schemas/EventComponentChoiceState" }
+    EventComponentList:
+      type: object
+      required: [components, locked, caller_can_manage]
+      properties:
+        components:
+          type: array
+          items: { $ref: "#/components/schemas/EventComponentState" }
+        locked: { type: boolean, description: "Seçimler artık değişmez: etkinlik başladı ya da iptal edildi, ya da tayfa salt okunur." }
+        caller_can_manage: { type: boolean, description: "Çağıran organizatör, moderatör ya da yöneticidir ve susturulmamıştır." }
+    EventReferee:
+      type: object
+      required: [id, user_id, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        component_key: { type: string, description: "Yoksa atama etkinliğin bütün bileşenleri içindir." }
+        scope_id: { type: string, format: uuid, description: "Bileşenin bir kapsamı (masa, maç); yoksa bileşenin tamamı." }
+        created_at: { type: string, format: date-time }
+    EventRefereeList:
+      type: object
+      required: [referees]
+      properties:
+        referees:
+          type: array
+          items: { $ref: "#/components/schemas/EventReferee" }
+    EventRefereeAssignRequest:
+      type: object
+      required: [user_id]
+      additionalProperties: false
+      properties:
+        user_id: { type: string, format: uuid, description: "Tayfanın etkin bir üyesi." }
+        component_key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+        scope_id: { type: string, format: uuid, description: "`component_key` ile birlikte verilir." }
+
     Recurrence:
       type: object
       required: [rrule]
@@ -7065,6 +7338,18 @@ components:
         türlerinde, en fazla bir tane verilir.
       properties:
         cover_upload_id: { type: string, format: uuid, description: "İsteğe bağlı: kendi hazır `cover` yüklemeniz (bu tayfa için açılmış). Yalnızca bu etkinliğe bağlanır." }
+        components:
+          type: array
+          maxItems: 20
+          description: |
+            Organizatörün bileşen seçimleri (ADR-0037 §2): `optional`
+            bileşenlerin açık/kapalı hali ve organizatöre bırakılan
+            parametreler. Gönderilmeyen bileşen tanımdaki varsayılanla
+            başlar. Türde olmayan ya da tekrar eden bileşen, `optional`
+            olmayan bileşeni kapatmak ve geçersiz seçim `invalid-request`.
+            Sonradan `PUT …/components/{component_key}` ile, etkinlik
+            başlayana kadar değişir.
+          items: { $ref: "#/components/schemas/EventComponentSelection" }
         type: { $ref: "#/components/schemas/EventTypeKey" }
         fields: { $ref: "#/components/schemas/EventFieldValues" }
         mode: { $ref: "#/components/schemas/EventMode" }

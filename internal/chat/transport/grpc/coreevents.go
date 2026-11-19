@@ -169,6 +169,13 @@ func coreEventFromProto(req *chatv1.ApplyCoreEventRequest) (coreevents.Event, er
 			return e, validation("channel_message_removed.message_id")
 		}
 		e.RemovedMessage, e.RemovedBy = m, actor
+	case *chatv1.ApplyCoreEventRequest_EventComponentChanged:
+		evID, ok := id.Parse(ev.EventComponentChanged.GetEventId())
+		if !ok {
+			return e, validation("event_component_changed.event_id")
+		}
+		// The key's form is checked in the app layer.
+		e.Component = &coreevents.ComponentChanged{Event: evID, Key: ev.EventComponentChanged.GetComponentKey()}
 	default:
 		return e, validation("event")
 	}

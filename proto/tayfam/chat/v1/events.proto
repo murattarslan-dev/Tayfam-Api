@@ -100,8 +100,8 @@ message ApplyUserEventResponse {}
 // chat (an explicit list in core's relay): notification.requested,
 // tayfa.purged, membership.changed and the tayfa state changes
 // (tayfa.warned, tayfa.archived, tayfa.reactivated, tayfa.deleted,
-// tayfa.deletion_requested, tayfa.deletion_cancelled), the event changes and
-// report.channel_message_removed.
+// tayfa.deletion_requested, tayfa.deletion_cancelled), the event changes,
+// report.channel_message_removed and event.component_changed.
 service CoreEventService {
   // ApplyCoreEvent applies one core event.
   //
@@ -136,7 +136,23 @@ message ApplyCoreEventRequest {
     EventAttendanceChanged event_attendance_changed = 14;
     EventScheduleChanged event_schedule_changed = 15;
     ChannelMessageRemoved channel_message_removed = 16;
+    EventComponentChanged event_component_changed = 17;
   }
+}
+
+// EventComponentChanged: a component of an event changed (a score, a draw,
+// a list item …), or the event's component selections or referees did
+// (core's event.component_changed; issue #238, ADR-0025 §6). Only the IDs
+// are carried, never content. chat stores nothing: it sends an
+// event.component_changed frame to the connections that watch the event
+// (each was allowed by core, asked with its own token), and their clients
+// read the component again from core.
+message EventComponentChanged {
+  string event_id = 1;
+  // The component's key in the event's type version
+  // (^[a-z][a-z0-9_]{1,39}$); empty when the selections or the referees
+  // changed.
+  string component_key = 2;
 }
 
 // ChannelMessageRemoved: the platform decided to remove a reported channel

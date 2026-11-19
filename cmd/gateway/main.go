@@ -111,6 +111,7 @@ func setup(rt *service.Runtime) error {
 			Social:              corev1.NewSocialServiceClient(conn),
 			Availability:        corev1.NewAvailabilityServiceClient(conn),
 			Catalog:             corev1.NewCatalogServiceClient(conn),
+			Components:          conn,
 			Discover:            corev1.NewDiscoverServiceClient(conn),
 			Invitations:         corev1.NewMembershipServiceClient(conn),
 			Profiles:            corev1.NewProfileServiceClient(conn),

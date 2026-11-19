@@ -76,6 +76,11 @@ var wantAppPrivileges = map[string]string{
 	"catalog_event_type_versions": "SELECT",
 	// Issue #237: a value never moves to another event or field.
 	"event_field_values": "DELETE,INSERT,SELECT,UPDATE(updated_at,value)",
+	// Issue #238: a selection never moves to another event or component
+	// and goes only with its event; a referee assignment is never changed,
+	// only removed.
+	"event_components": "INSERT,SELECT,UPDATE(enabled,params,updated_at)",
+	"event_referees":   "DELETE,INSERT,SELECT",
 }
 
 func TestAppRolePrivileges(t *testing.T) {

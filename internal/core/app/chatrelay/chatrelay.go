@@ -16,6 +16,9 @@
 //     read-only state may have changed (ADR-0009 "Tayfa askı ve arşiv");
 //     chat drops the permissions it keeps for the tayfa. They reach chat as
 //     one kind, tayfa_status_changed.
+//   - event.component_changed: a component of an event changed (issue
+//     #238, ADR-0025 §6); chat tells the connections watching the event.
+//     Only the event ID and the component key go.
 //
 // Payloads carry IDs and classification only, and so do the requests.
 package chatrelay
@@ -25,6 +28,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -65,7 +69,14 @@ const (
 	// TypeChannelMessageRemoved: the platform removes a reported channel
 	// message (issue #205, ADR-0031); chat hides it.
 	TypeChannelMessageRemoved = "report.channel_message_removed"
+	// TypeEventComponentChanged: a component of an event changed (issue
+	// #238, ADR-0025 §6, package component); chat tells the connections
+	// that watch the event. IDs only.
+	TypeEventComponentChanged = "event.component_changed"
 )
+
+// componentKeyPattern is the form of a component key (ADR-0025 §2).
+var componentKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{1,39}$`)
 
 // endedChanges are the membership.changed kinds after which the user is no
 // longer a member (package membership).
@@ -86,7 +97,7 @@ func Types() []string {
 		TypeTayfaDeletionRequested, TypeTayfaDeletionCancelled,
 		TypeTayfaSuspended, TypeTayfaUnsuspended,
 		TypeRSVPChanged, TypeRSVPPromoted, TypeEventUpdated, TypeEventCancelled,
-		TypeChannelMessageRemoved,
+		TypeChannelMessageRemoved, TypeEventComponentChanged,
 	}
 }
 
@@ -129,6 +140,8 @@ type payload struct {
 	EventID     string     `json:"event_id"`
 	EndsAt      *time.Time `json:"ends_at"`
 	CancelledAt *time.Time `json:"cancelled_at"`
+	// Component changes (issue #238).
+	ComponentKey string `json:"component_key"`
 }
 
 var types = map[string]chatv1.NotificationType{
@@ -241,6 +254,16 @@ func Request(e outbox.Event) (*chatv1.ApplyCoreEventRequest, error) {
 		}
 		req.Event = &chatv1.ApplyCoreEventRequest_EventScheduleChanged{EventScheduleChanged: &chatv1.EventScheduleChanged{
 			EventId: p.EventID, EndTime: timestamppb.New(*end), Cancelled: cancelled,
+		}}
+	case TypeEventComponentChanged:
+		if _, ok := id.Parse(p.EventID); !ok {
+			return nil, errors.New("bileşen olayında etkinlik yok")
+		}
+		if p.ComponentKey != "" && !componentKeyPattern.MatchString(p.ComponentKey) {
+			return nil, errors.New("bileşen olayında geçersiz bileşen anahtarı")
+		}
+		req.Event = &chatv1.ApplyCoreEventRequest_EventComponentChanged{EventComponentChanged: &chatv1.EventComponentChanged{
+			EventId: p.EventID, ComponentKey: p.ComponentKey,
 		}}
 	case TypeMembershipChanged:
 		if _, ok := id.Parse(p.UserID); !ok {

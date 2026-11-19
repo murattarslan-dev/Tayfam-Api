@@ -76,6 +76,24 @@ var (
 	ErrCatalogTypeNotFound = errors.New("katalogda tür sürümü yok")
 )
 
+// Event component errors (issue #238; ADR-0025 §4–§6, ADR-0037 §2). They
+// belong to the component framework (package component) and are shared by
+// every component.
+var (
+	// ErrComponentNotFound: the event's type version has no component with
+	// this key, or the component is of another kind than the endpoint.
+	ErrComponentNotFound = errors.New("bileşen bulunamadı")
+	// ErrComponentDisabled: the organizer turned the optional component
+	// off for this event (or left it off); reads are refused too.
+	ErrComponentDisabled = errors.New("bileşen kapalı")
+	// ErrComponentLocked: the organizer's selections cannot change once
+	// the event has started.
+	ErrComponentLocked = errors.New("bileşen seçimleri kilitli")
+	// ErrComponentFrozen: component data cannot change from seven days
+	// after the event's end (ADR-0025 §5).
+	ErrComponentFrozen = errors.New("bileşen verisi donmuş")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (

@@ -276,6 +276,8 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			// person on an application or review, and the Keşfet joins.
 			q.DeleteUserEventFeedback, q.DeleteUserSafetyContacts, q.ClearTayfaDiscoverUser,
 			q.DeleteUserDiscoverJoins,
+			// Event components (issue #238): the user's referee assignments.
+			q.DeleteUserEventReferees,
 			q.ClearAuditActor, q.ClearEventActor, q.ClearReportUserFields,
 		} {
 			if err := clear(ctx, e.User.PG()); err != nil {

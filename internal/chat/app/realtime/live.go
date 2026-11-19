@@ -127,7 +127,11 @@ type LiveConfig struct {
 	Channels Channels
 	// Keys may be left nil and given with BindKeys (issue #127).
 	Keys Acker
-	Log  *slog.Logger
+	// Events answers whether a connection's user may watch an event
+	// (core, with the connection's own token; issue #238). Without it no
+	// event can be watched.
+	Events EventAccess
+	Log    *slog.Logger
 }
 
 // Live subscribes connections to channels, sends from them and delivers
@@ -220,6 +224,7 @@ func (l *Live) ChannelChanged(tayfa, ch id.ID) {
 func (l *Live) MembershipChanged(tayfa, user id.ID) {
 	l.cfg.Hub.bump(tayfa)
 	l.enqueue(l.cfg.Hub.userSubs(tayfa, user))
+	l.enqueue(l.cfg.Hub.userWatches(tayfa, user))
 }
 
 // TayfaChanged: the tayfa became read-only or writable, or was deleted.
@@ -227,6 +232,7 @@ func (l *Live) MembershipChanged(tayfa, user id.ID) {
 func (l *Live) TayfaChanged(tayfa id.ID) {
 	l.cfg.Hub.bump(tayfa)
 	l.enqueue(l.cfg.Hub.subsWhere(tayfa, func(*Member, id.ID) bool { return true }))
+	l.enqueue(l.cfg.Hub.tayfaWatches(tayfa))
 }
 
 // TayfaPurged: the tayfa is gone for good; its subscriptions end without a
@@ -234,6 +240,9 @@ func (l *Live) TayfaChanged(tayfa id.ID) {
 func (l *Live) TayfaPurged(tayfa id.ID) {
 	l.cfg.Hub.bump(tayfa)
 	for _, s := range l.cfg.Hub.subsWhere(tayfa, func(*Member, id.ID) bool { return true }) {
+		l.cut(s, ReasonAccessLost)
+	}
+	for _, s := range l.cfg.Hub.tayfaWatches(tayfa) {
 		l.cut(s, ReasonAccessLost)
 	}
 }
@@ -266,6 +275,10 @@ func (l *Live) enqueue(subs []sub) {
 }
 
 func (l *Live) cut(s sub, reason string) {
+	if s.watch {
+		l.cutWatch(s, reason)
+		return
+	}
 	if l.cfg.Hub.unsubscribe(s.m, s.tayfa, s.channel) {
 		s.m.conn.Deliver(Event{Type: EventUnsubscribed, Data: SubscriptionData{
 			TayfaID: s.tayfa.String(), ChannelID: s.channel.String(), Reason: reason,
@@ -276,6 +289,10 @@ func (l *Live) cut(s sub, reason string) {
 // check asks core again, with the connection's own token, whether the
 // subscription still holds; if not it is cut.
 func (l *Live) check(ctx context.Context, s sub) {
+	if s.watch {
+		l.checkWatch(ctx, s)
+		return
+	}
 	if !l.cfg.Hub.subscribed(s.m, s.tayfa, s.channel) {
 		return
 	}

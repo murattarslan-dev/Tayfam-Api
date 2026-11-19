@@ -128,6 +128,9 @@ func createInput(req *corev1.CreateEventRequest) (event.Input, error) {
 	if in.CoverUploadID, err = optionalUploadID(req.GetCoverUploadId(), "cover_upload_id"); err != nil {
 		return event.Input{}, err
 	}
+	if in.Components, err = selectionsFromProto(req.GetComponents()); err != nil {
+		return event.Input{}, err
+	}
 	return in, nil
 }
 

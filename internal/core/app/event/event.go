@@ -40,6 +40,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalog"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalog/definition"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
@@ -171,6 +172,11 @@ type Input struct {
 	// CoverUploadID is the caller's own READY cover upload opened for the
 	// tayfa; on update zero removes the cover (issue #135).
 	CoverUploadID id.ID
+	// Components, on create only, are the organizer's selections: optional
+	// components on or off and the parameters the type leaves to them
+	// (issue #238, ADR-0037 §2). Later changes go through
+	// component.Service.Set.
+	Components []component.Selection
 }
 
 // setCover attaches the caller's cover upload to the event (zero: removes
@@ -428,6 +434,9 @@ func (s *Service) Prepare(in Input) (Plan, error) {
 	if len(in.Fields) > definition.MaxFields {
 		return Plan{}, apperr.Validation("fields")
 	}
+	if len(in.Components) > definition.MaxComponents {
+		return Plan{}, apperr.Validation("components")
+	}
 	p := Plan{in: in}
 	var err error
 	if p.title, err = cleanText(in.Title, "title", 1, titleMax, false); err != nil {
@@ -556,6 +565,10 @@ func createIn(ctx context.Context, q *store.Queries, c caller, b *batch, p Plan)
 		return id.ID{}, id.ID{}, err
 	}
 	if err := setFields(ctx, q, eventID, values, false); err != nil {
+		return id.ID{}, id.ID{}, err
+	}
+	// The organizer's selections, checked against the same type version.
+	if err := component.Apply(ctx, q, et, eventID, p.in.Components); err != nil {
 		return id.ID{}, id.ID{}, err
 	}
 	if p.in.CoverUploadID != (id.ID{}) {

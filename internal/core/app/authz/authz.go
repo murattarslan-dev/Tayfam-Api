@@ -247,6 +247,35 @@ const (
 	TayfaDiscoverManage
 	EventFeedback
 	EventSafetyContact
+	// Event components (issue #238; ADR-0025 §5). These are the roles every
+	// component shares; the component framework (package component) asks
+	// them, and a component adds an action of its own only for a rule
+	// these do not express. The events module switch, the component being
+	// part of the event's type version and switched on, and the write
+	// window are checked by the framework.
+	//
+	// EventComponentView reads a component's data and the event's
+	// selections and referees.
+	EventComponentView
+	// EventComponentParticipate is a participant's own entry in a
+	// component (taking a list item, a personal measurement, a question, a
+	// vote). The component checks the answer or the verified attendance it
+	// needs.
+	EventComponentParticipate
+	// EventComponentManageOwn is the organizer's part on their own event
+	// (the caller checks that the event is theirs): the selections,
+	// building teams, drawing lots, starting a bracket, total
+	// measurements, correcting scores. EventComponentManageAny is the same
+	// on every event of the tayfa.
+	EventComponentManageOwn
+	EventComponentManageAny
+	// EventRefereeAssignOwn assigns and removes the referees of one's own
+	// event; EventRefereeAssignAny those of every event of the tayfa.
+	EventRefereeAssignOwn
+	EventRefereeAssignAny
+	// EventComponentReferee is entering results as an assigned referee
+	// (the caller checks the assignment, event_referees).
+	EventComponentReferee
 
 	actionEnd // sentinel; keep last
 )
@@ -335,7 +364,15 @@ var actionNames = [...]string{
 	TayfaDiscoverManage:      "tayfa.discover_manage",
 	EventFeedback:            "event.feedback",
 	EventSafetyContact:       "event.safety_contact",
-	actionEnd:                "",
+	// Event components (issue #238).
+	EventComponentView:        "event.component_view",
+	EventComponentParticipate: "event.component_participate",
+	EventComponentManageOwn:   "event.component_manage_own",
+	EventComponentManageAny:   "event.component_manage_any",
+	EventRefereeAssignOwn:     "event.referee_assign_own",
+	EventRefereeAssignAny:     "event.referee_assign_any",
+	EventComponentReferee:     "event.component_referee",
+	actionEnd:                 "",
 }
 
 // String returns the stable name of the action, or "" for an invalid one.
@@ -409,6 +446,14 @@ var permissions = map[Action]Role{
 	ChannelPost:      Member,
 	ChannelDeleteOwn: Member,
 	ChannelMarkRead:  Member,
+	// Event components (issue #238, ADR-0025 §5): every active member
+	// reads them and takes part; the organizer manages the components and
+	// referees of their own event; an assigned referee enters results.
+	EventComponentView:        Member,
+	EventComponentParticipate: Member,
+	EventComponentManageOwn:   Member,
+	EventRefereeAssignOwn:     Member,
+	EventComponentReferee:     Member,
 
 	// Moderation: moderator and above.
 	// Lowering one's own role; members have nothing to step down to.
@@ -438,6 +483,9 @@ var permissions = map[Action]Role{
 	EventCatchDeleteAny: Moderator,
 	// "Yönetim her fotoğrafı" (Notion Faz 2 §2).
 	EventPhotoDeleteAny: Moderator,
+	// Components and referees of every event, like editing every event.
+	EventComponentManageAny: Moderator,
+	EventRefereeAssignAny:   Moderator,
 	// Q&A: someone else's question or answer (with CanActOnContent), and
 	// removing a tag from the tayfa.
 	QuestionEditAny:   Moderator,
@@ -551,6 +599,9 @@ var allowedWhileMuted = map[Action]bool{
 	// publish nothing; "I'm back" must never be refused.
 	EventFeedback:      true,
 	EventSafetyContact: true,
+	// Reading components is a read. Taking part, managing and refereeing
+	// publish into the event and are refused while muted.
+	EventComponentView: true,
 }
 
 // Settings are the tayfa settings that change the permission table. The zero

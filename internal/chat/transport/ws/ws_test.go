@@ -99,6 +99,35 @@ type env struct {
 	hub  *realtime.Hub
 	live *realtime.Live
 	ch   *fakeChannels
+	ev   *fakeEvents
+}
+
+// fakeEvents stands in for core's answer about watching an event: per
+// token and event an error, else allowed.
+type fakeEvents struct {
+	mu     sync.Mutex
+	deny   map[string]error
+	tokens []string
+}
+
+func (f *fakeEvents) set(token string, event id.ID, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.deny[token+event.String()] = err
+}
+
+func (f *fakeEvents) CheckEventAccess(ctx context.Context, _, event id.ID) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	tok := tokenOf(ctx)
+	f.tokens = append(f.tokens, tok)
+	return f.deny[tok+event.String()]
+}
+
+func (f *fakeEvents) lastToken() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.tokens[len(f.tokens)-1]
 }
 
 type who struct {
@@ -119,6 +148,8 @@ func newEnv(t *testing.T, mod func(*Config)) *env {
 	}
 	fc := &fakeChannels{deny: map[[2]id.ID]error{}, pub: live}
 	live.Bind(fc)
+	fe := &fakeEvents{deny: map[string]error{}}
+	live.BindEvents(fe)
 	runCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { _ = live.Run(runCtx); close(done) }()
@@ -140,7 +171,7 @@ func newEnv(t *testing.T, mod func(*Config)) *env {
 	h.Register(mux)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return &env{srv: srv, ver: ver, hub: hub, live: live, ch: fc}
+	return &env{srv: srv, ver: ver, hub: hub, live: live, ch: fc, ev: fe}
 }
 
 // token issues a token for a new session of user, valid for ttl.
@@ -601,5 +632,88 @@ func TestDirectMessage(t *testing.T) {
 	write(t, cx, `{"type":"nope","id":"z"}`)
 	if f := readFrame(t, cx); f.Type != "error" || f.ID != "z" {
 		t.Fatalf("yabancı: %+v %s", f, f.Data)
+	}
+}
+
+func eventRefJSON(tf, ev id.ID) string {
+	return `{"tayfa_id":"` + tf.String() + `","event_id":"` + ev.String() + `"}`
+}
+
+// Watching an event (issue #238, ADR-0025 §6): core is asked with the
+// connection's token; the watcher gets event.component_changed with IDs
+// only, a refused connection gets nothing.
+func TestEventWatch(t *testing.T) {
+	e := newEnv(t, nil)
+	tf, ev := id.New(), id.New()
+	a, b := e.token(id.New(), time.Hour), e.token(id.New(), time.Hour)
+	ca, cb := e.connect(t, a), e.connect(t, b)
+
+	write(t, ca, `{"type":"event.watch","id":"w1","data":`+eventRefJSON(tf, ev)+`}`)
+	f := readFrame(t, ca)
+	var w realtime.WatchData
+	_ = json.Unmarshal(f.Data, &w)
+	if f.Type != "event.watching" || f.ID != "w1" || w.TayfaID != tf.String() || w.EventID != ev.String() || w.Reason != "" {
+		t.Fatalf("izleme: %+v %s", f, f.Data)
+	}
+	if e.ev.lastToken() != a.token {
+		t.Fatal("izleme core'a bağlantının token'ıyla sorulmadı")
+	}
+
+	// b is not a member: refused, and no frame reaches it.
+	e.ev.set(b.token, ev, apperr.ErrTayfaNotFound)
+	write(t, cb, `{"type":"event.watch","id":"w2","data":`+eventRefJSON(tf, ev)+`}`)
+	if d := errorOf(t, readFrame(t, cb)); d.Code != "tayfa_not_found" {
+		t.Fatalf("üye olmayan: %+v", d)
+	}
+	missing := id.New()
+	e.ev.set(b.token, missing, apperr.ErrEventNotFound)
+	write(t, cb, `{"type":"event.watch","data":`+eventRefJSON(tf, missing)+`}`)
+	if d := errorOf(t, readFrame(t, cb)); d.Code != "event_not_found" {
+		t.Fatalf("olmayan etkinlik: %+v", d)
+	}
+	if e.hub.Watches() != 1 {
+		t.Fatalf("izleme = %d", e.hub.Watches())
+	}
+
+	e.live.ComponentChanged(tf, ev, "scoreboard")
+	f = readFrame(t, ca)
+	if f.Type != realtime.EventComponentChanged || f.ID != "" ||
+		string(f.Data) != `{"tayfa_id":"`+tf.String()+`","event_id":"`+ev.String()+`","component_key":"scoreboard"}` {
+		t.Fatalf("çerçeve: %+v %s", f, f.Data)
+	}
+	// b's next frame is the answer to its own request, not the change.
+	write(t, cb, `{"type":"x"}`)
+	if d := errorOf(t, readFrame(t, cb)); d.Code != "unsupported_type" {
+		t.Fatalf("erişimsiz bağlantıya çerçeve gitti: %+v", d)
+	}
+
+	// Leaving the tayfa ends the watch.
+	e.ev.set(a.token, ev, apperr.ErrTayfaNotFound)
+	e.live.MembershipChanged(tf, a.user)
+	f = readFrame(t, ca)
+	_ = json.Unmarshal(f.Data, &w)
+	if f.Type != realtime.EventUnwatched || w.Reason != realtime.ReasonAccessLost || w.EventID != ev.String() {
+		t.Fatalf("kesilme: %+v %s", f, f.Data)
+	}
+
+	// Unwatching is answered even without a watch; bad references are not.
+	write(t, ca, `{"type":"event.unwatch","id":"u1","data":`+eventRefJSON(tf, ev)+`}`)
+	f = readFrame(t, ca)
+	_ = json.Unmarshal(f.Data, &w)
+	if f.Type != realtime.EventUnwatched || f.ID != "u1" || w.Reason != realtime.ReasonRequested {
+		t.Fatalf("bırakma: %+v %s", f, f.Data)
+	}
+	for body, field := range map[string]string{
+		`{"tayfa_id":"x","event_id":"` + ev.String() + `"}`:                     "tayfa_id",
+		`{"tayfa_id":"` + tf.String() + `","event_id":"x"}`:                     "event_id",
+		`{"tayfa_id":"` + tf.String() + `","channel_id":"` + ev.String() + `"}`: "data",
+	} {
+		write(t, ca, `{"type":"event.watch","data":`+body+`}`)
+		if d := errorOf(t, readFrame(t, ca)); d.Code != "invalid_request" || d.Field != field {
+			t.Fatalf("%s: %+v", body, d)
+		}
+	}
+	if e.hub.Watches() != 0 {
+		t.Fatalf("izleme kaldı: %d", e.hub.Watches())
 	}
 }
