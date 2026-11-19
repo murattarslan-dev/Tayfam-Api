@@ -194,8 +194,6 @@ func (s *Seeder) seedEvent(ctx context.Context, t tayfaSpec, e eventSpec, tayfaI
 		req.MeetingPoint = &corev1.LatLng{Lat: e.Lat, Lng: e.Lng}
 	}
 	switch {
-	case e.Camp != nil:
-		req.Details = &corev1.CreateEventRequest_Camp{Camp: e.Camp}
 	case e.Hike != nil:
 		hike := &corev1.HikeDetails{Difficulty: e.Hike.Difficulty, DistanceKm: e.Hike.DistanceKm, ElevationM: e.Hike.ElevationM}
 		if e.Hike.ReturnAfter > 0 {
@@ -262,35 +260,38 @@ func (s *Seeder) seedEvent(ctx context.Context, t tayfaSpec, e eventSpec, tayfaI
 			return check("araç", err)
 		}
 	}
-	if len(e.CampItems) == 0 {
+	if len(e.Gear) == 0 {
 		return nil
 	}
-	got, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.GetEventResponse, error) {
-		return s.cfg.Core.Events.GetEvent(ctx, &corev1.GetEventRequest{TayfaId: tayfaID, EventId: eventID})
+	// The list is the list component's (issue #241), under the key "gear"
+	// (the camp); an item already on it is not added again.
+	gear := &corev1.ComponentRef{TayfaId: tayfaID, EventId: eventID, ComponentKey: "gear"}
+	got, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.ListChecklistResponse, error) {
+		return s.cfg.Core.Checklists.ListChecklist(ctx, &corev1.ListChecklistRequest{Ref: gear})
 	})
 	if err != nil {
-		return check("etkinlik", err)
+		return check("liste", err)
 	}
 	have := map[string]bool{}
-	for _, it := range got.GetEvent().GetCamp().GetItems() {
+	for _, it := range got.GetChecklist().GetItems() {
 		have[it.GetName()] = true
 	}
-	for _, it := range e.CampItems {
+	for _, it := range e.Gear {
 		if have[it.Name] {
 			continue
 		}
-		req := &corev1.AddCampItemRequest{TayfaId: tayfaID, EventId: eventID, Name: it.Name, Quantity: it.Quantity}
+		req := &corev1.AddChecklistItemRequest{Ref: gear, Name: it.Name, Quantity: it.Quantity}
 		if it.Assigned != "" {
 			req.AssignedUserId = users[it.Assigned].String()
 		}
-		_, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.AddCampItemResponse, error) {
-			return s.cfg.Core.Events.AddCampItem(ctx, req)
+		_, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.AddChecklistItemResponse, error) {
+			return s.cfg.Core.Checklists.AddChecklistItem(ctx, req)
 		})
 		if over(err) {
 			return nil
 		}
 		if err != nil {
-			return check("kamp malzemesi", err)
+			return check("liste maddesi", err)
 		}
 	}
 	return nil

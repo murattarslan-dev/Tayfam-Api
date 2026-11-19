@@ -28,9 +28,6 @@ type Events interface {
 	ListUpcoming(ctx context.Context, user, t id.ID, pageSize int32, pageToken string) ([]event.Event, string, error)
 	SetRSVP(ctx context.Context, user, t, e id.ID, status string) (string, error)
 	ListAttendees(ctx context.Context, user, t, e id.ID, status string, pageSize int32, pageToken string) ([]event.Attendee, string, error)
-	AddCampItem(ctx context.Context, user, t, e id.ID, name string, quantity int32, assigned id.ID) (event.CampItem, error)
-	RemoveCampItem(ctx context.Context, user, t, e, item id.ID) error
-	AssignCampItem(ctx context.Context, user, t, e, item, assigned id.ID) (event.CampItem, error)
 	CheckIn(ctx context.Context, user, t, e id.ID, at *event.Point) (event.Attendance, error)
 	StartHike(ctx context.Context, user, t, e id.ID, startedAt time.Time) (event.HikeCheckin, error)
 	FinishHike(ctx context.Context, user, t, e id.ID, returnedAt time.Time) (event.HikeCheckin, error)
@@ -320,65 +317,6 @@ func (s *EventServer) ListAttendees(ctx context.Context, req *corev1.ListAttende
 	return resp, nil
 }
 
-// AddCampItem implements corev1.EventServiceServer.
-func (s *EventServer) AddCampItem(ctx context.Context, req *corev1.AddCampItemRequest) (*corev1.AddCampItemResponse, error) {
-	user, t, e, err := scope(ctx, req.GetTayfaId(), ptr(req.GetEventId()))
-	if err != nil {
-		return nil, err
-	}
-	var assigned id.ID
-	if a := req.GetAssignedUserId(); a != "" {
-		var ok bool
-		if assigned, ok = id.Parse(a); !ok {
-			return nil, validation("assigned_user_id")
-		}
-	}
-	item, err := s.app.AddCampItem(ctx, user, t, e, req.GetName(), req.GetQuantity(), assigned)
-	if err != nil {
-		return nil, errorStatus(ctx, s.log, err)
-	}
-	return &corev1.AddCampItemResponse{Item: campItemToProto(item)}, nil
-}
-
-// RemoveCampItem implements corev1.EventServiceServer.
-func (s *EventServer) RemoveCampItem(ctx context.Context, req *corev1.RemoveCampItemRequest) (*corev1.RemoveCampItemResponse, error) {
-	user, t, e, err := scope(ctx, req.GetTayfaId(), ptr(req.GetEventId()))
-	if err != nil {
-		return nil, err
-	}
-	item, ok := id.Parse(req.GetItemId())
-	if !ok {
-		return nil, validation("item_id")
-	}
-	if err := s.app.RemoveCampItem(ctx, user, t, e, item); err != nil {
-		return nil, errorStatus(ctx, s.log, err)
-	}
-	return &corev1.RemoveCampItemResponse{}, nil
-}
-
-// AssignCampItem implements corev1.EventServiceServer.
-func (s *EventServer) AssignCampItem(ctx context.Context, req *corev1.AssignCampItemRequest) (*corev1.AssignCampItemResponse, error) {
-	user, t, e, err := scope(ctx, req.GetTayfaId(), ptr(req.GetEventId()))
-	if err != nil {
-		return nil, err
-	}
-	item, ok := id.Parse(req.GetItemId())
-	if !ok {
-		return nil, validation("item_id")
-	}
-	var assigned id.ID
-	if a := req.GetAssignedUserId(); a != "" {
-		if assigned, ok = id.Parse(a); !ok {
-			return nil, validation("assigned_user_id")
-		}
-	}
-	out, err := s.app.AssignCampItem(ctx, user, t, e, item, assigned)
-	if err != nil {
-		return nil, errorStatus(ctx, s.log, err)
-	}
-	return &corev1.AssignCampItemResponse{Item: campItemToProto(out)}, nil
-}
-
 // GetEventSeries implements corev1.EventServiceServer.
 func (s *EventServer) GetEventSeries(ctx context.Context, req *corev1.GetEventSeriesRequest) (*corev1.GetEventSeriesResponse, error) {
 	user, t, series, err := seriesScope(ctx, req.GetTayfaId(), req.GetSeriesId())
@@ -491,17 +429,6 @@ func locationFromProto(mode corev1.EventMode, name string, point *corev1.LatLng,
 func detailsFromProto(cv *corev1.ConvoyDetails, cp *corev1.CampDetails, h *corev1.HikeDetails, f *corev1.FishingDetails, g *corev1.GamingDetails, sp *corev1.SportsDetails) (event.Details, error) {
 	var d event.Details
 	switch {
-	case cp != nil:
-		c := &event.Camp{SiteName: cp.GetSiteName(), Notes: cp.GetNotes()}
-		if cp.HasWater != nil {
-			w := cp.GetHasWater()
-			c.HasWater = &w
-		}
-		if cp.HasToilet != nil {
-			w := cp.GetHasToilet()
-			c.HasToilet = &w
-		}
-		d.Camp = c
 	case h != nil:
 		if math.IsNaN(h.GetDistanceKm()) || math.IsInf(h.GetDistanceKm(), 0) {
 			return event.Details{}, validation("distance_km")
@@ -525,10 +452,12 @@ func detailsFromProto(cv *corev1.ConvoyDetails, cp *corev1.CampDetails, h *corev
 			return event.Details{}, validation("spot_visibility")
 		}
 		d.Fishing = fi
-	case cv != nil, g != nil, sp != nil:
+	case cv != nil, cp != nil, g != nil, sp != nil:
 		// A convoy has no details any more: its route and vehicles are
-		// components (issues #239, #240). Gaming and sports have no detail
-		// table either; their data is in the type's fields (issue #237).
+		// components (issues #239, #240). A camp's list is a component and
+		// its site details are fields (issue #241). Gaming and sports have
+		// no detail table either; their data is in the type's fields (issue
+		// #237).
 		return event.Details{}, validation("details")
 	}
 	return d, nil
@@ -592,12 +521,6 @@ func eventToProto(v event.Event) *corev1.Event {
 	}
 	d := v.Details
 	switch {
-	case d.Camp != nil:
-		c := &corev1.CampDetails{SiteName: d.Camp.SiteName, HasWater: d.Camp.HasWater, HasToilet: d.Camp.HasToilet, Notes: d.Camp.Notes}
-		for _, it := range d.Camp.Items {
-			c.Items = append(c.Items, campItemToProto(it))
-		}
-		out.Details = &corev1.Event_Camp{Camp: c}
 	case d.Hike != nil:
 		h := &corev1.HikeDetails{
 			Difficulty: d.Hike.Difficulty, DistanceKm: d.Hike.DistanceKm, ElevationM: d.Hike.ElevationM,
@@ -619,14 +542,6 @@ func eventToProto(v event.Event) *corev1.Event {
 		for k, raw := range v.Fields {
 			out.Fields[k] = string(raw)
 		}
-	}
-	return out
-}
-
-func campItemToProto(it event.CampItem) *corev1.CampItem {
-	out := &corev1.CampItem{Id: it.ID.String(), Name: it.Name, Quantity: it.Quantity}
-	if it.AssignedUserID != (id.ID{}) {
-		out.AssignedUserId = it.AssignedUserID.String()
 	}
 	return out
 }

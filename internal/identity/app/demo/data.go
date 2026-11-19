@@ -66,16 +66,17 @@ type eventSpec struct {
 	// Route is the route of an event whose type has the route component
 	// under the key "route" (the convoy).
 	Route   []*corev1.LatLng
-	Camp    *corev1.CampDetails
 	Hike    *hikeSpec
 	Fishing *corev1.FishingDetails
 	// Fields holds the values of the type's fields by field key, as JSON
 	// text (CreateEventRequest.fields): the data of the types without a
-	// Faz 1 detail message (gaming, sports).
-	Fields    map[string]string
-	RSVPs     []rsvpSpec
-	Vehicles  []vehicleSpec  // a type with the vehicles component (the convoy): members who answered GOING
-	CampItems []campItemSpec // camp: added by the founder
+	// Faz 1 detail message (gaming, sports, camp).
+	Fields   map[string]string
+	RSVPs    []rsvpSpec
+	Vehicles []vehicleSpec // a type with the vehicles component (the convoy): members who answered GOING
+	// Gear is the list of a type with a list component under the key
+	// "gear" (the camp), added by the founder.
+	Gear []checklistItemSpec
 }
 
 type hikeSpec struct {
@@ -99,7 +100,7 @@ type vehicleSpec struct {
 	Color  string
 }
 
-type campItemSpec struct {
+type checklistItemSpec struct {
 	Name     string
 	Quantity int32
 	Assigned string // person key, optional
@@ -320,16 +321,16 @@ var tayfas = []tayfaSpec{
 				Start:       at{Days: 12, Hour: 18}, Hours: 42,
 				PlaceName: "Milli park girişine yakın kamp alanı", Lat: 39.7031, Lng: 26.8542,
 				City: "Balıkesir", District: "Edremit",
-				Camp: &corev1.CampDetails{
-					SiteName: "Kazdağı kamp alanı", HasWater: ptr(true), HasToilet: ptr(true),
-					Notes: "Geceleri hava serin, uyku tulumunuzu kalın seçin. Ateş yalnızca ocak alanında yakılır.",
+				Fields: map[string]string{
+					"site_name": `"Kazdağı kamp alanı"`, "has_water": `true`, "has_toilet": `true`,
+					"notes": `"Geceleri hava serin, uyku tulumunuzu kalın seçin. Ateş yalnızca ocak alanında yakılır."`,
 				},
 				RSVPs: []rsvpSpec{
 					{Person: "burak", Status: going}, {Person: "deniz", Status: going}, {Person: "mert", Status: going},
 					{Person: "ece", Status: going}, {Person: "gizem", Status: maybe}, {Person: "damla", Status: going},
 					{Person: "tolga", Status: notGoing},
 				},
-				CampItems: []campItemSpec{
+				Gear: []checklistItemSpec{
 					{Name: "Çadır (4 kişilik)", Quantity: 2, Assigned: "burak"},
 					{Name: "Kamp ocağı ve tüp", Quantity: 1, Assigned: "deniz"},
 					{Name: "Su bidonu (19 L)", Quantity: 3, Assigned: "mert"},
@@ -593,5 +594,3 @@ var tayfas = []tayfaSpec{
 		},
 	},
 }
-
-func ptr[T any](v T) *T { return &v }

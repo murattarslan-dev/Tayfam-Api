@@ -1,0 +1,135 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "tayfam/core/v1/component.proto";
+
+// ChecklistComponentService is the list component (kind "checklist", issue
+// #241; ADR-0025 §4, §5): who brings, does or takes what. An event may have
+// more than one list (the component's key in the type definition: gear,
+// duty …). It replaces the Faz 1 camp item list
+// (EventService.AddCampItem, RemoveCampItem, AssignCampItem;
+// CampDetails.items) for every type that has the component.
+//
+// Only gateway calls it with the user's access token. Authentication,
+// scope and the errors every component shares are those of
+// EventComponentService (component.proto): anyone but an ACTIVE member
+// gets ERROR_REASON_TAYFA_NOT_FOUND, and so on.
+//
+// Changes are open until the event ends (ERROR_REASON_EVENT_ENDED). An
+// item's name is never logged or written to the audit record or an outbox
+// event.
+//
+// Every method returns the list as the caller sees it.
+service ChecklistComponentService {
+  // ListChecklist returns the items in the order they were added. Open to
+  // every active member, muted ones included.
+  rpc ListChecklist(ListChecklistRequest) returns (ListChecklistResponse);
+
+  // AddChecklistItem adds an item (at most 200 in a list). Managers only:
+  // the organizer, and moderators and admins as for every event.
+  //
+  // Errors: ERROR_REASON_VALIDATION (name; quantity outside 1–999 or above
+  // 1 when the component's `quantity` parameter is off; assigned_user_id
+  // when the `assignment` parameter is off), ERROR_REASON_EVENT_NOT_GOING
+  // (the assignee is not an active member who answered going),
+  // ERROR_REASON_EVENT_LIMIT, ERROR_REASON_EVENT_ENDED,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
+  // every component change.
+  rpc AddChecklistItem(AddChecklistItemRequest) returns (AddChecklistItemResponse);
+
+  // RemoveChecklistItem removes an item. Managers only.
+  //
+  // Errors: ERROR_REASON_EVENT_ITEM_NOT_FOUND, ERROR_REASON_EVENT_ENDED,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
+  // every component change.
+  rpc RemoveChecklistItem(RemoveChecklistItemRequest) returns (RemoveChecklistItemResponse);
+
+  // AssignChecklistItem sets or clears who took an item; an empty
+  // assigned_user_id clears it. It needs the component's `assignment`
+  // parameter. Managers assign any active member who answered going, or
+  // clear any assignment. Other members who answered going may only take a
+  // free item for themselves and drop their own. Setting the value it
+  // already has changes nothing. Of two people taking one item at once the
+  // second gets ERROR_REASON_EVENT_ITEM_TAKEN.
+  //
+  // Errors: ERROR_REASON_VALIDATION (assigned_user_id; also when the
+  // `assignment` parameter is off), ERROR_REASON_EVENT_ITEM_NOT_FOUND,
+  // ERROR_REASON_EVENT_ITEM_TAKEN, ERROR_REASON_EVENT_NOT_GOING,
+  // ERROR_REASON_EVENT_ENDED, ERROR_REASON_PERMISSION_DENIED (a member
+  // assigning someone else), ERROR_REASON_MUTED and the errors of every
+  // component change.
+  rpc AssignChecklistItem(AssignChecklistItemRequest) returns (AssignChecklistItemResponse);
+}
+
+// ChecklistItem is one entry of a list.
+message ChecklistItem {
+  string id = 1;
+  // 1–60 characters.
+  string name = 2;
+  // 1–999; always 1 when the component's `quantity` parameter is off.
+  int32 quantity = 3;
+  // The member who took the item; empty when nobody did.
+  string assigned_user_id = 4;
+}
+
+// Checklist is one list component of an event, as the caller sees it.
+message Checklist {
+  // In the order they were added.
+  repeated ChecklistItem items = 1;
+  // The component's label parameter: gear, task, section, duty or item
+  // ("item" when the type sets none). The client shows its own text for
+  // it.
+  string label = 2;
+  // The component's `assignment` and `quantity` parameters for this event.
+  bool assignment_enabled = 3;
+  bool quantity_enabled = 4;
+  // The caller may add, remove and assign items now: a manager who is not
+  // muted, and the event, the tayfa and the write window allow it.
+  bool caller_can_manage = 5;
+  // The caller may take a free item for themselves and drop their own now:
+  // going, not muted, assignment on, and the same windows.
+  bool caller_can_take = 6;
+}
+
+message ListChecklistRequest {
+  ComponentRef ref = 1;
+}
+
+message ListChecklistResponse {
+  Checklist checklist = 1;
+}
+
+message AddChecklistItemRequest {
+  ComponentRef ref = 1;
+  // 1–60 characters.
+  string name = 2;
+  // 0 means 1; otherwise 1–999.
+  int32 quantity = 3;
+  // Optional.
+  string assigned_user_id = 4;
+}
+
+message AddChecklistItemResponse {
+  Checklist checklist = 1;
+}
+
+message RemoveChecklistItemRequest {
+  ComponentRef ref = 1;
+  string item_id = 2;
+}
+
+message RemoveChecklistItemResponse {
+  Checklist checklist = 1;
+}
+
+message AssignChecklistItemRequest {
+  ComponentRef ref = 1;
+  string item_id = 2;
+  // Empty clears the assignment.
+  string assigned_user_id = 3;
+}
+
+message AssignChecklistItemResponse {
+  Checklist checklist = 1;
+}

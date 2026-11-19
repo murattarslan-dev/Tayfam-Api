@@ -25,9 +25,6 @@ type EventClient interface {
 	ListUpcomingEvents(ctx context.Context, in *corev1.ListUpcomingEventsRequest, opts ...grpc.CallOption) (*corev1.ListUpcomingEventsResponse, error)
 	SetRsvp(ctx context.Context, in *corev1.SetRsvpRequest, opts ...grpc.CallOption) (*corev1.SetRsvpResponse, error)
 	ListAttendees(ctx context.Context, in *corev1.ListAttendeesRequest, opts ...grpc.CallOption) (*corev1.ListAttendeesResponse, error)
-	AddCampItem(ctx context.Context, in *corev1.AddCampItemRequest, opts ...grpc.CallOption) (*corev1.AddCampItemResponse, error)
-	RemoveCampItem(ctx context.Context, in *corev1.RemoveCampItemRequest, opts ...grpc.CallOption) (*corev1.RemoveCampItemResponse, error)
-	AssignCampItem(ctx context.Context, in *corev1.AssignCampItemRequest, opts ...grpc.CallOption) (*corev1.AssignCampItemResponse, error)
 	CheckIn(ctx context.Context, in *corev1.CheckInRequest, opts ...grpc.CallOption) (*corev1.CheckInResponse, error)
 	StartHike(ctx context.Context, in *corev1.StartHikeRequest, opts ...grpc.CallOption) (*corev1.StartHikeResponse, error)
 	FinishHike(ctx context.Context, in *corev1.FinishHikeRequest, opts ...grpc.CallOption) (*corev1.FinishHikeResponse, error)
@@ -53,8 +50,6 @@ const (
 	rruleMax         = 256
 	timeZoneMax      = 64
 	cancelReasonMax  = 500
-	campItemNameMax  = 60
-	campQuantityMax  = 999
 	catchSpeciesMax  = 60
 	catchLengthMaxCm = 1000
 	// photoCaptionMax: album photo caption (core trims and checks again).
@@ -80,9 +75,6 @@ func registerEvents(mux *http.ServeMux, h coreHandlers) {
 	mux.HandleFunc("POST "+one+"/check-in", a(h.checkIn))
 	mux.HandleFunc("POST "+one+"/hike-start", a(h.startHike))
 	mux.HandleFunc("POST "+one+"/hike-return", a(h.finishHike))
-	mux.HandleFunc("POST "+one+"/camp-items", a(h.addCampItem))
-	mux.HandleFunc("DELETE "+one+"/camp-items/{item_id}", a(h.removeCampItem))
-	mux.HandleFunc("PATCH "+one+"/camp-items/{item_id}", a(h.assignCampItem))
 	mux.HandleFunc("GET "+one+"/fishing-catches", a(h.listFishingCatches))
 	mux.HandleFunc("POST "+one+"/fishing-catches", a(h.addFishingCatch))
 	mux.HandleFunc("DELETE "+one+"/fishing-catches/{catch_id}", a(h.removeFishingCatch))
@@ -119,18 +111,10 @@ func runes(s string) int { return utf8.RuneCountInString(strings.TrimSpace(s)) }
 
 // --- Input: type details ---
 
-type campInput struct {
-	SiteName  string `json:"site_name"`
-	HasWater  *bool  `json:"has_water"`
-	HasToilet *bool  `json:"has_toilet"`
-	Notes     string `json:"notes"`
-}
-
 // eventDetailsInput is the type details of a create or update body: at most
-// one is set. Output-only fields (camp items) are unknown fields
-// here and fail decoding.
+// one is set. A camp's details are fields (issue #241): "camp" is an
+// unknown field here and fails decoding.
 type eventDetailsInput struct {
-	Camp    *campInput   `json:"camp"`
 	Hike    *hikeJSON    `json:"hike"`
 	Fishing *fishingJSON `json:"fishing"`
 }
@@ -140,7 +124,6 @@ type eventDetailsInput struct {
 type eventDetails struct {
 	// typ is the catalog key of the type the details belong to.
 	typ     string
-	camp    *corev1.CampDetails
 	hike    *corev1.HikeDetails
 	fishing *corev1.FishingDetails
 }
@@ -150,12 +133,6 @@ type eventDetails struct {
 func (in eventDetailsInput) details() (eventDetails, bool) {
 	var d eventDetails
 	n := 0
-	if in.Camp != nil {
-		n++
-		d.typ, d.camp = "camp", &corev1.CampDetails{
-			SiteName: in.Camp.SiteName, HasWater: in.Camp.HasWater, HasToilet: in.Camp.HasToilet, Notes: in.Camp.Notes,
-		}
-	}
 	if in.Hike != nil {
 		n++
 		d.typ, d.hike = "hike", &corev1.HikeDetails{
@@ -204,8 +181,6 @@ func eventFields(in map[string]json.RawMessage) (map[string]string, bool) {
 // setCreate sets req's type details, if any.
 func (d eventDetails) setCreate(req *corev1.CreateEventRequest) {
 	switch {
-	case d.camp != nil:
-		req.Details = &corev1.CreateEventRequest_Camp{Camp: d.camp}
 	case d.hike != nil:
 		req.Details = &corev1.CreateEventRequest_Hike{Hike: d.hike}
 	case d.fishing != nil:
@@ -216,8 +191,6 @@ func (d eventDetails) setCreate(req *corev1.CreateEventRequest) {
 // setUpdate sets req's type details, if any.
 func (d eventDetails) setUpdate(req *corev1.UpdateEventRequest) {
 	switch {
-	case d.camp != nil:
-		req.Details = &corev1.UpdateEventRequest_Camp{Camp: d.camp}
 	case d.hike != nil:
 		req.Details = &corev1.UpdateEventRequest_Hike{Hike: d.hike}
 	case d.fishing != nil:
@@ -731,93 +704,6 @@ func (h coreHandlers) finishHike(ctx context.Context, w http.ResponseWriter, r *
 		return
 	}
 	writeJSON(w, http.StatusOK, hikeCheckinFrom(resp.GetCheckin()))
-}
-
-// --- Camp items ---
-
-type campItemBody struct {
-	Name           string `json:"name"`
-	Quantity       int32  `json:"quantity"`
-	AssignedUserID string `json:"assigned_user_id"`
-}
-
-func (h coreHandlers) addCampItem(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	id, eid, ok := pathTayfaEvent(w, r)
-	if !ok {
-		return
-	}
-	var b campItemBody
-	if !decode(w, r, &b) {
-		return
-	}
-	if n := runes(b.Name); n < 1 || n > campItemNameMax || b.Quantity < 0 || b.Quantity > campQuantityMax ||
-		(b.AssignedUserID != "" && !validUUID(b.AssignedUserID)) {
-		badRequest(w, r)
-		return
-	}
-	resp, err := h.d.Events.AddCampItem(ctx, &corev1.AddCampItemRequest{
-		TayfaId: id, EventId: eid, Name: b.Name, Quantity: b.Quantity, AssignedUserId: b.AssignedUserID,
-	})
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, campItemFrom(resp.GetItem()))
-}
-
-// campItemAssignBody: a uuid sets the assignee; a missing field or null
-// clears it (issue #198).
-type campItemAssignBody struct {
-	AssignedUserID json.RawMessage `json:"assigned_user_id"`
-}
-
-func (h coreHandlers) assignCampItem(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	ids, ok := pathIDs(w, r, "tayfa_id", "event_id", "item_id")
-	if !ok {
-		return
-	}
-	var b campItemAssignBody
-	if !decode(w, r, &b) {
-		return
-	}
-	assigned, ok := nullableUUID(b.AssignedUserID)
-	if !ok {
-		badRequest(w, r)
-		return
-	}
-	resp, err := h.d.Events.AssignCampItem(ctx, &corev1.AssignCampItemRequest{
-		TayfaId: ids[0], EventId: ids[1], ItemId: ids[2], AssignedUserId: assigned,
-	})
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, campItemFrom(resp.GetItem()))
-}
-
-// nullableUUID reads an optional uuid: missing or null gives "", a uuid
-// string gives itself; anything else is not ok.
-func nullableUUID(raw json.RawMessage) (string, bool) {
-	if len(raw) == 0 || string(raw) == "null" {
-		return "", true
-	}
-	var v string
-	if err := json.Unmarshal(raw, &v); err != nil || !validUUID(v) {
-		return "", false
-	}
-	return v, true
-}
-
-func (h coreHandlers) removeCampItem(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	ids, ok := pathIDs(w, r, "tayfa_id", "event_id", "item_id")
-	if !ok {
-		return
-	}
-	if _, err := h.d.Events.RemoveCampItem(ctx, &corev1.RemoveCampItemRequest{TayfaId: ids[0], EventId: ids[1], ItemId: ids[2]}); err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- Fishing log ---

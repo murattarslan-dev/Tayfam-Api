@@ -480,7 +480,7 @@ func TestDataSet(t *testing.T) {
 					t.Errorf("%s/%s: %s gelmiyor ama aracı var", ts.Key, ev.Key, v.Person)
 				}
 			}
-			for _, it := range ev.CampItems {
+			for _, it := range ev.Gear {
 				if it.Assigned != "" {
 					isIn("malzeme", it.Assigned)
 				}

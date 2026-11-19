@@ -128,17 +128,17 @@ const (
 	// a convoy vehicle, checking in; online check-in also needs it given
 	// before the start).
 	ErrorReason_ERROR_REASON_EVENT_NOT_GOING ErrorReason = 33
-	// NOT_FOUND. No camp item, convoy vehicle, fishing catch or album photo
+	// NOT_FOUND. No list item, vehicle, fishing catch or album photo
 	// with this ID on this event that the caller may remove.
 	ErrorReason_ERROR_REASON_EVENT_ITEM_NOT_FOUND ErrorReason = 34
-	// RESOURCE_EXHAUSTED. The event's list is full (200 camp items; 30 album
+	// RESOURCE_EXHAUSTED. The event's list is full (200 list items; 30 album
 	// photos per person or 500 per album).
 	ErrorReason_ERROR_REASON_EVENT_LIMIT ErrorReason = 35
 	// FAILED_PRECONDITION. The method is for another event type (for example
-	// AddCampItem on a convoy event).
+	// ListFishingCatches on a convoy event).
 	ErrorReason_ERROR_REASON_EVENT_TYPE_MISMATCH ErrorReason = 36
-	// ABORTED. Someone else took the camp item; reload the event (issue
-	// #198).
+	// ABORTED. Someone else took the list item; reload the list (issues
+	// #198, #241).
 	ErrorReason_ERROR_REASON_EVENT_ITEM_TAKEN ErrorReason = 37
 	// FAILED_PRECONDITION. Outside the check-in window: from 30 minutes
 	// before the start until the end.

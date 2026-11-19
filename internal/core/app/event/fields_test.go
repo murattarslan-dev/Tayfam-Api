@@ -130,7 +130,7 @@ func TestUpdateFields(t *testing.T) {
 	_, err = e.svc.Update(ctx, admin, tf, ev.ID, []string{FieldFields}, Input{Fields: values("game", `"x"`, "platform", `"amiga"`)})
 	wantField(t, "bozuk değer", err, "fields.platform")
 	// The type's data is not in details any more.
-	_, err = e.svc.Update(ctx, admin, tf, ev.ID, []string{FieldDetails}, Input{Details: Details{Camp: &Camp{}}})
+	_, err = e.svc.Update(ctx, admin, tf, ev.ID, []string{FieldDetails}, Input{Details: Details{Hike: &Hike{}}})
 	wantField(t, "alanlı türde detay", err, "details")
 	// A type without fields takes only the empty set.
 	gen := e.create(t, tf, admin, input())

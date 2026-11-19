@@ -8,8 +8,7 @@ import "tayfam/core/v1/component.proto";
 import "tayfam/core/v1/tayfa.proto";
 
 // EventService manages a tayfa's events: creating, editing and cancelling
-// them, RSVPs with a waitlist, camp item lists and convoy vehicles (issue
-// #49; data model v14 "Duyuru ve Etkinlik", "Türe özel tablolar",
+// them and RSVPs with a waitlist (issue #49; data model v14 "Duyuru ve Etkinlik", "Türe özel tablolar",
 // "Etkinlik iptali", "Online etkinlik", "Konvoy aracı"). Only gateway calls
 // it, with the user's access token.
 //
@@ -28,10 +27,9 @@ import "tayfam/core/v1/tayfa.proto";
 //       read events and attendees: every active member (also when muted)
 //       create: moderators and admins; every active member when
 //         Tayfa.members_can_create_events is true
-//       edit, cancel, manage camp items and other people's vehicles: the
-//         organizer (the event's creator) for their own event, moderators
-//         and admins for every event
-//       RSVP, add or remove one's own convoy vehicle: every active member
+//       edit, cancel: the organizer (the event's creator) for their own
+//         event, moderators and admins for every event
+//       RSVP: every active member
 //   - Changes to a read-only tayfa fail with ERROR_REASON_TAYFA_READ_ONLY.
 //   - Changes to a cancelled event fail with ERROR_REASON_EVENT_CANCELLED,
 //     and to an event that has ended with ERROR_REASON_EVENT_ENDED.
@@ -101,29 +99,20 @@ service EventService {
   // WAITLIST: the order in line).
   rpc ListAttendees(ListAttendeesRequest) returns (ListAttendeesResponse);
 
-  // AddCampItem adds an item to a camp event's list (at most 200).
-  //
-  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-  // ERROR_REASON_EVENT_LIMIT, ERROR_REASON_EVENT_NOT_GOING (the assignee
-  // did not answer GOING or is not an active member),
-  // ERROR_REASON_VALIDATION.
+  // AddCampItem is not served any more: a camp's list is the list
+  // component's (ChecklistComponentService.AddChecklistItem,
+  // component_checklist.proto; issue #241). It answers UNIMPLEMENTED; the
+  // method stays because it cannot be removed.
   rpc AddCampItem(AddCampItemRequest) returns (AddCampItemResponse);
 
-  // RemoveCampItem removes an item from a camp event's list.
-  //
-  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-  // ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+  // RemoveCampItem is not served any more
+  // (ChecklistComponentService.RemoveChecklistItem; issue #241). It
+  // answers UNIMPLEMENTED; the method stays because it cannot be removed.
   rpc RemoveCampItem(RemoveCampItemRequest) returns (RemoveCampItemResponse);
 
-  // AssignCampItem sets or clears who brings a camp item (issue #198). The
-  // organizer, moderators and admins assign any participant who answered
-  // GOING or clear any assignment; a member who answered GOING takes a
-  // free item for themselves or drops their own. Setting the current value
-  // is a no-op.
-  //
-  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-  // ERROR_REASON_EVENT_ITEM_NOT_FOUND, ERROR_REASON_EVENT_NOT_GOING,
-  // ERROR_REASON_EVENT_ITEM_TAKEN, ERROR_REASON_VALIDATION.
+  // AssignCampItem is not served any more
+  // (ChecklistComponentService.AssignChecklistItem; issue #241). It
+  // answers UNIMPLEMENTED; the method stays because it cannot be removed.
   rpc AssignCampItem(AssignCampItemRequest) returns (AssignCampItemResponse);
 
   // AddConvoyVehicle is not served any more: vehicles are the vehicles
@@ -402,26 +391,27 @@ message ConvoyVehicle {
   string plate = 7;
 }
 
+// CampDetails is not used any more: a camp has no type details. Its site
+// details are fields of the camp type (site_name, has_water, has_toilet,
+// notes; Event.fields) and its list is the list component's
+// (ChecklistComponentService, component_checklist.proto; issue #241). An
+// event never carries it and a request that sets it is refused
+// (ERROR_REASON_VALIDATION, field "details"). The message and its fields
+// stay because they cannot be removed.
 message CampDetails {
-  // Up to 120 characters; may be empty.
   string site_name = 1;
   optional bool has_water = 2;
   optional bool has_toilet = 3;
-  // Up to 1000 characters; may be empty.
   string notes = 4;
-  // Output only, GetEvent only. Changed with AddCampItem and
-  // RemoveCampItem.
   repeated CampItem items = 5;
 }
 
+// CampItem is not used any more (ChecklistItem,
+// component_checklist.proto; issue #241).
 message CampItem {
   string id = 1;
-  // 1–60 characters.
   string name = 2;
-  // 1–999.
   int32 quantity = 3;
-  // Optional: who brings it; an active member of the tayfa who answered
-  // GOING when assigned.
   string assigned_user_id = 4;
 }
 
@@ -499,11 +489,11 @@ message Event {
   // The event was edited on its own (UpdateEvent without series): changes
   // to the series and ending it leave it alone.
   bool series_override = 29;
-  // The Faz 1 details of the camp, hike and fishing types, until their
+  // The Faz 1 details of the hike and fishing types, until their
   // components replace them (ADR-0025 §10). Set by GetEvent; never by
-  // ListUpcomingEvents. convoy, gaming and sports are never set: a
-  // convoy's data is in its components (issues #239, #240), the others'
-  // in fields.
+  // ListUpcomingEvents. convoy, camp, gaming and sports are never set: a
+  // convoy's data is in its components (issues #239, #240), a camp's in
+  // its list component and fields (issue #241), the others' in fields.
   oneof details {
     ConvoyDetails convoy = 30;
     CampDetails camp = 31;
@@ -562,11 +552,11 @@ message CreateEventRequest {
   // 0: no limit; otherwise 1–10000.
   int32 capacity = 13;
   bool discoverable = 14;
-  // Only for the camp, hike and fishing types, and must match the type;
-  // may be unset. convoy, gaming and sports must be unset
+  // Only for the hike and fishing types, and must match the type; may be
+  // unset. convoy, camp, gaming and sports must be unset
   // (ERROR_REASON_VALIDATION, field "details"): a convoy's data is in its
-  // components, the others' goes in fields. Output-only fields (items) are
-  // ignored.
+  // components, a camp's in its list component and fields, the others' goes
+  // in fields.
   oneof details {
     ConvoyDetails convoy = 20;
     CampDetails camp = 21;
@@ -702,7 +692,7 @@ message UpdateEventRequest {
   // (start_time and end_time together), "location" (mode,
   // meeting_point_name, meeting_point, city, district and online_url
   // together), "capacity", "discoverable", "details" (replaces the type
-  // details of a camp, hike or fishing event; camp items stay), "fields" (replaces the field values), "cover_upload_id"
+  // details of a hike or fishing event), "fields" (replaces the field values), "cover_upload_id"
   // (not with series = true: ERROR_REASON_VALIDATION, field
   // "update_mask"). Any other path is ERROR_REASON_VALIDATION.
   google.protobuf.FieldMask update_mask = 15;
@@ -797,14 +787,13 @@ message ListAttendeesResponse {
   string next_page_token = 2;
 }
 
+// AddCampItemRequest and the other camp item messages are not used any
+// more (issue #241); they stay because they cannot be removed.
 message AddCampItemRequest {
   string tayfa_id = 1;
   string event_id = 2;
-  // 1–60 characters.
   string name = 3;
-  // 0 means 1; otherwise 1–999.
   int32 quantity = 4;
-  // Optional; must be an active member of the tayfa who answered GOING.
   string assigned_user_id = 5;
 }
 
@@ -824,7 +813,6 @@ message AssignCampItemRequest {
   string tayfa_id = 1;
   string event_id = 2;
   string item_id = 3;
-  // Empty clears the assignment.
   string assigned_user_id = 4;
 }
 

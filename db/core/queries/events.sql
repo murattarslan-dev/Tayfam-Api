@@ -120,16 +120,6 @@ LIMIT @page_size;
 -- Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
 -- key yanlış türü reddeder.
 
--- name: SetEventCamp :exec
-INSERT INTO event_camp (event_id, site_name, has_water, has_toilet, notes)
-VALUES (@event_id, @site_name, @has_water, @has_toilet, @notes)
-ON CONFLICT (event_id) DO UPDATE
-SET site_name = EXCLUDED.site_name, has_water = EXCLUDED.has_water,
-    has_toilet = EXCLUDED.has_toilet, notes = EXCLUDED.notes;
-
--- name: GetEventCamp :one
-SELECT site_name, has_water, has_toilet, notes FROM event_camp WHERE event_id = @event_id;
-
 -- name: SetEventHike :exec
 INSERT INTO event_hike (event_id, difficulty, distance_km, elevation_m, expected_return_at, return_grace_minutes)
 VALUES (@event_id, @difficulty, sqlc.narg(distance_km)::float8, @elevation_m, @expected_return_at, @return_grace_minutes)
@@ -176,32 +166,3 @@ DELETE FROM event_field_values WHERE event_id = @event_id;
 INSERT INTO event_field_values (event_id, field_key, value)
 SELECT @to_event_id::uuid, src.field_key, src.value FROM event_field_values AS src
 WHERE src.event_id = @from_event_id;
-
--- ---------------------------------------------------------------------------
--- Kamp malzemeleri
-
--- name: CountCampItems :one
-SELECT count(*) FROM event_camp_items WHERE event_id = @event_id;
-
--- name: CreateCampItem :exec
-INSERT INTO event_camp_items (id, event_id, name, quantity, assigned_user_id, created_by)
-VALUES (@id, @event_id, @name, @quantity, @assigned_user_id, @created_by);
-
--- name: ListCampItems :many
-SELECT id, name, quantity, assigned_user_id FROM event_camp_items
-WHERE event_id = @event_id
-ORDER BY created_at, id;
-
--- name: GetCampItemForUpdate :one
--- Kilit, aynı malzemeyi aynı anda üstlenen iki kişiden ikincisinin
--- güncel atamayı görmesini sağlar (issue #198).
-SELECT id, name, quantity, assigned_user_id FROM event_camp_items
-WHERE event_id = @event_id AND id = @id
-FOR UPDATE;
-
--- name: SetCampItemAssignee :exec
-UPDATE event_camp_items SET assigned_user_id = @assigned_user_id
-WHERE event_id = @event_id AND id = @id;
-
--- name: DeleteCampItem :execrows
-DELETE FROM event_camp_items WHERE event_id = @event_id AND id = @id;

@@ -57,20 +57,6 @@ func (q *Queries) CopyEventFieldValues(ctx context.Context, arg CopyEventFieldVa
 	return err
 }
 
-const countCampItems = `-- name: CountCampItems :one
-
-SELECT count(*) FROM event_camp_items WHERE event_id = $1
-`
-
-// ---------------------------------------------------------------------------
-// Kamp malzemeleri
-func (q *Queries) CountCampItems(ctx context.Context, eventID pgtype.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countCampItems, eventID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const countGoing = `-- name: CountGoing :one
 SELECT count(*) FROM event_rsvps
 WHERE event_id = $1 AND status = 'going'
@@ -116,32 +102,6 @@ func (q *Queries) CountRsvpsForEvents(ctx context.Context, eventIds []pgtype.UUI
 		return nil, err
 	}
 	return items, nil
-}
-
-const createCampItem = `-- name: CreateCampItem :exec
-INSERT INTO event_camp_items (id, event_id, name, quantity, assigned_user_id, created_by)
-VALUES ($1, $2, $3, $4, $5, $6)
-`
-
-type CreateCampItemParams struct {
-	ID             pgtype.UUID
-	EventID        pgtype.UUID
-	Name           string
-	Quantity       int32
-	AssignedUserID pgtype.UUID
-	CreatedBy      pgtype.UUID
-}
-
-func (q *Queries) CreateCampItem(ctx context.Context, arg CreateCampItemParams) error {
-	_, err := q.db.Exec(ctx, createCampItem,
-		arg.ID,
-		arg.EventID,
-		arg.Name,
-		arg.Quantity,
-		arg.AssignedUserID,
-		arg.CreatedBy,
-	)
-	return err
 }
 
 const createEvent = `-- name: CreateEvent :exec
@@ -207,23 +167,6 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) error 
 	return err
 }
 
-const deleteCampItem = `-- name: DeleteCampItem :execrows
-DELETE FROM event_camp_items WHERE event_id = $1 AND id = $2
-`
-
-type DeleteCampItemParams struct {
-	EventID pgtype.UUID
-	ID      pgtype.UUID
-}
-
-func (q *Queries) DeleteCampItem(ctx context.Context, arg DeleteCampItemParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteCampItem, arg.EventID, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const deleteEventFieldValues = `-- name: DeleteEventFieldValues :exec
 DELETE FROM event_field_values WHERE event_id = $1
 `
@@ -231,38 +174,6 @@ DELETE FROM event_field_values WHERE event_id = $1
 func (q *Queries) DeleteEventFieldValues(ctx context.Context, eventID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteEventFieldValues, eventID)
 	return err
-}
-
-const getCampItemForUpdate = `-- name: GetCampItemForUpdate :one
-SELECT id, name, quantity, assigned_user_id FROM event_camp_items
-WHERE event_id = $1 AND id = $2
-FOR UPDATE
-`
-
-type GetCampItemForUpdateParams struct {
-	EventID pgtype.UUID
-	ID      pgtype.UUID
-}
-
-type GetCampItemForUpdateRow struct {
-	ID             pgtype.UUID
-	Name           string
-	Quantity       int32
-	AssignedUserID pgtype.UUID
-}
-
-// Kilit, aynı malzemeyi aynı anda üstlenen iki kişiden ikincisinin
-// güncel atamayı görmesini sağlar (issue #198).
-func (q *Queries) GetCampItemForUpdate(ctx context.Context, arg GetCampItemForUpdateParams) (GetCampItemForUpdateRow, error) {
-	row := q.db.QueryRow(ctx, getCampItemForUpdate, arg.EventID, arg.ID)
-	var i GetCampItemForUpdateRow
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Quantity,
-		&i.AssignedUserID,
-	)
-	return i, err
 }
 
 const getEvent = `-- name: GetEvent :one
@@ -363,29 +274,6 @@ func (q *Queries) GetEventByClientRequest(ctx context.Context, arg GetEventByCli
 	row := q.db.QueryRow(ctx, getEventByClientRequest, arg.CreatedBy, arg.ClientRequestID)
 	var i GetEventByClientRequestRow
 	err := row.Scan(&i.ID, &i.TayfaID, &i.DeletedAt)
-	return i, err
-}
-
-const getEventCamp = `-- name: GetEventCamp :one
-SELECT site_name, has_water, has_toilet, notes FROM event_camp WHERE event_id = $1
-`
-
-type GetEventCampRow struct {
-	SiteName  pgtype.Text
-	HasWater  pgtype.Bool
-	HasToilet pgtype.Bool
-	Notes     pgtype.Text
-}
-
-func (q *Queries) GetEventCamp(ctx context.Context, eventID pgtype.UUID) (GetEventCampRow, error) {
-	row := q.db.QueryRow(ctx, getEventCamp, eventID)
-	var i GetEventCampRow
-	err := row.Scan(
-		&i.SiteName,
-		&i.HasWater,
-		&i.HasToilet,
-		&i.Notes,
-	)
 	return i, err
 }
 
@@ -576,44 +464,6 @@ func (q *Queries) ListAttendees(ctx context.Context, arg ListAttendeesParams) ([
 			&i.Attendance,
 			&i.AttendanceMethod,
 			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listCampItems = `-- name: ListCampItems :many
-SELECT id, name, quantity, assigned_user_id FROM event_camp_items
-WHERE event_id = $1
-ORDER BY created_at, id
-`
-
-type ListCampItemsRow struct {
-	ID             pgtype.UUID
-	Name           string
-	Quantity       int32
-	AssignedUserID pgtype.UUID
-}
-
-func (q *Queries) ListCampItems(ctx context.Context, eventID pgtype.UUID) ([]ListCampItemsRow, error) {
-	rows, err := q.db.Query(ctx, listCampItems, eventID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListCampItemsRow{}
-	for rows.Next() {
-		var i ListCampItemsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Quantity,
-			&i.AssignedUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -887,53 +737,6 @@ func (q *Queries) PromoteRsvp(ctx context.Context, arg PromoteRsvpParams) (int64
 	return result.RowsAffected(), nil
 }
 
-const setCampItemAssignee = `-- name: SetCampItemAssignee :exec
-UPDATE event_camp_items SET assigned_user_id = $1
-WHERE event_id = $2 AND id = $3
-`
-
-type SetCampItemAssigneeParams struct {
-	AssignedUserID pgtype.UUID
-	EventID        pgtype.UUID
-	ID             pgtype.UUID
-}
-
-func (q *Queries) SetCampItemAssignee(ctx context.Context, arg SetCampItemAssigneeParams) error {
-	_, err := q.db.Exec(ctx, setCampItemAssignee, arg.AssignedUserID, arg.EventID, arg.ID)
-	return err
-}
-
-const setEventCamp = `-- name: SetEventCamp :exec
-
-INSERT INTO event_camp (event_id, site_name, has_water, has_toilet, notes)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (event_id) DO UPDATE
-SET site_name = EXCLUDED.site_name, has_water = EXCLUDED.has_water,
-    has_toilet = EXCLUDED.has_toilet, notes = EXCLUDED.notes
-`
-
-type SetEventCampParams struct {
-	EventID   pgtype.UUID
-	SiteName  pgtype.Text
-	HasWater  pgtype.Bool
-	HasToilet pgtype.Bool
-	Notes     pgtype.Text
-}
-
-// ---------------------------------------------------------------------------
-// Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
-// key yanlış türü reddeder.
-func (q *Queries) SetEventCamp(ctx context.Context, arg SetEventCampParams) error {
-	_, err := q.db.Exec(ctx, setEventCamp,
-		arg.EventID,
-		arg.SiteName,
-		arg.HasWater,
-		arg.HasToilet,
-		arg.Notes,
-	)
-	return err
-}
-
 const setEventFieldValue = `-- name: SetEventFieldValue :exec
 INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, $2, $3)
 ON CONFLICT (event_id, field_key) DO UPDATE SET value = EXCLUDED.value
@@ -966,6 +769,7 @@ func (q *Queries) SetEventFishing(ctx context.Context, arg SetEventFishingParams
 }
 
 const setEventHike = `-- name: SetEventHike :exec
+
 INSERT INTO event_hike (event_id, difficulty, distance_km, elevation_m, expected_return_at, return_grace_minutes)
 VALUES ($1, $2, $3::float8, $4, $5, $6)
 ON CONFLICT (event_id) DO UPDATE
@@ -983,6 +787,9 @@ type SetEventHikeParams struct {
 	ReturnGraceMinutes int32
 }
 
+// ---------------------------------------------------------------------------
+// Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
+// key yanlış türü reddeder.
 func (q *Queries) SetEventHike(ctx context.Context, arg SetEventHikeParams) error {
 	_, err := q.db.Exec(ctx, setEventHike,
 		arg.EventID,

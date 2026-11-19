@@ -21,7 +21,6 @@ var wantAppPrivileges = map[string]string{
 	"polls":                 "DELETE,INSERT,SELECT,UPDATE",
 	"events":                "DELETE,INSERT,SELECT,UPDATE",
 	"event_rsvps":           "DELETE,INSERT,SELECT,UPDATE",
-	"event_camp_items":      "DELETE,INSERT,SELECT,UPDATE",
 	"event_hike_checkins":   "DELETE,INSERT,SELECT,UPDATE",
 	"user_activity_records": "DELETE,INSERT,SELECT,UPDATE",
 	"fishing_catches":       "DELETE,INSERT,SELECT,UPDATE",
@@ -53,7 +52,6 @@ var wantAppPrivileges = map[string]string{
 	"tayfa_modules":         "INSERT,SELECT,UPDATE",
 	"user_profiles":         "INSERT,SELECT,UPDATE",
 	"event_series":          "INSERT,SELECT,UPDATE",
-	"event_camp":            "INSERT,SELECT,UPDATE",
 	"event_hike":            "INSERT,SELECT,UPDATE",
 	"event_fishing":         "INSERT,SELECT,UPDATE",
 	"poll_options":          "INSERT,SELECT",
@@ -85,6 +83,10 @@ var wantAppPrivileges = map[string]string{
 	// person; a seat request is only approved or removed.
 	"event_vehicles":              "DELETE,INSERT,SELECT,UPDATE(color,make,model,model_year,plate,seats,updated_at)",
 	"event_vehicle_seat_requests": "DELETE,INSERT,SELECT,UPDATE(decided_at,status)",
+	// Issue #241: an item never moves to another event or list, and its
+	// name and quantity do not change; only the assignee changes and
+	// account deletion clears the people on it.
+	"event_checklist_items": "DELETE,INSERT,SELECT,UPDATE(assigned_user_id,created_by,updated_at)",
 }
 
 func TestAppRolePrivileges(t *testing.T) {

@@ -115,9 +115,10 @@ type Querier interface {
 	ClearAnnouncementUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearAnswerUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearAuditActor(ctx context.Context, userID pgtype.UUID) error
-	// Malzeme listede kalır; üstlenen ve ekleyen boşalır.
-	ClearCampItemUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearCatchDeleter(ctx context.Context, userID pgtype.UUID) error
+	// Liste maddesi listede kalır; üstlenen ve ekleyen boşalır (`checklist`
+	// bileşeni, issue #241).
+	ClearChecklistItemUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearEventActor(ctx context.Context, userID pgtype.UUID) error
 	ClearEventPhotoDeleter(ctx context.Context, userID pgtype.UUID) error
 	ClearEventSeriesCreator(ctx context.Context, userID pgtype.UUID) error
@@ -169,11 +170,9 @@ type Querier interface {
 	CountActiveMembers(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
 	CountActiveMembersForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]CountActiveMembersForTayfasRow, error)
 	CountApprovedSeats(ctx context.Context, arg CountApprovedSeatsParams) (int64, error)
-	// ---------------------------------------------------------------------------
-	// Kamp malzemeleri
-	CountCampItems(ctx context.Context, eventID pgtype.UUID) (int64, error)
 	// Deneme yalnızca sınırın altındayken sayılır; 0 satır: sınır dolmuş.
 	CountCheckInAttempt(ctx context.Context, arg CountCheckInAttemptParams) (int64, error)
+	CountChecklistItems(ctx context.Context, arg CountChecklistItemsParams) (int64, error)
 	// Kişinin ve albümün silinmemiş fotoğrafları (sınırlar). Çağıran etkinlik
 	// satırını önce kilitler.
 	CountEventPhotos(ctx context.Context, arg CountEventPhotosParams) (CountEventPhotosRow, error)
@@ -218,8 +217,8 @@ type Querier interface {
 	// yazılmaz.
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error
 	CreateBlock(ctx context.Context, arg CreateBlockParams) (int64, error)
-	CreateCampItem(ctx context.Context, arg CreateCampItemParams) error
 	CreateCatch(ctx context.Context, arg CreateCatchParams) error
+	CreateChecklistItem(ctx context.Context, arg CreateChecklistItemParams) error
 	// Etkinlikler (issue #49). Her sorgu tayfa_id ile ya da tayfa kapsamında
 	// yüklenmiş bir etkinliğin kimliğiyle çalışır (IDOR); yetki kontrolü app
 	// katmanındadır (authz).
@@ -284,8 +283,8 @@ type Querier interface {
 	DeleteAnswerVotes(ctx context.Context, answerID pgtype.UUID) error
 	DeleteAvailability(ctx context.Context, arg DeleteAvailabilityParams) (int64, error)
 	DeleteBlock(ctx context.Context, arg DeleteBlockParams) (int64, error)
-	DeleteCampItem(ctx context.Context, arg DeleteCampItemParams) (int64, error)
 	DeleteCatch(ctx context.Context, arg DeleteCatchParams) (int64, error)
+	DeleteChecklistItem(ctx context.Context, arg DeleteChecklistItemParams) (int64, error)
 	DeleteEventFieldValues(ctx context.Context, eventID pgtype.UUID) error
 	DeleteEventPhoto(ctx context.Context, arg DeleteEventPhotoParams) (int64, error)
 	DeleteEventReferee(ctx context.Context, arg DeleteEventRefereeParams) (int64, error)
@@ -494,9 +493,6 @@ type Querier interface {
 	GetAnswer(ctx context.Context, arg GetAnswerParams) (GetAnswerRow, error)
 	GetAnswerByClientRequest(ctx context.Context, arg GetAnswerByClientRequestParams) (GetAnswerByClientRequestRow, error)
 	GetAnswerForUpdate(ctx context.Context, arg GetAnswerForUpdateParams) (GetAnswerForUpdateRow, error)
-	// Kilit, aynı malzemeyi aynı anda üstlenen iki kişiden ikincisinin
-	// güncel atamayı görmesini sağlar (issue #198).
-	GetCampItemForUpdate(ctx context.Context, arg GetCampItemForUpdateParams) (GetCampItemForUpdateRow, error)
 	// Bir türün güncel hali; yeni etkinlik bu sürümle oluşturulur. Emekli türü
 	// app katmanı reddeder.
 	GetCatalogEventType(ctx context.Context, key string) (GetCatalogEventTypeRow, error)
@@ -512,10 +508,10 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// Av günlüğü
 	GetCatchByClientRequest(ctx context.Context, arg GetCatchByClientRequestParams) (GetCatchByClientRequestRow, error)
+	GetChecklistItem(ctx context.Context, arg GetChecklistItemParams) (pgtype.UUID, error)
 	GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow, error)
 	// Tekrar gönderilen oluşturma isteği aynı etkinliği döndürür.
 	GetEventByClientRequest(ctx context.Context, arg GetEventByClientRequestParams) (GetEventByClientRequestRow, error)
-	GetEventCamp(ctx context.Context, eventID pgtype.UUID) (GetEventCampRow, error)
 	GetEventComponent(ctx context.Context, arg GetEventComponentParams) (GetEventComponentRow, error)
 	// ---------------------------------------------------------------------------
 	// "Her şey yolunda mıydı?"
@@ -705,13 +701,18 @@ type Querier interface {
 	// Kişinin engelledikleri (yalnızca kendisi görür); engellenen kişinin
 	// profili silinmiş olsa da kayıt listelenir ki kaldırılabilsin.
 	ListBlocksPage(ctx context.Context, arg ListBlocksPageParams) ([]ListBlocksPageRow, error)
-	ListCampItems(ctx context.Context, eventID pgtype.UUID) ([]ListCampItemsRow, error)
 	// İlgi alanı doğrulaması için: anahtar ve durum (emekliler dahil).
 	ListCatalogInterestStatuses(ctx context.Context) ([]ListCatalogInterestStatusesRow, error)
 	// Emekliye ayrılanlar dahil: eski tayfalar ve profiller onları gösterir.
 	ListCatalogInterests(ctx context.Context) ([]ListCatalogInterestsRow, error)
 	// (created_at, id) ile sayfalanır.
 	ListCatches(ctx context.Context, arg ListCatchesParams) ([]ListCatchesRow, error)
+	// Liste bileşeni (`checklist`; issue #241; ADR-0025 §4). Etkinlik her zaman
+	// önce tayfa kapsamında yüklenir ve bileşen etkinliğin tür sürümünde çözülür
+	// (internal/core/app/component: View / Change); buradaki sorgular o
+	// etkinliğin kimliği ve bileşenin anahtarıyla çalışır (IDOR). Yetki app
+	// katmanındadır (internal/core/app/component/checklist).
+	ListChecklistItems(ctx context.Context, arg ListChecklistItemsParams) ([]ListChecklistItemsRow, error)
 	ListDeletingUploads(ctx context.Context, n int32) ([]ListDeletingUploadsRow, error)
 	// Keşfet (issue #210, ADR-0033; herkese açık: issue #227, ADR-0035).
 	// Listelenebilirlik tayfa_discover_listable (00028), etkinliğin izleyiciye
@@ -1066,23 +1067,22 @@ type Querier interface {
 	// audit_logs saklama işi; trigger yalnızca bu ayarla ve 365 günden eski
 	// kayıtlar için silmeye izin verir.
 	SetAuditRetentionJob(ctx context.Context) error
-	SetCampItemAssignee(ctx context.Context, arg SetCampItemAssigneeParams) error
 	SetCatchPhoto(ctx context.Context, arg SetCatchPhotoParams) error
+	SetChecklistItemAssignee(ctx context.Context, arg SetChecklistItemAssigneeParams) (int64, error)
 	// Outbox (ADR-0002): olaylar iş verisiyle aynı transaction'da
 	// internal/platform/outbox.Write ile yazılır (sıralama kilidi, outbox paket
 	// belgesi). payload'a kişisel içerik yazılmaz. outbox ortak kolonları yazar;
 	// core'a özgü tayfa_id kolonu aynı transaction'da hemen ardından doldurulur.
 	SetDomainEventTayfa(ctx context.Context, arg SetDomainEventTayfaParams) (int64, error)
-	// ---------------------------------------------------------------------------
-	// Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
-	// key yanlış türü reddeder.
-	SetEventCamp(ctx context.Context, arg SetEventCampParams) error
 	// Seçim app katmanında tür sürümüne göre doğrulanmış haliyle yazılır;
 	// trigger (event_components_guard) aynı kuralı ayrıca denetler.
 	SetEventComponent(ctx context.Context, arg SetEventComponentParams) error
 	SetEventCover(ctx context.Context, arg SetEventCoverParams) error
 	SetEventFieldValue(ctx context.Context, arg SetEventFieldValueParams) error
 	SetEventFishing(ctx context.Context, arg SetEventFishingParams) error
+	// ---------------------------------------------------------------------------
+	// Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
+	// key yanlış türü reddeder.
 	SetEventHike(ctx context.Context, arg SetEventHikeParams) error
 	// Rota app katmanında doğrulanmış haliyle yazılır; event_routes_points
 	// CHECK'i ve event_component_guard aynı kuralları ayrıca denetler.

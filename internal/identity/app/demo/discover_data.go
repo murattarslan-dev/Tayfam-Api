@@ -169,9 +169,9 @@ var discoverTayfas = []tayfaSpec{
 				Start:       at{Days: 11, Hour: 12}, Hours: 26,
 				PlaceName: "Abant Gölü Milli Parkı kamp alanı", Lat: 40.6058, Lng: 31.2813,
 				City: "Bolu", District: "Merkez",
-				Camp: &corev1.CampDetails{
-					SiteName: "Abant kamp alanı", HasWater: ptr(true), HasToilet: ptr(true),
-					Notes: "Gece hava soğuk; kalın uyku tulumu getirin.",
+				Fields: map[string]string{
+					"site_name": `"Abant kamp alanı"`, "has_water": `true`, "has_toilet": `true`,
+					"notes": `"Gece hava soğuk; kalın uyku tulumu getirin."`,
 				},
 				RSVPs: []rsvpSpec{
 					{Person: "tuncay", Status: going}, {Person: "arda", Status: going}, {Person: "sevgi", Status: going},

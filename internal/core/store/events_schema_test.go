@@ -65,7 +65,6 @@ func TestEventTypeIntegrity(t *testing.T) {
 	}
 
 	details := map[string]string{
-		"camp":    `INSERT INTO event_camp (event_id) VALUES ($1)`,
 		"hike":    `INSERT INTO event_hike (event_id) VALUES ($1)`,
 		"fishing": `INSERT INTO event_fishing (event_id) VALUES ($1)`,
 	}
@@ -86,26 +85,26 @@ func TestEventTypeIntegrity(t *testing.T) {
 	}
 
 	// The fixed type column cannot be changed to point elsewhere.
-	_, err := pool.Exec(ctx, `UPDATE event_camp SET type = 'hike' WHERE event_id = $1`, ids["camp"].PG())
-	if c := constraintOf(err); c != "event_camp_type" {
-		t.Errorf("event_camp.type değişti: %v", err)
+	_, err := pool.Exec(ctx, `UPDATE event_hike SET type = 'fishing' WHERE event_id = $1`, ids["hike"].PG())
+	if c := constraintOf(err); c != "event_hike_type" {
+		t.Errorf("event_hike.type değişti: %v", err)
 	}
 	// The event's type cannot change while a detail row points at it.
-	_, err = pool.Exec(ctx, `UPDATE events SET type = 'hike' WHERE id = $1`, ids["camp"].PG())
-	if c := constraintOf(err); c != "event_camp_event_fkey" {
+	_, err = pool.Exec(ctx, `UPDATE events SET type = 'fishing' WHERE id = $1`, ids["hike"].PG())
+	if c := constraintOf(err); c != "event_hike_event_fkey" {
 		t.Errorf("detaylı etkinliğin türü değişti: %v", err)
 	}
 
-	// Camp items hang off the type table, so they too need an event of the
-	// right type. Vehicles are a component's (event_vehicles, 00035): the
-	// component guard refuses a type without it.
+	// Vehicles and list items are components' (event_vehicles, 00035;
+	// event_checklist_items, 00036): the component guard refuses a type
+	// without the component.
 	_, err = pool.Exec(ctx, `INSERT INTO event_vehicles (id, event_id, component_key, user_id, make) VALUES (gen_random_uuid(), $1, 'vehicles', gen_random_uuid(), 'Murat')`, ids["camp"].PG())
 	if c := constraintOf(err); c != "event_component_guard" {
 		t.Errorf("kamp etkinliğine araç eklendi: %v", err)
 	}
-	_, err = pool.Exec(ctx, `INSERT INTO event_camp_items (id, event_id, name) VALUES (gen_random_uuid(), $1, 'Çadır')`, ids["convoy"].PG())
-	if c := constraintOf(err); c != "event_camp_items_event_id_fkey" {
-		t.Errorf("konvoy etkinliğine kamp malzemesi eklendi: %v", err)
+	_, err = pool.Exec(ctx, `INSERT INTO event_checklist_items (id, event_id, component_key, name) VALUES (gen_random_uuid(), $1, 'gear', 'Çadır')`, ids["convoy"].PG())
+	if c := constraintOf(err); c != "event_component_guard" {
+		t.Errorf("konvoy etkinliğine liste maddesi eklendi: %v", err)
 	}
 
 	// Deleting the event removes its details, vehicles (with their seat
@@ -228,11 +227,6 @@ func TestEventDetailConstraints(t *testing.T) {
 		}
 		return eid
 	}
-	camp := event("camp")
-	if _, err := pool.Exec(ctx, `INSERT INTO event_camp (event_id) VALUES ($1)`, camp.PG()); err != nil {
-		t.Fatal(err)
-	}
-
 	for name, tc := range map[string]struct {
 		sql        string
 		on         id.ID
@@ -247,9 +241,6 @@ func TestEventDetailConstraints(t *testing.T) {
 		"türde olmayan alan":    {`INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, 'stake', '100')`, event("gaming"), "event_field_values_guard"},
 		"alansız türde alan":    {`INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, 'game', '"CS2"')`, event("hike"), "event_field_values_guard"},
 		"nesne alan değeri":     {`INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, 'game', '{}')`, event("gaming"), "event_field_values_value"},
-		"1001 karakter not":     {`INSERT INTO event_camp (event_id, notes) VALUES ($1, repeat('n', 1001))`, event("camp"), "event_camp_notes_len"},
-		"sıfır adet":            {`INSERT INTO event_camp_items (id, event_id, name, quantity) VALUES (gen_random_uuid(), $1, 'Çadır', 0)`, camp, "event_camp_items_quantity"},
-		"boş malzeme":           {`INSERT INTO event_camp_items (id, event_id, name) VALUES (gen_random_uuid(), $1, '')`, camp, "event_camp_items_name_len"},
 	} {
 		_, err := pool.Exec(ctx, tc.sql, tc.on.PG())
 		if got := constraintOf(err); got != tc.constraint {

@@ -64,6 +64,7 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 		registerVehiclesComponent,
 
 		// checklist (#241)
+		registerChecklistComponent,
 
 		// roll_call (#242)
 

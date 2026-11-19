@@ -72,7 +72,7 @@ type fEvent struct {
 	route    []*corev1.LatLng
 	rsvps    map[string]corev1.RsvpStatus
 	vehicles map[string]*corev1.EventVehicle
-	items    []*corev1.CampItem
+	items    []*corev1.ChecklistItem
 }
 
 type fPoll struct {
@@ -91,7 +91,7 @@ func newFake() *fakeServices {
 }
 
 func (f *fakeServices) core() Core {
-	return Core{Tayfas: f, Memberships: f, Events: f, Routes: f, Vehicles: f, Announcements: f, QA: f, Polls: f, Discover: f, Social: f}
+	return Core{Tayfas: f, Memberships: f, Events: f, Routes: f, Vehicles: f, Checklists: f, Announcements: f, QA: f, Polls: f, Discover: f, Social: f}
 }
 
 func fail(code codes.Code, reason string) error {
@@ -360,27 +360,6 @@ func (f *fakeServices) event(tayfaID, eventID string) (*fEvent, error) {
 	return e, nil
 }
 
-func (f *fakeServices) GetEvent(ctx context.Context, in *corev1.GetEventRequest, _ ...grpc.CallOption) (*corev1.GetEventResponse, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	caller, err := f.begin(ctx, "GetEvent")
-	if err != nil {
-		return nil, err
-	}
-	if _, err := f.member(in.GetTayfaId(), caller, corev1.Role_ROLE_MEMBER, false); err != nil {
-		return nil, err
-	}
-	e, err := f.event(in.GetTayfaId(), in.GetEventId())
-	if err != nil {
-		return nil, err
-	}
-	out := &corev1.Event{Id: e.ev.Id, TayfaId: e.ev.TayfaId, Type: e.ev.Type}
-	if e.ev.Type == corev1.EventType_EVENT_TYPE_CAMP {
-		out.Details = &corev1.Event_Camp{Camp: &corev1.CampDetails{Items: e.items}}
-	}
-	return &corev1.GetEventResponse{Event: out}, nil
-}
-
 func (f *fakeServices) SetRsvp(ctx context.Context, in *corev1.SetRsvpRequest, _ ...grpc.CallOption) (*corev1.SetRsvpResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -425,32 +404,60 @@ func (f *fakeServices) SetRoute(ctx context.Context, in *corev1.SetRouteRequest,
 	return &corev1.SetRouteResponse{Route: &corev1.EventRoute{Points: e.route}}, nil
 }
 
-func (f *fakeServices) AddCampItem(ctx context.Context, in *corev1.AddCampItemRequest, _ ...grpc.CallOption) (*corev1.AddCampItemResponse, error) {
+// ListChecklist is ChecklistComponentService's: the camp's "gear" list.
+func (f *fakeServices) ListChecklist(ctx context.Context, in *corev1.ListChecklistRequest, _ ...grpc.CallOption) (*corev1.ListChecklistResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	caller, err := f.begin(ctx, "AddCampItem")
+	caller, err := f.begin(ctx, "ListChecklist")
 	if err != nil {
 		return nil, err
 	}
-	t, err := f.member(in.GetTayfaId(), caller, corev1.Role_ROLE_MODERATOR, true)
+	ref := in.GetRef()
+	if _, err := f.member(ref.GetTayfaId(), caller, corev1.Role_ROLE_MEMBER, false); err != nil {
+		return nil, err
+	}
+	e, err := f.event(ref.GetTayfaId(), ref.GetEventId())
 	if err != nil {
 		return nil, err
 	}
-	e, err := f.event(in.GetTayfaId(), in.GetEventId())
+	if e.ev.Type != corev1.EventType_EVENT_TYPE_CAMP || ref.GetComponentKey() != "gear" {
+		return nil, fail(codes.NotFound, "ERROR_REASON_COMPONENT_NOT_FOUND")
+	}
+	return &corev1.ListChecklistResponse{Checklist: &corev1.Checklist{Items: e.items, Label: "gear"}}, nil
+}
+
+// AddChecklistItem is ChecklistComponentService's: managers only, on the
+// camp's "gear" list.
+func (f *fakeServices) AddChecklistItem(ctx context.Context, in *corev1.AddChecklistItemRequest, _ ...grpc.CallOption) (*corev1.AddChecklistItemResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	caller, err := f.begin(ctx, "AddChecklistItem")
 	if err != nil {
 		return nil, err
 	}
-	if e.ev.Type != corev1.EventType_EVENT_TYPE_CAMP {
-		return nil, fail(codes.FailedPrecondition, "ERROR_REASON_EVENT_TYPE_MISMATCH")
+	ref := in.GetRef()
+	t, err := f.member(ref.GetTayfaId(), caller, corev1.Role_ROLE_MODERATOR, true)
+	if err != nil {
+		return nil, err
+	}
+	e, err := f.event(ref.GetTayfaId(), ref.GetEventId())
+	if err != nil {
+		return nil, err
+	}
+	if e.ev.Type != corev1.EventType_EVENT_TYPE_CAMP || ref.GetComponentKey() != "gear" {
+		return nil, fail(codes.NotFound, "ERROR_REASON_COMPONENT_NOT_FOUND")
 	}
 	if a := in.GetAssignedUserId(); a != "" {
 		if _, ok := t.roles[a]; !ok {
 			return nil, fail(codes.InvalidArgument, "ERROR_REASON_VALIDATION")
 		}
+		if e.rsvps[a] != corev1.RsvpStatus_RSVP_STATUS_GOING {
+			return nil, fail(codes.FailedPrecondition, "ERROR_REASON_EVENT_NOT_GOING")
+		}
 	}
-	it := &corev1.CampItem{Id: f.newID(), Name: in.GetName(), Quantity: in.GetQuantity(), AssignedUserId: in.GetAssignedUserId()}
+	it := &corev1.ChecklistItem{Id: f.newID(), Name: in.GetName(), Quantity: in.GetQuantity(), AssignedUserId: in.GetAssignedUserId()}
 	e.items = append(e.items, it)
-	return &corev1.AddCampItemResponse{Item: it}, nil
+	return &corev1.AddChecklistItemResponse{Checklist: &corev1.Checklist{Items: e.items, Label: "gear"}}, nil
 }
 
 // SetVehicle is VehiclesComponentService's: a going participant's own

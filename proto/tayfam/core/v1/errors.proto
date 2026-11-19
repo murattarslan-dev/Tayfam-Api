@@ -124,17 +124,17 @@ enum ErrorReason {
   // a convoy vehicle, checking in; online check-in also needs it given
   // before the start).
   ERROR_REASON_EVENT_NOT_GOING = 33;
-  // NOT_FOUND. No camp item, convoy vehicle, fishing catch or album photo
+  // NOT_FOUND. No list item, vehicle, fishing catch or album photo
   // with this ID on this event that the caller may remove.
   ERROR_REASON_EVENT_ITEM_NOT_FOUND = 34;
-  // RESOURCE_EXHAUSTED. The event's list is full (200 camp items; 30 album
+  // RESOURCE_EXHAUSTED. The event's list is full (200 list items; 30 album
   // photos per person or 500 per album).
   ERROR_REASON_EVENT_LIMIT = 35;
   // FAILED_PRECONDITION. The method is for another event type (for example
-  // AddCampItem on a convoy event).
+  // ListFishingCatches on a convoy event).
   ERROR_REASON_EVENT_TYPE_MISMATCH = 36;
-  // ABORTED. Someone else took the camp item; reload the event (issue
-  // #198).
+  // ABORTED. Someone else took the list item; reload the list (issues
+  // #198, #241).
   ERROR_REASON_EVENT_ITEM_TAKEN = 37;
 
   // Attendance (EventService check-in, correction and fishing catches;

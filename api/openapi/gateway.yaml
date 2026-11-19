@@ -1678,7 +1678,7 @@ paths:
       summary: Bitmemiş etkinlikler, başlangıç zamanına göre
       description: |
         Her etkin üyeye açıktır (susturulmuş üye de okur). İptal edilenler
-        de listededir. Türe özel ayrıntılar (`camp`, `hike`, …) listede
+        de listededir. Türe özel ayrıntılar (`hike`, `fishing`) listede
         dolmaz; tek etkinlik ucunu kullanın.
       parameters:
         - $ref: "#/components/parameters/PageSize"
@@ -1737,7 +1737,9 @@ paths:
         Katılımcılara özel balık noktasında (`spot_visibility=participants`)
         katılmayan üye `meeting_point` ve `meeting_point_name` almaz. Araçlar
         (ve plakalar) burada değildir; `vehicles` bileşenindedir
-        (`GET …/components/{component_key}/vehicles`, #240).
+        (`GET …/components/{component_key}/vehicles`, #240). Kamp listesi
+        `checklist` bileşenindedir (`GET …/components/{component_key}/items`,
+        #241); kamp yeri, su, tuvalet ve notlar `fields`'tadır.
       responses:
         "200":
           description: Etkinlik
@@ -1759,9 +1761,10 @@ paths:
         - Yer: `mode`, `meeting_point_name`, `meeting_point`, `city`,
           `district`, `online_url` birlikte değişir; bunlardan biri
           gönderilirse `mode` zorunludur ve gönderilmeyenler boşalır.
-        - Türe özel ayrıntı (`camp`, `hike`, `fishing`) tamamen değişir; kamp
-          listesi korunur. Konvoyun rotası `route` bileşenindedir
-          (`PUT …/components/{component_key}/route`).
+        - Türe özel ayrıntı (`hike`, `fishing`) tamamen değişir. Konvoyun
+          rotası `route` bileşenindedir
+          (`PUT …/components/{component_key}/route`); kampın ayrıntıları
+          `fields`'tadır.
 
         Kapasiteyi artırmak bekleme listesindekileri sırayla `going` yapar.
         Seriye ait bir etkinlikte `apply_to_series` `false` (varsayılan) ise
@@ -2052,97 +2055,6 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/HikeCheckin" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "404": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-        "503": { $ref: "#/components/responses/Problem" }
-
-  /v1/tayfas/{tayfa_id}/events/{event_id}/camp-items:
-    parameters:
-      - $ref: "#/components/parameters/TayfaID"
-      - $ref: "#/components/parameters/EventID"
-    post:
-      operationId: addCampItem
-      summary: Kamp listesine malzeme ekler (organizatör, moderatör, yönetici)
-      description: |
-        Yalnızca kamp etkinliğinde (`event-type-mismatch`); en fazla 200
-        malzeme (`event-limit`). Liste tek etkinlik yanıtındaki
-        `camp.items`'tadır. `assigned_user_id` verilirse kişi tayfanın etkin
-        üyesi olmalı ve `going` cevabı vermiş olmalıdır (`event-not-going`).
-      parameters:
-        - $ref: "#/components/parameters/ClientHeader"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/CampItemCreateRequest" }
-      responses:
-        "201":
-          description: Eklenen malzeme
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/CampItem" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "404": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-        "503": { $ref: "#/components/responses/Problem" }
-
-  /v1/tayfas/{tayfa_id}/events/{event_id}/camp-items/{item_id}:
-    parameters:
-      - $ref: "#/components/parameters/TayfaID"
-      - $ref: "#/components/parameters/EventID"
-      - name: item_id
-        in: path
-        required: true
-        schema: { type: string, format: uuid }
-    patch:
-      operationId: assignCampItem
-      summary: Malzemeyi kimin getireceğini belirler ya da atamayı kaldırır
-      description: |
-        `assigned_user_id` bir kullanıcı kimliği atar; alan yoksa ya da
-        `null` ise atama kaldırılır.
-
-        - Organizatör, moderatör ve yönetici `going` cevabı vermiş herhangi
-          bir etkin üyeyi atayabilir ya da herhangi bir atamayı kaldırabilir.
-        - `going` cevabı vermiş diğer üyeler yalnızca boştaki malzemeyi
-          kendine atayabilir ve yalnızca kendi atamasını kaldırabilir.
-          Başkasına atamak `permission-denied`dır.
-
-        `going` cevabı olmayan (ya da etkin üye olmayan) kişi:
-        `event-not-going`. Malzemeyi başkası üstlenmişse (aynı anda üstlenen
-        iki kişiden ikincisi dahil): `event-item-taken`; istemci etkinliği
-        yeniden yükler. Değeri zaten olana ayarlamak değişiklik yapmadan
-        başarılı olur. Yalnızca kamp etkinliğinde (`event-type-mismatch`).
-      parameters:
-        - $ref: "#/components/parameters/ClientHeader"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/CampItemAssignRequest" }
-      responses:
-        "200":
-          description: Güncel malzeme
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/CampItem" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "404": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-        "503": { $ref: "#/components/responses/Problem" }
-    delete:
-      operationId: removeCampItem
-      summary: Kamp listesinden malzeme çıkarır (organizatör, moderatör, yönetici)
-      parameters:
-        - $ref: "#/components/parameters/ClientHeader"
-      responses:
-        "204": { description: Malzeme çıkarıldı }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -2707,6 +2619,142 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/EventVehicles" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  # --- Etkinlik bileşenleri: liste (`checklist`; core ChecklistComponentService, #241, ADR-0025 §4, §5) ---
+  # Kim ne getiriyor, yapıyor, hangi bölümü alıyor. Bir etkinlikte birden çok
+  # liste olabilir (tanımdaki `key`: `gear`, `duty` …). Maddeyi organizatör,
+  # moderatör ve yönetici ekler ve çıkarır; bileşenin `assignment`
+  # parametresi açıksa `going` cevabı vermiş üye boştaki maddeyi üstlenir.
+  # Kampın Faz 1 malzeme listesi `gear` anahtarlı listedir. Yazan her uç
+  # listeyi güncel haliyle döner.
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/items:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: listChecklist
+      summary: Listenin maddeleri
+      description: |
+        Maddeler eklenme sırasıyladır. Her etkin üyeye açıktır (susturulmuş
+        üye de okur); iptal edilmiş ve donmuş etkinlikte de okunur. Bileşen
+        uçlarının ortak kuralları geçerlidir (`component-not-found`,
+        `component-disabled`).
+      responses:
+        "200":
+          description: Liste, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Checklist" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: addChecklistItem
+      summary: Listeye madde ekler (organizatör, moderatör, yönetici)
+      description: |
+        En fazla 200 madde (`event-limit`); etkinlik bitene kadar
+        (`event-ended`). Birden büyük `quantity` yalnızca bileşenin
+        `quantity` parametresi açıksa, `assigned_user_id` yalnızca
+        `assignment` parametresi açıksa kabul edilir (`quantity_enabled`,
+        `assignment_enabled`). Atanan kişi tayfanın etkin üyesi olmalı ve
+        `going` cevabı vermiş olmalıdır (`event-not-going`). Bileşen
+        uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChecklistItemRequest" }
+      responses:
+        "201":
+          description: Liste, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Checklist" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/items/{item_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/ChecklistItemID"
+    delete:
+      operationId: removeChecklistItem
+      summary: Listeden madde çıkarır (organizatör, moderatör, yönetici)
+      description: |
+        Bilinmeyen madde `event-item-not-found`; etkinlik bitene kadar
+        (`event-ended`). Bileşen uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Liste, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Checklist" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/items/{item_id}/assignee:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/ChecklistItemID"
+    put:
+      operationId: assignChecklistItem
+      summary: Maddeyi kimin üstleneceğini belirler ya da atamayı kaldırır
+      description: |
+        Yalnızca bileşenin `assignment` parametresi açıksa (yoksa
+        `invalid-request`). `assigned_user_id` bir kullanıcı kimliği atar;
+        alan yoksa ya da `null` ise atama kaldırılır.
+
+        - Organizatör, moderatör ve yönetici `going` cevabı vermiş herhangi
+          bir etkin üyeyi atayabilir ya da herhangi bir atamayı kaldırabilir.
+        - `going` cevabı vermiş diğer üyeler (susturulmamış) yalnızca
+          boştaki maddeyi kendine atayabilir ve yalnızca kendi atamasını
+          kaldırabilir. Başkasına atamak `permission-denied`dır.
+
+        `going` cevabı olmayan (ya da etkin üye olmayan) kişi:
+        `event-not-going`. Maddeyi başkası üstlenmişse (aynı anda üstlenen
+        iki kişiden ikincisi dahil): `event-item-taken`; istemci listeyi
+        yeniden yükler. Değeri zaten olana ayarlamak değişiklik yapmadan
+        başarılı olur. Etkinlik bitene kadar (`event-ended`). Bileşen
+        uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChecklistAssignRequest" }
+      responses:
+        "200":
+          description: Liste, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Checklist" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -6013,6 +6061,12 @@ components:
       required: true
       description: Bileşendeki aracın kimliği (`EventVehicle.id`).
       schema: { type: string, format: uuid }
+    ChecklistItemID:
+      name: item_id
+      in: path
+      required: true
+      description: Listedeki maddenin kimliği (`ChecklistItem.id`).
+      schema: { type: string, format: uuid }
     SeriesID:
       name: series_id
       in: path
@@ -7307,52 +7361,54 @@ components:
           maximum: 8
           description: Boş koltuk sayısı; verilmezse 0. Sıfırdan büyük değer yalnızca `seats_enabled` ise.
 
-    CampDetails:
-      type: object
-      properties:
-        site_name: { type: string }
-        has_water: { type: boolean, description: Bilinmiyorsa yoktur. }
-        has_toilet: { type: boolean, description: Bilinmiyorsa yoktur. }
-        notes: { type: string }
-        items:
-          type: array
-          description: Yalnızca tek etkinlik yanıtında.
-          items: { $ref: "#/components/schemas/CampItem" }
-    CampDetailsInput:
-      type: object
-      additionalProperties: false
-      properties:
-        site_name: { type: string, maxLength: 120 }
-        has_water: { type: boolean }
-        has_toilet: { type: boolean }
-        notes: { type: string, maxLength: 1000 }
-    CampItem:
+    ChecklistItem:
       type: object
       required: [id, name, quantity]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
-        quantity: { type: integer }
-        assigned_user_id: { type: string, format: uuid, description: Getirecek kişi. }
-    CampItemCreateRequest:
+        quantity: { type: integer, description: "1–999; bileşenin `quantity` parametresi kapalıysa hep 1." }
+        assigned_user_id: { type: string, format: uuid, description: Maddeyi üstlenen kişi; kimse üstlenmediyse yoktur. }
+    Checklist:
+      type: object
+      required: [items, label, assignment_enabled, quantity_enabled, caller_can_manage, caller_can_take]
+      description: Bir etkinliğin bir liste bileşeni, isteği yapanın gördüğü haliyle (#241).
+      properties:
+        items:
+          type: array
+          description: Eklenme sırasıyla.
+          items: { $ref: "#/components/schemas/ChecklistItem" }
+        label:
+          type: string
+          enum: [gear, task, section, duty, item]
+          description: Bileşenin `label` parametresi (malzeme, görev, bölüm, nöbet, madde); tanım vermezse `item`. Metni istemci çevirir.
+        assignment_enabled: { type: boolean, description: Bileşenin `assignment` parametresi; kapalıysa madde üstlenilmez. }
+        quantity_enabled: { type: boolean, description: Bileşenin `quantity` parametresi; kapalıysa adet hep 1. }
+        caller_can_manage:
+          type: boolean
+          description: Şu an madde ekleyebilir, çıkarabilir ve atayabilirsiniz (organizatör yetkisi, susturulmamış; etkinlik bitmemiş, iptal değil, tayfa salt okunur değil).
+        caller_can_take:
+          type: boolean
+          description: Şu an boştaki maddeyi kendinize atayabilir ve kendi atamanızı kaldırabilirsiniz (`going`, susturulmamış, `assignment_enabled`; aynı pencereler).
+    ChecklistItemRequest:
       type: object
       required: [name]
       additionalProperties: false
       properties:
         name: { type: string, minLength: 1, maxLength: 60 }
-        quantity: { type: integer, minimum: 0, maximum: 999, description: "0 ya da yok: 1." }
+        quantity: { type: integer, minimum: 0, maximum: 999, description: "0 ya da yok: 1. Birden büyük değer yalnızca `quantity_enabled` ise." }
         assigned_user_id:
           type: string
           format: uuid
-          description: Tayfanın `going` cevabı vermiş etkin bir üyesi (`event-not-going`).
-    CampItemAssignRequest:
+          description: İsteğe bağlı; yalnızca `assignment_enabled` ise. Tayfanın `going` cevabı vermiş etkin bir üyesi (`event-not-going`).
+    ChecklistAssignRequest:
       type: object
       additionalProperties: false
       properties:
         assigned_user_id:
           type: string
           format: uuid
-          description: Getirecek kişi. Yoksa (ya da `null`) atama kaldırılır.
+          description: Üstlenecek kişi. Yoksa (ya da `null`) atama kaldırılır.
 
     HikeDetails:
       type: object
@@ -7502,10 +7558,12 @@ components:
         etkinlik oluşturulduğu tür sürümüne (`type_version`) bağlıdır ve o
         sürümün tanımıyla gösterilir (güncel katalogda yoksa
         `GET /v1/catalog/event-types/{key}/versions/{version}`). `fields`
-        ve Faz 1'den kalan türe özel ayrıntı (`camp`, `hike`, `fishing`;
+        ve Faz 1'den kalan türe özel ayrıntı (`hike`, `fishing`;
         bileşenlere taşınana kadar) yalnızca tek etkinlik yanıtında gelir;
         ayrıntılardan en fazla biri doludur. Konvoyun rotası ve araçları
-        bileşenlerindedir (`route`, `vehicles`).
+        bileşenlerindedir (`route`, `vehicles`); kampın listesi `checklist`
+        bileşenindedir, kamp yeri, su, tuvalet ve notlar `fields`'tadır
+        (`site_name`, `has_water`, `has_toilet`, `notes`; #241).
       properties:
         cover_upload_id: { type: string, format: uuid, description: "Kapak; linkleri `POST /v1/media/urls`. Serinin ürettiği etkinliklerde yoktur." }
         id: { type: string, format: uuid }
@@ -7557,7 +7615,6 @@ components:
         series_override: { type: boolean, description: Seriden ayrı düzenlendi; seri değişiklikleri ona dokunmaz. }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
-        camp: { $ref: "#/components/schemas/CampDetails" }
         hike: { $ref: "#/components/schemas/HikeDetails" }
         fishing: { $ref: "#/components/schemas/FishingDetails" }
 
@@ -7581,9 +7638,10 @@ components:
         güncel sürümüyle oluşturulur ve `mode` türün izin verdiği modlardan
         biri olmalıdır. `fields` türün tanımına göre doğrulanır: zorunlu
         alanlar verilir, tanımda olmayan alan gönderilmez (ör. `gaming`:
-        `game`, `platform`; `sports`: `sport`, `venue_name`). Faz 1'den
-        kalan ayrıntılar (`camp`, `hike`, `fishing`) yalnızca kendi
-        türlerinde, en fazla bir tane verilir. Rota etkinlik oluşturulduktan
+        `game`, `platform`; `sports`: `sport`, `venue_name`; `camp`:
+        `site_name`, `has_water`, `has_toilet`, `notes`). Faz 1'den kalan
+        ayrıntılar (`hike`, `fishing`) yalnızca kendi türlerinde, en fazla
+        bir tane verilir. Rota etkinlik oluşturulduktan
         sonra `route` bileşeninden yazılır.
       properties:
         cover_upload_id: { type: string, format: uuid, description: "İsteğe bağlı: kendi hazır `cover` yüklemeniz (bu tayfa için açılmış). Yalnızca bu etkinliğe bağlanır." }
@@ -7622,7 +7680,6 @@ components:
             Organizatörün işareti: etkinlik halka açık bir yerde buluşur ve
             Keşfet'te görünebilir (ADR-0033). Yalnızca yüz yüze etkinlikte
             etkilidir; özel adreste buluşan etkinlik işaretlenmez.
-        camp: { $ref: "#/components/schemas/CampDetailsInput" }
         hike: { $ref: "#/components/schemas/HikeDetails" }
         fishing: { $ref: "#/components/schemas/FishingDetails" }
         recurrence: { $ref: "#/components/schemas/Recurrence" }
@@ -7663,7 +7720,6 @@ components:
             Organizatörün işareti: etkinlik halka açık bir yerde buluşur ve
             Keşfet'te görünebilir (ADR-0033). Yalnızca yüz yüze etkinlikte
             etkilidir; özel adreste buluşan etkinlik işaretlenmez.
-        camp: { $ref: "#/components/schemas/CampDetailsInput" }
         hike: { $ref: "#/components/schemas/HikeDetails" }
         fishing: { $ref: "#/components/schemas/FishingDetails" }
         apply_to_series:
