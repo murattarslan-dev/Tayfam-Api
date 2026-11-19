@@ -194,8 +194,6 @@ func (s *Seeder) seedEvent(ctx context.Context, t tayfaSpec, e eventSpec, tayfaI
 		req.MeetingPoint = &corev1.LatLng{Lat: e.Lat, Lng: e.Lng}
 	}
 	switch {
-	case e.Convoy != nil:
-		req.Details = &corev1.CreateEventRequest_Convoy{Convoy: e.Convoy}
 	case e.Camp != nil:
 		req.Details = &corev1.CreateEventRequest_Camp{Camp: e.Camp}
 	case e.Hike != nil:
@@ -218,7 +216,25 @@ func (s *Seeder) seedEvent(ctx context.Context, t tayfaSpec, e eventSpec, tayfaI
 
 	// An event that has ended or was cancelled since the first run takes no
 	// more answers; its remaining steps are skipped.
-	over := func(err error) bool { return is(err, "ERROR_REASON_EVENT_ENDED", "ERROR_REASON_EVENT_CANCELLED") }
+	// A component's data is frozen seven days after the end.
+	over := func(err error) bool {
+		return is(err, "ERROR_REASON_EVENT_ENDED", "ERROR_REASON_EVENT_CANCELLED", "ERROR_REASON_COMPONENT_FROZEN")
+	}
+	// The route is the route component's (issue #239); setting it again
+	// writes the same points.
+	if len(e.Route) > 0 {
+		_, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.SetRouteResponse, error) {
+			return s.cfg.Core.Routes.SetRoute(ctx, &corev1.SetRouteRequest{
+				Ref: &corev1.ComponentRef{TayfaId: tayfaID, EventId: eventID, ComponentKey: "route"}, Points: e.Route,
+			})
+		})
+		if over(err) {
+			return nil
+		}
+		if err != nil {
+			return check("rota", err)
+		}
+	}
 	for _, r := range e.RSVPs {
 		_, err := call(ctx, s, users[r.Person], func(ctx context.Context) (*corev1.SetRsvpResponse, error) {
 			return s.cfg.Core.Events.SetRsvp(ctx, &corev1.SetRsvpRequest{TayfaId: tayfaID, EventId: eventID, Status: r.Status})

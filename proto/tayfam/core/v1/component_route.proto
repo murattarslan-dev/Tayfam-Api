@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/component.proto";
+import "tayfam/core/v1/event.proto";
+
+// RouteComponentService is the route component (kind "route", issue #239;
+// ADR-0025 §4): the line an event follows on the map, as an ordered list
+// of points. It replaces the Faz 1 convoy route (ConvoyDetails.route) for
+// every type that has the component.
+//
+// Only gateway calls it with the user's access token. Authentication,
+// scope and the errors every component shares are those of
+// EventComponentService (component.proto): anyone but an ACTIVE member
+// gets ERROR_REASON_TAYFA_NOT_FOUND, and so on.
+//
+// The route is content the organizer shares on purpose (ADR-0008), not a
+// device location. Its points are never logged and never written to the
+// audit record or to an outbox event.
+service RouteComponentService {
+  // GetRoute returns the event's route; without one the points are empty.
+  // Open to every active member, muted ones included.
+  rpc GetRoute(GetRouteRequest) returns (GetRouteResponse);
+
+  // SetRoute replaces the route with 2–500 points, or removes it with no
+  // points. Managers only (the organizer, and moderators and admins as
+  // for every event), until the component freezes seven days after the
+  // event's end. The change applies to this event only, also in a series.
+  //
+  // Errors: ERROR_REASON_VALIDATION (points: one point, more than 500, a
+  // missing point or one outside lat -90..90, lng -180..180),
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
+  // every component change.
+  rpc SetRoute(SetRouteRequest) returns (SetRouteResponse);
+}
+
+// EventRoute is the route of one component of an event.
+message EventRoute {
+  // In order; empty without a route, 2–500 points otherwise.
+  repeated LatLng points = 1;
+  // When the route was last set; unset without a route.
+  google.protobuf.Timestamp update_time = 2;
+  // The caller may change the route now: a manager who is not muted, and
+  // the event, the tayfa and the write window allow changes.
+  bool caller_can_edit = 3;
+}
+
+message GetRouteRequest {
+  ComponentRef ref = 1;
+}
+
+message GetRouteResponse {
+  EventRoute route = 1;
+}
+
+message SetRouteRequest {
+  ComponentRef ref = 1;
+  // Empty removes the route; otherwise 2–500 points.
+  repeated LatLng points = 2;
+}
+
+message SetRouteResponse {
+  EventRoute route = 1;
+}

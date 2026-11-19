@@ -183,7 +183,6 @@ type EventConsumer struct {
 type EventConvoy struct {
 	EventID pgtype.UUID
 	Type    string
-	Route   []byte
 }
 
 type EventConvoyVehicle struct {
@@ -262,6 +261,14 @@ type EventReferee struct {
 	ComponentKey pgtype.Text
 	ScopeID      pgtype.UUID
 	CreatedAt    pgtype.Timestamptz
+}
+
+type EventRoute struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	Points       []byte
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
 }
 
 type EventRsvp struct {

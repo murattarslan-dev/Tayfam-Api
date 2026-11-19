@@ -6,8 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
+	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
@@ -270,7 +273,9 @@ func TestEventDetailConstraints(t *testing.T) {
 	}
 }
 
-func TestConvoyRoute(t *testing.T) {
+// The points of a route (event_routes, 00034; the Faz 1 convoy route moved
+// there, issue #239) keep the rules of is_valid_route.
+func TestRoutePoints(t *testing.T) {
 	pool, _ := setup(t)
 	ctx := context.Background()
 	tayfa := newTayfa(t, pool, id.New(), tayfaOpts{})
@@ -291,7 +296,6 @@ func TestConvoyRoute(t *testing.T) {
 		route string
 		ok    bool
 	}{
-		"rota yok":            {"", true},
 		"iki nokta":           {points(2), true},
 		"500 nokta":           {points(500), true},
 		"sınır değerler":      {`[{"lat": -90, "lng": -180}, {"lat": 90, "lng": 180}]`, true},
@@ -312,17 +316,108 @@ func TestConvoyRoute(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		var route any
-		if tc.route != "" {
-			route = tc.route
-		}
-		_, err = pool.Exec(ctx, `INSERT INTO event_convoy (event_id, route) VALUES ($1, $2::jsonb)`, eid.PG(), route)
+		_, err = pool.Exec(ctx, `INSERT INTO event_routes (event_id, component_key, points) VALUES ($1, 'route', $2::jsonb)`, eid.PG(), tc.route)
 		switch {
 		case tc.ok && err != nil:
 			t.Errorf("%s: reddedildi: %v", name, err)
-		case !tc.ok && constraintOf(err) != "event_convoy_route":
-			t.Errorf("%s: kısıt event_convoy_route bekleniyordu: %v", name, err)
+		case !tc.ok && constraintOf(err) != "event_routes_points":
+			t.Errorf("%s: kısıt event_routes_points bekleniyordu: %v", name, err)
 		}
+	}
+	// No route is no row: the points cannot be NULL.
+	eid, err := insertEvent(ctx, pool, tayfa, "convoy", "in_person", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO event_routes (event_id, component_key, points) VALUES ($1, 'route', NULL)`, eid.PG()); err == nil {
+		t.Error("NULL rota yazıldı")
+	}
+	// One route per component; the row cannot move to another component
+	// or event (core_app has no such privilege).
+	ins := `INSERT INTO event_routes (event_id, component_key, points) VALUES ($1, 'route', '[{"lat": 1, "lng": 2}, {"lat": 3, "lng": 4}]')`
+	if _, err := pool.Exec(ctx, ins, eid.PG()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, ins, eid.PG()); constraintOf(err) != "event_routes_pkey" {
+		t.Errorf("ikinci rota: %v", err)
+	}
+	dbtest.WantDenied(t, pool, `UPDATE event_routes SET component_key = 'track' WHERE event_id = $1`, eid.PG())
+	dbtest.WantDenied(t, pool, `UPDATE event_routes SET event_id = event_id WHERE event_id = $1`, eid.PG())
+}
+
+// 00034 moves real rows (ADR-0041 item 3): the Faz 1 convoy routes become
+// rows of the route component and the old column goes; Down brings both
+// back. The test database is migrated while empty, so the move is replayed
+// here on rows: back to the old shape, old rows in, forward.
+func TestRouteMigrationMovesRows(t *testing.T) {
+	pool, _ := setup(t)
+	admin := adminOf(t, pool)
+	ctx := context.Background()
+	up, down := migrationParts(t, coredb.Migrations(), "00034_component_route.sql")
+	tayfa := newTayfa(t, pool, id.New(), tayfaOpts{})
+	exec := func(sql string, args ...any) {
+		t.Helper()
+		if _, err := admin.Exec(ctx, sql, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	scalar := func(sql string, args ...any) string {
+		t.Helper()
+		var s *string
+		if err := admin.QueryRow(ctx, sql, args...).Scan(&s); err != nil {
+			t.Fatal(err)
+		}
+		if s == nil {
+			return ""
+		}
+		return *s
+	}
+	convoy := func() id.ID {
+		t.Helper()
+		eid, err := insertEvent(ctx, pool, tayfa, "convoy", "in_person", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return eid
+	}
+	with, without, later := convoy(), convoy(), convoy()
+	all := []pgtype.UUID{with.PG(), without.PG(), later.PG()}
+	const route = `[{"lat": 38.5, "lng": 27.25}, {"lat": 38.75, "lng": 27.5}, {"lat": 39, "lng": 28}]`
+	exec(`INSERT INTO event_convoy (event_id) SELECT unnest($1::uuid[])`, all)
+	// A route written with the new shape survives the way back.
+	exec(`INSERT INTO event_routes (event_id, component_key, points) VALUES ($1, 'route', '[{"lat": 1, "lng": 2}, {"lat": 3, "lng": 4}]')`, later.PG())
+
+	exec(down)
+	if got := scalar(`SELECT count(*)::text FROM event_convoy WHERE route IS NOT NULL AND event_id = ANY($1)`, all); got != "1" {
+		t.Fatalf("geri alınan rota sayısı = %s", got)
+	}
+	// A Faz 1 row, as the old code wrote it.
+	exec(`UPDATE event_convoy SET route = $2::jsonb WHERE event_id = $1`, with.PG(), route)
+
+	exec(up)
+	if got := scalar(`SELECT (points = $2::jsonb)::text FROM event_routes WHERE event_id = $1 AND component_key = 'route'`, with.PG(), route); got != "true" {
+		t.Fatalf("taşınan rota aynı değil: %q", got)
+	}
+	if got := scalar(`SELECT (r.created_at = e.created_at AND r.updated_at = e.updated_at)::text FROM event_routes r JOIN events e ON e.id = r.event_id WHERE r.event_id = $1`, with.PG()); got != "true" {
+		t.Fatalf("taşınan rotanın zamanları etkinliğinkiler değil: %q", got)
+	}
+	if got := scalar(`SELECT count(*)::text FROM event_routes WHERE event_id = ANY($1)`, all); got != "2" {
+		t.Fatalf("taşınan rota sayısı = %s (rotasız konvoy satır almaz)", got)
+	}
+	// The old column is gone; the detail rows the vehicles hang on stay.
+	if got := scalar(`SELECT count(*)::text FROM information_schema.columns WHERE table_name = 'event_convoy' AND column_name = 'route'`); got != "0" {
+		t.Fatal("event_convoy.route kaldırılmadı")
+	}
+	if got := scalar(`SELECT count(*)::text FROM event_convoy WHERE event_id = ANY($1)`, all); got != "3" {
+		t.Fatalf("konvoy detay satırları = %s", got)
+	}
+	// The way back: the routes return to the column.
+	exec(down)
+	if got := scalar(`SELECT (route = $2::jsonb)::text FROM event_convoy WHERE event_id = $1`, with.PG(), route); got != "true" {
+		t.Fatalf("geri alınan rota aynı değil: %q", got)
+	}
+	if got := scalar(`SELECT count(*)::text FROM event_convoy WHERE route IS NOT NULL AND event_id = ANY($1)`, all); got != "2" {
+		t.Fatalf("ikinci kez geri alınan rota sayısı = %s", got)
 	}
 }
 

@@ -525,18 +525,9 @@ func detailsFromProto(cv *corev1.ConvoyDetails, cp *corev1.CampDetails, h *corev
 	var d event.Details
 	switch {
 	case cv != nil:
-		if len(cv.GetRoute()) > 500 {
-			return event.Details{}, validation("route")
-		}
-		c := &event.Convoy{}
-		for _, p := range cv.GetRoute() {
-			pt, ok := pointFromProto(p)
-			if !ok || pt == nil {
-				return event.Details{}, validation("route")
-			}
-			c.Route = append(c.Route, *pt)
-		}
-		d.Convoy = c
+		// ConvoyDetails.route is no longer read: the route is the route
+		// component's (RouteComponentService, issue #239).
+		d.Convoy = &event.Convoy{}
 	case cp != nil:
 		c := &event.Camp{SiteName: cp.GetSiteName(), Notes: cp.GetNotes()}
 		if cp.HasWater != nil {
@@ -639,9 +630,6 @@ func eventToProto(v event.Event) *corev1.Event {
 	switch {
 	case d.Convoy != nil:
 		c := &corev1.ConvoyDetails{}
-		for _, p := range d.Convoy.Route {
-			c.Route = append(c.Route, &corev1.LatLng{Lat: p.Lat, Lng: p.Lng})
-		}
 		for _, veh := range d.Convoy.Vehicles {
 			c.Vehicles = append(c.Vehicles, vehicleToProto(veh))
 		}

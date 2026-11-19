@@ -100,7 +100,6 @@ func convoyVehicleFrom(v *corev1.ConvoyVehicle) convoyVehicleJSON {
 }
 
 type convoyJSON struct {
-	Route    []latLngJSON        `json:"route"`
 	Vehicles []convoyVehicleJSON `json:"vehicles"`
 }
 
@@ -227,10 +226,7 @@ func eventFrom(e *corev1.Event) eventJSON {
 	}
 	switch d := e.GetDetails().(type) {
 	case *corev1.Event_Convoy:
-		c := &convoyJSON{Route: make([]latLngJSON, 0, len(d.Convoy.GetRoute())), Vehicles: make([]convoyVehicleJSON, 0, len(d.Convoy.GetVehicles()))}
-		for _, p := range d.Convoy.GetRoute() {
-			c.Route = append(c.Route, latLngJSON{p.GetLat(), p.GetLng()})
-		}
+		c := &convoyJSON{Vehicles: make([]convoyVehicleJSON, 0, len(d.Convoy.GetVehicles()))}
 		for _, v := range d.Convoy.GetVehicles() {
 			c.Vehicles = append(c.Vehicles, convoyVehicleFrom(v))
 		}

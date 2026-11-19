@@ -58,6 +58,7 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 		registerEventComponents,
 
 		// route (#239)
+		registerRouteComponent,
 
 		// vehicles (#240)
 

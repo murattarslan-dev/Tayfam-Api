@@ -375,7 +375,9 @@ message LatLng {
 }
 
 message ConvoyDetails {
-  // Empty, or 2–500 points.
+  // Not used any more: the route is the route component's
+  // (RouteComponentService, component_route.proto; issue #239). Never read
+  // and never filled; the field stays because it cannot be removed.
   repeated LatLng route = 1;
   // Output only, GetEvent only.
   repeated ConvoyVehicle vehicles = 2;

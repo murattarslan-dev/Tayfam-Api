@@ -66,8 +66,6 @@ const (
 	makeMax         = 40
 	modelMax        = 40
 	colorMax        = 30
-	routeMin        = 2
-	routeMax        = 500
 	distanceMax     = 1000
 	elevationMax    = 9000
 	graceDefault    = 30
@@ -138,9 +136,9 @@ func (d Details) typ() string {
 	return t
 }
 
-// Convoy holds a convoy's route and, in views, its vehicles.
+// Convoy holds, in views, a convoy's vehicles. Its route is the route
+// component's (package component/route, issue #239).
 type Convoy struct {
-	Route    []Point
 	Vehicles []Vehicle
 }
 
@@ -345,17 +343,7 @@ func cleanDetails(typ string, d Details, start time.Time, create bool) (Details,
 	var err error
 	switch typ {
 	case TypeConvoy:
-		c := Convoy{}
-		if n := len(d.Convoy.Route); n != 0 && (n < routeMin || n > routeMax) {
-			return Details{}, apperr.Validation("route")
-		}
-		for _, p := range d.Convoy.Route {
-			if !p.valid() {
-				return Details{}, apperr.Validation("route")
-			}
-			c.Route = append(c.Route, p)
-		}
-		out.Convoy = &c
+		out.Convoy = &Convoy{}
 	case TypeCamp:
 		c := Camp{HasWater: d.Camp.HasWater, HasToilet: d.Camp.HasToilet}
 		if c.SiteName, err = cleanText(d.Camp.SiteName, "site_name", 0, placeNameMax, false); err != nil {

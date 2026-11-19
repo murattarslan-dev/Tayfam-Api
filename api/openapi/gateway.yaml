@@ -1758,8 +1758,9 @@ paths:
         - Yer: `mode`, `meeting_point_name`, `meeting_point`, `city`,
           `district`, `online_url` birlikte değişir; bunlardan biri
           gönderilirse `mode` zorunludur ve gönderilmeyenler boşalır.
-        - Türe özel ayrıntı (`convoy`, `camp`, …) tamamen değişir; araçlar
-          ve kamp listesi korunur.
+        - Türe özel ayrıntı (`camp`, `hike`, `fishing`) tamamen değişir; kamp
+          listesi korunur. Konvoyun rotası `route` bileşenindedir
+          (`PUT …/components/{component_key}/route`).
 
         Kapasiteyi artırmak bekleme listesindekileri sırayla `going` yapar.
         Seriye ait bir etkinlikte `apply_to_series` `false` (varsayılan) ise
@@ -2509,6 +2510,63 @@ paths:
         - $ref: "#/components/parameters/ClientHeader"
       responses:
         "204": { description: Atama kaldırıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  # --- Etkinlik bileşenleri: rota (`route`; core RouteComponentService, #239, ADR-0025 §4) ---
+  # Güzergâh sıralı nokta dizisidir. Organizatörün bilerek paylaştığı
+  # içeriktir (ADR-0008); noktalar yalnızca gövdede taşınır, log'a yazılmaz.
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/route:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: getEventRoute
+      summary: Etkinliğin rotası
+      description: |
+        Rota yoksa `points` boş dizidir ve `updated_at` yoktur. Her etkin
+        üyeye açıktır (susturulmuş üye de okur); iptal edilmiş ve donmuş
+        etkinlikte de okunur. Bileşen uçlarının ortak kuralları geçerlidir
+        (`component-not-found`, `component-disabled`).
+      responses:
+        "200":
+          description: Rota
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventRoute" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: setEventRoute
+      summary: Rotayı yazar ya da kaldırır (organizatör, moderatör, yönetici)
+      description: |
+        Rotanın tamamı değişir: 2–500 nokta. Boş `points` rotayı kaldırır;
+        olmayan rotayı kaldırmak hata değildir. Etkinlik başladıktan ve
+        bittikten sonra da değişir; bitişten 7 gün sonra donar
+        (`component-frozen`). Seriye ait etkinlikte yalnızca bu etkinlik
+        değişir. Bileşen uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventRouteRequest" }
+      responses:
+        "200":
+          description: Rota, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventRoute" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -7014,23 +7072,35 @@ components:
 
     ConvoyDetails:
       type: object
+      description: "Rota burada değildir: `route` bileşeni (`GET …/components/{component_key}/route`, #239)."
       properties:
-        route:
-          type: array
-          description: Boş ya da 2–500 nokta.
-          items: { $ref: "#/components/schemas/LatLng" }
         vehicles:
           type: array
           description: Yalnızca tek etkinlik yanıtında.
           items: { $ref: "#/components/schemas/ConvoyVehicle" }
-    ConvoyDetailsInput:
+    EventRoute:
       type: object
-      additionalProperties: false
+      required: [points, caller_can_edit]
+      description: Bir etkinliğin rota bileşeninin güzergâhı (#239).
       properties:
-        route:
+        points:
           type: array
           maxItems: 500
-          description: Boş ya da 2–500 nokta.
+          description: Sırayla; rota yoksa boş, varsa 2–500 nokta.
+          items: { $ref: "#/components/schemas/LatLng" }
+        updated_at: { type: string, format: date-time, description: Rotanın son yazıldığı an; rota yoksa yoktur. }
+        caller_can_edit:
+          type: boolean
+          description: Rotayı şu an değiştirebilirsiniz (organizatör yetkisi; etkinlik iptal değil, donmamış, tayfa salt okunur değil).
+    EventRouteRequest:
+      type: object
+      required: [points]
+      additionalProperties: false
+      properties:
+        points:
+          type: array
+          maxItems: 500
+          description: Boş (rotayı kaldırır) ya da 2–500 nokta.
           items: { $ref: "#/components/schemas/LatLng" }
     ConvoyVehicle:
       type: object
@@ -7334,8 +7404,9 @@ components:
         biri olmalıdır. `fields` türün tanımına göre doğrulanır: zorunlu
         alanlar verilir, tanımda olmayan alan gönderilmez (ör. `gaming`:
         `game`, `platform`; `sports`: `sport`, `venue_name`). Faz 1'den
-        kalan ayrıntılar (`convoy`, `camp`, `hike`, `fishing`) yalnızca kendi
-        türlerinde, en fazla bir tane verilir.
+        kalan ayrıntılar (`camp`, `hike`, `fishing`) yalnızca kendi
+        türlerinde, en fazla bir tane verilir. Rota etkinlik oluşturulduktan
+        sonra `route` bileşeninden yazılır.
       properties:
         cover_upload_id: { type: string, format: uuid, description: "İsteğe bağlı: kendi hazır `cover` yüklemeniz (bu tayfa için açılmış). Yalnızca bu etkinliğe bağlanır." }
         components:
@@ -7373,7 +7444,6 @@ components:
             Organizatörün işareti: etkinlik halka açık bir yerde buluşur ve
             Keşfet'te görünebilir (ADR-0033). Yalnızca yüz yüze etkinlikte
             etkilidir; özel adreste buluşan etkinlik işaretlenmez.
-        convoy: { $ref: "#/components/schemas/ConvoyDetailsInput" }
         camp: { $ref: "#/components/schemas/CampDetailsInput" }
         hike: { $ref: "#/components/schemas/HikeDetails" }
         fishing: { $ref: "#/components/schemas/FishingDetails" }
@@ -7415,7 +7485,6 @@ components:
             Organizatörün işareti: etkinlik halka açık bir yerde buluşur ve
             Keşfet'te görünebilir (ADR-0033). Yalnızca yüz yüze etkinlikte
             etkilidir; özel adreste buluşan etkinlik işaretlenmez.
-        convoy: { $ref: "#/components/schemas/ConvoyDetailsInput" }
         camp: { $ref: "#/components/schemas/CampDetailsInput" }
         hike: { $ref: "#/components/schemas/HikeDetails" }
         fishing: { $ref: "#/components/schemas/FishingDetails" }

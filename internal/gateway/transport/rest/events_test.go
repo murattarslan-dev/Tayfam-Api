@@ -49,7 +49,6 @@ func testEvent() *corev1.Event {
 		GoingCount: 3, MaybeCount: 1, CallerRsvp: corev1.RsvpStatus_RSVP_STATUS_GOING, CallerCanManage: true,
 		SeriesId: seriesID,
 		Details: &corev1.Event_Convoy{Convoy: &corev1.ConvoyDetails{
-			Route:    []*corev1.LatLng{{Lat: 41, Lng: 29}, {Lat: 41.1, Lng: 29.1}},
 			Vehicles: []*corev1.ConvoyVehicle{{Id: vehicleID, UserId: userID, Make: "Ford", ModelYear: 1967, Plate: "34 ABC 12"}},
 		}},
 	}
@@ -241,7 +240,7 @@ func TestEventResponses(t *testing.T) {
 		e.MeetingPoint == nil || e.MeetingPoint.Lat != 41.5 || e.GoingCount != 3 {
 		t.Fatalf("etkinlik: %+v", e)
 	}
-	if e.Convoy == nil || len(e.Convoy.Route) != 2 || len(e.Convoy.Vehicles) != 1 || e.Convoy.Vehicles[0].Plate != "34 ABC 12" || e.Camp != nil {
+	if e.Convoy == nil || len(e.Convoy.Vehicles) != 1 || e.Convoy.Vehicles[0].Plate != "34 ABC 12" || e.Camp != nil {
 		t.Fatalf("konvoy: %+v", e.Convoy)
 	}
 	for _, absent := range []string{"caller_attendance", "cancelled_at", "cancel_reason", "online_url", `"camp"`} {
@@ -353,8 +352,8 @@ func TestCreateEvent(t *testing.T) {
 			&corev1.CreateEventRequest{Details: &corev1.CreateEventRequest_Fishing{Fishing: &corev1.FishingDetails{SpotVisibility: corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS}}}},
 		{`{"type":"camp","mode":"in_person","title":"T",` + times + `,"camp":{"site_name":"Göl","has_water":false},"client_request_id":"` + reqID + `"}`,
 			&corev1.CreateEventRequest{Details: &corev1.CreateEventRequest_Camp{Camp: &corev1.CampDetails{SiteName: "Göl", HasWater: proto.Bool(false)}}}},
-		{`{"type":"convoy","mode":"in_person","title":"T",` + times + `,"convoy":{"route":[{"lat":1,"lng":2},{"lat":3,"lng":4}]},"client_request_id":"` + reqID + `"}`,
-			&corev1.CreateEventRequest{Details: &corev1.CreateEventRequest_Convoy{Convoy: &corev1.ConvoyDetails{Route: []*corev1.LatLng{{Lat: 1, Lng: 2}, {Lat: 3, Lng: 4}}}}}},
+		// A convoy has no details to send: its route is the route component's (#239).
+		{`{"type":"convoy","mode":"in_person","title":"T",` + times + `,"client_request_id":"` + reqID + `"}`, &corev1.CreateEventRequest{}},
 		{`{"type":"general","mode":"in_person","title":"T",` + times + `,"client_request_id":"` + reqID + `"}`, &corev1.CreateEventRequest{}},
 	} {
 		w := as(h, "POST", base, tc.body)
@@ -402,8 +401,9 @@ func TestEventBadRequests(t *testing.T) {
 		"eski oyun ayrıntısı":   {"POST", base, strings.Replace(create(`,"gaming":{"game":"x","platform":"pc"}`), "general", "gaming", 1)},
 		"eski spor ayrıntısı":   {"POST", base, strings.Replace(create(`,"sports":{"sport":"football"}`), "general", "sports", 1)},
 		"bilinmeyen görünürlük": {"POST", base, strings.Replace(create(`,"fishing":{"spot_visibility":"herkes"}`), "general", "fishing", 1)},
-		"rota noktası bozuk":    {"POST", base, strings.Replace(create(`,"convoy":{"route":[{"lat":0,"lng":0},{"lat":95,"lng":0}]}`), "general", "convoy", 1)},
-		"araçlar girdi değil":   {"POST", base, strings.Replace(create(`,"convoy":{"vehicles":[]}`), "general", "convoy", 1)},
+		// The convoy object is gone too: the route is a component (#239).
+		"eski konvoy rotası":    {"POST", base, strings.Replace(create(`,"convoy":{"route":[{"lat":0,"lng":0},{"lat":1,"lng":0}]}`), "general", "convoy", 1)},
+		"eski konvoy ayrıntısı": {"POST", base, strings.Replace(create(`,"convoy":{}`), "general", "convoy", 1)},
 		"boş kural":             {"POST", base, create(`,"recurrence":{"rrule":""}`)},
 		"bilinmeyen alan":       {"POST", base, create(`,"status":"cancelled"`)},
 		"organizatör verilemez": {"POST", base, create(`,"created_by":"` + userID + `"`)},

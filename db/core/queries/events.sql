@@ -120,12 +120,11 @@ LIMIT @page_size;
 -- Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
 -- key yanlış türü reddeder.
 
+-- Konvoyun detay satırı yalnızca araçların bağlandığı satırdır; rota
+-- `route` bileşenindedir (component_route.sql, issue #239).
 -- name: SetEventConvoy :exec
-INSERT INTO event_convoy (event_id, route) VALUES (@event_id, @route)
-ON CONFLICT (event_id) DO UPDATE SET route = EXCLUDED.route;
-
--- name: GetEventConvoy :one
-SELECT route FROM event_convoy WHERE event_id = @event_id;
+INSERT INTO event_convoy (event_id) VALUES (@event_id)
+ON CONFLICT (event_id) DO NOTHING;
 
 -- name: SetEventCamp :exec
 INSERT INTO event_camp (event_id, site_name, has_water, has_toilet, notes)

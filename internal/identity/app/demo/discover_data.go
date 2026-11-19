@@ -258,9 +258,9 @@ var discoverTayfas = []tayfaSpec{
 				Start:       at{Days: 14, Hour: 9}, Hours: 6,
 				PlaceName: "Göreme otogarı önü", Lat: 38.6431, Lng: 34.8289,
 				City: "Nevşehir", District: "Merkez",
-				Convoy: &corev1.ConvoyDetails{Route: []*corev1.LatLng{
+				Route: []*corev1.LatLng{
 					{Lat: 38.6431, Lng: 34.8289}, {Lat: 38.6310, Lng: 34.8046}, {Lat: 38.6250, Lng: 34.8640},
-				}},
+				},
 				RSVPs: []rsvpSpec{
 					{Person: "ozan", Status: going}, {Person: "ebru", Status: going}, {Person: "cihan", Status: going},
 					{Person: "kerem", Status: maybe},

@@ -36,6 +36,11 @@ type EventAPI interface {
 	AddConvoyVehicle(ctx context.Context, in *corev1.AddConvoyVehicleRequest, opts ...grpc.CallOption) (*corev1.AddConvoyVehicleResponse, error)
 }
 
+// RouteAPI: the route of an event is the route component's (issue #239).
+type RouteAPI interface {
+	SetRoute(ctx context.Context, in *corev1.SetRouteRequest, opts ...grpc.CallOption) (*corev1.SetRouteResponse, error)
+}
+
 type AnnouncementAPI interface {
 	CreateAnnouncement(ctx context.Context, in *corev1.CreateAnnouncementRequest, opts ...grpc.CallOption) (*corev1.CreateAnnouncementResponse, error)
 	SetAnnouncementPinned(ctx context.Context, in *corev1.SetAnnouncementPinnedRequest, opts ...grpc.CallOption) (*corev1.SetAnnouncementPinnedResponse, error)
@@ -78,6 +83,7 @@ type Core struct {
 	Tayfas        TayfaAPI
 	Memberships   MembershipAPI
 	Events        EventAPI
+	Routes        RouteAPI
 	Announcements AnnouncementAPI
 	QA            QAAPI
 	Polls         PollAPI
@@ -86,7 +92,7 @@ type Core struct {
 }
 
 func (c Core) complete() bool {
-	return c.Tayfas != nil && c.Memberships != nil && c.Events != nil &&
+	return c.Tayfas != nil && c.Memberships != nil && c.Events != nil && c.Routes != nil &&
 		c.Announcements != nil && c.QA != nil && c.Polls != nil &&
 		c.Discover != nil && c.Social != nil
 }
@@ -97,6 +103,7 @@ func NewCore(conn grpc.ClientConnInterface) Core {
 		Tayfas:        corev1.NewTayfaServiceClient(conn),
 		Memberships:   corev1.NewMembershipServiceClient(conn),
 		Events:        corev1.NewEventServiceClient(conn),
+		Routes:        corev1.NewRouteComponentServiceClient(conn),
 		Announcements: corev1.NewAnnouncementServiceClient(conn),
 		QA:            corev1.NewQAServiceClient(conn),
 		Polls:         corev1.NewPollServiceClient(conn),

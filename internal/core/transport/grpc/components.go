@@ -21,6 +21,7 @@ type componentRegistrar func(srv grpc.ServiceRegistrar, fw *component.Service, l
 func componentRegistrars() []componentRegistrar {
 	return []componentRegistrar{
 		// route (#239)
+		registerRouteComponent,
 
 		// vehicles (#240)
 

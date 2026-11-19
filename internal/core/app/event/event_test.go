@@ -170,7 +170,7 @@ func TestCreateAndGet(t *testing.T) {
 	in.Title = "  Ege turu  "
 	in.Description = "Satır 1\nSatır 2"
 	in.Capacity = 10
-	in.Details = Details{Convoy: &Convoy{Route: []Point{{38.4, 27.1}, {38.3, 26.3}, {37.9, 27.3}}}}
+	in.Details = Details{Convoy: &Convoy{}}
 	v := e.create(t, tf, admin, in)
 
 	if v.Title != "Ege turu" || v.Type != TypeConvoy || v.Status != StatusScheduled || v.Capacity != 10 ||
@@ -178,7 +178,7 @@ func TestCreateAndGet(t *testing.T) {
 		v.City != "İzmir" || v.District != "Konak" || v.OnlineURL != "" {
 		t.Fatalf("etkinlik = %+v", v)
 	}
-	if v.Details.Convoy == nil || len(v.Details.Convoy.Route) != 3 || v.Details.Convoy.Route[1] != (Point{38.3, 26.3}) {
+	if v.Details.Convoy == nil || v.Details.Camp != nil {
 		t.Fatalf("detay = %+v", v.Details)
 	}
 
@@ -248,13 +248,6 @@ func TestCreateAndGet(t *testing.T) {
 func TestCreateValidation(t *testing.T) {
 	e := setup(t)
 	tf, admin := e.newTayfa(t)
-	route := func(n int) []Point {
-		p := make([]Point, n)
-		for i := range p {
-			p[i] = Point{Lat: 38, Lng: 27}
-		}
-		return p
-	}
 	for _, tc := range []struct {
 		name  string
 		edit  func(*Input)
@@ -299,12 +292,6 @@ func TestCreateValidation(t *testing.T) {
 			i.Details.Camp = &Camp{}
 		}, "details"},
 		{"türde olmayan alan", func(i *Input) { i.Fields = values("stake", `100`) }, "fields"},
-		{"tek noktalı rota", func(i *Input) { i.Type = TypeConvoy; i.Details.Convoy = &Convoy{Route: route(1)} }, "route"},
-		{"501 noktalı rota", func(i *Input) { i.Type = TypeConvoy; i.Details.Convoy = &Convoy{Route: route(501)} }, "route"},
-		{"aralık dışı rota", func(i *Input) {
-			i.Type = TypeConvoy
-			i.Details.Convoy = &Convoy{Route: []Point{{1, 1}, {1, 200}}}
-		}, "route"},
 		{"zorluk 6", func(i *Input) { i.Type = TypeHike; i.Details.Hike = &Hike{Difficulty: 6} }, "difficulty"},
 		{"başlangıçtan önce dönüş", func(i *Input) {
 			i.Type = TypeHike
@@ -322,9 +309,9 @@ func TestCreateValidation(t *testing.T) {
 		t.Fatalf("%d geçersiz etkinlik yazıldı", n)
 	}
 
-	// 500 points and an online event are fine.
+	// A convoy without details and an online event are fine.
 	in := input()
-	in.Type, in.Details.Convoy = TypeConvoy, &Convoy{Route: route(500)}
+	in.Type = TypeConvoy
 	e.create(t, tf, admin, in)
 	in = input()
 	in.Location = Location{Mode: ModeOnline, OnlineURL: "https://discord.gg/ornek"}

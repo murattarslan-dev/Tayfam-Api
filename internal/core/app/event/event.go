@@ -906,17 +906,9 @@ func setDetails(ctx context.Context, q *store.Queries, event id.ID, d Details) e
 	var err error
 	switch {
 	case d.Convoy != nil:
-		var route []byte
-		if len(d.Convoy.Route) > 0 {
-			pts := make([]map[string]float64, len(d.Convoy.Route))
-			for i, p := range d.Convoy.Route {
-				pts[i] = map[string]float64{"lat": p.Lat, "lng": p.Lng}
-			}
-			if route, err = json.Marshal(pts); err != nil {
-				return fmt.Errorf("rota: %w", err)
-			}
-		}
-		err = q.SetEventConvoy(ctx, store.SetEventConvoyParams{EventID: event.PG(), Route: route})
+		// The row the convoy's vehicles hang on; the route is the route
+		// component's.
+		err = q.SetEventConvoy(ctx, event.PG())
 	case d.Camp != nil:
 		err = q.SetEventCamp(ctx, store.SetEventCampParams{
 			EventID: event.PG(), SiteName: text(d.Camp.SiteName), HasWater: boolPtr(d.Camp.HasWater),
