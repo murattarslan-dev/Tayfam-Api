@@ -2818,7 +2818,11 @@ paths:
         fazla bileşenin `max_entries` kadar (yoksa 100) kayıt
         (`event-limit`). Değerler tanıma göre doğrulanır
         (`invalid-request`, alan `values.<anahtar>`); zorunlu alanlar
-        verilir, tanımda olmayan alan gönderilmez. Konum yalnızca `location`
+        verilir, tanımda olmayan alan gönderilmez. Tayfa sözlüğüne bağlı
+        alan (`CatalogVocabulary`) için ya `values`'ta metin ya
+        `vocabulary_ids`'te tayfanın o ad alanındaki bir değerin kimliği
+        gönderilir, ikisi birden değil (`vocabulary_ids.<anahtar>`); yeni
+        metin sözlüğe eklenir. Konum yalnızca `location`
         parametresi açık günlükte verilir. Aynı `client_request_id` ile
         tekrar gönderim ilk kaydı döndürür. Bitişten 7 gün sonra donar
         (`component-frozen`); iptal edilmiş etkinliğe yazılmaz. Bileşen
@@ -2864,6 +2868,107 @@ paths:
         - $ref: "#/components/parameters/ClientHeader"
       responses:
         "204": { description: Kayıt çıkarıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  # --- Tayfa sözlüğü (core TayfaVocabularyService, #244, ADR-0037 §4) ---
+  # Tayfanın kendi değer listesi: bir ad alanındaki (`fish_species`, `book`
+  # …) değerler. Tanımda `vocabulary` olan metin alanı (`CatalogVocabulary`)
+  # bu sözlüğe bağlıdır: kayıtta ya var olan değerin kimliği
+  # (`vocabulary_ids`) ya da metin gönderilir; bilinen metin (Türkçe küçük
+  # harf, tek boşluk) yeniden kullanılır, yeni metin sözlüğe eklenir.
+  # Tayfam içerik sağlamaz. Birleştirmeyi moderatör ve yönetici yapar ve
+  # geri alır; birleştirilen değeri seçen kayıtlar hedefi gösterir.
+  # Birleştirme tek düzeydir: hedef birleştirilmiş olamaz, birleştirilen
+  # değere bağlı değerler de hedefe taşınır. Etkilenen yılların istatistiği
+  # yeniden hesaplanır. Etkin üye olmayan `tayfa-not-found` alır.
+
+  /v1/tayfas/{tayfa_id}/vocabulary/{namespace}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/VocabularyNamespace"
+    get:
+      operationId: listTayfaVocabulary
+      summary: Sözlükte arar (otomatik tamamlama)
+      description: |
+        Her etkin üyeye açıktır (susturulmuş üye de okur). Metni ya da ona
+        birleştirilmiş bir değerin metni `q`'yu içeren en fazla 20 değer;
+        `q` ile başlayanlar önce. Birleştirilmiş değerler hedeflerine
+        çözülür. `merged=true` ile bunların yerine birleştirilmiş değerler
+        hedefleriyle döner (geri alma için).
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Arama metni; en fazla 60 karakter. Boşsa ilk 20 değer.
+          schema: { type: string, maxLength: 60 }
+        - name: merged
+          in: query
+          required: false
+          description: Birleştirilmiş değerleri listeler.
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Değerler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TayfaVocabularyList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/vocabulary/{namespace}/{vocabulary_id}/merge:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/VocabularyNamespace"
+      - name: vocabulary_id
+        in: path
+        required: true
+        description: Birleştirilen değer.
+        schema: { type: string, format: uuid }
+    post:
+      operationId: mergeTayfaVocabulary
+      summary: Değeri başka bir değere birleştirir (moderatör, yönetici)
+      description: |
+        Değeri seçen kayıtlar artık hedefi gösterir. Değer ya da hedef zaten
+        birleştirilmişse `vocabulary-merged`; bilinmeyen değer
+        `vocabulary-not-found`; kendisine birleştirme `invalid-request`.
+        Salt okunur tayfada `tayfa-read-only`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TayfaVocabularyMergeRequest" }
+      responses:
+        "200":
+          description: Birleştirilen değer, hedefiyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TayfaVocabularyValue" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: unmergeTayfaVocabulary
+      summary: Birleştirmeyi geri alır (moderatör, yönetici)
+      description: |
+        Değeri seçen kayıtlar yine kendi değerini gösterir. Birleştirilmemiş
+        değer `vocabulary-not-merged`; bilinmeyen değer
+        `vocabulary-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Birleştirme geri alındı }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -6164,6 +6269,12 @@ components:
       required: true
       description: Bileşenin, etkinliğin tür sürümündeki anahtarı (`CatalogComponent.key`; yoksa `kind`).
       schema: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+    VocabularyNamespace:
+      name: namespace
+      in: path
+      required: true
+      description: "Sözlüğün ad alanı (`CatalogVocabulary.namespace`)."
+      schema: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
     VehicleID:
       name: vehicle_id
       in: path
@@ -6372,6 +6483,10 @@ components:
         - vehicle-full
         - vehicle-seats-taken
         - seat-request-driver
+        # core: tayfa sözlüğü (#244, ADR-0037 §4)
+        - vocabulary-not-found
+        - vocabulary-merged
+        - vocabulary-not-merged
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -7596,6 +7711,11 @@ components:
         photo_upload_id: { type: string, format: uuid, description: "Fotoğraf; linkleri `POST /v1/media/urls`. Kaydı gören her üye görür." }
         created_at: { type: string, format: date-time }
         caller_can_remove: { type: boolean, description: Kaydı şu an çıkarabilirsiniz. }
+        vocabulary_ids:
+          allOf: [{ $ref: "#/components/schemas/VocabularyIds" }]
+          description: |
+            Tayfa sözlüğüne bağlı alanların değerleri (birleştirme hedefine
+            çözülmüş); metinleri `values`'ta. Böyle alan yoksa yoktur.
     EventLogEntryList:
       type: object
       required: [entries, location_enabled, max_entries, caller_can_add]
@@ -7636,6 +7756,43 @@ components:
             Fotoğrafın konum bilgisi (EXIF/GPS) işlemede silinmiştir; kaydın
             konumu yalnızca `location` ile paylaşılır.
         client_request_id: { type: string, format: uuid }
+        vocabulary_ids:
+          allOf: [{ $ref: "#/components/schemas/VocabularyIds" }]
+          description: |
+            Tayfa sözlüğüne bağlı alanlar için var olan değerler (en fazla
+            8); aynı alan `values`'ta da verilmez.
+    VocabularyIds:
+      type: object
+      description: Alan anahtarı → tayfa sözlüğündeki değerin kimliği (#244).
+      maxProperties: 8
+      additionalProperties: { type: string, format: uuid }
+    TayfaVocabularyValue:
+      type: object
+      required: [id, value]
+      description: Tayfa sözlüğünde bir değer (#244).
+      properties:
+        id: { type: string, format: uuid }
+        value: { type: string, minLength: 1, maxLength: 60 }
+        merged_into_id:
+          type: string
+          format: uuid
+          description: Yalnızca birleştirilmiş değerde, gösterildiği değer.
+        merged_into_value: { type: string, description: "Yalnızca birleştirilmiş değerde, hedefin metni." }
+    TayfaVocabularyList:
+      type: object
+      required: [values, caller_can_merge]
+      properties:
+        values:
+          type: array
+          maxItems: 20
+          items: { $ref: "#/components/schemas/TayfaVocabularyValue" }
+        caller_can_merge: { type: boolean, description: Şu an değerleri birleştirebilir ve geri alabilirsiniz. }
+    TayfaVocabularyMergeRequest:
+      type: object
+      required: [target_id]
+      additionalProperties: false
+      properties:
+        target_id: { type: string, format: uuid, description: Birleştirilmemiş hedef değer. }
 
     EventTypeKey:
       type: string

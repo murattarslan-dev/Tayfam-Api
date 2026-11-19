@@ -37,6 +37,7 @@ func testLogEntry() *corev1.LogEntry {
 		Id: entryID, UserId: userID, Values: map[string]string{"species": `"Levrek"`, "weight": `1.25`},
 		Location: &corev1.LatLng{Lat: 38.35, Lng: 26.77}, LocationVisibility: corev1.LogLocationVisibility_LOG_LOCATION_VISIBILITY_PARTICIPANTS,
 		PhotoUploadId: uploadID, CreateTime: timestamppb.New(t0), CallerCanRemove: true,
+		VocabularyIds: map[string]string{"species": itemID},
 	}
 }
 
@@ -83,6 +84,8 @@ func TestLogComponentRoutes(t *testing.T) {
 			}},
 		{"POST", logPath, `{"values":{"species":"Lüfer"},"client_request_id":"` + reqID + `"}`, http.StatusCreated,
 			&corev1.AddLogEntryRequest{Ref: ref, Values: map[string]string{"species": `"Lüfer"`}, ClientRequestId: reqID}},
+		{"POST", logPath, `{"values":{"weight":1.25},"vocabulary_ids":{"species":"` + itemID + `"},"client_request_id":"` + reqID + `"}`, http.StatusCreated,
+			&corev1.AddLogEntryRequest{Ref: ref, Values: map[string]string{"weight": `1.25`}, VocabularyIds: map[string]string{"species": itemID}, ClientRequestId: reqID}},
 		{"DELETE", logEntryPath, "", http.StatusNoContent, &corev1.RemoveLogEntryRequest{Ref: ref, EntryId: entryID}},
 	} {
 		f.got, f.token = nil, ""
@@ -103,7 +106,7 @@ func TestLogComponentRoutes(t *testing.T) {
 	e := l.Entries[0]
 	if e.ID != entryID || e.UserID != userID || string(e.Values["species"]) != `"Levrek"` || string(e.Values["weight"]) != `1.25` ||
 		e.Location == nil || e.Location.Lat != 38.35 || e.LocationVisibility != "participants" || e.PhotoUploadID != uploadID ||
-		!e.CreatedAt.Equal(t0) || !e.CallerCanRemove {
+		!e.CreatedAt.Equal(t0) || !e.CallerCanRemove || e.VocabularyIDs["species"] != itemID {
 		t.Fatalf("kayıt: %+v", e)
 	}
 	// Someone else's entry without a location: no location keys, no photo.
@@ -122,17 +125,19 @@ func TestLogComponentRoutesValidateInput(t *testing.T) {
 
 	tooMany := `{"values":{"a1":1,"a2":1,"a3":1,"a4":1,"a5":1,"a6":1,"a7":1,"a8":1,"a9":1},"client_request_id":"` + reqID + `"}`
 	for name, body := range map[string]string{
-		"istek kimliği yok":   `{"values":{"species":"Levrek"}}`,
-		"bozuk istek kimliği": `{"values":{"species":"Levrek"},"client_request_id":"x"}`,
-		"null değer":          `{"values":{"species":null},"client_request_id":"` + reqID + `"}`,
-		"bozuk alan anahtarı": `{"values":{"Tür":"Levrek"},"client_request_id":"` + reqID + `"}`,
-		"çok alan":            tooMany,
-		"konum aralık dışı":   `{"values":{"species":"Levrek"},"location":{"lat":0,"lng":200},"client_request_id":"` + reqID + `"}`,
-		"konum fazla alan":    `{"values":{"species":"Levrek"},"location":{"lat":1,"lng":2,"accuracy":5},"client_request_id":"` + reqID + `"}`,
-		"bilinmeyen gizlilik": `{"values":{"species":"Levrek"},"location":{"lat":1,"lng":2},"location_visibility":"public","client_request_id":"` + reqID + `"}`,
-		"bozuk fotoğraf":      `{"values":{"species":"Levrek"},"photo_upload_id":"x","client_request_id":"` + reqID + `"}`,
-		"eski av gövdesi":     `{"species":"Levrek","length_cm":40,"client_request_id":"` + reqID + `"}`,
-		"bozuk JSON":          `{"values":`,
+		"istek kimliği yok":    `{"values":{"species":"Levrek"}}`,
+		"bozuk istek kimliği":  `{"values":{"species":"Levrek"},"client_request_id":"x"}`,
+		"null değer":           `{"values":{"species":null},"client_request_id":"` + reqID + `"}`,
+		"bozuk alan anahtarı":  `{"values":{"Tür":"Levrek"},"client_request_id":"` + reqID + `"}`,
+		"çok alan":             tooMany,
+		"konum aralık dışı":    `{"values":{"species":"Levrek"},"location":{"lat":0,"lng":200},"client_request_id":"` + reqID + `"}`,
+		"konum fazla alan":     `{"values":{"species":"Levrek"},"location":{"lat":1,"lng":2,"accuracy":5},"client_request_id":"` + reqID + `"}`,
+		"bilinmeyen gizlilik":  `{"values":{"species":"Levrek"},"location":{"lat":1,"lng":2},"location_visibility":"public","client_request_id":"` + reqID + `"}`,
+		"bozuk fotoğraf":       `{"values":{"species":"Levrek"},"photo_upload_id":"x","client_request_id":"` + reqID + `"}`,
+		"eski av gövdesi":      `{"species":"Levrek","length_cm":40,"client_request_id":"` + reqID + `"}`,
+		"bozuk sözlük kimliği": `{"values":{},"vocabulary_ids":{"species":"x"},"client_request_id":"` + reqID + `"}`,
+		"bozuk sözlük alanı":   `{"values":{},"vocabulary_ids":{"Tür":"` + itemID + `"},"client_request_id":"` + reqID + `"}`,
+		"bozuk JSON":           `{"values":`,
 	} {
 		if w := as(h, "POST", logPath, body); w.Code != http.StatusBadRequest || problemType(t, w) != "invalid-request" {
 			t.Errorf("%s: %d %s", name, w.Code, w.Body)

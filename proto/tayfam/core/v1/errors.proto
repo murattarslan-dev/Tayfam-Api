@@ -339,4 +339,15 @@ enum ErrorReason {
   // FAILED_PRECONDITION. Someone who has a vehicle of their own in the
   // component cannot ask for a seat.
   ERROR_REASON_SEAT_REQUEST_DRIVER = 2402;
+
+  // Tayfa vocabulary (TayfaVocabularyService, vocabulary.proto; issue #244:
+  // 2440–2449).
+
+  // NOT_FOUND. The tayfa has no such value in this namespace.
+  ERROR_REASON_VOCABULARY_NOT_FOUND = 2440;
+  // FAILED_PRECONDITION. The value or the merge target is already merged
+  // into another value; undo that merge or choose its target.
+  ERROR_REASON_VOCABULARY_MERGED = 2441;
+  // FAILED_PRECONDITION. The value is not merged; there is nothing to undo.
+  ERROR_REASON_VOCABULARY_NOT_MERGED = 2442;
 }

@@ -130,6 +130,15 @@ ise "dış içerik yok" ilkesine aykırıdır. Çözüm tayfanın kendi sözlü�
 - KVKK: değer içeriktir; kişinin eklediği değerler dışa aktarmada
   (ADR-0021) kişinin günlük kayıtlarıyla birlikte gelir. Hesap silinince
   sözlük değeri kalır, `created_by` boşalır (tayfanın ortak verisi).
+- Uygulama notu (#244): kaydın sözlüğe bağlı alanı `field_values`'ta
+  değil, kendi bağ tablosunda (`event_log_entry_vocabulary`: kayıt, alan,
+  `vocabulary_id`; foreign key ve tayfa/ad alanı tetikleyicisiyle) durur;
+  bağ kaydın seçtiği değerde kalır, gösterilen değer hedefe çözülür.
+  Birleştirme tek düzeydir: hedef birleştirilmiş olamaz, birleştirilen
+  değere bağlı değerler hedefe taşınır (geri almada onlar taşındıkları
+  yerde kalır). İstatistik kancası `tayfa.vocabulary_merged` /
+  `tayfa.vocabulary_unmerged` olayıdır (yük: kimlikler, ad alanı, etkilenen
+  yıllar; #266 tüketir).
 
 ### 5. Yazboz: masa ve ön ayar
 

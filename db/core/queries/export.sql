@@ -159,9 +159,15 @@ ORDER BY v.option_id
 LIMIT @n;
 
 -- Günlük kayıtları (issue #243); bölümün adı Faz 1'den (fishing_catches).
+-- Sözlüğe bağlı alanlar (issue #244) `vocabulary`'de: alan anahtarı →
+-- seçilen ya da eklenen sözlük değeri (ADR-0037 §4).
 -- name: ExportLogEntries :many
 SELECT f.id AS k, jsonb_build_object(
   'id', f.id, 'event_id', f.event_id, 'component_key', f.component_key, 'values', f.field_values,
+  'vocabulary', COALESCE((
+    SELECT jsonb_object_agg(x.field_key, jsonb_build_object('vocabulary_id', v.id, 'value', v.value))
+    FROM event_log_entry_vocabulary x JOIN tayfa_vocabulary v ON v.id = x.vocabulary_id
+    WHERE x.entry_id = f.id), '{}'::jsonb),
   'lat', f.lat, 'lng', f.lng, 'location_visibility', f.location_visibility, 'photo_upload_id', f.photo_upload_id,
   'created_at', f.created_at, 'deleted_at', f.deleted_at
 ) AS data

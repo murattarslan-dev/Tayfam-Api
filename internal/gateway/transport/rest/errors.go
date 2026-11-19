@@ -149,6 +149,10 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_VEHICLE_FULL":        {http.StatusConflict, "vehicle-full"},
 		"ERROR_REASON_VEHICLE_SEATS_TAKEN": {http.StatusConflict, "vehicle-seats-taken"},
 		"ERROR_REASON_SEAT_REQUEST_DRIVER": {http.StatusConflict, "seat-request-driver"},
+		// Tayfa vocabulary (issue #244; ADR-0037 §4).
+		"ERROR_REASON_VOCABULARY_NOT_FOUND":  {http.StatusNotFound, "vocabulary-not-found"},
+		"ERROR_REASON_VOCABULARY_MERGED":     {http.StatusConflict, "vocabulary-merged"},
+		"ERROR_REASON_VOCABULARY_NOT_MERGED": {http.StatusConflict, "vocabulary-not-merged"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

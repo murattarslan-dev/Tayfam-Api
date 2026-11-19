@@ -55,13 +55,13 @@ func (f *fakeLogbook) Remove(_ context.Context, ref component.Ref, entry id.ID) 
 }
 
 func TestLogComponentMethods(t *testing.T) {
-	author, mine, theirs, photo := id.New(), id.New(), id.New(), id.New()
+	author, mine, theirs, photo, species := id.New(), id.New(), id.New(), id.New(), id.New()
 	at := time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC)
 	f := &fakeLogbook{page: logbook.Page{
 		Entries: []logbook.Entry{
 			{ID: mine, UserID: author, Values: map[string]json.RawMessage{"species": json.RawMessage(`"Levrek"`), "weight": json.RawMessage(`1.25`)},
 				Location: &logbook.Point{Lat: 38.35, Lng: 26.77}, LocationVisibility: logbook.LocationParticipants,
-				PhotoUploadID: photo, CreatedAt: at, CallerCanRemove: true},
+				PhotoUploadID: photo, CreatedAt: at, CallerCanRemove: true, VocabularyIDs: map[string]id.ID{"species": species}},
 			{ID: theirs, UserID: id.New(), Values: map[string]json.RawMessage{"species": json.RawMessage(`"Lüfer"`)}, CreatedAt: at},
 		},
 		NextPageToken: "SONRAKI", LocationEnabled: true, LocationDefault: logbook.LocationSelf, MaxEntries: 100, CallerCanAdd: true,
@@ -83,8 +83,12 @@ func TestLogComponentMethods(t *testing.T) {
 	e := list.GetEntries()[0]
 	if e.GetId() != mine.String() || e.GetUserId() != author.String() || e.GetValues()["species"] != `"Levrek"` || e.GetValues()["weight"] != `1.25` ||
 		e.GetLocation().GetLat() != 38.35 || e.GetLocationVisibility() != corev1.LogLocationVisibility_LOG_LOCATION_VISIBILITY_PARTICIPANTS ||
-		e.GetPhotoUploadId() != photo.String() || !e.GetCreateTime().AsTime().Equal(at) || !e.GetCallerCanRemove() {
+		e.GetPhotoUploadId() != photo.String() || !e.GetCreateTime().AsTime().Equal(at) || !e.GetCallerCanRemove() ||
+		len(e.GetVocabularyIds()) != 1 || e.GetVocabularyIds()["species"] != species.String() {
 		t.Fatalf("kayıt: %v", e)
+	}
+	if o := list.GetEntries()[1]; o.GetVocabularyIds() != nil {
+		t.Fatalf("sözlüksüz kayıt: %v", o)
 	}
 	if o := list.GetEntries()[1]; o.GetLocation() != nil || o.GetLocationVisibility() != corev1.LogLocationVisibility_LOG_LOCATION_VISIBILITY_UNSPECIFIED ||
 		o.GetPhotoUploadId() != "" || o.GetCallerCanRemove() {
@@ -104,8 +108,14 @@ func TestLogComponentMethods(t *testing.T) {
 		t.Fatalf("girdi: %+v", f.in)
 	}
 	if _, err := s.AddLogEntry(ctx, &corev1.AddLogEntryRequest{Ref: ref, Values: map[string]string{"species": `"Lüfer"`}}); err != nil ||
-		f.in.Location != nil || f.in.LocationVisibility != "" || f.in.PhotoUploadID != (id.ID{}) {
+		f.in.Location != nil || f.in.LocationVisibility != "" || f.in.PhotoUploadID != (id.ID{}) || f.in.VocabularyIDs != nil {
 		t.Fatalf("konumsuz kayıt: %+v %v", f.in, err)
+	}
+	// A vocabulary value instead of a text (issue #244).
+	if _, err := s.AddLogEntry(ctx, &corev1.AddLogEntryRequest{
+		Ref: ref, Values: map[string]string{"weight": `1.25`}, VocabularyIds: map[string]string{"species": species.String()},
+	}); err != nil || len(f.in.VocabularyIDs) != 1 || f.in.VocabularyIDs["species"] != species || len(f.in.Values) != 1 {
+		t.Fatalf("sözlük değeriyle kayıt: %+v %v", f.in, err)
 	}
 
 	if _, err := s.RemoveLogEntry(ctx, &corev1.RemoveLogEntryRequest{Ref: ref, EntryId: theirs.String()}); err != nil || f.method != "Remove" || f.entry != theirs {
@@ -169,12 +179,14 @@ func TestLogComponentValidation(t *testing.T) {
 		req   *corev1.AddLogEntryRequest
 		field string
 	}{
-		"çok alan":            {&corev1.AddLogEntryRequest{Ref: ref, Values: tooMany}, "values"},
-		"bozuk alan anahtarı": {&corev1.AddLogEntryRequest{Ref: ref, Values: map[string]string{"Tür": `"x"`}}, "values"},
-		"boş değer":           {&corev1.AddLogEntryRequest{Ref: ref, Values: map[string]string{"species": ""}}, "values"},
-		"uzun değer":          {&corev1.AddLogEntryRequest{Ref: ref, Values: map[string]string{"species": `"` + strings.Repeat("a", 9000) + `"`}}, "values"},
-		"bilinmeyen gizlilik": {&corev1.AddLogEntryRequest{Ref: ref, LocationVisibility: 9}, "location_visibility"},
-		"bozuk fotoğraf":      {&corev1.AddLogEntryRequest{Ref: ref, PhotoUploadId: "x"}, "photo_upload_id"},
+		"çok alan":             {&corev1.AddLogEntryRequest{Ref: ref, Values: tooMany}, "values"},
+		"bozuk alan anahtarı":  {&corev1.AddLogEntryRequest{Ref: ref, Values: map[string]string{"Tür": `"x"`}}, "values"},
+		"boş değer":            {&corev1.AddLogEntryRequest{Ref: ref, Values: map[string]string{"species": ""}}, "values"},
+		"uzun değer":           {&corev1.AddLogEntryRequest{Ref: ref, Values: map[string]string{"species": `"` + strings.Repeat("a", 9000) + `"`}}, "values"},
+		"bilinmeyen gizlilik":  {&corev1.AddLogEntryRequest{Ref: ref, LocationVisibility: 9}, "location_visibility"},
+		"bozuk fotoğraf":       {&corev1.AddLogEntryRequest{Ref: ref, PhotoUploadId: "x"}, "photo_upload_id"},
+		"bozuk sözlük kimliği": {&corev1.AddLogEntryRequest{Ref: ref, VocabularyIds: map[string]string{"species": "x"}}, "vocabulary_ids.species"},
+		"bozuk sözlük alanı":   {&corev1.AddLogEntryRequest{Ref: ref, VocabularyIds: map[string]string{"Tür": good}}, "vocabulary_ids"},
 	} {
 		_, err := s.AddLogEntry(ctx, tc.req)
 		if got := field(err); got != tc.field {

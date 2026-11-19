@@ -47,6 +47,9 @@ type logEntryJSON struct {
 	PhotoUploadID      string    `json:"photo_upload_id,omitempty"`
 	CreatedAt          time.Time `json:"created_at"`
 	CallerCanRemove    bool      `json:"caller_can_remove"`
+	// VocabularyIDs are the tayfa vocabulary values of the fields bound to
+	// the vocabulary (issue #244), by field key.
+	VocabularyIDs map[string]string `json:"vocabulary_ids,omitempty"`
 }
 
 type logEntryListJSON struct {
@@ -66,7 +69,7 @@ func logEntryFrom(e *corev1.LogEntry) logEntryJSON {
 	return logEntryJSON{
 		ID: e.GetId(), UserID: e.GetUserId(), Values: values, Location: latLngFrom(e.GetLocation()),
 		LocationVisibility: optName(logVisibilities, e.GetLocationVisibility()), PhotoUploadID: e.GetPhotoUploadId(),
-		CreatedAt: e.GetCreateTime().AsTime(), CallerCanRemove: e.GetCallerCanRemove(),
+		CreatedAt: e.GetCreateTime().AsTime(), CallerCanRemove: e.GetCallerCanRemove(), VocabularyIDs: e.GetVocabularyIds(),
 	}
 }
 
@@ -101,6 +104,20 @@ type logEntryBody struct {
 	LocationVisibility string                     `json:"location_visibility"`
 	PhotoUploadID      string                     `json:"photo_upload_id"`
 	ClientRequestID    string                     `json:"client_request_id"`
+	VocabularyIDs      map[string]string          `json:"vocabulary_ids"`
+}
+
+// vocabularyIDsOK checks an entry's vocabulary value IDs by field key.
+func vocabularyIDsOK(in map[string]string) bool {
+	if len(in) > maxLogFields {
+		return false
+	}
+	for k, v := range in {
+		if !catalogKeyPattern.MatchString(k) || !validUUID(v) {
+			return false
+		}
+	}
+	return true
 }
 
 // addLogEntry passes the entry's location to core in the body only, like
@@ -117,13 +134,13 @@ func (h componentHandlers) addLogEntry(ctx context.Context, w http.ResponseWrite
 	values, okValues := eventFields(b.Values)
 	vis, okVis := logVisibilities.valueOrUnspecified(b.LocationVisibility)
 	if !okValues || len(b.Values) > maxLogFields || !okVis || !pointOK(b.Location) || !validUUID(b.ClientRequestID) ||
-		(b.PhotoUploadID != "" && !validUUID(b.PhotoUploadID)) {
+		(b.PhotoUploadID != "" && !validUUID(b.PhotoUploadID)) || !vocabularyIDsOK(b.VocabularyIDs) {
 		badRequest(w, r)
 		return
 	}
 	resp, err := h.logbook().AddLogEntry(ctx, &corev1.AddLogEntryRequest{
 		Ref: ref, Values: values, Location: b.Location.proto(), LocationVisibility: vis,
-		PhotoUploadId: b.PhotoUploadID, ClientRequestId: b.ClientRequestID,
+		PhotoUploadId: b.PhotoUploadID, ClientRequestId: b.ClientRequestID, VocabularyIds: b.VocabularyIDs,
 	})
 	if err != nil {
 		h.fail(w, r, err)

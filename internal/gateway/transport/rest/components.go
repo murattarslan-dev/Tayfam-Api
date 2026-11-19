@@ -73,6 +73,7 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 		registerLogComponent,
 
 		// tayfa vocabulary (#244)
+		registerTayfaVocabulary,
 
 		// measure (#245)
 

@@ -105,6 +105,17 @@ var (
 	ErrSeatRequestDriver = errors.New("aracı olan koltuk isteyemez")
 )
 
+// Tayfa vocabulary errors (issue #244; ADR-0037 §4).
+var (
+	// ErrVocabularyNotFound: no such value in the tayfa's namespace.
+	ErrVocabularyNotFound = errors.New("sözlük değeri bulunamadı")
+	// ErrVocabularyMerged: the value or the merge target is already
+	// merged.
+	ErrVocabularyMerged = errors.New("sözlük değeri birleştirilmiş")
+	// ErrVocabularyNotMerged: undoing a merge of a value that is not merged.
+	ErrVocabularyNotMerged = errors.New("sözlük değeri birleştirilmemiş")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (

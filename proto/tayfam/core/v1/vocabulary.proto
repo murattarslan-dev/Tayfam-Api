@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+// TayfaVocabularyService is the tayfa vocabulary (issue #244; ADR-0037 §4):
+// the tayfa's own list of values in a namespace (fish_species, book …), so
+// that the same species or book written two ways does not split the
+// statistics. Tayfam provides no content: values come from the members'
+// entries (LogComponentService.AddLogEntry with a new value). Moderators and
+// admins merge duplicates and undo merges.
+//
+// Only gateway calls it with the user's access token; the acting user is
+// always the token's. Anyone but an ACTIVE member of the tayfa gets
+// ERROR_REASON_TAYFA_NOT_FOUND. Values are content: they are never logged
+// or written to the audit record or an outbox event.
+service TayfaVocabularyService {
+  // ListVocabulary returns up to 20 values of the namespace whose text, or
+  // the text of a value merged into them, contains the query (normalized:
+  // Turkish lower case, single spaces); those that start with it first.
+  // Merged values resolve to their target. With merged set, it returns the
+  // merged values with their targets instead (to undo a merge). Open to
+  // every active member, muted ones included.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, namespace, query).
+  rpc ListVocabulary(ListVocabularyRequest) returns (ListVocabularyResponse);
+
+  // MergeVocabulary merges a value into another value of the same
+  // namespace (`tayfa.vocabulary_merge`: moderators and admins). Entries
+  // that chose the value show the target from now on; values merged into
+  // the value move to the target too (merges stay one level deep). The
+  // years of the affected entries are recomputed in the statistics.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, namespace, vocabulary_id,
+  // target_id; a value merged into itself), ERROR_REASON_VOCABULARY_NOT_FOUND,
+  // ERROR_REASON_VOCABULARY_MERGED, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY.
+  rpc MergeVocabulary(MergeVocabularyRequest) returns (MergeVocabularyResponse);
+
+  // UnmergeVocabulary undoes a merge: the entries that chose the value show
+  // it again. The same permission as MergeVocabulary.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, namespace, vocabulary_id),
+  // ERROR_REASON_VOCABULARY_NOT_FOUND, ERROR_REASON_VOCABULARY_NOT_MERGED,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED,
+  // ERROR_REASON_TAYFA_READ_ONLY.
+  rpc UnmergeVocabulary(UnmergeVocabularyRequest) returns (UnmergeVocabularyResponse);
+}
+
+// VocabularyValue is a value of a tayfa's vocabulary.
+message VocabularyValue {
+  string id = 1;
+  // 1–60 characters, trimmed, single spaces.
+  string value = 2;
+  // Set only on a merged value: the value it shows as.
+  string merged_into_id = 3;
+  string merged_into_value = 4;
+}
+
+message ListVocabularyRequest {
+  string tayfa_id = 1;
+  // A namespace of the catalog's definitions (`vocabulary.namespace`).
+  string namespace = 2;
+  // Optional; at most 60 characters.
+  string query = 3;
+  // Return the merged values instead.
+  bool merged = 4;
+}
+
+message ListVocabularyResponse {
+  repeated VocabularyValue values = 1;
+  // The caller may merge values and undo merges now.
+  bool caller_can_merge = 2;
+}
+
+message MergeVocabularyRequest {
+  string tayfa_id = 1;
+  string namespace = 2;
+  // The value that is merged.
+  string vocabulary_id = 3;
+  // The value it is merged into; not itself merged.
+  string target_id = 4;
+}
+
+message MergeVocabularyResponse {
+  // The merged value with its target.
+  VocabularyValue value = 1;
+}
+
+message UnmergeVocabularyRequest {
+  string tayfa_id = 1;
+  string namespace = 2;
+  string vocabulary_id = 3;
+}
+
+message UnmergeVocabularyResponse {}

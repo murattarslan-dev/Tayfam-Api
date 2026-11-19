@@ -278,6 +278,10 @@ const (
 	// EventComponentReferee is entering results as an assigned referee
 	// (the caller checks the assignment, event_referees).
 	EventComponentReferee
+	// TayfaVocabularyMerge merges two values of the tayfa vocabulary and
+	// undoes a merge (issue #244, ADR-0037 §4). Reading the vocabulary is
+	// TayfaView.
+	TayfaVocabularyMerge
 
 	actionEnd // sentinel; keep last
 )
@@ -374,6 +378,7 @@ var actionNames = [...]string{
 	EventRefereeAssignOwn:     "event.referee_assign_own",
 	EventRefereeAssignAny:     "event.referee_assign_any",
 	EventComponentReferee:     "event.component_referee",
+	TayfaVocabularyMerge:      "tayfa.vocabulary.merge",
 	actionEnd:                 "",
 }
 
@@ -488,6 +493,8 @@ var permissions = map[Action]Role{
 	// Components and referees of every event, like editing every event.
 	EventComponentManageAny: Moderator,
 	EventRefereeAssignAny:   Moderator,
+	// Merging duplicates of the tayfa vocabulary (ADR-0037 §4).
+	TayfaVocabularyMerge: Moderator,
 	// Q&A: someone else's question or answer (with CanActOnContent), and
 	// removing a tag from the tayfa.
 	QuestionEditAny:   Moderator,

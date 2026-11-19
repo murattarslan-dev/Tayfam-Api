@@ -926,6 +926,16 @@ var expected = []struct {
 	{invited, EventComponentReferee, false},
 	{banned, EventComponentReferee, false},
 	{nonMember, EventComponentReferee, false},
+	// TayfaVocabularyMerge
+	{admin, TayfaVocabularyMerge, true},
+	{moderator, TayfaVocabularyMerge, true},
+	{member, TayfaVocabularyMerge, false},
+	{mutedMember, TayfaVocabularyMerge, false},
+	{mutedModerator, TayfaVocabularyMerge, false},
+	{pending, TayfaVocabularyMerge, false},
+	{invited, TayfaVocabularyMerge, false},
+	{banned, TayfaVocabularyMerge, false},
+	{nonMember, TayfaVocabularyMerge, false},
 }
 
 func TestAllowedMatrix(t *testing.T) {

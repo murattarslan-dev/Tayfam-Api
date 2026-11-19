@@ -204,6 +204,12 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VEHICLE_SEATS_TAKEN, true
 	case errors.Is(err, apperr.ErrSeatRequestDriver):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SEAT_REQUEST_DRIVER, true
+	case errors.Is(err, apperr.ErrVocabularyNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_VOCABULARY_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrVocabularyMerged):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VOCABULARY_MERGED, true
+	case errors.Is(err, apperr.ErrVocabularyNotMerged):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VOCABULARY_NOT_MERGED, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }
