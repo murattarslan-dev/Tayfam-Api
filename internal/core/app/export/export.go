@@ -40,7 +40,7 @@ const (
 	SectionAnswerVotes     = "answer_votes"
 	SectionPolls           = "polls"
 	SectionPollVotes       = "poll_votes"
-	SectionFishingCatches  = "fishing_catches"
+	SectionFishingCatches  = "fishing_catches" // every log entry (#243); the Faz 1 name
 	SectionEventPhotos     = "event_photos"
 	SectionFriendships     = "friendships"
 	SectionBlocks          = "blocks"
@@ -147,8 +147,8 @@ var sections = []struct {
 		return rows(r, err, func(x store.ExportPollVotesRow) row { return row{x.K, x.Data} })
 	}},
 	{SectionFishingCatches, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
-		r, err := q.ExportFishingCatches(ctx, store.ExportFishingCatchesParams{UserID: u, After: a, N: n})
-		return rows(r, err, func(x store.ExportFishingCatchesRow) row { return row{x.K, x.Data} })
+		r, err := q.ExportLogEntries(ctx, store.ExportLogEntriesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportLogEntriesRow) row { return row{x.K, x.Data} })
 	}},
 	{SectionEventPhotos, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportEventPhotos(ctx, store.ExportEventPhotosParams{UserID: u, After: a, N: n})

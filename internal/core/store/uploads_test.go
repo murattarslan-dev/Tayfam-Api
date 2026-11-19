@@ -230,7 +230,7 @@ func TestContentMediaTriggers(t *testing.T) {
 	owner := id.New()
 	tayfa := newTayfa(t, pool, owner, tayfaOpts{})
 	attach := func(u id.ID, typ string, target id.ID) {
-		purpose := map[string]string{"tayfa": "cover", "event": "cover", "fishing_catch": "catch_photo"}[typ]
+		purpose := map[string]string{"tayfa": "cover", "event": "cover", "log_entry": "log_photo"}[typ]
 		if n, err := q.AttachUpload(ctx, AttachUploadParams{
 			ID: u.PG(), UserID: owner.PG(), Purpose: purpose, AttachedType: typ, AttachedID: target.PG(),
 			TayfaID: tayfa.PG(), Now: ts(time.Now()),
@@ -258,8 +258,8 @@ func TestContentMediaTriggers(t *testing.T) {
 		t.Fatalf("kaldırılan kapak silinmeli, durum = %s", s)
 	}
 
-	// An event cover and a catch photo go when the event is purged
-	// (the catch goes with it by cascade).
+	// An event cover and a log entry's photo go when the event is purged
+	// (the entry goes with it by cascade).
 	ev, err := insertEvent(ctx, pool, tayfa, "fishing", "in_person", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -267,20 +267,22 @@ func TestContentMediaTriggers(t *testing.T) {
 	evCover := readyUpload(t, q, owner, uploadOpts{purpose: "cover", tayfa: tayfa})
 	attach(evCover, "event", ev)
 	wantCode(t, q.SetEventCover(ctx, SetEventCoverParams{ID: ev.PG(), TayfaID: tayfa.PG(), CoverUploadID: evCover.PG()}), "")
-	admin := adminOf(t, pool)
-	if _, err := admin.Exec(ctx, "INSERT INTO event_fishing (event_id) VALUES ($1)", ev.PG()); err != nil {
+	entry := func(photo id.ID) error {
+		_, err := pool.Exec(ctx, `INSERT INTO event_log_entries (id, event_id, component_key, user_id, field_values, photo_upload_id, client_request_id)
+			VALUES ($1, $2, 'catches', $3, '{"species": "Levrek"}', $4, gen_random_uuid())`, id.New().PG(), ev.PG(), owner.PG(), photo.PG())
+		return err
+	}
+	photo := readyUpload(t, q, owner, uploadOpts{purpose: "log_photo", tayfa: tayfa})
+	// A cover cannot be a log photo, and the photo must be attached to the
+	// entry it is written on.
+	wantCode(t, entry(evCover), "TF080")
+	wantCode(t, entry(photo), "TF080")
+	logEntry := id.New()
+	attach(photo, "log_entry", logEntry)
+	if _, err := pool.Exec(ctx, `INSERT INTO event_log_entries (id, event_id, component_key, user_id, field_values, photo_upload_id, client_request_id)
+		VALUES ($1, $2, 'catches', $3, '{"species": "Levrek"}', $4, gen_random_uuid())`, logEntry.PG(), ev.PG(), owner.PG(), photo.PG()); err != nil {
 		t.Fatal(err)
 	}
-	catch := id.New()
-	if _, err := admin.Exec(ctx, `INSERT INTO fishing_catches (id, event_id, user_id, species, length_cm, client_request_id)
-		VALUES ($1, $2, $3, 'Levrek', 42, $4)`, catch.PG(), ev.PG(), owner.PG(), id.New().PG()); err != nil {
-		t.Fatal(err)
-	}
-	photo := readyUpload(t, q, owner, uploadOpts{purpose: "catch_photo", tayfa: tayfa})
-	// A cover cannot be a catch photo.
-	wantCode(t, q.SetCatchPhoto(ctx, SetCatchPhotoParams{ID: catch.PG(), PhotoUploadID: evCover.PG()}), "TF080")
-	attach(photo, "fishing_catch", catch)
-	wantCode(t, q.SetCatchPhoto(ctx, SetCatchPhotoParams{ID: catch.PG(), PhotoUploadID: photo.PG()}), "")
 
 	// Soft delete keeps the media (the content can still be restored).
 	if _, err := pool.Exec(ctx, "UPDATE events SET deleted_at = now() WHERE id = $1", ev.PG()); err != nil {
@@ -292,7 +294,7 @@ func TestContentMediaTriggers(t *testing.T) {
 	if _, err := pool.Exec(ctx, "DELETE FROM events WHERE id = $1", ev.PG()); err != nil {
 		t.Fatal(err)
 	}
-	for name, u := range map[string]id.ID{"etkinlik kapağı": evCover, "av fotoğrafı": photo} {
+	for name, u := range map[string]id.ID{"etkinlik kapağı": evCover, "günlük fotoğrafı": photo} {
 		if s := uploadStatus(t, pool, u); s != "deleting" {
 			t.Errorf("%s kalıcı silmede silinmeli, durum = %s", name, s)
 		}

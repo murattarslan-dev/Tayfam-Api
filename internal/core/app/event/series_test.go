@@ -480,22 +480,6 @@ func TestExport(t *testing.T) {
 	_, err = e.svc.Export(ctx, id.New(), tf, ov.ID)
 	wantErr(t, "yabancı", err, apperr.ErrTayfaNotFound)
 
-	// A participants-only fishing spot stays out for others.
-	fi := input()
-	fi.Type = TypeFishing
-	fi.Details = Details{Fishing: &Fishing{SpotVisibility: SpotParticipants}}
-	fv := e.create(t, tf, admin, fi)
-	ics, err = e.svc.Export(ctx, member, tf, fv.ID)
-	must(t, err)
-	if strings.Contains(string(ics), "Kordon") || !strings.Contains(string(ics), `LOCATION:Konak\, İzmir`) {
-		t.Errorf("gizli mera: %s", ics)
-	}
-	ics, err = e.svc.Export(ctx, admin, tf, fv.ID)
-	must(t, err)
-	if !strings.Contains(string(ics), "Kordon") {
-		t.Errorf("organizatör merayı görmüyor: %s", ics)
-	}
-
 	// Cancelled.
 	_, err = e.svc.Cancel(ctx, admin, tf, v.ID, "yağmur")
 	must(t, err)

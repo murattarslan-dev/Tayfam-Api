@@ -11,7 +11,7 @@ import (
 // Export returns the event as an iCalendar file ("Takvime ekleme", data
 // model v14: the file holds only what the member may see). It is built
 // from Get's view, so the same access rules apply: only active members,
-// and a participants-only fishing spot stays hidden from others.
+// with the same view.
 //
 // Privacy choices: the location is the meeting point's name, district and
 // city, never the coordinates (no GEO property), because the file leaves

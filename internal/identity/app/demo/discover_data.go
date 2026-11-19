@@ -227,7 +227,6 @@ var discoverTayfas = []tayfaSpec{
 				Start:       at{Days: 9, Hour: 18}, Hours: 4,
 				PlaceName: "Gümbet iskelesi", Lat: 37.0326, Lng: 27.4110,
 				City: "Muğla", District: "Bodrum",
-				Fishing: &corev1.FishingDetails{SpotVisibility: corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS},
 				RSVPs: []rsvpSpec{
 					{Person: "riza", Status: going}, {Person: "taner", Status: going}, {Person: "dilek", Status: going},
 					{Person: "batu", Status: going}, {Person: "sena", Status: maybe},

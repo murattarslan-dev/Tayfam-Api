@@ -30,9 +30,6 @@ type Events interface {
 	ListAttendees(ctx context.Context, user, t, e id.ID, status string, pageSize int32, pageToken string) ([]event.Attendee, string, error)
 	CheckIn(ctx context.Context, user, t, e id.ID, at *event.Point) (event.Attendance, error)
 	SetAttendance(ctx context.Context, user, t, e, target id.ID, attended bool) error
-	AddCatch(ctx context.Context, user, t, e id.ID, in event.CatchInput) (event.Catch, error)
-	ListCatches(ctx context.Context, user, t, e id.ID, pageSize int32, pageToken string) ([]event.Catch, string, error)
-	RemoveCatch(ctx context.Context, user, t, e, catch id.ID) error
 	AddPhoto(ctx context.Context, user, t, e id.ID, in event.PhotoInput) (event.Photo, error)
 	ListPhotos(ctx context.Context, user, t, e id.ID, pageSize int32, pageToken string) ([]event.Photo, string, error)
 	RemovePhoto(ctx context.Context, user, t, e, photo id.ID) error
@@ -105,14 +102,13 @@ func createInput(req *corev1.CreateEventRequest) (event.Input, error) {
 	if err != nil {
 		return event.Input{}, err
 	}
-	d, err := detailsFromProto(req.GetConvoy(), req.GetCamp(), req.GetHike(), req.GetFishing(), req.GetGaming(), req.GetSports())
-	if err != nil {
-		return event.Input{}, err
+	if req.GetDetails() != nil {
+		return event.Input{}, validation("details")
 	}
 	in := event.Input{
 		Type: typ, Title: req.GetTitle(), Description: req.GetDescription(),
 		StartsAt: timeOf(req.GetStartTime()), EndsAt: timeOf(req.GetEndTime()), Location: loc,
-		Capacity: req.GetCapacity(), Discoverable: req.GetDiscoverable(), Details: d, Fields: fields,
+		Capacity: req.GetCapacity(), Discoverable: req.GetDiscoverable(), Fields: fields,
 		ClientRequestID: req.GetClientRequestId(),
 	}
 	if r := req.GetRecurrence(); r != nil {
@@ -206,10 +202,6 @@ func (s *EventServer) UpdateEvent(ctx context.Context, req *corev1.UpdateEventRe
 		switch f {
 		case event.FieldLocation:
 			if in.Location, err = locationFromProto(req.GetMode(), req.GetMeetingPointName(), req.GetMeetingPoint(), req.GetCity(), req.GetDistrict(), req.GetOnlineUrl()); err != nil {
-				return nil, err
-			}
-		case event.FieldDetails:
-			if in.Details, err = detailsFromProto(req.GetConvoy(), req.GetCamp(), req.GetHike(), req.GetFishing(), req.GetGaming(), req.GetSports()); err != nil {
 				return nil, err
 			}
 		case event.FieldFields:
@@ -422,36 +414,6 @@ func locationFromProto(mode corev1.EventMode, name string, point *corev1.LatLng,
 	return l, nil
 }
 
-// detailsFromProto converts the request's details oneof; at most one of the
-// arguments is set. Output-only fields (items) are dropped.
-func detailsFromProto(cv *corev1.ConvoyDetails, cp *corev1.CampDetails, h *corev1.HikeDetails, f *corev1.FishingDetails, g *corev1.GamingDetails, sp *corev1.SportsDetails) (event.Details, error) {
-	var d event.Details
-	switch {
-	case f != nil:
-		fi := &event.Fishing{}
-		switch f.GetSpotVisibility() {
-		case corev1.SpotVisibility_SPOT_VISIBILITY_UNSPECIFIED:
-		case corev1.SpotVisibility_SPOT_VISIBILITY_TAYFA:
-			fi.SpotVisibility = event.SpotTayfa
-		case corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS:
-			fi.SpotVisibility = event.SpotParticipants
-		default:
-			return event.Details{}, validation("spot_visibility")
-		}
-		d.Fishing = fi
-	case cv != nil, cp != nil, h != nil, g != nil, sp != nil:
-		// A convoy has no details any more: its route and vehicles are
-		// components (issues #239, #240). A camp's list is a component and
-		// its site details are fields (issue #241); so are a hike's roll
-		// call and its difficulty, distance and elevation (issue #242).
-		// Gaming and sports have
-		// no detail table either; their data is in the type's fields (issue
-		// #237).
-		return event.Details{}, validation("details")
-	}
-	return d, nil
-}
-
 // maxFieldValueBytes bounds one field value before the app layer reads it.
 const maxFieldValueBytes = 8 << 10
 
@@ -507,13 +469,6 @@ func eventToProto(v event.Event) *corev1.Event {
 	}
 	if v.SeriesID != (id.ID{}) {
 		out.SeriesId, out.SeriesOverride = v.SeriesID.String(), v.SeriesOverride
-	}
-	if d := v.Details; d.Fishing != nil {
-		vis := corev1.SpotVisibility_SPOT_VISIBILITY_TAYFA
-		if d.Fishing.SpotVisibility == event.SpotParticipants {
-			vis = corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS
-		}
-		out.Details = &corev1.Event_Fishing{Fishing: &corev1.FishingDetails{SpotVisibility: vis}}
 	}
 	if len(v.Fields) > 0 {
 		out.Fields = make(map[string]string, len(v.Fields))

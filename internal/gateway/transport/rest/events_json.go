@@ -31,12 +31,6 @@ var (
 		"location": corev1.AttendanceMethod_ATTENDANCE_METHOD_LOCATION, "online": corev1.AttendanceMethod_ATTENDANCE_METHOD_ONLINE,
 		"hike_start": corev1.AttendanceMethod_ATTENDANCE_METHOD_HIKE_START, "organizer": corev1.AttendanceMethod_ATTENDANCE_METHOD_ORGANIZER,
 	})
-	catchVisibilities = newEnum(map[string]corev1.CatchVisibility{
-		"self": corev1.CatchVisibility_CATCH_VISIBILITY_SELF, "tayfa": corev1.CatchVisibility_CATCH_VISIBILITY_TAYFA,
-	})
-	spotVisibilities = newEnum(map[string]corev1.SpotVisibility{
-		"tayfa": corev1.SpotVisibility_SPOT_VISIBILITY_TAYFA, "participants": corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS,
-	})
 )
 
 // optName is the enum's name, or "" (left out) for the zero value.
@@ -79,14 +73,6 @@ func latLngFrom(p *corev1.LatLng) *latLngJSON {
 	return &latLngJSON{p.GetLat(), p.GetLng()}
 }
 
-// --- Type details (output) ---
-
-// fishingJSON is used for both input and output; an empty input value means
-// the default (tayfa).
-type fishingJSON struct {
-	SpotVisibility string `json:"spot_visibility,omitempty"`
-}
-
 type eventJSON struct {
 	ID      string `json:"id"`
 	TayfaID string `json:"tayfa_id"`
@@ -122,8 +108,6 @@ type eventJSON struct {
 	CoverUploadID    string    `json:"cover_upload_id,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
-
-	Fishing *fishingJSON `json:"fishing,omitempty"`
 
 	// Fields holds the values of the type's fields by field key; left out
 	// when the event has none and in lists.
@@ -171,9 +155,6 @@ func eventFrom(e *corev1.Event) eventJSON {
 		SeriesID:         e.GetSeriesId(), SeriesOverride: e.GetSeriesOverride(), CoverUploadID: e.GetCoverUploadId(),
 		CreatedAt: e.GetCreateTime().AsTime(), UpdatedAt: e.GetUpdateTime().AsTime(),
 	}
-	if d, ok := e.GetDetails().(*corev1.Event_Fishing); ok {
-		out.Fishing = &fishingJSON{SpotVisibility: spotVisibilities.name(d.Fishing.GetSpotVisibility())}
-	}
 	return out
 }
 
@@ -202,32 +183,6 @@ type attendeeListJSON struct {
 type checkInJSON struct {
 	Attendance string `json:"attendance"`
 	Method     string `json:"method"`
-}
-
-type fishingCatchJSON struct {
-	ID       string  `json:"id"`
-	UserID   string  `json:"user_id"`
-	Species  string  `json:"species"`
-	LengthCm float64 `json:"length_cm"`
-	// Only core decides who gets it.
-	Location   *latLngJSON `json:"location,omitempty"`
-	Visibility string      `json:"visibility"`
-	CreatedAt  time.Time   `json:"created_at"`
-	// PhotoUploadID: links with POST /v1/media/urls (issue #135).
-	PhotoUploadID string `json:"photo_upload_id,omitempty"`
-}
-
-func fishingCatchFrom(c *corev1.FishingCatch) fishingCatchJSON {
-	return fishingCatchJSON{
-		ID: c.GetId(), UserID: c.GetUserId(), Species: c.GetSpecies(), LengthCm: c.GetLengthCm(),
-		Location: latLngFrom(c.GetLocation()), Visibility: catchVisibilities.name(c.GetVisibility()),
-		CreatedAt: c.GetCreateTime().AsTime(), PhotoUploadID: c.GetPhotoUploadId(),
-	}
-}
-
-type fishingCatchListJSON struct {
-	Catches       []fishingCatchJSON `json:"catches"`
-	NextPageToken string             `json:"next_page_token,omitempty"`
 }
 
 // eventPhotoJSON is an album photo (issue #206). Links come from

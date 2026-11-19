@@ -69,12 +69,11 @@ type eventSpec struct {
 	Capacity     int32
 	// Route is the route of an event whose type has the route component
 	// under the key "route" (the convoy).
-	Route   []*corev1.LatLng
-	Hike    *hikeSpec
-	Fishing *corev1.FishingDetails
+	Route []*corev1.LatLng
+	Hike  *hikeSpec
 	// Fields holds the values of the type's fields by field key, as JSON
-	// text (CreateEventRequest.fields): the data of the types without a
-	// Faz 1 detail message (gaming, sports, camp; a hike's come from Hike).
+	// text (CreateEventRequest.fields): the data of the types (gaming,
+	// sports, camp; a hike's come from Hike).
 	Fields   map[string]string
 	RSVPs    []rsvpSpec
 	Vehicles []vehicleSpec // a type with the vehicles component (the convoy): members who answered GOING
@@ -361,7 +360,6 @@ var tayfas = []tayfaSpec{
 				Start:       at{Days: 6, Hour: 17, Minute: 30}, Hours: 4,
 				PlaceName: "Akçay sahil yolu", Lat: 39.5838, Lng: 26.9265,
 				City: "Balıkesir", District: "Edremit",
-				Fishing: &corev1.FishingDetails{SpotVisibility: corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS},
 				RSVPs: []rsvpSpec{
 					{Person: "burak", Status: going}, {Person: "mert", Status: going},
 					{Person: "kaan", Status: going}, {Person: "gizem", Status: maybe},

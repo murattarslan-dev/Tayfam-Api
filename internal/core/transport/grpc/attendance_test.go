@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
@@ -48,18 +49,6 @@ func TestAttendanceServerValidates(t *testing.T) {
 			_, err := srv.SetAttendance(ctx, &corev1.SetAttendanceRequest{TayfaId: good, EventId: good, UserId: "x"})
 			return err
 		}, "user_id"},
-		"bozuk av konumu": {func() error {
-			_, err := srv.AddFishingCatch(ctx, &corev1.AddFishingCatchRequest{TayfaId: good, EventId: good, Location: &corev1.LatLng{Lat: math.NaN()}})
-			return err
-		}, "location"},
-		"bilinmeyen görünürlük": {func() error {
-			_, err := srv.AddFishingCatch(ctx, &corev1.AddFishingCatchRequest{TayfaId: good, EventId: good, Visibility: 9})
-			return err
-		}, "visibility"},
-		"bozuk av kimliği": {func() error {
-			_, err := srv.RemoveFishingCatch(ctx, &corev1.RemoveFishingCatchRequest{TayfaId: good, EventId: good, CatchId: "x"})
-			return err
-		}, "catch_id"},
 	} {
 		if got := field(tc.call()); got != tc.field {
 			t.Errorf("%s: %s", name, got)
@@ -91,21 +80,15 @@ func TestAttendanceServerConverts(t *testing.T) {
 		t.Fatalf("düzeltme = %v %v %v", f.target, f.attended, err)
 	}
 
-	c, err := srv.AddFishingCatch(ctx, &corev1.AddFishingCatchRequest{
-		TayfaId: tid, EventId: eid, Species: "Levrek", LengthCm: 40, Location: &corev1.LatLng{Lat: 1, Lng: 2},
-		Visibility: corev1.CatchVisibility_CATCH_VISIBILITY_TAYFA, ClientRequestId: "istek",
-	})
-	if err != nil || f.catch.Visibility != event.CatchTayfa || f.catch.Location == nil || f.catch.ClientRequestID != "istek" ||
-		c.GetCatch().GetVisibility() != corev1.CatchVisibility_CATCH_VISIBILITY_TAYFA || c.GetCatch().GetLocation().GetLng() != 2 {
-		t.Fatalf("av = %v %v %+v", c, err, f.catch)
+	// The retired fishing catch methods are not served (issue #243).
+	if _, err := srv.AddFishingCatch(ctx, &corev1.AddFishingCatchRequest{TayfaId: tid, EventId: eid, Species: "Levrek", LengthCm: 40}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("kaldırılan AddFishingCatch: %v", err)
 	}
-	if _, err := srv.AddFishingCatch(ctx, &corev1.AddFishingCatchRequest{TayfaId: tid, EventId: eid}); err != nil || f.catch.Visibility != "" {
-		t.Fatalf("belirsiz görünürlük app'e %q olarak gitti: %v", f.catch.Visibility, err)
+	if _, err := srv.ListFishingCatches(ctx, &corev1.ListFishingCatchesRequest{TayfaId: tid, EventId: eid}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("kaldırılan ListFishingCatches: %v", err)
 	}
-	list, err := srv.ListFishingCatches(ctx, &corev1.ListFishingCatchesRequest{TayfaId: tid, EventId: eid})
-	if err != nil || len(list.GetCatches()) != 1 || list.GetCatches()[0].GetLocation() != nil ||
-		list.GetCatches()[0].GetVisibility() != corev1.CatchVisibility_CATCH_VISIBILITY_SELF {
-		t.Fatalf("liste = %v %v", list, err)
+	if _, err := srv.RemoveFishingCatch(ctx, &corev1.RemoveFishingCatchRequest{TayfaId: tid, EventId: eid, CatchId: id.New().String()}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("kaldırılan RemoveFishingCatch: %v", err)
 	}
 
 	f.view = event.Event{CallerAttendance: event.AttendanceNoShow}

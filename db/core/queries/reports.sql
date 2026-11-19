@@ -34,11 +34,11 @@ SELECT created_by AS author_id, (deleted_at IS NULL)::boolean AS visible
 FROM polls
 WHERE tayfa_id = @tayfa_id AND id = @id;
 
--- Av kaydı: etkinliği de görünür olmalı; 'self' görünürlüğündeki kaydı
--- yalnızca sahibi görür (app katmanı kontrol eder).
--- name: GetReportTargetCatch :one
-SELECT c.user_id AS author_id, (c.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible, c.visibility
-FROM fishing_catches c
+-- Günlük kaydı (issue #243): etkinliği de görünür olmalı. Kaydın kendisi
+-- (değerleri) etkinliği gören her üyeye açıktır; konum şikâyete girmez.
+-- name: GetReportTargetLogEntry :one
+SELECT c.user_id AS author_id, (c.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible
+FROM event_log_entries c
 JOIN events e ON e.id = c.event_id
 WHERE e.tayfa_id = @tayfa_id AND c.id = @id;
 

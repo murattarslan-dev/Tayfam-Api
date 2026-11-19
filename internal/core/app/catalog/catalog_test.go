@@ -42,8 +42,8 @@ func TestNewNeedsPool(t *testing.T) {
 // seedVersion is the catalog version the migrations leave: 1 from the
 // seed (00030), raised by every migration that changes a type in place
 // (00036: the camp's fields, issue #241; 00037: the hike's fields, issue
-// #242).
-const seedVersion = 3
+// #242; 00038: the fishing log's fields, issue #243).
+const seedVersion = 4
 
 // The seed is the seven Faz 1 types with today's behaviour (ADR-0025 §10
 // step 1): every definition passes the validator, the keys did not change.
@@ -126,6 +126,26 @@ func TestSeedCatalog(t *testing.T) {
 	}
 	if c, ok := byKey["hike"].Parsed.Component(definition.CompRollCall); !ok || !c.Params["alarm"].Bool() {
 		t.Errorf("hike.roll_call = %+v", c)
+	}
+	// The fishing catch log follows the Notion catalog (issue #243): the
+	// species in the fish_species vocabulary, count, weight and the Faz 1
+	// length, the location kept to oneself by default, two statistics.
+	catches, ok := byKey["fishing"].Parsed.Component("catches")
+	if !ok || catches.Kind != definition.CompLog || !catches.Params["location"].Bool() ||
+		catches.Params["location_default"].String() != "self" {
+		t.Fatalf("fishing.catches = %+v", catches)
+	}
+	var keys []string
+	for _, f := range catches.LogFields {
+		keys = append(keys, f.Key)
+	}
+	if !slices.Equal(keys, []string{"species", "count", "weight", "length_cm"}) ||
+		catches.LogFields[0].Vocabulary != "fish_species" || !catches.LogFields[0].Required ||
+		catches.LogFields[2].Unit != "kg" || catches.LogFields[3].Required {
+		t.Fatalf("fishing.catches alanları = %+v", catches.LogFields)
+	}
+	if st, _ := catches.Params["stat"].Value.([]string); !slices.Equal(st, []string{"distinct:species", "sum:weight"}) {
+		t.Fatalf("fishing.catches stat = %v", st)
 	}
 	// Gaming and sports keep their Faz 1 fields.
 	if f, ok := byKey["gaming"].Parsed.Field("platform"); !ok || !f.Required || len(f.Options) != 6 {

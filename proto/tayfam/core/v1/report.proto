@@ -130,6 +130,8 @@ enum ReportTargetType {
   REPORT_TARGET_TYPE_QUESTION = 5;
   REPORT_TARGET_TYPE_ANSWER = 6;
   REPORT_TARGET_TYPE_POLL = 7;
+  // target_id is a log component entry (issue #243; stored as log_entry).
+  // The name is from Faz 1, when the only log was the fishing catch log.
   REPORT_TARGET_TYPE_FISHING_CATCH = 8;
   // target_id is a direct message ID (issue #95). Not about a tayfa:
   // tayfa_id is empty. core asks chat with the reporter's own token

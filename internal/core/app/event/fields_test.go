@@ -48,7 +48,7 @@ func TestCreateWithFields(t *testing.T) {
 	member := e.seed(t, tf, authz.Member)
 
 	v := e.create(t, tf, admin, gaming())
-	if v.Type != TypeGaming || v.TypeVersion != 1 || v.Details.typ() != "" {
+	if v.Type != TypeGaming || v.TypeVersion != 1 {
 		t.Fatalf("etkinlik = %+v", v)
 	}
 	// Stored in their clean form: the text is trimmed.
@@ -129,9 +129,9 @@ func TestUpdateFields(t *testing.T) {
 	wantField(t, "zorunlu alansız güncelleme", err, "fields.game")
 	_, err = e.svc.Update(ctx, admin, tf, ev.ID, []string{FieldFields}, Input{Fields: values("game", `"x"`, "platform", `"amiga"`)})
 	wantField(t, "bozuk değer", err, "fields.platform")
-	// The type's data is not in details any more.
-	_, err = e.svc.Update(ctx, admin, tf, ev.ID, []string{FieldDetails}, Input{Details: Details{Fishing: &Fishing{}}})
-	wantField(t, "alanlı türde detay", err, "details")
+	// The type's data is not in details any more (issue #243).
+	_, err = e.svc.Update(ctx, admin, tf, ev.ID, []string{"details"}, Input{})
+	wantField(t, "alanlı türde detay", err, "update_mask")
 	// A type without fields takes only the empty set.
 	gen := e.create(t, tf, admin, input())
 	_, err = e.svc.Update(ctx, admin, tf, gen.ID, []string{FieldFields}, Input{Fields: values("game", `"x"`)})

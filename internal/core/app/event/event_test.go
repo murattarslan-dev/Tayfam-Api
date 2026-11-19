@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -177,12 +176,6 @@ func TestCreateAndGet(t *testing.T) {
 		v.City != "İzmir" || v.District != "Konak" || v.OnlineURL != "" {
 		t.Fatalf("etkinlik = %+v", v)
 	}
-	// A convoy has no type details: its route and vehicles are components
-	// (issues #239, #240).
-	if v.Details != (Details{}) {
-		t.Fatalf("detay = %+v", v.Details)
-	}
-
 	// Audit record and event carry IDs and the type only: no title, place
 	// or coordinates.
 	var meta, payload string
@@ -214,8 +207,8 @@ func TestCreateAndGet(t *testing.T) {
 	_, err = e.svc.Create(ctx, admin, other, in)
 	wantField(t, "başka tayfada aynı istek kimliği", err, "client_request_id")
 
-	// Every Faz 1 type is created at the catalog's version, the types with
-	// a detail table with their detail row.
+	// Every Faz 1 type is created at the catalog's version; none has a
+	// detail table any more (issue #243).
 	for _, typ := range Types {
 		in := input()
 		in.Type = typ
@@ -232,13 +225,6 @@ func TestCreateAndGet(t *testing.T) {
 		v := e.create(t, tf, admin, in)
 		got, err := e.svc.Get(ctx, admin, tf, v.ID)
 		must(t, err)
-		want := ""
-		if slices.Contains(detailTypes, typ) {
-			want = typ
-		}
-		if got.Details.typ() != want {
-			t.Errorf("%s: detay %+v", typ, got.Details)
-		}
 		if got.Type != typ || got.TypeVersion != 1 || got.Fields == nil || len(got.Fields) != len(in.Fields) {
 			t.Errorf("%s: tür %q sürüm %d alanlar %v", typ, got.Type, got.TypeVersion, got.Fields)
 		}
@@ -286,9 +272,6 @@ func TestCreateValidation(t *testing.T) {
 		{"boşluklu bağlantı", func(i *Input) { i.Location = Location{Mode: ModeOnline, OnlineURL: "https://example.com/a b"} }, "online_url"},
 		{"negatif kapasite", func(i *Input) { i.Capacity = -1 }, "capacity"},
 		{"büyük kapasite", func(i *Input) { i.Capacity = 10001 }, "capacity"},
-		{"genel türde detay", func(i *Input) { i.Details.Fishing = &Fishing{} }, "details"},
-		{"yürüyüşte detay", func(i *Input) { i.Type = TypeHike; i.Details.Fishing = &Fishing{} }, "details"},
-		{"kampta detay", func(i *Input) { i.Type = TypeCamp; i.Details.Fishing = &Fishing{} }, "details"},
 		{"uzun kamp notu", func(i *Input) { i.Type = TypeCamp; i.Fields = values("notes", `"`+strings.Repeat("n", 1001)+`"`) }, "fields.notes"},
 		{"metin su", func(i *Input) { i.Type = TypeCamp; i.Fields = values("has_water", `"evet"`) }, "fields.has_water"},
 		{"bozuk tür anahtarı", func(i *Input) { i.Type = "Hike Night" }, "type"},
@@ -296,17 +279,10 @@ func TestCreateValidation(t *testing.T) {
 		{"alansız spor", func(i *Input) { i.Type = TypeSports }, "fields.sport"},
 		{"bilinmeyen platform", func(i *Input) { i.Type = TypeGaming; i.Fields = values("game", `"x"`, "platform", `"amiga"`) }, "fields.platform"},
 		{"bilinmeyen spor", func(i *Input) { i.Type = TypeSports; i.Fields = values("sport", `"golf"`) }, "fields.sport"},
-		{"oyun türünde detay", func(i *Input) {
-			i.Type = TypeGaming
-			i.Fields = values("game", `"x"`, "platform", `"pc"`)
-			i.Details.Fishing = &Fishing{}
-		}, "details"},
-		{"konvoyda detay", func(i *Input) { i.Type = TypeConvoy; i.Details.Fishing = &Fishing{} }, "details"},
 		{"türde olmayan alan", func(i *Input) { i.Fields = values("stake", `100`) }, "fields"},
 		{"zorluk 6", func(i *Input) { i.Type = TypeHike; i.Fields = values("difficulty", `6`) }, "fields.difficulty"},
 		{"sıfır mesafe", func(i *Input) { i.Type = TypeHike; i.Fields = values("planned_distance", `0`) }, "fields.planned_distance"},
 		{"irtifa 9001", func(i *Input) { i.Type = TypeHike; i.Fields = values("planned_elevation", `9001`) }, "fields.planned_elevation"},
-		{"bilinmeyen mera görünürlüğü", func(i *Input) { i.Type = TypeFishing; i.Details.Fishing = &Fishing{SpotVisibility: "public"} }, "spot_visibility"},
 		{"istek kimliği yok", func(i *Input) { i.ClientRequestID = "" }, "client_request_id"},
 	} {
 		in := input()
@@ -401,26 +377,22 @@ func TestUpdate(t *testing.T) {
 	e := setup(t)
 	tf, admin := e.newTayfa(t)
 	in := input()
-	in.Type, in.Details.Fishing = TypeFishing, &Fishing{SpotVisibility: SpotTayfa}
+	in.Type = TypeFishing
 	ev := e.create(t, tf, admin, in)
 
 	start := time.Now().Add(48 * time.Hour).UTC().Truncate(time.Microsecond)
-	v, err := e.svc.Update(ctx, admin, tf, ev.ID, []string{FieldTime, FieldLocation, FieldDetails, FieldCapacity}, Input{
+	v, err := e.svc.Update(ctx, admin, tf, ev.ID, []string{FieldTime, FieldLocation, FieldCapacity}, Input{
 		StartsAt: start, EndsAt: start.Add(time.Hour), Capacity: 5,
 		Location: Location{Mode: ModeOnline, OnlineURL: "https://example.com/oda"},
-		Details:  Details{Fishing: &Fishing{SpotVisibility: SpotParticipants}},
 		Title:    "maskede yok",
 	})
 	must(t, err)
 	if !v.StartsAt.Equal(start) || v.Mode != ModeOnline || v.MeetingPoint != nil || v.City != "" || v.Capacity != 5 || v.Title != ev.Title {
 		t.Fatalf("güncel = %+v", v)
 	}
-	if f := v.Details.Fishing; f == nil || f.SpotVisibility != SpotParticipants {
-		t.Fatalf("balık = %+v", f)
-	}
 	var payload string
 	must(t, e.pool.QueryRow(ctx, `SELECT payload::text FROM domain_events WHERE type = 'event.updated'`).Scan(&payload))
-	if !strings.Contains(payload, `"fields": ["time", "location", "capacity", "details"]`) || strings.Contains(payload, "example.com") {
+	if !strings.Contains(payload, `"fields": ["time", "location", "capacity"]`) || strings.Contains(payload, "example.com") {
 		t.Fatalf("olay = %s", payload)
 	}
 
@@ -434,14 +406,13 @@ func TestUpdate(t *testing.T) {
 		{[]string{"status"}, Input{}, "update_mask"},
 		{[]string{FieldTitle}, Input{}, "title"},
 		{[]string{FieldLocation}, Input{Location: Location{Mode: ModeOnline}}, "online_url"},
-		{[]string{FieldDetails}, Input{}, "details"},
+		// No type has Faz 1 details any more (issue #243).
+		{[]string{"details"}, Input{}, "update_mask"},
 	} {
 		_, err := e.svc.Update(ctx, admin, tf, ev.ID, tc.fields, tc.in)
 		wantField(t, fmt.Sprint(tc.fields), err, tc.field)
 	}
 	general := e.create(t, tf, admin, input())
-	_, err = e.svc.Update(ctx, admin, tf, general.ID, []string{FieldDetails}, Input{Details: Details{Fishing: &Fishing{}}})
-	wantField(t, "genel etkinliğe detay", err, "details")
 
 	// Ended events no longer change.
 	e.exec(t, `UPDATE events SET starts_at = now() - interval '3 hours', ends_at = now() - interval '1 hour' WHERE id = $1`, general.ID.PG())
@@ -657,9 +628,6 @@ func (e *env) callAll(user, tf, ev id.ID) map[string]error {
 	_, _, out["ListAttendees"] = e.svc.ListAttendees(ctx, user, tf, ev, "", 0, "")
 	_, out["CheckIn"] = e.svc.CheckIn(ctx, user, tf, ev, izmir)
 	out["SetAttendance"] = e.svc.SetAttendance(ctx, user, tf, ev, id.New(), true)
-	_, out["AddCatch"] = e.svc.AddCatch(ctx, user, tf, ev, CatchInput{Species: "Levrek", LengthCm: 40, ClientRequestID: id.New().String()})
-	_, _, out["ListCatches"] = e.svc.ListCatches(ctx, user, tf, ev, 0, "")
-	out["RemoveCatch"] = e.svc.RemoveCatch(ctx, user, tf, ev, id.New())
 	_, out["AddPhoto"] = e.svc.AddPhoto(ctx, user, tf, ev, PhotoInput{UploadID: id.New(), ClientRequestID: id.New().String()})
 	_, _, out["ListPhotos"] = e.svc.ListPhotos(ctx, user, tf, ev, 0, "")
 	out["RemovePhoto"] = e.svc.RemovePhoto(ctx, user, tf, ev, id.New())
@@ -716,48 +684,8 @@ func TestReadOnlyTayfa(t *testing.T) {
 		switch name {
 		case "Get", "ListUpcoming", "ListAttendees", "ListPhotos":
 			must(t, err)
-		case "ListCatches":
-			// A read: it gets past the read-only check to the type check.
-			wantErr(t, name, err, apperr.ErrEventTypeMismatch)
 		default:
 			wantErr(t, name, err, apperr.ErrTayfaReadOnly)
-		}
-	}
-}
-
-func TestFishingSpotVisibility(t *testing.T) {
-	e := setup(t)
-	tf, admin := e.newTayfa(t)
-	e.allowMembers(t, tf, admin)
-	org := e.seed(t, tf, authz.Member)
-	mod := e.seed(t, tf, authz.Moderator)
-	angler := e.seed(t, tf, authz.Member)
-	outsider := e.seed(t, tf, authz.Member)
-	in := input()
-	in.Type, in.Details.Fishing = TypeFishing, &Fishing{SpotVisibility: SpotParticipants}
-	ev := e.create(t, tf, org, in)
-	_, err := e.svc.SetRSVP(ctx, angler, tf, ev.ID, RSVPMaybe)
-	must(t, err)
-
-	for name, tc := range map[string]struct {
-		u    id.ID
-		sees bool
-	}{
-		"organizatör": {org, true}, "moderatör": {mod, true}, "yönetici": {admin, true},
-		"belki diyen": {angler, true}, "katılmayan": {outsider, false},
-	} {
-		v, err := e.svc.Get(ctx, tc.u, tf, ev.ID)
-		must(t, err)
-		list, _, err := e.svc.ListUpcoming(ctx, tc.u, tf, 0, "")
-		must(t, err)
-		for _, got := range []Event{v, list[0]} {
-			if (got.MeetingPoint != nil) != tc.sees || (got.MeetingPointName != "") != tc.sees {
-				t.Errorf("%s: mera görünürlüğü %v bekleniyordu: %+v", name, tc.sees, got.Location)
-			}
-			// Il and ilçe stay visible: they are not the spot.
-			if got.City == "" {
-				t.Errorf("%s: il gizlendi", name)
-			}
 		}
 	}
 }
@@ -782,9 +710,6 @@ func TestListUpcomingPaging(t *testing.T) {
 		must(t, err)
 		for _, v := range list {
 			got = append(got, v.ID)
-			if v.Details.typ() != "" {
-				t.Error("listede detay")
-			}
 		}
 		if next == "" {
 			break

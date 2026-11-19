@@ -3,7 +3,6 @@ package event
 import (
 	"math"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -32,24 +31,12 @@ const (
 	RSVPMaybe    = "maybe"
 	RSVPNotGoing = "not_going"
 	RSVPWaitlist = "waitlist"
-
-	SpotTayfa        = "tayfa"
-	SpotParticipants = "participants"
 )
 
 // Types are the seven Faz 1 event types, in EventType order. The type of
 // an event is a catalog key (ADR-0025): any active type of the catalog can
 // be created, not only these.
 var Types = []string{TypeConvoy, TypeCamp, TypeHike, TypeFishing, TypeGaming, TypeSports, TypeGeneral}
-
-// detailTypes are the types that still keep data in a Faz 1 detail table
-// (event_fishing) until their components move it (issue #243). Every other
-// type has only the fields of its catalog definition (event_field_values)
-// and its components; the convoy's route and vehicles, the camp's list and
-// the hike's roll call are components (issues #239–#242), the camp's site
-// details and the hike's difficulty, distance and elevation are fields
-// (issues #241, #242).
-var detailTypes = []string{TypeFishing}
 
 // Limits (data model v14 and 00004_events.sql; the same CHECKs are in the
 // database).
@@ -90,38 +77,6 @@ type Location struct {
 	City         string
 	District     string
 	OnlineURL    string
-}
-
-// Details are the Faz 1 type details of the types in detailTypes; at most
-// one is set and it matches the event's type.
-type Details struct {
-	Fishing *Fishing
-}
-
-// typ returns the event type the set field belongs to, "" when none is set,
-// or "?" when more than one is.
-func (d Details) typ() string {
-	t := ""
-	for _, c := range []struct {
-		set bool
-		typ string
-	}{
-		{d.Fishing != nil, TypeFishing},
-	} {
-		if c.set {
-			if t != "" {
-				return "?"
-			}
-			t = c.typ
-		}
-	}
-	return t
-}
-
-// Fishing holds who sees the spot.
-type Fishing struct {
-	// SpotVisibility is SpotTayfa or SpotParticipants; "" means SpotTayfa.
-	SpotVisibility string
 }
 
 // cleanText trims s and checks its length in characters. Empty is allowed
@@ -245,44 +200,4 @@ func cleanCapacity(c int32) (int32, error) {
 		return 0, apperr.Validation("capacity")
 	}
 	return c, nil
-}
-
-// cleanDetails checks d for an event of type typ starting at start. create
-// fills in the default details of types that have no required field.
-func cleanDetails(typ string, d Details, start time.Time, create bool) (Details, error) {
-	bad := apperr.Validation("details")
-	dt := d.typ()
-	switch {
-	case dt == "?":
-		return Details{}, bad
-	case !slices.Contains(detailTypes, typ):
-		// No detail table: the type's data is in its fields.
-		if dt != "" {
-			return Details{}, bad
-		}
-		return Details{}, nil
-	case dt == "" && create:
-		if typ == TypeFishing {
-			d.Fishing = &Fishing{}
-		}
-	case dt != typ:
-		return Details{}, bad
-	}
-
-	var out Details
-	switch typ {
-	case TypeFishing:
-		f := *d.Fishing
-		switch f.SpotVisibility {
-		case "":
-			f.SpotVisibility = SpotTayfa
-		case SpotTayfa, SpotParticipants:
-		default:
-			return Details{}, apperr.Validation("spot_visibility")
-		}
-		out.Fishing = &f
-	default:
-		return Details{}, bad
-	}
-	return out, nil
 }

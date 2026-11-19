@@ -117,22 +117,6 @@ ORDER BY updated_at, user_id
 LIMIT @page_size;
 
 -- ---------------------------------------------------------------------------
--- Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
--- key yanlış türü reddeder.
-
--- name: SetEventFishing :exec
-INSERT INTO event_fishing (event_id, spot_visibility) VALUES (@event_id, @spot_visibility)
-ON CONFLICT (event_id) DO UPDATE SET spot_visibility = EXCLUDED.spot_visibility;
-
--- name: GetEventFishing :one
-SELECT spot_visibility FROM event_fishing WHERE event_id = @event_id;
-
--- Liste görünümünde mera gizliliği için.
--- name: ListFishingVisibility :many
-SELECT event_id, spot_visibility FROM event_fishing
-WHERE event_id = ANY(@event_ids::uuid[]);
-
--- ---------------------------------------------------------------------------
 -- Türe özel alan değerleri (issue #237, ADR-0025 §3). Değerler app
 -- katmanında etkinliğin tür sürümüne göre doğrulanmış halleriyle yazılır;
 -- trigger alanın o tür sürümünde olduğunu ayrıca denetler.

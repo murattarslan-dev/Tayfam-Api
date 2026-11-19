@@ -65,7 +65,6 @@ const (
 	FieldLocation     = "location"
 	FieldCapacity     = "capacity"
 	FieldDiscoverable = "discoverable"
-	FieldDetails      = "details"
 	// FieldFields replaces the values of the type's fields
 	// (event_field_values, issue #237).
 	FieldFields = "fields"
@@ -73,7 +72,7 @@ const (
 	FieldCover = "cover_upload_id"
 )
 
-var updateFields = []string{FieldTitle, FieldDescription, FieldTime, FieldLocation, FieldCapacity, FieldDiscoverable, FieldDetails, FieldFields, FieldCover}
+var updateFields = []string{FieldTitle, FieldDescription, FieldTime, FieldLocation, FieldCapacity, FieldDiscoverable, FieldFields, FieldCover}
 
 // Config wires a Service.
 type Config struct {
@@ -141,8 +140,6 @@ type Event struct {
 	CallerCanManage bool
 	// CoverUploadID is the cover image; zero when there is none.
 	CoverUploadID id.ID
-	// Details are filled by Get only.
-	Details Details
 	// Fields holds the values of the type's fields by field key, as JSON
 	// (definition.CleanValues); filled by Get only, never nil there.
 	Fields map[string]json.RawMessage
@@ -158,7 +155,6 @@ type Input struct {
 	Location     Location
 	Capacity     int32
 	Discoverable bool
-	Details      Details
 	// Fields holds the values of the type's fields by field key, as JSON.
 	// They are checked against the event's type version.
 	Fields map[string]json.RawMessage
@@ -393,7 +389,6 @@ type Plan struct {
 	end      time.Time
 	loc      Location
 	capacity int32
-	details  Details
 	crid     id.ID
 	rec      *recurrence
 }
@@ -433,9 +428,6 @@ func (s *Service) Prepare(in Input) (Plan, error) {
 		return Plan{}, err
 	}
 	if p.capacity, err = cleanCapacity(in.Capacity); err != nil {
-		return Plan{}, err
-	}
-	if p.details, err = cleanDetails(in.Type, in.Details, p.start, true); err != nil {
 		return Plan{}, err
 	}
 	var ok bool
@@ -541,9 +533,6 @@ func createIn(ctx context.Context, q *store.Queries, c caller, b *batch, p Plan)
 	setLocation(&cp.Mode, &cp.MeetingPointName, &cp.MeetingLat, &cp.MeetingLng, &cp.City, &cp.District, &cp.OnlineUrl, p.loc)
 	if err := q.CreateEvent(ctx, cp); err != nil {
 		return id.ID{}, id.ID{}, fmt.Errorf("etkinlik: %w", err)
-	}
-	if err := setDetails(ctx, q, eventID, p.details); err != nil {
-		return id.ID{}, id.ID{}, err
 	}
 	if err := setFields(ctx, q, eventID, values, false); err != nil {
 		return id.ID{}, id.ID{}, err
@@ -686,21 +675,6 @@ func (s *Service) Update(ctx context.Context, user, tayfa, event id.ID, fields [
 				return apperr.Validation("discoverable")
 			}
 			p.Discoverable = in.Discoverable
-		}
-		if set[FieldDetails] {
-			if !slices.Contains(detailTypes, ev.Type) {
-				return apperr.Validation("details")
-			}
-			d, err := cleanDetails(ev.Type, in.Details, p.StartsAt.Time, false)
-			if err != nil {
-				return err
-			}
-			if d.typ() == "" {
-				return apperr.Validation("details")
-			}
-			if err := setDetails(ctx, q, event, d); err != nil {
-				return err
-			}
 		}
 		if set[FieldFields] {
 			values, err := cleanEventFields(ctx, q, ev, in.Fields)
@@ -877,18 +851,6 @@ func setFields(ctx context.Context, q *store.Queries, event id.ID, values map[st
 		if err := q.SetEventFieldValue(ctx, store.SetEventFieldValueParams{EventID: event.PG(), FieldKey: k, Value: values[k]}); err != nil {
 			return fmt.Errorf("alan değeri: %w", err)
 		}
-	}
-	return nil
-}
-
-// setDetails writes the type details; d has exactly one field set, or none
-// for a type without a detail table.
-func setDetails(ctx context.Context, q *store.Queries, event id.ID, d Details) error {
-	if d.Fishing == nil {
-		return nil
-	}
-	if err := q.SetEventFishing(ctx, store.SetEventFishingParams{EventID: event.PG(), SpotVisibility: d.Fishing.SpotVisibility}); err != nil {
-		return fmt.Errorf("etkinlik detayı: %w", err)
 	}
 	return nil
 }

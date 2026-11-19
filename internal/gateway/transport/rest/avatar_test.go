@@ -51,7 +51,7 @@ func TestAvatarRoutes(t *testing.T) {
 	}
 }
 
-// Covers and catch photos are passed to core with their mask path; "" in a
+// Covers are passed to core with their mask path; "" in a
 // PATCH removes the cover (issue #135).
 func TestCoverAndPhotoFields(t *testing.T) {
 	f := &fakeCore{}
@@ -76,12 +76,5 @@ func TestCoverAndPhotoFields(t *testing.T) {
 	if r := in.(*corev1.UpdateEventRequest); r.GetCoverUploadId() != uploadID || r.GetUpdateMask().GetPaths()[0] != "cover_upload_id" {
 		t.Fatalf("etkinlik isteği: %v", r)
 	}
-	body := `{"species":"Levrek","length_cm":40,"client_request_id":"` + uploadID + `","photo_upload_id":"` + uploadID + `"}`
-	if w := as(h, "POST", "/v1/tayfas/"+tayfaID+"/events/"+eventID+"/fishing-catches", body); w.Code != http.StatusCreated {
-		t.Fatalf("av fotoğrafı: %d %s", w.Code, w.Body)
-	}
-	in, _, _ = f.last()
-	if in.(*corev1.AddFishingCatchRequest).GetPhotoUploadId() != uploadID {
-		t.Fatal("av fotoğrafı iletilmeli")
-	}
+	// A log entry's photo: TestLogComponentRoutes (issue #243).
 }

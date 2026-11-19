@@ -148,7 +148,7 @@ func targetLabel(t corev1.ReportTargetType) string {
 	case corev1.ReportTargetType_REPORT_TARGET_TYPE_POLL:
 		return "Anket"
 	case corev1.ReportTargetType_REPORT_TARGET_TYPE_FISHING_CATCH:
-		return "Av kaydı"
+		return "Günlük kaydı"
 	case corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT_PHOTO:
 		return "Albüm fotoğrafı"
 	case corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE:

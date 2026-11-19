@@ -103,7 +103,9 @@ const (
 	TargetQuestion     TargetType = "question"
 	TargetAnswer       TargetType = "answer"
 	TargetPoll         TargetType = "poll"
-	TargetFishingCatch TargetType = "fishing_catch"
+	// TargetLogEntry: a log component entry (issue #243; a fishing catch
+	// before it).
+	TargetLogEntry TargetType = "log_entry"
 	// TargetEventPhoto: an event album photo (issue #206, ADR-0028).
 	TargetEventPhoto TargetType = "event_photo"
 	// TargetDMMessage: a direct message (issue #95). Not about a tayfa; see
@@ -118,7 +120,7 @@ const (
 // content reports whether t is content (has an author and can be removed).
 func (t TargetType) content() bool {
 	switch t {
-	case TargetAnnouncement, TargetEvent, TargetQuestion, TargetAnswer, TargetPoll, TargetFishingCatch, TargetEventPhoto,
+	case TargetAnnouncement, TargetEvent, TargetQuestion, TargetAnswer, TargetPoll, TargetLogEntry, TargetEventPhoto,
 		TargetChannelMessage:
 		return true
 	}
@@ -568,7 +570,7 @@ func (s *Service) subjectOf(ctx context.Context, q *store.Queries, tayfa, user i
 	if err != nil {
 		return id.ID{}, err
 	}
-	if !c.found || !c.visible || (c.ownOnly && c.author != user) {
+	if !c.found || !c.visible {
 		return id.ID{}, apperr.ErrReportTargetNotFound
 	}
 	if c.author == user {
@@ -586,7 +588,7 @@ func moduleOf(t TargetType) string {
 	case TargetPoll:
 		return access.ModulePolls
 	}
-	return access.ModuleEvents // events, fishing catches and album photos
+	return access.ModuleEvents // events, log entries and album photos
 }
 
 // content is a reported piece of content as the report needs it.
@@ -596,8 +598,6 @@ type content struct {
 	// removed: no longer visible to members (deleted, or a cancelled
 	// event), or gone for good.
 	removed bool
-	// ownOnly: only the author sees it (a fishing catch kept to oneself).
-	ownOnly bool
 	author  id.ID // zero when the account was deleted
 }
 
@@ -632,11 +632,12 @@ func lookup(ctx context.Context, q *store.Queries, tayfa id.ID, t TargetType, ta
 		var r store.GetReportTargetPollRow
 		r, err = q.GetReportTargetPoll(ctx, store.GetReportTargetPollParams{TayfaID: p.t, ID: p.i})
 		author, visible = r.AuthorID, r.Visible
-	case TargetFishingCatch:
-		var r store.GetReportTargetCatchRow
-		r, err = q.GetReportTargetCatch(ctx, store.GetReportTargetCatchParams{TayfaID: p.t, ID: p.i})
+	case TargetLogEntry:
+		// Every member who sees the event sees the entry; its location is
+		// not part of the report.
+		var r store.GetReportTargetLogEntryRow
+		r, err = q.GetReportTargetLogEntry(ctx, store.GetReportTargetLogEntryParams{TayfaID: p.t, ID: p.i})
 		author, visible = r.AuthorID, r.Visible
-		c.ownOnly = r.Visibility != "tayfa"
 	case TargetEventPhoto:
 		var r store.GetReportTargetEventPhotoRow
 		r, err = q.GetReportTargetEventPhoto(ctx, store.GetReportTargetEventPhotoParams{TayfaID: p.t, ID: p.i})

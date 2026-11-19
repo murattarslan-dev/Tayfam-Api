@@ -225,18 +225,6 @@ func updateSeries(ctx context.Context, q *store.Queries, c caller, b *batch, ev 
 	if s.EndedAt.Valid {
 		return apperr.ErrEventSeriesEnded
 	}
-	var details Details
-	if set[FieldDetails] {
-		if !slices.Contains(detailTypes, ev.Type) {
-			return apperr.Validation("details")
-		}
-		if details, err = cleanDetails(ev.Type, in.Details, ev.StartsAt.Time, false); err != nil {
-			return err
-		}
-		if details.typ() == "" {
-			return apperr.Validation("details")
-		}
-	}
 	var values map[string]json.RawMessage
 	if set[FieldFields] {
 		// Every event of a series has the template's type version.
@@ -304,11 +292,6 @@ func updateSeries(ctx context.Context, q *store.Queries, c caller, b *batch, ev 
 		// Activity records are snapshots of the event (issue #50).
 		if set[FieldTitle] || set[FieldLocation] {
 			if err := refreshActivity(ctx, q, tayfa, t, c.now); err != nil {
-				return err
-			}
-		}
-		if set[FieldDetails] {
-			if err := setDetails(ctx, q, t, details); err != nil {
 				return err
 			}
 		}
@@ -497,11 +480,6 @@ func (s *Service) GenerateSeries(ctx context.Context, tayfa, series id.ID) (int,
 		if err != nil {
 			return fmt.Errorf("seri kuralı: %w", err)
 		}
-		details, err := typeDetails(ctx, q, tmpl)
-		if err != nil {
-			return err
-		}
-
 		after := sr.Dtstart.Time
 		if sr.GeneratedUntil.Valid && sr.GeneratedUntil.InfinityModifier == pgtype.Finite && sr.GeneratedUntil.Time.After(after) {
 			after = sr.GeneratedUntil.Time
@@ -529,9 +507,6 @@ func (s *Service) GenerateSeries(ctx context.Context, tayfa, series id.ID) (int,
 			if n == 0 {
 				// Already there (another pod, or an earlier run).
 				continue
-			}
-			if err := setDetails(ctx, q, eid, details); err != nil {
-				return err
 			}
 			// The occurrence gets the template's type version and its field
 			// values.

@@ -70,7 +70,7 @@ func TestReportServer(t *testing.T) {
 	user, tid, rid, subject := id.New(), id.New(), id.New(), id.New()
 	now := time.Now().UTC()
 	f := &fakeReports{
-		mine: report.MyView{ID: rid, TayfaID: tid, TargetType: report.TargetFishingCatch, TargetID: subject, Reason: report.ReasonChildSafety,
+		mine: report.MyView{ID: rid, TayfaID: tid, TargetType: report.TargetLogEntry, TargetID: subject, Reason: report.ReasonChildSafety,
 			Status: report.StatusResolved, Outcome: report.OutcomeDismissed, CreatedAt: now, ResolvedAt: now},
 		mod: report.ModView{ID: rid, TayfaID: tid, TargetType: report.TargetUser, TargetID: subject, SubjectID: subject,
 			Reason: report.ReasonStaffConduct, Priority: report.PriorityMinorInvolved, Status: report.StatusOpen, CreatedAt: now},

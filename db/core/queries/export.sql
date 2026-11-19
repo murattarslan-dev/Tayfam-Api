@@ -158,13 +158,14 @@ WHERE v.user_id = @user_id AND v.option_id > @after
 ORDER BY v.option_id
 LIMIT @n;
 
--- name: ExportFishingCatches :many
+-- Günlük kayıtları (issue #243); bölümün adı Faz 1'den (fishing_catches).
+-- name: ExportLogEntries :many
 SELECT f.id AS k, jsonb_build_object(
-  'id', f.id, 'event_id', f.event_id, 'species', f.species, 'length_cm', f.length_cm,
-  'lat', f.lat, 'lng', f.lng, 'visibility', f.visibility, 'photo_upload_id', f.photo_upload_id,
+  'id', f.id, 'event_id', f.event_id, 'component_key', f.component_key, 'values', f.field_values,
+  'lat', f.lat, 'lng', f.lng, 'location_visibility', f.location_visibility, 'photo_upload_id', f.photo_upload_id,
   'created_at', f.created_at, 'deleted_at', f.deleted_at
 ) AS data
-FROM fishing_catches f
+FROM event_log_entries f
 WHERE f.user_id = @user_id AND f.id > @after
 ORDER BY f.id
 LIMIT @n;

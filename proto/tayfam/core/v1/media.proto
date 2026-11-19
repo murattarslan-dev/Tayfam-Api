@@ -201,6 +201,9 @@ service MediaService {
 enum UploadPurpose {
   UPLOAD_PURPOSE_UNSPECIFIED = 0;
   UPLOAD_PURPOSE_AVATAR = 1;
+  // A log entry's photo (LogComponentService.AddLogEntry, issue #243;
+  // stored as log_photo). The name is from Faz 1, when only fishing
+  // catches had photos.
   UPLOAD_PURPOSE_CATCH_PHOTO = 2;
   // A tayfa or event cover.
   UPLOAD_PURPOSE_COVER = 3;

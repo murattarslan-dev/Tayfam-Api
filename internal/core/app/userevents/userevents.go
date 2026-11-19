@@ -201,7 +201,7 @@ func validDisplayName(s string) bool {
 //     after tayfa.DeletionDelay, requested by nobody (the system);
 //   - author and actor fields pointing at the user become NULL (questions,
 //     answers and polls stay, by a deleted user); the user's event RSVPs,
-//     convoy vehicles (plates), roll calls, fishing catches, activity
+//     convoy vehicles (plates), roll calls, log entries, activity
 //     records, helpful votes and poll votes are deleted, and the vote counts
 //     drop with them;
 //   - the user's uploaded files are deleted; covers attached to a tayfa or
@@ -265,7 +265,7 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			q.ClearTayfaUserFields, q.ClearInviteCreator, q.ClearMembershipUserFields,
 			q.ClearAnnouncementUserFields, q.ClearEventUserFields, q.ClearEventSeriesCreator,
 			q.ClearRsvpMarker, q.DeleteUserRsvps, q.DeleteUserVehicles, q.DeleteUserSeatRequests, q.ClearChecklistItemUserFields,
-			q.DeleteUserRollCallCheckins, q.DeleteUserCatches, q.ClearCatchDeleter,
+			q.DeleteUserRollCallCheckins, q.DeleteUserLogEntries, q.ClearLogEntryDeleter,
 			q.DeleteUserEventPhotos, q.ClearEventPhotoDeleter, q.DeleteUserActivityRecords,
 			q.ClearQuestionUserFields, q.ClearAnswerUserFields, q.DeleteUserAnswerVotes,
 			q.ClearPollUserFields, q.DeleteUserPollVotes,

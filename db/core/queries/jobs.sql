@@ -169,9 +169,11 @@ DELETE FROM polls WHERE id IN (
   SELECT x.id FROM polls x WHERE x.deleted_at <= @deleted_before
   ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
 
--- name: PurgeFishingCatches :execrows
-DELETE FROM fishing_catches WHERE id IN (
-  SELECT x.id FROM fishing_catches x WHERE x.deleted_at <= @deleted_before
+-- Günlük kaydı (issue #243); fotoğrafı uploads_release_ref ile silme
+-- kuyruğuna girer.
+-- name: PurgeLogEntries :execrows
+DELETE FROM event_log_entries WHERE id IN (
+  SELECT x.id FROM event_log_entries x WHERE x.deleted_at <= @deleted_before
   ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
 
 -- Albüm fotoğrafı; dosyası uploads_release_ref ile silme kuyruğuna girer.

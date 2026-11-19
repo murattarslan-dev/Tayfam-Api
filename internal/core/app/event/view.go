@@ -3,11 +3,8 @@ package event
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
@@ -33,9 +30,6 @@ func (s *Service) Get(ctx context.Context, user, tayfa, event id.ID) (Event, err
 		return Event{}, err
 	}
 	v := out[0]
-	if v.Details, err = s.details(ctx, ev); err != nil {
-		return Event{}, err
-	}
 	if v.Fields, err = loadFields(ctx, s.q, event); err != nil {
 		return Event{}, err
 	}
@@ -56,7 +50,7 @@ func loadFields(ctx context.Context, q *store.Queries, event id.ID) (map[string]
 }
 
 // ListUpcoming lists the tayfa's events that have not ended, cancelled ones
-// included, by start time. Details are not filled.
+// included, by start time. Field values are not filled.
 func (s *Service) ListUpcoming(ctx context.Context, user, tayfa id.ID, size int32, token string) ([]Event, string, error) {
 	size, err := pageSize(size)
 	if err != nil {
@@ -97,7 +91,7 @@ func (s *Service) ListUpcoming(ctx context.Context, user, tayfa id.ID, size int3
 }
 
 // views builds the views of rows with batched queries: answer counts, the
-// caller's answers and fishing spot visibility.
+// caller's answers.
 func (s *Service) views(ctx context.Context, c caller, rows []store.GetEventRow) ([]Event, error) {
 	if len(rows) == 0 {
 		return []Event{}, nil
@@ -114,10 +108,6 @@ func (s *Service) views(ctx context.Context, c caller, rows []store.GetEventRow)
 	if err != nil {
 		return nil, fmt.Errorf("katılımlarım: %w", err)
 	}
-	spots, err := s.q.ListFishingVisibility(ctx, ids)
-	if err != nil {
-		return nil, fmt.Errorf("mera görünürlüğü: %w", err)
-	}
 	byCount := map[id.ID]map[string]int32{}
 	for _, r := range counts {
 		k := id.ID(r.EventID.Bytes)
@@ -131,10 +121,6 @@ func (s *Service) views(ctx context.Context, c caller, rows []store.GetEventRow)
 	for _, r := range mine {
 		byMine[id.ID(r.EventID.Bytes)] = r.Status
 		attendance[id.ID(r.EventID.Bytes)] = r.Attendance
-	}
-	bySpot := map[id.ID]string{}
-	for _, r := range spots {
-		bySpot[id.ID(r.EventID.Bytes)] = r.SpotVisibility
 	}
 
 	out := make([]Event, len(rows))
@@ -171,53 +157,7 @@ func (s *Service) views(ctx context.Context, c caller, rows []store.GetEventRow)
 		if r.SeriesID.Valid {
 			v.SeriesID, v.SeriesOverride = id.ID(r.SeriesID.Bytes), r.SeriesOverride
 		}
-		// A secret fishing spot is shown only to participants, the
-		// organizer, moderators and admins.
-		if bySpot[k] == SpotParticipants && !c.seesSpot(r, v.CallerRSVP) {
-			v.MeetingPoint, v.MeetingPointName = nil, ""
-		}
 		out[i] = v
 	}
 	return out, nil
-}
-
-// seesSpot reports whether the caller may see a participants-only spot.
-// This is a read, so a mute does not hide it.
-func (c caller) seesSpot(ev store.GetEventRow, rsvp string) bool {
-	if rsvp == RSVPGoing || rsvp == RSVPMaybe {
-		return true
-	}
-	if ev.CreatedBy.Valid && id.ID(ev.CreatedBy.Bytes) == c.user {
-		return true
-	}
-	unmuted := c.m
-	unmuted.MutedUntil = time.Time{}
-	return authz.AllowedIn(unmuted, authz.EventEditAny, c.now, c.settings)
-}
-
-// details loads the type details of ev for Get.
-func (s *Service) details(ctx context.Context, ev store.GetEventRow) (Details, error) {
-	return typeDetails(ctx, s.q, ev)
-}
-
-// typeDetails loads the type details of ev from its type's table. A series
-// copies these to new occurrences.
-func typeDetails(ctx context.Context, q *store.Queries, ev store.GetEventRow) (Details, error) {
-	evID := ev.ID
-	var d Details
-	var err error
-	if ev.Type == TypeFishing {
-		var vis string
-		vis, err = q.GetEventFishing(ctx, evID)
-		d.Fishing = &Fishing{SpotVisibility: vis}
-	}
-	// Every event of a type in detailTypes is created with its detail row;
-	// a missing row means an inconsistency, not a client error.
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Details{}, fmt.Errorf("etkinlik detayı yok: %w", err)
-	}
-	if err != nil {
-		return Details{}, fmt.Errorf("etkinlik detayı: %w", err)
-	}
-	return d, nil
 }

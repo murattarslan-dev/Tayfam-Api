@@ -66,7 +66,7 @@ adları içeriktir ve yer alır.
 | `core/answer_votes.json` | `answer_id`, `created_at` |
 | `core/polls.json` | `id`, `tayfa_id`, `event_id`, `question`, `anonymous`, `multiple_choice`, `options` (`[{id, text, position}]`), `closes_at`, `closed_at`, `created_at`, `deleted_at` |
 | `core/poll_votes.json` | `poll_id`, `option_id`, `option_text`, `poll_question`, `anonymous`, `created_at` (gizli anket dahil yalnızca kullanıcının kendi oyu) |
-| `core/fishing_catches.json` | `id`, `event_id`, `species`, `length_cm`, `lat`, `lng`, `visibility`, `photo_upload_id`, `created_at`, `deleted_at` |
+| `core/fishing_catches.json` | Bütün günlük kayıtları (#243; ad Faz 1'den): `id`, `event_id`, `component_key`, `values`, `lat`, `lng`, `location_visibility`, `photo_upload_id`, `created_at`, `deleted_at` |
 | `core/friendships.json` | `user_id` (karşı taraf), `status`, `requested_by_me`, `created_at`, `accepted_at` |
 | `core/blocks.json` | `user_id` (engellenen), `created_at` |
 | `core/availability.json` | "Boşum" (#207): `date` (YYYY-MM-DD), `slots`, `note` (yoksa null), `created_at`, `updated_at`. Geçmiş günler saklanmadığı için yalnızca bugün ve sonrası |

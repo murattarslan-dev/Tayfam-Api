@@ -168,7 +168,7 @@ var reportTargets = map[corev1.ReportTargetType]report.TargetType{
 	corev1.ReportTargetType_REPORT_TARGET_TYPE_QUESTION:        report.TargetQuestion,
 	corev1.ReportTargetType_REPORT_TARGET_TYPE_ANSWER:          report.TargetAnswer,
 	corev1.ReportTargetType_REPORT_TARGET_TYPE_POLL:            report.TargetPoll,
-	corev1.ReportTargetType_REPORT_TARGET_TYPE_FISHING_CATCH:   report.TargetFishingCatch,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_FISHING_CATCH:   report.TargetLogEntry,
 	corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT_PHOTO:     report.TargetEventPhoto,
 	corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE:      report.TargetDMMessage,
 	corev1.ReportTargetType_REPORT_TARGET_TYPE_CHANNEL_MESSAGE: report.TargetChannelMessage,

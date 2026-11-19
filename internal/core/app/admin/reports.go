@@ -342,10 +342,12 @@ func reportedItem(ctx context.Context, q *store.Queries, r Report) (*Item, error
 			it.Author, it.Title, it.CreatedAt, it.DeletedAt = idOf(p.CreatedBy), p.Question, timeOf(p.CreatedAt), timeOf(p.DeletedAt)
 			it.Options, err = q.AdminGetPollOptions(ctx, r.Target.PG())
 		}
-	case "fishing_catch":
-		var x store.AdminGetCatchRow
-		x, err = q.AdminGetCatch(ctx, store.AdminGetCatchParams{ID: r.Target.PG(), TayfaID: tf})
-		it.Author, it.Title, it.CreatedAt, it.DeletedAt = idOf(x.UserID), x.Species, timeOf(x.CreatedAt), timeOf(x.DeletedAt)
+	case "log_entry":
+		// The entry's values (JSON by field key), never its location.
+		var x store.AdminGetLogEntryRow
+		x, err = q.AdminGetLogEntry(ctx, store.AdminGetLogEntryParams{ID: r.Target.PG(), TayfaID: tf})
+		it.Author, it.Title, it.Body = idOf(x.UserID), x.ComponentKey, string(x.FieldValues)
+		it.CreatedAt, it.DeletedAt = timeOf(x.CreatedAt), timeOf(x.DeletedAt)
 	case "event_photo":
 		var x store.AdminGetEventPhotoRow
 		x, err = q.AdminGetEventPhoto(ctx, store.AdminGetEventPhotoParams{ID: r.Target.PG(), TayfaID: tf})
@@ -379,8 +381,8 @@ func removeContent(ctx context.Context, q *store.Queries, r Report, by id.ID, no
 		_, err = q.AdminDeleteAnswer(ctx, store.AdminDeleteAnswerParams{ID: tid, TayfaID: tf, At: at, By: b})
 	case "poll":
 		_, err = q.AdminDeletePoll(ctx, store.AdminDeletePollParams{ID: tid, TayfaID: tf, At: at, By: b})
-	case "fishing_catch":
-		_, err = q.AdminDeleteCatch(ctx, store.AdminDeleteCatchParams{ID: tid, TayfaID: tf, At: at, By: b})
+	case "log_entry":
+		_, err = q.AdminDeleteLogEntry(ctx, store.AdminDeleteLogEntryParams{ID: tid, TayfaID: tf, At: at, By: b})
 	case "event_photo":
 		_, err = q.AdminDeleteEventPhoto(ctx, store.AdminDeleteEventPhotoParams{ID: tid, TayfaID: tf, At: at, By: b})
 	case "channel_message":
