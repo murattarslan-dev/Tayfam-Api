@@ -440,17 +440,6 @@ func (q *Queries) GetEventCamp(ctx context.Context, eventID pgtype.UUID) (GetEve
 	return i, err
 }
 
-const getEventConvoy = `-- name: GetEventConvoy :one
-SELECT route FROM event_convoy WHERE event_id = $1
-`
-
-func (q *Queries) GetEventConvoy(ctx context.Context, eventID pgtype.UUID) ([]byte, error) {
-	row := q.db.QueryRow(ctx, getEventConvoy, eventID)
-	var route []byte
-	err := row.Scan(&route)
-	return route, err
-}
-
 const getEventFishing = `-- name: GetEventFishing :one
 SELECT spot_visibility FROM event_fishing WHERE event_id = $1
 `
@@ -1078,20 +1067,17 @@ func (q *Queries) SetEventCamp(ctx context.Context, arg SetEventCampParams) erro
 
 const setEventConvoy = `-- name: SetEventConvoy :exec
 
-INSERT INTO event_convoy (event_id, route) VALUES ($1, $2)
-ON CONFLICT (event_id) DO UPDATE SET route = EXCLUDED.route
+INSERT INTO event_convoy (event_id) VALUES ($1)
+ON CONFLICT (event_id) DO NOTHING
 `
-
-type SetEventConvoyParams struct {
-	EventID pgtype.UUID
-	Route   []byte
-}
 
 // ---------------------------------------------------------------------------
 // Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
 // key yanlış türü reddeder.
-func (q *Queries) SetEventConvoy(ctx context.Context, arg SetEventConvoyParams) error {
-	_, err := q.db.Exec(ctx, setEventConvoy, arg.EventID, arg.Route)
+// Konvoyun detay satırı yalnızca araçların bağlandığı satırdır; rota
+// `route` bileşenindedir (component_route.sql, issue #239).
+func (q *Queries) SetEventConvoy(ctx context.Context, eventID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, setEventConvoy, eventID)
 	return err
 }
 

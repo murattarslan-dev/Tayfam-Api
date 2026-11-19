@@ -580,7 +580,9 @@ func (x *LatLng) GetLng() float64 {
 
 type ConvoyDetails struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Empty, or 2–500 points.
+	// Not used any more: the route is the route component's
+	// (RouteComponentService, component_route.proto; issue #239). Never read
+	// and never filled; the field stays because it cannot be removed.
 	Route []*LatLng `protobuf:"bytes,1,rep,name=route,proto3" json:"route,omitempty"`
 	// Output only, GetEvent only.
 	Vehicles      []*ConvoyVehicle `protobuf:"bytes,2,rep,name=vehicles,proto3" json:"vehicles,omitempty"`

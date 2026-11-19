@@ -161,6 +161,9 @@ type Querier interface {
 	CopyEventComponents(ctx context.Context, arg CopyEventComponentsParams) error
 	// Seri örneği şablonun alan değerlerini alır.
 	CopyEventFieldValues(ctx context.Context, arg CopyEventFieldValuesParams) error
+	// Seri örneği şablonun rotalarını alır (bileşen seçimlerinden sonra:
+	// tetikleyici bileşenin açık olduğunu denetler).
+	CopyEventRoutes(ctx context.Context, arg CopyEventRoutesParams) error
 	CountActiveMembers(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
 	CountActiveMembersForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]CountActiveMembersForTayfasRow, error)
 	// ---------------------------------------------------------------------------
@@ -283,6 +286,7 @@ type Querier interface {
 	DeleteEventFieldValues(ctx context.Context, eventID pgtype.UUID) error
 	DeleteEventPhoto(ctx context.Context, arg DeleteEventPhotoParams) (int64, error)
 	DeleteEventReferee(ctx context.Context, arg DeleteEventRefereeParams) (int64, error)
+	DeleteEventRoute(ctx context.Context, arg DeleteEventRouteParams) (int64, error)
 	// Bileşen bir kapsamı (masa, maç) silerken o kapsamın hakem atamalarını da
 	// siler.
 	DeleteEventScopeReferees(ctx context.Context, arg DeleteEventScopeRefereesParams) error
@@ -498,7 +502,6 @@ type Querier interface {
 	GetEventByClientRequest(ctx context.Context, arg GetEventByClientRequestParams) (GetEventByClientRequestRow, error)
 	GetEventCamp(ctx context.Context, eventID pgtype.UUID) (GetEventCampRow, error)
 	GetEventComponent(ctx context.Context, arg GetEventComponentParams) (GetEventComponentRow, error)
-	GetEventConvoy(ctx context.Context, eventID pgtype.UUID) ([]byte, error)
 	// ---------------------------------------------------------------------------
 	// "Her şey yolunda mıydı?"
 	GetEventFeedback(ctx context.Context, arg GetEventFeedbackParams) (GetEventFeedbackRow, error)
@@ -515,6 +518,12 @@ type Querier interface {
 	// Yetki, pencere ve sınırlar uygulama katmanında; trigger'lar ikinci hat
 	// (00023_event_photos.sql).
 	GetEventPhotoByClientRequest(ctx context.Context, arg GetEventPhotoByClientRequestParams) (GetEventPhotoByClientRequestRow, error)
+	// Rota bileşeni (`route`; issue #239; ADR-0025 §4). Etkinlik her zaman önce
+	// tayfa kapsamında yüklenir ve bileşen etkinliğin tür sürümünde çözülür
+	// (internal/core/app/component: View / Change); buradaki sorgular o
+	// etkinliğin kimliği ve bileşenin anahtarıyla çalışır (IDOR). Yetki app
+	// katmanındadır (internal/core/app/component/route).
+	GetEventRoute(ctx context.Context, arg GetEventRouteParams) (GetEventRouteRow, error)
 	GetEventSeries(ctx context.Context, arg GetEventSeriesParams) (GetEventSeriesRow, error)
 	// Seriyi değiştiren istekler ve üretim işi aynı satırı kilitler; çağıran
 	// tayfa satırını önceden kilitlemiştir (kilit sırası: tayfa, seri,
@@ -1050,11 +1059,16 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
 	// key yanlış türü reddeder.
-	SetEventConvoy(ctx context.Context, arg SetEventConvoyParams) error
+	// Konvoyun detay satırı yalnızca araçların bağlandığı satırdır; rota
+	// `route` bileşenindedir (component_route.sql, issue #239).
+	SetEventConvoy(ctx context.Context, eventID pgtype.UUID) error
 	SetEventCover(ctx context.Context, arg SetEventCoverParams) error
 	SetEventFieldValue(ctx context.Context, arg SetEventFieldValueParams) error
 	SetEventFishing(ctx context.Context, arg SetEventFishingParams) error
 	SetEventHike(ctx context.Context, arg SetEventHikeParams) error
+	// Rota app katmanında doğrulanmış haliyle yazılır; event_routes_points
+	// CHECK'i ve event_component_guard aynı kuralları ayrıca denetler.
+	SetEventRoute(ctx context.Context, arg SetEventRouteParams) error
 	SetEventSeriesID(ctx context.Context, arg SetEventSeriesIDParams) (int64, error)
 	SetEventSeriesTemplate(ctx context.Context, arg SetEventSeriesTemplateParams) error
 	// Boyut bir kez yazılır (trigger uploads_export_bytes_once); aynı boyut
