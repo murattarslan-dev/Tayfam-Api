@@ -433,7 +433,7 @@ func TestUpdate(t *testing.T) {
 		{[]string{FieldTitle}, Input{}, "title"},
 		{[]string{FieldLocation}, Input{Location: Location{Mode: ModeOnline}}, "online_url"},
 		{[]string{FieldDetails}, Input{}, "details"},
-		{[]string{FieldDetails}, Input{Details: Details{Hike: &Hike{}}}, "details"},
+		{[]string{FieldDetails}, Input{Details: Details{Fishing: &Fishing{}}}, "details"},
 	} {
 		_, err := e.svc.Update(ctx, admin, tf, ev.ID, tc.fields, tc.in)
 		wantField(t, fmt.Sprint(tc.fields), err, tc.field)
