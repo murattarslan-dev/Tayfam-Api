@@ -42,6 +42,7 @@ func componentRegistrars() []componentRegistrar {
 		registerMeasureComponent,
 
 		// goal (#246)
+		registerGoalComponent,
 
 		// schedule (#247)
 
