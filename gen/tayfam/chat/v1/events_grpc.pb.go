@@ -179,8 +179,8 @@ const (
 // chat (an explicit list in core's relay): notification.requested,
 // tayfa.purged, membership.changed and the tayfa state changes
 // (tayfa.warned, tayfa.archived, tayfa.reactivated, tayfa.deleted,
-// tayfa.deletion_requested, tayfa.deletion_cancelled), the event changes and
-// report.channel_message_removed.
+// tayfa.deletion_requested, tayfa.deletion_cancelled), the event changes,
+// report.channel_message_removed and event.component_changed.
 type CoreEventServiceClient interface {
 	// ApplyCoreEvent applies one core event.
 	//
@@ -226,8 +226,8 @@ func (c *coreEventServiceClient) ApplyCoreEvent(ctx context.Context, in *ApplyCo
 // chat (an explicit list in core's relay): notification.requested,
 // tayfa.purged, membership.changed and the tayfa state changes
 // (tayfa.warned, tayfa.archived, tayfa.reactivated, tayfa.deleted,
-// tayfa.deletion_requested, tayfa.deletion_cancelled), the event changes and
-// report.channel_message_removed.
+// tayfa.deletion_requested, tayfa.deletion_cancelled), the event changes,
+// report.channel_message_removed and event.component_changed.
 type CoreEventServiceServer interface {
 	// ApplyCoreEvent applies one core event.
 	//

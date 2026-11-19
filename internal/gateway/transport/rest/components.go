@@ -1,0 +1,105 @@
+package rest
+
+import (
+	"net/http"
+
+	"google.golang.org/grpc"
+
+	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+)
+
+// Event components (issue #238; ADR-0025 §4, §8). A component's routes
+// live under
+//
+//	/v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/…
+//
+// in a file of its own (component_<kind>.go) that builds its gRPC client
+// from the connection to core (componentHandlers.conn) and adds one line to
+// componentRoutes. The first path segment after {component_key} belongs to
+// one component kind (its name or its resource: "route", "items",
+// "tables" …): two kinds must not register the same pattern.
+
+// componentHandlers serves the component routes.
+type componentHandlers struct {
+	coreHandlers
+	// conn is the connection to core; every component builds its own
+	// client from it.
+	conn grpc.ClientConnInterface
+}
+
+// componentPath returns the route pattern of a component resource:
+// componentPath("GET", "items/{item_id}").
+func componentPath(method, suffix string) string {
+	return method + " /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/" + suffix
+}
+
+// componentRef reads and checks the path's tayfa, event and component key;
+// on a bad one it answers invalid-request and ok is false.
+func componentRef(w http.ResponseWriter, r *http.Request) (ref *corev1.ComponentRef, ok bool) {
+	id, eid, ok := pathTayfaEvent(w, r)
+	if !ok {
+		return nil, false
+	}
+	key := r.PathValue("component_key")
+	if !catalogKeyPattern.MatchString(key) {
+		badRequest(w, r)
+		return nil, false
+	}
+	return &corev1.ComponentRef{TayfaId: id, EventId: eid, ComponentKey: key}, true
+}
+
+// componentRoutes is the gateway's component registry: one line per
+// component, under its own heading, so that components developed side by
+// side do not touch the same lines. Keep the headings and the empty lines
+// between them.
+func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
+	return []func(mux *http.ServeMux, h componentHandlers){
+		// The framework's own routes: selections and referees.
+		registerEventComponents,
+
+		// route (#239)
+
+		// vehicles (#240)
+
+		// checklist (#241)
+
+		// roll_call (#242)
+
+		// log (#243)
+
+		// tayfa vocabulary (#244)
+
+		// measure (#245)
+
+		// goal (#246)
+
+		// schedule (#247)
+
+		// teams (#248)
+
+		// draw (#249)
+
+		// scoreboard (#250)
+
+		// bracket (#251)
+
+		// guest players (#252)
+
+		// ranking (#253)
+
+		// vote (#254)
+
+		// celebration (#255)
+
+		// questions (#256)
+
+		// pool_link (#271)
+	}
+}
+
+func registerComponents(mux *http.ServeMux, h coreHandlers) {
+	ch := componentHandlers{coreHandlers: h, conn: h.d.Components}
+	for _, register := range componentRoutes() {
+		register(mux, ch)
+	}
+}

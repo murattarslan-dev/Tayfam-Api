@@ -549,6 +549,10 @@ func (s *Service) GenerateSeries(ctx context.Context, tayfa, series id.ID) (int,
 			if err := q.CopyEventFieldValues(ctx, store.CopyEventFieldValuesParams{ToEventID: eid.PG(), FromEventID: tmpl.ID}); err != nil {
 				return fmt.Errorf("seri örneğinin alan değerleri: %w", err)
 			}
+			// And the organizer's component selections (issue #238).
+			if err := q.CopyEventComponents(ctx, store.CopyEventComponentsParams{ToEventID: eid.PG(), FromEventID: tmpl.ID}); err != nil {
+				return fmt.Errorf("seri örneğinin bileşen seçimleri: %w", err)
+			}
 			events = append(events, made{eid})
 		}
 

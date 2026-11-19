@@ -140,6 +140,11 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_SAFETY_CONTACT_NOT_FOUND": {http.StatusNotFound, "safety-contact-not-found"},
 		// Event type catalog (issue #237, ADR-0025).
 		"ERROR_REASON_CATALOG_TYPE_NOT_FOUND": {http.StatusNotFound, "catalog-type-not-found"},
+		// Event components (issue #238; ADR-0025 §4–§6, ADR-0037 §2).
+		"ERROR_REASON_COMPONENT_NOT_FOUND": {http.StatusNotFound, "component-not-found"},
+		"ERROR_REASON_COMPONENT_DISABLED":  {http.StatusConflict, "component-disabled"},
+		"ERROR_REASON_COMPONENT_LOCKED":    {http.StatusConflict, "component-locked"},
+		"ERROR_REASON_COMPONENT_FROZEN":    {http.StatusConflict, "component-frozen"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

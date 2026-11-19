@@ -165,6 +165,15 @@ type EventCampItem struct {
 	CreatedAt      pgtype.Timestamptz
 }
 
+type EventComponent struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	Enabled      bool
+	Params       []byte
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
 type EventConsumer struct {
 	ConsumerName string
 	LastEventID  pgtype.UUID
@@ -244,6 +253,15 @@ type EventPhoto struct {
 	CreatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
 	DeletedBy       pgtype.UUID
+}
+
+type EventReferee struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	UserID       pgtype.UUID
+	ComponentKey pgtype.Text
+	ScopeID      pgtype.UUID
+	CreatedAt    pgtype.Timestamptz
 }
 
 type EventRsvp struct {

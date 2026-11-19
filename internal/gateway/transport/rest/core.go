@@ -82,6 +82,12 @@ type CoreDeps struct {
 	Availability AvailabilityClient
 	// Catalog enables the event type catalog routes when set (issue #237).
 	Catalog CatalogClient
+	// Components is the connection to core for the event component routes
+	// (issue #238): the framework's own (selections, referees) and every
+	// registered component's (componentRoutes). Each builds its gRPC
+	// client from it. The routes are on when it is set together with
+	// Events.
+	Components grpc.ClientConnInterface
 	// Discover enables the Keşfet routes when set (issue #210). core
 	// decides whether Keşfet is on (DISCOVER_ENABLED); the gateway does not.
 	Discover DiscoverClient
@@ -178,6 +184,9 @@ func registerCore(mux *http.ServeMux, d CoreDeps) {
 	}
 	if d.Events != nil {
 		registerEvents(mux, h)
+		if d.Components != nil {
+			registerComponents(mux, h)
+		}
 	}
 	if d.QA != nil {
 		registerQA(mux, h)

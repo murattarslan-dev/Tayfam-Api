@@ -69,6 +69,8 @@ var (
 	// ErrTooManySubscriptions: the connection already follows
 	// MaxSubscriptions channels.
 	ErrTooManySubscriptions = errors.New("abonelik sınırı dolu")
+	// ErrTooManyWatches: the connection already watches MaxWatches events.
+	ErrTooManyWatches = errors.New("izleme sınırı dolu")
 	// errChanged: the tayfa changed while a subscription was being checked;
 	// the check is repeated.
 	errChanged = errors.New("tayfa değişti")
@@ -82,8 +84,15 @@ type HubConfig struct {
 	MaxPerUser int
 	// MaxSubscriptions bounds the channels one connection follows.
 	MaxSubscriptions int
-	Now              func() time.Time // optional, for tests
+	// MaxWatches bounds the events one connection watches for component
+	// changes (issue #238); DefaultMaxWatches when zero.
+	MaxWatches int
+	Now        func() time.Time // optional, for tests
 }
+
+// DefaultMaxWatches is HubConfig.MaxWatches when it is not set: a client
+// watches the event screens it has open.
+const DefaultMaxWatches = 20
 
 // Member is one admitted connection. Its token is the access token the
 // connection was opened with; it never leaves memory.
@@ -95,7 +104,9 @@ type Member struct {
 	conn    Conn
 	// subs maps a subscribed channel to its tayfa; guarded by hub.mu.
 	subs map[id.ID]id.ID
-	once sync.Once
+	// watches maps a watched event to its tayfa; guarded by hub.mu.
+	watches map[id.ID]id.ID
+	once    sync.Once
 }
 
 // User is the connection's user.
@@ -114,16 +125,22 @@ func (m *Member) Release() {
 				remove(h.byChannel, ch, m)
 			}
 			m.subs = nil
+			for ev := range m.watches {
+				remove(h.byEvent, ev, m)
+			}
+			m.watches = nil
 			h.total--
 		}
 	})
 }
 
-// sub is one subscription, for rechecks.
+// sub is one subscription, for rechecks: a channel, or with watch set an
+// event whose ID is in channel.
 type sub struct {
 	m       *Member
 	tayfa   id.ID
 	channel id.ID
+	watch   bool
 }
 
 // Hub keeps the process's live connections.
@@ -136,6 +153,8 @@ type Hub struct {
 	byUser    map[id.ID]map[*Member]struct{}
 	bySession map[id.ID]map[*Member]struct{}
 	byChannel map[id.ID]map[*Member]struct{}
+	// byEvent holds the connections that watch an event (watch.go).
+	byEvent map[id.ID]map[*Member]struct{}
 	// gen counts changes per tayfa (membership, state, channel
 	// visibility). A subscription checked against an older count is checked
 	// again, so a change that lands during the check is not missed.
@@ -153,9 +172,12 @@ func NewHub(cfg HubConfig) (*Hub, error) {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
+	if cfg.MaxWatches <= 0 {
+		cfg.MaxWatches = DefaultMaxWatches
+	}
 	return &Hub{
 		cfg: cfg, byUser: map[id.ID]map[*Member]struct{}{}, bySession: map[id.ID]map[*Member]struct{}{},
-		byChannel: map[id.ID]map[*Member]struct{}{}, gen: map[id.ID]uint64{},
+		byChannel: map[id.ID]map[*Member]struct{}{}, byEvent: map[id.ID]map[*Member]struct{}{}, gen: map[id.ID]uint64{},
 		endedSessions: map[id.ID]time.Time{}, endedUsers: map[id.ID]time.Time{},
 	}, nil
 }
@@ -172,7 +194,7 @@ func (h *Hub) Admit(user, session id.ID, token string, c Conn) (*Member, error) 
 	case len(h.byUser[user]) >= h.cfg.MaxPerUser:
 		return nil, ErrTooManyConnections
 	}
-	m := &Member{hub: h, user: user, session: session, token: token, conn: c, subs: map[id.ID]id.ID{}}
+	m := &Member{hub: h, user: user, session: session, token: token, conn: c, subs: map[id.ID]id.ID{}, watches: map[id.ID]id.ID{}}
 	add(h.byUser, user, m)
 	add(h.bySession, session, m)
 	h.total++

@@ -4,6 +4,7 @@ package tayfam.core.v1;
 
 import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/component.proto";
 import "tayfam/core/v1/tayfa.proto";
 
 // EventService manages a tayfa's events: creating, editing and cancelling
@@ -591,6 +592,14 @@ message CreateEventRequest {
   // bad value is ERROR_REASON_VALIDATION, field "fields.<key>"; an unknown
   // key or too many values, field "fields".
   map<string, string> fields = 19;
+  // The organizer's selections for the type's components (ADR-0037 §2):
+  // optional components on or off and options for the parameters the type
+  // leaves to the organizer. Components left out start with the type's
+  // defaults. Checked against the type's current definition; an unknown
+  // or repeated component, switching off a component that is not optional
+  // or a bad choice is ERROR_REASON_VALIDATION, field "components". Later
+  // changes: EventComponentService.SetEventComponent.
+  repeated ComponentSelection components = 26;
 }
 
 // Recurrence is how a series repeats (issue #51; data model v14

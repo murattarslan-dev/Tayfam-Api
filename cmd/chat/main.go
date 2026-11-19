@@ -168,6 +168,10 @@ func setup(rt *service.Runtime) error {
 	// durum olayları önbelleği hemen temizler, kaçan bir olay en geç bu
 	// sürede telafi edilir.
 	channelAccess := coremembers.NewChannelAccess(corev1.NewChannelAccessServiceClient(coreConn), channelAccessTTL)
+	// Bileşen değişikliklerinin canlı iletimi (issue #238, ADR-0025 §6):
+	// bir bağlantının etkinliği izleyip izleyemeyeceği her seferinde core'a,
+	// bağlantının kendi token'ıyla sorulur; chat etkinlik verisi tutmaz.
+	live.BindEvents(coremembers.NewEventAccess(corev1.NewEventComponentServiceClient(coreConn)))
 	// Kaydedilen değişiklikler abonelere canlı iletilir (ADR-0005).
 	// Spam koruması (issue #101): kullanıcı başına tek mesaj hızı sınırı;
 	// kanal ve birebir mesaj, REST ve WebSocket aynı sayacı paylaşır

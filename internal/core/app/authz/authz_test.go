@@ -856,6 +856,76 @@ var expected = []struct {
 	{invited, TayfaConvert, false},
 	{banned, TayfaConvert, false},
 	{nonMember, TayfaConvert, false},
+	// EventComponentView
+	{admin, EventComponentView, true},
+	{moderator, EventComponentView, true},
+	{member, EventComponentView, true},
+	{mutedMember, EventComponentView, true},
+	{mutedModerator, EventComponentView, true},
+	{pending, EventComponentView, false},
+	{invited, EventComponentView, false},
+	{banned, EventComponentView, false},
+	{nonMember, EventComponentView, false},
+	// EventComponentParticipate
+	{admin, EventComponentParticipate, true},
+	{moderator, EventComponentParticipate, true},
+	{member, EventComponentParticipate, true},
+	{mutedMember, EventComponentParticipate, false},
+	{mutedModerator, EventComponentParticipate, false},
+	{pending, EventComponentParticipate, false},
+	{invited, EventComponentParticipate, false},
+	{banned, EventComponentParticipate, false},
+	{nonMember, EventComponentParticipate, false},
+	// EventComponentManageOwn
+	{admin, EventComponentManageOwn, true},
+	{moderator, EventComponentManageOwn, true},
+	{member, EventComponentManageOwn, true},
+	{mutedMember, EventComponentManageOwn, false},
+	{mutedModerator, EventComponentManageOwn, false},
+	{pending, EventComponentManageOwn, false},
+	{invited, EventComponentManageOwn, false},
+	{banned, EventComponentManageOwn, false},
+	{nonMember, EventComponentManageOwn, false},
+	// EventComponentManageAny
+	{admin, EventComponentManageAny, true},
+	{moderator, EventComponentManageAny, true},
+	{member, EventComponentManageAny, false},
+	{mutedMember, EventComponentManageAny, false},
+	{mutedModerator, EventComponentManageAny, false},
+	{pending, EventComponentManageAny, false},
+	{invited, EventComponentManageAny, false},
+	{banned, EventComponentManageAny, false},
+	{nonMember, EventComponentManageAny, false},
+	// EventRefereeAssignOwn
+	{admin, EventRefereeAssignOwn, true},
+	{moderator, EventRefereeAssignOwn, true},
+	{member, EventRefereeAssignOwn, true},
+	{mutedMember, EventRefereeAssignOwn, false},
+	{mutedModerator, EventRefereeAssignOwn, false},
+	{pending, EventRefereeAssignOwn, false},
+	{invited, EventRefereeAssignOwn, false},
+	{banned, EventRefereeAssignOwn, false},
+	{nonMember, EventRefereeAssignOwn, false},
+	// EventRefereeAssignAny
+	{admin, EventRefereeAssignAny, true},
+	{moderator, EventRefereeAssignAny, true},
+	{member, EventRefereeAssignAny, false},
+	{mutedMember, EventRefereeAssignAny, false},
+	{mutedModerator, EventRefereeAssignAny, false},
+	{pending, EventRefereeAssignAny, false},
+	{invited, EventRefereeAssignAny, false},
+	{banned, EventRefereeAssignAny, false},
+	{nonMember, EventRefereeAssignAny, false},
+	// EventComponentReferee
+	{admin, EventComponentReferee, true},
+	{moderator, EventComponentReferee, true},
+	{member, EventComponentReferee, true},
+	{mutedMember, EventComponentReferee, false},
+	{mutedModerator, EventComponentReferee, false},
+	{pending, EventComponentReferee, false},
+	{invited, EventComponentReferee, false},
+	{banned, EventComponentReferee, false},
+	{nonMember, EventComponentReferee, false},
 }
 
 func TestAllowedMatrix(t *testing.T) {
@@ -994,6 +1064,9 @@ func TestMutedAdmin(t *testing.T) {
 		// publish nothing.
 		EventFeedback:      true,
 		EventSafetyContact: true,
+		// Reading components; taking part, managing and refereeing are
+		// refused.
+		EventComponentView: true,
 	}
 	for a := Action(1); a < actionEnd; a++ {
 		if got := Allowed(m, a, now); got != want[a] {

@@ -27,6 +27,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatdm"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatrelay"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/directmessage"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/discover"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
@@ -139,6 +140,12 @@ func setup(rt *service.Runtime) error {
 	}
 	// Etkinlik türü kataloğu (issue #237, ADR-0025).
 	catalogs, err := catalog.New(catalog.Config{Pool: pool})
+	if err != nil {
+		return err
+	}
+	// Bileşen çerçevesi (issue #238, ADR-0025 §4–§6): seçimler, hakemler ve
+	// her bileşenin üstüne kurulduğu ortak katman.
+	components, err := component.New(component.Config{Pool: pool, Log: rt.Log})
 	if err != nil {
 		return err
 	}
@@ -255,6 +262,11 @@ func setup(rt *service.Runtime) error {
 	corev1.RegisterSocialServiceServer(srv, grpcapi.NewSocialServer(socials, rt.Log))
 	corev1.RegisterAvailabilityServiceServer(srv, grpcapi.NewAvailabilityServer(availabilities, rt.Log))
 	corev1.RegisterCatalogServiceServer(srv, grpcapi.NewCatalogServer(catalogs, rt.Log))
+	// EventComponentService ve kayıtlı her bileşenin servisi
+	// (grpcapi.componentRegistrars).
+	if err := grpcapi.RegisterComponents(srv, components, rt.Log); err != nil {
+		return err
+	}
 	corev1.RegisterDiscoverServiceServer(srv, grpcapi.NewDiscoverServer(discovers, memberships, rt.Log))
 	corev1.RegisterProfileServiceServer(srv, grpcapi.NewProfileServer(profiles, rt.Log))
 	corev1.RegisterReportServiceServer(srv, grpcapi.NewReportServer(reports, rt.Log))

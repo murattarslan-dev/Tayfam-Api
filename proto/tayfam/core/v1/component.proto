@@ -1,0 +1,222 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// EventComponentService is the framework every event component shares
+// (issue #238; ADR-0025 §4–§6, ADR-0037 §2). An event type lists the
+// components an event of the type has (CatalogEventType.definition); this
+// service holds what belongs to all of them: the organizer's selections
+// for one event and the referees. Each component has a service of its own
+// (component_<kind>.proto) whose requests name the component with a
+// ComponentRef.
+//
+// Only gateway calls it with the user's access token, except
+// CheckEventAccess, which chat calls with the user's own token.
+//
+// Authentication and scope are those of EventService: the caller comes
+// from the access token; anyone but an ACTIVE member gets
+// ERROR_REASON_TAYFA_NOT_FOUND; with the events module off every method
+// fails with ERROR_REASON_MODULE_DISABLED; an event that is not in the
+// tayfa is ERROR_REASON_EVENT_NOT_FOUND. Reads are open to every active
+// member, muted ones included.
+//
+// "Manager" below is the event's organizer and, as for every event, the
+// tayfa's moderators and admins; a muted manager gets ERROR_REASON_MUTED.
+//
+// Errors shared by every component's methods: ERROR_REASON_VALIDATION
+// (field component_key), ERROR_REASON_COMPONENT_NOT_FOUND (the event's
+// type version has no such component, or it is of another kind),
+// ERROR_REASON_COMPONENT_DISABLED (an optional component that is off;
+// reads too) and, for changes, ERROR_REASON_TAYFA_READ_ONLY,
+// ERROR_REASON_EVENT_CANCELLED and ERROR_REASON_COMPONENT_FROZEN (from
+// seven days after the event's end).
+//
+// Live updates (ADR-0025 §6): a change to a component, to the selections
+// or to the referees reaches the connections that watch the event as an
+// event.component_changed frame with the event and the component key
+// only; clients read the component again.
+service EventComponentService {
+  // ListEventComponents returns every component of the event's type
+  // version with its state for this event: whether it is on, and the
+  // option in force for each parameter the type leaves to the organizer.
+  rpc ListEventComponents(ListEventComponentsRequest) returns (ListEventComponentsResponse);
+
+  // SetEventComponent changes the organizer's selection for one component:
+  // an optional component on or off, and options for the parameters left
+  // to the organizer. Managers only, and only before the event starts.
+  // The change applies to this event only, also in a series.
+  //
+  // Errors: ERROR_REASON_VALIDATION (selection.component_key; "enabled"
+  // for switching off a component that is not optional; "choices" for a
+  // parameter that is not left to the organizer or a value that is not
+  // one of its options), ERROR_REASON_COMPONENT_NOT_FOUND,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED,
+  // ERROR_REASON_TAYFA_READ_ONLY, ERROR_REASON_EVENT_CANCELLED,
+  // ERROR_REASON_COMPONENT_LOCKED (the event has started).
+  rpc SetEventComponent(SetEventComponentRequest) returns (SetEventComponentResponse);
+
+  // ListEventReferees returns the event's referee assignments, oldest
+  // first.
+  rpc ListEventReferees(ListEventRefereesRequest) returns (ListEventRefereesResponse);
+
+  // AssignEventReferee makes an active member of the tayfa a referee of
+  // the event, of one component or of one scope (a table, a match) of a
+  // component. Referees enter results next to the managers (ADR-0025 §5).
+  // Managers only. Assigning the same again returns the first assignment.
+  // An event has at most 50 assignments.
+  //
+  // Errors: ERROR_REASON_VALIDATION (user_id, component_key, scope_id:
+  // a scope needs a component), ERROR_REASON_MEMBER_NOT_FOUND (not an
+  // active member), ERROR_REASON_COMPONENT_NOT_FOUND,
+  // ERROR_REASON_COMPONENT_DISABLED, ERROR_REASON_EVENT_LIMIT,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED,
+  // ERROR_REASON_TAYFA_READ_ONLY, ERROR_REASON_EVENT_CANCELLED,
+  // ERROR_REASON_COMPONENT_FROZEN.
+  rpc AssignEventReferee(AssignEventRefereeRequest) returns (AssignEventRefereeResponse);
+
+  // RemoveEventReferee removes an assignment. Managers only. Removing one
+  // that is not there succeeds and changes nothing.
+  //
+  // Errors: ERROR_REASON_VALIDATION (referee_id),
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED,
+  // ERROR_REASON_TAYFA_READ_ONLY, ERROR_REASON_EVENT_CANCELLED,
+  // ERROR_REASON_COMPONENT_FROZEN.
+  rpc RemoveEventReferee(RemoveEventRefereeRequest) returns (RemoveEventRefereeResponse);
+
+  // CheckEventAccess succeeds when the caller may follow the event's live
+  // component updates: an active member of the tayfa, the events module
+  // on, the event in the tayfa. chat calls it with the connection's own
+  // token before it lets the connection watch an event and whenever the
+  // user's standing may have changed (ADR-0025 §6, the model of ADR-0024
+  // §1). It returns nothing but the fact.
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_MODULE_DISABLED,
+  // ERROR_REASON_EVENT_NOT_FOUND.
+  rpc CheckEventAccess(CheckEventAccessRequest) returns (CheckEventAccessResponse);
+}
+
+// ComponentRef names one component of an event; the first field of every
+// component request.
+message ComponentRef {
+  string tayfa_id = 1;
+  string event_id = 2;
+  // The component's key in the event's type version:
+  // ^[a-z][a-z0-9_]{1,39}$ (the component's kind when the type gives it
+  // no key).
+  string component_key = 3;
+}
+
+// ComponentSelection is the organizer's selection for one component
+// (ADR-0037 §2).
+message ComponentSelection {
+  string component_key = 1;
+  // Switches an optional component on or off; unset leaves it as it is.
+  // A component that is not optional accepts only true.
+  optional bool enabled = 2;
+  // A parameter the type leaves to the organizer (organizer_choice) to the
+  // chosen option as text: the option itself, or an integer option's
+  // digits ("swiss", "3"). Parameters left out keep their value.
+  map<string, string> choices = 3;
+}
+
+// ComponentChoice is a parameter the type leaves to the organizer.
+message ComponentChoice {
+  string param = 1;
+  // The option in force: the organizer's choice or the type's default.
+  string value = 2;
+  // The type's options, in its order.
+  repeated string options = 3;
+}
+
+// EventComponent is one component of an event as it holds for the event.
+message EventComponent {
+  string key = 1;
+  // The component kind (CatalogEventType.definition); a closed list that
+  // grows with code.
+  string kind = 2;
+  // The organizer may switch the component on and off.
+  bool optional = 3;
+  // False only for an optional component that is off.
+  bool enabled = 4;
+  // Every parameter left to the organizer, by name.
+  repeated ComponentChoice choices = 5;
+}
+
+message ListEventComponentsRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+}
+
+message ListEventComponentsResponse {
+  // In the order of the type version's definition.
+  repeated EventComponent components = 1;
+  // The selections can no longer change: the event has started or was
+  // cancelled, or the tayfa is read-only.
+  bool locked = 2;
+  // The caller is a manager and not muted.
+  bool caller_can_manage = 3;
+}
+
+message SetEventComponentRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  ComponentSelection selection = 3;
+}
+
+message SetEventComponentResponse {
+  repeated EventComponent components = 1;
+  bool locked = 2;
+  bool caller_can_manage = 3;
+}
+
+// EventReferee is one referee assignment.
+message EventReferee {
+  string id = 1;
+  string user_id = 2;
+  // Empty: every component of the event.
+  string component_key = 3;
+  // A table or match of the component (UUID); empty: the whole component.
+  string scope_id = 4;
+  google.protobuf.Timestamp create_time = 5;
+}
+
+message ListEventRefereesRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+}
+
+message ListEventRefereesResponse {
+  repeated EventReferee referees = 1;
+}
+
+message AssignEventRefereeRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  // An active member of the tayfa.
+  string user_id = 3;
+  // Optional; see EventReferee.
+  string component_key = 4;
+  // Optional; needs component_key.
+  string scope_id = 5;
+}
+
+message AssignEventRefereeResponse {
+  EventReferee referee = 1;
+}
+
+message RemoveEventRefereeRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+  string referee_id = 3;
+}
+
+message RemoveEventRefereeResponse {}
+
+message CheckEventAccessRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+}
+
+message CheckEventAccessResponse {}

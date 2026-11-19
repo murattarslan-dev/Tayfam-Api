@@ -312,6 +312,9 @@ type eventCreateBody struct {
 	Recurrence      *recurrenceJSON `json:"recurrence"`
 	ClientRequestID string          `json:"client_request_id"`
 	CoverUploadID   string          `json:"cover_upload_id"`
+	// Components are the organizer's selections for the type's components
+	// (issue #238, ADR-0037 §2).
+	Components []componentSelectionJSON `json:"components"`
 }
 
 // request checks the body and converts it for core; ok is false for a bad
@@ -322,7 +325,8 @@ func (b eventCreateBody) request(tayfaID string) (*corev1.CreateEventRequest, bo
 	mode, okM := eventModes.value(b.Mode)
 	det, okD := b.details()
 	fields, okF := eventFields(b.Fields)
-	if !okT || !okM || !okD || !okF || (det.typ != "" && det.typ != b.Type) ||
+	components, okC := componentSelections(b.Components)
+	if !okT || !okM || !okD || !okF || !okC || (det.typ != "" && det.typ != b.Type) ||
 		!eventTitleOK(b.Title) || !eventDescOK(b.Description) || b.StartsAt.IsZero() || b.EndsAt.IsZero() ||
 		!pointOK(b.MeetingPoint) || !capacityOK(b.Capacity) || !validUUID(b.ClientRequestID) ||
 		(b.CoverUploadID != "" && !validUUID(b.CoverUploadID)) {
@@ -335,6 +339,7 @@ func (b eventCreateBody) request(tayfaID string) (*corev1.CreateEventRequest, bo
 		City: b.City, District: b.District, OnlineUrl: b.OnlineURL,
 		Capacity: b.Capacity, Discoverable: b.Discoverable,
 		ClientRequestId: b.ClientRequestID, CoverUploadId: b.CoverUploadID,
+		Components: components,
 	}
 	det.setCreate(req)
 	if rc := b.Recurrence; rc != nil {
