@@ -244,7 +244,7 @@ func TestTypeVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if old.Labels["tr"] != "Doğa yürüyüşü" || len(old.Modes) != 2 || len(old.Parsed.Components) != 1 || old.Parsed.Components[0].Kind != definition.CompRollCall {
+	if old.Labels["tr"] != "Doğa yürüyüşü" || len(old.Modes) != 2 || len(old.Parsed.Components) != 3 || old.Parsed.Components[0].Kind != definition.CompRollCall {
 		t.Fatalf("eski sürüm değişti: %+v", old)
 	}
 	c, _, err := svc.Get(ctx, 0)

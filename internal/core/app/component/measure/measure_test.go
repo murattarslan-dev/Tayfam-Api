@@ -596,7 +596,7 @@ func TestMeasurePermissions(t *testing.T) {
 		_, err := e.measures.SetTotal(ctx, ref(tc.user, tf, ev.ID, key), 5)
 		if tc.want == nil {
 			must(t, err)
-		} else if !errors.Is(err, tc.want) && !(tc.user == muted && errors.Is(err, apperr.ErrMuted)) {
+		} else if ok := errors.Is(err, tc.want) || (tc.user == muted && errors.Is(err, apperr.ErrMuted)); !ok {
 			t.Errorf("%s: %v, %v bekleniyordu", tc.name, err, tc.want)
 		}
 		_, err = e.measures.Get(ctx, ref(tc.user, tf, ev.ID, key))
