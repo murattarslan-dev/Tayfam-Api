@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -38,7 +39,6 @@ type fakeEvents struct {
 	in       event.Input
 	fields   []string
 	status   string
-	vehicle  event.VehicleInput
 	assigned id.ID
 	view     event.Event
 	at       *event.Point
@@ -97,15 +97,6 @@ func (f *fakeEvents) AssignCampItem(_ context.Context, u, t, e, item, a id.ID) (
 	f.rec(u, t, e)
 	f.assigned = a
 	return event.CampItem{ID: item, Name: "Çadır", Quantity: 1, AssignedUserID: a}, f.err
-}
-func (f *fakeEvents) SetVehicle(_ context.Context, u, t, e id.ID, in event.VehicleInput) (event.Vehicle, error) {
-	f.rec(u, t, e)
-	f.vehicle = in
-	return event.Vehicle{ID: id.New(), UserID: u, Make: in.Make, Plate: in.Plate}, f.err
-}
-func (f *fakeEvents) RemoveVehicle(_ context.Context, u, t, e, _ id.ID) error {
-	f.rec(u, t, e)
-	return f.err
 }
 func (f *fakeEvents) GetSeries(_ context.Context, u, t, sr id.ID) (event.Series, error) {
 	f.rec(u, t, sr)
@@ -196,8 +187,6 @@ func callAllEvents(ctx context.Context, c corev1.EventServiceServer, tayfaID, ev
 	_, out["AddCampItem"] = c.AddCampItem(ctx, &corev1.AddCampItemRequest{TayfaId: tayfaID, EventId: eventID, Name: "Çadır"})
 	_, out["RemoveCampItem"] = c.RemoveCampItem(ctx, &corev1.RemoveCampItemRequest{TayfaId: tayfaID, EventId: eventID, ItemId: id.New().String()})
 	_, out["AssignCampItem"] = c.AssignCampItem(ctx, &corev1.AssignCampItemRequest{TayfaId: tayfaID, EventId: eventID, ItemId: id.New().String()})
-	_, out["AddConvoyVehicle"] = c.AddConvoyVehicle(ctx, &corev1.AddConvoyVehicleRequest{TayfaId: tayfaID, EventId: eventID, Make: "Ford"})
-	_, out["RemoveConvoyVehicle"] = c.RemoveConvoyVehicle(ctx, &corev1.RemoveConvoyVehicleRequest{TayfaId: tayfaID, EventId: eventID, VehicleId: id.New().String()})
 	_, out["CheckIn"] = c.CheckIn(ctx, &corev1.CheckInRequest{TayfaId: tayfaID, EventId: eventID, Location: &corev1.LatLng{Lat: 38.42, Lng: 27.14}})
 	_, out["StartHike"] = c.StartHike(ctx, &corev1.StartHikeRequest{TayfaId: tayfaID, EventId: eventID})
 	_, out["FinishHike"] = c.FinishHike(ctx, &corev1.FinishHikeRequest{TayfaId: tayfaID, EventId: eventID})
@@ -330,9 +319,14 @@ func TestEventServerValidatesRequest(t *testing.T) {
 	if field(err) != "assigned_user_id" {
 		t.Error("atamada bozuk kişi")
 	}
-	_, err = srv.RemoveConvoyVehicle(ctx, &corev1.RemoveConvoyVehicleRequest{TayfaId: good, EventId: good, VehicleId: "x"})
-	if field(err) != "vehicle_id" {
-		t.Error("bozuk araç kimliği")
+	// A convoy has no details any more (issues #239, #240): a request that
+	// still sends them is refused.
+	convoy := createReq(good)
+	convoy.Type = corev1.EventType_EVENT_TYPE_CONVOY
+	convoy.Details = &corev1.CreateEventRequest_Convoy{Convoy: &corev1.ConvoyDetails{Vehicles: []*corev1.ConvoyVehicle{{Make: "sızma"}}}}
+	_, err = srv.CreateEvent(ctx, convoy)
+	if field(err) != "details" {
+		t.Error("konvoy ayrıntısı kabul edildi")
 	}
 	if f.calls != 0 {
 		t.Fatal("geçersiz istek app katmanına ulaştı")
@@ -379,20 +373,23 @@ func TestEventServerConverts(t *testing.T) {
 		t.Fatalf("dönüştürme = %v", p)
 	}
 
-	// Request details reach the app layer; output-only fields are dropped,
-	// and so is the retired route field (the route component's now, #239).
+	// A convoy is created without details: its route and vehicles are
+	// components (issues #239, #240).
 	r := createReq(view.TayfaID.String())
 	r.Type = corev1.EventType_EVENT_TYPE_CONVOY
-	r.Details = &corev1.CreateEventRequest_Convoy{Convoy: &corev1.ConvoyDetails{
-		Route:    []*corev1.LatLng{{Lat: 1, Lng: 2}, {Lat: 3, Lng: 4}},
-		Vehicles: []*corev1.ConvoyVehicle{{Make: "sızma"}},
-	}}
 	if _, err := srv.CreateEvent(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	if f.in.Type != event.TypeConvoy || f.in.Details.Convoy == nil || len(f.in.Details.Convoy.Vehicles) != 0 ||
+	if f.in.Type != event.TypeConvoy || f.in.Details != (event.Details{}) ||
 		f.in.Location.MeetingPoint == nil || !f.in.StartsAt.Equal(r.GetStartTime().AsTime()) {
 		t.Fatalf("girdi = %+v", f.in)
+	}
+	// The retired vehicle methods are not served.
+	if _, err := srv.AddConvoyVehicle(ctx, &corev1.AddConvoyVehicleRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String(), Make: "Ford"}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("kaldırılan AddConvoyVehicle: %v", err)
+	}
+	if _, err := srv.RemoveConvoyVehicle(ctx, &corev1.RemoveConvoyVehicleRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String(), VehicleId: id.New().String()}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("kaldırılan RemoveConvoyVehicle: %v", err)
 	}
 	for _, tc := range []struct {
 		d     any
@@ -461,10 +458,6 @@ func TestEventServerConverts(t *testing.T) {
 	}
 	if _, err := srv.ListAttendees(ctx, &corev1.ListAttendeesRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String()}); err != nil || f.status != "" {
 		t.Fatalf("belirsiz durum app'e %q olarak gitti: %v", f.status, err)
-	}
-	v, err := srv.AddConvoyVehicle(ctx, &corev1.AddConvoyVehicleRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String(), Make: "Ford", Plate: "35 ABC 1"})
-	if err != nil || f.vehicle.Plate != "35 ABC 1" || v.GetVehicle().GetUserId() != user.String() {
-		t.Fatalf("araç = %v %v", v, err)
 	}
 	list, err := srv.ListUpcomingEvents(ctx, &corev1.ListUpcomingEventsRequest{TayfaId: view.TayfaID.String()})
 	if err != nil || len(list.GetEvents()) != 1 || list.GetNextPageToken() != "sonraki" {

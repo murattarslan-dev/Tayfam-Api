@@ -82,9 +82,14 @@ UPDATE event_rsvps SET attendance_marked_by = NULL WHERE attendance_marked_by = 
 -- name: DeleteUserRsvps :exec
 DELETE FROM event_rsvps WHERE user_id = @user_id;
 
--- Araç (plaka dahil) kişisel veridir ve kişiye aittir: silinir.
--- name: DeleteUserConvoyVehicles :exec
-DELETE FROM event_convoy_vehicles WHERE user_id = @user_id;
+-- Araç (plaka dahil) kişisel veridir ve kişiye aittir: silinir (araca gelen
+-- koltuk istekleri foreign key ile gider). Kişinin başkasının aracına
+-- yazdığı koltuk isteği de silinir (`vehicles` bileşeni, issue #240).
+-- name: DeleteUserVehicles :exec
+DELETE FROM event_vehicles WHERE user_id = @user_id;
+
+-- name: DeleteUserSeatRequests :exec
+DELETE FROM event_vehicle_seat_requests WHERE user_id = @user_id;
 
 -- Malzeme listede kalır; üstlenen ve ekleyen boşalır.
 -- name: ClearCampItemUserFields :exec

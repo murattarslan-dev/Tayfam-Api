@@ -253,16 +253,6 @@ func (q *Queries) DeleteUserCatches(ctx context.Context, userID pgtype.UUID) err
 	return err
 }
 
-const deleteUserConvoyVehicles = `-- name: DeleteUserConvoyVehicles :exec
-DELETE FROM event_convoy_vehicles WHERE user_id = $1
-`
-
-// Araç (plaka dahil) kişisel veridir ve kişiye aittir: silinir.
-func (q *Queries) DeleteUserConvoyVehicles(ctx context.Context, userID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteUserConvoyVehicles, userID)
-	return err
-}
-
 const deleteUserEventPhotos = `-- name: DeleteUserEventPhotos :exec
 DELETE FROM event_photos WHERE uploader_id = $1
 `
@@ -298,6 +288,27 @@ DELETE FROM event_rsvps WHERE user_id = $1
 
 func (q *Queries) DeleteUserRsvps(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserRsvps, userID)
+	return err
+}
+
+const deleteUserSeatRequests = `-- name: DeleteUserSeatRequests :exec
+DELETE FROM event_vehicle_seat_requests WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserSeatRequests(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserSeatRequests, userID)
+	return err
+}
+
+const deleteUserVehicles = `-- name: DeleteUserVehicles :exec
+DELETE FROM event_vehicles WHERE user_id = $1
+`
+
+// Araç (plaka dahil) kişisel veridir ve kişiye aittir: silinir (araca gelen
+// koltuk istekleri foreign key ile gider). Kişinin başkasının aracına
+// yazdığı koltuk isteği de silinir (`vehicles` bileşeni, issue #240).
+func (q *Queries) DeleteUserVehicles(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserVehicles, userID)
 	return err
 }
 

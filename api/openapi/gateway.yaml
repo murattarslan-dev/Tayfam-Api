@@ -1678,7 +1678,7 @@ paths:
       summary: Bitmemiş etkinlikler, başlangıç zamanına göre
       description: |
         Her etkin üyeye açıktır (susturulmuş üye de okur). İptal edilenler
-        de listededir. Türe özel ayrıntılar (`convoy`, `camp`, …) listede
+        de listededir. Türe özel ayrıntılar (`camp`, `hike`, …) listede
         dolmaz; tek etkinlik ucunu kullanın.
       parameters:
         - $ref: "#/components/parameters/PageSize"
@@ -1735,8 +1735,9 @@ paths:
       summary: Tek etkinlik, türe özel ayrıntılarıyla
       description: |
         Katılımcılara özel balık noktasında (`spot_visibility=participants`)
-        katılmayan üye `meeting_point` ve `meeting_point_name` almaz. Konvoy
-        plakaları yalnızca katılımcılara (`going`) ve organizatöre döner.
+        katılmayan üye `meeting_point` ve `meeting_point_name` almaz. Araçlar
+        (ve plakalar) burada değildir; `vehicles` bileşenindedir
+        (`GET …/components/{component_key}/vehicles`, #240).
       responses:
         "200":
           description: Etkinlik
@@ -2149,60 +2150,6 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
-  /v1/tayfas/{tayfa_id}/events/{event_id}/convoy-vehicles:
-    parameters:
-      - $ref: "#/components/parameters/TayfaID"
-      - $ref: "#/components/parameters/EventID"
-    post:
-      operationId: addConvoyVehicle
-      summary: Konvoya aracınızı ekler; önceki aracınızın yerini alır
-      description: |
-        Yalnızca konvoy etkinliğinde (`event-type-mismatch`) ve `going`
-        cevabıyla (`event-not-going`). Araçlar tek etkinlik yanıtındaki
-        `convoy.vehicles`'tadır. Plaka kişisel veridir; isteğe bağlıdır.
-      parameters:
-        - $ref: "#/components/parameters/ClientHeader"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/ConvoyVehicleCreateRequest" }
-      responses:
-        "201":
-          description: Kaydedilen araç
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ConvoyVehicle" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "404": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-        "503": { $ref: "#/components/responses/Problem" }
-
-  /v1/tayfas/{tayfa_id}/events/{event_id}/convoy-vehicles/{vehicle_id}:
-    parameters:
-      - $ref: "#/components/parameters/TayfaID"
-      - $ref: "#/components/parameters/EventID"
-      - name: vehicle_id
-        in: path
-        required: true
-        schema: { type: string, format: uuid }
-    delete:
-      operationId: removeConvoyVehicle
-      summary: Konvoydan araç çıkarır
-      description: Kendi aracınızı; organizatör, moderatör ve yönetici her aracı.
-      parameters:
-        - $ref: "#/components/parameters/ClientHeader"
-      responses:
-        "204": { description: Araç çıkarıldı }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "404": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-        "503": { $ref: "#/components/responses/Problem" }
-
   /v1/tayfas/{tayfa_id}/events/{event_id}/fishing-catches:
     parameters:
       - $ref: "#/components/parameters/TayfaID"
@@ -2567,6 +2514,199 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/EventRoute" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  # --- Etkinlik bileşenleri: araçlar ve koltuk paylaşımı (`vehicles`; core VehiclesComponentService, #240, ADR-0025 §4, ADR-0037 §3) ---
+  # Katılımcıların araçları (kişi başına bir araç) ve bileşenin `seats`
+  # parametresi açıksa boş koltuklar ile koltuk istekleri. Para ya da masraf
+  # alanı yoktur. Plaka kişisel veridir; yalnızca gövdede taşınır, log'a
+  # yazılmaz. Yazan her uç bileşenin araçlarını güncel haliyle döner.
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/vehicles:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: listEventVehicles
+      summary: Etkinliğin araçları
+      description: |
+        Araçlar eklenme sırasıyladır. Her etkin üyeye açıktır (susturulmuş
+        üye de okur); iptal edilmiş ve donmuş etkinlikte de okunur. Plaka
+        yalnızca katılımcılara (`going`), organizatöre ve aracın sahibine
+        döner. Bekleyen koltuk isteklerini aracın sahibi görür; başkası
+        yalnızca kendi isteğini görür. Bileşen uçlarının ortak kuralları
+        geçerlidir (`component-not-found`, `component-disabled`).
+      responses:
+        "200":
+          description: Bileşenin araçları, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventVehicles" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/vehicles/mine:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    put:
+      operationId: setEventVehicle
+      summary: Aracınızı yazar; önceki aracınızın yerini alır
+      description: |
+        Yalnızca `going` cevabıyla (`event-not-going`) ve etkinlik bitene
+        kadar (`event-ended`). Aracın kimliği değişmez. `plate` yalnızca
+        bileşenin `plate` parametresi açıksa, sıfırdan büyük `seats`
+        yalnızca `seats` parametresi açıksa kabul edilir (`plate_enabled`,
+        `seats_enabled`). Koltuk sayısı onaylanmış yolcu sayısının altına
+        inemez (`vehicle-seats-taken`). Araç yazan kişinin başka bir araca
+        yazdığı koltuk isteği silinir. Bileşen uçlarının ortak kuralları
+        geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventVehicleRequest" }
+      responses:
+        "200":
+          description: Bileşenin araçları, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventVehicles" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/vehicles/{vehicle_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/VehicleID"
+    delete:
+      operationId: removeEventVehicle
+      summary: Aracı, ona yazılmış koltuk istekleriyle birlikte çıkarır
+      description: |
+        Kendi aracınızı (susturulmuş olsanız da); organizatör, moderatör ve
+        yönetici her aracı. Bilinmeyen araç `event-item-not-found`. İptal
+        edilmiş ve donmuş etkinlikte çıkarılamaz (`event-cancelled`,
+        `component-frozen`); plaka etkinlik bitiminden 30 gün sonra
+        kendiliğinden silinir. Bileşen uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Bileşenin araçları, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventVehicles" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/vehicles/{vehicle_id}/seat-requests/mine:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/VehicleID"
+    put:
+      operationId: requestEventVehicleSeat
+      summary: Bu araçla gelmek için koltuk ister
+      description: |
+        Yalnızca `going` cevabıyla (`event-not-going`), etkinlik bitene kadar
+        (`event-ended`) ve bileşende kendi aracı olmayan için
+        (`seat-request-driver`). Araçta boş koltuk yoksa ya da bileşenin
+        `seats` parametresi kapalıysa `vehicle-full`. Kişinin bileşende tek
+        isteği vardır; başka araca istek öncekinin (onaylanmış olsa da)
+        yerini alır, aynı isteği yinelemek hiçbir şey değiştirmez. İstek
+        araç sahibinin onayını bekler. Gövde yoktur.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Bileşenin araçları, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventVehicles" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/vehicles/{vehicle_id}/seat-requests/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/VehicleID"
+      - $ref: "#/components/parameters/UserID"
+    delete:
+      operationId: releaseEventVehicleSeat
+      summary: Koltuk isteğini (bekleyen ya da onaylanmış) kaldırır
+      description: |
+        İsteyen kişi kendi isteğini geri çeker (susturulmuş olsa da); araç
+        sahibi isteği reddeder ya da yolcuyu çıkarır; organizatör, moderatör
+        ve yönetici her isteği kaldırır. Araç ya da bu kişinin o araca isteği
+        yoksa `event-item-not-found`. Bileşen uçlarının ortak kuralları
+        geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Bileşenin araçları, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventVehicles" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/vehicles/{vehicle_id}/seat-requests/{user_id}/approval:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/VehicleID"
+      - $ref: "#/components/parameters/UserID"
+    put:
+      operationId: approveEventVehicleSeat
+      summary: Aracınıza yazılmış koltuk isteğini onaylar (yalnızca araç sahibi)
+      description: |
+        Onaylanmış isteği yeniden onaylamak hiçbir şey değiştirmez. Boş
+        koltuk kalmadıysa `vehicle-full`; etkinlik bittiyse `event-ended`.
+        Araç ya da bu kişinin o araca isteği yoksa `event-item-not-found`.
+        Gövde yoktur. Bileşen uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Bileşenin araçları, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventVehicles" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -5867,6 +6007,12 @@ components:
       required: true
       description: Bileşenin, etkinliğin tür sürümündeki anahtarı (`CatalogComponent.key`; yoksa `kind`).
       schema: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+    VehicleID:
+      name: vehicle_id
+      in: path
+      required: true
+      description: Bileşendeki aracın kimliği (`EventVehicle.id`).
+      schema: { type: string, format: uuid }
     SeriesID:
       name: series_id
       in: path
@@ -6059,6 +6205,10 @@ components:
         - component-disabled
         - component-locked
         - component-frozen
+        # core: araçlar bileşeni (#240, ADR-0037 §3)
+        - vehicle-full
+        - vehicle-seats-taken
+        - seat-request-driver
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -7070,14 +7220,6 @@ components:
         lat: { type: number, minimum: -90, maximum: 90 }
         lng: { type: number, minimum: -180, maximum: 180 }
 
-    ConvoyDetails:
-      type: object
-      description: "Rota burada değildir: `route` bileşeni (`GET …/components/{component_key}/route`, #239)."
-      properties:
-        vehicles:
-          type: array
-          description: Yalnızca tek etkinlik yanıtında.
-          items: { $ref: "#/components/schemas/ConvoyVehicle" }
     EventRoute:
       type: object
       required: [points, caller_can_edit]
@@ -7102,32 +7244,68 @@ components:
           maxItems: 500
           description: Boş (rotayı kaldırır) ya da 2–500 nokta.
           items: { $ref: "#/components/schemas/LatLng" }
-    ConvoyVehicle:
+    EventVehicle:
       type: object
-      required: [id, user_id, make]
+      required: [id, user_id, make, seats, rider_user_ids, pending_user_ids]
+      description: Bir katılımcının etkinliğe yazdığı araç (#240).
       properties:
         id: { type: string, format: uuid }
-        user_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid, description: Aracın sahibi. }
         make: { type: string }
         model: { type: string }
         model_year: { type: integer, description: Verilmemişse yoktur. }
         color: { type: string }
         plate:
           type: string
-          description: Yalnızca katılımcılara (`going`) ve organizatöre döner.
-    ConvoyVehicleCreateRequest:
+          description: Kişisel veri. Yalnızca katılımcılara (`going`), organizatöre ve aracın sahibine döner.
+        seats:
+          type: integer
+          minimum: 0
+          maximum: 8
+          description: Araç sahibinin yazdığı boş koltuk sayısı; bileşenin `seats` parametresi kapalıysa hep 0.
+        rider_user_ids:
+          type: array
+          description: Koltuk isteği onaylanan kişiler, istek sırasıyla.
+          items: { type: string, format: uuid }
+        pending_user_ids:
+          type: array
+          description: Onay bekleyen kişiler. Aracın sahibi hepsini, başkası yalnızca kendisini görür.
+          items: { type: string, format: uuid }
+    EventVehicles:
+      type: object
+      required: [vehicles, plate_enabled, seats_enabled, caller_can_participate, caller_can_manage]
+      description: Bir etkinliğin araçlar bileşeninin araçları, isteği yapanın gördüğü haliyle (#240).
+      properties:
+        vehicles:
+          type: array
+          description: Eklenme sırasıyla.
+          items: { $ref: "#/components/schemas/EventVehicle" }
+        plate_enabled: { type: boolean, description: Bileşenin `plate` parametresi; kapalıysa plaka yazılamaz. }
+        seats_enabled: { type: boolean, description: Bileşenin `seats` parametresi; kapalıysa koltuk paylaşımı yoktur. }
+        caller_can_participate:
+          type: boolean
+          description: Şu an araç yazabilir ve koltuk isteyebilirsiniz (`going`, susturulmamış; etkinlik bitmemiş, iptal değil, tayfa salt okunur değil).
+        caller_can_manage:
+          type: boolean
+          description: Şu an başkasının aracını ve koltuk isteğini kaldırabilirsiniz (organizatör yetkisi; etkinlik iptal değil, donmamış, tayfa salt okunur değil).
+    EventVehicleRequest:
       type: object
       required: [make]
       additionalProperties: false
       properties:
         make: { type: string, minLength: 1, maxLength: 40 }
         model: { type: string, maxLength: 40 }
-        model_year: { type: integer, description: "0 ya da 1900 – gelecek yıl." }
+        model_year: { type: integer, minimum: 0, description: "0 ya da 1900 – gelecek yıl." }
         color: { type: string, maxLength: 30 }
         plate:
           type: string
           maxLength: 16
-          description: İsteğe bağlı, kişisel veri. Harf, rakam ve tek boşluk; 2–16 karakter.
+          description: İsteğe bağlı, kişisel veri; yalnızca `plate_enabled` ise. Harf, rakam ve tek boşluk; 2–16 karakter.
+        seats:
+          type: integer
+          minimum: 0
+          maximum: 8
+          description: Boş koltuk sayısı; verilmezse 0. Sıfırdan büyük değer yalnızca `seats_enabled` ise.
 
     CampDetails:
       type: object
@@ -7324,9 +7502,10 @@ components:
         etkinlik oluşturulduğu tür sürümüne (`type_version`) bağlıdır ve o
         sürümün tanımıyla gösterilir (güncel katalogda yoksa
         `GET /v1/catalog/event-types/{key}/versions/{version}`). `fields`
-        ve Faz 1'den kalan türe özel ayrıntı (`convoy`, `camp`, `hike`,
-        `fishing`; bileşenlere taşınana kadar) yalnızca tek etkinlik
-        yanıtında gelir; ayrıntılardan en fazla biri doludur.
+        ve Faz 1'den kalan türe özel ayrıntı (`camp`, `hike`, `fishing`;
+        bileşenlere taşınana kadar) yalnızca tek etkinlik yanıtında gelir;
+        ayrıntılardan en fazla biri doludur. Konvoyun rotası ve araçları
+        bileşenlerindedir (`route`, `vehicles`).
       properties:
         cover_upload_id: { type: string, format: uuid, description: "Kapak; linkleri `POST /v1/media/urls`. Serinin ürettiği etkinliklerde yoktur." }
         id: { type: string, format: uuid }
@@ -7378,7 +7557,6 @@ components:
         series_override: { type: boolean, description: Seriden ayrı düzenlendi; seri değişiklikleri ona dokunmaz. }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
-        convoy: { $ref: "#/components/schemas/ConvoyDetails" }
         camp: { $ref: "#/components/schemas/CampDetails" }
         hike: { $ref: "#/components/schemas/HikeDetails" }
         fishing: { $ref: "#/components/schemas/FishingDetails" }

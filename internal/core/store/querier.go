@@ -84,6 +84,7 @@ type Querier interface {
 	// Platform banı (identity'nin user.banned / user.unbanned olayları). Eski
 	// olay yenisini ezmez; aynı olay ikinci kez uygulanınca değişmez.
 	ApplyUserBan(ctx context.Context, arg ApplyUserBanParams) (int64, error)
+	ApproveEventSeatRequest(ctx context.Context, arg ApproveEventSeatRequestParams) (int64, error)
 	// Başvuru onayı.
 	ApproveMembership(ctx context.Context, arg ApproveMembershipParams) (int64, error)
 	// Anlık tayfa, etkinliği bittikten (iptalde iptal anından) @ended_before'a
@@ -131,7 +132,8 @@ type Querier interface {
 	ClearInviteCreator(ctx context.Context, userID pgtype.UUID) error
 	ClearMembershipUserFields(ctx context.Context, userID pgtype.UUID) error
 	// ---------------------------------------------------------------------------
-	// Plaka temizliği (v14 "Konvoy aracı", "Saklama süreleri")
+	// Plaka temizliği (v14 "Konvoy aracı", "Saklama süreleri"; `vehicles`
+	// bileşeni, issue #240, ADR-0025 "Plaka kuralı")
 	// ---------------------------------------------------------------------------
 	// Bitişi @ended_before'dan önce olan etkinliklerin plakaları boşaltılır.
 	ClearOldPlates(ctx context.Context, arg ClearOldPlatesParams) (int64, error)
@@ -166,6 +168,7 @@ type Querier interface {
 	CopyEventRoutes(ctx context.Context, arg CopyEventRoutesParams) error
 	CountActiveMembers(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
 	CountActiveMembersForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]CountActiveMembersForTayfasRow, error)
+	CountApprovedSeats(ctx context.Context, arg CountApprovedSeatsParams) (int64, error)
 	// ---------------------------------------------------------------------------
 	// Kamp malzemeleri
 	CountCampItems(ctx context.Context, eventID pgtype.UUID) (int64, error)
@@ -224,6 +227,7 @@ type Querier interface {
 	CreateEventPhoto(ctx context.Context, arg CreateEventPhotoParams) error
 	// Aynı atama varsa hiçbir şey yapmaz; etkilenen satır 0 olur.
 	CreateEventReferee(ctx context.Context, arg CreateEventRefereeParams) (int64, error)
+	CreateEventSeatRequest(ctx context.Context, arg CreateEventSeatRequestParams) error
 	// Tekrarlayan etkinlik serileri (issue #51). Kullanıcı istekleri her sorguyu
 	// tayfa_id ile çalıştırır (IDOR); üretim işi seriyi kendi listesinden alır.
 	CreateEventSeries(ctx context.Context, arg CreateEventSeriesParams) error
@@ -282,7 +286,6 @@ type Querier interface {
 	DeleteBlock(ctx context.Context, arg DeleteBlockParams) (int64, error)
 	DeleteCampItem(ctx context.Context, arg DeleteCampItemParams) (int64, error)
 	DeleteCatch(ctx context.Context, arg DeleteCatchParams) (int64, error)
-	DeleteConvoyVehicle(ctx context.Context, arg DeleteConvoyVehicleParams) (int64, error)
 	DeleteEventFieldValues(ctx context.Context, eventID pgtype.UUID) error
 	DeleteEventPhoto(ctx context.Context, arg DeleteEventPhotoParams) (int64, error)
 	DeleteEventReferee(ctx context.Context, arg DeleteEventRefereeParams) (int64, error)
@@ -290,6 +293,9 @@ type Querier interface {
 	// Bileşen bir kapsamı (masa, maç) silerken o kapsamın hakem atamalarını da
 	// siler.
 	DeleteEventScopeReferees(ctx context.Context, arg DeleteEventScopeRefereesParams) error
+	DeleteEventSeatRequest(ctx context.Context, arg DeleteEventSeatRequestParams) (int64, error)
+	// Aracın koltuk istekleri foreign key ile birlikte gider.
+	DeleteEventVehicle(ctx context.Context, arg DeleteEventVehicleParams) (int64, error)
 	// Aynı transaction'da, yazılan puanlardan profillemesi kapalı olanlarınki
 	// ve engelli çiftler silinir (hesaplama sırasında değişen ayar ve engel).
 	DeleteExcludedFriendScores(ctx context.Context) (int64, error)
@@ -341,10 +347,6 @@ type Querier interface {
 	DeleteUserBlocks(ctx context.Context, userID pgtype.UUID) error
 	// Av kayıtları konum içerebilir; kişiyle birlikte silinir.
 	DeleteUserCatches(ctx context.Context, userID pgtype.UUID) error
-	// "Geliyorum"dan vazgeçen kişinin aracı (ve plakası) kalmaz.
-	DeleteUserConvoyVehicle(ctx context.Context, arg DeleteUserConvoyVehicleParams) (int64, error)
-	// Araç (plaka dahil) kişisel veridir ve kişiye aittir: silinir.
-	DeleteUserConvoyVehicles(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserDiscoverJoins(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserEventFeedback(ctx context.Context, userID pgtype.UUID) error
 	// Albüm fotoğrafları kişiseldir; kişiyle birlikte silinir, dosyaları
@@ -352,6 +354,10 @@ type Querier interface {
 	DeleteUserEventPhotos(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silme: kişinin hakem atamaları silinir.
 	DeleteUserEventReferees(ctx context.Context, userID pgtype.UUID) error
+	DeleteUserEventSeatRequests(ctx context.Context, arg DeleteUserEventSeatRequestsParams) (int64, error)
+	// "Geliyorum"dan vazgeçen kişinin aracı (plakası ve aracına gelen istekler)
+	// ve kendi koltuk isteği kalmaz; etkinliğin bütün araçlar bileşenlerinde.
+	DeleteUserEventVehicles(ctx context.Context, arg DeleteUserEventVehiclesParams) (int64, error)
 	// Profilleme kapatma ve hesap silme: kişinin bütün puanları.
 	DeleteUserFriendScores(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserFriendSuggestions(ctx context.Context, userID pgtype.UUID) error
@@ -363,11 +369,16 @@ type Querier interface {
 	DeleteUserRequestOutcomes(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserRsvps(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserSafetyContacts(ctx context.Context, userID pgtype.UUID) error
+	DeleteUserSeatRequests(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserSocialSettings(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silme (user.deleted): kullanıcının dosyaları silinir; bağlı kapak
 	// görselleri tayfanındır, bağlı şikâyet kanıtı platformundur (rapor
 	// durdukça, ADR-0031); yalnızca sahiplikleri kaldırılır.
 	DeleteUserUploads(ctx context.Context, userID pgtype.UUID) (int64, error)
+	// Araç (plaka dahil) kişisel veridir ve kişiye aittir: silinir (araca gelen
+	// koltuk istekleri foreign key ile gider). Kişinin başkasının aracına
+	// yazdığı koltuk isteği de silinir (`vehicles` bileşeni, issue #240).
+	DeleteUserVehicles(ctx context.Context, userID pgtype.UUID) error
 	// Hiçbir mesaj dosyayı tutmuyor: bağlama kaldırılır; dosya bağlanmamış
 	// hazır dosya olarak 7 günlük temizliğe döner (ready_at'ten sayılır).
 	DetachChatAttachment(ctx context.Context, arg DetachChatAttachmentParams) (int64, error)
@@ -422,6 +433,8 @@ type Querier interface {
 	// işi siler).
 	ExportAvailability(ctx context.Context, arg ExportAvailabilityParams) ([]ExportAvailabilityRow, error)
 	ExportBlocks(ctx context.Context, arg ExportBlocksParams) ([]ExportBlocksRow, error)
+	// Etkinliklere yazılan araçlar (`vehicles` bileşeni, issue #240). Bölümün adı
+	// Faz 1'den kalmadır (convoy_vehicles); bütün türlerin araçlarını taşır.
 	ExportConvoyVehicles(ctx context.Context, arg ExportConvoyVehiclesParams) ([]ExportConvoyVehiclesRow, error)
 	// ---------------------------------------------------------------------------
 	// KVKK dışa aktarma (ADR-0021): tek kayıt.
@@ -457,6 +470,9 @@ type Querier interface {
 	ExportSocialSettings(ctx context.Context, arg ExportSocialSettingsParams) ([]ExportSocialSettingsRow, error)
 	// Yalnızca liste; dosyalar ve dışa aktarma kayıtları girmez.
 	ExportUploads(ctx context.Context, arg ExportUploadsParams) ([]ExportUploadsRow, error)
+	// Kişinin başkasının aracına yazdığı koltuk istekleri. Aracın sahibi ve
+	// plakası başkasının verisidir, dışa aktarılmaz.
+	ExportVehicleSeatRequests(ctx context.Context, arg ExportVehicleSeatRequestsParams) ([]ExportVehicleSeatRequestsRow, error)
 	FilterActiveMembers(ctx context.Context, arg FilterActiveMembersParams) ([]pgtype.UUID, error)
 	// Verilen kullanıcılardan hâlâ etkin üye olanlar (tek alıcılı bildirimler
 	// ve arka plan işlerinin seçtiği alıcılar).
@@ -496,7 +512,6 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// Av günlüğü
 	GetCatchByClientRequest(ctx context.Context, arg GetCatchByClientRequestParams) (GetCatchByClientRequestRow, error)
-	GetConvoyVehicleOwner(ctx context.Context, arg GetConvoyVehicleOwnerParams) (pgtype.UUID, error)
 	GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow, error)
 	// Tekrar gönderilen oluşturma isteği aynı etkinliği döndürür.
 	GetEventByClientRequest(ctx context.Context, arg GetEventByClientRequestParams) (GetEventByClientRequestRow, error)
@@ -524,11 +539,13 @@ type Querier interface {
 	// etkinliğin kimliği ve bileşenin anahtarıyla çalışır (IDOR). Yetki app
 	// katmanındadır (internal/core/app/component/route).
 	GetEventRoute(ctx context.Context, arg GetEventRouteParams) (GetEventRouteRow, error)
+	GetEventSeatRequest(ctx context.Context, arg GetEventSeatRequestParams) (GetEventSeatRequestRow, error)
 	GetEventSeries(ctx context.Context, arg GetEventSeriesParams) (GetEventSeriesRow, error)
 	// Seriyi değiştiren istekler ve üretim işi aynı satırı kilitler; çağıran
 	// tayfa satırını önceden kilitlemiştir (kilit sırası: tayfa, seri,
 	// etkinlikler).
 	GetEventSeriesForUpdate(ctx context.Context, arg GetEventSeriesForUpdateParams) (GetEventSeriesForUpdateRow, error)
+	GetEventVehicle(ctx context.Context, arg GetEventVehicleParams) (GetEventVehicleRow, error)
 	GetExportByClientRequest(ctx context.Context, arg GetExportByClientRequestParams) (Upload, error)
 	// Arkadaşlık ve engelleme (issue #71, veri modeli v14 "Arkadaşlık ve
 	// Davet (v11)"). friendships satırı iki kişi için tektir: user_low_id <
@@ -629,6 +646,7 @@ type Querier interface {
 	// Çözümden önce, kilitsiz: dışarıya (chat) sorulacak hedef (kanal mesajı).
 	GetTayfaReportTarget(ctx context.Context, arg GetTayfaReportTargetParams) (GetTayfaReportTargetRow, error)
 	GetUploadByClientRequest(ctx context.Context, arg GetUploadByClientRequestParams) (Upload, error)
+	GetUserEventVehicle(ctx context.Context, arg GetUserEventVehicleParams) (pgtype.UUID, error)
 	GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUserProfileRow, error)
 	// Kanalı açanlardan hangileri o etkinliğe gidiyor.
 	GoingAmong(ctx context.Context, arg GoingAmongParams) ([]GoingAmongRow, error)
@@ -694,7 +712,6 @@ type Querier interface {
 	ListCatalogInterests(ctx context.Context) ([]ListCatalogInterestsRow, error)
 	// (created_at, id) ile sayfalanır.
 	ListCatches(ctx context.Context, arg ListCatchesParams) ([]ListCatchesRow, error)
-	ListConvoyVehicles(ctx context.Context, eventID pgtype.UUID) ([]ListConvoyVehiclesRow, error)
 	ListDeletingUploads(ctx context.Context, n int32) ([]ListDeletingUploadsRow, error)
 	// Keşfet (issue #210, ADR-0033; herkese açık: issue #227, ADR-0035).
 	// Listelenebilirlik tayfa_discover_listable (00028), etkinliğin izleyiciye
@@ -733,6 +750,14 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// Hakemler
 	ListEventReferees(ctx context.Context, eventID pgtype.UUID) ([]ListEventRefereesRow, error)
+	ListEventSeatRequests(ctx context.Context, arg ListEventSeatRequestsParams) ([]ListEventSeatRequestsRow, error)
+	// Araçlar ve koltuk paylaşımı bileşeni (`vehicles`; issue #240; ADR-0025 §4,
+	// ADR-0037 §3). Etkinlik her zaman önce tayfa kapsamında yüklenir ve bileşen
+	// etkinliğin tür sürümünde çözülür (internal/core/app/component: View /
+	// Change); buradaki sorgular o etkinliğin kimliği ve bileşenin anahtarıyla
+	// çalışır (IDOR). Yetki app katmanındadır
+	// (internal/core/app/component/vehicles).
+	ListEventVehicles(ctx context.Context, arg ListEventVehiclesParams) ([]ListEventVehiclesRow, error)
 	// Liste görünümünde mera gizliliği için.
 	ListFishingVisibility(ctx context.Context, eventIds []pgtype.UUID) ([]ListFishingVisibilityRow, error)
 	// Kişinin arkadaşları ve istekleri. Silinmiş hesapların satırı hesap
@@ -1043,25 +1068,18 @@ type Querier interface {
 	SetAuditRetentionJob(ctx context.Context) error
 	SetCampItemAssignee(ctx context.Context, arg SetCampItemAssigneeParams) error
 	SetCatchPhoto(ctx context.Context, arg SetCatchPhotoParams) error
-	// ---------------------------------------------------------------------------
-	// Konvoy araçları. Kişi başına bir araç; yeniden eklemek öncekinin yerine
-	// geçer.
-	SetConvoyVehicle(ctx context.Context, arg SetConvoyVehicleParams) (pgtype.UUID, error)
 	// Outbox (ADR-0002): olaylar iş verisiyle aynı transaction'da
 	// internal/platform/outbox.Write ile yazılır (sıralama kilidi, outbox paket
 	// belgesi). payload'a kişisel içerik yazılmaz. outbox ortak kolonları yazar;
 	// core'a özgü tayfa_id kolonu aynı transaction'da hemen ardından doldurulur.
 	SetDomainEventTayfa(ctx context.Context, arg SetDomainEventTayfaParams) (int64, error)
+	// ---------------------------------------------------------------------------
+	// Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
+	// key yanlış türü reddeder.
 	SetEventCamp(ctx context.Context, arg SetEventCampParams) error
 	// Seçim app katmanında tür sürümüne göre doğrulanmış haliyle yazılır;
 	// trigger (event_components_guard) aynı kuralı ayrıca denetler.
 	SetEventComponent(ctx context.Context, arg SetEventComponentParams) error
-	// ---------------------------------------------------------------------------
-	// Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
-	// key yanlış türü reddeder.
-	// Konvoyun detay satırı yalnızca araçların bağlandığı satırdır; rota
-	// `route` bileşenindedir (component_route.sql, issue #239).
-	SetEventConvoy(ctx context.Context, eventID pgtype.UUID) error
 	SetEventCover(ctx context.Context, arg SetEventCoverParams) error
 	SetEventFieldValue(ctx context.Context, arg SetEventFieldValueParams) error
 	SetEventFishing(ctx context.Context, arg SetEventFishingParams) error
@@ -1071,6 +1089,9 @@ type Querier interface {
 	SetEventRoute(ctx context.Context, arg SetEventRouteParams) error
 	SetEventSeriesID(ctx context.Context, arg SetEventSeriesIDParams) (int64, error)
 	SetEventSeriesTemplate(ctx context.Context, arg SetEventSeriesTemplateParams) error
+	// Kişi başına bir araç; yeniden yazmak öncekinin yerine geçer (kimliği
+	// değişmez). Değerler app katmanında doğrulanmış haliyle yazılır.
+	SetEventVehicle(ctx context.Context, arg SetEventVehicleParams) (pgtype.UUID, error)
 	// Boyut bir kez yazılır (trigger uploads_export_bytes_once); aynı boyut
 	// tekrar yazılabilir.
 	SetExportBytes(ctx context.Context, arg SetExportBytesParams) (int64, error)

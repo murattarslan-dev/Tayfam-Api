@@ -3,7 +3,6 @@ package event
 import (
 	"math"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -45,10 +44,11 @@ const (
 var Types = []string{TypeConvoy, TypeCamp, TypeHike, TypeFishing, TypeGaming, TypeSports, TypeGeneral}
 
 // detailTypes are the types that still keep data in a Faz 1 detail table
-// (event_convoy, event_camp, event_hike, event_fishing) until their
-// components move it (issues #239–#243). Every other type has only the
-// fields of its catalog definition (event_field_values).
-var detailTypes = []string{TypeConvoy, TypeCamp, TypeHike, TypeFishing}
+// (event_camp, event_hike, event_fishing) until their components move it
+// (issues #241–#243). Every other type has only the fields of its catalog
+// definition (event_field_values) and its components; the convoy's route
+// and vehicles are components (issues #239, #240).
+var detailTypes = []string{TypeCamp, TypeHike, TypeFishing}
 
 // Limits (data model v14 and 00004_events.sql; the same CHECKs are in the
 // database).
@@ -63,14 +63,10 @@ const (
 	campNotesMax    = 1000
 	itemNameMax     = 60
 	itemQuantityMax = 999
-	makeMax         = 40
-	modelMax        = 40
-	colorMax        = 30
 	distanceMax     = 1000
 	elevationMax    = 9000
 	graceDefault    = 30
 	graceMax        = 1440
-	modelYearMin    = 1900
 
 	// startAhead bounds how far ahead an event may start; maxDuration how
 	// long it may last.
@@ -79,10 +75,6 @@ const (
 	// maxRuneBytes bounds the byte length before counting characters.
 	maxRuneBytes = 4
 )
-
-// platePattern is the event_convoy_vehicles_plate CHECK; single spaces only
-// (checked separately).
-var platePattern = regexp.MustCompile(`^[0-9A-Z][0-9A-Z ]{0,14}[0-9A-Z]$`)
 
 // Point is a WGS 84 coordinate in degrees.
 type Point struct {
@@ -109,7 +101,6 @@ type Location struct {
 // Details are the Faz 1 type details of the types in detailTypes; at most
 // one is set and it matches the event's type.
 type Details struct {
-	Convoy  *Convoy
 	Camp    *Camp
 	Hike    *Hike
 	Fishing *Fishing
@@ -123,8 +114,7 @@ func (d Details) typ() string {
 		set bool
 		typ string
 	}{
-		{d.Convoy != nil, TypeConvoy}, {d.Camp != nil, TypeCamp}, {d.Hike != nil, TypeHike},
-		{d.Fishing != nil, TypeFishing},
+		{d.Camp != nil, TypeCamp}, {d.Hike != nil, TypeHike}, {d.Fishing != nil, TypeFishing},
 	} {
 		if c.set {
 			if t != "" {
@@ -134,24 +124,6 @@ func (d Details) typ() string {
 		}
 	}
 	return t
-}
-
-// Convoy holds, in views, a convoy's vehicles. Its route is the route
-// component's (package component/route, issue #239).
-type Convoy struct {
-	Vehicles []Vehicle
-}
-
-// Vehicle is a convoy participant's vehicle.
-type Vehicle struct {
-	ID        id.ID
-	UserID    id.ID
-	Make      string
-	Model     string
-	ModelYear int32
-	Color     string
-	// Plate is empty for callers who are not participants.
-	Plate string
 }
 
 // Camp holds a camp's site details and, in views, its item list.
@@ -326,8 +298,6 @@ func cleanDetails(typ string, d Details, start time.Time, create bool) (Details,
 		return Details{}, nil
 	case dt == "" && create:
 		switch typ {
-		case TypeConvoy:
-			d.Convoy = &Convoy{}
 		case TypeCamp:
 			d.Camp = &Camp{}
 		case TypeHike:
@@ -342,8 +312,6 @@ func cleanDetails(typ string, d Details, start time.Time, create bool) (Details,
 	var out Details
 	var err error
 	switch typ {
-	case TypeConvoy:
-		out.Convoy = &Convoy{}
 	case TypeCamp:
 		c := Camp{HasWater: d.Camp.HasWater, HasToilet: d.Camp.HasToilet}
 		if c.SiteName, err = cleanText(d.Camp.SiteName, "site_name", 0, placeNameMax, false); err != nil {
@@ -392,53 +360,4 @@ func cleanDetails(typ string, d Details, start time.Time, create bool) (Details,
 		return Details{}, bad
 	}
 	return out, nil
-}
-
-// VehicleInput is a convoy vehicle to add.
-type VehicleInput struct {
-	Make      string
-	Model     string
-	ModelYear int32
-	Color     string
-	Plate     string
-}
-
-func cleanVehicle(v VehicleInput, now time.Time) (VehicleInput, error) {
-	var (
-		out VehicleInput
-		err error
-	)
-	if out.Make, err = cleanText(v.Make, "make", 1, makeMax, false); err != nil {
-		return VehicleInput{}, err
-	}
-	if out.Model, err = cleanText(v.Model, "model", 0, modelMax, false); err != nil {
-		return VehicleInput{}, err
-	}
-	if out.Color, err = cleanText(v.Color, "color", 0, colorMax, false); err != nil {
-		return VehicleInput{}, err
-	}
-	if v.ModelYear != 0 && (v.ModelYear < modelYearMin || int(v.ModelYear) > now.Year()+1) {
-		return VehicleInput{}, apperr.Validation("model_year")
-	}
-	out.ModelYear = v.ModelYear
-	if out.Plate, err = cleanPlate(v.Plate); err != nil {
-		return VehicleInput{}, err
-	}
-	return out, nil
-}
-
-// cleanPlate upper-cases the plate and collapses runs of spaces; the
-// result has only A–Z, digits and single spaces. Empty means no plate.
-func cleanPlate(s string) (string, error) {
-	if len(s) > 64 {
-		return "", apperr.Validation("plate")
-	}
-	p := strings.Join(strings.Fields(strings.ToUpper(s)), " ")
-	if p == "" {
-		return "", nil
-	}
-	if !platePattern.MatchString(p) {
-		return "", apperr.Validation("plate")
-	}
-	return p, nil
 }

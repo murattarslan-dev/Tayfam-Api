@@ -578,14 +578,17 @@ func (x *LatLng) GetLng() float64 {
 	return 0
 }
 
+// ConvoyDetails is not used any more: a convoy has no type details. Its
+// route is the route component's (RouteComponentService, issue #239) and
+// its vehicles are the vehicles component's (VehiclesComponentService,
+// component_vehicles.proto; issue #240). An event never carries it and a
+// request that sets it is refused (ERROR_REASON_VALIDATION, field
+// "details"). The message and its fields stay because they cannot be
+// removed.
 type ConvoyDetails struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Not used any more: the route is the route component's
-	// (RouteComponentService, component_route.proto; issue #239). Never read
-	// and never filled; the field stays because it cannot be removed.
-	Route []*LatLng `protobuf:"bytes,1,rep,name=route,proto3" json:"route,omitempty"`
-	// Output only, GetEvent only.
-	Vehicles      []*ConvoyVehicle `protobuf:"bytes,2,rep,name=vehicles,proto3" json:"vehicles,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Route         []*LatLng              `protobuf:"bytes,1,rep,name=route,proto3" json:"route,omitempty"`
+	Vehicles      []*ConvoyVehicle       `protobuf:"bytes,2,rep,name=vehicles,proto3" json:"vehicles,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -634,6 +637,8 @@ func (x *ConvoyDetails) GetVehicles() []*ConvoyVehicle {
 	return nil
 }
 
+// ConvoyVehicle is not used any more (EventVehicle,
+// component_vehicles.proto; issue #240).
 type ConvoyVehicle struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1163,10 +1168,11 @@ type Event struct {
 	// The event was edited on its own (UpdateEvent without series): changes
 	// to the series and ending it leave it alone.
 	SeriesOverride bool `protobuf:"varint,29,opt,name=series_override,json=seriesOverride,proto3" json:"series_override,omitempty"`
-	// The Faz 1 details of the convoy, camp, hike and fishing types, until
-	// their components replace them (ADR-0025 §10). Set by GetEvent; never by
-	// ListUpcomingEvents. gaming and sports are never set: their data is in
-	// fields.
+	// The Faz 1 details of the camp, hike and fishing types, until their
+	// components replace them (ADR-0025 §10). Set by GetEvent; never by
+	// ListUpcomingEvents. convoy, gaming and sports are never set: a
+	// convoy's data is in its components (issues #239, #240), the others'
+	// in fields.
 	//
 	// Types that are valid to be assigned to Details:
 	//
@@ -1592,10 +1598,11 @@ type CreateEventRequest struct {
 	// 0: no limit; otherwise 1–10000.
 	Capacity     int32 `protobuf:"varint,13,opt,name=capacity,proto3" json:"capacity,omitempty"`
 	Discoverable bool  `protobuf:"varint,14,opt,name=discoverable,proto3" json:"discoverable,omitempty"`
-	// Only for the convoy, camp, hike and fishing types, and must match the
-	// type; may be unset. gaming and sports must be unset
-	// (ERROR_REASON_VALIDATION, field "details"): their data goes in fields.
-	// Output-only fields (vehicles, items) are ignored.
+	// Only for the camp, hike and fishing types, and must match the type;
+	// may be unset. convoy, gaming and sports must be unset
+	// (ERROR_REASON_VALIDATION, field "details"): a convoy's data is in its
+	// components, the others' goes in fields. Output-only fields (items) are
+	// ignored.
 	//
 	// Types that are valid to be assigned to Details:
 	//
@@ -2285,8 +2292,7 @@ type UpdateEventRequest struct {
 	// (start_time and end_time together), "location" (mode,
 	// meeting_point_name, meeting_point, city, district and online_url
 	// together), "capacity", "discoverable", "details" (replaces the type
-	// details of a convoy, camp, hike or fishing event; vehicles and camp
-	// items stay), "fields" (replaces the field values), "cover_upload_id"
+	// details of a camp, hike or fishing event; camp items stay), "fields" (replaces the field values), "cover_upload_id"
 	// (not with series = true: ERROR_REASON_VALIDATION, field
 	// "update_mask"). Any other path is ERROR_REASON_VALIDATION.
 	UpdateMask *fieldmaskpb.FieldMask `protobuf:"bytes,15,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`

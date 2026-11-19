@@ -189,7 +189,8 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"events":                         `SELECT count(*) FROM events WHERE $1 IN (created_by, cancelled_by, deleted_by)`,
 		"event_series.created_by":        `SELECT count(*) FROM event_series WHERE created_by = $1`,
 		"event_rsvps":                    `SELECT count(*) FROM event_rsvps WHERE $1 IN (user_id, attendance_marked_by)`,
-		"event_convoy_vehicles.user_id":  `SELECT count(*) FROM event_convoy_vehicles WHERE user_id = $1`,
+		"event_vehicles.user_id":         `SELECT count(*) FROM event_vehicles WHERE user_id = $1`,
+		"event_vehicle_seat_requests":    `SELECT count(*) FROM event_vehicle_seat_requests WHERE user_id = $1`,
 		"event_referees.user_id":         `SELECT count(*) FROM event_referees WHERE user_id = $1`,
 		"event_camp_items":               `SELECT count(*) FROM event_camp_items WHERE $1 IN (assigned_user_id, created_by)`,
 		"event_hike_checkins.user_id":    `SELECT count(*) FROM event_hike_checkins WHERE user_id = $1`,
@@ -286,11 +287,17 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 			x.ev.PG(), t2.PG(), x.typ, x.by.PG(), u.PG())
 	}
 	e.seed(t, `INSERT INTO event_series (id, tayfa_id, rrule, timezone, dtstart, created_by) VALUES ($1, $2, 'FREQ=WEEKLY', 'Europe/Istanbul', now(), $3)`, id.New().PG(), t2.PG(), u.PG())
-	e.seed(t, `INSERT INTO event_convoy (event_id) VALUES ($1), ($2)`, ownEvent.PG(), otherEvent.PG())
 	e.seed(t, `INSERT INTO event_camp (event_id) VALUES ($1)`, campEvent.PG())
 	e.seed(t, `INSERT INTO event_rsvps (event_id, user_id, status) VALUES ($1, $2, 'going')`, otherEvent.PG(), u.PG())
 	e.seed(t, `INSERT INTO event_rsvps (event_id, user_id, status, attendance, attendance_method, attendance_marked_by, attendance_marked_at) VALUES ($1, $2, 'going', 'attended', 'organizer', $3, now())`, otherEvent.PG(), other.PG(), u.PG())
-	e.seed(t, `INSERT INTO event_convoy_vehicles (id, event_id, user_id, make, plate) VALUES ($1, $2, $3, 'Ford', '35 ABC 123')`, id.New().PG(), otherEvent.PG(), u.PG())
+	// u's vehicle goes with the seat request another member made to it;
+	// u's own request to another member's vehicle goes, the vehicle stays
+	// (issue #240).
+	ownVehicle, otherVehicle := id.New(), id.New()
+	e.seed(t, `INSERT INTO event_vehicles (id, event_id, component_key, user_id, make, plate, seats) VALUES ($1, $3, 'vehicles', $4, 'Ford', '35 ABC 123', 2), ($2, $5, 'vehicles', $6, 'Fiat', NULL, 2)`,
+		ownVehicle.PG(), otherVehicle.PG(), otherEvent.PG(), u.PG(), ownEvent.PG(), other.PG())
+	e.seed(t, `INSERT INTO event_vehicle_seat_requests (id, event_id, component_key, user_id, event_vehicle_id) VALUES ($1, $3, 'vehicles', $4, $5), ($2, $6, 'vehicles', $7, $8)`,
+		id.New().PG(), id.New().PG(), otherEvent.PG(), other.PG(), ownVehicle.PG(), ownEvent.PG(), u.PG(), otherVehicle.PG())
 	// u's referee assignment goes; another member's stays (issue #238).
 	e.seed(t, `INSERT INTO event_referees (id, event_id, user_id) VALUES ($1, $3, $4), ($2, $3, $5)`, id.New().PG(), id.New().PG(), otherEvent.PG(), u.PG(), other.PG())
 	e.seed(t, `INSERT INTO event_camp_items (id, event_id, name, assigned_user_id, created_by) VALUES ($1, $2, 'Çadır', $3, $3)`, id.New().PG(), campEvent.PG(), u.PG())
@@ -321,6 +328,12 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 	}
 	if n := e.count(t, `SELECT count(*) FROM event_referees WHERE event_id = $1 AND user_id = $2`, otherEvent.PG(), other.PG()); n != 1 {
 		t.Fatalf("başkasının hakem ataması = %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_vehicles WHERE id = $1 AND user_id = $2`, otherVehicle.PG(), other.PG()); n != 1 {
+		t.Fatalf("başkasının aracı = %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_vehicles`) + e.count(t, `SELECT count(*) FROM event_vehicle_seat_requests`); n != 1 {
+		t.Fatalf("silinen kullanıcının aracı ya da koltuk istekleri kaldı: %d", n)
 	}
 	if n := e.count(t, `SELECT count(*) FROM announcements WHERE (id = $1 AND author_id IS NULL AND title = 'Duyuru') OR (id = $2 AND author_id = $3 AND deleted_at IS NOT NULL AND deleted_by IS NULL)`, ownAnn.PG(), hiddenAnn.PG(), other.PG()); n != 2 {
 		t.Fatalf("duyurular = %d", n)

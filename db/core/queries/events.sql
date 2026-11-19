@@ -120,12 +120,6 @@ LIMIT @page_size;
 -- Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
 -- key yanlış türü reddeder.
 
--- Konvoyun detay satırı yalnızca araçların bağlandığı satırdır; rota
--- `route` bileşenindedir (component_route.sql, issue #239).
--- name: SetEventConvoy :exec
-INSERT INTO event_convoy (event_id) VALUES (@event_id)
-ON CONFLICT (event_id) DO NOTHING;
-
 -- name: SetEventCamp :exec
 INSERT INTO event_camp (event_id, site_name, has_water, has_toilet, notes)
 VALUES (@event_id, @site_name, @has_water, @has_toilet, @notes)
@@ -211,30 +205,3 @@ WHERE event_id = @event_id AND id = @id;
 
 -- name: DeleteCampItem :execrows
 DELETE FROM event_camp_items WHERE event_id = @event_id AND id = @id;
-
--- ---------------------------------------------------------------------------
--- Konvoy araçları. Kişi başına bir araç; yeniden eklemek öncekinin yerine
--- geçer.
-
--- name: SetConvoyVehicle :one
-INSERT INTO event_convoy_vehicles (id, event_id, user_id, make, model, model_year, color, plate)
-VALUES (@id, @event_id, @user_id, @make, @model, @model_year, @color, @plate)
-ON CONFLICT (event_id, user_id) DO UPDATE
-SET make = EXCLUDED.make, model = EXCLUDED.model, model_year = EXCLUDED.model_year,
-    color = EXCLUDED.color, plate = EXCLUDED.plate
-RETURNING id;
-
--- name: ListConvoyVehicles :many
-SELECT id, user_id, make, model, model_year, color, plate FROM event_convoy_vehicles
-WHERE event_id = @event_id
-ORDER BY created_at, id;
-
--- name: GetConvoyVehicleOwner :one
-SELECT user_id FROM event_convoy_vehicles WHERE event_id = @event_id AND id = @id;
-
--- name: DeleteConvoyVehicle :execrows
-DELETE FROM event_convoy_vehicles WHERE event_id = @event_id AND id = @id;
-
--- "Geliyorum"dan vazgeçen kişinin aracı (ve plakası) kalmaz.
--- name: DeleteUserConvoyVehicle :execrows
-DELETE FROM event_convoy_vehicles WHERE event_id = @event_id AND user_id = @user_id;

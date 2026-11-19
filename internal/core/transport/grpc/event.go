@@ -31,8 +31,6 @@ type Events interface {
 	AddCampItem(ctx context.Context, user, t, e id.ID, name string, quantity int32, assigned id.ID) (event.CampItem, error)
 	RemoveCampItem(ctx context.Context, user, t, e, item id.ID) error
 	AssignCampItem(ctx context.Context, user, t, e, item, assigned id.ID) (event.CampItem, error)
-	SetVehicle(ctx context.Context, user, t, e id.ID, in event.VehicleInput) (event.Vehicle, error)
-	RemoveVehicle(ctx context.Context, user, t, e, vehicle id.ID) error
 	CheckIn(ctx context.Context, user, t, e id.ID, at *event.Point) (event.Attendance, error)
 	StartHike(ctx context.Context, user, t, e id.ID, startedAt time.Time) (event.HikeCheckin, error)
 	FinishHike(ctx context.Context, user, t, e id.ID, returnedAt time.Time) (event.HikeCheckin, error)
@@ -55,7 +53,7 @@ type Instants interface {
 
 // EventServer implements corev1.EventServiceServer. The acting user always
 // comes from the verified token (auth.Guard), never from the request.
-// Locations, URLs and plates are converted here and never logged.
+// Locations and URLs are converted here and never logged.
 type EventServer struct {
 	corev1.UnimplementedEventServiceServer
 	app     Events
@@ -381,37 +379,6 @@ func (s *EventServer) AssignCampItem(ctx context.Context, req *corev1.AssignCamp
 	return &corev1.AssignCampItemResponse{Item: campItemToProto(out)}, nil
 }
 
-// AddConvoyVehicle implements corev1.EventServiceServer.
-func (s *EventServer) AddConvoyVehicle(ctx context.Context, req *corev1.AddConvoyVehicleRequest) (*corev1.AddConvoyVehicleResponse, error) {
-	user, t, e, err := scope(ctx, req.GetTayfaId(), ptr(req.GetEventId()))
-	if err != nil {
-		return nil, err
-	}
-	v, err := s.app.SetVehicle(ctx, user, t, e, event.VehicleInput{
-		Make: req.GetMake(), Model: req.GetModel(), ModelYear: req.GetModelYear(), Color: req.GetColor(), Plate: req.GetPlate(),
-	})
-	if err != nil {
-		return nil, errorStatus(ctx, s.log, err)
-	}
-	return &corev1.AddConvoyVehicleResponse{Vehicle: vehicleToProto(v)}, nil
-}
-
-// RemoveConvoyVehicle implements corev1.EventServiceServer.
-func (s *EventServer) RemoveConvoyVehicle(ctx context.Context, req *corev1.RemoveConvoyVehicleRequest) (*corev1.RemoveConvoyVehicleResponse, error) {
-	user, t, e, err := scope(ctx, req.GetTayfaId(), ptr(req.GetEventId()))
-	if err != nil {
-		return nil, err
-	}
-	vehicle, ok := id.Parse(req.GetVehicleId())
-	if !ok {
-		return nil, validation("vehicle_id")
-	}
-	if err := s.app.RemoveVehicle(ctx, user, t, e, vehicle); err != nil {
-		return nil, errorStatus(ctx, s.log, err)
-	}
-	return &corev1.RemoveConvoyVehicleResponse{}, nil
-}
-
 // GetEventSeries implements corev1.EventServiceServer.
 func (s *EventServer) GetEventSeries(ctx context.Context, req *corev1.GetEventSeriesRequest) (*corev1.GetEventSeriesResponse, error) {
 	user, t, series, err := seriesScope(ctx, req.GetTayfaId(), req.GetSeriesId())
@@ -520,14 +487,10 @@ func locationFromProto(mode corev1.EventMode, name string, point *corev1.LatLng,
 }
 
 // detailsFromProto converts the request's details oneof; at most one of the
-// arguments is set. Output-only fields (vehicles, items) are dropped.
+// arguments is set. Output-only fields (items) are dropped.
 func detailsFromProto(cv *corev1.ConvoyDetails, cp *corev1.CampDetails, h *corev1.HikeDetails, f *corev1.FishingDetails, g *corev1.GamingDetails, sp *corev1.SportsDetails) (event.Details, error) {
 	var d event.Details
 	switch {
-	case cv != nil:
-		// ConvoyDetails.route is no longer read: the route is the route
-		// component's (RouteComponentService, issue #239).
-		d.Convoy = &event.Convoy{}
 	case cp != nil:
 		c := &event.Camp{SiteName: cp.GetSiteName(), Notes: cp.GetNotes()}
 		if cp.HasWater != nil {
@@ -562,9 +525,10 @@ func detailsFromProto(cv *corev1.ConvoyDetails, cp *corev1.CampDetails, h *corev
 			return event.Details{}, validation("spot_visibility")
 		}
 		d.Fishing = fi
-	case g != nil, sp != nil:
-		// Gaming and sports have no detail table any more; their data is
-		// in the type's fields (issue #237).
+	case cv != nil, g != nil, sp != nil:
+		// A convoy has no details any more: its route and vehicles are
+		// components (issues #239, #240). Gaming and sports have no detail
+		// table either; their data is in the type's fields (issue #237).
 		return event.Details{}, validation("details")
 	}
 	return d, nil
@@ -628,12 +592,6 @@ func eventToProto(v event.Event) *corev1.Event {
 	}
 	d := v.Details
 	switch {
-	case d.Convoy != nil:
-		c := &corev1.ConvoyDetails{}
-		for _, veh := range d.Convoy.Vehicles {
-			c.Vehicles = append(c.Vehicles, vehicleToProto(veh))
-		}
-		out.Details = &corev1.Event_Convoy{Convoy: c}
 	case d.Camp != nil:
 		c := &corev1.CampDetails{SiteName: d.Camp.SiteName, HasWater: d.Camp.HasWater, HasToilet: d.Camp.HasToilet, Notes: d.Camp.Notes}
 		for _, it := range d.Camp.Items {
@@ -663,13 +621,6 @@ func eventToProto(v event.Event) *corev1.Event {
 		}
 	}
 	return out
-}
-
-func vehicleToProto(v event.Vehicle) *corev1.ConvoyVehicle {
-	return &corev1.ConvoyVehicle{
-		Id: v.ID.String(), UserId: v.UserID.String(), Make: v.Make, Model: v.Model,
-		ModelYear: v.ModelYear, Color: v.Color, Plate: v.Plate,
-	}
 }
 
 func campItemToProto(it event.CampItem) *corev1.CampItem {

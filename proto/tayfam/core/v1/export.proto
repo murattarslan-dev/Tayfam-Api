@@ -30,7 +30,9 @@ enum CoreExportSection {
   CORE_EXPORT_SECTION_EVENT_RSVPS = 2;
   // Hike start and return times.
   CORE_EXPORT_SECTION_HIKE_CHECKINS = 3;
-  // Convoy vehicles, plates included.
+  // The vehicles the caller wrote on events (the vehicles component,
+  // issue #240), plates included. The name is from Faz 1; vehicles of
+  // every event type are here.
   CORE_EXPORT_SECTION_CONVOY_VEHICLES = 4;
   // The attendance history (user_activity_records).
   CORE_EXPORT_SECTION_ACTIVITY_RECORDS = 5;
@@ -70,6 +72,10 @@ enum CoreExportSection {
   // safety contacts they chose (issue #210, ADR-0033). Being someone
   // else's safety contact is that person's data and is not exported.
   CORE_EXPORT_SECTION_DISCOVER = 23;
+  // The caller's requests for a seat in someone else's vehicle (the
+  // vehicles component, issue #240). The vehicle's owner and plate are the
+  // owner's data and are not exported.
+  CORE_EXPORT_SECTION_VEHICLE_SEAT_REQUESTS = 24;
 }
 
 message ExportMyDataRequest {}

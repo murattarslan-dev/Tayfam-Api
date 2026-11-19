@@ -33,7 +33,7 @@ func (s *Service) Get(ctx context.Context, user, tayfa, event id.ID) (Event, err
 		return Event{}, err
 	}
 	v := out[0]
-	if v.Details, err = s.details(ctx, c, ev, v); err != nil {
+	if v.Details, err = s.details(ctx, ev); err != nil {
 		return Event{}, err
 	}
 	if v.Fields, err = loadFields(ctx, s.q, event); err != nil {
@@ -195,40 +195,13 @@ func (c caller) seesSpot(ev store.GetEventRow, rsvp string) bool {
 	return authz.AllowedIn(unmuted, authz.EventEditAny, c.now, c.settings)
 }
 
-// participant reports whether the caller may see plates on a convoy: an
-// answer of going, or the organizer.
-func (c caller) participant(ev store.GetEventRow, rsvp string) bool {
-	return rsvp == RSVPGoing || (ev.CreatedBy.Valid && id.ID(ev.CreatedBy.Bytes) == c.user)
-}
-
-// details loads the type details of ev for Get, with the convoy's vehicles
-// and the camp's items.
-func (s *Service) details(ctx context.Context, c caller, ev store.GetEventRow, v Event) (Details, error) {
+// details loads the type details of ev for Get, with the camp's items.
+func (s *Service) details(ctx context.Context, ev store.GetEventRow) (Details, error) {
 	d, err := typeDetails(ctx, s.q, ev)
 	if err != nil {
 		return Details{}, err
 	}
-	switch {
-	case d.Convoy != nil:
-		d.Convoy.Vehicles = []Vehicle{}
-		vs, err := s.q.ListConvoyVehicles(ctx, ev.ID)
-		if err != nil {
-			return Details{}, fmt.Errorf("araçlar: %w", err)
-		}
-		seesPlates := c.participant(ev, v.CallerRSVP)
-		for _, r := range vs {
-			veh := Vehicle{
-				ID: id.ID(r.ID.Bytes), UserID: id.ID(r.UserID.Bytes), Make: r.Make, Model: r.Model.String,
-				ModelYear: r.ModelYear.Int32, Color: r.Color.String,
-			}
-			// Plates are personal data: only the event's participants and
-			// the organizer see them, and everyone sees their own.
-			if seesPlates || veh.UserID == c.user {
-				veh.Plate = r.Plate.String
-			}
-			d.Convoy.Vehicles = append(d.Convoy.Vehicles, veh)
-		}
-	case d.Camp != nil:
+	if d.Camp != nil {
 		d.Camp.Items = []CampItem{}
 		items, err := s.q.ListCampItems(ctx, ev.ID)
 		if err != nil {
@@ -246,16 +219,12 @@ func (s *Service) details(ctx context.Context, c caller, ev store.GetEventRow, v
 }
 
 // typeDetails loads the type details of ev from its type's table, without
-// lists (vehicles, camp items). A series copies these to new occurrences.
+// lists (camp items). A series copies these to new occurrences.
 func typeDetails(ctx context.Context, q *store.Queries, ev store.GetEventRow) (Details, error) {
 	evID := ev.ID
 	var d Details
 	var err error
 	switch ev.Type {
-	case TypeConvoy:
-		// Nothing to load: the route is the route component's (issue
-		// #239) and the vehicles are a list.
-		d.Convoy = &Convoy{}
 	case TypeCamp:
 		var r store.GetEventCampRow
 		r, err = q.GetEventCamp(ctx, evID)

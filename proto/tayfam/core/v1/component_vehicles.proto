@@ -1,0 +1,194 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "tayfam/core/v1/component.proto";
+
+// VehiclesComponentService is the vehicles component (kind "vehicles",
+// issue #240; ADR-0025 §4, ADR-0037 §3): the vehicles the participants of
+// an event come with, one per person, and with the component's `seats`
+// parameter the free seats a vehicle's owner offers and the requests of
+// participants to ride along. It replaces the Faz 1 convoy vehicles
+// (EventService.AddConvoyVehicle, ConvoyDetails.vehicles) for every type
+// that has the component. There is no cost or money field.
+//
+// Only gateway calls it with the user's access token. Authentication,
+// scope and the errors every component shares are those of
+// EventComponentService (component.proto): anyone but an ACTIVE member
+// gets ERROR_REASON_TAYFA_NOT_FOUND, and so on.
+//
+// A plate is personal data: it is returned only to the event's
+// participants (an answer of going), the organizer and the vehicle's
+// owner, is cleared 30 days after the event's end and is never logged or
+// written to the audit record or an outbox event.
+//
+// Every method returns the component's vehicles as the caller sees them.
+service VehiclesComponentService {
+  // ListVehicles returns the vehicles in the order they were added. Open
+  // to every active member, muted ones included.
+  rpc ListVehicles(ListVehiclesRequest) returns (ListVehiclesResponse);
+
+  // SetVehicle sets the caller's vehicle, replacing a previous one (its ID
+  // stays). The caller must have answered going and the event must not
+  // have ended. A seat request of the caller's own to another vehicle is
+  // removed: a driver rides in their own vehicle.
+  //
+  // Errors: ERROR_REASON_VALIDATION (make, model, color, model_year; plate
+  // also when the component's `plate` parameter is off; seats outside 0–8
+  // or not 0 when the `seats` parameter is off),
+  // ERROR_REASON_EVENT_NOT_GOING, ERROR_REASON_EVENT_ENDED,
+  // ERROR_REASON_VEHICLE_SEATS_TAKEN (fewer seats than approved riders),
+  // ERROR_REASON_MUTED and the errors of every component change.
+  rpc SetVehicle(SetVehicleRequest) returns (SetVehicleResponse);
+
+  // RemoveVehicle removes a vehicle with the seat requests made to it:
+  // one's own (muted members too), or anyone's for managers (the
+  // organizer, and moderators and admins as for every event).
+  //
+  // Errors: ERROR_REASON_EVENT_ITEM_NOT_FOUND,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED (managers) and the
+  // errors of every component change.
+  rpc RemoveVehicle(RemoveVehicleRequest) returns (RemoveVehicleResponse);
+
+  // RequestSeat asks for a seat in a vehicle for the caller, who must have
+  // answered going and has no vehicle of their own in the component. A
+  // person has one request in a component: a request to another vehicle
+  // replaces the previous one (an approved seat included); the same
+  // request again changes nothing. The request waits for the owner's
+  // approval.
+  //
+  // Errors: ERROR_REASON_EVENT_ITEM_NOT_FOUND (the vehicle),
+  // ERROR_REASON_SEAT_REQUEST_DRIVER (the caller has a vehicle),
+  // ERROR_REASON_VEHICLE_FULL (no free seat; always when the `seats`
+  // parameter is off), ERROR_REASON_EVENT_NOT_GOING,
+  // ERROR_REASON_EVENT_ENDED, ERROR_REASON_MUTED and the errors of every
+  // component change.
+  rpc RequestSeat(RequestSeatRequest) returns (RequestSeatResponse);
+
+  // ApproveSeat approves a waiting request to the caller's own vehicle;
+  // only the vehicle's owner may. Approving an approved request changes
+  // nothing.
+  //
+  // Errors: ERROR_REASON_EVENT_ITEM_NOT_FOUND (the vehicle, or no request
+  // of this user to it), ERROR_REASON_PERMISSION_DENIED (not the owner),
+  // ERROR_REASON_VEHICLE_FULL, ERROR_REASON_EVENT_ENDED,
+  // ERROR_REASON_MUTED and the errors of every component change.
+  rpc ApproveSeat(ApproveSeatRequest) returns (ApproveSeatResponse);
+
+  // ReleaseSeat removes a seat request, waiting or approved: the
+  // requester withdraws their own, the vehicle's owner declines or
+  // removes a rider, a manager removes any. Muted members may withdraw
+  // their own.
+  //
+  // Errors: ERROR_REASON_EVENT_ITEM_NOT_FOUND,
+  // ERROR_REASON_PERMISSION_DENIED and the errors of every component
+  // change.
+  rpc ReleaseSeat(ReleaseSeatRequest) returns (ReleaseSeatResponse);
+}
+
+// EventVehicle is one participant's vehicle.
+message EventVehicle {
+  string id = 1;
+  // The owner.
+  string user_id = 2;
+  // 1–40 characters.
+  string make = 3;
+  // Up to 40 characters; may be empty.
+  string model = 4;
+  // 0 when not given.
+  int32 model_year = 5;
+  // Up to 30 characters; may be empty.
+  string color = 6;
+  // Empty unless the caller is a participant of the event (going), its
+  // organizer or the vehicle's owner.
+  string plate = 7;
+  // Free seats the owner offers, 0–8; always 0 when the component's
+  // `seats` parameter is off.
+  int32 seats = 8;
+  // Users whose request the owner approved, in request order.
+  repeated string rider_user_ids = 9;
+  // Users whose request waits for approval. The owner sees all of them;
+  // anyone else sees only their own.
+  repeated string pending_user_ids = 10;
+}
+
+// EventVehicles is the vehicles of one component of an event, as the
+// caller sees them.
+message EventVehicles {
+  repeated EventVehicle vehicles = 1;
+  // The component's `plate` and `seats` parameters for this event.
+  bool plate_enabled = 2;
+  bool seats_enabled = 3;
+  // The caller may set a vehicle or ask for a seat now: going, not muted,
+  // and the event, the tayfa and the write window allow it.
+  bool caller_can_participate = 4;
+  // The caller may remove other people's vehicles and seat requests now
+  // (a manager who is not muted).
+  bool caller_can_manage = 5;
+}
+
+message ListVehiclesRequest {
+  ComponentRef ref = 1;
+}
+
+message ListVehiclesResponse {
+  EventVehicles vehicles = 1;
+}
+
+message SetVehicleRequest {
+  ComponentRef ref = 1;
+  // 1–40 characters.
+  string make = 2;
+  string model = 3;
+  // 0, or 1900 to next year.
+  int32 model_year = 4;
+  string color = 5;
+  // Optional; upper-cased, A–Z, digits and single spaces, 2–16 characters.
+  string plate = 6;
+  // 0–8.
+  int32 seats = 7;
+}
+
+message SetVehicleResponse {
+  EventVehicles vehicles = 1;
+}
+
+message RemoveVehicleRequest {
+  ComponentRef ref = 1;
+  string vehicle_id = 2;
+}
+
+message RemoveVehicleResponse {
+  EventVehicles vehicles = 1;
+}
+
+message RequestSeatRequest {
+  ComponentRef ref = 1;
+  string vehicle_id = 2;
+}
+
+message RequestSeatResponse {
+  EventVehicles vehicles = 1;
+}
+
+message ApproveSeatRequest {
+  ComponentRef ref = 1;
+  string vehicle_id = 2;
+  // The requester.
+  string user_id = 3;
+}
+
+message ApproveSeatResponse {
+  EventVehicles vehicles = 1;
+}
+
+message ReleaseSeatRequest {
+  ComponentRef ref = 1;
+  string vehicle_id = 2;
+  // The requester.
+  string user_id = 3;
+}
+
+message ReleaseSeatResponse {
+  EventVehicles vehicles = 1;
+}

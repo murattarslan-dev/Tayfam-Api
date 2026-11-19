@@ -324,4 +324,17 @@ enum ErrorReason {
   // FAILED_PRECONDITION. Component data cannot change from seven days after
   // the event's end.
   ERROR_REASON_COMPONENT_FROZEN = 136;
+
+  // Vehicles component (VehiclesComponentService, component_vehicles.proto;
+  // issue #240: 2400–2409).
+
+  // FAILED_PRECONDITION. The vehicle has no free seat: every seat the
+  // owner offers is taken by an approved rider, or it offers none.
+  ERROR_REASON_VEHICLE_FULL = 2400;
+  // FAILED_PRECONDITION. The owner cannot offer fewer seats than the riders
+  // already approved; a rider is removed first.
+  ERROR_REASON_VEHICLE_SEATS_TAKEN = 2401;
+  // FAILED_PRECONDITION. Someone who has a vehicle of their own in the
+  // component cannot ask for a seat.
+  ERROR_REASON_SEAT_REQUEST_DRIVER = 2402;
 }

@@ -1,5 +1,5 @@
 // Package event manages a tayfa's events: creating, editing and cancelling
-// them, RSVPs with a waitlist, camp item lists and convoy vehicles
+// them, RSVPs with a waitlist and camp item lists
 // (EventService, proto/tayfam/core/v1/event.proto; issue #49, data model
 // v14 "Duyuru ve Etkinlik", "Türe özel tablolar", "Etkinlik iptali",
 // "Online etkinlik", "Konvoy aracı").
@@ -303,8 +303,8 @@ func flush(ctx context.Context, q *store.Queries, b *batch) error {
 // them (ADR-0009, package notify): a new event for every active member,
 // a change or cancellation for its going, maybe and waitlist participants,
 // a waitlist promotion for the promoted member. The actor never hears
-// about their own change. Changes to the lists on an event (camp items,
-// convoy vehicles) notify nobody.
+// about their own change. Changes to the lists on an event (camp items)
+// notify nobody.
 func notifyBatch(ctx context.Context, q *store.Queries, b *batch) error {
 	for _, e := range b.events {
 		req := notify.Request{Tayfa: b.tayfa, Actor: b.actor, TargetType: notify.TargetEvent, Target: e.subject}
@@ -347,14 +347,14 @@ func notifyBatch(ctx context.Context, q *store.Queries, b *batch) error {
 }
 
 // listsOnly reports an event.updated whose fields are all lists on the
-// event (fieldCampItems, fieldVehicles).
+// event (fieldCampItems).
 func listsOnly(v any) bool {
 	fields, ok := v.([]string)
 	if !ok || len(fields) == 0 {
 		return false
 	}
 	for _, f := range fields {
-		if f != fieldCampItems && f != fieldVehicles {
+		if f != fieldCampItems {
 			return false
 		}
 	}
@@ -905,10 +905,6 @@ func setFields(ctx context.Context, q *store.Queries, event id.ID, values map[st
 func setDetails(ctx context.Context, q *store.Queries, event id.ID, d Details) error {
 	var err error
 	switch {
-	case d.Convoy != nil:
-		// The row the convoy's vehicles hang on; the route is the route
-		// component's.
-		err = q.SetEventConvoy(ctx, event.PG())
 	case d.Camp != nil:
 		err = q.SetEventCamp(ctx, store.SetEventCampParams{
 			EventID: event.PG(), SiteName: text(d.Camp.SiteName), HasWater: boolPtr(d.Camp.HasWater),

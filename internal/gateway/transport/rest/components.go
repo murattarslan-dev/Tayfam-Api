@@ -61,6 +61,7 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 		registerRouteComponent,
 
 		// vehicles (#240)
+		registerVehiclesComponent,
 
 		// checklist (#241)
 

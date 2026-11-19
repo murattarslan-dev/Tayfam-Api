@@ -126,19 +126,15 @@ service EventService {
   // ERROR_REASON_EVENT_ITEM_TAKEN, ERROR_REASON_VALIDATION.
   rpc AssignCampItem(AssignCampItemRequest) returns (AssignCampItemResponse);
 
-  // AddConvoyVehicle sets the caller's vehicle on a convoy event; it
-  // replaces the caller's previous vehicle there. The caller must have
-  // answered GOING.
-  //
-  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-  // ERROR_REASON_EVENT_NOT_GOING, ERROR_REASON_VALIDATION.
+  // AddConvoyVehicle is not served any more: vehicles are the vehicles
+  // component's (VehiclesComponentService.SetVehicle,
+  // component_vehicles.proto; issue #240). It answers UNIMPLEMENTED; the
+  // method stays because it cannot be removed.
   rpc AddConvoyVehicle(AddConvoyVehicleRequest) returns (AddConvoyVehicleResponse);
 
-  // RemoveConvoyVehicle removes a vehicle: one's own, or any vehicle for the
-  // organizer, moderators and admins.
-  //
-  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-  // ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+  // RemoveConvoyVehicle is not served any more
+  // (VehiclesComponentService.RemoveVehicle; issue #240). It answers
+  // UNIMPLEMENTED; the method stays because it cannot be removed.
   rpc RemoveConvoyVehicle(RemoveConvoyVehicleRequest) returns (RemoveConvoyVehicleResponse);
 
   // Attendance (issue #50; data model v14 "Konumla check-in", "Online
@@ -374,15 +370,20 @@ message LatLng {
   double lng = 2;
 }
 
+// ConvoyDetails is not used any more: a convoy has no type details. Its
+// route is the route component's (RouteComponentService, issue #239) and
+// its vehicles are the vehicles component's (VehiclesComponentService,
+// component_vehicles.proto; issue #240). An event never carries it and a
+// request that sets it is refused (ERROR_REASON_VALIDATION, field
+// "details"). The message and its fields stay because they cannot be
+// removed.
 message ConvoyDetails {
-  // Not used any more: the route is the route component's
-  // (RouteComponentService, component_route.proto; issue #239). Never read
-  // and never filled; the field stays because it cannot be removed.
   repeated LatLng route = 1;
-  // Output only, GetEvent only.
   repeated ConvoyVehicle vehicles = 2;
 }
 
+// ConvoyVehicle is not used any more (EventVehicle,
+// component_vehicles.proto; issue #240).
 message ConvoyVehicle {
   string id = 1;
   string user_id = 2;
@@ -498,10 +499,11 @@ message Event {
   // The event was edited on its own (UpdateEvent without series): changes
   // to the series and ending it leave it alone.
   bool series_override = 29;
-  // The Faz 1 details of the convoy, camp, hike and fishing types, until
-  // their components replace them (ADR-0025 §10). Set by GetEvent; never by
-  // ListUpcomingEvents. gaming and sports are never set: their data is in
-  // fields.
+  // The Faz 1 details of the camp, hike and fishing types, until their
+  // components replace them (ADR-0025 §10). Set by GetEvent; never by
+  // ListUpcomingEvents. convoy, gaming and sports are never set: a
+  // convoy's data is in its components (issues #239, #240), the others'
+  // in fields.
   oneof details {
     ConvoyDetails convoy = 30;
     CampDetails camp = 31;
@@ -560,10 +562,11 @@ message CreateEventRequest {
   // 0: no limit; otherwise 1–10000.
   int32 capacity = 13;
   bool discoverable = 14;
-  // Only for the convoy, camp, hike and fishing types, and must match the
-  // type; may be unset. gaming and sports must be unset
-  // (ERROR_REASON_VALIDATION, field "details"): their data goes in fields.
-  // Output-only fields (vehicles, items) are ignored.
+  // Only for the camp, hike and fishing types, and must match the type;
+  // may be unset. convoy, gaming and sports must be unset
+  // (ERROR_REASON_VALIDATION, field "details"): a convoy's data is in its
+  // components, the others' goes in fields. Output-only fields (items) are
+  // ignored.
   oneof details {
     ConvoyDetails convoy = 20;
     CampDetails camp = 21;
@@ -699,8 +702,7 @@ message UpdateEventRequest {
   // (start_time and end_time together), "location" (mode,
   // meeting_point_name, meeting_point, city, district and online_url
   // together), "capacity", "discoverable", "details" (replaces the type
-  // details of a convoy, camp, hike or fishing event; vehicles and camp
-  // items stay), "fields" (replaces the field values), "cover_upload_id"
+  // details of a camp, hike or fishing event; camp items stay), "fields" (replaces the field values), "cover_upload_id"
   // (not with series = true: ERROR_REASON_VALIDATION, field
   // "update_mask"). Any other path is ERROR_REASON_VALIDATION.
   google.protobuf.FieldMask update_mask = 15;

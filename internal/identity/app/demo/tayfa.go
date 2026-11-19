@@ -247,16 +247,19 @@ func (s *Seeder) seedEvent(ctx context.Context, t tayfaSpec, e eventSpec, tayfaI
 		}
 	}
 	for _, v := range e.Vehicles {
-		_, err := call(ctx, s, users[v.Person], func(ctx context.Context) (*corev1.AddConvoyVehicleResponse, error) {
-			return s.cfg.Core.Events.AddConvoyVehicle(ctx, &corev1.AddConvoyVehicleRequest{
-				TayfaId: tayfaID, EventId: eventID, Make: v.Make, Model: v.Model, ModelYear: v.Year, Color: v.Color,
+		// The vehicles are the vehicles component's (issue #240), under
+		// the key "vehicles" (the convoy); setting one again replaces it.
+		_, err := call(ctx, s, users[v.Person], func(ctx context.Context) (*corev1.SetVehicleResponse, error) {
+			return s.cfg.Core.Vehicles.SetVehicle(ctx, &corev1.SetVehicleRequest{
+				Ref:  &corev1.ComponentRef{TayfaId: tayfaID, EventId: eventID, ComponentKey: "vehicles"},
+				Make: v.Make, Model: v.Model, ModelYear: v.Year, Color: v.Color,
 			})
 		})
 		if over(err) {
 			return nil
 		}
 		if err != nil {
-			return check("konvoy aracı", err)
+			return check("araç", err)
 		}
 	}
 	if len(e.CampItems) == 0 {

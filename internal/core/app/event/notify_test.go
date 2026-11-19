@@ -70,7 +70,7 @@ func TestListsOnlyUpdatesNotifyNobody(t *testing.T) {
 		want   bool
 	}{
 		{[]string{fieldCampItems}, true},
-		{[]string{fieldVehicles, fieldCampItems}, true},
+		{[]string{fieldCampItems, fieldCampItems}, true},
 		{[]string{fieldCampItems, FieldTitle}, false},
 		{[]string{}, false},
 	} {

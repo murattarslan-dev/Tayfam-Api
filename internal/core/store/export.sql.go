@@ -262,10 +262,11 @@ func (q *Queries) ExportBlocks(ctx context.Context, arg ExportBlocksParams) ([]E
 
 const exportConvoyVehicles = `-- name: ExportConvoyVehicles :many
 SELECT v.id AS k, jsonb_build_object(
-  'event_id', v.event_id, 'make', v.make, 'model', v.model, 'model_year', v.model_year,
-  'color', v.color, 'plate', v.plate, 'created_at', v.created_at
+  'event_id', v.event_id, 'component_key', v.component_key, 'make', v.make, 'model', v.model,
+  'model_year', v.model_year, 'color', v.color, 'plate', v.plate, 'seats', v.seats,
+  'created_at', v.created_at, 'updated_at', v.updated_at
 ) AS data
-FROM event_convoy_vehicles v
+FROM event_vehicles v
 WHERE v.user_id = $1 AND v.id > $2
 ORDER BY v.id
 LIMIT $3
@@ -282,6 +283,8 @@ type ExportConvoyVehiclesRow struct {
 	Data []byte
 }
 
+// Etkinliklere yazılan araçlar (`vehicles` bileşeni, issue #240). Bölümün adı
+// Faz 1'den kalmadır (convoy_vehicles); bütün türlerin araçlarını taşır.
 func (q *Queries) ExportConvoyVehicles(ctx context.Context, arg ExportConvoyVehiclesParams) ([]ExportConvoyVehiclesRow, error) {
 	rows, err := q.db.Query(ctx, exportConvoyVehicles, arg.UserID, arg.After, arg.N)
 	if err != nil {
@@ -920,6 +923,50 @@ func (q *Queries) ExportUploads(ctx context.Context, arg ExportUploadsParams) ([
 	items := []ExportUploadsRow{}
 	for rows.Next() {
 		var i ExportUploadsRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportVehicleSeatRequests = `-- name: ExportVehicleSeatRequests :many
+SELECT r.id AS k, jsonb_build_object(
+  'event_id', r.event_id, 'component_key', r.component_key, 'vehicle_id', r.event_vehicle_id,
+  'status', r.status, 'created_at', r.created_at, 'decided_at', r.decided_at
+) AS data
+FROM event_vehicle_seat_requests r
+WHERE r.user_id = $1 AND r.id > $2
+ORDER BY r.id
+LIMIT $3
+`
+
+type ExportVehicleSeatRequestsParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportVehicleSeatRequestsRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Kişinin başkasının aracına yazdığı koltuk istekleri. Aracın sahibi ve
+// plakası başkasının verisidir, dışa aktarılmaz.
+func (q *Queries) ExportVehicleSeatRequests(ctx context.Context, arg ExportVehicleSeatRequestsParams) ([]ExportVehicleSeatRequestsRow, error) {
+	rows, err := q.db.Query(ctx, exportVehicleSeatRequests, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportVehicleSeatRequestsRow{}
+	for rows.Next() {
+		var i ExportVehicleSeatRequestsRow
 		if err := rows.Scan(&i.K, &i.Data); err != nil {
 			return nil, err
 		}

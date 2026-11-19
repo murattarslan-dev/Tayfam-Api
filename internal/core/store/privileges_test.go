@@ -22,7 +22,6 @@ var wantAppPrivileges = map[string]string{
 	"events":                "DELETE,INSERT,SELECT,UPDATE",
 	"event_rsvps":           "DELETE,INSERT,SELECT,UPDATE",
 	"event_camp_items":      "DELETE,INSERT,SELECT,UPDATE",
-	"event_convoy_vehicles": "DELETE,INSERT,SELECT,UPDATE",
 	"event_hike_checkins":   "DELETE,INSERT,SELECT,UPDATE",
 	"user_activity_records": "DELETE,INSERT,SELECT,UPDATE",
 	"fishing_catches":       "DELETE,INSERT,SELECT,UPDATE",
@@ -55,7 +54,6 @@ var wantAppPrivileges = map[string]string{
 	"user_profiles":         "INSERT,SELECT,UPDATE",
 	"event_series":          "INSERT,SELECT,UPDATE",
 	"event_camp":            "INSERT,SELECT,UPDATE",
-	"event_convoy":          "INSERT,SELECT,UPDATE",
 	"event_hike":            "INSERT,SELECT,UPDATE",
 	"event_fishing":         "INSERT,SELECT,UPDATE",
 	"poll_options":          "INSERT,SELECT",
@@ -83,6 +81,10 @@ var wantAppPrivileges = map[string]string{
 	"event_referees":   "DELETE,INSERT,SELECT",
 	// Issue #239: a route never moves to another event or component.
 	"event_routes": "DELETE,INSERT,SELECT,UPDATE(points,updated_at)",
+	// Issue #240: a vehicle never moves to another event, component or
+	// person; a seat request is only approved or removed.
+	"event_vehicles":              "DELETE,INSERT,SELECT,UPDATE(color,make,model,model_year,plate,seats,updated_at)",
+	"event_vehicle_seat_requests": "DELETE,INSERT,SELECT,UPDATE(decided_at,status)",
 }
 
 func TestAppRolePrivileges(t *testing.T) {

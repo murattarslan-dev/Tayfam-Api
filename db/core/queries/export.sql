@@ -36,14 +36,29 @@ WHERE c.user_id = @user_id AND c.event_id > @after
 ORDER BY c.event_id
 LIMIT @n;
 
+-- Etkinliklere yazılan araçlar (`vehicles` bileşeni, issue #240). Bölümün adı
+-- Faz 1'den kalmadır (convoy_vehicles); bütün türlerin araçlarını taşır.
 -- name: ExportConvoyVehicles :many
 SELECT v.id AS k, jsonb_build_object(
-  'event_id', v.event_id, 'make', v.make, 'model', v.model, 'model_year', v.model_year,
-  'color', v.color, 'plate', v.plate, 'created_at', v.created_at
+  'event_id', v.event_id, 'component_key', v.component_key, 'make', v.make, 'model', v.model,
+  'model_year', v.model_year, 'color', v.color, 'plate', v.plate, 'seats', v.seats,
+  'created_at', v.created_at, 'updated_at', v.updated_at
 ) AS data
-FROM event_convoy_vehicles v
+FROM event_vehicles v
 WHERE v.user_id = @user_id AND v.id > @after
 ORDER BY v.id
+LIMIT @n;
+
+-- Kişinin başkasının aracına yazdığı koltuk istekleri. Aracın sahibi ve
+-- plakası başkasının verisidir, dışa aktarılmaz.
+-- name: ExportVehicleSeatRequests :many
+SELECT r.id AS k, jsonb_build_object(
+  'event_id', r.event_id, 'component_key', r.component_key, 'vehicle_id', r.event_vehicle_id,
+  'status', r.status, 'created_at', r.created_at, 'decided_at', r.decided_at
+) AS data
+FROM event_vehicle_seat_requests r
+WHERE r.user_id = @user_id AND r.id > @after
+ORDER BY r.id
 LIMIT @n;
 
 -- name: ExportActivityRecords :many
