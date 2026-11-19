@@ -302,6 +302,13 @@ const (
 	// FAILED_PRECONDITION. Someone who has a vehicle of their own in the
 	// component cannot ask for a seat.
 	ErrorReason_ERROR_REASON_SEAT_REQUEST_DRIVER ErrorReason = 2402
+	// NOT_FOUND. The tayfa has no such value in this namespace.
+	ErrorReason_ERROR_REASON_VOCABULARY_NOT_FOUND ErrorReason = 2440
+	// FAILED_PRECONDITION. The value or the merge target is already merged
+	// into another value; undo that merge or choose its target.
+	ErrorReason_ERROR_REASON_VOCABULARY_MERGED ErrorReason = 2441
+	// FAILED_PRECONDITION. The value is not merged; there is nothing to undo.
+	ErrorReason_ERROR_REASON_VOCABULARY_NOT_MERGED ErrorReason = 2442
 )
 
 // Enum value maps for ErrorReason.
@@ -395,6 +402,9 @@ var (
 		2400: "ERROR_REASON_VEHICLE_FULL",
 		2401: "ERROR_REASON_VEHICLE_SEATS_TAKEN",
 		2402: "ERROR_REASON_SEAT_REQUEST_DRIVER",
+		2440: "ERROR_REASON_VOCABULARY_NOT_FOUND",
+		2441: "ERROR_REASON_VOCABULARY_MERGED",
+		2442: "ERROR_REASON_VOCABULARY_NOT_MERGED",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                 0,
@@ -485,6 +495,9 @@ var (
 		"ERROR_REASON_VEHICLE_FULL":                2400,
 		"ERROR_REASON_VEHICLE_SEATS_TAKEN":         2401,
 		"ERROR_REASON_SEAT_REQUEST_DRIVER":         2402,
+		"ERROR_REASON_VOCABULARY_NOT_FOUND":        2440,
+		"ERROR_REASON_VOCABULARY_MERGED":           2441,
+		"ERROR_REASON_VOCABULARY_NOT_MERGED":       2442,
 	}
 )
 
@@ -519,7 +532,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xd6\x18\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xcc\x19\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -609,7 +622,10 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\x1dERROR_REASON_COMPONENT_FROZEN\x10\x88\x01\x12\x1e\n" +
 	"\x19ERROR_REASON_VEHICLE_FULL\x10\xe0\x12\x12%\n" +
 	" ERROR_REASON_VEHICLE_SEATS_TAKEN\x10\xe1\x12\x12%\n" +
-	" ERROR_REASON_SEAT_REQUEST_DRIVER\x10\xe2\x12B\xbd\x01\n" +
+	" ERROR_REASON_SEAT_REQUEST_DRIVER\x10\xe2\x12\x12&\n" +
+	"!ERROR_REASON_VOCABULARY_NOT_FOUND\x10\x88\x13\x12#\n" +
+	"\x1eERROR_REASON_VOCABULARY_MERGED\x10\x89\x13\x12'\n" +
+	"\"ERROR_REASON_VOCABULARY_NOT_MERGED\x10\x8a\x13B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

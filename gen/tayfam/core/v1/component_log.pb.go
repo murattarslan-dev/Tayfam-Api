@@ -100,8 +100,12 @@ type LogEntry struct {
 	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	// The caller may remove the entry now.
 	CallerCanRemove bool `protobuf:"varint,8,opt,name=caller_can_remove,json=callerCanRemove,proto3" json:"caller_can_remove,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The tayfa vocabulary values of the fields bound to a vocabulary
+	// (issue #244; ADR-0037 §4), by field key: the value's ID, resolved to
+	// its merge target. The value's text is in values, as a JSON string.
+	VocabularyIds map[string]string `protobuf:"bytes,9,rep,name=vocabulary_ids,json=vocabularyIds,proto3" json:"vocabulary_ids,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LogEntry) Reset() {
@@ -188,6 +192,13 @@ func (x *LogEntry) GetCallerCanRemove() bool {
 		return x.CallerCanRemove
 	}
 	return false
+}
+
+func (x *LogEntry) GetVocabularyIds() map[string]string {
+	if x != nil {
+		return x.VocabularyIds
+	}
+	return nil
 }
 
 type ListLogEntriesRequest struct {
@@ -355,8 +366,14 @@ type AddLogEntryRequest struct {
 	PhotoUploadId string `protobuf:"bytes,5,opt,name=photo_upload_id,json=photoUploadId,proto3" json:"photo_upload_id,omitempty"`
 	// Required (UUID).
 	ClientRequestId string `protobuf:"bytes,6,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// A field bound to a tayfa vocabulary (`vocabulary` in the definition;
+	// issue #244) takes either an existing value of the tayfa's vocabulary
+	// here (field key → TayfaVocabularyService value ID) or a text in values:
+	// a known text (normalized) is reused, a new one is added to the
+	// vocabulary. Not both for one field.
+	VocabularyIds map[string]string `protobuf:"bytes,7,rep,name=vocabulary_ids,json=vocabularyIds,proto3" json:"vocabulary_ids,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AddLogEntryRequest) Reset() {
@@ -429,6 +446,13 @@ func (x *AddLogEntryRequest) GetClientRequestId() string {
 		return x.ClientRequestId
 	}
 	return ""
+}
+
+func (x *AddLogEntryRequest) GetVocabularyIds() map[string]string {
+	if x != nil {
+		return x.VocabularyIds
+	}
+	return nil
 }
 
 type AddLogEntryResponse struct {
@@ -567,7 +591,7 @@ var File_tayfam_core_v1_component_log_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_component_log_proto_rawDesc = "" +
 	"\n" +
-	"\"tayfam/core/v1/component_log.proto\x12\x0etayfam.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1etayfam/core/v1/component.proto\x1a\x1atayfam/core/v1/event.proto\"\xc9\x03\n" +
+	"\"tayfam/core/v1/component_log.proto\x12\x0etayfam.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1etayfam/core/v1/component.proto\x1a\x1atayfam/core/v1/event.proto\"\xdf\x04\n" +
 	"\bLogEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12<\n" +
@@ -577,8 +601,12 @@ const file_tayfam_core_v1_component_log_proto_rawDesc = "" +
 	"\x0fphoto_upload_id\x18\x06 \x01(\tR\rphotoUploadId\x12;\n" +
 	"\vcreate_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12*\n" +
-	"\x11caller_can_remove\x18\b \x01(\bR\x0fcallerCanRemove\x1a9\n" +
+	"\x11caller_can_remove\x18\b \x01(\bR\x0fcallerCanRemove\x12R\n" +
+	"\x0evocabulary_ids\x18\t \x03(\v2+.tayfam.core.v1.LogEntry.VocabularyIdsEntryR\rvocabularyIds\x1a9\n" +
 	"\vValuesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a@\n" +
+	"\x12VocabularyIdsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x83\x01\n" +
 	"\x15ListLogEntriesRequest\x12.\n" +
@@ -593,15 +621,19 @@ const file_tayfam_core_v1_component_log_proto_rawDesc = "" +
 	"\x10location_default\x18\x04 \x01(\x0e2%.tayfam.core.v1.LogLocationVisibilityR\x0flocationDefault\x12\x1f\n" +
 	"\vmax_entries\x18\x05 \x01(\x05R\n" +
 	"maxEntries\x12$\n" +
-	"\x0ecaller_can_add\x18\x06 \x01(\bR\fcallerCanAdd\"\xa7\x03\n" +
+	"\x0ecaller_can_add\x18\x06 \x01(\bR\fcallerCanAdd\"\xc7\x04\n" +
 	"\x12AddLogEntryRequest\x12.\n" +
 	"\x03ref\x18\x01 \x01(\v2\x1c.tayfam.core.v1.ComponentRefR\x03ref\x12F\n" +
 	"\x06values\x18\x02 \x03(\v2..tayfam.core.v1.AddLogEntryRequest.ValuesEntryR\x06values\x122\n" +
 	"\blocation\x18\x03 \x01(\v2\x16.tayfam.core.v1.LatLngR\blocation\x12V\n" +
 	"\x13location_visibility\x18\x04 \x01(\x0e2%.tayfam.core.v1.LogLocationVisibilityR\x12locationVisibility\x12&\n" +
 	"\x0fphoto_upload_id\x18\x05 \x01(\tR\rphotoUploadId\x12*\n" +
-	"\x11client_request_id\x18\x06 \x01(\tR\x0fclientRequestId\x1a9\n" +
+	"\x11client_request_id\x18\x06 \x01(\tR\x0fclientRequestId\x12\\\n" +
+	"\x0evocabulary_ids\x18\a \x03(\v25.tayfam.core.v1.AddLogEntryRequest.VocabularyIdsEntryR\rvocabularyIds\x1a9\n" +
 	"\vValuesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a@\n" +
+	"\x12VocabularyIdsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"E\n" +
 	"\x13AddLogEntryResponse\x12.\n" +
@@ -634,7 +666,7 @@ func file_tayfam_core_v1_component_log_proto_rawDescGZIP() []byte {
 }
 
 var file_tayfam_core_v1_component_log_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_tayfam_core_v1_component_log_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_tayfam_core_v1_component_log_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_tayfam_core_v1_component_log_proto_goTypes = []any{
 	(LogLocationVisibility)(0),     // 0: tayfam.core.v1.LogLocationVisibility
 	(*LogEntry)(nil),               // 1: tayfam.core.v1.LogEntry
@@ -645,36 +677,40 @@ var file_tayfam_core_v1_component_log_proto_goTypes = []any{
 	(*RemoveLogEntryRequest)(nil),  // 6: tayfam.core.v1.RemoveLogEntryRequest
 	(*RemoveLogEntryResponse)(nil), // 7: tayfam.core.v1.RemoveLogEntryResponse
 	nil,                            // 8: tayfam.core.v1.LogEntry.ValuesEntry
-	nil,                            // 9: tayfam.core.v1.AddLogEntryRequest.ValuesEntry
-	(*LatLng)(nil),                 // 10: tayfam.core.v1.LatLng
-	(*timestamppb.Timestamp)(nil),  // 11: google.protobuf.Timestamp
-	(*ComponentRef)(nil),           // 12: tayfam.core.v1.ComponentRef
+	nil,                            // 9: tayfam.core.v1.LogEntry.VocabularyIdsEntry
+	nil,                            // 10: tayfam.core.v1.AddLogEntryRequest.ValuesEntry
+	nil,                            // 11: tayfam.core.v1.AddLogEntryRequest.VocabularyIdsEntry
+	(*LatLng)(nil),                 // 12: tayfam.core.v1.LatLng
+	(*timestamppb.Timestamp)(nil),  // 13: google.protobuf.Timestamp
+	(*ComponentRef)(nil),           // 14: tayfam.core.v1.ComponentRef
 }
 var file_tayfam_core_v1_component_log_proto_depIdxs = []int32{
 	8,  // 0: tayfam.core.v1.LogEntry.values:type_name -> tayfam.core.v1.LogEntry.ValuesEntry
-	10, // 1: tayfam.core.v1.LogEntry.location:type_name -> tayfam.core.v1.LatLng
+	12, // 1: tayfam.core.v1.LogEntry.location:type_name -> tayfam.core.v1.LatLng
 	0,  // 2: tayfam.core.v1.LogEntry.location_visibility:type_name -> tayfam.core.v1.LogLocationVisibility
-	11, // 3: tayfam.core.v1.LogEntry.create_time:type_name -> google.protobuf.Timestamp
-	12, // 4: tayfam.core.v1.ListLogEntriesRequest.ref:type_name -> tayfam.core.v1.ComponentRef
-	1,  // 5: tayfam.core.v1.ListLogEntriesResponse.entries:type_name -> tayfam.core.v1.LogEntry
-	0,  // 6: tayfam.core.v1.ListLogEntriesResponse.location_default:type_name -> tayfam.core.v1.LogLocationVisibility
-	12, // 7: tayfam.core.v1.AddLogEntryRequest.ref:type_name -> tayfam.core.v1.ComponentRef
-	9,  // 8: tayfam.core.v1.AddLogEntryRequest.values:type_name -> tayfam.core.v1.AddLogEntryRequest.ValuesEntry
-	10, // 9: tayfam.core.v1.AddLogEntryRequest.location:type_name -> tayfam.core.v1.LatLng
-	0,  // 10: tayfam.core.v1.AddLogEntryRequest.location_visibility:type_name -> tayfam.core.v1.LogLocationVisibility
-	1,  // 11: tayfam.core.v1.AddLogEntryResponse.entry:type_name -> tayfam.core.v1.LogEntry
-	12, // 12: tayfam.core.v1.RemoveLogEntryRequest.ref:type_name -> tayfam.core.v1.ComponentRef
-	2,  // 13: tayfam.core.v1.LogComponentService.ListLogEntries:input_type -> tayfam.core.v1.ListLogEntriesRequest
-	4,  // 14: tayfam.core.v1.LogComponentService.AddLogEntry:input_type -> tayfam.core.v1.AddLogEntryRequest
-	6,  // 15: tayfam.core.v1.LogComponentService.RemoveLogEntry:input_type -> tayfam.core.v1.RemoveLogEntryRequest
-	3,  // 16: tayfam.core.v1.LogComponentService.ListLogEntries:output_type -> tayfam.core.v1.ListLogEntriesResponse
-	5,  // 17: tayfam.core.v1.LogComponentService.AddLogEntry:output_type -> tayfam.core.v1.AddLogEntryResponse
-	7,  // 18: tayfam.core.v1.LogComponentService.RemoveLogEntry:output_type -> tayfam.core.v1.RemoveLogEntryResponse
-	16, // [16:19] is the sub-list for method output_type
-	13, // [13:16] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	13, // 3: tayfam.core.v1.LogEntry.create_time:type_name -> google.protobuf.Timestamp
+	9,  // 4: tayfam.core.v1.LogEntry.vocabulary_ids:type_name -> tayfam.core.v1.LogEntry.VocabularyIdsEntry
+	14, // 5: tayfam.core.v1.ListLogEntriesRequest.ref:type_name -> tayfam.core.v1.ComponentRef
+	1,  // 6: tayfam.core.v1.ListLogEntriesResponse.entries:type_name -> tayfam.core.v1.LogEntry
+	0,  // 7: tayfam.core.v1.ListLogEntriesResponse.location_default:type_name -> tayfam.core.v1.LogLocationVisibility
+	14, // 8: tayfam.core.v1.AddLogEntryRequest.ref:type_name -> tayfam.core.v1.ComponentRef
+	10, // 9: tayfam.core.v1.AddLogEntryRequest.values:type_name -> tayfam.core.v1.AddLogEntryRequest.ValuesEntry
+	12, // 10: tayfam.core.v1.AddLogEntryRequest.location:type_name -> tayfam.core.v1.LatLng
+	0,  // 11: tayfam.core.v1.AddLogEntryRequest.location_visibility:type_name -> tayfam.core.v1.LogLocationVisibility
+	11, // 12: tayfam.core.v1.AddLogEntryRequest.vocabulary_ids:type_name -> tayfam.core.v1.AddLogEntryRequest.VocabularyIdsEntry
+	1,  // 13: tayfam.core.v1.AddLogEntryResponse.entry:type_name -> tayfam.core.v1.LogEntry
+	14, // 14: tayfam.core.v1.RemoveLogEntryRequest.ref:type_name -> tayfam.core.v1.ComponentRef
+	2,  // 15: tayfam.core.v1.LogComponentService.ListLogEntries:input_type -> tayfam.core.v1.ListLogEntriesRequest
+	4,  // 16: tayfam.core.v1.LogComponentService.AddLogEntry:input_type -> tayfam.core.v1.AddLogEntryRequest
+	6,  // 17: tayfam.core.v1.LogComponentService.RemoveLogEntry:input_type -> tayfam.core.v1.RemoveLogEntryRequest
+	3,  // 18: tayfam.core.v1.LogComponentService.ListLogEntries:output_type -> tayfam.core.v1.ListLogEntriesResponse
+	5,  // 19: tayfam.core.v1.LogComponentService.AddLogEntry:output_type -> tayfam.core.v1.AddLogEntryResponse
+	7,  // 20: tayfam.core.v1.LogComponentService.RemoveLogEntry:output_type -> tayfam.core.v1.RemoveLogEntryResponse
+	18, // [18:21] is the sub-list for method output_type
+	15, // [15:18] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_component_log_proto_init() }
@@ -690,7 +726,7 @@ func file_tayfam_core_v1_component_log_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_component_log_proto_rawDesc), len(file_tayfam_core_v1_component_log_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   9,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

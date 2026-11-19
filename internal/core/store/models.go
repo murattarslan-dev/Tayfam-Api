@@ -205,6 +205,12 @@ type EventLogEntry struct {
 	CreatedAt          pgtype.Timestamptz
 }
 
+type EventLogEntryVocabulary struct {
+	EntryID      pgtype.UUID
+	FieldKey     string
+	VocabularyID pgtype.UUID
+}
+
 type EventPhoto struct {
 	ID              pgtype.UUID
 	EventID         pgtype.UUID
@@ -559,6 +565,17 @@ type TayfaModule struct {
 	Enabled   bool
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
+}
+
+type TayfaVocabulary struct {
+	ID              pgtype.UUID
+	TayfaID         pgtype.UUID
+	Namespace       string
+	Value           string
+	ValueNormalized string
+	MergedInto      pgtype.UUID
+	CreatedBy       pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
 }
 
 type Upload struct {

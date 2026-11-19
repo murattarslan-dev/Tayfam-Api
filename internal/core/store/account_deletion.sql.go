@@ -187,6 +187,17 @@ func (q *Queries) ClearTayfaUserFields(ctx context.Context, userID pgtype.UUID) 
 	return err
 }
 
+const clearVocabularyCreator = `-- name: ClearVocabularyCreator :exec
+UPDATE tayfa_vocabulary SET created_by = NULL WHERE created_by = $1
+`
+
+// Tayfa sözlüğüne eklediği değerler tayfanın ortak verisidir; kalır, ekleyen
+// boşalır (issue #244; ADR-0037 §4).
+func (q *Queries) ClearVocabularyCreator(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearVocabularyCreator, userID)
+	return err
+}
+
 const createSystemAuditLog = `-- name: CreateSystemAuditLog :exec
 INSERT INTO audit_logs (id, tayfa_id, actor_id, action, target_type, target_id, metadata)
 VALUES ($1, $2, NULL, $3, $4, $5, $6)
