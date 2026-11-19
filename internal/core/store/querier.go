@@ -170,6 +170,9 @@ type Querier interface {
 	CopyEventComponents(ctx context.Context, arg CopyEventComponentsParams) error
 	// Seri örneği şablonun alan değerlerini alır.
 	CopyEventFieldValues(ctx context.Context, arg CopyEventFieldValuesParams) error
+	// Seri örneği şablonun hedefini alır (planın parçası); satır yoksa örnek de
+	// tanımdaki varsayılanla başlar.
+	CopyEventGoals(ctx context.Context, arg CopyEventGoalsParams) error
 	// Seri örneği şablonun rotalarını alır (bileşen seçimlerinden sonra:
 	// tetikleyici bileşenin açık olduğunu denetler).
 	CopyEventRoutes(ctx context.Context, arg CopyEventRoutesParams) error
@@ -298,6 +301,7 @@ type Querier interface {
 	DeleteBlock(ctx context.Context, arg DeleteBlockParams) (int64, error)
 	DeleteChecklistItem(ctx context.Context, arg DeleteChecklistItemParams) (int64, error)
 	DeleteEventFieldValues(ctx context.Context, eventID pgtype.UUID) error
+	DeleteEventGoal(ctx context.Context, arg DeleteEventGoalParams) (int64, error)
 	DeleteEventMeasurement(ctx context.Context, arg DeleteEventMeasurementParams) (int64, error)
 	DeleteEventMeasurementTotal(ctx context.Context, arg DeleteEventMeasurementTotalParams) (int64, error)
 	DeleteEventPhoto(ctx context.Context, arg DeleteEventPhotoParams) (int64, error)
@@ -550,6 +554,14 @@ type Querier interface {
 	// Katılım ve düzenleme aynı etkinlik satırını kilitleyerek okur; kapasite
 	// ve bekleme sırası iki eşzamanlı istekte birden aşılamaz.
 	GetEventForUpdate(ctx context.Context, arg GetEventForUpdateParams) (GetEventForUpdateRow, error)
+	// Hedef çubuğu bileşeni (`goal`; issue #246; ADR-0025 §4, §5). Etkinlik her
+	// zaman önce tayfa kapsamında yüklenir ve bileşen etkinliğin tür sürümünde
+	// çözülür (internal/core/app/component: View / Change); buradaki sorgular o
+	// etkinliğin kimliği ve bileşenin anahtarıyla çalışır (IDOR). Yetki, bağlı
+	// ölçüm ve ilerlemeyi kimin gördüğü app katmanındadır
+	// (internal/core/app/component/goal). Sayılar float8 olarak okunur ve
+	// yazılır; kolonlar numeric(13, 3)'tür.
+	GetEventGoal(ctx context.Context, arg GetEventGoalParams) (GetEventGoalRow, error)
 	GetEventMeasurement(ctx context.Context, arg GetEventMeasurementParams) (GetEventMeasurementRow, error)
 	// Ölçüm bileşeni (`measure`; issue #245; ADR-0025 §4, §5; ADR-0037 §2, §3).
 	// Etkinlik her zaman önce tayfa kapsamında yüklenir ve bileşen etkinliğin tür
@@ -1156,6 +1168,7 @@ type Querier interface {
 	SetEventComponent(ctx context.Context, arg SetEventComponentParams) error
 	SetEventCover(ctx context.Context, arg SetEventCoverParams) error
 	SetEventFieldValue(ctx context.Context, arg SetEventFieldValueParams) error
+	SetEventGoal(ctx context.Context, arg SetEventGoalParams) error
 	SetEventMeasurement(ctx context.Context, arg SetEventMeasurementParams) error
 	SetEventMeasurementTotal(ctx context.Context, arg SetEventMeasurementTotalParams) error
 	// Rota app katmanında doğrulanmış haliyle yazılır; event_routes_points
@@ -1204,6 +1217,10 @@ type Querier interface {
 	SoftDeleteDueTayfas(ctx context.Context, arg SoftDeleteDueTayfasParams) ([]pgtype.UUID, error)
 	// Tekrar gönderim ilk çıkışı korur (0 satır).
 	StartRollCallCheckin(ctx context.Context, arg StartRollCallCheckinParams) (int64, error)
+	// İlerleme: bağlı ölçümün kaydedilmiş değerleri (öneri tabloya yazılmaz).
+	// Toplam ölçümde tek satır (user_id NULL), kişisel ölçümde kişi başına satır;
+	// personal ölçümün kapsamına göre biri seçilir. Değer yoksa 0, count 0.
+	SumEventGoalProgress(ctx context.Context, arg SumEventGoalProgressParams) (SumEventGoalProgressRow, error)
 	// Hesap silindi: ad ve avatar temizlenir, satır mezar taşı olarak kalır.
 	// Tekrar uygulanınca sonuç değişmez.
 	TombstoneUserProfile(ctx context.Context, arg TombstoneUserProfileParams) error

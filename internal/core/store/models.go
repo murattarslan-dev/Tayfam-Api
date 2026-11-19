@@ -189,6 +189,14 @@ type EventFieldValue struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type EventGoal struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	Target       pgtype.Numeric
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
 type EventLogEntry struct {
 	ID                 pgtype.UUID
 	EventID            pgtype.UUID
