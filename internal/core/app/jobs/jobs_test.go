@@ -634,15 +634,14 @@ func (e *env) convoy(t *testing.T, tf id.ID, ended time.Duration) id.ID {
 	e.exec(t, `INSERT INTO events (id, tayfa_id, type, mode, title, starts_at, ends_at, meeting_point_name, meeting_lat, meeting_lng, city, district)
 	    VALUES ($1, $2, 'convoy', 'in_person', 'Konvoy', $3, $4, 'Meydan', 38.4, 27.1, 'İzmir', 'Konak')`,
 		ev.PG(), tf.PG(), e.base.Add(ended-3*time.Hour), e.base.Add(ended))
-	e.exec(t, `INSERT INTO event_convoy (event_id) VALUES ($1)`, ev.PG())
-	e.exec(t, `INSERT INTO event_convoy_vehicles (id, event_id, user_id, make, plate) VALUES ($1, $2, $3, 'Murat', '35 ABC 123')`, v.PG(), ev.PG(), id.New().PG())
+	e.exec(t, `INSERT INTO event_vehicles (id, event_id, component_key, user_id, make, plate) VALUES ($1, $2, 'vehicles', $3, 'Murat', '35 ABC 123')`, v.PG(), ev.PG(), id.New().PG())
 	return v
 }
 
 func (e *env) plate(t *testing.T, v id.ID) bool {
 	t.Helper()
 	var p pgtype.Text
-	must(t, e.pool.QueryRow(ctx, `SELECT plate FROM event_convoy_vehicles WHERE id = $1`, v.PG()).Scan(&p))
+	must(t, e.pool.QueryRow(ctx, `SELECT plate FROM event_vehicles WHERE id = $1`, v.PG()).Scan(&p))
 	return p.Valid
 }
 

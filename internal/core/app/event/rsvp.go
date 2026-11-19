@@ -76,10 +76,14 @@ func (s *Service) SetRSVP(ctx context.Context, user, tayfa, event id.ID, want st
 			return fmt.Errorf("katılım: %w", err)
 		}
 		// Someone who is no longer going leaves no vehicle (and no plate)
-		// behind on a convoy.
-		if next != RSVPGoing && ev.Type == TypeConvoy {
-			if _, err := q.DeleteUserConvoyVehicle(ctx, store.DeleteUserConvoyVehicleParams{EventID: event.PG(), UserID: user.PG()}); err != nil {
+		// and no seat request behind in the event's vehicles components
+		// (issue #240); the requests to their vehicle go with it.
+		if next != RSVPGoing {
+			if _, err := q.DeleteUserEventVehicles(ctx, store.DeleteUserEventVehiclesParams{EventID: event.PG(), UserID: user.PG()}); err != nil {
 				return fmt.Errorf("araç: %w", err)
+			}
+			if _, err := q.DeleteUserEventSeatRequests(ctx, store.DeleteUserEventSeatRequestsParams{EventID: event.PG(), UserID: user.PG()}); err != nil {
+				return fmt.Errorf("koltuk isteği: %w", err)
 			}
 		}
 		if err := audit(ctx, q, c, RSVPChanged, event, map[string]any{"status": next}); err != nil {

@@ -71,7 +71,7 @@ type fEvent struct {
 	ev       *corev1.Event
 	route    []*corev1.LatLng
 	rsvps    map[string]corev1.RsvpStatus
-	vehicles map[string]*corev1.ConvoyVehicle
+	vehicles map[string]*corev1.EventVehicle
 	items    []*corev1.CampItem
 }
 
@@ -91,7 +91,7 @@ func newFake() *fakeServices {
 }
 
 func (f *fakeServices) core() Core {
-	return Core{Tayfas: f, Memberships: f, Events: f, Routes: f, Announcements: f, QA: f, Polls: f, Discover: f, Social: f}
+	return Core{Tayfas: f, Memberships: f, Events: f, Routes: f, Vehicles: f, Announcements: f, QA: f, Polls: f, Discover: f, Social: f}
 }
 
 func fail(code codes.Code, reason string) error {
@@ -345,7 +345,7 @@ func (f *fakeServices) CreateEvent(ctx context.Context, in *corev1.CreateEventRe
 	e := &fEvent{
 		ev: &corev1.Event{Id: f.newID(), TayfaId: in.GetTayfaId(), Type: in.GetType(), Mode: in.GetMode(), StartTime: in.GetStartTime(),
 			Discoverable: in.GetDiscoverable()},
-		rsvps: map[string]corev1.RsvpStatus{}, vehicles: map[string]*corev1.ConvoyVehicle{},
+		rsvps: map[string]corev1.RsvpStatus{}, vehicles: map[string]*corev1.EventVehicle{},
 	}
 	f.events[e.ev.Id] = e
 	f.created(caller, "event", in.GetClientRequestId(), e.ev.Id)
@@ -453,19 +453,25 @@ func (f *fakeServices) AddCampItem(ctx context.Context, in *corev1.AddCampItemRe
 	return &corev1.AddCampItemResponse{Item: it}, nil
 }
 
-func (f *fakeServices) AddConvoyVehicle(ctx context.Context, in *corev1.AddConvoyVehicleRequest, _ ...grpc.CallOption) (*corev1.AddConvoyVehicleResponse, error) {
+// SetVehicle is VehiclesComponentService's: a going participant's own
+// vehicle, on a convoy.
+func (f *fakeServices) SetVehicle(ctx context.Context, in *corev1.SetVehicleRequest, _ ...grpc.CallOption) (*corev1.SetVehicleResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	caller, err := f.begin(ctx, "AddConvoyVehicle")
+	caller, err := f.begin(ctx, "SetVehicle")
 	if err != nil {
 		return nil, err
 	}
-	if _, err := f.member(in.GetTayfaId(), caller, corev1.Role_ROLE_MEMBER, true); err != nil {
+	ref := in.GetRef()
+	if _, err := f.member(ref.GetTayfaId(), caller, corev1.Role_ROLE_MEMBER, true); err != nil {
 		return nil, err
 	}
-	e, err := f.event(in.GetTayfaId(), in.GetEventId())
+	e, err := f.event(ref.GetTayfaId(), ref.GetEventId())
 	if err != nil {
 		return nil, err
+	}
+	if e.ev.Type != corev1.EventType_EVENT_TYPE_CONVOY || ref.GetComponentKey() != "vehicles" {
+		return nil, fail(codes.NotFound, "ERROR_REASON_COMPONENT_NOT_FOUND")
 	}
 	if e.rsvps[caller] != corev1.RsvpStatus_RSVP_STATUS_GOING {
 		return nil, fail(codes.FailedPrecondition, "ERROR_REASON_EVENT_NOT_GOING")
@@ -473,9 +479,12 @@ func (f *fakeServices) AddConvoyVehicle(ctx context.Context, in *corev1.AddConvo
 	if in.GetPlate() != "" {
 		f.plates++
 	}
-	v := &corev1.ConvoyVehicle{Id: f.newID(), UserId: caller, Make: in.GetMake(), Model: in.GetModel(), ModelYear: in.GetModelYear(), Color: in.GetColor()}
+	v := &corev1.EventVehicle{Id: f.newID(), UserId: caller, Make: in.GetMake(), Model: in.GetModel(), ModelYear: in.GetModelYear(), Color: in.GetColor()}
+	if old, ok := e.vehicles[caller]; ok {
+		v.Id = old.GetId()
+	}
 	e.vehicles[caller] = v
-	return &corev1.AddConvoyVehicleResponse{Vehicle: v}, nil
+	return &corev1.SetVehicleResponse{Vehicles: &corev1.EventVehicles{Vehicles: []*corev1.EventVehicle{v}}}, nil
 }
 
 // AnnouncementService

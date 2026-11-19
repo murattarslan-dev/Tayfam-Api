@@ -54,6 +54,9 @@ const (
 	// Issue #210, ADR-0033 §13: one's feedback answers and the safety
 	// contacts one chose; being someone else's contact is their data.
 	SectionDiscover = "discover"
+	// Issue #240: one's requests for a seat in someone else's vehicle.
+	// One's own vehicles are SectionConvoyVehicles (the name is from Faz 1).
+	SectionVehicleSeatRequests = "vehicle_seat_requests"
 )
 
 const (
@@ -182,6 +185,10 @@ var sections = []struct {
 	{SectionDiscover, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportDiscover(ctx, store.ExportDiscoverParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportDiscoverRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionVehicleSeatRequests, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportVehicleSeatRequests(ctx, store.ExportVehicleSeatRequestsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportVehicleSeatRequestsRow) row { return row{x.K, x.Data} })
 	}},
 }
 

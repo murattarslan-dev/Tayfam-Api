@@ -28,8 +28,6 @@ type EventClient interface {
 	AddCampItem(ctx context.Context, in *corev1.AddCampItemRequest, opts ...grpc.CallOption) (*corev1.AddCampItemResponse, error)
 	RemoveCampItem(ctx context.Context, in *corev1.RemoveCampItemRequest, opts ...grpc.CallOption) (*corev1.RemoveCampItemResponse, error)
 	AssignCampItem(ctx context.Context, in *corev1.AssignCampItemRequest, opts ...grpc.CallOption) (*corev1.AssignCampItemResponse, error)
-	AddConvoyVehicle(ctx context.Context, in *corev1.AddConvoyVehicleRequest, opts ...grpc.CallOption) (*corev1.AddConvoyVehicleResponse, error)
-	RemoveConvoyVehicle(ctx context.Context, in *corev1.RemoveConvoyVehicleRequest, opts ...grpc.CallOption) (*corev1.RemoveConvoyVehicleResponse, error)
 	CheckIn(ctx context.Context, in *corev1.CheckInRequest, opts ...grpc.CallOption) (*corev1.CheckInResponse, error)
 	StartHike(ctx context.Context, in *corev1.StartHikeRequest, opts ...grpc.CallOption) (*corev1.StartHikeResponse, error)
 	FinishHike(ctx context.Context, in *corev1.FinishHikeRequest, opts ...grpc.CallOption) (*corev1.FinishHikeResponse, error)
@@ -57,9 +55,6 @@ const (
 	cancelReasonMax  = 500
 	campItemNameMax  = 60
 	campQuantityMax  = 999
-	vehicleMakeMax   = 40
-	vehicleColorMax  = 30
-	vehiclePlateMax  = 16
 	catchSpeciesMax  = 60
 	catchLengthMaxCm = 1000
 	// photoCaptionMax: album photo caption (core trims and checks again).
@@ -88,8 +83,6 @@ func registerEvents(mux *http.ServeMux, h coreHandlers) {
 	mux.HandleFunc("POST "+one+"/camp-items", a(h.addCampItem))
 	mux.HandleFunc("DELETE "+one+"/camp-items/{item_id}", a(h.removeCampItem))
 	mux.HandleFunc("PATCH "+one+"/camp-items/{item_id}", a(h.assignCampItem))
-	mux.HandleFunc("POST "+one+"/convoy-vehicles", a(h.addConvoyVehicle))
-	mux.HandleFunc("DELETE "+one+"/convoy-vehicles/{vehicle_id}", a(h.removeConvoyVehicle))
 	mux.HandleFunc("GET "+one+"/fishing-catches", a(h.listFishingCatches))
 	mux.HandleFunc("POST "+one+"/fishing-catches", a(h.addFishingCatch))
 	mux.HandleFunc("DELETE "+one+"/fishing-catches/{catch_id}", a(h.removeFishingCatch))
@@ -134,7 +127,7 @@ type campInput struct {
 }
 
 // eventDetailsInput is the type details of a create or update body: at most
-// one is set. Output-only fields (vehicles, camp items) are unknown fields
+// one is set. Output-only fields (camp items) are unknown fields
 // here and fail decoding.
 type eventDetailsInput struct {
 	Camp    *campInput   `json:"camp"`
@@ -740,7 +733,7 @@ func (h coreHandlers) finishHike(ctx context.Context, w http.ResponseWriter, r *
 	writeJSON(w, http.StatusOK, hikeCheckinFrom(resp.GetCheckin()))
 }
 
-// --- Camp items and convoy vehicles ---
+// --- Camp items ---
 
 type campItemBody struct {
 	Name           string `json:"name"`
@@ -821,50 +814,6 @@ func (h coreHandlers) removeCampItem(ctx context.Context, w http.ResponseWriter,
 		return
 	}
 	if _, err := h.d.Events.RemoveCampItem(ctx, &corev1.RemoveCampItemRequest{TayfaId: ids[0], EventId: ids[1], ItemId: ids[2]}); err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-type convoyVehicleBody struct {
-	Make      string `json:"make"`
-	Model     string `json:"model"`
-	ModelYear int32  `json:"model_year"`
-	Color     string `json:"color"`
-	Plate     string `json:"plate"`
-}
-
-func (h coreHandlers) addConvoyVehicle(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	id, eid, ok := pathTayfaEvent(w, r)
-	if !ok {
-		return
-	}
-	var b convoyVehicleBody
-	if !decode(w, r, &b) {
-		return
-	}
-	if n := runes(b.Make); n < 1 || n > vehicleMakeMax || runes(b.Model) > vehicleMakeMax ||
-		runes(b.Color) > vehicleColorMax || utf8.RuneCountInString(b.Plate) > vehiclePlateMax {
-		badRequest(w, r)
-		return
-	}
-	resp, err := h.d.Events.AddConvoyVehicle(ctx, &corev1.AddConvoyVehicleRequest{
-		TayfaId: id, EventId: eid, Make: b.Make, Model: b.Model, ModelYear: b.ModelYear, Color: b.Color, Plate: b.Plate,
-	})
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, convoyVehicleFrom(resp.GetVehicle()))
-}
-
-func (h coreHandlers) removeConvoyVehicle(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	ids, ok := pathIDs(w, r, "tayfa_id", "event_id", "vehicle_id")
-	if !ok {
-		return
-	}
-	if _, err := h.d.Events.RemoveConvoyVehicle(ctx, &corev1.RemoveConvoyVehicleRequest{TayfaId: ids[0], EventId: ids[1], VehicleId: ids[2]}); err != nil {
 		h.fail(w, r, err)
 		return
 	}

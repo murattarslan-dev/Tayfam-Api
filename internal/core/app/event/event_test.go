@@ -170,7 +170,6 @@ func TestCreateAndGet(t *testing.T) {
 	in.Title = "  Ege turu  "
 	in.Description = "Satır 1\nSatır 2"
 	in.Capacity = 10
-	in.Details = Details{Convoy: &Convoy{}}
 	v := e.create(t, tf, admin, in)
 
 	if v.Title != "Ege turu" || v.Type != TypeConvoy || v.Status != StatusScheduled || v.Capacity != 10 ||
@@ -178,7 +177,9 @@ func TestCreateAndGet(t *testing.T) {
 		v.City != "İzmir" || v.District != "Konak" || v.OnlineURL != "" {
 		t.Fatalf("etkinlik = %+v", v)
 	}
-	if v.Details.Convoy == nil || v.Details.Camp != nil {
+	// A convoy has no type details: its route and vehicles are components
+	// (issues #239, #240).
+	if v.Details != (Details{}) {
 		t.Fatalf("detay = %+v", v.Details)
 	}
 
@@ -291,6 +292,7 @@ func TestCreateValidation(t *testing.T) {
 			i.Fields = values("game", `"x"`, "platform", `"pc"`)
 			i.Details.Camp = &Camp{}
 		}, "details"},
+		{"konvoyda detay", func(i *Input) { i.Type = TypeConvoy; i.Details.Camp = &Camp{} }, "details"},
 		{"türde olmayan alan", func(i *Input) { i.Fields = values("stake", `100`) }, "fields"},
 		{"zorluk 6", func(i *Input) { i.Type = TypeHike; i.Details.Hike = &Hike{Difficulty: 6} }, "difficulty"},
 		{"başlangıçtan önce dönüş", func(i *Input) {
@@ -650,8 +652,6 @@ func (e *env) callAll(user, tf, ev id.ID) map[string]error {
 	_, out["AddCampItem"] = e.svc.AddCampItem(ctx, user, tf, ev, "Çadır", 1, id.ID{})
 	out["RemoveCampItem"] = e.svc.RemoveCampItem(ctx, user, tf, ev, id.New())
 	_, out["AssignCampItem"] = e.svc.AssignCampItem(ctx, user, tf, ev, id.New(), id.ID{})
-	_, out["SetVehicle"] = e.svc.SetVehicle(ctx, user, tf, ev, VehicleInput{Make: "Ford"})
-	out["RemoveVehicle"] = e.svc.RemoveVehicle(ctx, user, tf, ev, id.New())
 	_, out["CheckIn"] = e.svc.CheckIn(ctx, user, tf, ev, izmir)
 	_, out["StartHike"] = e.svc.StartHike(ctx, user, tf, ev, time.Time{})
 	_, out["FinishHike"] = e.svc.FinishHike(ctx, user, tf, ev, time.Time{})
@@ -722,111 +722,6 @@ func TestReadOnlyTayfa(t *testing.T) {
 			wantErr(t, name, err, apperr.ErrTayfaReadOnly)
 		}
 	}
-}
-
-func TestConvoyVehiclesAndPlates(t *testing.T) {
-	e := setup(t)
-	tf, admin := e.newTayfa(t)
-	e.allowMembers(t, tf, admin)
-	org := e.seed(t, tf, authz.Member)
-	driver := e.seed(t, tf, authz.Member)
-	rider := e.seed(t, tf, authz.Member)
-	outsider := e.seed(t, tf, authz.Member)
-	in := input()
-	in.Type = TypeConvoy
-	ev := e.create(t, tf, org, in)
-
-	_, err := e.svc.SetVehicle(ctx, driver, tf, ev.ID, VehicleInput{Make: "Ford", Plate: "35 ABC 123"})
-	wantErr(t, "katılmadan araç", err, apperr.ErrEventNotGoing)
-	for _, u := range []id.ID{driver, rider} {
-		_, err := e.svc.SetRSVP(ctx, u, tf, ev.ID, RSVPGoing)
-		must(t, err)
-	}
-	for _, tc := range []struct {
-		in    VehicleInput
-		field string
-	}{
-		{VehicleInput{}, "make"},
-		{VehicleInput{Make: "Ford", ModelYear: 1899}, "model_year"},
-		{VehicleInput{Make: "Ford", ModelYear: int32(time.Now().Year() + 2)}, "model_year"},
-		{VehicleInput{Make: "Ford", Plate: "35-ABC-123"}, "plate"},
-		{VehicleInput{Make: "Ford", Plate: "35 ŞĞÜ 12"}, "plate"},
-		{VehicleInput{Make: "Ford", Plate: "1234567890ABCDEFG"}, "plate"},
-	} {
-		_, err := e.svc.SetVehicle(ctx, driver, tf, ev.ID, tc.in)
-		wantField(t, fmt.Sprintf("%+v", tc.in), err, tc.field)
-	}
-	veh, err := e.svc.SetVehicle(ctx, driver, tf, ev.ID, VehicleInput{Make: "Ford", Model: "Mustang", ModelYear: 1967, Color: "Kırmızı", Plate: " 35  abc 123 "})
-	must(t, err)
-	if veh.Plate != "35 ABC 123" {
-		t.Fatalf("plaka = %q", veh.Plate)
-	}
-	// Setting again replaces the caller's vehicle.
-	veh2, err := e.svc.SetVehicle(ctx, driver, tf, ev.ID, VehicleInput{Make: "Ford", Model: "Mustang", ModelYear: 1967, Plate: "35 ABC 123"})
-	must(t, err)
-	if veh2.ID != veh.ID || e.count(t, `SELECT count(*) FROM event_convoy_vehicles`) != 1 {
-		t.Fatal("ikinci araç eklendi")
-	}
-
-	plate := func(u id.ID) string {
-		t.Helper()
-		v, err := e.svc.Get(ctx, u, tf, ev.ID)
-		must(t, err)
-		if len(v.Details.Convoy.Vehicles) != 1 {
-			t.Fatalf("araçlar = %+v", v.Details.Convoy.Vehicles)
-		}
-		return v.Details.Convoy.Vehicles[0].Plate
-	}
-	for name, tc := range map[string]struct {
-		u    id.ID
-		want string
-	}{
-		"sürücü":      {driver, "35 ABC 123"},
-		"katılımcı":   {rider, "35 ABC 123"},
-		"organizatör": {org, "35 ABC 123"},
-		"katılmayan":  {outsider, ""},
-		// Admins see the vehicle but not the plate unless they take part.
-		"yönetici": {admin, ""},
-	} {
-		if got := plate(tc.u); got != tc.want {
-			t.Errorf("%s: plaka %q, %q bekleniyordu", name, got, tc.want)
-		}
-	}
-	_, err = e.svc.SetRSVP(ctx, outsider, tf, ev.ID, RSVPMaybe)
-	must(t, err)
-	if plate(outsider) != "" {
-		t.Error("belki diyen plakayı gördü")
-	}
-
-	// The plate never reaches audit records or events.
-	var all string
-	must(t, e.pool.QueryRow(ctx, `SELECT coalesce(string_agg(metadata::text, ' '), '') FROM audit_logs`).Scan(&all))
-	var events string
-	must(t, e.pool.QueryRow(ctx, `SELECT coalesce(string_agg(payload::text, ' '), '') FROM domain_events`).Scan(&events))
-	if strings.Contains(all+events, "ABC") || strings.Contains(all+events, "Mustang") {
-		t.Fatal("araç bilgisi kayda girdi")
-	}
-
-	// Removing: not someone else's (unless managing), always one's own.
-	err = e.svc.RemoveVehicle(ctx, rider, tf, ev.ID, veh.ID)
-	wantErr(t, "başkasının aracı", err, apperr.ErrPermissionDenied)
-	err = e.svc.RemoveVehicle(ctx, rider, tf, ev.ID, id.New())
-	wantErr(t, "olmayan araç", err, apperr.ErrEventItemNotFound)
-	must(t, e.svc.RemoveVehicle(ctx, org, tf, ev.ID, veh.ID))
-	_, err = e.svc.SetVehicle(ctx, driver, tf, ev.ID, VehicleInput{Make: "Ford", Plate: "35 ABC 123"})
-	must(t, err)
-
-	// Leaving the convoy takes the vehicle (and plate) with it.
-	_, err = e.svc.SetRSVP(ctx, driver, tf, ev.ID, RSVPNotGoing)
-	must(t, err)
-	if n := e.count(t, `SELECT count(*) FROM event_convoy_vehicles`); n != 0 {
-		t.Fatalf("ayrılan sürücünün aracı kaldı: %d", n)
-	}
-
-	// Vehicles are convoy-only.
-	other := e.create(t, tf, org, input())
-	_, err = e.svc.SetVehicle(ctx, driver, tf, other.ID, VehicleInput{Make: "Ford"})
-	wantErr(t, "genel etkinliğe araç", err, apperr.ErrEventTypeMismatch)
 }
 
 func TestCampItems(t *testing.T) {

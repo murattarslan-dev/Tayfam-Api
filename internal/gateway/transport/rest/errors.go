@@ -145,6 +145,10 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_COMPONENT_DISABLED":  {http.StatusConflict, "component-disabled"},
 		"ERROR_REASON_COMPONENT_LOCKED":    {http.StatusConflict, "component-locked"},
 		"ERROR_REASON_COMPONENT_FROZEN":    {http.StatusConflict, "component-frozen"},
+		// Vehicles component (issue #240; ADR-0037 §3).
+		"ERROR_REASON_VEHICLE_FULL":        {http.StatusConflict, "vehicle-full"},
+		"ERROR_REASON_VEHICLE_SEATS_TAKEN": {http.StatusConflict, "vehicle-seats-taken"},
+		"ERROR_REASON_SEAT_REQUEST_DRIVER": {http.StatusConflict, "seat-request-driver"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

@@ -48,9 +48,6 @@ func testEvent() *corev1.Event {
 		CreateTime: timestamppb.New(t0), UpdateTime: timestamppb.New(t0),
 		GoingCount: 3, MaybeCount: 1, CallerRsvp: corev1.RsvpStatus_RSVP_STATUS_GOING, CallerCanManage: true,
 		SeriesId: seriesID,
-		Details: &corev1.Event_Convoy{Convoy: &corev1.ConvoyDetails{
-			Vehicles: []*corev1.ConvoyVehicle{{Id: vehicleID, UserId: userID, Make: "Ford", ModelYear: 1967, Plate: "34 ABC 12"}},
-		}},
 	}
 }
 
@@ -111,12 +108,6 @@ func (f *fakeCore) RemoveCampItem(ctx context.Context, in *corev1.RemoveCampItem
 }
 func (f *fakeCore) AssignCampItem(ctx context.Context, in *corev1.AssignCampItemRequest, _ ...grpc.CallOption) (*corev1.AssignCampItemResponse, error) {
 	return &corev1.AssignCampItemResponse{Item: &corev1.CampItem{Id: in.GetItemId(), Name: "Çadır", Quantity: 1, AssignedUserId: in.GetAssignedUserId()}}, f.record(ctx, in)
-}
-func (f *fakeCore) AddConvoyVehicle(ctx context.Context, in *corev1.AddConvoyVehicleRequest, _ ...grpc.CallOption) (*corev1.AddConvoyVehicleResponse, error) {
-	return &corev1.AddConvoyVehicleResponse{Vehicle: &corev1.ConvoyVehicle{Id: vehicleID, UserId: userID, Make: in.GetMake()}}, f.record(ctx, in)
-}
-func (f *fakeCore) RemoveConvoyVehicle(ctx context.Context, in *corev1.RemoveConvoyVehicleRequest, _ ...grpc.CallOption) (*corev1.RemoveConvoyVehicleResponse, error) {
-	return &corev1.RemoveConvoyVehicleResponse{}, f.record(ctx, in)
 }
 func (f *fakeCore) CheckIn(ctx context.Context, in *corev1.CheckInRequest, _ ...grpc.CallOption) (*corev1.CheckInResponse, error) {
 	return &corev1.CheckInResponse{Attendance: corev1.AttendanceStatus_ATTENDANCE_STATUS_ATTENDED, Method: corev1.AttendanceMethod_ATTENDANCE_METHOD_LOCATION}, f.record(ctx, in)
@@ -201,9 +192,6 @@ func TestEventRoutes(t *testing.T) {
 		{"PATCH", one + "/camp-items/" + itemID, `{"assigned_user_id":"` + userID + `"}`, 200, &corev1.AssignCampItemRequest{TayfaId: tayfaID, EventId: eventID, ItemId: itemID, AssignedUserId: userID}},
 		{"PATCH", one + "/camp-items/" + itemID, `{"assigned_user_id":null}`, 200, &corev1.AssignCampItemRequest{TayfaId: tayfaID, EventId: eventID, ItemId: itemID}},
 		{"PATCH", one + "/camp-items/" + itemID, `{}`, 200, &corev1.AssignCampItemRequest{TayfaId: tayfaID, EventId: eventID, ItemId: itemID}},
-		{"POST", one + "/convoy-vehicles", `{"make":"Ford","model":"Mustang","model_year":1967,"color":"Kırmızı","plate":"34 ABC 12"}`, 201,
-			&corev1.AddConvoyVehicleRequest{TayfaId: tayfaID, EventId: eventID, Make: "Ford", Model: "Mustang", ModelYear: 1967, Color: "Kırmızı", Plate: "34 ABC 12"}},
-		{"DELETE", one + "/convoy-vehicles/" + vehicleID, "", 204, &corev1.RemoveConvoyVehicleRequest{TayfaId: tayfaID, EventId: eventID, VehicleId: vehicleID}},
 		{"GET", one + "/fishing-catches?page_token=P", "", 200, &corev1.ListFishingCatchesRequest{TayfaId: tayfaID, EventId: eventID, PageToken: "P"}},
 		{"POST", one + "/fishing-catches", `{"species":"Levrek","length_cm":42.5,"location":{"lat":41,"lng":29},"visibility":"tayfa","client_request_id":"` + reqID + `"}`, 201,
 			&corev1.AddFishingCatchRequest{TayfaId: tayfaID, EventId: eventID, Species: "Levrek", LengthCm: 42.5, Location: &corev1.LatLng{Lat: 41, Lng: 29}, Visibility: corev1.CatchVisibility_CATCH_VISIBILITY_TAYFA, ClientRequestId: reqID}},
@@ -240,10 +228,12 @@ func TestEventResponses(t *testing.T) {
 		e.MeetingPoint == nil || e.MeetingPoint.Lat != 41.5 || e.GoingCount != 3 {
 		t.Fatalf("etkinlik: %+v", e)
 	}
-	if e.Convoy == nil || len(e.Convoy.Vehicles) != 1 || e.Convoy.Vehicles[0].Plate != "34 ABC 12" || e.Camp != nil {
-		t.Fatalf("konvoy: %+v", e.Convoy)
+	// A convoy has no details: its route and vehicles are components
+	// (#239, #240).
+	if e.Camp != nil || e.Hike != nil || e.Fishing != nil {
+		t.Fatalf("ayrıntı: %s", w.Body)
 	}
-	for _, absent := range []string{"caller_attendance", "cancelled_at", "cancel_reason", "online_url", `"camp"`} {
+	for _, absent := range []string{"caller_attendance", "cancelled_at", "cancel_reason", "online_url", `"camp"`, `"convoy":`, "vehicles"} {
 		if strings.Contains(w.Body.String(), absent) {
 			t.Errorf("boş alan yazıldı: %s", absent)
 		}
@@ -252,7 +242,7 @@ func TestEventResponses(t *testing.T) {
 	w = as(h, "GET", "/v1/tayfas/"+tayfaID+"/events", "")
 	l := decodeBody[eventListJSON](t, w)
 	if len(l.Events) != 2 || l.NextPageToken != "SONRAKI" || l.Events[1].Mode != "online" || l.Events[1].OnlineURL == "" ||
-		l.Events[1].MeetingPoint != nil || l.Events[1].CallerRSVP != "" || l.Events[1].CreatedByUserID != "" || l.Events[1].Convoy != nil {
+		l.Events[1].MeetingPoint != nil || l.Events[1].CallerRSVP != "" || l.Events[1].CreatedByUserID != "" || l.Events[1].Camp != nil {
 		t.Fatalf("liste: %+v", l)
 	}
 
@@ -401,7 +391,8 @@ func TestEventBadRequests(t *testing.T) {
 		"eski oyun ayrıntısı":   {"POST", base, strings.Replace(create(`,"gaming":{"game":"x","platform":"pc"}`), "general", "gaming", 1)},
 		"eski spor ayrıntısı":   {"POST", base, strings.Replace(create(`,"sports":{"sport":"football"}`), "general", "sports", 1)},
 		"bilinmeyen görünürlük": {"POST", base, strings.Replace(create(`,"fishing":{"spot_visibility":"herkes"}`), "general", "fishing", 1)},
-		// The convoy object is gone too: the route is a component (#239).
+		// The convoy object is gone too: the route and the vehicles are
+		// components (#239, #240).
 		"eski konvoy rotası":    {"POST", base, strings.Replace(create(`,"convoy":{"route":[{"lat":0,"lng":0},{"lat":1,"lng":0}]}`), "general", "convoy", 1)},
 		"eski konvoy ayrıntısı": {"POST", base, strings.Replace(create(`,"convoy":{}`), "general", "convoy", 1)},
 		"boş kural":             {"POST", base, create(`,"recurrence":{"rrule":""}`)},
@@ -432,9 +423,6 @@ func TestEventBadRequests(t *testing.T) {
 		"atamada bozuk kişi":    {"PATCH", one + "/camp-items/" + itemID, `{"assigned_user_id":"x"}`},
 		"atamada sayı":          {"PATCH", one + "/camp-items/" + itemID, `{"assigned_user_id":5}`},
 		"atamada bozuk id":      {"PATCH", one + "/camp-items/x", `{"assigned_user_id":null}`},
-		"marka yok":             {"POST", one + "/convoy-vehicles", `{"make":" "}`},
-		"uzun plaka":            {"POST", one + "/convoy-vehicles", `{"make":"Ford","plate":"` + strings.Repeat("A", 17) + `"}`},
-		"bozuk araç id":         {"DELETE", one + "/convoy-vehicles/x", ""},
 		"av türü yok":           {"POST", one + "/fishing-catches", `{"species":"","length_cm":10,"client_request_id":"` + reqID + `"}`},
 		"av boyu sıfır":         {"POST", one + "/fishing-catches", `{"species":"Levrek","length_cm":0,"client_request_id":"` + reqID + `"}`},
 		"av boyu fazla":         {"POST", one + "/fishing-catches", `{"species":"Levrek","length_cm":1000.5,"client_request_id":"` + reqID + `"}`},
@@ -514,7 +502,6 @@ func TestEventWritesNeedClientHeader(t *testing.T) {
 		{"PUT", one + "/rsvp"}, {"PUT", one + "/attendees/" + userID + "/attendance"}, {"DELETE", one + "/attendees/" + userID + "/attendance"},
 		{"POST", one + "/check-in"}, {"POST", one + "/hike-start"}, {"POST", one + "/hike-return"},
 		{"POST", one + "/camp-items"}, {"DELETE", one + "/camp-items/" + itemID}, {"PATCH", one + "/camp-items/" + itemID},
-		{"POST", one + "/convoy-vehicles"}, {"DELETE", one + "/convoy-vehicles/" + vehicleID},
 		{"POST", one + "/fishing-catches"}, {"DELETE", one + "/fishing-catches/" + catchID},
 		{"POST", "/v1/tayfas/" + tayfaID + "/event-series/" + seriesID + "/ending"},
 	} {

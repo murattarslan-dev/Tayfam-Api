@@ -56,7 +56,8 @@ adları içeriktir ve yer alır.
 | `core/memberships.json` | `tayfa_id`, `tayfa_name`, `role`, `status`, `joined_via`, `joined_at`, `muted_until`, `created_at` |
 | `core/event_rsvps.json` | `event_id`, `tayfa_id`, `event_title`, `status`, `attendance`, `attendance_method`, `checked_in_at`, `created_at`, `updated_at` |
 | `core/hike_checkins.json` | `event_id`, `started_at`, `returned_at`, `created_at` |
-| `core/convoy_vehicles.json` | `event_id`, `make`, `model`, `model_year`, `color`, `plate`, `created_at` |
+| `core/convoy_vehicles.json` | Etkinliklere yazdığınız araçlar (`vehicles` bileşeni; dosya adı Faz 1'den kalmadır, bütün etkinlik türlerinin araçlarını taşır): `event_id`, `component_key`, `make`, `model`, `model_year`, `color`, `plate`, `seats`, `created_at`, `updated_at` |
+| `core/vehicle_seat_requests.json` | Başkasının aracına yazdığınız koltuk istekleri: `event_id`, `component_key`, `vehicle_id`, `status` (`pending`, `approved`), `created_at`, `decided_at`. Aracın sahibi ve plakası dışa aktarılmaz |
 | `core/activity_records.json` | `id`, `event_id`, `tayfa_id`, `event_type`, `mode`, `event_title`, `city`, `district`, `started_at`, `duration_minutes`, `attendance_method` |
 | `core/announcements.json` | `id`, `tayfa_id`, `title`, `body`, `pinned`, `created_at`, `updated_at`, `deleted_at` |
 | `core/events.json` | `id`, `tayfa_id`, `type`, `mode`, `title`, `description`, `starts_at`, `ends_at`, `meeting_point_name`, `meeting_lat`, `meeting_lng`, `city`, `district`, `online_url`, `capacity`, `status`, `cancelled_at`, `cancel_reason`, `created_at`, `updated_at`, `deleted_at` |

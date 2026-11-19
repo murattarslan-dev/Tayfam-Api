@@ -94,6 +94,17 @@ var (
 	ErrComponentFrozen = errors.New("bileşen verisi donmuş")
 )
 
+// Vehicles component errors (issue #240; ADR-0037 §3).
+var (
+	// ErrVehicleFull: the vehicle has no free seat (or offers none).
+	ErrVehicleFull = errors.New("araçta boş koltuk yok")
+	// ErrVehicleSeatsTaken: fewer seats than the riders already approved.
+	ErrVehicleSeatsTaken = errors.New("koltuk sayısı onaylanan yolculardan az")
+	// ErrSeatRequestDriver: someone with a vehicle of their own in the
+	// component asked for a seat.
+	ErrSeatRequestDriver = errors.New("aracı olan koltuk isteyemez")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (

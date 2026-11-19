@@ -81,28 +81,6 @@ func latLngFrom(p *corev1.LatLng) *latLngJSON {
 
 // --- Type details (output) ---
 
-type convoyVehicleJSON struct {
-	ID        string `json:"id"`
-	UserID    string `json:"user_id"`
-	Make      string `json:"make"`
-	Model     string `json:"model,omitempty"`
-	ModelYear int32  `json:"model_year,omitempty"`
-	Color     string `json:"color,omitempty"`
-	// Only core decides who gets it (participants and the organizer).
-	Plate string `json:"plate,omitempty"`
-}
-
-func convoyVehicleFrom(v *corev1.ConvoyVehicle) convoyVehicleJSON {
-	return convoyVehicleJSON{
-		ID: v.GetId(), UserID: v.GetUserId(), Make: v.GetMake(), Model: v.GetModel(),
-		ModelYear: v.GetModelYear(), Color: v.GetColor(), Plate: v.GetPlate(),
-	}
-}
-
-type convoyJSON struct {
-	Vehicles []convoyVehicleJSON `json:"vehicles"`
-}
-
 type campItemJSON struct {
 	ID             string `json:"id"`
 	Name           string `json:"name"`
@@ -173,7 +151,6 @@ type eventJSON struct {
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 
-	Convoy  *convoyJSON  `json:"convoy,omitempty"`
 	Camp    *campJSON    `json:"camp,omitempty"`
 	Hike    *hikeJSON    `json:"hike,omitempty"`
 	Fishing *fishingJSON `json:"fishing,omitempty"`
@@ -225,12 +202,6 @@ func eventFrom(e *corev1.Event) eventJSON {
 		CreatedAt: e.GetCreateTime().AsTime(), UpdatedAt: e.GetUpdateTime().AsTime(),
 	}
 	switch d := e.GetDetails().(type) {
-	case *corev1.Event_Convoy:
-		c := &convoyJSON{Vehicles: make([]convoyVehicleJSON, 0, len(d.Convoy.GetVehicles()))}
-		for _, v := range d.Convoy.GetVehicles() {
-			c.Vehicles = append(c.Vehicles, convoyVehicleFrom(v))
-		}
-		out.Convoy = c
 	case *corev1.Event_Camp:
 		c := &campJSON{SiteName: d.Camp.GetSiteName(), HasWater: d.Camp.HasWater, HasToilet: d.Camp.HasToilet, Notes: d.Camp.GetNotes(), Items: make([]campItemJSON, 0, len(d.Camp.GetItems()))}
 		for _, i := range d.Camp.GetItems() {

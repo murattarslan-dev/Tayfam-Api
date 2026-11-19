@@ -198,6 +198,12 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_COMPONENT_LOCKED, true
 	case errors.Is(err, apperr.ErrComponentFrozen):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_COMPONENT_FROZEN, true
+	case errors.Is(err, apperr.ErrVehicleFull):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VEHICLE_FULL, true
+	case errors.Is(err, apperr.ErrVehicleSeatsTaken):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VEHICLE_SEATS_TAKEN, true
+	case errors.Is(err, apperr.ErrSeatRequestDriver):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SEAT_REQUEST_DRIVER, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

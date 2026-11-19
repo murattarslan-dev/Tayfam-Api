@@ -33,12 +33,17 @@ type EventAPI interface {
 	GetEvent(ctx context.Context, in *corev1.GetEventRequest, opts ...grpc.CallOption) (*corev1.GetEventResponse, error)
 	SetRsvp(ctx context.Context, in *corev1.SetRsvpRequest, opts ...grpc.CallOption) (*corev1.SetRsvpResponse, error)
 	AddCampItem(ctx context.Context, in *corev1.AddCampItemRequest, opts ...grpc.CallOption) (*corev1.AddCampItemResponse, error)
-	AddConvoyVehicle(ctx context.Context, in *corev1.AddConvoyVehicleRequest, opts ...grpc.CallOption) (*corev1.AddConvoyVehicleResponse, error)
 }
 
 // RouteAPI: the route of an event is the route component's (issue #239).
 type RouteAPI interface {
 	SetRoute(ctx context.Context, in *corev1.SetRouteRequest, opts ...grpc.CallOption) (*corev1.SetRouteResponse, error)
+}
+
+// VehicleAPI: the vehicles of an event are the vehicles component's (issue
+// #240).
+type VehicleAPI interface {
+	SetVehicle(ctx context.Context, in *corev1.SetVehicleRequest, opts ...grpc.CallOption) (*corev1.SetVehicleResponse, error)
 }
 
 type AnnouncementAPI interface {
@@ -84,6 +89,7 @@ type Core struct {
 	Memberships   MembershipAPI
 	Events        EventAPI
 	Routes        RouteAPI
+	Vehicles      VehicleAPI
 	Announcements AnnouncementAPI
 	QA            QAAPI
 	Polls         PollAPI
@@ -92,7 +98,7 @@ type Core struct {
 }
 
 func (c Core) complete() bool {
-	return c.Tayfas != nil && c.Memberships != nil && c.Events != nil && c.Routes != nil &&
+	return c.Tayfas != nil && c.Memberships != nil && c.Events != nil && c.Routes != nil && c.Vehicles != nil &&
 		c.Announcements != nil && c.QA != nil && c.Polls != nil &&
 		c.Discover != nil && c.Social != nil
 }
@@ -104,6 +110,7 @@ func NewCore(conn grpc.ClientConnInterface) Core {
 		Memberships:   corev1.NewMembershipServiceClient(conn),
 		Events:        corev1.NewEventServiceClient(conn),
 		Routes:        corev1.NewRouteComponentServiceClient(conn),
+		Vehicles:      corev1.NewVehiclesComponentServiceClient(conn),
 		Announcements: corev1.NewAnnouncementServiceClient(conn),
 		QA:            corev1.NewQAServiceClient(conn),
 		Polls:         corev1.NewPollServiceClient(conn),

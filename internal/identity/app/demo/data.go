@@ -74,7 +74,7 @@ type eventSpec struct {
 	// Faz 1 detail message (gaming, sports).
 	Fields    map[string]string
 	RSVPs     []rsvpSpec
-	Vehicles  []vehicleSpec  // convoy: members who answered GOING
+	Vehicles  []vehicleSpec  // a type with the vehicles component (the convoy): members who answered GOING
 	CampItems []campItemSpec // camp: added by the founder
 }
 

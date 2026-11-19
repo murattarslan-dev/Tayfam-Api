@@ -24,6 +24,7 @@ func componentRegistrars() []componentRegistrar {
 		registerRouteComponent,
 
 		// vehicles (#240)
+		registerVehiclesComponent,
 
 		// checklist (#241)
 
