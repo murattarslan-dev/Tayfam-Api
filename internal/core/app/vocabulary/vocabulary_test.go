@@ -30,13 +30,13 @@ import (
 var ctx = context.Background()
 
 func TestNormalizeAndClean(t *testing.T) {
-	for in, want := range map[string]string{
-		"  KIRLANGIÇ   Balığı ": "kırlangıç balığı",
-		"İstavrit":              "istavrit",
-		"Levrek\tbalığı":        "levrek balığı",
+	for _, tc := range []struct{ in, want string }{
+		{"  KIRLANGIÇ   Balığı ", "kırlangıç balığı"},
+		{"İstavrit", "istavrit"},
+		{"Levrek\tbalığı", "levrek balığı"},
 	} {
-		if got := vocabulary.Normalize(in); got != want {
-			t.Errorf("Normalize(%q) = %q, %q bekleniyordu", in, got, want)
+		if got := vocabulary.Normalize(tc.in); got != tc.want {
+			t.Errorf("Normalize(%q) = %q, %q bekleniyordu", tc.in, got, tc.want)
 		}
 	}
 	if got, ok := vocabulary.Clean("  Ev   kırlangıcı ", 60); !ok || got != "Ev kırlangıcı" {
@@ -250,8 +250,9 @@ func TestVocabulary(t *testing.T) {
 	_, err = e.voc.Merge(ctx, member, tf, ns, lavrak, levrek)
 	wantErr(t, "üye", err, apperr.ErrPermissionDenied)
 	muted := e.member(t, tf, authz.Moderator)
-	e.exec(t, `UPDATE memberships SET muted_until = now() + interval '30 days', muted_by = $3 WHERE tayfa_id = $1 AND user_id = $2`,
-		tf.PG(), muted.PG(), id.New().PG())
+	// Muted until 30 days after the test clock.
+	e.exec(t, `UPDATE memberships SET muted_until = $4, muted_by = $3 WHERE tayfa_id = $1 AND user_id = $2`,
+		tf.PG(), muted.PG(), id.New().PG(), e.clock.now().Add(30*24*time.Hour))
 	_, err = e.voc.Merge(ctx, muted, tf, ns, lavrak, levrek)
 	wantErr(t, "susturulmuş moderatör", err, apperr.ErrMuted)
 	_, err = e.voc.List(ctx, muted, tf, ns, "", false)

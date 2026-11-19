@@ -89,12 +89,14 @@ func TestLogEntryConstraints(t *testing.T) {
 // each location's visibility; their photos and reports follow under the new
 // names, and Down brings the old tables back. The test database is
 // migrated while empty, so the move is replayed here on rows: back to the
-// old shape, old rows in, forward.
+// old shape, old rows in, forward. The later tayfa vocabulary (00039)
+// depends on the log table and moves its texts, so it is taken back first.
 func TestLogMigrationMovesRows(t *testing.T) {
 	pool, q := setup(t)
 	admin := adminOf(t, pool)
 	ctx := context.Background()
 	up, down := migrationParts(t, coredb.Migrations(), "00038_component_log.sql")
+	_, vocabularyDown := migrationParts(t, coredb.Migrations(), "00039_tayfa_vocabulary.sql")
 	owner := id.New()
 	tayfa := newTayfa(t, pool, owner, tayfaOpts{})
 	exec := func(sql string, args ...any) {
@@ -103,6 +105,7 @@ func TestLogMigrationMovesRows(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	exec(vocabularyDown)
 	scalar := func(sql string, args ...any) string {
 		t.Helper()
 		var s *string
