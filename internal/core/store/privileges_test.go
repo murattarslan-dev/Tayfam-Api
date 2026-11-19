@@ -81,6 +81,8 @@ var wantAppPrivileges = map[string]string{
 	// only removed.
 	"event_components": "INSERT,SELECT,UPDATE(enabled,params,updated_at)",
 	"event_referees":   "DELETE,INSERT,SELECT",
+	// Issue #239: a route never moves to another event or component.
+	"event_routes": "DELETE,INSERT,SELECT,UPDATE(points,updated_at)",
 }
 
 func TestAppRolePrivileges(t *testing.T) {

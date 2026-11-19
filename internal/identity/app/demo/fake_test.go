@@ -69,6 +69,7 @@ type fTayfa struct {
 
 type fEvent struct {
 	ev       *corev1.Event
+	route    []*corev1.LatLng
 	rsvps    map[string]corev1.RsvpStatus
 	vehicles map[string]*corev1.ConvoyVehicle
 	items    []*corev1.CampItem
@@ -90,7 +91,7 @@ func newFake() *fakeServices {
 }
 
 func (f *fakeServices) core() Core {
-	return Core{Tayfas: f, Memberships: f, Events: f, Announcements: f, QA: f, Polls: f, Discover: f, Social: f}
+	return Core{Tayfas: f, Memberships: f, Events: f, Routes: f, Announcements: f, QA: f, Polls: f, Discover: f, Social: f}
 }
 
 func fail(code codes.Code, reason string) error {
@@ -396,6 +397,32 @@ func (f *fakeServices) SetRsvp(ctx context.Context, in *corev1.SetRsvpRequest, _
 	}
 	e.rsvps[caller] = in.GetStatus()
 	return &corev1.SetRsvpResponse{Status: in.GetStatus()}, nil
+}
+
+// SetRoute is RouteComponentService's: managers only, on a convoy.
+func (f *fakeServices) SetRoute(ctx context.Context, in *corev1.SetRouteRequest, _ ...grpc.CallOption) (*corev1.SetRouteResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	caller, err := f.begin(ctx, "SetRoute")
+	if err != nil {
+		return nil, err
+	}
+	ref := in.GetRef()
+	if _, err := f.member(ref.GetTayfaId(), caller, corev1.Role_ROLE_MODERATOR, true); err != nil {
+		return nil, err
+	}
+	e, err := f.event(ref.GetTayfaId(), ref.GetEventId())
+	if err != nil {
+		return nil, err
+	}
+	if e.ev.Type != corev1.EventType_EVENT_TYPE_CONVOY || ref.GetComponentKey() != "route" {
+		return nil, fail(codes.NotFound, "ERROR_REASON_COMPONENT_NOT_FOUND")
+	}
+	if n := len(in.GetPoints()); n == 1 || n > 500 {
+		return nil, fail(codes.InvalidArgument, "ERROR_REASON_VALIDATION")
+	}
+	e.route = in.GetPoints()
+	return &corev1.SetRouteResponse{Route: &corev1.EventRoute{Points: e.route}}, nil
 }
 
 func (f *fakeServices) AddCampItem(ctx context.Context, in *corev1.AddCampItemRequest, _ ...grpc.CallOption) (*corev1.AddCampItemResponse, error) {

@@ -52,4 +52,37 @@
 //
 // The test component in component_test.go is the pattern: a table with the
 // guard trigger, a service that reads with View and writes with Change.
+// Package route (issue #239) is the first real component and the smallest
+// one to copy from.
+//
+// What the first component found out, for the ones that follow:
+//
+//   - The registrar must work with a nil framework: the registry's test
+//     calls RegisterComponents(srv, nil, log). Build the app service
+//     without checking fw (route.New), and return an error only for a
+//     broken wiring of the component's own.
+//   - Every table gets its grants in its own migration: core_app has only
+//     SELECT and INSERT on a new table (00016). Grant UPDATE by column, so
+//     that a row cannot move to another event or component, and add the
+//     table to wantAppPrivileges (store/privileges_test.go).
+//   - The guard trigger also runs for writes that go around the service: a
+//     migration that moves Faz 1 rows into the table (the copy fails
+//     loudly for an event whose type version lacks the component) and the
+//     copy to a series occurrence.
+//   - Series: an occurrence starts with the template's selections. A
+//     component whose data is part of the plan (a route, not a list people
+//     fill in) copies it there too: a Copy query of its own and one line
+//     under its heading in event/series.go, after CopyEventComponents. A
+//     later change applies to the one event, as a selection does.
+//   - A component that takes over a Faz 1 type detail removes it from the
+//     event API in the same PR (ADR-0041: no reading from two places): the
+//     column, the OpenAPI field and the Go code. A proto field cannot be
+//     deleted (buf breaking, FILE); leave it with a comment and stop
+//     reading and filling it.
+//   - Reads that tell the client whether it may write (caller_can_edit)
+//     combine Scope.IsManager with Scope.Cancelled, Scope.Frozen and
+//     access.ReadOnly(Scope.TayfaRow()): the checks Change makes.
+//   - The demo seeder (internal/identity/app/demo) calls core's services
+//     as users do; data that moved to a component is seeded through the
+//     component's service (demo.Core).
 package component

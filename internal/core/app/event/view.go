@@ -253,25 +253,9 @@ func typeDetails(ctx context.Context, q *store.Queries, ev store.GetEventRow) (D
 	var err error
 	switch ev.Type {
 	case TypeConvoy:
-		var route []byte
-		route, err = q.GetEventConvoy(ctx, evID)
-		if err != nil {
-			break
-		}
-		cv := &Convoy{Route: []Point{}}
-		if len(route) > 0 {
-			var pts []struct {
-				Lat float64 `json:"lat"`
-				Lng float64 `json:"lng"`
-			}
-			if err := json.Unmarshal(route, &pts); err != nil {
-				return Details{}, fmt.Errorf("rota: %w", err)
-			}
-			for _, p := range pts {
-				cv.Route = append(cv.Route, Point{Lat: p.Lat, Lng: p.Lng})
-			}
-		}
-		d.Convoy = cv
+		// Nothing to load: the route is the route component's (issue
+		// #239) and the vehicles are a list.
+		d.Convoy = &Convoy{}
 	case TypeCamp:
 		var r store.GetEventCampRow
 		r, err = q.GetEventCamp(ctx, evID)

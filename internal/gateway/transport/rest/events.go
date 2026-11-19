@@ -47,12 +47,11 @@ type EventClient interface {
 
 const (
 	// maxEventBody fits 5000 characters of description in the worst JSON
-	// escaping plus a 500-point convoy route.
+	// escaping.
 	maxEventBody     = 160 << 10
 	eventTitleMax    = 120
 	eventDescMax     = 5000
 	eventCapacityMax = 10000
-	convoyRouteMax   = 500
 	rruleMax         = 256
 	timeZoneMax      = 64
 	cancelReasonMax  = 500
@@ -127,10 +126,6 @@ func runes(s string) int { return utf8.RuneCountInString(strings.TrimSpace(s)) }
 
 // --- Input: type details ---
 
-type convoyInput struct {
-	Route []latLngJSON `json:"route"`
-}
-
 type campInput struct {
 	SiteName  string `json:"site_name"`
 	HasWater  *bool  `json:"has_water"`
@@ -142,7 +137,6 @@ type campInput struct {
 // one is set. Output-only fields (vehicles, camp items) are unknown fields
 // here and fail decoding.
 type eventDetailsInput struct {
-	Convoy  *convoyInput `json:"convoy"`
 	Camp    *campInput   `json:"camp"`
 	Hike    *hikeJSON    `json:"hike"`
 	Fishing *fishingJSON `json:"fishing"`
@@ -153,7 +147,6 @@ type eventDetailsInput struct {
 type eventDetails struct {
 	// typ is the catalog key of the type the details belong to.
 	typ     string
-	convoy  *corev1.ConvoyDetails
 	camp    *corev1.CampDetails
 	hike    *corev1.HikeDetails
 	fishing *corev1.FishingDetails
@@ -164,19 +157,6 @@ type eventDetails struct {
 func (in eventDetailsInput) details() (eventDetails, bool) {
 	var d eventDetails
 	n := 0
-	if in.Convoy != nil {
-		n++
-		if len(in.Convoy.Route) > convoyRouteMax {
-			return d, false
-		}
-		d.typ, d.convoy = "convoy", &corev1.ConvoyDetails{}
-		for _, p := range in.Convoy.Route {
-			if !p.valid() {
-				return d, false
-			}
-			d.convoy.Route = append(d.convoy.Route, &corev1.LatLng{Lat: p.Lat, Lng: p.Lng})
-		}
-	}
 	if in.Camp != nil {
 		n++
 		d.typ, d.camp = "camp", &corev1.CampDetails{
@@ -231,8 +211,6 @@ func eventFields(in map[string]json.RawMessage) (map[string]string, bool) {
 // setCreate sets req's type details, if any.
 func (d eventDetails) setCreate(req *corev1.CreateEventRequest) {
 	switch {
-	case d.convoy != nil:
-		req.Details = &corev1.CreateEventRequest_Convoy{Convoy: d.convoy}
 	case d.camp != nil:
 		req.Details = &corev1.CreateEventRequest_Camp{Camp: d.camp}
 	case d.hike != nil:
@@ -245,8 +223,6 @@ func (d eventDetails) setCreate(req *corev1.CreateEventRequest) {
 // setUpdate sets req's type details, if any.
 func (d eventDetails) setUpdate(req *corev1.UpdateEventRequest) {
 	switch {
-	case d.convoy != nil:
-		req.Details = &corev1.UpdateEventRequest_Convoy{Convoy: d.convoy}
 	case d.camp != nil:
 		req.Details = &corev1.UpdateEventRequest_Camp{Camp: d.camp}
 	case d.hike != nil:

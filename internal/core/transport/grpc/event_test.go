@@ -273,12 +273,6 @@ func TestEventServerValidatesRequest(t *testing.T) {
 		"belirsiz biçim": {func(r *corev1.CreateEventRequest) { r.Mode = 0 }, "mode"},
 		"NaN enlem":      {func(r *corev1.CreateEventRequest) { r.MeetingPoint.Lat = math.NaN() }, "meeting_point"},
 		"sonsuz boylam":  {func(r *corev1.CreateEventRequest) { r.MeetingPoint.Lng = math.Inf(1) }, "meeting_point"},
-		"NaN rota noktası": {func(r *corev1.CreateEventRequest) {
-			r.Details = &corev1.CreateEventRequest_Convoy{Convoy: &corev1.ConvoyDetails{Route: []*corev1.LatLng{{Lat: math.NaN()}}}}
-		}, "route"},
-		"boş rota noktası": {func(r *corev1.CreateEventRequest) {
-			r.Details = &corev1.CreateEventRequest_Convoy{Convoy: &corev1.ConvoyDetails{Route: []*corev1.LatLng{nil, nil}}}
-		}, "route"},
 		"oyun detayı": {func(r *corev1.CreateEventRequest) {
 			r.Details = &corev1.CreateEventRequest_Gaming{Gaming: &corev1.GamingDetails{Game: "x", Platform: corev1.GamingPlatform_GAMING_PLATFORM_PC}}
 		}, "details"},
@@ -385,7 +379,8 @@ func TestEventServerConverts(t *testing.T) {
 		t.Fatalf("dönüştürme = %v", p)
 	}
 
-	// Request details reach the app layer; output-only fields are dropped.
+	// Request details reach the app layer; output-only fields are dropped,
+	// and so is the retired route field (the route component's now, #239).
 	r := createReq(view.TayfaID.String())
 	r.Type = corev1.EventType_EVENT_TYPE_CONVOY
 	r.Details = &corev1.CreateEventRequest_Convoy{Convoy: &corev1.ConvoyDetails{
@@ -395,7 +390,7 @@ func TestEventServerConverts(t *testing.T) {
 	if _, err := srv.CreateEvent(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	if f.in.Type != event.TypeConvoy || f.in.Details.Convoy == nil || len(f.in.Details.Convoy.Route) != 2 || len(f.in.Details.Convoy.Vehicles) != 0 ||
+	if f.in.Type != event.TypeConvoy || f.in.Details.Convoy == nil || len(f.in.Details.Convoy.Vehicles) != 0 ||
 		f.in.Location.MeetingPoint == nil || !f.in.StartsAt.Equal(r.GetStartTime().AsTime()) {
 		t.Fatalf("girdi = %+v", f.in)
 	}

@@ -553,6 +553,14 @@ func (s *Service) GenerateSeries(ctx context.Context, tayfa, series id.ID) (int,
 			if err := q.CopyEventComponents(ctx, store.CopyEventComponentsParams{ToEventID: eid.PG(), FromEventID: tmpl.ID}); err != nil {
 				return fmt.Errorf("seri örneğinin bileşen seçimleri: %w", err)
 			}
+			// Component data that is part of the event's plan, one line per
+			// component under its own heading and after the selections
+			// (the tables' trigger asks whether the component is on).
+
+			// route (#239)
+			if err := q.CopyEventRoutes(ctx, store.CopyEventRoutesParams{ToEventID: eid.PG(), FromEventID: tmpl.ID}); err != nil {
+				return fmt.Errorf("seri örneğinin rotası: %w", err)
+			}
 			events = append(events, made{eid})
 		}
 
