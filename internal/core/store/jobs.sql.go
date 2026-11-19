@@ -106,9 +106,9 @@ func (q *Queries) ArchiveWarnedTayfas(ctx context.Context, arg ArchiveWarnedTayf
 
 const clearOldPlates = `-- name: ClearOldPlates :execrows
 
-UPDATE event_convoy_vehicles SET plate = NULL
+UPDATE event_vehicles SET plate = NULL
 WHERE id IN (
-    SELECT v.id FROM event_convoy_vehicles v
+    SELECT v.id FROM event_vehicles v
     JOIN events e ON e.id = v.event_id
     WHERE v.plate IS NOT NULL AND e.ends_at <= $1
     ORDER BY v.id
@@ -124,7 +124,8 @@ type ClearOldPlatesParams struct {
 }
 
 // ---------------------------------------------------------------------------
-// Plaka temizliği (v14 "Konvoy aracı", "Saklama süreleri")
+// Plaka temizliği (v14 "Konvoy aracı", "Saklama süreleri"; `vehicles`
+// bileşeni, issue #240, ADR-0025 "Plaka kuralı")
 // ---------------------------------------------------------------------------
 // Bitişi @ended_before'dan önce olan etkinliklerin plakaları boşaltılır.
 func (q *Queries) ClearOldPlates(ctx context.Context, arg ClearOldPlatesParams) (int64, error) {

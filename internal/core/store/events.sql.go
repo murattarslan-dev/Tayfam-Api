@@ -224,23 +224,6 @@ func (q *Queries) DeleteCampItem(ctx context.Context, arg DeleteCampItemParams) 
 	return result.RowsAffected(), nil
 }
 
-const deleteConvoyVehicle = `-- name: DeleteConvoyVehicle :execrows
-DELETE FROM event_convoy_vehicles WHERE event_id = $1 AND id = $2
-`
-
-type DeleteConvoyVehicleParams struct {
-	EventID pgtype.UUID
-	ID      pgtype.UUID
-}
-
-func (q *Queries) DeleteConvoyVehicle(ctx context.Context, arg DeleteConvoyVehicleParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteConvoyVehicle, arg.EventID, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const deleteEventFieldValues = `-- name: DeleteEventFieldValues :exec
 DELETE FROM event_field_values WHERE event_id = $1
 `
@@ -248,24 +231,6 @@ DELETE FROM event_field_values WHERE event_id = $1
 func (q *Queries) DeleteEventFieldValues(ctx context.Context, eventID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteEventFieldValues, eventID)
 	return err
-}
-
-const deleteUserConvoyVehicle = `-- name: DeleteUserConvoyVehicle :execrows
-DELETE FROM event_convoy_vehicles WHERE event_id = $1 AND user_id = $2
-`
-
-type DeleteUserConvoyVehicleParams struct {
-	EventID pgtype.UUID
-	UserID  pgtype.UUID
-}
-
-// "Geliyorum"dan vazgeçen kişinin aracı (ve plakası) kalmaz.
-func (q *Queries) DeleteUserConvoyVehicle(ctx context.Context, arg DeleteUserConvoyVehicleParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteUserConvoyVehicle, arg.EventID, arg.UserID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const getCampItemForUpdate = `-- name: GetCampItemForUpdate :one
@@ -298,22 +263,6 @@ func (q *Queries) GetCampItemForUpdate(ctx context.Context, arg GetCampItemForUp
 		&i.AssignedUserID,
 	)
 	return i, err
-}
-
-const getConvoyVehicleOwner = `-- name: GetConvoyVehicleOwner :one
-SELECT user_id FROM event_convoy_vehicles WHERE event_id = $1 AND id = $2
-`
-
-type GetConvoyVehicleOwnerParams struct {
-	EventID pgtype.UUID
-	ID      pgtype.UUID
-}
-
-func (q *Queries) GetConvoyVehicleOwner(ctx context.Context, arg GetConvoyVehicleOwnerParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, getConvoyVehicleOwner, arg.EventID, arg.ID)
-	var user_id pgtype.UUID
-	err := row.Scan(&user_id)
-	return user_id, err
 }
 
 const getEvent = `-- name: GetEvent :one
@@ -676,50 +625,6 @@ func (q *Queries) ListCampItems(ctx context.Context, eventID pgtype.UUID) ([]Lis
 	return items, nil
 }
 
-const listConvoyVehicles = `-- name: ListConvoyVehicles :many
-SELECT id, user_id, make, model, model_year, color, plate FROM event_convoy_vehicles
-WHERE event_id = $1
-ORDER BY created_at, id
-`
-
-type ListConvoyVehiclesRow struct {
-	ID        pgtype.UUID
-	UserID    pgtype.UUID
-	Make      string
-	Model     pgtype.Text
-	ModelYear pgtype.Int4
-	Color     pgtype.Text
-	Plate     pgtype.Text
-}
-
-func (q *Queries) ListConvoyVehicles(ctx context.Context, eventID pgtype.UUID) ([]ListConvoyVehiclesRow, error) {
-	rows, err := q.db.Query(ctx, listConvoyVehicles, eventID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListConvoyVehiclesRow{}
-	for rows.Next() {
-		var i ListConvoyVehiclesRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.Make,
-			&i.Model,
-			&i.ModelYear,
-			&i.Color,
-			&i.Plate,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listEventFieldValues = `-- name: ListEventFieldValues :many
 
 SELECT field_key, value FROM event_field_values
@@ -998,47 +903,8 @@ func (q *Queries) SetCampItemAssignee(ctx context.Context, arg SetCampItemAssign
 	return err
 }
 
-const setConvoyVehicle = `-- name: SetConvoyVehicle :one
-
-INSERT INTO event_convoy_vehicles (id, event_id, user_id, make, model, model_year, color, plate)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-ON CONFLICT (event_id, user_id) DO UPDATE
-SET make = EXCLUDED.make, model = EXCLUDED.model, model_year = EXCLUDED.model_year,
-    color = EXCLUDED.color, plate = EXCLUDED.plate
-RETURNING id
-`
-
-type SetConvoyVehicleParams struct {
-	ID        pgtype.UUID
-	EventID   pgtype.UUID
-	UserID    pgtype.UUID
-	Make      string
-	Model     pgtype.Text
-	ModelYear pgtype.Int4
-	Color     pgtype.Text
-	Plate     pgtype.Text
-}
-
-// ---------------------------------------------------------------------------
-// Konvoy araçları. Kişi başına bir araç; yeniden eklemek öncekinin yerine
-// geçer.
-func (q *Queries) SetConvoyVehicle(ctx context.Context, arg SetConvoyVehicleParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, setConvoyVehicle,
-		arg.ID,
-		arg.EventID,
-		arg.UserID,
-		arg.Make,
-		arg.Model,
-		arg.ModelYear,
-		arg.Color,
-		arg.Plate,
-	)
-	var id pgtype.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
 const setEventCamp = `-- name: SetEventCamp :exec
+
 INSERT INTO event_camp (event_id, site_name, has_water, has_toilet, notes)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (event_id) DO UPDATE
@@ -1054,6 +920,9 @@ type SetEventCampParams struct {
 	Notes     pgtype.Text
 }
 
+// ---------------------------------------------------------------------------
+// Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
+// key yanlış türü reddeder.
 func (q *Queries) SetEventCamp(ctx context.Context, arg SetEventCampParams) error {
 	_, err := q.db.Exec(ctx, setEventCamp,
 		arg.EventID,
@@ -1062,22 +931,6 @@ func (q *Queries) SetEventCamp(ctx context.Context, arg SetEventCampParams) erro
 		arg.HasToilet,
 		arg.Notes,
 	)
-	return err
-}
-
-const setEventConvoy = `-- name: SetEventConvoy :exec
-
-INSERT INTO event_convoy (event_id) VALUES ($1)
-ON CONFLICT (event_id) DO NOTHING
-`
-
-// ---------------------------------------------------------------------------
-// Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
-// key yanlış türü reddeder.
-// Konvoyun detay satırı yalnızca araçların bağlandığı satırdır; rota
-// `route` bileşenindedir (component_route.sql, issue #239).
-func (q *Queries) SetEventConvoy(ctx context.Context, eventID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, setEventConvoy, eventID)
 	return err
 }
 

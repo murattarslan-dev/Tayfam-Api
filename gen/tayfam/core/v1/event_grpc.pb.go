@@ -159,18 +159,14 @@ type EventServiceClient interface {
 	// ERROR_REASON_EVENT_ITEM_NOT_FOUND, ERROR_REASON_EVENT_NOT_GOING,
 	// ERROR_REASON_EVENT_ITEM_TAKEN, ERROR_REASON_VALIDATION.
 	AssignCampItem(ctx context.Context, in *AssignCampItemRequest, opts ...grpc.CallOption) (*AssignCampItemResponse, error)
-	// AddConvoyVehicle sets the caller's vehicle on a convoy event; it
-	// replaces the caller's previous vehicle there. The caller must have
-	// answered GOING.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_NOT_GOING, ERROR_REASON_VALIDATION.
+	// AddConvoyVehicle is not served any more: vehicles are the vehicles
+	// component's (VehiclesComponentService.SetVehicle,
+	// component_vehicles.proto; issue #240). It answers UNIMPLEMENTED; the
+	// method stays because it cannot be removed.
 	AddConvoyVehicle(ctx context.Context, in *AddConvoyVehicleRequest, opts ...grpc.CallOption) (*AddConvoyVehicleResponse, error)
-	// RemoveConvoyVehicle removes a vehicle: one's own, or any vehicle for the
-	// organizer, moderators and admins.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+	// RemoveConvoyVehicle is not served any more
+	// (VehiclesComponentService.RemoveVehicle; issue #240). It answers
+	// UNIMPLEMENTED; the method stays because it cannot be removed.
 	RemoveConvoyVehicle(ctx context.Context, in *RemoveConvoyVehicleRequest, opts ...grpc.CallOption) (*RemoveConvoyVehicleResponse, error)
 	// CheckIn verifies the caller's attendance. The window is from 30 minutes
 	// before the start until the end, and the caller must have answered
@@ -672,18 +668,14 @@ type EventServiceServer interface {
 	// ERROR_REASON_EVENT_ITEM_NOT_FOUND, ERROR_REASON_EVENT_NOT_GOING,
 	// ERROR_REASON_EVENT_ITEM_TAKEN, ERROR_REASON_VALIDATION.
 	AssignCampItem(context.Context, *AssignCampItemRequest) (*AssignCampItemResponse, error)
-	// AddConvoyVehicle sets the caller's vehicle on a convoy event; it
-	// replaces the caller's previous vehicle there. The caller must have
-	// answered GOING.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_NOT_GOING, ERROR_REASON_VALIDATION.
+	// AddConvoyVehicle is not served any more: vehicles are the vehicles
+	// component's (VehiclesComponentService.SetVehicle,
+	// component_vehicles.proto; issue #240). It answers UNIMPLEMENTED; the
+	// method stays because it cannot be removed.
 	AddConvoyVehicle(context.Context, *AddConvoyVehicleRequest) (*AddConvoyVehicleResponse, error)
-	// RemoveConvoyVehicle removes a vehicle: one's own, or any vehicle for the
-	// organizer, moderators and admins.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+	// RemoveConvoyVehicle is not served any more
+	// (VehiclesComponentService.RemoveVehicle; issue #240). It answers
+	// UNIMPLEMENTED; the method stays because it cannot be removed.
 	RemoveConvoyVehicle(context.Context, *RemoveConvoyVehicleRequest) (*RemoveConvoyVehicleResponse, error)
 	// CheckIn verifies the caller's attendance. The window is from 30 minutes
 	// before the start until the end, and the caller must have answered

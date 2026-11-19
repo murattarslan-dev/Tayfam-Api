@@ -180,24 +180,6 @@ type EventConsumer struct {
 	UpdatedAt    pgtype.Timestamptz
 }
 
-type EventConvoy struct {
-	EventID pgtype.UUID
-	Type    string
-}
-
-type EventConvoyVehicle struct {
-	ID        pgtype.UUID
-	EventID   pgtype.UUID
-	UserID    pgtype.UUID
-	VehicleID pgtype.UUID
-	Make      string
-	Model     pgtype.Text
-	ModelYear pgtype.Int4
-	Color     pgtype.Text
-	Plate     pgtype.Text
-	CreatedAt pgtype.Timestamptz
-}
-
 type EventFeedback struct {
 	EventID   pgtype.UUID
 	UserID    pgtype.UUID
@@ -309,6 +291,33 @@ type EventSeries struct {
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	Dtstart         pgtype.Timestamptz
+}
+
+type EventVehicle struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	UserID       pgtype.UUID
+	VehicleID    pgtype.UUID
+	Make         string
+	Model        pgtype.Text
+	ModelYear    pgtype.Int4
+	Color        pgtype.Text
+	Plate        pgtype.Text
+	Seats        int32
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type EventVehicleSeatRequest struct {
+	ID             pgtype.UUID
+	EventID        pgtype.UUID
+	ComponentKey   string
+	UserID         pgtype.UUID
+	EventVehicleID pgtype.UUID
+	Status         string
+	CreatedAt      pgtype.Timestamptz
+	DecidedAt      pgtype.Timestamptz
 }
 
 type FishingCatch struct {

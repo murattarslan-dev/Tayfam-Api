@@ -33,7 +33,9 @@ const (
 	CoreExportSection_CORE_EXPORT_SECTION_EVENT_RSVPS CoreExportSection = 2
 	// Hike start and return times.
 	CoreExportSection_CORE_EXPORT_SECTION_HIKE_CHECKINS CoreExportSection = 3
-	// Convoy vehicles, plates included.
+	// The vehicles the caller wrote on events (the vehicles component,
+	// issue #240), plates included. The name is from Faz 1; vehicles of
+	// every event type are here.
 	CoreExportSection_CORE_EXPORT_SECTION_CONVOY_VEHICLES CoreExportSection = 4
 	// The attendance history (user_activity_records).
 	CoreExportSection_CORE_EXPORT_SECTION_ACTIVITY_RECORDS CoreExportSection = 5
@@ -73,6 +75,10 @@ const (
 	// safety contacts they chose (issue #210, ADR-0033). Being someone
 	// else's safety contact is that person's data and is not exported.
 	CoreExportSection_CORE_EXPORT_SECTION_DISCOVER CoreExportSection = 23
+	// The caller's requests for a seat in someone else's vehicle (the
+	// vehicles component, issue #240). The vehicle's owner and plate are the
+	// owner's data and are not exported.
+	CoreExportSection_CORE_EXPORT_SECTION_VEHICLE_SEAT_REQUESTS CoreExportSection = 24
 )
 
 // Enum value maps for CoreExportSection.
@@ -101,31 +107,33 @@ var (
 		20: "CORE_EXPORT_SECTION_SOCIAL_SETTINGS",
 		21: "CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS",
 		23: "CORE_EXPORT_SECTION_DISCOVER",
+		24: "CORE_EXPORT_SECTION_VEHICLE_SEAT_REQUESTS",
 	}
 	CoreExportSection_value = map[string]int32{
-		"CORE_EXPORT_SECTION_UNSPECIFIED":        0,
-		"CORE_EXPORT_SECTION_MEMBERSHIPS":        1,
-		"CORE_EXPORT_SECTION_EVENT_RSVPS":        2,
-		"CORE_EXPORT_SECTION_HIKE_CHECKINS":      3,
-		"CORE_EXPORT_SECTION_CONVOY_VEHICLES":    4,
-		"CORE_EXPORT_SECTION_ACTIVITY_RECORDS":   5,
-		"CORE_EXPORT_SECTION_ANNOUNCEMENTS":      6,
-		"CORE_EXPORT_SECTION_EVENTS":             7,
-		"CORE_EXPORT_SECTION_QUESTIONS":          8,
-		"CORE_EXPORT_SECTION_ANSWERS":            9,
-		"CORE_EXPORT_SECTION_ANSWER_VOTES":       10,
-		"CORE_EXPORT_SECTION_POLLS":              11,
-		"CORE_EXPORT_SECTION_POLL_VOTES":         12,
-		"CORE_EXPORT_SECTION_FISHING_CATCHES":    13,
-		"CORE_EXPORT_SECTION_FRIENDSHIPS":        14,
-		"CORE_EXPORT_SECTION_BLOCKS":             15,
-		"CORE_EXPORT_SECTION_REPORTS":            16,
-		"CORE_EXPORT_SECTION_UPLOADS":            17,
-		"CORE_EXPORT_SECTION_EVENT_PHOTOS":       18,
-		"CORE_EXPORT_SECTION_AVAILABILITY":       19,
-		"CORE_EXPORT_SECTION_SOCIAL_SETTINGS":    20,
-		"CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS": 21,
-		"CORE_EXPORT_SECTION_DISCOVER":           23,
+		"CORE_EXPORT_SECTION_UNSPECIFIED":           0,
+		"CORE_EXPORT_SECTION_MEMBERSHIPS":           1,
+		"CORE_EXPORT_SECTION_EVENT_RSVPS":           2,
+		"CORE_EXPORT_SECTION_HIKE_CHECKINS":         3,
+		"CORE_EXPORT_SECTION_CONVOY_VEHICLES":       4,
+		"CORE_EXPORT_SECTION_ACTIVITY_RECORDS":      5,
+		"CORE_EXPORT_SECTION_ANNOUNCEMENTS":         6,
+		"CORE_EXPORT_SECTION_EVENTS":                7,
+		"CORE_EXPORT_SECTION_QUESTIONS":             8,
+		"CORE_EXPORT_SECTION_ANSWERS":               9,
+		"CORE_EXPORT_SECTION_ANSWER_VOTES":          10,
+		"CORE_EXPORT_SECTION_POLLS":                 11,
+		"CORE_EXPORT_SECTION_POLL_VOTES":            12,
+		"CORE_EXPORT_SECTION_FISHING_CATCHES":       13,
+		"CORE_EXPORT_SECTION_FRIENDSHIPS":           14,
+		"CORE_EXPORT_SECTION_BLOCKS":                15,
+		"CORE_EXPORT_SECTION_REPORTS":               16,
+		"CORE_EXPORT_SECTION_UPLOADS":               17,
+		"CORE_EXPORT_SECTION_EVENT_PHOTOS":          18,
+		"CORE_EXPORT_SECTION_AVAILABILITY":          19,
+		"CORE_EXPORT_SECTION_SOCIAL_SETTINGS":       20,
+		"CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS":    21,
+		"CORE_EXPORT_SECTION_DISCOVER":              23,
+		"CORE_EXPORT_SECTION_VEHICLE_SEAT_REQUESTS": 24,
 	}
 )
 
@@ -253,7 +261,7 @@ const file_tayfam_core_v1_export_proto_rawDesc = "" +
 	"\x13ExportMyDataRequest\"m\n" +
 	"\x14ExportMyDataResponse\x12;\n" +
 	"\asection\x18\x01 \x01(\x0e2!.tayfam.core.v1.CoreExportSectionR\asection\x12\x18\n" +
-	"\arecords\x18\x02 \x03(\fR\arecords*\xe3\x06\n" +
+	"\arecords\x18\x02 \x03(\fR\arecords*\x92\a\n" +
 	"\x11CoreExportSection\x12#\n" +
 	"\x1fCORE_EXPORT_SECTION_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fCORE_EXPORT_SECTION_MEMBERSHIPS\x10\x01\x12#\n" +
@@ -278,7 +286,8 @@ const file_tayfam_core_v1_export_proto_rawDesc = "" +
 	" CORE_EXPORT_SECTION_AVAILABILITY\x10\x13\x12'\n" +
 	"#CORE_EXPORT_SECTION_SOCIAL_SETTINGS\x10\x14\x12*\n" +
 	"&CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS\x10\x15\x12 \n" +
-	"\x1cCORE_EXPORT_SECTION_DISCOVER\x10\x172l\n" +
+	"\x1cCORE_EXPORT_SECTION_DISCOVER\x10\x17\x12-\n" +
+	")CORE_EXPORT_SECTION_VEHICLE_SEAT_REQUESTS\x10\x182l\n" +
 	"\rExportService\x12[\n" +
 	"\fExportMyData\x12#.tayfam.core.v1.ExportMyDataRequest\x1a$.tayfam.core.v1.ExportMyDataResponse0\x01B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vExportProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
