@@ -368,32 +368,6 @@ func (q *Queries) GetEventForUpdate(ctx context.Context, arg GetEventForUpdatePa
 	return i, err
 }
 
-const getEventHike = `-- name: GetEventHike :one
-SELECT difficulty, COALESCE(distance_km, 0)::float8 AS distance_km, elevation_m, expected_return_at, return_grace_minutes
-FROM event_hike WHERE event_id = $1
-`
-
-type GetEventHikeRow struct {
-	Difficulty         pgtype.Int4
-	DistanceKm         float64
-	ElevationM         pgtype.Int4
-	ExpectedReturnAt   pgtype.Timestamptz
-	ReturnGraceMinutes int32
-}
-
-func (q *Queries) GetEventHike(ctx context.Context, eventID pgtype.UUID) (GetEventHikeRow, error) {
-	row := q.db.QueryRow(ctx, getEventHike, eventID)
-	var i GetEventHikeRow
-	err := row.Scan(
-		&i.Difficulty,
-		&i.DistanceKm,
-		&i.ElevationM,
-		&i.ExpectedReturnAt,
-		&i.ReturnGraceMinutes,
-	)
-	return i, err
-}
-
 const getRsvp = `-- name: GetRsvp :one
 SELECT status, updated_at FROM event_rsvps
 WHERE event_id = $1 AND user_id = $2
@@ -754,6 +728,7 @@ func (q *Queries) SetEventFieldValue(ctx context.Context, arg SetEventFieldValue
 }
 
 const setEventFishing = `-- name: SetEventFishing :exec
+
 INSERT INTO event_fishing (event_id, spot_visibility) VALUES ($1, $2)
 ON CONFLICT (event_id) DO UPDATE SET spot_visibility = EXCLUDED.spot_visibility
 `
@@ -763,42 +738,11 @@ type SetEventFishingParams struct {
 	SpotVisibility string
 }
 
-func (q *Queries) SetEventFishing(ctx context.Context, arg SetEventFishingParams) error {
-	_, err := q.db.Exec(ctx, setEventFishing, arg.EventID, arg.SpotVisibility)
-	return err
-}
-
-const setEventHike = `-- name: SetEventHike :exec
-
-INSERT INTO event_hike (event_id, difficulty, distance_km, elevation_m, expected_return_at, return_grace_minutes)
-VALUES ($1, $2, $3::float8, $4, $5, $6)
-ON CONFLICT (event_id) DO UPDATE
-SET difficulty = EXCLUDED.difficulty, distance_km = EXCLUDED.distance_km,
-    elevation_m = EXCLUDED.elevation_m, expected_return_at = EXCLUDED.expected_return_at,
-    return_grace_minutes = EXCLUDED.return_grace_minutes
-`
-
-type SetEventHikeParams struct {
-	EventID            pgtype.UUID
-	Difficulty         pgtype.Int4
-	DistanceKm         pgtype.Float8
-	ElevationM         pgtype.Int4
-	ExpectedReturnAt   pgtype.Timestamptz
-	ReturnGraceMinutes int32
-}
-
 // ---------------------------------------------------------------------------
 // Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
 // key yanlış türü reddeder.
-func (q *Queries) SetEventHike(ctx context.Context, arg SetEventHikeParams) error {
-	_, err := q.db.Exec(ctx, setEventHike,
-		arg.EventID,
-		arg.Difficulty,
-		arg.DistanceKm,
-		arg.ElevationM,
-		arg.ExpectedReturnAt,
-		arg.ReturnGraceMinutes,
-	)
+func (q *Queries) SetEventFishing(ctx context.Context, arg SetEventFishingParams) error {
+	_, err := q.db.Exec(ctx, setEventFishing, arg.EventID, arg.SpotVisibility)
 	return err
 }
 

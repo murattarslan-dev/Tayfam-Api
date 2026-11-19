@@ -256,14 +256,13 @@ func (q *Queries) ListTayfaStaffIDs(ctx context.Context, arg ListTayfaStaffIDsPa
 
 const lockOverdueHikers = `-- name: LockOverdueHikers :many
 
-SELECT c.event_id, c.user_id, e.tayfa_id, e.created_by
-FROM event_hike_checkins c
-JOIN event_hike h ON h.event_id = c.event_id
+SELECT c.event_id, c.component_key, c.user_id, e.tayfa_id, e.created_by
+FROM event_roll_call_checkins c
+JOIN event_roll_calls p ON p.event_id = c.event_id AND p.component_key = c.component_key
 JOIN events e ON e.id = c.event_id
 WHERE c.returned_at IS NULL AND c.alert_sent_at IS NULL
-  AND h.expected_return_at IS NOT NULL
-  AND h.expected_return_at + make_interval(mins => h.return_grace_minutes) <= $1
-ORDER BY c.event_id, c.user_id
+  AND p.expected_return_at + make_interval(mins => roll_call_alarm_minutes(event_component_definition(c.event_id, c.component_key))) <= $1
+ORDER BY c.event_id, c.component_key, c.user_id
 LIMIT $2
 FOR UPDATE OF c SKIP LOCKED
 `
@@ -274,19 +273,23 @@ type LockOverdueHikersParams struct {
 }
 
 type LockOverdueHikersRow struct {
-	EventID   pgtype.UUID
-	UserID    pgtype.UUID
-	TayfaID   pgtype.UUID
-	CreatedBy pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	UserID       pgtype.UUID
+	TayfaID      pgtype.UUID
+	CreatedBy    pgtype.UUID
 }
 
 // ---------------------------------------------------------------------------
-// Yürüyüş dönmeme alarmı (v14 "Yürüyüşte beklenen dönüş")
+// Dönmeme alarmı (v14 "Yürüyüşte beklenen dönüş"; `roll_call` bileşeni,
+// issue #242)
 // ---------------------------------------------------------------------------
 // Yola çıkmış (satır var = started_at dolu), dönmemiş, alarmı gönderilmemiş
-// ve beklenen dönüş + tolerans süresi @now'dan önce dolmuş yürüyüşçüler.
-// Etkinlik iptal ya da silinmiş olsa da alarm gider: kişi hâlâ dağda
-// olabilir.
+// ve beklenen dönüş + tolerans süresi @now'dan önce dolmuş katılımcılar.
+// Alarm ve tolerans, etkinliğin tür sürümündeki bileşenin parametreleridir
+// (`alarm`, `return_grace_minutes`; tolerans yoksa 30 dakika); alarmsız
+// yoklamada make_interval NULL olur ve satır seçilmez. Etkinlik iptal ya da
+// silinmiş olsa da alarm gider: kişi hâlâ dağda olabilir.
 func (q *Queries) LockOverdueHikers(ctx context.Context, arg LockOverdueHikersParams) ([]LockOverdueHikersRow, error) {
 	rows, err := q.db.Query(ctx, lockOverdueHikers, arg.Now, arg.N)
 	if err != nil {
@@ -298,6 +301,7 @@ func (q *Queries) LockOverdueHikers(ctx context.Context, arg LockOverdueHikersPa
 		var i LockOverdueHikersRow
 		if err := rows.Scan(
 			&i.EventID,
+			&i.ComponentKey,
 			&i.UserID,
 			&i.TayfaID,
 			&i.CreatedBy,
@@ -313,19 +317,25 @@ func (q *Queries) LockOverdueHikers(ctx context.Context, arg LockOverdueHikersPa
 }
 
 const markHikeAlertSent = `-- name: MarkHikeAlertSent :execrows
-UPDATE event_hike_checkins SET alert_sent_at = $1
-WHERE event_id = $2 AND user_id = $3
+UPDATE event_roll_call_checkins SET alert_sent_at = $1
+WHERE event_id = $2 AND component_key = $3 AND user_id = $4
   AND returned_at IS NULL AND alert_sent_at IS NULL
 `
 
 type MarkHikeAlertSentParams struct {
-	Now     pgtype.Timestamptz
-	EventID pgtype.UUID
-	UserID  pgtype.UUID
+	Now          pgtype.Timestamptz
+	EventID      pgtype.UUID
+	ComponentKey string
+	UserID       pgtype.UUID
 }
 
 func (q *Queries) MarkHikeAlertSent(ctx context.Context, arg MarkHikeAlertSentParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markHikeAlertSent, arg.Now, arg.EventID, arg.UserID)
+	result, err := q.db.Exec(ctx, markHikeAlertSent,
+		arg.Now,
+		arg.EventID,
+		arg.ComponentKey,
+		arg.UserID,
+	)
 	if err != nil {
 		return 0, err
 	}

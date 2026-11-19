@@ -572,10 +572,15 @@ func (q *Queries) ExportFriendships(ctx context.Context, arg ExportFriendshipsPa
 
 const exportHikeCheckins = `-- name: ExportHikeCheckins :many
 SELECT c.event_id AS k, jsonb_build_object(
-  'event_id', c.event_id, 'started_at', c.started_at, 'returned_at', c.returned_at, 'created_at', c.created_at
+  'event_id', c.event_id,
+  'roll_calls', jsonb_agg(jsonb_build_object(
+    'component_key', c.component_key, 'started_at', c.started_at,
+    'returned_at', c.returned_at, 'created_at', c.created_at
+  ) ORDER BY c.component_key)
 ) AS data
-FROM event_hike_checkins c
+FROM event_roll_call_checkins c
 WHERE c.user_id = $1 AND c.event_id > $2
+GROUP BY c.event_id
 ORDER BY c.event_id
 LIMIT $3
 `
@@ -591,6 +596,9 @@ type ExportHikeCheckinsRow struct {
 	Data []byte
 }
 
+// Yoklama satırları (`roll_call` bileşeni, issue #242). Bölümün adı Faz 1'den
+// kalmadır (hike_checkins); bütün türlerin yoklamalarını taşır. Bir
+// etkinlikte birden çok yoklama bileşeni olabilir: etkinlik başına bir satır.
 func (q *Queries) ExportHikeCheckins(ctx context.Context, arg ExportHikeCheckinsParams) ([]ExportHikeCheckinsRow, error) {
 	rows, err := q.db.Query(ctx, exportHikeCheckins, arg.UserID, arg.After, arg.N)
 	if err != nil {

@@ -239,7 +239,8 @@ const (
 	AttendanceMethod_ATTENDANCE_METHOD_LOCATION AttendanceMethod = 1
 	// "Katıldım" on an online event.
 	AttendanceMethod_ATTENDANCE_METHOD_ONLINE AttendanceMethod = 2
-	// Set out on a hike (StartHike).
+	// Set out with a roll call (RollCallComponentService.StartRollCall; the
+	// name is from the Faz 1 hike roll call).
 	AttendanceMethod_ATTENDANCE_METHOD_HIKE_START AttendanceMethod = 3
 	// The organizer's correction (SetAttendance).
 	AttendanceMethod_ATTENDANCE_METHOD_ORGANIZER AttendanceMethod = 4
@@ -892,6 +893,14 @@ func (x *CampItem) GetAssignedUserId() string {
 	return ""
 }
 
+// HikeDetails is not used any more: a hike has no type details. Its
+// difficulty, distance and elevation are fields of the hike type
+// (difficulty, planned_distance, planned_elevation; Event.fields) and its
+// expected return and roll call are the roll call component's
+// (RollCallComponentService, component_roll_call.proto; issue #242). An
+// event never carries it and a request that sets it is refused
+// (ERROR_REASON_VALIDATION, field "details"). The message and its fields
+// stay because they cannot be removed.
 type HikeDetails struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 0 (not given) or 1–5.
@@ -1169,11 +1178,12 @@ type Event struct {
 	// The event was edited on its own (UpdateEvent without series): changes
 	// to the series and ending it leave it alone.
 	SeriesOverride bool `protobuf:"varint,29,opt,name=series_override,json=seriesOverride,proto3" json:"series_override,omitempty"`
-	// The Faz 1 details of the hike and fishing types, until their
-	// components replace them (ADR-0025 §10). Set by GetEvent; never by
-	// ListUpcomingEvents. convoy, camp, gaming and sports are never set: a
-	// convoy's data is in its components (issues #239, #240), a camp's in
-	// its list component and fields (issue #241), the others' in fields.
+	// The Faz 1 details of the fishing type, until its component replaces
+	// them (ADR-0025 §10). Set by GetEvent; never by ListUpcomingEvents.
+	// convoy, camp, hike, gaming and sports are never set: a convoy's data is
+	// in its components (issues #239, #240), a camp's in its list component
+	// and fields (issue #241), a hike's in its roll call component and fields
+	// (issue #242), the others' in fields.
 	//
 	// Types that are valid to be assigned to Details:
 	//
@@ -1599,11 +1609,11 @@ type CreateEventRequest struct {
 	// 0: no limit; otherwise 1–10000.
 	Capacity     int32 `protobuf:"varint,13,opt,name=capacity,proto3" json:"capacity,omitempty"`
 	Discoverable bool  `protobuf:"varint,14,opt,name=discoverable,proto3" json:"discoverable,omitempty"`
-	// Only for the hike and fishing types, and must match the type; may be
-	// unset. convoy, camp, gaming and sports must be unset
-	// (ERROR_REASON_VALIDATION, field "details"): a convoy's data is in its
-	// components, a camp's in its list component and fields, the others' goes
-	// in fields.
+	// Only for the fishing type; may be unset. convoy, camp, hike, gaming and
+	// sports must be unset (ERROR_REASON_VALIDATION, field "details"): a
+	// convoy's data is in its components, a camp's in its list component and
+	// fields, a hike's in its roll call component and fields, the others'
+	// goes in fields.
 	//
 	// Types that are valid to be assigned to Details:
 	//
@@ -2293,7 +2303,7 @@ type UpdateEventRequest struct {
 	// (start_time and end_time together), "location" (mode,
 	// meeting_point_name, meeting_point, city, district and online_url
 	// together), "capacity", "discoverable", "details" (replaces the type
-	// details of a hike or fishing event), "fields" (replaces the field values), "cover_upload_id"
+	// details of a fishing event), "fields" (replaces the field values), "cover_upload_id"
 	// (not with series = true: ERROR_REASON_VALIDATION, field
 	// "update_mask"). Any other path is ERROR_REASON_VALIDATION.
 	UpdateMask *fieldmaskpb.FieldMask `protobuf:"bytes,15,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
@@ -2303,8 +2313,7 @@ type UpdateEventRequest struct {
 	// the change is made to the series: this event and every event of the
 	// series that has not started, is scheduled and was not edited on its
 	// own, and the events generated later. "time" cannot be changed for a
-	// series (ERROR_REASON_VALIDATION, field "update_mask"); hike details'
-	// expected_return_time keeps its distance from each event's start.
+	// series (ERROR_REASON_VALIDATION, field "update_mask").
 	// ERROR_REASON_EVENT_SERIES_ENDED if the series was ended.
 	Series bool `protobuf:"varint,16,opt,name=series,proto3" json:"series,omitempty"`
 	// With "cover_upload_id" in update_mask: same rules as
@@ -3924,7 +3933,8 @@ func (x *CheckInResponse) GetMethod() AttendanceMethod {
 	return AttendanceMethod_ATTENDANCE_METHOD_UNSPECIFIED
 }
 
-// HikeCheckin is the caller's hike roll call. Times are the client's.
+// HikeCheckin and the StartHike / FinishHike messages are not used any
+// more (RollCallEntry, component_roll_call.proto; issue #242).
 type HikeCheckin struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	StartTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
