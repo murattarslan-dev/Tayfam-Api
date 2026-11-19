@@ -884,12 +884,10 @@ func setFields(ctx context.Context, q *store.Queries, event id.ID, values map[st
 // setDetails writes the type details; d has exactly one field set, or none
 // for a type without a detail table.
 func setDetails(ctx context.Context, q *store.Queries, event id.ID, d Details) error {
-	var err error
-	switch {
-	case d.Fishing != nil:
-		err = q.SetEventFishing(ctx, store.SetEventFishingParams{EventID: event.PG(), SpotVisibility: d.Fishing.SpotVisibility})
+	if d.Fishing == nil {
+		return nil
 	}
-	if err != nil {
+	if err := q.SetEventFishing(ctx, store.SetEventFishingParams{EventID: event.PG(), SpotVisibility: d.Fishing.SpotVisibility}); err != nil {
 		return fmt.Errorf("etkinlik detayı: %w", err)
 	}
 	return nil

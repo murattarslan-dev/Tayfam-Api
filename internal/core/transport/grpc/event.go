@@ -508,9 +508,7 @@ func eventToProto(v event.Event) *corev1.Event {
 	if v.SeriesID != (id.ID{}) {
 		out.SeriesId, out.SeriesOverride = v.SeriesID.String(), v.SeriesOverride
 	}
-	d := v.Details
-	switch {
-	case d.Fishing != nil:
+	if d := v.Details; d.Fishing != nil {
 		vis := corev1.SpotVisibility_SPOT_VISIBILITY_TAYFA
 		if d.Fishing.SpotVisibility == event.SpotParticipants {
 			vis = corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS

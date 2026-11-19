@@ -206,8 +206,7 @@ func typeDetails(ctx context.Context, q *store.Queries, ev store.GetEventRow) (D
 	evID := ev.ID
 	var d Details
 	var err error
-	switch ev.Type {
-	case TypeFishing:
+	if ev.Type == TypeFishing {
 		var vis string
 		vis, err = q.GetEventFishing(ctx, evID)
 		d.Fishing = &Fishing{SpotVisibility: vis}

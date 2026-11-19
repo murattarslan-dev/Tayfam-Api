@@ -7512,7 +7512,7 @@ components:
           maxItems: 1000
           description: Herkesin kaydı, önce dışarıdakiler; yalnızca `caller_can_manage` ise dolu, değilse boş.
           items: { $ref: "#/components/schemas/RollCallEntry" }
-        caller_can_manage: { type: boolean, description: Etkinliğin bileşenlerini yönetirsiniz (organizatör yetkisi, susturulmamış). }
+        caller_can_manage: { type: boolean, description: "Etkinliğin bileşenlerini yönetirsiniz (organizatör yetkisi, susturulmamış)." }
         caller_can_edit:
           type: boolean
           description: Beklenen dönüşü şu an değiştirebilirsiniz (organizatör yetkisi; etkinlik iptal değil, donmamış, tayfa salt okunur değil).

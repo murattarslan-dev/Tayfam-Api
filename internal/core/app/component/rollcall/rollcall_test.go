@@ -420,7 +420,7 @@ func TestRollCallPermissions(t *testing.T) {
 			wantErr(t, tc.name+" plan", err, tc.want)
 		}
 		got, err := e.rc.Get(ctx, ref(tc.user, tf, ev.ID, "roll_call"))
-		if tc.want == apperr.ErrTayfaNotFound {
+		if errors.Is(tc.want, apperr.ErrTayfaNotFound) {
 			wantErr(t, tc.name+" okuma", err, tc.want)
 			continue
 		}

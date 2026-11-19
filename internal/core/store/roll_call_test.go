@@ -261,7 +261,8 @@ func TestRollCallMigrationMovesRows(t *testing.T) {
 		t.Fatalf("eski tablolar kaldırılmadı: %s", got)
 	}
 	// core_app keeps its privileges on the tables the migration made.
-	if _, err := pool.Exec(ctx, `UPDATE event_roll_call_checkins SET returned_at = now(), returned_received_at = now() WHERE event_id = $1 AND user_id = $2`, full.PG(), out.PG()); err != nil {
+	if _, err := pool.Exec(ctx, `UPDATE event_roll_call_checkins SET returned_at = '2026-12-06T16:00:00Z', returned_received_at = '2026-12-06T16:00:00Z'
+		WHERE event_id = $1 AND user_id = $2`, full.PG(), out.PG()); err != nil {
 		t.Fatalf("taşınan yoklamayı güncelleme: %v", err)
 	}
 }
