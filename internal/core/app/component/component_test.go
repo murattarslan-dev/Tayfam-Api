@@ -73,7 +73,7 @@ func (n notes) List(ctx context.Context, ref component.Ref) ([]string, error) {
 
 // Add is a participant's change: the caller must be going.
 func (n notes) Add(ctx context.Context, ref component.Ref, note string) error {
-	return n.fw.Change(ctx, ref, n.kind, component.Participant(), func(sc *component.Scope) error {
+	return n.fw.Change(ctx, ref, n.kind, component.ByParticipant(), func(sc *component.Scope) error {
 		going, err := sc.Going(ctx)
 		if err != nil {
 			return err
@@ -100,7 +100,7 @@ func (n notes) Add(ctx context.Context, ref component.Ref, note string) error {
 
 // Clear is the organizer's change.
 func (n notes) Clear(ctx context.Context, ref component.Ref) error {
-	return n.fw.Change(ctx, ref, n.kind, component.Manager(), func(sc *component.Scope) error {
+	return n.fw.Change(ctx, ref, n.kind, component.ByManager(), func(sc *component.Scope) error {
 		tx, _ := sc.Q().Tx()
 		tag, err := tx.Exec(ctx, `DELETE FROM test_component_notes WHERE event_id = $1 AND component_key = $2`, sc.Event.PG(), sc.Key)
 		if err != nil {
@@ -116,9 +116,9 @@ func (n notes) Clear(ctx context.Context, ref component.Ref) error {
 // Judge is a referee's change in a scope (a table, a match); it reports
 // the parameters as they hold for the event.
 func (n notes) Judge(ctx context.Context, ref component.Ref, scope id.ID) (format string, bestOf int64, err error) {
-	err = n.fw.Change(ctx, ref, n.kind, component.Referee(scope), func(sc *component.Scope) error {
-		format = sc.String("format")
-		bestOf, _ = sc.Int("best_of")
+	err = n.fw.Change(ctx, ref, n.kind, component.ByReferee(scope), func(sc *component.Scope) error {
+		format = sc.ParamString("format")
+		bestOf, _ = sc.ParamInt("best_of")
 		return nil
 	})
 	return format, bestOf, err
@@ -593,8 +593,8 @@ func TestComponentPermissions(t *testing.T) {
 	// The zero Who allows nobody, not even an admin.
 	wantErr(t, "tanımsız rol", e.fw.Change(ctx, ref(admin, tf, ev.ID, "gear"), definition.CompChecklist, component.Who{}, func(*component.Scope) error { return nil }), denied)
 	// A component's own action from the permission table.
-	must(t, e.fw.Change(ctx, ref(member, tf, ev.ID, "gear"), definition.CompChecklist, component.Allowed(authz.EventRSVP), func(*component.Scope) error { return nil }))
-	wantErr(t, "bileşenin kendi işlemi", e.fw.Change(ctx, ref(member, tf, ev.ID, "gear"), definition.CompChecklist, component.Allowed(authz.EventEditAny),
+	must(t, e.fw.Change(ctx, ref(member, tf, ev.ID, "gear"), definition.CompChecklist, component.ByAction(authz.EventRSVP), func(*component.Scope) error { return nil }))
+	wantErr(t, "bileşenin kendi işlemi", e.fw.Change(ctx, ref(member, tf, ev.ID, "gear"), definition.CompChecklist, component.ByAction(authz.EventEditAny),
 		func(*component.Scope) error { return nil }), denied)
 }
 
@@ -950,7 +950,7 @@ func TestReferees(t *testing.T) {
 	tick()
 	_, err = e.fw.AssignReferee(ctx, admin, tf, ev.ID, component.RefereeInput{User: plain, ComponentKey: "bracket", Scope: table})
 	must(t, err)
-	must(t, e.fw.Change(ctx, ref(admin, tf, ev.ID, "bracket"), definition.CompBracket, component.Manager(), func(sc *component.Scope) error {
+	must(t, e.fw.Change(ctx, ref(admin, tf, ev.ID, "bracket"), definition.CompBracket, component.ByManager(), func(sc *component.Scope) error {
 		return sc.RemoveScopeReferees(ctx, table)
 	}))
 	list, err = e.fw.ListReferees(ctx, admin, tf, ev.ID)

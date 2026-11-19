@@ -22,10 +22,10 @@
 //     (apperr.ErrTayfaReadOnly) or from seven days after the event's end
 //     (apperr.ErrComponentFrozen; ADR-0025 §5).
 //   - Roles: the permission table's component actions (authz) asked in one
-//     place. A change names who may make it: Participant, Manager (the
-//     organizer, and moderators as for every event), Referee (a manager or
-//     a referee the organizer assigned, event_referees) or an action of
-//     the component's own (Allowed).
+//     place. A change names who may make it: ByParticipant, ByManager (the
+//     organizer, and moderators as for every event), ByReferee (a manager
+//     or a referee the organizer assigned, event_referees) or an action
+//     of the component's own (ByAction).
 //   - Live updates: a change that calls Scope.Changed writes
 //     event.component_changed (event ID and component key only) to the
 //     outbox in the same transaction; the relay passes it to chat, which

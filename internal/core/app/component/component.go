@@ -97,22 +97,22 @@ const (
 	roleAction
 )
 
-// Participant is every active member who is not muted
+// ByParticipant is every active member who is not muted
 // (authz.EventComponentParticipate). The component checks the answer or
 // verified attendance its rule needs (Scope.Going, Scope.Attended).
-func Participant() Who { return Who{role: roleParticipant} }
+func ByParticipant() Who { return Who{role: roleParticipant} }
 
-// Manager is the event's organizer, and moderators and admins as for every
+// ByManager is the event's organizer, and moderators and admins as for every
 // event (authz.EventComponentManageOwn / EventComponentManageAny).
-func Manager() Who { return Who{role: roleManager} }
+func ByManager() Who { return Who{role: roleManager} }
 
-// Referee is a manager, or a referee the organizer assigned to the event,
+// ByReferee is a manager, or a referee the organizer assigned to the event,
 // to this component or to exactly this scope of it (a table, a match;
 // event_referees). The zero scope asks for an assignment without a scope.
-func Referee(scope id.ID) Who { return Who{role: roleReferee, scope: scope} }
+func ByReferee(scope id.ID) Who { return Who{role: roleReferee, scope: scope} }
 
-// Allowed is an action of the component's own in the permission table.
-func Allowed(a authz.Action) Who { return Who{role: roleAction, action: a} }
+// ByAction is an action of the component's own in the permission table.
+func ByAction(a authz.Action) Who { return Who{role: roleAction, action: a} }
 
 // Scope is one request on one component of an event, resolved and checked.
 // It is valid only inside the View or Change call that made it.
@@ -173,18 +173,18 @@ func (sc *Scope) manages(own, anyAction authz.Action) error {
 }
 
 // IsManager reports whether the caller may manage the event's components
-// (Manager); a mute counts.
+// (ByManager); a mute counts.
 func (sc *Scope) IsManager() bool {
 	return sc.manages(authz.EventComponentManageOwn, authz.EventComponentManageAny) == nil
 }
 
-// AuthorizeManager is the check behind Manager, for a rule inside a change
+// AuthorizeManager is the check behind ByManager, for a rule inside a change
 // opened to others.
 func (sc *Scope) AuthorizeManager() error {
 	return sc.manages(authz.EventComponentManageOwn, authz.EventComponentManageAny)
 }
 
-// AuthorizeReferee is the check behind Referee, for a scope known only
+// AuthorizeReferee is the check behind ByReferee, for a scope known only
 // inside the change (the table a score belongs to).
 func (sc *Scope) AuthorizeReferee(ctx context.Context, scope id.ID) error {
 	if sc.AuthorizeManager() == nil {
@@ -249,21 +249,22 @@ func (sc *Scope) Param(name string) (p definition.Param, ok bool) {
 	return p, true
 }
 
-// String returns a string parameter (Param); "" when it is not set.
-func (sc *Scope) String(name string) string {
+// ParamString returns a string parameter (Param); "" when it is not set.
+func (sc *Scope) ParamString(name string) string {
 	p, _ := sc.Param(name)
 	return p.String()
 }
 
-// Bool returns a boolean parameter (Param); false when it is not set.
-func (sc *Scope) Bool(name string) bool {
+// ParamBool returns a boolean parameter (Param); false when it is not
+// set.
+func (sc *Scope) ParamBool(name string) bool {
 	p, _ := sc.Param(name)
 	return p.Bool()
 }
 
-// Int returns an integer parameter (Param); ok is false when it is not
-// set.
-func (sc *Scope) Int(name string) (n int64, ok bool) {
+// ParamInt returns an integer parameter (Param); ok is false when it is
+// not set.
+func (sc *Scope) ParamInt(name string) (n int64, ok bool) {
 	p, _ := sc.Param(name)
 	n, ok = p.Value.(int64)
 	return n, ok
