@@ -146,23 +146,16 @@ type Event struct {
 	TypeVersion      int32
 }
 
-type EventCamp struct {
-	EventID   pgtype.UUID
-	Type      string
-	SiteName  pgtype.Text
-	HasWater  pgtype.Bool
-	HasToilet pgtype.Bool
-	Notes     pgtype.Text
-}
-
-type EventCampItem struct {
+type EventChecklistItem struct {
 	ID             pgtype.UUID
 	EventID        pgtype.UUID
+	ComponentKey   string
 	Name           string
 	Quantity       int32
 	AssignedUserID pgtype.UUID
 	CreatedBy      pgtype.UUID
 	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type EventComponent struct {

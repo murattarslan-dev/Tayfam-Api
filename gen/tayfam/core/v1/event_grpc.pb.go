@@ -52,8 +52,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // EventService manages a tayfa's events: creating, editing and cancelling
-// them, RSVPs with a waitlist, camp item lists and convoy vehicles (issue
-// #49; data model v14 "Duyuru ve Etkinlik", "Türe özel tablolar",
+// them and RSVPs with a waitlist (issue #49; data model v14 "Duyuru ve Etkinlik", "Türe özel tablolar",
 // "Etkinlik iptali", "Online etkinlik", "Konvoy aracı"). Only gateway calls
 // it, with the user's access token.
 //
@@ -72,10 +71,9 @@ const (
 //     read events and attendees: every active member (also when muted)
 //     create: moderators and admins; every active member when
 //     Tayfa.members_can_create_events is true
-//     edit, cancel, manage camp items and other people's vehicles: the
-//     organizer (the event's creator) for their own event, moderators
-//     and admins for every event
-//     RSVP, add or remove one's own convoy vehicle: every active member
+//     edit, cancel: the organizer (the event's creator) for their own
+//     event, moderators and admins for every event
+//     RSVP: every active member
 //   - Changes to a read-only tayfa fail with ERROR_REASON_TAYFA_READ_ONLY.
 //   - Changes to a cancelled event fail with ERROR_REASON_EVENT_CANCELLED,
 //     and to an event that has ended with ERROR_REASON_EVENT_ENDED.
@@ -137,27 +135,18 @@ type EventServiceClient interface {
 	// ListAttendees lists the answers with one status, oldest first (for
 	// WAITLIST: the order in line).
 	ListAttendees(ctx context.Context, in *ListAttendeesRequest, opts ...grpc.CallOption) (*ListAttendeesResponse, error)
-	// AddCampItem adds an item to a camp event's list (at most 200).
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_LIMIT, ERROR_REASON_EVENT_NOT_GOING (the assignee
-	// did not answer GOING or is not an active member),
-	// ERROR_REASON_VALIDATION.
+	// AddCampItem is not served any more: a camp's list is the list
+	// component's (ChecklistComponentService.AddChecklistItem,
+	// component_checklist.proto; issue #241). It answers UNIMPLEMENTED; the
+	// method stays because it cannot be removed.
 	AddCampItem(ctx context.Context, in *AddCampItemRequest, opts ...grpc.CallOption) (*AddCampItemResponse, error)
-	// RemoveCampItem removes an item from a camp event's list.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+	// RemoveCampItem is not served any more
+	// (ChecklistComponentService.RemoveChecklistItem; issue #241). It
+	// answers UNIMPLEMENTED; the method stays because it cannot be removed.
 	RemoveCampItem(ctx context.Context, in *RemoveCampItemRequest, opts ...grpc.CallOption) (*RemoveCampItemResponse, error)
-	// AssignCampItem sets or clears who brings a camp item (issue #198). The
-	// organizer, moderators and admins assign any participant who answered
-	// GOING or clear any assignment; a member who answered GOING takes a
-	// free item for themselves or drops their own. Setting the current value
-	// is a no-op.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_ITEM_NOT_FOUND, ERROR_REASON_EVENT_NOT_GOING,
-	// ERROR_REASON_EVENT_ITEM_TAKEN, ERROR_REASON_VALIDATION.
+	// AssignCampItem is not served any more
+	// (ChecklistComponentService.AssignChecklistItem; issue #241). It
+	// answers UNIMPLEMENTED; the method stays because it cannot be removed.
 	AssignCampItem(ctx context.Context, in *AssignCampItemRequest, opts ...grpc.CallOption) (*AssignCampItemResponse, error)
 	// AddConvoyVehicle is not served any more: vehicles are the vehicles
 	// component's (VehiclesComponentService.SetVehicle,
@@ -561,8 +550,7 @@ func (c *eventServiceClient) ExportEvent(ctx context.Context, in *ExportEventReq
 // for forward compatibility.
 //
 // EventService manages a tayfa's events: creating, editing and cancelling
-// them, RSVPs with a waitlist, camp item lists and convoy vehicles (issue
-// #49; data model v14 "Duyuru ve Etkinlik", "Türe özel tablolar",
+// them and RSVPs with a waitlist (issue #49; data model v14 "Duyuru ve Etkinlik", "Türe özel tablolar",
 // "Etkinlik iptali", "Online etkinlik", "Konvoy aracı"). Only gateway calls
 // it, with the user's access token.
 //
@@ -581,10 +569,9 @@ func (c *eventServiceClient) ExportEvent(ctx context.Context, in *ExportEventReq
 //     read events and attendees: every active member (also when muted)
 //     create: moderators and admins; every active member when
 //     Tayfa.members_can_create_events is true
-//     edit, cancel, manage camp items and other people's vehicles: the
-//     organizer (the event's creator) for their own event, moderators
-//     and admins for every event
-//     RSVP, add or remove one's own convoy vehicle: every active member
+//     edit, cancel: the organizer (the event's creator) for their own
+//     event, moderators and admins for every event
+//     RSVP: every active member
 //   - Changes to a read-only tayfa fail with ERROR_REASON_TAYFA_READ_ONLY.
 //   - Changes to a cancelled event fail with ERROR_REASON_EVENT_CANCELLED,
 //     and to an event that has ended with ERROR_REASON_EVENT_ENDED.
@@ -646,27 +633,18 @@ type EventServiceServer interface {
 	// ListAttendees lists the answers with one status, oldest first (for
 	// WAITLIST: the order in line).
 	ListAttendees(context.Context, *ListAttendeesRequest) (*ListAttendeesResponse, error)
-	// AddCampItem adds an item to a camp event's list (at most 200).
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_LIMIT, ERROR_REASON_EVENT_NOT_GOING (the assignee
-	// did not answer GOING or is not an active member),
-	// ERROR_REASON_VALIDATION.
+	// AddCampItem is not served any more: a camp's list is the list
+	// component's (ChecklistComponentService.AddChecklistItem,
+	// component_checklist.proto; issue #241). It answers UNIMPLEMENTED; the
+	// method stays because it cannot be removed.
 	AddCampItem(context.Context, *AddCampItemRequest) (*AddCampItemResponse, error)
-	// RemoveCampItem removes an item from a camp event's list.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+	// RemoveCampItem is not served any more
+	// (ChecklistComponentService.RemoveChecklistItem; issue #241). It
+	// answers UNIMPLEMENTED; the method stays because it cannot be removed.
 	RemoveCampItem(context.Context, *RemoveCampItemRequest) (*RemoveCampItemResponse, error)
-	// AssignCampItem sets or clears who brings a camp item (issue #198). The
-	// organizer, moderators and admins assign any participant who answered
-	// GOING or clear any assignment; a member who answered GOING takes a
-	// free item for themselves or drops their own. Setting the current value
-	// is a no-op.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_ITEM_NOT_FOUND, ERROR_REASON_EVENT_NOT_GOING,
-	// ERROR_REASON_EVENT_ITEM_TAKEN, ERROR_REASON_VALIDATION.
+	// AssignCampItem is not served any more
+	// (ChecklistComponentService.AssignChecklistItem; issue #241). It
+	// answers UNIMPLEMENTED; the method stays because it cannot be removed.
 	AssignCampItem(context.Context, *AssignCampItemRequest) (*AssignCampItemResponse, error)
 	// AddConvoyVehicle is not served any more: vehicles are the vehicles
 	// component's (VehiclesComponentService.SetVehicle,

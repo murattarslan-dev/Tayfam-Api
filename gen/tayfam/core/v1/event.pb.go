@@ -739,17 +739,20 @@ func (x *ConvoyVehicle) GetPlate() string {
 	return ""
 }
 
+// CampDetails is not used any more: a camp has no type details. Its site
+// details are fields of the camp type (site_name, has_water, has_toilet,
+// notes; Event.fields) and its list is the list component's
+// (ChecklistComponentService, component_checklist.proto; issue #241). An
+// event never carries it and a request that sets it is refused
+// (ERROR_REASON_VALIDATION, field "details"). The message and its fields
+// stay because they cannot be removed.
 type CampDetails struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Up to 120 characters; may be empty.
-	SiteName  string `protobuf:"bytes,1,opt,name=site_name,json=siteName,proto3" json:"site_name,omitempty"`
-	HasWater  *bool  `protobuf:"varint,2,opt,name=has_water,json=hasWater,proto3,oneof" json:"has_water,omitempty"`
-	HasToilet *bool  `protobuf:"varint,3,opt,name=has_toilet,json=hasToilet,proto3,oneof" json:"has_toilet,omitempty"`
-	// Up to 1000 characters; may be empty.
-	Notes string `protobuf:"bytes,4,opt,name=notes,proto3" json:"notes,omitempty"`
-	// Output only, GetEvent only. Changed with AddCampItem and
-	// RemoveCampItem.
-	Items         []*CampItem `protobuf:"bytes,5,rep,name=items,proto3" json:"items,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SiteName      string                 `protobuf:"bytes,1,opt,name=site_name,json=siteName,proto3" json:"site_name,omitempty"`
+	HasWater      *bool                  `protobuf:"varint,2,opt,name=has_water,json=hasWater,proto3,oneof" json:"has_water,omitempty"`
+	HasToilet     *bool                  `protobuf:"varint,3,opt,name=has_toilet,json=hasToilet,proto3,oneof" json:"has_toilet,omitempty"`
+	Notes         string                 `protobuf:"bytes,4,opt,name=notes,proto3" json:"notes,omitempty"`
+	Items         []*CampItem            `protobuf:"bytes,5,rep,name=items,proto3" json:"items,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -819,16 +822,14 @@ func (x *CampDetails) GetItems() []*CampItem {
 	return nil
 }
 
+// CampItem is not used any more (ChecklistItem,
+// component_checklist.proto; issue #241).
 type CampItem struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// 1–60 characters.
-	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	// 1–999.
-	Quantity int32 `protobuf:"varint,3,opt,name=quantity,proto3" json:"quantity,omitempty"`
-	// Optional: who brings it; an active member of the tayfa who answered
-	// GOING when assigned.
-	AssignedUserId string `protobuf:"bytes,4,opt,name=assigned_user_id,json=assignedUserId,proto3" json:"assigned_user_id,omitempty"`
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name           string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Quantity       int32                  `protobuf:"varint,3,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	AssignedUserId string                 `protobuf:"bytes,4,opt,name=assigned_user_id,json=assignedUserId,proto3" json:"assigned_user_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1168,11 +1169,11 @@ type Event struct {
 	// The event was edited on its own (UpdateEvent without series): changes
 	// to the series and ending it leave it alone.
 	SeriesOverride bool `protobuf:"varint,29,opt,name=series_override,json=seriesOverride,proto3" json:"series_override,omitempty"`
-	// The Faz 1 details of the camp, hike and fishing types, until their
+	// The Faz 1 details of the hike and fishing types, until their
 	// components replace them (ADR-0025 §10). Set by GetEvent; never by
-	// ListUpcomingEvents. convoy, gaming and sports are never set: a
-	// convoy's data is in its components (issues #239, #240), the others'
-	// in fields.
+	// ListUpcomingEvents. convoy, camp, gaming and sports are never set: a
+	// convoy's data is in its components (issues #239, #240), a camp's in
+	// its list component and fields (issue #241), the others' in fields.
 	//
 	// Types that are valid to be assigned to Details:
 	//
@@ -1598,11 +1599,11 @@ type CreateEventRequest struct {
 	// 0: no limit; otherwise 1–10000.
 	Capacity     int32 `protobuf:"varint,13,opt,name=capacity,proto3" json:"capacity,omitempty"`
 	Discoverable bool  `protobuf:"varint,14,opt,name=discoverable,proto3" json:"discoverable,omitempty"`
-	// Only for the camp, hike and fishing types, and must match the type;
-	// may be unset. convoy, gaming and sports must be unset
+	// Only for the hike and fishing types, and must match the type; may be
+	// unset. convoy, camp, gaming and sports must be unset
 	// (ERROR_REASON_VALIDATION, field "details"): a convoy's data is in its
-	// components, the others' goes in fields. Output-only fields (items) are
-	// ignored.
+	// components, a camp's in its list component and fields, the others' goes
+	// in fields.
 	//
 	// Types that are valid to be assigned to Details:
 	//
@@ -2292,7 +2293,7 @@ type UpdateEventRequest struct {
 	// (start_time and end_time together), "location" (mode,
 	// meeting_point_name, meeting_point, city, district and online_url
 	// together), "capacity", "discoverable", "details" (replaces the type
-	// details of a camp, hike or fishing event; camp items stay), "fields" (replaces the field values), "cover_upload_id"
+	// details of a hike or fishing event), "fields" (replaces the field values), "cover_upload_id"
 	// (not with series = true: ERROR_REASON_VALIDATION, field
 	// "update_mask"). Any other path is ERROR_REASON_VALIDATION.
 	UpdateMask *fieldmaskpb.FieldMask `protobuf:"bytes,15,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
@@ -3245,16 +3246,15 @@ func (x *ListAttendeesResponse) GetNextPageToken() string {
 	return ""
 }
 
+// AddCampItemRequest and the other camp item messages are not used any
+// more (issue #241); they stay because they cannot be removed.
 type AddCampItemRequest struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	TayfaId string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
-	EventId string                 `protobuf:"bytes,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	// 1–60 characters.
-	Name string `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	// 0 means 1; otherwise 1–999.
-	Quantity int32 `protobuf:"varint,4,opt,name=quantity,proto3" json:"quantity,omitempty"`
-	// Optional; must be an active member of the tayfa who answered GOING.
-	AssignedUserId string `protobuf:"bytes,5,opt,name=assigned_user_id,json=assignedUserId,proto3" json:"assigned_user_id,omitempty"`
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	TayfaId        string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	EventId        string                 `protobuf:"bytes,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	Name           string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Quantity       int32                  `protobuf:"varint,4,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	AssignedUserId string                 `protobuf:"bytes,5,opt,name=assigned_user_id,json=assignedUserId,proto3" json:"assigned_user_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -3465,12 +3465,11 @@ func (*RemoveCampItemResponse) Descriptor() ([]byte, []int) {
 }
 
 type AssignCampItemRequest struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	TayfaId string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
-	EventId string                 `protobuf:"bytes,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	ItemId  string                 `protobuf:"bytes,3,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
-	// Empty clears the assignment.
-	AssignedUserId string `protobuf:"bytes,4,opt,name=assigned_user_id,json=assignedUserId,proto3" json:"assigned_user_id,omitempty"`
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	TayfaId        string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	EventId        string                 `protobuf:"bytes,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	ItemId         string                 `protobuf:"bytes,3,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	AssignedUserId string                 `protobuf:"bytes,4,opt,name=assigned_user_id,json=assignedUserId,proto3" json:"assigned_user_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }

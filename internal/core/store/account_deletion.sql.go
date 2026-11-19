@@ -46,25 +46,26 @@ func (q *Queries) ClearAuditActor(ctx context.Context, userID pgtype.UUID) error
 	return err
 }
 
-const clearCampItemUserFields = `-- name: ClearCampItemUserFields :exec
-UPDATE event_camp_items
-SET assigned_user_id = NULLIF(assigned_user_id, $1),
-    created_by       = NULLIF(created_by, $1)
-WHERE $1 IN (assigned_user_id, created_by)
-`
-
-// Malzeme listede kalır; üstlenen ve ekleyen boşalır.
-func (q *Queries) ClearCampItemUserFields(ctx context.Context, userID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, clearCampItemUserFields, userID)
-	return err
-}
-
 const clearCatchDeleter = `-- name: ClearCatchDeleter :exec
 UPDATE fishing_catches SET deleted_by = NULL WHERE deleted_by = $1
 `
 
 func (q *Queries) ClearCatchDeleter(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, clearCatchDeleter, userID)
+	return err
+}
+
+const clearChecklistItemUserFields = `-- name: ClearChecklistItemUserFields :exec
+UPDATE event_checklist_items
+SET assigned_user_id = NULLIF(assigned_user_id, $1),
+    created_by       = NULLIF(created_by, $1)
+WHERE $1 IN (assigned_user_id, created_by)
+`
+
+// Liste maddesi listede kalır; üstlenen ve ekleyen boşalır (`checklist`
+// bileşeni, issue #241).
+func (q *Queries) ClearChecklistItemUserFields(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearChecklistItemUserFields, userID)
 	return err
 }
 
