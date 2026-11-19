@@ -211,6 +211,17 @@ type EventLogEntryVocabulary struct {
 	VocabularyID pgtype.UUID
 }
 
+type EventMeasurement struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	UserID       pgtype.UUID
+	Value        pgtype.Numeric
+	EnteredBy    pgtype.UUID
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
 type EventPhoto struct {
 	ID              pgtype.UUID
 	EventID         pgtype.UUID

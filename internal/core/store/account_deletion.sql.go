@@ -121,6 +121,15 @@ func (q *Queries) ClearLogEntryDeleter(ctx context.Context, userID pgtype.UUID) 
 	return err
 }
 
+const clearMeasurementEnteredBy = `-- name: ClearMeasurementEnteredBy :exec
+UPDATE event_measurements SET entered_by = NULL WHERE entered_by = $1
+`
+
+func (q *Queries) ClearMeasurementEnteredBy(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearMeasurementEnteredBy, userID)
+	return err
+}
+
 const clearMembershipUserFields = `-- name: ClearMembershipUserFields :exec
 UPDATE memberships
 SET invited_by_user_id = NULLIF(invited_by_user_id, $1),
@@ -274,6 +283,17 @@ DELETE FROM event_log_entries WHERE user_id = $1
 // silinir, fotoğrafları silme kuyruğuna girer (issue #243).
 func (q *Queries) DeleteUserLogEntries(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserLogEntries, userID)
+	return err
+}
+
+const deleteUserMeasurements = `-- name: DeleteUserMeasurements :exec
+DELETE FROM event_measurements WHERE user_id = $1
+`
+
+// Kişisel ölçüm değerleri kişiye aittir; kişiyle birlikte silinir. Toplam
+// ölçüm etkinliğindir: kalır, yazan boşalır (issue #245; ADR-0025 §11).
+func (q *Queries) DeleteUserMeasurements(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserMeasurements, userID)
 	return err
 }
 
