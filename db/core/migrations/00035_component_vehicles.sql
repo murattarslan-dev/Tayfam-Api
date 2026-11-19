@@ -113,10 +113,12 @@ CREATE TRIGGER event_vehicle_seat_requests_component_guard
 -- değişir (ON CONFLICT) ve silinir; başka etkinliğe, bileşene ya da kişiye
 -- taşınamaz. İstek yalnızca onaylanır ve silinir; başka araca ya da kişiye
 -- taşınamaz.
+-- SELECT ve INSERT burada da açıkça verilir: geri alınıp yeniden uygulanan
+-- migration'ı başka bir rol çalıştırırsa varsayılan yetkiler oluşmaz.
+GRANT SELECT, INSERT, DELETE ON event_vehicles TO core_app;
 GRANT UPDATE (make, model, model_year, color, plate, seats, updated_at) ON event_vehicles TO core_app;
-GRANT DELETE ON event_vehicles TO core_app;
+GRANT SELECT, INSERT, DELETE ON event_vehicle_seat_requests TO core_app;
 GRANT UPDATE (status, decided_at) ON event_vehicle_seat_requests TO core_app;
-GRANT DELETE ON event_vehicle_seat_requests TO core_app;
 
 -- Faz 1 verisi: konvoy araçları bileşen tablosuna.
 INSERT INTO event_vehicles (id, event_id, component_key, user_id, vehicle_id, make, model, model_year, color, plate, seats, created_at, updated_at)
