@@ -146,7 +146,16 @@ ALTER TABLE uploads ADD CONSTRAINT uploads_attached CHECK (
 );
 
 ALTER TABLE reports DROP CONSTRAINT reports_target_type;
+-- Şikâyetin oluşturma bilgileri ve kararları korunur (reports_guard,
+-- reports_platform_guard); yalnızca hedef türünün adı değişir, bu yüzden
+-- korumalar ve updated_at tetikleyicisi bu güncelleme için kapatılır.
+ALTER TABLE reports DISABLE TRIGGER reports_guard;
+ALTER TABLE reports DISABLE TRIGGER reports_platform_guard;
+ALTER TABLE reports DISABLE TRIGGER reports_updated_at;
 UPDATE reports SET target_type = 'log_entry' WHERE target_type = 'fishing_catch';
+ALTER TABLE reports ENABLE TRIGGER reports_guard;
+ALTER TABLE reports ENABLE TRIGGER reports_platform_guard;
+ALTER TABLE reports ENABLE TRIGGER reports_updated_at;
 ALTER TABLE reports ADD CONSTRAINT reports_target_type CHECK (target_type IN
   ('user', 'tayfa', 'announcement', 'event', 'question', 'answer', 'poll', 'log_entry', 'dm_message', 'event_photo',
    'channel_message'));
@@ -288,7 +297,16 @@ ALTER TABLE uploads ADD CONSTRAINT uploads_attached CHECK (
 );
 
 ALTER TABLE reports DROP CONSTRAINT reports_target_type;
+-- Şikâyetin oluşturma bilgileri ve kararları korunur (reports_guard,
+-- reports_platform_guard); yalnızca hedef türünün adı değişir, bu yüzden
+-- korumalar ve updated_at tetikleyicisi bu güncelleme için kapatılır.
+ALTER TABLE reports DISABLE TRIGGER reports_guard;
+ALTER TABLE reports DISABLE TRIGGER reports_platform_guard;
+ALTER TABLE reports DISABLE TRIGGER reports_updated_at;
 UPDATE reports SET target_type = 'fishing_catch' WHERE target_type = 'log_entry';
+ALTER TABLE reports ENABLE TRIGGER reports_guard;
+ALTER TABLE reports ENABLE TRIGGER reports_platform_guard;
+ALTER TABLE reports ENABLE TRIGGER reports_updated_at;
 ALTER TABLE reports ADD CONSTRAINT reports_target_type CHECK (target_type IN
   ('user', 'tayfa', 'announcement', 'event', 'question', 'answer', 'poll', 'fishing_catch', 'dm_message', 'event_photo',
    'channel_message'));
