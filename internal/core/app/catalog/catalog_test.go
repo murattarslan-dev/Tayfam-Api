@@ -42,8 +42,9 @@ func TestNewNeedsPool(t *testing.T) {
 // seedVersion is the catalog version the migrations leave: 1 from the
 // seed (00030), raised by every migration that changes a type in place
 // (00036: the camp's fields, issue #241; 00037: the hike's fields, issue
-// #242; 00038: the fishing log's fields, issue #243).
-const seedVersion = 4
+// #242; 00038: the fishing log's fields, issue #243; 00040: the hike's
+// measures, issue #245).
+const seedVersion = 5
 
 // The seed is the seven Faz 1 types with today's behaviour (ADR-0025 §10
 // step 1): every definition passes the validator, the keys did not change.
@@ -126,6 +127,17 @@ func TestSeedCatalog(t *testing.T) {
 	}
 	if c, ok := byKey["hike"].Parsed.Component(definition.CompRollCall); !ok || !c.Params["alarm"].Bool() {
 		t.Errorf("hike.roll_call = %+v", c)
+	}
+	// The hike's measures follow the Notion catalog (issue #245): totals the
+	// organizer enters, suggested from the planned values.
+	for key, want := range map[string][2]string{
+		"distance": {"km", "planned_distance"}, "elevation_gain": {"m", "planned_elevation"},
+	} {
+		c, ok := byKey["hike"].Parsed.Component(key)
+		if !ok || c.Kind != definition.CompMeasure || c.Params["unit"].String() != want[0] || c.Params["scope"].String() != "total" ||
+			c.Params["entered_by"].String() != "organizer" || c.Params["prefill_from"].String() != want[1] || !c.Params["showcase"].Bool() {
+			t.Errorf("hike.%s = %+v", key, c)
+		}
 	}
 	// The fishing catch log follows the Notion catalog (issue #243): the
 	// species in the fish_species vocabulary, count, weight and the Faz 1

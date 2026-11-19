@@ -153,6 +153,10 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_VOCABULARY_NOT_FOUND":  {http.StatusNotFound, "vocabulary-not-found"},
 		"ERROR_REASON_VOCABULARY_MERGED":     {http.StatusConflict, "vocabulary-merged"},
 		"ERROR_REASON_VOCABULARY_NOT_MERGED": {http.StatusConflict, "vocabulary-not-merged"},
+		// Measure component (issue #245; ADR-0025 §4, §5).
+		"ERROR_REASON_MEASUREMENT_NOT_STARTED":     {http.StatusConflict, "measurement-not-started"},
+		"ERROR_REASON_MEASUREMENT_NOT_PARTICIPANT": {http.StatusConflict, "measurement-not-participant"},
+		"ERROR_REASON_MEASUREMENT_SCOPE":           {http.StatusConflict, "measurement-scope"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

@@ -140,6 +140,14 @@ DELETE FROM event_log_entries WHERE user_id = @user_id;
 -- name: ClearLogEntryDeleter :exec
 UPDATE event_log_entries SET deleted_by = NULL WHERE deleted_by = @user_id;
 
+-- Kişisel ölçüm değerleri kişiye aittir; kişiyle birlikte silinir. Toplam
+-- ölçüm etkinliğindir: kalır, yazan boşalır (issue #245; ADR-0025 §11).
+-- name: DeleteUserMeasurements :exec
+DELETE FROM event_measurements WHERE user_id = @user_id;
+
+-- name: ClearMeasurementEnteredBy :exec
+UPDATE event_measurements SET entered_by = NULL WHERE entered_by = @user_id;
+
 -- Tayfa sözlüğüne eklediği değerler tayfanın ortak verisidir; kalır, ekleyen
 -- boşalır (issue #244; ADR-0037 §4).
 -- name: ClearVocabularyCreator :exec

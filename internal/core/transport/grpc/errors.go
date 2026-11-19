@@ -210,6 +210,12 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VOCABULARY_MERGED, true
 	case errors.Is(err, apperr.ErrVocabularyNotMerged):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VOCABULARY_NOT_MERGED, true
+	case errors.Is(err, apperr.ErrMeasurementNotStarted):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_MEASUREMENT_NOT_STARTED, true
+	case errors.Is(err, apperr.ErrMeasurementNotParticipant):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_MEASUREMENT_NOT_PARTICIPANT, true
+	case errors.Is(err, apperr.ErrMeasurementScope):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_MEASUREMENT_SCOPE, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

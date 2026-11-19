@@ -39,6 +39,7 @@ func componentRegistrars() []componentRegistrar {
 		registerTayfaVocabulary,
 
 		// measure (#245)
+		registerMeasureComponent,
 
 		// goal (#246)
 

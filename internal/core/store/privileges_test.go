@@ -79,6 +79,9 @@ var wantAppPrivileges = map[string]string{
 	// person; a seat request is only approved or removed.
 	"event_vehicles":              "DELETE,INSERT,SELECT,UPDATE(color,make,model,model_year,plate,seats,updated_at)",
 	"event_vehicle_seat_requests": "DELETE,INSERT,SELECT,UPDATE(decided_at,status)",
+	// Issue #245: a measurement never moves to another event, component or
+	// person; only its value changes and account deletion clears its writer.
+	"event_measurements": "DELETE,INSERT,SELECT,UPDATE(entered_by,updated_at,value)",
 	// Issue #241: an item never moves to another event or list, and its
 	// name and quantity do not change; only the assignee changes and
 	// account deletion clears the people on it.

@@ -1,0 +1,163 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/component.proto";
+
+// MeasureComponentService is the measure component (kind "measure", issue
+// #245; ADR-0025 §4, §5; ADR-0037 §2, §3): a value with a unit, for the
+// whole event (scope total: a hike's distance) or per participant (scope
+// personal: goals, pages read). The unit, the bounds, the decimals and who
+// enters the value are parameters of the component in the event's type
+// version.
+//
+// Who enters what:
+//   - total: managers (the organizer, and moderators and admins as for
+//     every event);
+//   - personal, entered_by self: a participant whose attendance was
+//     verified, their own value only;
+//   - personal, entered_by organizer: managers and the referees the
+//     organizer assigned to the event or the component, for every
+//     participant.
+// Values are entered from the event's start until the component freezes
+// seven days after the event's end.
+//
+// Only gateway calls it with the user's access token. Authentication,
+// scope and the errors every component shares are those of
+// EventComponentService (component.proto): anyone but an ACTIVE member
+// gets ERROR_REASON_TAYFA_NOT_FOUND, and so on. Values are never logged or
+// written to the audit record or to an outbox event.
+service MeasureComponentService {
+  // GetMeasure returns the measure's values. Open to every active member,
+  // muted ones included. A sensitive measure (deneme neti) shows each
+  // person only their own value; those who may enter values for others
+  // see every value.
+  rpc GetMeasure(GetMeasureRequest) returns (GetMeasureResponse);
+
+  // SetMeasureTotal writes the value of a total measure. Errors:
+  // ERROR_REASON_VALIDATION (value: outside the bounds or not finite),
+  // ERROR_REASON_MEASUREMENT_SCOPE (a personal measure),
+  // ERROR_REASON_MEASUREMENT_NOT_STARTED, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED and the errors of every component change.
+  rpc SetMeasureTotal(SetMeasureTotalRequest) returns (SetMeasureTotalResponse);
+
+  // RemoveMeasureTotal removes the value of a total measure; removing one
+  // that is not there is not an error. Errors as SetMeasureTotal.
+  rpc RemoveMeasureTotal(RemoveMeasureTotalRequest) returns (RemoveMeasureTotalResponse);
+
+  // SetMeasureEntry writes a participant's value of a personal measure.
+  // Errors: ERROR_REASON_VALIDATION (value, user_id),
+  // ERROR_REASON_MEASUREMENT_SCOPE (a total measure),
+  // ERROR_REASON_MEASUREMENT_NOT_STARTED, ERROR_REASON_NOT_ATTENDED (one's
+  // own value without a verified attendance),
+  // ERROR_REASON_MEASUREMENT_NOT_PARTICIPANT (a value for someone who is
+  // not a participant), ERROR_REASON_PERMISSION_DENIED (someone else's
+  // value without the right, or one's own when the organizer enters
+  // them), ERROR_REASON_MUTED and the errors of every component change.
+  rpc SetMeasureEntry(SetMeasureEntryRequest) returns (SetMeasureEntryResponse);
+
+  // RemoveMeasureEntry removes a participant's value of a personal measure;
+  // removing one that is not there is not an error. Errors as
+  // SetMeasureEntry, without the participant checks.
+  rpc RemoveMeasureEntry(RemoveMeasureEntryRequest) returns (RemoveMeasureEntryResponse);
+}
+
+// MeasureScope is the measure's scope parameter.
+enum MeasureScope {
+  MEASURE_SCOPE_UNSPECIFIED = 0;
+  // One value for the whole event.
+  MEASURE_SCOPE_TOTAL = 1;
+  // One value per participant.
+  MEASURE_SCOPE_PERSONAL = 2;
+}
+
+// MeasureEnteredBy is the measure's entered_by parameter.
+enum MeasureEnteredBy {
+  MEASURE_ENTERED_BY_UNSPECIFIED = 0;
+  // A participant enters their own value.
+  MEASURE_ENTERED_BY_SELF = 1;
+  // Managers (and, for a personal measure, assigned referees) enter it.
+  MEASURE_ENTERED_BY_ORGANIZER = 2;
+}
+
+// MeasureEntry is one participant's value of a personal measure.
+message MeasureEntry {
+  string user_id = 1;
+  double value = 2;
+  google.protobuf.Timestamp update_time = 3;
+}
+
+// EventMeasure is one measure component of an event, as the caller sees
+// it.
+message EventMeasure {
+  // From the event's type version (the definition's unit, a closed list).
+  string unit = 1;
+  MeasureScope scope = 2;
+  MeasureEnteredBy entered_by = 3;
+  // The bounds and the decimals values are rounded to; the definition's,
+  // or 0, 1 000 000 000 and 0 when it gives none.
+  double min = 4;
+  double max = 5;
+  int32 decimals = 6;
+  // The value of a total measure; unset without one (and for a personal
+  // measure).
+  optional double total = 7;
+  // When the total was last written; unset without one.
+  google.protobuf.Timestamp total_update_time = 8;
+  // The values of a personal measure the caller may see; empty for a total
+  // measure.
+  repeated MeasureEntry entries = 9;
+  // The suggested value (prefill_from, ADR-0037 §2): the value of the
+  // event's field, once the event has ended and while a total measure has
+  // no value. It is not a measurement until someone writes it.
+  optional double suggested = 10;
+  // The caller may write now: the total (total), their own value (self)
+  // or every participant's value (organizer).
+  bool caller_can_edit = 11;
+}
+
+message GetMeasureRequest {
+  ComponentRef ref = 1;
+}
+
+message GetMeasureResponse {
+  EventMeasure measure = 1;
+}
+
+message SetMeasureTotalRequest {
+  ComponentRef ref = 1;
+  double value = 2;
+}
+
+message SetMeasureTotalResponse {
+  EventMeasure measure = 1;
+}
+
+message RemoveMeasureTotalRequest {
+  ComponentRef ref = 1;
+}
+
+message RemoveMeasureTotalResponse {
+  EventMeasure measure = 1;
+}
+
+message SetMeasureEntryRequest {
+  ComponentRef ref = 1;
+  // The participant whose value this is; the caller for their own.
+  string user_id = 2;
+  double value = 3;
+}
+
+message SetMeasureEntryResponse {
+  EventMeasure measure = 1;
+}
+
+message RemoveMeasureEntryRequest {
+  ComponentRef ref = 1;
+  string user_id = 2;
+}
+
+message RemoveMeasureEntryResponse {
+  EventMeasure measure = 1;
+}

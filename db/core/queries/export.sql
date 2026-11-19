@@ -176,6 +176,20 @@ WHERE f.user_id = @user_id AND f.id > @after
 ORDER BY f.id
 LIMIT @n;
 
+-- Kişisel ölçüm değerleri (`measure` bileşeni, issue #245): kendi
+-- girdikleriniz ve organizatörün ya da hakemin sizin adınıza girdikleri. Kimin
+-- girdiği yalnızca "kendim mi" olarak yer alır; toplam ölçümler etkinliğindir.
+-- name: ExportMeasurements :many
+SELECT m.id AS k, jsonb_build_object(
+  'event_id', m.event_id, 'component_key', m.component_key, 'value', m.value,
+  'entered_by_self', m.entered_by IS NOT DISTINCT FROM m.user_id,
+  'created_at', m.created_at, 'updated_at', m.updated_at
+) AS data
+FROM event_measurements m
+WHERE m.user_id = @user_id AND m.id > @after
+ORDER BY m.id
+LIMIT @n;
+
 -- Albüm fotoğrafları (issue #206); dosyaların kendisi zip'e girmez
 -- (ADR-0021 §5), uploads bölümü onları listeler.
 -- name: ExportEventPhotos :many
