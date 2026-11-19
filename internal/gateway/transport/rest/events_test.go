@@ -151,7 +151,6 @@ func TestEventRoutes(t *testing.T) {
 	base := "/v1/tayfas/" + tayfaID + "/events"
 	one := base + "/" + eventID
 	series := "/v1/tayfas/" + tayfaID + "/event-series/" + seriesID
-	start := t0.Add(-time.Hour)
 	for _, tc := range []struct {
 		method, path, body string
 		code               int
