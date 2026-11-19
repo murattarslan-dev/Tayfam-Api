@@ -30,9 +30,14 @@
 // asked for; the client sends the point the author chose. Values and
 // locations never reach a log, an audit record or an outbox event.
 //
-// The statistics (`stat`) and the tayfa vocabulary of text fields
-// (`vocabulary`) read the stored values (event_log_entries.field_values,
-// definition.CleanValues' stored forms); they are issues #266 and #244.
+// Values are stored in event_log_entries.field_values in
+// definition.CleanValues' stored forms, except the text fields bound to the
+// tayfa vocabulary (`vocabulary`, issue #244; ADR-0037 §4): the client sends
+// an existing value's ID (Input.VocabularyIDs) or a text, a new text is added
+// to the vocabulary (package vocabulary), and the entry keeps the value's ID
+// in event_log_entry_vocabulary. Such a field is returned as the text of the
+// value's merge target, with its ID in Entry.VocabularyIDs. The statistics
+// (`stat`, issue #266) read both.
 package logbook
 
 import (
@@ -53,6 +58,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalog/definition"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/vocabulary"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -106,8 +112,12 @@ func (p Point) valid() bool {
 // Input is a new entry.
 type Input struct {
 	// Values maps a record field's key to its JSON value; every required
-	// field of the log must be there.
+	// field of the log must be there, in Values or VocabularyIDs.
 	Values map[string]json.RawMessage
+	// VocabularyIDs maps a field bound to the tayfa vocabulary to an
+	// existing value of the tayfa's vocabulary in the field's namespace.
+	// Such a field takes a value here or a text in Values, not both.
+	VocabularyIDs map[string]id.ID
 	// Location is optional, and only for a log with the location
 	// parameter.
 	Location *Point
@@ -126,8 +136,12 @@ type Input struct {
 type Entry struct {
 	ID     id.ID
 	UserID id.ID
-	// Values are the stored values by field key.
+	// Values are the stored values by field key; a field bound to the
+	// vocabulary is the text of its value's merge target, a JSON string.
 	Values map[string]json.RawMessage
+	// VocabularyIDs are the vocabulary values of the fields bound to the
+	// vocabulary, resolved to their merge targets; nil when there is none.
+	VocabularyIDs map[string]id.ID
 	// Location is nil when the entry has none or the caller may not see
 	// it.
 	Location *Point
@@ -232,15 +246,53 @@ type row struct {
 	CreatedAt          pgtype.Timestamptz
 }
 
+// resolved is a vocabulary field of an entry: its value's merge target.
+type resolved struct {
+	id    id.ID
+	value string
+}
+
+// vocabularyOf reads the vocabulary fields of the entries, by entry and
+// field key. The entries were read in the caller's event and component.
+func vocabularyOf(ctx context.Context, sc *component.Scope, entries []pgtype.UUID) (map[id.ID]map[string]resolved, error) {
+	out := map[id.ID]map[string]resolved{}
+	if len(entries) == 0 {
+		return out, nil
+	}
+	rows, err := sc.Q().ListLogEntryVocabulary(ctx, entries)
+	if err != nil {
+		return nil, fmt.Errorf("günlük kayıtlarının sözlük değerleri: %w", err)
+	}
+	for _, r := range rows {
+		e := id.ID(r.EntryID.Bytes)
+		if out[e] == nil {
+			out[e] = map[string]resolved{}
+		}
+		out[e][r.FieldKey] = resolved{id: id.ID(r.VocabularyID.Bytes), value: r.Value}
+	}
+	return out, nil
+}
+
 // entryOf converts r for the caller; seesParticipants is whether the caller
-// sees participants-only locations.
-func entryOf(sc *component.Scope, r row, seesParticipants bool) (Entry, error) {
+// sees participants-only locations, voc the entry's vocabulary fields.
+func entryOf(sc *component.Scope, r row, voc map[string]resolved, seesParticipants bool) (Entry, error) {
 	e := Entry{ID: id.ID(r.ID.Bytes), UserID: id.ID(r.UserID.Bytes), CreatedAt: r.CreatedAt.Time.UTC()}
 	if err := json.Unmarshal(r.FieldValues, &e.Values); err != nil {
 		return Entry{}, fmt.Errorf("günlük kaydının değerleri: %w", err)
 	}
 	if e.Values == nil {
 		e.Values = map[string]json.RawMessage{}
+	}
+	for k, v := range voc {
+		text, err := json.Marshal(v.value)
+		if err != nil {
+			return Entry{}, fmt.Errorf("günlük kaydının sözlük değeri: %w", err)
+		}
+		e.Values[k] = text
+		if e.VocabularyIDs == nil {
+			e.VocabularyIDs = map[string]id.ID{}
+		}
+		e.VocabularyIDs[k] = v.id
 	}
 	if r.PhotoUploadID.Valid {
 		e.PhotoUploadID = id.ID(r.PhotoUploadID.Bytes)
@@ -306,8 +358,16 @@ func (s *Service) List(ctx context.Context, ref component.Ref, size int32, token
 			last := rows[len(rows)-1]
 			out.NextPageToken = encodeCursor(ref.Tayfa, scope, last.CreatedAt.Time, id.ID(last.ID.Bytes))
 		}
+		ids := make([]pgtype.UUID, 0, len(rows))
 		for _, r := range rows {
-			e, err := entryOf(sc, row(r), sees)
+			ids = append(ids, r.ID)
+		}
+		voc, err := vocabularyOf(ctx, sc, ids)
+		if err != nil {
+			return err
+		}
+		for _, r := range rows {
+			e, err := entryOf(sc, row(r), voc[id.ID(r.ID.Bytes)], sees)
 			if err != nil {
 				return err
 			}
@@ -321,9 +381,88 @@ func (s *Service) List(ctx context.Context, ref component.Ref, size int32, token
 	return out, nil
 }
 
-// cleanValues checks the values against the log's record fields.
-func cleanValues(sc *component.Scope, in map[string]json.RawMessage) ([]byte, error) {
-	def := &definition.Definition{Fields: sc.Component.LogFields}
+// link is a field of a new entry bound to the vocabulary.
+type link struct {
+	key   string
+	value id.ID
+}
+
+// cleanEntry checks the values against the log's record fields and returns
+// the stored values and the vocabulary fields. Known texts of vocabulary
+// fields are looked up and new ones added to the tayfa's vocabulary, in
+// the caller's transaction, after every other check.
+func cleanEntry(ctx context.Context, sc *component.Scope, in Input) ([]byte, []link, error) {
+	plain := make(map[string]json.RawMessage, len(in.Values))
+	for k, v := range in.Values {
+		plain[k] = v
+	}
+	type pending struct {
+		field definition.Field
+		text  string
+		id    id.ID
+	}
+	var (
+		fields []definition.Field
+		vocab  []pending
+	)
+	for _, f := range sc.Component.LogFields {
+		if f.Vocabulary == "" {
+			fields = append(fields, f)
+			continue
+		}
+		raw, hasText := plain[f.Key]
+		v, hasID := in.VocabularyIDs[f.Key]
+		delete(plain, f.Key)
+		switch {
+		case hasText && hasID:
+			return nil, nil, apperr.Validation("vocabulary_ids." + f.Key)
+		case hasID:
+			vocab = append(vocab, pending{field: f, id: v})
+		case hasText:
+			clean, err := f.Clean(raw)
+			if err != nil {
+				return nil, nil, apperr.Validation("values." + f.Key)
+			}
+			var text string
+			if err := json.Unmarshal(clean, &text); err != nil {
+				return nil, nil, apperr.Validation("values." + f.Key)
+			}
+			vocab = append(vocab, pending{field: f, text: text})
+		case f.Required:
+			return nil, nil, apperr.Validation("values." + f.Key)
+		}
+	}
+	for k := range in.VocabularyIDs {
+		if !slices.ContainsFunc(sc.Component.LogFields, func(f definition.Field) bool { return f.Key == k && f.Vocabulary != "" }) {
+			return nil, nil, apperr.Validation("vocabulary_ids")
+		}
+	}
+	values, err := cleanValues(fields, plain)
+	if err != nil {
+		return nil, nil, err
+	}
+	links := make([]link, 0, len(vocab))
+	for _, p := range vocab {
+		if p.id != (id.ID{}) {
+			if err := vocabulary.Lookup(ctx, sc.Q(), sc.Tayfa, p.field.Vocabulary, p.id, "vocabulary_ids."+p.field.Key); err != nil {
+				return nil, nil, err
+			}
+			links = append(links, link{key: p.field.Key, value: p.id})
+			continue
+		}
+		v, err := vocabulary.Ensure(ctx, sc.Q(), sc.Tayfa, sc.User, p.field.Vocabulary, p.text, p.field.MaxLength, sc.Now, "values."+p.field.Key)
+		if err != nil {
+			return nil, nil, err
+		}
+		links = append(links, link{key: p.field.Key, value: v})
+	}
+	return values, links, nil
+}
+
+// cleanValues checks the values against the log's record fields that are
+// not bound to the vocabulary.
+func cleanValues(fields []definition.Field, in map[string]json.RawMessage) ([]byte, error) {
+	def := &definition.Definition{Fields: fields}
 	values, err := def.CleanValues(in, true)
 	var ve *definition.ValueError
 	switch {
@@ -341,8 +480,10 @@ func cleanValues(sc *component.Scope, in map[string]json.RawMessage) ([]byte, er
 
 // Add logs an entry; the caller must have a verified attendance. A repeat
 // with the same ClientRequestID returns the first entry. Refused: a bad
-// value (validation error on values.<field>, location,
-// location_visibility, client_request_id), a location on a log without
+// value (validation error on values.<field>; vocabulary_ids.<field> for a
+// value that is not in the tayfa's vocabulary of the field's namespace or
+// a field given twice; vocabulary_ids for a field not bound to it;
+// location, location_visibility, client_request_id), a location on a log without
 // one (validation error on location), an unverified attendance
 // (apperr.ErrNotAttended), the caller's full log (apperr.ErrEventLimit), a
 // photo that is not the caller's ready log photo of the tayfa (the media
@@ -350,6 +491,9 @@ func cleanValues(sc *component.Scope, in map[string]json.RawMessage) ([]byte, er
 func (s *Service) Add(ctx context.Context, ref component.Ref, in Input) (Entry, error) {
 	if len(in.Values) > definition.MaxLogFields {
 		return Entry{}, apperr.Validation("values")
+	}
+	if len(in.VocabularyIDs) > definition.MaxLogFields {
+		return Entry{}, apperr.Validation("vocabulary_ids")
 	}
 	if in.Location != nil && !in.Location.valid() {
 		return Entry{}, apperr.Validation("location")
@@ -373,12 +517,16 @@ func (s *Service) Add(ctx context.Context, ref component.Ref, in Input) (Entry, 
 			if err != nil {
 				return fmt.Errorf("günlük kaydı: %w", err)
 			}
-			out, err = entryOf(sc, row(r), true)
+			voc, err := vocabularyOf(ctx, sc, []pgtype.UUID{prev.ID})
+			if err != nil {
+				return err
+			}
+			out, err = entryOf(sc, row(r), voc[id.ID(prev.ID.Bytes)], true)
 			return err
 		case !errors.Is(err, pgx.ErrNoRows):
 			return fmt.Errorf("tekrar gönderim: %w", err)
 		}
-		values, err := cleanValues(sc, in.Values)
+		values, links, err := cleanEntry(ctx, sc, in)
 		if err != nil {
 			return err
 		}
@@ -427,6 +575,17 @@ func (s *Service) Add(ctx context.Context, ref component.Ref, in Input) (Entry, 
 		if err := sc.Q().CreateLogEntry(ctx, p); err != nil {
 			return fmt.Errorf("günlük kaydı: %w", err)
 		}
+		for _, l := range links {
+			if err := sc.Q().CreateLogEntryVocabulary(ctx, store.CreateLogEntryVocabularyParams{
+				EntryID: p.ID, FieldKey: l.key, VocabularyID: l.value.PG(),
+			}); err != nil {
+				return fmt.Errorf("günlük kaydının sözlük değeri: %w", err)
+			}
+		}
+		voc, err := vocabularyOf(ctx, sc, []pgtype.UUID{p.ID})
+		if err != nil {
+			return err
+		}
 		sc.Changed()
 		if err := sc.Audit(ctx, AuditAdded, map[string]any{"entry_id": entry.String()}); err != nil {
 			return err
@@ -434,7 +593,7 @@ func (s *Service) Add(ctx context.Context, ref component.Ref, in Input) (Entry, 
 		out, err = entryOf(sc, row{
 			ID: p.ID, UserID: p.UserID, FieldValues: values, Lat: p.Lat, Lng: p.Lng,
 			LocationVisibility: p.LocationVisibility, PhotoUploadID: p.PhotoUploadID, CreatedAt: p.CreatedAt,
-		}, true)
+		}, voc[entry], true)
 		return err
 	})
 	if err != nil {

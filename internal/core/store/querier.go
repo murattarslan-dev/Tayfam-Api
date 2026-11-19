@@ -156,6 +156,9 @@ type Querier interface {
 	ClearRsvpMarker(ctx context.Context, userID pgtype.UUID) error
 	ClearTayfaDiscoverUser(ctx context.Context, userID pgtype.UUID) error
 	ClearTayfaUserFields(ctx context.Context, userID pgtype.UUID) error
+	// Tayfa sözlüğüne eklediği değerler tayfanın ortak verisidir; kalır, ekleyen
+	// boşalır (issue #244; ADR-0037 §4).
+	ClearVocabularyCreator(ctx context.Context, userID pgtype.UUID) error
 	ClosePoll(ctx context.Context, arg ClosePollParams) (int64, error)
 	// chat dosyayı tutan mesajı söyledi: bağlama o mesajla onaylanır. Arada
 	// taşındıysa (asked_id değişti) bir şey olmaz.
@@ -249,6 +252,7 @@ type Querier interface {
 	CreateInstantTayfa(ctx context.Context, arg CreateInstantTayfaParams) error
 	CreateInvite(ctx context.Context, arg CreateInviteParams) error
 	CreateLogEntry(ctx context.Context, arg CreateLogEntryParams) error
+	CreateLogEntryVocabulary(ctx context.Context, arg CreateLogEntryVocabularyParams) error
 	// Üyelik değişiklikleri transaction içinde SetActor ya da SetSystemJob'dan
 	// sonra yapılır; aksi halde trigger reddeder.
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) error
@@ -284,6 +288,8 @@ type Querier interface {
 	// r2_key hiçbir yanıta, log'a ve olaya girmez; yalnızca R2 istemcisine
 	// verilir.
 	CreateUpload(ctx context.Context, arg CreateUploadParams) (pgtype.UUID, error)
+	// Aynı değer eşzamanlı eklenirse satır dönmez; çağıran yeniden arar.
+	CreateVocabularyValue(ctx context.Context, arg CreateVocabularyValueParams) (pgtype.UUID, error)
 	DeleteActivityRecord(ctx context.Context, arg DeleteActivityRecordParams) (int64, error)
 	DeleteAllFriendScores(ctx context.Context) error
 	DeleteAnswerVotes(ctx context.Context, answerID pgtype.UUID) error
@@ -461,6 +467,8 @@ type Querier interface {
 	// etkinlikte birden çok yoklama bileşeni olabilir: etkinlik başına bir satır.
 	ExportHikeCheckins(ctx context.Context, arg ExportHikeCheckinsParams) ([]ExportHikeCheckinsRow, error)
 	// Günlük kayıtları (issue #243); bölümün adı Faz 1'den (fishing_catches).
+	// Sözlüğe bağlı alanlar (issue #244) `vocabulary`'de: alan anahtarı →
+	// seçilen ya da eklenen sözlük değeri (ADR-0037 §4).
 	ExportLogEntries(ctx context.Context, arg ExportLogEntriesParams) ([]ExportLogEntriesRow, error)
 	// KVKK veri dışa aktarma (issue #144, ADR-0021; alanlar
 	// docs/data-export-format.md). Her sorgu yalnızca @user_id'nin (doğrulanmış
@@ -490,6 +498,10 @@ type Querier interface {
 	// ve arka plan işlerinin seçtiği alıcılar).
 	FilterNotifyActive(ctx context.Context, arg FilterNotifyActiveParams) ([]pgtype.UUID, error)
 	FindEventReferee(ctx context.Context, arg FindEventRefereeParams) (FindEventRefereeRow, error)
+	// Tayfa sözlüğü (issue #244; ADR-0037 §4). Her sorgu tayfa ve ad alanı
+	// kapsamında çalışır (IDOR); üyelik ve yetki app katmanındadır
+	// (internal/core/app/vocabulary).
+	FindVocabularyValue(ctx context.Context, arg FindVocabularyValueParams) (pgtype.UUID, error)
 	// Alıcının bir sayfadaki istek bildirimleri için: isteyenlerle arasındaki
 	// arkadaşlık satırı ve kayıtlı sonuç.
 	FriendRequestStates(ctx context.Context, arg FriendRequestStatesParams) ([]FriendRequestStatesRow, error)
@@ -668,6 +680,8 @@ type Querier interface {
 	GetUploadByClientRequest(ctx context.Context, arg GetUploadByClientRequestParams) (Upload, error)
 	GetUserEventVehicle(ctx context.Context, arg GetUserEventVehicleParams) (pgtype.UUID, error)
 	GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUserProfileRow, error)
+	GetVocabularyValue(ctx context.Context, arg GetVocabularyValueParams) (GetVocabularyValueRow, error)
+	GetVocabularyValueForUpdate(ctx context.Context, arg GetVocabularyValueForUpdateParams) (GetVocabularyValueForUpdateRow, error)
 	// Kanalı açanlardan hangileri o etkinliğe gidiyor.
 	GoingAmong(ctx context.Context, arg GoingAmongParams) ([]GoingAmongRow, error)
 	HasMutualTayfa(ctx context.Context, arg HasMutualTayfaParams) (bool, error)
@@ -819,6 +833,9 @@ type Querier interface {
 	ListLiveInvites(ctx context.Context, arg ListLiveInvitesParams) ([]ListLiveInvitesRow, error)
 	// (created_at, id) ile sayfalanır.
 	ListLogEntries(ctx context.Context, arg ListLogEntriesParams) ([]ListLogEntriesRow, error)
+	// Kayıtların sözlüğe bağlı alanları, birleştirme hedefine çözülmüş olarak.
+	// Kayıtlar çağıranın etkinlik ve bileşen kapsamında okunmuştur.
+	ListLogEntryVocabulary(ctx context.Context, entryIds []pgtype.UUID) ([]ListLogEntryVocabularyRow, error)
 	// Görüntüleme: istenen hazır dosyalar ve izleyicinin her birini görüp
 	// göremeyeceğine karar vermek için bağlam. Karar uygulama katmanında, core'un
 	// izin tablosuyla verilir (authz); burada yalnızca veri toplanır. İçeriğin
@@ -1017,6 +1034,8 @@ type Querier interface {
 	// belki hiç yazılmamış bir mesaja bağlı dosya, aynı sahibin yeni mesajına
 	// taşınır. Çağıran satırı önce GetOwnUploadForUpdate ile kilitler.
 	MoveChatAttachment(ctx context.Context, arg MoveChatAttachmentParams) (int64, error)
+	// Birleştirilen değere bağlı değerler hedefe taşınır (zincir yok).
+	MoveVocabularyMerges(ctx context.Context, arg MoveVocabularyMergesParams) error
 	MuteMembership(ctx context.Context, arg MuteMembershipParams) (int64, error)
 	// Bekleme listesinin başı: en eski kayıt önce. Çağıran etkinlik satırını
 	// zaten kilitlemiştir; satır kilidi aynı kaydın iki kez terfisini de önler.
@@ -1085,10 +1104,15 @@ type Querier interface {
 	// Kimse kalmayan tayfa sistem tarafından silme beklemesine alınır; talep
 	// eden kişi yoktur.
 	ScheduleTayfaDeletionBySystem(ctx context.Context, arg ScheduleTayfaDeletionBySystemParams) (int64, error)
+	// Birleştirilmiş değerler ve hedefleri (geri alma için).
+	SearchMergedVocabulary(ctx context.Context, arg SearchMergedVocabularyParams) ([]SearchMergedVocabularyRow, error)
 	// Türkçe tam metin arama. Sorgu metni tr_lower ile, belgelerle aynı
 	// tabloya göre küçültülür; websearch_to_tsquery her girdiyi kabul eder.
 	// Sıra: ilgi azalan, eşitlikte yeniden eskiye.
 	SearchQuestionsPage(ctx context.Context, arg SearchQuestionsPageParams) ([]SearchQuestionsPageRow, error)
+	// Birleştirilmemiş değerler; @query (normalize) kendisinde ya da ona
+	// birleştirilmiş bir değerde geçenler. Önce @query ile başlayanlar.
+	SearchVocabulary(ctx context.Context, arg SearchVocabularyParams) ([]SearchVocabularyRow, error)
 	// İşlemi yapan kullanıcıyı transaction'a bildirir; memberships trigger'ı rol
 	// hiyerarşisini buna göre doğrular (ADR-0004). Yalnızca transaction içinde
 	// anlamlıdır: değer transaction bitince silinir (set_config is_local = true).
@@ -1138,6 +1162,7 @@ type Querier interface {
 	SetTayfaJoinCode(ctx context.Context, arg SetTayfaJoinCodeParams) (int64, error)
 	SetTayfaModule(ctx context.Context, arg SetTayfaModuleParams) error
 	SetTayfaVisibility(ctx context.Context, arg SetTayfaVisibilityParams) (int64, error)
+	SetVocabularyMergedInto(ctx context.Context, arg SetVocabularyMergedIntoParams) (int64, error)
 	// Birebir mesaj kuralının girdileri (issue #95, veri modeli v14 "Mesaj
 	// İsteği Modeli (v7)", ADR-0009 CheckDirectMessage). Engelleme ve
 	// arkadaşlık social.sql'deki sorgularla okunur.
@@ -1207,6 +1232,9 @@ type Querier interface {
 	// Kota: iki varyantın (birebir ekte tek nesnenin) bildirilen (ve imzayla
 	// zorlanan) boyutları.
 	UserStoredBytes(ctx context.Context, userID pgtype.UUID) (int64, error)
+	// Değere (ve ona birleştirilmiş değerlere) bağlı silinmemiş günlük
+	// kayıtlarının etkinlik yılları (Europe/Istanbul; istatistik, ADR-0026 §2).
+	VocabularyEntryYears(ctx context.Context, arg VocabularyEntryYearsParams) ([]int32, error)
 	// Uyarı iki sebeple verilir:
 	//   inactive:    last_activity_at @inactive_before'dan eski (30 gün).
 	//   few_members: açılışından (dönüşen anlık tayfada dönüşümünden)

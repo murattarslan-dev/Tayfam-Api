@@ -69,6 +69,12 @@ func logEntryPB(e logbook.Entry) *corev1.LogEntry {
 	for k, v := range e.Values {
 		out.Values[k] = string(v)
 	}
+	if len(e.VocabularyIDs) > 0 {
+		out.VocabularyIds = make(map[string]string, len(e.VocabularyIDs))
+		for k, v := range e.VocabularyIDs {
+			out.VocabularyIds[k] = v.String()
+		}
+	}
 	if e.Location != nil {
 		out.Location = &corev1.LatLng{Lat: e.Location.Lat, Lng: e.Location.Lng}
 	}
@@ -88,6 +94,30 @@ func logValuesFromProto(in map[string]string) (map[string]json.RawMessage, error
 			return nil, validation("values")
 		}
 		out[k] = json.RawMessage(v)
+	}
+	return out, nil
+}
+
+// logVocabularyFromProto converts a request's vocabulary value IDs by field
+// key; the app layer checks them against the log's fields and the tayfa's
+// vocabulary.
+func logVocabularyFromProto(in map[string]string) (map[string]id.ID, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	if len(in) > definition.MaxLogFields {
+		return nil, validation("vocabulary_ids")
+	}
+	out := make(map[string]id.ID, len(in))
+	for k, v := range in {
+		if !definition.ValidKey(k) {
+			return nil, validation("vocabulary_ids")
+		}
+		u, ok := id.Parse(v)
+		if !ok {
+			return nil, validation("vocabulary_ids." + k)
+		}
+		out[k] = u
 	}
 	return out, nil
 }
@@ -124,7 +154,11 @@ func (s *LogComponentServer) AddLogEntry(ctx context.Context, req *corev1.AddLog
 	if err != nil {
 		return nil, err
 	}
-	in := logbook.Input{Values: values, ClientRequestID: req.GetClientRequestId()}
+	vocab, err := logVocabularyFromProto(req.GetVocabularyIds())
+	if err != nil {
+		return nil, err
+	}
+	in := logbook.Input{Values: values, VocabularyIDs: vocab, ClientRequestID: req.GetClientRequestId()}
 	if l := req.GetLocation(); l != nil {
 		in.Location = &logbook.Point{Lat: l.GetLat(), Lng: l.GetLng()}
 	}

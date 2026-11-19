@@ -59,7 +59,9 @@ type LogComponentServiceClient interface {
 	// returns the first entry. Open within the write window (until seven
 	// days after the end; not on a cancelled event).
 	//
-	// Errors: ERROR_REASON_VALIDATION (values.<field>, values, location,
+	// Errors: ERROR_REASON_VALIDATION (values.<field>, values,
+	// vocabulary_ids.<field> for an ID that is not a value of the tayfa's
+	// vocabulary in the field's namespace, vocabulary_ids, location,
 	// location_visibility, client_request_id), ERROR_REASON_NOT_ATTENDED,
 	// ERROR_REASON_EVENT_LIMIT, ERROR_REASON_UPLOAD_NOT_FOUND,
 	// ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE,
@@ -149,7 +151,9 @@ type LogComponentServiceServer interface {
 	// returns the first entry. Open within the write window (until seven
 	// days after the end; not on a cancelled event).
 	//
-	// Errors: ERROR_REASON_VALIDATION (values.<field>, values, location,
+	// Errors: ERROR_REASON_VALIDATION (values.<field>, values,
+	// vocabulary_ids.<field> for an ID that is not a value of the tayfa's
+	// vocabulary in the field's namespace, vocabulary_ids, location,
 	// location_visibility, client_request_id), ERROR_REASON_NOT_ATTENDED,
 	// ERROR_REASON_EVENT_LIMIT, ERROR_REASON_UPLOAD_NOT_FOUND,
 	// ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE,

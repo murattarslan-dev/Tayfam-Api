@@ -140,6 +140,11 @@ DELETE FROM event_log_entries WHERE user_id = @user_id;
 -- name: ClearLogEntryDeleter :exec
 UPDATE event_log_entries SET deleted_by = NULL WHERE deleted_by = @user_id;
 
+-- Tayfa sözlüğüne eklediği değerler tayfanın ortak verisidir; kalır, ekleyen
+-- boşalır (issue #244; ADR-0037 §4).
+-- name: ClearVocabularyCreator :exec
+UPDATE tayfa_vocabulary SET created_by = NULL WHERE created_by = @user_id;
+
 -- Albüm fotoğrafları kişiseldir; kişiyle birlikte silinir, dosyaları
 -- silme kuyruğuna girer (issue #206).
 -- name: DeleteUserEventPhotos :exec

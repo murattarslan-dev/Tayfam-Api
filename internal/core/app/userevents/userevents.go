@@ -265,7 +265,7 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			q.ClearTayfaUserFields, q.ClearInviteCreator, q.ClearMembershipUserFields,
 			q.ClearAnnouncementUserFields, q.ClearEventUserFields, q.ClearEventSeriesCreator,
 			q.ClearRsvpMarker, q.DeleteUserRsvps, q.DeleteUserVehicles, q.DeleteUserSeatRequests, q.ClearChecklistItemUserFields,
-			q.DeleteUserRollCallCheckins, q.DeleteUserLogEntries, q.ClearLogEntryDeleter,
+			q.DeleteUserRollCallCheckins, q.DeleteUserLogEntries, q.ClearLogEntryDeleter, q.ClearVocabularyCreator,
 			q.DeleteUserEventPhotos, q.ClearEventPhotoDeleter, q.DeleteUserActivityRecords,
 			q.ClearQuestionUserFields, q.ClearAnswerUserFields, q.DeleteUserAnswerVotes,
 			q.ClearPollUserFields, q.DeleteUserPollVotes,

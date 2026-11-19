@@ -36,6 +36,7 @@ func componentRegistrars() []componentRegistrar {
 		registerLogComponent,
 
 		// tayfa vocabulary (#244)
+		registerTayfaVocabulary,
 
 		// measure (#245)
 

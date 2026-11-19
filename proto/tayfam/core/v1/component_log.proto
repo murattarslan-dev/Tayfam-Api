@@ -38,7 +38,9 @@ service LogComponentService {
   // returns the first entry. Open within the write window (until seven
   // days after the end; not on a cancelled event).
   //
-  // Errors: ERROR_REASON_VALIDATION (values.<field>, values, location,
+  // Errors: ERROR_REASON_VALIDATION (values.<field>, values,
+  // vocabulary_ids.<field> for an ID that is not a value of the tayfa's
+  // vocabulary in the field's namespace, vocabulary_ids, location,
   // location_visibility, client_request_id), ERROR_REASON_NOT_ATTENDED,
   // ERROR_REASON_EVENT_LIMIT, ERROR_REASON_UPLOAD_NOT_FOUND,
   // ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE,
@@ -88,6 +90,10 @@ message LogEntry {
   google.protobuf.Timestamp create_time = 7;
   // The caller may remove the entry now.
   bool caller_can_remove = 8;
+  // The tayfa vocabulary values of the fields bound to a vocabulary
+  // (issue #244; ADR-0037 §4), by field key: the value's ID, resolved to
+  // its merge target. The value's text is in values, as a JSON string.
+  map<string, string> vocabulary_ids = 9;
 }
 
 message ListLogEntriesRequest {
@@ -125,6 +131,12 @@ message AddLogEntryRequest {
   string photo_upload_id = 5;
   // Required (UUID).
   string client_request_id = 6;
+  // A field bound to a tayfa vocabulary (`vocabulary` in the definition;
+  // issue #244) takes either an existing value of the tayfa's vocabulary
+  // here (field key → TayfaVocabularyService value ID) or a text in values:
+  // a known text (normalized) is reused, a new one is added to the
+  // vocabulary. Not both for one field.
+  map<string, string> vocabulary_ids = 7;
 }
 
 message AddLogEntryResponse {

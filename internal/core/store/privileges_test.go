@@ -92,6 +92,11 @@ var wantAppPrivileges = map[string]string{
 	// person, and its values, location and photo do not change; it is only
 	// soft deleted (account deletion clears who deleted it).
 	"event_log_entries": "DELETE,INSERT,SELECT,UPDATE(deleted_at,deleted_by)",
+	// Issue #244: a vocabulary value is never deleted and its spelling never
+	// changes; only a merge and account deletion write to it. A log entry's
+	// link never changes; it goes with the entry (cascade).
+	"tayfa_vocabulary":           "INSERT,SELECT,UPDATE(created_by,merged_into)",
+	"event_log_entry_vocabulary": "INSERT,SELECT",
 }
 
 func TestAppRolePrivileges(t *testing.T) {

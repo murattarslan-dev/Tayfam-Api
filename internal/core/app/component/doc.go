@@ -97,4 +97,10 @@
 //     A moderator's removal of someone else's content is moderation, made
 //     with BySafetySignal(<the any-action>) so that it also works on a
 //     cancelled or frozen event; the author's own removal keeps the window.
+//   - Data that belongs to the tayfa rather than to one event (the tayfa
+//     vocabulary, issue #244) runs in Service.Tayfa with a TayfaScope. A
+//     component field bound to it (`vocabulary` in the definition) keeps the
+//     value's ID in a link table of its own with a foreign key and a guard
+//     trigger (tayfa and namespace), and resolves merges when it reads
+//     (package vocabulary: Ensure, Lookup; logbook is the example).
 package component
