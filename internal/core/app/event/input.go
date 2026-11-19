@@ -286,7 +286,6 @@ func cleanDetails(typ string, d Details, start time.Time, create bool) (Details,
 	}
 
 	var out Details
-	var err error
 	switch typ {
 	case TypeHike:
 		h := *d.Hike
