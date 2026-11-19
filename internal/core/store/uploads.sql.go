@@ -636,10 +636,10 @@ LEFT JOIN LATERAL (
   SELECT e.tayfa_id FROM events e JOIN tayfas t ON t.id = e.tayfa_id AND t.deleted_at IS NULL
   WHERE u.attached_type = 'event' AND e.id = u.attached_id AND e.deleted_at IS NULL
   UNION ALL
-  SELECT e.tayfa_id FROM fishing_catches f
+  SELECT e.tayfa_id FROM event_log_entries f
   JOIN events e ON e.id = f.event_id AND e.deleted_at IS NULL
   JOIN tayfas t ON t.id = e.tayfa_id AND t.deleted_at IS NULL
-  WHERE u.attached_type = 'fishing_catch' AND f.id = u.attached_id AND f.deleted_at IS NULL
+  WHERE u.attached_type = 'log_entry' AND f.id = u.attached_id AND f.deleted_at IS NULL
   UNION ALL
   SELECT e.tayfa_id FROM event_photos ph
   JOIN events e ON e.id = ph.event_id AND e.deleted_at IS NULL
@@ -960,21 +960,6 @@ func (q *Queries) ReleaseTayfaChatPhotos(ctx context.Context, tayfaID pgtype.UUI
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const setCatchPhoto = `-- name: SetCatchPhoto :exec
-UPDATE fishing_catches SET photo_upload_id = $1
-WHERE id = $2 AND deleted_at IS NULL
-`
-
-type SetCatchPhotoParams struct {
-	PhotoUploadID pgtype.UUID
-	ID            pgtype.UUID
-}
-
-func (q *Queries) SetCatchPhoto(ctx context.Context, arg SetCatchPhotoParams) error {
-	_, err := q.db.Exec(ctx, setCatchPhoto, arg.PhotoUploadID, arg.ID)
-	return err
 }
 
 const setEventCover = `-- name: SetEventCover :exec

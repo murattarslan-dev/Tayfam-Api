@@ -291,8 +291,9 @@ func (AttendanceMethod) EnumDescriptor() ([]byte, []int) {
 	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{4}
 }
 
-// Who gets a fishing catch's location. The catch itself (species, length)
-// is seen by every active member.
+// CatchVisibility is not used any more (LogLocationVisibility,
+// component_log.proto; issue #243). The enum stays because it cannot be
+// removed.
 type CatchVisibility int32
 
 const (
@@ -345,7 +346,10 @@ func (CatchVisibility) EnumDescriptor() ([]byte, []int) {
 	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{5}
 }
 
-// Who sees a fishing event's meeting point (the spot).
+// SpotVisibility is not used any more: a fishing event's meeting point is
+// shown like every event's, and the spot rule became the log component's
+// location visibility (LogLocationVisibility, component_log.proto; issue
+// #243). The enum stays because it cannot be removed.
 type SpotVisibility int32
 
 const (
@@ -982,6 +986,12 @@ func (x *HikeDetails) GetReturnGraceMinutes() int32 {
 	return 0
 }
 
+// FishingDetails is not used any more: a fishing event has no type
+// details (issue #243). Its catch log is the log component's
+// (LogComponentService, component_log.proto). An event never carries it and
+// a request that sets it is refused (ERROR_REASON_VALIDATION, field
+// "details"). The message and its fields stay because they cannot be
+// removed.
 type FishingDetails struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	SpotVisibility SpotVisibility         `protobuf:"varint,1,opt,name=spot_visibility,json=spotVisibility,proto3,enum=tayfam.core.v1.SpotVisibility" json:"spot_visibility,omitempty"`
@@ -1146,7 +1156,7 @@ type Event struct {
 	Description string                 `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
 	StartTime   *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
 	EndTime     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
-	// In-person events (see SpotVisibility for fishing events).
+	// In-person events.
 	MeetingPointName string  `protobuf:"bytes,9,opt,name=meeting_point_name,json=meetingPointName,proto3" json:"meeting_point_name,omitempty"`
 	MeetingPoint     *LatLng `protobuf:"bytes,10,opt,name=meeting_point,json=meetingPoint,proto3" json:"meeting_point,omitempty"`
 	City             string  `protobuf:"bytes,11,opt,name=city,proto3" json:"city,omitempty"`
@@ -1178,12 +1188,12 @@ type Event struct {
 	// The event was edited on its own (UpdateEvent without series): changes
 	// to the series and ending it leave it alone.
 	SeriesOverride bool `protobuf:"varint,29,opt,name=series_override,json=seriesOverride,proto3" json:"series_override,omitempty"`
-	// The Faz 1 details of the fishing type, until its component replaces
-	// them (ADR-0025 §10). Set by GetEvent; never by ListUpcomingEvents.
-	// convoy, camp, hike, gaming and sports are never set: a convoy's data is
-	// in its components (issues #239, #240), a camp's in its list component
-	// and fields (issue #241), a hike's in its roll call component and fields
-	// (issue #242), the others' in fields.
+	// Never set any more: no type has Faz 1 details (ADR-0041). A convoy's
+	// data is in its components (issues #239, #240), a camp's in its list
+	// component and fields (issue #241), a hike's in its roll call component
+	// and fields (issue #242), a fishing event's catches in its log
+	// component (issue #243), the others' in fields. The oneof stays because
+	// it cannot be removed.
 	//
 	// Types that are valid to be assigned to Details:
 	//
@@ -1609,11 +1619,11 @@ type CreateEventRequest struct {
 	// 0: no limit; otherwise 1–10000.
 	Capacity     int32 `protobuf:"varint,13,opt,name=capacity,proto3" json:"capacity,omitempty"`
 	Discoverable bool  `protobuf:"varint,14,opt,name=discoverable,proto3" json:"discoverable,omitempty"`
-	// Only for the fishing type; may be unset. convoy, camp, hike, gaming and
-	// sports must be unset (ERROR_REASON_VALIDATION, field "details"): a
-	// convoy's data is in its components, a camp's in its list component and
-	// fields, a hike's in its roll call component and fields, the others'
-	// goes in fields.
+	// Must be unset (ERROR_REASON_VALIDATION, field "details"): no type has
+	// Faz 1 details any more (issue #243). A convoy's data is in its
+	// components, a camp's in its list component and fields, a hike's in its
+	// roll call component and fields, a fishing event's catches in its log
+	// component, the others' goes in fields.
 	//
 	// Types that are valid to be assigned to Details:
 	//
@@ -2302,10 +2312,11 @@ type UpdateEventRequest struct {
 	// Required, non-empty. Allowed paths: "title", "description", "time"
 	// (start_time and end_time together), "location" (mode,
 	// meeting_point_name, meeting_point, city, district and online_url
-	// together), "capacity", "discoverable", "details" (replaces the type
-	// details of a fishing event), "fields" (replaces the field values), "cover_upload_id"
-	// (not with series = true: ERROR_REASON_VALIDATION, field
-	// "update_mask"). Any other path is ERROR_REASON_VALIDATION.
+	// together), "capacity", "discoverable", "fields" (replaces the field
+	// values), "cover_upload_id" (not with series = true:
+	// ERROR_REASON_VALIDATION, field "update_mask"). Any other path, "details"
+	// included (no type has Faz 1 details any more, issue #243), is
+	// ERROR_REASON_VALIDATION.
 	UpdateMask *fieldmaskpb.FieldMask `protobuf:"bytes,15,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	// Only for an event of a series (otherwise ERROR_REASON_VALIDATION, field
 	// "series"). false: only this event changes and it is marked
@@ -4306,6 +4317,9 @@ func (*SetAttendanceResponse) Descriptor() ([]byte, []int) {
 	return file_tayfam_core_v1_event_proto_rawDescGZIP(), []int{47}
 }
 
+// FishingCatch and the fishing catch requests are not used any more
+// (LogEntry, component_log.proto; issue #243). The messages and their
+// fields stay because they cannot be removed.
 type FishingCatch struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`

@@ -422,19 +422,21 @@ func (q *Queries) PurgeEvents(ctx context.Context, arg PurgeEventsParams) (int64
 	return result.RowsAffected(), nil
 }
 
-const purgeFishingCatches = `-- name: PurgeFishingCatches :execrows
-DELETE FROM fishing_catches WHERE id IN (
-  SELECT x.id FROM fishing_catches x WHERE x.deleted_at <= $1
+const purgeLogEntries = `-- name: PurgeLogEntries :execrows
+DELETE FROM event_log_entries WHERE id IN (
+  SELECT x.id FROM event_log_entries x WHERE x.deleted_at <= $1
   ORDER BY x.deleted_at, x.id LIMIT $2 FOR UPDATE SKIP LOCKED)
 `
 
-type PurgeFishingCatchesParams struct {
+type PurgeLogEntriesParams struct {
 	DeletedBefore pgtype.Timestamptz
 	N             int32
 }
 
-func (q *Queries) PurgeFishingCatches(ctx context.Context, arg PurgeFishingCatchesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, purgeFishingCatches, arg.DeletedBefore, arg.N)
+// Günlük kaydı (issue #243); fotoğrafı uploads_release_ref ile silme
+// kuyruğuna girer.
+func (q *Queries) PurgeLogEntries(ctx context.Context, arg PurgeLogEntriesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeLogEntries, arg.DeletedBefore, arg.N)
 	if err != nil {
 		return 0, err
 	}

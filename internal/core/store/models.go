@@ -189,10 +189,20 @@ type EventFieldValue struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
-type EventFishing struct {
-	EventID        pgtype.UUID
-	Type           string
-	SpotVisibility string
+type EventLogEntry struct {
+	ID                 pgtype.UUID
+	EventID            pgtype.UUID
+	ComponentKey       string
+	UserID             pgtype.UUID
+	FieldValues        []byte
+	Lat                pgtype.Float8
+	Lng                pgtype.Float8
+	LocationVisibility pgtype.Text
+	PhotoUploadID      pgtype.UUID
+	ClientRequestID    pgtype.UUID
+	DeletedAt          pgtype.Timestamptz
+	DeletedBy          pgtype.UUID
+	CreatedAt          pgtype.Timestamptz
 }
 
 type EventPhoto struct {
@@ -310,22 +320,6 @@ type EventVehicleSeatRequest struct {
 	Status         string
 	CreatedAt      pgtype.Timestamptz
 	DecidedAt      pgtype.Timestamptz
-}
-
-type FishingCatch struct {
-	ID              pgtype.UUID
-	EventID         pgtype.UUID
-	UserID          pgtype.UUID
-	Species         string
-	LengthCm        pgtype.Numeric
-	Lat             pgtype.Float8
-	Lng             pgtype.Float8
-	Visibility      string
-	ClientRequestID pgtype.UUID
-	DeletedAt       pgtype.Timestamptz
-	DeletedBy       pgtype.UUID
-	CreatedAt       pgtype.Timestamptz
-	PhotoUploadID   pgtype.UUID
 }
 
 type FriendRequestOutcome struct {

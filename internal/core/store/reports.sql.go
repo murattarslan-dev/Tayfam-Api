@@ -372,33 +372,6 @@ func (q *Queries) GetReportTargetAnswer(ctx context.Context, arg GetReportTarget
 	return i, err
 }
 
-const getReportTargetCatch = `-- name: GetReportTargetCatch :one
-SELECT c.user_id AS author_id, (c.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible, c.visibility
-FROM fishing_catches c
-JOIN events e ON e.id = c.event_id
-WHERE e.tayfa_id = $1 AND c.id = $2
-`
-
-type GetReportTargetCatchParams struct {
-	TayfaID pgtype.UUID
-	ID      pgtype.UUID
-}
-
-type GetReportTargetCatchRow struct {
-	AuthorID   pgtype.UUID
-	Visible    bool
-	Visibility string
-}
-
-// Av kaydı: etkinliği de görünür olmalı; 'self' görünürlüğündeki kaydı
-// yalnızca sahibi görür (app katmanı kontrol eder).
-func (q *Queries) GetReportTargetCatch(ctx context.Context, arg GetReportTargetCatchParams) (GetReportTargetCatchRow, error) {
-	row := q.db.QueryRow(ctx, getReportTargetCatch, arg.TayfaID, arg.ID)
-	var i GetReportTargetCatchRow
-	err := row.Scan(&i.AuthorID, &i.Visible, &i.Visibility)
-	return i, err
-}
-
 const getReportTargetEvent = `-- name: GetReportTargetEvent :one
 SELECT created_by AS author_id, (deleted_at IS NULL)::boolean AS visible, (status = 'cancelled')::boolean AS cancelled
 FROM events
@@ -445,6 +418,32 @@ type GetReportTargetEventPhotoRow struct {
 func (q *Queries) GetReportTargetEventPhoto(ctx context.Context, arg GetReportTargetEventPhotoParams) (GetReportTargetEventPhotoRow, error) {
 	row := q.db.QueryRow(ctx, getReportTargetEventPhoto, arg.TayfaID, arg.ID)
 	var i GetReportTargetEventPhotoRow
+	err := row.Scan(&i.AuthorID, &i.Visible)
+	return i, err
+}
+
+const getReportTargetLogEntry = `-- name: GetReportTargetLogEntry :one
+SELECT c.user_id AS author_id, (c.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible
+FROM event_log_entries c
+JOIN events e ON e.id = c.event_id
+WHERE e.tayfa_id = $1 AND c.id = $2
+`
+
+type GetReportTargetLogEntryParams struct {
+	TayfaID pgtype.UUID
+	ID      pgtype.UUID
+}
+
+type GetReportTargetLogEntryRow struct {
+	AuthorID pgtype.UUID
+	Visible  bool
+}
+
+// Günlük kaydı (issue #243): etkinliği de görünür olmalı. Kaydın kendisi
+// (değerleri) etkinliği gören her üyeye açıktır; konum şikâyete girmez.
+func (q *Queries) GetReportTargetLogEntry(ctx context.Context, arg GetReportTargetLogEntryParams) (GetReportTargetLogEntryRow, error) {
+	row := q.db.QueryRow(ctx, getReportTargetLogEntry, arg.TayfaID, arg.ID)
+	var i GetReportTargetLogEntryRow
 	err := row.Scan(&i.AuthorID, &i.Visible)
 	return i, err
 }

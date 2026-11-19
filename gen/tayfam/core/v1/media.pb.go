@@ -30,6 +30,9 @@ type UploadPurpose int32
 const (
 	UploadPurpose_UPLOAD_PURPOSE_UNSPECIFIED UploadPurpose = 0
 	UploadPurpose_UPLOAD_PURPOSE_AVATAR      UploadPurpose = 1
+	// A log entry's photo (LogComponentService.AddLogEntry, issue #243;
+	// stored as log_photo). The name is from Faz 1, when only fishing
+	// catches had photos.
 	UploadPurpose_UPLOAD_PURPOSE_CATCH_PHOTO UploadPurpose = 2
 	// A tayfa or event cover.
 	UploadPurpose_UPLOAD_PURPOSE_COVER UploadPurpose = 3
