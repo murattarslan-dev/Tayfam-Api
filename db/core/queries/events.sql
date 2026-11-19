@@ -120,18 +120,6 @@ LIMIT @page_size;
 -- Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
 -- key yanlış türü reddeder.
 
--- name: SetEventHike :exec
-INSERT INTO event_hike (event_id, difficulty, distance_km, elevation_m, expected_return_at, return_grace_minutes)
-VALUES (@event_id, @difficulty, sqlc.narg(distance_km)::float8, @elevation_m, @expected_return_at, @return_grace_minutes)
-ON CONFLICT (event_id) DO UPDATE
-SET difficulty = EXCLUDED.difficulty, distance_km = EXCLUDED.distance_km,
-    elevation_m = EXCLUDED.elevation_m, expected_return_at = EXCLUDED.expected_return_at,
-    return_grace_minutes = EXCLUDED.return_grace_minutes;
-
--- name: GetEventHike :one
-SELECT difficulty, COALESCE(distance_km, 0)::float8 AS distance_km, elevation_m, expected_return_at, return_grace_minutes
-FROM event_hike WHERE event_id = @event_id;
-
 -- name: SetEventFishing :exec
 INSERT INTO event_fishing (event_id, spot_visibility) VALUES (@event_id, @spot_visibility)
 ON CONFLICT (event_id) DO UPDATE SET spot_visibility = EXCLUDED.spot_visibility;

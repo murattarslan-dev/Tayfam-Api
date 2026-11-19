@@ -73,6 +73,7 @@ type fEvent struct {
 	rsvps    map[string]corev1.RsvpStatus
 	vehicles map[string]*corev1.EventVehicle
 	items    []*corev1.ChecklistItem
+	back     *timestamppb.Timestamp // the roll call's expected return
 }
 
 type fPoll struct {
@@ -91,7 +92,7 @@ func newFake() *fakeServices {
 }
 
 func (f *fakeServices) core() Core {
-	return Core{Tayfas: f, Memberships: f, Events: f, Routes: f, Vehicles: f, Checklists: f, Announcements: f, QA: f, Polls: f, Discover: f, Social: f}
+	return Core{Tayfas: f, Memberships: f, Events: f, Routes: f, Vehicles: f, Checklists: f, RollCalls: f, Announcements: f, QA: f, Polls: f, Discover: f, Social: f}
 }
 
 func fail(code codes.Code, reason string) error {
@@ -402,6 +403,33 @@ func (f *fakeServices) SetRoute(ctx context.Context, in *corev1.SetRouteRequest,
 	}
 	e.route = in.GetPoints()
 	return &corev1.SetRouteResponse{Route: &corev1.EventRoute{Points: e.route}}, nil
+}
+
+// SetExpectedReturn is RollCallComponentService's: managers only, on the
+// hike's "roll_call" component.
+func (f *fakeServices) SetExpectedReturn(ctx context.Context, in *corev1.SetExpectedReturnRequest, _ ...grpc.CallOption) (*corev1.SetExpectedReturnResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	caller, err := f.begin(ctx, "SetExpectedReturn")
+	if err != nil {
+		return nil, err
+	}
+	ref := in.GetRef()
+	if _, err := f.member(ref.GetTayfaId(), caller, corev1.Role_ROLE_MODERATOR, true); err != nil {
+		return nil, err
+	}
+	e, err := f.event(ref.GetTayfaId(), ref.GetEventId())
+	if err != nil {
+		return nil, err
+	}
+	if e.ev.Type != corev1.EventType_EVENT_TYPE_HIKE || ref.GetComponentKey() != "roll_call" {
+		return nil, fail(codes.NotFound, "ERROR_REASON_COMPONENT_NOT_FOUND")
+	}
+	if at := in.GetExpectedReturnTime(); at != nil && !at.AsTime().After(e.ev.GetStartTime().AsTime()) {
+		return nil, fail(codes.InvalidArgument, "ERROR_REASON_VALIDATION")
+	}
+	e.back = in.GetExpectedReturnTime()
+	return &corev1.SetExpectedReturnResponse{RollCall: &corev1.EventRollCall{Alarm: true, ExpectedReturnTime: e.back}}, nil
 }
 
 // ListChecklist is ChecklistComponentService's: the camp's "gear" list.

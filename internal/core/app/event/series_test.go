@@ -1,6 +1,7 @@
 package event
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -69,7 +70,7 @@ func TestSeriesCreateAndGenerate(t *testing.T) {
 	tf, admin := e.newTayfa(t)
 	in := weekly(input(), "FREQ=WEEKLY")
 	in.Type = TypeHike
-	in.Details = Details{Hike: &Hike{Difficulty: 3, ExpectedReturnAt: in.StartsAt.Add(5 * time.Hour)}}
+	in.Fields = values("difficulty", `3`)
 	in.Capacity = 12
 	first := e.create(t, tf, admin, in)
 	if first.SeriesID == (id.ID{}) || first.SeriesOverride {
@@ -94,13 +95,10 @@ func TestSeriesCreateAndGenerate(t *testing.T) {
 			r.MeetingLat.Float64 != izmir.Lat || id.ID(r.CreatedBy.Bytes) != admin || r.SeriesOverride || r.Status != StatusScheduled {
 			t.Errorf("örnek %d kopyası = %+v", i+1, r)
 		}
-		// Type details are copied; the expected return keeps its distance
-		// from the start.
+		// Field values are copied.
 		v, err := e.svc.Get(ctx, admin, tf, id.ID(r.ID.Bytes))
 		must(t, err)
-		if v.Details.Hike == nil || v.Details.Hike.Difficulty != 3 || !v.Details.Hike.ExpectedReturnAt.Equal(want.Add(5*time.Hour)) {
-			t.Errorf("örnek %d detayı = %+v", i+1, v.Details.Hike)
-		}
+		wantValues(t, fmt.Sprintf("örnek %d alanları", i+1), v.Fields, "difficulty", `3`)
 	}
 	// Outbox: one event.created per generated occurrence, without an actor,
 	// naming the series and nothing else.

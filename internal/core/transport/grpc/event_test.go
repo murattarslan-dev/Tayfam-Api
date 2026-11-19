@@ -41,7 +41,6 @@ type fakeEvents struct {
 	status   string
 	view     event.Event
 	at       *event.Point
-	when     time.Time
 	target   id.ID
 	attended bool
 	catch    event.CatchInput
@@ -100,16 +99,6 @@ func (f *fakeEvents) CheckIn(_ context.Context, u, t, e id.ID, at *event.Point) 
 	f.rec(u, t, e)
 	f.at = at
 	return event.Attendance{Status: event.AttendanceAttended, Method: event.MethodLocation}, f.err
-}
-func (f *fakeEvents) StartHike(_ context.Context, u, t, e id.ID, at time.Time) (event.HikeCheckin, error) {
-	f.rec(u, t, e)
-	f.when = at
-	return event.HikeCheckin{StartedAt: time.Now()}, f.err
-}
-func (f *fakeEvents) FinishHike(_ context.Context, u, t, e id.ID, at time.Time) (event.HikeCheckin, error) {
-	f.rec(u, t, e)
-	f.when = at
-	return event.HikeCheckin{StartedAt: time.Now().Add(-time.Hour), ReturnedAt: time.Now()}, f.err
 }
 func (f *fakeEvents) SetAttendance(_ context.Context, u, t, e, target id.ID, attended bool) error {
 	f.rec(u, t, e)
@@ -170,8 +159,6 @@ func callAllEvents(ctx context.Context, c corev1.EventServiceServer, tayfaID, ev
 	_, out["SetRsvp"] = c.SetRsvp(ctx, &corev1.SetRsvpRequest{TayfaId: tayfaID, EventId: eventID, Status: corev1.RsvpStatus_RSVP_STATUS_GOING})
 	_, out["ListAttendees"] = c.ListAttendees(ctx, &corev1.ListAttendeesRequest{TayfaId: tayfaID, EventId: eventID})
 	_, out["CheckIn"] = c.CheckIn(ctx, &corev1.CheckInRequest{TayfaId: tayfaID, EventId: eventID, Location: &corev1.LatLng{Lat: 38.42, Lng: 27.14}})
-	_, out["StartHike"] = c.StartHike(ctx, &corev1.StartHikeRequest{TayfaId: tayfaID, EventId: eventID})
-	_, out["FinishHike"] = c.FinishHike(ctx, &corev1.FinishHikeRequest{TayfaId: tayfaID, EventId: eventID})
 	_, out["SetAttendance"] = c.SetAttendance(ctx, &corev1.SetAttendanceRequest{TayfaId: tayfaID, EventId: eventID, UserId: id.New().String(), Attended: true})
 	_, out["AddFishingCatch"] = c.AddFishingCatch(ctx, &corev1.AddFishingCatchRequest{TayfaId: tayfaID, EventId: eventID, Species: "Levrek", LengthCm: 40, ClientRequestId: id.New().String()})
 	_, out["ListFishingCatches"] = c.ListFishingCatches(ctx, &corev1.ListFishingCatchesRequest{TayfaId: tayfaID, EventId: eventID})
@@ -261,9 +248,9 @@ func TestEventServerValidatesRequest(t *testing.T) {
 				r.Fields["f"+strings.Repeat("x", i+1)] = `1`
 			}
 		}, "fields"},
-		"NaN mesafe": {func(r *corev1.CreateEventRequest) {
-			r.Details = &corev1.CreateEventRequest_Hike{Hike: &corev1.HikeDetails{DistanceKm: math.NaN()}}
-		}, "distance_km"},
+		"yürüyüş ayrıntısı": {func(r *corev1.CreateEventRequest) {
+			r.Details = &corev1.CreateEventRequest_Hike{Hike: &corev1.HikeDetails{Difficulty: 3}}
+		}, "details"},
 		"bozuk görünürlük": {func(r *corev1.CreateEventRequest) {
 			r.Details = &corev1.CreateEventRequest_Fishing{Fishing: &corev1.FishingDetails{SpotVisibility: 9}}
 		}, "spot_visibility"},
@@ -358,6 +345,13 @@ func TestEventServerConverts(t *testing.T) {
 		f.in.Location.MeetingPoint == nil || !f.in.StartsAt.Equal(r.GetStartTime().AsTime()) {
 		t.Fatalf("girdi = %+v", f.in)
 	}
+	// The retired hike roll call methods are not served (issue #242).
+	if _, err := srv.StartHike(ctx, &corev1.StartHikeRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String()}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("kaldırılan StartHike: %v", err)
+	}
+	if _, err := srv.FinishHike(ctx, &corev1.FinishHikeRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String()}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("kaldırılan FinishHike: %v", err)
+	}
 	// The retired vehicle methods are not served.
 	if _, err := srv.AddConvoyVehicle(ctx, &corev1.AddConvoyVehicleRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String(), Make: "Ford"}); status.Code(err) != codes.Unimplemented {
 		t.Fatalf("kaldırılan AddConvoyVehicle: %v", err)
@@ -383,16 +377,9 @@ func TestEventServerConverts(t *testing.T) {
 			func(d event.Details) bool {
 				return d.Fishing != nil && d.Fishing.SpotVisibility == event.SpotParticipants
 			}},
-		{&corev1.CreateEventRequest_Hike{Hike: &corev1.HikeDetails{Difficulty: 4, ExpectedReturnTime: timestamppb.New(start)}},
-			func(d event.Details) bool {
-				return d.Hike != nil && d.Hike.Difficulty == 4 && d.Hike.ExpectedReturnAt.Equal(start)
-			}},
 	} {
 		r := createReq(view.TayfaID.String())
-		switch d := tc.d.(type) {
-		case *corev1.CreateEventRequest_Fishing:
-			r.Details = d
-		case *corev1.CreateEventRequest_Hike:
+		if d, ok := tc.d.(*corev1.CreateEventRequest_Fishing); ok {
 			r.Details = d
 		}
 		if _, err := srv.CreateEvent(ctx, r); err != nil {

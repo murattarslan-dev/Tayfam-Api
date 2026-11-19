@@ -29,8 +29,6 @@ type Events interface {
 	SetRSVP(ctx context.Context, user, t, e id.ID, status string) (string, error)
 	ListAttendees(ctx context.Context, user, t, e id.ID, status string, pageSize int32, pageToken string) ([]event.Attendee, string, error)
 	CheckIn(ctx context.Context, user, t, e id.ID, at *event.Point) (event.Attendance, error)
-	StartHike(ctx context.Context, user, t, e id.ID, startedAt time.Time) (event.HikeCheckin, error)
-	FinishHike(ctx context.Context, user, t, e id.ID, returnedAt time.Time) (event.HikeCheckin, error)
 	SetAttendance(ctx context.Context, user, t, e, target id.ID, attended bool) error
 	AddCatch(ctx context.Context, user, t, e id.ID, in event.CatchInput) (event.Catch, error)
 	ListCatches(ctx context.Context, user, t, e id.ID, pageSize int32, pageToken string) ([]event.Catch, string, error)
@@ -429,17 +427,6 @@ func locationFromProto(mode corev1.EventMode, name string, point *corev1.LatLng,
 func detailsFromProto(cv *corev1.ConvoyDetails, cp *corev1.CampDetails, h *corev1.HikeDetails, f *corev1.FishingDetails, g *corev1.GamingDetails, sp *corev1.SportsDetails) (event.Details, error) {
 	var d event.Details
 	switch {
-	case h != nil:
-		if math.IsNaN(h.GetDistanceKm()) || math.IsInf(h.GetDistanceKm(), 0) {
-			return event.Details{}, validation("distance_km")
-		}
-		d.Hike = &event.Hike{
-			Difficulty: h.GetDifficulty(), DistanceKm: h.GetDistanceKm(), ElevationM: h.GetElevationM(),
-			ExpectedReturnAt: timeOf(h.GetExpectedReturnTime()), ReturnGraceMinutes: h.GetReturnGraceMinutes(),
-		}
-		if h.GetExpectedReturnTime() != nil && d.Hike.ExpectedReturnAt.IsZero() {
-			return event.Details{}, validation("expected_return_time")
-		}
 	case f != nil:
 		fi := &event.Fishing{}
 		switch f.GetSpotVisibility() {
@@ -452,10 +439,12 @@ func detailsFromProto(cv *corev1.ConvoyDetails, cp *corev1.CampDetails, h *corev
 			return event.Details{}, validation("spot_visibility")
 		}
 		d.Fishing = fi
-	case cv != nil, cp != nil, g != nil, sp != nil:
+	case cv != nil, cp != nil, h != nil, g != nil, sp != nil:
 		// A convoy has no details any more: its route and vehicles are
 		// components (issues #239, #240). A camp's list is a component and
-		// its site details are fields (issue #241). Gaming and sports have
+		// its site details are fields (issue #241); so are a hike's roll
+		// call and its difficulty, distance and elevation (issue #242).
+		// Gaming and sports have
 		// no detail table either; their data is in the type's fields (issue
 		// #237).
 		return event.Details{}, validation("details")
@@ -521,15 +510,6 @@ func eventToProto(v event.Event) *corev1.Event {
 	}
 	d := v.Details
 	switch {
-	case d.Hike != nil:
-		h := &corev1.HikeDetails{
-			Difficulty: d.Hike.Difficulty, DistanceKm: d.Hike.DistanceKm, ElevationM: d.Hike.ElevationM,
-			ReturnGraceMinutes: d.Hike.ReturnGraceMinutes,
-		}
-		if !d.Hike.ExpectedReturnAt.IsZero() {
-			h.ExpectedReturnTime = timestamppb.New(d.Hike.ExpectedReturnAt)
-		}
-		out.Details = &corev1.Event_Hike{Hike: h}
 	case d.Fishing != nil:
 		vis := corev1.SpotVisibility_SPOT_VISIBILITY_TAYFA
 		if d.Fishing.SpotVisibility == event.SpotParticipants {

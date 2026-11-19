@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
@@ -33,7 +32,6 @@ func TestAttendanceServerValidates(t *testing.T) {
 		}
 		return info.GetMetadata()["field"]
 	}
-	badTime := &timestamppb.Timestamp{Seconds: 1, Nanos: -1}
 	for name, tc := range map[string]struct {
 		call  func() error
 		field string
@@ -46,14 +44,6 @@ func TestAttendanceServerValidates(t *testing.T) {
 			_, err := srv.CheckIn(ctx, &corev1.CheckInRequest{TayfaId: good, EventId: good, Location: &corev1.LatLng{Lng: math.Inf(-1)}})
 			return err
 		}, "location"},
-		"bozuk çıkış zamanı": {func() error {
-			_, err := srv.StartHike(ctx, &corev1.StartHikeRequest{TayfaId: good, EventId: good, StartTime: badTime})
-			return err
-		}, "start_time"},
-		"bozuk dönüş zamanı": {func() error {
-			_, err := srv.FinishHike(ctx, &corev1.FinishHikeRequest{TayfaId: good, EventId: good, ReturnTime: badTime})
-			return err
-		}, "return_time"},
 		"bozuk kişi": {func() error {
 			_, err := srv.SetAttendance(ctx, &corev1.SetAttendanceRequest{TayfaId: good, EventId: good, UserId: "x"})
 			return err
@@ -94,19 +84,6 @@ func TestAttendanceServerConverts(t *testing.T) {
 	}
 	if _, err := srv.CheckIn(ctx, &corev1.CheckInRequest{TayfaId: tid, EventId: eid}); err != nil || f.at != nil {
 		t.Fatalf("konumsuz check-in app'e %+v olarak gitti: %v", f.at, err)
-	}
-
-	at := time.Now().Add(-time.Minute).UTC().Truncate(time.Microsecond)
-	h, err := srv.StartHike(ctx, &corev1.StartHikeRequest{TayfaId: tid, EventId: eid, StartTime: timestamppb.New(at)})
-	if err != nil || !f.when.Equal(at) || h.GetCheckin().GetStartTime() == nil || h.GetCheckin().GetReturnTime() != nil {
-		t.Fatalf("çıkış = %v %v %v", h, err, f.when)
-	}
-	if _, err := srv.StartHike(ctx, &corev1.StartHikeRequest{TayfaId: tid, EventId: eid}); err != nil || !f.when.IsZero() {
-		t.Fatalf("zamansız çıkış = %v %v", f.when, err)
-	}
-	back, err := srv.FinishHike(ctx, &corev1.FinishHikeRequest{TayfaId: tid, EventId: eid})
-	if err != nil || back.GetCheckin().GetReturnTime() == nil {
-		t.Fatalf("dönüş = %v %v", back, err)
 	}
 
 	target := id.New()

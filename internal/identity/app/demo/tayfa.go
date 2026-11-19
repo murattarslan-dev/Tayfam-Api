@@ -193,17 +193,13 @@ func (s *Seeder) seedEvent(ctx context.Context, t tayfaSpec, e eventSpec, tayfaI
 		req.MeetingPointName, req.City, req.District = e.PlaceName, e.City, e.District
 		req.MeetingPoint = &corev1.LatLng{Lat: e.Lat, Lng: e.Lng}
 	}
-	switch {
-	case e.Hike != nil:
-		hike := &corev1.HikeDetails{Difficulty: e.Hike.Difficulty, DistanceKm: e.Hike.DistanceKm, ElevationM: e.Hike.ElevationM}
-		if e.Hike.ReturnAfter > 0 {
-			hike.ExpectedReturnTime = timestamppb.New(start.Add(time.Duration(e.Hike.ReturnAfter) * time.Hour))
-		}
-		req.Details = &corev1.CreateEventRequest_Hike{Hike: hike}
-	case e.Fishing != nil:
+	if e.Fishing != nil {
 		req.Details = &corev1.CreateEventRequest_Fishing{Fishing: e.Fishing}
 	}
 	req.Fields = e.Fields
+	if e.Hike != nil {
+		req.Fields = e.Hike.fields()
+	}
 	created, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.CreateEventResponse, error) {
 		return s.cfg.Core.Events.CreateEvent(ctx, req)
 	})
@@ -231,6 +227,22 @@ func (s *Seeder) seedEvent(ctx context.Context, t tayfaSpec, e eventSpec, tayfaI
 		}
 		if err != nil {
 			return check("rota", err)
+		}
+	}
+	// The expected return is the roll call component's (issue #242);
+	// setting it again writes the same time.
+	if e.Hike != nil && e.Hike.ReturnAfter > 0 {
+		_, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.SetExpectedReturnResponse, error) {
+			return s.cfg.Core.RollCalls.SetExpectedReturn(ctx, &corev1.SetExpectedReturnRequest{
+				Ref:                &corev1.ComponentRef{TayfaId: tayfaID, EventId: eventID, ComponentKey: "roll_call"},
+				ExpectedReturnTime: timestamppb.New(start.Add(time.Duration(e.Hike.ReturnAfter) * time.Hour)),
+			})
+		})
+		if over(err) {
+			return nil
+		}
+		if err != nil {
+			return check("yoklama planı", err)
 		}
 	}
 	for _, r := range e.RSVPs {

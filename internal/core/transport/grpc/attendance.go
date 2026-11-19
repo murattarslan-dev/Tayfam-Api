@@ -28,38 +28,6 @@ func (s *EventServer) CheckIn(ctx context.Context, req *corev1.CheckInRequest) (
 	return &corev1.CheckInResponse{Attendance: attendanceToProto(a.Status), Method: methodToProto(a.Method)}, nil
 }
 
-// StartHike implements corev1.EventServiceServer.
-func (s *EventServer) StartHike(ctx context.Context, req *corev1.StartHikeRequest) (*corev1.StartHikeResponse, error) {
-	user, t, e, err := scope(ctx, req.GetTayfaId(), ptr(req.GetEventId()))
-	if err != nil {
-		return nil, err
-	}
-	if req.GetStartTime() != nil && req.GetStartTime().CheckValid() != nil {
-		return nil, validation("start_time")
-	}
-	h, err := s.app.StartHike(ctx, user, t, e, timeOf(req.GetStartTime()))
-	if err != nil {
-		return nil, errorStatus(ctx, s.log, err)
-	}
-	return &corev1.StartHikeResponse{Checkin: hikeToProto(h)}, nil
-}
-
-// FinishHike implements corev1.EventServiceServer.
-func (s *EventServer) FinishHike(ctx context.Context, req *corev1.FinishHikeRequest) (*corev1.FinishHikeResponse, error) {
-	user, t, e, err := scope(ctx, req.GetTayfaId(), ptr(req.GetEventId()))
-	if err != nil {
-		return nil, err
-	}
-	if req.GetReturnTime() != nil && req.GetReturnTime().CheckValid() != nil {
-		return nil, validation("return_time")
-	}
-	h, err := s.app.FinishHike(ctx, user, t, e, timeOf(req.GetReturnTime()))
-	if err != nil {
-		return nil, errorStatus(ctx, s.log, err)
-	}
-	return &corev1.FinishHikeResponse{Checkin: hikeToProto(h)}, nil
-}
-
 // SetAttendance implements corev1.EventServiceServer.
 func (s *EventServer) SetAttendance(ctx context.Context, req *corev1.SetAttendanceRequest) (*corev1.SetAttendanceResponse, error) {
 	user, t, e, err := scope(ctx, req.GetTayfaId(), ptr(req.GetEventId()))
@@ -170,14 +138,6 @@ var catchVisibilityValues = map[corev1.CatchVisibility]string{
 	corev1.CatchVisibility_CATCH_VISIBILITY_UNSPECIFIED: "",
 	corev1.CatchVisibility_CATCH_VISIBILITY_SELF:        event.CatchSelf,
 	corev1.CatchVisibility_CATCH_VISIBILITY_TAYFA:       event.CatchTayfa,
-}
-
-func hikeToProto(h event.HikeCheckin) *corev1.HikeCheckin {
-	out := &corev1.HikeCheckin{StartTime: timestamppb.New(h.StartedAt)}
-	if !h.ReturnedAt.IsZero() {
-		out.ReturnTime = timestamppb.New(h.ReturnedAt)
-	}
-	return out
 }
 
 func catchToProto(c event.Catch) *corev1.FishingCatch {

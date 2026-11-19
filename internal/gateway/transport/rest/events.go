@@ -26,8 +26,6 @@ type EventClient interface {
 	SetRsvp(ctx context.Context, in *corev1.SetRsvpRequest, opts ...grpc.CallOption) (*corev1.SetRsvpResponse, error)
 	ListAttendees(ctx context.Context, in *corev1.ListAttendeesRequest, opts ...grpc.CallOption) (*corev1.ListAttendeesResponse, error)
 	CheckIn(ctx context.Context, in *corev1.CheckInRequest, opts ...grpc.CallOption) (*corev1.CheckInResponse, error)
-	StartHike(ctx context.Context, in *corev1.StartHikeRequest, opts ...grpc.CallOption) (*corev1.StartHikeResponse, error)
-	FinishHike(ctx context.Context, in *corev1.FinishHikeRequest, opts ...grpc.CallOption) (*corev1.FinishHikeResponse, error)
 	SetAttendance(ctx context.Context, in *corev1.SetAttendanceRequest, opts ...grpc.CallOption) (*corev1.SetAttendanceResponse, error)
 	AddFishingCatch(ctx context.Context, in *corev1.AddFishingCatchRequest, opts ...grpc.CallOption) (*corev1.AddFishingCatchResponse, error)
 	ListFishingCatches(ctx context.Context, in *corev1.ListFishingCatchesRequest, opts ...grpc.CallOption) (*corev1.ListFishingCatchesResponse, error)
@@ -73,8 +71,6 @@ func registerEvents(mux *http.ServeMux, h coreHandlers) {
 	mux.HandleFunc("PUT "+one+"/attendees/{user_id}/attendance", a(h.setAttendance(true)))
 	mux.HandleFunc("DELETE "+one+"/attendees/{user_id}/attendance", a(h.setAttendance(false)))
 	mux.HandleFunc("POST "+one+"/check-in", a(h.checkIn))
-	mux.HandleFunc("POST "+one+"/hike-start", a(h.startHike))
-	mux.HandleFunc("POST "+one+"/hike-return", a(h.finishHike))
 	mux.HandleFunc("GET "+one+"/fishing-catches", a(h.listFishingCatches))
 	mux.HandleFunc("POST "+one+"/fishing-catches", a(h.addFishingCatch))
 	mux.HandleFunc("DELETE "+one+"/fishing-catches/{catch_id}", a(h.removeFishingCatch))
@@ -111,11 +107,10 @@ func runes(s string) int { return utf8.RuneCountInString(strings.TrimSpace(s)) }
 
 // --- Input: type details ---
 
-// eventDetailsInput is the type details of a create or update body: at most
-// one is set. A camp's details are fields (issue #241): "camp" is an
-// unknown field here and fails decoding.
+// eventDetailsInput is the type details of a create or update body. A
+// camp's and a hike's details are fields (issues #241, #242): "camp" and
+// "hike" are unknown fields here and fail decoding.
 type eventDetailsInput struct {
-	Hike    *hikeJSON    `json:"hike"`
 	Fishing *fishingJSON `json:"fishing"`
 }
 
@@ -124,31 +119,21 @@ type eventDetailsInput struct {
 type eventDetails struct {
 	// typ is the catalog key of the type the details belong to.
 	typ     string
-	hike    *corev1.HikeDetails
 	fishing *corev1.FishingDetails
 }
 
-// details checks the cheap rules (enum names, coordinates, counts) and
-// converts. core checks everything again.
+// details checks the cheap rules (enum names) and converts. core checks
+// everything again.
 func (in eventDetailsInput) details() (eventDetails, bool) {
 	var d eventDetails
-	n := 0
-	if in.Hike != nil {
-		n++
-		d.typ, d.hike = "hike", &corev1.HikeDetails{
-			Difficulty: in.Hike.Difficulty, DistanceKm: in.Hike.DistanceKm, ElevationM: in.Hike.ElevationM,
-			ExpectedReturnTime: optTimestamp(in.Hike.ExpectedReturnAt), ReturnGraceMinutes: in.Hike.ReturnGraceMinutes,
-		}
-	}
 	if in.Fishing != nil {
-		n++
 		v, ok := spotVisibilities.valueOrUnspecified(in.Fishing.SpotVisibility)
 		if !ok {
 			return d, false
 		}
 		d.typ, d.fishing = "fishing", &corev1.FishingDetails{SpotVisibility: v}
 	}
-	return d, n <= 1
+	return d, true
 }
 
 // Limits of the field values of a body; core checks the values themselves
@@ -180,20 +165,14 @@ func eventFields(in map[string]json.RawMessage) (map[string]string, bool) {
 
 // setCreate sets req's type details, if any.
 func (d eventDetails) setCreate(req *corev1.CreateEventRequest) {
-	switch {
-	case d.hike != nil:
-		req.Details = &corev1.CreateEventRequest_Hike{Hike: d.hike}
-	case d.fishing != nil:
+	if d.fishing != nil {
 		req.Details = &corev1.CreateEventRequest_Fishing{Fishing: d.fishing}
 	}
 }
 
 // setUpdate sets req's type details, if any.
 func (d eventDetails) setUpdate(req *corev1.UpdateEventRequest) {
-	switch {
-	case d.hike != nil:
-		req.Details = &corev1.UpdateEventRequest_Hike{Hike: d.hike}
-	case d.fishing != nil:
+	if d.fishing != nil {
 		req.Details = &corev1.UpdateEventRequest_Fishing{Fishing: d.fishing}
 	}
 }
@@ -662,48 +641,6 @@ func (h coreHandlers) checkIn(ctx context.Context, w http.ResponseWriter, r *htt
 		return
 	}
 	writeJSON(w, http.StatusOK, checkInJSON{attendanceStatuses.name(resp.GetAttendance()), attendanceMethods.name(resp.GetMethod())})
-}
-
-type hikeStartBody struct {
-	StartedAt *time.Time `json:"started_at"`
-}
-
-func (h coreHandlers) startHike(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	id, eid, ok := pathTayfaEvent(w, r)
-	if !ok {
-		return
-	}
-	var b hikeStartBody
-	if !decode(w, r, &b) {
-		return
-	}
-	resp, err := h.d.Events.StartHike(ctx, &corev1.StartHikeRequest{TayfaId: id, EventId: eid, StartTime: optTimestamp(b.StartedAt)})
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, hikeCheckinFrom(resp.GetCheckin()))
-}
-
-type hikeReturnBody struct {
-	ReturnedAt *time.Time `json:"returned_at"`
-}
-
-func (h coreHandlers) finishHike(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	id, eid, ok := pathTayfaEvent(w, r)
-	if !ok {
-		return
-	}
-	var b hikeReturnBody
-	if !decode(w, r, &b) {
-		return
-	}
-	resp, err := h.d.Events.FinishHike(ctx, &corev1.FinishHikeRequest{TayfaId: id, EventId: eid, ReturnTime: optTimestamp(b.ReturnedAt)})
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, hikeCheckinFrom(resp.GetCheckin()))
 }
 
 // --- Fishing log ---

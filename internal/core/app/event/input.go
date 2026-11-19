@@ -43,12 +43,13 @@ const (
 var Types = []string{TypeConvoy, TypeCamp, TypeHike, TypeFishing, TypeGaming, TypeSports, TypeGeneral}
 
 // detailTypes are the types that still keep data in a Faz 1 detail table
-// (event_hike, event_fishing) until their components move it (issues
-// #242, #243). Every other type has only the fields of its catalog
-// definition (event_field_values) and its components; the convoy's route
-// and vehicles and the camp's list are components (issues #239–#241), the
-// camp's site details are fields (issue #241).
-var detailTypes = []string{TypeHike, TypeFishing}
+// (event_fishing) until their components move it (issue #243). Every other
+// type has only the fields of its catalog definition (event_field_values)
+// and its components; the convoy's route and vehicles, the camp's list and
+// the hike's roll call are components (issues #239–#242), the camp's site
+// details and the hike's difficulty, distance and elevation are fields
+// (issues #241, #242).
+var detailTypes = []string{TypeFishing}
 
 // Limits (data model v14 and 00004_events.sql; the same CHECKs are in the
 // database).
@@ -60,10 +61,6 @@ const (
 	onlineURLMax    = 2048
 	capacityMax     = 10000
 	cancelReasonMax = 500
-	distanceMax     = 1000
-	elevationMax    = 9000
-	graceDefault    = 30
-	graceMax        = 1440
 
 	// startAhead bounds how far ahead an event may start; maxDuration how
 	// long it may last.
@@ -98,7 +95,6 @@ type Location struct {
 // Details are the Faz 1 type details of the types in detailTypes; at most
 // one is set and it matches the event's type.
 type Details struct {
-	Hike    *Hike
 	Fishing *Fishing
 }
 
@@ -110,7 +106,7 @@ func (d Details) typ() string {
 		set bool
 		typ string
 	}{
-		{d.Hike != nil, TypeHike}, {d.Fishing != nil, TypeFishing},
+		{d.Fishing != nil, TypeFishing},
 	} {
 		if c.set {
 			if t != "" {
@@ -120,15 +116,6 @@ func (d Details) typ() string {
 		}
 	}
 	return t
-}
-
-// Hike holds a hike's details. Zero values mean "not given".
-type Hike struct {
-	Difficulty         int32
-	DistanceKm         float64
-	ElevationM         int32
-	ExpectedReturnAt   time.Time
-	ReturnGraceMinutes int32
 }
 
 // Fishing holds who sees the spot.
@@ -275,10 +262,7 @@ func cleanDetails(typ string, d Details, start time.Time, create bool) (Details,
 		}
 		return Details{}, nil
 	case dt == "" && create:
-		switch typ {
-		case TypeHike:
-			d.Hike = &Hike{}
-		case TypeFishing:
+		if typ == TypeFishing {
 			d.Fishing = &Fishing{}
 		}
 	case dt != typ:
@@ -287,31 +271,6 @@ func cleanDetails(typ string, d Details, start time.Time, create bool) (Details,
 
 	var out Details
 	switch typ {
-	case TypeHike:
-		h := *d.Hike
-		if h.Difficulty < 0 || h.Difficulty > 5 {
-			return Details{}, apperr.Validation("difficulty")
-		}
-		if math.IsNaN(h.DistanceKm) || h.DistanceKm < 0 || h.DistanceKm > distanceMax {
-			return Details{}, apperr.Validation("distance_km")
-		}
-		h.DistanceKm = math.Round(h.DistanceKm*100) / 100
-		if h.ElevationM < 0 || h.ElevationM > elevationMax {
-			return Details{}, apperr.Validation("elevation_m")
-		}
-		if !h.ExpectedReturnAt.IsZero() {
-			if !h.ExpectedReturnAt.After(start) {
-				return Details{}, apperr.Validation("expected_return_time")
-			}
-			h.ExpectedReturnAt = h.ExpectedReturnAt.UTC().Truncate(time.Microsecond)
-		}
-		switch {
-		case h.ReturnGraceMinutes == 0:
-			h.ReturnGraceMinutes = graceDefault
-		case h.ReturnGraceMinutes < 0 || h.ReturnGraceMinutes > graceMax:
-			return Details{}, apperr.Validation("return_grace_minutes")
-		}
-		out.Hike = &h
 	case TypeFishing:
 		f := *d.Fishing
 		switch f.SpotVisibility {

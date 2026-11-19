@@ -40,22 +40,15 @@ SELECT EXISTS (
 );
 
 -- ---------------------------------------------------------------------------
--- Yürüyüş yoklaması
+-- Yoklama (`roll_call` bileşeni, issue #242)
 
--- name: GetHikeCheckin :one
-SELECT started_at, started_received_at, returned_at, returned_received_at
-FROM event_hike_checkins
-WHERE event_id = @event_id AND user_id = @user_id;
-
--- name: StartHikeCheckin :execrows
-INSERT INTO event_hike_checkins (event_id, user_id, started_at, started_received_at)
-VALUES (@event_id, @user_id, @started_at, @received_at)
-ON CONFLICT (event_id, user_id) DO NOTHING;
-
--- name: ReturnHikeCheckin :execrows
-UPDATE event_hike_checkins
-SET returned_at = @returned_at, returned_received_at = @received_at
-WHERE event_id = @event_id AND user_id = @user_id AND returned_at IS NULL;
+-- Katılım geçmişi, yoklaması olan kişide çıkış anını ve döndüyse gerçek
+-- süreyi kullanır (birden çok yoklamada en erken çıkış).
+-- name: GetRollCallTimes :one
+SELECT started_at, returned_at FROM event_roll_call_checkins
+WHERE event_id = @event_id AND user_id = @user_id
+ORDER BY started_at, component_key
+LIMIT 1;
 
 -- ---------------------------------------------------------------------------
 -- Kalıcı katılım geçmişi

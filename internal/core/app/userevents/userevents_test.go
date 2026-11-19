@@ -193,7 +193,7 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"event_vehicle_seat_requests":    `SELECT count(*) FROM event_vehicle_seat_requests WHERE user_id = $1`,
 		"event_referees.user_id":         `SELECT count(*) FROM event_referees WHERE user_id = $1`,
 		"event_checklist_items":          `SELECT count(*) FROM event_checklist_items WHERE $1 IN (assigned_user_id, created_by)`,
-		"event_hike_checkins.user_id":    `SELECT count(*) FROM event_hike_checkins WHERE user_id = $1`,
+		"event_roll_call_checkins":       `SELECT count(*) FROM event_roll_call_checkins WHERE user_id = $1`,
 		"fishing_catches":                `SELECT count(*) FROM fishing_catches WHERE $1 IN (user_id, deleted_by)`,
 		"event_photos":                   `SELECT count(*) FROM event_photos WHERE $1 IN (uploader_id, deleted_by)`,
 		"user_activity_records.user_id":  `SELECT count(*) FROM user_activity_records WHERE user_id = $1`,
@@ -485,7 +485,7 @@ func (e *env) status(t *testing.T, ev, u id.ID) string {
 // were going to, the oldest waitlisted answer becomes going in the same
 // transaction, with an rsvp.promoted event and audit record by the system
 // (issue #50). Ended, cancelled and not-going events are left alone. The
-// user's hike roll calls, catches and activity records go too.
+// user's roll calls, catches and activity records go too.
 func TestDeletedPromotesWaitlist(t *testing.T) {
 	e := setup(t)
 	u, admin, a, w1, w2 := id.New(), id.New(), id.New(), id.New(), id.New()
@@ -521,8 +521,7 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 
 	// Personal attendance data of u.
 	hike := e.eventAt(t, tf, "hike", now.Add(-5*time.Hour), now.Add(-time.Hour), nil, "scheduled")
-	e.seed(t, `INSERT INTO event_hike (event_id) VALUES ($1)`, hike.PG())
-	e.seed(t, `INSERT INTO event_hike_checkins (event_id, user_id, started_at, started_received_at) VALUES ($1, $2, $3, $3)`, hike.PG(), u.PG(), now.Add(-4*time.Hour))
+	e.seed(t, `INSERT INTO event_roll_call_checkins (event_id, component_key, user_id, started_at, started_received_at) VALUES ($1, 'roll_call', $2, $3, $3)`, hike.PG(), u.PG(), now.Add(-4*time.Hour))
 	e.seed(t, `INSERT INTO user_activity_records (id, user_id, event_id, tayfa_id, event_type, mode, event_title, started_at, duration_minutes, attendance_method)
 		VALUES ($1, $2, $3, $4, 'hike', 'in_person', 'Etkinlik', $5, 240, 'hike_start')`, id.New().PG(), u.PG(), hike.PG(), tf.PG(), now.Add(-4*time.Hour))
 	fishing := e.eventAt(t, tf, "fishing", now.Add(-5*time.Hour), now.Add(-time.Hour), nil, "scheduled")

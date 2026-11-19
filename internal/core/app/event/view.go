@@ -207,17 +207,6 @@ func typeDetails(ctx context.Context, q *store.Queries, ev store.GetEventRow) (D
 	var d Details
 	var err error
 	switch ev.Type {
-	case TypeHike:
-		var r store.GetEventHikeRow
-		r, err = q.GetEventHike(ctx, evID)
-		if err != nil {
-			break
-		}
-		h := &Hike{Difficulty: r.Difficulty.Int32, DistanceKm: r.DistanceKm, ElevationM: r.ElevationM.Int32, ReturnGraceMinutes: r.ReturnGraceMinutes}
-		if r.ExpectedReturnAt.Valid {
-			h.ExpectedReturnAt = r.ExpectedReturnAt.Time.UTC()
-		}
-		d.Hike = h
 	case TypeFishing:
 		var vis string
 		vis, err = q.GetEventFishing(ctx, evID)

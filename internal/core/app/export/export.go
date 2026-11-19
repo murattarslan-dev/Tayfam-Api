@@ -30,7 +30,7 @@ import (
 const (
 	SectionMemberships     = "memberships"
 	SectionEventRSVPs      = "event_rsvps"
-	SectionHikeCheckins    = "hike_checkins"
+	SectionHikeCheckins    = "hike_checkins" // every roll call (#242); the Faz 1 name
 	SectionConvoyVehicles  = "convoy_vehicles"
 	SectionActivityRecords = "activity_records"
 	SectionAnnouncements   = "announcements"

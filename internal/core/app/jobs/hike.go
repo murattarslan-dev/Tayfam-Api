@@ -11,11 +11,12 @@ import (
 )
 
 // AlertOverdueHikes raises the overdue alarm (v14 "Yürüyüşte beklenen
-// dönüş") and returns how many hikers it was raised for.
+// dönüş"; the roll_call component, issue #242) and returns how many
+// participants it was raised for.
 //
-// A hiker is overdue when they started (they have a check-in row), did not
-// return, and the hike's expected_return_at + return_grace_minutes has
-// passed. Each hiker gets one hike.overdue event and alert_sent_at is set
+// A participant is overdue when they set out on a roll call whose alarm is
+// on (they have a roll call row), did not return, and the plan's expected
+// return + the component's return_grace_minutes (default 30) has passed. Each hiker gets one hike.overdue event and alert_sent_at is set
 // in the same transaction, so the alarm is never sent twice. The alarm goes
 // out even when the event was cancelled or deleted: the person may still be
 // out.
@@ -39,7 +40,9 @@ func (s *Service) AlertOverdueHikes(ctx context.Context) (int, error) {
 		}
 		alerts := make([]alert, 0, len(rows))
 		for _, r := range rows {
-			n, err := q.MarkHikeAlertSent(ctx, store.MarkHikeAlertSentParams{Now: ts(now), EventID: r.EventID, UserID: r.UserID})
+			n, err := q.MarkHikeAlertSent(ctx, store.MarkHikeAlertSentParams{
+				Now: ts(now), EventID: r.EventID, ComponentKey: r.ComponentKey, UserID: r.UserID,
+			})
 			if err != nil {
 				return 0, fmt.Errorf("alarm zamanı: %w", err)
 			}

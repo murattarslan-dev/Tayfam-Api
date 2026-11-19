@@ -226,6 +226,8 @@ func TestCreateAndGet(t *testing.T) {
 			in.Fields = values("game", `"CS2"`, "platform", `"pc"`)
 		case TypeSports:
 			in.Fields = values("sport", `"football"`, "venue_name", `"Halısaha"`)
+		case TypeHike:
+			in.Fields = values("difficulty", `3`, "planned_distance", `12.345`, "planned_elevation", `800`)
 		}
 		v := e.create(t, tf, admin, in)
 		got, err := e.svc.Get(ctx, admin, tf, v.ID)
@@ -241,11 +243,14 @@ func TestCreateAndGet(t *testing.T) {
 			t.Errorf("%s: tür %q sürüm %d alanlar %v", typ, got.Type, got.TypeVersion, got.Fields)
 		}
 	}
-	got, err := e.svc.Get(ctx, admin, tf, e.create(t, tf, admin, func() Input { i := input(); i.Type = TypeHike; return i }()).ID)
+	// A hike's Faz 1 details are fields (issue #242); the distance keeps
+	// two decimals.
+	hike := input()
+	hike.Type = TypeHike
+	hike.Fields = values("difficulty", `5`, "planned_distance", `12.345`)
+	got, err := e.svc.Get(ctx, admin, tf, e.create(t, tf, admin, hike).ID)
 	must(t, err)
-	if got.Details.Hike.ReturnGraceMinutes != 30 {
-		t.Errorf("varsayılan dönüş payı = %d", got.Details.Hike.ReturnGraceMinutes)
-	}
+	wantValues(t, "yürüyüş alanları", got.Fields, "difficulty", `5`, "planned_distance", `12.35`)
 }
 
 func TestCreateValidation(t *testing.T) {
@@ -281,10 +286,9 @@ func TestCreateValidation(t *testing.T) {
 		{"boşluklu bağlantı", func(i *Input) { i.Location = Location{Mode: ModeOnline, OnlineURL: "https://example.com/a b"} }, "online_url"},
 		{"negatif kapasite", func(i *Input) { i.Capacity = -1 }, "capacity"},
 		{"büyük kapasite", func(i *Input) { i.Capacity = 10001 }, "capacity"},
-		{"genel türde detay", func(i *Input) { i.Details.Hike = &Hike{} }, "details"},
-		{"yanlış türde detay", func(i *Input) { i.Type = TypeHike; i.Details.Fishing = &Fishing{} }, "details"},
-		{"iki detay", func(i *Input) { i.Type = TypeHike; i.Details = Details{Fishing: &Fishing{}, Hike: &Hike{}} }, "details"},
-		{"kampta detay", func(i *Input) { i.Type = TypeCamp; i.Details.Hike = &Hike{} }, "details"},
+		{"genel türde detay", func(i *Input) { i.Details.Fishing = &Fishing{} }, "details"},
+		{"yürüyüşte detay", func(i *Input) { i.Type = TypeHike; i.Details.Fishing = &Fishing{} }, "details"},
+		{"kampta detay", func(i *Input) { i.Type = TypeCamp; i.Details.Fishing = &Fishing{} }, "details"},
 		{"uzun kamp notu", func(i *Input) { i.Type = TypeCamp; i.Fields = values("notes", `"`+strings.Repeat("n", 1001)+`"`) }, "fields.notes"},
 		{"metin su", func(i *Input) { i.Type = TypeCamp; i.Fields = values("has_water", `"evet"`) }, "fields.has_water"},
 		{"bozuk tür anahtarı", func(i *Input) { i.Type = "Hike Night" }, "type"},
@@ -295,15 +299,13 @@ func TestCreateValidation(t *testing.T) {
 		{"oyun türünde detay", func(i *Input) {
 			i.Type = TypeGaming
 			i.Fields = values("game", `"x"`, "platform", `"pc"`)
-			i.Details.Hike = &Hike{}
+			i.Details.Fishing = &Fishing{}
 		}, "details"},
-		{"konvoyda detay", func(i *Input) { i.Type = TypeConvoy; i.Details.Hike = &Hike{} }, "details"},
+		{"konvoyda detay", func(i *Input) { i.Type = TypeConvoy; i.Details.Fishing = &Fishing{} }, "details"},
 		{"türde olmayan alan", func(i *Input) { i.Fields = values("stake", `100`) }, "fields"},
-		{"zorluk 6", func(i *Input) { i.Type = TypeHike; i.Details.Hike = &Hike{Difficulty: 6} }, "difficulty"},
-		{"başlangıçtan önce dönüş", func(i *Input) {
-			i.Type = TypeHike
-			i.Details.Hike = &Hike{ExpectedReturnAt: i.StartsAt.Add(-time.Minute)}
-		}, "expected_return_time"},
+		{"zorluk 6", func(i *Input) { i.Type = TypeHike; i.Fields = values("difficulty", `6`) }, "fields.difficulty"},
+		{"sıfır mesafe", func(i *Input) { i.Type = TypeHike; i.Fields = values("planned_distance", `0`) }, "fields.planned_distance"},
+		{"irtifa 9001", func(i *Input) { i.Type = TypeHike; i.Fields = values("planned_elevation", `9001`) }, "fields.planned_elevation"},
 		{"bilinmeyen mera görünürlüğü", func(i *Input) { i.Type = TypeFishing; i.Details.Fishing = &Fishing{SpotVisibility: "public"} }, "spot_visibility"},
 		{"istek kimliği yok", func(i *Input) { i.ClientRequestID = "" }, "client_request_id"},
 	} {
@@ -399,22 +401,22 @@ func TestUpdate(t *testing.T) {
 	e := setup(t)
 	tf, admin := e.newTayfa(t)
 	in := input()
-	in.Type, in.Details.Hike = TypeHike, &Hike{Difficulty: 3}
+	in.Type, in.Details.Fishing = TypeFishing, &Fishing{SpotVisibility: SpotTayfa}
 	ev := e.create(t, tf, admin, in)
 
 	start := time.Now().Add(48 * time.Hour).UTC().Truncate(time.Microsecond)
 	v, err := e.svc.Update(ctx, admin, tf, ev.ID, []string{FieldTime, FieldLocation, FieldDetails, FieldCapacity}, Input{
 		StartsAt: start, EndsAt: start.Add(time.Hour), Capacity: 5,
 		Location: Location{Mode: ModeOnline, OnlineURL: "https://example.com/oda"},
-		Details:  Details{Hike: &Hike{Difficulty: 5, DistanceKm: 12.345, ElevationM: 800, ReturnGraceMinutes: 45}},
+		Details:  Details{Fishing: &Fishing{SpotVisibility: SpotParticipants}},
 		Title:    "maskede yok",
 	})
 	must(t, err)
 	if !v.StartsAt.Equal(start) || v.Mode != ModeOnline || v.MeetingPoint != nil || v.City != "" || v.Capacity != 5 || v.Title != ev.Title {
 		t.Fatalf("güncel = %+v", v)
 	}
-	if h := v.Details.Hike; h.Difficulty != 5 || h.DistanceKm != 12.35 || h.ElevationM != 800 || h.ReturnGraceMinutes != 45 {
-		t.Fatalf("yürüyüş = %+v", h)
+	if f := v.Details.Fishing; f == nil || f.SpotVisibility != SpotParticipants {
+		t.Fatalf("balık = %+v", f)
 	}
 	var payload string
 	must(t, e.pool.QueryRow(ctx, `SELECT payload::text FROM domain_events WHERE type = 'event.updated'`).Scan(&payload))
@@ -433,13 +435,12 @@ func TestUpdate(t *testing.T) {
 		{[]string{FieldTitle}, Input{}, "title"},
 		{[]string{FieldLocation}, Input{Location: Location{Mode: ModeOnline}}, "online_url"},
 		{[]string{FieldDetails}, Input{}, "details"},
-		{[]string{FieldDetails}, Input{Details: Details{Fishing: &Fishing{}}}, "details"},
 	} {
 		_, err := e.svc.Update(ctx, admin, tf, ev.ID, tc.fields, tc.in)
 		wantField(t, fmt.Sprint(tc.fields), err, tc.field)
 	}
 	general := e.create(t, tf, admin, input())
-	_, err = e.svc.Update(ctx, admin, tf, general.ID, []string{FieldDetails}, Input{Details: Details{Hike: &Hike{}}})
+	_, err = e.svc.Update(ctx, admin, tf, general.ID, []string{FieldDetails}, Input{Details: Details{Fishing: &Fishing{}}})
 	wantField(t, "genel etkinliğe detay", err, "details")
 
 	// Ended events no longer change.
@@ -655,8 +656,6 @@ func (e *env) callAll(user, tf, ev id.ID) map[string]error {
 	_, out["SetRSVP"] = e.svc.SetRSVP(ctx, user, tf, ev, RSVPGoing)
 	_, _, out["ListAttendees"] = e.svc.ListAttendees(ctx, user, tf, ev, "", 0, "")
 	_, out["CheckIn"] = e.svc.CheckIn(ctx, user, tf, ev, izmir)
-	_, out["StartHike"] = e.svc.StartHike(ctx, user, tf, ev, time.Time{})
-	_, out["FinishHike"] = e.svc.FinishHike(ctx, user, tf, ev, time.Time{})
 	out["SetAttendance"] = e.svc.SetAttendance(ctx, user, tf, ev, id.New(), true)
 	_, out["AddCatch"] = e.svc.AddCatch(ctx, user, tf, ev, CatchInput{Species: "Levrek", LengthCm: 40, ClientRequestID: id.New().String()})
 	_, _, out["ListCatches"] = e.svc.ListCatches(ctx, user, tf, ev, 0, "")

@@ -488,7 +488,7 @@ func TestPurge(t *testing.T) {
 	}
 	if n := e.count(t, `SELECT count(*) FROM event_series WHERE id = $1`, series.PG()) +
 		e.count(t, `SELECT count(*) FROM event_rsvps WHERE event_id = $1`, hikeID.PG()) +
-		e.count(t, `SELECT count(*) FROM event_hike_checkins WHERE event_id = $1`, hikeID.PG()); n != 0 {
+		e.count(t, `SELECT count(*) FROM event_roll_call_checkins WHERE event_id = $1`, hikeID.PG()); n != 0 {
 		t.Errorf("seri, katılım ya da yoklama kaldı: %d", n)
 	}
 	// The activity record stays without its event and tayfa (SET NULL).
@@ -532,15 +532,15 @@ func TestPurge(t *testing.T) {
 // ---------------------------------------------------------------------------
 // Yürüyüş alarmı
 
-// hike creates a hike event organized by organizer whose expected return
-// is base + ret (grace 30 minutes).
+// hike creates a hike event organized by organizer whose roll call
+// (hike v1: alarm on, grace 30 minutes) expects the return at base + ret.
 func (e *env) hike(t *testing.T, tf, organizer id.ID, ret time.Duration) id.ID {
 	t.Helper()
 	ev := id.New()
 	e.exec(t, `INSERT INTO events (id, tayfa_id, type, mode, title, starts_at, ends_at, meeting_point_name, meeting_lat, meeting_lng, city, district, created_by)
 	    VALUES ($1, $2, 'hike', 'in_person', 'Zirve', $3, $4, 'Otopark', 38.4, 27.1, 'İzmir', 'Bornova', $5)`,
 		ev.PG(), tf.PG(), e.base.Add(-6*time.Hour), e.base.Add(ret), organizer.PG())
-	e.exec(t, `INSERT INTO event_hike (event_id, expected_return_at, return_grace_minutes) VALUES ($1, $2, 30)`, ev.PG(), e.base.Add(ret))
+	e.exec(t, `INSERT INTO event_roll_calls (event_id, component_key, expected_return_at) VALUES ($1, 'roll_call', $2)`, ev.PG(), e.base.Add(ret))
 	return ev
 }
 
@@ -551,14 +551,14 @@ func (e *env) checkin(t *testing.T, ev, user id.ID, returned bool) {
 	if returned {
 		back = pgtype.Timestamptz{Time: e.base.Add(-time.Hour), Valid: true}
 	}
-	e.exec(t, `INSERT INTO event_hike_checkins (event_id, user_id, started_at, started_received_at, returned_at, returned_received_at)
-	    VALUES ($1, $2, $3, $3, $4, $4)`, ev.PG(), user.PG(), start, back)
+	e.exec(t, `INSERT INTO event_roll_call_checkins (event_id, component_key, user_id, started_at, started_received_at, returned_at, returned_received_at)
+	    VALUES ($1, 'roll_call', $2, $3, $3, $4, $4)`, ev.PG(), user.PG(), start, back)
 }
 
 func (e *env) alertSent(t *testing.T, ev, user id.ID) bool {
 	t.Helper()
 	var at pgtype.Timestamptz
-	must(t, e.pool.QueryRow(ctx, `SELECT alert_sent_at FROM event_hike_checkins WHERE event_id = $1 AND user_id = $2`, ev.PG(), user.PG()).Scan(&at))
+	must(t, e.pool.QueryRow(ctx, `SELECT alert_sent_at FROM event_roll_call_checkins WHERE event_id = $1 AND user_id = $2`, ev.PG(), user.PG()).Scan(&at))
 	return at.Valid
 }
 
@@ -579,9 +579,14 @@ func TestAlertOverdueHikes(t *testing.T) {
 	// Expected back 10 minutes ago: still within the grace period.
 	grace := e.hike(t, tf, organizer, -10*time.Minute)
 	e.checkin(t, grace, hiker, false)
+	// Without an expected return (no plan) there is no alarm.
+	noPlan := e.hike(t, tf, organizer, -2*time.Hour)
+	e.exec(t, `DELETE FROM event_roll_calls WHERE event_id = $1`, noPlan.PG())
+	e.checkin(t, noPlan, hiker, false)
 
 	run(t, "alarm", e.at(t, 0).AlertOverdueHikes, 2)
-	if !e.alertSent(t, late, hiker) || !e.alertSent(t, late, modHiker) || e.alertSent(t, late, back) || e.alertSent(t, grace, hiker) {
+	if !e.alertSent(t, late, hiker) || !e.alertSent(t, late, modHiker) || e.alertSent(t, late, back) || e.alertSent(t, grace, hiker) ||
+		e.alertSent(t, noPlan, hiker) {
 		t.Error("alert_sent_at yanlış satırlarda")
 	}
 	got := e.events(t, EventHikeOverdue)

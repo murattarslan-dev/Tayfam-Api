@@ -886,19 +886,6 @@ func setFields(ctx context.Context, q *store.Queries, event id.ID, values map[st
 func setDetails(ctx context.Context, q *store.Queries, event id.ID, d Details) error {
 	var err error
 	switch {
-	case d.Hike != nil:
-		h := d.Hike
-		p := store.SetEventHikeParams{
-			EventID: event.PG(), Difficulty: int4(h.Difficulty), ElevationM: int4(h.ElevationM),
-			ReturnGraceMinutes: h.ReturnGraceMinutes,
-		}
-		if h.DistanceKm > 0 {
-			p.DistanceKm = pgtype.Float8{Float64: h.DistanceKm, Valid: true}
-		}
-		if !h.ExpectedReturnAt.IsZero() {
-			p.ExpectedReturnAt = ts(h.ExpectedReturnAt)
-		}
-		err = q.SetEventHike(ctx, p)
 	case d.Fishing != nil:
 		err = q.SetEventFishing(ctx, store.SetEventFishingParams{EventID: event.PG(), SpotVisibility: d.Fishing.SpotVisibility})
 	}

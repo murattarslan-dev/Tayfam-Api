@@ -1678,8 +1678,8 @@ paths:
       summary: Bitmemiş etkinlikler, başlangıç zamanına göre
       description: |
         Her etkin üyeye açıktır (susturulmuş üye de okur). İptal edilenler
-        de listededir. Türe özel ayrıntılar (`hike`, `fishing`) listede
-        dolmaz; tek etkinlik ucunu kullanın.
+        de listededir. Türe özel ayrıntı (`fishing`) listede dolmaz; tek
+        etkinlik ucunu kullanın.
       parameters:
         - $ref: "#/components/parameters/PageSize"
         - $ref: "#/components/parameters/PageToken"
@@ -1761,10 +1761,12 @@ paths:
         - Yer: `mode`, `meeting_point_name`, `meeting_point`, `city`,
           `district`, `online_url` birlikte değişir; bunlardan biri
           gönderilirse `mode` zorunludur ve gönderilmeyenler boşalır.
-        - Türe özel ayrıntı (`hike`, `fishing`) tamamen değişir. Konvoyun
+        - Türe özel ayrıntı (`fishing`) tamamen değişir. Konvoyun
           rotası `route` bileşenindedir
-          (`PUT …/components/{component_key}/route`); kampın ayrıntıları
-          `fields`'tadır.
+          (`PUT …/components/{component_key}/route`); kampın ve yürüyüşün
+          ayrıntıları `fields`'tadır, yürüyüşün beklenen dönüşü `roll_call`
+          bileşenindedir
+          (`PUT …/components/{component_key}/roll-call/expected-return`).
 
         Kapasiteyi artırmak bekleme listesindekileri sırayla `going` yapar.
         Seriye ait bir etkinlikte `apply_to_series` `false` (varsayılan) ise
@@ -2000,66 +2002,6 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
-        "503": { $ref: "#/components/responses/Problem" }
-
-  /v1/tayfas/{tayfa_id}/events/{event_id}/hike-start:
-    parameters:
-      - $ref: "#/components/parameters/TayfaID"
-      - $ref: "#/components/parameters/EventID"
-    post:
-      operationId: startHike
-      summary: Yürüyüşe çıktığınızı kaydeder; katılım sayılır
-      description: |
-        Yalnızca yürüyüş etkinliğinde (`event-type-mismatch`). Check-in ile
-        aynı pencere ve `going` kuralı. Tekrar gönderim ilk çıkışı döndürür.
-      parameters:
-        - $ref: "#/components/parameters/ClientHeader"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/HikeStartRequest" }
-      responses:
-        "200":
-          description: Yürüyüş yoklaması
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/HikeCheckin" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "404": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-        "503": { $ref: "#/components/responses/Problem" }
-
-  /v1/tayfas/{tayfa_id}/events/{event_id}/hike-return:
-    parameters:
-      - $ref: "#/components/parameters/TayfaID"
-      - $ref: "#/components/parameters/EventID"
-    post:
-      operationId: finishHike
-      summary: Yürüyüşten döndüğünüzü kaydeder
-      description: |
-        Bitişten sonra ve iptal edilmiş etkinlikte de çalışır. Önce çıkış
-        gerekir (`hike-not-started`). Tekrar gönderim ilk dönüşü döndürür.
-      parameters:
-        - $ref: "#/components/parameters/ClientHeader"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/HikeReturnRequest" }
-      responses:
-        "200":
-          description: Yürüyüş yoklaması
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/HikeCheckin" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "404": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
   /v1/tayfas/{tayfa_id}/events/{event_id}/fishing-catches:
@@ -2755,6 +2697,144 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Checklist" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  # --- Etkinlik bileşenleri: yoklama ve dönmeme alarmı (`roll_call`; core RollCallComponentService, #242, ADR-0025 §4, §9) ---
+  # Kimin çıktığı ve döndüğü. Bileşenin `alarm` parametresi açıksa, çıkıp
+  # beklenen dönüş + tolerans (`return_grace_minutes`, yoksa 30 dk) geçtiği
+  # halde dönmeyen kişi için organizatöre, yöneticilere ve moderatörlere bir
+  # kez `hike_overdue` bildirimi gider (kişinin kendisine gitmez; iptal
+  # edilmiş etkinlikte de). Cihaz konumu alınmaz (ADR-0008). Her uç
+  # bileşeni güncel haliyle döner.
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/roll-call:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: getEventRollCall
+      summary: Etkinliğin yoklaması
+      description: |
+        Plan (beklenen dönüş), kendi kaydınız ve organizatör yetkisi
+        olanlara herkesin kaydı. Her etkin üyeye açıktır (susturulmuş üye
+        de okur); iptal edilmiş ve donmuş etkinlikte de okunur. Bileşen
+        uçlarının ortak kuralları geçerlidir (`component-not-found`,
+        `component-disabled`).
+      responses:
+        "200":
+          description: Yoklama
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventRollCall" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/roll-call/expected-return:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    put:
+      operationId: setEventRollCallExpectedReturn
+      summary: Beklenen dönüşü yazar ya da kaldırır (organizatör, moderatör, yönetici)
+      description: |
+        `expected_return_at` etkinliğin başlangıcından sonra olmalıdır
+        (`invalid-request`); alan yoksa ya da `null` ise plan kaldırılır
+        (alarm kurulmaz). Olmayan
+        planı kaldırmak hata değildir. Etkinlik başladıktan ve bittikten
+        sonra da değişir; bitişten 7 gün sonra donar (`component-frozen`).
+        Seriye ait etkinlikte yalnızca bu etkinlik değişir; serinin yeni
+        örnekleri şablonun beklenen dönüşünü kendi başlangıçlarına göre
+        kaydırarak alır. Bileşen uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RollCallPlanRequest" }
+      responses:
+        "200":
+          description: Yoklama, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventRollCall" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/roll-call/start:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    post:
+      operationId: startEventRollCall
+      summary: Çıktığınızı kaydeder; katılım sayılır
+      description: |
+        Katılım `hike_start` yöntemiyle doğrulanır. `going` cevabı gerekir
+        (`event-not-going`); başlangıçtan 30 dakika önceden bitişe kadar
+        (`check-in-closed`). Susturulmuş üye de çıkabilir (güvenlik
+        sinyali). Tekrar gönderim ilk çıkışı döndürür. Bileşen uçlarının
+        ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RollCallStartRequest" }
+      responses:
+        "200":
+          description: Yoklama, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventRollCall" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/roll-call/return:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    post:
+      operationId: returnEventRollCall
+      summary: Döndüğünüzü kaydeder
+      description: |
+        Güvenlik sinyalidir: bitişten sonra, bileşen donduktan sonra,
+        iptal edilmiş etkinlikte ve susturulmuşken de çalışır; yalnızca
+        salt okunur tayfa reddeder (`tayfa-read-only`). Önce çıkış gerekir
+        (`hike-not-started`). Tekrar gönderim ilk dönüşü döndürür.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RollCallReturnRequest" }
+      responses:
+        "200":
+          description: Yoklama, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventRollCall" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -7261,7 +7341,7 @@ components:
       type: string
       description: |
         `location`: buluşma noktasına 300 m içinde check-in. `online`:
-        çevrimiçi etkinlikte "Katıldım". `hike_start`: yürüyüşe çıkış.
+        çevrimiçi etkinlikte "Katıldım". `hike_start`: yoklamada çıkış (`roll_call`).
         `organizer`: organizatör düzeltmesi.
       enum: [location, online, hike_start, organizer]
 
@@ -7409,15 +7489,58 @@ components:
           type: string
           format: uuid
           description: Üstlenecek kişi. Yoksa (ya da `null`) atama kaldırılır.
-
-    HikeDetails:
+    RollCallEntry:
       type: object
+      required: [user_id, started_at]
       properties:
-        difficulty: { type: integer, minimum: 0, maximum: 5, description: "0: verilmemiş." }
-        distance_km: { type: number, minimum: 0, maximum: 1000, description: "0: verilmemiş; iki ondalık." }
-        elevation_m: { type: integer, minimum: 0, maximum: 9000, description: "0: verilmemiş." }
-        expected_return_at: { type: string, format: date-time, description: Başlangıçtan sonra. }
-        return_grace_minutes: { type: integer, minimum: 0, maximum: 1440, description: "0: varsayılan 30." }
+        user_id: { type: string, format: uuid }
+        started_at: { type: string, format: date-time, description: İstemcinin bildirdiği çıkış anı. }
+        returned_at: { type: string, format: date-time, description: İstemcinin bildirdiği dönüş anı; dışarıdayken yoktur. }
+    EventRollCall:
+      type: object
+      required: [alarm, return_grace_minutes, entries, caller_can_manage, caller_can_edit]
+      description: Bir etkinliğin bir yoklama bileşeni, isteği yapanın gördüğü haliyle (#242).
+      properties:
+        alarm: { type: boolean, description: Bileşenin `alarm` parametresi; kapalıysa dönmeme alarmı kurulmaz. }
+        return_grace_minutes: { type: integer, minimum: 0, maximum: 1440, description: "Beklenen dönüşten sonraki tolerans (dakika); tanım vermezse 30." }
+        expected_return_at: { type: string, format: date-time, description: Beklenen dönüş; plan yoksa yoktur (alarm kurulmaz). }
+        mine:
+          allOf: [{ $ref: "#/components/schemas/RollCallEntry" }]
+          description: Kendi kaydınız; çıkmadıysanız yoktur.
+        entries:
+          type: array
+          maxItems: 1000
+          description: Herkesin kaydı, önce dışarıdakiler; yalnızca `caller_can_manage` ise dolu, değilse boş.
+          items: { $ref: "#/components/schemas/RollCallEntry" }
+        caller_can_manage: { type: boolean, description: Etkinliğin bileşenlerini yönetirsiniz (organizatör yetkisi, susturulmamış). }
+        caller_can_edit:
+          type: boolean
+          description: Beklenen dönüşü şu an değiştirebilirsiniz (organizatör yetkisi; etkinlik iptal değil, donmamış, tayfa salt okunur değil).
+    RollCallPlanRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        expected_return_at:
+          type: string
+          format: date-time
+          description: Etkinliğin başlangıcından sonra. Yoksa (ya da `null`) plan kaldırılır.
+    RollCallStartRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        started_at:
+          type: string
+          format: date-time
+          description: İstemcinin çıkış zamanı; yoksa şimdi. Gelecekte değil, en fazla 48 saat önce.
+    RollCallReturnRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        returned_at:
+          type: string
+          format: date-time
+          description: İstemcinin dönüş zamanı; yoksa şimdi. Çıkıştan önce olamaz.
+
     FishingDetails:
       type: object
       properties:
@@ -7558,12 +7681,14 @@ components:
         etkinlik oluşturulduğu tür sürümüne (`type_version`) bağlıdır ve o
         sürümün tanımıyla gösterilir (güncel katalogda yoksa
         `GET /v1/catalog/event-types/{key}/versions/{version}`). `fields`
-        ve Faz 1'den kalan türe özel ayrıntı (`hike`, `fishing`;
-        bileşenlere taşınana kadar) yalnızca tek etkinlik yanıtında gelir;
-        ayrıntılardan en fazla biri doludur. Konvoyun rotası ve araçları
-        bileşenlerindedir (`route`, `vehicles`); kampın listesi `checklist`
-        bileşenindedir, kamp yeri, su, tuvalet ve notlar `fields`'tadır
-        (`site_name`, `has_water`, `has_toilet`, `notes`; #241).
+        ve Faz 1'den kalan türe özel ayrıntı (`fishing`; bileşene taşınana
+        kadar) yalnızca tek etkinlik yanıtında gelir. Konvoyun rotası ve
+        araçları bileşenlerindedir (`route`, `vehicles`); kampın listesi
+        `checklist` bileşenindedir, kamp yeri, su, tuvalet ve notlar
+        `fields`'tadır (`site_name`, `has_water`, `has_toilet`, `notes`;
+        #241). Yürüyüşün yoklaması ve beklenen dönüşü `roll_call`
+        bileşenindedir; zorluk, planlanan mesafe ve irtifa `fields`'tadır
+        (`difficulty`, `planned_distance`, `planned_elevation`; #242).
       properties:
         cover_upload_id: { type: string, format: uuid, description: "Kapak; linkleri `POST /v1/media/urls`. Serinin ürettiği etkinliklerde yoktur." }
         id: { type: string, format: uuid }
@@ -7615,7 +7740,6 @@ components:
         series_override: { type: boolean, description: Seriden ayrı düzenlendi; seri değişiklikleri ona dokunmaz. }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
-        hike: { $ref: "#/components/schemas/HikeDetails" }
         fishing: { $ref: "#/components/schemas/FishingDetails" }
 
     EventList:
@@ -7639,10 +7763,11 @@ components:
         biri olmalıdır. `fields` türün tanımına göre doğrulanır: zorunlu
         alanlar verilir, tanımda olmayan alan gönderilmez (ör. `gaming`:
         `game`, `platform`; `sports`: `sport`, `venue_name`; `camp`:
-        `site_name`, `has_water`, `has_toilet`, `notes`). Faz 1'den kalan
-        ayrıntılar (`hike`, `fishing`) yalnızca kendi türlerinde, en fazla
-        bir tane verilir. Rota etkinlik oluşturulduktan
-        sonra `route` bileşeninden yazılır.
+        `site_name`, `has_water`, `has_toilet`, `notes`; `hike`:
+        `difficulty`, `planned_distance`, `planned_elevation`). Faz 1'den
+        kalan ayrıntı (`fishing`) yalnızca kendi türünde verilir. Rota ve
+        yürüyüşün beklenen dönüşü etkinlik oluşturulduktan sonra
+        bileşenlerinden (`route`, `roll_call`) yazılır.
       properties:
         cover_upload_id: { type: string, format: uuid, description: "İsteğe bağlı: kendi hazır `cover` yüklemeniz (bu tayfa için açılmış). Yalnızca bu etkinliğe bağlanır." }
         components:
@@ -7680,7 +7805,6 @@ components:
             Organizatörün işareti: etkinlik halka açık bir yerde buluşur ve
             Keşfet'te görünebilir (ADR-0033). Yalnızca yüz yüze etkinlikte
             etkilidir; özel adreste buluşan etkinlik işaretlenmez.
-        hike: { $ref: "#/components/schemas/HikeDetails" }
         fishing: { $ref: "#/components/schemas/FishingDetails" }
         recurrence: { $ref: "#/components/schemas/Recurrence" }
         client_request_id:
@@ -7720,7 +7844,6 @@ components:
             Organizatörün işareti: etkinlik halka açık bir yerde buluşur ve
             Keşfet'te görünebilir (ADR-0033). Yalnızca yüz yüze etkinlikte
             etkilidir; özel adreste buluşan etkinlik işaretlenmez.
-        hike: { $ref: "#/components/schemas/HikeDetails" }
         fishing: { $ref: "#/components/schemas/FishingDetails" }
         apply_to_series:
           type: boolean
@@ -7780,29 +7903,6 @@ components:
       properties:
         attendance: { $ref: "#/components/schemas/AttendanceStatus" }
         method: { $ref: "#/components/schemas/AttendanceMethod" }
-
-    HikeStartRequest:
-      type: object
-      additionalProperties: false
-      properties:
-        started_at:
-          type: string
-          format: date-time
-          description: İstemcinin çıkış zamanı; yoksa şimdi. Gelecekte değil, en fazla 48 saat önce.
-    HikeReturnRequest:
-      type: object
-      additionalProperties: false
-      properties:
-        returned_at:
-          type: string
-          format: date-time
-          description: İstemcinin dönüş zamanı; yoksa şimdi. Çıkıştan önce olamaz.
-    HikeCheckin:
-      type: object
-      required: [started_at]
-      properties:
-        started_at: { type: string, format: date-time }
-        returned_at: { type: string, format: date-time, description: Dönülmediyse yoktur. }
 
     FishingCatch:
       type: object

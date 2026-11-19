@@ -41,8 +41,9 @@ func TestNewNeedsPool(t *testing.T) {
 
 // seedVersion is the catalog version the migrations leave: 1 from the
 // seed (00030), raised by every migration that changes a type in place
-// (00036: the camp's fields, issue #241).
-const seedVersion = 2
+// (00036: the camp's fields, issue #241; 00037: the hike's fields, issue
+// #242).
+const seedVersion = 3
 
 // The seed is the seven Faz 1 types with today's behaviour (ADR-0025 §10
 // step 1): every definition passes the validator, the keys did not change.
@@ -109,6 +110,22 @@ func TestSeedCatalog(t *testing.T) {
 		if f, ok := byKey["camp"].Parsed.Field(key); !ok || f.Kind != kind || f.Required {
 			t.Errorf("camp.%s = %+v", key, f)
 		}
+	}
+	// The hike's Faz 1 details are fields (issue #242); its roll call has
+	// the alarm on.
+	for key, kind := range map[string]string{
+		"difficulty": definition.KindInteger, "planned_distance": definition.KindDecimal,
+		"planned_elevation": definition.KindInteger,
+	} {
+		if f, ok := byKey["hike"].Parsed.Field(key); !ok || f.Kind != kind || f.Required {
+			t.Errorf("hike.%s = %+v", key, f)
+		}
+	}
+	if f, _ := byKey["hike"].Parsed.Field("planned_distance"); f.Unit != "km" || f.Min != 0.01 || f.Max != 1000 {
+		t.Errorf("hike.planned_distance = %+v", f)
+	}
+	if c, ok := byKey["hike"].Parsed.Component(definition.CompRollCall); !ok || !c.Params["alarm"].Bool() {
+		t.Errorf("hike.roll_call = %+v", c)
 	}
 	// Gaming and sports keep their Faz 1 fields.
 	if f, ok := byKey["gaming"].Parsed.Field("platform"); !ok || !f.Required || len(f.Options) != 6 {

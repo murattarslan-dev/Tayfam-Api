@@ -65,7 +65,6 @@ func TestEventTypeIntegrity(t *testing.T) {
 	}
 
 	details := map[string]string{
-		"hike":    `INSERT INTO event_hike (event_id) VALUES ($1)`,
 		"fishing": `INSERT INTO event_fishing (event_id) VALUES ($1)`,
 	}
 	for typ, sql := range details {
@@ -85,13 +84,13 @@ func TestEventTypeIntegrity(t *testing.T) {
 	}
 
 	// The fixed type column cannot be changed to point elsewhere.
-	_, err := pool.Exec(ctx, `UPDATE event_hike SET type = 'fishing' WHERE event_id = $1`, ids["hike"].PG())
-	if c := constraintOf(err); c != "event_hike_type" {
-		t.Errorf("event_hike.type değişti: %v", err)
+	_, err := pool.Exec(ctx, `UPDATE event_fishing SET type = 'hike' WHERE event_id = $1`, ids["fishing"].PG())
+	if c := constraintOf(err); c != "event_fishing_type" {
+		t.Errorf("event_fishing.type değişti: %v", err)
 	}
 	// The event's type cannot change while a detail row points at it.
-	_, err = pool.Exec(ctx, `UPDATE events SET type = 'fishing' WHERE id = $1`, ids["hike"].PG())
-	if c := constraintOf(err); c != "event_hike_event_fkey" {
+	_, err = pool.Exec(ctx, `UPDATE events SET type = 'hike' WHERE id = $1`, ids["fishing"].PG())
+	if c := constraintOf(err); c != "event_fishing_event_fkey" {
 		t.Errorf("detaylı etkinliğin türü değişti: %v", err)
 	}
 
@@ -207,7 +206,7 @@ func TestEventConstraints(t *testing.T) {
 		"bilinmeyen yoklama":  {`INSERT INTO event_rsvps (event_id, user_id, status, attendance) VALUES ($1, gen_random_uuid(), 'going', 'late')`, "event_rsvps_attendance"},
 		"bilinmeyen yöntem":   {`INSERT INTO event_rsvps (event_id, user_id, status, attendance_method) VALUES ($1, gen_random_uuid(), 'going', 'qr')`, "event_rsvps_attendance_method"},
 		"zamansız işaretleme": {`INSERT INTO event_rsvps (event_id, user_id, status, attendance_marked_by) VALUES ($1, gen_random_uuid(), 'going', gen_random_uuid())`, "event_rsvps_attendance_marked"},
-		"yanlış tür sütunu":   {`INSERT INTO event_hike (event_id, type) VALUES ($1, 'general')`, "event_hike_type"},
+		"yanlış tür sütunu":   {`INSERT INTO event_fishing (event_id, type) VALUES ($1, 'general')`, "event_fishing_type"},
 	} {
 		_, err := pool.Exec(ctx, tc.sql, eid.PG())
 		if got := constraintOf(err); got != tc.constraint {
@@ -232,14 +231,9 @@ func TestEventDetailConstraints(t *testing.T) {
 		on         id.ID
 		constraint string
 	}{
-		"zorluk 0":              {`INSERT INTO event_hike (event_id, difficulty) VALUES ($1, 0)`, event("hike"), "event_hike_difficulty"},
-		"zorluk 6":              {`INSERT INTO event_hike (event_id, difficulty) VALUES ($1, 6)`, event("hike"), "event_hike_difficulty"},
-		"negatif mesafe":        {`INSERT INTO event_hike (event_id, distance_km) VALUES ($1, -1)`, event("hike"), "event_hike_distance_km"},
-		"negatif yükseklik":     {`INSERT INTO event_hike (event_id, elevation_m) VALUES ($1, -5)`, event("hike"), "event_hike_elevation_m"},
-		"uzun bekleme payı":     {`INSERT INTO event_hike (event_id, return_grace_minutes) VALUES ($1, 2000)`, event("hike"), "event_hike_return_grace_minutes"},
 		"bilinmeyen görünürlük": {`INSERT INTO event_fishing (event_id, spot_visibility) VALUES ($1, 'public')`, event("fishing"), "event_fishing_spot_visibility"},
 		"türde olmayan alan":    {`INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, 'stake', '100')`, event("gaming"), "event_field_values_guard"},
-		"alansız türde alan":    {`INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, 'game', '"CS2"')`, event("hike"), "event_field_values_guard"},
+		"alansız türde alan":    {`INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, 'game', '"CS2"')`, event("general"), "event_field_values_guard"},
 		"nesne alan değeri":     {`INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, 'game', '{}')`, event("gaming"), "event_field_values_value"},
 	} {
 		_, err := pool.Exec(ctx, tc.sql, tc.on.PG())
