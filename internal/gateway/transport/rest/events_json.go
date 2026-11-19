@@ -81,15 +81,6 @@ func latLngFrom(p *corev1.LatLng) *latLngJSON {
 
 // --- Type details (output) ---
 
-// hikeJSON is used for both input and output.
-type hikeJSON struct {
-	Difficulty         int32      `json:"difficulty"`
-	DistanceKm         float64    `json:"distance_km"`
-	ElevationM         int32      `json:"elevation_m"`
-	ExpectedReturnAt   *time.Time `json:"expected_return_at,omitempty"`
-	ReturnGraceMinutes int32      `json:"return_grace_minutes"`
-}
-
 // fishingJSON is used for both input and output; an empty input value means
 // the default (tayfa).
 type fishingJSON struct {
@@ -132,7 +123,6 @@ type eventJSON struct {
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 
-	Hike    *hikeJSON    `json:"hike,omitempty"`
 	Fishing *fishingJSON `json:"fishing,omitempty"`
 
 	// Fields holds the values of the type's fields by field key; left out
@@ -181,13 +171,7 @@ func eventFrom(e *corev1.Event) eventJSON {
 		SeriesID:         e.GetSeriesId(), SeriesOverride: e.GetSeriesOverride(), CoverUploadID: e.GetCoverUploadId(),
 		CreatedAt: e.GetCreateTime().AsTime(), UpdatedAt: e.GetUpdateTime().AsTime(),
 	}
-	switch d := e.GetDetails().(type) {
-	case *corev1.Event_Hike:
-		out.Hike = &hikeJSON{
-			Difficulty: d.Hike.GetDifficulty(), DistanceKm: d.Hike.GetDistanceKm(), ElevationM: d.Hike.GetElevationM(),
-			ExpectedReturnAt: optTime(d.Hike.GetExpectedReturnTime()), ReturnGraceMinutes: d.Hike.GetReturnGraceMinutes(),
-		}
-	case *corev1.Event_Fishing:
+	if d, ok := e.GetDetails().(*corev1.Event_Fishing); ok {
 		out.Fishing = &fishingJSON{SpotVisibility: spotVisibilities.name(d.Fishing.GetSpotVisibility())}
 	}
 	return out
@@ -218,15 +202,6 @@ type attendeeListJSON struct {
 type checkInJSON struct {
 	Attendance string `json:"attendance"`
 	Method     string `json:"method"`
-}
-
-type hikeCheckinJSON struct {
-	StartedAt  time.Time  `json:"started_at"`
-	ReturnedAt *time.Time `json:"returned_at,omitempty"`
-}
-
-func hikeCheckinFrom(c *corev1.HikeCheckin) hikeCheckinJSON {
-	return hikeCheckinJSON{StartedAt: c.GetStartTime().AsTime(), ReturnedAt: optTime(c.GetReturnTime())}
 }
 
 type fishingCatchJSON struct {

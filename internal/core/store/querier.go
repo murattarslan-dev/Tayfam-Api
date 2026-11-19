@@ -167,6 +167,10 @@ type Querier interface {
 	// Seri örneği şablonun rotalarını alır (bileşen seçimlerinden sonra:
 	// tetikleyici bileşenin açık olduğunu denetler).
 	CopyEventRoutes(ctx context.Context, arg CopyEventRoutesParams) error
+	// Seri örneği şablonun planını alır; beklenen dönüş örneğin başlangıcına
+	// göre kaydırılır (Faz 1 ile aynı). Bileşen seçimlerinden sonra çalışır:
+	// tetikleyici bileşenin açık olduğunu denetler.
+	CopyRollCallPlans(ctx context.Context, arg CopyRollCallPlansParams) error
 	CountActiveMembers(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
 	CountActiveMembersForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]CountActiveMembersForTayfasRow, error)
 	CountApprovedSeats(ctx context.Context, arg CountApprovedSeatsParams) (int64, error)
@@ -326,6 +330,7 @@ type Querier interface {
 	DeletePoll(ctx context.Context, arg DeletePollParams) (int64, error)
 	// Silinen anketin oyları hemen silinir; geri alma yoktur.
 	DeletePollVotes(ctx context.Context, pollID pgtype.UUID) error
+	DeleteRollCallPlan(ctx context.Context, arg DeleteRollCallPlanParams) (int64, error)
 	DeleteSafetyContact(ctx context.Context, arg DeleteSafetyContactParams) error
 	// Etiket silinince bağları CASCADE ile gider; sorular kalır.
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
@@ -363,9 +368,10 @@ type Querier interface {
 	// Hesap silme (user.deleted): kişinin arkadaşlıkları, istekleri ve iki
 	// yöndeki engellemeleri.
 	DeleteUserFriendships(ctx context.Context, userID pgtype.UUID) error
-	DeleteUserHikeCheckins(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserPollVotes(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserRequestOutcomes(ctx context.Context, userID pgtype.UUID) error
+	// Yoklama satırları (`roll_call` bileşeni, issue #242) kişiye aittir.
+	DeleteUserRollCallCheckins(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserRsvps(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserSafetyContacts(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserSeatRequests(ctx context.Context, userID pgtype.UUID) error
@@ -448,6 +454,9 @@ type Querier interface {
 	// (source = blocked) bir öneri değildir; engel zaten blocks bölümündedir.
 	ExportFriendSuggestions(ctx context.Context, arg ExportFriendSuggestionsParams) ([]ExportFriendSuggestionsRow, error)
 	ExportFriendships(ctx context.Context, arg ExportFriendshipsParams) ([]ExportFriendshipsRow, error)
+	// Yoklama satırları (`roll_call` bileşeni, issue #242). Bölümün adı Faz 1'den
+	// kalmadır (hike_checkins); bütün türlerin yoklamalarını taşır. Bir
+	// etkinlikte birden çok yoklama bileşeni olabilir: etkinlik başına bir satır.
 	ExportHikeCheckins(ctx context.Context, arg ExportHikeCheckinsParams) ([]ExportHikeCheckinsRow, error)
 	// KVKK veri dışa aktarma (issue #144, ADR-0021; alanlar
 	// docs/data-export-format.md). Her sorgu yalnızca @user_id'nin (doğrulanmış
@@ -520,7 +529,6 @@ type Querier interface {
 	// Katılım ve düzenleme aynı etkinlik satırını kilitleyerek okur; kapasite
 	// ve bekleme sırası iki eşzamanlı istekte birden aşılamaz.
 	GetEventForUpdate(ctx context.Context, arg GetEventForUpdateParams) (GetEventForUpdateRow, error)
-	GetEventHike(ctx context.Context, eventID pgtype.UUID) (GetEventHikeRow, error)
 	// Kişinin etkinlikteki cevabı ve doğrulanmış katılımı (bileşenlerin
 	// "katılımcı" ve "check-in'i doğrulanmış katılımcı" kuralları).
 	GetEventParticipation(ctx context.Context, arg GetEventParticipationParams) (GetEventParticipationRow, error)
@@ -547,9 +555,6 @@ type Querier interface {
 	// Davet (v11)"). friendships satırı iki kişi için tektir: user_low_id <
 	// user_high_id. Uygulama her sorguya düşük ve yüksek kimliği sıralı verir.
 	GetFriendship(ctx context.Context, arg GetFriendshipParams) (Friendship, error)
-	// ---------------------------------------------------------------------------
-	// Yürüyüş yoklaması
-	GetHikeCheckin(ctx context.Context, arg GetHikeCheckinParams) (GetHikeCheckinRow, error)
 	GetInvite(ctx context.Context, arg GetInviteParams) (GetInviteRow, error)
 	// Davet önizlemesi: kilitlemeden okur, link kullanılmaz. Silinmiş tayfanın
 	// daveti bulunmaz.
@@ -611,6 +616,19 @@ type Querier interface {
 	// Platform panelinde şikâyet edilen albüm fotoğrafı (ADR-0028 §5): yalnızca
 	// panelin şikâyetten okuduğu upload_id, hazır event_photo dosyası.
 	GetReportedPhotoUpload(ctx context.Context, id pgtype.UUID) (GetReportedPhotoUploadRow, error)
+	GetRollCallCheckin(ctx context.Context, arg GetRollCallCheckinParams) (GetRollCallCheckinRow, error)
+	// Yoklama ve dönmeme alarmı bileşeni (`roll_call`; issue #242; ADR-0025 §4).
+	// Etkinlik her zaman önce tayfa kapsamında yüklenir ve bileşen etkinliğin tür
+	// sürümünde çözülür (internal/core/app/component: View / Change); buradaki
+	// sorgular o etkinliğin kimliği ve bileşenin anahtarıyla çalışır (IDOR).
+	// Yetki app katmanındadır (internal/core/app/component/rollcall). Dönmeme
+	// alarmı işi jobs.sql'dedir (LockOverdueHikers).
+	GetRollCallPlan(ctx context.Context, arg GetRollCallPlanParams) (GetRollCallPlanRow, error)
+	// ---------------------------------------------------------------------------
+	// Yoklama (`roll_call` bileşeni, issue #242)
+	// Katılım geçmişi, yoklaması olan kişide çıkış anını ve döndüyse gerçek
+	// süreyi kullanır (birden çok yoklamada en erken çıkış).
+	GetRollCallTimes(ctx context.Context, arg GetRollCallTimesParams) (GetRollCallTimesRow, error)
 	GetRsvp(ctx context.Context, arg GetRsvpParams) (GetRsvpRow, error)
 	// Katılım doğrulama, organizatör düzeltmesi, yürüyüş yoklaması, kalıcı
 	// katılım geçmişi ve av günlüğü (issue #50). Etkinlik her zaman önce tayfa
@@ -884,6 +902,8 @@ type Querier interface {
 	ListReportsOfReporter(ctx context.Context, arg ListReportsOfReporterParams) ([]ListReportsOfReporterRow, error)
 	// Çözülmüşler, son çözülen önce.
 	ListResolvedTayfaReports(ctx context.Context, arg ListResolvedTayfaReportsParams) ([]ListResolvedTayfaReportsRow, error)
+	// Yönetenlerin gördüğü liste: önce dışarıdakiler, sonra çıkış sırası.
+	ListRollCallCheckins(ctx context.Context, arg ListRollCallCheckinsParams) ([]ListRollCallCheckinsRow, error)
 	// Kişiyi güvenlik kişisi seçenlerin etkinlikleri: bitişinden 24 saat
 	// geçmemiş ya da alarmı son 7 günde gitmiş. Yalnızca kim, saat aralığı ve
 	// durum (platform sahibi, 2026-11-16): tayfa adı, etkinlik başlığı ve
@@ -948,12 +968,15 @@ type Querier interface {
 	// ilerler.
 	LockInviteByHash(ctx context.Context, tokenHash []byte) (LockInviteByHashRow, error)
 	// ---------------------------------------------------------------------------
-	// Yürüyüş dönmeme alarmı (v14 "Yürüyüşte beklenen dönüş")
+	// Dönmeme alarmı (v14 "Yürüyüşte beklenen dönüş"; `roll_call` bileşeni,
+	// issue #242)
 	// ---------------------------------------------------------------------------
 	// Yola çıkmış (satır var = started_at dolu), dönmemiş, alarmı gönderilmemiş
-	// ve beklenen dönüş + tolerans süresi @now'dan önce dolmuş yürüyüşçüler.
-	// Etkinlik iptal ya da silinmiş olsa da alarm gider: kişi hâlâ dağda
-	// olabilir.
+	// ve beklenen dönüş + tolerans süresi @now'dan önce dolmuş katılımcılar.
+	// Alarm ve tolerans, etkinliğin tür sürümündeki bileşenin parametreleridir
+	// (`alarm`, `return_grace_minutes`; tolerans yoksa 30 dakika); alarmsız
+	// yoklamada make_interval NULL olur ve satır seçilmez. Etkinlik iptal ya da
+	// silinmiş olsa da alarm gider: kişi hâlâ dağda olabilir.
 	LockOverdueHikers(ctx context.Context, arg LockOverdueHikersParams) ([]LockOverdueHikersRow, error)
 	// Aynı alıcının eşzamanlı önerileri sıraya girer.
 	LockSuggestionRecipient(ctx context.Context, userID pgtype.UUID) error
@@ -1047,7 +1070,8 @@ type Querier interface {
 	RestoreAnnouncement(ctx context.Context, arg RestoreAnnouncementParams) (int64, error)
 	RestoreAnswer(ctx context.Context, arg RestoreAnswerParams) (int64, error)
 	RestoreQuestion(ctx context.Context, arg RestoreQuestionParams) (int64, error)
-	ReturnHikeCheckin(ctx context.Context, arg ReturnHikeCheckinParams) (int64, error)
+	// Tekrar gönderim ilk dönüşü korur (0 satır).
+	ReturnRollCallCheckin(ctx context.Context, arg ReturnRollCallCheckinParams) (int64, error)
 	RevokeInvite(ctx context.Context, arg RevokeInviteParams) (int64, error)
 	// Kişi güvenlik kişisi olabilir mi: kabul edilmiş arkadaş, iki yönden engel
 	// yok, hesap silinmemiş ve platformda banlı değil.
@@ -1079,11 +1103,10 @@ type Querier interface {
 	SetEventComponent(ctx context.Context, arg SetEventComponentParams) error
 	SetEventCover(ctx context.Context, arg SetEventCoverParams) error
 	SetEventFieldValue(ctx context.Context, arg SetEventFieldValueParams) error
-	SetEventFishing(ctx context.Context, arg SetEventFishingParams) error
 	// ---------------------------------------------------------------------------
 	// Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
 	// key yanlış türü reddeder.
-	SetEventHike(ctx context.Context, arg SetEventHikeParams) error
+	SetEventFishing(ctx context.Context, arg SetEventFishingParams) error
 	// Rota app katmanında doğrulanmış haliyle yazılır; event_routes_points
 	// CHECK'i ve event_component_guard aynı kuralları ayrıca denetler.
 	SetEventRoute(ctx context.Context, arg SetEventRouteParams) error
@@ -1102,6 +1125,7 @@ type Querier interface {
 	SetInstantTayfaName(ctx context.Context, arg SetInstantTayfaNameParams) (int64, error)
 	SetInvitationOutcome(ctx context.Context, arg SetInvitationOutcomeParams) error
 	SetMembershipRole(ctx context.Context, arg SetMembershipRoleParams) (int64, error)
+	SetRollCallPlan(ctx context.Context, arg SetRollCallPlanParams) error
 	SetRsvp(ctx context.Context, arg SetRsvpParams) error
 	// Kullanıcısız arka plan işi. Trigger'ın tanıdığı tek değer
 	// 'account_deletion'dır; başka bir değer işlemi hata ile durdurur.
@@ -1126,7 +1150,8 @@ type Querier interface {
 	// Bekleme süresi dolan tayfa soft delete edilir; silen sistemdir
 	// (deleted_by boş). İptal edilen talepte deletion_scheduled_for boştur.
 	SoftDeleteDueTayfas(ctx context.Context, arg SoftDeleteDueTayfasParams) ([]pgtype.UUID, error)
-	StartHikeCheckin(ctx context.Context, arg StartHikeCheckinParams) (int64, error)
+	// Tekrar gönderim ilk çıkışı korur (0 satır).
+	StartRollCallCheckin(ctx context.Context, arg StartRollCallCheckinParams) (int64, error)
 	// Hesap silindi: ad ve avatar temizlenir, satır mezar taşı olarak kalır.
 	// Tekrar uygulanınca sonuç değişmez.
 	TombstoneUserProfile(ctx context.Context, arg TombstoneUserProfileParams) error

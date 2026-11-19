@@ -187,36 +187,32 @@ func (q *Queries) GetCatchByClientRequest(ctx context.Context, arg GetCatchByCli
 	return i, err
 }
 
-const getHikeCheckin = `-- name: GetHikeCheckin :one
+const getRollCallTimes = `-- name: GetRollCallTimes :one
 
-SELECT started_at, started_received_at, returned_at, returned_received_at
-FROM event_hike_checkins
+SELECT started_at, returned_at FROM event_roll_call_checkins
 WHERE event_id = $1 AND user_id = $2
+ORDER BY started_at, component_key
+LIMIT 1
 `
 
-type GetHikeCheckinParams struct {
+type GetRollCallTimesParams struct {
 	EventID pgtype.UUID
 	UserID  pgtype.UUID
 }
 
-type GetHikeCheckinRow struct {
-	StartedAt          pgtype.Timestamptz
-	StartedReceivedAt  pgtype.Timestamptz
-	ReturnedAt         pgtype.Timestamptz
-	ReturnedReceivedAt pgtype.Timestamptz
+type GetRollCallTimesRow struct {
+	StartedAt  pgtype.Timestamptz
+	ReturnedAt pgtype.Timestamptz
 }
 
 // ---------------------------------------------------------------------------
-// Yürüyüş yoklaması
-func (q *Queries) GetHikeCheckin(ctx context.Context, arg GetHikeCheckinParams) (GetHikeCheckinRow, error) {
-	row := q.db.QueryRow(ctx, getHikeCheckin, arg.EventID, arg.UserID)
-	var i GetHikeCheckinRow
-	err := row.Scan(
-		&i.StartedAt,
-		&i.StartedReceivedAt,
-		&i.ReturnedAt,
-		&i.ReturnedReceivedAt,
-	)
+// Yoklama (`roll_call` bileşeni, issue #242)
+// Katılım geçmişi, yoklaması olan kişide çıkış anını ve döndüyse gerçek
+// süreyi kullanır (birden çok yoklamada en erken çıkış).
+func (q *Queries) GetRollCallTimes(ctx context.Context, arg GetRollCallTimesParams) (GetRollCallTimesRow, error) {
+	row := q.db.QueryRow(ctx, getRollCallTimes, arg.EventID, arg.UserID)
+	var i GetRollCallTimesRow
+	err := row.Scan(&i.StartedAt, &i.ReturnedAt)
 	return i, err
 }
 
@@ -449,58 +445,6 @@ func (q *Queries) MarkNoShow(ctx context.Context, arg MarkNoShowParams) error {
 		arg.UserID,
 	)
 	return err
-}
-
-const returnHikeCheckin = `-- name: ReturnHikeCheckin :execrows
-UPDATE event_hike_checkins
-SET returned_at = $1, returned_received_at = $2
-WHERE event_id = $3 AND user_id = $4 AND returned_at IS NULL
-`
-
-type ReturnHikeCheckinParams struct {
-	ReturnedAt pgtype.Timestamptz
-	ReceivedAt pgtype.Timestamptz
-	EventID    pgtype.UUID
-	UserID     pgtype.UUID
-}
-
-func (q *Queries) ReturnHikeCheckin(ctx context.Context, arg ReturnHikeCheckinParams) (int64, error) {
-	result, err := q.db.Exec(ctx, returnHikeCheckin,
-		arg.ReturnedAt,
-		arg.ReceivedAt,
-		arg.EventID,
-		arg.UserID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const startHikeCheckin = `-- name: StartHikeCheckin :execrows
-INSERT INTO event_hike_checkins (event_id, user_id, started_at, started_received_at)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (event_id, user_id) DO NOTHING
-`
-
-type StartHikeCheckinParams struct {
-	EventID    pgtype.UUID
-	UserID     pgtype.UUID
-	StartedAt  pgtype.Timestamptz
-	ReceivedAt pgtype.Timestamptz
-}
-
-func (q *Queries) StartHikeCheckin(ctx context.Context, arg StartHikeCheckinParams) (int64, error) {
-	result, err := q.db.Exec(ctx, startHikeCheckin,
-		arg.EventID,
-		arg.UserID,
-		arg.StartedAt,
-		arg.ReceivedAt,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const upsertActivityRecord = `-- name: UpsertActivityRecord :exec

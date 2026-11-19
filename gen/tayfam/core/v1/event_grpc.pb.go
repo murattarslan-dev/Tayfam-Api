@@ -176,19 +176,14 @@ type EventServiceClient interface {
 	// (location: set for an online event, unset or out of range for an
 	// in-person one).
 	CheckIn(ctx context.Context, in *CheckInRequest, opts ...grpc.CallOption) (*CheckInResponse, error)
-	// StartHike records that the caller set out on a hike; it counts as
-	// attendance (ATTENDANCE_METHOD_HIKE_START). Same window and GOING rule
-	// as CheckIn. A repeat returns the first start.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_CHECK_IN_CLOSED, ERROR_REASON_EVENT_NOT_GOING,
-	// ERROR_REASON_VALIDATION (start_time).
+	// StartHike is not served any more: the hike roll call is the roll call
+	// component's (RollCallComponentService.StartRollCall,
+	// component_roll_call.proto; issue #242). It answers UNIMPLEMENTED; the
+	// method stays because it cannot be removed.
 	StartHike(ctx context.Context, in *StartHikeRequest, opts ...grpc.CallOption) (*StartHikeResponse, error)
-	// FinishHike records the caller's return. It also works after the end and
-	// on a cancelled event. A repeat returns the first return.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_HIKE_NOT_STARTED, ERROR_REASON_VALIDATION (return_time).
+	// FinishHike is not served any more
+	// (RollCallComponentService.ReturnRollCall; issue #242). It answers
+	// UNIMPLEMENTED; the method stays because it cannot be removed.
 	FinishHike(ctx context.Context, in *FinishHikeRequest, opts ...grpc.CallOption) (*FinishHikeResponse, error)
 	// SetAttendance is the organizer's correction: the organizer for their own
 	// event, moderators and admins for every event add a participant's
@@ -674,19 +669,14 @@ type EventServiceServer interface {
 	// (location: set for an online event, unset or out of range for an
 	// in-person one).
 	CheckIn(context.Context, *CheckInRequest) (*CheckInResponse, error)
-	// StartHike records that the caller set out on a hike; it counts as
-	// attendance (ATTENDANCE_METHOD_HIKE_START). Same window and GOING rule
-	// as CheckIn. A repeat returns the first start.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_CHECK_IN_CLOSED, ERROR_REASON_EVENT_NOT_GOING,
-	// ERROR_REASON_VALIDATION (start_time).
+	// StartHike is not served any more: the hike roll call is the roll call
+	// component's (RollCallComponentService.StartRollCall,
+	// component_roll_call.proto; issue #242). It answers UNIMPLEMENTED; the
+	// method stays because it cannot be removed.
 	StartHike(context.Context, *StartHikeRequest) (*StartHikeResponse, error)
-	// FinishHike records the caller's return. It also works after the end and
-	// on a cancelled event. A repeat returns the first return.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_HIKE_NOT_STARTED, ERROR_REASON_VALIDATION (return_time).
+	// FinishHike is not served any more
+	// (RollCallComponentService.ReturnRollCall; issue #242). It answers
+	// UNIMPLEMENTED; the method stays because it cannot be removed.
 	FinishHike(context.Context, *FinishHikeRequest) (*FinishHikeResponse, error)
 	// SetAttendance is the organizer's correction: the organizer for their own
 	// event, moderators and admins for every event add a participant's

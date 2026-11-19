@@ -195,28 +195,6 @@ type EventFishing struct {
 	SpotVisibility string
 }
 
-type EventHike struct {
-	EventID            pgtype.UUID
-	Type               string
-	Difficulty         pgtype.Int4
-	DistanceKm         pgtype.Numeric
-	ElevationM         pgtype.Int4
-	ExpectedReturnAt   pgtype.Timestamptz
-	ReturnGraceMinutes int32
-}
-
-type EventHikeCheckin struct {
-	EventID            pgtype.UUID
-	UserID             pgtype.UUID
-	StartedAt          pgtype.Timestamptz
-	StartedReceivedAt  pgtype.Timestamptz
-	ReturnedAt         pgtype.Timestamptz
-	ReturnedReceivedAt pgtype.Timestamptz
-	AlertSentAt        pgtype.Timestamptz
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-}
-
 type EventPhoto struct {
 	ID              pgtype.UUID
 	EventID         pgtype.UUID
@@ -236,6 +214,27 @@ type EventReferee struct {
 	ComponentKey pgtype.Text
 	ScopeID      pgtype.UUID
 	CreatedAt    pgtype.Timestamptz
+}
+
+type EventRollCall struct {
+	EventID          pgtype.UUID
+	ComponentKey     string
+	ExpectedReturnAt pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+type EventRollCallCheckin struct {
+	EventID            pgtype.UUID
+	ComponentKey       string
+	UserID             pgtype.UUID
+	StartedAt          pgtype.Timestamptz
+	StartedReceivedAt  pgtype.Timestamptz
+	ReturnedAt         pgtype.Timestamptz
+	ReturnedReceivedAt pgtype.Timestamptz
+	AlertSentAt        pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
 }
 
 type EventRoute struct {

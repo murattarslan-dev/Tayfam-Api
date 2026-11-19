@@ -149,7 +149,8 @@ const (
 	EventRSVP
 	EventViewAttendees
 	// Attendance (issue #50). EventCheckIn covers the caller's own location
-	// or online check-in and their hike start and return.
+	// or online check-in and their roll call start and return (roll_call
+	// component, issue #242).
 	EventCheckIn
 	// EventAttendanceOwn is the organizer's correction on their own event
 	// (the caller checks that the event is theirs); EventAttendanceAny is
@@ -568,8 +569,8 @@ var allowedWhileMuted = map[Action]bool{
 	// Stepping down only narrows the caller's own access.
 	RoleStepDown: true,
 	// Checking in records that one was there; it publishes nothing. A muted
-	// member who attends keeps their history, and a hike return (a safety
-	// signal) must never be refused.
+	// member who attends keeps their history, and a roll call return (a
+	// safety signal) must never be refused.
 	EventCheckIn: true,
 	// Deleting one's own question or answer publishes nothing and removes
 	// one's own words at once (v14 "Silinen içeriği geri alma"); a mute

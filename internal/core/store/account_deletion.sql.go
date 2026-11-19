@@ -265,21 +265,22 @@ func (q *Queries) DeleteUserEventPhotos(ctx context.Context, userID pgtype.UUID)
 	return err
 }
 
-const deleteUserHikeCheckins = `-- name: DeleteUserHikeCheckins :exec
-DELETE FROM event_hike_checkins WHERE user_id = $1
-`
-
-func (q *Queries) DeleteUserHikeCheckins(ctx context.Context, userID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteUserHikeCheckins, userID)
-	return err
-}
-
 const deleteUserPollVotes = `-- name: DeleteUserPollVotes :exec
 DELETE FROM poll_votes WHERE user_id = $1
 `
 
 func (q *Queries) DeleteUserPollVotes(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserPollVotes, userID)
+	return err
+}
+
+const deleteUserRollCallCheckins = `-- name: DeleteUserRollCallCheckins :exec
+DELETE FROM event_roll_call_checkins WHERE user_id = $1
+`
+
+// Yoklama satırları (`roll_call` bileşeni, issue #242) kişiye aittir.
+func (q *Queries) DeleteUserRollCallCheckins(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserRollCallCheckins, userID)
 	return err
 }
 

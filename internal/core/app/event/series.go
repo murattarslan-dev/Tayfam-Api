@@ -308,7 +308,7 @@ func updateSeries(ctx context.Context, q *store.Queries, c caller, b *batch, ev 
 			}
 		}
 		if set[FieldDetails] {
-			if err := setDetails(ctx, q, t, shiftDetails(details, row.StartsAt.Time.Sub(ev.StartsAt.Time))); err != nil {
+			if err := setDetails(ctx, q, t, details); err != nil {
 				return err
 			}
 		}
@@ -327,17 +327,6 @@ func updateSeries(ctx context.Context, q *store.Queries, c caller, b *batch, ev 
 	}
 	return txn.Audit(ctx, q, tayfa, c.user, SeriesUpdated, txn.Target{Type: "event_series", ID: id.ID(s.ID.Bytes)},
 		map[string]any{"fields": changed, "events": len(targets)})
-}
-
-// shiftDetails moves the times inside d (a hike's expected return) by off,
-// for a copy of d on an event that starts off later.
-func shiftDetails(d Details, off time.Duration) Details {
-	if d.Hike != nil && !d.Hike.ExpectedReturnAt.IsZero() {
-		h := *d.Hike
-		h.ExpectedReturnAt = h.ExpectedReturnAt.Add(off)
-		d.Hike = &h
-	}
-	return d
 }
 
 // GetSeries returns a series of the tayfa.
@@ -541,7 +530,7 @@ func (s *Service) GenerateSeries(ctx context.Context, tayfa, series id.ID) (int,
 				// Already there (another pod, or an earlier run).
 				continue
 			}
-			if err := setDetails(ctx, q, eid, shiftDetails(details, start.Sub(tmpl.StartsAt.Time))); err != nil {
+			if err := setDetails(ctx, q, eid, details); err != nil {
 				return err
 			}
 			// The occurrence gets the template's type version and its field
@@ -560,6 +549,11 @@ func (s *Service) GenerateSeries(ctx context.Context, tayfa, series id.ID) (int,
 			// route (#239)
 			if err := q.CopyEventRoutes(ctx, store.CopyEventRoutesParams{ToEventID: eid.PG(), FromEventID: tmpl.ID}); err != nil {
 				return fmt.Errorf("seri örneğinin rotası: %w", err)
+			}
+
+			// roll_call (#242): the expected return, moved with the start.
+			if err := q.CopyRollCallPlans(ctx, store.CopyRollCallPlansParams{ToEventID: eid.PG(), FromEventID: tmpl.ID}); err != nil {
+				return fmt.Errorf("seri örneğinin yoklama planı: %w", err)
 			}
 			events = append(events, made{eid})
 		}

@@ -1,6 +1,10 @@
 package demo
 
-import corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+import (
+	"strconv"
+
+	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+)
 
 // The demo data set (issue #179). Names are ordinary first names with a
 // surname initial; they imitate no real person. Every text is in line with
@@ -70,7 +74,7 @@ type eventSpec struct {
 	Fishing *corev1.FishingDetails
 	// Fields holds the values of the type's fields by field key, as JSON
 	// text (CreateEventRequest.fields): the data of the types without a
-	// Faz 1 detail message (gaming, sports, camp).
+	// Faz 1 detail message (gaming, sports, camp; a hike's come from Hike).
 	Fields   map[string]string
 	RSVPs    []rsvpSpec
 	Vehicles []vehicleSpec // a type with the vehicles component (the convoy): members who answered GOING
@@ -79,11 +83,23 @@ type eventSpec struct {
 	Gear []checklistItemSpec
 }
 
+// hikeSpec is a hike's data: its difficulty, distance and elevation are
+// fields of the hike type and its expected return is the roll call
+// component's plan (issue #242).
 type hikeSpec struct {
 	Difficulty  int32
 	DistanceKm  float64
 	ElevationM  int32
 	ReturnAfter int // hours after the start
+}
+
+// fields returns the hike type's field values (CreateEventRequest.fields).
+func (h *hikeSpec) fields() map[string]string {
+	return map[string]string{
+		"difficulty":        strconv.Itoa(int(h.Difficulty)),
+		"planned_distance":  strconv.FormatFloat(h.DistanceKm, 'f', -1, 64),
+		"planned_elevation": strconv.Itoa(int(h.ElevationM)),
+	}
 }
 
 type rsvpSpec struct {

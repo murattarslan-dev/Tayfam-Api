@@ -30,6 +30,7 @@ func componentRegistrars() []componentRegistrar {
 		registerChecklistComponent,
 
 		// roll_call (#242)
+		registerRollCallComponent,
 
 		// log (#243)
 

@@ -86,6 +86,8 @@ type Who struct {
 	role   role
 	scope  id.ID
 	action authz.Action
+	// safety: see BySafetySignal.
+	safety bool
 }
 
 type role int
@@ -113,6 +115,14 @@ func ByReferee(scope id.ID) Who { return Who{role: roleReferee, scope: scope} }
 
 // ByAction is an action of the component's own in the permission table.
 func ByAction(a authz.Action) Who { return Who{role: roleAction, action: a} }
+
+// BySafetySignal is ByAction(a) for a signal that must get through
+// whatever the event's state (issue #242: a return from a roll call, which
+// the overdue alarm waits for): besides a's own rule, only a read-only
+// tayfa refuses it. The write window (a cancelled or frozen event) and the
+// component's selection (switched off) do not. Use it with an action that
+// muted members keep (authz.EventCheckIn).
+func BySafetySignal(a authz.Action) Who { return Who{role: roleAction, action: a, safety: true} }
 
 // Scope is one request on one component of an event, resolved and checked.
 // It is valid only inside the View or Change call that made it.
@@ -542,7 +552,8 @@ func (s *Service) View(ctx context.Context, ref Ref, kind string, fn func(sc *Sc
 // a role that is too low or a mute (apperr.ErrPermissionDenied,
 // apperr.ErrMuted), a read-only tayfa (apperr.ErrTayfaReadOnly), a
 // cancelled event (apperr.ErrEventCancelled) and the closed write window
-// (apperr.ErrComponentFrozen). Rules about the event's phase (before the
+// (apperr.ErrComponentFrozen); a safety signal (BySafetySignal) skips the
+// window and the selection. Rules about the event's phase (before the
 // start, after the end) are the component's: Scope.Started, Scope.Ended.
 //
 // After fn the deferred writes run (Scope.Defer, Scope.Emit) and, if fn
@@ -563,11 +574,18 @@ func (s *Service) Change(ctx context.Context, ref Ref, kind string, who Who, fn 
 		if err := sc.authorize(ctx, who); err != nil {
 			return err
 		}
-		if err := b.writable(); err != nil {
-			return err
-		}
-		if !sc.Enabled {
-			return apperr.ErrComponentDisabled
+		switch {
+		case who.safety:
+			if access.ReadOnly(b.tayfa) {
+				return apperr.ErrTayfaReadOnly
+			}
+		default:
+			if err := b.writable(); err != nil {
+				return err
+			}
+			if !sc.Enabled {
+				return apperr.ErrComponentDisabled
+			}
 		}
 		if err := fn(sc); err != nil {
 			return err

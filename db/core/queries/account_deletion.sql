@@ -128,8 +128,9 @@ FOR UPDATE OF e;
 -- name: DeleteUserActivityRecords :exec
 DELETE FROM user_activity_records WHERE user_id = @user_id;
 
--- name: DeleteUserHikeCheckins :exec
-DELETE FROM event_hike_checkins WHERE user_id = @user_id;
+-- Yoklama satırları (`roll_call` bileşeni, issue #242) kişiye aittir.
+-- name: DeleteUserRollCallCheckins :exec
+DELETE FROM event_roll_call_checkins WHERE user_id = @user_id;
 
 -- Av kayıtları konum içerebilir; kişiyle birlikte silinir.
 -- name: DeleteUserCatches :exec

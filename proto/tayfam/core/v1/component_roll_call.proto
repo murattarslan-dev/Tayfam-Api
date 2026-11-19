@@ -1,0 +1,135 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/component.proto";
+
+// RollCallComponentService is the roll call and overdue alarm component
+// (kind "roll_call", issue #242; ADR-0025 §4, §9): who set out and who came
+// back, and the alarm when someone does not return. It replaces the Faz 1
+// hike roll call (EventService.StartHike / FinishHike, HikeDetails'
+// expected_return_time and return_grace_minutes) for every type that has
+// the component.
+//
+// Only gateway calls it with the user's access token. Authentication,
+// scope and the errors every component shares are those of
+// EventComponentService (component.proto): anyone but an ACTIVE member
+// gets ERROR_REASON_TAYFA_NOT_FOUND, and so on.
+//
+// Whether the alarm is on and its grace period are parameters of the
+// component in the event's type version (`alarm`, `return_grace_minutes`,
+// default 30 minutes). With the alarm on, a participant who set out and
+// has not come back when expected_return_time + the grace period has
+// passed raises one hike_overdue notification for the organizer and the
+// tayfa's admins and moderators (never for the participant), also on a
+// cancelled event. No device location is taken, stored or logged
+// (ADR-0008).
+service RollCallComponentService {
+  // GetRollCall returns the plan, the caller's own record and, for
+  // managers, everyone's. Open to every active member, muted ones
+  // included.
+  rpc GetRollCall(GetRollCallRequest) returns (GetRollCallResponse);
+
+  // SetExpectedReturn sets the expected return, or removes it (no alarm
+  // then) without one. Managers only (the organizer, and moderators and
+  // admins as for every event), until the component freezes seven days
+  // after the event's end. The change applies to this event only, also in
+  // a series; a new occurrence gets the template's expected return moved
+  // with its start.
+  //
+  // Errors: ERROR_REASON_VALIDATION (expected_return_time: not after the
+  // event's start), ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and
+  // the errors of every component change.
+  rpc SetExpectedReturn(SetExpectedReturnRequest) returns (SetExpectedReturnResponse);
+
+  // StartRollCall records that the caller set out; it counts as attendance
+  // (ATTENDANCE_METHOD_HIKE_START). The caller must have answered GOING;
+  // from 30 minutes before the start until the end (the check-in window).
+  // Muted members may set out too: it is a safety signal. A repeat
+  // returns the first start.
+  //
+  // Errors: ERROR_REASON_CHECK_IN_CLOSED, ERROR_REASON_EVENT_NOT_GOING,
+  // ERROR_REASON_VALIDATION (start_time) and the errors of every component
+  // change.
+  rpc StartRollCall(StartRollCallRequest) returns (StartRollCallResponse);
+
+  // ReturnRollCall records the caller's return. A safety signal: it also
+  // works after the end, after the component froze, on a cancelled event
+  // and for a muted member; only a read-only tayfa refuses it. A repeat
+  // returns the first return.
+  //
+  // Errors: ERROR_REASON_HIKE_NOT_STARTED, ERROR_REASON_VALIDATION
+  // (return_time), ERROR_REASON_TAYFA_READ_ONLY and the errors every
+  // component shares.
+  rpc ReturnRollCall(ReturnRollCallRequest) returns (ReturnRollCallResponse);
+}
+
+// RollCallEntry is one participant's record. Times are the client's.
+message RollCallEntry {
+  string user_id = 1;
+  google.protobuf.Timestamp start_time = 2;
+  // Unset while out.
+  google.protobuf.Timestamp return_time = 3;
+}
+
+// EventRollCall is one roll call component of an event, as the caller sees
+// it.
+message EventRollCall {
+  // The component's parameters in the event's type version.
+  bool alarm = 1;
+  int32 return_grace_minutes = 2;
+  // Unset without a plan (no alarm then).
+  google.protobuf.Timestamp expected_return_time = 3;
+  // The caller's own record; unset before they set out.
+  RollCallEntry mine = 4;
+  // Everyone's records, those still out first, at most 1000. Only for
+  // managers (caller_can_manage); empty for everyone else.
+  repeated RollCallEntry entries = 5;
+  // The caller manages the event's components (sees entries); changing
+  // the plan also needs caller_can_edit.
+  bool caller_can_manage = 6;
+  // The caller may change the expected return now: a manager who is not
+  // muted, and the event, the tayfa and the write window allow changes.
+  bool caller_can_edit = 7;
+}
+
+message GetRollCallRequest {
+  ComponentRef ref = 1;
+}
+
+message GetRollCallResponse {
+  EventRollCall roll_call = 1;
+}
+
+message SetExpectedReturnRequest {
+  ComponentRef ref = 1;
+  // Unset removes the plan; otherwise after the event's start.
+  google.protobuf.Timestamp expected_return_time = 2;
+}
+
+message SetExpectedReturnResponse {
+  EventRollCall roll_call = 1;
+}
+
+message StartRollCallRequest {
+  ComponentRef ref = 1;
+  // The client's time of setting out; unset means now. Not in the future
+  // (a few minutes of clock skew are accepted), at most 48 hours ago.
+  google.protobuf.Timestamp start_time = 2;
+}
+
+message StartRollCallResponse {
+  EventRollCall roll_call = 1;
+}
+
+message ReturnRollCallRequest {
+  ComponentRef ref = 1;
+  // The client's time of return; unset means now. Same rules as
+  // start_time, and not before the start.
+  google.protobuf.Timestamp return_time = 2;
+}
+
+message ReturnRollCallResponse {
+  EventRollCall roll_call = 1;
+}

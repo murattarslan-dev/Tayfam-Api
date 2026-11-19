@@ -82,6 +82,12 @@
 //   - Reads that tell the client whether it may write (caller_can_edit)
 //     combine Scope.IsManager with Scope.Cancelled, Scope.Frozen and
 //     access.ReadOnly(Scope.TayfaRow()): the checks Change makes.
+//   - A safety signal (a roll call return, issue #242) changes with
+//     BySafetySignal(authz.EventCheckIn): muted members keep it, and only
+//     a read-only tayfa refuses it, not a cancelled or frozen event or a
+//     switched-off component. A component that counts as attendance
+//     records it through package event (RollCallStarted), inside the
+//     change, and writes event's outbox events with Scope.Defer.
 //   - The demo seeder (internal/identity/app/demo) calls core's services
 //     as users do; data that moved to a component is seeded through the
 //     component's service (demo.Core).

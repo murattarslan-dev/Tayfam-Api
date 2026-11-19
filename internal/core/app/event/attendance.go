@@ -23,7 +23,7 @@ const (
 
 	MethodLocation  = "location"
 	MethodOnline    = "online"
-	MethodHikeStart = "hike_start"
+	MethodHikeStart = "hike_start" // a roll call start (#242); the Faz 1 name
 	MethodOrganizer = "organizer"
 )
 
@@ -34,8 +34,6 @@ const (
 	AttendanceRemoved  = "attendance.removed"
 	// AttendanceCorrected is the audit action of an organizer's correction.
 	AttendanceCorrected = "attendance.corrected"
-	HikeStarted         = "hike.started"
-	HikeReturned        = "hike.returned"
 )
 
 const (
@@ -47,11 +45,6 @@ const (
 	// frozen afterwards (v14 "Organizatör düzeltmesi", "Kalıcı katılım
 	// geçmişi").
 	correctionWindow = 7 * 24 * time.Hour
-	// clientSkew and clientMaxAge bound client times (hike start and
-	// return): not in the future beyond a little clock skew, not older than
-	// 48 hours (v14 "Çevrimdışı yazma"). The database allows 5 minutes.
-	clientSkew   = 2 * time.Minute
-	clientMaxAge = 48 * time.Hour
 	// activityPerDay caps the recorded duration per started day of a
 	// multi-day event; maxActivity is the cap of a 30-day event and the
 	// user_activity_records_duration CHECK.
@@ -65,13 +58,6 @@ type Attendance struct {
 	Status string
 	// Method is how it was verified; "" while unknown.
 	Method string
-}
-
-// HikeCheckin is a participant's hike roll call: the client's start and
-// return times. ReturnedAt is zero while out.
-type HikeCheckin struct {
-	StartedAt  time.Time
-	ReturnedAt time.Time
 }
 
 // checkInOpen refuses a cancelled event and times outside the check-in
@@ -247,23 +233,21 @@ func markAttended(ctx context.Context, q *store.Queries, c caller, b *batch, ev 
 }
 
 // recordActivity writes the user's activity record of ev: a snapshot of the
-// type, mode, title, city and district, the start and the duration. Hikes
-// use the roll call's start and, once back, the real duration. Never a
-// coordinate.
+// type, mode, title, city and district, the start and the duration. A
+// participant with a roll call (roll_call component) gets its start and,
+// once back, the real duration. Never a coordinate.
 func recordActivity(ctx context.Context, q *store.Queries, ev store.GetEventRow, user id.ID, method string) error {
 	started := ev.StartsAt.Time
 	dur := ev.EndsAt.Time.Sub(started)
-	if ev.Type == TypeHike {
-		h, err := q.GetHikeCheckin(ctx, store.GetHikeCheckinParams{EventID: ev.ID, UserID: user.PG()})
-		switch {
-		case err == nil:
-			started = h.StartedAt.Time
-			if h.ReturnedAt.Valid {
-				dur = h.ReturnedAt.Time.Sub(started)
-			}
-		case !errors.Is(err, pgx.ErrNoRows):
-			return fmt.Errorf("yürüyüş yoklaması: %w", err)
+	rc, err := q.GetRollCallTimes(ctx, store.GetRollCallTimesParams{EventID: ev.ID, UserID: user.PG()})
+	switch {
+	case err == nil:
+		started = rc.StartedAt.Time
+		if rc.ReturnedAt.Valid {
+			dur = rc.ReturnedAt.Time.Sub(started)
 		}
+	case !errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("yoklama: %w", err)
 	}
 	if err := q.UpsertActivityRecord(ctx, store.UpsertActivityRecordParams{
 		ID: id.New().PG(), UserID: user.PG(), EventID: ev.ID, TayfaID: ev.TayfaID,
@@ -306,161 +290,6 @@ func refreshActivity(ctx context.Context, q *store.Queries, tayfa, event id.ID, 
 		}
 	}
 	return nil
-}
-
-// ---------------------------------------------------------------------------
-// Hike roll call
-
-// clientTime checks a client-reported time against now; zero means now.
-func clientTime(t, now time.Time, field string) (time.Time, error) {
-	if t.IsZero() {
-		return now, nil
-	}
-	t = t.UTC().Truncate(time.Microsecond)
-	if t.After(now.Add(clientSkew)) || t.Before(now.Add(-clientMaxAge)) {
-		return time.Time{}, apperr.Validation(field)
-	}
-	return t, nil
-}
-
-// StartHike records that the caller set out on a hike (data model v14
-// "Yürüyüşte beklenen dönüş"). It counts as attendance (hike_start). The
-// caller must be going, and the server's time must be in the check-in
-// window; startedAt is the client's time (zero: now). A repeat returns the
-// first start.
-func (s *Service) StartHike(ctx context.Context, user, tayfa, event id.ID, startedAt time.Time) (HikeCheckin, error) {
-	var out HikeCheckin
-	err := s.write(ctx, user, tayfa, func(q *store.Queries, c caller, b *batch) error {
-		if err := c.authorize(authz.EventCheckIn); err != nil {
-			return err
-		}
-		start, err := clientTime(startedAt, c.now, "start_time")
-		if err != nil {
-			return err
-		}
-		ev, err := lockEvent(ctx, q, tayfa, event)
-		if err != nil {
-			return err
-		}
-		if ev.Type != TypeHike {
-			return apperr.ErrEventTypeMismatch
-		}
-		if err := checkInOpen(ev, c.now); err != nil {
-			return err
-		}
-		r, ok, err := rsvpRow(ctx, q, event, user)
-		if err != nil {
-			return err
-		}
-		if !ok || r.Status != RSVPGoing {
-			return apperr.ErrEventNotGoing
-		}
-		n, err := q.StartHikeCheckin(ctx, store.StartHikeCheckinParams{
-			EventID: event.PG(), UserID: user.PG(), StartedAt: ts(start), ReceivedAt: ts(c.now),
-		})
-		if err != nil {
-			return fmt.Errorf("yürüyüş yoklaması: %w", err)
-		}
-		if n == 0 {
-			out, err = hikeCheckin(ctx, q, event, user)
-			return err
-		}
-		out = HikeCheckin{StartedAt: start}
-		if r.Attendance == AttendanceAttended {
-			// Already checked in: the record now starts with the hike.
-			if err := recordActivity(ctx, q, ev, user, r.AttendanceMethod.String); err != nil {
-				return err
-			}
-		} else if err := markAttended(ctx, q, c, b, ev, user, MethodHikeStart, false); err != nil {
-			return err
-		}
-		if err := audit(ctx, q, c, HikeStarted, event, map[string]any{"user_id": user.String()}); err != nil {
-			return err
-		}
-		b.add(HikeStarted, event, map[string]any{"event_id": event.String(), "user_id": user.String()})
-		return txn.TouchTayfa(ctx, q, tayfa, c.now)
-	})
-	if err != nil {
-		return HikeCheckin{}, err
-	}
-	return out, nil
-}
-
-// FinishHike records the caller's return from a hike they started;
-// returnedAt is the client's time (zero: now). It works after the end and
-// on a cancelled event too: a late return is exactly what the overdue
-// alarm waits for. A repeat returns the first return.
-func (s *Service) FinishHike(ctx context.Context, user, tayfa, event id.ID, returnedAt time.Time) (HikeCheckin, error) {
-	var out HikeCheckin
-	err := s.write(ctx, user, tayfa, func(q *store.Queries, c caller, b *batch) error {
-		if err := c.authorize(authz.EventCheckIn); err != nil {
-			return err
-		}
-		back, err := clientTime(returnedAt, c.now, "return_time")
-		if err != nil {
-			return err
-		}
-		ev, err := lockEvent(ctx, q, tayfa, event)
-		if err != nil {
-			return err
-		}
-		if ev.Type != TypeHike {
-			return apperr.ErrEventTypeMismatch
-		}
-		h, err := hikeCheckin(ctx, q, event, user)
-		if err != nil {
-			return err
-		}
-		if !h.ReturnedAt.IsZero() {
-			out = h
-			return nil
-		}
-		if back.Before(h.StartedAt) {
-			return apperr.Validation("return_time")
-		}
-		if _, err := q.ReturnHikeCheckin(ctx, store.ReturnHikeCheckinParams{
-			EventID: event.PG(), UserID: user.PG(), ReturnedAt: ts(back), ReceivedAt: ts(c.now),
-		}); err != nil {
-			return fmt.Errorf("yürüyüş yoklaması: %w", err)
-		}
-		out = HikeCheckin{StartedAt: h.StartedAt, ReturnedAt: back}
-		// The real duration replaces the planned one while the record is
-		// not frozen and the attendance still stands.
-		r, ok, err := rsvpRow(ctx, q, event, user)
-		if err != nil {
-			return err
-		}
-		if ok && r.Attendance == AttendanceAttended && inCorrectionWindow(ev, c.now) {
-			if err := recordActivity(ctx, q, ev, user, r.AttendanceMethod.String); err != nil {
-				return err
-			}
-		}
-		if err := audit(ctx, q, c, HikeReturned, event, map[string]any{"user_id": user.String()}); err != nil {
-			return err
-		}
-		b.add(HikeReturned, event, map[string]any{"event_id": event.String(), "user_id": user.String()})
-		return nil
-	})
-	if err != nil {
-		return HikeCheckin{}, err
-	}
-	return out, nil
-}
-
-// hikeCheckin loads a roll call row; apperr.ErrHikeNotStarted without one.
-func hikeCheckin(ctx context.Context, q *store.Queries, event, user id.ID) (HikeCheckin, error) {
-	h, err := q.GetHikeCheckin(ctx, store.GetHikeCheckinParams{EventID: event.PG(), UserID: user.PG()})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return HikeCheckin{}, apperr.ErrHikeNotStarted
-	}
-	if err != nil {
-		return HikeCheckin{}, fmt.Errorf("yürüyüş yoklaması: %w", err)
-	}
-	out := HikeCheckin{StartedAt: h.StartedAt.Time.UTC()}
-	if h.ReturnedAt.Valid {
-		out.ReturnedAt = h.ReturnedAt.Time.UTC()
-	}
-	return out, nil
 }
 
 // ---------------------------------------------------------------------------

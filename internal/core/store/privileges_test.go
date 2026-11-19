@@ -21,7 +21,6 @@ var wantAppPrivileges = map[string]string{
 	"polls":                 "DELETE,INSERT,SELECT,UPDATE",
 	"events":                "DELETE,INSERT,SELECT,UPDATE",
 	"event_rsvps":           "DELETE,INSERT,SELECT,UPDATE",
-	"event_hike_checkins":   "DELETE,INSERT,SELECT,UPDATE",
 	"user_activity_records": "DELETE,INSERT,SELECT,UPDATE",
 	"fishing_catches":       "DELETE,INSERT,SELECT,UPDATE",
 	// Issue #206: a photo never moves to another event, file or uploader.
@@ -52,7 +51,6 @@ var wantAppPrivileges = map[string]string{
 	"tayfa_modules":         "INSERT,SELECT,UPDATE",
 	"user_profiles":         "INSERT,SELECT,UPDATE",
 	"event_series":          "INSERT,SELECT,UPDATE",
-	"event_hike":            "INSERT,SELECT,UPDATE",
 	"event_fishing":         "INSERT,SELECT,UPDATE",
 	"poll_options":          "INSERT,SELECT",
 	"event_consumers":       "INSERT,SELECT,UPDATE",
@@ -87,6 +85,11 @@ var wantAppPrivileges = map[string]string{
 	// name and quantity do not change; only the assignee changes and
 	// account deletion clears the people on it.
 	"event_checklist_items": "DELETE,INSERT,SELECT,UPDATE(assigned_user_id,created_by,updated_at)",
+	// Issue #242: a plan or a roll call record never moves to another
+	// event, component or person; a record's start never changes, only its
+	// return and alarm are written.
+	"event_roll_calls":         "DELETE,INSERT,SELECT,UPDATE(expected_return_at,updated_at)",
+	"event_roll_call_checkins": "DELETE,INSERT,SELECT,UPDATE(alert_sent_at,returned_at,returned_received_at,updated_at)",
 }
 
 func TestAppRolePrivileges(t *testing.T) {

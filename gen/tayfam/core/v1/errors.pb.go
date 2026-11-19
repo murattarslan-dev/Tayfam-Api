@@ -152,7 +152,9 @@ const (
 	// FAILED_PRECONDITION. Outside the organizer's correction window: the
 	// seven days after the end.
 	ErrorReason_ERROR_REASON_CORRECTION_CLOSED ErrorReason = 43
-	// FAILED_PRECONDITION. FinishHike without StartHike.
+	// FAILED_PRECONDITION. A roll call return without a start
+	// (RollCallComponentService.ReturnRollCall; the name is from the Faz 1
+	// hike roll call).
 	ErrorReason_ERROR_REASON_HIKE_NOT_STARTED ErrorReason = 44
 	// FAILED_PRECONDITION. The action needs the caller's verified attendance
 	// (AddFishingCatch, AddEventPhoto).

@@ -152,20 +152,15 @@ service EventService {
   // in-person one).
   rpc CheckIn(CheckInRequest) returns (CheckInResponse);
 
-  // StartHike records that the caller set out on a hike; it counts as
-  // attendance (ATTENDANCE_METHOD_HIKE_START). Same window and GOING rule
-  // as CheckIn. A repeat returns the first start.
-  //
-  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-  // ERROR_REASON_CHECK_IN_CLOSED, ERROR_REASON_EVENT_NOT_GOING,
-  // ERROR_REASON_VALIDATION (start_time).
+  // StartHike is not served any more: the hike roll call is the roll call
+  // component's (RollCallComponentService.StartRollCall,
+  // component_roll_call.proto; issue #242). It answers UNIMPLEMENTED; the
+  // method stays because it cannot be removed.
   rpc StartHike(StartHikeRequest) returns (StartHikeResponse);
 
-  // FinishHike records the caller's return. It also works after the end and
-  // on a cancelled event. A repeat returns the first return.
-  //
-  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-  // ERROR_REASON_HIKE_NOT_STARTED, ERROR_REASON_VALIDATION (return_time).
+  // FinishHike is not served any more
+  // (RollCallComponentService.ReturnRollCall; issue #242). It answers
+  // UNIMPLEMENTED; the method stays because it cannot be removed.
   rpc FinishHike(FinishHikeRequest) returns (FinishHikeResponse);
 
   // SetAttendance is the organizer's correction: the organizer for their own
@@ -302,7 +297,8 @@ enum AttendanceMethod {
   ATTENDANCE_METHOD_LOCATION = 1;
   // "Katıldım" on an online event.
   ATTENDANCE_METHOD_ONLINE = 2;
-  // Set out on a hike (StartHike).
+  // Set out with a roll call (RollCallComponentService.StartRollCall; the
+  // name is from the Faz 1 hike roll call).
   ATTENDANCE_METHOD_HIKE_START = 3;
   // The organizer's correction (SetAttendance).
   ATTENDANCE_METHOD_ORGANIZER = 4;
@@ -415,6 +411,14 @@ message CampItem {
   string assigned_user_id = 4;
 }
 
+// HikeDetails is not used any more: a hike has no type details. Its
+// difficulty, distance and elevation are fields of the hike type
+// (difficulty, planned_distance, planned_elevation; Event.fields) and its
+// expected return and roll call are the roll call component's
+// (RollCallComponentService, component_roll_call.proto; issue #242). An
+// event never carries it and a request that sets it is refused
+// (ERROR_REASON_VALIDATION, field "details"). The message and its fields
+// stay because they cannot be removed.
 message HikeDetails {
   // 0 (not given) or 1–5.
   int32 difficulty = 1;
@@ -489,11 +493,12 @@ message Event {
   // The event was edited on its own (UpdateEvent without series): changes
   // to the series and ending it leave it alone.
   bool series_override = 29;
-  // The Faz 1 details of the hike and fishing types, until their
-  // components replace them (ADR-0025 §10). Set by GetEvent; never by
-  // ListUpcomingEvents. convoy, camp, gaming and sports are never set: a
-  // convoy's data is in its components (issues #239, #240), a camp's in
-  // its list component and fields (issue #241), the others' in fields.
+  // The Faz 1 details of the fishing type, until its component replaces
+  // them (ADR-0025 §10). Set by GetEvent; never by ListUpcomingEvents.
+  // convoy, camp, hike, gaming and sports are never set: a convoy's data is
+  // in its components (issues #239, #240), a camp's in its list component
+  // and fields (issue #241), a hike's in its roll call component and fields
+  // (issue #242), the others' in fields.
   oneof details {
     ConvoyDetails convoy = 30;
     CampDetails camp = 31;
@@ -552,11 +557,11 @@ message CreateEventRequest {
   // 0: no limit; otherwise 1–10000.
   int32 capacity = 13;
   bool discoverable = 14;
-  // Only for the hike and fishing types, and must match the type; may be
-  // unset. convoy, camp, gaming and sports must be unset
-  // (ERROR_REASON_VALIDATION, field "details"): a convoy's data is in its
-  // components, a camp's in its list component and fields, the others' goes
-  // in fields.
+  // Only for the fishing type; may be unset. convoy, camp, hike, gaming and
+  // sports must be unset (ERROR_REASON_VALIDATION, field "details"): a
+  // convoy's data is in its components, a camp's in its list component and
+  // fields, a hike's in its roll call component and fields, the others'
+  // goes in fields.
   oneof details {
     ConvoyDetails convoy = 20;
     CampDetails camp = 21;
@@ -692,7 +697,7 @@ message UpdateEventRequest {
   // (start_time and end_time together), "location" (mode,
   // meeting_point_name, meeting_point, city, district and online_url
   // together), "capacity", "discoverable", "details" (replaces the type
-  // details of a hike or fishing event), "fields" (replaces the field values), "cover_upload_id"
+  // details of a fishing event), "fields" (replaces the field values), "cover_upload_id"
   // (not with series = true: ERROR_REASON_VALIDATION, field
   // "update_mask"). Any other path is ERROR_REASON_VALIDATION.
   google.protobuf.FieldMask update_mask = 15;
@@ -702,8 +707,7 @@ message UpdateEventRequest {
   // the change is made to the series: this event and every event of the
   // series that has not started, is scheduled and was not edited on its
   // own, and the events generated later. "time" cannot be changed for a
-  // series (ERROR_REASON_VALIDATION, field "update_mask"); hike details'
-  // expected_return_time keeps its distance from each event's start.
+  // series (ERROR_REASON_VALIDATION, field "update_mask").
   // ERROR_REASON_EVENT_SERIES_ENDED if the series was ended.
   bool series = 16;
   // With "cover_upload_id" in update_mask: same rules as
@@ -857,7 +861,8 @@ message CheckInResponse {
   AttendanceMethod method = 2;
 }
 
-// HikeCheckin is the caller's hike roll call. Times are the client's.
+// HikeCheckin and the StartHike / FinishHike messages are not used any
+// more (RollCallEntry, component_roll_call.proto; issue #242).
 message HikeCheckin {
   google.protobuf.Timestamp start_time = 1;
   // Unset while out.

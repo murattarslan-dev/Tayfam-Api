@@ -51,6 +51,12 @@ type ChecklistAPI interface {
 	AddChecklistItem(ctx context.Context, in *corev1.AddChecklistItemRequest, opts ...grpc.CallOption) (*corev1.AddChecklistItemResponse, error)
 }
 
+// RollCallAPI: an event's expected return is the roll call component's
+// (issue #242).
+type RollCallAPI interface {
+	SetExpectedReturn(ctx context.Context, in *corev1.SetExpectedReturnRequest, opts ...grpc.CallOption) (*corev1.SetExpectedReturnResponse, error)
+}
+
 type AnnouncementAPI interface {
 	CreateAnnouncement(ctx context.Context, in *corev1.CreateAnnouncementRequest, opts ...grpc.CallOption) (*corev1.CreateAnnouncementResponse, error)
 	SetAnnouncementPinned(ctx context.Context, in *corev1.SetAnnouncementPinnedRequest, opts ...grpc.CallOption) (*corev1.SetAnnouncementPinnedResponse, error)
@@ -96,6 +102,7 @@ type Core struct {
 	Routes        RouteAPI
 	Vehicles      VehicleAPI
 	Checklists    ChecklistAPI
+	RollCalls     RollCallAPI
 	Announcements AnnouncementAPI
 	QA            QAAPI
 	Polls         PollAPI
@@ -105,7 +112,7 @@ type Core struct {
 
 func (c Core) complete() bool {
 	return c.Tayfas != nil && c.Memberships != nil && c.Events != nil && c.Routes != nil && c.Vehicles != nil && c.Checklists != nil &&
-		c.Announcements != nil && c.QA != nil && c.Polls != nil &&
+		c.RollCalls != nil && c.Announcements != nil && c.QA != nil && c.Polls != nil &&
 		c.Discover != nil && c.Social != nil
 }
 
@@ -118,6 +125,7 @@ func NewCore(conn grpc.ClientConnInterface) Core {
 		Routes:        corev1.NewRouteComponentServiceClient(conn),
 		Vehicles:      corev1.NewVehiclesComponentServiceClient(conn),
 		Checklists:    corev1.NewChecklistComponentServiceClient(conn),
+		RollCalls:     corev1.NewRollCallComponentServiceClient(conn),
 		Announcements: corev1.NewAnnouncementServiceClient(conn),
 		QA:            corev1.NewQAServiceClient(conn),
 		Polls:         corev1.NewPollServiceClient(conn),
