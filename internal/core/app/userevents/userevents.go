@@ -264,7 +264,7 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 		for _, clear := range []func(context.Context, pgtype.UUID) error{
 			q.ClearTayfaUserFields, q.ClearInviteCreator, q.ClearMembershipUserFields,
 			q.ClearAnnouncementUserFields, q.ClearEventUserFields, q.ClearEventSeriesCreator,
-			q.ClearRsvpMarker, q.DeleteUserRsvps, q.DeleteUserVehicles, q.DeleteUserSeatRequests, q.ClearCampItemUserFields,
+			q.ClearRsvpMarker, q.DeleteUserRsvps, q.DeleteUserVehicles, q.DeleteUserSeatRequests, q.ClearChecklistItemUserFields,
 			q.DeleteUserHikeCheckins, q.DeleteUserCatches, q.ClearCatchDeleter,
 			q.DeleteUserEventPhotos, q.ClearEventPhotoDeleter, q.DeleteUserActivityRecords,
 			q.ClearQuestionUserFields, q.ClearAnswerUserFields, q.DeleteUserAnswerVotes,

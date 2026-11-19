@@ -30,9 +30,7 @@ type MembershipAPI interface {
 
 type EventAPI interface {
 	CreateEvent(ctx context.Context, in *corev1.CreateEventRequest, opts ...grpc.CallOption) (*corev1.CreateEventResponse, error)
-	GetEvent(ctx context.Context, in *corev1.GetEventRequest, opts ...grpc.CallOption) (*corev1.GetEventResponse, error)
 	SetRsvp(ctx context.Context, in *corev1.SetRsvpRequest, opts ...grpc.CallOption) (*corev1.SetRsvpResponse, error)
-	AddCampItem(ctx context.Context, in *corev1.AddCampItemRequest, opts ...grpc.CallOption) (*corev1.AddCampItemResponse, error)
 }
 
 // RouteAPI: the route of an event is the route component's (issue #239).
@@ -44,6 +42,13 @@ type RouteAPI interface {
 // #240).
 type VehicleAPI interface {
 	SetVehicle(ctx context.Context, in *corev1.SetVehicleRequest, opts ...grpc.CallOption) (*corev1.SetVehicleResponse, error)
+}
+
+// ChecklistAPI: the lists of an event are the list component's (issue
+// #241).
+type ChecklistAPI interface {
+	ListChecklist(ctx context.Context, in *corev1.ListChecklistRequest, opts ...grpc.CallOption) (*corev1.ListChecklistResponse, error)
+	AddChecklistItem(ctx context.Context, in *corev1.AddChecklistItemRequest, opts ...grpc.CallOption) (*corev1.AddChecklistItemResponse, error)
 }
 
 type AnnouncementAPI interface {
@@ -90,6 +95,7 @@ type Core struct {
 	Events        EventAPI
 	Routes        RouteAPI
 	Vehicles      VehicleAPI
+	Checklists    ChecklistAPI
 	Announcements AnnouncementAPI
 	QA            QAAPI
 	Polls         PollAPI
@@ -98,7 +104,7 @@ type Core struct {
 }
 
 func (c Core) complete() bool {
-	return c.Tayfas != nil && c.Memberships != nil && c.Events != nil && c.Routes != nil && c.Vehicles != nil &&
+	return c.Tayfas != nil && c.Memberships != nil && c.Events != nil && c.Routes != nil && c.Vehicles != nil && c.Checklists != nil &&
 		c.Announcements != nil && c.QA != nil && c.Polls != nil &&
 		c.Discover != nil && c.Social != nil
 }
@@ -111,6 +117,7 @@ func NewCore(conn grpc.ClientConnInterface) Core {
 		Events:        corev1.NewEventServiceClient(conn),
 		Routes:        corev1.NewRouteComponentServiceClient(conn),
 		Vehicles:      corev1.NewVehiclesComponentServiceClient(conn),
+		Checklists:    corev1.NewChecklistComponentServiceClient(conn),
 		Announcements: corev1.NewAnnouncementServiceClient(conn),
 		QA:            corev1.NewQAServiceClient(conn),
 		Polls:         corev1.NewPollServiceClient(conn),

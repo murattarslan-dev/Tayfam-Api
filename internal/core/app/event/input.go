@@ -10,7 +10,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
-	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
 // Stored values (events.type, events.mode, …; 00004_events.sql).
@@ -44,25 +43,23 @@ const (
 var Types = []string{TypeConvoy, TypeCamp, TypeHike, TypeFishing, TypeGaming, TypeSports, TypeGeneral}
 
 // detailTypes are the types that still keep data in a Faz 1 detail table
-// (event_camp, event_hike, event_fishing) until their components move it
-// (issues #241–#243). Every other type has only the fields of its catalog
+// (event_hike, event_fishing) until their components move it (issues
+// #242, #243). Every other type has only the fields of its catalog
 // definition (event_field_values) and its components; the convoy's route
-// and vehicles are components (issues #239, #240).
-var detailTypes = []string{TypeCamp, TypeHike, TypeFishing}
+// and vehicles and the camp's list are components (issues #239–#241), the
+// camp's site details are fields (issue #241).
+var detailTypes = []string{TypeHike, TypeFishing}
 
 // Limits (data model v14 and 00004_events.sql; the same CHECKs are in the
 // database).
 const (
 	titleMax        = 120
 	descriptionMax  = 5000
-	placeNameMax    = 120 // meeting point, camp site, sports venue
+	placeNameMax    = 120 // meeting point
 	cityMax         = 50
 	onlineURLMax    = 2048
 	capacityMax     = 10000
 	cancelReasonMax = 500
-	campNotesMax    = 1000
-	itemNameMax     = 60
-	itemQuantityMax = 999
 	distanceMax     = 1000
 	elevationMax    = 9000
 	graceDefault    = 30
@@ -101,7 +98,6 @@ type Location struct {
 // Details are the Faz 1 type details of the types in detailTypes; at most
 // one is set and it matches the event's type.
 type Details struct {
-	Camp    *Camp
 	Hike    *Hike
 	Fishing *Fishing
 }
@@ -114,7 +110,7 @@ func (d Details) typ() string {
 		set bool
 		typ string
 	}{
-		{d.Camp != nil, TypeCamp}, {d.Hike != nil, TypeHike}, {d.Fishing != nil, TypeFishing},
+		{d.Hike != nil, TypeHike}, {d.Fishing != nil, TypeFishing},
 	} {
 		if c.set {
 			if t != "" {
@@ -124,24 +120,6 @@ func (d Details) typ() string {
 		}
 	}
 	return t
-}
-
-// Camp holds a camp's site details and, in views, its item list.
-type Camp struct {
-	SiteName  string
-	HasWater  *bool
-	HasToilet *bool
-	Notes     string
-	Items     []CampItem
-}
-
-// CampItem is one entry of a camp's list.
-type CampItem struct {
-	ID       id.ID
-	Name     string
-	Quantity int32
-	// AssignedUserID is zero when nobody is assigned.
-	AssignedUserID id.ID
 }
 
 // Hike holds a hike's details. Zero values mean "not given".
@@ -298,8 +276,6 @@ func cleanDetails(typ string, d Details, start time.Time, create bool) (Details,
 		return Details{}, nil
 	case dt == "" && create:
 		switch typ {
-		case TypeCamp:
-			d.Camp = &Camp{}
 		case TypeHike:
 			d.Hike = &Hike{}
 		case TypeFishing:
@@ -312,15 +288,6 @@ func cleanDetails(typ string, d Details, start time.Time, create bool) (Details,
 	var out Details
 	var err error
 	switch typ {
-	case TypeCamp:
-		c := Camp{HasWater: d.Camp.HasWater, HasToilet: d.Camp.HasToilet}
-		if c.SiteName, err = cleanText(d.Camp.SiteName, "site_name", 0, placeNameMax, false); err != nil {
-			return Details{}, err
-		}
-		if c.Notes, err = cleanText(d.Camp.Notes, "notes", 0, campNotesMax, true); err != nil {
-			return Details{}, err
-		}
-		out.Camp = &c
 	case TypeHike:
 		h := *d.Hike
 		if h.Difficulty < 0 || h.Difficulty > 5 {

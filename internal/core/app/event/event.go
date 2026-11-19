@@ -1,5 +1,5 @@
 // Package event manages a tayfa's events: creating, editing and cancelling
-// them, RSVPs with a waitlist and camp item lists
+// them and RSVPs with a waitlist
 // (EventService, proto/tayfam/core/v1/event.proto; issue #49, data model
 // v14 "Duyuru ve Etkinlik", "Türe özel tablolar", "Etkinlik iptali",
 // "Online etkinlik", "Konvoy aracı").
@@ -303,8 +303,7 @@ func flush(ctx context.Context, q *store.Queries, b *batch) error {
 // them (ADR-0009, package notify): a new event for every active member,
 // a change or cancellation for its going, maybe and waitlist participants,
 // a waitlist promotion for the promoted member. The actor never hears
-// about their own change. Changes to the lists on an event (camp items)
-// notify nobody.
+// about their own change.
 func notifyBatch(ctx context.Context, q *store.Queries, b *batch) error {
 	for _, e := range b.events {
 		req := notify.Request{Tayfa: b.tayfa, Actor: b.actor, TargetType: notify.TargetEvent, Target: e.subject}
@@ -317,9 +316,6 @@ func notifyBatch(ctx context.Context, q *store.Queries, b *batch) error {
 			req.Type = notify.TypeEventCreated
 			to, err = notify.Members(ctx, q, b.tayfa, b.actor)
 		case EventUpdated:
-			if listsOnly(e.payload["fields"]) {
-				continue
-			}
 			req.Type = notify.TypeEventUpdated
 			to, err = notify.Participants(ctx, q, b.tayfa, e.subject, b.actor)
 		case EventCancelled:
@@ -344,21 +340,6 @@ func notifyBatch(ctx context.Context, q *store.Queries, b *batch) error {
 		}
 	}
 	return nil
-}
-
-// listsOnly reports an event.updated whose fields are all lists on the
-// event (fieldCampItems).
-func listsOnly(v any) bool {
-	fields, ok := v.([]string)
-	if !ok || len(fields) == 0 {
-		return false
-	}
-	for _, f := range fields {
-		if f != fieldCampItems {
-			return false
-		}
-	}
-	return true
 }
 
 // lockEvent loads and locks an event of the tayfa.
@@ -905,11 +886,6 @@ func setFields(ctx context.Context, q *store.Queries, event id.ID, values map[st
 func setDetails(ctx context.Context, q *store.Queries, event id.ID, d Details) error {
 	var err error
 	switch {
-	case d.Camp != nil:
-		err = q.SetEventCamp(ctx, store.SetEventCampParams{
-			EventID: event.PG(), SiteName: text(d.Camp.SiteName), HasWater: boolPtr(d.Camp.HasWater),
-			HasToilet: boolPtr(d.Camp.HasToilet), Notes: text(d.Camp.Notes),
-		})
 	case d.Hike != nil:
 		h := d.Hike
 		p := store.SetEventHikeParams{
@@ -956,19 +932,4 @@ func int4(n int32) pgtype.Int4 {
 		return pgtype.Int4{}
 	}
 	return pgtype.Int4{Int32: n, Valid: true}
-}
-
-func boolPtr(b *bool) pgtype.Bool {
-	if b == nil {
-		return pgtype.Bool{}
-	}
-	return pgtype.Bool{Bool: *b, Valid: true}
-}
-
-// optID is NULL for the zero ID.
-func optID(u id.ID) pgtype.UUID {
-	if u == (id.ID{}) {
-		return pgtype.UUID{}
-	}
-	return u.PG()
 }

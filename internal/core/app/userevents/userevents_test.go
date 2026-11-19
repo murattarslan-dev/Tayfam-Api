@@ -192,7 +192,7 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"event_vehicles.user_id":         `SELECT count(*) FROM event_vehicles WHERE user_id = $1`,
 		"event_vehicle_seat_requests":    `SELECT count(*) FROM event_vehicle_seat_requests WHERE user_id = $1`,
 		"event_referees.user_id":         `SELECT count(*) FROM event_referees WHERE user_id = $1`,
-		"event_camp_items":               `SELECT count(*) FROM event_camp_items WHERE $1 IN (assigned_user_id, created_by)`,
+		"event_checklist_items":          `SELECT count(*) FROM event_checklist_items WHERE $1 IN (assigned_user_id, created_by)`,
 		"event_hike_checkins.user_id":    `SELECT count(*) FROM event_hike_checkins WHERE user_id = $1`,
 		"fishing_catches":                `SELECT count(*) FROM fishing_catches WHERE $1 IN (user_id, deleted_by)`,
 		"event_photos":                   `SELECT count(*) FROM event_photos WHERE $1 IN (uploader_id, deleted_by)`,
@@ -276,7 +276,7 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 	e.seed(t, `INSERT INTO answer_votes (answer_id, user_id) VALUES ($1, $2), ($3, $4)`, ownA.PG(), other.PG(), otherA.PG(), u.PG())
 
 	// u's events stay with an empty organizer; u's RSVPs and vehicle (plate)
-	// go; camp items stay without u.
+	// go; list items stay without u (issue #241).
 	ownEvent, otherEvent, campEvent := id.New(), id.New(), id.New()
 	for _, x := range []struct {
 		ev, by id.ID
@@ -287,7 +287,6 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 			x.ev.PG(), t2.PG(), x.typ, x.by.PG(), u.PG())
 	}
 	e.seed(t, `INSERT INTO event_series (id, tayfa_id, rrule, timezone, dtstart, created_by) VALUES ($1, $2, 'FREQ=WEEKLY', 'Europe/Istanbul', now(), $3)`, id.New().PG(), t2.PG(), u.PG())
-	e.seed(t, `INSERT INTO event_camp (event_id) VALUES ($1)`, campEvent.PG())
 	e.seed(t, `INSERT INTO event_rsvps (event_id, user_id, status) VALUES ($1, $2, 'going')`, otherEvent.PG(), u.PG())
 	e.seed(t, `INSERT INTO event_rsvps (event_id, user_id, status, attendance, attendance_method, attendance_marked_by, attendance_marked_at) VALUES ($1, $2, 'going', 'attended', 'organizer', $3, now())`, otherEvent.PG(), other.PG(), u.PG())
 	// u's vehicle goes with the seat request another member made to it;
@@ -300,7 +299,7 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 		id.New().PG(), id.New().PG(), otherEvent.PG(), other.PG(), ownVehicle.PG(), ownEvent.PG(), u.PG(), otherVehicle.PG())
 	// u's referee assignment goes; another member's stays (issue #238).
 	e.seed(t, `INSERT INTO event_referees (id, event_id, user_id) VALUES ($1, $3, $4), ($2, $3, $5)`, id.New().PG(), id.New().PG(), otherEvent.PG(), u.PG(), other.PG())
-	e.seed(t, `INSERT INTO event_camp_items (id, event_id, name, assigned_user_id, created_by) VALUES ($1, $2, 'Çadır', $3, $3)`, id.New().PG(), campEvent.PG(), u.PG())
+	e.seed(t, `INSERT INTO event_checklist_items (id, event_id, component_key, name, assigned_user_id, created_by) VALUES ($1, $2, 'gear', 'Çadır', $3, $3)`, id.New().PG(), campEvent.PG(), u.PG())
 
 	// u's poll stays with an empty creator; u's votes go, other votes stay.
 	// One poll u deleted loses deleted_by.
@@ -359,8 +358,8 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 	if n := e.count(t, `SELECT count(*) FROM event_rsvps WHERE event_id = $1 AND user_id = $2 AND attendance = 'attended'`, otherEvent.PG(), other.PG()); n != 1 {
 		t.Fatal("başkasının katılım kaydı silindi")
 	}
-	if n := e.count(t, `SELECT count(*) FROM event_camp_items WHERE event_id = $1`, campEvent.PG()); n != 1 {
-		t.Fatal("kamp malzemesi silindi")
+	if n := e.count(t, `SELECT count(*) FROM event_checklist_items WHERE event_id = $1 AND assigned_user_id IS NULL AND created_by IS NULL`, campEvent.PG()); n != 1 {
+		t.Fatal("liste maddesi silindi ya da kişi alanları kaldı")
 	}
 	if got := e.role(t, t1, modOld); got != "active/admin" {
 		t.Fatalf("halef = %s", got)

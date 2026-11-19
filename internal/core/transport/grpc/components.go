@@ -27,6 +27,7 @@ func componentRegistrars() []componentRegistrar {
 		registerVehiclesComponent,
 
 		// checklist (#241)
+		registerChecklistComponent,
 
 		// roll_call (#242)
 

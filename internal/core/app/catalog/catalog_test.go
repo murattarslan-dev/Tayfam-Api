@@ -39,6 +39,11 @@ func TestNewNeedsPool(t *testing.T) {
 	}
 }
 
+// seedVersion is the catalog version the migrations leave: 1 from the
+// seed (00030), raised by every migration that changes a type in place
+// (00036: the camp's fields, issue #241).
+const seedVersion = 2
+
 // The seed is the seven Faz 1 types with today's behaviour (ADR-0025 §10
 // step 1): every definition passes the validator, the keys did not change.
 func TestSeedCatalog(t *testing.T) {
@@ -47,7 +52,7 @@ func TestSeedCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if notModified || c.Version != 1 {
+	if notModified || c.Version != seedVersion {
 		t.Fatalf("sürüm = %d, değişmedi = %v", c.Version, notModified)
 	}
 	var interests []string
@@ -96,6 +101,15 @@ func TestSeedCatalog(t *testing.T) {
 			t.Errorf("%s türünde %s bileşeni yok", typ, kind)
 		}
 	}
+	// The camp's Faz 1 site details are fields (issue #241).
+	for key, kind := range map[string]string{
+		"site_name": definition.KindText, "has_water": definition.KindBoolean,
+		"has_toilet": definition.KindBoolean, "notes": definition.KindLongText,
+	} {
+		if f, ok := byKey["camp"].Parsed.Field(key); !ok || f.Kind != kind || f.Required {
+			t.Errorf("camp.%s = %+v", key, f)
+		}
+	}
 	// Gaming and sports keep their Faz 1 fields.
 	if f, ok := byKey["gaming"].Parsed.Field("platform"); !ok || !f.Required || len(f.Options) != 6 {
 		t.Fatalf("gaming.platform = %+v", f)
@@ -110,20 +124,20 @@ func TestSeedCatalog(t *testing.T) {
 
 func TestGetNotModified(t *testing.T) {
 	svc, _, admin := setup(t)
-	c, notModified, err := svc.Get(ctx, 1)
+	c, notModified, err := svc.Get(ctx, seedVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !notModified || c.Version != 1 || c.Interests != nil || c.Types != nil {
+	if !notModified || c.Version != seedVersion || c.Interests != nil || c.Types != nil {
 		t.Fatalf("katalog = %+v, değişmedi = %v", c, notModified)
 	}
 	// A change to the catalog raises the version; the old one is stale.
 	exec(t, admin, `UPDATE catalog_meta SET catalog_version = catalog_version + 1`)
-	c, notModified, err = svc.Get(ctx, 1)
+	c, notModified, err = svc.Get(ctx, seedVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if notModified || c.Version != 2 || len(c.Types) != 7 {
+	if notModified || c.Version != seedVersion+1 || len(c.Types) != 7 {
 		t.Fatalf("sürüm = %d, değişmedi = %v, tür = %d", c.Version, notModified, len(c.Types))
 	}
 	// A version from the future is not "current" either.

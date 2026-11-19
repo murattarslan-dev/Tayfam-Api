@@ -195,50 +195,18 @@ func (c caller) seesSpot(ev store.GetEventRow, rsvp string) bool {
 	return authz.AllowedIn(unmuted, authz.EventEditAny, c.now, c.settings)
 }
 
-// details loads the type details of ev for Get, with the camp's items.
+// details loads the type details of ev for Get.
 func (s *Service) details(ctx context.Context, ev store.GetEventRow) (Details, error) {
-	d, err := typeDetails(ctx, s.q, ev)
-	if err != nil {
-		return Details{}, err
-	}
-	if d.Camp != nil {
-		d.Camp.Items = []CampItem{}
-		items, err := s.q.ListCampItems(ctx, ev.ID)
-		if err != nil {
-			return Details{}, fmt.Errorf("kamp malzemeleri: %w", err)
-		}
-		for _, it := range items {
-			ci := CampItem{ID: id.ID(it.ID.Bytes), Name: it.Name, Quantity: it.Quantity}
-			if it.AssignedUserID.Valid {
-				ci.AssignedUserID = id.ID(it.AssignedUserID.Bytes)
-			}
-			d.Camp.Items = append(d.Camp.Items, ci)
-		}
-	}
-	return d, nil
+	return typeDetails(ctx, s.q, ev)
 }
 
-// typeDetails loads the type details of ev from its type's table, without
-// lists (camp items). A series copies these to new occurrences.
+// typeDetails loads the type details of ev from its type's table. A series
+// copies these to new occurrences.
 func typeDetails(ctx context.Context, q *store.Queries, ev store.GetEventRow) (Details, error) {
 	evID := ev.ID
 	var d Details
 	var err error
 	switch ev.Type {
-	case TypeCamp:
-		var r store.GetEventCampRow
-		r, err = q.GetEventCamp(ctx, evID)
-		if err != nil {
-			break
-		}
-		cp := &Camp{SiteName: r.SiteName.String, Notes: r.Notes.String}
-		if r.HasWater.Valid {
-			cp.HasWater = &r.HasWater.Bool
-		}
-		if r.HasToilet.Valid {
-			cp.HasToilet = &r.HasToilet.Bool
-		}
-		d.Camp = cp
 	case TypeHike:
 		var r store.GetEventHikeRow
 		r, err = q.GetEventHike(ctx, evID)

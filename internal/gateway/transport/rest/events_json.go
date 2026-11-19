@@ -81,25 +81,6 @@ func latLngFrom(p *corev1.LatLng) *latLngJSON {
 
 // --- Type details (output) ---
 
-type campItemJSON struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	Quantity       int32  `json:"quantity"`
-	AssignedUserID string `json:"assigned_user_id,omitempty"`
-}
-
-func campItemFrom(i *corev1.CampItem) campItemJSON {
-	return campItemJSON{ID: i.GetId(), Name: i.GetName(), Quantity: i.GetQuantity(), AssignedUserID: i.GetAssignedUserId()}
-}
-
-type campJSON struct {
-	SiteName  string         `json:"site_name"`
-	HasWater  *bool          `json:"has_water,omitempty"`
-	HasToilet *bool          `json:"has_toilet,omitempty"`
-	Notes     string         `json:"notes"`
-	Items     []campItemJSON `json:"items"`
-}
-
 // hikeJSON is used for both input and output.
 type hikeJSON struct {
 	Difficulty         int32      `json:"difficulty"`
@@ -151,7 +132,6 @@ type eventJSON struct {
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 
-	Camp    *campJSON    `json:"camp,omitempty"`
 	Hike    *hikeJSON    `json:"hike,omitempty"`
 	Fishing *fishingJSON `json:"fishing,omitempty"`
 
@@ -202,12 +182,6 @@ func eventFrom(e *corev1.Event) eventJSON {
 		CreatedAt: e.GetCreateTime().AsTime(), UpdatedAt: e.GetUpdateTime().AsTime(),
 	}
 	switch d := e.GetDetails().(type) {
-	case *corev1.Event_Camp:
-		c := &campJSON{SiteName: d.Camp.GetSiteName(), HasWater: d.Camp.HasWater, HasToilet: d.Camp.HasToilet, Notes: d.Camp.GetNotes(), Items: make([]campItemJSON, 0, len(d.Camp.GetItems()))}
-		for _, i := range d.Camp.GetItems() {
-			c.Items = append(c.Items, campItemFrom(i))
-		}
-		out.Camp = c
 	case *corev1.Event_Hike:
 		out.Hike = &hikeJSON{
 			Difficulty: d.Hike.GetDifficulty(), DistanceKm: d.Hike.GetDistanceKm(), ElevationM: d.Hike.GetElevationM(),

@@ -91,9 +91,10 @@ DELETE FROM event_vehicles WHERE user_id = @user_id;
 -- name: DeleteUserSeatRequests :exec
 DELETE FROM event_vehicle_seat_requests WHERE user_id = @user_id;
 
--- Malzeme listede kalır; üstlenen ve ekleyen boşalır.
--- name: ClearCampItemUserFields :exec
-UPDATE event_camp_items
+-- Liste maddesi listede kalır; üstlenen ve ekleyen boşalır (`checklist`
+-- bileşeni, issue #241).
+-- name: ClearChecklistItemUserFields :exec
+UPDATE event_checklist_items
 SET assigned_user_id = NULLIF(assigned_user_id, @user_id),
     created_by       = NULLIF(created_by, @user_id)
 WHERE @user_id IN (assigned_user_id, created_by);
