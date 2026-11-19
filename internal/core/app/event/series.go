@@ -530,6 +530,11 @@ func (s *Service) GenerateSeries(ctx context.Context, tayfa, series id.ID) (int,
 			if err := q.CopyRollCallPlans(ctx, store.CopyRollCallPlansParams{ToEventID: eid.PG(), FromEventID: tmpl.ID}); err != nil {
 				return fmt.Errorf("seri örneğinin yoklama planı: %w", err)
 			}
+
+			// goal (#246): the organizer's target.
+			if err := q.CopyEventGoals(ctx, store.CopyEventGoalsParams{ToEventID: eid.PG(), FromEventID: tmpl.ID}); err != nil {
+				return fmt.Errorf("seri örneğinin hedefi: %w", err)
+			}
 			events = append(events, made{eid})
 		}
 

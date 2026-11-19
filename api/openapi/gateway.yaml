@@ -3024,6 +3024,98 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Etkinlik bileşenleri: hedef çubuğu (`goal`; core GoalComponentService, #246, ADR-0025 §4, §5) ---
+  # Etkinliğin ölçümlerinden birine (tanımdaki `measure` parametresi) konmuş
+  # hedef ve ona doğru ilerleme. Hedef ölçümün birimindedir; tanım varsayılan
+  # hedef verebilir (`default_target`), organizatör, moderatör ve yönetici
+  # etkinliğe kendi hedefini koyar ya da kaldırır (varsayılan geri gelir).
+  # Hedef etkinlik oluşturulduktan bitişten 7 gün sonrasına kadar
+  # (`component-frozen`) yazılır. İlerleme saklanmaz: bağlı ölçümün
+  # kaydedilmiş değerinden (toplam ölçüm) ya da değerlerinin toplamından
+  # (kişisel ölçüm) okunur; önerilen değer (`suggested`) sayılmaz. Bağlı
+  # ölçüm değişince `event.component_changed` ölçümün anahtarıyla gelir;
+  # istemci hedefi de yeniden çeker. Hedefler log'a yazılmaz. Yazan her uç
+  # hedefi güncel haliyle döner.
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/goal:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: getEventGoal
+      summary: Etkinliğin hedefi ve ilerlemesi
+      description: |
+        Her etkin üyeye açıktır (susturulmuş üye de okur); iptal edilmiş ve
+        donmuş etkinlikte de okunur. Bağlı ölçüm hassassa (`sensitive`,
+        kişisel) ilerlemeyi yalnızca bütün değerleri görebilenler görür
+        (organizatörün girdiği ölçümde organizatör, moderatör, yönetici);
+        diğerlerine `progress_hidden` döner. Bileşen uçlarının ortak
+        kuralları geçerlidir (`component-not-found`, `component-disabled`).
+      responses:
+        "200":
+          description: Hedef
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventGoal" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/goal/target:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    put:
+      operationId: setEventGoalTarget
+      summary: Etkinliğin hedefini koyar (organizatör, moderatör, yönetici)
+      description: |
+        Hedef ölçümün ondalık basamağına yuvarlanır; sıfırdan büyük olmalı,
+        toplam ölçümde ölçümün üst sınırını aşamaz (`invalid-request`). Aynı
+        hedefi yeniden yazmak bir şey değiştirmez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventGoalTargetRequest" }
+      responses:
+        "200":
+          description: Hedef, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventGoal" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: removeEventGoalTarget
+      summary: Etkinliğin hedefini kaldırır (organizatör, moderatör, yönetici)
+      description: |
+        Tanımdaki varsayılan hedef yeniden geçerli olur. Olmayan hedefi
+        kaldırmak hata değildir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Hedef, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventGoal" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   # --- Tayfa sözlüğü (core TayfaVocabularyService, #244, ADR-0037 §4) ---
   # Tayfanın kendi değer listesi: bir ad alanındaki (`fish_species`, `book`
   # …) değerler. Tanımda `vocabulary` olan metin alanı (`CatalogVocabulary`)
@@ -7963,6 +8055,40 @@ components:
           minimum: -1000000000
           maximum: 1000000000
           description: Tanımdaki sınırlar içinde; ondalık basamağa yuvarlanır.
+    EventGoal:
+      type: object
+      required: [measure_key, unit, decimals, target_set, progress_hidden, measure_enabled, reached, caller_can_edit]
+      description: Bir etkinliğin bir hedef bileşeni, isteği yapanın gördüğü haliyle (#246).
+      properties:
+        measure_key: { type: string, description: "Hedefin bağlı olduğu ölçümün anahtarı (`EventMeasure`)." }
+        unit: { type: string, description: "Bağlı ölçümün birimi (kapalı liste, `CatalogComponent`); adı istemcinin çeviri dosyasında." }
+        decimals: { type: integer, minimum: 0, maximum: 3, description: Bağlı ölçümün ondalık basamağı. }
+        target: { type: number, description: "Etkinliğin hedefi: organizatörün koyduğu, yoksa tanımdaki varsayılan; ikisi de yoksa yoktur." }
+        target_set: { type: boolean, description: "Hedefi organizatör koydu (`false` ise varsayılan ya da hedef yok)." }
+        target_updated_at: { type: string, format: date-time, description: Organizatörün hedefi son yazdığı an; yoksa yoktur. }
+        default_target: { type: number, description: Tanımdaki varsayılan hedef; yoksa yoktur. }
+        current:
+          type: number
+          description: |
+            Bağlı ölçümün kaydedilmiş değeri (toplam ölçüm) ya da değerlerinin
+            toplamı (kişisel ölçüm); değer yoksa 0. Önerilen değer sayılmaz.
+            `progress_hidden` ya da ölçüm kapalıysa yoktur.
+        progress_hidden: { type: boolean, description: "İlerlemeyi göremezsiniz (hassas kişisel ölçüm)." }
+        measure_enabled: { type: boolean, description: "Bağlı ölçüm bu etkinlikte açık (isteğe bağlı ölçüm kapalıysa ilerleme yoktur)." }
+        reached: { type: boolean, description: "`current` hedefe ulaştı." }
+        caller_can_edit:
+          type: boolean
+          description: Şu an hedefi koyabilirsiniz (organizatör, moderatör, yönetici; etkinlik iptal değil, donmamış, tayfa salt okunur değil).
+    EventGoalTargetRequest:
+      type: object
+      required: [target]
+      additionalProperties: false
+      properties:
+        target:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 1000000000
+          description: Bağlı ölçümün biriminde; ondalık basamağına yuvarlanır.
     VocabularyIds:
       type: object
       description: Alan anahtarı → tayfa sözlüğündeki değerin kimliği (#244).
