@@ -78,7 +78,8 @@ CREATE TABLE tayfa_daily_items (
   CONSTRAINT tayfa_daily_items_position CHECK (position >= 0),
   CONSTRAINT tayfa_daily_items_pin CHECK (
     (pin_month IS NULL AND pin_day IS NULL AND pin_year IS NULL)
-    OR (pin_month BETWEEN 1 AND 12 AND pin_day BETWEEN 1 AND 31
+    OR (pin_month IS NOT NULL AND pin_day IS NOT NULL
+        AND pin_month BETWEEN 1 AND 12 AND pin_day BETWEEN 1 AND 31
         AND pin_day <= CASE WHEN pin_month = 2 THEN 29 WHEN pin_month IN (4, 6, 9, 11) THEN 30 ELSE 31 END
         AND (pin_year IS NULL OR pin_year BETWEEN 2000 AND 2100)
         -- 29 Şubat'a yıl verildiyse artık yıl olmalı; yılsız 29 Şubat

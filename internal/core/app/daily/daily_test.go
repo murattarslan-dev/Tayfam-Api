@@ -39,7 +39,7 @@ func TestCleanBody(t *testing.T) {
 	for name, in := range map[string]string{
 		"boş":             " \n\t ",
 		"denetim kodu":    "bir\x00iki",
-		"görünmez işaret": "bir​iki",
+		"görünmez işaret": "bir\u200biki",
 		"geçersiz UTF-8":  "bir\xffiki",
 		"501 karakter":    strings.Repeat("ş", 501),
 	} {
@@ -62,7 +62,7 @@ func TestCleanAttribution(t *testing.T) {
 			t.Errorf("CleanAttribution(%q) = %q %v, %q bekleniyordu", in, got, ok, want)
 		}
 	}
-	for _, in := range []string{"Yunus\x07Emre", "Yunus‮Emre", strings.Repeat("a", 121)} {
+	for _, in := range []string{"Yunus\x07Emre", "Yunus\u202eEmre", strings.Repeat("a", 121)} {
 		if _, ok := daily.CleanAttribution(in); ok {
 			t.Errorf("CleanAttribution(%q) kabul edildi", in)
 		}
