@@ -66,6 +66,8 @@ var wantAppPrivileges = map[string]string{
 	"catalog_interests":           "SELECT",
 	"catalog_event_types":         "SELECT",
 	"catalog_event_type_versions": "SELECT",
+	// Issue #259: the study tag list is catalog data too.
+	"catalog_study_tags": "SELECT",
 	// Issue #237: a value never moves to another event or field.
 	"event_field_values": "DELETE,INSERT,SELECT,UPDATE(updated_at,value)",
 	// Issue #238: a selection never moves to another event or component

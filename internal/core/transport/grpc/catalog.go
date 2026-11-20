@@ -53,6 +53,12 @@ func (s *CatalogServer) GetCatalog(ctx context.Context, req *corev1.GetCatalogRe
 	for _, t := range c.Types {
 		out.EventTypes = append(out.EventTypes, catalogEventTypePB(t))
 	}
+	out.StudyTags = make([]*corev1.CatalogStudyTag, 0, len(c.StudyTags))
+	for _, t := range c.StudyTags {
+		out.StudyTags = append(out.StudyTags, &corev1.CatalogStudyTag{
+			Key: t.Key, ParentKey: t.ParentKey, Position: t.Position, Labels: t.Labels, Status: catalogStatusPB(t.Status),
+		})
+	}
 	return out, nil
 }
 

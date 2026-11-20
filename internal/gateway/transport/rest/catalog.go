@@ -64,10 +64,21 @@ type catalogEventTypeJSON struct {
 	Definition json.RawMessage `json:"definition"`
 }
 
+// catalogStudyTagJSON is an entry of the study tag list (issue #259);
+// parent_key is left out for a level.
+type catalogStudyTagJSON struct {
+	Key       string            `json:"key"`
+	ParentKey string            `json:"parent_key,omitempty"`
+	Position  int32             `json:"position"`
+	Labels    map[string]string `json:"labels"`
+	Status    string            `json:"status"`
+}
+
 type catalogJSON struct {
 	CatalogVersion int64                  `json:"catalog_version"`
 	Interests      []catalogInterestJSON  `json:"interests"`
 	EventTypes     []catalogEventTypeJSON `json:"event_types"`
+	StudyTags      []catalogStudyTagJSON  `json:"study_tags"`
 }
 
 // catalogEventTypeFrom converts a type; ok is false when core's definition
@@ -152,6 +163,7 @@ func (h coreHandlers) getCatalog(ctx context.Context, w http.ResponseWriter, r *
 		CatalogVersion: resp.GetCatalogVersion(),
 		Interests:      make([]catalogInterestJSON, 0, len(resp.GetInterests())),
 		EventTypes:     make([]catalogEventTypeJSON, 0, len(resp.GetEventTypes())),
+		StudyTags:      make([]catalogStudyTagJSON, 0, len(resp.GetStudyTags())),
 	}
 	for _, in := range resp.GetInterests() {
 		out.Interests = append(out.Interests, catalogInterestJSON{
@@ -167,6 +179,12 @@ func (h coreHandlers) getCatalog(ctx context.Context, w http.ResponseWriter, r *
 			return
 		}
 		out.EventTypes = append(out.EventTypes, j)
+	}
+	for _, t := range resp.GetStudyTags() {
+		out.StudyTags = append(out.StudyTags, catalogStudyTagJSON{
+			Key: t.GetKey(), ParentKey: t.GetParentKey(), Position: t.GetPosition(), Labels: nonNilMap(t.GetLabels()),
+			Status: catalogStatuses.name(t.GetStatus()),
+		})
 	}
 	writeCatalogJSON(w, etag, out)
 }

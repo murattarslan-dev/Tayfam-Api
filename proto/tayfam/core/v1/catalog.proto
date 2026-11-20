@@ -74,6 +74,24 @@ message CatalogEventType {
   string definition = 8;
 }
 
+// CatalogStudyTag is one entry of the study tag list the Eğitim modules
+// label their content with (issue #259; ADR-0040 §5): level (exam or
+// grade) → subject → topic, at most three deep. A subject is required on
+// such content, a topic is optional. Every level and subject has a "Diğer"
+// child whose key is the parent's key followed by "_other". A retired tag
+// cannot be chosen for new content; old content keeps showing it.
+message CatalogStudyTag {
+  // Immutable and unique in the whole list; ^[a-z][a-z0-9_]{1,39}$.
+  string key = 1;
+  // Empty for a level; never changes.
+  string parent_key = 2;
+  // Order under the same parent, ascending.
+  int32 position = 3;
+  // Language to name.
+  map<string, string> labels = 4;
+  CatalogStatus status = 5;
+}
+
 message GetCatalogRequest {
   // The catalog version the caller already holds; 0 when none.
   int64 known_version = 1;
@@ -82,13 +100,16 @@ message GetCatalogRequest {
 message GetCatalogResponse {
   // Grows with every change to the catalog.
   int64 catalog_version = 1;
-  // The caller's known_version is current; interests and event_types are
-  // empty.
+  // The caller's known_version is current; interests, event_types and
+  // study_tags are empty.
   bool not_modified = 2;
   // Every interest, retired ones included, by position.
   repeated CatalogInterest interests = 3;
   // The current version of every active event type, by position.
   repeated CatalogEventType event_types = 4;
+  // The study tag list, retired tags included, by position; the client
+  // groups it by parent_key.
+  repeated CatalogStudyTag study_tags = 5;
 }
 
 message GetEventTypeVersionRequest {
