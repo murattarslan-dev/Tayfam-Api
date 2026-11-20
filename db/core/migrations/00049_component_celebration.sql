@@ -55,12 +55,15 @@ CREATE TABLE event_celebration_winners (
   component_key text NOT NULL,
   -- Kazanan katılımcı. Hesap silinince satır silinir.
   user_id       uuid NOT NULL,
+  -- Organizatörün verdiği sıra (1'den).
+  position      smallint NOT NULL,
   created_at    timestamptz NOT NULL DEFAULT now(),
 
   -- Kazanan yalnızca ilan edilmiş bir kutlamada vardır.
   CONSTRAINT event_celebration_winners_celebration FOREIGN KEY (event_id, component_key)
     REFERENCES event_celebrations (event_id, component_key) ON DELETE CASCADE,
-  CONSTRAINT event_celebration_winners_person UNIQUE (event_id, component_key, user_id)
+  CONSTRAINT event_celebration_winners_person UNIQUE (event_id, component_key, user_id),
+  CONSTRAINT event_celebration_winners_position CHECK (position BETWEEN 1 AND 10)
 );
 -- Dışa aktarma ve hesap silme.
 CREATE INDEX event_celebration_winners_user_id_idx ON event_celebration_winners (user_id);

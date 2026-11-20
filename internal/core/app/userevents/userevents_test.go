@@ -561,9 +561,9 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 	// and a's win stay, without the announcer.
 	e.seed(t, `INSERT INTO event_celebrations (event_id, component_key, announced_by, announced_at, updated_at) VALUES ($1, 'celebration', $2, now(), now())`,
 		hike.PG(), u.PG())
-	e.seed(t, `INSERT INTO event_celebration_winners (id, event_id, component_key, user_id) VALUES ($1, $2, 'celebration', $3)`,
+	e.seed(t, `INSERT INTO event_celebration_winners (id, event_id, component_key, user_id, position) VALUES ($1, $2, 'celebration', $3, 1)`,
 		id.New().PG(), hike.PG(), u.PG())
-	e.seed(t, `INSERT INTO event_celebration_winners (id, event_id, component_key, user_id) VALUES ($1, $2, 'celebration', $3)`,
+	e.seed(t, `INSERT INTO event_celebration_winners (id, event_id, component_key, user_id, position) VALUES ($1, $2, 'celebration', $3, 2)`,
 		id.New().PG(), hike.PG(), a.PG())
 	// Teams (issue #248): u's place goes; the team and a's place stay.
 	team := id.New()

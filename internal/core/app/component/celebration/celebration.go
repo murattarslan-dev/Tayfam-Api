@@ -436,9 +436,11 @@ func replace(ctx context.Context, sc *component.Scope, chosen []id.ID) error {
 	}); err != nil {
 		return fmt.Errorf("kutlamanın kazananlarını silme: %w", err)
 	}
-	for _, u := range chosen {
+	for i, u := range chosen {
 		if err := sc.Q().AddEventCelebrationWinner(ctx, store.AddEventCelebrationWinnerParams{
-			ID: id.New().PG(), EventID: sc.Event.PG(), ComponentKey: sc.Key, UserID: u.PG(), Now: ts(sc.Now),
+			ID: id.New().PG(), EventID: sc.Event.PG(), ComponentKey: sc.Key, UserID: u.PG(),
+			Position: int16(i + 1), //nolint:gosec // at most MaxWinners
+			Now:      ts(sc.Now),
 		}); err != nil {
 			return fmt.Errorf("kutlamanın kazananını yazma: %w", err)
 		}

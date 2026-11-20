@@ -463,7 +463,7 @@ func TestCelebrationByHand(t *testing.T) {
 		t.Fatalf("üyenin okuması: %+v %v", got, err)
 	}
 	// The database keeps one row per person.
-	_, err = e.pool.Exec(ctx, `INSERT INTO event_celebration_winners (id, event_id, component_key, user_id) VALUES ($1, $2, $3, $4)`,
+	_, err = e.pool.Exec(ctx, `INSERT INTO event_celebration_winners (id, event_id, component_key, user_id, position) VALUES ($1, $2, $3, $4, 3)`,
 		id.New().PG(), ev.ID.PG(), key, a.PG())
 	if c := constraintOf(err); c != "event_celebration_winners_person" {
 		t.Errorf("aynı kazanan: %q (%v)", c, err)
