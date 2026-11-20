@@ -306,6 +306,18 @@ type EventSafetyContact struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
+type EventScheduleItem struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	StartsAt     pgtype.Timestamptz
+	EndsAt       pgtype.Timestamptz
+	Title        string
+	Note         pgtype.Text
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
 type EventSeries struct {
 	ID              pgtype.UUID
 	TayfaID         pgtype.UUID
