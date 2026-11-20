@@ -2220,8 +2220,21 @@ type CreateInstantEventRequest struct {
 	// distinct IDs, not the caller. If one cannot be invited nothing is
 	// created.
 	InviteeUserIds []string `protobuf:"bytes,2,rep,name=invitee_user_ids,json=inviteeUserIds,proto3" json:"invitee_user_ids,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Optional, with event.starts_now only (else ERROR_REASON_VALIDATION,
+	// field "now_recipient_ids"): the friends the organizer chose to tell
+	// that the now event started (ADR-0038 §4), at most 30 distinct IDs, not
+	// the caller and none of invitee_user_ids. Each is invited directly
+	// (accepting makes them an active member) and gets one NOW_STARTED
+	// notification instead of TAYFA_INVITATION. core checks every one again
+	// and silently leaves out who is not an accepted friend, is blocked
+	// either way, is deleted or banned, or whose now_from_friends setting
+	// does not allow the caller; the caller is never told who was left out.
+	// A caller sends at most 2 such broadcasts a day (Europe/Istanbul day),
+	// whoever is left out (ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED); they do
+	// not count toward the daily direct invitation limit.
+	NowRecipientIds []string `protobuf:"bytes,3,rep,name=now_recipient_ids,json=nowRecipientIds,proto3" json:"now_recipient_ids,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *CreateInstantEventRequest) Reset() {
@@ -2264,6 +2277,13 @@ func (x *CreateInstantEventRequest) GetEvent() *CreateEventRequest {
 func (x *CreateInstantEventRequest) GetInviteeUserIds() []string {
 	if x != nil {
 		return x.InviteeUserIds
+	}
+	return nil
+}
+
+func (x *CreateInstantEventRequest) GetNowRecipientIds() []string {
+	if x != nil {
+		return x.NowRecipientIds
 	}
 	return nil
 }
@@ -6075,10 +6095,11 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\vcreate_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\"B\n" +
 	"\x13CreateEventResponse\x12+\n" +
-	"\x05event\x18\x01 \x01(\v2\x15.tayfam.core.v1.EventR\x05event\"\x7f\n" +
+	"\x05event\x18\x01 \x01(\v2\x15.tayfam.core.v1.EventR\x05event\"\xab\x01\n" +
 	"\x19CreateInstantEventRequest\x128\n" +
 	"\x05event\x18\x01 \x01(\v2\".tayfam.core.v1.CreateEventRequestR\x05event\x12(\n" +
-	"\x10invitee_user_ids\x18\x02 \x03(\tR\x0einviteeUserIds\"v\n" +
+	"\x10invitee_user_ids\x18\x02 \x03(\tR\x0einviteeUserIds\x12*\n" +
+	"\x11now_recipient_ids\x18\x03 \x03(\tR\x0fnowRecipientIds\"v\n" +
 	"\x1aCreateInstantEventResponse\x12+\n" +
 	"\x05tayfa\x18\x01 \x01(\v2\x15.tayfam.core.v1.TayfaR\x05tayfa\x12+\n" +
 	"\x05event\x18\x02 \x01(\v2\x15.tayfam.core.v1.EventR\x05event\"\xf5\b\n" +

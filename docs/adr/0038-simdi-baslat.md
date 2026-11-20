@@ -250,6 +250,51 @@ olayına yazar; chat teslim eder.
   gün yaşar); dışa aktarmaya yeni bölüm eklenmedi. QR ile kurulan üyelik
   `joined_via = qr` (`JoinSource` `qr`) olarak üyeliklerle gelir.
 
+## Uygulama notları (#265, §4–§5)
+
+- **Tayfa etkinliği:** `event.created` olayının `starts_now` işareti
+  `event_created` yerine `now_started` üretir. Alıcılar organizatör
+  dışındaki etkin üyelerdir; organizatörle iki yönden engeli olan üye
+  bildirim almaz. Sayaç (`now_notification_counters`, scope `tayfa`, en
+  fazla 3; CHECK ikinci savunma hattı) yalnızca en az bir alıcı varsa
+  artar; dolunca etkinlik açılır, bildirim üretilmez.
+- **Anlık etkinlik:** `POST /v1/instant-events` gövdesinde
+  `now_recipient_ids` (yalnızca `starts_now` ile, en fazla 30,
+  `invitee_user_ids` ile kesişmez). Her alıcı `FilterNowFriendRecipients`
+  ile yeniden denetlenir; düşenler hata vermez, iz bırakmaz (engel ve
+  `off` ayarı göndericiye belli olmaz). Kalanlar `direct_invite` olarak
+  davet edilir (denetim kaydı `member.now_invited`; `tayfa.invited`
+  olayı yazılmaz, böylece günlük 10 doğrudan davet sınırına sayılmaz)
+  ve tek `now_started` bildirimi alır (`tayfa_invitation` değil).
+- **Kişi başı 2 yayın:** yayın, alıcılardan kimse kalmasa da sayılır
+  (sınır alıcılar hakkında bilgi vermesin diye). Sınır doluysa istek
+  reddedilir, hiçbir şey açılmaz: `now-broadcast-limit-reached` (429,
+  reason 2650). Tayfa sınırından farklı olarak reddedilmesinin nedeni:
+  organizatör alıcıları kendisi seçti; sessizce bildirimsiz açmak
+  "davet ettim" sanmasına yol açardı. İstemci alıcısız yeniden
+  başlatmayı önerebilir.
+- **`close`:** gönderen, alıcının arkadaş listesinin (ADR-0030 §12 sırası:
+  puan azalan, eşitlikte kimlik; silinmiş/banlı hesap yok) ilk 20'sinde
+  mi — `now_close_friend(alıcı, gönderen)` SQL fonksiyonu. Puan dışarı
+  çıkmaz. Alıcının profillemesi kapalıysa `all` gibi.
+- **Tercih:** chat'te `scope_type = 'tayfa_now'` (CHECK: yalnızca `all` /
+  `none`); uç `PUT/DELETE /v1/notification-preferences/tayfas/{id}/now`
+  (gRPC'de `SetTayfaNotificationPreferenceRequest.now`). Push önce tayfa
+  tercihine, sonra `tayfa_now`'a bakar; `now_started` kişisel sayılmaz,
+  tayfa seviyesi `mentions` de push'u durdurur. Tayfa silinince iki
+  tercih birlikte silinir.
+- **18 yaş altı ve hassas katılım:** ek kural yok (Notion §D: bildirim
+  yalnızca karşılıklı onaylı arkadaşlara ya da tayfa üyelerine).
+  Bildirim katılımcı bilgisi taşımadığı için `sensitive_attendance`
+  türlerinde de aynı kural geçerlidir.
+- **KVKK:** sayaçlar yalnızca sayıdır; 2 gün sonra retention işiyle,
+  kişinin yayın sayacı hesap silinince hemen silinir. Alıcı listesi
+  olaylara yalnızca `notification.requested`'ın kimlikleri olarak girer
+  (chat teslim için gerekir), log'a girmez. `now_from_friends` dışa
+  aktarmada `core/social_settings.json` içinde; `tayfa_now` tercihleri
+  `chat/notification_preferences.json` içinde (dışa aktarma sayfası artık
+  bir `scope_id`'nin iki satırını bölmez).
+
 ## Değerlendirilen alternatifler
 
 - **Ayrı "şimdi" modeli (tayfasız etkinlik)**: Reddedildi. ADR-0032 gizli

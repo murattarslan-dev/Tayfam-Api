@@ -486,6 +486,20 @@ paths:
         sınıra hem kişi başı 1 açık şimdi etkinliği sınırına
         (`now-limit-reached`) sayılır.
 
+        **Şimdi bildirimi** (ADR-0038 §4): `starts_now` ile
+        `now_recipient_ids`'de organizatörün seçtiği arkadaşlar (en fazla
+        30) etkinliğin başladığını `now_started` bildirimiyle öğrenir ve
+        doğrudan davet edilir (`/v1/me/invitations/{tayfa_id}/acceptance`
+        ile kabul edince etkin üye olur). Sunucu
+        her alıcıyı yeniden denetler; kabul edilmiş arkadaşınız olmayan,
+        aranızda iki yönden engel olan, hesabı silinmiş ya da banlı olan ve
+        "Şimdi bildirimi kimden" ayarı (`now_from_friends`) sizi kabul
+        etmeyen kişi sessizce düşer; kimin düştüğü söylenmez. Günde en
+        fazla 2 şimdi yayını (İstanbul günü; kimse kalmasa da sayılır):
+        aşılırsa hiçbir şey açılmaz, `now-broadcast-limit-reached`
+        (`now_recipient_ids` olmadan açılabilir). Şimdi yayını günlük 10
+        doğrudan davet sınırına sayılmaz.
+
         Etkinlik bitince (iptalde iptal anından) 7 gün sonra tayfa
         arşivlenir. Davet linkiyle gelen her zaman katılım isteği bırakır,
         organizatör onaylar; katılım koduyla katılım yoktur. Etkinlik
@@ -5531,6 +5545,51 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  /v1/notification-preferences/tayfas/{tayfa_id}/now:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    put:
+      operationId: setTayfaNowNotificationPreference
+      summary: Bir tayfanın şimdi bildirimlerini kapatır ya da açar
+      description: |
+        "Şimdi bildirimleri" (ADR-0038 §4): tayfada biri Şimdi başlat ile
+        etkinlik açınca gelen `now_started` bildirimi. Etkin üyesi
+        olduğunuz tayfa için (`tayfa-not-found`). Seviye yalnızca `all` ya
+        da `none` (`mentions` `invalid-request`); `none` isteğe bağlı
+        olarak `mute_until`'e kadar sürer (en fazla bir yıl); `all` ile
+        `mute_until` verilemez, `all` tercihi kaldırır. Tercih listede
+        `scope_type: tayfa_now` olarak görünür. Tayfanın genel seviyesi
+        `none` ise şimdi bildirimi de gitmez. Sessize alma bildirimleri
+        listeden gizlemez; yalnızca anlık bildirim (push) gitmez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NowNotificationPreferenceRequest" }
+      responses:
+        "200":
+          description: Tercih
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationPreference" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: resetTayfaNowNotificationPreference
+      summary: Tayfanın şimdi bildirimlerini varsayılana (`all`) döndürür
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Varsayılana döndü }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /v1/notification-preferences/conversations/{conversation_id}:
     parameters:
       - $ref: "#/components/parameters/ConversationID"
@@ -6433,6 +6492,11 @@ paths:
         **Keşfet'te arkadaşlarım görebilsin** (`discover_visible_to_friends`,
         varsayılan açık): kapatınca etkinliklere katılımınız arkadaşlarınızın
         Keşfet akışında gösterilmez ve sayılmaz (hemen).
+
+        **Şimdi bildirimi kimden** (`now_from_friends`, varsayılan `all`;
+        ADR-0038 §4): `all` bütün arkadaşlarınızdan, `close` yalnızca
+        arkadaş listenizin ilk 20'sindekilerden, `off` hiçbirinden.
+        Geçersiz değer `invalid-request`.
 
         Ayarı kapatıp açmak haftalık öneri sınırını ve daha önce kimin
         önerildiğini sıfırlamaz; kapattığınız öneriler de hatırlanır.
@@ -8182,6 +8246,8 @@ components:
         # core: QR ile katılım (#264, ADR-0038 §3)
         - invalid-join-qr
         - join-qr-limit-reached
+        # core: şimdi bildirimi (#265, ADR-0038 §4)
+        - now-broadcast-limit-reached
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -8537,6 +8603,16 @@ components:
           uniqueItems: true
           items: { type: string, format: uuid }
           description: Doğrudan davet edilecek arkadaşlarınız (en fazla 10, siz değil).
+        now_recipient_ids:
+          type: array
+          maxItems: 30
+          uniqueItems: true
+          items: { type: string, format: uuid }
+          description: |
+            Yalnızca `event.starts_now` ile (yoksa `invalid-request`):
+            etkinliğin başladığını öğrenecek ve davet edilecek
+            arkadaşlarınız (en fazla 30; siz ve `invitee_user_ids`'deki
+            kişiler değil). Bildirimde başlık, tür, yer ya da ad yoktur.
 
     InstantEvent:
       type: object
@@ -10643,8 +10719,18 @@ components:
             açın) ve `tayfa_id` yoktur; tayfa rozetinde alıcılar tayfanın
             yönetici ve moderatörleridir, hedef `tayfa`'dır. Yalnızca
             uygulama içi, push gitmez.
+            `now_started` (#265, ADR-0038 §4): organizatör (`actor_id`)
+            hedef etkinliği Şimdi başlat ile açtı. Tayfa etkinliğinde
+            alıcılar tayfanın etkin üyeleridir (tayfa başına günde en fazla
+            3); anlık etkinlikte organizatörün seçtiği arkadaşlardır ve
+            bildirim bir davettir: `tayfa_id` anlık etkinliğin tayfasıdır,
+            daveti `GET /v1/me/invitations` gösterir, kabul edince etkin üye
+            olursunuz. Başlık, tür, yer ya da ad taşımaz; push yalnızca
+            `push_now_started_title` / `push_now_started_body` anahtarlarıdır.
+            Tayfa seviyesi `none` ya da tayfanın şimdi tercihi (`tayfa_now`)
+            `none` ise push gitmez.
             Tanınmayan değer `unknown`.
-          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, tayfa_suspended, tayfa_unsuspended, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, data_export_ready, friend_suggestion, safety_alert, celebration, badge_earned, unknown]
+          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, tayfa_suspended, tayfa_unsuspended, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, data_export_ready, friend_suggestion, safety_alert, celebration, badge_earned, now_started, unknown]
         tayfa_id:
           type: string
           format: uuid
@@ -10726,8 +10812,8 @@ components:
       properties:
         scope_type:
           type: string
-          description: "`tayfa` ya da `dm_conversation` (birebir konuşma); kanal sonra gelir."
-          enum: [tayfa, channel, dm_conversation, unknown]
+          description: "`tayfa`, `tayfa_now` (tayfanın şimdi bildirimleri) ya da `dm_conversation` (birebir konuşma); kanal sonra gelir."
+          enum: [tayfa, tayfa_now, channel, dm_conversation, unknown]
         scope_id: { type: string, format: uuid }
         level: { type: string, enum: [all, mentions, none, unknown] }
         mute_until:
@@ -10752,6 +10838,17 @@ components:
           type: string
           format: date-time
           description: Yalnızca `mentions` ya da `none` ile; en fazla bir yıl sonrası.
+    NowNotificationPreferenceRequest:
+      type: object
+      description: Tayfanın şimdi bildirimleri; `mentions` yoktur.
+      required: [level]
+      additionalProperties: false
+      properties:
+        level: { type: string, enum: [all, none] }
+        mute_until:
+          type: string
+          format: date-time
+          description: Yalnızca `none` ile; en fazla bir yıl sonrası.
     ConversationNotificationPreferenceRequest:
       type: object
       description: Birebir konuşma tercihi; `mentions` yoktur.
@@ -11874,7 +11971,7 @@ components:
           items: { $ref: "#/components/schemas/FriendSuggestion" }
     SocialSettings:
       type: object
-      required: [profiling_enabled, hide_from_suggestions, discover_visible_to_friends]
+      required: [profiling_enabled, hide_from_suggestions, discover_visible_to_friends, now_from_friends]
       additionalProperties: false
       properties:
         profiling_enabled:
@@ -11890,6 +11987,16 @@ components:
             etkinliğe gideceğiniz ya da katıldığınız, arkadaşlarınıza
             Keşfet'te gösterilebilir. Katılım geçmişiniz `private` ise bu
             ayar açık olsa da gösterilmez.
+        now_from_friends:
+          type: string
+          enum: [all, close, off, unknown]
+          description: |
+            "Şimdi bildirimi kimden" (ADR-0038 §4; varsayılan `all`):
+            arkadaşlarınızın anlık şimdi etkinliklerinden hangilerinin size
+            bildirileceği. `close`: yalnızca arkadaş listenizin ilk 20'sindeki
+            arkadaşlarınızdan (`GET /v1/me/friends` sırası); profilleme
+            kapalıyken sıra puansız olduğu için `all` gibi davranır. `off`:
+            hiçbirinden; gönderene söylenmez. Tanınmayan değer `unknown`.
     SocialSettingsUpdate:
       type: object
       minProperties: 1
@@ -11898,6 +12005,7 @@ components:
         profiling_enabled: { type: boolean }
         hide_from_suggestions: { type: boolean }
         discover_visible_to_friends: { type: boolean }
+        now_from_friends: { type: string, enum: [all, close, off] }
     DaySlot:
       type: string
       description: Günün kaba bir bölümü; saat değil. `all_day` başka dilimle birlikte olmaz.

@@ -424,6 +424,11 @@ const (
 	ErrorReason_ERROR_REASON_INVALID_JOIN_QR ErrorReason = 2640
 	// RESOURCE_EXHAUSTED. The event already had 30 joins by QR.
 	ErrorReason_ERROR_REASON_JOIN_QR_LIMIT_REACHED ErrorReason = 2641
+	// RESOURCE_EXHAUSTED. CreateInstantEvent with now_recipient_ids when the
+	// caller already sent 2 now broadcasts to friends today (Europe/Istanbul
+	// day). Nothing is created; without now_recipient_ids the event can be
+	// started.
+	ErrorReason_ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED ErrorReason = 2650
 )
 
 // Enum value maps for ErrorReason.
@@ -559,6 +564,7 @@ var (
 		2631: "ERROR_REASON_EVENT_NOT_OPEN_ENDED",
 		2640: "ERROR_REASON_INVALID_JOIN_QR",
 		2641: "ERROR_REASON_JOIN_QR_LIMIT_REACHED",
+		2650: "ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                  0,
@@ -691,6 +697,7 @@ var (
 		"ERROR_REASON_EVENT_NOT_OPEN_ENDED":         2631,
 		"ERROR_REASON_INVALID_JOIN_QR":              2640,
 		"ERROR_REASON_JOIN_QR_LIMIT_REACHED":        2641,
+		"ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED":  2650,
 	}
 )
 
@@ -725,7 +732,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xd8%\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\x87&\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -857,7 +864,8 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\x1eERROR_REASON_NOW_LIMIT_REACHED\x10\xc6\x14\x12&\n" +
 	"!ERROR_REASON_EVENT_NOT_OPEN_ENDED\x10\xc7\x14\x12!\n" +
 	"\x1cERROR_REASON_INVALID_JOIN_QR\x10\xd0\x14\x12'\n" +
-	"\"ERROR_REASON_JOIN_QR_LIMIT_REACHED\x10\xd1\x14B\xbd\x01\n" +
+	"\"ERROR_REASON_JOIN_QR_LIMIT_REACHED\x10\xd1\x14\x12-\n" +
+	"(ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED\x10\xda\x14B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

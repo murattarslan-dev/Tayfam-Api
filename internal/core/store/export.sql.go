@@ -1249,6 +1249,7 @@ SELECT $1::uuid AS k, jsonb_build_object(
   'profiling_enabled', COALESCE(s.profiling_enabled, true),
   'hide_from_suggestions', COALESCE(s.hide_from_suggestions, false),
   'discover_visible_to_friends', COALESCE(s.discover_visible_to_friends, true),
+  'now_from_friends', COALESCE(s.now_from_friends, 'all'),
   'updated_at', s.updated_at,
   'scored_people_count', (SELECT count(*) FROM friend_scores f
                           WHERE f.user_low_id = $1::uuid OR f.user_high_id = $1::uuid)

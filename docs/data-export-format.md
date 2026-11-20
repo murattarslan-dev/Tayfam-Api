@@ -81,7 +81,7 @@ adları içeriktir ve yer alır.
 | `core/blocks.json` | `user_id` (engellenen), `created_at` |
 | `core/availability.json` | "Boşum" (#207): `date` (YYYY-MM-DD), `slots`, `note` (yoksa null), `created_at`, `updated_at`. Geçmiş günler saklanmadığı için yalnızca bugün ve sonrası |
 | `core/reports.json` | `id`, `tayfa_id`, `target_type`, `target_id`, `reason`, `description`, `evidence_text`, `status`, `resolution`, `created_at` |
-| `core/social_settings.json` | Ayar değiştirildiyse ya da puan tutuluyorsa tek kayıt: `profiling_enabled`, `hide_from_suggestions`, `discover_visible_to_friends` (ADR-0033), `updated_at` (hiç değiştirilmediyse `null`), `scored_people_count` (hakkınızda arkadaşlık puanı tutulan kişi sayısı; puan değerleri ve kişiler girmez, ADR-0030) |
+| `core/social_settings.json` | Ayar değiştirildiyse ya da puan tutuluyorsa tek kayıt: `profiling_enabled`, `hide_from_suggestions`, `discover_visible_to_friends` (ADR-0033), `now_from_friends` (ADR-0038 §4), `updated_at` (hiç değiştirilmediyse `null`), `scored_people_count` (hakkınızda arkadaşlık puanı tutulan kişi sayısı; puan değerleri ve kişiler girmez, ADR-0030) |
 | `core/friend_suggestions.json` | `user_id` (önerilen kişi), `created_at`, `dismissed_at` (kapatılmadıysa `null`), `withdrawn_at` (geri çekilmediyse `null`) |
 | `core/discover.json` | Keşfet güvenlik ağı (ADR-0033); veri varsa tek kayıt: `feedback` ("Her şey yolunda mıydı?" cevaplarınız: `event_id`, `answer` = `ok` / `not_ok` / `serious`, `created_at`, `updated_at`) ve `safety_contacts` (seçtiğiniz güvenlik kişileri: `event_id`, `contact_user_id`, `grace_minutes`, `returned_at`, `alert_sent_at`, `created_at`) ve `discover_joins` (Keşfet'ten katıldığınız tayfalar: `tayfa_id`, `joined_at`, `left_at`; ayrılıştan 30 gün sonra silinir). Başkasının sizi güvenlik kişisi seçtiği kayıtlar o kişinin verisidir, girmez |
 | `core/uploads.json` | `id`, `purpose`, `status`, `tayfa_id`, `width`, `height`, `attached_type`, `attached_id`, `created_at`, `ready_at` (dosyaların kendisi yoktur; istemci kendi dosyalarını `POST /v1/media/urls` ile indirir) |
@@ -91,7 +91,7 @@ adları içeriktir ve yer alır.
 | Dosya | Alanlar |
 |-------|---------|
 | `chat/channel_messages.json` | `id`, `channel_id`, `tayfa_id`, `body` (silinmiş mesajda `null`), `created_at`, `deleted_at` |
-| `chat/notification_preferences.json` | `scope_type`, `scope_id`, `level`, `muted_until`, `updated_at` |
+| `chat/notification_preferences.json` | `scope_type` (`tayfa`, `tayfa_now`: tayfanın şimdi bildirimleri, `dm_conversation`), `scope_id`, `level`, `muted_until`, `updated_at` |
 
 ## Girmeyenler
 

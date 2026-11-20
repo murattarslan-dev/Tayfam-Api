@@ -663,6 +663,13 @@ type Membership struct {
 	UpdatedAt       pgtype.Timestamptz
 }
 
+type NowNotificationCounter struct {
+	Scope     string
+	SubjectID pgtype.UUID
+	Day       pgtype.Date
+	Sent      int32
+}
+
 type Poll struct {
 	ID              pgtype.UUID
 	TayfaID         pgtype.UUID
@@ -755,6 +762,7 @@ type SocialSetting struct {
 	HideFromSuggestions      bool
 	UpdatedAt                pgtype.Timestamptz
 	DiscoverVisibleToFriends bool
+	NowFromFriends           string
 }
 
 type Tag struct {

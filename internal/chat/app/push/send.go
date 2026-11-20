@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/murattarslan-dev/tayfam-api/internal/chat/app/notification"
 	"github.com/murattarslan-dev/tayfam-api/internal/chat/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -212,12 +213,24 @@ func (s *Service) failed(ctx context.Context, q *store.Queries, j store.ClaimPus
 	return Outcome{Retry: true}, cause
 }
 
-// wanted reads the recipient's preference for n.
+// wanted reads the recipient's preference for n. A now_started notice
+// must pass the tayfa's preference and then its own "Şimdi bildirimleri"
+// (issue #265; ADR-0038 §4).
 func (s *Service) wanted(ctx context.Context, q *store.Queries, n note, now time.Time) (bool, error) {
 	typ, scopeID, ok := scope(n)
 	if !ok {
 		return allowed(n.Type, "", time.Time{}, now), nil
 	}
+	yes, err := s.preferred(ctx, q, n, typ, scopeID, now)
+	if err != nil || !yes || n.Type != notification.TypeNowStarted {
+		return yes, err
+	}
+	return s.preferred(ctx, q, n, notification.ScopeTayfaNow, n.Tayfa, now)
+}
+
+// preferred reads the recipient's preference of one scope for n; none
+// means level all.
+func (s *Service) preferred(ctx context.Context, q *store.Queries, n note, typ string, scopeID id.ID, now time.Time) (bool, error) {
 	p, err := q.GetNotificationPreference(ctx, store.GetNotificationPreferenceParams{
 		UserID: n.User.PG(), ScopeType: typ, ScopeID: scopeID.PG(),
 	})

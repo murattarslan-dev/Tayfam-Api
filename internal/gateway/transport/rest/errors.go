@@ -203,6 +203,8 @@ var problemsByDomain = map[string]map[string]problem{
 		// QR ile katılım (issue #264; ADR-0038 §3).
 		"ERROR_REASON_INVALID_JOIN_QR":       {http.StatusNotFound, "invalid-join-qr"},
 		"ERROR_REASON_JOIN_QR_LIMIT_REACHED": {http.StatusTooManyRequests, "join-qr-limit-reached"},
+		// Şimdi bildirimi (issue #265; ADR-0038 §4).
+		"ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED": {http.StatusTooManyRequests, "now-broadcast-limit-reached"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

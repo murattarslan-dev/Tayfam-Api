@@ -131,6 +131,9 @@ func TestNotificationRoutes(t *testing.T) {
 			TayfaId: tayfaID, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_NONE, MuteUntil: &timestamppb.Timestamp{Seconds: 1893553445}}},
 		{"PUT", pref, `{"level":"mentions"}`, 200, &chatv1.SetTayfaNotificationPreferenceRequest{TayfaId: tayfaID, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_MENTIONS}},
 		{"DELETE", pref, "", 204, &chatv1.SetTayfaNotificationPreferenceRequest{TayfaId: tayfaID, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_ALL}},
+		// The tayfa's now notifications (issue #265).
+		{"PUT", pref + "/now", `{"level":"none"}`, 200, &chatv1.SetTayfaNotificationPreferenceRequest{TayfaId: tayfaID, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_NONE, Now: true}},
+		{"DELETE", pref + "/now", "", 204, &chatv1.SetTayfaNotificationPreferenceRequest{TayfaId: tayfaID, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_ALL, Now: true}},
 		{"PUT", convPref, `{"level":"none","mute_until":"2030-01-02T03:04:05Z"}`, 200, &chatv1.SetConversationNotificationPreferenceRequest{
 			ConversationId: conversationID, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_NONE, MuteUntil: &timestamppb.Timestamp{Seconds: 1893553445}}},
 		{"PUT", convPref, `{"level":"none"}`, 200, &chatv1.SetConversationNotificationPreferenceRequest{ConversationId: conversationID, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_NONE}},
@@ -194,6 +197,8 @@ func TestNotificationBadRequests(t *testing.T) {
 		"konuşma bozuk süre":      {"PUT", convPref, `{"level":"none","mute_until":"yarın"}`},
 		"konuşma başkası":         {"PUT", convPref, `{"level":"none","user_id":"` + userID + `"}`},
 		"konuşma mentions":        {"PUT", convPref, `{"level":"mentions"}`},
+		"şimdi mentions":          {"PUT", pref + "/now", `{"level":"mentions"}`},
+		"şimdi bozuk tayfa":       {"PUT", "/v1/notification-preferences/tayfas/x/now", `{"level":"none"}`},
 		"konuşma mentions süreli": {"PUT", convPref, `{"level":"mentions","mute_until":"2030-01-02T03:04:05Z"}`},
 	} {
 		if w := as(h, tc.method, tc.path, tc.body); w.Code != 400 || problemType(t, w) != "invalid-request" {

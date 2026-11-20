@@ -283,6 +283,8 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			q.DeleteUserEventReferees,
 			// Join QR tokens the user opened (issue #264).
 			q.DeleteUserJoinQRTokens,
+			// Now broadcast counters of the user (issue #265).
+			q.DeleteUserNowCounters,
 			q.ClearAuditActor, q.ClearEventActor, q.ClearReportUserFields,
 		} {
 			if err := clear(ctx, e.User.PG()); err != nil {

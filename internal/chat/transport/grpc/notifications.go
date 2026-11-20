@@ -20,6 +20,7 @@ type Notifications interface {
 	MarkAllRead(ctx context.Context, caller id.ID) error
 	Preferences(ctx context.Context, caller id.ID) ([]notification.Preference, error)
 	SetTayfaPreference(ctx context.Context, caller, tayfa id.ID, level string, until time.Time) (notification.Preference, error)
+	SetTayfaNowPreference(ctx context.Context, caller, tayfa id.ID, level string, until time.Time) (notification.Preference, error)
 	SetConversationPreference(ctx context.Context, caller, conversation id.ID, level string, until time.Time) (notification.Preference, error)
 }
 
@@ -70,6 +71,8 @@ func scopeToProto(s string) chatv1.NotificationScopeType {
 		return chatv1.NotificationScopeType_NOTIFICATION_SCOPE_TYPE_CHANNEL
 	case "dm_conversation":
 		return chatv1.NotificationScopeType_NOTIFICATION_SCOPE_TYPE_DM_CONVERSATION
+	case notification.ScopeTayfaNow:
+		return chatv1.NotificationScopeType_NOTIFICATION_SCOPE_TYPE_TAYFA_NOW
 	}
 	return chatv1.NotificationScopeType_NOTIFICATION_SCOPE_TYPE_UNSPECIFIED
 }
@@ -176,7 +179,12 @@ func (s *NotificationServer) SetTayfaNotificationPreference(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	p, err := s.app.SetTayfaPreference(ctx, caller, tayfa, level, until)
+	set := s.app.SetTayfaPreference
+	if req.GetNow() {
+		// The tayfa's now notifications (issue #265).
+		set = s.app.SetTayfaNowPreference
+	}
+	p, err := set(ctx, caller, tayfa, level, until)
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}

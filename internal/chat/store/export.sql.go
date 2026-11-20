@@ -73,14 +73,20 @@ func (q *Queries) ExportChannelMessages(ctx context.Context, arg ExportChannelMe
 }
 
 const exportNotificationPreferences = `-- name: ExportNotificationPreferences :many
+WITH page AS (
+  SELECT DISTINCT x.scope_id FROM notification_preferences x
+  WHERE x.user_id = $1 AND x.scope_id > $2
+  ORDER BY x.scope_id
+  LIMIT $3
+)
 SELECT p.scope_id AS k, jsonb_build_object(
   'scope_type', p.scope_type, 'scope_id', p.scope_id, 'level', p.level,
   'muted_until', p.muted_until, 'updated_at', p.updated_at
 ) AS data
 FROM notification_preferences p
-WHERE p.user_id = $1 AND p.scope_id > $2
-ORDER BY p.scope_id
-LIMIT $3
+JOIN page ON page.scope_id = p.scope_id
+WHERE p.user_id = $1
+ORDER BY p.scope_id, p.scope_type
 `
 
 type ExportNotificationPreferencesParams struct {
@@ -94,6 +100,9 @@ type ExportNotificationPreferencesRow struct {
 	Data []byte
 }
 
+// Bir tayfanın iki tercihi (tayfa ve tayfa_now, issue #265) aynı scope_id'yi
+// taşır: sayfa scope_id'ye göre ilerler ve bir scope_id'nin bütün satırları
+// aynı sayfada gelir (sayfada en fazla @n farklı scope_id).
 func (q *Queries) ExportNotificationPreferences(ctx context.Context, arg ExportNotificationPreferencesParams) ([]ExportNotificationPreferencesRow, error) {
 	rows, err := q.db.Query(ctx, exportNotificationPreferences, arg.UserID, arg.After, arg.N)
 	if err != nil {

@@ -111,6 +111,11 @@ henüz yoktur.
   `report_resolved`, `dm_message`, `dm_request` (platform sahibi kabul
   etti, 2026-11-11) ve `data_export_ready` (ADR-0021, 2026-11-11).
 - `hike_overdue` hiçbir tercihle engellenemez (v14).
+- `now_started` (ADR-0038 §4, #265) önce tayfanın tercihinden, sonra
+  tayfanın "Şimdi bildirimleri" tercihinden (`tayfa_now`, yalnızca `all`
+  / `none`) geçer; ikisinden biri push'u durdurursa gitmez. Kişisel
+  sayılmaz (`mentions` geçirmez). Push'ta yalnızca
+  `push_now_started_title` / `_body` anahtarları ve kimlikler bulunur.
 
 ### 4. İçerik: çeviri anahtarı ve kimlikler
 

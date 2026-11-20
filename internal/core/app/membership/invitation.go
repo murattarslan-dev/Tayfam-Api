@@ -190,6 +190,66 @@ func (s *Service) InviteFriendTx(ctx context.Context, q *store.Queries, caller, 
 	return out, nil
 }
 
+// AuditNowInvited is the audit action of an invitation sent with a now
+// broadcast (InviteNowTx).
+const AuditNowInvited = "member.now_invited"
+
+// InviteNowTx invites the friends the caller chose for the now event of an
+// instant tayfa the caller just opened (issue #265; ADR-0038 §4), inside
+// the caller's transaction q (txn.WithActor for caller), and tells them
+// with one now_started notification about the event. NowFriends checks
+// every one again; who is left out, or is already in the tayfa in any
+// way, is skipped without a trace. A now invitation does not count toward
+// DirectInvitesPerDay (it writes no tayfa.invited event); the caller
+// counts the broadcast (notify.TakeNowBroadcast). Accepting it is the
+// ordinary AcceptInvitation: the inviter is the tayfa's admin, so the
+// friend becomes an active member. It returns how many were invited.
+func (s *Service) InviteNowTx(ctx context.Context, q *store.Queries, caller, tayfa, event id.ID, users []id.ID) (int, error) {
+	t, _, err := s.actorFor(ctx, q, tayfa, caller, authz.InviteDirect, true)
+	if err != nil {
+		return 0, err
+	}
+	if t.readOnly || !t.instant {
+		return 0, apperr.ErrPermissionDenied
+	}
+	to, err := notify.NowFriends(ctx, q, caller, users)
+	if err != nil {
+		return 0, err
+	}
+	invited := make([]id.ID, 0, len(to))
+	for _, u := range to {
+		_, err := q.GetMembership(ctx, store.GetMembershipParams{TayfaID: tayfa.PG(), UserID: u.PG()})
+		switch {
+		case err == nil:
+			// Already a member, invited, waiting or banned.
+			continue
+		case !errors.Is(err, pgx.ErrNoRows):
+			return 0, fmt.Errorf("üyelik: %w", err)
+		}
+		if err := q.CreateMembership(ctx, store.CreateMembershipParams{
+			TayfaID: tayfa.PG(), UserID: u.PG(), Role: authz.Member.String(), Status: string(authz.StatusInvited),
+			JoinedVia: "direct_invite", InvitedByUserID: caller.PG(),
+		}); err != nil {
+			return 0, fmt.Errorf("şimdi daveti: %w", err)
+		}
+		if err := q.ClearInvitationOutcome(ctx, store.ClearInvitationOutcomeParams{TayfaID: tayfa.PG(), UserID: u.PG()}); err != nil {
+			return 0, fmt.Errorf("davet sonucu: %w", err)
+		}
+		if err := txn.Audit(ctx, q, tayfa, caller, AuditNowInvited, txn.Target{Type: "membership", ID: u}, nil); err != nil {
+			return 0, err
+		}
+		invited = append(invited, u)
+	}
+	// The invited users are not members: the recipients are named
+	// directly. Last write of the transaction (outbox ordering).
+	if err := notify.Write(ctx, q, notify.Request{
+		Type: notify.TypeNowStarted, Tayfa: tayfa, Actor: caller, TargetType: notify.TargetEvent, Target: event,
+	}, invited); err != nil {
+		return 0, err
+	}
+	return len(invited), nil
+}
+
 // AcceptInvitation accepts the caller's invitation to tayfa: active when the
 // tayfa is open or the inviter is an active moderator or admin right now,
 // pending otherwise (v14 "Davet kabul edilince").

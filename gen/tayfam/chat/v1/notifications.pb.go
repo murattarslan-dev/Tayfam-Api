@@ -142,6 +142,8 @@ const (
 	NotificationScopeType_NOTIFICATION_SCOPE_TYPE_CHANNEL NotificationScopeType = 2
 	// A direct conversation (SetConversationNotificationPreference).
 	NotificationScopeType_NOTIFICATION_SCOPE_TYPE_DM_CONVERSATION NotificationScopeType = 3
+	// A tayfa's now notifications (SetTayfaNotificationPreference with now).
+	NotificationScopeType_NOTIFICATION_SCOPE_TYPE_TAYFA_NOW NotificationScopeType = 4
 )
 
 // Enum value maps for NotificationScopeType.
@@ -151,12 +153,14 @@ var (
 		1: "NOTIFICATION_SCOPE_TYPE_TAYFA",
 		2: "NOTIFICATION_SCOPE_TYPE_CHANNEL",
 		3: "NOTIFICATION_SCOPE_TYPE_DM_CONVERSATION",
+		4: "NOTIFICATION_SCOPE_TYPE_TAYFA_NOW",
 	}
 	NotificationScopeType_value = map[string]int32{
 		"NOTIFICATION_SCOPE_TYPE_UNSPECIFIED":     0,
 		"NOTIFICATION_SCOPE_TYPE_TAYFA":           1,
 		"NOTIFICATION_SCOPE_TYPE_CHANNEL":         2,
 		"NOTIFICATION_SCOPE_TYPE_DM_CONVERSATION": 3,
+		"NOTIFICATION_SCOPE_TYPE_TAYFA_NOW":       4,
 	}
 )
 
@@ -839,7 +843,9 @@ type SetTayfaNotificationPreferenceRequest struct {
 	TayfaId string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
 	Level   NotificationLevel      `protobuf:"varint,2,opt,name=level,proto3,enum=tayfam.chat.v1.NotificationLevel" json:"level,omitempty"`
 	// Optional; only with MENTIONS or NONE.
-	MuteUntil     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=mute_until,json=muteUntil,proto3" json:"mute_until,omitempty"`
+	MuteUntil *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=mute_until,json=muteUntil,proto3" json:"mute_until,omitempty"`
+	// The tayfa's now notifications (scope TAYFA_NOW): ALL or NONE.
+	Now           bool `protobuf:"varint,4,opt,name=now,proto3" json:"now,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -893,6 +899,13 @@ func (x *SetTayfaNotificationPreferenceRequest) GetMuteUntil() *timestamppb.Time
 		return x.MuteUntil
 	}
 	return nil
+}
+
+func (x *SetTayfaNotificationPreferenceRequest) GetNow() bool {
+	if x != nil {
+		return x.Now
+	}
+	return false
 }
 
 type SetTayfaNotificationPreferenceResponse struct {
@@ -1096,12 +1109,13 @@ const file_tayfam_chat_v1_notifications_proto_rawDesc = "" +
 	"updateTime\"$\n" +
 	"\"ListNotificationPreferencesRequest\"o\n" +
 	"#ListNotificationPreferencesResponse\x12H\n" +
-	"\vpreferences\x18\x01 \x03(\v2&.tayfam.chat.v1.NotificationPreferenceR\vpreferences\"\xb6\x01\n" +
+	"\vpreferences\x18\x01 \x03(\v2&.tayfam.chat.v1.NotificationPreferenceR\vpreferences\"\xc8\x01\n" +
 	"%SetTayfaNotificationPreferenceRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x127\n" +
 	"\x05level\x18\x02 \x01(\x0e2!.tayfam.chat.v1.NotificationLevelR\x05level\x129\n" +
 	"\n" +
-	"mute_until\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tmuteUntil\"p\n" +
+	"mute_until\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tmuteUntil\x12\x10\n" +
+	"\x03now\x18\x04 \x01(\bR\x03now\"p\n" +
 	"&SetTayfaNotificationPreferenceResponse\x12F\n" +
 	"\n" +
 	"preference\x18\x01 \x01(\v2&.tayfam.chat.v1.NotificationPreferenceR\n" +
@@ -1126,12 +1140,13 @@ const file_tayfam_chat_v1_notifications_proto_rawDesc = "" +
 	"\x1eNOTIFICATION_LEVEL_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16NOTIFICATION_LEVEL_ALL\x10\x01\x12\x1f\n" +
 	"\x1bNOTIFICATION_LEVEL_MENTIONS\x10\x02\x12\x1b\n" +
-	"\x17NOTIFICATION_LEVEL_NONE\x10\x03*\xb5\x01\n" +
+	"\x17NOTIFICATION_LEVEL_NONE\x10\x03*\xdc\x01\n" +
 	"\x15NotificationScopeType\x12'\n" +
 	"#NOTIFICATION_SCOPE_TYPE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dNOTIFICATION_SCOPE_TYPE_TAYFA\x10\x01\x12#\n" +
 	"\x1fNOTIFICATION_SCOPE_TYPE_CHANNEL\x10\x02\x12+\n" +
-	"'NOTIFICATION_SCOPE_TYPE_DM_CONVERSATION\x10\x032\xb9\a\n" +
+	"'NOTIFICATION_SCOPE_TYPE_DM_CONVERSATION\x10\x03\x12%\n" +
+	"!NOTIFICATION_SCOPE_TYPE_TAYFA_NOW\x10\x042\xb9\a\n" +
 	"\x13NotificationService\x12h\n" +
 	"\x11ListNotifications\x12(.tayfam.chat.v1.ListNotificationsRequest\x1a).tayfam.chat.v1.ListNotificationsResponse\x12\x83\x01\n" +
 	"\x1aGetUnreadNotificationCount\x121.tayfam.chat.v1.GetUnreadNotificationCountRequest\x1a2.tayfam.chat.v1.GetUnreadNotificationCountResponse\x12q\n" +

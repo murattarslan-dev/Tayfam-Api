@@ -257,6 +257,9 @@ type batch struct {
 	tayfa  id.ID
 	actor  id.ID
 	events []queued
+	// now: the creating transaction's clock, for the day of the now
+	// notification limit (createIn sets it).
+	now time.Time
 }
 
 type queued struct {
@@ -322,6 +325,15 @@ func notifyBatch(ctx context.Context, q *store.Queries, b *batch) error {
 		)
 		switch e.typ {
 		case EventCreated:
+			if now, _ := e.payload["starts_now"].(bool); now {
+				// A now event tells the members instead, within the tayfa's
+				// daily limit (ADR-0038 §4); an instant tayfa has no other
+				// member, its organizer's friends are told by package
+				// instant.
+				req.Type = notify.TypeNowStarted
+				to, err = notify.NowMembers(ctx, q, b.tayfa, b.actor, b.now)
+				break
+			}
 			req.Type = notify.TypeEventCreated
 			to, err = notify.Members(ctx, q, b.tayfa, b.actor)
 		case EventUpdated:
@@ -596,8 +608,9 @@ func createIn(ctx context.Context, q *store.Queries, c caller, b *batch, p Plan)
 	meta := map[string]any{"type": p.in.Type}
 	payload := map[string]any{"event_id": eventID.String(), "type": p.in.Type}
 	if p.now {
-		// #265 sends the now notifications from this mark.
+		// notifyBatch sends the now notification from this mark.
 		meta["starts_now"], payload["starts_now"] = true, true
+		b.now = c.now
 	}
 	if err := audit(ctx, q, c, EventCreated, eventID, meta); err != nil {
 		return id.ID{}, id.ID{}, err

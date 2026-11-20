@@ -5,7 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/availability"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/localday"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/report"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
@@ -100,7 +104,12 @@ func (s *Service) ExpireRecords(ctx context.Context) (int, error) {
 	if err != nil {
 		return reports + audits + int(nf) + int(ni) + int(na) + nd, fmt.Errorf("QR token saklama: %w", err) //nolint:gosec // row counts
 	}
-	return reports + audits + int(nf) + int(ni) + int(na) + nd + int(nq), nil //nolint:gosec // row counts
+	// Now notification counters live two days (issue #265, ADR-0038 §5).
+	nn, err := q.DeleteOldNowCounters(ctx, pgtype.Date{Time: localday.Today(s.now().Add(-notify.NowCounterRetention)), Valid: true})
+	if err != nil {
+		return reports + audits + int(nf) + int(ni) + int(na) + nd + int(nq), fmt.Errorf("şimdi sayacı saklama: %w", err) //nolint:gosec // row counts
+	}
+	return reports + audits + int(nf) + int(ni) + int(na) + nd + int(nq) + int(nn), nil //nolint:gosec // row counts
 }
 
 // JoinQRRetention is how long the hash of a join QR token is kept.

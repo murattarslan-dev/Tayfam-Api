@@ -743,3 +743,60 @@ func TestFIDRemovedWithSession(t *testing.T) {
 		t.Fatalf("hesap silmede kaldı: %+v", got)
 	}
 }
+
+// A now notice (issue #265; ADR-0038 §4) is pushed with its translation
+// keys and IDs only, and passes the tayfa's preference and then the
+// tayfa's own "Şimdi bildirimleri".
+func TestNowStartedPush(t *testing.T) {
+	for name, tc := range map[string]struct {
+		tayfa, now string // "": no preference
+		want       bool
+	}{
+		"tercih yok":             {"", "", true},
+		"tayfa none":             {"none", "", false},
+		"tayfa mentions":         {"mentions", "", false},
+		"şimdi none":             {"", "none", false},
+		"tayfa all, şimdi none":  {"all", "none", false},
+		"başka tayfanın tercihi": {"", "other", true},
+		"tayfa none, şimdi all":  {"none", "all", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := setup(t, true)
+			u, org, ev := id.New(), id.New(), id.New()
+			must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:u", push.TokenTypeRegistration))
+			set := func(scope, level string, tayfa id.ID) {
+				_, err := e.pool.Exec(ctx, `INSERT INTO notification_preferences (user_id, scope_type, scope_id, level) VALUES ($1, $2, $3, $4)`,
+					u.PG(), scope, tayfa.PG(), level)
+				must(t, err)
+			}
+			if tc.tayfa != "" {
+				set("tayfa", tc.tayfa, e.tayfa)
+			}
+			switch tc.now {
+			case "":
+			case "other":
+				set("tayfa_now", "none", id.New())
+			default:
+				set("tayfa_now", tc.now, e.tayfa)
+			}
+			e.notify(t, notification.Request{Type: notification.TypeNowStarted, Tayfa: e.tayfa, Actor: org, TargetType: notification.TargetEvent, Target: ev, Recipients: []id.ID{u}})
+			e.drain(t)
+			sent := e.fcm.Sent()
+			if got := len(sent) == 1; got != tc.want {
+				t.Fatalf("push gitti mi = %v, beklenen %v", got, tc.want)
+			}
+			if !tc.want {
+				return
+			}
+			data := sent[0]["data"].(map[string]any)
+			if data["type"] != "now_started" || data["target_type"] != "event" || data["target_id"] != ev.String() ||
+				data["tayfa_id"] != e.tayfa.String() || len(data) != 5 {
+				t.Fatalf("data = %v", data)
+			}
+			n := sent[0]["android"].(map[string]any)["notification"].(map[string]any)
+			if n["title_loc_key"] != "push_now_started_title" || n["body_loc_key"] != "push_now_started_body" || n["title_loc_args"] != nil || n["body_loc_args"] != nil {
+				t.Fatalf("android bildirimi = %v", n)
+			}
+		})
+	}
+}

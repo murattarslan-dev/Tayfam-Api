@@ -82,6 +82,12 @@ const (
 	// tayfa badge goes to the tayfa's admins and moderators with the tayfa
 	// as target.
 	TypeBadgeEarned = "badge_earned"
+	// TypeNowStarted: a now event (the target) started (issue #265;
+	// ADR-0038 §4); the actor is its organizer. A tayfa's now event goes to
+	// its members (NowMembers), an instant one to the friends the
+	// organizer chose (NowFriends), who are invited. Never a title, type,
+	// place or name.
+	TypeNowStarted = "now_started"
 )
 
 // Target types: what the client opens (and reads from core).

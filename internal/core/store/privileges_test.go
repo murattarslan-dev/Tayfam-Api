@@ -29,7 +29,7 @@ var wantAppPrivileges = map[string]string{
 	// a suggestion only gets its dismissal and withdrawal times.
 	"friend_scores":           "DELETE,INSERT,SELECT",
 	"friend_suggestions":      "DELETE,INSERT,SELECT,UPDATE(dismissed_at,withdrawn_at)",
-	"social_settings":         "DELETE,INSERT,SELECT,UPDATE(discover_visible_to_friends,hide_from_suggestions,profiling_enabled,updated_at)",
+	"social_settings":         "DELETE,INSERT,SELECT,UPDATE(discover_visible_to_friends,hide_from_suggestions,now_from_friends,profiling_enabled,updated_at)",
 	"friend_request_outcomes": "DELETE,INSERT,SELECT,UPDATE(outcome,resolved_at)",
 	// Issue #210, ADR-0033: an application is never deleted (it goes with
 	// the tayfa); feedback carries no text; a safety contact row never
@@ -160,6 +160,9 @@ var wantAppPrivileges = map[string]string{
 	// counter only grows.
 	"event_join_qr_tokens": "DELETE,INSERT,SELECT",
 	"event_join_qr_counts": "INSERT,SELECT,UPDATE(joins)",
+	// Issue #265, ADR-0038 §4–§5: a now notification counter only grows;
+	// it is deleted after two days or with its user's account.
+	"now_notification_counters": "DELETE,INSERT,SELECT,UPDATE(sent)",
 }
 
 func TestAppRolePrivileges(t *testing.T) {
