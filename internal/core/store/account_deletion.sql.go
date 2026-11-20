@@ -207,6 +207,17 @@ func (q *Queries) ClearUserDrawEntries(ctx context.Context, userID pgtype.UUID) 
 	return err
 }
 
+const clearUserScorePlayers = `-- name: ClearUserScorePlayers :exec
+UPDATE event_score_players SET user_id = NULL WHERE user_id = $1
+`
+
+// Yazbozdaki yeri ve skorları kalır, kişi boşalır: masada "Silinmiş
+// kullanıcı" olarak görünür (issue #250; ADR-0025 §11).
+func (q *Queries) ClearUserScorePlayers(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearUserScorePlayers, userID)
+	return err
+}
+
 const clearVocabularyCreator = `-- name: ClearVocabularyCreator :exec
 UPDATE tayfa_vocabulary SET created_by = NULL WHERE created_by = $1
 `

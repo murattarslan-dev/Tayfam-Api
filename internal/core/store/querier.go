@@ -20,6 +20,8 @@ type Querier interface {
 	AddAnswerVote(ctx context.Context, arg AddAnswerVoteParams) (int64, error)
 	AddDrawEntry(ctx context.Context, arg AddDrawEntryParams) error
 	AddQuestionTag(ctx context.Context, arg AddQuestionTagParams) error
+	AddScore(ctx context.Context, arg AddScoreParams) error
+	AddScorePlayer(ctx context.Context, arg AddScorePlayerParams) error
 	// İlgi alanı katalog anahtarıdır (catalog_interests, ADR-0025 §2).
 	AddTayfaInterest(ctx context.Context, arg AddTayfaInterestParams) error
 	AddTeamMember(ctx context.Context, arg AddTeamMemberParams) error
@@ -162,6 +164,9 @@ type Querier interface {
 	// Kuradaki yeri kişinin katılımıdır (issue #249). Kura sonucu sabittir:
 	// yer silinmez, boşalır; sıra ve diğer yerler değişmez.
 	ClearUserDrawEntries(ctx context.Context, userID pgtype.UUID) error
+	// Yazbozdaki yeri ve skorları kalır, kişi boşalır: masada "Silinmiş
+	// kullanıcı" olarak görünür (issue #250; ADR-0025 §11).
+	ClearUserScorePlayers(ctx context.Context, userID pgtype.UUID) error
 	// Tayfa sözlüğüne eklediği değerler tayfanın ortak verisidir; kalır, ekleyen
 	// boşalır (issue #244; ADR-0037 §4).
 	ClearVocabularyCreator(ctx context.Context, userID pgtype.UUID) error
@@ -220,6 +225,8 @@ type Querier interface {
 	// Katılım
 	CountRsvpsForEvents(ctx context.Context, eventIds []pgtype.UUID) ([]CountRsvpsForEventsRow, error)
 	CountScheduleItems(ctx context.Context, arg CountScheduleItemsParams) (int64, error)
+	CountScoreTables(ctx context.Context, arg CountScoreTablesParams) (int64, error)
+	CountTableScores(ctx context.Context, arg CountTableScoresParams) (int64, error)
 	// Etiketler.
 	CountTags(ctx context.Context, tayfaID pgtype.UUID) (int32, error)
 	// Kullanıcı başına günlük tayfa açma sınırı. Silinen tayfalar da sayılır;
@@ -289,6 +296,7 @@ type Querier interface {
 	// (00013_dm_reports.sql).
 	CreateReport(ctx context.Context, arg CreateReportParams) (pgtype.UUID, error)
 	CreateScheduleItem(ctx context.Context, arg CreateScheduleItemParams) error
+	CreateScoreTable(ctx context.Context, arg CreateScoreTableParams) error
 	// Üretilen örnek. Aynı seride aynı başlangıç zamanı zaten varsa hiçbir şey
 	// yazılmaz (events_series_starts_at_key); iki pod aynı örneği üretemez.
 	CreateSeriesEvent(ctx context.Context, arg CreateSeriesEventParams) (int64, error)
@@ -359,6 +367,10 @@ type Querier interface {
 	DeleteRollCallPlan(ctx context.Context, arg DeleteRollCallPlanParams) (int64, error)
 	DeleteSafetyContact(ctx context.Context, arg DeleteSafetyContactParams) error
 	DeleteScheduleItem(ctx context.Context, arg DeleteScheduleItemParams) (int64, error)
+	DeleteScorePlayers(ctx context.Context, arg DeleteScorePlayersParams) error
+	// Düzeltme eli siler ve yeniden yazar.
+	DeleteScoreRound(ctx context.Context, arg DeleteScoreRoundParams) (int64, error)
+	DeleteScoreTable(ctx context.Context, arg DeleteScoreTableParams) (int64, error)
 	// Etiket silinince bağları CASCADE ile gider; sorular kalır.
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
 	DeleteTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) error
@@ -518,6 +530,10 @@ type Querier interface {
 	ExportQuestions(ctx context.Context, arg ExportQuestionsParams) ([]ExportQuestionsRow, error)
 	// Şikâyeti işleyen, öncelik ve platform alanları girmez (ADR-0021 madde 7).
 	ExportReports(ctx context.Context, arg ExportReportsParams) ([]ExportReportsRow, error)
+	// Yazbozdaki yerleriniz ve skorlarınız (`scoreboard` bileşeni, issue #250):
+	// hangi etkinliğin hangi masasında oynadınız, el el skorunuz. Masadaki
+	// diğer kişiler ve skorları dışa aktarılmaz.
+	ExportScores(ctx context.Context, arg ExportScoresParams) ([]ExportScoresRow, error)
 	// Tek kayıt: üç ayar (satır yoksa varsayılanlar) ve kişi hakkında puan
 	// tutulan kişi sayısı. Puan değerleri ve kiminle olduğu girmez (ADR-0030
 	// §9). Ayar satırı da puanı da yoksa tutulan bir şey yoktur, kayıt da yok.
@@ -721,6 +737,9 @@ type Querier interface {
 	// Güvenlik kişisi
 	GetSafetyContact(ctx context.Context, arg GetSafetyContactParams) (GetSafetyContactRow, error)
 	GetSafetyContactForUpdate(ctx context.Context, arg GetSafetyContactForUpdateParams) (GetSafetyContactForUpdateRow, error)
+	// Masayı kilitleyerek okur: aynı masaya eşzamanlı iki el aynı numarayı
+	// alamaz.
+	GetScoreTableForUpdate(ctx context.Context, arg GetScoreTableForUpdateParams) (EventScoreTable, error)
 	// ---------------------------------------------------------------------------
 	// Ayarlar
 	GetSocialSettings(ctx context.Context, userID pgtype.UUID) (GetSocialSettingsRow, error)
@@ -779,6 +798,7 @@ type Querier interface {
 	IsEventReferee(ctx context.Context, arg IsEventRefereeParams) (bool, error)
 	// Kapalı ya da kaydı olmayan modül kapalı sayılır (varsayılan "hayır").
 	IsTayfaModuleEnabled(ctx context.Context, arg IsTayfaModuleEnabledParams) (bool, error)
+	LastScoreRound(ctx context.Context, arg LastScoreRoundParams) (int32, error)
 	// Aktif türlerin güncel tanımları.
 	ListActiveCatalogEventTypes(ctx context.Context) ([]ListActiveCatalogEventTypesRow, error)
 	// Kişinin katılım geçmişi, yeniden eskiye; started_at @not_after'dan yeni
@@ -1013,6 +1033,18 @@ type Querier interface {
 	// etkinliğin kimliği ve bileşenin anahtarıyla çalışır (IDOR). Yetki app
 	// katmanındadır (internal/core/app/component/schedule).
 	ListScheduleItems(ctx context.Context, arg ListScheduleItemsParams) ([]ListScheduleItemsRow, error)
+	// Bileşenin bütün masalarındaki yerler.
+	ListScorePlayers(ctx context.Context, arg ListScorePlayersParams) ([]ListScorePlayersRow, error)
+	// Yazboz bileşeni (`scoreboard`; issue #250; ADR-0025 §4–§6, ADR-0037 §5).
+	// Etkinlik her zaman önce tayfa kapsamında yüklenir ve bileşen etkinliğin
+	// tür sürümünde çözülür (internal/core/app/component: View / Change);
+	// buradaki sorgular o etkinliğin kimliği ve bileşenin anahtarıyla çalışır
+	// (IDOR). Yetki app katmanındadır (internal/core/app/component/scoreboard).
+	// Ön ayarlar; emekliye ayrılanlar dahil (eski masalar adlarını gösterir).
+	ListScorePresets(ctx context.Context, keys []string) ([]ListScorePresetsRow, error)
+	ListScoreTables(ctx context.Context, arg ListScoreTablesParams) ([]EventScoreTable, error)
+	// Bileşenin bütün masalarındaki skorlar.
+	ListScores(ctx context.Context, arg ListScoresParams) ([]ListScoresRow, error)
 	// Serinin henüz başlamamış, iptal edilmemiş ve tek başına düzenlenmemiş
 	// örnekleri; seri güncellemesi bunları değiştirir.
 	ListSeriesUpcomingEvents(ctx context.Context, arg ListSeriesUpcomingEventsParams) ([]pgtype.UUID, error)
@@ -1304,6 +1336,7 @@ type Querier interface {
 	UpdateEvent(ctx context.Context, arg UpdateEventParams) (int64, error)
 	UpdateQuestionContent(ctx context.Context, arg UpdateQuestionContentParams) (int64, error)
 	UpdateScheduleItem(ctx context.Context, arg UpdateScheduleItemParams) (int64, error)
+	UpdateScoreTable(ctx context.Context, arg UpdateScoreTableParams) error
 	// Seri güncellemesi: UpdateEvent gibi, ama series_override'a dokunmaz.
 	UpdateSeriesEvent(ctx context.Context, arg UpdateSeriesEventParams) (int64, error)
 	UpdateTayfaSettings(ctx context.Context, arg UpdateTayfaSettingsParams) (int64, error)
