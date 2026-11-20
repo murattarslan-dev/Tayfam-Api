@@ -29,15 +29,17 @@ import (
 var ctx = context.Background()
 
 // Test types. talkType has a programme of at most three items (Notion
-// Faz 3: söyleşi, program); tourType one without max_items and an optional
-// programme that is off by default, and a second version without them.
+// Faz 3: söyleşi, program); tourType one without max_items under its own
+// key, and a second version without it; optType an optional programme
+// that is off by default (a type has at most one programme).
 const (
 	talkType = "test_talk"
 	talkV1   = `{"components":[{"kind":"schedule","params":{"max_items":3}}]}`
 	tourType = "test_tour"
-	tourV1   = `{"components":[{"kind":"schedule","key":"plan"},
-		{"kind":"schedule","key":"extra","optional":{"default":false}}]}`
-	tourV2 = `{"components":[{"kind":"draw"}]}`
+	tourV1   = `{"components":[{"kind":"schedule","key":"plan"}]}`
+	tourV2   = `{"components":[{"kind":"draw"}]}`
+	optType  = "test_opt"
+	optV1    = `{"components":[{"kind":"schedule","optional":{"default":false}}]}`
 )
 
 type clock struct {
@@ -108,7 +110,7 @@ func setup(t *testing.T) *env {
 	tayfas, err := tayfa.New(tayfa.Config{Pool: d.App, Log: log})
 	must(t, err)
 	e := &env{schedules: schedule.New(fw), events: events, tayfas: tayfas, pool: d.App, admin: d.Admin, clock: c}
-	for key, def := range map[string]string{talkType: talkV1, tourType: tourV1} {
+	for key, def := range map[string]string{talkType: talkV1, tourType: tourV1, optType: optV1} {
 		e.addType(t, key, def)
 	}
 	return e
@@ -362,7 +364,8 @@ func TestScheduleOutsideTypeVersion(t *testing.T) {
 	tf, admin := e.newTayfa(t)
 	general := e.newEvent(t, tf, admin, event.TypeGeneral)
 	tour := e.newEvent(t, tf, admin, tourType)
-	extra := e.newEvent(t, tf, admin, tourType, component.Selection{Key: "extra", Enabled: on(true)})
+	off := e.newEvent(t, tf, admin, optType)
+	extra := e.newEvent(t, tf, admin, optType, component.Selection{Key: "schedule", Enabled: on(true)})
 	in := schedule.Input{StartsAt: tour.StartsAt, Title: "Varış"}
 
 	for name, r := range map[string]component.Ref{
@@ -378,11 +381,11 @@ func TestScheduleOutsideTypeVersion(t *testing.T) {
 		_, err = e.schedules.Remove(ctx, r, id.New())
 		wantErr(t, name+" silme", err, apperr.ErrComponentNotFound)
 	}
-	_, err := e.schedules.Get(ctx, ref(admin, tf, tour.ID, "extra"))
+	_, err := e.schedules.Get(ctx, ref(admin, tf, off.ID, "schedule"))
 	wantErr(t, "kapalı bileşen", err, apperr.ErrComponentDisabled)
-	_, err = e.schedules.Add(ctx, ref(admin, tf, tour.ID, "extra"), in)
+	_, err = e.schedules.Add(ctx, ref(admin, tf, off.ID, "schedule"), in)
 	wantErr(t, "kapalı bileşene yazma", err, apperr.ErrComponentDisabled)
-	if _, err := e.schedules.Add(ctx, ref(admin, tf, extra.ID, "extra"), schedule.Input{StartsAt: extra.StartsAt, Title: "Varış"}); err != nil {
+	if _, err := e.schedules.Add(ctx, ref(admin, tf, extra.ID, "schedule"), schedule.Input{StartsAt: extra.StartsAt, Title: "Varış"}); err != nil {
 		t.Fatalf("açılan bileşen: %v", err)
 	}
 
@@ -408,7 +411,7 @@ func TestScheduleOutsideTypeVersion(t *testing.T) {
 	}{
 		"bileşensiz tür": {general.ID, "schedule"},
 		"yeni sürüm":     {newer.ID, "plan"},
-		"kapalı bileşen": {tour.ID, "extra"},
+		"kapalı bileşen": {off.ID, "schedule"},
 	} {
 		_, err := e.pool.Exec(ctx, `INSERT INTO event_schedule_items (id, event_id, component_key, starts_at, title)
 			VALUES (gen_random_uuid(), $1, $2, now(), 'Varış')`, tc.ev.PG(), tc.key)
@@ -533,27 +536,27 @@ func TestSchedulePermissions(t *testing.T) {
 func TestScheduleCopyForSeries(t *testing.T) {
 	e := setup(t)
 	tf, admin := e.newTayfa(t)
-	tmpl := e.newEvent(t, tf, admin, tourType, component.Selection{Key: "extra", Enabled: on(true)})
+	const key = "schedule"
+	sel := component.Selection{Key: key, Enabled: on(true)}
+	tmpl := e.newEvent(t, tf, admin, optType, sel)
 	for _, in := range []schedule.Input{
 		{StartsAt: tmpl.StartsAt, EndsAt: tmpl.StartsAt.Add(time.Hour), Title: "Varış", Note: "Kapıda"},
 		{StartsAt: tmpl.StartsAt.Add(2 * time.Hour), Title: "Dönüş"},
 	} {
-		_, err := e.schedules.Add(ctx, ref(admin, tf, tmpl.ID, "plan"), in)
+		_, err := e.schedules.Add(ctx, ref(admin, tf, tmpl.ID, key), in)
 		must(t, err)
 	}
-	_, err := e.schedules.Add(ctx, ref(admin, tf, tmpl.ID, "extra"), schedule.Input{StartsAt: tmpl.StartsAt, Title: "Ek"})
-	must(t, err)
-	want, err := e.schedules.Get(ctx, ref(admin, tf, tmpl.ID, "plan"))
+	want, err := e.schedules.Get(ctx, ref(admin, tf, tmpl.ID, key))
 	must(t, err)
 	q := store.New(e.pool)
 
 	// A week later, with the optional programme switched on as the
 	// template.
 	e.clock.set(e.clock.now().Add(7 * 24 * time.Hour))
-	occ := e.newEvent(t, tf, admin, tourType, component.Selection{Key: "extra", Enabled: on(true)})
+	occ := e.newEvent(t, tf, admin, optType, sel)
 	shift := occ.StartsAt.Sub(tmpl.StartsAt)
 	must(t, q.CopyScheduleItems(ctx, store.CopyScheduleItemsParams{ToEventID: occ.ID.PG(), FromEventID: tmpl.ID.PG()}))
-	got, err := e.schedules.Get(ctx, ref(admin, tf, occ.ID, "plan"))
+	got, err := e.schedules.Get(ctx, ref(admin, tf, occ.ID, key))
 	must(t, err)
 	if len(got.Items) != len(want.Items) {
 		t.Fatalf("kopya: %+v", got.Items)
@@ -565,11 +568,12 @@ func TestScheduleCopyForSeries(t *testing.T) {
 			t.Fatalf("kopya madde %d: %+v, şablon %+v", i, it, w)
 		}
 	}
-	if extra, err := e.schedules.Get(ctx, ref(admin, tf, occ.ID, "extra")); err != nil || titles(extra) != "Ek" {
-		t.Fatalf("ek program: %+v %v", extra, err)
+	// The template keeps its own items.
+	if again, err := e.schedules.Get(ctx, ref(admin, tf, tmpl.ID, key)); err != nil || titles(again) != titles(want) {
+		t.Fatalf("şablon: %+v %v", again, err)
 	}
 	// Without the selection the trigger refuses the copy.
-	off := e.newEvent(t, tf, admin, tourType)
+	off := e.newEvent(t, tf, admin, optType)
 	if err := q.CopyScheduleItems(ctx, store.CopyScheduleItemsParams{ToEventID: off.ID.PG(), FromEventID: tmpl.ID.PG()}); constraintOf(err) != "event_component_guard" {
 		t.Fatalf("kapalı bileşene kopya: %v", err)
 	}
