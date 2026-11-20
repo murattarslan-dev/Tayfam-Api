@@ -387,4 +387,26 @@ enum ErrorReason {
   // FAILED_PRECONDITION. Fewer than two to draw: participants, or teams
   // with people when the type forms teams.
   ERROR_REASON_DRAW_TOO_FEW = 2491;
+
+  // Scoreboard component (ScoreboardComponentService,
+  // component_scoreboard.proto; issue #250: 2500–2509).
+
+  // FAILED_PRECONDITION. The preset is not one the component offers or is
+  // retired; or the component offers presets and the table names none, or
+  // offers none and the table names one.
+  ERROR_REASON_SCORE_PRESET_UNAVAILABLE = 2500;
+  // NOT_FOUND. No such table in the component.
+  ERROR_REASON_SCORE_TABLE_NOT_FOUND = 2501;
+  // FAILED_PRECONDITION. The table is finished; a manager reopens it
+  // before a new round is entered.
+  ERROR_REASON_SCORE_TABLE_FINISHED = 2502;
+  // FAILED_PRECONDITION. The table has scores; its players no longer
+  // change.
+  ERROR_REASON_SCORE_TABLE_STARTED = 2503;
+  // FAILED_PRECONDITION. A player is not a participant of the event (an
+  // active member who answered "going" or whose attendance was verified),
+  // or a team is not a team of the named teams component.
+  ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT = 2504;
+  // FAILED_PRECONDITION. Scores are entered once the event has started.
+  ERROR_REASON_SCORE_NOT_STARTED = 2505;
 }

@@ -158,6 +158,11 @@ DELETE FROM event_team_members WHERE user_id = @user_id;
 -- name: ClearUserDrawEntries :exec
 UPDATE event_draw_entries SET user_id = NULL WHERE user_id = @user_id;
 
+-- Yazbozdaki yeri ve skorları kalır, kişi boşalır: masada "Silinmiş
+-- kullanıcı" olarak görünür (issue #250; ADR-0025 §11).
+-- name: ClearUserScorePlayers :exec
+UPDATE event_score_players SET user_id = NULL WHERE user_id = @user_id;
+
 -- Tayfa sözlüğüne eklediği değerler tayfanın ortak verisidir; kalır, ekleyen
 -- boşalır (issue #244; ADR-0037 §4).
 -- name: ClearVocabularyCreator :exec

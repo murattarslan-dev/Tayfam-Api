@@ -54,6 +54,7 @@ func componentRegistrars() []componentRegistrar {
 		registerDrawComponent,
 
 		// scoreboard (#250)
+		registerScoreboardComponent,
 
 		// bracket (#251)
 

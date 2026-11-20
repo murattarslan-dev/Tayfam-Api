@@ -199,6 +199,7 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"event_measurements":             `SELECT count(*) FROM event_measurements WHERE $1 IN (user_id, entered_by)`,
 		"event_team_members.user_id":     `SELECT count(*) FROM event_team_members WHERE user_id = $1`,
 		"event_draw_entries.user_id":     `SELECT count(*) FROM event_draw_entries WHERE user_id = $1`,
+		"event_score_players.user_id":    `SELECT count(*) FROM event_score_players WHERE user_id = $1`,
 		"event_photos":                   `SELECT count(*) FROM event_photos WHERE $1 IN (uploader_id, deleted_by)`,
 		"user_activity_records.user_id":  `SELECT count(*) FROM user_activity_records WHERE user_id = $1`,
 		"questions":                      `SELECT count(*) FROM questions WHERE $1 IN (author_id, deleted_by)`,
@@ -557,6 +558,15 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 	e.seed(t, `INSERT INTO event_draws (event_id, component_key, subject, drawn_at) VALUES ($1, 'draw', 'participants', now())`, hike.PG())
 	e.seed(t, `INSERT INTO event_draw_entries (id, event_id, component_key, position, user_id) VALUES ($1, $3, 'draw', 1, $4), ($2, $3, 'draw', 2, $5)`,
 		id.New().PG(), id.New().PG(), hike.PG(), u.PG(), a.PG())
+	// Scoreboard (issue #250): u's seat and scores stay as a deleted user;
+	// a's seat is untouched.
+	scoreTable, uSeat := id.New(), id.New()
+	e.seed(t, `INSERT INTO event_score_tables (id, event_id, component_key, label, side, rounds, winner, result) VALUES ($1, $2, 'scoreboard', 'Masa 1', 'player', 'round', 'high', 'points')`,
+		scoreTable.PG(), hike.PG())
+	e.seed(t, `INSERT INTO event_score_players (id, table_id, event_id, component_key, position, user_id) VALUES ($1, $3, $4, 'scoreboard', 1, $5), ($2, $3, $4, 'scoreboard', 2, $6)`,
+		uSeat.PG(), id.New().PG(), scoreTable.PG(), hike.PG(), u.PG(), a.PG())
+	e.seed(t, `INSERT INTO event_scores (id, table_id, event_id, component_key, player_id, round, points) VALUES ($1, $2, $3, 'scoreboard', $4, 1, 12)`,
+		id.New().PG(), scoreTable.PG(), hike.PG(), uSeat.PG())
 	// Album photos (issue #206): u's own go; a's photo that u removed stays
 	// without its remover.
 	e.seed(t, `INSERT INTO event_photos (id, event_id, uploader_id, upload_id, caption, client_request_id) VALUES ($1, $2, $3, $4, 'Zirve', $5)`,
@@ -597,6 +607,12 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 	}
 	if n := e.count(t, `SELECT count(*) FROM event_draw_entries WHERE event_id = $1 AND ((position = 1 AND user_id IS NULL) OR (position = 2 AND user_id = $2))`, hike.PG(), a.PG()); n != 2 {
 		t.Errorf("kuradaki yer boşalmadı ya da kura değişti: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_score_players p JOIN event_scores s ON s.player_id = p.id WHERE p.id = $1 AND p.user_id IS NULL AND s.points = 12`, uSeat.PG()); n != 1 {
+		t.Errorf("yazbozdaki yer ve skor silinmiş kullanıcı olarak kalmadı: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_score_players WHERE table_id = $1 AND user_id = $2`, scoreTable.PG(), a.PG()); n != 1 {
+		t.Errorf("başkasının yazbozdaki yeri değişti: %d", n)
 	}
 	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'rsvp.promoted' AND actor_id IS NULL AND tayfa_id = $1 AND subject_id = $2 AND payload->>'user_id' = $3`,
 		tf.PG(), full.PG(), w1.String()); n != 1 {

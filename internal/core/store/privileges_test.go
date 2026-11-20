@@ -97,6 +97,13 @@ var wantAppPrivileges = map[string]string{
 	// empties a person's place.
 	"event_draws":        "INSERT,SELECT",
 	"event_draw_entries": "INSERT,SELECT,UPDATE(user_id)",
+	// Issue #250: score presets are catalog data the service only reads.
+	// A table, a seat or a score never moves to another event, component or
+	// table; account deletion empties a person's seat.
+	"catalog_score_presets": "SELECT",
+	"event_score_tables":    "DELETE,INSERT,SELECT,UPDATE(finished_at,label,status,updated_at)",
+	"event_score_players":   "DELETE,INSERT,SELECT,UPDATE(user_id)",
+	"event_scores":          "DELETE,INSERT,SELECT",
 	// Issue #241: an item never moves to another event or list, and its
 	// name and quantity do not change; only the assignee changes and
 	// account deletion clears the people on it.

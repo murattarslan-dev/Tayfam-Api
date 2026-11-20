@@ -148,6 +148,27 @@ var (
 	ErrDrawTooFew = errors.New("kura için katılımcı az")
 )
 
+// Scoreboard component errors (issue #250; ADR-0025 §4, §5, ADR-0037 §5).
+var (
+	// ErrScorePresetUnavailable: the preset is not one the component
+	// offers, is retired, or the component offers presets and none was
+	// named.
+	ErrScorePresetUnavailable = errors.New("ön ayar seçilemez")
+	// ErrScoreTableNotFound: no such table in the component.
+	ErrScoreTableNotFound = errors.New("masa bulunamadı")
+	// ErrScoreTableFinished: the table is finished; a manager reopens it
+	// before a new round.
+	ErrScoreTableFinished = errors.New("masa bitti")
+	// ErrScoreTableStarted: the table has scores; its players no longer
+	// change.
+	ErrScoreTableStarted = errors.New("masada skor var")
+	// ErrScorePlayerNotParticipant: a player is not a participant of the
+	// event, or a team is not one of the named teams component's teams.
+	ErrScorePlayerNotParticipant = errors.New("oyuncu katılımcı değil")
+	// ErrScoreNotStarted: scores are entered once the event has started.
+	ErrScoreNotStarted = errors.New("etkinlik başlamadan skor girilmez")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (
