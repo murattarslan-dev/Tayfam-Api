@@ -147,6 +147,12 @@ var wantAppPrivileges = map[string]string{
 	// mark and the soft delete are written. A vote is added or deleted.
 	"event_questions":      "DELETE,INSERT,SELECT,UPDATE(answered_at,answered_by,deleted_at,deleted_by)",
 	"event_question_votes": "DELETE,INSERT,SELECT",
+	// Issue #269: a daily item never moves to another tayfa and its
+	// request ID never changes; the text, place and pin are edited, the
+	// soft delete is written and undone, account deletion clears who added
+	// and deleted it. The rotation state only moves.
+	"tayfa_daily_items": "DELETE,INSERT,SELECT,UPDATE(attribution,body,created_by,deleted_at,deleted_by,pin_day,pin_month,pin_year,position,updated_at)",
+	"tayfa_daily_state": "INSERT,SELECT,UPDATE(next_position,shown_item_id,shown_on,updated_at)",
 	// Issue #241: an item never moves to another event or list, and its
 	// name and quantity do not change; only the assignee changes and
 	// account deletion clears the people on it.

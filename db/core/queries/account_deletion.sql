@@ -216,6 +216,13 @@ DELETE FROM user_stats WHERE user_id = @user_id;
 -- name: ClearVocabularyCreator :exec
 UPDATE tayfa_vocabulary SET created_by = NULL WHERE created_by = @user_id;
 
+-- Günün içeriği tayfanın havuzudur; içerik kalır, ekleyen ve silen boşalır
+-- (issue #269; ADR-0027 §5, duyurular gibi).
+-- name: ClearDailyItemUserFields :exec
+UPDATE tayfa_daily_items
+SET created_by = NULLIF(created_by, @user_id), deleted_by = NULLIF(deleted_by, @user_id)
+WHERE created_by = @user_id OR deleted_by = @user_id;
+
 -- Albüm fotoğrafları kişiseldir; kişiyle birlikte silinir, dosyaları
 -- silme kuyruğuna girer (issue #206).
 -- name: DeleteUserEventPhotos :exec

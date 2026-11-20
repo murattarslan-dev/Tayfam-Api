@@ -292,6 +292,10 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_JOIN_QR_LIMIT_REACHED, true
 	case errors.Is(err, apperr.ErrHomeWidgetNotFound):
 		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_HOME_WIDGET_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrDailyItemNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_DAILY_ITEM_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrDailyItemLimit):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DAILY_ITEM_LIMIT, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

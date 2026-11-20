@@ -162,6 +162,10 @@ enum ReportTargetType {
   // (ADR-0025 §5). The reporter's own question is ERROR_REASON_VALIDATION
   // (field target_id).
   REPORT_TARGET_TYPE_EVENT_QUESTION = 12;
+  // target_id is an item of the tayfa's daily content pool (issue #269;
+  // TayfaDailyService). Its subject is the member who added it. Reporting
+  // needs the daily module on.
+  REPORT_TARGET_TYPE_DAILY_ITEM = 13;
 }
 
 // ReportReason follows the community rules (Notion "Topluluk Kuralları").
