@@ -80,6 +80,8 @@ func componentRegistrars() []componentRegistrar {
 
 		// tayfa home widgets (#268)
 		registerTayfaHome,
+		// daily content (#269)
+		registerTayfaDaily,
 	}
 }
 

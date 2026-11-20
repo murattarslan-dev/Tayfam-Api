@@ -30,6 +30,7 @@ var pathParams = strings.NewReplacer(
 	"{match_id}", itemID, "{game}", "1",
 	"{guest_id}", itemID,
 	"{widget_key}", "stats",
+	"{daily_item_id}", itemID,
 )
 
 // TestRoutesMatchContract keeps the router and api/openapi/gateway.yaml in

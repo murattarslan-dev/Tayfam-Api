@@ -449,3 +449,16 @@ FROM user_availability a
 WHERE a.user_id = @user_id AND a.id > @after
 ORDER BY a.id
 LIMIT @n;
+
+-- Günün içeriği (issue #269; ADR-0027 §5): eklediğiniz içerikler, duyurular
+-- gibi. Sıra ve kimin sildiği yer almaz.
+-- name: ExportDailyItems :many
+SELECT d.id AS k, jsonb_build_object(
+  'id', d.id, 'tayfa_id', d.tayfa_id, 'body', d.body, 'attribution', d.attribution,
+  'pin_month', d.pin_month, 'pin_day', d.pin_day, 'pin_year', d.pin_year,
+  'created_at', d.created_at, 'updated_at', d.updated_at, 'deleted_at', d.deleted_at
+) AS data
+FROM tayfa_daily_items d
+WHERE d.created_by = @user_id AND d.id > @after
+ORDER BY d.id
+LIMIT @n;

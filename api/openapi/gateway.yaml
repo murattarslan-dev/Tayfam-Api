@@ -4672,6 +4672,199 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Günün içeriği (core TayfaDailyService, #269, ADR-0027 §5) ---
+  # Tayfanın kendi havuzu (söz, dize, bilgi notu); Tayfam havuza içerik
+  # koymaz. `daily` modülüdür (kapalıysa her uç `module-disabled`); ana
+  # sayfa bileşeni `daily` bu modülün vitrinidir ve kartını `…/daily/today`
+  # ile çizer. Havuzu yönetici ve moderatör yönetir (ekler, düzenler,
+  # siler, geri alır, sıralar, bir güne sabitler); her etkin üye okur.
+  # Metinler içeriktir, loglanmaz. Etkin üye olmayan `tayfa-not-found`.
+
+  /v1/tayfas/{tayfa_id}/daily/today:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: getDailyToday
+      summary: Günün içeriği
+      description: |
+        Gün Europe/Istanbul gününe göredir ve seçim sunucudadır; o gün her
+        üye aynı içeriği görür. O güne (o yıla ya da her yıla) sabitlenmiş
+        içerik varsa havuz sırasında önce gelen gösterilir (`pinned`
+        true). Yoksa sabitlenmemiş içerikler arasından sıradaki: sıra kartın
+        açıldığı her gün bir adım ilerler, sona gelince başa döner;
+        kimsenin açmadığı gün ilerlemez. Gösterilecek içerik yoksa `item`
+        yoktur. Her etkin üyeye açıktır.
+      responses:
+        "200":
+          description: Günün içeriği
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DailyToday" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/daily/items:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listDailyItems
+      summary: Havuzun tamamı, sırasıyla
+      description: |
+        En fazla 1000 içerik, havuz sırasıyla. `deleted=true` yalnızca
+        yönetici ve moderatöre: son 30 günde silinenler (geri almak için),
+        son silinen önce; başkasına `permission-denied`.
+      parameters:
+        - name: deleted
+          in: query
+          required: false
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Havuz
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DailyItemList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createDailyItem
+      summary: Havuza içerik ekler (yönetici, moderatör)
+      description: |
+        Havuzun sonuna eklenir. Aynı güne ikinci sabitleme reddedilmez:
+        yanıtta `pin_conflict` true döner, istemci uyarır. Aynı
+        `client_request_id` ile tekrar gönderim aynı içeriği döndürür.
+        Havuz doluysa (1000) `daily-item-limit`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DailyItemCreateRequest" }
+      responses:
+        "201":
+          description: Eklenen içerik
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DailyItemSaved" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/daily/items/{daily_item_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/DailyItemID"
+    put:
+      operationId: updateDailyItem
+      summary: İçeriği düzenler (yönetici, moderatör)
+      description: |
+        Metin, söyleyen ve sabitleme birlikte yazılır (kısmi güncelleme
+        yok; `pin` yoksa sabitleme kalkar). Havuzdaki yeri değişmez.
+        Havuzda olmayan içerik `daily-item-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DailyItemInput" }
+      responses:
+        "200":
+          description: Düzenlenen içerik
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DailyItemSaved" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteDailyItem
+      summary: İçeriği siler (yönetici, moderatör)
+      description: |
+        30 gün içinde geri alınabilir, sonra kalıcı silinir. Havuzda
+        olmayan içerik `daily-item-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Silindi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/daily/items/{daily_item_id}/restore:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/DailyItemID"
+    post:
+      operationId: restoreDailyItem
+      summary: Silinen içeriği geri alır (yönetici, moderatör)
+      description: |
+        Son 30 günde silinen içerik havuzun sonuna döner; silinmemiş
+        içerikte bir şey değişmez. Bilinmeyen ya da 30 günden önce silinen
+        içerik `daily-item-not-found`; havuz doluysa `daily-item-limit`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Geri alınan içerik
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DailyItemSaved" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/daily/order:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    put:
+      operationId: reorderDailyItems
+      summary: Havuzun sırasını değiştirir (yönetici, moderatör)
+      description: |
+        `item_ids` havuzdaki her içeriği tam bir kez, yeni sırasıyla içerir;
+        eksik, fazla, tekrarlanan ya da bilinmeyen kimlik `invalid-request`
+        (alan `item_ids`). Sıradaki dönüş aynı yer numarasından devam eder.
+        Cevap yeni sıradır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DailyOrderRequest" }
+      responses:
+        "200":
+          description: Yeni sıra
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DailyOrder" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /v1/tayfas/{tayfa_id}/event-series/{series_id}:
     parameters:
       - $ref: "#/components/parameters/TayfaID"
@@ -8244,6 +8437,12 @@ components:
       required: true
       description: Ana sayfa bileşeninin anahtarı (`stats`).
       schema: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+    DailyItemID:
+      name: daily_item_id
+      in: path
+      required: true
+      description: Günün içeriği havuzundaki içeriğin kimliği (`DailyItem.id`).
+      schema: { type: string, format: uuid }
     CatalogTypeVersion:
       name: version
       in: path
@@ -8411,6 +8610,9 @@ components:
         - now-broadcast-limit-reached
         # core: ana sayfa bileşenleri (#268, ADR-0027 §3–§4)
         - home-widget-not-found
+        # core: günün içeriği (#269, ADR-0027 §5)
+        - daily-item-not-found
+        - daily-item-limit
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -8692,7 +8894,8 @@ components:
       enum: [approval, open]
     Module:
       type: string
-      enum: [announcements, events, qa, polls]
+      description: "`daily` günün içeriğidir (#269)."
+      enum: [announcements, events, qa, polls, daily]
     Role:
       type: string
       enum: [member, moderator, admin]
@@ -8842,6 +9045,7 @@ components:
             events: { type: boolean }
             qa: { type: boolean }
             polls: { type: boolean }
+            daily: { type: boolean }
         status:
           type: string
           description: "`warned`: hareketsiz, 7 gün sonra arşivlenir. `archived`: salt okunur."
@@ -10533,7 +10737,7 @@ components:
         Ana sayfa bileşeni. `kind` istemciye bilgi içindir; anahtar
         listesi sunucunundur ve büyüyebilir (bugün `upcoming`,
         `announcements`, `polls`, `questions`, `stats`, `goal`,
-        `countdown`, `champions`, `log_summary`).
+        `countdown`, `champions`, `log_summary`, `daily`).
       properties:
         key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
         kind:
@@ -10666,6 +10870,98 @@ components:
         countdown: { $ref: "#/components/schemas/CountdownWidgetData" }
         champions: { $ref: "#/components/schemas/ChampionsWidgetData" }
         log_summary: { $ref: "#/components/schemas/LogSummaryWidgetData" }
+
+    DailyPin:
+      type: object
+      required: [month, day]
+      additionalProperties: false
+      description: |
+        Yılın bir gününe sabitleme. `year` yoksa her yıl tekrarlanır.
+        Yılsız 29 Şubat yalnızca artık yıllarda gösterilir; yıllı 29 Şubat
+        artık yıl ister.
+      properties:
+        month: { type: integer, format: int32, minimum: 1, maximum: 12 }
+        day: { type: integer, format: int32, minimum: 1, maximum: 31 }
+        year: { type: integer, format: int32, minimum: 2000, maximum: 2100 }
+    DailyItem:
+      type: object
+      required: [id, body, position, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        body:
+          type: string
+          description: |
+            1–500 karakter. Satırlar `\n` ile ayrılır (dizeler için; art
+            arda en fazla bir boş satır); başka denetim karakteri yoktur.
+        attribution:
+          type: string
+          description: Söyleyen ya da kaynak; tek satır, en fazla 120. Yoksa alan yoktur.
+        position: { type: integer, format: int32, description: "Havuzdaki yeri, küçükten büyüğe (boşluk olabilir)." }
+        pin: { $ref: "#/components/schemas/DailyPin" }
+        created_by_user_id:
+          type: string
+          format: uuid
+          description: Ekleyen; hesabı silindiyse yoktur ("Silinmiş kullanıcı").
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        deleted_at:
+          type: string
+          format: date-time
+          description: Yalnızca silinenler listesinde (`deleted=true`).
+    DailyToday:
+      type: object
+      required: [pinned, date]
+      properties:
+        item: { $ref: "#/components/schemas/DailyItem" }
+        pinned: { type: boolean, description: "İçerik bugüne sabitlenmiş." }
+        date: { type: string, format: date, description: "Bugün, Europe/Istanbul." }
+    DailyItemList:
+      type: object
+      required: [items, caller_can_manage]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/DailyItem" }
+        caller_can_manage: { type: boolean, description: "Çağıran havuzu şimdi yönetebilir mi." }
+    DailyItemInput:
+      type: object
+      required: [body]
+      additionalProperties: false
+      properties:
+        body: { type: string, minLength: 1, maxLength: 4096 }
+        attribution: { type: string, maxLength: 4096, description: "Boş: yok." }
+        pin: { $ref: "#/components/schemas/DailyPin" }
+    DailyItemCreateRequest:
+      type: object
+      required: [body, client_request_id]
+      additionalProperties: false
+      properties:
+        body: { type: string, minLength: 1, maxLength: 4096 }
+        attribution: { type: string, maxLength: 4096, description: "Boş: yok." }
+        pin: { $ref: "#/components/schemas/DailyPin" }
+        client_request_id: { type: string, format: uuid }
+    DailyItemSaved:
+      type: object
+      required: [item, pin_conflict]
+      properties:
+        item: { $ref: "#/components/schemas/DailyItem" }
+        pin_conflict: { type: boolean, description: "Aynı güne sabitlenmiş başka içerik var; istemci uyarır." }
+    DailyOrderRequest:
+      type: object
+      required: [item_ids]
+      additionalProperties: false
+      properties:
+        item_ids:
+          type: array
+          maxItems: 1000
+          items: { type: string, format: uuid }
+    DailyOrder:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/DailyItem" }
 
     EventTypeKey:
       type: string
@@ -13168,8 +13464,9 @@ components:
         kaydıdır (#243; eskiden `fishing_catch`). `event_question` soru
         toplama bileşenindeki bir sorudur (#256); anonim sorunun yazarı
         tayfa kuyruğunda yer almaz (`subject_user_id` yoktur), yalnızca
-        platform yönetimine görünür.
-      enum: [user, tayfa, announcement, event, question, answer, poll, log_entry, dm_message, event_photo, channel_message, event_question]
+        platform yönetimine görünür. `daily_item` günün içeriği havuzundaki
+        bir içeriktir (#269); `daily` modülü açık olmalıdır.
+      enum: [user, tayfa, announcement, event, question, answer, poll, log_entry, dm_message, event_photo, channel_message, event_question, daily_item]
 
     BanRequest:
       type: object

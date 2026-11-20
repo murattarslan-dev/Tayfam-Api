@@ -376,6 +376,30 @@ func (q *Queries) GetReportTargetAnswer(ctx context.Context, arg GetReportTarget
 	return i, err
 }
 
+const getReportTargetDailyItem = `-- name: GetReportTargetDailyItem :one
+SELECT created_by AS author_id, (deleted_at IS NULL)::boolean AS visible
+FROM tayfa_daily_items
+WHERE tayfa_id = $1 AND id = $2
+`
+
+type GetReportTargetDailyItemParams struct {
+	TayfaID pgtype.UUID
+	ID      pgtype.UUID
+}
+
+type GetReportTargetDailyItemRow struct {
+	AuthorID pgtype.UUID
+	Visible  bool
+}
+
+// Günün içeriği (issue #269): yazarı ekleyendir.
+func (q *Queries) GetReportTargetDailyItem(ctx context.Context, arg GetReportTargetDailyItemParams) (GetReportTargetDailyItemRow, error) {
+	row := q.db.QueryRow(ctx, getReportTargetDailyItem, arg.TayfaID, arg.ID)
+	var i GetReportTargetDailyItemRow
+	err := row.Scan(&i.AuthorID, &i.Visible)
+	return i, err
+}
+
 const getReportTargetEvent = `-- name: GetReportTargetEvent :one
 SELECT created_by AS author_id, (deleted_at IS NULL)::boolean AS visible, (status = 'cancelled')::boolean AS cancelled
 FROM events

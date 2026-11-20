@@ -129,6 +129,9 @@ enum Module {
   MODULE_EVENTS = 2;
   MODULE_QA = 3;
   MODULE_POLLS = 4;
+  // Günün içeriği (issue #269; ADR-0027 §5): the tayfa's daily content
+  // pool (TayfaDailyService) and its home widget.
+  MODULE_DAILY = 5;
 }
 
 // Lifecycle of an inactive tayfa (tayfas.status).

@@ -126,6 +126,10 @@ enum CoreExportSection {
   // year for all time) the metric, its value and how many events made it.
   // Derived from frozen events; nothing sensitive is in it.
   CORE_EXPORT_SECTION_USER_STATS = 35;
+  // The tayfa daily content items the caller added (issue #269, ADR-0027
+  // §5), deleted ones included: text, attribution, pinned day. Their place
+  // in the pool and who deleted them are not exported.
+  CORE_EXPORT_SECTION_DAILY_ITEMS = 36;
 }
 
 message ExportMyDataRequest {}

@@ -81,6 +81,8 @@ const (
 	SectionBadges = "badges"
 	// Issue #266: one's statistics per tayfa and year (ADR-0026).
 	SectionUserStats = "user_stats"
+	// Issue #269: the daily content items one added (ADR-0027 §5).
+	SectionDailyItems = "daily_items"
 )
 
 const (
@@ -257,6 +259,10 @@ var sections = []struct {
 	{SectionUserStats, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportUserStats(ctx, store.ExportUserStatsParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportUserStatsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionDailyItems, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportDailyItems(ctx, store.ExportDailyItemsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportDailyItemsRow) row { return row{x.K, x.Data} })
 	}},
 }
 

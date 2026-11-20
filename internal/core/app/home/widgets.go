@@ -103,6 +103,7 @@ func Widgets() []Widget {
 		{Key: KeyLogSummary, Kind: KindDisplay, NeedsConfig: true},
 
 		// daily (#269)
+		{Key: "daily", Kind: KindModule, Module: "daily"},
 
 		// library (#270)
 

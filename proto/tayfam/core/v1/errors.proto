@@ -522,4 +522,14 @@ enum ErrorReason {
   // its date) or whose data is not read through this method (sections and
   // module widgets read their own endpoints).
   ERROR_REASON_HOME_WIDGET_NOT_FOUND = 2680;
+
+  // Günün içeriği (ADR-0027 §5; issue #269: 2690–2699).
+
+  // NOT_FOUND. A daily content item that is not in the tayfa's pool: never
+  // there, deleted (for anything but RestoreDailyItem), or deleted more
+  // than 30 days ago (RestoreDailyItem).
+  ERROR_REASON_DAILY_ITEM_NOT_FOUND = 2690;
+  // FAILED_PRECONDITION. The pool already has 1000 items; nothing is
+  // added or restored.
+  ERROR_REASON_DAILY_ITEM_LIMIT = 2691;
 }

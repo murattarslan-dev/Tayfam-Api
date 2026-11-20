@@ -207,6 +207,9 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED": {http.StatusTooManyRequests, "now-broadcast-limit-reached"},
 		// Ana sayfa (issue #268; ADR-0027 §3–§4).
 		"ERROR_REASON_HOME_WIDGET_NOT_FOUND": {http.StatusNotFound, "home-widget-not-found"},
+		// Günün içeriği (issue #269; ADR-0027 §5).
+		"ERROR_REASON_DAILY_ITEM_NOT_FOUND": {http.StatusNotFound, "daily-item-not-found"},
+		"ERROR_REASON_DAILY_ITEM_LIMIT":     {http.StatusConflict, "daily-item-limit"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

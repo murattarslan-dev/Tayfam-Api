@@ -279,6 +279,15 @@ var (
 	ErrHomeWidgetNotFound = errors.New("ana sayfa bileşeni yok")
 )
 
+// Daily content errors (issue #269; ADR-0027 §5).
+var (
+	// ErrDailyItemNotFound: an item that is not in the tayfa's pool (never
+	// there, deleted, or deleted too long ago to restore).
+	ErrDailyItemNotFound = errors.New("günün içeriği yok")
+	// ErrDailyItemLimit: the pool is full (daily.MaxItems).
+	ErrDailyItemLimit = errors.New("günün içeriği sınırı")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (

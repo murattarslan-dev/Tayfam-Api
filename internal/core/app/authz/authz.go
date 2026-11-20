@@ -314,6 +314,10 @@ const (
 	// Ana sayfa düzeni (issue #268, ADR-0027 §3). TayfaHomeUpdate turns
 	// the home page widgets on or off, orders them and sets their config.
 	TayfaHomeUpdate
+	// Günün içeriği (issue #269, ADR-0027 §5). TayfaDailyManage adds,
+	// edits, deletes, restores, orders and pins the items of the tayfa's
+	// daily content pool. Reading the pool and today's item is TayfaView.
+	TayfaDailyManage
 
 	actionEnd // sentinel; keep last
 )
@@ -420,6 +424,7 @@ var actionNames = [...]string{
 	EventJoinQRCreateAny:      "event.join_qr_create_any",
 	TayfaStatsShowcaseUpdate:  "tayfa.stats_showcase.update",
 	TayfaHomeUpdate:           "tayfa.home.update",
+	TayfaDailyManage:          "tayfa.daily.manage",
 	actionEnd:                 "",
 }
 
@@ -547,6 +552,8 @@ var permissions = map[Action]Role{
 	EventRefereeAssignAny:   Moderator,
 	// Merging duplicates of the tayfa vocabulary (ADR-0037 §4).
 	TayfaVocabularyMerge: Moderator,
+	// The daily content pool: "yönetici ve moderatör ekler" (ADR-0027 §5).
+	TayfaDailyManage: Moderator,
 	// Removing anyone's event question ("Tayfa yönetimi anonim soruyu
 	// yazarını görmeden silebilir", ADR-0025 §5).
 	EventQuestionDeleteAny: Moderator,

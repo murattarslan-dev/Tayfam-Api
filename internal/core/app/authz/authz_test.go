@@ -463,6 +463,16 @@ var expected = []struct {
 	{invited, EventPhotoDeleteOwnEvent, false},
 	{banned, EventPhotoDeleteOwnEvent, false},
 	{nonMember, EventPhotoDeleteOwnEvent, false},
+	// TayfaDailyManage (issue #269): moderators and admins.
+	{admin, TayfaDailyManage, true},
+	{moderator, TayfaDailyManage, true},
+	{member, TayfaDailyManage, false},
+	{mutedMember, TayfaDailyManage, false},
+	{mutedModerator, TayfaDailyManage, false},
+	{pending, TayfaDailyManage, false},
+	{invited, TayfaDailyManage, false},
+	{banned, TayfaDailyManage, false},
+	{nonMember, TayfaDailyManage, false},
 	// TayfaHomeUpdate (issue #268): admins only.
 	{admin, TayfaHomeUpdate, true},
 	{moderator, TayfaHomeUpdate, false},

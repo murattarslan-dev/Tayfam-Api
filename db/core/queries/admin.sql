@@ -147,6 +147,12 @@ SELECT q.author_id, q.component_key, q.body, q.created_at, q.deleted_at
 FROM event_questions q JOIN events e ON e.id = q.event_id
 WHERE q.id = @id AND e.tayfa_id = @tayfa_id;
 
+-- Günün içeriği (issue #269).
+-- name: AdminGetDailyItem :one
+SELECT created_by, body, attribution, created_at, deleted_at
+FROM tayfa_daily_items
+WHERE id = @id AND tayfa_id = @tayfa_id;
+
 -- name: AdminGetEventPhoto :one
 SELECT p.uploader_id, p.caption, p.created_at, p.deleted_at, p.upload_id
 FROM event_photos p JOIN events e ON e.id = p.event_id
@@ -181,6 +187,10 @@ WHERE l.id = @id AND e.id = l.event_id AND e.tayfa_id = @tayfa_id AND l.deleted_
 UPDATE event_questions q SET deleted_at = @at, deleted_by = @by
 FROM events e
 WHERE q.id = @id AND e.id = q.event_id AND e.tayfa_id = @tayfa_id AND q.deleted_at IS NULL;
+
+-- name: AdminDeleteDailyItem :execrows
+UPDATE tayfa_daily_items SET deleted_at = @at, deleted_by = @by
+WHERE id = @id AND tayfa_id = @tayfa_id AND deleted_at IS NULL;
 
 -- name: AdminDeleteEventPhoto :execrows
 UPDATE event_photos p SET deleted_at = @at, deleted_by = @by

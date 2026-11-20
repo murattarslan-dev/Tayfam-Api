@@ -51,6 +51,12 @@ FROM event_questions q
 JOIN events e ON e.id = q.event_id
 WHERE e.tayfa_id = @tayfa_id AND q.id = @id;
 
+-- Günün içeriği (issue #269): yazarı ekleyendir.
+-- name: GetReportTargetDailyItem :one
+SELECT created_by AS author_id, (deleted_at IS NULL)::boolean AS visible
+FROM tayfa_daily_items
+WHERE tayfa_id = @tayfa_id AND id = @id;
+
 -- Albüm fotoğrafı (issue #206): etkinliği de görünür olmalı.
 -- name: GetReportTargetEventPhoto :one
 SELECT p.uploader_id AS author_id, (p.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible

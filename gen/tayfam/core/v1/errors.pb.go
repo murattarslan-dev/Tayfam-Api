@@ -434,6 +434,13 @@ const (
 	// its date) or whose data is not read through this method (sections and
 	// module widgets read their own endpoints).
 	ErrorReason_ERROR_REASON_HOME_WIDGET_NOT_FOUND ErrorReason = 2680
+	// NOT_FOUND. A daily content item that is not in the tayfa's pool: never
+	// there, deleted (for anything but RestoreDailyItem), or deleted more
+	// than 30 days ago (RestoreDailyItem).
+	ErrorReason_ERROR_REASON_DAILY_ITEM_NOT_FOUND ErrorReason = 2690
+	// FAILED_PRECONDITION. The pool already has 1000 items; nothing is
+	// added or restored.
+	ErrorReason_ERROR_REASON_DAILY_ITEM_LIMIT ErrorReason = 2691
 )
 
 // Enum value maps for ErrorReason.
@@ -571,6 +578,8 @@ var (
 		2641: "ERROR_REASON_JOIN_QR_LIMIT_REACHED",
 		2650: "ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED",
 		2680: "ERROR_REASON_HOME_WIDGET_NOT_FOUND",
+		2690: "ERROR_REASON_DAILY_ITEM_NOT_FOUND",
+		2691: "ERROR_REASON_DAILY_ITEM_LIMIT",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                  0,
@@ -705,6 +714,8 @@ var (
 		"ERROR_REASON_JOIN_QR_LIMIT_REACHED":        2641,
 		"ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED":  2650,
 		"ERROR_REASON_HOME_WIDGET_NOT_FOUND":        2680,
+		"ERROR_REASON_DAILY_ITEM_NOT_FOUND":         2690,
+		"ERROR_REASON_DAILY_ITEM_LIMIT":             2691,
 	}
 )
 
@@ -739,7 +750,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xb0&\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xfc&\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -873,7 +884,9 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\x1cERROR_REASON_INVALID_JOIN_QR\x10\xd0\x14\x12'\n" +
 	"\"ERROR_REASON_JOIN_QR_LIMIT_REACHED\x10\xd1\x14\x12-\n" +
 	"(ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED\x10\xda\x14\x12'\n" +
-	"\"ERROR_REASON_HOME_WIDGET_NOT_FOUND\x10\xf8\x14B\xbd\x01\n" +
+	"\"ERROR_REASON_HOME_WIDGET_NOT_FOUND\x10\xf8\x14\x12&\n" +
+	"!ERROR_REASON_DAILY_ITEM_NOT_FOUND\x10\x82\x15\x12\"\n" +
+	"\x1dERROR_REASON_DAILY_ITEM_LIMIT\x10\x83\x15B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

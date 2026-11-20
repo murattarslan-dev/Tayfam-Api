@@ -1,0 +1,197 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// TayfaDailyService is günün içeriği (issue #269; ADR-0027 §5): the
+// tayfa's own pool of short texts (a saying, a verse, a note) and the one
+// the home page shows today. Tayfam never puts content in a pool.
+// Moderators and admins add, edit, delete, restore, order and pin items
+// (`tayfa.daily.manage`); every active member reads, muted ones included.
+//
+// Today's item is chosen on the server, on the Europe/Istanbul day, and is
+// the same for every member all day: an item pinned to the day (its year
+// or every year) wins, the first in pool order among several; otherwise
+// the next unpinned item in pool order, one step per day the card is
+// opened, back to the start after the last. Pinned items are not in the
+// rotation. A day nobody opens does not move the rotation.
+//
+// Only gateway calls it with the user's access token; the acting user is
+// always the token's. Anyone but an ACTIVE member of the tayfa gets
+// ERROR_REASON_TAYFA_NOT_FOUND; with the daily module off every method gets
+// ERROR_REASON_MODULE_DISABLED. Writes on a read-only tayfa get
+// ERROR_REASON_TAYFA_READ_ONLY. Texts are content: they are never logged
+// or written to the audit record or an outbox event.
+service TayfaDailyService {
+  // GetDailyToday returns today's item, or none when the pool has no item
+  // to show.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id).
+  rpc GetDailyToday(GetDailyTodayRequest) returns (GetDailyTodayResponse);
+
+  // ListDailyItems returns the whole pool in its order (at most 1000
+  // items). With deleted set it returns instead the items deleted in the
+  // last 30 days, the latest first (managers only, to restore one).
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id), ERROR_REASON_PERMISSION_DENIED
+  // (deleted, for anyone but a manager).
+  rpc ListDailyItems(ListDailyItemsRequest) returns (ListDailyItemsResponse);
+
+  // CreateDailyItem adds an item at the end of the pool. A second item
+  // pinned to the same day is not refused: the answer says pin_conflict.
+  // A repeated client_request_id returns the item it created.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, body, attribution, pin,
+  // client_request_id), ERROR_REASON_DAILY_ITEM_LIMIT,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED,
+  // ERROR_REASON_TAYFA_READ_ONLY.
+  rpc CreateDailyItem(CreateDailyItemRequest) returns (CreateDailyItemResponse);
+
+  // UpdateDailyItem replaces an item's text, attribution and pin. Its place
+  // in the pool does not change.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, item_id, body, attribution,
+  // pin), ERROR_REASON_DAILY_ITEM_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY.
+  rpc UpdateDailyItem(UpdateDailyItemRequest) returns (UpdateDailyItemResponse);
+
+  // DeleteDailyItem deletes an item; it can be restored for 30 days, then
+  // it is deleted for good.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, item_id),
+  // ERROR_REASON_DAILY_ITEM_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY.
+  rpc DeleteDailyItem(DeleteDailyItemRequest) returns (DeleteDailyItemResponse);
+
+  // RestoreDailyItem brings back an item deleted in the last 30 days, at
+  // the end of the pool. Restoring an item that is not deleted changes
+  // nothing.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, item_id),
+  // ERROR_REASON_DAILY_ITEM_NOT_FOUND, ERROR_REASON_DAILY_ITEM_LIMIT,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED,
+  // ERROR_REASON_TAYFA_READ_ONLY.
+  rpc RestoreDailyItem(RestoreDailyItemRequest) returns (RestoreDailyItemResponse);
+
+  // ReorderDailyItems sets the pool's order: item_ids holds every item of
+  // the pool exactly once, in the new order. The rotation goes on from the
+  // same place number.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, item_ids: an item missing,
+  // repeated or unknown), ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY.
+  rpc ReorderDailyItems(ReorderDailyItemsRequest) returns (ReorderDailyItemsResponse);
+}
+
+// DailyPin pins an item to a day of the year.
+message DailyPin {
+  // 1–12.
+  int32 month = 1;
+  // 1–31, a day of the month (29 February: shown in leap years only when
+  // no year is given).
+  int32 day = 2;
+  // 2000–2100; unset: every year.
+  optional int32 year = 3;
+}
+
+// DailyItem is an item of a tayfa's daily content pool.
+message DailyItem {
+  string id = 1;
+  // 1–500 characters; lines are separated by "\n" (at most one empty line
+  // in a row), no other control character.
+  string body = 2;
+  // 0–120 characters, one line; empty: none.
+  string attribution = 3;
+  // The item's place in the pool, from 0 (gaps possible).
+  int32 position = 4;
+  // Unset: not pinned.
+  DailyPin pin = 5;
+  // The member who added it; empty once their account is deleted.
+  string created_by = 6;
+  google.protobuf.Timestamp create_time = 7;
+  google.protobuf.Timestamp update_time = 8;
+  // Set only in the list of deleted items.
+  google.protobuf.Timestamp delete_time = 9;
+}
+
+// DailyItemInput is an item's text and pin as a manager writes them.
+message DailyItemInput {
+  string body = 1;
+  string attribution = 2;
+  DailyPin pin = 3;
+}
+
+message GetDailyTodayRequest {
+  string tayfa_id = 1;
+}
+
+message GetDailyTodayResponse {
+  // Unset when the pool has no item to show.
+  DailyItem item = 1;
+  // Whether the item is pinned to today.
+  bool pinned = 2;
+  // Today in Europe/Istanbul, YYYY-MM-DD.
+  string date = 3;
+}
+
+message ListDailyItemsRequest {
+  string tayfa_id = 1;
+  bool deleted = 2;
+}
+
+message ListDailyItemsResponse {
+  repeated DailyItem items = 1;
+  // Whether the caller may manage the pool now.
+  bool caller_can_manage = 2;
+}
+
+message CreateDailyItemRequest {
+  string tayfa_id = 1;
+  DailyItemInput item = 2;
+  // UUID made by the client; a retry returns the same item.
+  string client_request_id = 3;
+}
+
+message CreateDailyItemResponse {
+  DailyItem item = 1;
+  // Another live item is pinned to the same day.
+  bool pin_conflict = 2;
+}
+
+message UpdateDailyItemRequest {
+  string tayfa_id = 1;
+  string item_id = 2;
+  DailyItemInput item = 3;
+}
+
+message UpdateDailyItemResponse {
+  DailyItem item = 1;
+  bool pin_conflict = 2;
+}
+
+message DeleteDailyItemRequest {
+  string tayfa_id = 1;
+  string item_id = 2;
+}
+
+message DeleteDailyItemResponse {}
+
+message RestoreDailyItemRequest {
+  string tayfa_id = 1;
+  string item_id = 2;
+}
+
+message RestoreDailyItemResponse {
+  DailyItem item = 1;
+  bool pin_conflict = 2;
+}
+
+message ReorderDailyItemsRequest {
+  string tayfa_id = 1;
+  repeated string item_ids = 2;
+}
+
+message ReorderDailyItemsResponse {
+  repeated DailyItem items = 1;
+}

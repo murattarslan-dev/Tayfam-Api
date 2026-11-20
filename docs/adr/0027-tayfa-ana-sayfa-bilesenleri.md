@@ -227,3 +227,52 @@ Karar değişmedi; §2–§4'ün uygulanışı:
 - **Yetki:** `tayfa.home.update` yalnızca yönetici; anlık tayfada kimse.
   Okuma (`tayfa.view`) her etkin üye; kapalı tayfanın düzeni ve verisi
   üye olmayana hiçbir uçtan dönmez (`tayfa-not-found`).
+
+## Uygulama notları (#269)
+
+§5'in uygulanışı; bir noktada §1'den sapma (platform sahibinin kararıyla):
+
+- **Modül:** Günün içeriği kendi verisi ve uçları olan bir **modüldür**
+  (`tayfa_modules` anahtarı `daily`, `tayfa.Modules`); §1'de gösterim
+  bileşenleri arasında sayılmıştı. Ana sayfa bileşeni `daily` `module`
+  türündedir ve kartını modülün `GET /v1/tayfas/{id}/daily/today` ucundan
+  çizer; modül kapalıyken bileşen gizlenir, uçlar `module-disabled` döner.
+  Yeni ve var olan standart tayfalarda modül açıktır; anlık tayfada
+  kapalıdır.
+- **Tablolar:** `tayfa_daily_items` (§5'teki alanlar + `client_request_id`,
+  `updated_at`; `body` satır sonu içerebilir: dizeler için, art arda en
+  fazla bir boş satır, başka denetim karakteri yok; Go ve CHECK aynı
+  kuralı uygular) ve `tayfa_daily_state` (`next_position`, `shown_on`,
+  `shown_item_id`).
+- **Seçim kuralı** (`internal/core/app/daily`, testlerle sabit): gün
+  Europe/Istanbul günüdür. O güne sabitlenmiş canlı içerik (`pin_year` o
+  yıl ya da NULL) varsa `(position, id)` sırasında ilki gösterilir; bu
+  hesap her istekte yapılır, sıra ilerlemez. Yoksa durum satırı okunur:
+  `shown_on` bugünse ve o içerik hâlâ canlı ve sabitlenmemişse o gösterilir;
+  değilse `position >= next_position` olan ilk sabitlenmemiş canlı içerik
+  (yoksa baştan ilki) seçilir ve `next_position = position + 1`,
+  `shown_on = bugün` karşılaştır-yaz ile yazılır (aynı anda gelen iki ilk
+  istekten biri yazar, diğeri yeniden okur). Gün içinde eklenen bir
+  sabitleme o günü hemen alır (dönüşteki içerik kaybolmaz, gösterilmiş
+  sayılır). Yılsız 29 Şubat yalnızca artık yıllarda gösterilir; yıllı 29
+  Şubat artık yıl ister.
+- **Sıra:** yeni ve geri alınan içerik havuzun sonuna gider (silinmişler
+  dahil en büyük yer + 1); `PUT …/daily/order` havuzun tamamını tam bir
+  kez ister ve yerleri 0'dan yeniden yazar; sıradaki dönüş aynı yer
+  numarasından devam eder.
+- **Çakışma:** ekleme, düzenleme ve geri almada aynı güne (yılsız
+  sabitleme her yılla) başka canlı sabitleme varsa yanıtta
+  `pin_conflict: true`; reddedilmez.
+- **Yetki:** `tayfa.daily.manage` moderatör ve yönetici (ekleme,
+  düzenleme, silme, geri alma, sıralama, sabitleme); okuma `tayfa.view`.
+  Silinenler listesi (`deleted=true`) yalnızca yönetenlere. Silinen içerik
+  30 gün geri alınabilir, sonra arka plan işi kalıcı siler.
+- **Sınırlar:** `body` 1–500, `attribution` 0–120 (tek satır), havuz 1000
+  canlı içerik (`daily-item-limit`). Kötüye kullanım filtresi core'da yok
+  (ADR-0012); tek takılma noktası `daily.checkTerms`.
+- **Şikâyet:** hedef türü `daily_item` (proto 13), konu ekleyendir; modül
+  kapalıysa hedef bulunamaz. Platform paneli içeriği okur ve kaldırır.
+- **KVKK:** içerik tayfanındır; ekleyenin içerikleri duyurular gibi dışa
+  aktarılır (bölüm 36 `daily_items`), hesap silinince içerik kalır, ekleyen
+  ve silen boşalır. Görsel yoktur.
+- **Hatalar:** `daily-item-not-found` (2690), `daily-item-limit` (2691).

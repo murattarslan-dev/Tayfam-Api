@@ -182,6 +182,12 @@ DELETE FROM event_questions WHERE id IN (
   SELECT x.id FROM event_questions x WHERE x.deleted_at <= @deleted_before
   ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
 
+-- Günün içeriği (issue #269).
+-- name: PurgeDailyItems :execrows
+DELETE FROM tayfa_daily_items WHERE id IN (
+  SELECT x.id FROM tayfa_daily_items x WHERE x.deleted_at <= @deleted_before
+  ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
+
 -- Albüm fotoğrafı; dosyası uploads_release_ref ile silme kuyruğuna girer.
 -- name: PurgeEventPhotos :execrows
 DELETE FROM event_photos WHERE id IN (
