@@ -1182,7 +1182,8 @@ type Querier interface {
 	// Ön ayarlar; emekliye ayrılanlar dahil (eski masalar adlarını gösterir).
 	ListScorePresets(ctx context.Context, keys []string) ([]ListScorePresetsRow, error)
 	ListScoreTables(ctx context.Context, arg ListScoreTablesParams) ([]EventScoreTable, error)
-	// Bileşenin bütün masalarındaki skorlar.
+	// Bileşenin bütün masalarındaki skorlar; bir eldeki skorlar masadaki yer
+	// sırasıyla (yerin kimliği aynı milisaniyede sıra vermez, issue #297).
 	ListScores(ctx context.Context, arg ListScoresParams) ([]ListScoresRow, error)
 	// Serinin henüz başlamamış, iptal edilmemiş ve tek başına düzenlenmemiş
 	// örnekleri; seri güncellemesi bunları değiştirir.
