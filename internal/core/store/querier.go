@@ -235,6 +235,9 @@ type Querier interface {
 	// Kullanıcının organizatörü olduğu açık anlık etkinlikler: silinmemiş,
 	// arşivlenmemiş anlık tayfada bitmemiş ve iptal edilmemiş etkinlik.
 	CountOpenInstantEvents(ctx context.Context, arg CountOpenInstantEventsParams) (int64, error)
+	// Kullanıcının açık şimdi etkinlikleri: bitmemiş (Bitir denmemiş ve 12
+	// saat dolmamış), iptal edilmemiş, silinmemiş; tayfası da silinmemiş.
+	CountOpenNowEvents(ctx context.Context, arg CountOpenNowEventsParams) (int64, error)
 	// Son yönetici kontrolü; çağıran tayfa satırını kilitlemiş olmalıdır.
 	CountOtherActiveAdmins(ctx context.Context, arg CountOtherActiveAdminsParams) (int64, error)
 	// Onay bekleyen katılım istekleri (issue #150); memberships_pending_idx.
@@ -636,6 +639,9 @@ type Querier interface {
 	// kapsamında çalışır (IDOR); üyelik ve yetki app katmanındadır
 	// (internal/core/app/vocabulary).
 	FindVocabularyValue(ctx context.Context, arg FindVocabularyValueParams) (pgtype.UUID, error)
+	// Şimdi başlat (issue #263, ADR-0038 §1): organizatör "Bitir" der; bitiş
+	// o an olur, açık uçluluk kalkar. Yalnızca planlı, açık uçlu etkinlikte.
+	FinishEvent(ctx context.Context, arg FinishEventParams) (int64, error)
 	// Alıcının bir sayfadaki istek bildirimleri için: isteyenlerle arasındaki
 	// arkadaşlık satırı ve kayıtlı sonuç.
 	FriendRequestStates(ctx context.Context, arg FriendRequestStatesParams) ([]FriendRequestStatesRow, error)
@@ -1280,6 +1286,10 @@ type Querier interface {
 	// transaction'da kontrol edilir, eşzamanlı son kullanımdan yalnızca biri
 	// ilerler.
 	LockInviteByHash(ctx context.Context, tokenHash []byte) (LockInviteByHashRow, error)
+	// Aynı kullanıcının şimdi etkinliği açan istekleri (tayfa içi ve anlık)
+	// sırayla işlenir; kişi başı 1 açık şimdi etkinliği sınırı iki istekte
+	// birden aşılamaz. Kilit transaction bitince bırakılır.
+	LockNowEventCreation(ctx context.Context, userID pgtype.UUID) error
 	// ---------------------------------------------------------------------------
 	// Dönmeme alarmı (v14 "Yürüyüşte beklenen dönüş"; `roll_call` bileşeni,
 	// issue #242)
