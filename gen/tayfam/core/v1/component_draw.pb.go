@@ -32,7 +32,10 @@ type DrawEntry struct {
 	UserId string `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	// A team draw: the team's ID (of the teams component teams_key); empty
 	// when the place is empty.
-	TeamId        string `protobuf:"bytes,3,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	TeamId string `protobuf:"bytes,3,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	// A participant draw: the guest player's ID (issue #252;
+	// GuestPlayerComponentService). A guest's place never becomes empty.
+	GuestId       string `protobuf:"bytes,4,opt,name=guest_id,json=guestId,proto3" json:"guest_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -84,6 +87,13 @@ func (x *DrawEntry) GetUserId() string {
 func (x *DrawEntry) GetTeamId() string {
 	if x != nil {
 		return x.TeamId
+	}
+	return ""
+}
+
+func (x *DrawEntry) GetGuestId() string {
+	if x != nil {
+		return x.GuestId
 	}
 	return ""
 }
@@ -360,11 +370,12 @@ var File_tayfam_core_v1_component_draw_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_component_draw_proto_rawDesc = "" +
 	"\n" +
-	"#tayfam/core/v1/component_draw.proto\x12\x0etayfam.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1etayfam/core/v1/component.proto\"Y\n" +
+	"#tayfam/core/v1/component_draw.proto\x12\x0etayfam.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1etayfam/core/v1/component.proto\"t\n" +
 	"\tDrawEntry\x12\x1a\n" +
 	"\bposition\x18\x01 \x01(\x05R\bposition\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x17\n" +
-	"\ateam_id\x18\x03 \x01(\tR\x06teamId\"\xeb\x01\n" +
+	"\ateam_id\x18\x03 \x01(\tR\x06teamId\x12\x19\n" +
+	"\bguest_id\x18\x04 \x01(\tR\aguestId\"\xeb\x01\n" +
 	"\x04Draw\x12\x14\n" +
 	"\x05drawn\x18\x01 \x01(\bR\x05drawn\x12\x18\n" +
 	"\asubject\x18\x02 \x01(\tR\asubject\x12\x1b\n" +

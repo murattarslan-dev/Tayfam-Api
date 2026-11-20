@@ -21,6 +21,7 @@ type Querier interface {
 	AddBracketGame(ctx context.Context, arg AddBracketGameParams) error
 	AddBracketMatch(ctx context.Context, arg AddBracketMatchParams) error
 	AddDrawEntry(ctx context.Context, arg AddDrawEntryParams) error
+	AddGuestPlayer(ctx context.Context, arg AddGuestPlayerParams) error
 	AddQuestionTag(ctx context.Context, arg AddQuestionTagParams) error
 	AddScore(ctx context.Context, arg AddScoreParams) error
 	AddScorePlayer(ctx context.Context, arg AddScorePlayerParams) error
@@ -135,12 +136,22 @@ type Querier interface {
 	ClearEventUserFields(ctx context.Context, userID pgtype.UUID) error
 	// Yeni istek: eski sonuç geçersiz.
 	ClearFriendRequestOutcome(ctx context.Context, arg ClearFriendRequestOutcomeParams) error
+	// Eklediği misafirlerin takma adı onun içeriğidir; takma ad ve ekleyen
+	// boşalır, misafir satırı kalır: skor ve kura yeri "Misafir" olarak görünür
+	// (issue #252; ADR-0037 §6).
+	ClearGuestPlayerCreator(ctx context.Context, userID pgtype.UUID) error
 	// Yeni davet: eski sonuç geçersiz.
 	ClearInvitationOutcome(ctx context.Context, arg ClearInvitationOutcomeParams) error
 	ClearInviteCreator(ctx context.Context, userID pgtype.UUID) error
 	ClearLogEntryDeleter(ctx context.Context, userID pgtype.UUID) error
 	ClearMeasurementEnteredBy(ctx context.Context, userID pgtype.UUID) error
 	ClearMembershipUserFields(ctx context.Context, userID pgtype.UUID) error
+	// ---------------------------------------------------------------------------
+	// Misafir takma adı temizliği (issue #252; ADR-0037 §6)
+	// ---------------------------------------------------------------------------
+	// Bitişi @ended_before'dan önce olan etkinliklerin misafir takma adları
+	// silinir; misafir satırı kalır (skor ve kura yeri "Misafir" olur).
+	ClearOldGuestNicknames(ctx context.Context, arg ClearOldGuestNicknamesParams) (int64, error)
 	// ---------------------------------------------------------------------------
 	// Plaka temizliği (v14 "Konvoy aracı", "Saklama süreleri"; `vehicles`
 	// bileşeni, issue #240, ADR-0025 "Plaka kuralı")
@@ -206,6 +217,7 @@ type Querier interface {
 	CountEventPhotos(ctx context.Context, arg CountEventPhotosParams) (CountEventPhotosRow, error)
 	CountEventReferees(ctx context.Context, eventID pgtype.UUID) (int64, error)
 	CountGoing(ctx context.Context, eventID pgtype.UUID) (int64, error)
+	CountGuestPlayers(ctx context.Context, eventID pgtype.UUID) (int64, error)
 	// Kullanıcının son @since'ten beri açtığı anlık tayfalar: iptal edilen,
 	// silinen ve dönüştürülenler de sayılır (günde 5; ADR-0032 §5).
 	CountInstantTayfasCreatedSince(ctx context.Context, arg CountInstantTayfasCreatedSinceParams) (int64, error)
@@ -350,6 +362,7 @@ type Querier interface {
 	DeleteFriendScore(ctx context.Context, arg DeleteFriendScoreParams) error
 	// Arkadaşlığı bitirme, isteği geri çekme ya da reddetme.
 	DeleteFriendship(ctx context.Context, arg DeleteFriendshipParams) (int64, error)
+	DeleteGuestPlayer(ctx context.Context, arg DeleteGuestPlayerParams) (int64, error)
 	DeleteLogEntry(ctx context.Context, arg DeleteLogEntryParams) (int64, error)
 	// Ayrılma, çıkarma, başvuru reddi, ban kaldırma.
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (int64, error)
@@ -515,6 +528,10 @@ type Querier interface {
 	// (source = blocked) bir öneri değildir; engel zaten blocks bölümündedir.
 	ExportFriendSuggestions(ctx context.Context, arg ExportFriendSuggestionsParams) ([]ExportFriendSuggestionsRow, error)
 	ExportFriendships(ctx context.Context, arg ExportFriendshipsParams) ([]ExportFriendshipsRow, error)
+	// Eklediğiniz misafir oyuncular (issue #252): hangi etkinliğe hangi takma
+	// adla. Takma adı silinmiş misafir NULL takma adla gelir; misafirin masa ve
+	// kura yerleri dışa aktarılmaz.
+	ExportGuestPlayers(ctx context.Context, arg ExportGuestPlayersParams) ([]ExportGuestPlayersRow, error)
 	// Yoklama satırları (`roll_call` bileşeni, issue #242). Bölümün adı Faz 1'den
 	// kalmadır (hike_checkins); bütün türlerin yoklamalarını taşır. Bir
 	// etkinlikte birden çok yoklama bileşeni olabilir: etkinlik başına bir satır.
@@ -783,6 +800,11 @@ type Querier interface {
 	GetVocabularyValueForUpdate(ctx context.Context, arg GetVocabularyValueForUpdateParams) (GetVocabularyValueForUpdateRow, error)
 	// Kanalı açanlardan hangileri o etkinliğe gidiyor.
 	GoingAmong(ctx context.Context, arg GoingAmongParams) ([]GoingAmongRow, error)
+	// Misafir bir masada ya da kurada yer alıyor mu: yer alan misafir
+	// silinmez (skor ve kura sabittir).
+	GuestPlayerInUse(ctx context.Context, arg GuestPlayerInUseParams) (pgtype.Bool, error)
+	// Misafiri ekleyen hakemin masası bileşenin masası mı.
+	GuestScoreTableExists(ctx context.Context, arg GuestScoreTableExistsParams) (bool, error)
 	HasMutualTayfa(ctx context.Context, arg HasMutualTayfaParams) (bool, error)
 	// Ortak etkinlik geçmişi: ikisinin de attended işaretlendiği, iptal
 	// edilmemiş, silinmemiş ve bitmiş en az bir etkinlik (hangi tayfada
@@ -926,6 +948,14 @@ type Querier interface {
 	// ya da sayfalar arasında biten arkadaşlık) puanı 0 sayılır: imleç başka
 	// birinin puanını sorgulamak için kullanılamaz.
 	ListFriendshipsPage(ctx context.Context, arg ListFriendshipsPageParams) ([]ListFriendshipsPageRow, error)
+	// Misafir oyuncu (issue #252; ADR-0037 §6). Etkinlik her zaman önce tayfa
+	// kapsamında yüklenir ve yazboz bileşeni etkinliğin tür sürümünde çözülür
+	// (internal/core/app/component: View / Change); buradaki sorgular o
+	// etkinliğin kimliğiyle çalışır (IDOR). Yetki app katmanındadır
+	// (internal/core/app/component/guest).
+	// Etkinliğin misafirleri, eklenme sırasıyla. Takma adı silinmiş misafir
+	// de listelenir ("Misafir").
+	ListGuestPlayers(ctx context.Context, eventID pgtype.UUID) ([]ListGuestPlayersRow, error)
 	// Alarmın alıcıları: organizatör (tayfada hâlâ aktif üyeyse) ve aktif
 	// yöneticiler ve moderatörler; dönmeyen kişinin kendisi hariç. Organizatör
 	// önce, sonra yönetici, sonra moderatör.

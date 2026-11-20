@@ -300,7 +300,7 @@ func (s *Service) Remove(ctx context.Context, ref component.Ref, guest id.ID) (G
 		if err != nil {
 			return fmt.Errorf("misafirin yerleri: %w", err)
 		}
-		if used {
+		if used.Bool {
 			return apperr.ErrGuestPlayerInUse
 		}
 		n, err := q.DeleteGuestPlayer(ctx, store.DeleteGuestPlayerParams{ID: guest.PG(), EventID: sc.Event.PG()})

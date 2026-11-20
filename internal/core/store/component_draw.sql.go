@@ -12,8 +12,8 @@ import (
 )
 
 const addDrawEntry = `-- name: AddDrawEntry :exec
-INSERT INTO event_draw_entries (id, event_id, component_key, position, user_id, team_key, team_id, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO event_draw_entries (id, event_id, component_key, position, user_id, team_key, team_id, guest_id, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 `
 
 type AddDrawEntryParams struct {
@@ -24,6 +24,7 @@ type AddDrawEntryParams struct {
 	UserID       pgtype.UUID
 	TeamKey      pgtype.Text
 	TeamID       pgtype.UUID
+	GuestID      pgtype.UUID
 	CreatedAt    pgtype.Timestamptz
 }
 
@@ -36,6 +37,7 @@ func (q *Queries) AddDrawEntry(ctx context.Context, arg AddDrawEntryParams) erro
 		arg.UserID,
 		arg.TeamKey,
 		arg.TeamID,
+		arg.GuestID,
 		arg.CreatedAt,
 	)
 	return err
@@ -125,7 +127,7 @@ func (q *Queries) ListDrawCandidates(ctx context.Context, eventID pgtype.UUID) (
 }
 
 const listDrawEntries = `-- name: ListDrawEntries :many
-SELECT d.position, d.user_id, d.team_id, (ms.user_id IS NOT NULL)::boolean AS active_member
+SELECT d.position, d.user_id, d.team_id, d.guest_id, (ms.user_id IS NOT NULL)::boolean AS active_member
 FROM event_draw_entries AS d
 JOIN events AS e ON e.id = d.event_id
 LEFT JOIN memberships AS ms ON ms.tayfa_id = e.tayfa_id AND ms.user_id = d.user_id AND ms.status = 'active'
@@ -142,6 +144,7 @@ type ListDrawEntriesRow struct {
 	Position     int16
 	UserID       pgtype.UUID
 	TeamID       pgtype.UUID
+	GuestID      pgtype.UUID
 	ActiveMember bool
 }
 
@@ -160,6 +163,7 @@ func (q *Queries) ListDrawEntries(ctx context.Context, arg ListDrawEntriesParams
 			&i.Position,
 			&i.UserID,
 			&i.TeamID,
+			&i.GuestID,
 			&i.ActiveMember,
 		); err != nil {
 			return nil, err

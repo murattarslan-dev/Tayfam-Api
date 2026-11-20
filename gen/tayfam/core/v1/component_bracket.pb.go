@@ -31,7 +31,9 @@ type BracketEntrant struct {
 	// empty (the person left the tayfa or deleted their account).
 	UserId string `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	// A team draw: the team's ID; empty when the team was removed.
-	TeamId        string `protobuf:"bytes,3,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	TeamId string `protobuf:"bytes,3,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	// A participant draw: the guest player's ID (issue #252).
+	GuestId       string `protobuf:"bytes,4,opt,name=guest_id,json=guestId,proto3" json:"guest_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -83,6 +85,13 @@ func (x *BracketEntrant) GetUserId() string {
 func (x *BracketEntrant) GetTeamId() string {
 	if x != nil {
 		return x.TeamId
+	}
+	return ""
+}
+
+func (x *BracketEntrant) GetGuestId() string {
+	if x != nil {
+		return x.GuestId
 	}
 	return ""
 }
@@ -1339,11 +1348,12 @@ var File_tayfam_core_v1_component_bracket_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_component_bracket_proto_rawDesc = "" +
 	"\n" +
-	"&tayfam/core/v1/component_bracket.proto\x12\x0etayfam.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1etayfam/core/v1/component.proto\"^\n" +
+	"&tayfam/core/v1/component_bracket.proto\x12\x0etayfam.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1etayfam/core/v1/component.proto\"y\n" +
 	"\x0eBracketEntrant\x12\x1a\n" +
 	"\bposition\x18\x01 \x01(\x05R\bposition\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x17\n" +
-	"\ateam_id\x18\x03 \x01(\tR\x06teamId\"x\n" +
+	"\ateam_id\x18\x03 \x01(\tR\x06teamId\x12\x19\n" +
+	"\bguest_id\x18\x04 \x01(\tR\aguestId\"x\n" +
 	"\vBracketGame\x12\x16\n" +
 	"\x06number\x18\x01 \x01(\x05R\x06number\x12\x19\n" +
 	"\ba_points\x18\x02 \x01(\x05R\aaPoints\x12\x19\n" +

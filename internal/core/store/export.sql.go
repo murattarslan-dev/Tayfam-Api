@@ -630,6 +630,50 @@ func (q *Queries) ExportFriendships(ctx context.Context, arg ExportFriendshipsPa
 	return items, nil
 }
 
+const exportGuestPlayers = `-- name: ExportGuestPlayers :many
+SELECT g.id AS k, jsonb_build_object(
+  'id', g.id, 'event_id', g.event_id, 'nickname', g.nickname, 'created_at', g.created_at
+) AS data
+FROM event_guest_players AS g
+WHERE g.created_by = $1 AND g.id > $2
+ORDER BY g.id
+LIMIT $3
+`
+
+type ExportGuestPlayersParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportGuestPlayersRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Eklediğiniz misafir oyuncular (issue #252): hangi etkinliğe hangi takma
+// adla. Takma adı silinmiş misafir NULL takma adla gelir; misafirin masa ve
+// kura yerleri dışa aktarılmaz.
+func (q *Queries) ExportGuestPlayers(ctx context.Context, arg ExportGuestPlayersParams) ([]ExportGuestPlayersRow, error) {
+	rows, err := q.db.Query(ctx, exportGuestPlayers, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportGuestPlayersRow{}
+	for rows.Next() {
+		var i ExportGuestPlayersRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportHikeCheckins = `-- name: ExportHikeCheckins :many
 SELECT c.event_id AS k, jsonb_build_object(
   'event_id', c.event_id,

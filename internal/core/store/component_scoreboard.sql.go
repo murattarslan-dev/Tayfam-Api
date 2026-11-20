@@ -47,9 +47,9 @@ func (q *Queries) AddScore(ctx context.Context, arg AddScoreParams) error {
 
 const addScorePlayer = `-- name: AddScorePlayer :exec
 INSERT INTO event_score_players (id, table_id, event_id, component_key, position, user_id,
-  team_key, team_id, created_at)
+  team_key, team_id, guest_id, created_at)
 VALUES ($1, $2, $3, $4, $5, $6,
-  $7, $8, $9)
+  $7, $8, $9, $10)
 `
 
 type AddScorePlayerParams struct {
@@ -61,6 +61,7 @@ type AddScorePlayerParams struct {
 	UserID       pgtype.UUID
 	TeamKey      pgtype.Text
 	TeamID       pgtype.UUID
+	GuestID      pgtype.UUID
 	CreatedAt    pgtype.Timestamptz
 }
 
@@ -74,6 +75,7 @@ func (q *Queries) AddScorePlayer(ctx context.Context, arg AddScorePlayerParams) 
 		arg.UserID,
 		arg.TeamKey,
 		arg.TeamID,
+		arg.GuestID,
 		arg.CreatedAt,
 	)
 	return err
@@ -275,7 +277,7 @@ func (q *Queries) LastScoreRound(ctx context.Context, arg LastScoreRoundParams) 
 }
 
 const listScorePlayers = `-- name: ListScorePlayers :many
-SELECT id, table_id, position, user_id, team_id FROM event_score_players
+SELECT id, table_id, position, user_id, team_id, guest_id FROM event_score_players
 WHERE event_id = $1 AND component_key = $2
 ORDER BY table_id, position
 `
@@ -291,6 +293,7 @@ type ListScorePlayersRow struct {
 	Position int16
 	UserID   pgtype.UUID
 	TeamID   pgtype.UUID
+	GuestID  pgtype.UUID
 }
 
 // Bileşenin bütün masalarındaki yerler.
@@ -309,6 +312,7 @@ func (q *Queries) ListScorePlayers(ctx context.Context, arg ListScorePlayersPara
 			&i.Position,
 			&i.UserID,
 			&i.TeamID,
+			&i.GuestID,
 		); err != nil {
 			return nil, err
 		}
