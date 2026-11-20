@@ -3701,6 +3701,223 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Etkinlik bileşenleri: eşleşme ağacı (`bracket`; core BracketComponentService, #251, ADR-0025 §4–§6, ADR-0037 §3) ---
+  # Etkinliğin kurasından tohumlanan turnuva; canlı güncellenir
+  # (`event.component_changed`). Biçim (`format`: eleme, lig, İsviçre) ve
+  # maç başına oyun (`best_of`: 1, 3, 5) bileşen parametresidir (tanım
+  # bırakıyorsa organizatörün seçimi). Maç oyun oyun yazboz kuralıyla
+  # skorlanır: türün ilk yazboz bileşeni oyunun puanla (yüksek ya da düşük
+  # kazanır) mı galibiyet/beraberlik/mağlubiyetle (`wdl`) mi oynandığını
+  # söyler. Kurallar turnuva başlarken saklanır. Katılımcılar türün ilk kura
+  # bileşeninin yerleridir (kura çekilmiş olmalı); maçlar yerleri adlandırır,
+  # kişi ya da takım kuradan okunur. Eleme: 1. tur kuradaki yerleri sırayla
+  # eşler (boş ya da tek kalan son yer bay geçer), sonraki tur kazananları
+  # sırayla; berabere biten eleme maçı ek oyunla sürer. Lig: herkes herkesle
+  # bir kez; tüm turlar başlangıçta eşlenir. İsviçre: ⌈log2 n⌉ tur; sonraki
+  # tur sıralamayı yukarıdan aşağı, rövanşsız eşler; bay (galibiyet sayılır)
+  # henüz bay geçmemiş en alttakine. Lig ve İsviçre sıralaması: puan
+  # (galibiyet 1, beraberlik ½, bay 1) → aralarındaki maç → Buchholz;
+  # rating/ELO yok. Başlatma, sonraki turu eşleme, düzeltme ve sıfırlama
+  # organizatör, moderatör ve yöneticinin; oyun girme ayrıca maça, bileşene
+  # ya da etkinliğe atanmış hakemin. Oyunlar etkinlik başladıktan sonra
+  # girilir (`score-not-started`); her yazma bitişten 7 gün sonra kapanır
+  # (`component-frozen`). Turnuva katılımdır, seri örneğine kopyalanmaz.
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/bracket:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: getEventBracket
+      summary: Etkinliğin eşleşme ağacı
+      description: |
+        Her etkin üyeye açıktır (susturulmuş üye de okur); iptal edilmiş ve
+        donmuş etkinlikte de okunur. Başlamamışsa `started` false; kurallar
+        ve kuranın alanları başlatılırsa alınacak olanlardır. Bileşen
+        uçlarının ortak kuralları geçerlidir (`component-not-found`,
+        `component-disabled`).
+      responses:
+        "200":
+          description: Eşleşme ağacı
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventBracket" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: startEventBracket
+      summary: Eşleşme ağacını başlatır (organizatör, moderatör, yönetici)
+      description: |
+        Gövde almaz. Kuradan ilk turu (ligde tüm turları) eşler. Başlamışsa
+        `bracket-started`; kura çekilmemişse ya da türde kura yoksa
+        `bracket-draw-required`; kurada ikiden az dolu yer varsa
+        `bracket-too-few`; elemede 128 yerden, ligde 20 ve İsviçre'de 64
+        katılımcıdan fazlası `event-limit`. Bileşen uçlarının ortak
+        kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Başlatılan eşleşme ağacı
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventBracket" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: resetEventBracket
+      summary: Eşleşme ağacını sıfırlar (organizatör, moderatör, yönetici)
+      description: |
+        Maçları, oyunları ve maçlara atanmış hakemleri siler; kura kalır.
+        Başlamamışsa `bracket-not-started`. Bileşen uçlarının ortak
+        kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Sıfırlanan eşleşme ağacı (başlamamış haliyle)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventBracket" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/bracket/rounds:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    post:
+      operationId: pairEventBracketRound
+      summary: Sonraki turu eşler (organizatör, moderatör, yönetici)
+      description: |
+        Gövde almaz. Elemede ve İsviçre'de, mevcut turun tüm maçları
+        sonuçlanınca sonraki turu eşler. Sonuçlanmamış maç varsa
+        `bracket-round-open`; sonraki tur yoksa (ligde turların hepsi
+        başlangıçta eşlenir) `bracket-finished`; başlamamışsa
+        `bracket-not-started`. Bileşen uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Eşleşme ağacı, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventBracket" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/bracket/matches/{match_id}/games:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/BracketMatchID"
+    post:
+      operationId: addEventBracketGame
+      summary: Maça sonraki oyunu girer (organizatör, moderatör, yönetici, hakem)
+      description: |
+        `points` kuralında iki tarafın puanı (`a_points`, `b_points`),
+        `wdl` kuralında A tarafının sonucu (`a_outcome`); kurala uymayan
+        gövde `invalid-request`. Maçı sonuçlandıran oyunla maç biter.
+        Etkinlik başlamadıysa `score-not-started`; maç yoksa
+        `bracket-match-not-found`; sonuçlanmış maçta ya da bayda
+        `bracket-match-decided`; sonraki tur eşlenmişse
+        `bracket-round-closed`; 9 oyundan sonra `event-limit`. Bileşen
+        uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventBracketGameRequest" }
+      responses:
+        "200":
+          description: Eşleşme ağacı, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventBracket" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/bracket/matches/{match_id}/games/{game}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/BracketMatchID"
+      - $ref: "#/components/parameters/BracketGame"
+    put:
+      operationId: correctEventBracketGame
+      summary: Girilmiş bir oyunu düzeltir (organizatör, moderatör, yönetici)
+      description: |
+        Sonuçlanmış maçta da oyunun yerini alır. Girilmemiş oyun
+        `bracket-game-not-found`; sonraki tur bu maçın turundan eşlenmişse
+        `bracket-round-closed` (gerekirse eşleşme ağacı sıfırlanır). Gövde
+        kuralları oyun girmedeki gibidir. Bileşen uçlarının ortak kuralları
+        geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventBracketGameRequest" }
+      responses:
+        "200":
+          description: Eşleşme ağacı, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventBracket" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteEventBracketGame
+      summary: Maçın son oyununu siler (organizatör, moderatör, yönetici)
+      description: |
+        Yalnızca son oyun silinir (aksi `bracket-game-not-found`); sonraki
+        tur eşlenmişse `bracket-round-closed`. Bileşen uçlarının ortak
+        kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Eşleşme ağacı, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventBracket" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   # --- Tayfa sözlüğü (core TayfaVocabularyService, #244, ADR-0037 §4) ---
   # Tayfanın kendi değer listesi: bir ad alanındaki (`fish_species`, `book`
   # …) değerler. Tanımda `vocabulary` olan metin alanı (`CatalogVocabulary`)
@@ -7131,6 +7348,18 @@ components:
       required: true
       description: Elin numarası (1–200).
       schema: { type: integer, format: int32, minimum: 1, maximum: 200 }
+    BracketMatchID:
+      name: match_id
+      in: path
+      required: true
+      description: Eşleşme ağacındaki maçın kimliği (`EventBracketMatch.id`).
+      schema: { type: string, format: uuid }
+    BracketGame:
+      name: game
+      in: path
+      required: true
+      description: Maçtaki oyunun numarası (1–9).
+      schema: { type: integer, format: int32, minimum: 1, maximum: 9 }
     SeriesID:
       name: series_id
       in: path
@@ -7349,6 +7578,17 @@ components:
         - score-table-started
         - score-player-not-participant
         - score-not-started
+        # core: eşleşme ağacı bileşeni (#251, ADR-0025 §4, §5, ADR-0037 §3)
+        - bracket-draw-required
+        - bracket-started
+        - bracket-not-started
+        - bracket-too-few
+        - bracket-match-not-found
+        - bracket-game-not-found
+        - bracket-match-decided
+        - bracket-round-open
+        - bracket-round-closed
+        - bracket-finished
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -8985,6 +9225,105 @@ components:
           minItems: 1
           maxItems: 50
           items: { $ref: "#/components/schemas/EventScoreEntry" }
+    EventBracketEntrant:
+      type: object
+      required: [position]
+      description: Eşleşme ağacının tohumlandığı kuradaki bir yer. Boş yerde (kişi ya da takım geri çekildi) ne `user_id` ne `team_id` vardır.
+      properties:
+        position: { type: integer, format: int32, minimum: 1, maximum: 500 }
+        user_id: { type: string, format: uuid, description: "Katılımcı kurasında kişinin kullanıcı kimliği." }
+        team_id: { type: string, format: uuid, description: "Takım kurasında takımın kimliği." }
+    EventBracketGame:
+      type: object
+      required: [number]
+      description: Maçın bir oyunu.
+      properties:
+        number: { type: integer, format: int32, minimum: 1, maximum: 9 }
+        a_points: { type: integer, format: int32, description: "Yalnızca `points` kuralında." }
+        b_points: { type: integer, format: int32, description: "Yalnızca `points` kuralında." }
+        a_outcome: { type: string, enum: [win, draw, loss], description: "Yalnızca `wdl` kuralında; B tarafınınki tersidir." }
+    EventBracketMatch:
+      type: object
+      required: [id, round, slot, games, decided, bye, a_total, b_total, a_games_won, b_games_won, caller_can_score]
+      description: Eşleşme ağacının bir maçı (#251). Taraflar kuradaki yerlerdir.
+      properties:
+        id: { type: string, format: uuid }
+        round: { type: integer, format: int32, minimum: 1 }
+        slot: { type: integer, format: int32, minimum: 1, description: Maçın turdaki sırası. }
+        a_position: { type: integer, format: int32, description: "A tarafının kuradaki yeri; yoksa (bay) alan yok." }
+        b_position: { type: integer, format: int32, description: "B tarafının kuradaki yeri; yoksa (bay) alan yok." }
+        games:
+          type: array
+          items: { $ref: "#/components/schemas/EventBracketGame" }
+        decided: { type: boolean, description: "Maç sonuçlandı: kazanan, beraberlik (elemede yok) ya da bay." }
+        bye: { type: boolean, description: En fazla bir taraflı maç. }
+        winner_position: { type: integer, format: int32, description: "Kazananın yeri; beraberlikte, sonuçlanmamış maçta ya da tarafsız maçta alan yok." }
+        a_total: { type: number, format: double, description: "Tarafın toplamı; `wdl` kuralında galibiyet 1, beraberlik 0.5." }
+        b_total: { type: number, format: double }
+        a_games_won: { type: integer, format: int32, description: Tarafın tek başına kazandığı oyun sayısı. }
+        b_games_won: { type: integer, format: int32 }
+        caller_can_score:
+          type: boolean
+          description: Şu an bu maça oyun girebilirsiniz (organizatör, moderatör, yönetici ya da maçın hakemi; mevcut turun sonuçlanmamış maçı; etkinlik başlamış, iptal değil, donmamış, tayfa salt okunur değil).
+    EventBracketStanding:
+      type: object
+      required: [position, played, won, drawn, lost, points, head_to_head, buchholz, rank]
+      description: Lig ya da İsviçre sıralamasında bir katılımcı.
+      properties:
+        position: { type: integer, format: int32, description: Kuradaki yeri. }
+        played: { type: integer, format: int32 }
+        won: { type: integer, format: int32 }
+        drawn: { type: integer, format: int32 }
+        lost: { type: integer, format: int32 }
+        points: { type: number, format: double, description: "Galibiyet 1, beraberlik 0.5, bay 1." }
+        head_to_head: { type: number, format: double, description: Puanca eşit olanlara karşı alınan puan. }
+        buchholz: { type: number, format: double, description: Rakiplerin puanları toplamı. }
+        rank: { type: integer, format: int32, description: "1'den başlar; üçünde de eşit olanlar aynı sırayı paylaşır." }
+    EventBracket:
+      type: object
+      required: [started, format, best_of, result, winner, drawn, rounds, current_round, entrants, matches, standings, finished, winner_positions, caller_can_manage]
+      description: Bir etkinliğin bir eşleşme ağacı bileşeni, isteği yapanın gördüğü haliyle (#251).
+      properties:
+        started: { type: boolean, description: Eşleşme ağacı başlatıldı. }
+        format: { type: string, enum: [elimination, league, swiss], description: "Eleme, lig ya da İsviçre; başlamamışsa başlatılırsa alınacak olan." }
+        best_of: { type: integer, format: int32, enum: [1, 3, 5], description: Maç başına oyun (BO1/BO3/BO5). }
+        result: { type: string, enum: [points, wdl], description: "Oyun puanla mı galibiyet/beraberlik/mağlubiyetle mi skorlanır." }
+        winner: { type: string, enum: [high, low], description: "`points` kuralında yüksek ya da düşük puan kazanır." }
+        draw_key: { type: string, description: Tohumların geldiği kura bileşeninin anahtarı; türde kura yoksa alan yok. }
+        drawn: { type: boolean, description: "Kura çekildi; `subject`, `teams_key` ve `entrants` onundur." }
+        subject: { type: string, enum: [participants, teams] }
+        teams_key: { type: string, description: "Yalnızca takım kurasında, takım bileşeninin anahtarı." }
+        rounds: { type: integer, format: int32, description: "Planlanan tur: ligin turları, İsviçre'de oynanacak tur, elemede en çok tur." }
+        current_round: { type: integer, format: int32, description: Eşlenmiş son tur; başlamamışsa 0. }
+        started_at: { type: string, format: date-time, description: Yalnızca başlamış eşleşme ağacında. }
+        entrants:
+          type: array
+          description: Kuradaki yerler, sıraya göre.
+          items: { $ref: "#/components/schemas/EventBracketEntrant" }
+        matches:
+          type: array
+          description: Tura ve sıraya göre.
+          items: { $ref: "#/components/schemas/EventBracketMatch" }
+        standings:
+          type: array
+          description: Lig ya da İsviçre sıralaması (puan → aralarındaki maç → Buchholz); elemede boş.
+          items: { $ref: "#/components/schemas/EventBracketStanding" }
+        finished: { type: boolean, description: Eşleşme ağacı sonuçlandı. }
+        winner_positions:
+          type: array
+          description: Sonuçlandıysa kazananların kuradaki yerleri (elemede son kazanan, lig ve İsviçre'de birinci; tam eşitlikte birden çok); öncesinde boş.
+          items: { type: integer, format: int32 }
+        caller_can_manage:
+          type: boolean
+          description: Şu an başlatabilir, sonraki turu eşleyebilir, düzeltebilir ve sıfırlayabilirsiniz (organizatör, moderatör, yönetici; susturulmamış; etkinlik iptal değil, donmamış, tayfa salt okunur değil).
+    EventBracketGameRequest:
+      type: object
+      description: "`points` kuralında `a_points` ve `b_points` birlikte, `wdl` kuralında yalnızca `a_outcome`."
+      additionalProperties: false
+      properties:
+        a_points: { type: integer, format: int32, minimum: -1000000, maximum: 1000000 }
+        b_points: { type: integer, format: int32, minimum: -1000000, maximum: 1000000 }
+        a_outcome: { type: string, enum: [win, draw, loss] }
     VocabularyIds:
       type: object
       description: Alan anahtarı → tayfa sözlüğündeki değerin kimliği (#244).

@@ -94,6 +94,11 @@ enum CoreExportSection {
   // caller's score in every round. The others at the table are not
   // exported.
   CORE_EXPORT_SECTION_SCORES = 28;
+  // The caller's matches in brackets (the bracket component, issue #251),
+  // through their place in the draw: the event, the component, the round,
+  // the place and the caller's own score in every game. The opponent and
+  // their score are not exported.
+  CORE_EXPORT_SECTION_BRACKET_MATCHES = 29;
 }
 
 message ExportMyDataRequest {}

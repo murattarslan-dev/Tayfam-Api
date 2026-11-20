@@ -65,6 +65,8 @@ const (
 	SectionDrawEntries = "draw_entries"
 	// Issue #250: one's seats and scores at scoreboard tables.
 	SectionScores = "scoreboard_scores"
+	// Issue #251: one's matches in brackets and one's own scores.
+	SectionBracketMatches = "bracket_matches"
 )
 
 const (
@@ -213,6 +215,10 @@ var sections = []struct {
 	{SectionScores, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportScores(ctx, store.ExportScoresParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportScoresRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionBracketMatches, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportBracketMatches(ctx, store.ExportBracketMatchesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportBracketMatchesRow) row { return row{x.K, x.Data} })
 	}},
 }
 

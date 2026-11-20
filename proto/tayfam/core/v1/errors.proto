@@ -409,4 +409,31 @@ enum ErrorReason {
   ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT = 2504;
   // FAILED_PRECONDITION. Scores are entered once the event has started.
   ERROR_REASON_SCORE_NOT_STARTED = 2505;
+
+  // Bracket component (BracketComponentService, component_bracket.proto;
+  // issue #251: 2510–2519).
+
+  // FAILED_PRECONDITION. The bracket seeds from the type's draw component:
+  // its draw was not made, or the type has none.
+  ERROR_REASON_BRACKET_DRAW_REQUIRED = 2510;
+  // FAILED_PRECONDITION. The bracket was started; a manager resets it
+  // before starting again.
+  ERROR_REASON_BRACKET_STARTED = 2511;
+  // FAILED_PRECONDITION. The bracket has not been started.
+  ERROR_REASON_BRACKET_NOT_STARTED = 2512;
+  // FAILED_PRECONDITION. Fewer than two entrants in the draw.
+  ERROR_REASON_BRACKET_TOO_FEW = 2513;
+  // NOT_FOUND. No such match in the bracket.
+  ERROR_REASON_BRACKET_MATCH_NOT_FOUND = 2514;
+  // NOT_FOUND. No such game in the match; only the last game is deleted.
+  ERROR_REASON_BRACKET_GAME_NOT_FOUND = 2515;
+  // FAILED_PRECONDITION. The match is decided (or a bye): no more games.
+  ERROR_REASON_BRACKET_MATCH_DECIDED = 2516;
+  // FAILED_PRECONDITION. A match of the current round is not decided yet.
+  ERROR_REASON_BRACKET_ROUND_OPEN = 2517;
+  // FAILED_PRECONDITION. A later round was paired from the match's round;
+  // its games no longer change (reset the bracket instead).
+  ERROR_REASON_BRACKET_ROUND_CLOSED = 2518;
+  // FAILED_PRECONDITION. The bracket has no next round.
+  ERROR_REASON_BRACKET_FINISHED = 2519;
 }

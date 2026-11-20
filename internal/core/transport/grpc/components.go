@@ -57,6 +57,7 @@ func componentRegistrars() []componentRegistrar {
 		registerScoreboardComponent,
 
 		// bracket (#251)
+		registerBracketComponent,
 
 		// guest players (#252)
 

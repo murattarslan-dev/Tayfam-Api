@@ -171,6 +171,17 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_SCORE_TABLE_STARTED":          {http.StatusConflict, "score-table-started"},
 		"ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT": {http.StatusConflict, "score-player-not-participant"},
 		"ERROR_REASON_SCORE_NOT_STARTED":            {http.StatusConflict, "score-not-started"},
+		// Bracket component (issue #251; ADR-0025 §4, §5, ADR-0037 §3).
+		"ERROR_REASON_BRACKET_DRAW_REQUIRED":   {http.StatusConflict, "bracket-draw-required"},
+		"ERROR_REASON_BRACKET_STARTED":         {http.StatusConflict, "bracket-started"},
+		"ERROR_REASON_BRACKET_NOT_STARTED":     {http.StatusConflict, "bracket-not-started"},
+		"ERROR_REASON_BRACKET_TOO_FEW":         {http.StatusConflict, "bracket-too-few"},
+		"ERROR_REASON_BRACKET_MATCH_NOT_FOUND": {http.StatusNotFound, "bracket-match-not-found"},
+		"ERROR_REASON_BRACKET_GAME_NOT_FOUND":  {http.StatusNotFound, "bracket-game-not-found"},
+		"ERROR_REASON_BRACKET_MATCH_DECIDED":   {http.StatusConflict, "bracket-match-decided"},
+		"ERROR_REASON_BRACKET_ROUND_OPEN":      {http.StatusConflict, "bracket-round-open"},
+		"ERROR_REASON_BRACKET_ROUND_CLOSED":    {http.StatusConflict, "bracket-round-closed"},
+		"ERROR_REASON_BRACKET_FINISHED":        {http.StatusConflict, "bracket-finished"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

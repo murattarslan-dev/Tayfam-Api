@@ -94,6 +94,7 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 		registerScoreboardComponent,
 
 		// bracket (#251)
+		registerBracketComponent,
 
 		// guest players (#252)
 

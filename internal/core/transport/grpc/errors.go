@@ -238,6 +238,26 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT, true
 	case errors.Is(err, apperr.ErrScoreNotStarted):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SCORE_NOT_STARTED, true
+	case errors.Is(err, apperr.ErrBracketDrawRequired):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_BRACKET_DRAW_REQUIRED, true
+	case errors.Is(err, apperr.ErrBracketStarted):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_BRACKET_STARTED, true
+	case errors.Is(err, apperr.ErrBracketNotStarted):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_BRACKET_NOT_STARTED, true
+	case errors.Is(err, apperr.ErrBracketTooFew):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_BRACKET_TOO_FEW, true
+	case errors.Is(err, apperr.ErrBracketMatchNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_BRACKET_MATCH_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrBracketGameNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_BRACKET_GAME_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrBracketMatchDecided):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_BRACKET_MATCH_DECIDED, true
+	case errors.Is(err, apperr.ErrBracketRoundOpen):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_BRACKET_ROUND_OPEN, true
+	case errors.Is(err, apperr.ErrBracketRoundClosed):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_BRACKET_ROUND_CLOSED, true
+	case errors.Is(err, apperr.ErrBracketFinished):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_BRACKET_FINISHED, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

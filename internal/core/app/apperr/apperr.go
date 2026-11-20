@@ -169,6 +169,36 @@ var (
 	ErrScoreNotStarted = errors.New("etkinlik başlamadan skor girilmez")
 )
 
+// Bracket component errors (issue #251; ADR-0025 §4, §5, ADR-0037 §3).
+var (
+	// ErrBracketDrawRequired: the bracket seeds from the type's draw
+	// component, and its draw was not made (or the type has none).
+	ErrBracketDrawRequired = errors.New("eşleşme için kura çekilmeli")
+	// ErrBracketStarted: the bracket was started; a manager resets it
+	// before starting again.
+	ErrBracketStarted = errors.New("eşleşme ağacı başladı")
+	// ErrBracketNotStarted: the bracket has not been started.
+	ErrBracketNotStarted = errors.New("eşleşme ağacı başlamadı")
+	// ErrBracketTooFew: fewer than two entrants in the draw.
+	ErrBracketTooFew = errors.New("eşleşme için katılımcı az")
+	// ErrBracketMatchNotFound: no such match in the bracket.
+	ErrBracketMatchNotFound = errors.New("maç bulunamadı")
+	// ErrBracketGameNotFound: no such game in the match, or not its last
+	// game (only the last one is deleted).
+	ErrBracketGameNotFound = errors.New("oyun bulunamadı")
+	// ErrBracketMatchDecided: the match is decided (or a bye); no more
+	// games.
+	ErrBracketMatchDecided = errors.New("maç sonuçlandı")
+	// ErrBracketRoundOpen: a match of the current round is not decided
+	// yet.
+	ErrBracketRoundOpen = errors.New("turda sonuçlanmamış maç var")
+	// ErrBracketRoundClosed: a later round was paired from this match's
+	// round; its games no longer change.
+	ErrBracketRoundClosed = errors.New("sonraki tur başladı")
+	// ErrBracketFinished: the bracket has no next round.
+	ErrBracketFinished = errors.New("eşleşme ağacı bitti")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (
