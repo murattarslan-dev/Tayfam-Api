@@ -305,6 +305,51 @@ func (q *Queries) ExportConvoyVehicles(ctx context.Context, arg ExportConvoyVehi
 	return items, nil
 }
 
+const exportDrawEntries = `-- name: ExportDrawEntries :many
+SELECT d.id AS k, jsonb_build_object(
+  'event_id', d.event_id, 'component_key', d.component_key, 'position', d.position,
+  'drawn_at', w.drawn_at
+) AS data
+FROM event_draw_entries d
+JOIN event_draws w ON w.event_id = d.event_id AND w.component_key = d.component_key
+WHERE d.user_id = $1 AND d.id > $2
+ORDER BY d.id
+LIMIT $3
+`
+
+type ExportDrawEntriesParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportDrawEntriesRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Kuradaki yeriniz (`draw` bileşeni, issue #249): hangi etkinliğin kurasında
+// kaçıncı sıradasınız. Kuradaki diğer kişiler dışa aktarılmaz.
+func (q *Queries) ExportDrawEntries(ctx context.Context, arg ExportDrawEntriesParams) ([]ExportDrawEntriesRow, error) {
+	rows, err := q.db.Query(ctx, exportDrawEntries, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportDrawEntriesRow{}
+	for rows.Next() {
+		var i ExportDrawEntriesRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportEventPhotos = `-- name: ExportEventPhotos :many
 SELECT p.id AS k, jsonb_build_object(
   'id', p.id, 'event_id', p.event_id, 'tayfa_id', e.tayfa_id, 'upload_id', p.upload_id,

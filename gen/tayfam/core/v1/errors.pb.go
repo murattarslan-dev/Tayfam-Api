@@ -328,6 +328,12 @@ const (
 	// event: an active member who answered "going" or whose attendance was
 	// verified.
 	ErrorReason_ERROR_REASON_TEAMS_NOT_PARTICIPANT ErrorReason = 2482
+	// FAILED_PRECONDITION. The component's draw was made; its result is fixed
+	// and cannot be drawn again.
+	ErrorReason_ERROR_REASON_DRAW_ALREADY_MADE ErrorReason = 2490
+	// FAILED_PRECONDITION. Fewer than two to draw: participants, or teams
+	// with people when the type forms teams.
+	ErrorReason_ERROR_REASON_DRAW_TOO_FEW ErrorReason = 2491
 )
 
 // Enum value maps for ErrorReason.
@@ -430,6 +436,8 @@ var (
 		2480: "ERROR_REASON_TEAMS_MANUAL",
 		2481: "ERROR_REASON_TEAMS_TOO_FEW",
 		2482: "ERROR_REASON_TEAMS_NOT_PARTICIPANT",
+		2490: "ERROR_REASON_DRAW_ALREADY_MADE",
+		2491: "ERROR_REASON_DRAW_TOO_FEW",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                 0,
@@ -529,6 +537,8 @@ var (
 		"ERROR_REASON_TEAMS_MANUAL":                2480,
 		"ERROR_REASON_TEAMS_TOO_FEW":               2481,
 		"ERROR_REASON_TEAMS_NOT_PARTICIPANT":       2482,
+		"ERROR_REASON_DRAW_ALREADY_MADE":           2490,
+		"ERROR_REASON_DRAW_TOO_FEW":                2491,
 	}
 )
 
@@ -563,7 +573,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xb5\x1b\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xfa\x1b\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -662,7 +672,9 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\x1eERROR_REASON_MEASUREMENT_SCOPE\x10\x94\x13\x12\x1e\n" +
 	"\x19ERROR_REASON_TEAMS_MANUAL\x10\xb0\x13\x12\x1f\n" +
 	"\x1aERROR_REASON_TEAMS_TOO_FEW\x10\xb1\x13\x12'\n" +
-	"\"ERROR_REASON_TEAMS_NOT_PARTICIPANT\x10\xb2\x13B\xbd\x01\n" +
+	"\"ERROR_REASON_TEAMS_NOT_PARTICIPANT\x10\xb2\x13\x12#\n" +
+	"\x1eERROR_REASON_DRAW_ALREADY_MADE\x10\xba\x13\x12\x1e\n" +
+	"\x19ERROR_REASON_DRAW_TOO_FEW\x10\xbb\x13B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

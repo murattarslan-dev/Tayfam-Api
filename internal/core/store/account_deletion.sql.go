@@ -196,6 +196,17 @@ func (q *Queries) ClearTayfaUserFields(ctx context.Context, userID pgtype.UUID) 
 	return err
 }
 
+const clearUserDrawEntries = `-- name: ClearUserDrawEntries :exec
+UPDATE event_draw_entries SET user_id = NULL WHERE user_id = $1
+`
+
+// Kuradaki yeri kişinin katılımıdır (issue #249). Kura sonucu sabittir:
+// yer silinmez, boşalır; sıra ve diğer yerler değişmez.
+func (q *Queries) ClearUserDrawEntries(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearUserDrawEntries, userID)
+	return err
+}
+
 const clearVocabularyCreator = `-- name: ClearVocabularyCreator :exec
 UPDATE tayfa_vocabulary SET created_by = NULL WHERE created_by = $1
 `

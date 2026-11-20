@@ -18,6 +18,7 @@ type Querier interface {
 	// Oy ve sayaç aynı transaction'da: oy eklendiyse sayaç artar. Aynı kişinin
 	// ikinci oyu PK'ye takılır, sayaç değişmez.
 	AddAnswerVote(ctx context.Context, arg AddAnswerVoteParams) (int64, error)
+	AddDrawEntry(ctx context.Context, arg AddDrawEntryParams) error
 	AddQuestionTag(ctx context.Context, arg AddQuestionTagParams) error
 	// İlgi alanı katalog anahtarıdır (catalog_interests, ADR-0025 §2).
 	AddTayfaInterest(ctx context.Context, arg AddTayfaInterestParams) error
@@ -158,6 +159,9 @@ type Querier interface {
 	ClearRsvpMarker(ctx context.Context, userID pgtype.UUID) error
 	ClearTayfaDiscoverUser(ctx context.Context, userID pgtype.UUID) error
 	ClearTayfaUserFields(ctx context.Context, userID pgtype.UUID) error
+	// Kuradaki yeri kişinin katılımıdır (issue #249). Kura sonucu sabittir:
+	// yer silinmez, boşalır; sıra ve diğer yerler değişmez.
+	ClearUserDrawEntries(ctx context.Context, userID pgtype.UUID) error
 	// Tayfa sözlüğüne eklediği değerler tayfanın ortak verisidir; kalır, ekleyen
 	// boşalır (issue #244; ADR-0037 §4).
 	ClearVocabularyCreator(ctx context.Context, userID pgtype.UUID) error
@@ -236,6 +240,7 @@ type Querier interface {
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error
 	CreateBlock(ctx context.Context, arg CreateBlockParams) (int64, error)
 	CreateChecklistItem(ctx context.Context, arg CreateChecklistItemParams) error
+	CreateDraw(ctx context.Context, arg CreateDrawParams) error
 	// Etkinlikler (issue #49). Her sorgu tayfa_id ile ya da tayfa kapsamında
 	// yüklenmiş bir etkinliğin kimliğiyle çalışır (IDOR); yetki kontrolü app
 	// katmanındadır (authz).
@@ -475,6 +480,9 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// KVKK dışa aktarma (ADR-0021): tek kayıt.
 	ExportDiscover(ctx context.Context, arg ExportDiscoverParams) ([]ExportDiscoverRow, error)
+	// Kuradaki yeriniz (`draw` bileşeni, issue #249): hangi etkinliğin kurasında
+	// kaçıncı sıradasınız. Kuradaki diğer kişiler dışa aktarılmaz.
+	ExportDrawEntries(ctx context.Context, arg ExportDrawEntriesParams) ([]ExportDrawEntriesRow, error)
 	// Albüm fotoğrafları (issue #206); dosyaların kendisi zip'e girmez
 	// (ADR-0021 §5), uploads bölümü onları listeler.
 	ExportEventPhotos(ctx context.Context, arg ExportEventPhotosParams) ([]ExportEventPhotosRow, error)
@@ -560,6 +568,12 @@ type Querier interface {
 	// Kataloğun bütününün sürümü; GET /v1/catalog'un ETag'i.
 	GetCatalogVersion(ctx context.Context) (int64, error)
 	GetChecklistItem(ctx context.Context, arg GetChecklistItemParams) (pgtype.UUID, error)
+	// Kura bileşeni (`draw`; issue #249; ADR-0025 §4). Etkinlik her zaman önce
+	// tayfa kapsamında yüklenir ve bileşen etkinliğin tür sürümünde çözülür
+	// (internal/core/app/component: View / Change); buradaki sorgular o
+	// etkinliğin kimliği ve bileşenin anahtarıyla çalışır (IDOR). Yetki app
+	// katmanındadır (internal/core/app/component/draw).
+	GetDraw(ctx context.Context, arg GetDrawParams) (GetDrawRow, error)
 	GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow, error)
 	// Tekrar gönderilen oluşturma isteği aynı etkinliği döndürür.
 	GetEventByClientRequest(ctx context.Context, arg GetEventByClientRequestParams) (GetEventByClientRequestRow, error)
@@ -814,6 +828,12 @@ type Querier interface {
 	// gün geçmiş, iptal edilmemiş, silinmemiş; ADR-0026 §1). En çok 3 arkadaş
 	// (puan, sonra ad sırasıyla); arkadaş yoksa boş liste ve 0. Puan dönmez.
 	ListDiscoverFeed(ctx context.Context, arg ListDiscoverFeedParams) ([]ListDiscoverFeedRow, error)
+	// Kuraya girecek kişiler: tayfanın etkin üyesi olan ve "geliyorum" demiş
+	// ya da katılımı doğrulanmış katılımcılar, kimlik sırasıyla.
+	ListDrawCandidates(ctx context.Context, eventID pgtype.UUID) ([]pgtype.UUID, error)
+	// Kuranın sırası. active_member, kişinin hâlâ tayfanın etkin üyesi olup
+	// olmadığıdır: tayfadan ayrılanın yeri boş gösterilir.
+	ListDrawEntries(ctx context.Context, arg ListDrawEntriesParams) ([]ListDrawEntriesRow, error)
 	// Üretim sırası gelen seriler: bitmemiş, şablonu olan ve generated_until'ı
 	// verilen zamandan önce kalanlar.
 	ListDueEventSeries(ctx context.Context, arg ListDueEventSeriesParams) ([]ListDueEventSeriesRow, error)
