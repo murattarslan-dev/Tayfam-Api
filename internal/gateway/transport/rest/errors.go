@@ -200,6 +200,9 @@ var problemsByDomain = map[string]map[string]problem{
 		// Şimdi başlat (issue #263; ADR-0038 §1, §2).
 		"ERROR_REASON_NOW_LIMIT_REACHED":    {http.StatusTooManyRequests, "now-limit-reached"},
 		"ERROR_REASON_EVENT_NOT_OPEN_ENDED": {http.StatusConflict, "event-not-open-ended"},
+		// QR ile katılım (issue #264; ADR-0038 §3).
+		"ERROR_REASON_INVALID_JOIN_QR":       {http.StatusNotFound, "invalid-join-qr"},
+		"ERROR_REASON_JOIN_QR_LIMIT_REACHED": {http.StatusTooManyRequests, "join-qr-limit-reached"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

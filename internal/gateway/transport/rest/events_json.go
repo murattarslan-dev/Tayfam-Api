@@ -30,6 +30,7 @@ var (
 	attendanceMethods = newEnum(map[string]corev1.AttendanceMethod{
 		"location": corev1.AttendanceMethod_ATTENDANCE_METHOD_LOCATION, "online": corev1.AttendanceMethod_ATTENDANCE_METHOD_ONLINE,
 		"hike_start": corev1.AttendanceMethod_ATTENDANCE_METHOD_HIKE_START, "organizer": corev1.AttendanceMethod_ATTENDANCE_METHOD_ORGANIZER,
+		"qr": corev1.AttendanceMethod_ATTENDANCE_METHOD_QR,
 	})
 )
 

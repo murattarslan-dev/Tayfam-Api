@@ -207,6 +207,49 @@ olayına yazar; chat teslim eder.
 - `event.created` olayında `starts_now: true` işareti vardır; şimdi
   bildirimi (#265) buradan çıkar.
 
+## Uygulama notları (#264, §3, §5)
+
+- Uçlar: `POST …/events/{id}/join-qr` (`CreateEventJoinQr`) ve `POST
+  /v1/join-qr` (`JoinEventByQr`, token gövdede). İkisi de kimlik ister;
+  açık metod eklenmedi. Gateway'de IP başına davet sınırı, core'da
+  kullanıcı başına dakikada 5 deneme.
+- İzin tablosu: `EventJoinQRCreate` (üye; çağıran etkinliğin
+  organizatörü olmalı) ve `EventJoinQRCreateAny` (yönetici). ADR'deki tek
+  `EventJoinQrCreate` "kendi / herkesinki" kalıbıyla ikiye ayrıldı.
+- QR yalnızca **yüz yüze** etkinlikte açılır (çevrimiçi etkinlik
+  `invalid-request`, alan `mode`); bitmiş ya da iptal edilmiş etkinlikte
+  token açılmaz ve eski token katılım sağlamaz (Bitir'den sonra QR
+  kendiliğinden kapanır).
+- Token 128 bit (`crypto/rand`), base64url 22 karakter; core yalnızca
+  SHA-256 özetini `event_join_qr_tokens`'ta saklar (2 dk CHECK'i). Özetler
+  retention işiyle 1 gün sonra, açanın hesabı silinince hemen silinir.
+  Token açma denetim kaydı ve olay üretmez (her 2 dakikada bir yenilenir;
+  kayıt değeri yok).
+- Sayaç `event_join_qr_counts` yalnızca sayı tutar (kim katıldığı
+  saklanmaz). Bir şey değiştiren her QR kullanımı sayılır: yeni üyelik ya
+  da istek, mevcut üyenin "geliyorum"u veya check-in'i. Hiçbir şey
+  değiştirmeyen tekrar sayılmaz. 30 dolunca yeni token da açılmaz
+  (`join-qr-limit-reached`, 429, reason 2641).
+- Tek tip ret `invalid-join-qr` (404, reason 2640): bozuk, bilinmeyen,
+  süresi dolmuş token; bitmiş/iptal/çevrimiçi etkinlik; salt okunur ya da
+  silinmiş tayfa; etkinlik modülü kapalı; tayfada banlı; organizatörle ya
+  da token'ı açanla iki yönden engel; silinmiş ya da platform banlı hesap;
+  token'ı açanın kendisi.
+- Mevcut üye okutursa "geliyorum" (doluysa bekleme listesi) ve check-in
+  penceresi açıksa yeni yöntem `qr` ile check-in (`attendance_method`
+  CHECK'ine eklendi). Yeni katılan yalnızca "geliyorum" alır (§3
+  metniyle aynı); check-in'i ikinci okutmayla ya da konumla yapar.
+  Bekleyen istek tekrar okutursa yine `pending`; cevap bekleyen doğrudan
+  davet `already-pending` alır (davet `AcceptInvitation` ile cevaplanır).
+- `memberships_guard`: `qr` kod gibi ele alınır (davet kimliği yok);
+  anlık tayfada etkin katılım yalnızca transaction'da
+  `app.join_qr_token` ile verilen, süresi dolmamış ve tayfanın aktif
+  yöneticisinin açtığı token'la olur. Kalıcı tayfada politika (açık:
+  etkin, onaylı: istek) veritabanında da korunur.
+- KVKK: token özetleri ve sayaç kişiyi göstermez (özetin `created_by`'ı 1
+  gün yaşar); dışa aktarmaya yeni bölüm eklenmedi. QR ile kurulan üyelik
+  `joined_via = qr` (`JoinSource` `qr`) olarak üyeliklerle gelir.
+
 ## Değerlendirilen alternatifler
 
 - **Ayrı "şimdi" modeli (tayfasız etkinlik)**: Reddedildi. ADR-0032 gizli

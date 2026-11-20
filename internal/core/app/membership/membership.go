@@ -371,6 +371,56 @@ func (s *Service) JoinByInvite(ctx context.Context, caller id.ID, token string) 
 	return out, err
 }
 
+// JoinedViaQR is memberships.joined_via for a join by an event's QR
+// (ADR-0038 §3).
+const JoinedViaQR = "qr"
+
+// JoinByQRTx joins user to tayfa by an event's join QR (package joinqr,
+// ADR-0038 §3) inside the caller's transaction q, which names user as
+// actor and has given the token to the memberships trigger
+// (SetJoinQRToken). An instant tayfa takes the user as an active member at
+// once; a standard tayfa follows its join policy (open: active, approval: a
+// join request). existing is true when user already was an active member,
+// and for a join request that was already waiting (returned as it is). A
+// banned user and a read-only or deleted tayfa get apperr.ErrInvalidJoinQR;
+// a direct invitation waiting for an answer apperr.ErrAlreadyPending.
+func (s *Service) JoinByQRTx(ctx context.Context, q *store.Queries, tayfa, user id.ID) (m Member, existing bool, err error) {
+	t, err := lockTayfa(ctx, q, tayfa)
+	if err != nil {
+		if errors.Is(err, apperr.ErrTayfaNotFound) {
+			return Member{}, false, apperr.ErrInvalidJoinQR
+		}
+		return Member{}, false, err
+	}
+	if t.readOnly {
+		return Member{}, false, apperr.ErrInvalidJoinQR
+	}
+	r, err := q.GetMembership(ctx, store.GetMembershipParams{TayfaID: tayfa.PG(), UserID: user.PG()})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return Member{}, false, fmt.Errorf("üyelik: %w", err)
+	default:
+		switch authz.Status(r.Status) {
+		case authz.StatusActive, authz.StatusPending:
+			cur, cerr := toMember(tayfa, user, r.Role, r.Status, r.JoinedAt, r.MutedUntil, s.now(), true)
+			return cur, true, cerr
+		case authz.StatusBanned:
+			return Member{}, false, apperr.ErrInvalidJoinQR
+		default:
+			// A direct invitation: the invited user answers it with
+			// AcceptInvitation.
+			return Member{}, false, apperr.ErrAlreadyPending
+		}
+	}
+	st := authz.StatusPending
+	if t.instant || t.joinPolicy == "open" {
+		st = authz.StatusActive
+	}
+	m, err = s.join(ctx, q, tayfa, user, st, JoinedViaQR, id.ID{})
+	return m, false, err
+}
+
 // checkNotMember refuses users who already have a membership. banned is the
 // error for a banned user (each join path has its own).
 func (s *Service) checkNotMember(ctx context.Context, q *store.Queries, tayfa, user id.ID, banned error) error {

@@ -82,6 +82,14 @@ func (f *fakeCore) FinishEvent(ctx context.Context, in *corev1.FinishEventReques
 	e.EndTime = timestamppb.New(t0)
 	return &corev1.FinishEventResponse{Event: e}, f.record(ctx, in)
 }
+func (f *fakeCore) CreateEventJoinQr(ctx context.Context, in *corev1.CreateEventJoinQrRequest, _ ...grpc.CallOption) (*corev1.CreateEventJoinQrResponse, error) {
+	return &corev1.CreateEventJoinQrResponse{Token: "QRTOKEN", ExpireTime: timestamppb.New(t0)}, f.record(ctx, in)
+}
+func (f *fakeCore) JoinEventByQr(ctx context.Context, in *corev1.JoinEventByQrRequest, _ ...grpc.CallOption) (*corev1.JoinEventByQrResponse, error) {
+	return &corev1.JoinEventByQrResponse{
+		TayfaId: tayfaID, EventId: eventID, Rsvp: corev1.RsvpStatus_RSVP_STATUS_GOING, Attendance: corev1.AttendanceStatus_ATTENDANCE_STATUS_ATTENDED,
+	}, f.record(ctx, in)
+}
 func (f *fakeCore) GetEvent(ctx context.Context, in *corev1.GetEventRequest, _ ...grpc.CallOption) (*corev1.GetEventResponse, error) {
 	if f.event != nil {
 		return &corev1.GetEventResponse{Event: f.event}, f.record(ctx, in)
@@ -152,6 +160,8 @@ func TestEventRoutes(t *testing.T) {
 		{"POST", one + "/cancellation", `{"reason":"Yağmur"}`, 200, &corev1.CancelEventRequest{TayfaId: tayfaID, EventId: eventID, Reason: "Yağmur"}},
 		{"POST", one + "/cancellation", `{}`, 200, &corev1.CancelEventRequest{TayfaId: tayfaID, EventId: eventID}},
 		{"POST", one + "/finish", "", 200, &corev1.FinishEventRequest{TayfaId: tayfaID, EventId: eventID}},
+		{"POST", one + "/join-qr", "", 201, &corev1.CreateEventJoinQrRequest{TayfaId: tayfaID, EventId: eventID}},
+		{"POST", "/v1/join-qr", `{"token":"AbCdEfGhIjKlMnOpQrStUv"}`, 200, &corev1.JoinEventByQrRequest{Token: "AbCdEfGhIjKlMnOpQrStUv"}},
 		{"PUT", one + "/rsvp", `{"status":"going"}`, 200, &corev1.SetRsvpRequest{TayfaId: tayfaID, EventId: eventID, Status: corev1.RsvpStatus_RSVP_STATUS_GOING}},
 		{"PUT", one + "/rsvp", `{"status":"not_going"}`, 200, &corev1.SetRsvpRequest{TayfaId: tayfaID, EventId: eventID, Status: corev1.RsvpStatus_RSVP_STATUS_NOT_GOING}},
 		{"GET", one + "/attendees", "", 200, &corev1.ListAttendeesRequest{TayfaId: tayfaID, EventId: eventID, Status: corev1.RsvpStatus_RSVP_STATUS_GOING}},
@@ -733,6 +743,33 @@ func TestTayfaNowCreateMinRole(t *testing.T) {
 	_, _, before := f.last()
 	for _, b := range []string{`{"now_create_min_role":"owner"}`, `{"now_create_min_role":""}`, `{"now_create_min_role":1}`} {
 		if w := as(h, "PATCH", "/v1/tayfas/"+tayfaID, b); w.Code != 400 {
+			t.Errorf("%s: kod %d", b, w.Code)
+		}
+	}
+	if _, _, n := f.last(); n != before {
+		t.Error("hatalı istek core'a gitti")
+	}
+}
+
+// QR ile katılım (issue #264): the token goes to the client only in the
+// body; a join's result names the IDs and the answer, and a request
+// without a token never reaches core.
+func TestJoinQRResponses(t *testing.T) {
+	f := &fakeCore{}
+	h := coreRouter(f)
+	w := as(h, "POST", "/v1/tayfas/"+tayfaID+"/events/"+eventID+"/join-qr", "")
+	tok := decodeBody[joinQRTokenJSON](t, w)
+	if w.Code != 201 || tok.Token != "QRTOKEN" || !tok.ExpiresAt.Equal(t0) {
+		t.Fatalf("QR token: %d %s", w.Code, w.Body)
+	}
+	w = as(h, "POST", "/v1/join-qr", `{"token":"AbCdEfGhIjKlMnOpQrStUv"}`)
+	r := decodeBody[joinQRResultJSON](t, w)
+	if w.Code != 200 || r.TayfaID != tayfaID || r.EventID != eventID || r.Pending || r.RSVP != "going" || r.Attendance != "attended" {
+		t.Fatalf("QR katılımı: %d %s", w.Code, w.Body)
+	}
+	_, _, before := f.last()
+	for _, b := range []string{`{}`, `{"token":""}`, `{"token":"` + strings.Repeat("a", 65) + `"}`, `{"token":1}`} {
+		if w := as(h, "POST", "/v1/join-qr", b); w.Code != 400 {
 			t.Errorf("%s: kod %d", b, w.Code)
 		}
 	}

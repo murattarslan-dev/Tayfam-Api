@@ -22,6 +22,8 @@ type EventClient interface {
 	UpdateEvent(ctx context.Context, in *corev1.UpdateEventRequest, opts ...grpc.CallOption) (*corev1.UpdateEventResponse, error)
 	CancelEvent(ctx context.Context, in *corev1.CancelEventRequest, opts ...grpc.CallOption) (*corev1.CancelEventResponse, error)
 	FinishEvent(ctx context.Context, in *corev1.FinishEventRequest, opts ...grpc.CallOption) (*corev1.FinishEventResponse, error)
+	CreateEventJoinQr(ctx context.Context, in *corev1.CreateEventJoinQrRequest, opts ...grpc.CallOption) (*corev1.CreateEventJoinQrResponse, error)
+	JoinEventByQr(ctx context.Context, in *corev1.JoinEventByQrRequest, opts ...grpc.CallOption) (*corev1.JoinEventByQrResponse, error)
 	GetEvent(ctx context.Context, in *corev1.GetEventRequest, opts ...grpc.CallOption) (*corev1.GetEventResponse, error)
 	ListUpcomingEvents(ctx context.Context, in *corev1.ListUpcomingEventsRequest, opts ...grpc.CallOption) (*corev1.ListUpcomingEventsResponse, error)
 	SetRsvp(ctx context.Context, in *corev1.SetRsvpRequest, opts ...grpc.CallOption) (*corev1.SetRsvpResponse, error)
@@ -62,6 +64,8 @@ func registerEvents(mux *http.ServeMux, h coreHandlers) {
 	mux.HandleFunc("PATCH "+one, a(h.updateEvent))
 	mux.HandleFunc("POST "+one+"/cancellation", a(h.cancelEvent))
 	mux.HandleFunc("POST "+one+"/finish", a(h.finishEvent))
+	mux.HandleFunc("POST "+one+"/join-qr", a(h.createEventJoinQr))
+	mux.HandleFunc("POST /v1/join-qr", a(h.joinEventByQr))
 	mux.HandleFunc("GET "+one+"/calendar", a(h.exportEvent))
 	mux.HandleFunc("PUT "+one+"/rsvp", a(h.setRsvp))
 	mux.HandleFunc("GET "+one+"/attendees", a(h.listAttendees))
@@ -470,6 +474,59 @@ func (h coreHandlers) finishEvent(ctx context.Context, w http.ResponseWriter, r 
 		return
 	}
 	writeJSON(w, http.StatusOK, eventFrom(resp.GetEvent()))
+}
+
+// --- QR ile katılım (issue #264, ADR-0038 §3) ---
+
+type joinQRTokenJSON struct {
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// createEventJoinQr returns a new join token for the event's QR. The token
+// is in the response body only; nothing here logs it.
+func (h coreHandlers) createEventJoinQr(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	if !h.d.InviteLimit.Allow(clientIP(r, h.d.TrustCFConnectingIP)) {
+		rateLimited(w, r)
+		return
+	}
+	id, eid, ok := pathTayfaEvent(w, r)
+	if !ok {
+		return
+	}
+	resp, err := h.d.Events.CreateEventJoinQr(ctx, &corev1.CreateEventJoinQrRequest{TayfaId: id, EventId: eid})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, joinQRTokenJSON{Token: resp.GetToken(), ExpiresAt: resp.GetExpireTime().AsTime().UTC()})
+}
+
+type joinQRResultJSON struct {
+	TayfaID    string `json:"tayfa_id"`
+	EventID    string `json:"event_id"`
+	Pending    bool   `json:"pending"`
+	RSVP       string `json:"rsvp,omitempty"`
+	Attendance string `json:"attendance,omitempty"`
+}
+
+// joinEventByQr redeems a join token. The token travels in the body (it is
+// in the QR link's fragment and never in a URL), and is limited per IP
+// before the body is read; core also limits attempts per user.
+func (h coreHandlers) joinEventByQr(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	token, ok := h.inviteToken(w, r)
+	if !ok {
+		return
+	}
+	resp, err := h.d.Events.JoinEventByQr(ctx, &corev1.JoinEventByQrRequest{Token: token})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, joinQRResultJSON{
+		TayfaID: resp.GetTayfaId(), EventID: resp.GetEventId(), Pending: resp.GetPending(),
+		RSVP: optName(rsvpStatuses, resp.GetRsvp()), Attendance: optName(attendanceStatuses, resp.GetAttendance()),
+	})
 }
 
 // exportEvent serves the event as an .ics file. It may carry the online

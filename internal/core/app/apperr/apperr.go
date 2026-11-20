@@ -257,6 +257,16 @@ var (
 	ErrEventNotOpenEnded = errors.New("etkinlik açık uçlu değil")
 )
 
+// QR join errors (issue #264; ADR-0038 §3). Neither carries the token.
+var (
+	// ErrInvalidJoinQR: every refused QR join (unknown or expired token,
+	// event or tayfa not open to it, a caller who may not join), alike on
+	// purpose.
+	ErrInvalidJoinQR = errors.New("geçersiz katılım QR'ı")
+	// ErrJoinQRLimit: the event already had its 30 joins by QR.
+	ErrJoinQRLimit = errors.New("QR katılım sınırı")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (

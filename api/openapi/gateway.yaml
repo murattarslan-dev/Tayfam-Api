@@ -1862,6 +1862,41 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  /v1/tayfas/{tayfa_id}/events/{event_id}/join-qr:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+    post:
+      operationId: createEventJoinQr
+      summary: Etkinliğin QR'ı için kısa ömürlü katılım token'ı
+      description: |
+        QR ile katılım (ADR-0038 §3). Organizatör kendi etkinliği için,
+        tayfanın yöneticileri her etkinlik için alır. Yalnızca yüz yüze ve
+        bitmemiş etkinlik; çevrimiçi etkinlik `invalid-request`, bitmiş
+        etkinlik `event-ended`, iptal edilmiş etkinlik `event-cancelled`
+        alır. Token 128 bit rastgele değerdir ve yalnızca bu yanıtta
+        döner; sunucu yalnızca özetini saklar. Ömrü 2 dakikadır
+        (`expires_at`): istemci süre dolmadan yenisini ister; eski token
+        süresi dolana kadar geçerli kalır. QR yalnızca token'ı taşır
+        (`https://tayfam.app/q#<token>`, token fragment'ta). Etkinlik 30
+        QR katılımına ulaştıysa `join-qr-limit-reached`. IP başına sınır
+        vardır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "201":
+          description: Yeni katılım token'ı
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JoinQrToken" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /v1/tayfas/{tayfa_id}/events/{event_id}/calendar:
     parameters:
       - $ref: "#/components/parameters/TayfaID"
@@ -4629,6 +4664,50 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "410": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/join-qr:
+    post:
+      operationId: joinEventByQr
+      summary: Organizatörün QR'ıyla etkinliğe (ve tayfasına) katılır
+      description: |
+        QR ile katılım (ADR-0038 §3). Token yalnızca gövdede gider (QR
+        linkinde fragment'tadır, URL'ye yazılmaz).
+        - Anlık etkinlik: onay beklemeden tayfaya üye olunur ve etkinliğe
+          `going` (doluysa `waitlist`) yazılır.
+        - Kalıcı tayfa: tayfanın katılım politikası geçerlidir. Açık
+          tayfada üye olunur ve `going` yazılır; onaylı tayfada katılım
+          isteği bırakılır (`pending: true`, başka bir şey yazılmaz).
+        - Zaten etkin üye: `going` yazılır; check-in penceresi açıksa
+          katılım `qr` yöntemiyle doğrulanır (`attendance: attended`).
+        - Bekleyen katılım isteği: yine `pending: true`, değişiklik yok.
+        Bozuk, bilinmeyen ya da süresi dolmuş token; bitmiş, iptal
+        edilmiş ya da çevrimiçi etkinlik; tayfada banlı, organizatörle iki
+        yönden engelli, silinmiş ya da platform banlı hesap aynı cevabı
+        alır (`invalid-join-qr`). Cevap bekleyen doğrudan davet
+        `already-pending`. Etkinlik başına en fazla 30 QR katılımı
+        (`join-qr-limit-reached`; hiçbir şey değiştirmeyen tekrar
+        sayılmaz). IP başına (gateway) ve kullanıcı başına dakikada 5
+        (core) deneme sınırı vardır (`rate-limited`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InviteTokenRequest" }
+      responses:
+        "200":
+          description: Katılımın sonucu
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JoinQrResult" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
@@ -8100,6 +8179,9 @@ components:
         # core: şimdi başlat (#263, ADR-0038)
         - now-limit-reached
         - event-not-open-ended
+        # core: QR ile katılım (#264, ADR-0038 §3)
+        - invalid-join-qr
+        - join-qr-limit-reached
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -8667,7 +8749,7 @@ components:
       properties:
         user_id: { type: string, format: uuid }
         requested_at: { type: string, format: date-time }
-        source: { type: string, enum: [invite_link, direct_invite, code, discover] }
+        source: { type: string, enum: [invite_link, direct_invite, code, discover, qr] }
         inviter_user_id:
           type: string
           format: uuid
@@ -8745,6 +8827,33 @@ components:
       additionalProperties: false
       properties:
         token: { type: string, maxLength: 64 }
+
+    JoinQrToken:
+      type: object
+      required: [token, expires_at]
+      description: QR ile katılım token'ı (ADR-0038 §3). Log'a yazılmaz.
+      properties:
+        token:
+          type: string
+          minLength: 22
+          maxLength: 22
+          description: base64url, 128 bit. QR `https://tayfam.app/q#<token>` taşır.
+        expires_at:
+          type: string
+          format: date-time
+          description: Oluşturmadan 2 dakika sonra.
+
+    JoinQrResult:
+      type: object
+      required: [tayfa_id, event_id, pending]
+      properties:
+        tayfa_id: { type: string, format: uuid }
+        event_id: { type: string, format: uuid }
+        pending:
+          type: boolean
+          description: Onaylı tayfada katılım isteği bırakıldı (ya da zaten bekliyordu); `rsvp` ve `attendance` yok.
+        rsvp: { $ref: "#/components/schemas/RsvpStatus" }
+        attendance: { $ref: "#/components/schemas/AttendanceStatus" }
 
     InvitePreview:
       type: object
@@ -9112,8 +9221,9 @@ components:
       description: |
         `location`: buluşma noktasına 300 m içinde check-in. `online`:
         çevrimiçi etkinlikte "Katıldım". `hike_start`: yoklamada çıkış (`roll_call`).
-        `organizer`: organizatör düzeltmesi.
-      enum: [location, online, hike_start, organizer]
+        `organizer`: organizatör düzeltmesi. `qr`: üye organizatörün
+        QR'ını okuttu (ADR-0038 §3).
+      enum: [location, online, hike_start, organizer, qr]
 
     LatLng:
       type: object

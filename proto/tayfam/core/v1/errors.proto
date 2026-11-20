@@ -495,4 +495,15 @@ enum ErrorReason {
   // FAILED_PRECONDITION. FinishEvent on an event that was not started now
   // (Event.open_ended false): a planned event ends at its end_time.
   ERROR_REASON_EVENT_NOT_OPEN_ENDED = 2631;
+
+  // QR ile katılım (ADR-0038 §3; issue #264: 2640–2649).
+
+  // NOT_FOUND. The join QR token is malformed, unknown or expired, its
+  // event is cancelled, ended, deleted or online, its tayfa is read-only
+  // or gone, or the caller may not join: banned in the tayfa, blocked
+  // with the organizer either way, deleted or banned on the platform.
+  // These cases are indistinguishable on purpose (ADR-0011).
+  ERROR_REASON_INVALID_JOIN_QR = 2640;
+  // RESOURCE_EXHAUSTED. The event already had 30 joins by QR.
+  ERROR_REASON_JOIN_QR_LIMIT_REACHED = 2641;
 }

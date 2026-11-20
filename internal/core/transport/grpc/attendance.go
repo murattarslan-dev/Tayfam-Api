@@ -65,6 +65,8 @@ func methodToProto(s string) corev1.AttendanceMethod {
 		return corev1.AttendanceMethod_ATTENDANCE_METHOD_HIKE_START
 	case event.MethodOrganizer:
 		return corev1.AttendanceMethod_ATTENDANCE_METHOD_ORGANIZER
+	case event.MethodQR:
+		return corev1.AttendanceMethod_ATTENDANCE_METHOD_QR
 	}
 	return corev1.AttendanceMethod_ATTENDANCE_METHOD_UNSPECIFIED
 }

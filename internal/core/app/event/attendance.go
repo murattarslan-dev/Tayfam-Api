@@ -25,6 +25,9 @@ const (
 	MethodOnline    = "online"
 	MethodHikeStart = "hike_start" // a roll call start (#242); the Faz 1 name
 	MethodOrganizer = "organizer"
+	// MethodQR: a member scanned the organizer's join QR (issue #264,
+	// ADR-0038 §3).
+	MethodQR = "qr"
 )
 
 // Outbox event types and audit actions of attendance (issue #50). Payloads
