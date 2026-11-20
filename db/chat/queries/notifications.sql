@@ -75,6 +75,7 @@ WHERE user_id = @user_id AND scope_type = @scope_type AND scope_id = @scope_id;
 -- name: DeleteTayfaNotifications :exec
 DELETE FROM notifications WHERE tayfa_id = @tayfa_id;
 
+-- Tayfanın genel ve "Şimdi bildirimleri" (tayfa_now, issue #265) tercihleri.
 -- name: DeleteTayfaNotificationPreferences :exec
-DELETE FROM notification_preferences WHERE scope_type = 'tayfa' AND scope_id = @tayfa_id;
+DELETE FROM notification_preferences WHERE scope_type IN ('tayfa', 'tayfa_now') AND scope_id = @tayfa_id;
 

@@ -743,6 +743,19 @@ message CreateInstantEventRequest {
   // distinct IDs, not the caller. If one cannot be invited nothing is
   // created.
   repeated string invitee_user_ids = 2;
+  // Optional, with event.starts_now only (else ERROR_REASON_VALIDATION,
+  // field "now_recipient_ids"): the friends the organizer chose to tell
+  // that the now event started (ADR-0038 §4), at most 30 distinct IDs, not
+  // the caller and none of invitee_user_ids. Each is invited directly
+  // (accepting makes them an active member) and gets one NOW_STARTED
+  // notification instead of TAYFA_INVITATION. core checks every one again
+  // and silently leaves out who is not an accepted friend, is blocked
+  // either way, is deleted or banned, or whose now_from_friends setting
+  // does not allow the caller; the caller is never told who was left out.
+  // A caller sends at most 2 such broadcasts a day (Europe/Istanbul day),
+  // whoever is left out (ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED); they do
+  // not count toward the daily direct invitation limit.
+  repeated string now_recipient_ids = 3;
 }
 
 message CreateInstantEventResponse {

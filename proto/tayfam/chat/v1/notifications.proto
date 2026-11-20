@@ -54,7 +54,12 @@ service NotificationService {
   // ADR-0009); UNAVAILABLE when core cannot answer. Level
   // MENTIONS or NONE may last until mute_until (at most a year ahead), then
   // the tayfa is back to ALL. Level ALL without mute_until removes the
-  // preference; ALL with mute_until is ERROR_REASON_VALIDATION.
+  // preference; ALL with mute_until is ERROR_REASON_VALIDATION. With now
+  // set it is the tayfa's "Şimdi bildirimleri" instead (scope
+  // NOTIFICATION_SCOPE_TYPE_TAYFA_NOW; issue #265, ADR-0038 §4): ALL or NONE
+  // only (MENTIONS is ERROR_REASON_VALIDATION), the same membership and
+  // mute_until rules; it mutes NOW_STARTED pushes of that tayfa. A tayfa at
+  // level NONE pushes no NOW_STARTED either.
   rpc SetTayfaNotificationPreference(SetTayfaNotificationPreferenceRequest) returns (SetTayfaNotificationPreferenceResponse);
 
   // SetConversationNotificationPreference sets how the caller hears about a
@@ -152,6 +157,8 @@ enum NotificationScopeType {
   NOTIFICATION_SCOPE_TYPE_CHANNEL = 2;
   // A direct conversation (SetConversationNotificationPreference).
   NOTIFICATION_SCOPE_TYPE_DM_CONVERSATION = 3;
+  // A tayfa's now notifications (SetTayfaNotificationPreference with now).
+  NOTIFICATION_SCOPE_TYPE_TAYFA_NOW = 4;
 }
 
 message NotificationPreference {
@@ -174,6 +181,8 @@ message SetTayfaNotificationPreferenceRequest {
   NotificationLevel level = 2;
   // Optional; only with MENTIONS or NONE.
   google.protobuf.Timestamp mute_until = 3;
+  // The tayfa's now notifications (scope TAYFA_NOW): ALL or NONE.
+  bool now = 4;
 }
 
 message SetTayfaNotificationPreferenceResponse {

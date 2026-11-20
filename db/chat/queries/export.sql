@@ -10,12 +10,21 @@ WHERE m.author_id = @user_id AND m.id > @after
 ORDER BY m.id
 LIMIT @n;
 
+-- Bir tayfanın iki tercihi (tayfa ve tayfa_now, issue #265) aynı scope_id'yi
+-- taşır: sayfa scope_id'ye göre ilerler ve bir scope_id'nin bütün satırları
+-- aynı sayfada gelir (sayfada en fazla @n farklı scope_id).
 -- name: ExportNotificationPreferences :many
+WITH page AS (
+  SELECT DISTINCT x.scope_id FROM notification_preferences x
+  WHERE x.user_id = @user_id AND x.scope_id > @after
+  ORDER BY x.scope_id
+  LIMIT @n
+)
 SELECT p.scope_id AS k, jsonb_build_object(
   'scope_type', p.scope_type, 'scope_id', p.scope_id, 'level', p.level,
   'muted_until', p.muted_until, 'updated_at', p.updated_at
 ) AS data
 FROM notification_preferences p
-WHERE p.user_id = @user_id AND p.scope_id > @after
-ORDER BY p.scope_id
-LIMIT @n;
+JOIN page ON page.scope_id = p.scope_id
+WHERE p.user_id = @user_id
+ORDER BY p.scope_id, p.scope_type;
