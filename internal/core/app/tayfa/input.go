@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalog"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalog/definition"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/home"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -151,8 +153,10 @@ func checkInterests(ctx context.Context, q *store.Queries, keys, current []strin
 }
 
 // setInterests replaces the tayfa's interests with keys after checking
-// them against the catalog.
-func setInterests(ctx context.Context, q *store.Queries, tayfa id.ID, keys []string) error {
+// them against the catalog, and switches on the home page widgets: with
+// sections the former fixed sections (a new or converted tayfa), and the
+// default widgets of the interests added (ADR-0027 §3; home.AddDefaults).
+func setInterests(ctx context.Context, q *store.Queries, tayfa id.ID, keys []string, sections bool, now time.Time) error {
 	current, err := q.ListTayfaInterests(ctx, tayfa.PG())
 	if err != nil {
 		return fmt.Errorf("ilgi alanları: %w", err)
@@ -163,12 +167,16 @@ func setInterests(ctx context.Context, q *store.Queries, tayfa id.ID, keys []str
 	if err := q.DeleteTayfaInterests(ctx, tayfa.PG()); err != nil {
 		return fmt.Errorf("ilgi alanları: %w", err)
 	}
+	var added []string
 	for _, k := range keys {
 		if err := q.AddTayfaInterest(ctx, store.AddTayfaInterestParams{TayfaID: tayfa.PG(), InterestKey: k}); err != nil {
 			return fmt.Errorf("ilgi alanı: %w", err)
 		}
+		if !slices.Contains(current, k) {
+			added = append(added, k)
+		}
 	}
-	return nil
+	return home.AddDefaults(ctx, q, tayfa, added, sections, now)
 }
 
 func validJoinPolicy(p string) bool { return p == JoinApproval || p == JoinOpen }

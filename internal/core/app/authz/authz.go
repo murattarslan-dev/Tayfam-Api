@@ -311,6 +311,9 @@ const (
 	// shows or hides the tayfa's statistics and badges in its Keşfet
 	// card (tayfas.stats_showcase).
 	TayfaStatsShowcaseUpdate
+	// Ana sayfa düzeni (issue #268, ADR-0027 §3). TayfaHomeUpdate turns
+	// the home page widgets on or off, orders them and sets their config.
+	TayfaHomeUpdate
 
 	actionEnd // sentinel; keep last
 )
@@ -416,6 +419,7 @@ var actionNames = [...]string{
 	EventJoinQRCreate:         "event.join_qr_create",
 	EventJoinQRCreateAny:      "event.join_qr_create_any",
 	TayfaStatsShowcaseUpdate:  "tayfa.stats_showcase.update",
+	TayfaHomeUpdate:           "tayfa.home.update",
 	actionEnd:                 "",
 }
 
@@ -579,6 +583,8 @@ var permissions = map[Action]Role{
 	TayfaDiscoverManage: Admin,
 	// Keşfet vitrini: only the admins (ADR-0026 §3).
 	TayfaStatsShowcaseUpdate: Admin,
+	// Ana sayfa düzeni: only the admins (ADR-0027 §3).
+	TayfaHomeUpdate: Admin,
 	// "Yönetici her daveti ve davet linkini iptal edebilir" (v14).
 	InviteDirectCancel: Admin,
 	MemberChangeRole:   Admin,
@@ -609,7 +615,10 @@ var instantRules = map[Action]Role{
 	TayfaUpdateSettings: nobody,
 	TayfaRotateJoinCode: nobody,
 	TayfaManageModules:  nobody,
-	EventCreate:         nobody,
+	// An instant tayfa has no home page (ADR-0027 §3); it gets one when
+	// converted.
+	TayfaHomeUpdate: nobody,
+	EventCreate:     nobody,
 	// An instant now event is created with the instant tayfa
 	// (POST /v1/instant-events, ADR-0038 §2), never inside it.
 	EventCreateNow: nobody,

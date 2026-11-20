@@ -4583,6 +4583,95 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Tayfa ana sayfası (core TayfaHomeService, #268, ADR-0027 §1–§4) ---
+  # Bileşen listesi sunucunundur ve kapalıdır; her tayfa her bileşeni
+  # kullanabilir, ilgi alanları yalnızca varsayılan açık gelenleri belirler.
+  # "Sıradaki" kartı bileşen değildir, istemci her zaman en üstte gösterir.
+  # Modülü kapalı bileşen açık olsa da gösterilmez. İstemci tanımadığı
+  # anahtarı ana sayfada atlar, ayarlar ekranında "Uygulamayı güncelle"
+  # etiketiyle değiştirilemez olarak listeler. Etkin üye olmayan
+  # `tayfa-not-found` alır.
+
+  /v1/tayfas/{tayfa_id}/home-widgets:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: getHomeWidgets
+      summary: Ana sayfa düzeninin tamamı (ayarlar ekranı)
+      description: |
+        Sunucunun bildiği her bileşen, kapalılar dahil, sırasıyla. Her etkin
+        üyeye açıktır (susturulmuş üye de okur). Ana sayfanın kendisi
+        `GET /v1/tayfas/{tayfa_id}` yanıtındaki `home_widgets`'tır.
+      responses:
+        "200":
+          description: Düzen
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HomeWidgetLayout" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: setHomeWidgets
+      summary: Ana sayfa düzenini değiştirir (yönetici)
+      description: |
+        Bütün liste tek istekte: `GET` yanıtındaki her bileşen tam bir kez,
+        yeni sırasıyla, açık/kapalı ve ayarıyla (kısmi güncelleme yok).
+        Eksik, fazla ya da bilinmeyen anahtar `invalid-request` (alan
+        `widgets`). Ayar gerektiren bileşen (`goal`, `countdown`,
+        `log_summary`) ayarsız açılamaz; ayarı olmayan bileşen ayar almaz
+        (alan `config`). Modülü kapalı bileşen açılabilir; modül açılınca
+        görünür. Yalnızca yönetici; değişiklik denetim kaydına yazılır.
+        Cevap yeni düzendir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HomeWidgetLayoutInput" }
+      responses:
+        "200":
+          description: Yeni düzen
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HomeWidgetLayout" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/home-widgets/{widget_key}/data:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/HomeWidgetKey"
+    get:
+      operationId: getHomeWidgetData
+      summary: Bir gösterim bileşeninin verisi
+      description: |
+        `stats`, `goal`, `countdown`, `champions` ve `log_summary` için,
+        ana sayfanın gösterdiği haliyle. Her etkin üyeye açıktır. Ana
+        sayfanın göstermediği bileşen (kapalı, modülü kapalı, tarihi geçmiş
+        geri sayım) ya da verisi kendi uçlarından okunan bileşen (bölümler,
+        modül bileşenleri) `home-widget-not-found`. İstatistikler donmuş
+        etkinliklerdendir (#266); hassas değer hiçbir yerde yoktur.
+        Şampiyonlar yalnızca ilan edilmiş, kazananı olan ve kutlama
+        bileşeninin üyelere gösterdiği kutlamalardır; en fazla 10, en yeni
+        ilan önce.
+      responses:
+        "200":
+          description: Veri
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HomeWidgetData" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /v1/tayfas/{tayfa_id}/event-series/{series_id}:
     parameters:
       - $ref: "#/components/parameters/TayfaID"
@@ -8149,6 +8238,12 @@ components:
       required: true
       description: Etkinlik türünün anahtarı (`hike`).
       schema: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+    HomeWidgetKey:
+      name: widget_key
+      in: path
+      required: true
+      description: Ana sayfa bileşeninin anahtarı (`stats`).
+      schema: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
     CatalogTypeVersion:
       name: version
       in: path
@@ -8314,6 +8409,8 @@ components:
         - join-qr-limit-reached
         # core: şimdi bildirimi (#265, ADR-0038 §4)
         - now-broadcast-limit-reached
+        # core: ana sayfa bileşenleri (#268, ADR-0027 §3–§4)
+        - home-widget-not-found
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -8785,7 +8882,7 @@ components:
 
     TayfaView:
       type: object
-      required: [tayfa, caller_role, badges]
+      required: [tayfa, caller_role, badges, home_widgets]
       properties:
         tayfa: { $ref: "#/components/schemas/Tayfa" }
         caller_role: { $ref: "#/components/schemas/Role" }
@@ -8793,6 +8890,14 @@ components:
           type: array
           description: Tayfanın rozetleri, kazanılma sırasıyla (#258, ADR-0039 §3).
           items: { $ref: "#/components/schemas/EarnedBadge" }
+        home_widgets:
+          type: array
+          description: |
+            Ana sayfanın "Sıradaki" kartından sonra gösterdiği bileşenler,
+            sırasıyla (#268, ADR-0027 §3): yalnızca açık olanlar, modülü
+            açık olanlar ve tarihi geçmemiş geri sayım. İstemci tanımadığı
+            anahtarı atlar.
+          items: { $ref: "#/components/schemas/HomeWidget" }
 
     MyTayfa:
       type: object
@@ -10335,6 +10440,232 @@ components:
           type: string
           format: date-time
           description: Son hesaplama; henüz hesaplanmadıysa yoktur.
+
+    HomeWidgetPeriod:
+      type: string
+      description: |
+        Dönem. `this_year` Europe/Istanbul takvim yılı; `all_time` tüm
+        zamanlar (`stats`, `log_summary`); `last_30_days` son 30 gün
+        (`champions`).
+      enum: [this_year, all_time, last_30_days]
+    StatsWidgetConfig:
+      type: object
+      required: [metric_keys, period]
+      additionalProperties: false
+      description: |
+        İstatistik kartı: tayfa istatistiğinden en fazla 4 metrik
+        (`TayfaStat.metric_key`) ve dönem (`this_year` ya da `all_time`).
+        Ayarsız kart bu yılın dört ortak metriğini gösterir.
+      properties:
+        metric_keys:
+          type: array
+          minItems: 1
+          maxItems: 4
+          items: { type: string, maxLength: 130 }
+        period: { $ref: "#/components/schemas/HomeWidgetPeriod" }
+    GoalWidgetConfig:
+      type: object
+      required: [metric_key, target]
+      additionalProperties: false
+      description: |
+        Yıllık hedef: tayfa istatistiğinden bir metrik ve hedef değer.
+        İlerleme yalnızca istatistikten dolar, elle artırılmaz.
+      properties:
+        metric_key: { type: string, maxLength: 130 }
+        target: { type: number, exclusiveMinimum: 0, maximum: 1000000000 }
+        year:
+          type: integer
+          minimum: 2000
+          maximum: 2999
+          description: Yoksa her zaman içinde bulunulan yıl.
+    CountdownWidgetConfig:
+      type: object
+      required: [title, at]
+      additionalProperties: false
+      description: |
+        Geri sayım. Başlık kötüye kullanım filtresinden geçer; an geçince
+        bileşen gösterilmez.
+      properties:
+        title: { type: string, minLength: 1, maxLength: 60 }
+        at: { type: string, format: date-time, description: "Saniyeye yuvarlanır." }
+    ChampionsWidgetConfig:
+      type: object
+      required: [event_types, period]
+      additionalProperties: false
+      description: |
+        Şampiyonlar: bu türlerdeki etkinliklerin ilan edilmiş kazananları
+        (boş liste her tür) ve dönem (`last_30_days` ya da `this_year`).
+        Ayarsız kart bu yılın bütün türlerini gösterir.
+      properties:
+        event_types:
+          type: array
+          maxItems: 10
+          items: { $ref: "#/components/schemas/EventTypeKey" }
+        period: { $ref: "#/components/schemas/HomeWidgetPeriod" }
+    LogSummaryWidgetConfig:
+      type: object
+      required: [metric_key, period]
+      additionalProperties: false
+      description: |
+        Günlük özeti: bir günlük istatistiği (`<tür>.<günlük>.<stat>`,
+        örneğin `birding.sightings.distinct_species`) ve dönem
+        (`this_year` ya da `all_time`).
+      properties:
+        metric_key: { type: string, maxLength: 130 }
+        period: { $ref: "#/components/schemas/HomeWidgetPeriod" }
+    HomeWidgetConfig:
+      type: object
+      additionalProperties: false
+      description: |
+        Bileşenin ayarı: en fazla bileşenin kendi anahtarındaki alan
+        bulunur. Okurken `stats` ve `champions` her zaman ayarlıdır
+        (varsayılanlarla).
+      properties:
+        stats: { $ref: "#/components/schemas/StatsWidgetConfig" }
+        goal: { $ref: "#/components/schemas/GoalWidgetConfig" }
+        countdown: { $ref: "#/components/schemas/CountdownWidgetConfig" }
+        champions: { $ref: "#/components/schemas/ChampionsWidgetConfig" }
+        log_summary: { $ref: "#/components/schemas/LogSummaryWidgetConfig" }
+    HomeWidget:
+      type: object
+      required: [key, kind, enabled, position]
+      description: |
+        Ana sayfa bileşeni. `kind` istemciye bilgi içindir; anahtar
+        listesi sunucunundur ve büyüyebilir (bugün `upcoming`,
+        `announcements`, `polls`, `questions`, `stats`, `goal`,
+        `countdown`, `champions`, `log_summary`).
+      properties:
+        key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+        kind:
+          type: string
+          enum: [section, display, module, unknown]
+          description: |
+            `section` eski sabit bölüm (modülünün listesi), `display`
+            gösterim bileşeni (verisi `…/data`), `module` modül vitrini
+            (verisi modülün kendi uçlarından).
+        module:
+          type: string
+          description: Bileşenin bağlı olduğu tayfa modülü; yoksa alan yoktur.
+        enabled: { type: boolean, description: "Ana sayfada (`home_widgets`) her zaman true." }
+        position: { type: integer, description: "Sıradaki kartından sonraki yeri, 0'dan." }
+        config: { $ref: "#/components/schemas/HomeWidgetConfig" }
+    HomeWidgetLayout:
+      type: object
+      required: [widgets]
+      properties:
+        widgets:
+          type: array
+          items: { $ref: "#/components/schemas/HomeWidget" }
+    HomeWidgetInput:
+      type: object
+      required: [key, enabled]
+      additionalProperties: false
+      properties:
+        key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+        enabled: { type: boolean }
+        config: { $ref: "#/components/schemas/HomeWidgetConfig" }
+    HomeWidgetLayoutInput:
+      type: object
+      required: [widgets]
+      additionalProperties: false
+      properties:
+        widgets:
+          type: array
+          maxItems: 64
+          description: Bütün liste, yeni sırasıyla.
+          items: { $ref: "#/components/schemas/HomeWidgetInput" }
+    HomeMetricValue:
+      type: object
+      required: [metric_key, value, event_count]
+      properties:
+        metric_key: { type: string }
+        value: { type: number, description: "Henüz sayılmamış metrikte 0." }
+        event_count: { type: integer }
+    StatsWidgetData:
+      type: object
+      required: [period, values]
+      properties:
+        period: { $ref: "#/components/schemas/HomeWidgetPeriod" }
+        year: { type: integer, description: "Europe/Istanbul yılı; tüm zamanlarda yoktur." }
+        values:
+          type: array
+          description: Ayardaki metrikler, ayardaki sırayla.
+          items: { $ref: "#/components/schemas/HomeMetricValue" }
+        computed_at:
+          type: string
+          format: date-time
+          description: Son hesaplama; henüz hesaplanmadıysa yoktur.
+    GoalWidgetData:
+      type: object
+      required: [metric_key, target, year, value, event_count, reached]
+      properties:
+        metric_key: { type: string }
+        target: { type: number }
+        year: { type: integer }
+        value: { type: number }
+        event_count: { type: integer }
+        reached: { type: boolean }
+    CountdownWidgetData:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+        at: { type: string, format: date-time }
+    ChampionWinner:
+      type: object
+      description: |
+        Bir kazanan; tam biri bulunur. Kişi (`user_id`), takım (`team_id`;
+        `team_name` adsız takımda yoktur, `team_position` 1'den) ya da
+        misafir oyuncu (`guest_id`; `guest_nickname` silinmişse yoktur).
+      properties:
+        user_id: { type: string, format: uuid }
+        team_id: { type: string, format: uuid }
+        team_name: { type: string }
+        team_position: { type: integer }
+        guest_id: { type: string, format: uuid }
+        guest_nickname: { type: string }
+    HomeChampion:
+      type: object
+      required: [event_id, event_title, event_type, component_key, winners]
+      properties:
+        event_id: { type: string, format: uuid }
+        event_title: { type: string }
+        event_type: { $ref: "#/components/schemas/EventTypeKey" }
+        starts_at: { type: string, format: date-time }
+        component_key: { type: string, description: "Etkinliğin kutlama bileşeni." }
+        announced_at: { type: string, format: date-time }
+        winners:
+          type: array
+          items: { $ref: "#/components/schemas/ChampionWinner" }
+    ChampionsWidgetData:
+      type: object
+      required: [period, champions]
+      properties:
+        period: { $ref: "#/components/schemas/HomeWidgetPeriod" }
+        champions:
+          type: array
+          maxItems: 10
+          items: { $ref: "#/components/schemas/HomeChampion" }
+    LogSummaryWidgetData:
+      type: object
+      required: [metric_key, period, value, event_count]
+      properties:
+        metric_key: { type: string }
+        period: { $ref: "#/components/schemas/HomeWidgetPeriod" }
+        year: { type: integer, description: "Europe/Istanbul yılı; tüm zamanlarda yoktur." }
+        value: { type: number }
+        event_count: { type: integer }
+    HomeWidgetData:
+      type: object
+      required: [key]
+      description: Bileşenin anahtarındaki alan bulunur.
+      properties:
+        key: { type: string }
+        stats: { $ref: "#/components/schemas/StatsWidgetData" }
+        goal: { $ref: "#/components/schemas/GoalWidgetData" }
+        countdown: { $ref: "#/components/schemas/CountdownWidgetData" }
+        champions: { $ref: "#/components/schemas/ChampionsWidgetData" }
+        log_summary: { $ref: "#/components/schemas/LogSummaryWidgetData" }
 
     EventTypeKey:
       type: string

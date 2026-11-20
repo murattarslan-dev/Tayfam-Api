@@ -205,6 +205,8 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_JOIN_QR_LIMIT_REACHED": {http.StatusTooManyRequests, "join-qr-limit-reached"},
 		// Şimdi bildirimi (issue #265; ADR-0038 §4).
 		"ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED": {http.StatusTooManyRequests, "now-broadcast-limit-reached"},
+		// Ana sayfa (issue #268; ADR-0027 §3–§4).
+		"ERROR_REASON_HOME_WIDGET_NOT_FOUND": {http.StatusNotFound, "home-widget-not-found"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

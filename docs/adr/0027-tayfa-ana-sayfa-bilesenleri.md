@@ -175,3 +175,55 @@ panelinden yönetilir.
   olurdu; üyeler farklı içerik görebilirdi.
 - **Rastgele seçim:** Platform sahibi sıralı havuz ve tarihe sabitleme
   istedi; rastgelelik özel günleri garanti edemez.
+
+## Uygulama notları (#268)
+
+Karar değişmedi; §2–§4'ün uygulanışı:
+
+- **Bileşen listesi** `internal/core/app/home` (`Widgets`): anahtar, tür
+  (`section` / `display` / `module`), bağlı modül, ayar zorunluluğu. Bugünkü
+  sabit bölümlerin anahtarları `upcoming`, `announcements`, `polls`,
+  `questions` (bu sırayla); gösterim bileşenleri `stats`, `goal`,
+  `countdown`, `champions`, `log_summary`. Diğer bileşenler (#269 `daily`,
+  #270, #271, #261, #272) listeye kendi başlıkları altına tek satır ekler;
+  `tayfa_home_widgets.widget_key` CHECK'te liste tutmaz (yalnızca biçim),
+  migration gerekmez. "En düşük istemci sürümü" alanı yoktur: Faz 3 tek
+  sürümde yayınlanır (Notion E.6) ve istemci tanımadığı anahtarı atlar.
+- **Modüllerle ilişki** (ADR-0040): bileşenin `module` alanı
+  `tayfa_modules` anahtarıdır; modül kapalıyken (ya da satırı yokken)
+  bileşen açık olsa da ana sayfada gösterilmez, verisi
+  `home-widget-not-found` döner. Bölümler ve `champions` `events`
+  modülüne bağlıdır. Modül bileşenlerinin verisi modülün kendi
+  uçlarındadır.
+- **`updated_by` tutulmaz:** kim değiştirdi denetim kaydındadır
+  (`tayfa.home_updated`, açık bileşen anahtarlarıyla; ayar metni yok).
+  Satırda kişisel veri olmadığı için dışa aktarma ve hesap silme kapsamı
+  dışındadır (ADR-0011, tutmadığın veri).
+- **Varsayılanlar:** oluşturma ve anlık tayfa dönüştürmede bölümler +
+  ilgi alanlarının `default_widgets`'ı; ilgi alanı eklenince yalnızca
+  onunkiler. Ayar isteyen bileşen (`goal`, `countdown`, `log_summary`) ve
+  kodun tanımadığı anahtar varsayılan olamaz, atlanır. Mevcut standart
+  tayfalara migration bölümleri bugünkü sırayla açık ekler. İlgi alanı →
+  bileşen eşlemesinin içeriği katalog verisidir (#260); bu iş kaydı boş
+  bıraktı.
+- **Sözleşme:** `GET /v1/tayfas/{id}` → `home_widgets` (yalnızca
+  gösterilenler); `GET`/`PUT /v1/tayfas/{id}/home-widgets` (düzenin
+  tamamı; PUT her bileşeni tam bir kez ister); gösterim bileşeni verisi
+  `GET /v1/tayfas/{id}/home-widgets/{key}/data`. `config` bileşen
+  anahtarıyla adlanmış alt nesnedir (`{"goal": {…}}`).
+- **Ayarlar:** `stats` en fazla 4 metrik + dönem (`this_year` /
+  `all_time`; ayarsızsa dört ortak metrik, bu yıl); `goal` metrik, hedef
+  (0 < hedef ≤ 1e9), yıl (yoksa her zaman içinde bulunulan yıl);
+  `countdown` başlık (1–60, filtre takılma noktası `home.checkTerms`) ve
+  an (saniye); `champions` türler (≤ 10, boş = hepsi) + dönem
+  (`last_30_days` / `this_year`, ayarsızsa bu yıl); `log_summary`
+  `<tür>.<günlük>.<stat>` + dönem. Yıl Europe/Istanbul yılıdır.
+- **Veri:** istatistik, hedef ve günlük özeti `stats.TayfaTotals`'tan
+  (donmuş etkinlikler; hassas değer hiç yok); şampiyonlar ilan edilmiş,
+  başlamış, iptal edilmemiş etkinliklerin kutlamalarından
+  `celebration.Load` ile (gizli kaynak ve hassas katılımlı tür yok, kapalı
+  isteğe bağlı kutlama yok), en fazla 10, en yeni ilan önce; takım adı ve
+  misafir takma adı eklenir.
+- **Yetki:** `tayfa.home.update` yalnızca yönetici; anlık tayfada kimse.
+  Okuma (`tayfa.view`) her etkin üye; kapalı tayfanın düzeni ve verisi
+  üye olmayana hiçbir uçtan dönmez (`tayfa-not-found`).

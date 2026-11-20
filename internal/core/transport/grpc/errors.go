@@ -290,6 +290,8 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_INVALID_JOIN_QR, true
 	case errors.Is(err, apperr.ErrJoinQRLimit):
 		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_JOIN_QR_LIMIT_REACHED, true
+	case errors.Is(err, apperr.ErrHomeWidgetNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_HOME_WIDGET_NOT_FOUND, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

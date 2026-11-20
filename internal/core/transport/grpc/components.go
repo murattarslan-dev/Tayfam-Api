@@ -77,6 +77,9 @@ func componentRegistrars() []componentRegistrar {
 
 		// tayfa statistics (#266)
 		registerTayfaStats,
+
+		// tayfa home widgets (#268)
+		registerTayfaHome,
 	}
 }
 
