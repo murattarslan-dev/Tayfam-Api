@@ -569,7 +569,7 @@ func TestDrawPermissions(t *testing.T) {
 		switch {
 		case tc.want == nil:
 			must(t, err)
-		case !errors.Is(err, tc.want) && !(tc.user == muted && errors.Is(err, apperr.ErrMuted)):
+		case !errors.Is(err, tc.want) && (tc.user != muted || !errors.Is(err, apperr.ErrMuted)):
 			t.Errorf("%s çekme: %v, %v bekleniyordu", tc.name, err, tc.want)
 		}
 	}
