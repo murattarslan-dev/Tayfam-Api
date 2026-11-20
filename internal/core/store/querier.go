@@ -21,6 +21,7 @@ type Querier interface {
 	AddBracketGame(ctx context.Context, arg AddBracketGameParams) error
 	AddBracketMatch(ctx context.Context, arg AddBracketMatchParams) error
 	AddDrawEntry(ctx context.Context, arg AddDrawEntryParams) error
+	AddEventCelebrationWinner(ctx context.Context, arg AddEventCelebrationWinnerParams) error
 	AddGuestPlayer(ctx context.Context, arg AddGuestPlayerParams) error
 	AddQuestionTag(ctx context.Context, arg AddQuestionTagParams) error
 	AddScore(ctx context.Context, arg AddScoreParams) error
@@ -124,6 +125,7 @@ type Querier interface {
 	ClearAnnouncementUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearAnswerUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearAuditActor(ctx context.Context, userID pgtype.UUID) error
+	ClearCelebrationAnnouncer(ctx context.Context, userID pgtype.UUID) error
 	// Liste maddesi listede kalır; üstlenen ve ekleyen boşalır (`checklist`
 	// bileşeni, issue #241).
 	ClearChecklistItemUserFields(ctx context.Context, userID pgtype.UUID) error
@@ -268,6 +270,7 @@ type Querier interface {
 	// yüklenmiş bir etkinliğin kimliğiyle çalışır (IDOR); yetki kontrolü app
 	// katmanındadır (authz).
 	CreateEvent(ctx context.Context, arg CreateEventParams) error
+	CreateEventCelebration(ctx context.Context, arg CreateEventCelebrationParams) error
 	CreateEventPhoto(ctx context.Context, arg CreateEventPhotoParams) error
 	// Aynı atama varsa hiçbir şey yapmaz; etkilenen satır 0 olur.
 	CreateEventReferee(ctx context.Context, arg CreateEventRefereeParams) (int64, error)
@@ -338,6 +341,7 @@ type Querier interface {
 	DeleteBracket(ctx context.Context, arg DeleteBracketParams) error
 	DeleteBracketGame(ctx context.Context, arg DeleteBracketGameParams) (int64, error)
 	DeleteChecklistItem(ctx context.Context, arg DeleteChecklistItemParams) (int64, error)
+	DeleteEventCelebrationWinners(ctx context.Context, arg DeleteEventCelebrationWinnersParams) error
 	DeleteEventFieldValues(ctx context.Context, eventID pgtype.UUID) error
 	DeleteEventGoal(ctx context.Context, arg DeleteEventGoalParams) (int64, error)
 	DeleteEventMeasurement(ctx context.Context, arg DeleteEventMeasurementParams) (int64, error)
@@ -411,6 +415,9 @@ type Querier interface {
 	DeleteUserAvailability(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserBan(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserBlocks(ctx context.Context, userID pgtype.UUID) error
+	// Elle seçildiği kutlama kazananlığı kişiye aittir; kişiyle birlikte silinir.
+	// İlan ettiği kutlama kalır, ilan eden boşalır (issue #255).
+	DeleteUserCelebrationWins(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserDiscoverJoins(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserEventFeedback(ctx context.Context, userID pgtype.UUID) error
 	// Albüm fotoğrafları kişiseldir; kişiyle birlikte silinir, dosyaları
@@ -515,6 +522,11 @@ type Querier interface {
 	// kendi skorunuz (`wdl` kuralında kendi sonucunuz). Rakip ve skoru dışa
 	// aktarılmaz.
 	ExportBracketMatches(ctx context.Context, arg ExportBracketMatchesParams) ([]ExportBracketMatchesRow, error)
+	// Kutlamalarda elle kazanan seçildiğiniz etkinlikler (`celebration`
+	// bileşeni, issue #255). Kimin ilan ettiği ve diğer kazananlar yer almaz;
+	// kaynaktan (yazboz, eşleşme ağacı, derece) gelen kazanmalar o bileşenlerin
+	// bölümlerindedir.
+	ExportCelebrationWins(ctx context.Context, arg ExportCelebrationWinsParams) ([]ExportCelebrationWinsRow, error)
 	// Etkinliklere yazılan araçlar (`vehicles` bileşeni, issue #240). Bölümün adı
 	// Faz 1'den kalmadır (convoy_vehicles); bütün türlerin araçlarını taşır.
 	ExportConvoyVehicles(ctx context.Context, arg ExportConvoyVehiclesParams) ([]ExportConvoyVehiclesRow, error)
@@ -636,6 +648,13 @@ type Querier interface {
 	GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow, error)
 	// Tekrar gönderilen oluşturma isteği aynı etkinliği döndürür.
 	GetEventByClientRequest(ctx context.Context, arg GetEventByClientRequestParams) (GetEventByClientRequestRow, error)
+	// Kutlama bileşeni (`celebration`; issue #255; ADR-0025 §4, §5). Etkinlik her
+	// zaman önce tayfa kapsamında yüklenir ve bileşen etkinliğin tür sürümünde
+	// çözülür (internal/core/app/component: View / Change); buradaki sorgular o
+	// etkinliğin kimliği ve bileşenin anahtarıyla çalışır (IDOR). Yetki,
+	// kaynaktan kazanan okuma ve bildirim app katmanındadır
+	// (internal/core/app/component/celebration).
+	GetEventCelebration(ctx context.Context, arg GetEventCelebrationParams) (GetEventCelebrationRow, error)
 	GetEventComponent(ctx context.Context, arg GetEventComponentParams) (GetEventComponentRow, error)
 	// ---------------------------------------------------------------------------
 	// "Her şey yolunda mıydı?"
@@ -911,6 +930,8 @@ type Querier interface {
 	// Etkinlik kanalının kitlesi (gidecekler ve organizatör; kanalı açan Go'da
 	// eklenir), kullanıcı kimliğine göre sıralı, imleçten sonrası.
 	ListEventAudience(ctx context.Context, arg ListEventAudienceParams) ([]pgtype.UUID, error)
+	// Elle seçilen kazananlar, organizatörün verdiği sırayla; en fazla on kişi.
+	ListEventCelebrationWinners(ctx context.Context, arg ListEventCelebrationWinnersParams) ([]pgtype.UUID, error)
 	// Bileşen çerçevesi (issue #238; ADR-0025 §4–§6, ADR-0037 §2): etkinliğin
 	// bileşen seçimleri ve hakemleri. Etkinlik her zaman önce tayfa kapsamında
 	// yüklenir (GetEvent / GetEventForUpdate); buradaki sorgular o etkinliğin
@@ -1381,6 +1402,7 @@ type Querier interface {
 	// Hesap silindi: ad ve avatar temizlenir, satır mezar taşı olarak kalır.
 	// Tekrar uygulanınca sonuç değişmez.
 	TombstoneUserProfile(ctx context.Context, arg TombstoneUserProfileParams) error
+	TouchEventCelebration(ctx context.Context, arg TouchEventCelebrationParams) error
 	// Tayfa aktivitesi (pasif tayfa temizliğinin dayanağı, v14 "Tayfa
 	// yönetimi"). Yalnızca ileri gider; not_after = at - 1 saat verilir:
 	// sıcak satıra her yazmada yeni sürüm açılmaz, temizlik işi gün ölçeğinde

@@ -287,6 +287,21 @@ WHERE r.user_id = @user_id AND r.id > @after
 ORDER BY r.id
 LIMIT @n;
 
+-- Kutlamalarda elle kazanan seçildiğiniz etkinlikler (`celebration`
+-- bileşeni, issue #255). Kimin ilan ettiği ve diğer kazananlar yer almaz;
+-- kaynaktan (yazboz, eşleşme ağacı, derece) gelen kazanmalar o bileşenlerin
+-- bölümlerindedir.
+-- name: ExportCelebrationWins :many
+SELECT w.id AS k, jsonb_build_object(
+  'event_id', w.event_id, 'component_key', w.component_key, 'announced_at', c.announced_at,
+  'created_at', w.created_at
+) AS data
+FROM event_celebration_winners AS w
+JOIN event_celebrations AS c ON c.event_id = w.event_id AND c.component_key = w.component_key
+WHERE w.user_id = @user_id AND w.id > @after
+ORDER BY w.id
+LIMIT @n;
+
 -- Albüm fotoğrafları (issue #206); dosyaların kendisi zip'e girmez
 -- (ADR-0021 §5), uploads bölümü onları listeler.
 -- name: ExportEventPhotos :many

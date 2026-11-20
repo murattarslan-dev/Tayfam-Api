@@ -190,6 +190,23 @@ type EventBracketMatch struct {
 	CreatedAt    pgtype.Timestamptz
 }
 
+type EventCelebration struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	AnnouncedBy  pgtype.UUID
+	AnnouncedAt  pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type EventCelebrationWinner struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	UserID       pgtype.UUID
+	Position     int16
+	CreatedAt    pgtype.Timestamptz
+}
+
 type EventChecklistItem struct {
 	ID             pgtype.UUID
 	EventID        pgtype.UUID

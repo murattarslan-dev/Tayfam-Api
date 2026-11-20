@@ -318,6 +318,53 @@ func (q *Queries) ExportBracketMatches(ctx context.Context, arg ExportBracketMat
 	return items, nil
 }
 
+const exportCelebrationWins = `-- name: ExportCelebrationWins :many
+SELECT w.id AS k, jsonb_build_object(
+  'event_id', w.event_id, 'component_key', w.component_key, 'announced_at', c.announced_at,
+  'created_at', w.created_at
+) AS data
+FROM event_celebration_winners AS w
+JOIN event_celebrations AS c ON c.event_id = w.event_id AND c.component_key = w.component_key
+WHERE w.user_id = $1 AND w.id > $2
+ORDER BY w.id
+LIMIT $3
+`
+
+type ExportCelebrationWinsParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportCelebrationWinsRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Kutlamalarda elle kazanan seçildiğiniz etkinlikler (`celebration`
+// bileşeni, issue #255). Kimin ilan ettiği ve diğer kazananlar yer almaz;
+// kaynaktan (yazboz, eşleşme ağacı, derece) gelen kazanmalar o bileşenlerin
+// bölümlerindedir.
+func (q *Queries) ExportCelebrationWins(ctx context.Context, arg ExportCelebrationWinsParams) ([]ExportCelebrationWinsRow, error) {
+	rows, err := q.db.Query(ctx, exportCelebrationWins, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportCelebrationWinsRow{}
+	for rows.Next() {
+		var i ExportCelebrationWinsRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportConvoyVehicles = `-- name: ExportConvoyVehicles :many
 SELECT v.id AS k, jsonb_build_object(
   'event_id', v.event_id, 'component_key', v.component_key, 'make', v.make, 'model', v.model,
