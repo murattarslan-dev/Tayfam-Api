@@ -216,6 +216,12 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_MEASUREMENT_NOT_PARTICIPANT, true
 	case errors.Is(err, apperr.ErrMeasurementScope):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_MEASUREMENT_SCOPE, true
+	case errors.Is(err, apperr.ErrTeamsManual):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_TEAMS_MANUAL, true
+	case errors.Is(err, apperr.ErrTeamsTooFew):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_TEAMS_TOO_FEW, true
+	case errors.Is(err, apperr.ErrTeamsNotParticipant):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_TEAMS_NOT_PARTICIPANT, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

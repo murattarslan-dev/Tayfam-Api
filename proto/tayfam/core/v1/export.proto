@@ -81,6 +81,10 @@ enum CoreExportSection {
   // their own entries and those an organizer or referee entered for them.
   // Total measurements belong to the event and are not exported.
   CORE_EXPORT_SECTION_MEASUREMENTS = 25;
+  // The teams the caller is in (the teams component, issue #248): the event,
+  // the component and the team's ID and position. Teammates and the team's
+  // name are not exported.
+  CORE_EXPORT_SECTION_TEAM_MEMBERSHIPS = 26;
 }
 
 message ExportMyDataRequest {}

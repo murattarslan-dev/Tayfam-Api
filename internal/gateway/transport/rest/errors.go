@@ -157,6 +157,10 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_MEASUREMENT_NOT_STARTED":     {http.StatusConflict, "measurement-not-started"},
 		"ERROR_REASON_MEASUREMENT_NOT_PARTICIPANT": {http.StatusConflict, "measurement-not-participant"},
 		"ERROR_REASON_MEASUREMENT_SCOPE":           {http.StatusConflict, "measurement-scope"},
+		// Teams component (issue #248; ADR-0025 §4, §5).
+		"ERROR_REASON_TEAMS_MANUAL":          {http.StatusConflict, "teams-manual"},
+		"ERROR_REASON_TEAMS_TOO_FEW":         {http.StatusConflict, "teams-too-few"},
+		"ERROR_REASON_TEAMS_NOT_PARTICIPANT": {http.StatusConflict, "teams-not-participant"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

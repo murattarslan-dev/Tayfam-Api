@@ -148,6 +148,11 @@ DELETE FROM event_measurements WHERE user_id = @user_id;
 -- name: ClearMeasurementEnteredBy :exec
 UPDATE event_measurements SET entered_by = NULL WHERE entered_by = @user_id;
 
+-- Takımlardaki yeri kişinin katılımıdır; kişiyle birlikte silinir (issue
+-- #248). Takımın kendisi etkinliğindir, kalır.
+-- name: DeleteUserTeamMemberships :exec
+DELETE FROM event_team_members WHERE user_id = @user_id;
+
 -- Tayfa sözlüğüne eklediği değerler tayfanın ortak verisidir; kalır, ekleyen
 -- boşalır (issue #244; ADR-0037 §4).
 -- name: ClearVocabularyCreator :exec

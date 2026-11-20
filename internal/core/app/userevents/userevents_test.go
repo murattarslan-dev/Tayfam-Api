@@ -197,6 +197,7 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"event_log_entries":              `SELECT count(*) FROM event_log_entries WHERE $1 IN (user_id, deleted_by)`,
 		"tayfa_vocabulary.created_by":    `SELECT count(*) FROM tayfa_vocabulary WHERE created_by = $1`,
 		"event_measurements":             `SELECT count(*) FROM event_measurements WHERE $1 IN (user_id, entered_by)`,
+		"event_team_members.user_id":     `SELECT count(*) FROM event_team_members WHERE user_id = $1`,
 		"event_photos":                   `SELECT count(*) FROM event_photos WHERE $1 IN (uploader_id, deleted_by)`,
 		"user_activity_records.user_id":  `SELECT count(*) FROM user_activity_records WHERE user_id = $1`,
 		"questions":                      `SELECT count(*) FROM questions WHERE $1 IN (author_id, deleted_by)`,
@@ -545,6 +546,11 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 		id.New().PG(), hike.PG(), u.PG())
 	e.seed(t, `INSERT INTO event_measurements (id, event_id, component_key, user_id, value, entered_by) VALUES ($1, $2, 'goals', $3, 1, $4)`,
 		id.New().PG(), hike.PG(), a.PG(), u.PG())
+	// Teams (issue #248): u's place goes; the team and a's place stay.
+	team := id.New()
+	e.seed(t, `INSERT INTO event_teams (id, event_id, component_key, position) VALUES ($1, $2, 'teams', 1)`, team.PG(), hike.PG())
+	e.seed(t, `INSERT INTO event_team_members (event_id, component_key, team_id, user_id) VALUES ($1, 'teams', $2, $3), ($1, 'teams', $2, $4)`,
+		hike.PG(), team.PG(), u.PG(), a.PG())
 	// Album photos (issue #206): u's own go; a's photo that u removed stays
 	// without its remover.
 	e.seed(t, `INSERT INTO event_photos (id, event_id, uploader_id, upload_id, caption, client_request_id) VALUES ($1, $2, $3, $4, 'Zirve', $5)`,
@@ -579,6 +585,9 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 	}
 	if n := e.count(t, `SELECT count(*) FROM event_measurements WHERE event_id = $1 AND entered_by IS NULL AND (user_id IS NULL OR user_id = $2)`, hike.PG(), a.PG()); n != 2 {
 		t.Errorf("toplam ölçüm ya da başkasının ölçümü silindi ya da yazan boşalmadı: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_team_members WHERE team_id = $1 AND user_id = $2`, team.PG(), a.PG()); n != 1 {
+		t.Errorf("başkasının takımdaki yeri silindi: %d", n)
 	}
 	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'rsvp.promoted' AND actor_id IS NULL AND tayfa_id = $1 AND subject_id = $2 AND payload->>'user_id' = $3`,
 		tf.PG(), full.PG(), w1.String()); n != 1 {

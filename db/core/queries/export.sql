@@ -190,6 +190,20 @@ WHERE m.user_id = @user_id AND m.id > @after
 ORDER BY m.id
 LIMIT @n;
 
+-- Takımlardaki yeriniz (`teams` bileşeni, issue #248): hangi etkinliğin
+-- hangi takımındasınız. Takım arkadaşları ve takım adı (organizatörün
+-- içeriği) dışa aktarılmaz.
+-- name: ExportTeamMemberships :many
+SELECT t.id AS k, jsonb_build_object(
+  'event_id', m.event_id, 'component_key', m.component_key, 'team_id', m.team_id,
+  'team_position', t.position, 'created_at', m.created_at
+) AS data
+FROM event_team_members m
+JOIN event_teams t ON t.id = m.team_id
+WHERE m.user_id = @user_id AND t.id > @after
+ORDER BY t.id
+LIMIT @n;
+
 -- Albüm fotoğrafları (issue #206); dosyaların kendisi zip'e girmez
 -- (ADR-0021 §5), uploads bölümü onları listeler.
 -- name: ExportEventPhotos :many

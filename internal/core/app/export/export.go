@@ -59,6 +59,8 @@ const (
 	SectionVehicleSeatRequests = "vehicle_seat_requests"
 	// Issue #245: one's personal measurements; totals belong to the event.
 	SectionMeasurements = "measurements"
+	// Issue #248: the teams one is in.
+	SectionTeamMemberships = "team_memberships"
 )
 
 const (
@@ -195,6 +197,10 @@ var sections = []struct {
 	{SectionMeasurements, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportMeasurements(ctx, store.ExportMeasurementsParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportMeasurementsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionTeamMemberships, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportTeamMemberships(ctx, store.ExportTeamMembershipsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportTeamMembershipsRow) row { return row{x.K, x.Data} })
 	}},
 }
 

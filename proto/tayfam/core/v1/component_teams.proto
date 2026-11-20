@@ -1,0 +1,131 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "tayfam/core/v1/component.proto";
+
+// TeamsComponentService is the teams component (kind "teams", issue #248;
+// ADR-0025 §4, §5): the event's participants split into teams (2 per team
+// = pairs, as dive buddies). The component's parameters, as they hold for
+// the event (the organizer may choose the mode where the definition leaves
+// it to them):
+//
+//   - mode: "random", "balanced" or "manual" ("random" when unset). In the
+//     first two the server forms the teams (GenerateTeams); in every mode
+//     a manager may set them by hand (ReplaceTeams).
+//   - team_count: the number of teams (2–50).
+//   - team_size: the people per team (1–50). With team_count it is each
+//     team's capacity and generated teams leave the rest out (the bench);
+//     without it it is the size teams are formed to, and the few left over
+//     join teams (five divers in pairs: a pair and a trio).
+//
+// A participant is an active member of the tayfa who answered "going" or
+// whose attendance was verified. Teams are part of the event's attendance:
+// a series occurrence does not take them, and someone who stops being a
+// participant drops out of their team.
+//
+// Only gateway calls it with the user's access token. Authentication,
+// scope and the errors every component shares are those of
+// EventComponentService (component.proto). Writes are for managers (the
+// organizer, and moderators and admins as for every event) until the
+// write window closes (ERROR_REASON_COMPONENT_FROZEN). Levels sent for
+// balanced teams are never stored, logged or returned.
+//
+// Every method returns the teams as the caller sees them.
+service TeamsComponentService {
+  // GetTeams returns the teams. Open to every active member, muted ones
+  // included.
+  rpc GetTeams(GetTeamsRequest) returns (GetTeamsResponse);
+
+  // GenerateTeams forms the teams from the event's participants with
+  // crypto/rand, replacing the current ones. "random" shuffles them;
+  // "balanced" deals them by level (strongest first, in a snake order)
+  // so that the teams' level sums are close, with ties shuffled.
+  //
+  // Errors: ERROR_REASON_TEAMS_MANUAL (mode "manual"),
+  // ERROR_REASON_TEAMS_TOO_FEW, ERROR_REASON_EVENT_LIMIT (more than 500
+  // participants), ERROR_REASON_VALIDATION (levels: a level outside 1–5,
+  // a person twice, too many entries), ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED and the errors of every component change.
+  rpc GenerateTeams(GenerateTeamsRequest) returns (GenerateTeamsResponse);
+
+  // ReplaceTeams sets the teams by hand, replacing the current ones: the
+  // n-th team keeps the ID of the current n-th team. An empty list clears
+  // them.
+  //
+  // Errors: ERROR_REASON_VALIDATION (teams: more than team_count or 50,
+  // more than team_size people in a team when team_count is set too, a
+  // name, a person twice, more than 500 people),
+  // ERROR_REASON_TEAMS_NOT_PARTICIPANT, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED and the errors of every component change.
+  rpc ReplaceTeams(ReplaceTeamsRequest) returns (ReplaceTeamsResponse);
+}
+
+// Team is one team of the component.
+message Team {
+  string id = 1;
+  // 1-based; the client names an unnamed team by it.
+  int32 position = 2;
+  // 0–40 characters; empty for an unnamed team.
+  string name = 3;
+  // User IDs of the people in the team who are still participants.
+  repeated string member_ids = 4;
+}
+
+// Teams is one teams component of an event, as the caller sees it.
+message Teams {
+  // Ordered by position.
+  repeated Team teams = 1;
+  // The mode as it holds for the event: "random", "balanced" or "manual".
+  string mode = 2;
+  // The component's team_count parameter; 0 when the type sets none.
+  int32 team_count = 3;
+  // The component's team_size parameter; 0 when the type sets none.
+  int32 team_size = 4;
+  // The caller may form the teams now: a manager who is not muted, and the
+  // event, the tayfa and the write window allow it.
+  bool caller_can_edit = 5;
+}
+
+// TeamLevel is a participant's level for balanced teams.
+message TeamLevel {
+  string user_id = 1;
+  // 1 (beginner) – 5 (strongest).
+  int32 level = 2;
+}
+
+// TeamInput is a team set by hand.
+message TeamInput {
+  // Optional; at most 40 characters.
+  string name = 1;
+  repeated string member_ids = 2;
+}
+
+message GetTeamsRequest {
+  ComponentRef ref = 1;
+}
+
+message GetTeamsResponse {
+  Teams teams = 1;
+}
+
+message GenerateTeamsRequest {
+  ComponentRef ref = 1;
+  // For "balanced" only (ignored otherwise): at most one per person;
+  // participants without one count as 3. Never stored.
+  repeated TeamLevel levels = 2;
+}
+
+message GenerateTeamsResponse {
+  Teams teams = 1;
+}
+
+message ReplaceTeamsRequest {
+  ComponentRef ref = 1;
+  // In order; at most 50.
+  repeated TeamInput teams = 2;
+}
+
+message ReplaceTeamsResponse {
+  Teams teams = 1;
+}
