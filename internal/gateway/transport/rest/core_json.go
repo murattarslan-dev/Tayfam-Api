@@ -127,6 +127,9 @@ type tayfaJSON struct {
 	MemberCount int32           `json:"member_count"`
 	// MembersCanCreateEvents: every active member may create events.
 	MembersCanCreateEvents bool `json:"members_can_create_events"`
+	// NowCreateMinRole: the lowest role that may start an event now
+	// (ADR-0038 §2).
+	NowCreateMinRole string `json:"now_create_min_role"`
 	// Only core decides who gets it (admins); gateway passes it on as is.
 	JoinCode string `json:"join_code,omitempty"`
 	// Only core decides who gets it (moderators, admins); absent otherwise.
@@ -156,7 +159,8 @@ func tayfaFrom(t *corev1.Tayfa) tayfaJSON {
 		Modules: mods, Status: tayfaStatuses.name(t.GetStatus()),
 		SuspendedAt: optTime(t.GetSuspendTime()), DeletionAt: optTime(t.GetDeletionTime()),
 		MemberCount: t.GetMemberCount(), MembersCanCreateEvents: t.GetMembersCanCreateEvents(), JoinCode: t.GetJoinCode(),
-		CreatedAt: t.GetCreateTime().AsTime(), UpdatedAt: t.GetUpdateTime().AsTime(),
+		NowCreateMinRole: roles.name(t.GetNowCreateMinRole()),
+		CreatedAt:        t.GetCreateTime().AsTime(), UpdatedAt: t.GetUpdateTime().AsTime(),
 		CoverUploadID: t.GetCoverUploadId(), PendingJoinRequestCount: t.PendingJoinRequestCount,
 		Kind: tayfaKinds.name(t.GetKind()), InstantEventID: t.GetInstantEventId(),
 		ConvertedAt: optTime(t.GetConvertTime()),

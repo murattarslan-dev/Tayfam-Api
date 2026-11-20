@@ -77,6 +77,11 @@ func (f *fakeCore) CancelEvent(ctx context.Context, in *corev1.CancelEventReques
 	e.Status, e.CancelTime, e.CancelReason = corev1.EventStatus_EVENT_STATUS_CANCELLED, timestamppb.New(t0), in.GetReason()
 	return &corev1.CancelEventResponse{Event: e}, f.record(ctx, in)
 }
+func (f *fakeCore) FinishEvent(ctx context.Context, in *corev1.FinishEventRequest, _ ...grpc.CallOption) (*corev1.FinishEventResponse, error) {
+	e := testEvent()
+	e.EndTime = timestamppb.New(t0)
+	return &corev1.FinishEventResponse{Event: e}, f.record(ctx, in)
+}
 func (f *fakeCore) GetEvent(ctx context.Context, in *corev1.GetEventRequest, _ ...grpc.CallOption) (*corev1.GetEventResponse, error) {
 	if f.event != nil {
 		return &corev1.GetEventResponse{Event: f.event}, f.record(ctx, in)
@@ -146,6 +151,7 @@ func TestEventRoutes(t *testing.T) {
 		{"GET", one, "", 200, &corev1.GetEventRequest{TayfaId: tayfaID, EventId: eventID}},
 		{"POST", one + "/cancellation", `{"reason":"Yağmur"}`, 200, &corev1.CancelEventRequest{TayfaId: tayfaID, EventId: eventID, Reason: "Yağmur"}},
 		{"POST", one + "/cancellation", `{}`, 200, &corev1.CancelEventRequest{TayfaId: tayfaID, EventId: eventID}},
+		{"POST", one + "/finish", "", 200, &corev1.FinishEventRequest{TayfaId: tayfaID, EventId: eventID}},
 		{"PUT", one + "/rsvp", `{"status":"going"}`, 200, &corev1.SetRsvpRequest{TayfaId: tayfaID, EventId: eventID, Status: corev1.RsvpStatus_RSVP_STATUS_GOING}},
 		{"PUT", one + "/rsvp", `{"status":"not_going"}`, 200, &corev1.SetRsvpRequest{TayfaId: tayfaID, EventId: eventID, Status: corev1.RsvpStatus_RSVP_STATUS_NOT_GOING}},
 		{"GET", one + "/attendees", "", 200, &corev1.ListAttendeesRequest{TayfaId: tayfaID, EventId: eventID, Status: corev1.RsvpStatus_RSVP_STATUS_GOING}},
@@ -647,5 +653,90 @@ func TestEventTypeVersionAndFields(t *testing.T) {
 	w = as(coreRouter(&fakeCore{}), "GET", "/v1/tayfas/"+tayfaID+"/events/"+eventID, "")
 	if v := decodeBody[eventJSON](t, w); v.Type != "convoy" || v.Fields != nil || strings.Contains(w.Body.String(), `"fields"`) {
 		t.Fatalf("Faz 1 etkinliği: %s", w.Body)
+	}
+}
+
+// Şimdi başlat (issue #263, ADR-0038 §1): starts_now goes to core without
+// times; the client's clock never reaches core. With starts_now the times,
+// a recurrence and discoverable are refused here already.
+func TestCreateEventStartsNow(t *testing.T) {
+	f := &fakeCore{}
+	h := coreRouter(f)
+	base := "/v1/tayfas/" + tayfaID + "/events"
+	body := func(extra string) string {
+		return `{"type":"board_game_night","mode":"in_person","title":"Batak","meeting_point":{"lat":41.17,"lng":28.98},` +
+			`"city":"İstanbul","district":"Kadıköy","starts_now":true,"client_request_id":"` + reqID + `"` + extra + `}`
+	}
+	w := as(h, "POST", base, body(""))
+	got, _, _ := f.last()
+	want := &corev1.CreateEventRequest{
+		TayfaId: tayfaID, TypeKey: "board_game_night", Mode: corev1.EventMode_EVENT_MODE_IN_PERSON, Title: "Batak",
+		MeetingPoint: &corev1.LatLng{Lat: 41.17, Lng: 28.98}, City: "İstanbul", District: "Kadıköy",
+		StartsNow: true, ClientRequestId: reqID,
+	}
+	if w.Code != 201 || !proto.Equal(got, want) {
+		t.Fatalf("şimdi başlat: %d %s; core'a giden %v", w.Code, w.Body, got)
+	}
+	// An instant event starts now the same way.
+	w = as(h, "POST", "/v1/instant-events", `{"event":`+body("")+`}`)
+	got, _, _ = f.last()
+	if ir, ok := got.(*corev1.CreateInstantEventRequest); w.Code != 201 || !ok || !ir.GetEvent().GetStartsNow() || ir.GetEvent().GetStartTime() != nil {
+		t.Fatalf("anlık şimdi başlat: %d %s; core'a giden %v", w.Code, w.Body, got)
+	}
+
+	_, _, before := f.last()
+	for name, extra := range map[string]string{
+		"başlangıç": `,"starts_at":"2027-01-02T10:00:00Z"`,
+		"bitiş":     `,"ends_at":"2027-01-02T12:00:00Z"`,
+		"tekrar":    `,"recurrence":{"rrule":"FREQ=WEEKLY","time_zone":"Europe/Istanbul"}`,
+		"keşfet":    `,"discoverable":true`,
+		"iki zaman": `,"starts_at":"2027-01-02T10:00:00Z","ends_at":"2027-01-02T12:00:00Z"`,
+	} {
+		if w := as(h, "POST", base, body(extra)); w.Code != 400 {
+			t.Errorf("%s: kod %d", name, w.Code)
+		}
+	}
+	if _, _, n := f.last(); n != before {
+		t.Error("hatalı istek core'a gitti")
+	}
+}
+
+func TestFinishEventResponse(t *testing.T) {
+	ev := testEvent()
+	ev.OpenEnded = true
+	f := &fakeCore{event: ev}
+	w := as(coreRouter(f), "GET", "/v1/tayfas/"+tayfaID+"/events/"+eventID, "")
+	if w.Code != 200 || !decodeBody[eventJSON](t, w).OpenEnded {
+		t.Fatalf("açık uçlu: %d %s", w.Code, w.Body)
+	}
+	// The field is always written.
+	w = as(coreRouter(&fakeCore{}), "POST", "/v1/tayfas/"+tayfaID+"/events/"+eventID+"/finish", "")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"open_ended":false`) {
+		t.Fatalf("bitir: %d %s", w.Code, w.Body)
+	}
+}
+
+func TestTayfaNowCreateMinRole(t *testing.T) {
+	tf := testTayfa()
+	tf.NowCreateMinRole = corev1.Role_ROLE_MODERATOR
+	f := &fakeCore{tayfa: tf}
+	h := coreRouter(f)
+	w := as(h, "PATCH", "/v1/tayfas/"+tayfaID, `{"now_create_min_role":"moderator"}`)
+	got, _, _ := f.last()
+	req := got.(*corev1.UpdateTayfaRequest)
+	if w.Code != 200 || !slices.Equal(req.GetUpdateMask().GetPaths(), []string{"now_create_min_role"}) || req.GetNowCreateMinRole() != corev1.Role_ROLE_MODERATOR {
+		t.Fatalf("güncelleme: %d %v", w.Code, req)
+	}
+	if decodeBody[tayfaJSON](t, w).NowCreateMinRole != "moderator" {
+		t.Fatalf("yanıt: %s", w.Body)
+	}
+	_, _, before := f.last()
+	for _, b := range []string{`{"now_create_min_role":"owner"}`, `{"now_create_min_role":""}`, `{"now_create_min_role":1}`} {
+		if w := as(h, "PATCH", "/v1/tayfas/"+tayfaID, b); w.Code != 400 {
+			t.Errorf("%s: kod %d", b, w.Code)
+		}
+	}
+	if _, _, n := f.last(); n != before {
+		t.Error("hatalı istek core'a gitti")
 	}
 }

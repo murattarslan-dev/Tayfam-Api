@@ -295,6 +295,13 @@ const (
 	// question, an anonymous one without learning its author.
 	EventQuestionAsk
 	EventQuestionDeleteAny
+	// Şimdi başlat (issue #263, ADR-0038 §2). EventCreateNow creates an
+	// event that starts now (starts_now); its minimum role is the tayfa's
+	// setting Settings.NowCreateMinRole (member by default), independent
+	// of EventCreate. EventFinish is the organizer's "Bitir" on their own
+	// open-ended event (the caller checks that the event is theirs).
+	EventCreateNow
+	EventFinish
 
 	actionEnd // sentinel; keep last
 )
@@ -395,6 +402,8 @@ var actionNames = [...]string{
 	EventGuestAdd:             "event.guest_add",
 	EventQuestionAsk:          "event.question_ask",
 	EventQuestionDeleteAny:    "event.question_delete_any",
+	EventCreateNow:            "event.create_now",
+	EventFinish:               "event.finish",
 	actionEnd:                 "",
 }
 
@@ -481,6 +490,11 @@ var permissions = map[Action]Role{
 	EventGuestAdd: Member,
 	// Event questions (issue #256): a participant asks and votes.
 	EventQuestionAsk: Member,
+	// Şimdi başlat (ADR-0038 §2): every active member by default; the
+	// tayfa's now_create_min_role raises it (minRole). The organizer
+	// finishes their own open-ended event.
+	EventCreateNow: Member,
+	EventFinish:    Member,
 
 	// Moderation: moderator and above.
 	// Lowering one's own role; members have nothing to step down to.
@@ -577,6 +591,9 @@ var instantRules = map[Action]Role{
 	TayfaRotateJoinCode: nobody,
 	TayfaManageModules:  nobody,
 	EventCreate:         nobody,
+	// An instant now event is created with the instant tayfa
+	// (POST /v1/instant-events, ADR-0038 §2), never inside it.
+	EventCreateNow: nobody,
 	// No moderators: the organizer alone approves join requests.
 	MemberChangeRole: nobody,
 	InviteCreate:     Admin,
@@ -645,6 +662,10 @@ type Settings struct {
 	// Instant (tayfas.kind = 'instant') applies instantRules and allows
 	// TayfaConvert (ADR-0032).
 	Instant bool
+	// NowCreateMinRole (tayfas.now_create_min_role) is the lowest role
+	// that may perform EventCreateNow (ADR-0038 §2). The zero value is the
+	// default, Member.
+	NowCreateMinRole Role
 }
 
 // minRole returns the lowest role that may perform a under s; ok is false
@@ -657,6 +678,9 @@ func minRole(a Action, s Settings) (need Role, ok bool) {
 	}
 	if a == EventCreate && s.MembersCanCreateEvents {
 		need = Member
+	}
+	if a == EventCreateNow && s.NowCreateMinRole.Valid() {
+		need = s.NowCreateMinRole
 	}
 	if s.Instant {
 		if r, ok := instantRules[a]; ok {
@@ -682,7 +706,8 @@ func Allowed(m Membership, a Action, now time.Time) bool {
 }
 
 // AllowedIn is Allowed for a tayfa with settings s. Actions whose rule
-// depends on a setting (EventCreate, and every action in instantRules) must
+// depends on a setting (EventCreate, EventCreateNow, and every action in
+// instantRules) must
 // be checked with AllowedIn and the tayfa's current settings; Allowed
 // assumes a standard tayfa with the defaults.
 func AllowedIn(m Membership, a Action, now time.Time, s Settings) bool {

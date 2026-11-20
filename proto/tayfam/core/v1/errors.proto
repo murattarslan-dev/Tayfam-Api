@@ -485,4 +485,14 @@ enum ErrorReason {
   // uploader's acknowledgement that the people in it (a child's guardian)
   // agreed: consent_ack true.
   ERROR_REASON_ALBUM_CONSENT_REQUIRED = 2571;
+
+  // Şimdi başlat (ADR-0038 §1, §2; issue #263: 2630–2639).
+
+  // RESOURCE_EXHAUSTED. The caller already organizes an open now event (a
+  // starts_now event that is not finished, ended or cancelled), in a
+  // tayfa or as an instant event: at most one at a time.
+  ERROR_REASON_NOW_LIMIT_REACHED = 2630;
+  // FAILED_PRECONDITION. FinishEvent on an event that was not started now
+  // (Event.open_ended false): a planned event ends at its end_time.
+  ERROR_REASON_EVENT_NOT_OPEN_ENDED = 2631;
 }

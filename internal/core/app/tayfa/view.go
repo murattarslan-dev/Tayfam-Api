@@ -23,9 +23,11 @@ type viewRow struct {
 	DeletionScheduledFor pgtype.Timestamptz
 	// MembersCanCreateEvents is tayfas.members_can_create_events.
 	MembersCanCreateEvents bool
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	CoverUploadID          pgtype.UUID
+	// NowCreateMinRole is tayfas.now_create_min_role (ADR-0038 §2).
+	NowCreateMinRole string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	CoverUploadID    pgtype.UUID
 	// Kind is tayfas.kind (ADR-0032).
 	Kind string
 	// ConvertedAt is tayfas.converted_at: set only once an instant tayfa
@@ -35,7 +37,10 @@ type viewRow struct {
 }
 
 func (r viewRow) settings() authz.Settings {
-	return authz.Settings{MembersCanCreateEvents: r.MembersCanCreateEvents, Instant: r.Kind == access.KindInstant}
+	return authz.Settings{
+		MembersCanCreateEvents: r.MembersCanCreateEvents, Instant: r.Kind == access.KindInstant,
+		NowCreateMinRole: access.NowCreateMinRole(r.NowCreateMinRole),
+	}
 }
 
 func fromTayfa(t access.Tayfa, m authz.Membership) viewRow {
@@ -43,7 +48,8 @@ func fromTayfa(t access.Tayfa, m authz.Membership) viewRow {
 		ID: id.ID(t.ID.Bytes), Name: t.Name, Description: t.Description, JoinCode: t.JoinCode,
 		Status: t.Status, JoinPolicy: t.JoinPolicy, SuspendedAt: t.SuspendedAt,
 		DeletionScheduledFor: t.DeletionScheduledFor, MembersCanCreateEvents: t.MembersCanCreateEvents,
-		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, CoverUploadID: t.CoverUploadID, Kind: t.Kind, ConvertedAt: t.ConvertedAt, Member: m,
+		NowCreateMinRole: t.NowCreateMinRole,
+		CreatedAt:        t.CreatedAt, UpdatedAt: t.UpdatedAt, CoverUploadID: t.CoverUploadID, Kind: t.Kind, ConvertedAt: t.ConvertedAt, Member: m,
 	}
 }
 
@@ -134,6 +140,7 @@ func (s *Service) views(ctx context.Context, rows []viewRow) ([]View, error) {
 			ID: r.ID, Name: r.Name, Description: r.Description.String,
 			JoinPolicy: r.JoinPolicy, Status: r.Status, MemberCount: byCount[r.ID],
 			MembersCanCreateEvents: r.MembersCanCreateEvents,
+			NowCreateMinRole:       access.NowCreateMinRole(r.NowCreateMinRole),
 			CreatedAt:              r.CreatedAt.Time.UTC(), UpdatedAt: r.UpdatedAt.Time.UTC(),
 			Interests: []string{}, Kind: r.Kind, InstantEventID: byEvent[r.ID],
 		}

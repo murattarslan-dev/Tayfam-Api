@@ -6,11 +6,11 @@
 INSERT INTO events (
   id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
   meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
-  capacity, discoverable, created_by, client_request_id
+  capacity, discoverable, created_by, client_request_id, open_ended
 ) VALUES (
   @id, @tayfa_id, @type, @type_version, @mode, @title, @description, @starts_at, @ends_at,
   @meeting_point_name, @meeting_lat, @meeting_lng, @city, @district, @online_url,
-  @capacity, @discoverable, @created_by, @client_request_id
+  @capacity, @discoverable, @created_by, @client_request_id, @open_ended
 );
 
 -- Tekrar gönderilen oluşturma isteği aynı etkinliği döndürür.
@@ -22,7 +22,7 @@ WHERE created_by = @created_by AND client_request_id = @client_request_id;
 SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
-       created_by, created_at, updated_at, cover_upload_id
+       created_by, created_at, updated_at, cover_upload_id, open_ended
 FROM events
 WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL;
 
@@ -32,7 +32,7 @@ WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL;
 SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
-       created_by, created_at, updated_at, cover_upload_id
+       created_by, created_at, updated_at, cover_upload_id, open_ended
 FROM events
 WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL
 FOR UPDATE;
@@ -53,13 +53,34 @@ SET status = 'cancelled', cancelled_at = @cancelled_at, cancelled_by = @cancelle
     cancel_reason = @cancel_reason
 WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL AND status = 'scheduled';
 
+-- Şimdi başlat (issue #263, ADR-0038 §1): organizatör "Bitir" der; bitiş
+-- o an olur, açık uçluluk kalkar. Yalnızca planlı, açık uçlu etkinlikte.
+-- name: FinishEvent :execrows
+UPDATE events SET ends_at = @ends_at, open_ended = false
+WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL
+  AND status = 'scheduled' AND open_ended;
+
+-- Aynı kullanıcının şimdi etkinliği açan istekleri (tayfa içi ve anlık)
+-- sırayla işlenir; kişi başı 1 açık şimdi etkinliği sınırı iki istekte
+-- birden aşılamaz. Kilit transaction bitince bırakılır.
+-- name: LockNowEventCreation :exec
+SELECT pg_advisory_xact_lock(hashtextextended('tayfam.core.now_event:' || sqlc.arg(user_id)::uuid::text, 0));
+
+-- Kullanıcının açık şimdi etkinlikleri: bitmemiş (Bitir denmemiş ve 12
+-- saat dolmamış), iptal edilmemiş, silinmemiş; tayfası da silinmemiş.
+-- name: CountOpenNowEvents :one
+SELECT count(*) FROM events e
+JOIN tayfas t ON t.id = e.tayfa_id
+WHERE e.created_by = @created_by AND e.open_ended AND e.deleted_at IS NULL
+  AND e.status = 'scheduled' AND e.ends_at > @now AND t.deleted_at IS NULL;
+
 -- Bitmemiş etkinlikler, başlangıç zamanına göre; (starts_at, id) ile
 -- sayfalanır.
 -- name: ListUpcomingEvents :many
 SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
-       created_by, created_at, updated_at, cover_upload_id
+       created_by, created_at, updated_at, cover_upload_id, open_ended
 FROM events
 WHERE tayfa_id = @tayfa_id
   AND deleted_at IS NULL

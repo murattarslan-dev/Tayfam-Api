@@ -137,7 +137,7 @@ func (s *Service) views(ctx context.Context, c caller, rows []store.GetEventRow)
 			Discoverable: r.Discoverable, CreatedAt: r.CreatedAt.Time.UTC(), UpdatedAt: r.UpdatedAt.Time.UTC(),
 			Going: byCount[k][RSVPGoing], Maybe: byCount[k][RSVPMaybe], Waitlist: byCount[k][RSVPWaitlist],
 			CallerRSVP: byMine[k], CallerCanManage: c.canManage(r),
-			CallerAttendance: AttendanceUnknown,
+			CallerAttendance: AttendanceUnknown, OpenEnded: r.OpenEnded,
 		}
 		if a, ok := attendance[k]; ok {
 			v.CallerAttendance = a

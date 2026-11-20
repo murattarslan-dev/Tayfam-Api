@@ -280,6 +280,10 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.PermissionDenied, corev1.ErrorReason_ERROR_REASON_ATTENDEES_HIDDEN, true
 	case errors.Is(err, apperr.ErrAlbumConsentRequired):
 		return codes.InvalidArgument, corev1.ErrorReason_ERROR_REASON_ALBUM_CONSENT_REQUIRED, true
+	case errors.Is(err, apperr.ErrNowLimitReached):
+		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_NOW_LIMIT_REACHED, true
+	case errors.Is(err, apperr.ErrEventNotOpenEnded):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_NOT_OPEN_ENDED, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

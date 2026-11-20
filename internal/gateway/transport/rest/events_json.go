@@ -78,13 +78,15 @@ type eventJSON struct {
 	TayfaID string `json:"tayfa_id"`
 	// Type is the catalog key of the event's type; TypeVersion the version
 	// it was created with (GET /v1/catalog/event-types/{key}/versions/{version}).
-	Type             string      `json:"type"`
-	TypeVersion      int32       `json:"type_version"`
-	Mode             string      `json:"mode"`
-	Title            string      `json:"title"`
-	Description      string      `json:"description"`
-	StartsAt         time.Time   `json:"starts_at"`
-	EndsAt           time.Time   `json:"ends_at"`
+	Type        string    `json:"type"`
+	TypeVersion int32     `json:"type_version"`
+	Mode        string    `json:"mode"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	StartsAt    time.Time `json:"starts_at"`
+	EndsAt      time.Time `json:"ends_at"`
+	// OpenEnded: started now and not finished (ADR-0038 §1).
+	OpenEnded        bool        `json:"open_ended"`
 	MeetingPointName string      `json:"meeting_point_name,omitempty"`
 	MeetingPoint     *latLngJSON `json:"meeting_point,omitempty"`
 	City             string      `json:"city,omitempty"`
@@ -143,7 +145,7 @@ func eventFrom(e *corev1.Event) eventJSON {
 	out := eventJSON{
 		ID: e.GetId(), TayfaID: e.GetTayfaId(), Type: eventTypeKey(e), TypeVersion: e.GetTypeVersion(), Mode: eventModes.name(e.GetMode()),
 		Title: e.GetTitle(), Description: e.GetDescription(), Fields: eventFieldsFrom(e.GetFields()),
-		StartsAt: e.GetStartTime().AsTime(), EndsAt: e.GetEndTime().AsTime(),
+		StartsAt: e.GetStartTime().AsTime(), EndsAt: e.GetEndTime().AsTime(), OpenEnded: e.GetOpenEnded(),
 		MeetingPointName: e.GetMeetingPointName(), MeetingPoint: latLngFrom(e.GetMeetingPoint()),
 		City: e.GetCity(), District: e.GetDistrict(), OnlineURL: e.GetOnlineUrl(),
 		Capacity: e.GetCapacity(), Status: eventStatuses.name(e.GetStatus()),

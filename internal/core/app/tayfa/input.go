@@ -48,6 +48,9 @@ const (
 	// FieldMembersCanCreateEvents is the event creation setting
 	// (tayfas.members_can_create_events).
 	FieldMembersCanCreateEvents = "members_can_create_events"
+	// FieldNowCreateMinRole is the Şimdi başlat setting
+	// (tayfas.now_create_min_role, ADR-0038 §2).
+	FieldNowCreateMinRole = "now_create_min_role"
 	// FieldCover is the cover image (tayfas.cover_upload_id, issue #135).
 	FieldCover = "cover_upload_id"
 )

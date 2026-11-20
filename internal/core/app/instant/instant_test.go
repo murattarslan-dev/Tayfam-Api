@@ -684,3 +684,58 @@ func TestConvertedAt(t *testing.T) {
 		t.Fatalf("liste = %+v", list)
 	}
 }
+
+// Şimdi başlat (issue #263, ADR-0038 §2): an instant event may start now;
+// it counts toward the open instant events and toward the single open now
+// event of its organizer, together with now events in tayfas.
+func TestCreateStartsNow(t *testing.T) {
+	e := setup(t)
+	org := id.New()
+	in := input("Batak")
+	in.Event.StartsAt, in.Event.EndsAt, in.Event.StartsNow = time.Time{}, time.Time{}, true
+	before := time.Now().UTC()
+	r, err := e.svc.Create(ctx, org, in)
+	must(t, err)
+	ev := r.Event
+	if !ev.OpenEnded || ev.StartsAt.Before(before.Add(-time.Second)) || ev.StartsAt.After(time.Now().UTC()) ||
+		ev.EndsAt.Sub(ev.StartsAt) != 12*time.Hour || r.Tayfa.Kind != access.KindInstant {
+		t.Fatalf("anlık şimdi etkinliği = %v – %v açık uçlu %v", ev.StartsAt, ev.EndsAt, ev.OpenEnded)
+	}
+	if n := e.count(t, `SELECT count(*) FROM tayfas WHERE created_by = $1 AND kind = 'instant'`, org.PG()); n != 1 {
+		t.Fatalf("anlık tayfa = %d", n)
+	}
+
+	// A second now event, instant or in a tayfa, is refused; nothing is
+	// left behind.
+	in2 := input("Okey")
+	in2.Event.StartsAt, in2.Event.EndsAt, in2.Event.StartsNow = time.Time{}, time.Time{}, true
+	_, err = e.svc.Create(ctx, org, in2)
+	wantErr(t, "ikinci anlık şimdi", err, apperr.ErrNowLimitReached)
+	if n := e.count(t, `SELECT count(*) FROM tayfas WHERE created_by = $1`, org.PG()); n != 1 {
+		t.Fatalf("reddedilen istek tayfa bıraktı: %d", n)
+	}
+	tv, err := e.tayfas.Create(ctx, org, tayfa.CreateInput{Name: "Okey Ekibi", ClientRequestID: id.New().String()})
+	must(t, err)
+	tin := in2.Event
+	tin.ClientRequestID = id.New().String()
+	_, err = e.events.Create(ctx, org, tv.ID, tin)
+	wantErr(t, "tayfada ikinci şimdi", err, apperr.ErrNowLimitReached)
+
+	// A planned instant event is still allowed (up to the instant limit).
+	_, err = e.svc.Create(ctx, org, input("Yarın"))
+	must(t, err)
+
+	// "Bitir" in the instant tayfa (its organizer is its admin) frees the
+	// place.
+	_, err = e.events.Finish(ctx, org, r.Tayfa.ID, ev.ID)
+	must(t, err)
+	tin.ClientRequestID = id.New().String()
+	if _, err := e.events.Create(ctx, org, tv.ID, tin); err != nil {
+		t.Fatalf("bitirdikten sonra: %v", err)
+	}
+
+	// Nobody starts a now event inside an instant tayfa.
+	tin.ClientRequestID = id.New().String()
+	_, err = e.events.Create(ctx, org, r.Tayfa.ID, tin)
+	wantErr(t, "anlık tayfanın içinde", err, apperr.ErrPermissionDenied)
+}

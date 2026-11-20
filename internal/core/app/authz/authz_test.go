@@ -966,6 +966,26 @@ var expected = []struct {
 	{invited, EventGuestAdd, false},
 	{banned, EventGuestAdd, false},
 	{nonMember, EventGuestAdd, false},
+	// EventCreateNow
+	{admin, EventCreateNow, true},
+	{moderator, EventCreateNow, true},
+	{member, EventCreateNow, true},
+	{mutedMember, EventCreateNow, false},
+	{mutedModerator, EventCreateNow, false},
+	{pending, EventCreateNow, false},
+	{invited, EventCreateNow, false},
+	{banned, EventCreateNow, false},
+	{nonMember, EventCreateNow, false},
+	// EventFinish
+	{admin, EventFinish, true},
+	{moderator, EventFinish, true},
+	{member, EventFinish, true},
+	{mutedMember, EventFinish, false},
+	{mutedModerator, EventFinish, false},
+	{pending, EventFinish, false},
+	{invited, EventFinish, false},
+	{banned, EventFinish, false},
+	{nonMember, EventFinish, false},
 }
 
 func TestAllowedMatrix(t *testing.T) {
@@ -1285,6 +1305,7 @@ var instantOverrides = map[Action]map[string]bool{
 	TayfaRotateJoinCode: {},
 	TayfaManageModules:  {},
 	EventCreate:         {},
+	EventCreateNow:      {},
 	MemberChangeRole:    {},
 	InviteCreate:        {admin.name: true},
 	InviteDirect:        {admin.name: true},
@@ -1317,5 +1338,45 @@ func TestInstantMatrix(t *testing.T) {
 		if AllowedIn(mutedAdmin, a, now, Settings{Instant: true}) {
 			t.Errorf("susturulmuş organizatör %s yapabiliyor", a)
 		}
+	}
+}
+
+// TestNowCreateMinRole: the tayfa's now_create_min_role sets the lowest
+// role of EventCreateNow (ADR-0038 §2); the zero value is "member". It
+// changes no other action, members_can_create_events does not touch it,
+// and an instant tayfa refuses it whatever the setting.
+func TestNowCreateMinRole(t *testing.T) {
+	subjects := []subject{admin, moderator, member, mutedMember, mutedModerator, pending, invited, banned, nonMember}
+	for _, tc := range []struct {
+		set  Settings
+		want map[string]bool
+	}{
+		{Settings{}, map[string]bool{admin.name: true, moderator.name: true, member.name: true}},
+		{Settings{NowCreateMinRole: Member}, map[string]bool{admin.name: true, moderator.name: true, member.name: true}},
+		{Settings{NowCreateMinRole: Moderator}, map[string]bool{admin.name: true, moderator.name: true}},
+		{Settings{NowCreateMinRole: Admin}, map[string]bool{admin.name: true}},
+		{Settings{NowCreateMinRole: Admin, MembersCanCreateEvents: true}, map[string]bool{admin.name: true}},
+		{Settings{NowCreateMinRole: Member, Instant: true}, map[string]bool{}},
+	} {
+		for _, s := range subjects {
+			if got := AllowedIn(s.m, EventCreateNow, now, tc.set); got != tc.want[s.name] {
+				t.Errorf("%+v, %s: AllowedIn(EventCreateNow) = %v, %v bekleniyordu", tc.set, s.name, got, tc.want[s.name])
+			}
+		}
+		if tc.set.Instant || tc.set.MembersCanCreateEvents {
+			continue
+		}
+		for _, tt := range expected {
+			if tt.a == EventCreateNow {
+				continue
+			}
+			if got := AllowedIn(tt.who.m, tt.a, now, tc.set); got != tt.want {
+				t.Errorf("%+v, %s / %s: AllowedIn = %v, %v bekleniyordu", tc.set, tt.who.name, tt.a, got, tt.want)
+			}
+		}
+	}
+	// The setting never opens EventCreate.
+	if AllowedIn(member.m, EventCreate, now, Settings{NowCreateMinRole: Member}) {
+		t.Error("şimdi başlatma ayarı etkinlik açmayı üyelere açtı")
 	}
 }

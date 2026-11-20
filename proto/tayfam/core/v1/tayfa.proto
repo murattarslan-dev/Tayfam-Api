@@ -203,6 +203,11 @@ message Tayfa {
   // (CatalogInterest.key; ADR-0025 §2), distinct, in catalog order. A
   // retired interest stays on the tayfas that chose it.
   repeated string interest_keys = 20;
+  // The lowest role that may start an event now (CreateEventRequest
+  // .starts_now; ADR-0038 §2): ROLE_MEMBER (the default), ROLE_MODERATOR
+  // or ROLE_ADMIN. Independent of members_can_create_events. Instant
+  // tayfas never start a now event inside (POST /v1/instant-events does).
+  Role now_create_min_role = 21;
 }
 
 message CreateTayfaRequest {
@@ -275,8 +280,8 @@ message UpdateTayfaRequest {
   // Must not be UNSPECIFIED when named in update_mask.
   JoinPolicy join_policy = 5;
   // Required, non-empty. Allowed paths: "name", "description", "interests",
-  // "join_policy", "members_can_create_events", "cover_upload_id". Any
-  // other path is ERROR_REASON_VALIDATION.
+  // "join_policy", "members_can_create_events", "now_create_min_role",
+  // "cover_upload_id". Any other path is ERROR_REASON_VALIDATION.
   google.protobuf.FieldMask update_mask = 6;
   // See Tayfa.members_can_create_events.
   bool members_can_create_events = 7;
@@ -289,6 +294,9 @@ message UpdateTayfaRequest {
   // CreateTayfaRequest.interest_keys, except that a retired interest the
   // tayfa already has may be kept.
   repeated string interest_keys = 9;
+  // With "now_create_min_role" in update_mask: see
+  // Tayfa.now_create_min_role; UNSPECIFIED is ERROR_REASON_VALIDATION.
+  Role now_create_min_role = 10;
 }
 
 message UpdateTayfaResponse {

@@ -21,6 +21,7 @@ type EventClient interface {
 	CreateInstantEvent(ctx context.Context, in *corev1.CreateInstantEventRequest, opts ...grpc.CallOption) (*corev1.CreateInstantEventResponse, error)
 	UpdateEvent(ctx context.Context, in *corev1.UpdateEventRequest, opts ...grpc.CallOption) (*corev1.UpdateEventResponse, error)
 	CancelEvent(ctx context.Context, in *corev1.CancelEventRequest, opts ...grpc.CallOption) (*corev1.CancelEventResponse, error)
+	FinishEvent(ctx context.Context, in *corev1.FinishEventRequest, opts ...grpc.CallOption) (*corev1.FinishEventResponse, error)
 	GetEvent(ctx context.Context, in *corev1.GetEventRequest, opts ...grpc.CallOption) (*corev1.GetEventResponse, error)
 	ListUpcomingEvents(ctx context.Context, in *corev1.ListUpcomingEventsRequest, opts ...grpc.CallOption) (*corev1.ListUpcomingEventsResponse, error)
 	SetRsvp(ctx context.Context, in *corev1.SetRsvpRequest, opts ...grpc.CallOption) (*corev1.SetRsvpResponse, error)
@@ -60,6 +61,7 @@ func registerEvents(mux *http.ServeMux, h coreHandlers) {
 	mux.HandleFunc("GET "+one, a(h.getEvent))
 	mux.HandleFunc("PATCH "+one, a(h.updateEvent))
 	mux.HandleFunc("POST "+one+"/cancellation", a(h.cancelEvent))
+	mux.HandleFunc("POST "+one+"/finish", a(h.finishEvent))
 	mux.HandleFunc("GET "+one+"/calendar", a(h.exportEvent))
 	mux.HandleFunc("PUT "+one+"/rsvp", a(h.setRsvp))
 	mux.HandleFunc("GET "+one+"/attendees", a(h.listAttendees))
@@ -182,6 +184,9 @@ type eventCreateBody struct {
 	// Components are the organizer's selections for the type's components
 	// (issue #238, ADR-0037 §2).
 	Components []componentSelectionJSON `json:"components"`
+	// StartsNow: the event starts at core's now and is open-ended; the
+	// times are not sent (ADR-0038 §1).
+	StartsNow bool `json:"starts_now"`
 }
 
 // request checks the body and converts it for core; ok is false for a bad
@@ -192,20 +197,28 @@ func (b eventCreateBody) request(tayfaID string) (*corev1.CreateEventRequest, bo
 	mode, okM := eventModes.value(b.Mode)
 	fields, okF := eventFields(b.Fields)
 	components, okC := componentSelections(b.Components)
-	if !okT || !okM || !okF || !okC ||
-		!eventTitleOK(b.Title) || !eventDescOK(b.Description) || b.StartsAt.IsZero() || b.EndsAt.IsZero() ||
+	// With starts_now the times are core's; without it both are required.
+	okTime := !b.StartsAt.IsZero() && !b.EndsAt.IsZero()
+	if b.StartsNow {
+		okTime = b.StartsAt.IsZero() && b.EndsAt.IsZero() && b.Recurrence == nil && !b.Discoverable
+	}
+	if !okT || !okM || !okF || !okC || !okTime ||
+		!eventTitleOK(b.Title) || !eventDescOK(b.Description) ||
 		!pointOK(b.MeetingPoint) || !capacityOK(b.Capacity) || !validUUID(b.ClientRequestID) ||
 		(b.CoverUploadID != "" && !validUUID(b.CoverUploadID)) {
 		return nil, false
 	}
 	req := &corev1.CreateEventRequest{
 		TayfaId: tayfaID, TypeKey: b.Type, Fields: fields, Mode: mode, Title: b.Title, Description: b.Description,
-		StartTime: timestamppb.New(b.StartsAt), EndTime: timestamppb.New(b.EndsAt),
+		StartsNow:        b.StartsNow,
 		MeetingPointName: b.MeetingPointName, MeetingPoint: b.MeetingPoint.proto(),
 		City: b.City, District: b.District, OnlineUrl: b.OnlineURL,
 		Capacity: b.Capacity, Discoverable: b.Discoverable,
 		ClientRequestId: b.ClientRequestID, CoverUploadId: b.CoverUploadID,
 		Components: components,
+	}
+	if !b.StartsNow {
+		req.StartTime, req.EndTime = timestamppb.New(b.StartsAt), timestamppb.New(b.EndsAt)
 	}
 	if rc := b.Recurrence; rc != nil {
 		if rc.RRule == "" || len(rc.RRule) > rruleMax || len(rc.TimeZone) > timeZoneMax {
@@ -437,6 +450,21 @@ func (h coreHandlers) cancelEvent(ctx context.Context, w http.ResponseWriter, r 
 		return
 	}
 	resp, err := h.d.Events.CancelEvent(ctx, &corev1.CancelEventRequest{TayfaId: id, EventId: eid, Reason: b.Reason})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, eventFrom(resp.GetEvent()))
+}
+
+// finishEvent is the organizer's "Bitir" on an open-ended event (ADR-0038
+// §1); the end is core's now, so the request has no body.
+func (h coreHandlers) finishEvent(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	id, eid, ok := pathTayfaEvent(w, r)
+	if !ok {
+		return
+	}
+	resp, err := h.d.Events.FinishEvent(ctx, &corev1.FinishEventRequest{TayfaId: id, EventId: eid})
 	if err != nil {
 		h.fail(w, r, err)
 		return

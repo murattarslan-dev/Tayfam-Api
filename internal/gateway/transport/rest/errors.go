@@ -197,6 +197,9 @@ var problemsByDomain = map[string]map[string]problem{
 		// Type flags (issue #257; ADR-0037 §1).
 		"ERROR_REASON_ATTENDEES_HIDDEN":       {http.StatusForbidden, "attendees-hidden"},
 		"ERROR_REASON_ALBUM_CONSENT_REQUIRED": {http.StatusBadRequest, "album-consent-required"},
+		// Şimdi başlat (issue #263; ADR-0038 §1, §2).
+		"ERROR_REASON_NOW_LIMIT_REACHED":    {http.StatusTooManyRequests, "now-limit-reached"},
+		"ERROR_REASON_EVENT_NOT_OPEN_ENDED": {http.StatusConflict, "event-not-open-ended"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

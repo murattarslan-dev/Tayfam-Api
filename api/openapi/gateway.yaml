@@ -407,7 +407,8 @@ paths:
         Yalnızca gövdede bulunan alanlar değişir; en az bir alan gerekir.
         `interests` gönderilirse ilgi alanlarının tamamını değiştirir.
         `members_can_create_events` etkinlik açma iznini üyelere açar ya da
-        kapatır.
+        kapatır. `now_create_min_role` Şimdi başlat için gereken en düşük
+        roldür (ADR-0038 §2).
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -480,7 +481,10 @@ paths:
         /v1/tayfas/{tayfa_id}/events` ile aynıdır; `recurrence` ve
         `cover_upload_id` kabul edilmez (kapak sonra etkinlik
         düzenlemesiyle eklenir), `discoverable` `true` olamaz (sonradan da). Aynı `event.client_request_id` ile tekrar
-        gönderim ilk açılanı döndürür.
+        gönderim ilk açılanı döndürür. `event.starts_now` ile anlık
+        etkinlik şimdi başlar (ADR-0038 §1); açık şimdi etkinliği hem bu
+        sınıra hem kişi başı 1 açık şimdi etkinliği sınırına
+        (`now-limit-reached`) sayılır.
 
         Etkinlik bitince (iptalde iptal anından) 7 gün sonra tayfa
         arşivlenir. Davet linkiyle gelen her zaman katılım isteği bırakır,
@@ -1699,7 +1703,9 @@ paths:
       summary: Etkinlik açar; açan kişi organizatördür
       description: |
         Moderatör ve yönetici; tayfada `members_can_create_events` açıksa
-        her etkin üye. Aynı `client_request_id` ile tekrar gönderim ilk
+        her etkin üye. `starts_now` ile (Şimdi başlat) tayfanın
+        `now_create_min_role` ayarı ve üstü (varsayılan her etkin üye).
+        Aynı `client_request_id` ile tekrar gönderim ilk
         açılan etkinliği döndürür ve yeni etkinlik açmaz. `recurrence`
         verilirse etkinlik tekrarlayan bir serinin ilkidir; sunucu sonraki
         etkinlikleri sekiz hafta ileriye kadar kendisi açar.
@@ -1815,6 +1821,37 @@ paths:
       responses:
         "200":
           description: İptal edilen etkinlik
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Event" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/finish:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+    post:
+      operationId: finishEvent
+      summary: Açık uçlu etkinliği bitirir (organizatör)
+      description: |
+        Şimdi başlat ile açılmış (`open_ended`) etkinlikte "Bitir"
+        (ADR-0038 §1): `ends_at` sunucu saatiyle şimdi olur, `open_ended`
+        `false` olur. Check-in, bileşenlerin yazma penceresi ve 7 günlük
+        düzeltme penceresi yeni bitişten sayılır. Katılımcılara bildirim
+        gitmez. Yalnızca organizatör; bitirilmeyen etkinlik başlangıçtan 12
+        saat sonra kendiliğinden biter. Planlı etkinlik
+        `event-not-open-ended`, bitmiş ya da bitirilmiş etkinlik
+        `event-ended`, iptal edilmiş etkinlik `event-cancelled` alır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Biten etkinlik
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Event" }
@@ -8060,6 +8097,9 @@ components:
         # core: tür bayrakları (#257, ADR-0037 §1)
         - attendees-hidden
         - album-consent-required
+        # core: şimdi başlat (#263, ADR-0038)
+        - now-limit-reached
+        - event-not-open-ended
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -8444,10 +8484,13 @@ components:
         members_can_create_events:
           type: boolean
           description: "`true`: her etkin üye etkinlik açabilir. `false`: yalnızca moderatör ve yönetici."
+        now_create_min_role:
+          allOf: [{ $ref: "#/components/schemas/Role" }]
+          description: Şimdi başlat (`starts_now`) için gereken en düşük rol (ADR-0038 §2).
 
     Tayfa:
       type: object
-      required: [id, name, description, interests, join_policy, modules, status, member_count, members_can_create_events, created_at, updated_at, kind]
+      required: [id, name, description, interests, join_policy, modules, status, member_count, members_can_create_events, now_create_min_role, created_at, updated_at, kind]
       properties:
         cover_upload_id: { type: string, format: uuid, description: "Kapak; linkleri `POST /v1/media/urls`." }
         id: { type: string, format: uuid }
@@ -8497,6 +8540,12 @@ components:
             `true` ise her etkin üye etkinlik açabilir; `false` (varsayılan)
             ise yalnızca moderatör ve yönetici. Organizatör kendi etkinliğini
             her zaman yönetir.
+        now_create_min_role:
+          allOf: [{ $ref: "#/components/schemas/Role" }]
+          description: |
+            Tayfada Şimdi başlat (`starts_now`) için gereken en düşük rol;
+            varsayılan `member` (ADR-0038 §2). `members_can_create_events`
+            ayarından bağımsızdır. Yalnızca yönetici değiştirir.
         join_code:
           type: string
           description: Yalnızca yöneticiye döner.
@@ -10115,7 +10164,7 @@ components:
 
     Event:
       type: object
-      required: [id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at, capacity, status, discoverable, going_count, maybe_count, waitlist_count, caller_can_manage, series_override, created_at, updated_at]
+      required: [id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at, open_ended, capacity, status, discoverable, going_count, maybe_count, waitlist_count, caller_can_manage, series_override, created_at, updated_at]
       description: |
         Bir etkin üyenin gördüğü etkinlik. `type` katalog anahtarıdır;
         etkinlik oluşturulduğu tür sürümüne (`type_version`) bağlıdır ve o
@@ -10145,6 +10194,15 @@ components:
         description: { type: string }
         starts_at: { type: string, format: date-time }
         ends_at: { type: string, format: date-time }
+        open_ended:
+          type: boolean
+          description: |
+            `starts_now` ile açılmış ve organizatörün henüz bitirmediği
+            etkinlik (ADR-0038 §1): `ends_at` planlanmış bitiş değil, en geç
+            bitiştir (başlangıçtan 12 saat sonra); etkinlik o anda
+            kendiliğinden biter. Kendiliğinden bittikten sonra da `true`
+            kalır; etkinliğin sürüp sürmediği `ends_at` ile şimdiye bakılarak
+            anlaşılır. Organizatör `POST …/finish` ile bitirir.
         meeting_point_name: { type: string }
         meeting_point: { $ref: "#/components/schemas/LatLng" }
         city: { type: string }
@@ -10192,9 +10250,11 @@ components:
 
     EventCreateRequest:
       type: object
-      required: [type, mode, title, starts_at, ends_at, client_request_id]
+      required: [type, mode, title, client_request_id]
       additionalProperties: false
       description: |
+        `starts_at` ve `ends_at` zorunludur; `starts_now` `true` ise ikisi
+        de gönderilmez.
         Yüz yüze: `meeting_point`, `city`, `district` zorunlu; `online_url`
         boş. Çevrimiçi: `online_url` (https) zorunlu; yer alanları boş.
         `type` katalogdaki aktif bir türün anahtarıdır; etkinlik türün
@@ -10230,8 +10290,22 @@ components:
           maxLength: 120
           description: Baştaki ve sondaki boşluklar atıldıktan sonra 1–120 karakter.
         description: { type: string, maxLength: 5000 }
-        starts_at: { type: string, format: date-time, description: "Gelecekte, en fazla iki yıl ileri." }
-        ends_at: { type: string, format: date-time, description: "Başlangıçtan sonra, en fazla 30 gün." }
+        starts_at: { type: string, format: date-time, description: "Gelecekte, en fazla iki yıl ileri. `starts_now` ile gönderilmez." }
+        ends_at: { type: string, format: date-time, description: "Başlangıçtan sonra, en fazla 30 gün. `starts_now` ile gönderilmez." }
+        starts_now:
+          type: boolean
+          description: |
+            Şimdi başlat (ADR-0038 §1): etkinlik sunucu saatiyle şimdi başlar
+            (istemci saati kullanılmaz) ve açık uçludur (`open_ended`):
+            `ends_at` 12 saat sonrasına yazılır, organizatör
+            `POST …/finish` ile bitirir. `starts_at`, `ends_at` ve
+            `recurrence` gönderilmez, `discoverable` `true` olamaz
+            (`invalid-request`). Tayfada etkinlik açma izni yerine tayfanın
+            `now_create_min_role` ayarı geçerlidir. Kişi başına aynı anda en
+            fazla bir açık şimdi etkinliği (tayfa içi ve anlık toplam):
+            aşılırsa `now-limit-reached`. Yüz yüzede buluşma noktası yine
+            zorunludur; istemcinin cihaz konumuyla önerip kullanıcının
+            onayladığı noktadır, cihaz konumu ayrıca gönderilmez.
         meeting_point_name: { type: string, maxLength: 120 }
         meeting_point: { $ref: "#/components/schemas/LatLng" }
         city: { type: string, maxLength: 50 }
