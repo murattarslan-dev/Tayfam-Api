@@ -352,6 +352,29 @@ const (
 	ErrorReason_ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT ErrorReason = 2504
 	// FAILED_PRECONDITION. Scores are entered once the event has started.
 	ErrorReason_ERROR_REASON_SCORE_NOT_STARTED ErrorReason = 2505
+	// FAILED_PRECONDITION. The bracket seeds from the type's draw component:
+	// its draw was not made, or the type has none.
+	ErrorReason_ERROR_REASON_BRACKET_DRAW_REQUIRED ErrorReason = 2510
+	// FAILED_PRECONDITION. The bracket was started; a manager resets it
+	// before starting again.
+	ErrorReason_ERROR_REASON_BRACKET_STARTED ErrorReason = 2511
+	// FAILED_PRECONDITION. The bracket has not been started.
+	ErrorReason_ERROR_REASON_BRACKET_NOT_STARTED ErrorReason = 2512
+	// FAILED_PRECONDITION. Fewer than two entrants in the draw.
+	ErrorReason_ERROR_REASON_BRACKET_TOO_FEW ErrorReason = 2513
+	// NOT_FOUND. No such match in the bracket.
+	ErrorReason_ERROR_REASON_BRACKET_MATCH_NOT_FOUND ErrorReason = 2514
+	// NOT_FOUND. No such game in the match; only the last game is deleted.
+	ErrorReason_ERROR_REASON_BRACKET_GAME_NOT_FOUND ErrorReason = 2515
+	// FAILED_PRECONDITION. The match is decided (or a bye): no more games.
+	ErrorReason_ERROR_REASON_BRACKET_MATCH_DECIDED ErrorReason = 2516
+	// FAILED_PRECONDITION. A match of the current round is not decided yet.
+	ErrorReason_ERROR_REASON_BRACKET_ROUND_OPEN ErrorReason = 2517
+	// FAILED_PRECONDITION. A later round was paired from the match's round;
+	// its games no longer change (reset the bracket instead).
+	ErrorReason_ERROR_REASON_BRACKET_ROUND_CLOSED ErrorReason = 2518
+	// FAILED_PRECONDITION. The bracket has no next round.
+	ErrorReason_ERROR_REASON_BRACKET_FINISHED ErrorReason = 2519
 )
 
 // Enum value maps for ErrorReason.
@@ -462,6 +485,16 @@ var (
 		2503: "ERROR_REASON_SCORE_TABLE_STARTED",
 		2504: "ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT",
 		2505: "ERROR_REASON_SCORE_NOT_STARTED",
+		2510: "ERROR_REASON_BRACKET_DRAW_REQUIRED",
+		2511: "ERROR_REASON_BRACKET_STARTED",
+		2512: "ERROR_REASON_BRACKET_NOT_STARTED",
+		2513: "ERROR_REASON_BRACKET_TOO_FEW",
+		2514: "ERROR_REASON_BRACKET_MATCH_NOT_FOUND",
+		2515: "ERROR_REASON_BRACKET_GAME_NOT_FOUND",
+		2516: "ERROR_REASON_BRACKET_MATCH_DECIDED",
+		2517: "ERROR_REASON_BRACKET_ROUND_OPEN",
+		2518: "ERROR_REASON_BRACKET_ROUND_CLOSED",
+		2519: "ERROR_REASON_BRACKET_FINISHED",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                  0,
@@ -569,6 +602,16 @@ var (
 		"ERROR_REASON_SCORE_TABLE_STARTED":          2503,
 		"ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT": 2504,
 		"ERROR_REASON_SCORE_NOT_STARTED":            2505,
+		"ERROR_REASON_BRACKET_DRAW_REQUIRED":        2510,
+		"ERROR_REASON_BRACKET_STARTED":              2511,
+		"ERROR_REASON_BRACKET_NOT_STARTED":          2512,
+		"ERROR_REASON_BRACKET_TOO_FEW":              2513,
+		"ERROR_REASON_BRACKET_MATCH_NOT_FOUND":      2514,
+		"ERROR_REASON_BRACKET_GAME_NOT_FOUND":       2515,
+		"ERROR_REASON_BRACKET_MATCH_DECIDED":        2516,
+		"ERROR_REASON_BRACKET_ROUND_OPEN":           2517,
+		"ERROR_REASON_BRACKET_ROUND_CLOSED":         2518,
+		"ERROR_REASON_BRACKET_FINISHED":             2519,
 	}
 )
 
@@ -603,7 +646,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xf3\x1d\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xf9 \n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -710,7 +753,17 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"!ERROR_REASON_SCORE_TABLE_FINISHED\x10\xc6\x13\x12%\n" +
 	" ERROR_REASON_SCORE_TABLE_STARTED\x10\xc7\x13\x12.\n" +
 	")ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT\x10\xc8\x13\x12#\n" +
-	"\x1eERROR_REASON_SCORE_NOT_STARTED\x10\xc9\x13B\xbd\x01\n" +
+	"\x1eERROR_REASON_SCORE_NOT_STARTED\x10\xc9\x13\x12'\n" +
+	"\"ERROR_REASON_BRACKET_DRAW_REQUIRED\x10\xce\x13\x12!\n" +
+	"\x1cERROR_REASON_BRACKET_STARTED\x10\xcf\x13\x12%\n" +
+	" ERROR_REASON_BRACKET_NOT_STARTED\x10\xd0\x13\x12!\n" +
+	"\x1cERROR_REASON_BRACKET_TOO_FEW\x10\xd1\x13\x12)\n" +
+	"$ERROR_REASON_BRACKET_MATCH_NOT_FOUND\x10\xd2\x13\x12(\n" +
+	"#ERROR_REASON_BRACKET_GAME_NOT_FOUND\x10\xd3\x13\x12'\n" +
+	"\"ERROR_REASON_BRACKET_MATCH_DECIDED\x10\xd4\x13\x12$\n" +
+	"\x1fERROR_REASON_BRACKET_ROUND_OPEN\x10\xd5\x13\x12&\n" +
+	"!ERROR_REASON_BRACKET_ROUND_CLOSED\x10\xd6\x13\x12\"\n" +
+	"\x1dERROR_REASON_BRACKET_FINISHED\x10\xd7\x13B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

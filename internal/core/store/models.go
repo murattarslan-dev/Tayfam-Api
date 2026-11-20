@@ -155,6 +155,41 @@ type Event struct {
 	TypeVersion      int32
 }
 
+type EventBracket struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	DrawKey      string
+	Format       string
+	BestOf       int16
+	Result       string
+	Winner       string
+	Rounds       int16
+	StartedAt    pgtype.Timestamptz
+}
+
+type EventBracketGame struct {
+	MatchID      pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	Number       int16
+	APoints      pgtype.Int4
+	BPoints      pgtype.Int4
+	AOutcome     pgtype.Text
+	CreatedAt    pgtype.Timestamptz
+}
+
+type EventBracketMatch struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	DrawKey      string
+	Round        int16
+	Slot         int16
+	APosition    pgtype.Int2
+	BPosition    pgtype.Int2
+	CreatedAt    pgtype.Timestamptz
+}
+
 type EventChecklistItem struct {
 	ID             pgtype.UUID
 	EventID        pgtype.UUID

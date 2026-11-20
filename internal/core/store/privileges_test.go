@@ -104,6 +104,12 @@ var wantAppPrivileges = map[string]string{
 	"event_score_tables":    "DELETE,INSERT,SELECT,UPDATE(finished_at,label,status,updated_at)",
 	"event_score_players":   "DELETE,INSERT,SELECT,UPDATE(user_id)",
 	"event_scores":          "DELETE,INSERT,SELECT",
+	// Issue #251: a bracket, a match or a game never moves to another
+	// event, component or match; a correction deletes the game and writes
+	// it again, a reset deletes the bracket.
+	"event_brackets":        "DELETE,INSERT,SELECT",
+	"event_bracket_matches": "DELETE,INSERT,SELECT",
+	"event_bracket_games":   "DELETE,INSERT,SELECT",
 	// Issue #241: an item never moves to another event or list, and its
 	// name and quantity do not change; only the assignee changes and
 	// account deletion clears the people on it.

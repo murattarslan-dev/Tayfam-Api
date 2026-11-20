@@ -18,6 +18,8 @@ type Querier interface {
 	// Oy ve sayaç aynı transaction'da: oy eklendiyse sayaç artar. Aynı kişinin
 	// ikinci oyu PK'ye takılır, sayaç değişmez.
 	AddAnswerVote(ctx context.Context, arg AddAnswerVoteParams) (int64, error)
+	AddBracketGame(ctx context.Context, arg AddBracketGameParams) error
+	AddBracketMatch(ctx context.Context, arg AddBracketMatchParams) error
 	AddDrawEntry(ctx context.Context, arg AddDrawEntryParams) error
 	AddQuestionTag(ctx context.Context, arg AddQuestionTagParams) error
 	AddScore(ctx context.Context, arg AddScoreParams) error
@@ -246,6 +248,7 @@ type Querier interface {
 	// yazılmaz.
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error
 	CreateBlock(ctx context.Context, arg CreateBlockParams) (int64, error)
+	CreateBracket(ctx context.Context, arg CreateBracketParams) error
 	CreateChecklistItem(ctx context.Context, arg CreateChecklistItemParams) error
 	CreateDraw(ctx context.Context, arg CreateDrawParams) error
 	// Etkinlikler (issue #49). Her sorgu tayfa_id ile ya da tayfa kapsamında
@@ -318,6 +321,9 @@ type Querier interface {
 	DeleteAnswerVotes(ctx context.Context, answerID pgtype.UUID) error
 	DeleteAvailability(ctx context.Context, arg DeleteAvailabilityParams) (int64, error)
 	DeleteBlock(ctx context.Context, arg DeleteBlockParams) (int64, error)
+	// Turnuvayı sıfırlar; maçlar ve oyunlar birlikte gider.
+	DeleteBracket(ctx context.Context, arg DeleteBracketParams) error
+	DeleteBracketGame(ctx context.Context, arg DeleteBracketGameParams) (int64, error)
 	DeleteChecklistItem(ctx context.Context, arg DeleteChecklistItemParams) (int64, error)
 	DeleteEventFieldValues(ctx context.Context, eventID pgtype.UUID) error
 	DeleteEventGoal(ctx context.Context, arg DeleteEventGoalParams) (int64, error)
@@ -486,6 +492,11 @@ type Querier interface {
 	// işi siler).
 	ExportAvailability(ctx context.Context, arg ExportAvailabilityParams) ([]ExportAvailabilityRow, error)
 	ExportBlocks(ctx context.Context, arg ExportBlocksParams) ([]ExportBlocksRow, error)
+	// Eşleşme ağacındaki maçlarınız (`bracket` bileşeni, issue #251): kuradaki
+	// yeriniz üzerinden hangi etkinliğin hangi turunda oynadınız ve oyun oyun
+	// kendi skorunuz (`wdl` kuralında kendi sonucunuz). Rakip ve skoru dışa
+	// aktarılmaz.
+	ExportBracketMatches(ctx context.Context, arg ExportBracketMatchesParams) ([]ExportBracketMatchesRow, error)
 	// Etkinliklere yazılan araçlar (`vehicles` bileşeni, issue #240). Bölümün adı
 	// Faz 1'den kalmadır (convoy_vehicles); bütün türlerin araçlarını taşır.
 	ExportConvoyVehicles(ctx context.Context, arg ExportConvoyVehiclesParams) ([]ExportConvoyVehiclesRow, error)
@@ -572,6 +583,12 @@ type Querier interface {
 	GetAnswer(ctx context.Context, arg GetAnswerParams) (GetAnswerRow, error)
 	GetAnswerByClientRequest(ctx context.Context, arg GetAnswerByClientRequestParams) (GetAnswerByClientRequestRow, error)
 	GetAnswerForUpdate(ctx context.Context, arg GetAnswerForUpdateParams) (GetAnswerForUpdateRow, error)
+	// Eşleşme ağacı bileşeni (`bracket`; issue #251; ADR-0025 §4). Etkinlik
+	// her zaman önce tayfa kapsamında yüklenir ve bileşen etkinliğin tür
+	// sürümünde çözülür (internal/core/app/component: View / Change); buradaki
+	// sorgular o etkinliğin kimliği ve bileşenin anahtarıyla çalışır (IDOR).
+	// Yetki app katmanındadır (internal/core/app/component/bracket).
+	GetBracket(ctx context.Context, arg GetBracketParams) (GetBracketRow, error)
 	// Bir türün güncel hali; yeni etkinlik bu sürümle oluşturulur. Emekli türü
 	// app katmanı reddeder.
 	GetCatalogEventType(ctx context.Context, key string) (GetCatalogEventTypeRow, error)
@@ -822,6 +839,8 @@ type Querier interface {
 	// Kişinin engelledikleri (yalnızca kendisi görür); engellenen kişinin
 	// profili silinmiş olsa da kayıt listelenir ki kaldırılabilsin.
 	ListBlocksPage(ctx context.Context, arg ListBlocksPageParams) ([]ListBlocksPageRow, error)
+	ListBracketGames(ctx context.Context, arg ListBracketGamesParams) ([]ListBracketGamesRow, error)
+	ListBracketMatches(ctx context.Context, arg ListBracketMatchesParams) ([]ListBracketMatchesRow, error)
 	// İlgi alanı doğrulaması için: anahtar ve durum (emekliler dahil).
 	ListCatalogInterestStatuses(ctx context.Context) ([]ListCatalogInterestStatusesRow, error)
 	// Emekliye ayrılanlar dahil: eski tayfalar ve profiller onları gösterir.

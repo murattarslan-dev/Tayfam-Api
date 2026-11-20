@@ -236,6 +236,32 @@ WHERE p.user_id = @user_id AND p.id > @after
 ORDER BY p.id
 LIMIT @n;
 
+-- Eşleşme ağacındaki maçlarınız (`bracket` bileşeni, issue #251): kuradaki
+-- yeriniz üzerinden hangi etkinliğin hangi turunda oynadınız ve oyun oyun
+-- kendi skorunuz (`wdl` kuralında kendi sonucunuz). Rakip ve skoru dışa
+-- aktarılmaz.
+-- name: ExportBracketMatches :many
+SELECT m.id AS k, jsonb_build_object(
+  'event_id', m.event_id, 'component_key', m.component_key, 'round', m.round,
+  'position', d.position,
+  'games', COALESCE((
+    SELECT jsonb_agg(jsonb_build_object(
+      'number', g.number,
+      'points', CASE WHEN m.a_position = d.position THEN g.a_points ELSE g.b_points END,
+      'outcome', CASE WHEN m.a_position = d.position THEN g.a_outcome
+        WHEN g.a_outcome = 'win' THEN 'loss' WHEN g.a_outcome = 'loss' THEN 'win'
+        ELSE g.a_outcome END)
+      ORDER BY g.number)
+    FROM event_bracket_games AS g WHERE g.match_id = m.id), '[]'::jsonb),
+  'created_at', m.created_at
+) AS data
+FROM event_bracket_matches AS m
+JOIN event_draw_entries AS d ON d.event_id = m.event_id AND d.component_key = m.draw_key
+  AND d.position IN (m.a_position, m.b_position)
+WHERE d.user_id = @user_id AND m.id > @after
+ORDER BY m.id
+LIMIT @n;
+
 -- Albüm fotoğrafları (issue #206); dosyaların kendisi zip'e girmez
 -- (ADR-0021 §5), uploads bölümü onları listeler.
 -- name: ExportEventPhotos :many
