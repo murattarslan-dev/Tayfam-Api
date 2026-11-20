@@ -94,6 +94,31 @@ func (q *Queries) AdminDeleteAnswer(ctx context.Context, arg AdminDeleteAnswerPa
 	return result.RowsAffected(), nil
 }
 
+const adminDeleteDailyItem = `-- name: AdminDeleteDailyItem :execrows
+UPDATE tayfa_daily_items SET deleted_at = $1, deleted_by = $2
+WHERE id = $3 AND tayfa_id = $4 AND deleted_at IS NULL
+`
+
+type AdminDeleteDailyItemParams struct {
+	At      pgtype.Timestamptz
+	By      pgtype.UUID
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+func (q *Queries) AdminDeleteDailyItem(ctx context.Context, arg AdminDeleteDailyItemParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adminDeleteDailyItem,
+		arg.At,
+		arg.By,
+		arg.ID,
+		arg.TayfaID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const adminDeleteEvent = `-- name: AdminDeleteEvent :execrows
 UPDATE events SET deleted_at = $1, deleted_by = $2 WHERE id = $3 AND tayfa_id = $4 AND deleted_at IS NULL
 `
@@ -318,6 +343,39 @@ func (q *Queries) AdminGetAnswer(ctx context.Context, arg AdminGetAnswerParams) 
 	err := row.Scan(
 		&i.AuthorID,
 		&i.Body,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const adminGetDailyItem = `-- name: AdminGetDailyItem :one
+SELECT created_by, body, attribution, created_at, deleted_at
+FROM tayfa_daily_items
+WHERE id = $1 AND tayfa_id = $2
+`
+
+type AdminGetDailyItemParams struct {
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+type AdminGetDailyItemRow struct {
+	CreatedBy   pgtype.UUID
+	Body        string
+	Attribution pgtype.Text
+	CreatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+}
+
+// Günün içeriği (issue #269).
+func (q *Queries) AdminGetDailyItem(ctx context.Context, arg AdminGetDailyItemParams) (AdminGetDailyItemRow, error) {
+	row := q.db.QueryRow(ctx, adminGetDailyItem, arg.ID, arg.TayfaID)
+	var i AdminGetDailyItemRow
+	err := row.Scan(
+		&i.CreatedBy,
+		&i.Body,
+		&i.Attribution,
 		&i.CreatedAt,
 		&i.DeletedAt,
 	)

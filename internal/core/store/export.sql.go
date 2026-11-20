@@ -410,6 +410,51 @@ func (q *Queries) ExportConvoyVehicles(ctx context.Context, arg ExportConvoyVehi
 	return items, nil
 }
 
+const exportDailyItems = `-- name: ExportDailyItems :many
+SELECT d.id AS k, jsonb_build_object(
+  'id', d.id, 'tayfa_id', d.tayfa_id, 'body', d.body, 'attribution', d.attribution,
+  'pin_month', d.pin_month, 'pin_day', d.pin_day, 'pin_year', d.pin_year,
+  'created_at', d.created_at, 'updated_at', d.updated_at, 'deleted_at', d.deleted_at
+) AS data
+FROM tayfa_daily_items d
+WHERE d.created_by = $1 AND d.id > $2
+ORDER BY d.id
+LIMIT $3
+`
+
+type ExportDailyItemsParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportDailyItemsRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Günün içeriği (issue #269; ADR-0027 §5): eklediğiniz içerikler, duyurular
+// gibi. Sıra ve kimin sildiği yer almaz.
+func (q *Queries) ExportDailyItems(ctx context.Context, arg ExportDailyItemsParams) ([]ExportDailyItemsRow, error) {
+	rows, err := q.db.Query(ctx, exportDailyItems, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportDailyItemsRow{}
+	for rows.Next() {
+		var i ExportDailyItemsRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportDrawEntries = `-- name: ExportDrawEntries :many
 SELECT d.id AS k, jsonb_build_object(
   'event_id', d.event_id, 'component_key', d.component_key, 'position', d.position,

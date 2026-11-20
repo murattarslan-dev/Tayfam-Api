@@ -412,6 +412,26 @@ func (q *Queries) PurgeAnswers(ctx context.Context, arg PurgeAnswersParams) (int
 	return result.RowsAffected(), nil
 }
 
+const purgeDailyItems = `-- name: PurgeDailyItems :execrows
+DELETE FROM tayfa_daily_items WHERE id IN (
+  SELECT x.id FROM tayfa_daily_items x WHERE x.deleted_at <= $1
+  ORDER BY x.deleted_at, x.id LIMIT $2 FOR UPDATE SKIP LOCKED)
+`
+
+type PurgeDailyItemsParams struct {
+	DeletedBefore pgtype.Timestamptz
+	N             int32
+}
+
+// Günün içeriği (issue #269).
+func (q *Queries) PurgeDailyItems(ctx context.Context, arg PurgeDailyItemsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeDailyItems, arg.DeletedBefore, arg.N)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const purgeEventPhotos = `-- name: PurgeEventPhotos :execrows
 DELETE FROM event_photos WHERE id IN (
   SELECT x.id FROM event_photos x WHERE x.deleted_at <= $1

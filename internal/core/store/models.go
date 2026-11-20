@@ -822,6 +822,31 @@ type TayfaBadge struct {
 	EarnedAt  pgtype.Timestamptz
 }
 
+type TayfaDailyItem struct {
+	ID              pgtype.UUID
+	TayfaID         pgtype.UUID
+	Body            string
+	Attribution     pgtype.Text
+	Position        int32
+	PinMonth        pgtype.Int2
+	PinDay          pgtype.Int2
+	PinYear         pgtype.Int2
+	CreatedBy       pgtype.UUID
+	ClientRequestID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	DeletedBy       pgtype.UUID
+}
+
+type TayfaDailyState struct {
+	TayfaID      pgtype.UUID
+	NextPosition int32
+	ShownOn      pgtype.Date
+	ShownItemID  pgtype.UUID
+	UpdatedAt    pgtype.Timestamptz
+}
+
 type TayfaDiscover struct {
 	TayfaID         pgtype.UUID
 	Status          string

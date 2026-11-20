@@ -45,6 +45,7 @@ type Querier interface {
 	// İçeriği kaldırma: soft delete, silen platform yöneticisi.
 	AdminDeleteAnnouncement(ctx context.Context, arg AdminDeleteAnnouncementParams) (int64, error)
 	AdminDeleteAnswer(ctx context.Context, arg AdminDeleteAnswerParams) (int64, error)
+	AdminDeleteDailyItem(ctx context.Context, arg AdminDeleteDailyItemParams) (int64, error)
 	AdminDeleteEvent(ctx context.Context, arg AdminDeleteEventParams) (int64, error)
 	AdminDeleteEventPhoto(ctx context.Context, arg AdminDeleteEventPhotoParams) (int64, error)
 	AdminDeleteEventQuestion(ctx context.Context, arg AdminDeleteEventQuestionParams) (int64, error)
@@ -56,6 +57,8 @@ type Querier interface {
 	// Şikâyet edilen öğe, yalnızca o öğe. Konum ve oy alanları seçilmez.
 	AdminGetAnnouncement(ctx context.Context, arg AdminGetAnnouncementParams) (AdminGetAnnouncementRow, error)
 	AdminGetAnswer(ctx context.Context, arg AdminGetAnswerParams) (AdminGetAnswerRow, error)
+	// Günün içeriği (issue #269).
+	AdminGetDailyItem(ctx context.Context, arg AdminGetDailyItemParams) (AdminGetDailyItemRow, error)
 	AdminGetEvent(ctx context.Context, arg AdminGetEventParams) (AdminGetEventRow, error)
 	AdminGetEventPhoto(ctx context.Context, arg AdminGetEventPhotoParams) (AdminGetEventPhotoRow, error)
 	// Etkinlik sorusu (issue #256): anonim sorunun yazarı yalnızca burada,
@@ -100,6 +103,9 @@ type Querier interface {
 	// dönmez.
 	AdminTayfaStats(ctx context.Context) (AdminTayfaStatsRow, error)
 	AdminUnsuspendTayfa(ctx context.Context, id pgtype.UUID) (int64, error)
+	// Okunan durum hâlâ aynıysa ilerletir (karşılaştır-yaz): aynı anda gelen
+	// iki ilk istekten yalnızca biri yazar, diğeri yeniden okur.
+	AdvanceDailyState(ctx context.Context, arg AdvanceDailyStateParams) (int64, error)
 	// generated_until yalnızca ileri gider.
 	AdvanceEventSeries(ctx context.Context, arg AdvanceEventSeriesParams) error
 	// Platform banı (identity'nin user.banned / user.unbanned olayları). Eski
@@ -144,6 +150,9 @@ type Querier interface {
 	// Liste maddesi listede kalır; üstlenen ve ekleyen boşalır (`checklist`
 	// bileşeni, issue #241).
 	ClearChecklistItemUserFields(ctx context.Context, userID pgtype.UUID) error
+	// Günün içeriği tayfanın havuzudur; içerik kalır, ekleyen ve silen boşalır
+	// (issue #269; ADR-0027 §5, duyurular gibi).
+	ClearDailyItemUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearEventActor(ctx context.Context, userID pgtype.UUID) error
 	ClearEventPhotoDeleter(ctx context.Context, userID pgtype.UUID) error
 	ClearEventQuestionUserFields(ctx context.Context, userID pgtype.UUID) error
@@ -231,6 +240,10 @@ type Querier interface {
 	// Deneme yalnızca sınırın altındayken sayılır; 0 satır: sınır dolmuş.
 	CountCheckInAttempt(ctx context.Context, arg CountCheckInAttemptParams) (int64, error)
 	CountChecklistItems(ctx context.Context, arg CountChecklistItemsParams) (int64, error)
+	CountDailyItems(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
+	// Aynı güne başka canlı sabitleme (ADR-0027 §5 "Çakışma uyarısı"): yılı
+	// olmayan sabitleme her yılın o günüyle çakışır.
+	CountDailyPinConflicts(ctx context.Context, arg CountDailyPinConflictsParams) (int64, error)
 	// Kişinin ve albümün silinmemiş fotoğrafları (sınırlar). Çağıran etkinlik
 	// satırını önce kilitler.
 	CountEventPhotos(ctx context.Context, arg CountEventPhotosParams) (CountEventPhotosRow, error)
@@ -286,6 +299,7 @@ type Querier interface {
 	CreateBlock(ctx context.Context, arg CreateBlockParams) (int64, error)
 	CreateBracket(ctx context.Context, arg CreateBracketParams) error
 	CreateChecklistItem(ctx context.Context, arg CreateChecklistItemParams) error
+	CreateDailyItem(ctx context.Context, arg CreateDailyItemParams) error
 	CreateDraw(ctx context.Context, arg CreateDrawParams) error
 	// Etkinlikler (issue #49). Her sorgu tayfa_id ile ya da tayfa kapsamında
 	// yüklenmiş bir etkinliğin kimliğiyle çalışır (IDOR); yetki kontrolü app
@@ -367,6 +381,7 @@ type Querier interface {
 	DeleteBracket(ctx context.Context, arg DeleteBracketParams) error
 	DeleteBracketGame(ctx context.Context, arg DeleteBracketGameParams) (int64, error)
 	DeleteChecklistItem(ctx context.Context, arg DeleteChecklistItemParams) (int64, error)
+	DeleteDailyItem(ctx context.Context, arg DeleteDailyItemParams) (int64, error)
 	DeleteEventCelebrationWinners(ctx context.Context, arg DeleteEventCelebrationWinnersParams) error
 	DeleteEventFieldValues(ctx context.Context, eventID pgtype.UUID) error
 	DeleteEventGoal(ctx context.Context, arg DeleteEventGoalParams) (int64, error)
@@ -539,6 +554,7 @@ type Querier interface {
 	// Yanlış boyutta yüklenmiş dışa aktarma silinir.
 	DropExport(ctx context.Context, arg DropExportParams) (int64, error)
 	EndEventSeries(ctx context.Context, arg EndEventSeriesParams) (int64, error)
+	EnsureDailyState(ctx context.Context, arg EnsureDailyStateParams) error
 	// Yazarın kendi silmesi: başlık ve gövde hemen boşaltılır, geri alınamaz
 	// (v14 "Silinen içeriği geri alma").
 	EraseAnnouncement(ctx context.Context, arg EraseAnnouncementParams) (int64, error)
@@ -580,6 +596,9 @@ type Querier interface {
 	// Etkinliklere yazılan araçlar (`vehicles` bileşeni, issue #240). Bölümün adı
 	// Faz 1'den kalmadır (convoy_vehicles); bütün türlerin araçlarını taşır.
 	ExportConvoyVehicles(ctx context.Context, arg ExportConvoyVehiclesParams) ([]ExportConvoyVehiclesRow, error)
+	// Günün içeriği (issue #269; ADR-0027 §5): eklediğiniz içerikler, duyurular
+	// gibi. Sıra ve kimin sildiği yer almaz.
+	ExportDailyItems(ctx context.Context, arg ExportDailyItemsParams) ([]ExportDailyItemsRow, error)
 	// ---------------------------------------------------------------------------
 	// KVKK dışa aktarma (ADR-0021): tek kayıt.
 	ExportDiscover(ctx context.Context, arg ExportDiscoverParams) ([]ExportDiscoverRow, error)
@@ -713,6 +732,10 @@ type Querier interface {
 	// Kataloğun bütününün sürümü; GET /v1/catalog'un ETag'i.
 	GetCatalogVersion(ctx context.Context) (int64, error)
 	GetChecklistItem(ctx context.Context, arg GetChecklistItemParams) (pgtype.UUID, error)
+	GetDailyItem(ctx context.Context, arg GetDailyItemParams) (TayfaDailyItem, error)
+	GetDailyItemByClientRequest(ctx context.Context, arg GetDailyItemByClientRequestParams) (TayfaDailyItem, error)
+	GetDailyItemForUpdate(ctx context.Context, arg GetDailyItemForUpdateParams) (TayfaDailyItem, error)
+	GetDailyState(ctx context.Context, tayfaID pgtype.UUID) (GetDailyStateRow, error)
 	// Kura bileşeni (`draw`; issue #249; ADR-0025 §4). Etkinlik her zaman önce
 	// tayfa kapsamında yüklenir ve bileşen etkinliğin tür sürümünde çözülür
 	// (internal/core/app/component: View / Change); buradaki sorgular o
@@ -823,6 +846,9 @@ type Querier interface {
 	// dosyaları (data_export) görüntü yollarında hiç görünmez.
 	GetOwnUpload(ctx context.Context, arg GetOwnUploadParams) (Upload, error)
 	GetOwnUploadForUpdate(ctx context.Context, arg GetOwnUploadForUpdateParams) (Upload, error)
+	// Günün sabitlemesi: o güne (yılı o yıl ya da yılsız) sabitlenmiş canlı
+	// içeriklerden sırada önce gelen.
+	GetPinnedDailyItem(ctx context.Context, arg GetPinnedDailyItemParams) (TayfaDailyItem, error)
 	GetPoll(ctx context.Context, arg GetPollParams) (GetPollRow, error)
 	// Tekrar gönderilen oluşturma isteği aynı anketi döndürür (issue #150).
 	GetPollByClientRequest(ctx context.Context, arg GetPollByClientRequestParams) (GetPollByClientRequestRow, error)
@@ -848,6 +874,8 @@ type Querier interface {
 	GetReportTargetAnnouncement(ctx context.Context, arg GetReportTargetAnnouncementParams) (GetReportTargetAnnouncementRow, error)
 	// Silinmiş sorunun cevabı da görünmez.
 	GetReportTargetAnswer(ctx context.Context, arg GetReportTargetAnswerParams) (GetReportTargetAnswerRow, error)
+	// Günün içeriği (issue #269): yazarı ekleyendir.
+	GetReportTargetDailyItem(ctx context.Context, arg GetReportTargetDailyItemParams) (GetReportTargetDailyItemRow, error)
 	// İptal edilmiş etkinlik görünür kalır; kaldırılmış sayılır (çözüm için).
 	GetReportTargetEvent(ctx context.Context, arg GetReportTargetEventParams) (GetReportTargetEventRow, error)
 	// Albüm fotoğrafı (issue #206): etkinliği de görünür olmalı.
@@ -1019,6 +1047,13 @@ type Querier interface {
 	// etkinliğin kimliği ve bileşenin anahtarıyla çalışır (IDOR). Yetki app
 	// katmanındadır (internal/core/app/component/checklist).
 	ListChecklistItems(ctx context.Context, arg ListChecklistItemsParams) ([]ListChecklistItemsRow, error)
+	// Günün içeriği (issue #269; ADR-0027 §5). Tayfa her zaman önce üyelik
+	// kontrolüyle yüklenir (internal/core/app/daily); buradaki sorgular o
+	// tayfanın kimliğiyle çalışır (IDOR). Yetki, modül ve seçim kuralı app
+	// katmanındadır.
+	ListDailyItems(ctx context.Context, tayfaID pgtype.UUID) ([]TayfaDailyItem, error)
+	// Geri alınabilecek silinmişler (son 30 gün), son silinen önce.
+	ListDeletedDailyItems(ctx context.Context, arg ListDeletedDailyItemsParams) ([]TayfaDailyItem, error)
 	ListDeletingUploads(ctx context.Context, n int32) ([]ListDeletingUploadsRow, error)
 	// Keşfet (issue #210, ADR-0033; herkese açık: issue #227, ADR-0035).
 	// Listelenebilirlik tayfa_discover_listable (00028), etkinliğin izleyiciye
@@ -1430,6 +1465,11 @@ type Querier interface {
 	// Birleştirilen değere bağlı değerler hedefe taşınır (zincir yok).
 	MoveVocabularyMerges(ctx context.Context, arg MoveVocabularyMergesParams) error
 	MuteMembership(ctx context.Context, arg MuteMembershipParams) (int64, error)
+	// Yeni ya da geri alınan içerik havuzun sonuna gider; silinmişler de
+	// sayılır, böylece iki içerik aynı yeri almaz.
+	NextDailyPosition(ctx context.Context, tayfaID pgtype.UUID) (int32, error)
+	// Sıradaki: from_position ya da sonrasındaki ilk sabitlenmemiş canlı içerik.
+	NextDailyRotationItem(ctx context.Context, arg NextDailyRotationItemParams) (TayfaDailyItem, error)
 	// Bekleme listesinin başı: en eski kayıt önce. Çağıran etkinlik satırını
 	// zaten kilitlemiştir; satır kilidi aynı kaydın iki kez terfisini de önler.
 	NextWaitlisted(ctx context.Context, arg NextWaitlistedParams) ([]pgtype.UUID, error)
@@ -1441,6 +1481,8 @@ type Querier interface {
 	PromoteRsvp(ctx context.Context, arg PromoteRsvpParams) (int64, error)
 	PurgeAnnouncements(ctx context.Context, arg PurgeAnnouncementsParams) (int64, error)
 	PurgeAnswers(ctx context.Context, arg PurgeAnswersParams) (int64, error)
+	// Günün içeriği (issue #269).
+	PurgeDailyItems(ctx context.Context, arg PurgeDailyItemsParams) (int64, error)
 	// Albüm fotoğrafı; dosyası uploads_release_ref ile silme kuyruğuna girer.
 	PurgeEventPhotos(ctx context.Context, arg PurgeEventPhotosParams) (int64, error)
 	// Etkinlik sorusu (issue #256); oyları cascade ile gider.
@@ -1485,6 +1527,8 @@ type Querier interface {
 	// tayfa.purged ile silinir; dosyanın tayfası core'da bellidir).
 	ReleaseTayfaChatPhotos(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
 	RemoveAnswerVote(ctx context.Context, arg RemoveAnswerVoteParams) (int64, error)
+	// Sıra bütün liste olarak yazılır: ids'teki n'inci içerik n-1'inci yere.
+	ReorderDailyItems(ctx context.Context, arg ReorderDailyItemsParams) (int64, error)
 	RequestTayfaDeletion(ctx context.Context, arg RequestTayfaDeletionParams) (int64, error)
 	// Açılışta başvuru: satır yoksa pending açılır; reddedilmişse yeniden
 	// pending olur. Onaylı, bekleyen ve düşürülmüş başvuru değişmez.
@@ -1492,6 +1536,7 @@ type Querier interface {
 	ResolveReport(ctx context.Context, arg ResolveReportParams) (int64, error)
 	RestoreAnnouncement(ctx context.Context, arg RestoreAnnouncementParams) (int64, error)
 	RestoreAnswer(ctx context.Context, arg RestoreAnswerParams) (int64, error)
+	RestoreDailyItem(ctx context.Context, arg RestoreDailyItemParams) (int64, error)
 	RestoreQuestion(ctx context.Context, arg RestoreQuestionParams) (int64, error)
 	// Tekrar gönderim ilk dönüşü korur (0 satır).
 	ReturnRollCallCheckin(ctx context.Context, arg ReturnRollCallCheckinParams) (int64, error)
@@ -1620,6 +1665,7 @@ type Querier interface {
 	// (issue #191). Sabitleme edited_at'e dokunmaz.
 	UpdateAnnouncementContent(ctx context.Context, arg UpdateAnnouncementContentParams) (int64, error)
 	UpdateAnswerBody(ctx context.Context, arg UpdateAnswerBodyParams) (int64, error)
+	UpdateDailyItem(ctx context.Context, arg UpdateDailyItemParams) (int64, error)
 	// Seri örneği elle düzenlenince seri güncellemeleri ona dokunmaz.
 	UpdateEvent(ctx context.Context, arg UpdateEventParams) (int64, error)
 	UpdateQuestionContent(ctx context.Context, arg UpdateQuestionContentParams) (int64, error)

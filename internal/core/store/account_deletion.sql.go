@@ -69,6 +69,19 @@ func (q *Queries) ClearChecklistItemUserFields(ctx context.Context, userID pgtyp
 	return err
 }
 
+const clearDailyItemUserFields = `-- name: ClearDailyItemUserFields :exec
+UPDATE tayfa_daily_items
+SET created_by = NULLIF(created_by, $1), deleted_by = NULLIF(deleted_by, $1)
+WHERE created_by = $1 OR deleted_by = $1
+`
+
+// Günün içeriği tayfanın havuzudur; içerik kalır, ekleyen ve silen boşalır
+// (issue #269; ADR-0027 §5, duyurular gibi).
+func (q *Queries) ClearDailyItemUserFields(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearDailyItemUserFields, userID)
+	return err
+}
+
 const clearEventActor = `-- name: ClearEventActor :exec
 UPDATE domain_events SET actor_id = NULL WHERE actor_id = $1
 `
