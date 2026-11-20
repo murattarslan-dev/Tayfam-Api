@@ -194,6 +194,9 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_CELEBRATION_NOT_STARTED":     {http.StatusConflict, "celebration-not-started"},
 		"ERROR_REASON_CELEBRATION_NO_WINNER":       {http.StatusConflict, "celebration-no-winner"},
 		"ERROR_REASON_CELEBRATION_NOT_PARTICIPANT": {http.StatusConflict, "celebration-not-participant"},
+		// Type flags (issue #257; ADR-0037 §1).
+		"ERROR_REASON_ATTENDEES_HIDDEN":       {http.StatusForbidden, "attendees-hidden"},
+		"ERROR_REASON_ALBUM_CONSENT_REQUIRED": {http.StatusBadRequest, "album-consent-required"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

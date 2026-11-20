@@ -133,7 +133,10 @@ type EventServiceClient interface {
 	// Errors: common, ERROR_REASON_VALIDATION (status).
 	SetRsvp(ctx context.Context, in *SetRsvpRequest, opts ...grpc.CallOption) (*SetRsvpResponse, error)
 	// ListAttendees lists the answers with one status, oldest first (for
-	// WAITLIST: the order in line).
+	// WAITLIST: the order in line). For an event whose type's attendance is
+	// sensitive (sensitive_attendance, ADR-0037 §1) only the organizer,
+	// moderators and admins get the list; the others get
+	// ERROR_REASON_ATTENDEES_HIDDEN and see the counts on the event.
 	ListAttendees(ctx context.Context, in *ListAttendeesRequest, opts ...grpc.CallOption) (*ListAttendeesResponse, error)
 	// AddCampItem is not served any more: a camp's list is the list
 	// component's (ChecklistComponentService.AddChecklistItem,
@@ -220,7 +223,9 @@ type EventServiceClient interface {
 	// Errors: common, ERROR_REASON_EVENT_CANCELLED, ERROR_REASON_ALBUM_CLOSED,
 	// ERROR_REASON_NOT_ATTENDED, ERROR_REASON_EVENT_LIMIT,
 	// ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,
-	// ERROR_REASON_UPLOAD_IN_USE, ERROR_REASON_VALIDATION.
+	// ERROR_REASON_UPLOAD_IN_USE, ERROR_REASON_VALIDATION,
+	// ERROR_REASON_ALBUM_CONSENT_REQUIRED (a type with album_notice, ADR-0037
+	// §1, without consent_ack).
 	AddEventPhoto(ctx context.Context, in *AddEventPhotoRequest, opts ...grpc.CallOption) (*AddEventPhotoResponse, error)
 	// ListEventPhotos lists the event's album, oldest first. Every active
 	// member may read it, also while muted and on a cancelled event. The
@@ -620,7 +625,10 @@ type EventServiceServer interface {
 	// Errors: common, ERROR_REASON_VALIDATION (status).
 	SetRsvp(context.Context, *SetRsvpRequest) (*SetRsvpResponse, error)
 	// ListAttendees lists the answers with one status, oldest first (for
-	// WAITLIST: the order in line).
+	// WAITLIST: the order in line). For an event whose type's attendance is
+	// sensitive (sensitive_attendance, ADR-0037 §1) only the organizer,
+	// moderators and admins get the list; the others get
+	// ERROR_REASON_ATTENDEES_HIDDEN and see the counts on the event.
 	ListAttendees(context.Context, *ListAttendeesRequest) (*ListAttendeesResponse, error)
 	// AddCampItem is not served any more: a camp's list is the list
 	// component's (ChecklistComponentService.AddChecklistItem,
@@ -707,7 +715,9 @@ type EventServiceServer interface {
 	// Errors: common, ERROR_REASON_EVENT_CANCELLED, ERROR_REASON_ALBUM_CLOSED,
 	// ERROR_REASON_NOT_ATTENDED, ERROR_REASON_EVENT_LIMIT,
 	// ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,
-	// ERROR_REASON_UPLOAD_IN_USE, ERROR_REASON_VALIDATION.
+	// ERROR_REASON_UPLOAD_IN_USE, ERROR_REASON_VALIDATION,
+	// ERROR_REASON_ALBUM_CONSENT_REQUIRED (a type with album_notice, ADR-0037
+	// §1, without consent_ack).
 	AddEventPhoto(context.Context, *AddEventPhotoRequest) (*AddEventPhotoResponse, error)
 	// ListEventPhotos lists the event's album, oldest first. Every active
 	// member may read it, also while muted and on a cancelled event. The

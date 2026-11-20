@@ -18,7 +18,8 @@ WHERE s.user_id = @sender_id AND s.status = 'active';
 
 -- Ortak etkinlik geçmişi: ikisinin de attended işaretlendiği, iptal
 -- edilmemiş, silinmemiş ve bitmiş en az bir etkinlik (hangi tayfada
--- olduğu fark etmez).
+-- olduğu fark etmez). Hassas katılımlı türün etkinliği (sensitive_attendance,
+-- ADR-0037 §1) sayılmaz: kimin katıldığı bu yoldan da anlaşılmaz.
 -- name: HasSharedEventHistory :one
 SELECT EXISTS (
   SELECT 1
@@ -27,5 +28,6 @@ SELECT EXISTS (
     ON b.event_id = a.event_id AND b.user_id = @user_b AND b.attendance = 'attended'
   JOIN events e
     ON e.id = a.event_id AND e.status = 'scheduled' AND e.deleted_at IS NULL AND e.ends_at <= @now
+       AND NOT event_attendance_sensitive(e.id)
   WHERE a.user_id = @user_a AND a.attendance = 'attended'
 );

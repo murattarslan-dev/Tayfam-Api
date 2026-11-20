@@ -19,6 +19,7 @@ SELECT EXISTS (
     ON b.event_id = a.event_id AND b.user_id = $1 AND b.attendance = 'attended'
   JOIN events e
     ON e.id = a.event_id AND e.status = 'scheduled' AND e.deleted_at IS NULL AND e.ends_at <= $2
+       AND NOT event_attendance_sensitive(e.id)
   WHERE a.user_id = $3 AND a.attendance = 'attended'
 )
 `
@@ -31,7 +32,8 @@ type HasSharedEventHistoryParams struct {
 
 // Ortak etkinlik geçmişi: ikisinin de attended işaretlendiği, iptal
 // edilmemiş, silinmemiş ve bitmiş en az bir etkinlik (hangi tayfada
-// olduğu fark etmez).
+// olduğu fark etmez). Hassas katılımlı türün etkinliği (sensitive_attendance,
+// ADR-0037 §1) sayılmaz: kimin katıldığı bu yoldan da anlaşılmaz.
 func (q *Queries) HasSharedEventHistory(ctx context.Context, arg HasSharedEventHistoryParams) (bool, error) {
 	row := q.db.QueryRow(ctx, hasSharedEventHistory, arg.UserB, arg.Now, arg.UserA)
 	var exists bool

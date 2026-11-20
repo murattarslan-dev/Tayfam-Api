@@ -809,6 +809,18 @@ func modeAllowed(ctx context.Context, q *store.Queries, ev store.GetEventRow, mo
 	return nil
 }
 
+// typeFlags returns the flags of the type version ev was created with
+// (ADR-0037 §1). Versions never change, so neither do an event's flags. In
+// SQL the same flag is event_attendance_sensitive (migration 00051).
+func typeFlags(ctx context.Context, q *store.Queries, ev store.GetEventRow) (definition.Flags, error) {
+	et, err := catalog.TypeVersion(ctx, q, ev.Type, ev.TypeVersion)
+	if err != nil {
+		// The foreign key guarantees the version exists.
+		return definition.Flags{}, fmt.Errorf("etkinliğin tür sürümü: %w", err)
+	}
+	return et.Parsed.Flags, nil
+}
+
 // cleanFields checks a complete set of field values against a type
 // version's definition. The error names the field ("fields.platform"),
 // never its value.

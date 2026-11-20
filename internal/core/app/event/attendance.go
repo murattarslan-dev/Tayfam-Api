@@ -235,8 +235,19 @@ func markAttended(ctx context.Context, q *store.Queries, c caller, b *batch, ev 
 // recordActivity writes the user's activity record of ev: a snapshot of the
 // type, mode, title, city and district, the start and the duration. A
 // participant with a roll call (roll_call component) gets its start and,
-// once back, the real duration. Never a coordinate.
+// once back, the real duration. Never a coordinate. A type whose attendance
+// is sensitive (sensitive_attendance, ADR-0037 §1: blood donation) gets no
+// record at all, so attending it reaches neither the personal history nor
+// the profile statistics; the attendance itself stays on the answer for
+// the organizer. The database refuses such a record too (00051).
 func recordActivity(ctx context.Context, q *store.Queries, ev store.GetEventRow, user id.ID, method string) error {
+	flags, err := typeFlags(ctx, q, ev)
+	if err != nil {
+		return err
+	}
+	if flags.SensitiveAttendance {
+		return nil
+	}
 	started := ev.StartsAt.Time
 	dur := ev.EndsAt.Time.Sub(started)
 	rc, err := q.GetRollCallTimes(ctx, store.GetRollCallTimesParams{EventID: ev.ID, UserID: user.PG()})

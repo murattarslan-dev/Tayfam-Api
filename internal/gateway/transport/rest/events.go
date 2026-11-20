@@ -604,6 +604,7 @@ type eventPhotoBody struct {
 	UploadID        string `json:"upload_id"`
 	Caption         string `json:"caption"`
 	ClientRequestID string `json:"client_request_id"`
+	ConsentAck      bool   `json:"consent_ack"`
 }
 
 func (h coreHandlers) addEventPhoto(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -621,6 +622,7 @@ func (h coreHandlers) addEventPhoto(ctx context.Context, w http.ResponseWriter, 
 	}
 	resp, err := h.d.Events.AddEventPhoto(ctx, &corev1.AddEventPhotoRequest{
 		TayfaId: id, EventId: eid, UploadId: b.UploadID, Caption: b.Caption, ClientRequestId: b.ClientRequestID,
+		ConsentAck: b.ConsentAck,
 	})
 	if err != nil {
 		h.fail(w, r, err)

@@ -401,6 +401,14 @@ const (
 	// the event: they did not answer "going" and their attendance was not
 	// verified.
 	ErrorReason_ERROR_REASON_CELEBRATION_NOT_PARTICIPANT ErrorReason = 2552
+	// PERMISSION_DENIED. The attendee list of an event whose type's
+	// attendance is sensitive (sensitive_attendance) is the organizer's,
+	// moderators' and admins' only; the others see the counts on the event.
+	ErrorReason_ERROR_REASON_ATTENDEES_HIDDEN ErrorReason = 2570
+	// INVALID_ARGUMENT. An album photo of a type with album_notice needs the
+	// uploader's acknowledgement that the people in it (a child's guardian)
+	// agreed: consent_ack true.
+	ErrorReason_ERROR_REASON_ALBUM_CONSENT_REQUIRED ErrorReason = 2571
 )
 
 // Enum value maps for ErrorReason.
@@ -530,6 +538,8 @@ var (
 		2550: "ERROR_REASON_CELEBRATION_NOT_STARTED",
 		2551: "ERROR_REASON_CELEBRATION_NO_WINNER",
 		2552: "ERROR_REASON_CELEBRATION_NOT_PARTICIPANT",
+		2570: "ERROR_REASON_ATTENDEES_HIDDEN",
+		2571: "ERROR_REASON_ALBUM_CONSENT_REQUIRED",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                  0,
@@ -656,6 +666,8 @@ var (
 		"ERROR_REASON_CELEBRATION_NOT_STARTED":      2550,
 		"ERROR_REASON_CELEBRATION_NO_WINNER":        2551,
 		"ERROR_REASON_CELEBRATION_NOT_PARTICIPANT":  2552,
+		"ERROR_REASON_ATTENDEES_HIDDEN":             2570,
+		"ERROR_REASON_ALBUM_CONSENT_REQUIRED":       2571,
 	}
 )
 
@@ -690,7 +702,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xf1#\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xbf$\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -816,7 +828,9 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"!ERROR_REASON_RANKING_FROM_MEASURE\x10\xe4\x13\x12)\n" +
 	"$ERROR_REASON_CELEBRATION_NOT_STARTED\x10\xf6\x13\x12'\n" +
 	"\"ERROR_REASON_CELEBRATION_NO_WINNER\x10\xf7\x13\x12-\n" +
-	"(ERROR_REASON_CELEBRATION_NOT_PARTICIPANT\x10\xf8\x13B\xbd\x01\n" +
+	"(ERROR_REASON_CELEBRATION_NOT_PARTICIPANT\x10\xf8\x13\x12\"\n" +
+	"\x1dERROR_REASON_ATTENDEES_HIDDEN\x10\x8a\x14\x12(\n" +
+	"#ERROR_REASON_ALBUM_CONSENT_REQUIRED\x10\x8b\x14B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

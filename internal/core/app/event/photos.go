@@ -50,6 +50,10 @@ type PhotoInput struct {
 	UploadID        id.ID
 	Caption         string
 	ClientRequestID string
+	// ConsentAck is the uploader's acknowledgement that the people in the
+	// photo agreed; required when the type has album_notice (ADR-0037 §1).
+	// Not stored.
+	ConsentAck bool
 }
 
 // cleanCaption trims the caption; empty means none.
@@ -70,7 +74,10 @@ func albumOpen(ev store.GetEventRow, now time.Time) bool {
 // have verified attendance; the album is open from the start until seven
 // days after the end, not on a cancelled event. At most PhotosPerUser per
 // person and PhotosPerAlbum per album. A repeat with the same
-// ClientRequestID returns the first photo.
+// ClientRequestID returns the first photo. A type with album_notice
+// (ADR-0037 §1: visits, children and the elderly in photos) takes a photo
+// only with ConsentAck (apperr.ErrAlbumConsentRequired); the check is here,
+// a client cannot skip it.
 func (s *Service) AddPhoto(ctx context.Context, user, tayfa, event id.ID, in PhotoInput) (Photo, error) {
 	caption, err := cleanCaption(in.Caption)
 	if err != nil {
@@ -114,6 +121,13 @@ func (s *Service) AddPhoto(ctx context.Context, user, tayfa, event id.ID, in Pho
 		}
 		if !albumOpen(ev, c.now) {
 			return apperr.ErrAlbumClosed
+		}
+		flags, err := typeFlags(ctx, q, ev)
+		if err != nil {
+			return err
+		}
+		if flags.AlbumNotice && !in.ConsentAck {
+			return apperr.ErrAlbumConsentRequired
 		}
 		r, ok, err := rsvpRow(ctx, q, event, user)
 		if err != nil {

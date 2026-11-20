@@ -152,7 +152,10 @@ type Attendee struct {
 }
 
 // ListAttendees lists the answers with status st ("" means going), oldest
-// first; for the waitlist that is the order in line.
+// first; for the waitlist that is the order in line. When the event's type
+// has sensitive attendance (ADR-0037 §1) the list is the organizer's,
+// moderators' and admins' (those who correct attendance) only; the others
+// get apperr.ErrAttendeesHidden and see the counts on the event.
 func (s *Service) ListAttendees(ctx context.Context, user, tayfa, event id.ID, st string, size int32, token string) ([]Attendee, string, error) {
 	if st == "" {
 		st = RSVPGoing
@@ -178,8 +181,16 @@ func (s *Service) ListAttendees(ctx context.Context, user, tayfa, event id.ID, s
 	if err := c.authorize(authz.EventViewAttendees); err != nil {
 		return nil, "", err
 	}
-	if _, err := getEvent(ctx, s.q, tayfa, event); err != nil {
+	ev, err := getEvent(ctx, s.q, tayfa, event)
+	if err != nil {
 		return nil, "", err
+	}
+	flags, err := typeFlags(ctx, s.q, ev)
+	if err != nil {
+		return nil, "", err
+	}
+	if flags.SensitiveAttendance && c.manage(ev, authz.EventAttendanceOwn, authz.EventAttendanceAny) != nil {
+		return nil, "", apperr.ErrAttendeesHidden
 	}
 	rows, err := s.q.ListAttendees(ctx, store.ListAttendeesParams{
 		EventID: event.PG(), Status: st, AfterTime: ts(at), AfterUserID: after.PG(), PageSize: size + 1,

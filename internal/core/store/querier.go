@@ -873,7 +873,8 @@ type Querier interface {
 	HasMutualTayfa(ctx context.Context, arg HasMutualTayfaParams) (bool, error)
 	// Ortak etkinlik geçmişi: ikisinin de attended işaretlendiği, iptal
 	// edilmemiş, silinmemiş ve bitmiş en az bir etkinlik (hangi tayfada
-	// olduğu fark etmez).
+	// olduğu fark etmez). Hassas katılımlı türün etkinliği (sensitive_attendance,
+	// ADR-0037 §1) sayılmaz: kimin katıldığı bu yoldan da anlaşılmaz.
 	HasSharedEventHistory(ctx context.Context, arg HasSharedEventHistoryParams) (bool, error)
 	// Moderatör/yönetici silmesi: içerik gizlenir, geri alınabilir.
 	HideAnnouncement(ctx context.Context, arg HideAnnouncementParams) (int64, error)
@@ -889,7 +890,8 @@ type Querier interface {
 	// Son 12 ayda (since sonrası, now öncesi başlayan) silinmemiş ve iptal
 	// edilmemiş etkinliklerde ikisi de "attended" olan çiftler. Ağırlık
 	// 0,5 ^ (yaş / yarı ömür). Profillemesi kapalı, hesabı silinmiş ya da banlı
-	// kullanıcı ve aralarında engel olan çift girmez.
+	// kullanıcı ve aralarında engel olan çift girmez. Hassas katılımlı türün
+	// etkinliği (sensitive_attendance, ADR-0037 §1) sayılmaz.
 	InsertFriendScores(ctx context.Context, arg InsertFriendScoresParams) (int64, error)
 	// Davet edilenin bir sayfadaki davet bildirimleri için: o tayfadaki
 	// üyeliği ve kayıtlı sonuç.

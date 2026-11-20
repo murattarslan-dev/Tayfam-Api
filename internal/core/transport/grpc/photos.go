@@ -24,6 +24,7 @@ func (s *EventServer) AddEventPhoto(ctx context.Context, req *corev1.AddEventPho
 	}
 	p, err := s.app.AddPhoto(ctx, user, t, e, event.PhotoInput{
 		UploadID: upload, Caption: req.GetCaption(), ClientRequestID: req.GetClientRequestId(),
+		ConsentAck: req.GetConsentAck(),
 	})
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)

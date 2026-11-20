@@ -474,4 +474,15 @@ enum ErrorReason {
   // the event: they did not answer "going" and their attendance was not
   // verified.
   ERROR_REASON_CELEBRATION_NOT_PARTICIPANT = 2552;
+
+  // Type flags (ADR-0037 §1; issue #257: 2570–2579).
+
+  // PERMISSION_DENIED. The attendee list of an event whose type's
+  // attendance is sensitive (sensitive_attendance) is the organizer's,
+  // moderators' and admins' only; the others see the counts on the event.
+  ERROR_REASON_ATTENDEES_HIDDEN = 2570;
+  // INVALID_ARGUMENT. An album photo of a type with album_notice needs the
+  // uploader's acknowledgement that the people in it (a child's guardian)
+  // agreed: consent_ack true.
+  ERROR_REASON_ALBUM_CONSENT_REQUIRED = 2571;
 }

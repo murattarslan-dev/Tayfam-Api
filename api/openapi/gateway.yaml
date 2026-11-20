@@ -1899,7 +1899,10 @@ paths:
       summary: Bir cevaptaki katılımcılar, eskiden yeniye
       description: |
         `status=waitlist` için sıra bekleme sırasıdır. `attendance`
-        doğrulanmış katılımı gösterir.
+        doğrulanmış katılımı gösterir. Türü `sensitive_attendance`
+        bayraklı etkinlikte (ADR-0037 §1, kan bağışı) listeyi yalnızca
+        organizatör, moderatör ve yönetici alır; diğerleri
+        `attendees-hidden` alır ve etkinlikteki sayıları görür.
       parameters:
         - name: status
           in: query
@@ -1918,6 +1921,7 @@ paths:
               schema: { $ref: "#/components/schemas/AttendeeList" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
@@ -2042,6 +2046,8 @@ paths:
         (`event-cancelled`). Kişi başı 30, albüm başına 500 fotoğraf
         (`event-limit`; silinenler sayılmaz). Aynı `client_request_id` ile
         tekrar gönderim ilk fotoğrafı döndürür. Fotoğraf bildirim üretmez.
+        Türü `album_notice` bayraklı etkinlikte (ADR-0037 §1, ziyaret)
+        `consent_ack: true` zorunludur; yoksa `album-consent-required`.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -8044,6 +8050,9 @@ components:
         - celebration-not-started
         - celebration-no-winner
         - celebration-not-participant
+        # core: tür bayrakları (#257, ADR-0037 §1)
+        - attendees-hidden
+        - album-consent-required
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -10344,6 +10353,13 @@ components:
             bağlanmamış). Konum bilgisi (EXIF/GPS) işlemede silinmiştir.
         caption: { type: string, maxLength: 200, description: "İsteğe bağlı; boşluklar kırpılır, boş ise yok sayılır." }
         client_request_id: { type: string, format: uuid }
+        consent_ack:
+          type: boolean
+          default: false
+          description: |
+            Yüzü görünenlerden (çocuklarda velisinden) izin alındığının
+            onayı. Türü `album_notice` bayraklı etkinlikte `true` olmalıdır
+            (`album-consent-required`); diğerlerinde yok sayılır. Saklanmaz.
     EventPhotoList:
       type: object
       required: [photos]
@@ -11968,10 +11984,10 @@ components:
       properties:
         sensitive_attendance:
           type: boolean
-          description: Katılım kişisel geçmişe, istatistiğe ve arkadaşlık puanına girmez; katılımcı listesini yalnızca organizatör görür.
+          description: Katılım kişisel geçmişe, istatistiğe ve arkadaşlık puanına girmez; katılımcı listesini yalnızca organizatör, moderatör ve yönetici görür (diğerleri `attendees-hidden`).
         album_notice:
           type: boolean
-          description: Albüme yüklemeden önce izin onayı istenir.
+          description: Albüme yüklemeden önce izin onayı istenir; onaysız istek `album-consent-required` alır (`consent_ack`).
         personal_scope_forbidden:
           type: boolean
           description: Bu türde kişi bazında değer tutulmaz (kişisel ölçüm ve günlük tanımlanamaz).

@@ -4896,8 +4896,12 @@ type AddEventPhotoRequest struct {
 	// Required. A UUID the client generates once per photo and reuses on
 	// retry.
 	ClientRequestId string `protobuf:"bytes,5,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The uploader's acknowledgement that the people in the photo (for a
+	// child, the guardian) agreed. Required true when the event's type has
+	// album_notice (ADR-0037 §1); otherwise ignored. Not stored.
+	ConsentAck    bool `protobuf:"varint,6,opt,name=consent_ack,json=consentAck,proto3" json:"consent_ack,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AddEventPhotoRequest) Reset() {
@@ -4963,6 +4967,13 @@ func (x *AddEventPhotoRequest) GetClientRequestId() string {
 		return x.ClientRequestId
 	}
 	return ""
+}
+
+func (x *AddEventPhotoRequest) GetConsentAck() bool {
+	if x != nil {
+		return x.ConsentAck
+	}
+	return false
 }
 
 type AddEventPhotoResponse struct {
@@ -5902,13 +5913,15 @@ const file_tayfam_core_v1_event_proto_rawDesc = "" +
 	"\tupload_id\x18\x04 \x01(\tR\buploadId\x12\x18\n" +
 	"\acaption\x18\x05 \x01(\tR\acaption\x12;\n" +
 	"\vcreate_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\xaf\x01\n" +
+	"createTime\"\xd0\x01\n" +
 	"\x14AddEventPhotoRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x19\n" +
 	"\bevent_id\x18\x02 \x01(\tR\aeventId\x12\x1b\n" +
 	"\tupload_id\x18\x03 \x01(\tR\buploadId\x12\x18\n" +
 	"\acaption\x18\x04 \x01(\tR\acaption\x12*\n" +
-	"\x11client_request_id\x18\x05 \x01(\tR\x0fclientRequestId\"I\n" +
+	"\x11client_request_id\x18\x05 \x01(\tR\x0fclientRequestId\x12\x1f\n" +
+	"\vconsent_ack\x18\x06 \x01(\bR\n" +
+	"consentAck\"I\n" +
 	"\x15AddEventPhotoResponse\x120\n" +
 	"\x05photo\x18\x01 \x01(\v2\x1a.tayfam.core.v1.EventPhotoR\x05photo\"\x8a\x01\n" +
 	"\x16ListEventPhotosRequest\x12\x19\n" +
