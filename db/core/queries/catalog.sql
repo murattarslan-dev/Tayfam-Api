@@ -33,3 +33,22 @@ WHERE v.type_key = @type_key AND v.version = @version;
 SELECT key, interest_keys, labels, icon, modes, version, definition, status
 FROM catalog_event_types
 WHERE key = @key;
+
+-- Ders ve konu etiketleri (issue #259; ADR-0040 §5), emekliler dahil: eski
+-- içerik onları göstermeye devam eder. Düzeylerin parent_key'i ''.
+-- name: ListCatalogStudyTags :many
+SELECT key, COALESCE(parent_key, '')::text AS parent_key, position, labels, status
+FROM catalog_study_tags
+ORDER BY position, key;
+
+-- Bir etiketin yeri ve yeni içerikte seçilip seçilemeyeceği: kendisi ve
+-- üst etiketleri aktifse seçilebilir. depth 1 düzey, 2 ders, 3 konu.
+-- name: GetCatalogStudyTag :one
+SELECT t.key, COALESCE(t.parent_key, '')::text AS parent_key,
+  (CASE WHEN t.parent_key IS NULL THEN 1 WHEN p.parent_key IS NULL THEN 2 ELSE 3 END)::integer AS depth,
+  (t.status = 'active' AND COALESCE(p.status, 'active') = 'active'
+    AND COALESCE(g.status, 'active') = 'active')::boolean AS selectable
+FROM catalog_study_tags t
+LEFT JOIN catalog_study_tags p ON p.key = t.parent_key
+LEFT JOIN catalog_study_tags g ON g.key = p.parent_key
+WHERE t.key = @key;

@@ -45,6 +45,10 @@ func (f *fakeCatalog) Get(_ context.Context, known int64) (catalog.Catalog, bool
 			Status: catalog.StatusActive, DefaultWidgets: []string{"next_event"},
 		}},
 		Types: []catalog.EventType{f.hike()},
+		StudyTags: []catalog.StudyTag{
+			{Key: "level_a", Position: 1, Labels: map[string]string{"tr": "Düzey A"}, Status: catalog.StatusActive},
+			{Key: "subject_a", ParentKey: "level_a", Position: 2, Labels: map[string]string{"tr": "Ders A"}, Status: catalog.StatusRetired},
+		},
 	}, false, nil
 }
 
@@ -80,13 +84,21 @@ func TestCatalogMethods(t *testing.T) {
 		!slices.Equal(et.GetModes(), []corev1.EventMode{corev1.EventMode_EVENT_MODE_IN_PERSON, corev1.EventMode_EVENT_MODE_ONLINE}) {
 		t.Fatalf("tür: %v", et)
 	}
+	tags := resp.GetStudyTags()
+	if len(tags) != 2 || tags[0].GetKey() != "level_a" || tags[0].GetParentKey() != "" || tags[0].GetPosition() != 1 ||
+		tags[0].GetLabels()["tr"] != "Düzey A" || tags[0].GetStatus() != corev1.CatalogStatus_CATALOG_STATUS_ACTIVE ||
+		tags[1].GetKey() != "subject_a" || tags[1].GetParentKey() != "level_a" ||
+		tags[1].GetStatus() != corev1.CatalogStatus_CATALOG_STATUS_RETIRED {
+		t.Fatalf("ders/konu etiketleri: %v", tags)
+	}
 
 	// The caller's version is current: no lists.
 	resp, err = s.GetCatalog(ctx, &corev1.GetCatalogRequest{KnownVersion: 7})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !resp.GetNotModified() || resp.GetCatalogVersion() != 7 || len(resp.GetInterests()) != 0 || len(resp.GetEventTypes()) != 0 {
+	if !resp.GetNotModified() || resp.GetCatalogVersion() != 7 || len(resp.GetInterests()) != 0 || len(resp.GetEventTypes()) != 0 ||
+		len(resp.GetStudyTags()) != 0 {
 		t.Fatalf("değişmemiş katalog: %v", resp)
 	}
 

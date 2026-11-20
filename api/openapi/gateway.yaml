@@ -6481,6 +6481,9 @@ paths:
         zaman vardır) ve düz metin olarak gösterilir. `icon` istemcinin sabit
         ikon setinden bir anahtardır; bilinmeyen anahtar için ilgi alanının
         ikonu, o da yoksa genel ikon gösterilir.
+
+        `study_tags` Eğitim modüllerinin ders ve konu etiket listesidir
+        (`CatalogStudyTag`); emekliye ayrılanlar dahil hepsi döner.
       parameters:
         - name: If-None-Match
           in: header
@@ -11897,7 +11900,7 @@ components:
           maxLength: 60
     Catalog:
       type: object
-      required: [catalog_version, interests, event_types]
+      required: [catalog_version, interests, event_types, study_tags]
       properties:
         catalog_version:
           type: integer
@@ -11911,6 +11914,10 @@ components:
           type: array
           description: Aktif türlerin güncel sürümleri, listeleme sırasıyla.
           items: { $ref: "#/components/schemas/CatalogEventType" }
+        study_tags:
+          type: array
+          description: Ders ve konu etiketleri (emekliler dahil), `position` sırasıyla; istemci `parent_key` ile gruplar.
+          items: { $ref: "#/components/schemas/CatalogStudyTag" }
     CatalogStatus:
       type: string
       description: |
@@ -11934,6 +11941,25 @@ components:
           type: array
           description: Bu ilgi alanını seçen tayfada varsayılan açık gelen ana sayfa bileşenleri (ADR-0027).
           items: { type: string }
+    CatalogStudyTag:
+      type: object
+      description: |
+        Eğitim modüllerinin (materyal kütüphanesi, soru havuzu) içeriği
+        etiketlediği ders ve konu listesinin bir kaydı (#259, ADR-0040 §5):
+        sınav/düzey → ders → konu, en fazla üç seviye. Böyle içerikte ders
+        (ikinci seviye) zorunlu, konu (üçüncü seviye, o dersin altında)
+        isteğe bağlıdır. Her düzeyin ve dersin altında anahtarı
+        `<üst anahtar>_other` olan bir "Diğer" kaydı vardır. `retired` kayıt
+        (ya da emekli bir kaydın altındaki kayıt) yeni içerikte seçilemez,
+        eski içerik göstermeye devam eder. Adlar platform sahibinin
+        içeriğidir ve düz metin gösterilir.
+      required: [key, position, labels, status]
+      properties:
+        key: { type: string, description: "Değişmez, bütün listede tekil anahtar: `^[a-z][a-z0-9_]{1,39}$`." }
+        parent_key: { type: string, description: "Üst kaydın anahtarı; düzeyde yoktur. Değişmez." }
+        position: { type: integer, format: int32, description: "Aynı üst kaydın altındaki sıra (küçükten büyüğe)." }
+        labels: { $ref: "#/components/schemas/CatalogLabels" }
+        status: { $ref: "#/components/schemas/CatalogStatus" }
     CatalogEventType:
       type: object
       description: Bir etkinlik türünün bir sürümü.

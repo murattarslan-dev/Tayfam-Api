@@ -44,6 +44,10 @@ func (f *fakeCore) GetCatalog(ctx context.Context, in *corev1.GetCatalogRequest,
 			Status: corev1.CatalogStatus_CATALOG_STATUS_ACTIVE,
 		}},
 		EventTypes: []*corev1.CatalogEventType{t},
+		StudyTags: []*corev1.CatalogStudyTag{
+			{Key: "level_a", Position: 1, Labels: map[string]string{"tr": "Düzey A"}, Status: corev1.CatalogStatus_CATALOG_STATUS_ACTIVE},
+			{Key: "subject_a", ParentKey: "level_a", Position: 2, Labels: map[string]string{"tr": "Ders A"}, Status: corev1.CatalogStatus_CATALOG_STATUS_RETIRED},
+		},
 	}, nil
 }
 
@@ -93,6 +97,15 @@ func TestCatalogRoute(t *testing.T) {
 	// The definition is an object in the body, not a string.
 	if !strings.Contains(w.Body.String(), `"definition":{"components":[{"kind":"roll_call","params":{"alarm":true}}]}`) {
 		t.Fatalf("tanım gövdede nesne değil: %s", w.Body)
+	}
+	tags := v.StudyTags
+	if len(tags) != 2 || tags[0].Key != "level_a" || tags[0].ParentKey != "" || tags[0].Position != 1 || tags[0].Labels["tr"] != "Düzey A" ||
+		tags[0].Status != "active" || tags[1].Key != "subject_a" || tags[1].ParentKey != "level_a" || tags[1].Status != "retired" {
+		t.Fatalf("ders/konu etiketleri: %+v", tags)
+	}
+	// A level has no parent_key in the body.
+	if !strings.Contains(w.Body.String(), `{"key":"level_a","position":1,`) {
+		t.Fatalf("düzeyin parent_key'i: %s", w.Body)
 	}
 	// An empty list is [], never null.
 	if !strings.Contains(w.Body.String(), `"default_widgets":[]`) {

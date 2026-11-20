@@ -4,8 +4,9 @@
 //
 // Event types are data in core's database: catalog_interests,
 // catalog_event_types (the current version of each type),
-// catalog_event_type_versions (every version, immutable) and catalog_meta
-// (the version of the catalog as a whole). The service's database user can
+// catalog_event_type_versions (every version, immutable), catalog_study_tags
+// (the study tag list, study_tags.go) and catalog_meta (the version of the
+// catalog as a whole). The service's database user can
 // only read them.
 //
 // What is read is checked again before it leaves (ADR-0011, "assume
@@ -29,7 +30,8 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 )
 
-// Stored values of catalog_interests.status and catalog_event_types.status.
+// Stored values of catalog_interests.status, catalog_event_types.status and
+// catalog_study_tags.status.
 const (
 	StatusActive  = "active"
 	StatusRetired = "retired"
@@ -94,6 +96,9 @@ type Catalog struct {
 	Interests []Interest
 	// Types holds the current version of every active type, by position.
 	Types []EventType
+	// StudyTags holds the study tag list, retired tags included, by
+	// position (study_tags.go).
+	StudyTags []StudyTag
 }
 
 // Get returns the catalog. When known is the catalog's current version the
@@ -139,6 +144,9 @@ func (s *Service) Get(ctx context.Context, known int64) (c Catalog, notModified 
 				return err
 			}
 			c.Types = append(c.Types, t)
+		}
+		if c.StudyTags, err = studyTags(ctx, q); err != nil {
+			return err
 		}
 		return nil
 	})

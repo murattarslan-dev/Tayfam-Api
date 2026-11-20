@@ -270,6 +270,92 @@ func (x *CatalogEventType) GetDefinition() string {
 	return ""
 }
 
+// CatalogStudyTag is one entry of the study tag list the Eğitim modules
+// label their content with (issue #259; ADR-0040 §5): level (exam or
+// grade) → subject → topic, at most three deep. A subject is required on
+// such content, a topic is optional. Every level and subject has a "Diğer"
+// child whose key is the parent's key followed by "_other". A retired tag
+// cannot be chosen for new content; old content keeps showing it.
+type CatalogStudyTag struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Immutable and unique in the whole list; ^[a-z][a-z0-9_]{1,39}$.
+	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	// Empty for a level; never changes.
+	ParentKey string `protobuf:"bytes,2,opt,name=parent_key,json=parentKey,proto3" json:"parent_key,omitempty"`
+	// Order under the same parent, ascending.
+	Position int32 `protobuf:"varint,3,opt,name=position,proto3" json:"position,omitempty"`
+	// Language to name.
+	Labels        map[string]string `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Status        CatalogStatus     `protobuf:"varint,5,opt,name=status,proto3,enum=tayfam.core.v1.CatalogStatus" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CatalogStudyTag) Reset() {
+	*x = CatalogStudyTag{}
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CatalogStudyTag) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CatalogStudyTag) ProtoMessage() {}
+
+func (x *CatalogStudyTag) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CatalogStudyTag.ProtoReflect.Descriptor instead.
+func (*CatalogStudyTag) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *CatalogStudyTag) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *CatalogStudyTag) GetParentKey() string {
+	if x != nil {
+		return x.ParentKey
+	}
+	return ""
+}
+
+func (x *CatalogStudyTag) GetPosition() int32 {
+	if x != nil {
+		return x.Position
+	}
+	return 0
+}
+
+func (x *CatalogStudyTag) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+func (x *CatalogStudyTag) GetStatus() CatalogStatus {
+	if x != nil {
+		return x.Status
+	}
+	return CatalogStatus_CATALOG_STATUS_UNSPECIFIED
+}
+
 type GetCatalogRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The catalog version the caller already holds; 0 when none.
@@ -280,7 +366,7 @@ type GetCatalogRequest struct {
 
 func (x *GetCatalogRequest) Reset() {
 	*x = GetCatalogRequest{}
-	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[2]
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -292,7 +378,7 @@ func (x *GetCatalogRequest) String() string {
 func (*GetCatalogRequest) ProtoMessage() {}
 
 func (x *GetCatalogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[2]
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -305,7 +391,7 @@ func (x *GetCatalogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCatalogRequest.ProtoReflect.Descriptor instead.
 func (*GetCatalogRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{2}
+	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GetCatalogRequest) GetKnownVersion() int64 {
@@ -319,20 +405,23 @@ type GetCatalogResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Grows with every change to the catalog.
 	CatalogVersion int64 `protobuf:"varint,1,opt,name=catalog_version,json=catalogVersion,proto3" json:"catalog_version,omitempty"`
-	// The caller's known_version is current; interests and event_types are
-	// empty.
+	// The caller's known_version is current; interests, event_types and
+	// study_tags are empty.
 	NotModified bool `protobuf:"varint,2,opt,name=not_modified,json=notModified,proto3" json:"not_modified,omitempty"`
 	// Every interest, retired ones included, by position.
 	Interests []*CatalogInterest `protobuf:"bytes,3,rep,name=interests,proto3" json:"interests,omitempty"`
 	// The current version of every active event type, by position.
-	EventTypes    []*CatalogEventType `protobuf:"bytes,4,rep,name=event_types,json=eventTypes,proto3" json:"event_types,omitempty"`
+	EventTypes []*CatalogEventType `protobuf:"bytes,4,rep,name=event_types,json=eventTypes,proto3" json:"event_types,omitempty"`
+	// The study tag list, retired tags included, by position; the client
+	// groups it by parent_key.
+	StudyTags     []*CatalogStudyTag `protobuf:"bytes,5,rep,name=study_tags,json=studyTags,proto3" json:"study_tags,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetCatalogResponse) Reset() {
 	*x = GetCatalogResponse{}
-	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[3]
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -344,7 +433,7 @@ func (x *GetCatalogResponse) String() string {
 func (*GetCatalogResponse) ProtoMessage() {}
 
 func (x *GetCatalogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[3]
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -357,7 +446,7 @@ func (x *GetCatalogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCatalogResponse.ProtoReflect.Descriptor instead.
 func (*GetCatalogResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{3}
+	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetCatalogResponse) GetCatalogVersion() int64 {
@@ -388,6 +477,13 @@ func (x *GetCatalogResponse) GetEventTypes() []*CatalogEventType {
 	return nil
 }
 
+func (x *GetCatalogResponse) GetStudyTags() []*CatalogStudyTag {
+	if x != nil {
+		return x.StudyTags
+	}
+	return nil
+}
+
 type GetEventTypeVersionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
@@ -399,7 +495,7 @@ type GetEventTypeVersionRequest struct {
 
 func (x *GetEventTypeVersionRequest) Reset() {
 	*x = GetEventTypeVersionRequest{}
-	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[4]
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -411,7 +507,7 @@ func (x *GetEventTypeVersionRequest) String() string {
 func (*GetEventTypeVersionRequest) ProtoMessage() {}
 
 func (x *GetEventTypeVersionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[4]
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -424,7 +520,7 @@ func (x *GetEventTypeVersionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEventTypeVersionRequest.ProtoReflect.Descriptor instead.
 func (*GetEventTypeVersionRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{4}
+	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetEventTypeVersionRequest) GetKey() string {
@@ -450,7 +546,7 @@ type GetEventTypeVersionResponse struct {
 
 func (x *GetEventTypeVersionResponse) Reset() {
 	*x = GetEventTypeVersionResponse{}
-	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[5]
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -462,7 +558,7 @@ func (x *GetEventTypeVersionResponse) String() string {
 func (*GetEventTypeVersionResponse) ProtoMessage() {}
 
 func (x *GetEventTypeVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[5]
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -475,7 +571,7 @@ func (x *GetEventTypeVersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEventTypeVersionResponse.ProtoReflect.Descriptor instead.
 func (*GetEventTypeVersionResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{5}
+	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetEventTypeVersionResponse) GetEventType() *CatalogEventType {
@@ -513,15 +609,27 @@ const file_tayfam_core_v1_catalog_proto_rawDesc = "" +
 	"definition\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x95\x02\n" +
+	"\x0fCatalogStudyTag\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x1d\n" +
+	"\n" +
+	"parent_key\x18\x02 \x01(\tR\tparentKey\x12\x1a\n" +
+	"\bposition\x18\x03 \x01(\x05R\bposition\x12C\n" +
+	"\x06labels\x18\x04 \x03(\v2+.tayfam.core.v1.CatalogStudyTag.LabelsEntryR\x06labels\x125\n" +
+	"\x06status\x18\x05 \x01(\x0e2\x1d.tayfam.core.v1.CatalogStatusR\x06status\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"8\n" +
 	"\x11GetCatalogRequest\x12#\n" +
-	"\rknown_version\x18\x01 \x01(\x03R\fknownVersion\"\xe2\x01\n" +
+	"\rknown_version\x18\x01 \x01(\x03R\fknownVersion\"\xa2\x02\n" +
 	"\x12GetCatalogResponse\x12'\n" +
 	"\x0fcatalog_version\x18\x01 \x01(\x03R\x0ecatalogVersion\x12!\n" +
 	"\fnot_modified\x18\x02 \x01(\bR\vnotModified\x12=\n" +
 	"\tinterests\x18\x03 \x03(\v2\x1f.tayfam.core.v1.CatalogInterestR\tinterests\x12A\n" +
 	"\vevent_types\x18\x04 \x03(\v2 .tayfam.core.v1.CatalogEventTypeR\n" +
-	"eventTypes\"H\n" +
+	"eventTypes\x12>\n" +
+	"\n" +
+	"study_tags\x18\x05 \x03(\v2\x1f.tayfam.core.v1.CatalogStudyTagR\tstudyTags\"H\n" +
 	"\x1aGetEventTypeVersionRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x05R\aversion\"^\n" +
@@ -551,37 +659,42 @@ func file_tayfam_core_v1_catalog_proto_rawDescGZIP() []byte {
 }
 
 var file_tayfam_core_v1_catalog_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_tayfam_core_v1_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_tayfam_core_v1_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_tayfam_core_v1_catalog_proto_goTypes = []any{
 	(CatalogStatus)(0),                  // 0: tayfam.core.v1.CatalogStatus
 	(*CatalogInterest)(nil),             // 1: tayfam.core.v1.CatalogInterest
 	(*CatalogEventType)(nil),            // 2: tayfam.core.v1.CatalogEventType
-	(*GetCatalogRequest)(nil),           // 3: tayfam.core.v1.GetCatalogRequest
-	(*GetCatalogResponse)(nil),          // 4: tayfam.core.v1.GetCatalogResponse
-	(*GetEventTypeVersionRequest)(nil),  // 5: tayfam.core.v1.GetEventTypeVersionRequest
-	(*GetEventTypeVersionResponse)(nil), // 6: tayfam.core.v1.GetEventTypeVersionResponse
-	nil,                                 // 7: tayfam.core.v1.CatalogInterest.LabelsEntry
-	nil,                                 // 8: tayfam.core.v1.CatalogEventType.LabelsEntry
-	(EventMode)(0),                      // 9: tayfam.core.v1.EventMode
+	(*CatalogStudyTag)(nil),             // 3: tayfam.core.v1.CatalogStudyTag
+	(*GetCatalogRequest)(nil),           // 4: tayfam.core.v1.GetCatalogRequest
+	(*GetCatalogResponse)(nil),          // 5: tayfam.core.v1.GetCatalogResponse
+	(*GetEventTypeVersionRequest)(nil),  // 6: tayfam.core.v1.GetEventTypeVersionRequest
+	(*GetEventTypeVersionResponse)(nil), // 7: tayfam.core.v1.GetEventTypeVersionResponse
+	nil,                                 // 8: tayfam.core.v1.CatalogInterest.LabelsEntry
+	nil,                                 // 9: tayfam.core.v1.CatalogEventType.LabelsEntry
+	nil,                                 // 10: tayfam.core.v1.CatalogStudyTag.LabelsEntry
+	(EventMode)(0),                      // 11: tayfam.core.v1.EventMode
 }
 var file_tayfam_core_v1_catalog_proto_depIdxs = []int32{
-	7,  // 0: tayfam.core.v1.CatalogInterest.labels:type_name -> tayfam.core.v1.CatalogInterest.LabelsEntry
+	8,  // 0: tayfam.core.v1.CatalogInterest.labels:type_name -> tayfam.core.v1.CatalogInterest.LabelsEntry
 	0,  // 1: tayfam.core.v1.CatalogInterest.status:type_name -> tayfam.core.v1.CatalogStatus
-	8,  // 2: tayfam.core.v1.CatalogEventType.labels:type_name -> tayfam.core.v1.CatalogEventType.LabelsEntry
-	9,  // 3: tayfam.core.v1.CatalogEventType.modes:type_name -> tayfam.core.v1.EventMode
+	9,  // 2: tayfam.core.v1.CatalogEventType.labels:type_name -> tayfam.core.v1.CatalogEventType.LabelsEntry
+	11, // 3: tayfam.core.v1.CatalogEventType.modes:type_name -> tayfam.core.v1.EventMode
 	0,  // 4: tayfam.core.v1.CatalogEventType.status:type_name -> tayfam.core.v1.CatalogStatus
-	1,  // 5: tayfam.core.v1.GetCatalogResponse.interests:type_name -> tayfam.core.v1.CatalogInterest
-	2,  // 6: tayfam.core.v1.GetCatalogResponse.event_types:type_name -> tayfam.core.v1.CatalogEventType
-	2,  // 7: tayfam.core.v1.GetEventTypeVersionResponse.event_type:type_name -> tayfam.core.v1.CatalogEventType
-	3,  // 8: tayfam.core.v1.CatalogService.GetCatalog:input_type -> tayfam.core.v1.GetCatalogRequest
-	5,  // 9: tayfam.core.v1.CatalogService.GetEventTypeVersion:input_type -> tayfam.core.v1.GetEventTypeVersionRequest
-	4,  // 10: tayfam.core.v1.CatalogService.GetCatalog:output_type -> tayfam.core.v1.GetCatalogResponse
-	6,  // 11: tayfam.core.v1.CatalogService.GetEventTypeVersion:output_type -> tayfam.core.v1.GetEventTypeVersionResponse
-	10, // [10:12] is the sub-list for method output_type
-	8,  // [8:10] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	10, // 5: tayfam.core.v1.CatalogStudyTag.labels:type_name -> tayfam.core.v1.CatalogStudyTag.LabelsEntry
+	0,  // 6: tayfam.core.v1.CatalogStudyTag.status:type_name -> tayfam.core.v1.CatalogStatus
+	1,  // 7: tayfam.core.v1.GetCatalogResponse.interests:type_name -> tayfam.core.v1.CatalogInterest
+	2,  // 8: tayfam.core.v1.GetCatalogResponse.event_types:type_name -> tayfam.core.v1.CatalogEventType
+	3,  // 9: tayfam.core.v1.GetCatalogResponse.study_tags:type_name -> tayfam.core.v1.CatalogStudyTag
+	2,  // 10: tayfam.core.v1.GetEventTypeVersionResponse.event_type:type_name -> tayfam.core.v1.CatalogEventType
+	4,  // 11: tayfam.core.v1.CatalogService.GetCatalog:input_type -> tayfam.core.v1.GetCatalogRequest
+	6,  // 12: tayfam.core.v1.CatalogService.GetEventTypeVersion:input_type -> tayfam.core.v1.GetEventTypeVersionRequest
+	5,  // 13: tayfam.core.v1.CatalogService.GetCatalog:output_type -> tayfam.core.v1.GetCatalogResponse
+	7,  // 14: tayfam.core.v1.CatalogService.GetEventTypeVersion:output_type -> tayfam.core.v1.GetEventTypeVersionResponse
+	13, // [13:15] is the sub-list for method output_type
+	11, // [11:13] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_catalog_proto_init() }
@@ -596,7 +709,7 @@ func file_tayfam_core_v1_catalog_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_catalog_proto_rawDesc), len(file_tayfam_core_v1_catalog_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   8,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -104,6 +104,16 @@ type CatalogScorePreset struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type CatalogStudyTag struct {
+	Key       string
+	ParentKey pgtype.Text
+	Position  int32
+	Labels    []byte
+	Status    string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
 type DiscoverJoin struct {
 	TayfaID  pgtype.UUID
 	UserID   pgtype.UUID

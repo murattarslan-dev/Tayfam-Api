@@ -120,6 +120,10 @@ Ortak kurallar (dördü için):
   `GET /v1/catalog` yanıtında döner.
 - Her düzeyin ve dersin altında `other` ("Diğer") vardır; ders seçimi
   zorunlu, konu isteğe bağlıdır.
+  Anahtar bütün listede tekil olduğu için "Diğer"in anahtarı
+  `<üst anahtar>_other`'dır (#259); "Diğer"in alt etiketi olmaz. Bu içerik
+  kuralını `catalog.CheckStudyTags` denetler (seed ve panel); içerik
+  seçimini `catalog.CheckStudySelection` doğrular.
 - Kaldırılan etiket `retired` olur: yeni içerikte seçilemez, eski içerik
   göstermeye devam eder. Anahtar değişmez, kayıt silinmez.
 - Yayınevi ya da marka adı etiket olamaz (panel doğrulaması değil,
