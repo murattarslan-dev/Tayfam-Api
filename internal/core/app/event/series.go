@@ -535,6 +535,11 @@ func (s *Service) GenerateSeries(ctx context.Context, tayfa, series id.ID) (int,
 			if err := q.CopyEventGoals(ctx, store.CopyEventGoalsParams{ToEventID: eid.PG(), FromEventID: tmpl.ID}); err != nil {
 				return fmt.Errorf("seri örneğinin hedefi: %w", err)
 			}
+
+			// schedule (#247): the programme, moved with the start.
+			if err := q.CopyScheduleItems(ctx, store.CopyScheduleItemsParams{ToEventID: eid.PG(), FromEventID: tmpl.ID}); err != nil {
+				return fmt.Errorf("seri örneğinin programı: %w", err)
+			}
 			events = append(events, made{eid})
 		}
 

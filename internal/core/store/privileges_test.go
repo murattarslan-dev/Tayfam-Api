@@ -85,6 +85,9 @@ var wantAppPrivileges = map[string]string{
 	// Issue #246: a target never moves to another event or component; only
 	// its value changes.
 	"event_goals": "DELETE,INSERT,SELECT,UPDATE(target,updated_at)",
+	// Issue #247: a programme item never moves to another event or
+	// component; its values change and it is deleted.
+	"event_schedule_items": "DELETE,INSERT,SELECT,UPDATE(ends_at,note,starts_at,title,updated_at)",
 	// Issue #241: an item never moves to another event or list, and its
 	// name and quantity do not change; only the assignee changes and
 	// account deletion clears the people on it.

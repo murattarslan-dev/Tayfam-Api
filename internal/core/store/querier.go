@@ -180,6 +180,9 @@ type Querier interface {
 	// göre kaydırılır (Faz 1 ile aynı). Bileşen seçimlerinden sonra çalışır:
 	// tetikleyici bileşenin açık olduğunu denetler.
 	CopyRollCallPlans(ctx context.Context, arg CopyRollCallPlansParams) error
+	// Seri örneği (issue #247): şablonun maddeleri yeni kimliklerle, saatleri
+	// örneğin başlangıcına kaydırılarak. Kopya ortak tetikleyiciden geçer.
+	CopyScheduleItems(ctx context.Context, arg CopyScheduleItemsParams) error
 	CountActiveMembers(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
 	CountActiveMembersForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]CountActiveMembersForTayfasRow, error)
 	CountApprovedSeats(ctx context.Context, arg CountApprovedSeatsParams) (int64, error)
@@ -211,6 +214,7 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// Katılım
 	CountRsvpsForEvents(ctx context.Context, eventIds []pgtype.UUID) ([]CountRsvpsForEventsRow, error)
+	CountScheduleItems(ctx context.Context, arg CountScheduleItemsParams) (int64, error)
 	// Etiketler.
 	CountTags(ctx context.Context, tayfaID pgtype.UUID) (int32, error)
 	// Kullanıcı başına günlük tayfa açma sınırı. Silinen tayfalar da sayılır;
@@ -278,6 +282,7 @@ type Querier interface {
 	// evidence_text yalnızca birebir mesaj şikâyetinde boş/dolu değişir
 	// (00013_dm_reports.sql).
 	CreateReport(ctx context.Context, arg CreateReportParams) (pgtype.UUID, error)
+	CreateScheduleItem(ctx context.Context, arg CreateScheduleItemParams) error
 	// Üretilen örnek. Aynı seride aynı başlangıç zamanı zaten varsa hiçbir şey
 	// yazılmaz (events_series_starts_at_key); iki pod aynı örneği üretemez.
 	CreateSeriesEvent(ctx context.Context, arg CreateSeriesEventParams) (int64, error)
@@ -347,6 +352,7 @@ type Querier interface {
 	DeletePollVotes(ctx context.Context, pollID pgtype.UUID) error
 	DeleteRollCallPlan(ctx context.Context, arg DeleteRollCallPlanParams) (int64, error)
 	DeleteSafetyContact(ctx context.Context, arg DeleteSafetyContactParams) error
+	DeleteScheduleItem(ctx context.Context, arg DeleteScheduleItemParams) (int64, error)
 	// Etiket silinince bağları CASCADE ile gider; sorular kalır.
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
 	DeleteTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) error
@@ -971,6 +977,12 @@ type Querier interface {
 	// (etkinlik sonradan iptal ya da silinmiş olsa bile) katılımcı check-in
 	// yaptıysa görünür; alarmın kendisi bildirimle gitti.
 	ListSafetyShares(ctx context.Context, arg ListSafetySharesParams) ([]ListSafetySharesRow, error)
+	// Program akışı bileşeni (`schedule`; issue #247; ADR-0025 §4). Etkinlik her
+	// zaman önce tayfa kapsamında yüklenir ve bileşen etkinliğin tür sürümünde
+	// çözülür (internal/core/app/component: View / Change); buradaki sorgular o
+	// etkinliğin kimliği ve bileşenin anahtarıyla çalışır (IDOR). Yetki app
+	// katmanındadır (internal/core/app/component/schedule).
+	ListScheduleItems(ctx context.Context, arg ListScheduleItemsParams) ([]ListScheduleItemsRow, error)
 	// Serinin henüz başlamamış, iptal edilmemiş ve tek başına düzenlenmemiş
 	// örnekleri; seri güncellemesi bunları değiştirir.
 	ListSeriesUpcomingEvents(ctx context.Context, arg ListSeriesUpcomingEventsParams) ([]pgtype.UUID, error)
@@ -1248,6 +1260,7 @@ type Querier interface {
 	// Seri örneği elle düzenlenince seri güncellemeleri ona dokunmaz.
 	UpdateEvent(ctx context.Context, arg UpdateEventParams) (int64, error)
 	UpdateQuestionContent(ctx context.Context, arg UpdateQuestionContentParams) (int64, error)
+	UpdateScheduleItem(ctx context.Context, arg UpdateScheduleItemParams) (int64, error)
 	// Seri güncellemesi: UpdateEvent gibi, ama series_override'a dokunmaz.
 	UpdateSeriesEvent(ctx context.Context, arg UpdateSeriesEventParams) (int64, error)
 	UpdateTayfaSettings(ctx context.Context, arg UpdateTayfaSettingsParams) (int64, error)
