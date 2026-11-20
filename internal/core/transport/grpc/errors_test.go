@@ -71,6 +71,8 @@ func TestErrorStatus(t *testing.T) {
 		{apperr.ErrTeamsManual, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_TEAMS_MANUAL},
 		{apperr.ErrTeamsTooFew, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_TEAMS_TOO_FEW},
 		{apperr.ErrTeamsNotParticipant, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_TEAMS_NOT_PARTICIPANT},
+		{apperr.ErrDrawAlreadyMade, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DRAW_ALREADY_MADE},
+		{apperr.ErrDrawTooFew, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DRAW_TOO_FEW},
 		{apperr.ErrSeatRequestDriver, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SEAT_REQUEST_DRIVER},
 		{apperr.ErrPermissionDenied, codes.PermissionDenied, corev1.ErrorReason_ERROR_REASON_PERMISSION_DENIED},
 		{apperr.ErrMuted, codes.PermissionDenied, corev1.ErrorReason_ERROR_REASON_MUTED},

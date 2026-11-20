@@ -3345,6 +3345,66 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Etkinlik bileşenleri: kura (`draw`; core DrawComponentService, #249, ADR-0025 §4, §5, §6) ---
+  # Etkinliğin katılımcılarını (tür bir takım bileşeni içeriyorsa ve bu
+  # etkinlikte açıksa, ilk takım bileşeninin üyesi olan takımları) rastgele
+  # sıraya dizer. Ardışık iki yer bir eşleşmedir (1–2, 3–4 …); tek sayıda
+  # girişte son yer bay geçer. Eşleşme ağacı sırayı tohum olarak kullanır.
+  # Kura bir kez çekilir ve sabittir: yeniden çekilmez, değiştirilemez;
+  # kimin çektiği denetim kaydındadır. Bir yer yalnızca boşalır (kişi
+  # tayfadan ayrıldı ya da hesabını sildi, takım kaldırıldı). Kurayı
+  # organizatör, moderatör ve yönetici çeker; bitişten 7 gün sonrasına kadar
+  # (`component-frozen`). Kura katılımdır, seri örneğine kopyalanmaz.
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/draw:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: getEventDraw
+      summary: Etkinliğin kurası
+      description: |
+        Her etkin üyeye açıktır (susturulmuş üye de okur); iptal edilmiş ve
+        donmuş etkinlikte de okunur. Kura çekilmemişse `drawn` false,
+        `entries` boştur; `subject` çekilecek kuranın neyi sıralayacağını
+        gösterir. Bileşen uçlarının ortak kuralları geçerlidir
+        (`component-not-found`, `component-disabled`).
+      responses:
+        "200":
+          description: Kura
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventDraw" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: makeEventDraw
+      summary: Kurayı çeker (organizatör, moderatör, yönetici)
+      description: |
+        Gövde almaz. Sıra sunucuda kriptografik üreteçle belirlenir ve
+        sabitlenir. Kura daha önce çekildiyse `draw-already-made`; ikiden
+        az katılımcıda (takım kurasında üyesi olan ikiden az takımda)
+        `draw-too-few`; 500'den çok katılımcıda `event-limit`. Bileşen
+        uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Çekilen kura
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventDraw" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   # --- Tayfa sözlüğü (core TayfaVocabularyService, #244, ADR-0037 §4) ---
   # Tayfanın kendi değer listesi: bir ad alanındaki (`fish_species`, `book`
   # …) değerler. Tanımda `vocabulary` olan metin alanı (`CatalogVocabulary`)
@@ -6971,6 +7031,9 @@ components:
         - teams-manual
         - teams-too-few
         - teams-not-participant
+        # core: kura bileşeni (#249, ADR-0025 §4, §5)
+        - draw-already-made
+        - draw-too-few
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -8427,6 +8490,33 @@ components:
             properties:
               user_id: { type: string, format: uuid }
               level: { type: integer, minimum: 1, maximum: 5, description: "1 (başlangıç) – 5 (en güçlü)." }
+    EventDrawEntry:
+      type: object
+      required: [position]
+      description: Kurada bir yer. Boş yerde (kişi ya da takım geri çekildi) ne `user_id` ne `team_id` vardır.
+      properties:
+        position: { type: integer, minimum: 1, maximum: 500 }
+        user_id: { type: string, format: uuid, description: "Katılımcı kurasında kişinin kullanıcı kimliği." }
+        team_id: { type: string, format: uuid, description: "Takım kurasında `teams_key` bileşenindeki takımın kimliği." }
+    EventDraw:
+      type: object
+      required: [drawn, subject, entries, caller_can_draw]
+      description: Bir etkinliğin bir kura bileşeni, isteği yapanın gördüğü haliyle (#249).
+      properties:
+        drawn: { type: boolean, description: Kura çekildi. }
+        subject:
+          type: string
+          enum: [participants, teams]
+          description: Kuranın sıraladığı (çekilmemişse şu an çekilse sıralayacağı) giriş türü.
+        teams_key: { type: string, description: "Yalnızca `teams` kurasında, takım bileşeninin anahtarı." }
+        drawn_at: { type: string, format: date-time, description: Yalnızca çekilmiş kurada. }
+        entries:
+          type: array
+          description: Sıraya göre; kura çekilmemişse boş. Ardışık iki yer bir eşleşmedir.
+          items: { $ref: "#/components/schemas/EventDrawEntry" }
+        caller_can_draw:
+          type: boolean
+          description: Şu an kurayı çekebilirsiniz (kura çekilmemiş; organizatör, moderatör, yönetici; susturulmamış; etkinlik iptal değil, donmamış, tayfa salt okunur değil).
     VocabularyIds:
       type: object
       description: Alan anahtarı → tayfa sözlüğündeki değerin kimliği (#244).

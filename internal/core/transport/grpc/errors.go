@@ -222,6 +222,10 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_TEAMS_TOO_FEW, true
 	case errors.Is(err, apperr.ErrTeamsNotParticipant):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_TEAMS_NOT_PARTICIPANT, true
+	case errors.Is(err, apperr.ErrDrawAlreadyMade):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DRAW_ALREADY_MADE, true
+	case errors.Is(err, apperr.ErrDrawTooFew):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DRAW_TOO_FEW, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

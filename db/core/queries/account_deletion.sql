@@ -153,6 +153,11 @@ UPDATE event_measurements SET entered_by = NULL WHERE entered_by = @user_id;
 -- name: DeleteUserTeamMemberships :exec
 DELETE FROM event_team_members WHERE user_id = @user_id;
 
+-- Kuradaki yeri kişinin katılımıdır (issue #249). Kura sonucu sabittir:
+-- yer silinmez, boşalır; sıra ve diğer yerler değişmez.
+-- name: ClearUserDrawEntries :exec
+UPDATE event_draw_entries SET user_id = NULL WHERE user_id = @user_id;
+
 -- Tayfa sözlüğüne eklediği değerler tayfanın ortak verisidir; kalır, ekleyen
 -- boşalır (issue #244; ADR-0037 §4).
 -- name: ClearVocabularyCreator :exec

@@ -173,6 +173,25 @@ type EventConsumer struct {
 	UpdatedAt    pgtype.Timestamptz
 }
 
+type EventDraw struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	Subject      string
+	TeamKey      pgtype.Text
+	DrawnAt      pgtype.Timestamptz
+}
+
+type EventDrawEntry struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	Position     int16
+	UserID       pgtype.UUID
+	TeamKey      pgtype.Text
+	TeamID       pgtype.UUID
+	CreatedAt    pgtype.Timestamptz
+}
+
 type EventFeedback struct {
 	EventID   pgtype.UUID
 	UserID    pgtype.UUID

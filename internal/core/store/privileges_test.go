@@ -93,6 +93,10 @@ var wantAppPrivileges = map[string]string{
 	// changes: it is deleted and written again.
 	"event_teams":        "DELETE,INSERT,SELECT,UPDATE(name,updated_at)",
 	"event_team_members": "DELETE,INSERT,SELECT",
+	// Issue #249: a draw is fixed. Rows are only written; account deletion
+	// empties a person's place.
+	"event_draws":        "INSERT,SELECT",
+	"event_draw_entries": "INSERT,SELECT,UPDATE(user_id)",
 	// Issue #241: an item never moves to another event or list, and its
 	// name and quantity do not change; only the assignee changes and
 	// account deletion clears the people on it.

@@ -88,6 +88,7 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 		registerTeamsComponent,
 
 		// draw (#249)
+		registerDrawComponent,
 
 		// scoreboard (#250)
 

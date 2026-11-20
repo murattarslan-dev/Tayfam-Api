@@ -85,6 +85,10 @@ enum CoreExportSection {
   // the component and the team's ID and position. Teammates and the team's
   // name are not exported.
   CORE_EXPORT_SECTION_TEAM_MEMBERSHIPS = 26;
+  // The caller's places in draws (the draw component, issue #249): the
+  // event, the component, the place and when it was drawn. The others in
+  // the draw are not exported.
+  CORE_EXPORT_SECTION_DRAW_ENTRIES = 27;
 }
 
 message ExportMyDataRequest {}
