@@ -183,6 +183,30 @@ olayına yazar; chat teslim eder.
 - İzin tablosu: `EventCreateNow`, `EventFinish`, `EventJoinQrCreate`;
   tablo testleri.
 
+## Uygulama notları (#263, §1–§2)
+
+- `events.open_ended` CHECK'i (`events_open_ended`): açık uçlu etkinlik
+  seriye ait olamaz, Keşfet'e çıkamaz, `ends_at` başlangıçtan en fazla 12
+  saat sonradır. Açık uçlu etkinlikte zaman düzenlenemez (`update_mask`
+  doğrulama hatası); bitiş yalnızca Bitir'le değişir.
+- Bitir yalnızca organizatöründür (`EventFinish`, moderatör ve yönetici
+  dahil başkası yapamaz); susturulmuş organizatör bitiremez, etkinlik yine
+  12 saatte biter. Planlı etkinlikte Bitir `event-not-open-ended`
+  (FAILED_PRECONDITION, 2631) alır; bitmiş ya da bitirilmiş etkinlik
+  `event-ended`. Sonuçlar bölümündeki problem tiplerine bu eklendi.
+- Bitir katılımcılara bildirim üretmez; yeni bitiş `event.updated`
+  olayıyla (`finished: true`) chat'e gider, kanal arşivi yeni bitişten
+  sayılır. Check-in, bileşenlerin yazma/donma pencereleri, 7 günlük
+  düzeltme penceresi, katılım geçmişi süresi ve rozetler zaten `ends_at`'e
+  dayanır; ek bir kural gerekmedi. Yoklama alarmı organizatörün yazdığı
+  beklenen dönüşe dayanır, bitişe değil.
+- `open_ended` kendiliğinden bitişten sonra da `true` kalır; sürüp
+  sürmediği `ends_at` ile anlaşılır. Kişi başı 1 açık şimdi etkinliği
+  sayımı `open_ended AND ends_at > now` ile yapılır, kullanıcı başına
+  advisory kilitle sıralanır.
+- `event.created` olayında `starts_now: true` işareti vardır; şimdi
+  bildirimi (#265) buradan çıkar.
+
 ## Değerlendirilen alternatifler
 
 - **Ayrı "şimdi" modeli (tayfasız etkinlik)**: Reddedildi. ADR-0032 gizli

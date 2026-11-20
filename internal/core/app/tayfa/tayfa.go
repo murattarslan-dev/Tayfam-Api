@@ -100,6 +100,9 @@ type View struct {
 	// MembersCanCreateEvents lets every active member create events; when
 	// false only moderators and admins can (2026-11-09).
 	MembersCanCreateEvents bool
+	// NowCreateMinRole is the lowest role that may start an event now
+	// (tayfas.now_create_min_role, ADR-0038 §2); member by default.
+	NowCreateMinRole authz.Role
 	// Modules has one entry per Modules value, in that order.
 	Modules []ModuleState
 	Status  string
@@ -280,13 +283,15 @@ type UpdateInput struct {
 	JoinPolicy  string
 	// MembersCanCreateEvents is the event creation setting.
 	MembersCanCreateEvents bool
+	// NowCreateMinRole is the Şimdi başlat setting (ADR-0038 §2).
+	NowCreateMinRole authz.Role
 	// CoverUploadID is the caller's own READY cover upload opened for this
 	// tayfa; zero removes the cover (the old one is deleted).
 	CoverUploadID id.ID
 }
 
 // updateFields are the allowed update mask paths, in audit record order.
-var updateFields = []string{FieldName, FieldDescription, FieldInterests, FieldJoinPolicy, FieldMembersCanCreateEvents, FieldCover}
+var updateFields = []string{FieldName, FieldDescription, FieldInterests, FieldJoinPolicy, FieldMembersCanCreateEvents, FieldNowCreateMinRole, FieldCover}
 
 // Update changes the tayfa's settings. Admin only.
 func (s *Service) Update(ctx context.Context, user, tayfa id.ID, in UpdateInput) (View, error) {
@@ -323,6 +328,9 @@ func (s *Service) Update(ctx context.Context, user, tayfa id.ID, in UpdateInput)
 	if set[FieldJoinPolicy] && !validJoinPolicy(in.JoinPolicy) {
 		return View{}, apperr.Validation(FieldJoinPolicy)
 	}
+	if set[FieldNowCreateMinRole] && !in.NowCreateMinRole.Valid() {
+		return View{}, apperr.Validation(FieldNowCreateMinRole)
+	}
 	// Field names in a fixed order for the audit record.
 	var fields []string
 	for _, f := range updateFields {
@@ -335,7 +343,7 @@ func (s *Service) Update(ctx context.Context, user, tayfa id.ID, in UpdateInput)
 		p := store.UpdateTayfaSettingsParams{
 			ID: tayfa.PG(), Name: t.Name, NameNormalized: t.NameNormalized,
 			Description: t.Description, JoinPolicy: t.JoinPolicy,
-			MembersCanCreateEvents: t.MembersCanCreateEvents,
+			MembersCanCreateEvents: t.MembersCanCreateEvents, NowCreateMinRole: t.NowCreateMinRole,
 		}
 		if set[FieldName] {
 			p.Name, p.NameNormalized = name, normalized
@@ -348,6 +356,9 @@ func (s *Service) Update(ctx context.Context, user, tayfa id.ID, in UpdateInput)
 		}
 		if set[FieldMembersCanCreateEvents] {
 			p.MembersCanCreateEvents = in.MembersCanCreateEvents
+		}
+		if set[FieldNowCreateMinRole] {
+			p.NowCreateMinRole = in.NowCreateMinRole.String()
 		}
 		if n, err := q.UpdateTayfaSettings(ctx, p); err != nil {
 			return fmt.Errorf("ayarlar: %w", err)

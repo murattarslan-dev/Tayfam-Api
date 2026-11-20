@@ -53,8 +53,11 @@ const (
 	EventCreated   = "event.created"
 	EventUpdated   = "event.updated"
 	EventCancelled = "event.cancelled"
-	RSVPChanged    = "rsvp.changed"
-	RSVPPromoted   = "rsvp.promoted"
+	// EventFinished is the audit action of Finish; the outbox event is
+	// EventUpdated with the new end.
+	EventFinished = "event.finished"
+	RSVPChanged   = "rsvp.changed"
+	RSVPPromoted  = "rsvp.promoted"
 )
 
 // Update mask paths (UpdateEventRequest.update_mask), in audit order.
@@ -143,6 +146,9 @@ type Event struct {
 	// Fields holds the values of the type's fields by field key, as JSON
 	// (definition.CleanValues); filled by Get only, never nil there.
 	Fields map[string]json.RawMessage
+	// OpenEnded: started now and not finished (events.open_ended, ADR-0038
+	// §1); EndsAt is the latest end, nowMaxDuration after the start.
+	OpenEnded bool
 }
 
 // Input is a create request, and the new values of an update.
@@ -173,7 +179,14 @@ type Input struct {
 	// (issue #238, ADR-0037 §2). Later changes go through
 	// component.Service.Set.
 	Components []component.Selection
+	// StartsNow, on create only, starts the event at the server's now as
+	// an open-ended event (ADR-0038 §1); StartsAt and EndsAt must be zero.
+	StartsNow bool
 }
+
+// nowMaxDuration is how long an open-ended event runs at most: it ends by
+// itself then unless its organizer finishes it (ADR-0038 §1).
+const nowMaxDuration = 12 * time.Hour
 
 // setCover attaches the caller's cover upload to the event (zero: removes
 // the cover) and writes the column, whose trigger checks the attachment
@@ -312,6 +325,10 @@ func notifyBatch(ctx context.Context, q *store.Queries, b *batch) error {
 			req.Type = notify.TypeEventCreated
 			to, err = notify.Members(ctx, q, b.tayfa, b.actor)
 		case EventUpdated:
+			if finished, _ := e.payload["finished"].(bool); finished {
+				// "Bitir" notifies nobody (ADR-0038 §1).
+				continue
+			}
 			req.Type = notify.TypeEventUpdated
 			to, err = notify.Participants(ctx, q, b.tayfa, e.subject, b.actor)
 		case EventCancelled:
@@ -391,6 +408,9 @@ type Plan struct {
 	capacity int32
 	crid     id.ID
 	rec      *recurrence
+	// now: starts_now; start and end are set from the server's clock in
+	// the creating transaction (createIn).
+	now bool
 }
 
 // Title is the cleaned title: the name of an instant event's tayfa
@@ -421,7 +441,22 @@ func (s *Service) Prepare(in Input) (Plan, error) {
 	if p.desc, err = cleanText(in.Description, "description", 0, descriptionMax, true); err != nil {
 		return Plan{}, err
 	}
-	if p.start, p.end, err = cleanTime(in.StartsAt, in.EndsAt, s.now()); err != nil {
+	if in.StartsNow {
+		// The client's clock is never used (ADR-0038 §1).
+		switch {
+		case !in.StartsAt.IsZero():
+			return Plan{}, apperr.Validation("start_time")
+		case !in.EndsAt.IsZero():
+			return Plan{}, apperr.Validation("end_time")
+		case in.Recurrence != nil:
+			return Plan{}, apperr.Validation("recurrence")
+		case in.Discoverable:
+			return Plan{}, apperr.Validation("discoverable")
+		}
+		p.now = true
+		p.start = s.now()
+		p.end = p.start.Add(nowMaxDuration)
+	} else if p.start, p.end, err = cleanTime(in.StartsAt, in.EndsAt, s.now()); err != nil {
 		return Plan{}, err
 	}
 	if p.loc, err = cleanLocation(in.Location); err != nil {
@@ -449,7 +484,12 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in Input) (Even
 	}
 	var eventID, seriesID id.ID
 	err = s.write(ctx, user, tayfa, func(q *store.Queries, c caller, b *batch) error {
-		if err := c.authorize(authz.EventCreate); err != nil {
+		// Şimdi başlat has its own setting (ADR-0038 §2).
+		action := authz.EventCreate
+		if p.now {
+			action = authz.EventCreateNow
+		}
+		if err := c.authorize(action); err != nil {
 			return err
 		}
 		prev, err := q.GetEventByClientRequest(ctx, store.GetEventByClientRequestParams{CreatedBy: user.PG(), ClientRequestID: p.crid.PG()})
@@ -524,11 +564,18 @@ func createIn(ctx context.Context, q *store.Queries, c caller, b *batch, p Plan)
 	if err != nil {
 		return id.ID{}, id.ID{}, err
 	}
+	if p.now {
+		if err := nowAllowed(ctx, q, c.user, c.now); err != nil {
+			return id.ID{}, id.ID{}, err
+		}
+		// "Now" is the creating transaction's clock (ADR-0038 §1).
+		p.start, p.end = c.now, c.now.Add(nowMaxDuration)
+	}
 	eventID = id.New()
 	cp := store.CreateEventParams{
 		ID: eventID.PG(), TayfaID: tayfa.PG(), Type: et.Key, TypeVersion: et.Version, Title: p.title, Description: text(p.desc),
 		StartsAt: ts(p.start), EndsAt: ts(p.end), Capacity: int4(p.capacity), Discoverable: p.in.Discoverable,
-		CreatedBy: c.user.PG(), ClientRequestID: p.crid.PG(),
+		CreatedBy: c.user.PG(), ClientRequestID: p.crid.PG(), OpenEnded: p.now,
 	}
 	setLocation(&cp.Mode, &cp.MeetingPointName, &cp.MeetingLat, &cp.MeetingLng, &cp.City, &cp.District, &cp.OnlineUrl, p.loc)
 	if err := q.CreateEvent(ctx, cp); err != nil {
@@ -546,10 +593,15 @@ func createIn(ctx context.Context, q *store.Queries, c caller, b *batch, p Plan)
 			return id.ID{}, id.ID{}, err
 		}
 	}
-	if err := audit(ctx, q, c, EventCreated, eventID, map[string]any{"type": p.in.Type}); err != nil {
+	meta := map[string]any{"type": p.in.Type}
+	payload := map[string]any{"event_id": eventID.String(), "type": p.in.Type}
+	if p.now {
+		// #265 sends the now notifications from this mark.
+		meta["starts_now"], payload["starts_now"] = true, true
+	}
+	if err := audit(ctx, q, c, EventCreated, eventID, meta); err != nil {
 		return id.ID{}, id.ID{}, err
 	}
-	payload := map[string]any{"event_id": eventID.String(), "type": p.in.Type}
 	if p.rec != nil {
 		if seriesID, err = createSeries(ctx, q, c, eventID, p.start, p.rec); err != nil {
 			return id.ID{}, id.ID{}, err
@@ -626,6 +678,11 @@ func (s *Service) Update(ctx context.Context, user, tayfa, event id.ID, fields [
 		if err := changeable(ev, c.now); err != nil {
 			return err
 		}
+		if ev.OpenEnded && set[FieldTime] {
+			// An open-ended event's times are the server's; it ends with
+			// Finish (ADR-0038 §1).
+			return apperr.Validation("update_mask")
+		}
 		if set[FieldLocation] {
 			// The mode must be one the event's type version allows.
 			if err := modeAllowed(ctx, q, ev, loc.Mode); err != nil {
@@ -670,8 +727,9 @@ func (s *Service) Update(ctx context.Context, user, tayfa, event id.ID, fields [
 			p.Capacity = int4(capacity)
 		}
 		if set[FieldDiscoverable] {
-			// An instant tayfa's event never reaches discovery (ADR-0032).
-			if in.Discoverable && access.Instant(c.tayfa) {
+			// An instant tayfa's event never reaches discovery (ADR-0032),
+			// nor does a now event (ADR-0038 §1).
+			if in.Discoverable && (access.Instant(c.tayfa) || ev.OpenEnded) {
 				return apperr.Validation("discoverable")
 			}
 			p.Discoverable = in.Discoverable
@@ -773,6 +831,81 @@ func (s *Service) Cancel(ctx context.Context, user, tayfa, event id.ID, reason s
 	}
 	return s.Get(ctx, user, tayfa, event)
 }
+
+// Finish is the organizer's "Bitir" on their own open-ended event (ADR-0038
+// §1): the end becomes now and the event is no longer open-ended. Check-in,
+// the components' write windows, the correction window and the activity
+// records follow the new end. Participants are not notified; the end
+// reaches chat with the event.updated event like any change of the end.
+func (s *Service) Finish(ctx context.Context, user, tayfa, event id.ID) (Event, error) {
+	err := s.write(ctx, user, tayfa, func(q *store.Queries, c caller, b *batch) error {
+		ev, err := lockEvent(ctx, q, tayfa, event)
+		if err != nil {
+			return err
+		}
+		// Only the organizer: "Bitir" is theirs, also against moderators.
+		if !ev.CreatedBy.Valid || id.ID(ev.CreatedBy.Bytes) != c.user {
+			return apperr.ErrPermissionDenied
+		}
+		if err := c.authorize(authz.EventFinish); err != nil {
+			return err
+		}
+		if err := changeable(ev, c.now); err != nil {
+			return err
+		}
+		if !ev.OpenEnded {
+			return apperr.ErrEventNotOpenEnded
+		}
+		end := c.now
+		if !end.After(ev.StartsAt.Time) {
+			// Finished in the instant it started (events_time: end > start).
+			end = ev.StartsAt.Time.Add(time.Microsecond)
+		}
+		n, err := q.FinishEvent(ctx, store.FinishEventParams{TayfaID: tayfa.PG(), ID: event.PG(), EndsAt: ts(end)})
+		if err != nil {
+			return fmt.Errorf("bitir: %w", err)
+		}
+		if n != 1 {
+			return apperr.ErrEventNotOpenEnded
+		}
+		if err := audit(ctx, q, c, EventFinished, event, nil); err != nil {
+			return err
+		}
+		// event.updated carries the new end to chat (the channel is
+		// archived from it); "finished" keeps it out of the participants'
+		// notifications (notifyBatch).
+		b.add(EventUpdated, event, map[string]any{
+			"event_id": event.String(), "fields": []string{FieldTime}, "ends_at": end.UTC(), "finished": true,
+		})
+		// The activity records take the real duration (issue #50).
+		return refreshActivity(ctx, q, tayfa, event, c.now)
+	})
+	if err != nil {
+		return Event{}, err
+	}
+	return s.Get(ctx, user, tayfa, event)
+}
+
+// nowAllowed checks the limit of open now events of user (ADR-0038 §2): at
+// most one at a time, in tayfas and instant events together. It takes the
+// user's now lock first, so two creates cannot both pass.
+func nowAllowed(ctx context.Context, q *store.Queries, user id.ID, now time.Time) error {
+	if err := q.LockNowEventCreation(ctx, user.PG()); err != nil {
+		return fmt.Errorf("şimdi kilidi: %w", err)
+	}
+	n, err := q.CountOpenNowEvents(ctx, store.CountOpenNowEventsParams{CreatedBy: user.PG(), Now: ts(now)})
+	if err != nil {
+		return fmt.Errorf("açık şimdi etkinlikleri: %w", err)
+	}
+	if n >= maxOpenNow {
+		return apperr.ErrNowLimitReached
+	}
+	return nil
+}
+
+// maxOpenNow is how many open now events one person may organize at a time
+// (ADR-0038 §2).
+const maxOpenNow = 1
 
 // currentType returns the catalog's current version of the type key for a
 // new event with the given mode. An unknown or retired type and a mode the

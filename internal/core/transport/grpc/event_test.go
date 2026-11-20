@@ -22,6 +22,7 @@ import (
 
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
@@ -60,6 +61,10 @@ func (f *fakeEvents) Update(_ context.Context, u, t, e id.ID, fields []string, i
 	return f.view, f.err
 }
 func (f *fakeEvents) Cancel(_ context.Context, u, t, e id.ID, _ string) (event.Event, error) {
+	f.rec(u, t, e)
+	return f.view, f.err
+}
+func (f *fakeEvents) Finish(_ context.Context, u, t, e id.ID) (event.Event, error) {
 	f.rec(u, t, e)
 	return f.view, f.err
 }
@@ -140,6 +145,7 @@ func callAllEvents(ctx context.Context, c corev1.EventServiceServer, tayfaID, ev
 	_, out["CreateEvent"] = c.CreateEvent(ctx, createReq(tayfaID))
 	_, out["UpdateEvent"] = c.UpdateEvent(ctx, &corev1.UpdateEventRequest{TayfaId: tayfaID, EventId: eventID, Title: "x", UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"title"}}})
 	_, out["CancelEvent"] = c.CancelEvent(ctx, &corev1.CancelEventRequest{TayfaId: tayfaID, EventId: eventID})
+	_, out["FinishEvent"] = c.FinishEvent(ctx, &corev1.FinishEventRequest{TayfaId: tayfaID, EventId: eventID})
 	_, out["GetEvent"] = c.GetEvent(ctx, &corev1.GetEventRequest{TayfaId: tayfaID, EventId: eventID})
 	_, out["ListUpcomingEvents"] = c.ListUpcomingEvents(ctx, &corev1.ListUpcomingEventsRequest{TayfaId: tayfaID})
 	_, out["SetRsvp"] = c.SetRsvp(ctx, &corev1.SetRsvpRequest{TayfaId: tayfaID, EventId: eventID, Status: corev1.RsvpStatus_RSVP_STATUS_GOING})
@@ -572,4 +578,40 @@ func codeOf(t *testing.T, err error) codes.Code {
 	t.Helper()
 	code, _ := infoOf(t, err)
 	return code
+}
+
+// Şimdi başlat (issue #263): starts_now reaches the app without times, the
+// view's open_ended flag reaches the client, FinishEvent passes the IDs and
+// maps its errors.
+func TestEventServerStartsNow(t *testing.T) {
+	user, tayfaID, eventID := id.New(), id.New(), id.New()
+	f := &fakeEvents{view: event.Event{ID: eventID, TayfaID: tayfaID, Title: "Batak", OpenEnded: true}}
+	srv := NewEventServer(f, discard)
+	ctx := callerCtx(user)
+	r := createReq(tayfaID.String())
+	r.StartTime, r.EndTime, r.StartsNow = nil, nil, true
+	resp, err := srv.CreateEvent(ctx, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !f.in.StartsNow || !f.in.StartsAt.IsZero() || !f.in.EndsAt.IsZero() || !resp.GetEvent().GetOpenEnded() {
+		t.Fatalf("şimdi başlat aktarılmadı: %+v", f.in)
+	}
+	fin, err := srv.FinishEvent(ctx, &corev1.FinishEventRequest{TayfaId: tayfaID.String(), EventId: eventID.String()})
+	if err != nil || f.user != user || f.tayfa != tayfaID || f.event != eventID || fin.GetEvent().GetId() != eventID.String() {
+		t.Fatalf("bitir: %v", err)
+	}
+	if _, err := srv.FinishEvent(ctx, &corev1.FinishEventRequest{TayfaId: tayfaID.String(), EventId: "x"}); err == nil {
+		t.Fatal("geçersiz etkinlik kimliği kabul edildi")
+	}
+	f.err = apperr.ErrEventNotOpenEnded
+	_, err = srv.FinishEvent(ctx, &corev1.FinishEventRequest{TayfaId: tayfaID.String(), EventId: eventID.String()})
+	if code, info := infoOf(t, err); code != codes.FailedPrecondition || info.GetReason() != corev1.ErrorReason_ERROR_REASON_EVENT_NOT_OPEN_ENDED.String() {
+		t.Fatalf("açık uçlu değil: %v", err)
+	}
+	f.err = apperr.ErrNowLimitReached
+	_, err = srv.CreateEvent(ctx, r)
+	if code, info := infoOf(t, err); code != codes.ResourceExhausted || info.GetReason() != corev1.ErrorReason_ERROR_REASON_NOW_LIMIT_REACHED.String() {
+		t.Fatalf("sınır: %v", err)
+	}
 }

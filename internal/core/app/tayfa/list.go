@@ -83,7 +83,8 @@ func (s *Service) ListMine(ctx context.Context, user id.ID, pageSize int32, page
 				ID: id.ID(r.ID.Bytes), Name: r.Name, Description: r.Description, JoinCode: r.JoinCode,
 				Status: r.Status, JoinPolicy: r.JoinPolicy, SuspendedAt: r.SuspendedAt,
 				DeletionScheduledFor: r.DeletionScheduledFor, MembersCanCreateEvents: r.MembersCanCreateEvents,
-				CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, CoverUploadID: r.CoverUploadID, Kind: r.Kind, ConvertedAt: r.ConvertedAt, Member: m,
+				NowCreateMinRole: r.NowCreateMinRole,
+				CreatedAt:        r.CreatedAt, UpdatedAt: r.UpdatedAt, CoverUploadID: r.CoverUploadID, Kind: r.Kind, ConvertedAt: r.ConvertedAt, Member: m,
 			})
 			activeIdx = append(activeIdx, i)
 		}

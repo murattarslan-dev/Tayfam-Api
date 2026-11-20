@@ -22,6 +22,7 @@ const (
 	EventService_CreateEvent_FullMethodName         = "/tayfam.core.v1.EventService/CreateEvent"
 	EventService_CreateInstantEvent_FullMethodName  = "/tayfam.core.v1.EventService/CreateInstantEvent"
 	EventService_UpdateEvent_FullMethodName         = "/tayfam.core.v1.EventService/UpdateEvent"
+	EventService_FinishEvent_FullMethodName         = "/tayfam.core.v1.EventService/FinishEvent"
 	EventService_CancelEvent_FullMethodName         = "/tayfam.core.v1.EventService/CancelEvent"
 	EventService_GetEvent_FullMethodName            = "/tayfam.core.v1.EventService/GetEvent"
 	EventService_ListUpcomingEvents_FullMethodName  = "/tayfam.core.v1.EventService/ListUpcomingEvents"
@@ -71,6 +72,9 @@ const (
 //     read events and attendees: every active member (also when muted)
 //     create: moderators and admins; every active member when
 //     Tayfa.members_can_create_events is true
+//     create with starts_now: Tayfa.now_create_min_role and above
+//     (every active member by default; ADR-0038 §2)
+//     finish: the organizer, for their own open-ended event
 //     edit, cancel: the organizer (the event's creator) for their own
 //     event, moderators and admins for every event
 //     RSVP: every active member
@@ -90,7 +94,8 @@ type EventServiceClient interface {
 	// with the same client_request_id by the same caller returns the event
 	// created the first time and creates nothing.
 	//
-	// Errors: common, ERROR_REASON_VALIDATION.
+	// Errors: common, ERROR_REASON_VALIDATION, ERROR_REASON_NOW_LIMIT_REACHED
+	// (starts_now).
 	CreateEvent(ctx context.Context, in *CreateEventRequest, opts ...grpc.CallOption) (*CreateEventResponse, error)
 	// CreateInstantEvent creates an instant event (ADR-0032): a hidden tayfa
 	// of kind TAYFA_KIND_INSTANT with the caller as its only admin and this
@@ -104,7 +109,8 @@ type EventServiceClient interface {
 	//
 	// Errors: ERROR_REASON_VALIDATION, ERROR_REASON_INSTANT_EVENT_LIMIT,
 	// ERROR_REASON_USER_NOT_FOUND, ERROR_REASON_NOT_FRIENDS,
-	// ERROR_REASON_DIRECT_INVITE_LIMIT.
+	// ERROR_REASON_DIRECT_INVITE_LIMIT, ERROR_REASON_NOW_LIMIT_REACHED
+	// (event.starts_now).
 	CreateInstantEvent(ctx context.Context, in *CreateInstantEventRequest, opts ...grpc.CallOption) (*CreateInstantEventResponse, error)
 	// UpdateEvent changes the fields named in update_mask. Raising the
 	// capacity (or removing it) moves the oldest waitlisted RSVPs to GOING in
@@ -113,6 +119,17 @@ type EventServiceClient interface {
 	//
 	// Errors: common, ERROR_REASON_VALIDATION.
 	UpdateEvent(ctx context.Context, in *UpdateEventRequest, opts ...grpc.CallOption) (*UpdateEventResponse, error)
+	// FinishEvent is the organizer's "Bitir" on their own open-ended event
+	// (Event.open_ended, ADR-0038 §1): the end becomes the server's now and
+	// open_ended false. Participants are not notified; the event's channel
+	// is archived from the new end like after any change of the end. An
+	// open-ended event that is not finished ends by itself at its end_time
+	// (12 hours after the start).
+	//
+	// Errors: common (ERROR_REASON_EVENT_ENDED once it has ended, also when
+	// already finished), ERROR_REASON_EVENT_NOT_OPEN_ENDED for an event that
+	// was not started now.
+	FinishEvent(ctx context.Context, in *FinishEventRequest, opts ...grpc.CallOption) (*FinishEventResponse, error)
 	// CancelEvent cancels a scheduled event. The event is not deleted: its
 	// members still see it, with the cancellation time and reason. RSVPs
 	// cannot change afterwards.
@@ -303,6 +320,16 @@ func (c *eventServiceClient) UpdateEvent(ctx context.Context, in *UpdateEventReq
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(UpdateEventResponse)
 	err := c.cc.Invoke(ctx, EventService_UpdateEvent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *eventServiceClient) FinishEvent(ctx context.Context, in *FinishEventRequest, opts ...grpc.CallOption) (*FinishEventResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FinishEventResponse)
+	err := c.cc.Invoke(ctx, EventService_FinishEvent_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -563,6 +590,9 @@ func (c *eventServiceClient) ExportEvent(ctx context.Context, in *ExportEventReq
 //     read events and attendees: every active member (also when muted)
 //     create: moderators and admins; every active member when
 //     Tayfa.members_can_create_events is true
+//     create with starts_now: Tayfa.now_create_min_role and above
+//     (every active member by default; ADR-0038 §2)
+//     finish: the organizer, for their own open-ended event
 //     edit, cancel: the organizer (the event's creator) for their own
 //     event, moderators and admins for every event
 //     RSVP: every active member
@@ -582,7 +612,8 @@ type EventServiceServer interface {
 	// with the same client_request_id by the same caller returns the event
 	// created the first time and creates nothing.
 	//
-	// Errors: common, ERROR_REASON_VALIDATION.
+	// Errors: common, ERROR_REASON_VALIDATION, ERROR_REASON_NOW_LIMIT_REACHED
+	// (starts_now).
 	CreateEvent(context.Context, *CreateEventRequest) (*CreateEventResponse, error)
 	// CreateInstantEvent creates an instant event (ADR-0032): a hidden tayfa
 	// of kind TAYFA_KIND_INSTANT with the caller as its only admin and this
@@ -596,7 +627,8 @@ type EventServiceServer interface {
 	//
 	// Errors: ERROR_REASON_VALIDATION, ERROR_REASON_INSTANT_EVENT_LIMIT,
 	// ERROR_REASON_USER_NOT_FOUND, ERROR_REASON_NOT_FRIENDS,
-	// ERROR_REASON_DIRECT_INVITE_LIMIT.
+	// ERROR_REASON_DIRECT_INVITE_LIMIT, ERROR_REASON_NOW_LIMIT_REACHED
+	// (event.starts_now).
 	CreateInstantEvent(context.Context, *CreateInstantEventRequest) (*CreateInstantEventResponse, error)
 	// UpdateEvent changes the fields named in update_mask. Raising the
 	// capacity (or removing it) moves the oldest waitlisted RSVPs to GOING in
@@ -605,6 +637,17 @@ type EventServiceServer interface {
 	//
 	// Errors: common, ERROR_REASON_VALIDATION.
 	UpdateEvent(context.Context, *UpdateEventRequest) (*UpdateEventResponse, error)
+	// FinishEvent is the organizer's "Bitir" on their own open-ended event
+	// (Event.open_ended, ADR-0038 §1): the end becomes the server's now and
+	// open_ended false. Participants are not notified; the event's channel
+	// is archived from the new end like after any change of the end. An
+	// open-ended event that is not finished ends by itself at its end_time
+	// (12 hours after the start).
+	//
+	// Errors: common (ERROR_REASON_EVENT_ENDED once it has ended, also when
+	// already finished), ERROR_REASON_EVENT_NOT_OPEN_ENDED for an event that
+	// was not started now.
+	FinishEvent(context.Context, *FinishEventRequest) (*FinishEventResponse, error)
 	// CancelEvent cancels a scheduled event. The event is not deleted: its
 	// members still see it, with the cancellation time and reason. RSVPs
 	// cannot change afterwards.
@@ -780,6 +823,9 @@ func (UnimplementedEventServiceServer) CreateInstantEvent(context.Context, *Crea
 func (UnimplementedEventServiceServer) UpdateEvent(context.Context, *UpdateEventRequest) (*UpdateEventResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateEvent not implemented")
 }
+func (UnimplementedEventServiceServer) FinishEvent(context.Context, *FinishEventRequest) (*FinishEventResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method FinishEvent not implemented")
+}
 func (UnimplementedEventServiceServer) CancelEvent(context.Context, *CancelEventRequest) (*CancelEventResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CancelEvent not implemented")
 }
@@ -920,6 +966,24 @@ func _EventService_UpdateEvent_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(EventServiceServer).UpdateEvent(ctx, req.(*UpdateEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EventService_FinishEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FinishEventRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).FinishEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_FinishEvent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).FinishEvent(ctx, req.(*FinishEventRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1356,6 +1420,10 @@ var EventService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateEvent",
 			Handler:    _EventService_UpdateEvent_Handler,
+		},
+		{
+			MethodName: "FinishEvent",
+			Handler:    _EventService_FinishEvent_Handler,
 		},
 		{
 			MethodName: "CancelEvent",

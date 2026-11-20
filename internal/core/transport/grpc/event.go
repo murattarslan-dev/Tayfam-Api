@@ -24,6 +24,7 @@ type Events interface {
 	Create(ctx context.Context, user, t id.ID, in event.Input) (event.Event, error)
 	Update(ctx context.Context, user, t, e id.ID, fields []string, in event.Input) (event.Event, error)
 	Cancel(ctx context.Context, user, t, e id.ID, reason string) (event.Event, error)
+	Finish(ctx context.Context, user, t, e id.ID) (event.Event, error)
 	Get(ctx context.Context, user, t, e id.ID) (event.Event, error)
 	ListUpcoming(ctx context.Context, user, t id.ID, pageSize int32, pageToken string) ([]event.Event, string, error)
 	SetRSVP(ctx context.Context, user, t, e id.ID, status string) (string, error)
@@ -109,7 +110,7 @@ func createInput(req *corev1.CreateEventRequest) (event.Input, error) {
 		Type: typ, Title: req.GetTitle(), Description: req.GetDescription(),
 		StartsAt: timeOf(req.GetStartTime()), EndsAt: timeOf(req.GetEndTime()), Location: loc,
 		Capacity: req.GetCapacity(), Discoverable: req.GetDiscoverable(), Fields: fields,
-		ClientRequestID: req.GetClientRequestId(),
+		ClientRequestID: req.GetClientRequestId(), StartsNow: req.GetStartsNow(),
 	}
 	if r := req.GetRecurrence(); r != nil {
 		in.Recurrence = &event.Recurrence{RRule: r.GetRrule(), TimeZone: r.GetTimeZone()}
@@ -232,6 +233,19 @@ func (s *EventServer) CancelEvent(ctx context.Context, req *corev1.CancelEventRe
 		return nil, errorStatus(ctx, s.log, err)
 	}
 	return &corev1.CancelEventResponse{Event: eventToProto(v)}, nil
+}
+
+// FinishEvent implements corev1.EventServiceServer.
+func (s *EventServer) FinishEvent(ctx context.Context, req *corev1.FinishEventRequest) (*corev1.FinishEventResponse, error) {
+	user, t, e, err := scope(ctx, req.GetTayfaId(), ptr(req.GetEventId()))
+	if err != nil {
+		return nil, err
+	}
+	v, err := s.app.Finish(ctx, user, t, e)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.FinishEventResponse{Event: eventToProto(v)}, nil
 }
 
 // GetEvent implements corev1.EventServiceServer.
@@ -445,6 +459,7 @@ func eventToProto(v event.Event) *corev1.Event {
 		CallerRsvp: rsvpToProto(v.CallerRSVP), CallerCanManage: v.CallerCanManage,
 		CallerAttendance: attendanceToProto(v.CallerAttendance),
 		CoverUploadId:    optionalID(v.CoverUploadID),
+		OpenEnded:        v.OpenEnded,
 	}
 	switch v.Mode {
 	case event.ModeInPerson:

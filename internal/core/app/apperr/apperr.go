@@ -248,6 +248,15 @@ var (
 	ErrAlbumConsentRequired = errors.New("albüm için izin onayı gerekli")
 )
 
+// Şimdi başlat errors (issue #263; ADR-0038 §1, §2).
+var (
+	// ErrNowLimitReached: the caller already organizes an open now event
+	// (at most one at a time, in tayfas and instant events together).
+	ErrNowLimitReached = errors.New("açık şimdi etkinliği sınırı")
+	// ErrEventNotOpenEnded: "Bitir" on an event that was not started now.
+	ErrEventNotOpenEnded = errors.New("etkinlik açık uçlu değil")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (

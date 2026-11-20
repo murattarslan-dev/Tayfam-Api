@@ -69,6 +69,27 @@ func (q *Queries) CountGoing(ctx context.Context, eventID pgtype.UUID) (int64, e
 	return count, err
 }
 
+const countOpenNowEvents = `-- name: CountOpenNowEvents :one
+SELECT count(*) FROM events e
+JOIN tayfas t ON t.id = e.tayfa_id
+WHERE e.created_by = $1 AND e.open_ended AND e.deleted_at IS NULL
+  AND e.status = 'scheduled' AND e.ends_at > $2 AND t.deleted_at IS NULL
+`
+
+type CountOpenNowEventsParams struct {
+	CreatedBy pgtype.UUID
+	Now       pgtype.Timestamptz
+}
+
+// Kullanıcının açık şimdi etkinlikleri: bitmemiş (Bitir denmemiş ve 12
+// saat dolmamış), iptal edilmemiş, silinmemiş; tayfası da silinmemiş.
+func (q *Queries) CountOpenNowEvents(ctx context.Context, arg CountOpenNowEventsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOpenNowEvents, arg.CreatedBy, arg.Now)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countRsvpsForEvents = `-- name: CountRsvpsForEvents :many
 
 SELECT event_id, status, count(*) AS n FROM event_rsvps
@@ -109,11 +130,11 @@ const createEvent = `-- name: CreateEvent :exec
 INSERT INTO events (
   id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
   meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
-  capacity, discoverable, created_by, client_request_id
+  capacity, discoverable, created_by, client_request_id, open_ended
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7, $8, $9,
   $10, $11, $12, $13, $14, $15,
-  $16, $17, $18, $19
+  $16, $17, $18, $19, $20
 )
 `
 
@@ -137,6 +158,7 @@ type CreateEventParams struct {
 	Discoverable     bool
 	CreatedBy        pgtype.UUID
 	ClientRequestID  pgtype.UUID
+	OpenEnded        bool
 }
 
 // Etkinlikler (issue #49). Her sorgu tayfa_id ile ya da tayfa kapsamında
@@ -163,6 +185,7 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) error 
 		arg.Discoverable,
 		arg.CreatedBy,
 		arg.ClientRequestID,
+		arg.OpenEnded,
 	)
 	return err
 }
@@ -176,11 +199,33 @@ func (q *Queries) DeleteEventFieldValues(ctx context.Context, eventID pgtype.UUI
 	return err
 }
 
+const finishEvent = `-- name: FinishEvent :execrows
+UPDATE events SET ends_at = $1, open_ended = false
+WHERE tayfa_id = $2 AND id = $3 AND deleted_at IS NULL
+  AND status = 'scheduled' AND open_ended
+`
+
+type FinishEventParams struct {
+	EndsAt  pgtype.Timestamptz
+	TayfaID pgtype.UUID
+	ID      pgtype.UUID
+}
+
+// Şimdi başlat (issue #263, ADR-0038 §1): organizatör "Bitir" der; bitiş
+// o an olur, açık uçluluk kalkar. Yalnızca planlı, açık uçlu etkinlikte.
+func (q *Queries) FinishEvent(ctx context.Context, arg FinishEventParams) (int64, error) {
+	result, err := q.db.Exec(ctx, finishEvent, arg.EndsAt, arg.TayfaID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getEvent = `-- name: GetEvent :one
 SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
-       created_by, created_at, updated_at, cover_upload_id
+       created_by, created_at, updated_at, cover_upload_id, open_ended
 FROM events
 WHERE tayfa_id = $1 AND id = $2 AND deleted_at IS NULL
 `
@@ -217,6 +262,7 @@ type GetEventRow struct {
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	CoverUploadID    pgtype.UUID
+	OpenEnded        bool
 }
 
 func (q *Queries) GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow, error) {
@@ -249,6 +295,7 @@ func (q *Queries) GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CoverUploadID,
+		&i.OpenEnded,
 	)
 	return i, err
 }
@@ -281,7 +328,7 @@ const getEventForUpdate = `-- name: GetEventForUpdate :one
 SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
-       created_by, created_at, updated_at, cover_upload_id
+       created_by, created_at, updated_at, cover_upload_id, open_ended
 FROM events
 WHERE tayfa_id = $1 AND id = $2 AND deleted_at IS NULL
 FOR UPDATE
@@ -319,6 +366,7 @@ type GetEventForUpdateRow struct {
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	CoverUploadID    pgtype.UUID
+	OpenEnded        bool
 }
 
 // Katılım ve düzenleme aynı etkinlik satırını kilitleyerek okur; kapasite
@@ -353,6 +401,7 @@ func (q *Queries) GetEventForUpdate(ctx context.Context, arg GetEventForUpdatePa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CoverUploadID,
+		&i.OpenEnded,
 	)
 	return i, err
 }
@@ -478,7 +527,7 @@ const listUpcomingEvents = `-- name: ListUpcomingEvents :many
 SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
-       created_by, created_at, updated_at, cover_upload_id
+       created_by, created_at, updated_at, cover_upload_id, open_ended
 FROM events
 WHERE tayfa_id = $1
   AND deleted_at IS NULL
@@ -523,6 +572,7 @@ type ListUpcomingEventsRow struct {
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	CoverUploadID    pgtype.UUID
+	OpenEnded        bool
 }
 
 // Bitmemiş etkinlikler, başlangıç zamanına göre; (starts_at, id) ile
@@ -569,6 +619,7 @@ func (q *Queries) ListUpcomingEvents(ctx context.Context, arg ListUpcomingEvents
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.CoverUploadID,
+			&i.OpenEnded,
 		); err != nil {
 			return nil, err
 		}
@@ -614,6 +665,18 @@ func (q *Queries) ListUserRsvpsForEvents(ctx context.Context, arg ListUserRsvpsF
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockNowEventCreation = `-- name: LockNowEventCreation :exec
+SELECT pg_advisory_xact_lock(hashtextextended('tayfam.core.now_event:' || $1::uuid::text, 0))
+`
+
+// Aynı kullanıcının şimdi etkinliği açan istekleri (tayfa içi ve anlık)
+// sırayla işlenir; kişi başı 1 açık şimdi etkinliği sınırı iki istekte
+// birden aşılamaz. Kilit transaction bitince bırakılır.
+func (q *Queries) LockNowEventCreation(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, lockNowEventCreation, userID)
+	return err
 }
 
 const nextWaitlisted = `-- name: NextWaitlisted :many

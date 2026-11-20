@@ -175,6 +175,7 @@ type Event struct {
 	UpdatedAt        pgtype.Timestamptz
 	CoverUploadID    pgtype.UUID
 	TypeVersion      int32
+	OpenEnded        bool
 }
 
 type EventBadgeRun struct {
@@ -780,6 +781,7 @@ type Tayfa struct {
 	CoverUploadID          pgtype.UUID
 	Kind                   string
 	ConvertedAt            pgtype.Timestamptz
+	NowCreateMinRole       string
 }
 
 type TayfaBadge struct {

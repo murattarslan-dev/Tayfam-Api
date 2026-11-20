@@ -424,6 +424,9 @@ type tayfaUpdateBody struct {
 	JoinPolicy  *string   `json:"join_policy"`
 	// MembersCanCreateEvents lets every active member create events.
 	MembersCanCreateEvents *bool `json:"members_can_create_events"`
+	// NowCreateMinRole: the lowest role that may start an event now
+	// (ADR-0038 §2).
+	NowCreateMinRole *string `json:"now_create_min_role"`
 	// CoverUploadID: a READY cover upload of the caller; "" removes the
 	// cover (issue #135).
 	CoverUploadID *string `json:"cover_upload_id"`
@@ -472,6 +475,15 @@ func (h coreHandlers) updateTayfa(ctx context.Context, w http.ResponseWriter, r 
 	if b.MembersCanCreateEvents != nil {
 		req.MembersCanCreateEvents = *b.MembersCanCreateEvents
 		req.UpdateMask.Paths = append(req.UpdateMask.Paths, "members_can_create_events")
+	}
+	if b.NowCreateMinRole != nil {
+		v, ok := roles.value(*b.NowCreateMinRole)
+		if !ok {
+			badRequest(w, r)
+			return
+		}
+		req.NowCreateMinRole = v
+		req.UpdateMask.Paths = append(req.UpdateMask.Paths, "now_create_min_role")
 	}
 	if b.CoverUploadID != nil {
 		if *b.CoverUploadID != "" && !validUUID(*b.CoverUploadID) {
