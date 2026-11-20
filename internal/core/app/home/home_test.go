@@ -494,7 +494,7 @@ func TestChampions(t *testing.T) {
 	e.celebrated(t, other, cupType, "Başka tayfa", now.Add(-24*time.Hour), u1) // another tayfa
 	e.celebrated(t, tf, cupType, "Gelecek", now.Add(24*time.Hour), u1)         // not started
 	cancelled := e.celebrated(t, tf, cupType, "İptal", now.Add(-24*time.Hour), u1)
-	e.exec(t, `UPDATE events SET cancelled_at = now() WHERE id = $1`, cancelled.PG())
+	e.exec(t, `UPDATE events SET status = 'cancelled', cancelled_at = now() WHERE id = $1`, cancelled.PG())
 
 	items, err := e.svc.Layout(ctx, admin, tf)
 	must(t, err)
