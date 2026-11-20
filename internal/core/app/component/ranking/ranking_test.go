@@ -289,6 +289,8 @@ func TestRankingByHand(t *testing.T) {
 	bystander := e.member(t, tf, authz.Member)
 	_, err := e.fw.AssignReferee(ctx, organizer, tf, ev.ID, component.RefereeInput{User: referee, ComponentKey: key})
 	must(t, err)
+	// The assignment is a change of its own.
+	base := e.changes(t, ev.ID, key)
 
 	got, err := e.rankings.Get(ctx, ref(bystander, tf, ev.ID, key))
 	must(t, err)
@@ -330,13 +332,13 @@ func TestRankingByHand(t *testing.T) {
 	if p := places(got.Entries); p[b] != 1 || p[c] != 1 || p[a] != 3 {
 		t.Fatalf("yerler: %v", p)
 	}
-	if n := e.changes(t, ev.ID, key); n != 3 {
+	if n := e.changes(t, ev.ID, key) - base; n != 3 {
 		t.Fatalf("canlı güncelleme = %d", n)
 	}
 	// The same value again changes nothing.
 	_, err = e.rankings.SetEntry(ctx, ref(referee, tf, ev.ID, key), c, 59.5)
 	must(t, err)
-	if n := e.changes(t, ev.ID, key); n != 3 {
+	if n := e.changes(t, ev.ID, key) - base; n != 3 {
 		t.Fatalf("aynı değer canlı güncelleme yazdı: %d", n)
 	}
 
@@ -370,7 +372,7 @@ func TestRankingByHand(t *testing.T) {
 	// Removing what is not there is not an error and changes nothing.
 	_, err = e.rankings.RemoveEntry(ctx, ref(referee, tf, ev.ID, key), b)
 	must(t, err)
-	if n := e.changes(t, ev.ID, key); n != 4 {
+	if n := e.changes(t, ev.ID, key) - base; n != 4 {
 		t.Fatalf("canlı güncelleme = %d", n)
 	}
 	_, err = e.rankings.RemoveEntry(ctx, ref(a, tf, ev.ID, key), a)
