@@ -165,6 +165,7 @@ type Querier interface {
 	// Sorular ve cevaplar kalır, yazar "Silinmiş kullanıcı" olur (v14
 	// "İlişkiler ve Silme Davranışı").
 	ClearQuestionUserFields(ctx context.Context, userID pgtype.UUID) error
+	ClearRankingEntryEnteredBy(ctx context.Context, userID pgtype.UUID) error
 	// ---------------------------------------------------------------------------
 	// Hesap silme (SetSystemJob('account_deletion') sonrası)
 	// ---------------------------------------------------------------------------
@@ -342,6 +343,7 @@ type Querier interface {
 	DeleteEventMeasurement(ctx context.Context, arg DeleteEventMeasurementParams) (int64, error)
 	DeleteEventMeasurementTotal(ctx context.Context, arg DeleteEventMeasurementTotalParams) (int64, error)
 	DeleteEventPhoto(ctx context.Context, arg DeleteEventPhotoParams) (int64, error)
+	DeleteEventRankingEntry(ctx context.Context, arg DeleteEventRankingEntryParams) (int64, error)
 	DeleteEventReferee(ctx context.Context, arg DeleteEventRefereeParams) (int64, error)
 	DeleteEventRoute(ctx context.Context, arg DeleteEventRouteParams) (int64, error)
 	// Bileşen bir kapsamı (masa, maç) silerken o kapsamın hakem atamalarını da
@@ -433,6 +435,9 @@ type Querier interface {
 	// ölçüm etkinliğindir: kalır, yazan boşalır (issue #245; ADR-0025 §11).
 	DeleteUserMeasurements(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserPollVotes(ctx context.Context, userID pgtype.UUID) error
+	// Elle girilen derecesi kişiye aittir; kişiyle birlikte silinir. Başkasının
+	// derecesini girdiyse derece kalır, yazan boşalır (issue #253).
+	DeleteUserRankingEntries(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserRequestOutcomes(ctx context.Context, userID pgtype.UUID) error
 	// Yoklama satırları (`roll_call` bileşeni, issue #242) kişiye aittir.
 	DeleteUserRollCallCheckins(ctx context.Context, userID pgtype.UUID) error
@@ -556,6 +561,10 @@ type Querier interface {
 	ExportPollVotes(ctx context.Context, arg ExportPollVotesParams) ([]ExportPollVotesRow, error)
 	ExportPolls(ctx context.Context, arg ExportPollsParams) ([]ExportPollsRow, error)
 	ExportQuestions(ctx context.Context, arg ExportQuestionsParams) ([]ExportQuestionsRow, error)
+	// Elle girilen dereceleriniz (`ranking` bileşeni, issue #253): organizatörün
+	// ya da hakemin sizin adınıza girdiği süre ya da sıra. Kimin girdiği yer
+	// almaz; ölçümden hesaplanan dereceler ölçümlerinizdedir (measurements).
+	ExportRankingEntries(ctx context.Context, arg ExportRankingEntriesParams) ([]ExportRankingEntriesRow, error)
 	// Şikâyeti işleyen, öncelik ve platform alanları girmez (ADR-0021 madde 7).
 	ExportReports(ctx context.Context, arg ExportReportsParams) ([]ExportReportsRow, error)
 	// Yazbozdaki yerleriniz ve skorlarınız (`scoreboard` bileşeni, issue #250):
@@ -659,6 +668,7 @@ type Querier interface {
 	// Yetki, pencere ve sınırlar uygulama katmanında; trigger'lar ikinci hat
 	// (00023_event_photos.sql).
 	GetEventPhotoByClientRequest(ctx context.Context, arg GetEventPhotoByClientRequestParams) (GetEventPhotoByClientRequestRow, error)
+	GetEventRankingEntry(ctx context.Context, arg GetEventRankingEntryParams) (GetEventRankingEntryRow, error)
 	// Rota bileşeni (`route`; issue #239; ADR-0025 §4). Etkinlik her zaman önce
 	// tayfa kapsamında yüklenir ve bileşen etkinliğin tür sürümünde çözülür
 	// (internal/core/app/component: View / Change); buradaki sorgular o
@@ -917,6 +927,16 @@ type Querier interface {
 	ListEventMeasurements(ctx context.Context, arg ListEventMeasurementsParams) ([]ListEventMeasurementsRow, error)
 	// (created_at, id) ile sayfalanır, eskiden yeniye.
 	ListEventPhotos(ctx context.Context, arg ListEventPhotosParams) ([]ListEventPhotosRow, error)
+	// Derece / sıralama bileşeni (`ranking`; issue #253; ADR-0025 §4, §5; ADR-0037
+	// §3). Etkinlik her zaman önce tayfa kapsamında yüklenir ve bileşen etkinliğin
+	// tür sürümünde çözülür (internal/core/app/component: View / Change); buradaki
+	// sorgular o etkinliğin kimliği ve bileşenin anahtarıyla çalışır (IDOR). Yetki,
+	// sınırlar ve sıralama app katmanındadır (internal/core/app/component/ranking).
+	// Ölçümden hesaplanan derece ölçümün sorgularını okur (component_measure.sql).
+	// Değerler float8 olarak okunur ve yazılır; kolon numeric(13, 3)'tür.
+	// (updated_at, id) sırasıyla; bir etkinliğin dereceleri katılımcı sayısıyla
+	// sınırlıdır.
+	ListEventRankingEntries(ctx context.Context, arg ListEventRankingEntriesParams) ([]ListEventRankingEntriesRow, error)
 	// ---------------------------------------------------------------------------
 	// Hakemler
 	ListEventReferees(ctx context.Context, eventID pgtype.UUID) ([]ListEventRefereesRow, error)
@@ -1307,6 +1327,7 @@ type Querier interface {
 	SetEventGoal(ctx context.Context, arg SetEventGoalParams) error
 	SetEventMeasurement(ctx context.Context, arg SetEventMeasurementParams) error
 	SetEventMeasurementTotal(ctx context.Context, arg SetEventMeasurementTotalParams) error
+	SetEventRankingEntry(ctx context.Context, arg SetEventRankingEntryParams) error
 	// Rota app katmanında doğrulanmış haliyle yazılır; event_routes_points
 	// CHECK'i ve event_component_guard aynı kuralları ayrıca denetler.
 	SetEventRoute(ctx context.Context, arg SetEventRouteParams) error
