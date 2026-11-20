@@ -506,4 +506,12 @@ enum ErrorReason {
   ERROR_REASON_INVALID_JOIN_QR = 2640;
   // RESOURCE_EXHAUSTED. The event already had 30 joins by QR.
   ERROR_REASON_JOIN_QR_LIMIT_REACHED = 2641;
+
+  // Şimdi bildirimi (ADR-0038 §4; issue #265: 2650–2659).
+
+  // RESOURCE_EXHAUSTED. CreateInstantEvent with now_recipient_ids when the
+  // caller already sent 2 now broadcasts to friends today (Europe/Istanbul
+  // day). Nothing is created; without now_recipient_ids the event can be
+  // started.
+  ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED = 2650;
 }

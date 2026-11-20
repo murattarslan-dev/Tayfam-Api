@@ -99,6 +99,15 @@ enum NotificationType {
   // tayfa); a tayfa badge goes to the tayfa's admins and moderators
   // (target: TAYFA). In-app only: no push is sent for it.
   NOTIFICATION_TYPE_BADGE_EARNED = 25;
+  // A now event started (issue #265, ADR-0038 §4; target: EVENT; the actor
+  // is its organizer). A tayfa's now event goes to its active members but
+  // the organizer and anyone blocked with the organizer either way, at
+  // most 3 a day per tayfa; an instant now event goes to the friends the
+  // organizer chose, who are invited directly (accepting the tayfa's
+  // invitation joins). Never a title, type, place or name; the push holds
+  // the push_now_started_title / _body keys only. Muted with the tayfa's
+  // level NONE or with its NOTIFICATION_SCOPE_TYPE_TAYFA_NOW preference.
+  NOTIFICATION_TYPE_NOW_STARTED = 26;
 }
 
 enum NotificationTargetType {

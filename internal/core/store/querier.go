@@ -400,6 +400,7 @@ type Querier interface {
 	DeleteOldInvitationOutcomes(ctx context.Context, before pgtype.Timestamptz) (int64, error)
 	// 1 günden eski token'lar (ADR-0038 §5; retention işi).
 	DeleteOldJoinQRTokens(ctx context.Context, createdBefore pgtype.Timestamptz) (int64, error)
+	DeleteOldNowCounters(ctx context.Context, before pgtype.Date) (int64, error)
 	// Saklama: 365 günden eski kapatılmamış satırlar (kapatılmışlar kalır).
 	DeleteOldOpenFriendSuggestions(ctx context.Context, before pgtype.Timestamptz) (int64, error)
 	// ---------------------------------------------------------------------------
@@ -475,6 +476,7 @@ type Querier interface {
 	// Kişisel ölçüm değerleri kişiye aittir; kişiyle birlikte silinir. Toplam
 	// ölçüm etkinliğindir: kalır, yazan boşalır (issue #245; ADR-0025 §11).
 	DeleteUserMeasurements(ctx context.Context, userID pgtype.UUID) error
+	DeleteUserNowCounters(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserPollVotes(ctx context.Context, userID pgtype.UUID) error
 	// Elle girilen derecesi kişiye aittir; kişiyle birlikte silinir. Başkasının
 	// derecesini girdiyse derece kalır, yazan boşalır (issue #253).
@@ -643,6 +645,12 @@ type Querier interface {
 	// Verilen kullanıcılardan hâlâ etkin üye olanlar (tek alıcılı bildirimler
 	// ve arka plan işlerinin seçtiği alıcılar).
 	FilterNotifyActive(ctx context.Context, arg FilterNotifyActiveParams) ([]pgtype.UUID, error)
+	// Anlık şimdi etkinliğinde organizatörün seçtiği alıcılardan bildirim
+	// alabilecek olanlar: gönderenin kabul edilmiş arkadaşı, iki yönden engel
+	// yok, hesabı silinmemiş ve platform banlı değil, alıcının
+	// now_from_friends ayarı izin veriyor (all; close'ta gönderen alıcının
+	// ilk 20'sinde ya da alıcının profillemesi kapalı; off hiç).
+	FilterNowFriendRecipients(ctx context.Context, arg FilterNowFriendRecipientsParams) ([]pgtype.UUID, error)
 	FindEventReferee(ctx context.Context, arg FindEventRefereeParams) (FindEventRefereeRow, error)
 	// Tayfa sözlüğü (issue #244; ADR-0037 §4). Her sorgu tayfa ve ad alanı
 	// kapsamında çalışır (IDOR); üyelik ve yetki app katmanındadır
@@ -1149,6 +1157,10 @@ type Querier interface {
 	// chat'e bildirir. Yalnızca etkin üyeler; bekleyen, banlı, ayrılmış ya da
 	// hiç üye olmamış kullanıcılar ve işlemi yapan (exclude_user_id) hariç.
 	ListNotifyMembers(ctx context.Context, arg ListNotifyMembersParams) ([]pgtype.UUID, error)
+	// Şimdi bildirimi (issue #265; ADR-0038 §4).
+	// Tayfa şimdi etkinliğinin alıcıları: organizatör dışındaki etkin üyeler;
+	// organizatörle arasında iki yönden herhangi birinde engel olan hariç.
+	ListNotifyNowMembers(ctx context.Context, arg ListNotifyNowMembersParams) ([]pgtype.UUID, error)
 	// Etkinliğe going, maybe ya da waitlist diyen etkin üyeler.
 	ListNotifyParticipants(ctx context.Context, arg ListNotifyParticipantsParams) ([]pgtype.UUID, error)
 	// Yönetici ve moderatörler (başvuru, silme talebi).
@@ -1510,6 +1522,8 @@ type Querier interface {
 	// Toplam ölçümde tek satır (user_id NULL), kişisel ölçümde kişi başına satır;
 	// personal ölçümün kapsamına göre biri seçilir. Değer yoksa 0, count 0.
 	SumEventGoalProgress(ctx context.Context, arg SumEventGoalProgressParams) (SumEventGoalProgressRow, error)
+	// Günlük sayaçtan bir hak alır; sınır doluysa satır dönmez (pgx.ErrNoRows).
+	TakeNowCounter(ctx context.Context, arg TakeNowCounterParams) (int32, error)
 	// Hesap silindi: ad ve avatar temizlenir, satır mezar taşı olarak kalır.
 	// Tekrar uygulanınca sonuç değişmez.
 	TombstoneUserProfile(ctx context.Context, arg TombstoneUserProfileParams) error

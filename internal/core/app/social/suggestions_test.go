@@ -155,6 +155,29 @@ func TestSocialSettings(t *testing.T) {
 	if got != st {
 		t.Fatalf("okunan %+v, yazılan %+v", got, st)
 	}
+
+	// "Şimdi bildirimi kimden" (issue #265; ADR-0038 §4).
+	if st.NowFromFriends != NowFromAll {
+		t.Fatalf("şimdi varsayılanı = %q", st.NowFromFriends)
+	}
+	st, err = e.svc.UpdateSocialSettings(ctx, a, SettingsUpdate{NowFromFriends: NowFromClose})
+	must(t, err)
+	if st.NowFromFriends != NowFromClose || st.ProfilingEnabled || !st.HideFromSuggestions {
+		t.Fatalf("şimdi ayarı: %+v", st)
+	}
+	st, err = e.svc.UpdateSocialSettings(ctx, a, SettingsUpdate{HideFromSuggestions: &off})
+	must(t, err)
+	if st.NowFromFriends != NowFromClose {
+		t.Fatalf("verilmeyen şimdi ayarı değişti: %+v", st)
+	}
+	_, err = e.svc.UpdateSocialSettings(ctx, a, SettingsUpdate{NowFromFriends: "friends"})
+	wantInvalid(t, "bilinmeyen şimdi ayarı", err)
+	b := e.user(t, "Ece")
+	st, err = e.svc.UpdateSocialSettings(ctx, b, SettingsUpdate{NowFromFriends: NowFromOff})
+	must(t, err)
+	if st.NowFromFriends != NowFromOff || !st.ProfilingEnabled || st.HideFromSuggestions || !st.DiscoverVisibleToFriends {
+		t.Fatalf("ilk satır şimdi ayarıyla: %+v", st)
+	}
 }
 
 // TestHideFromSuggestionsDeletesOpenOnes: turning "Beni önerme" on removes

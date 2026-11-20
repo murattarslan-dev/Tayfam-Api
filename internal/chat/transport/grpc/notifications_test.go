@@ -65,6 +65,11 @@ func (f *fakeNotifications) SetTayfaPreference(_ context.Context, caller, tayfa 
 	return notification.Preference{ScopeType: notification.ScopeTayfa, Scope: tayfa, Level: level, MutedUntil: until}, nil
 }
 
+func (f *fakeNotifications) SetTayfaNowPreference(_ context.Context, caller, tayfa id.ID, level string, until time.Time) (notification.Preference, error) {
+	f.caller, f.scope, f.level, f.until = caller, tayfa, level, until
+	return notification.Preference{ScopeType: notification.ScopeTayfaNow, Scope: tayfa, Level: level, MutedUntil: until}, nil
+}
+
 func (f *fakeNotifications) SetConversationPreference(_ context.Context, caller, conversation id.ID, level string, until time.Time) (notification.Preference, error) {
 	f.caller, f.scope, f.level, f.until = caller, conversation, level, until
 	if f.convErr != nil {
@@ -166,6 +171,17 @@ func TestNotificationServiceCaller(t *testing.T) {
 	}
 	if _, err := client.SetTayfaNotificationPreference(ctx, &chatv1.SetTayfaNotificationPreferenceRequest{TayfaId: tf.String()}); status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("seviyesiz: %v", err)
+	}
+	// The tayfa's now notifications (issue #265): their own scope.
+	app.scope = id.ID{}
+	p, err = client.SetTayfaNotificationPreference(ctx, &chatv1.SetTayfaNotificationPreferenceRequest{
+		TayfaId: tf.String(), Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_NONE, Now: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if app.scope != tf || p.GetPreference().GetScopeType() != chatv1.NotificationScopeType_NOTIFICATION_SCOPE_TYPE_TAYFA_NOW {
+		t.Fatalf("şimdi tercihi = %v", p)
 	}
 }
 

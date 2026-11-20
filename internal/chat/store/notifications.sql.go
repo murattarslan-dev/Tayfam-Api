@@ -123,9 +123,10 @@ func (q *Queries) DeleteOldNotifications(ctx context.Context, arg DeleteOldNotif
 }
 
 const deleteTayfaNotificationPreferences = `-- name: DeleteTayfaNotificationPreferences :exec
-DELETE FROM notification_preferences WHERE scope_type = 'tayfa' AND scope_id = $1
+DELETE FROM notification_preferences WHERE scope_type IN ('tayfa', 'tayfa_now') AND scope_id = $1
 `
 
+// Tayfanın genel ve "Şimdi bildirimleri" (tayfa_now, issue #265) tercihleri.
 func (q *Queries) DeleteTayfaNotificationPreferences(ctx context.Context, tayfaID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteTayfaNotificationPreferences, tayfaID)
 	return err

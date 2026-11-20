@@ -406,22 +406,32 @@ type friendSuggestionListJSON struct {
 }
 
 type socialSettingsJSON struct {
-	ProfilingEnabled         bool `json:"profiling_enabled"`
-	HideFromSuggestions      bool `json:"hide_from_suggestions"`
-	DiscoverVisibleToFriends bool `json:"discover_visible_to_friends"`
+	ProfilingEnabled         bool   `json:"profiling_enabled"`
+	HideFromSuggestions      bool   `json:"hide_from_suggestions"`
+	DiscoverVisibleToFriends bool   `json:"discover_visible_to_friends"`
+	NowFromFriends           string `json:"now_from_friends"`
 }
 
 // socialSettingsPatch is SocialSettingsUpdate: absent fields stay.
 type socialSettingsPatch struct {
-	ProfilingEnabled         *bool `json:"profiling_enabled"`
-	HideFromSuggestions      *bool `json:"hide_from_suggestions"`
-	DiscoverVisibleToFriends *bool `json:"discover_visible_to_friends"`
+	ProfilingEnabled         *bool   `json:"profiling_enabled"`
+	HideFromSuggestions      *bool   `json:"hide_from_suggestions"`
+	DiscoverVisibleToFriends *bool   `json:"discover_visible_to_friends"`
+	NowFromFriends           *string `json:"now_from_friends"`
+}
+
+// nowFromFriendsNames: SocialSettings.now_from_friends (ADR-0038 §4).
+var nowFromFriendsNames = map[corev1.NowFromFriends]string{
+	corev1.NowFromFriends_NOW_FROM_FRIENDS_ALL:   "all",
+	corev1.NowFromFriends_NOW_FROM_FRIENDS_CLOSE: "close",
+	corev1.NowFromFriends_NOW_FROM_FRIENDS_OFF:   "off",
 }
 
 func socialSettingsFrom(s *corev1.SocialSettings) socialSettingsJSON {
 	return socialSettingsJSON{
 		ProfilingEnabled: s.GetProfilingEnabled(), HideFromSuggestions: s.GetHideFromSuggestions(),
 		DiscoverVisibleToFriends: s.GetDiscoverVisibleToFriends(),
+		NowFromFriends:           nameOr(nowFromFriendsNames, s.GetNowFromFriends()),
 	}
 }
 
@@ -467,13 +477,25 @@ func (h coreHandlers) updateSocialSettings(ctx context.Context, w http.ResponseW
 	if !decode(w, r, &b) {
 		return
 	}
-	if b.ProfilingEnabled == nil && b.HideFromSuggestions == nil && b.DiscoverVisibleToFriends == nil {
+	if b.ProfilingEnabled == nil && b.HideFromSuggestions == nil && b.DiscoverVisibleToFriends == nil && b.NowFromFriends == nil {
 		badRequest(w, r)
 		return
 	}
+	var nowFrom corev1.NowFromFriends
+	if b.NowFromFriends != nil {
+		for k, v := range nowFromFriendsNames {
+			if v == *b.NowFromFriends {
+				nowFrom = k
+			}
+		}
+		if nowFrom == corev1.NowFromFriends_NOW_FROM_FRIENDS_UNSPECIFIED {
+			badRequest(w, r)
+			return
+		}
+	}
 	resp, err := h.d.Social.UpdateSocialSettings(ctx, &corev1.UpdateSocialSettingsRequest{
 		ProfilingEnabled: b.ProfilingEnabled, HideFromSuggestions: b.HideFromSuggestions,
-		DiscoverVisibleToFriends: b.DiscoverVisibleToFriends,
+		DiscoverVisibleToFriends: b.DiscoverVisibleToFriends, NowFromFriends: nowFrom,
 	})
 	if err != nil {
 		h.fail(w, r, err)

@@ -237,9 +237,14 @@ func (b eventCreateBody) request(tayfaID string) (*corev1.CreateEventRequest, bo
 // event (ADR-0032).
 const maxInstantInvitees = 10
 
+// maxNowRecipients is core's limit on the friends of a now broadcast
+// (ADR-0038 §4).
+const maxNowRecipients = 30
+
 type instantEventBody struct {
-	Event          *eventCreateBody `json:"event"`
-	InviteeUserIDs []string         `json:"invitee_user_ids"`
+	Event           *eventCreateBody `json:"event"`
+	InviteeUserIDs  []string         `json:"invitee_user_ids"`
+	NowRecipientIDs []string         `json:"now_recipient_ids"`
 }
 
 type instantEventJSON struct {
@@ -255,14 +260,17 @@ func (h coreHandlers) createInstantEvent(ctx context.Context, w http.ResponseWri
 	if !decodeLimit(w, r, &b, maxEventBody) {
 		return
 	}
-	if b.Event == nil || b.Event.Recurrence != nil || b.Event.CoverUploadID != "" || len(b.InviteeUserIDs) > maxInstantInvitees {
+	if b.Event == nil || b.Event.Recurrence != nil || b.Event.CoverUploadID != "" || len(b.InviteeUserIDs) > maxInstantInvitees ||
+		len(b.NowRecipientIDs) > maxNowRecipients || (len(b.NowRecipientIDs) > 0 && !b.Event.StartsNow) {
 		badRequest(w, r)
 		return
 	}
-	for _, u := range b.InviteeUserIDs {
-		if !validUUID(u) {
-			badRequest(w, r)
-			return
+	for _, list := range [][]string{b.InviteeUserIDs, b.NowRecipientIDs} {
+		for _, u := range list {
+			if !validUUID(u) {
+				badRequest(w, r)
+				return
+			}
 		}
 	}
 	er, ok := b.Event.request("")
@@ -270,7 +278,7 @@ func (h coreHandlers) createInstantEvent(ctx context.Context, w http.ResponseWri
 		badRequest(w, r)
 		return
 	}
-	resp, err := h.d.Events.CreateInstantEvent(ctx, &corev1.CreateInstantEventRequest{Event: er, InviteeUserIds: b.InviteeUserIDs})
+	resp, err := h.d.Events.CreateInstantEvent(ctx, &corev1.CreateInstantEventRequest{Event: er, InviteeUserIds: b.InviteeUserIDs, NowRecipientIds: b.NowRecipientIDs})
 	if err != nil {
 		h.fail(w, r, err)
 		return

@@ -28,6 +28,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
@@ -79,6 +80,11 @@ func (s *Service) now() time.Time { return s.cfg.Now().UTC().Truncate(time.Micro
 type Input struct {
 	Event    event.Input
 	Invitees []id.ID
+	// NowRecipients: with Event.StartsNow, the friends the organizer chose
+	// to tell that the event started (ADR-0038 §4; at most
+	// notify.MaxNowRecipients, none of Invitees). They are invited with a
+	// now_started notification (membership.Service.InviteNowTx).
+	NowRecipients []id.ID
 }
 
 // Result is the created (or, on a retry, the first created) tayfa and
@@ -104,10 +110,22 @@ func (s *Service) Create(ctx context.Context, user id.ID, in Input) (Result, err
 	if len(in.Invitees) > MaxInvitees {
 		return Result{}, apperr.Validation("invitee_user_ids")
 	}
-	seen := make(map[id.ID]bool, len(in.Invitees))
+	seen := make(map[id.ID]bool, len(in.Invitees)+len(in.NowRecipients))
 	for _, u := range in.Invitees {
 		if u == (id.ID{}) || u == user || seen[u] {
 			return Result{}, apperr.Validation("invitee_user_ids")
+		}
+		seen[u] = true
+	}
+	if len(in.NowRecipients) > 0 && !in.Event.StartsNow {
+		return Result{}, apperr.Validation("now_recipient_ids")
+	}
+	if len(in.NowRecipients) > notify.MaxNowRecipients {
+		return Result{}, apperr.Validation("now_recipient_ids")
+	}
+	for _, u := range in.NowRecipients {
+		if u == (id.ID{}) || u == user || seen[u] {
+			return Result{}, apperr.Validation("now_recipient_ids")
 		}
 		seen[u] = true
 	}
@@ -158,6 +176,17 @@ func (s *Service) Create(ctx context.Context, user id.ID, in Input) (Result, err
 		if n >= MaxPerDay {
 			return apperr.ErrInstantEventLimit
 		}
+		// A now broadcast counts whoever is left out of it, so that the
+		// limit tells nothing about the recipients (ADR-0038 §4).
+		if len(in.NowRecipients) > 0 {
+			ok, err := notify.TakeNowBroadcast(ctx, q, user, now)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return apperr.ErrNowBroadcastLimit
+			}
+		}
 
 		tayfaID = id.New()
 		if err := tayfa.WithJoinCode(ctx, tx, func(q *store.Queries, code string) error {
@@ -195,6 +224,11 @@ func (s *Service) Create(ctx context.Context, user id.ID, in Input) (Result, err
 		}
 		for _, u := range in.Invitees {
 			if _, err := s.cfg.Memberships.InviteFriendTx(ctx, q, user, tayfaID, u); err != nil {
+				return err
+			}
+		}
+		if len(in.NowRecipients) > 0 {
+			if _, err := s.cfg.Memberships.InviteNowTx(ctx, q, user, tayfaID, eventID, in.NowRecipients); err != nil {
 				return err
 			}
 		}

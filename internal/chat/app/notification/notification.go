@@ -50,6 +50,9 @@ const (
 	ScopeTayfa = "tayfa"
 	// ScopeDMConversation: a direct conversation of the user (issue #138).
 	ScopeDMConversation = "dm_conversation"
+	// ScopeTayfaNow: a tayfa's "Şimdi bildirimleri" (issue #265; ADR-0038
+	// §4), level all or none.
+	ScopeTayfaNow = "tayfa_now"
 )
 
 // Notification is one notification of the caller.
@@ -298,6 +301,26 @@ func (s *Service) Preferences(ctx context.Context, caller id.ID) ([]Preference, 
 // sending push notifications.
 func (s *Service) SetTayfaPreference(ctx context.Context, caller, tayfa id.ID, level string, until time.Time) (Preference, error) {
 	return s.setPreference(ctx, caller, ScopeTayfa, tayfa, level, until, func() error {
+		ok, err := s.cfg.Members.IsActiveMember(ctx, tayfa, caller)
+		if err != nil {
+			return fmt.Errorf("üyelik: %w", err)
+		}
+		if !ok {
+			return apperr.ErrTayfaNotFound
+		}
+		return nil
+	})
+}
+
+// SetTayfaNowPreference sets whether the caller hears about the now events
+// of a tayfa they are an active member of (issue #265; ADR-0038 §4): level
+// all or none, with the rules of SetTayfaPreference. Level mentions is
+// refused. Like every preference it mutes pushes only.
+func (s *Service) SetTayfaNowPreference(ctx context.Context, caller, tayfa id.ID, level string, until time.Time) (Preference, error) {
+	if level == LevelMentions {
+		return Preference{}, invalid("level")
+	}
+	return s.setPreference(ctx, caller, ScopeTayfaNow, tayfa, level, until, func() error {
 		ok, err := s.cfg.Members.IsActiveMember(ctx, tayfa, caller)
 		if err != nil {
 			return fmt.Errorf("üyelik: %w", err)

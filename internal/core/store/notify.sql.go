@@ -11,6 +11,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteOldNowCounters = `-- name: DeleteOldNowCounters :execrows
+DELETE FROM now_notification_counters WHERE day < $1::date
+`
+
+func (q *Queries) DeleteOldNowCounters(ctx context.Context, before pgtype.Date) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOldNowCounters, before)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteUserNowCounters = `-- name: DeleteUserNowCounters :exec
+DELETE FROM now_notification_counters WHERE scope = 'user' AND subject_id = $1
+`
+
+func (q *Queries) DeleteUserNowCounters(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserNowCounters, userID)
+	return err
+}
+
 const filterNotifyActive = `-- name: FilterNotifyActive :many
 SELECT user_id FROM memberships
 WHERE tayfa_id = $1 AND status = 'active' AND user_id = ANY($2::uuid[])
@@ -28,6 +49,52 @@ type FilterNotifyActiveParams struct {
 // ve arka plan işlerinin seçtiği alıcılar).
 func (q *Queries) FilterNotifyActive(ctx context.Context, arg FilterNotifyActiveParams) ([]pgtype.UUID, error) {
 	rows, err := q.db.Query(ctx, filterNotifyActive, arg.TayfaID, arg.UserIds, arg.ExcludeUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var user_id pgtype.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const filterNowFriendRecipients = `-- name: FilterNowFriendRecipients :many
+SELECT p.user_id FROM user_profiles p
+JOIN friendships f
+  ON f.user_low_id = LEAST(p.user_id, $1::uuid) AND f.user_high_id = GREATEST(p.user_id, $1::uuid)
+ AND f.status = 'accepted'
+LEFT JOIN social_settings s ON s.user_id = p.user_id
+WHERE p.user_id = ANY($2::uuid[]) AND p.user_id <> $1::uuid AND p.deleted_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM user_platform_bans b WHERE b.user_id = p.user_id AND b.banned_at IS NOT NULL)
+  AND NOT EXISTS (SELECT 1 FROM user_blocks ub
+                  WHERE (ub.blocker_id = $1::uuid AND ub.blocked_id = p.user_id)
+                     OR (ub.blocker_id = p.user_id AND ub.blocked_id = $1::uuid))
+  AND (s.user_id IS NULL OR s.now_from_friends = 'all'
+       OR (s.now_from_friends = 'close' AND (NOT s.profiling_enabled OR now_close_friend(p.user_id, $1::uuid))))
+ORDER BY p.user_id
+`
+
+type FilterNowFriendRecipientsParams struct {
+	SenderID pgtype.UUID
+	UserIds  []pgtype.UUID
+}
+
+// Anlık şimdi etkinliğinde organizatörün seçtiği alıcılardan bildirim
+// alabilecek olanlar: gönderenin kabul edilmiş arkadaşı, iki yönden engel
+// yok, hesabı silinmemiş ve platform banlı değil, alıcının
+// now_from_friends ayarı izin veriyor (all; close'ta gönderen alıcının
+// ilk 20'sinde ya da alıcının profillemesi kapalı; off hiç).
+func (q *Queries) FilterNowFriendRecipients(ctx context.Context, arg FilterNowFriendRecipientsParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, filterNowFriendRecipients, arg.SenderID, arg.UserIds)
 	if err != nil {
 		return nil, err
 	}
@@ -64,6 +131,44 @@ type ListNotifyMembersParams struct {
 // hiç üye olmamış kullanıcılar ve işlemi yapan (exclude_user_id) hariç.
 func (q *Queries) ListNotifyMembers(ctx context.Context, arg ListNotifyMembersParams) ([]pgtype.UUID, error) {
 	rows, err := q.db.Query(ctx, listNotifyMembers, arg.TayfaID, arg.ExcludeUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var user_id pgtype.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNotifyNowMembers = `-- name: ListNotifyNowMembers :many
+
+SELECT m.user_id FROM memberships m
+WHERE m.tayfa_id = $1 AND m.status = 'active' AND m.user_id <> $2
+  AND NOT EXISTS (SELECT 1 FROM user_blocks ub
+                  WHERE (ub.blocker_id = $2 AND ub.blocked_id = m.user_id)
+                     OR (ub.blocker_id = m.user_id AND ub.blocked_id = $2))
+ORDER BY m.user_id
+`
+
+type ListNotifyNowMembersParams struct {
+	TayfaID pgtype.UUID
+	ActorID pgtype.UUID
+}
+
+// Şimdi bildirimi (issue #265; ADR-0038 §4).
+// Tayfa şimdi etkinliğinin alıcıları: organizatör dışındaki etkin üyeler;
+// organizatörle arasında iki yönden herhangi birinde engel olan hariç.
+func (q *Queries) ListNotifyNowMembers(ctx context.Context, arg ListNotifyNowMembersParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listNotifyNowMembers, arg.TayfaID, arg.ActorID)
 	if err != nil {
 		return nil, err
 	}
@@ -148,4 +253,32 @@ func (q *Queries) ListNotifyStaff(ctx context.Context, arg ListNotifyStaffParams
 		return nil, err
 	}
 	return items, nil
+}
+
+const takeNowCounter = `-- name: TakeNowCounter :one
+INSERT INTO now_notification_counters AS c (scope, subject_id, day, sent)
+VALUES ($1, $2, $3::date, 1)
+ON CONFLICT (scope, subject_id, day) DO UPDATE SET sent = c.sent + 1
+WHERE c.sent < $4::integer
+RETURNING c.sent
+`
+
+type TakeNowCounterParams struct {
+	Scope     string
+	SubjectID pgtype.UUID
+	Day       pgtype.Date
+	MaxSent   int32
+}
+
+// Günlük sayaçtan bir hak alır; sınır doluysa satır dönmez (pgx.ErrNoRows).
+func (q *Queries) TakeNowCounter(ctx context.Context, arg TakeNowCounterParams) (int32, error) {
+	row := q.db.QueryRow(ctx, takeNowCounter,
+		arg.Scope,
+		arg.SubjectID,
+		arg.Day,
+		arg.MaxSent,
+	)
+	var sent int32
+	err := row.Scan(&sent)
+	return sent, err
 }

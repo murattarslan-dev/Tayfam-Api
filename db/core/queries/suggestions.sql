@@ -146,22 +146,24 @@ WHERE user_id = @user_id AND suggested_user_id = @suggested_user_id AND dismisse
 -- Ayarlar
 
 -- name: GetSocialSettings :one
-SELECT profiling_enabled, hide_from_suggestions, discover_visible_to_friends FROM social_settings WHERE user_id = @user_id;
+SELECT profiling_enabled, hide_from_suggestions, discover_visible_to_friends, now_from_friends FROM social_settings WHERE user_id = @user_id;
 
 -- Verilmeyen alan (NULL) olduğu gibi kalır; satır yoksa varsayılanlardan
 -- açılır.
 -- name: UpsertSocialSettings :one
-INSERT INTO social_settings (user_id, profiling_enabled, hide_from_suggestions, discover_visible_to_friends, updated_at)
+INSERT INTO social_settings (user_id, profiling_enabled, hide_from_suggestions, discover_visible_to_friends, now_from_friends, updated_at)
 VALUES (@user_id, COALESCE(sqlc.narg(profiling_enabled)::boolean, true),
         COALESCE(sqlc.narg(hide_from_suggestions)::boolean, false),
-        COALESCE(sqlc.narg(discover_visible_to_friends)::boolean, true), @now::timestamptz)
+        COALESCE(sqlc.narg(discover_visible_to_friends)::boolean, true),
+        COALESCE(sqlc.narg(now_from_friends)::text, 'all'), @now::timestamptz)
 ON CONFLICT (user_id) DO UPDATE SET
   profiling_enabled     = COALESCE(sqlc.narg(profiling_enabled)::boolean, social_settings.profiling_enabled),
   hide_from_suggestions = COALESCE(sqlc.narg(hide_from_suggestions)::boolean, social_settings.hide_from_suggestions),
   discover_visible_to_friends = COALESCE(sqlc.narg(discover_visible_to_friends)::boolean,
                                          social_settings.discover_visible_to_friends),
+  now_from_friends      = COALESCE(sqlc.narg(now_from_friends)::text, social_settings.now_from_friends),
   updated_at            = @now::timestamptz
-RETURNING profiling_enabled, hide_from_suggestions, discover_visible_to_friends;
+RETURNING profiling_enabled, hide_from_suggestions, discover_visible_to_friends, now_from_friends;
 
 -- Profilleme kapatma ve hesap silme: kişinin bütün puanları.
 -- name: DeleteUserFriendScores :exec

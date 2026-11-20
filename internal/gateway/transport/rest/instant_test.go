@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -40,6 +41,16 @@ func TestCreateInstantEvent(t *testing.T) {
 		t.Fatalf("gövde = %+v", b)
 	}
 
+	// A now event with the friends to tell (issue #265).
+	nowEv := `{"type":"general","mode":"online","title":"Film gecesi","starts_now":true,"online_url":"https://example.org/film","client_request_id":"` + reqID + `"}`
+	if w := as(h, "POST", "/v1/instant-events", `{"event":`+nowEv+`,"now_recipient_ids":["`+friendID+`"]}`); w.Code != 201 {
+		t.Fatalf("şimdi açma: %d %s", w.Code, w.Body)
+	}
+	if got, _, _ := f.last(); !got.(*corev1.CreateInstantEventRequest).GetEvent().GetStartsNow() ||
+		!slices.Equal(got.(*corev1.CreateInstantEventRequest).GetNowRecipientIds(), []string{friendID}) {
+		t.Fatalf("core'a giden = %v", got)
+	}
+
 	// Bad bodies never reach core.
 	f2 := &fakeCore{}
 	h2 := coreRouter(f2)
@@ -51,6 +62,10 @@ func TestCreateInstantEvent(t *testing.T) {
 		"fazla davetli":   `{"event":` + ev + `,"invitee_user_ids":[` + strings.Repeat(`"`+friendID+`",`, 10) + `"` + friendID + `"]}`,
 		"bilinmeyen alan": `{"event":` + ev + `,"tayfa_id":"` + tayfaID + `"}`,
 		"başlıksız":       `{"event":` + strings.Replace(ev, `"Film gecesi"`, `""`, 1) + `}`,
+		// now_recipient_ids only with starts_now, at most 30 (issue #265).
+		"planlıya şimdi alıcısı": `{"event":` + ev + `,"now_recipient_ids":["` + friendID + `"]}`,
+		"bozuk şimdi alıcısı":    `{"event":` + nowEv + `,"now_recipient_ids":["1"]}`,
+		"fazla şimdi alıcısı":    `{"event":` + nowEv + `,"now_recipient_ids":[` + strings.Repeat(`"`+friendID+`",`, 30) + `"` + friendID + `"]}`,
 	} {
 		if w := as(h2, "POST", "/v1/instant-events", body); w.Code != 400 || problemType(t, w) != "invalid-request" {
 			t.Errorf("%s: %d %s", name, w.Code, w.Body)

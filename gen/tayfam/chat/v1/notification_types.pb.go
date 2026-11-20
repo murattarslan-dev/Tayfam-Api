@@ -120,6 +120,15 @@ const (
 	// tayfa); a tayfa badge goes to the tayfa's admins and moderators
 	// (target: TAYFA). In-app only: no push is sent for it.
 	NotificationType_NOTIFICATION_TYPE_BADGE_EARNED NotificationType = 25
+	// A now event started (issue #265, ADR-0038 §4; target: EVENT; the actor
+	// is its organizer). A tayfa's now event goes to its active members but
+	// the organizer and anyone blocked with the organizer either way, at
+	// most 3 a day per tayfa; an instant now event goes to the friends the
+	// organizer chose, who are invited directly (accepting the tayfa's
+	// invitation joins). Never a title, type, place or name; the push holds
+	// the push_now_started_title / _body keys only. Muted with the tayfa's
+	// level NONE or with its NOTIFICATION_SCOPE_TYPE_TAYFA_NOW preference.
+	NotificationType_NOTIFICATION_TYPE_NOW_STARTED NotificationType = 26
 )
 
 // Enum value maps for NotificationType.
@@ -151,6 +160,7 @@ var (
 		23: "NOTIFICATION_TYPE_SAFETY_ALERT",
 		24: "NOTIFICATION_TYPE_CELEBRATION",
 		25: "NOTIFICATION_TYPE_BADGE_EARNED",
+		26: "NOTIFICATION_TYPE_NOW_STARTED",
 	}
 	NotificationType_value = map[string]int32{
 		"NOTIFICATION_TYPE_UNSPECIFIED":              0,
@@ -179,6 +189,7 @@ var (
 		"NOTIFICATION_TYPE_SAFETY_ALERT":             23,
 		"NOTIFICATION_TYPE_CELEBRATION":              24,
 		"NOTIFICATION_TYPE_BADGE_EARNED":             25,
+		"NOTIFICATION_TYPE_NOW_STARTED":              26,
 	}
 )
 
@@ -342,7 +353,7 @@ var File_tayfam_chat_v1_notification_types_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\n" +
-	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xea\a\n" +
+	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\x8d\b\n" +
 	"\x10NotificationType\x12!\n" +
 	"\x1dNOTIFICATION_TYPE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fNOTIFICATION_TYPE_EVENT_CREATED\x10\x01\x12#\n" +
@@ -370,7 +381,8 @@ const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"#NOTIFICATION_TYPE_FRIEND_SUGGESTION\x10\x16\x12\"\n" +
 	"\x1eNOTIFICATION_TYPE_SAFETY_ALERT\x10\x17\x12!\n" +
 	"\x1dNOTIFICATION_TYPE_CELEBRATION\x10\x18\x12\"\n" +
-	"\x1eNOTIFICATION_TYPE_BADGE_EARNED\x10\x19*\xa3\x03\n" +
+	"\x1eNOTIFICATION_TYPE_BADGE_EARNED\x10\x19\x12!\n" +
+	"\x1dNOTIFICATION_TYPE_NOW_STARTED\x10\x1a*\xa3\x03\n" +
 	"\x16NotificationTargetType\x12(\n" +
 	"$NOTIFICATION_TARGET_TYPE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eNOTIFICATION_TARGET_TYPE_TAYFA\x10\x01\x12'\n" +

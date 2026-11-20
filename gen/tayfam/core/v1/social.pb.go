@@ -249,6 +249,58 @@ func (RequestResolution) EnumDescriptor() ([]byte, []int) {
 	return file_tayfam_core_v1_social_proto_rawDescGZIP(), []int{3}
 }
 
+type NowFromFriends int32
+
+const (
+	NowFromFriends_NOW_FROM_FRIENDS_UNSPECIFIED NowFromFriends = 0
+	NowFromFriends_NOW_FROM_FRIENDS_ALL         NowFromFriends = 1
+	NowFromFriends_NOW_FROM_FRIENDS_CLOSE       NowFromFriends = 2
+	NowFromFriends_NOW_FROM_FRIENDS_OFF         NowFromFriends = 3
+)
+
+// Enum value maps for NowFromFriends.
+var (
+	NowFromFriends_name = map[int32]string{
+		0: "NOW_FROM_FRIENDS_UNSPECIFIED",
+		1: "NOW_FROM_FRIENDS_ALL",
+		2: "NOW_FROM_FRIENDS_CLOSE",
+		3: "NOW_FROM_FRIENDS_OFF",
+	}
+	NowFromFriends_value = map[string]int32{
+		"NOW_FROM_FRIENDS_UNSPECIFIED": 0,
+		"NOW_FROM_FRIENDS_ALL":         1,
+		"NOW_FROM_FRIENDS_CLOSE":       2,
+		"NOW_FROM_FRIENDS_OFF":         3,
+	}
+)
+
+func (x NowFromFriends) Enum() *NowFromFriends {
+	p := new(NowFromFriends)
+	*p = x
+	return p
+}
+
+func (x NowFromFriends) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (NowFromFriends) Descriptor() protoreflect.EnumDescriptor {
+	return file_tayfam_core_v1_social_proto_enumTypes[4].Descriptor()
+}
+
+func (NowFromFriends) Type() protoreflect.EnumType {
+	return &file_tayfam_core_v1_social_proto_enumTypes[4]
+}
+
+func (x NowFromFriends) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use NowFromFriends.Descriptor instead.
+func (NowFromFriends) EnumDescriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_social_proto_rawDescGZIP(), []int{4}
+}
+
 // Friend is another user in one of the caller's lists.
 type Friend struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
@@ -1541,8 +1593,14 @@ type SocialSettings struct {
 	// an event may be shown to their friends in Keşfet (ADR-0033 §4); it is
 	// also never shown while activity visibility is PRIVATE. Default true.
 	DiscoverVisibleToFriends bool `protobuf:"varint,3,opt,name=discover_visible_to_friends,json=discoverVisibleToFriends,proto3" json:"discover_visible_to_friends,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	// "Şimdi bildirimi kimden" (ADR-0038 §4, issue #265): from which friends
+	// the caller hears about their instant now events. Default ALL. With
+	// CLOSE only from the first 20 of the caller's friend list (the order of
+	// ListFriendships); CLOSE acts like ALL while profiling is off (there is
+	// no score). With OFF the caller gets none, and a sender is never told.
+	NowFromFriends NowFromFriends `protobuf:"varint,4,opt,name=now_from_friends,json=nowFromFriends,proto3,enum=tayfam.core.v1.NowFromFriends" json:"now_from_friends,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SocialSettings) Reset() {
@@ -1594,6 +1652,13 @@ func (x *SocialSettings) GetDiscoverVisibleToFriends() bool {
 		return x.DiscoverVisibleToFriends
 	}
 	return false
+}
+
+func (x *SocialSettings) GetNowFromFriends() NowFromFriends {
+	if x != nil {
+		return x.NowFromFriends
+	}
+	return NowFromFriends_NOW_FROM_FRIENDS_UNSPECIFIED
 }
 
 type GetSocialSettingsRequest struct {
@@ -1681,8 +1746,10 @@ type UpdateSocialSettingsRequest struct {
 	ProfilingEnabled         *bool                  `protobuf:"varint,1,opt,name=profiling_enabled,json=profilingEnabled,proto3,oneof" json:"profiling_enabled,omitempty"`
 	HideFromSuggestions      *bool                  `protobuf:"varint,2,opt,name=hide_from_suggestions,json=hideFromSuggestions,proto3,oneof" json:"hide_from_suggestions,omitempty"`
 	DiscoverVisibleToFriends *bool                  `protobuf:"varint,3,opt,name=discover_visible_to_friends,json=discoverVisibleToFriends,proto3,oneof" json:"discover_visible_to_friends,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	// UNSPECIFIED: unchanged.
+	NowFromFriends NowFromFriends `protobuf:"varint,4,opt,name=now_from_friends,json=nowFromFriends,proto3,enum=tayfam.core.v1.NowFromFriends" json:"now_from_friends,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *UpdateSocialSettingsRequest) Reset() {
@@ -1734,6 +1801,13 @@ func (x *UpdateSocialSettingsRequest) GetDiscoverVisibleToFriends() bool {
 		return *x.DiscoverVisibleToFriends
 	}
 	return false
+}
+
+func (x *UpdateSocialSettingsRequest) GetNowFromFriends() NowFromFriends {
+	if x != nil {
+		return x.NowFromFriends
+	}
+	return NowFromFriends_NOW_FROM_FRIENDS_UNSPECIFIED
 }
 
 type UpdateSocialSettingsResponse struct {
@@ -1857,18 +1931,20 @@ const file_tayfam_core_v1_social_proto_rawDesc = "" +
 	"\vsuggestions\x18\x01 \x03(\v2 .tayfam.core.v1.FriendSuggestionR\vsuggestions\"9\n" +
 	"\x1eDismissFriendSuggestionRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\"!\n" +
-	"\x1fDismissFriendSuggestionResponse\"\xb0\x01\n" +
+	"\x1fDismissFriendSuggestionResponse\"\xfa\x01\n" +
 	"\x0eSocialSettings\x12+\n" +
 	"\x11profiling_enabled\x18\x01 \x01(\bR\x10profilingEnabled\x122\n" +
 	"\x15hide_from_suggestions\x18\x02 \x01(\bR\x13hideFromSuggestions\x12=\n" +
-	"\x1bdiscover_visible_to_friends\x18\x03 \x01(\bR\x18discoverVisibleToFriends\"\x1a\n" +
+	"\x1bdiscover_visible_to_friends\x18\x03 \x01(\bR\x18discoverVisibleToFriends\x12H\n" +
+	"\x10now_from_friends\x18\x04 \x01(\x0e2\x1e.tayfam.core.v1.NowFromFriendsR\x0enowFromFriends\"\x1a\n" +
 	"\x18GetSocialSettingsRequest\"W\n" +
 	"\x19GetSocialSettingsResponse\x12:\n" +
-	"\bsettings\x18\x01 \x01(\v2\x1e.tayfam.core.v1.SocialSettingsR\bsettings\"\x9c\x02\n" +
+	"\bsettings\x18\x01 \x01(\v2\x1e.tayfam.core.v1.SocialSettingsR\bsettings\"\xe6\x02\n" +
 	"\x1bUpdateSocialSettingsRequest\x120\n" +
 	"\x11profiling_enabled\x18\x01 \x01(\bH\x00R\x10profilingEnabled\x88\x01\x01\x127\n" +
 	"\x15hide_from_suggestions\x18\x02 \x01(\bH\x01R\x13hideFromSuggestions\x88\x01\x01\x12B\n" +
-	"\x1bdiscover_visible_to_friends\x18\x03 \x01(\bH\x02R\x18discoverVisibleToFriends\x88\x01\x01B\x14\n" +
+	"\x1bdiscover_visible_to_friends\x18\x03 \x01(\bH\x02R\x18discoverVisibleToFriends\x88\x01\x01\x12H\n" +
+	"\x10now_from_friends\x18\x04 \x01(\x0e2\x1e.tayfam.core.v1.NowFromFriendsR\x0enowFromFriendsB\x14\n" +
 	"\x12_profiling_enabledB\x18\n" +
 	"\x16_hide_from_suggestionsB\x1e\n" +
 	"\x1c_discover_visible_to_friends\"Z\n" +
@@ -1894,7 +1970,12 @@ const file_tayfam_core_v1_social_proto_rawDesc = "" +
 	"\x1bREQUEST_RESOLUTION_ACCEPTED\x10\x02\x12\x1f\n" +
 	"\x1bREQUEST_RESOLUTION_DECLINED\x10\x03\x12 \n" +
 	"\x1cREQUEST_RESOLUTION_WITHDRAWN\x10\x04\x12\x1e\n" +
-	"\x1aREQUEST_RESOLUTION_EXPIRED\x10\x052\xeb\n" +
+	"\x1aREQUEST_RESOLUTION_EXPIRED\x10\x05*\x82\x01\n" +
+	"\x0eNowFromFriends\x12 \n" +
+	"\x1cNOW_FROM_FRIENDS_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14NOW_FROM_FRIENDS_ALL\x10\x01\x12\x1a\n" +
+	"\x16NOW_FROM_FRIENDS_CLOSE\x10\x02\x12\x18\n" +
+	"\x14NOW_FROM_FRIENDS_OFF\x10\x032\xeb\n" +
 	"\n" +
 	"\rSocialService\x12h\n" +
 	"\x11SendFriendRequest\x12(.tayfam.core.v1.SendFriendRequestRequest\x1a).tayfam.core.v1.SendFriendRequestResponse\x12n\n" +
@@ -1924,97 +2005,100 @@ func file_tayfam_core_v1_social_proto_rawDescGZIP() []byte {
 	return file_tayfam_core_v1_social_proto_rawDescData
 }
 
-var file_tayfam_core_v1_social_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_tayfam_core_v1_social_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
 var file_tayfam_core_v1_social_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_tayfam_core_v1_social_proto_goTypes = []any{
 	(FriendState)(0),                        // 0: tayfam.core.v1.FriendState
 	(RequestDirection)(0),                   // 1: tayfam.core.v1.RequestDirection
 	(RequestKind)(0),                        // 2: tayfam.core.v1.RequestKind
 	(RequestResolution)(0),                  // 3: tayfam.core.v1.RequestResolution
-	(*Friend)(nil),                          // 4: tayfam.core.v1.Friend
-	(*BlockedUser)(nil),                     // 5: tayfam.core.v1.BlockedUser
-	(*SendFriendRequestRequest)(nil),        // 6: tayfam.core.v1.SendFriendRequestRequest
-	(*SendFriendRequestResponse)(nil),       // 7: tayfam.core.v1.SendFriendRequestResponse
-	(*AcceptFriendRequestRequest)(nil),      // 8: tayfam.core.v1.AcceptFriendRequestRequest
-	(*AcceptFriendRequestResponse)(nil),     // 9: tayfam.core.v1.AcceptFriendRequestResponse
-	(*RemoveFriendshipRequest)(nil),         // 10: tayfam.core.v1.RemoveFriendshipRequest
-	(*RemoveFriendshipResponse)(nil),        // 11: tayfam.core.v1.RemoveFriendshipResponse
-	(*ListFriendsRequest)(nil),              // 12: tayfam.core.v1.ListFriendsRequest
-	(*ListFriendsResponse)(nil),             // 13: tayfam.core.v1.ListFriendsResponse
-	(*ListFriendRequestsRequest)(nil),       // 14: tayfam.core.v1.ListFriendRequestsRequest
-	(*ListFriendRequestsResponse)(nil),      // 15: tayfam.core.v1.ListFriendRequestsResponse
-	(*BlockUserRequest)(nil),                // 16: tayfam.core.v1.BlockUserRequest
-	(*BlockUserResponse)(nil),               // 17: tayfam.core.v1.BlockUserResponse
-	(*UnblockUserRequest)(nil),              // 18: tayfam.core.v1.UnblockUserRequest
-	(*UnblockUserResponse)(nil),             // 19: tayfam.core.v1.UnblockUserResponse
-	(*ListBlockedUsersRequest)(nil),         // 20: tayfam.core.v1.ListBlockedUsersRequest
-	(*ListBlockedUsersResponse)(nil),        // 21: tayfam.core.v1.ListBlockedUsersResponse
-	(*RequestRef)(nil),                      // 22: tayfam.core.v1.RequestRef
-	(*GetRequestResolutionsRequest)(nil),    // 23: tayfam.core.v1.GetRequestResolutionsRequest
-	(*GetRequestResolutionsResponse)(nil),   // 24: tayfam.core.v1.GetRequestResolutionsResponse
-	(*FriendSuggestion)(nil),                // 25: tayfam.core.v1.FriendSuggestion
-	(*ListFriendSuggestionsRequest)(nil),    // 26: tayfam.core.v1.ListFriendSuggestionsRequest
-	(*ListFriendSuggestionsResponse)(nil),   // 27: tayfam.core.v1.ListFriendSuggestionsResponse
-	(*DismissFriendSuggestionRequest)(nil),  // 28: tayfam.core.v1.DismissFriendSuggestionRequest
-	(*DismissFriendSuggestionResponse)(nil), // 29: tayfam.core.v1.DismissFriendSuggestionResponse
-	(*SocialSettings)(nil),                  // 30: tayfam.core.v1.SocialSettings
-	(*GetSocialSettingsRequest)(nil),        // 31: tayfam.core.v1.GetSocialSettingsRequest
-	(*GetSocialSettingsResponse)(nil),       // 32: tayfam.core.v1.GetSocialSettingsResponse
-	(*UpdateSocialSettingsRequest)(nil),     // 33: tayfam.core.v1.UpdateSocialSettingsRequest
-	(*UpdateSocialSettingsResponse)(nil),    // 34: tayfam.core.v1.UpdateSocialSettingsResponse
-	(*timestamppb.Timestamp)(nil),           // 35: google.protobuf.Timestamp
-	(*AvailabilityDay)(nil),                 // 36: tayfam.core.v1.AvailabilityDay
+	(NowFromFriends)(0),                     // 4: tayfam.core.v1.NowFromFriends
+	(*Friend)(nil),                          // 5: tayfam.core.v1.Friend
+	(*BlockedUser)(nil),                     // 6: tayfam.core.v1.BlockedUser
+	(*SendFriendRequestRequest)(nil),        // 7: tayfam.core.v1.SendFriendRequestRequest
+	(*SendFriendRequestResponse)(nil),       // 8: tayfam.core.v1.SendFriendRequestResponse
+	(*AcceptFriendRequestRequest)(nil),      // 9: tayfam.core.v1.AcceptFriendRequestRequest
+	(*AcceptFriendRequestResponse)(nil),     // 10: tayfam.core.v1.AcceptFriendRequestResponse
+	(*RemoveFriendshipRequest)(nil),         // 11: tayfam.core.v1.RemoveFriendshipRequest
+	(*RemoveFriendshipResponse)(nil),        // 12: tayfam.core.v1.RemoveFriendshipResponse
+	(*ListFriendsRequest)(nil),              // 13: tayfam.core.v1.ListFriendsRequest
+	(*ListFriendsResponse)(nil),             // 14: tayfam.core.v1.ListFriendsResponse
+	(*ListFriendRequestsRequest)(nil),       // 15: tayfam.core.v1.ListFriendRequestsRequest
+	(*ListFriendRequestsResponse)(nil),      // 16: tayfam.core.v1.ListFriendRequestsResponse
+	(*BlockUserRequest)(nil),                // 17: tayfam.core.v1.BlockUserRequest
+	(*BlockUserResponse)(nil),               // 18: tayfam.core.v1.BlockUserResponse
+	(*UnblockUserRequest)(nil),              // 19: tayfam.core.v1.UnblockUserRequest
+	(*UnblockUserResponse)(nil),             // 20: tayfam.core.v1.UnblockUserResponse
+	(*ListBlockedUsersRequest)(nil),         // 21: tayfam.core.v1.ListBlockedUsersRequest
+	(*ListBlockedUsersResponse)(nil),        // 22: tayfam.core.v1.ListBlockedUsersResponse
+	(*RequestRef)(nil),                      // 23: tayfam.core.v1.RequestRef
+	(*GetRequestResolutionsRequest)(nil),    // 24: tayfam.core.v1.GetRequestResolutionsRequest
+	(*GetRequestResolutionsResponse)(nil),   // 25: tayfam.core.v1.GetRequestResolutionsResponse
+	(*FriendSuggestion)(nil),                // 26: tayfam.core.v1.FriendSuggestion
+	(*ListFriendSuggestionsRequest)(nil),    // 27: tayfam.core.v1.ListFriendSuggestionsRequest
+	(*ListFriendSuggestionsResponse)(nil),   // 28: tayfam.core.v1.ListFriendSuggestionsResponse
+	(*DismissFriendSuggestionRequest)(nil),  // 29: tayfam.core.v1.DismissFriendSuggestionRequest
+	(*DismissFriendSuggestionResponse)(nil), // 30: tayfam.core.v1.DismissFriendSuggestionResponse
+	(*SocialSettings)(nil),                  // 31: tayfam.core.v1.SocialSettings
+	(*GetSocialSettingsRequest)(nil),        // 32: tayfam.core.v1.GetSocialSettingsRequest
+	(*GetSocialSettingsResponse)(nil),       // 33: tayfam.core.v1.GetSocialSettingsResponse
+	(*UpdateSocialSettingsRequest)(nil),     // 34: tayfam.core.v1.UpdateSocialSettingsRequest
+	(*UpdateSocialSettingsResponse)(nil),    // 35: tayfam.core.v1.UpdateSocialSettingsResponse
+	(*timestamppb.Timestamp)(nil),           // 36: google.protobuf.Timestamp
+	(*AvailabilityDay)(nil),                 // 37: tayfam.core.v1.AvailabilityDay
 }
 var file_tayfam_core_v1_social_proto_depIdxs = []int32{
 	0,  // 0: tayfam.core.v1.Friend.state:type_name -> tayfam.core.v1.FriendState
-	35, // 1: tayfam.core.v1.Friend.request_time:type_name -> google.protobuf.Timestamp
-	35, // 2: tayfam.core.v1.Friend.accept_time:type_name -> google.protobuf.Timestamp
-	36, // 3: tayfam.core.v1.Friend.next_available:type_name -> tayfam.core.v1.AvailabilityDay
-	35, // 4: tayfam.core.v1.BlockedUser.block_time:type_name -> google.protobuf.Timestamp
-	4,  // 5: tayfam.core.v1.SendFriendRequestResponse.friend:type_name -> tayfam.core.v1.Friend
-	4,  // 6: tayfam.core.v1.AcceptFriendRequestResponse.friend:type_name -> tayfam.core.v1.Friend
-	4,  // 7: tayfam.core.v1.ListFriendsResponse.friends:type_name -> tayfam.core.v1.Friend
+	36, // 1: tayfam.core.v1.Friend.request_time:type_name -> google.protobuf.Timestamp
+	36, // 2: tayfam.core.v1.Friend.accept_time:type_name -> google.protobuf.Timestamp
+	37, // 3: tayfam.core.v1.Friend.next_available:type_name -> tayfam.core.v1.AvailabilityDay
+	36, // 4: tayfam.core.v1.BlockedUser.block_time:type_name -> google.protobuf.Timestamp
+	5,  // 5: tayfam.core.v1.SendFriendRequestResponse.friend:type_name -> tayfam.core.v1.Friend
+	5,  // 6: tayfam.core.v1.AcceptFriendRequestResponse.friend:type_name -> tayfam.core.v1.Friend
+	5,  // 7: tayfam.core.v1.ListFriendsResponse.friends:type_name -> tayfam.core.v1.Friend
 	1,  // 8: tayfam.core.v1.ListFriendRequestsRequest.direction:type_name -> tayfam.core.v1.RequestDirection
-	4,  // 9: tayfam.core.v1.ListFriendRequestsResponse.requests:type_name -> tayfam.core.v1.Friend
-	5,  // 10: tayfam.core.v1.ListBlockedUsersResponse.users:type_name -> tayfam.core.v1.BlockedUser
+	5,  // 9: tayfam.core.v1.ListFriendRequestsResponse.requests:type_name -> tayfam.core.v1.Friend
+	6,  // 10: tayfam.core.v1.ListBlockedUsersResponse.users:type_name -> tayfam.core.v1.BlockedUser
 	2,  // 11: tayfam.core.v1.RequestRef.kind:type_name -> tayfam.core.v1.RequestKind
-	22, // 12: tayfam.core.v1.GetRequestResolutionsRequest.refs:type_name -> tayfam.core.v1.RequestRef
+	23, // 12: tayfam.core.v1.GetRequestResolutionsRequest.refs:type_name -> tayfam.core.v1.RequestRef
 	3,  // 13: tayfam.core.v1.GetRequestResolutionsResponse.resolutions:type_name -> tayfam.core.v1.RequestResolution
-	35, // 14: tayfam.core.v1.FriendSuggestion.suggest_time:type_name -> google.protobuf.Timestamp
-	25, // 15: tayfam.core.v1.ListFriendSuggestionsResponse.suggestions:type_name -> tayfam.core.v1.FriendSuggestion
-	30, // 16: tayfam.core.v1.GetSocialSettingsResponse.settings:type_name -> tayfam.core.v1.SocialSettings
-	30, // 17: tayfam.core.v1.UpdateSocialSettingsResponse.settings:type_name -> tayfam.core.v1.SocialSettings
-	6,  // 18: tayfam.core.v1.SocialService.SendFriendRequest:input_type -> tayfam.core.v1.SendFriendRequestRequest
-	8,  // 19: tayfam.core.v1.SocialService.AcceptFriendRequest:input_type -> tayfam.core.v1.AcceptFriendRequestRequest
-	10, // 20: tayfam.core.v1.SocialService.RemoveFriendship:input_type -> tayfam.core.v1.RemoveFriendshipRequest
-	12, // 21: tayfam.core.v1.SocialService.ListFriends:input_type -> tayfam.core.v1.ListFriendsRequest
-	14, // 22: tayfam.core.v1.SocialService.ListFriendRequests:input_type -> tayfam.core.v1.ListFriendRequestsRequest
-	16, // 23: tayfam.core.v1.SocialService.BlockUser:input_type -> tayfam.core.v1.BlockUserRequest
-	18, // 24: tayfam.core.v1.SocialService.UnblockUser:input_type -> tayfam.core.v1.UnblockUserRequest
-	20, // 25: tayfam.core.v1.SocialService.ListBlockedUsers:input_type -> tayfam.core.v1.ListBlockedUsersRequest
-	23, // 26: tayfam.core.v1.SocialService.GetRequestResolutions:input_type -> tayfam.core.v1.GetRequestResolutionsRequest
-	26, // 27: tayfam.core.v1.SocialService.ListFriendSuggestions:input_type -> tayfam.core.v1.ListFriendSuggestionsRequest
-	28, // 28: tayfam.core.v1.SocialService.DismissFriendSuggestion:input_type -> tayfam.core.v1.DismissFriendSuggestionRequest
-	31, // 29: tayfam.core.v1.SocialService.GetSocialSettings:input_type -> tayfam.core.v1.GetSocialSettingsRequest
-	33, // 30: tayfam.core.v1.SocialService.UpdateSocialSettings:input_type -> tayfam.core.v1.UpdateSocialSettingsRequest
-	7,  // 31: tayfam.core.v1.SocialService.SendFriendRequest:output_type -> tayfam.core.v1.SendFriendRequestResponse
-	9,  // 32: tayfam.core.v1.SocialService.AcceptFriendRequest:output_type -> tayfam.core.v1.AcceptFriendRequestResponse
-	11, // 33: tayfam.core.v1.SocialService.RemoveFriendship:output_type -> tayfam.core.v1.RemoveFriendshipResponse
-	13, // 34: tayfam.core.v1.SocialService.ListFriends:output_type -> tayfam.core.v1.ListFriendsResponse
-	15, // 35: tayfam.core.v1.SocialService.ListFriendRequests:output_type -> tayfam.core.v1.ListFriendRequestsResponse
-	17, // 36: tayfam.core.v1.SocialService.BlockUser:output_type -> tayfam.core.v1.BlockUserResponse
-	19, // 37: tayfam.core.v1.SocialService.UnblockUser:output_type -> tayfam.core.v1.UnblockUserResponse
-	21, // 38: tayfam.core.v1.SocialService.ListBlockedUsers:output_type -> tayfam.core.v1.ListBlockedUsersResponse
-	24, // 39: tayfam.core.v1.SocialService.GetRequestResolutions:output_type -> tayfam.core.v1.GetRequestResolutionsResponse
-	27, // 40: tayfam.core.v1.SocialService.ListFriendSuggestions:output_type -> tayfam.core.v1.ListFriendSuggestionsResponse
-	29, // 41: tayfam.core.v1.SocialService.DismissFriendSuggestion:output_type -> tayfam.core.v1.DismissFriendSuggestionResponse
-	32, // 42: tayfam.core.v1.SocialService.GetSocialSettings:output_type -> tayfam.core.v1.GetSocialSettingsResponse
-	34, // 43: tayfam.core.v1.SocialService.UpdateSocialSettings:output_type -> tayfam.core.v1.UpdateSocialSettingsResponse
-	31, // [31:44] is the sub-list for method output_type
-	18, // [18:31] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	36, // 14: tayfam.core.v1.FriendSuggestion.suggest_time:type_name -> google.protobuf.Timestamp
+	26, // 15: tayfam.core.v1.ListFriendSuggestionsResponse.suggestions:type_name -> tayfam.core.v1.FriendSuggestion
+	4,  // 16: tayfam.core.v1.SocialSettings.now_from_friends:type_name -> tayfam.core.v1.NowFromFriends
+	31, // 17: tayfam.core.v1.GetSocialSettingsResponse.settings:type_name -> tayfam.core.v1.SocialSettings
+	4,  // 18: tayfam.core.v1.UpdateSocialSettingsRequest.now_from_friends:type_name -> tayfam.core.v1.NowFromFriends
+	31, // 19: tayfam.core.v1.UpdateSocialSettingsResponse.settings:type_name -> tayfam.core.v1.SocialSettings
+	7,  // 20: tayfam.core.v1.SocialService.SendFriendRequest:input_type -> tayfam.core.v1.SendFriendRequestRequest
+	9,  // 21: tayfam.core.v1.SocialService.AcceptFriendRequest:input_type -> tayfam.core.v1.AcceptFriendRequestRequest
+	11, // 22: tayfam.core.v1.SocialService.RemoveFriendship:input_type -> tayfam.core.v1.RemoveFriendshipRequest
+	13, // 23: tayfam.core.v1.SocialService.ListFriends:input_type -> tayfam.core.v1.ListFriendsRequest
+	15, // 24: tayfam.core.v1.SocialService.ListFriendRequests:input_type -> tayfam.core.v1.ListFriendRequestsRequest
+	17, // 25: tayfam.core.v1.SocialService.BlockUser:input_type -> tayfam.core.v1.BlockUserRequest
+	19, // 26: tayfam.core.v1.SocialService.UnblockUser:input_type -> tayfam.core.v1.UnblockUserRequest
+	21, // 27: tayfam.core.v1.SocialService.ListBlockedUsers:input_type -> tayfam.core.v1.ListBlockedUsersRequest
+	24, // 28: tayfam.core.v1.SocialService.GetRequestResolutions:input_type -> tayfam.core.v1.GetRequestResolutionsRequest
+	27, // 29: tayfam.core.v1.SocialService.ListFriendSuggestions:input_type -> tayfam.core.v1.ListFriendSuggestionsRequest
+	29, // 30: tayfam.core.v1.SocialService.DismissFriendSuggestion:input_type -> tayfam.core.v1.DismissFriendSuggestionRequest
+	32, // 31: tayfam.core.v1.SocialService.GetSocialSettings:input_type -> tayfam.core.v1.GetSocialSettingsRequest
+	34, // 32: tayfam.core.v1.SocialService.UpdateSocialSettings:input_type -> tayfam.core.v1.UpdateSocialSettingsRequest
+	8,  // 33: tayfam.core.v1.SocialService.SendFriendRequest:output_type -> tayfam.core.v1.SendFriendRequestResponse
+	10, // 34: tayfam.core.v1.SocialService.AcceptFriendRequest:output_type -> tayfam.core.v1.AcceptFriendRequestResponse
+	12, // 35: tayfam.core.v1.SocialService.RemoveFriendship:output_type -> tayfam.core.v1.RemoveFriendshipResponse
+	14, // 36: tayfam.core.v1.SocialService.ListFriends:output_type -> tayfam.core.v1.ListFriendsResponse
+	16, // 37: tayfam.core.v1.SocialService.ListFriendRequests:output_type -> tayfam.core.v1.ListFriendRequestsResponse
+	18, // 38: tayfam.core.v1.SocialService.BlockUser:output_type -> tayfam.core.v1.BlockUserResponse
+	20, // 39: tayfam.core.v1.SocialService.UnblockUser:output_type -> tayfam.core.v1.UnblockUserResponse
+	22, // 40: tayfam.core.v1.SocialService.ListBlockedUsers:output_type -> tayfam.core.v1.ListBlockedUsersResponse
+	25, // 41: tayfam.core.v1.SocialService.GetRequestResolutions:output_type -> tayfam.core.v1.GetRequestResolutionsResponse
+	28, // 42: tayfam.core.v1.SocialService.ListFriendSuggestions:output_type -> tayfam.core.v1.ListFriendSuggestionsResponse
+	30, // 43: tayfam.core.v1.SocialService.DismissFriendSuggestion:output_type -> tayfam.core.v1.DismissFriendSuggestionResponse
+	33, // 44: tayfam.core.v1.SocialService.GetSocialSettings:output_type -> tayfam.core.v1.GetSocialSettingsResponse
+	35, // 45: tayfam.core.v1.SocialService.UpdateSocialSettings:output_type -> tayfam.core.v1.UpdateSocialSettingsResponse
+	33, // [33:46] is the sub-list for method output_type
+	20, // [20:33] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_social_proto_init() }
@@ -2029,7 +2113,7 @@ func file_tayfam_core_v1_social_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_social_proto_rawDesc), len(file_tayfam_core_v1_social_proto_rawDesc)),
-			NumEnums:      4,
+			NumEnums:      5,
 			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,

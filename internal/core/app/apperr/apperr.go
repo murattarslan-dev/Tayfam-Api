@@ -255,6 +255,9 @@ var (
 	ErrNowLimitReached = errors.New("açık şimdi etkinliği sınırı")
 	// ErrEventNotOpenEnded: "Bitir" on an event that was not started now.
 	ErrEventNotOpenEnded = errors.New("etkinlik açık uçlu değil")
+	// ErrNowBroadcastLimit: the caller already sent today's now broadcasts
+	// to friends (issue #265; ADR-0038 §4).
+	ErrNowBroadcastLimit = errors.New("şimdi yayını sınırı")
 )
 
 // QR join errors (issue #264; ADR-0038 §3). Neither carries the token.

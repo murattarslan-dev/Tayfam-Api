@@ -78,6 +78,13 @@ const (
 	// recipient and the target (TargetUser), no tayfa. A tayfa badge: the
 	// tayfa's admins and moderators, the tayfa is the target (TargetTayfa).
 	TypeBadgeEarned = "badge_earned"
+	// TypeNowStarted: a now event (the target) started; the actor is its
+	// organizer (issue #265; ADR-0038 §4). Always about a tayfa: the
+	// event's tayfa, or the hidden tayfa of an instant event, whose chosen
+	// friends are invited and are not members yet. Pushed with the
+	// push_now_started keys only; muted with the tayfa's level none or its
+	// ScopeTayfaNow preference.
+	TypeNowStarted = "now_started"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -108,7 +115,7 @@ const MaxRecipients = 200
 // targetOf is the only target type each notification type may have.
 func targetOf(typ string) (string, bool) {
 	switch typ {
-	case TypeEventCreated, TypeEventUpdated, TypeEventCancelled, TypeRSVPPromoted, TypeHikeOverdue, TypeCelebration:
+	case TypeEventCreated, TypeEventUpdated, TypeEventCancelled, TypeRSVPPromoted, TypeHikeOverdue, TypeCelebration, TypeNowStarted:
 		return TargetEvent, true
 	case TypeAnnouncement:
 		return TargetAnnouncement, true

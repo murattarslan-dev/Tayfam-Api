@@ -17,6 +17,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event/ical"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/instant"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/joinqr"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
@@ -194,7 +195,18 @@ func (s *EventServer) CreateInstantEvent(ctx context.Context, req *corev1.Create
 		}
 		invitees = append(invitees, v)
 	}
-	r, err := s.instant.Create(ctx, user, instant.Input{Event: in, Invitees: invitees})
+	if len(req.GetNowRecipientIds()) > notify.MaxNowRecipients {
+		return nil, validation("now_recipient_ids")
+	}
+	recipients := make([]id.ID, 0, len(req.GetNowRecipientIds()))
+	for _, u := range req.GetNowRecipientIds() {
+		v, ok := id.Parse(u)
+		if !ok {
+			return nil, validation("now_recipient_ids")
+		}
+		recipients = append(recipients, v)
+	}
+	r, err := s.instant.Create(ctx, user, instant.Input{Event: in, Invitees: invitees, NowRecipients: recipients})
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}

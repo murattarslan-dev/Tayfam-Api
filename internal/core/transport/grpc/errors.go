@@ -282,6 +282,8 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.InvalidArgument, corev1.ErrorReason_ERROR_REASON_ALBUM_CONSENT_REQUIRED, true
 	case errors.Is(err, apperr.ErrNowLimitReached):
 		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_NOW_LIMIT_REACHED, true
+	case errors.Is(err, apperr.ErrNowBroadcastLimit):
+		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED, true
 	case errors.Is(err, apperr.ErrEventNotOpenEnded):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_NOT_OPEN_ENDED, true
 	case errors.Is(err, apperr.ErrInvalidJoinQR):

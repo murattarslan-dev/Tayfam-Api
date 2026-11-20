@@ -41,6 +41,10 @@ func (f *fakeCore) UpdateSocialSettings(ctx context.Context, in *corev1.UpdateSo
 	if in.HideFromSuggestions != nil {
 		st.HideFromSuggestions = in.GetHideFromSuggestions()
 	}
+	st.NowFromFriends = corev1.NowFromFriends_NOW_FROM_FRIENDS_ALL
+	if in.GetNowFromFriends() != corev1.NowFromFriends_NOW_FROM_FRIENDS_UNSPECIFIED {
+		st.NowFromFriends = in.GetNowFromFriends()
+	}
 	return &corev1.UpdateSocialSettingsResponse{Settings: st}, f.record(ctx, in)
 }
 
@@ -99,6 +103,18 @@ func TestFriendSuggestionRoutes(t *testing.T) {
 	got, _, _ = f.last()
 	if in := got.(*corev1.UpdateSocialSettingsRequest); in.DiscoverVisibleToFriends == nil || in.GetDiscoverVisibleToFriends() {
 		t.Fatalf("core'a giden: %v", in)
+	}
+	// "Şimdi bildirimi kimden" (issue #265).
+	w = as(h, "PATCH", "/v1/me/social-settings", `{"now_from_friends":"close"}`)
+	if v := decodeBody[socialSettingsJSON](t, w); w.Code != 200 || v.NowFromFriends != "close" {
+		t.Fatalf("şimdi ayarı: %d %+v", w.Code, v)
+	}
+	got, _, _ = f.last()
+	if in := got.(*corev1.UpdateSocialSettingsRequest); in.GetNowFromFriends() != corev1.NowFromFriends_NOW_FROM_FRIENDS_CLOSE || in.HideFromSuggestions != nil {
+		t.Fatalf("core'a giden: %v", in)
+	}
+	if w := as(h, "PATCH", "/v1/me/social-settings", `{"now_from_friends":"friends"}`); w.Code != 400 || problemType(t, w) != "invalid-request" {
+		t.Fatalf("bilinmeyen şimdi ayarı: %d", w.Code)
 	}
 }
 
