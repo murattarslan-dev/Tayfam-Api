@@ -260,6 +260,64 @@ func (q *Queries) ExportBlocks(ctx context.Context, arg ExportBlocksParams) ([]E
 	return items, nil
 }
 
+const exportBracketMatches = `-- name: ExportBracketMatches :many
+SELECT m.id AS k, jsonb_build_object(
+  'event_id', m.event_id, 'component_key', m.component_key, 'round', m.round,
+  'position', d.position,
+  'games', COALESCE((
+    SELECT jsonb_agg(jsonb_build_object(
+      'number', g.number,
+      'points', CASE WHEN m.a_position = d.position THEN g.a_points ELSE g.b_points END,
+      'outcome', CASE WHEN m.a_position = d.position THEN g.a_outcome
+        WHEN g.a_outcome = 'win' THEN 'loss' WHEN g.a_outcome = 'loss' THEN 'win'
+        ELSE g.a_outcome END)
+      ORDER BY g.number)
+    FROM event_bracket_games AS g WHERE g.match_id = m.id), '[]'::jsonb),
+  'created_at', m.created_at
+) AS data
+FROM event_bracket_matches AS m
+JOIN event_draw_entries AS d ON d.event_id = m.event_id AND d.component_key = m.draw_key
+  AND d.position IN (m.a_position, m.b_position)
+WHERE d.user_id = $1 AND m.id > $2
+ORDER BY m.id
+LIMIT $3
+`
+
+type ExportBracketMatchesParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportBracketMatchesRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Eşleşme ağacındaki maçlarınız (`bracket` bileşeni, issue #251): kuradaki
+// yeriniz üzerinden hangi etkinliğin hangi turunda oynadınız ve oyun oyun
+// kendi skorunuz (`wdl` kuralında kendi sonucunuz). Rakip ve skoru dışa
+// aktarılmaz.
+func (q *Queries) ExportBracketMatches(ctx context.Context, arg ExportBracketMatchesParams) ([]ExportBracketMatchesRow, error) {
+	rows, err := q.db.Query(ctx, exportBracketMatches, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportBracketMatchesRow{}
+	for rows.Next() {
+		var i ExportBracketMatchesRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportConvoyVehicles = `-- name: ExportConvoyVehicles :many
 SELECT v.id AS k, jsonb_build_object(
   'event_id', v.event_id, 'component_key', v.component_key, 'make', v.make, 'model', v.model,
