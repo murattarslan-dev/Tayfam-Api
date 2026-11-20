@@ -4182,6 +4182,179 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Etkinlik bileşenleri: soru toplama (`questions`; core QuestionsComponentService, #256, ADR-0025 §4, §5) ---
+  # Söyleşide canlı soru: katılımcılar soru sorar ve oy verir, organizatör
+  # soruyu "cevaplandı" işaretler. Tayfanın Soru-Cevap modülünden ayrı bir
+  # bileşendir. Bileşenin `anonymous` parametresi açıksa soru anonim
+  # sorulabilir: yazar yalnızca sunucuda tutulur, hiçbir yanıtta (tayfa
+  # moderatörüne ve yöneticisine de) `author_id` olarak dönmez; yazar
+  # yalnızca sorunun kendisinin olduğunu (`caller_is_author`) görür. Anonim
+  # soru şikâyet edilirse (`event_question`) yazarı yalnızca platform
+  # yönetimi görür. Soru metni log'a, denetim kaydına ve olaya yazılmaz.
+  # Değişiklikler canlı güncellenir (`event.component_changed`).
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/questions:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: listEventQuestions
+      summary: Bileşenin soruları
+      description: |
+        Her etkin üyeye açıktır (susturulmuş üye de okur); iptal edilmiş ve
+        donmuş etkinlikte de okunur. Cevaplanmamışlar önce, sonra çok oy
+        alan, sonra eski. Bileşen uçlarının ortak kuralları geçerlidir
+        (`component-not-found`, `component-disabled`).
+      responses:
+        "200":
+          description: Sorular
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventQuestionList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: askEventQuestion
+      summary: Soru sorar
+      description: |
+        Etkinliğe `going` cevabı vermiş ya da katılımı doğrulanmış olmalısınız
+        (`event-not-going`); susturulmuş üye soramaz. Metin kırpılır, iç
+        boşlukları teke indirilir; 1–500 karakter, denetim ve biçim
+        karakteri olmadan (`invalid-request`, alan `body`). `anonymous`
+        yalnızca bileşen izin veriyorsa (`anonymous_allowed`; alan
+        `anonymous`). Kişi başına en fazla 20, bileşende en fazla 500 soru
+        (`event-limit`). Aynı `client_request_id` ile tekrar gönderim ilk
+        soruyu döndürür. Bitişten 7 gün sonra donar (`component-frozen`);
+        iptal edilmiş etkinliğe yazılmaz.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventQuestionCreateRequest" }
+      responses:
+        "201":
+          description: Sorulan soru (ya da tekrar gönderimde ilk sorulan)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventQuestion" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/questions/{question_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/QuestionID"
+    delete:
+      operationId: removeEventQuestion
+      summary: Soruyu kaldırır
+      description: |
+        Kendi sorunuzu yazma penceresi içinde (`component-frozen`);
+        moderatör ve yönetici herkesinkini, anonim soruyu da yazarını
+        görmeden, her zaman (iptal edilmiş ve donmuş etkinlikte de). Soru 30
+        gün sonra oylarıyla kalıcı silinir. Bilinmeyen soru
+        `event-item-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Soru kaldırıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/questions/{question_id}/vote:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/QuestionID"
+    put:
+      operationId: voteEventQuestion
+      summary: Soruya oy verir
+      description: |
+        Soru sorabilenler oy verir (`event-not-going`); kişi başına soru
+        başına bir oy, zaten verilmiş oy hata değildir. Yazma penceresi
+        içinde. Bilinmeyen soru `event-item-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Oy verildi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: unvoteEventQuestion
+      summary: Sorudaki oyunuzu geri alır
+      description: |
+        Verilmemiş oyu geri almak hata değildir. Yazma penceresi içinde;
+        susturulmuş üye geri alamaz.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Oy geri alındı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/questions/{question_id}/answered:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/QuestionID"
+    put:
+      operationId: markEventQuestionAnswered
+      summary: Soruyu cevaplandı işaretler
+      description: |
+        Organizatör, moderatör ve yönetici; yazma penceresi içinde. Zaten
+        işaretli soru hata değildir (ilk işaret zamanı kalır).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Soru cevaplandı işaretlendi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: unmarkEventQuestionAnswered
+      summary: Cevaplandı işaretini kaldırır
+      description: |
+        Organizatör, moderatör ve yönetici; yazma penceresi içinde.
+        İşaretsiz soru hata değildir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: İşaret kaldırıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   # --- Tayfa sözlüğü (core TayfaVocabularyService, #244, ADR-0037 §4) ---
   # Tayfanın kendi değer listesi: bir ad alanındaki (`fish_species`, `book`
   # …) değerler. Tanımda `vocabulary` olan metin alanı (`CatalogVocabulary`)
@@ -9725,6 +9898,45 @@ components:
           maxItems: 10
           description: Yalnızca kaynaksız kutlamada, elle seçilen kazananlar (etkinliğin katılımcıları, 1–10 farklı kişi).
           items: { type: string, format: uuid }
+    EventQuestion:
+      type: object
+      required: [id, body, anonymous, caller_is_author, vote_count, caller_voted, created_at, caller_can_remove]
+      description: Bir etkinlik sorusu, isteği yapanın gördüğü haliyle (#256).
+      properties:
+        id: { type: string, format: uuid }
+        body: { type: string, minLength: 1, maxLength: 500 }
+        anonymous: { type: boolean, description: "Anonim soru; `author_id` hiçbir zaman verilmez." }
+        author_id: { type: string, format: uuid, description: Soran; anonim soruda yoktur (yazara ve yönetime de). }
+        caller_is_author: { type: boolean, description: Soruyu siz sordunuz. }
+        vote_count: { type: integer, minimum: 0 }
+        caller_voted: { type: boolean, description: Bu soruya oy verdiniz. }
+        answered_at: { type: string, format: date-time, description: Yalnızca cevaplandı işaretliyse. }
+        created_at: { type: string, format: date-time }
+        caller_can_remove: { type: boolean, description: Soruyu şu an kaldırabilirsiniz. }
+    EventQuestionList:
+      type: object
+      required: [questions, anonymous_allowed, caller_can_ask, caller_can_mark_answered, max_questions_per_person]
+      description: Bir etkinliğin bir soru toplama bileşeninin soruları (#256).
+      properties:
+        questions:
+          type: array
+          maxItems: 500
+          description: Cevaplanmamışlar önce, sonra çok oy alan, sonra eski.
+          items: { $ref: "#/components/schemas/EventQuestion" }
+        anonymous_allowed: { type: boolean, description: "Bileşenin `anonymous` parametresi; açıksa soru anonim sorulabilir." }
+        caller_can_ask:
+          type: boolean
+          description: Şu an soru sorabilir ve oy verebilirsiniz (`going` ya da katılımı doğrulanmış, susturulmamış; etkinlik iptal değil, donmamış, tayfa salt okunur değil). Sayı sınırları ayrıca denetlenir.
+        caller_can_mark_answered: { type: boolean, description: Şu an soruları cevaplandı işaretleyebilirsiniz. }
+        max_questions_per_person: { type: integer, minimum: 1, description: Kişi başına en fazla soru. }
+    EventQuestionCreateRequest:
+      type: object
+      required: [body, client_request_id]
+      additionalProperties: false
+      properties:
+        body: { type: string, minLength: 1, maxLength: 2256, description: "Soru; kırpıldıktan ve iç boşluklar teke indirildikten sonra 1–500 karakter." }
+        anonymous: { type: boolean, default: false, description: "Yalnızca `anonymous_allowed` bileşende." }
+        client_request_id: { type: string, format: uuid }
     VocabularyIds:
       type: object
       description: Alan anahtarı → tayfa sözlüğündeki değerin kimliği (#244).
@@ -12013,8 +12225,11 @@ components:
         `dm_message` (birebir mesaj) yalnızca `POST /v1/me/reports` ile;
         diğerleri yalnızca tayfa ucuyla. `channel_message` kanal mesajıdır
         (metin, fotoğraf ya da yer; #205). `log_entry` bir günlük bileşeni
-        kaydıdır (#243; eskiden `fishing_catch`).
-      enum: [user, tayfa, announcement, event, question, answer, poll, log_entry, dm_message, event_photo, channel_message]
+        kaydıdır (#243; eskiden `fishing_catch`). `event_question` soru
+        toplama bileşenindeki bir sorudur (#256); anonim sorunun yazarı
+        tayfa kuyruğunda yer almaz (`subject_user_id` yoktur), yalnızca
+        platform yönetimine görünür.
+      enum: [user, tayfa, announcement, event, question, answer, poll, log_entry, dm_message, event_photo, channel_message, event_question]
 
     BanRequest:
       type: object
@@ -12117,7 +12332,7 @@ components:
         subject_user_id:
           type: string
           format: uuid
-          description: Şikâyet edilen üye ya da içeriğin yazarı; hesap silindiyse yoktur.
+          description: Şikâyet edilen üye ya da içeriğin yazarı; hesap silindiyse ve anonim etkinlik sorusunda (`event_question`) yoktur. Yazarı gizli şikâyet `member_sanctioned` ile kapatılamaz.
         reason: { $ref: "#/components/schemas/ReportReason" }
         description: { type: string }
         priority: { type: string, enum: [normal, minor_involved] }

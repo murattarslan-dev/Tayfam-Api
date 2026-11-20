@@ -42,6 +42,15 @@ FROM event_log_entries c
 JOIN events e ON e.id = c.event_id
 WHERE e.tayfa_id = @tayfa_id AND c.id = @id;
 
+-- Etkinlik sorusu (`questions` bileşeni, issue #256): etkinliği de görünür
+-- olmalı. anonymous, şikâyette yazarın tayfa yönetiminden gizlenmesi
+-- (subject_hidden) içindir.
+-- name: GetReportTargetEventQuestion :one
+SELECT q.author_id, (q.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible, q.anonymous
+FROM event_questions q
+JOIN events e ON e.id = q.event_id
+WHERE e.tayfa_id = @tayfa_id AND q.id = @id;
+
 -- Albüm fotoğrafı (issue #206): etkinliği de görünür olmalı.
 -- name: GetReportTargetEventPhoto :one
 SELECT p.uploader_id AS author_id, (p.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible
@@ -62,13 +71,15 @@ WHERE reporter_id = @reporter_id AND created_at > @since;
 INSERT INTO reports (
   id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, evidence_text, evidence_upload_id,
   priority, minor_involved_at, platform_only, escalated_to_platform_at, escalation_reason, platform_status, created_at,
-  channel_id, message_kind, message_body, message_photo_upload_id, place_latitude, place_longitude, place_name)
+  channel_id, message_kind, message_body, message_photo_upload_id, place_latitude, place_longitude, place_name,
+  subject_hidden)
 VALUES (
   @id, sqlc.narg(tayfa_id), @reporter_id, @target_type, @target_id, @subject_user_id, @reason, sqlc.narg(description), sqlc.narg(evidence_text), sqlc.narg(evidence_upload_id),
   @priority, sqlc.narg(minor_involved_at), @platform_only, sqlc.narg(escalated_to_platform_at),
   sqlc.narg(escalation_reason), sqlc.narg(platform_status), @created_at,
   sqlc.narg(channel_id), sqlc.narg(message_kind), sqlc.narg(message_body), sqlc.narg(message_photo_upload_id),
-  sqlc.narg(place_latitude), sqlc.narg(place_longitude), sqlc.narg(place_name))
+  sqlc.narg(place_latitude), sqlc.narg(place_longitude), sqlc.narg(place_name),
+  @subject_hidden)
 ON CONFLICT (reporter_id, target_type, target_id) DO NOTHING
 RETURNING id;
 
@@ -93,12 +104,14 @@ ORDER BY created_at DESC, id DESC
 LIMIT @page_size;
 
 -- Kuyruk: tayfanın açık şikâyetleri; platforma özel olanlar ve izleyicinin
--- kendisi hakkındakiler hariç. minor_involved ve çocuk/genç güvenliği
+-- kendisi hakkındakiler hariç. Yazarı gizli şikâyette (anonim soru, issue
+-- #256) subject_user_id boş döner: yazar yalnızca platform yönetimine
+-- görünür. Kuyruk ve çözüm okumaları aynı kuralı izler. minor_involved ve çocuk/genç güvenliği
 -- şikâyetleri önce, sonra eskiden yeniye (ADR-0012, platform sahibinin
 -- 2026-11-09 kararı; Notion v14). reporter_id
 -- ve yükselme bilgisi seçilmez; yaş ve doğum tarihi core'da hiç yoktur.
 -- name: ListOpenTayfaReports :many
-SELECT id, tayfa_id, target_type, target_id, subject_user_id, reason, description, status, resolution,
+SELECT id, tayfa_id, target_type, target_id, (CASE WHEN subject_hidden THEN NULL ELSE subject_user_id END)::uuid AS subject_user_id, reason, description, status, resolution,
        handled_by, handled_at, priority, created_at, channel_id
 FROM reports
 WHERE tayfa_id = @tayfa_id AND status = 'open' AND NOT platform_only
@@ -112,7 +125,7 @@ LIMIT @page_size;
 
 -- Çözülmüşler, son çözülen önce.
 -- name: ListResolvedTayfaReports :many
-SELECT id, tayfa_id, target_type, target_id, subject_user_id, reason, description, status, resolution,
+SELECT id, tayfa_id, target_type, target_id, (CASE WHEN subject_hidden THEN NULL ELSE subject_user_id END)::uuid AS subject_user_id, reason, description, status, resolution,
        handled_by, handled_at, priority, created_at, channel_id
 FROM reports
 WHERE tayfa_id = @tayfa_id AND status = 'resolved' AND NOT platform_only
@@ -124,7 +137,7 @@ LIMIT @page_size;
 -- Çözüm için kilitlenir; kuyruğun kuralları aynı (platforma özel ve
 -- izleyicinin kendisi hakkındaki şikâyet bulunamaz).
 -- name: LockTayfaReport :one
-SELECT id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, status,
+SELECT id, tayfa_id, reporter_id, target_type, target_id, (CASE WHEN subject_hidden THEN NULL ELSE subject_user_id END)::uuid AS subject_user_id, reason, description, status,
        resolution, handled_by, handled_at, priority, created_at, channel_id
 FROM reports
 WHERE tayfa_id = @tayfa_id AND id = @id AND NOT platform_only

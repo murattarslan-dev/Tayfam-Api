@@ -108,6 +108,7 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 		registerCelebrationComponent,
 
 		// questions (#256)
+		registerQuestionsComponent,
 
 		// pool_link (#271)
 	}

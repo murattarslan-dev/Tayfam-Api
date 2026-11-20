@@ -185,6 +185,21 @@ DELETE FROM event_celebration_winners WHERE user_id = @user_id;
 -- name: ClearCelebrationAnnouncer :exec
 UPDATE event_celebrations SET announced_by = NULL WHERE announced_by = @user_id;
 
+-- Etkinlik soruları ve oyları kişiye aittir (anonim olanlar dahil); kişiyle
+-- birlikte silinir (sorunun oyları cascade ile). Cevaplandı işaretlediği ya
+-- da sildiği başkasının sorusu kalır, işaretleyen ve silen boşalır (issue
+-- #256; ADR-0025 §11).
+-- name: DeleteUserEventQuestions :exec
+DELETE FROM event_questions WHERE author_id = @user_id;
+
+-- name: DeleteUserEventQuestionVotes :exec
+DELETE FROM event_question_votes WHERE user_id = @user_id;
+
+-- name: ClearEventQuestionUserFields :exec
+UPDATE event_questions
+SET answered_by = NULLIF(answered_by, @user_id), deleted_by = NULLIF(deleted_by, @user_id)
+WHERE answered_by = @user_id OR deleted_by = @user_id;
+
 -- Tayfa sözlüğüne eklediği değerler tayfanın ortak verisidir; kalır, ekleyen
 -- boşalır (issue #244; ADR-0037 §4).
 -- name: ClearVocabularyCreator :exec

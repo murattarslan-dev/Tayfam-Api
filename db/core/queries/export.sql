@@ -302,6 +302,28 @@ WHERE w.user_id = @user_id AND w.id > @after
 ORDER BY w.id
 LIMIT @n;
 
+-- Etkinlik soruları (`questions` bileşeni, issue #256): sorduğunuz sorular
+-- (anonim olanlar dahil; ADR-0025 §11) ve oy verdiğiniz sorular. Başkasının
+-- sorusunun metni, yazarı ve diğer oylar yer almaz; kimin cevaplandı
+-- işaretlediği de.
+-- name: ExportEventQuestions :many
+SELECT q.id AS k, jsonb_build_object(
+  'id', q.id, 'event_id', q.event_id, 'component_key', q.component_key,
+  'asked', q.author_id = @user_id,
+  'body', CASE WHEN q.author_id = @user_id THEN q.body END,
+  'anonymous', CASE WHEN q.author_id = @user_id THEN q.anonymous END,
+  'answered_at', CASE WHEN q.author_id = @user_id THEN q.answered_at END,
+  'created_at', CASE WHEN q.author_id = @user_id THEN q.created_at END,
+  'deleted_at', CASE WHEN q.author_id = @user_id THEN q.deleted_at END,
+  'voted_at', (SELECT v.created_at FROM event_question_votes v WHERE v.question_id = q.id AND v.user_id = @user_id)
+) AS data
+FROM event_questions AS q
+WHERE (q.author_id = @user_id
+       OR EXISTS (SELECT 1 FROM event_question_votes v WHERE v.question_id = q.id AND v.user_id = @user_id))
+  AND q.id > @after
+ORDER BY q.id
+LIMIT @n;
+
 -- Albüm fotoğrafları (issue #206); dosyaların kendisi zip'e girmez
 -- (ADR-0021 §5), uploads bölümü onları listeler.
 -- name: ExportEventPhotos :many

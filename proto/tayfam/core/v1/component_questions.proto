@@ -1,0 +1,140 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/component.proto";
+
+// QuestionsComponentService is the questions component (kind "questions",
+// issue #256; ADR-0025 §4, §5): live questions at a talk, which
+// participants ask and vote for and the organizer marks answered. It is a
+// component of its own, apart from the tayfa's Q&A module.
+//
+// Only gateway calls it with the user's access token. Authentication,
+// scope and the errors every component shares are those of
+// EventComponentService (component.proto): anyone but an ACTIVE member
+// gets ERROR_REASON_TAYFA_NOT_FOUND, and so on.
+//
+// Anonymous questions (the component's `anonymous` parameter): the author
+// is kept by the server only. No response carries the author of an
+// anonymous question, not even to the tayfa's moderators and admins; the
+// author learns only that the question is theirs (caller_is_author). A
+// report about one shows its author to the platform only (report.proto,
+// REPORT_TARGET_TYPE_EVENT_QUESTION). Question texts are never logged.
+service QuestionsComponentService {
+  // ListQuestions returns the component's questions: unanswered first,
+  // then by votes (most first), then oldest first. Open to every active
+  // member, muted ones included.
+  //
+  // Errors: the errors of every component read.
+  rpc ListQuestions(ListQuestionsRequest) returns (ListQuestionsResponse);
+
+  // AskQuestion asks a question. The caller must have answered going or
+  // have a verified attendance (ERROR_REASON_EVENT_NOT_GOING); one person
+  // asks at most 20 live questions in one component and a component holds
+  // at most 500 (ERROR_REASON_EVENT_LIMIT). anonymous only where the
+  // component allows it (ERROR_REASON_VALIDATION, field anonymous). A
+  // repeat with the same client_request_id returns the first question.
+  // Open within the write window (until seven days after the end; not on a
+  // cancelled event); refused while muted.
+  //
+  // Errors: ERROR_REASON_VALIDATION (body: 1–500 characters after trimming,
+  // no control or format characters; anonymous; client_request_id) and
+  // the errors of every component change.
+  rpc AskQuestion(AskQuestionRequest) returns (AskQuestionResponse);
+
+  // RemoveQuestion removes a question (soft delete; purged after 30 days
+  // with its votes). The author removes their own within the write window;
+  // moderators and admins remove anyone's, anonymous ones included, also on
+  // a cancelled or frozen event (moderation).
+  //
+  // Errors: ERROR_REASON_EVENT_ITEM_NOT_FOUND, ERROR_REASON_VALIDATION
+  // (question_id) and the errors of every component change.
+  rpc RemoveQuestion(RemoveQuestionRequest) returns (RemoveQuestionResponse);
+
+  // SetQuestionVote adds (voted) or takes back the caller's vote for a
+  // question; doing what is already done is not an error. The same people
+  // as AskQuestion, within the write window.
+  //
+  // Errors: as AskQuestion, and ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+  rpc SetQuestionVote(SetQuestionVoteRequest) returns (SetQuestionVoteResponse);
+
+  // SetQuestionAnswered marks a question answered or takes the mark back;
+  // doing what is already done is not an error. The organizer, moderators
+  // and admins, within the write window.
+  //
+  // Errors: ERROR_REASON_EVENT_ITEM_NOT_FOUND, ERROR_REASON_VALIDATION
+  // (question_id) and the errors of every component change.
+  rpc SetQuestionAnswered(SetQuestionAnsweredRequest) returns (SetQuestionAnsweredResponse);
+}
+
+// EventQuestion is a question as the caller sees it.
+message EventQuestion {
+  string id = 1;
+  string body = 2;
+  bool anonymous = 3;
+  // The author; always empty for an anonymous question, also when the
+  // caller is its author or a moderator.
+  string author_id = 4;
+  // The caller asked the question.
+  bool caller_is_author = 5;
+  int32 vote_count = 6;
+  bool caller_voted = 7;
+  // Set when the question was marked answered.
+  google.protobuf.Timestamp answer_time = 8;
+  google.protobuf.Timestamp create_time = 9;
+  // The caller may remove the question now.
+  bool caller_can_remove = 10;
+}
+
+message ListQuestionsRequest {
+  ComponentRef ref = 1;
+}
+
+message ListQuestionsResponse {
+  repeated EventQuestion questions = 1;
+  // The component's `anonymous` parameter: questions may be anonymous.
+  bool anonymous_allowed = 2;
+  // The caller may ask and vote now (going or attended, not muted; the
+  // event not cancelled or frozen, the tayfa not read-only). The limits
+  // are checked on asking.
+  bool caller_can_ask = 3;
+  // The caller may mark questions answered now.
+  bool caller_can_mark_answered = 4;
+  // One person's live questions in this component, at most.
+  int32 max_questions_per_person = 5;
+}
+
+message AskQuestionRequest {
+  ComponentRef ref = 1;
+  string body = 2;
+  bool anonymous = 3;
+  string client_request_id = 4;
+}
+
+message AskQuestionResponse {
+  EventQuestion question = 1;
+}
+
+message RemoveQuestionRequest {
+  ComponentRef ref = 1;
+  string question_id = 2;
+}
+
+message RemoveQuestionResponse {}
+
+message SetQuestionVoteRequest {
+  ComponentRef ref = 1;
+  string question_id = 2;
+  bool voted = 3;
+}
+
+message SetQuestionVoteResponse {}
+
+message SetQuestionAnsweredRequest {
+  ComponentRef ref = 1;
+  string question_id = 2;
+  bool answered = 3;
+}
+
+message SetQuestionAnsweredResponse {}

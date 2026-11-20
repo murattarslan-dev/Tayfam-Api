@@ -348,6 +348,13 @@ func reportedItem(ctx context.Context, q *store.Queries, r Report) (*Item, error
 		x, err = q.AdminGetLogEntry(ctx, store.AdminGetLogEntryParams{ID: r.Target.PG(), TayfaID: tf})
 		it.Author, it.Title, it.Body = idOf(x.UserID), x.ComponentKey, string(x.FieldValues)
 		it.CreatedAt, it.DeletedAt = timeOf(x.CreatedAt), timeOf(x.DeletedAt)
+	case "event_question":
+		// The author of an anonymous question too: the platform sees it
+		// (ADR-0025 §5).
+		var x store.AdminGetEventQuestionRow
+		x, err = q.AdminGetEventQuestion(ctx, store.AdminGetEventQuestionParams{ID: r.Target.PG(), TayfaID: tf})
+		it.Author, it.Title, it.Body = idOf(x.AuthorID), x.ComponentKey, x.Body
+		it.CreatedAt, it.DeletedAt = timeOf(x.CreatedAt), timeOf(x.DeletedAt)
 	case "event_photo":
 		var x store.AdminGetEventPhotoRow
 		x, err = q.AdminGetEventPhoto(ctx, store.AdminGetEventPhotoParams{ID: r.Target.PG(), TayfaID: tf})
@@ -383,6 +390,8 @@ func removeContent(ctx context.Context, q *store.Queries, r Report, by id.ID, no
 		_, err = q.AdminDeletePoll(ctx, store.AdminDeletePollParams{ID: tid, TayfaID: tf, At: at, By: b})
 	case "log_entry":
 		_, err = q.AdminDeleteLogEntry(ctx, store.AdminDeleteLogEntryParams{ID: tid, TayfaID: tf, At: at, By: b})
+	case "event_question":
+		_, err = q.AdminDeleteEventQuestion(ctx, store.AdminDeleteEventQuestionParams{ID: tid, TayfaID: tf, At: at, By: b})
 	case "event_photo":
 		_, err = q.AdminDeleteEventPhoto(ctx, store.AdminDeleteEventPhotoParams{ID: tid, TayfaID: tf, At: at, By: b})
 	case "channel_message":

@@ -155,6 +155,8 @@ func targetLabel(t corev1.ReportTargetType) string {
 		return "Birebir mesaj"
 	case corev1.ReportTargetType_REPORT_TARGET_TYPE_CHANNEL_MESSAGE:
 		return "Kanal mesajı"
+	case corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT_QUESTION:
+		return "Etkinlik sorusu"
 	}
 	return "—"
 }
