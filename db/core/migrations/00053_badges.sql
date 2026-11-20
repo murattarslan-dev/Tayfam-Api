@@ -141,8 +141,11 @@ BEGIN
   IF yearly <> (NEW.period_key <> 'all') THEN
     RAISE EXCEPTION 'rozetin dönemi kuralına uymuyor' USING ERRCODE = 'check_violation';
   END IF;
-  IF TG_ARGV[0] = 'user' AND champion <> (NEW.event_id IS NOT NULL) THEN
-    RAISE EXCEPTION 'yalnızca şampiyonluk rozeti bir etkinliğe bağlıdır' USING ERRCODE = 'check_violation';
+  -- tayfa_badges'te event_id yoktur: alan yalnızca user_badges'te okunur.
+  IF TG_ARGV[0] = 'user' THEN
+    IF champion <> (NEW.event_id IS NOT NULL) THEN
+      RAISE EXCEPTION 'yalnızca şampiyonluk rozeti bir etkinliğe bağlıdır' USING ERRCODE = 'check_violation';
+    END IF;
   END IF;
   RETURN NEW;
 END
