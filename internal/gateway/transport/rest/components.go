@@ -82,6 +82,7 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 		registerGoalComponent,
 
 		// schedule (#247)
+		registerScheduleComponent,
 
 		// teams (#248)
 

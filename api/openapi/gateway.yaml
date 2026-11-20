@@ -3116,6 +3116,128 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Etkinlik bileşenleri: program akışı (`schedule`; core ScheduleComponentService, #247, ADR-0025 §4, §5) ---
+  # Etkinliğin saatli programı (varış, söyleşi, öğle yemeği …). Maddeler
+  # başlangıç saatine göre sıralıdır; aynı saattekiler eklenme sırasıyla.
+  # Madde sayısını bileşenin `max_items` parametresi sınırlar (tanım
+  # vermezse 100). Maddeyi organizatör, moderatör ve yönetici ekler,
+  # düzenler ve çıkarır; program etkinlik oluşturulduktan bitişten 7 gün
+  # sonrasına kadar (`component-frozen`) yazılır. Program planın
+  # parçasıdır: seri örneği şablonun maddeleriyle, saatleri örneğin
+  # başlangıcına kaydırılarak başlar. Başlık ve not log'a yazılmaz. Yazan
+  # her uç programı güncel haliyle döner.
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/schedule:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: getEventSchedule
+      summary: Etkinliğin programı
+      description: |
+        Her etkin üyeye açıktır (susturulmuş üye de okur); iptal edilmiş ve
+        donmuş etkinlikte de okunur. Bileşen uçlarının ortak kuralları
+        geçerlidir (`component-not-found`, `component-disabled`).
+      responses:
+        "200":
+          description: Program
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventSchedule" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/schedule/items:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    post:
+      operationId: addEventScheduleItem
+      summary: Programa madde ekler (organizatör, moderatör, yönetici)
+      description: |
+        En fazla `max_items` madde (`event-limit`). Saatler etkinliğin
+        başlangıcından en çok bir gün önce, bitişinden en çok bir gün sonra
+        olabilir; bitiş saati başlangıçtan sonra olmalıdır (aksi
+        `invalid-request`). Bileşen uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventScheduleItemRequest" }
+      responses:
+        "201":
+          description: Program, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventSchedule" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/schedule/items/{item_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/ScheduleItemID"
+    put:
+      operationId: updateEventScheduleItem
+      summary: Program maddesini düzenler (organizatör, moderatör, yönetici)
+      description: |
+        Maddenin bütün değerlerini değiştirir (gönderilmeyen `ends_at` ve
+        `note` kaldırılır); kurallar eklemedekiyle aynıdır. Bilinmeyen
+        madde `event-item-not-found`. Bileşen uçlarının ortak kuralları
+        geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventScheduleItemRequest" }
+      responses:
+        "200":
+          description: Program, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventSchedule" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: removeEventScheduleItem
+      summary: Programdan madde çıkarır (organizatör, moderatör, yönetici)
+      description: |
+        Bilinmeyen madde `event-item-not-found`. Bileşen uçlarının ortak
+        kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Program, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventSchedule" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   # --- Tayfa sözlüğü (core TayfaVocabularyService, #244, ADR-0037 §4) ---
   # Tayfanın kendi değer listesi: bir ad alanındaki (`fish_species`, `book`
   # …) değerler. Tanımda `vocabulary` olan metin alanı (`CatalogVocabulary`)
@@ -6528,6 +6650,12 @@ components:
       required: true
       description: Listedeki maddenin kimliği (`ChecklistItem.id`).
       schema: { type: string, format: uuid }
+    ScheduleItemID:
+      name: item_id
+      in: path
+      required: true
+      description: Programdaki maddenin kimliği (`EventScheduleItem.id`).
+      schema: { type: string, format: uuid }
     SeriesID:
       name: series_id
       in: path
@@ -8089,6 +8217,43 @@ components:
           exclusiveMinimum: 0
           maximum: 1000000000
           description: Bağlı ölçümün biriminde; ondalık basamağına yuvarlanır.
+    EventScheduleItem:
+      type: object
+      required: [id, starts_at, title]
+      properties:
+        id: { type: string, format: uuid }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time, description: Bitiş saati; yoksa yoktur. }
+        title: { type: string, description: 1–120 karakter. }
+        note: { type: string, description: En fazla 500 karakter; yoksa yoktur. }
+    EventSchedule:
+      type: object
+      required: [items, max_items, caller_can_edit]
+      description: Bir etkinliğin bir program bileşeni, isteği yapanın gördüğü haliyle (#247).
+      properties:
+        items:
+          type: array
+          description: Başlangıç saatine göre; aynı saattekiler eklenme sırasıyla.
+          items: { $ref: "#/components/schemas/EventScheduleItem" }
+        max_items: { type: integer, minimum: 1, maximum: 100, description: "Programın alabileceği madde sayısı (bileşenin `max_items` parametresi; tanım vermezse 100)." }
+        caller_can_edit:
+          type: boolean
+          description: Şu an madde ekleyebilir, düzenleyebilir ve çıkarabilirsiniz (organizatör, moderatör, yönetici; susturulmamış; etkinlik iptal değil, donmamış, tayfa salt okunur değil).
+    EventScheduleItemRequest:
+      type: object
+      required: [starts_at, title]
+      additionalProperties: false
+      properties:
+        starts_at:
+          type: string
+          format: date-time
+          description: Etkinliğin başlangıcından en çok bir gün önce, bitişinden en çok bir gün sonra.
+        ends_at:
+          type: string
+          format: date-time
+          description: İsteğe bağlı; başlangıçtan sonra, etkinliğin bitişinden en çok bir gün sonra.
+        title: { type: string, minLength: 1, maxLength: 120 }
+        note: { type: string, maxLength: 500, description: İsteğe bağlı; boş metin notu kaldırır. }
     VocabularyIds:
       type: object
       description: Alan anahtarı → tayfa sözlüğündeki değerin kimliği (#244).

@@ -45,6 +45,7 @@ func componentRegistrars() []componentRegistrar {
 		registerGoalComponent,
 
 		// schedule (#247)
+		registerScheduleComponent,
 
 		// teams (#248)
 
