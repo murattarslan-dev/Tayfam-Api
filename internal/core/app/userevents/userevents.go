@@ -267,6 +267,7 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			q.ClearRsvpMarker, q.DeleteUserRsvps, q.DeleteUserVehicles, q.DeleteUserSeatRequests, q.ClearChecklistItemUserFields,
 			q.DeleteUserRollCallCheckins, q.DeleteUserLogEntries, q.ClearLogEntryDeleter, q.ClearVocabularyCreator,
 			q.DeleteUserMeasurements, q.ClearMeasurementEnteredBy, q.DeleteUserTeamMemberships, q.ClearUserDrawEntries, q.ClearUserScorePlayers, q.ClearGuestPlayerCreator,
+			q.DeleteUserRankingEntries, q.ClearRankingEntryEnteredBy,
 			q.DeleteUserEventPhotos, q.ClearEventPhotoDeleter, q.DeleteUserActivityRecords,
 			q.ClearQuestionUserFields, q.ClearAnswerUserFields, q.DeleteUserAnswerVotes,
 			q.ClearPollUserFields, q.DeleteUserPollVotes,

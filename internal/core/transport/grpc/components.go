@@ -63,6 +63,7 @@ func componentRegistrars() []componentRegistrar {
 		registerGuestPlayers,
 
 		// ranking (#253)
+		registerRankingComponent,
 
 		// vote (#254)
 

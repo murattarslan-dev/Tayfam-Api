@@ -314,6 +314,17 @@ type EventPhoto struct {
 	DeletedBy       pgtype.UUID
 }
 
+type EventRankingEntry struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	UserID       pgtype.UUID
+	Value        pgtype.Numeric
+	EnteredBy    pgtype.UUID
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
 type EventReferee struct {
 	ID           pgtype.UUID
 	EventID      pgtype.UUID

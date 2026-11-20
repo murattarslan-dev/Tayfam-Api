@@ -383,6 +383,14 @@ const (
 	// FAILED_PRECONDITION. The guest has a seat at a table or a place in a
 	// draw; it is not removed.
 	ErrorReason_ERROR_REASON_GUEST_PLAYER_IN_USE ErrorReason = 2522
+	// FAILED_PRECONDITION. A ranking is entered once the event has started.
+	ErrorReason_ERROR_REASON_RANKING_NOT_STARTED ErrorReason = 2530
+	// FAILED_PRECONDITION. The person is not a participant of the event: they
+	// did not answer "going" and their attendance was not verified.
+	ErrorReason_ERROR_REASON_RANKING_NOT_PARTICIPANT ErrorReason = 2531
+	// FAILED_PRECONDITION. The ranking is computed from a measure (its
+	// `source` parameter); the measure's values are entered instead.
+	ErrorReason_ERROR_REASON_RANKING_FROM_MEASURE ErrorReason = 2532
 )
 
 // Enum value maps for ErrorReason.
@@ -506,6 +514,9 @@ var (
 		2520: "ERROR_REASON_GUEST_PLAYERS_DISABLED",
 		2521: "ERROR_REASON_GUEST_PLAYER_NOT_FOUND",
 		2522: "ERROR_REASON_GUEST_PLAYER_IN_USE",
+		2530: "ERROR_REASON_RANKING_NOT_STARTED",
+		2531: "ERROR_REASON_RANKING_NOT_PARTICIPANT",
+		2532: "ERROR_REASON_RANKING_FROM_MEASURE",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                  0,
@@ -626,6 +637,9 @@ var (
 		"ERROR_REASON_GUEST_PLAYERS_DISABLED":       2520,
 		"ERROR_REASON_GUEST_PLAYER_NOT_FOUND":       2521,
 		"ERROR_REASON_GUEST_PLAYER_IN_USE":          2522,
+		"ERROR_REASON_RANKING_NOT_STARTED":          2530,
+		"ERROR_REASON_RANKING_NOT_PARTICIPANT":      2531,
+		"ERROR_REASON_RANKING_FROM_MEASURE":         2532,
 	}
 )
 
@@ -660,7 +674,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xf4!\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xee\"\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -780,7 +794,10 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\x1dERROR_REASON_BRACKET_FINISHED\x10\xd7\x13\x12(\n" +
 	"#ERROR_REASON_GUEST_PLAYERS_DISABLED\x10\xd8\x13\x12(\n" +
 	"#ERROR_REASON_GUEST_PLAYER_NOT_FOUND\x10\xd9\x13\x12%\n" +
-	" ERROR_REASON_GUEST_PLAYER_IN_USE\x10\xda\x13B\xbd\x01\n" +
+	" ERROR_REASON_GUEST_PLAYER_IN_USE\x10\xda\x13\x12%\n" +
+	" ERROR_REASON_RANKING_NOT_STARTED\x10\xe2\x13\x12)\n" +
+	"$ERROR_REASON_RANKING_NOT_PARTICIPANT\x10\xe3\x13\x12&\n" +
+	"!ERROR_REASON_RANKING_FROM_MEASURE\x10\xe4\x13B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

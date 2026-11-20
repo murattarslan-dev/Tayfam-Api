@@ -186,6 +186,10 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_GUEST_PLAYERS_DISABLED": {http.StatusConflict, "guest-players-disabled"},
 		"ERROR_REASON_GUEST_PLAYER_NOT_FOUND": {http.StatusNotFound, "guest-player-not-found"},
 		"ERROR_REASON_GUEST_PLAYER_IN_USE":    {http.StatusConflict, "guest-player-in-use"},
+		// Ranking component (issue #253; ADR-0037 §3).
+		"ERROR_REASON_RANKING_NOT_STARTED":     {http.StatusConflict, "ranking-not-started"},
+		"ERROR_REASON_RANKING_NOT_PARTICIPANT": {http.StatusConflict, "ranking-not-participant"},
+		"ERROR_REASON_RANKING_FROM_MEASURE":    {http.StatusConflict, "ranking-from-measure"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

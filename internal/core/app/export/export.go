@@ -69,6 +69,9 @@ const (
 	SectionBracketMatches = "bracket_matches"
 	// Issue #252: the guest players one added and their nicknames.
 	SectionGuestPlayers = "guest_players"
+	// Issue #253: one's rankings entered by hand; the computed ones are
+	// one's measurements.
+	SectionRankingEntries = "ranking_entries"
 )
 
 const (
@@ -225,6 +228,10 @@ var sections = []struct {
 	{SectionGuestPlayers, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportGuestPlayers(ctx, store.ExportGuestPlayersParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportGuestPlayersRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionRankingEntries, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportRankingEntries(ctx, store.ExportRankingEntriesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportRankingEntriesRow) row { return row{x.K, x.Data} })
 	}},
 }
 

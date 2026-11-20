@@ -183,6 +183,15 @@ func (q *Queries) ClearQuestionUserFields(ctx context.Context, userID pgtype.UUI
 	return err
 }
 
+const clearRankingEntryEnteredBy = `-- name: ClearRankingEntryEnteredBy :exec
+UPDATE event_ranking_entries SET entered_by = NULL WHERE entered_by = $1
+`
+
+func (q *Queries) ClearRankingEntryEnteredBy(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearRankingEntryEnteredBy, userID)
+	return err
+}
+
 const clearRsvpMarker = `-- name: ClearRsvpMarker :exec
 UPDATE event_rsvps SET attendance_marked_by = NULL WHERE attendance_marked_by = $1
 `
@@ -337,6 +346,17 @@ DELETE FROM poll_votes WHERE user_id = $1
 
 func (q *Queries) DeleteUserPollVotes(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserPollVotes, userID)
+	return err
+}
+
+const deleteUserRankingEntries = `-- name: DeleteUserRankingEntries :exec
+DELETE FROM event_ranking_entries WHERE user_id = $1
+`
+
+// Elle girilen derecesi kişiye aittir; kişiyle birlikte silinir. Başkasının
+// derecesini girdiyse derece kalır, yazan boşalır (issue #253).
+func (q *Queries) DeleteUserRankingEntries(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserRankingEntries, userID)
 	return err
 }
 

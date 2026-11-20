@@ -1002,6 +1002,51 @@ func (q *Queries) ExportQuestions(ctx context.Context, arg ExportQuestionsParams
 	return items, nil
 }
 
+const exportRankingEntries = `-- name: ExportRankingEntries :many
+SELECT r.id AS k, jsonb_build_object(
+  'event_id', r.event_id, 'component_key', r.component_key, 'value', r.value,
+  'created_at', r.created_at, 'updated_at', r.updated_at
+) AS data
+FROM event_ranking_entries AS r
+WHERE r.user_id = $1 AND r.id > $2
+ORDER BY r.id
+LIMIT $3
+`
+
+type ExportRankingEntriesParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportRankingEntriesRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Elle girilen dereceleriniz (`ranking` bileşeni, issue #253): organizatörün
+// ya da hakemin sizin adınıza girdiği süre ya da sıra. Kimin girdiği yer
+// almaz; ölçümden hesaplanan dereceler ölçümlerinizdedir (measurements).
+func (q *Queries) ExportRankingEntries(ctx context.Context, arg ExportRankingEntriesParams) ([]ExportRankingEntriesRow, error) {
+	rows, err := q.db.Query(ctx, exportRankingEntries, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportRankingEntriesRow{}
+	for rows.Next() {
+		var i ExportRankingEntriesRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportReports = `-- name: ExportReports :many
 SELECT r.id AS k, jsonb_build_object(
   'id', r.id, 'tayfa_id', r.tayfa_id, 'target_type', r.target_type, 'target_id', r.target_id,

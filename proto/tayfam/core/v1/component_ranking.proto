@@ -1,0 +1,126 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/component.proto";
+
+// RankingComponentService is the ranking component (kind "ranking", issue
+// #253; ADR-0025 §4, §5; ADR-0037 §3): the participants of an event in
+// order, by a time or a place.
+//
+// The definition decides where the values come from: with source (the key
+// of a personal measure of the same type version) the ranking is computed
+// from the measure's stored values and takes no values of its own; with
+// metric (duration: seconds, at most two decimals; rank: a whole place)
+// managers and the referees the organizer assigned enter one value per
+// participant, from the event's start until the component freezes seven
+// days after the event's end. direction (asc, desc) orders the values;
+// equal values share a place and the next one is skipped (1, 1, 3).
+//
+// Only gateway calls it with the user's access token. Authentication,
+// scope and the errors every component shares are those of
+// EventComponentService (component.proto): anyone but an ACTIVE member
+// gets ERROR_REASON_TAYFA_NOT_FOUND, and so on. Values are never logged or
+// written to the audit record or to an outbox event.
+service RankingComponentService {
+  // GetRanking returns the ranking. Open to every active member, muted ones
+  // included. A ranking computed from a sensitive measure is hidden from
+  // everyone but those who see every value of the measure.
+  rpc GetRanking(GetRankingRequest) returns (GetRankingResponse);
+
+  // SetRankingEntry writes a participant's value of a ranking entered by
+  // hand. Errors: ERROR_REASON_VALIDATION (value: not one the metric
+  // takes; user_id), ERROR_REASON_RANKING_FROM_MEASURE (a ranking computed
+  // from a measure), ERROR_REASON_RANKING_NOT_STARTED,
+  // ERROR_REASON_RANKING_NOT_PARTICIPANT, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED and the errors of every component change.
+  rpc SetRankingEntry(SetRankingEntryRequest) returns (SetRankingEntryResponse);
+
+  // RemoveRankingEntry removes a participant's value of a ranking entered
+  // by hand; removing one that is not there is not an error. Errors as
+  // SetRankingEntry, without the start and participant checks.
+  rpc RemoveRankingEntry(RemoveRankingEntryRequest) returns (RemoveRankingEntryResponse);
+}
+
+// RankingMetric is the metric parameter of a ranking entered by hand.
+enum RankingMetric {
+  // A ranking computed from a measure has no metric.
+  RANKING_METRIC_UNSPECIFIED = 0;
+  // A time in seconds.
+  RANKING_METRIC_DURATION = 1;
+  // A place: 1, 2, 3 …
+  RANKING_METRIC_RANK = 2;
+}
+
+// RankingDirection is the direction parameter, or its default.
+enum RankingDirection {
+  RANKING_DIRECTION_UNSPECIFIED = 0;
+  // The lowest value first (the default of a ranking entered by hand).
+  RANKING_DIRECTION_ASC = 1;
+  // The highest value first (the default of a computed ranking).
+  RANKING_DIRECTION_DESC = 2;
+}
+
+// RankingEntry is one participant's place in the ranking.
+message RankingEntry {
+  string user_id = 1;
+  double value = 2;
+  // The place, from 1; equal values share it.
+  int32 rank = 3;
+  google.protobuf.Timestamp update_time = 4;
+}
+
+// EventRanking is one ranking component of an event, as the caller sees
+// it.
+message EventRanking {
+  // The key of the measure the ranking is computed from; empty for a
+  // ranking entered by hand.
+  string source = 1;
+  RankingMetric metric = 2;
+  RankingDirection direction = 3;
+  // The measure's unit and decimals for a computed ranking; for one entered
+  // by hand the unit is empty and the decimals the metric's (2 for
+  // duration, 0 for rank).
+  string unit = 4;
+  int32 decimals = 5;
+  // The participants in order, the best first; empty when hidden or when
+  // the measure is switched off.
+  repeated RankingEntry entries = 6;
+  // The ranking comes from a sensitive measure the caller may not see
+  // every value of.
+  bool hidden = 7;
+  // False when the measure a computed ranking comes from is switched off
+  // for the event; always true for a ranking entered by hand.
+  bool measure_enabled = 8;
+  // The caller may enter values now; never for a computed ranking.
+  bool caller_can_edit = 9;
+}
+
+message GetRankingRequest {
+  ComponentRef ref = 1;
+}
+
+message GetRankingResponse {
+  EventRanking ranking = 1;
+}
+
+message SetRankingEntryRequest {
+  ComponentRef ref = 1;
+  // The participant whose value this is.
+  string user_id = 2;
+  double value = 3;
+}
+
+message SetRankingEntryResponse {
+  EventRanking ranking = 1;
+}
+
+message RemoveRankingEntryRequest {
+  ComponentRef ref = 1;
+  string user_id = 2;
+}
+
+message RemoveRankingEntryResponse {
+  EventRanking ranking = 1;
+}

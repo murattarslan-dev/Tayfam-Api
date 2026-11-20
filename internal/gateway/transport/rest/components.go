@@ -100,6 +100,7 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 		registerGuestPlayers,
 
 		// ranking (#253)
+		registerRankingComponent,
 
 		// vote (#254)
 

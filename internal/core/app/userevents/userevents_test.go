@@ -200,6 +200,7 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"event_team_members.user_id":     `SELECT count(*) FROM event_team_members WHERE user_id = $1`,
 		"event_draw_entries.user_id":     `SELECT count(*) FROM event_draw_entries WHERE user_id = $1`,
 		"event_score_players.user_id":    `SELECT count(*) FROM event_score_players WHERE user_id = $1`,
+		"event_ranking_entries":          `SELECT count(*) FROM event_ranking_entries WHERE $1 IN (user_id, entered_by)`,
 		"event_photos":                   `SELECT count(*) FROM event_photos WHERE $1 IN (uploader_id, deleted_by)`,
 		"user_activity_records.user_id":  `SELECT count(*) FROM user_activity_records WHERE user_id = $1`,
 		"questions":                      `SELECT count(*) FROM questions WHERE $1 IN (author_id, deleted_by)`,
@@ -548,6 +549,12 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 		id.New().PG(), hike.PG(), u.PG())
 	e.seed(t, `INSERT INTO event_measurements (id, event_id, component_key, user_id, value, entered_by) VALUES ($1, $2, 'goals', $3, 1, $4)`,
 		id.New().PG(), hike.PG(), a.PG(), u.PG())
+	// Rankings (issue #253): u's time goes; a's time u entered stays
+	// without its writer.
+	e.seed(t, `INSERT INTO event_ranking_entries (id, event_id, component_key, user_id, value, entered_by) VALUES ($1, $2, 'ranking', $3, 61.5, $4)`,
+		id.New().PG(), hike.PG(), u.PG(), a.PG())
+	e.seed(t, `INSERT INTO event_ranking_entries (id, event_id, component_key, user_id, value, entered_by) VALUES ($1, $2, 'ranking', $3, 63, $4)`,
+		id.New().PG(), hike.PG(), a.PG(), u.PG())
 	// Teams (issue #248): u's place goes; the team and a's place stay.
 	team := id.New()
 	e.seed(t, `INSERT INTO event_teams (id, event_id, component_key, position) VALUES ($1, $2, 'teams', 1)`, team.PG(), hike.PG())
@@ -601,6 +608,9 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 	}
 	if n := e.count(t, `SELECT count(*) FROM event_measurements WHERE event_id = $1 AND entered_by IS NULL AND (user_id IS NULL OR user_id = $2)`, hike.PG(), a.PG()); n != 2 {
 		t.Errorf("toplam ölçüm ya da başkasının ölçümü silindi ya da yazan boşalmadı: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_ranking_entries WHERE event_id = $1 AND user_id = $2 AND entered_by IS NULL`, hike.PG(), a.PG()); n != 1 {
+		t.Errorf("başkasının derecesi silindi ya da yazan boşalmadı: %d", n)
 	}
 	if n := e.count(t, `SELECT count(*) FROM event_team_members WHERE team_id = $1 AND user_id = $2`, team.PG(), a.PG()); n != 1 {
 		t.Errorf("başkasının takımdaki yeri silindi: %d", n)
