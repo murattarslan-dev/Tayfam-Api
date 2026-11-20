@@ -80,7 +80,7 @@ var wantAppPrivileges = map[string]string{
 	"tayfa_stats":      "DELETE,INSERT,SELECT",
 	"user_stats":       "DELETE,INSERT,SELECT",
 	"event_stat_runs":  "INSERT,SELECT,UPDATE(changed_at,counted)",
-	"tayfa_stat_queue": "DELETE,INSERT,SELECT",
+	"tayfa_stat_queue": "DELETE,INSERT,SELECT,UPDATE(queued_at)",
 	// Issue #237: a value never moves to another event or field.
 	"event_field_values": "DELETE,INSERT,SELECT,UPDATE(updated_at,value)",
 	// Issue #238: a selection never moves to another event or component

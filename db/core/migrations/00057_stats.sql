@@ -91,11 +91,12 @@ CREATE TABLE tayfa_stat_queue (
 );
 
 -- Tablolar yeniden yazılır (silinip eklenir), satır değiştirilmez; işaret
--- yalnızca counted ve changed_at'i değiştirir.
+-- yalnızca counted ve changed_at'i değiştirir. Kuyruk satırı FOR UPDATE ile
+-- alınır (bu yüzden queued_at üzerinde UPDATE) ve silinir.
 GRANT SELECT, INSERT, DELETE ON tayfa_stats TO core_app;
 GRANT SELECT, INSERT, DELETE ON user_stats TO core_app;
 GRANT SELECT, INSERT, UPDATE (counted, changed_at) ON event_stat_runs TO core_app;
-GRANT SELECT, INSERT, DELETE ON tayfa_stat_queue TO core_app;
+GRANT SELECT, INSERT, DELETE, UPDATE (queued_at) ON tayfa_stat_queue TO core_app;
 
 -- +goose Down
 

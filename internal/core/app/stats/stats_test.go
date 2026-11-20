@@ -320,8 +320,9 @@ func TestRecompute(t *testing.T) {
 	if got := e.tayfaStat(t, tf, 2025, fishType+".catches.distinct_species"); got != 1 {
 		t.Errorf("birleştirmeden sonra farklı tür: %v", got)
 	}
-	if got := e.tayfaStat(t, tf, 2026, "events"); got != -1 {
-		t.Errorf("silinen etkinliğin yılı kaldı: %v", got)
+	// ev1, the blood drive and the event that froze; ev2 is gone.
+	if got := e.tayfaStat(t, tf, 0, "events"); got != 3 {
+		t.Errorf("silinen etkinlik düşmedi: %v", got)
 	}
 	// Badges stay.
 	if n := e.count(t, `SELECT count(*) FROM tayfa_badges WHERE tayfa_id = $1`, tf.PG()); n != 2 {
