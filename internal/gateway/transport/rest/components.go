@@ -111,6 +111,9 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 		registerQuestionsComponent,
 
 		// pool_link (#271)
+
+		// tayfa statistics (#266)
+		registerTayfaStats,
 	}
 }
 
