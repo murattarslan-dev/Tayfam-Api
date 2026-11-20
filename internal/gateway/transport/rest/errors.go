@@ -164,6 +164,13 @@ var problemsByDomain = map[string]map[string]problem{
 		// Draw component (issue #249; ADR-0025 §4, §5).
 		"ERROR_REASON_DRAW_ALREADY_MADE": {http.StatusConflict, "draw-already-made"},
 		"ERROR_REASON_DRAW_TOO_FEW":      {http.StatusConflict, "draw-too-few"},
+		// Scoreboard component (issue #250; ADR-0025 §4, §5).
+		"ERROR_REASON_SCORE_PRESET_UNAVAILABLE":     {http.StatusConflict, "score-preset-unavailable"},
+		"ERROR_REASON_SCORE_TABLE_NOT_FOUND":        {http.StatusNotFound, "score-table-not-found"},
+		"ERROR_REASON_SCORE_TABLE_FINISHED":         {http.StatusConflict, "score-table-finished"},
+		"ERROR_REASON_SCORE_TABLE_STARTED":          {http.StatusConflict, "score-table-started"},
+		"ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT": {http.StatusConflict, "score-player-not-participant"},
+		"ERROR_REASON_SCORE_NOT_STARTED":            {http.StatusConflict, "score-not-started"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

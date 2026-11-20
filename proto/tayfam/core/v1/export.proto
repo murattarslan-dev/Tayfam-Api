@@ -89,6 +89,11 @@ enum CoreExportSection {
   // event, the component, the place and when it was drawn. The others in
   // the draw are not exported.
   CORE_EXPORT_SECTION_DRAW_ENTRIES = 27;
+  // The caller's seats at scoreboard tables (the scoreboard component,
+  // issue #250): the event, the component, the table, the seat and the
+  // caller's score in every round. The others at the table are not
+  // exported.
+  CORE_EXPORT_SECTION_SCORES = 28;
 }
 
 message ExportMyDataRequest {}

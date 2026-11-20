@@ -217,6 +217,25 @@ WHERE d.user_id = @user_id AND d.id > @after
 ORDER BY d.id
 LIMIT @n;
 
+-- Yazbozdaki yerleriniz ve skorlarınız (`scoreboard` bileşeni, issue #250):
+-- hangi etkinliğin hangi masasında oynadınız, el el skorunuz. Masadaki
+-- diğer kişiler ve skorları dışa aktarılmaz.
+-- name: ExportScores :many
+SELECT p.id AS k, jsonb_build_object(
+  'event_id', p.event_id, 'component_key', p.component_key, 'table_id', p.table_id,
+  'table_label', t.label, 'preset_key', t.preset_key, 'position', p.position,
+  'scores', COALESCE((
+    SELECT jsonb_agg(jsonb_build_object('round', s.round, 'points', s.points, 'outcome', s.outcome)
+      ORDER BY s.round)
+    FROM event_scores AS s WHERE s.player_id = p.id), '[]'::jsonb),
+  'created_at', p.created_at
+) AS data
+FROM event_score_players AS p
+JOIN event_score_tables AS t ON t.id = p.table_id
+WHERE p.user_id = @user_id AND p.id > @after
+ORDER BY p.id
+LIMIT @n;
+
 -- Albüm fotoğrafları (issue #206); dosyaların kendisi zip'e girmez
 -- (ADR-0021 §5), uploads bölümü onları listeler.
 -- name: ExportEventPhotos :many

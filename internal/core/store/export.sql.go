@@ -945,6 +945,57 @@ func (q *Queries) ExportReports(ctx context.Context, arg ExportReportsParams) ([
 	return items, nil
 }
 
+const exportScores = `-- name: ExportScores :many
+SELECT p.id AS k, jsonb_build_object(
+  'event_id', p.event_id, 'component_key', p.component_key, 'table_id', p.table_id,
+  'table_label', t.label, 'preset_key', t.preset_key, 'position', p.position,
+  'scores', COALESCE((
+    SELECT jsonb_agg(jsonb_build_object('round', s.round, 'points', s.points, 'outcome', s.outcome)
+      ORDER BY s.round)
+    FROM event_scores AS s WHERE s.player_id = p.id), '[]'::jsonb),
+  'created_at', p.created_at
+) AS data
+FROM event_score_players AS p
+JOIN event_score_tables AS t ON t.id = p.table_id
+WHERE p.user_id = $1 AND p.id > $2
+ORDER BY p.id
+LIMIT $3
+`
+
+type ExportScoresParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportScoresRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Yazbozdaki yerleriniz ve skorlarınız (`scoreboard` bileşeni, issue #250):
+// hangi etkinliğin hangi masasında oynadınız, el el skorunuz. Masadaki
+// diğer kişiler ve skorları dışa aktarılmaz.
+func (q *Queries) ExportScores(ctx context.Context, arg ExportScoresParams) ([]ExportScoresRow, error) {
+	rows, err := q.db.Query(ctx, exportScores, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportScoresRow{}
+	for rows.Next() {
+		var i ExportScoresRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportSocialSettings = `-- name: ExportSocialSettings :many
 SELECT $1::uuid AS k, jsonb_build_object(
   'profiling_enabled', COALESCE(s.profiling_enabled, true),

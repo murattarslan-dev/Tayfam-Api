@@ -226,6 +226,18 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DRAW_ALREADY_MADE, true
 	case errors.Is(err, apperr.ErrDrawTooFew):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DRAW_TOO_FEW, true
+	case errors.Is(err, apperr.ErrScorePresetUnavailable):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SCORE_PRESET_UNAVAILABLE, true
+	case errors.Is(err, apperr.ErrScoreTableNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_SCORE_TABLE_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrScoreTableFinished):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SCORE_TABLE_FINISHED, true
+	case errors.Is(err, apperr.ErrScoreTableStarted):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SCORE_TABLE_STARTED, true
+	case errors.Is(err, apperr.ErrScorePlayerNotParticipant):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT, true
+	case errors.Is(err, apperr.ErrScoreNotStarted):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SCORE_NOT_STARTED, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

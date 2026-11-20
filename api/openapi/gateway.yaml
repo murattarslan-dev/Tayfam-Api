@@ -3405,6 +3405,302 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Etkinlik bileşenleri: yazboz (`scoreboard`; core ScoreboardComponentService, #250, ADR-0025 §4–§6, ADR-0037 §5) ---
+  # Oyunların el el (ya da tek maç, ilk N) skorlandığı masalar; canlı
+  # güncellenir (`event.component_changed`). Bileşen en fazla 20 masa
+  # taşır (`tables` parametresi kapalıysa 1). Masada katılımcılar (etkin
+  # üye ve "geliyorum" demiş ya da katılımı doğrulanmış) ya da takım
+  # yazbozunda etkinliğin bir takım bileşeninin takımları oturur. Masanın
+  # kuralları masa kurulurken çözülüp masada saklanır: bileşen parametreleri
+  # (organizatörün seçimiyle), üstüne masanın ön ayarı, hedef puanda masanın
+  # kendisi. Ön ayar katalog verisidir (Batak, 101 Okey …); bileşenin
+  # `presets` parametresi seçilebilenleri listeler ve böyle bileşende masa
+  # bir ön ayar seçmek zorundadır. Hiçbir kuralda para, bahis ya da ödül
+  # yoktur. Masa, elleri oyunu bitirdiğinde (tek maçın eli, hedefe ulaşan,
+  # BO maçında yarıdan fazlasını kazanan) ya da hakem veya organizatör
+  # bitirdiğinde biter; organizatör yeniden açabilir. Masayı organizatör,
+  # moderatör ve yönetici yönetir ve skoru düzeltir; eli onlar ve masaya
+  # (bileşene, etkinliğe) atanmış hakemler girer (`…/referees`). El,
+  # etkinlik başladıktan sonra girilir (`score-not-started`); her yazma
+  # bitişten 7 gün sonra kapanır (`component-frozen`). Hesabını silen
+  # kişinin yeri ve skorları "Silinmiş kullanıcı" olarak kalır. Masalar
+  # katılımdır, seri örneğine kopyalanmaz. Yazan her uç bileşeni güncel
+  # haliyle döner.
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/scoreboard:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: getEventScoreboard
+      summary: Etkinliğin yazbozu
+      description: |
+        Masalar, yerleri, elleri, sıralama ve (biten masada) kazananlar ile
+        bileşenin sunduğu ve masaların kullandığı ön ayarlar. Her etkin
+        üyeye açıktır (susturulmuş üye de okur); iptal edilmiş ve donmuş
+        etkinlikte de okunur. Bileşen uçlarının ortak kuralları geçerlidir
+        (`component-not-found`, `component-disabled`).
+      responses:
+        "200":
+          description: Yazboz
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventScoreboard" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/scoreboard/tables:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    post:
+      operationId: createEventScoreTable
+      summary: Masa kurar (organizatör, moderatör, yönetici)
+      description: |
+        Yerler şimdi ya da ilk elden önce (`…/players`) verilir. Bileşen ön
+        ayar sunuyorsa `preset_key` onlardan biri olmalı, sunmuyorsa
+        verilmez (aksi ya da emekli ön ayar `score-preset-unavailable`).
+        `first_to` ya da `first` kuralında hedef puan yoksa, etiket 1–30
+        karakter değilse, yer tam olarak bir kişi ya da takım değilse, bir
+        kişi ya da takım iki kez geçerse, ön ayarın oyuncu sayısı dışındaysa,
+        oyuncu masasına takım ya da takım masasına kişi verilirse, takım
+        masasında `teams_key` etkinliğin türündeki bir `teams` bileşeni
+        değilse `invalid-request`. Katılımcı olmayan kişi ya da takım
+        bileşeninde olmayan takım `score-player-not-participant`; masalar
+        doluysa `event-limit`. Bileşen uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventScoreTableRequest" }
+      responses:
+        "201":
+          description: Yazboz, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventScoreboard" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/scoreboard/tables/{table_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/ScoreTableID"
+    patch:
+      operationId: updateEventScoreTable
+      summary: Masanın adını ya da durumunu değiştirir (organizatör, moderatör, yönetici)
+      description: |
+        `status` ile masa yeniden açılır (`open`) ya da bitirilir
+        (`finished`). En az bir alan verilir. Masa yoksa
+        `score-table-not-found`. Bileşen uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventScoreTableUpdate" }
+      responses:
+        "200":
+          description: Yazboz, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventScoreboard" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteEventScoreTable
+      summary: Masayı siler (organizatör, moderatör, yönetici)
+      description: |
+        Masa yerleri, elleri ve hakem atamalarıyla silinir. Masa yoksa
+        `score-table-not-found`. Bileşen uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Yazboz, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventScoreboard" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/scoreboard/tables/{table_id}/players:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/ScoreTableID"
+    put:
+      operationId: setEventScorePlayers
+      summary: Masanın yerlerini belirler (organizatör, moderatör, yönetici)
+      description: |
+        Sırasıyla yerlerin yerini alır (boş liste yerleri boşaltır). İlk el
+        girildikten sonra `score-table-started`. Yer kuralları ve hataları
+        masa kurmadaki gibidir. Bileşen uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventScorePlayersRequest" }
+      responses:
+        "200":
+          description: Yazboz, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventScoreboard" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/scoreboard/tables/{table_id}/rounds:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/ScoreTableID"
+    post:
+      operationId: addEventScoreRound
+      summary: Masanın sıradaki elini girer (organizatör, moderatör, yönetici, hakem)
+      description: |
+        Hakem masaya, bileşene ya da etkinliğe atanmış olmalıdır. Oyunu
+        bitiren el masayı bitirir. Skor masanın yerleri için verilir, her yer
+        en fazla bir kez; `points` modunda `points` (−1000000…1000000),
+        `wdl` modunda `outcome` verilir ve el en az iki yerde ya birinin
+        galibiyeti ile diğerlerinin mağlubiyeti ya da herkesin
+        beraberliğidir (aksi `invalid-request`). Biten masada
+        `score-table-finished`; 200 elden sonra `event-limit`; etkinlik
+        başlamadıysa `score-not-started`. Bileşen uçlarının ortak kuralları
+        geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventScoreRoundRequest" }
+      responses:
+        "200":
+          description: Yazboz, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventScoreboard" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/scoreboard/tables/{table_id}/rounds/{round}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/ScoreTableID"
+      - $ref: "#/components/parameters/ScoreRound"
+    put:
+      operationId: correctEventScoreRound
+      summary: Girilmiş bir eli düzeltir (organizatör, moderatör, yönetici)
+      description: |
+        Açık ya da biten masada elin skorlarının yerini alır. Oyunu bitiren
+        düzeltme açık masayı bitirir; biten masa bitmiş kalır (yeniden açmak
+        için `PATCH`). Girilmemiş el `invalid-request`; skor kuralları el
+        girmedeki gibidir. Bileşen uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventScoreRoundRequest" }
+      responses:
+        "200":
+          description: Yazboz, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventScoreboard" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteEventScoreRound
+      summary: Masanın son elini siler (organizatör, moderatör, yönetici)
+      description: |
+        Yalnızca son el silinir (aksi `invalid-request`); masanın durumu
+        değişmez. Bileşen uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Yazboz, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventScoreboard" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/scoreboard/tables/{table_id}/finish:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/ScoreTableID"
+    post:
+      operationId: finishEventScoreTable
+      summary: Masayı bitirir (organizatör, moderatör, yönetici, hakem)
+      description: |
+        Gövde almaz. Biten masayı bitirmek bir şey değiştirmez. Etkinlik
+        başlamadıysa `score-not-started`. Bileşen uçlarının ortak kuralları
+        geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Yazboz, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventScoreboard" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   # --- Tayfa sözlüğü (core TayfaVocabularyService, #244, ADR-0037 §4) ---
   # Tayfanın kendi değer listesi: bir ad alanındaki (`fish_species`, `book`
   # …) değerler. Tanımda `vocabulary` olan metin alanı (`CatalogVocabulary`)
@@ -6823,6 +7119,18 @@ components:
       required: true
       description: Programdaki maddenin kimliği (`EventScheduleItem.id`).
       schema: { type: string, format: uuid }
+    ScoreTableID:
+      name: table_id
+      in: path
+      required: true
+      description: Yazboz masasının kimliği (`EventScoreTable.id`).
+      schema: { type: string, format: uuid }
+    ScoreRound:
+      name: round
+      in: path
+      required: true
+      description: Elin numarası (1–200).
+      schema: { type: integer, format: int32, minimum: 1, maximum: 200 }
     SeriesID:
       name: series_id
       in: path
@@ -7034,6 +7342,13 @@ components:
         # core: kura bileşeni (#249, ADR-0025 §4, §5)
         - draw-already-made
         - draw-too-few
+        # core: yazboz bileşeni (#250, ADR-0025 §4, §5, ADR-0037 §5)
+        - score-preset-unavailable
+        - score-table-not-found
+        - score-table-finished
+        - score-table-started
+        - score-player-not-participant
+        - score-not-started
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -8517,6 +8832,159 @@ components:
         caller_can_draw:
           type: boolean
           description: Şu an kurayı çekebilirsiniz (kura çekilmemiş; organizatör, moderatör, yönetici; susturulmamış; etkinlik iptal değil, donmamış, tayfa salt okunur değil).
+    EventScoreRules:
+      type: object
+      description: |
+        Yazboz kuralları (#250). Ön ayarda verilmeyen kural boştur ve
+        bileşenden gelir; masada ve bileşende hepsi doludur.
+      properties:
+        side: { type: string, enum: [player, team], description: "Oyuncular kişiler (`player`) ya da takımlar (`team`)." }
+        rounds: { type: string, enum: [round, single, first_to], description: "El el, tek maç ya da hedefe ilk ulaşana kadar." }
+        winner: { type: string, enum: [high, low, first], description: "Yüksek, düşük toplam ya da hedefe ilk ulaşan kazanır." }
+        result: { type: string, enum: [points, wdl], description: "Puan ya da galibiyet (1) / beraberlik (½) / mağlubiyet (0)." }
+        target: { type: integer, format: int32, minimum: 1, maximum: 100000, description: Hedef puan; yoksa alan yok. }
+        best_of: { type: integer, format: int32, enum: [3, 5], description: "BO maçı; yarıdan fazlasını kazanan kazanır. Yoksa alan yok." }
+    EventScorePreset:
+      type: object
+      required: [key, labels, rules, retired]
+      description: Katalogdaki bir yazboz ön ayarı (Batak, 101 Okey …; #250).
+      properties:
+        key: { type: string, description: "Değişmez anahtar: `^[a-z][a-z0-9_]{1,39}$`." }
+        labels: { $ref: "#/components/schemas/CatalogLabels" }
+        players_min: { type: integer, format: int32, description: Masanın en az yer sayısı; yoksa alan yok. }
+        players_max: { type: integer, format: int32, description: Masanın en çok yer sayısı; yoksa alan yok. }
+        rules: { $ref: "#/components/schemas/EventScoreRules" }
+        retired: { type: boolean, description: Emekli ön ayar eski masalarda görünür; yeni masa kullanamaz. }
+    EventScorePlayer:
+      type: object
+      required: [id, position]
+      description: |
+        Masadaki bir yer. Kişi ya da takım; ikisi de yoksa kişi hesabını
+        silmiştir ("Silinmiş kullanıcı") ya da takım kaldırılmıştır.
+      properties:
+        id: { type: string, format: uuid }
+        position: { type: integer, format: int32, minimum: 1, maximum: 50 }
+        user_id: { type: string, format: uuid }
+        team_id: { type: string, format: uuid, description: Takım masasında takım bileşeninin takımı. }
+    EventScoreEntry:
+      type: object
+      required: [player_id]
+      description: Bir yerin bir eldeki skoru.
+      properties:
+        player_id: { type: string, format: uuid, description: "Yer (`EventScorePlayer.id`)." }
+        points: { type: integer, format: int32, description: "Yalnızca `points` modunda." }
+        outcome: { type: string, enum: [win, draw, loss], description: "Yalnızca `wdl` modunda." }
+    EventScoreRound:
+      type: object
+      required: [number, scores]
+      properties:
+        number: { type: integer, format: int32, minimum: 1, maximum: 200 }
+        scores:
+          type: array
+          items: { $ref: "#/components/schemas/EventScoreEntry" }
+    EventScoreStanding:
+      type: object
+      required: [player_id, total, rounds_won, rank]
+      properties:
+        player_id: { type: string, format: uuid }
+        total: { type: number, format: double, description: "Puan toplamı; `wdl` modunda galibiyet 1, beraberlik 0.5." }
+        rounds_won: { type: integer, format: int32, description: Tek başına kazanılan el sayısı; BO maçında kazananı belirler. }
+        rank: { type: integer, format: int32, description: 1'den başlar; eşitler aynı sırayı paylaşır. }
+    EventScoreTable:
+      type: object
+      required: [id, label, rules, status, created_at, players, rounds, standings, winner_ids, caller_can_score]
+      description: Yazbozun bir masası (#250).
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string, minLength: 1, maxLength: 30 }
+        preset_key: { type: string, description: Masanın ön ayarı; yoksa alan yok. }
+        rules: { $ref: "#/components/schemas/EventScoreRules" }
+        teams_key: { type: string, description: "Yalnızca takım masasında, takım bileşeninin anahtarı." }
+        status: { type: string, enum: [open, finished] }
+        finished_at: { type: string, format: date-time, description: Yalnızca biten masada. }
+        created_at: { type: string, format: date-time }
+        players:
+          type: array
+          maxItems: 50
+          description: Sıraya göre.
+          items: { $ref: "#/components/schemas/EventScorePlayer" }
+        rounds:
+          type: array
+          maxItems: 200
+          description: El numarasına göre.
+          items: { $ref: "#/components/schemas/EventScoreRound" }
+        standings:
+          type: array
+          description: Sıralamaya, sonra yer sırasına göre.
+          items: { $ref: "#/components/schemas/EventScoreStanding" }
+        winner_ids:
+          type: array
+          description: Biten masada birinci sıradaki yerler (beraberlikte birden çok); açık masada boş.
+          items: { type: string, format: uuid }
+        caller_can_score:
+          type: boolean
+          description: Şu an el girebilir ve masayı bitirebilirsiniz (organizatör, moderatör, yönetici ya da masanın hakemi; susturulmamış; masa açık; etkinlik başlamış, iptal değil, donmamış; tayfa salt okunur değil).
+    EventScoreboard:
+      type: object
+      required: [tables, presets, rules, max_tables, caller_can_manage]
+      description: Bir etkinliğin bir yazboz bileşeni, isteği yapanın gördüğü haliyle (#250).
+      properties:
+        tables:
+          type: array
+          maxItems: 20
+          description: Kuruluş sırasıyla.
+          items: { $ref: "#/components/schemas/EventScoreTable" }
+        presets:
+          type: array
+          description: Bileşenin sunduğu ve masaların kullandığı ön ayarlar, katalog sırasıyla.
+          items: { $ref: "#/components/schemas/EventScorePreset" }
+        rules: { $ref: "#/components/schemas/EventScoreRules" }
+        max_tables: { type: integer, format: int32, description: "20; bileşenin `tables` parametresi kapalıysa 1." }
+        caller_can_manage:
+          type: boolean
+          description: Şu an masaları yönetebilir ve skor düzeltebilirsiniz (organizatör, moderatör, yönetici; susturulmamış; etkinlik iptal değil, donmamış; tayfa salt okunur değil).
+    EventScorePlayerInput:
+      type: object
+      description: Bir yer; `user_id` ve `team_id`'den tam olarak biri.
+      properties:
+        user_id: { type: string, format: uuid }
+        team_id: { type: string, format: uuid }
+    EventScoreTableRequest:
+      type: object
+      required: [label]
+      properties:
+        label: { type: string, minLength: 1, maxLength: 30 }
+        preset_key: { type: string, description: Bileşen ön ayar sunuyorsa zorunlu; sunmuyorsa verilmez. }
+        target: { type: integer, format: int32, minimum: 0, maximum: 100000, description: Hedef puanı değiştirir; 0 ya da yok kuraldakini korur. }
+        teams_key: { type: string, description: "Takım masasında zorunlu: etkinliğin türündeki `teams` bileşeninin anahtarı." }
+        players:
+          type: array
+          maxItems: 50
+          description: Sırasıyla; boş ya da yoksa yerler sonra verilir.
+          items: { $ref: "#/components/schemas/EventScorePlayerInput" }
+    EventScoreTableUpdate:
+      type: object
+      description: En az bir alan.
+      properties:
+        label: { type: string, minLength: 1, maxLength: 30 }
+        status: { type: string, enum: [open, finished] }
+    EventScorePlayersRequest:
+      type: object
+      required: [players]
+      properties:
+        players:
+          type: array
+          maxItems: 50
+          items: { $ref: "#/components/schemas/EventScorePlayerInput" }
+    EventScoreRoundRequest:
+      type: object
+      required: [scores]
+      properties:
+        scores:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: { $ref: "#/components/schemas/EventScoreEntry" }
     VocabularyIds:
       type: object
       description: Alan anahtarı → tayfa sözlüğündeki değerin kimliği (#244).

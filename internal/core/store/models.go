@@ -95,6 +95,15 @@ type CatalogMetum struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
+type CatalogScorePreset struct {
+	Key       string
+	Position  int16
+	Labels    []byte
+	Params    []byte
+	Status    string
+	UpdatedAt pgtype.Timestamptz
+}
+
 type DiscoverJoin struct {
 	TayfaID  pgtype.UUID
 	UserID   pgtype.UUID
@@ -333,6 +342,49 @@ type EventScheduleItem struct {
 	EndsAt       pgtype.Timestamptz
 	Title        string
 	Note         pgtype.Text
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type EventScore struct {
+	ID           pgtype.UUID
+	TableID      pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	PlayerID     pgtype.UUID
+	Round        int16
+	Points       pgtype.Int4
+	Outcome      pgtype.Text
+	CreatedAt    pgtype.Timestamptz
+}
+
+type EventScorePlayer struct {
+	ID           pgtype.UUID
+	TableID      pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	Position     int16
+	UserID       pgtype.UUID
+	TeamKey      pgtype.Text
+	TeamID       pgtype.UUID
+	CreatedAt    pgtype.Timestamptz
+}
+
+type EventScoreTable struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	Label        string
+	PresetKey    pgtype.Text
+	Side         string
+	Rounds       string
+	Winner       string
+	Result       string
+	Target       pgtype.Int4
+	BestOf       pgtype.Int2
+	TeamKey      pgtype.Text
+	Status       string
+	FinishedAt   pgtype.Timestamptz
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
 }

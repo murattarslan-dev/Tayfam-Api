@@ -91,6 +91,7 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 		registerDrawComponent,
 
 		// scoreboard (#250)
+		registerScoreboardComponent,
 
 		// bracket (#251)
 

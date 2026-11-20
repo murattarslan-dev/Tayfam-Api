@@ -92,6 +92,11 @@ const (
 	// event, the component, the place and when it was drawn. The others in
 	// the draw are not exported.
 	CoreExportSection_CORE_EXPORT_SECTION_DRAW_ENTRIES CoreExportSection = 27
+	// The caller's seats at scoreboard tables (the scoreboard component,
+	// issue #250): the event, the component, the table, the seat and the
+	// caller's score in every round. The others at the table are not
+	// exported.
+	CoreExportSection_CORE_EXPORT_SECTION_SCORES CoreExportSection = 28
 )
 
 // Enum value maps for CoreExportSection.
@@ -124,6 +129,7 @@ var (
 		25: "CORE_EXPORT_SECTION_MEASUREMENTS",
 		26: "CORE_EXPORT_SECTION_TEAM_MEMBERSHIPS",
 		27: "CORE_EXPORT_SECTION_DRAW_ENTRIES",
+		28: "CORE_EXPORT_SECTION_SCORES",
 	}
 	CoreExportSection_value = map[string]int32{
 		"CORE_EXPORT_SECTION_UNSPECIFIED":           0,
@@ -153,6 +159,7 @@ var (
 		"CORE_EXPORT_SECTION_MEASUREMENTS":          25,
 		"CORE_EXPORT_SECTION_TEAM_MEMBERSHIPS":      26,
 		"CORE_EXPORT_SECTION_DRAW_ENTRIES":          27,
+		"CORE_EXPORT_SECTION_SCORES":                28,
 	}
 )
 
@@ -280,7 +287,7 @@ const file_tayfam_core_v1_export_proto_rawDesc = "" +
 	"\x13ExportMyDataRequest\"m\n" +
 	"\x14ExportMyDataResponse\x12;\n" +
 	"\asection\x18\x01 \x01(\x0e2!.tayfam.core.v1.CoreExportSectionR\asection\x12\x18\n" +
-	"\arecords\x18\x02 \x03(\fR\arecords*\x88\b\n" +
+	"\arecords\x18\x02 \x03(\fR\arecords*\xa8\b\n" +
 	"\x11CoreExportSection\x12#\n" +
 	"\x1fCORE_EXPORT_SECTION_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fCORE_EXPORT_SECTION_MEMBERSHIPS\x10\x01\x12#\n" +
@@ -309,7 +316,8 @@ const file_tayfam_core_v1_export_proto_rawDesc = "" +
 	")CORE_EXPORT_SECTION_VEHICLE_SEAT_REQUESTS\x10\x18\x12$\n" +
 	" CORE_EXPORT_SECTION_MEASUREMENTS\x10\x19\x12(\n" +
 	"$CORE_EXPORT_SECTION_TEAM_MEMBERSHIPS\x10\x1a\x12$\n" +
-	" CORE_EXPORT_SECTION_DRAW_ENTRIES\x10\x1b2l\n" +
+	" CORE_EXPORT_SECTION_DRAW_ENTRIES\x10\x1b\x12\x1e\n" +
+	"\x1aCORE_EXPORT_SECTION_SCORES\x10\x1c2l\n" +
 	"\rExportService\x12[\n" +
 	"\fExportMyData\x12#.tayfam.core.v1.ExportMyDataRequest\x1a$.tayfam.core.v1.ExportMyDataResponse0\x01B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vExportProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
