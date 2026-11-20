@@ -279,11 +279,11 @@ func TestComputeAndDecided(t *testing.T) {
 	high := scoreboard.Rules{Side: "player", Rounds: "round", Winner: "high", Result: "points"}
 	rounds := []scoreboard.Round{round(1, p, 10, 5, 10), round(2, p, 2, 9, 2)}
 	got := scoreboard.Compute(high, p, rounds, false)
-	if got.Standings[0].Player != p[1] || got.Standings[0].Total != 14 || got.Standings[0].Rank != 1 ||
+	if got.Standings[0].Player != p[1].ID || got.Standings[0].Total != 14 || got.Standings[0].Rank != 1 ||
 		got.Standings[1].Rank != 2 || got.Standings[2].Rank != 2 || len(got.Winners) != 0 {
 		t.Fatalf("yüksek kazanır: %+v", got)
 	}
-	if got := scoreboard.Compute(high, p, rounds, true); len(got.Winners) != 1 || got.Winners[0] != p[1] {
+	if got := scoreboard.Compute(high, p, rounds, true); len(got.Winners) != 1 || got.Winners[0] != p[1].ID {
 		t.Fatalf("biten masanın kazananı: %+v", got.Winners)
 	}
 	if scoreboard.Decided(high, p, rounds) {
@@ -294,7 +294,7 @@ func TestComputeAndDecided(t *testing.T) {
 	low := high
 	low.Winner = "low"
 	got = scoreboard.Compute(low, p, []scoreboard.Round{round(1, p, -101, 40, -101)}, true)
-	if got.Standings[0].Rank != 1 || got.Standings[1].Rank != 1 || got.Standings[2].Player != p[1] || len(got.Winners) != 2 {
+	if got.Standings[0].Rank != 1 || got.Standings[1].Rank != 1 || got.Standings[2].Player != p[1].ID || len(got.Winners) != 2 {
 		t.Fatalf("düşük kazanır: %+v", got)
 	}
 
@@ -306,7 +306,7 @@ func TestComputeAndDecided(t *testing.T) {
 	if !scoreboard.Decided(first, two, rs) {
 		t.Fatal("hedefe ulaşan masa bitmedi")
 	}
-	if got := scoreboard.Compute(first, two, rs, true); got.Winners[0] != two[0] {
+	if got := scoreboard.Compute(first, two, rs, true); got.Winners[0] != two[0].ID {
 		t.Fatalf("ilk ulaşan: %+v", got)
 	}
 	if scoreboard.Decided(first, two, rs[:1]) {
@@ -322,7 +322,7 @@ func TestComputeAndDecided(t *testing.T) {
 	// wdl best of three: two wins decide; a draw counts ½.
 	bo3 := scoreboard.Rules{Side: "player", Rounds: "round", Winner: "high", Result: "wdl", BestOf: 3}
 	w := func(n int32, a, b string) scoreboard.Round {
-		return scoreboard.Round{Number: n, Scores: []scoreboard.Score{{Player: two[0], Outcome: a}, {Player: two[1], Outcome: b}}}
+		return scoreboard.Round{Number: n, Scores: []scoreboard.Score{{Player: two[0].ID, Outcome: a}, {Player: two[1].ID, Outcome: b}}}
 	}
 	rs = []scoreboard.Round{w(1, "draw", "draw"), w(2, "loss", "win")}
 	if scoreboard.Decided(bo3, two, rs) {
@@ -330,7 +330,7 @@ func TestComputeAndDecided(t *testing.T) {
 	}
 	rs = append(rs, w(3, "loss", "win"))
 	got = scoreboard.Compute(bo3, two, rs, scoreboard.Decided(bo3, two, rs))
-	if len(got.Winners) != 1 || got.Winners[0] != two[1] || got.Standings[0].Total != 2.5 || got.Standings[0].RoundsWon != 2 ||
+	if len(got.Winners) != 1 || got.Winners[0] != two[1].ID || got.Standings[0].Total != 2.5 || got.Standings[0].RoundsWon != 2 ||
 		got.Standings[1].Total != 0.5 {
 		t.Fatalf("BO3: %+v", got)
 	}
