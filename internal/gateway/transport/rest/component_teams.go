@@ -99,11 +99,12 @@ func (h componentHandlers) getTeams(ctx context.Context, w http.ResponseWriter, 
 // teamsLevels reads and checks a generate body; an empty body (no levels)
 // is allowed. On a bad one it answers invalid-request and ok is false.
 func teamsLevels(w http.ResponseWriter, r *http.Request) (levels []*corev1.TeamLevel, ok bool) {
-	var b teamsGenerateBody
+	// A pointer so that a null body is refused; {} has no levels.
+	var b *teamsGenerateBody
 	if !decodeLimit(w, r, &b, teamsBodyMax) {
 		return nil, false
 	}
-	if len(b.Levels) > teamsPeopleMax {
+	if b == nil || len(b.Levels) > teamsPeopleMax {
 		badRequest(w, r)
 		return nil, false
 	}
