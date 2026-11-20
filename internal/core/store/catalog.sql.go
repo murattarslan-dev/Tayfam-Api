@@ -85,6 +85,38 @@ func (q *Queries) GetCatalogEventTypeVersion(ctx context.Context, arg GetCatalog
 	return i, err
 }
 
+const getCatalogStudyTag = `-- name: GetCatalogStudyTag :one
+SELECT t.key, COALESCE(t.parent_key, '')::text AS parent_key,
+  (CASE WHEN t.parent_key IS NULL THEN 1 WHEN p.parent_key IS NULL THEN 2 ELSE 3 END)::integer AS depth,
+  (t.status = 'active' AND COALESCE(p.status, 'active') = 'active'
+    AND COALESCE(g.status, 'active') = 'active')::boolean AS selectable
+FROM catalog_study_tags t
+LEFT JOIN catalog_study_tags p ON p.key = t.parent_key
+LEFT JOIN catalog_study_tags g ON g.key = p.parent_key
+WHERE t.key = $1
+`
+
+type GetCatalogStudyTagRow struct {
+	Key        string
+	ParentKey  string
+	Depth      int32
+	Selectable bool
+}
+
+// Bir etiketin yeri ve yeni içerikte seçilip seçilemeyeceği: kendisi ve
+// üst etiketleri aktifse seçilebilir. depth 1 düzey, 2 ders, 3 konu.
+func (q *Queries) GetCatalogStudyTag(ctx context.Context, key string) (GetCatalogStudyTagRow, error) {
+	row := q.db.QueryRow(ctx, getCatalogStudyTag, key)
+	var i GetCatalogStudyTagRow
+	err := row.Scan(
+		&i.Key,
+		&i.ParentKey,
+		&i.Depth,
+		&i.Selectable,
+	)
+	return i, err
+}
+
 const getCatalogVersion = `-- name: GetCatalogVersion :one
 
 SELECT catalog_version FROM catalog_meta
@@ -179,6 +211,48 @@ func (q *Queries) ListCatalogInterests(ctx context.Context) ([]ListCatalogIntere
 			&i.Icon,
 			&i.Status,
 			&i.DefaultWidgets,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCatalogStudyTags = `-- name: ListCatalogStudyTags :many
+SELECT key, COALESCE(parent_key, '')::text AS parent_key, position, labels, status
+FROM catalog_study_tags
+ORDER BY position, key
+`
+
+type ListCatalogStudyTagsRow struct {
+	Key       string
+	ParentKey string
+	Position  int32
+	Labels    []byte
+	Status    string
+}
+
+// Ders ve konu etiketleri (issue #259; ADR-0040 §5), emekliler dahil: eski
+// içerik onları göstermeye devam eder. Düzeylerin parent_key'i ”.
+func (q *Queries) ListCatalogStudyTags(ctx context.Context) ([]ListCatalogStudyTagsRow, error) {
+	rows, err := q.db.Query(ctx, listCatalogStudyTags)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCatalogStudyTagsRow{}
+	for rows.Next() {
+		var i ListCatalogStudyTagsRow
+		if err := rows.Scan(
+			&i.Key,
+			&i.ParentKey,
+			&i.Position,
+			&i.Labels,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}

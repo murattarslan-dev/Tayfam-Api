@@ -655,6 +655,9 @@ type Querier interface {
 	// Bir türün bir sürümü; eski etkinlikler için (emekli türler dahil).
 	// İlgi alanları ve durum türün güncel halinden gelir.
 	GetCatalogEventTypeVersion(ctx context.Context, arg GetCatalogEventTypeVersionParams) (GetCatalogEventTypeVersionRow, error)
+	// Bir etiketin yeri ve yeni içerikte seçilip seçilemeyeceği: kendisi ve
+	// üst etiketleri aktifse seçilebilir. depth 1 düzey, 2 ders, 3 konu.
+	GetCatalogStudyTag(ctx context.Context, key string) (GetCatalogStudyTagRow, error)
 	// Etkinlik türü kataloğu (issue #237; ADR-0025 §2, §8). core_app bu
 	// tabloları yalnızca okur; katalog migration'la (ileride platform paneliyle)
 	// değişir.
@@ -934,6 +937,9 @@ type Querier interface {
 	ListCatalogInterestStatuses(ctx context.Context) ([]ListCatalogInterestStatusesRow, error)
 	// Emekliye ayrılanlar dahil: eski tayfalar ve profiller onları gösterir.
 	ListCatalogInterests(ctx context.Context) ([]ListCatalogInterestsRow, error)
+	// Ders ve konu etiketleri (issue #259; ADR-0040 §5), emekliler dahil: eski
+	// içerik onları göstermeye devam eder. Düzeylerin parent_key'i ''.
+	ListCatalogStudyTags(ctx context.Context) ([]ListCatalogStudyTagsRow, error)
 	// Liste bileşeni (`checklist`; issue #241; ADR-0025 §4). Etkinlik her zaman
 	// önce tayfa kapsamında yüklenir ve bileşen etkinliğin tür sürümünde çözülür
 	// (internal/core/app/component: View / Change); buradaki sorgular o
