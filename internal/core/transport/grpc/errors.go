@@ -264,6 +264,12 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_GUEST_PLAYER_NOT_FOUND, true
 	case errors.Is(err, apperr.ErrGuestPlayerInUse):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_GUEST_PLAYER_IN_USE, true
+	case errors.Is(err, apperr.ErrRankingNotStarted):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_RANKING_NOT_STARTED, true
+	case errors.Is(err, apperr.ErrRankingNotParticipant):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_RANKING_NOT_PARTICIPANT, true
+	case errors.Is(err, apperr.ErrRankingFromMeasure):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_RANKING_FROM_MEASURE, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

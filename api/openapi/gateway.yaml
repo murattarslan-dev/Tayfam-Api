@@ -4015,6 +4015,103 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Etkinlik bileşenleri: derece / sıralama (`ranking`; core RankingComponentService, #253, ADR-0025 §4, §5, ADR-0037 §3) ---
+  # Katılımcıların bir süreye ya da sıraya göre dizilişi. Tanımda `source`
+  # (aynı türdeki kişisel bir ölçümün anahtarı) varsa derece ölçümün
+  # kaydedilmiş değerlerinden hesaplanır, ayrı giriş yoktur; yazan uçlar
+  # `ranking-from-measure` alır. `source` yoksa `metric` (`duration`: saniye,
+  # en çok iki basamak; `rank`: tam sayı sıra) ile organizatör, moderatör,
+  # yönetici ve organizatörün atadığı hakemler katılımcı başına elle girer:
+  # etkinlik başladıktan (`ranking-not-started`) bitişten 7 gün sonrasına
+  # kadar (`component-frozen`). Yön `direction` (`asc`, `desc`); verilmezse
+  # elle girilen derece artan, ölçümden hesaplanan azalan. Eşit değerler
+  # aynı sırayı paylaşır, sonraki sıra atlanır (1, 1, 3); sıra saklanmaz.
+  # Değerler log'a yazılmaz. Yazan her uç dereceyi güncel haliyle döner.
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/ranking:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: getEventRanking
+      summary: Etkinliğin derecesi
+      description: |
+        Her etkin üyeye açıktır (susturulmuş üye de okur); iptal edilmiş ve
+        donmuş etkinlikte de okunur. Hassas ölçümden (`sensitive`) hesaplanan
+        derece, ölçümün bütün değerlerini görebilenler (ölçümü organizatör
+        giriyorsa organizatör, moderatör, yönetici) dışında gizlidir
+        (`hidden`). Kaynak ölçüm kapalıysa (`measure_enabled: false`) derece
+        boştur. Bileşen uçlarının ortak kuralları geçerlidir
+        (`component-not-found`, `component-disabled`).
+      responses:
+        "200":
+          description: Derece
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventRanking" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/ranking/entries/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/UserID"
+    put:
+      operationId: setEventRankingEntry
+      summary: Bir katılımcının derecesini elle yazar (organizatör, moderatör, yönetici, hakem)
+      description: |
+        Süre sıfırdan büyük, en çok 1000000 saniye ve iki basamağa
+        yuvarlanır; sıra 1–10000 arası tam sayıdır (dışı `invalid-request`).
+        `going` cevabı vermemiş ve katılımı doğrulanmamış kişi
+        `ranking-not-participant`. Aynı değeri yeniden yazmak bir şey
+        değiştirmez. Ölçümden hesaplanan derecede `ranking-from-measure`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventRankingValueRequest" }
+      responses:
+        "200":
+          description: Derece, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventRanking" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: removeEventRankingEntry
+      summary: Bir katılımcının elle girilmiş derecesini kaldırır
+      description: |
+        Değeri yazabilen kaldırır (başlangıç ve katılım denetimi olmadan).
+        Olmayan değeri kaldırmak hata değildir. Ölçümden hesaplanan derecede
+        `ranking-from-measure`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Derece, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventRanking" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   # --- Tayfa sözlüğü (core TayfaVocabularyService, #244, ADR-0037 §4) ---
   # Tayfanın kendi değer listesi: bir ad alanındaki (`fish_species`, `book`
   # …) değerler. Tanımda `vocabulary` olan metin alanı (`CatalogVocabulary`)
@@ -7696,6 +7793,10 @@ components:
         - guest-players-disabled
         - guest-player-not-found
         - guest-player-in-use
+        # core: derece / sıralama bileşeni (#253, ADR-0037 §3)
+        - ranking-not-started
+        - ranking-not-participant
+        - ranking-from-measure
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -9470,6 +9571,49 @@ components:
         a_points: { type: integer, format: int32, minimum: -1000000, maximum: 1000000 }
         b_points: { type: integer, format: int32, minimum: -1000000, maximum: 1000000 }
         a_outcome: { type: string, enum: [win, draw, loss] }
+    EventRanking:
+      type: object
+      required: [direction, decimals, entries, hidden, measure_enabled, caller_can_edit]
+      description: Bir etkinliğin bir derece bileşeni, isteği yapanın gördüğü haliyle (#253).
+      properties:
+        source: { type: string, description: "Derecenin hesaplandığı kişisel ölçümün anahtarı (`EventMeasure`); elle girilen derecede yoktur." }
+        metric:
+          type: string
+          enum: [duration, rank]
+          description: "Elle girilen derecenin ölçütü: `duration` süre (saniye), `rank` sıra. Ölçümden hesaplanan derecede yoktur."
+        direction:
+          type: string
+          enum: [asc, desc]
+          description: "`asc` en küçük değer önde (süre, sıra), `desc` en büyük değer önde."
+        unit: { type: string, description: "Ölçümden hesaplanan derecede ölçümün birimi (kapalı liste); elle girilen derecede yoktur." }
+        decimals: { type: integer, minimum: 0, maximum: 3, description: "Değerin ondalık basamağı: ölçümünki ya da ölçütünkü (`duration` 2, `rank` 0)." }
+        entries:
+          type: array
+          description: Katılımcılar sırayla, en iyi önde; gizliyken ya da kaynak ölçüm kapalıyken boş.
+          items: { $ref: "#/components/schemas/EventRankingEntry" }
+        hidden: { type: boolean, description: "Derece hassas bir ölçümden hesaplanıyor ve ölçümün bütün değerlerini göremiyorsunuz." }
+        measure_enabled: { type: boolean, description: "Ölçümden hesaplanan derecede kaynak ölçüm bu etkinlikte açık; elle girilen derecede her zaman `true`." }
+        caller_can_edit:
+          type: boolean
+          description: Şu an değer girebilirsiniz (yalnızca elle girilen derecede; organizatör, moderatör, yönetici ya da atanmış hakem). Etkinlik başlamış, iptal değil, donmamış, tayfa salt okunur değil.
+    EventRankingEntry:
+      type: object
+      required: [user_id, value, rank]
+      properties:
+        user_id: { type: string, format: uuid, description: Derecenin ait olduğu katılımcı. }
+        value: { type: number, description: "Süre (saniye), sıra ya da ölçümün değeri." }
+        rank: { type: integer, format: int32, minimum: 1, description: "Sıra; eşit değerler aynı sırayı paylaşır (1, 1, 3)." }
+        updated_at: { type: string, format: date-time }
+    EventRankingValueRequest:
+      type: object
+      required: [value]
+      additionalProperties: false
+      properties:
+        value:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 1000000
+          description: "`duration` ölçütünde saniye (iki basamağa yuvarlanır, en çok 1000000), `rank` ölçütünde 1–10000 arası tam sayı."
     VocabularyIds:
       type: object
       description: Alan anahtarı → tayfa sözlüğündeki değerin kimliği (#244).
@@ -11588,7 +11732,7 @@ components:
         | `draw` | — |
         | `bracket` | `format` (`elimination`, `league`, `swiss`; seçimli), `best_of` (1, 3, 5; seçimli) |
         | `scoreboard` | `side` (`player`, `team`), `tables` (boolean), `presets` (ön ayar anahtarları), `rounds` (`round`, `single`, `first_to`; seçimli), `target` (1–100000), `winner` (`high`, `low`, `first`; seçimli), `result` (`points`, `wdl`), `best_of` (1, 3, 5; seçimli), `guests` (boolean) |
-        | `ranking` | `source` (bir ölçümün `key`'i), `metric` (`duration`, `rank`), `direction` (`asc`, `desc`) |
+        | `ranking` | `source` (kişisel bir ölçümün `key`'i) ya da `metric` (`duration`, `rank`); biri zorunlu, ikisi birlikte olmaz; `direction` (`asc`, `desc`) |
         | `vote` | `source` (`free`, `participants`, `vehicles`, `album`, `route_stops`; zorunlu) |
         | `celebration` | `source` (bir `scoreboard`, `bracket`, `ranking` ya da `vote` bileşeninin `key`'i) |
         | `measure` | `unit`, `scope` (`personal`, `total`), `entered_by` (`self`, `organizer`) zorunlu; `min`, `max`, `decimals` (0–3), `showcase`, `sensitive` (boolean), `prefill_from` (bir alanın `key`'i) |

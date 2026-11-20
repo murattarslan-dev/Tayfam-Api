@@ -113,6 +113,10 @@ var wantAppPrivileges = map[string]string{
 	// Issue #252: a guest never moves to another event; only its nickname
 	// and who added it are cleared (expiry, account deletion).
 	"event_guest_players": "DELETE,INSERT,SELECT,UPDATE(created_by,nickname)",
+	// Issue #253: a ranking entry never moves to another event, component
+	// or person; only its value changes and account deletion clears its
+	// writer.
+	"event_ranking_entries": "DELETE,INSERT,SELECT,UPDATE(entered_by,updated_at,value)",
 	// Issue #241: an item never moves to another event or list, and its
 	// name and quantity do not change; only the assignee changes and
 	// account deletion clears the people on it.

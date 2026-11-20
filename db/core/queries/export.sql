@@ -274,6 +274,19 @@ WHERE g.created_by = @user_id AND g.id > @after
 ORDER BY g.id
 LIMIT @n;
 
+-- Elle girilen dereceleriniz (`ranking` bileşeni, issue #253): organizatörün
+-- ya da hakemin sizin adınıza girdiği süre ya da sıra. Kimin girdiği yer
+-- almaz; ölçümden hesaplanan dereceler ölçümlerinizdedir (measurements).
+-- name: ExportRankingEntries :many
+SELECT r.id AS k, jsonb_build_object(
+  'event_id', r.event_id, 'component_key', r.component_key, 'value', r.value,
+  'created_at', r.created_at, 'updated_at', r.updated_at
+) AS data
+FROM event_ranking_entries AS r
+WHERE r.user_id = @user_id AND r.id > @after
+ORDER BY r.id
+LIMIT @n;
+
 -- Albüm fotoğrafları (issue #206); dosyaların kendisi zip'e girmez
 -- (ADR-0021 §5), uploads bölümü onları listeler.
 -- name: ExportEventPhotos :many

@@ -212,6 +212,18 @@ var (
 	ErrGuestPlayerInUse = errors.New("misafir oyuncu masada ya da kurada")
 )
 
+// Ranking component errors (issue #253; ADR-0037 §3).
+var (
+	// ErrRankingNotStarted: a ranking before the event's start.
+	ErrRankingNotStarted = errors.New("etkinlik başlamadan derece girilmez")
+	// ErrRankingNotParticipant: a ranking for someone who is not a
+	// participant of the event.
+	ErrRankingNotParticipant = errors.New("kişi etkinliğin katılımcısı değil")
+	// ErrRankingFromMeasure: a value for a ranking computed from a measure;
+	// the measure is entered instead.
+	ErrRankingFromMeasure = errors.New("derece ölçümden hesaplanır")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (

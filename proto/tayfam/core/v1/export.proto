@@ -103,6 +103,10 @@ enum CoreExportSection {
   // the nickname (empty once cleared) and when. The guest's seats, places
   // and scores are not exported.
   CORE_EXPORT_SECTION_GUEST_PLAYERS = 30;
+  // The rankings an organizer or referee entered for the caller by hand
+  // (the ranking component, issue #253): the time or the place. Rankings
+  // computed from a measure are the caller's measurements.
+  CORE_EXPORT_SECTION_RANKING_ENTRIES = 31;
 }
 
 message ExportMyDataRequest {}

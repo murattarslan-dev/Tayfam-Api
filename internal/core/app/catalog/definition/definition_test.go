@@ -17,6 +17,9 @@ func fieldDef(body string) string { return `{"fields":[` + body + `]}` }
 func comps(body string) string { return `{"components":[` + body + `]}` }
 
 // measure is a valid total measure with the key "distance".
+// personalMeasure is a personal measure a ranking may be computed from.
+const personalMeasure = `{"kind":"measure","key":"laps",` + trLabel + `,"params":{"unit":"piece","scope":"personal","entered_by":"organizer"}}`
+
 const measure = `{"kind":"measure","key":"distance",` + trLabel + `,"params":{"unit":"km","scope":"total","entered_by":"organizer"}}`
 
 func TestParseADRExample(t *testing.T) {
@@ -291,10 +294,13 @@ func TestParseComponents(t *testing.T) {
 		{"scoreboard", "hedef sıfır", comps(`{"kind":"scoreboard","params":{"target":0}}`), false},
 		// ranking
 		{"ranking", "elle", comps(`{"kind":"ranking","params":{"metric":"duration","direction":"asc"}}`), true},
-		{"ranking", "ölçümden", comps(measure + `,{"kind":"ranking","params":{"source":"distance","direction":"desc"}}`), true},
+		{"ranking", "ölçümden", comps(personalMeasure + `,{"kind":"ranking","params":{"source":"laps","direction":"desc"}}`), true},
 		{"ranking", "kaynak yok", comps(`{"kind":"ranking","params":{"source":"distance"}}`), false},
 		{"ranking", "kaynak ölçüm değil", comps(`{"kind":"route"},{"kind":"ranking","params":{"source":"route"}}`), false},
-		{"ranking", "bilinmeyen yön", comps(`{"kind":"ranking","params":{"direction":"up"}}`), false},
+		{"ranking", "kaynak toplam ölçüm", comps(measure + `,{"kind":"ranking","params":{"source":"distance","direction":"desc"}}`), false},
+		{"ranking", "kaynak ve ölçüt birlikte", comps(personalMeasure + `,{"kind":"ranking","params":{"source":"laps","metric":"rank"}}`), false},
+		{"ranking", "ne kaynak ne ölçüt", comps(`{"kind":"ranking","params":{"direction":"asc"}}`), false},
+		{"ranking", "bilinmeyen yön", comps(`{"kind":"ranking","params":{"metric":"rank","direction":"up"}}`), false},
 		// vote
 		{"vote", "serbest", comps(`{"kind":"vote","params":{"source":"free"}}`), true},
 		{"vote", "araçlar", comps(`{"kind":"vehicles"},{"kind":"vote","params":{"source":"vehicles"}}`), true},

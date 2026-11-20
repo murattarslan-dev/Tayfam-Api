@@ -1070,11 +1070,7 @@ func (p *parser) crossCheck(d *Definition) {
 				p.fail(join(pp, "measure"), "bu anahtarla bir ölçüm yok")
 			}
 		case CompRanking:
-			if src, ok := c.Params["source"]; ok {
-				if t, ok := d.Component(src.String()); !ok || t.Kind != CompMeasure {
-					p.fail(join(pp, "source"), "bu anahtarla bir ölçüm yok")
-				}
-			}
+			p.checkRanking(d, c, pp)
 		case CompCelebration:
 			if src, ok := c.Params["source"]; ok {
 				if t, ok := d.Component(src.String()); !ok || !slices.Contains(celebrationSources, t.Kind) {
@@ -1089,6 +1085,30 @@ func (p *parser) crossCheck(d *Definition) {
 		}
 		if p.failed() {
 			return
+		}
+	}
+}
+
+// checkRanking checks a ranking (issue #253; ADR-0037 §3): either computed
+// from a personal measure of the same definition (source) or entered by
+// hand with a metric, never both. A total measure has a single value and
+// ranks nobody.
+func (p *parser) checkRanking(d *Definition, c Component, pp string) {
+	src, hasSrc := c.Params["source"]
+	_, hasMetric := c.Params["metric"]
+	switch {
+	case hasSrc && hasMetric:
+		p.fail(join(pp, "metric"), "ölçümden hesaplanan derecenin ölçütü yoktur")
+	case !hasSrc && !hasMetric:
+		p.fail(join(pp, "metric"), "source ya da metric gerekli")
+	case hasSrc:
+		t, ok := d.Component(src.String())
+		if !ok || t.Kind != CompMeasure {
+			p.fail(join(pp, "source"), "bu anahtarla bir ölçüm yok")
+			return
+		}
+		if t.Params["scope"].String() != "personal" {
+			p.fail(join(pp, "source"), "kişisel bir ölçüm değil")
 		}
 	}
 }
