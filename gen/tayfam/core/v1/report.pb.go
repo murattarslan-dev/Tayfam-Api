@@ -61,6 +61,13 @@ const (
 	// like other content; content_removed means the message is no longer
 	// visible (deleted or hidden by moderation).
 	ReportTargetType_REPORT_TARGET_TYPE_CHANNEL_MESSAGE ReportTargetType = 11
+	// target_id is a question of an event's questions component (issue #256;
+	// QuestionsComponentService). The author of an anonymous question is
+	// kept on the report for the platform only: in the tayfa's queue such a
+	// report has no subject_user_id, and member_sanctioned cannot close it
+	// (ADR-0025 §5). The reporter's own question is ERROR_REASON_VALIDATION
+	// (field target_id).
+	ReportTargetType_REPORT_TARGET_TYPE_EVENT_QUESTION ReportTargetType = 12
 )
 
 // Enum value maps for ReportTargetType.
@@ -78,6 +85,7 @@ var (
 		9:  "REPORT_TARGET_TYPE_DM_MESSAGE",
 		10: "REPORT_TARGET_TYPE_EVENT_PHOTO",
 		11: "REPORT_TARGET_TYPE_CHANNEL_MESSAGE",
+		12: "REPORT_TARGET_TYPE_EVENT_QUESTION",
 	}
 	ReportTargetType_value = map[string]int32{
 		"REPORT_TARGET_TYPE_UNSPECIFIED":     0,
@@ -92,6 +100,7 @@ var (
 		"REPORT_TARGET_TYPE_DM_MESSAGE":      9,
 		"REPORT_TARGET_TYPE_EVENT_PHOTO":     10,
 		"REPORT_TARGET_TYPE_CHANNEL_MESSAGE": 11,
+		"REPORT_TARGET_TYPE_EVENT_QUESTION":  12,
 	}
 )
 
@@ -1360,7 +1369,7 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"resolution\x18\x03 \x01(\x0e2 .tayfam.core.v1.ReportResolutionR\n" +
 	"resolution\"Q\n" +
 	"\x15ResolveReportResponse\x128\n" +
-	"\x06report\x18\x01 \x01(\v2 .tayfam.core.v1.ModerationReportR\x06report*\xa6\x03\n" +
+	"\x06report\x18\x01 \x01(\v2 .tayfam.core.v1.ModerationReportR\x06report*\xcd\x03\n" +
 	"\x10ReportTargetType\x12\"\n" +
 	"\x1eREPORT_TARGET_TYPE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17REPORT_TARGET_TYPE_USER\x10\x01\x12\x1c\n" +
@@ -1374,7 +1383,8 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"\x1dREPORT_TARGET_TYPE_DM_MESSAGE\x10\t\x12\"\n" +
 	"\x1eREPORT_TARGET_TYPE_EVENT_PHOTO\x10\n" +
 	"\x12&\n" +
-	"\"REPORT_TARGET_TYPE_CHANNEL_MESSAGE\x10\v*\x8d\x04\n" +
+	"\"REPORT_TARGET_TYPE_CHANNEL_MESSAGE\x10\v\x12%\n" +
+	"!REPORT_TARGET_TYPE_EVENT_QUESTION\x10\f*\x8d\x04\n" +
 	"\fReportReason\x12\x1d\n" +
 	"\x19REPORT_REASON_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18REPORT_REASON_HARASSMENT\x10\x01\x12\x1d\n" +

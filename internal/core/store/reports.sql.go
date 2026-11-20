@@ -53,13 +53,15 @@ const createReport = `-- name: CreateReport :one
 INSERT INTO reports (
   id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, evidence_text, evidence_upload_id,
   priority, minor_involved_at, platform_only, escalated_to_platform_at, escalation_reason, platform_status, created_at,
-  channel_id, message_kind, message_body, message_photo_upload_id, place_latitude, place_longitude, place_name)
+  channel_id, message_kind, message_body, message_photo_upload_id, place_latitude, place_longitude, place_name,
+  subject_hidden)
 VALUES (
   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
   $11, $12, $13, $14,
   $15, $16, $17,
   $18, $19, $20, $21,
-  $22, $23, $24)
+  $22, $23, $24,
+  $25)
 ON CONFLICT (reporter_id, target_type, target_id) DO NOTHING
 RETURNING id
 `
@@ -89,6 +91,7 @@ type CreateReportParams struct {
 	PlaceLatitude         pgtype.Float8
 	PlaceLongitude        pgtype.Float8
 	PlaceName             pgtype.Text
+	SubjectHidden         bool
 }
 
 // Aynı hedefe ikinci şikâyet mevcut kaydı döndürür. tayfa_id ve
@@ -120,6 +123,7 @@ func (q *Queries) CreateReport(ctx context.Context, arg CreateReportParams) (pgt
 		arg.PlaceLatitude,
 		arg.PlaceLongitude,
 		arg.PlaceName,
+		arg.SubjectHidden,
 	)
 	var id pgtype.UUID
 	err := row.Scan(&id)
@@ -422,6 +426,34 @@ func (q *Queries) GetReportTargetEventPhoto(ctx context.Context, arg GetReportTa
 	return i, err
 }
 
+const getReportTargetEventQuestion = `-- name: GetReportTargetEventQuestion :one
+SELECT q.author_id, (q.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible, q.anonymous
+FROM event_questions q
+JOIN events e ON e.id = q.event_id
+WHERE e.tayfa_id = $1 AND q.id = $2
+`
+
+type GetReportTargetEventQuestionParams struct {
+	TayfaID pgtype.UUID
+	ID      pgtype.UUID
+}
+
+type GetReportTargetEventQuestionRow struct {
+	AuthorID  pgtype.UUID
+	Visible   bool
+	Anonymous bool
+}
+
+// Etkinlik sorusu (`questions` bileşeni, issue #256): etkinliği de görünür
+// olmalı. anonymous, şikâyette yazarın tayfa yönetiminden gizlenmesi
+// (subject_hidden) içindir.
+func (q *Queries) GetReportTargetEventQuestion(ctx context.Context, arg GetReportTargetEventQuestionParams) (GetReportTargetEventQuestionRow, error) {
+	row := q.db.QueryRow(ctx, getReportTargetEventQuestion, arg.TayfaID, arg.ID)
+	var i GetReportTargetEventQuestionRow
+	err := row.Scan(&i.AuthorID, &i.Visible, &i.Anonymous)
+	return i, err
+}
+
 const getReportTargetLogEntry = `-- name: GetReportTargetLogEntry :one
 SELECT c.user_id AS author_id, (c.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible
 FROM event_log_entries c
@@ -521,7 +553,7 @@ func (q *Queries) GetTayfaReportTarget(ctx context.Context, arg GetTayfaReportTa
 }
 
 const listOpenTayfaReports = `-- name: ListOpenTayfaReports :many
-SELECT id, tayfa_id, target_type, target_id, subject_user_id, reason, description, status, resolution,
+SELECT id, tayfa_id, target_type, target_id, (CASE WHEN subject_hidden THEN NULL ELSE subject_user_id END)::uuid AS subject_user_id, reason, description, status, resolution,
        handled_by, handled_at, priority, created_at, channel_id
 FROM reports
 WHERE tayfa_id = $1 AND status = 'open' AND NOT platform_only
@@ -562,7 +594,9 @@ type ListOpenTayfaReportsRow struct {
 }
 
 // Kuyruk: tayfanın açık şikâyetleri; platforma özel olanlar ve izleyicinin
-// kendisi hakkındakiler hariç. minor_involved ve çocuk/genç güvenliği
+// kendisi hakkındakiler hariç. Yazarı gizli şikâyette (anonim soru, issue
+// #256) subject_user_id boş döner: yazar yalnızca platform yönetimine
+// görünür. Kuyruk ve çözüm okumaları aynı kuralı izler. minor_involved ve çocuk/genç güvenliği
 // şikâyetleri önce, sonra eskiden yeniye (ADR-0012, platform sahibinin
 // 2026-11-09 kararı; Notion v14). reporter_id
 // ve yükselme bilgisi seçilmez; yaş ve doğum tarihi core'da hiç yoktur.
@@ -678,7 +712,7 @@ func (q *Queries) ListReportsOfReporter(ctx context.Context, arg ListReportsOfRe
 }
 
 const listResolvedTayfaReports = `-- name: ListResolvedTayfaReports :many
-SELECT id, tayfa_id, target_type, target_id, subject_user_id, reason, description, status, resolution,
+SELECT id, tayfa_id, target_type, target_id, (CASE WHEN subject_hidden THEN NULL ELSE subject_user_id END)::uuid AS subject_user_id, reason, description, status, resolution,
        handled_by, handled_at, priority, created_at, channel_id
 FROM reports
 WHERE tayfa_id = $1 AND status = 'resolved' AND NOT platform_only
@@ -758,7 +792,7 @@ func (q *Queries) ListResolvedTayfaReports(ctx context.Context, arg ListResolved
 }
 
 const lockTayfaReport = `-- name: LockTayfaReport :one
-SELECT id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, status,
+SELECT id, tayfa_id, reporter_id, target_type, target_id, (CASE WHEN subject_hidden THEN NULL ELSE subject_user_id END)::uuid AS subject_user_id, reason, description, status,
        resolution, handled_by, handled_at, priority, created_at, channel_id
 FROM reports
 WHERE tayfa_id = $1 AND id = $2 AND NOT platform_only

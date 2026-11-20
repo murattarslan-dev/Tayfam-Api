@@ -432,6 +432,26 @@ func (q *Queries) PurgeEventPhotos(ctx context.Context, arg PurgeEventPhotosPara
 	return result.RowsAffected(), nil
 }
 
+const purgeEventQuestions = `-- name: PurgeEventQuestions :execrows
+DELETE FROM event_questions WHERE id IN (
+  SELECT x.id FROM event_questions x WHERE x.deleted_at <= $1
+  ORDER BY x.deleted_at, x.id LIMIT $2 FOR UPDATE SKIP LOCKED)
+`
+
+type PurgeEventQuestionsParams struct {
+	DeletedBefore pgtype.Timestamptz
+	N             int32
+}
+
+// Etkinlik sorusu (issue #256); oyları cascade ile gider.
+func (q *Queries) PurgeEventQuestions(ctx context.Context, arg PurgeEventQuestionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeEventQuestions, arg.DeletedBefore, arg.N)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const purgeEvents = `-- name: PurgeEvents :execrows
 DELETE FROM events WHERE id IN (
   SELECT x.id FROM events x WHERE x.deleted_at <= $1
