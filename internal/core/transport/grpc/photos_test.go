@@ -55,9 +55,10 @@ func TestEventPhotoServerConverts(t *testing.T) {
 
 	resp, err := srv.AddEventPhoto(ctx, &corev1.AddEventPhotoRequest{
 		TayfaId: tid.String(), EventId: eid.String(), UploadId: upload.String(), Caption: "Zirvede", ClientRequestId: "istek",
+		ConsentAck: true,
 	})
 	if err != nil || f.tayfa != tid || f.event != eid || f.user != user || f.photo.UploadID != upload ||
-		f.photo.Caption != "Zirvede" || f.photo.ClientRequestID != "istek" {
+		f.photo.Caption != "Zirvede" || f.photo.ClientRequestID != "istek" || !f.photo.ConsentAck {
 		t.Fatalf("ekleme app'e %+v olarak gitti: %v", f.photo, err)
 	}
 	p := resp.GetPhoto()

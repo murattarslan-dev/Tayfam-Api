@@ -159,6 +159,8 @@ func TestEventRoutes(t *testing.T) {
 			&corev1.AddEventPhotoRequest{TayfaId: tayfaID, EventId: eventID, UploadId: uploadID2, Caption: "Zirvede", ClientRequestId: reqID}},
 		{"POST", one + "/photos", `{"upload_id":"` + uploadID2 + `","client_request_id":"` + reqID + `"}`, 201,
 			&corev1.AddEventPhotoRequest{TayfaId: tayfaID, EventId: eventID, UploadId: uploadID2, ClientRequestId: reqID}},
+		{"POST", one + "/photos", `{"upload_id":"` + uploadID2 + `","client_request_id":"` + reqID + `","consent_ack":true}`, 201,
+			&corev1.AddEventPhotoRequest{TayfaId: tayfaID, EventId: eventID, UploadId: uploadID2, ClientRequestId: reqID, ConsentAck: true}},
 		{"DELETE", one + "/photos/" + photoID, "", 204, &corev1.RemoveEventPhotoRequest{TayfaId: tayfaID, EventId: eventID, PhotoId: photoID}},
 		{"GET", series, "", 200, &corev1.GetEventSeriesRequest{TayfaId: tayfaID, SeriesId: seriesID}},
 		{"POST", series + "/ending", "", 200, &corev1.EndEventSeriesRequest{TayfaId: tayfaID, SeriesId: seriesID}},

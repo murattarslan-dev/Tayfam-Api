@@ -96,7 +96,10 @@ service EventService {
   rpc SetRsvp(SetRsvpRequest) returns (SetRsvpResponse);
 
   // ListAttendees lists the answers with one status, oldest first (for
-  // WAITLIST: the order in line).
+  // WAITLIST: the order in line). For an event whose type's attendance is
+  // sensitive (sensitive_attendance, ADR-0037 §1) only the organizer,
+  // moderators and admins get the list; the others get
+  // ERROR_REASON_ATTENDEES_HIDDEN and see the counts on the event.
   rpc ListAttendees(ListAttendeesRequest) returns (ListAttendeesResponse);
 
   // AddCampItem is not served any more: a camp's list is the list
@@ -202,7 +205,9 @@ service EventService {
   // Errors: common, ERROR_REASON_EVENT_CANCELLED, ERROR_REASON_ALBUM_CLOSED,
   // ERROR_REASON_NOT_ATTENDED, ERROR_REASON_EVENT_LIMIT,
   // ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,
-  // ERROR_REASON_UPLOAD_IN_USE, ERROR_REASON_VALIDATION.
+  // ERROR_REASON_UPLOAD_IN_USE, ERROR_REASON_VALIDATION,
+  // ERROR_REASON_ALBUM_CONSENT_REQUIRED (a type with album_notice, ADR-0037
+  // §1, without consent_ack).
   rpc AddEventPhoto(AddEventPhotoRequest) returns (AddEventPhotoResponse);
 
   // ListEventPhotos lists the event's album, oldest first. Every active
@@ -998,6 +1003,10 @@ message AddEventPhotoRequest {
   // Required. A UUID the client generates once per photo and reuses on
   // retry.
   string client_request_id = 5;
+  // The uploader's acknowledgement that the people in the photo (for a
+  // child, the guardian) agreed. Required true when the event's type has
+  // album_notice (ADR-0037 §1); otherwise ignored. Not stored.
+  bool consent_ack = 6;
 }
 
 message AddEventPhotoResponse {

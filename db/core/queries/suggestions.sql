@@ -21,7 +21,8 @@ DELETE FROM friend_scores;
 -- Son 12 ayda (since sonrası, now öncesi başlayan) silinmemiş ve iptal
 -- edilmemiş etkinliklerde ikisi de "attended" olan çiftler. Ağırlık
 -- 0,5 ^ (yaş / yarı ömür). Profillemesi kapalı, hesabı silinmiş ya da banlı
--- kullanıcı ve aralarında engel olan çift girmez.
+-- kullanıcı ve aralarında engel olan çift girmez. Hassas katılımlı türün
+-- etkinliği (sensitive_attendance, ADR-0037 §1) sayılmaz.
 -- name: InsertFriendScores :execrows
 WITH att AS (
   SELECT r.user_id, e.id AS event_id, e.starts_at
@@ -30,6 +31,7 @@ WITH att AS (
   WHERE r.attendance = 'attended'
     AND e.deleted_at IS NULL AND e.status <> 'cancelled'
     AND e.starts_at > @since::timestamptz AND e.starts_at <= @now::timestamptz
+    AND NOT event_attendance_sensitive(e.id)
     AND NOT EXISTS (SELECT 1 FROM social_settings s WHERE s.user_id = r.user_id AND NOT s.profiling_enabled)
     AND NOT EXISTS (SELECT 1 FROM user_profiles p WHERE p.user_id = r.user_id AND p.deleted_at IS NOT NULL)
     AND NOT EXISTS (SELECT 1 FROM user_platform_bans b WHERE b.user_id = r.user_id AND b.banned_at IS NOT NULL)

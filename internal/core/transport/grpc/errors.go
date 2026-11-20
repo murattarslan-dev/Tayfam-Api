@@ -276,6 +276,10 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_CELEBRATION_NO_WINNER, true
 	case errors.Is(err, apperr.ErrCelebrationNotParticipant):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_CELEBRATION_NOT_PARTICIPANT, true
+	case errors.Is(err, apperr.ErrAttendeesHidden):
+		return codes.PermissionDenied, corev1.ErrorReason_ERROR_REASON_ATTENDEES_HIDDEN, true
+	case errors.Is(err, apperr.ErrAlbumConsentRequired):
+		return codes.InvalidArgument, corev1.ErrorReason_ERROR_REASON_ALBUM_CONSENT_REQUIRED, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

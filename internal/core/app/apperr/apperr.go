@@ -236,6 +236,18 @@ var (
 	ErrCelebrationNotParticipant = errors.New("kazanan etkinliğin katılımcısı değil")
 )
 
+// Type flag errors (issue #257; ADR-0037 §1).
+var (
+	// ErrAttendeesHidden: the attendee list of an event whose type's
+	// attendance is sensitive (sensitive_attendance) asked by someone other
+	// than the organizer, a moderator or an admin; the counts stay on the
+	// event.
+	ErrAttendeesHidden = errors.New("katılımcı listesi yalnızca organizatöre açık")
+	// ErrAlbumConsentRequired: an album photo of a type with album_notice
+	// sent without the uploader's consent acknowledgement (consent_ack).
+	ErrAlbumConsentRequired = errors.New("albüm için izin onayı gerekli")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (
