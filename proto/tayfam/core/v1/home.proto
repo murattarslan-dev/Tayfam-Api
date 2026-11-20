@@ -1,0 +1,236 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// TayfaHomeService is a tayfa's home page (issue #268; ADR-0027 §1–§4,
+// ADR-0040): which widgets it shows, in what order and with what settings,
+// and the data of the display widgets.
+//
+// The widget list is closed and the server's: every tayfa may use every
+// widget whatever its interests; the interests only decide which widgets
+// are on by default. "Sıradaki" (the next event) is not a widget: the
+// client always shows it first. A widget whose module is off is not shown,
+// even when on. A client skips a widget key it does not know on the home
+// page and lists it as "update the app" on the settings screen.
+//
+// Only gateway calls it with the user's access token; the acting user is
+// always the token's. Anyone but an ACTIVE member of the tayfa gets
+// ERROR_REASON_TAYFA_NOT_FOUND.
+service TayfaHomeService {
+  // GetHomeWidgets returns the whole layout for the settings screen: every
+  // widget of the server's list, those off included, in order. Open to
+  // every active member, muted ones included.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id).
+  rpc GetHomeWidgets(GetHomeWidgetsRequest) returns (GetHomeWidgetsResponse);
+
+  // SetHomeWidgets replaces the layout: the whole list (every widget of
+  // GetHomeWidgets exactly once) in the new order, whether each is on and
+  // its settings. A widget that needs settings (goal, countdown,
+  // log_summary) cannot be on without them; a widget without settings
+  // takes none. Admins only; the change goes to the audit log.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, widgets, config),
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED,
+  // ERROR_REASON_TAYFA_READ_ONLY.
+  rpc SetHomeWidgets(SetHomeWidgetsRequest) returns (SetHomeWidgetsResponse);
+
+  // GetHomeWidgetData returns a display widget's data (stats, goal,
+  // countdown, champions, log_summary) as the home page shows it. Open to
+  // every active member, muted ones included. Nothing sensitive is in it:
+  // the statistics hold no sensitive value (ADR-0037 §7) and the champions
+  // only what the celebration shows members.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, key),
+  // ERROR_REASON_HOME_WIDGET_NOT_FOUND (a widget the page does not show,
+  // or one whose data is read from its own endpoints).
+  rpc GetHomeWidgetData(GetHomeWidgetDataRequest) returns (GetHomeWidgetDataResponse);
+}
+
+// HomeWidgetKind is what a widget is (ADR-0027 §1).
+enum HomeWidgetKind {
+  HOME_WIDGET_KIND_UNSPECIFIED = 0;
+  // A former fixed section of the home page (upcoming, announcements,
+  // polls, questions): its module's list.
+  HOME_WIDGET_KIND_SECTION = 1;
+  // Shows data kept elsewhere; its data comes from GetHomeWidgetData.
+  HOME_WIDGET_KIND_DISPLAY = 2;
+  // The showcase of a tayfa module with its own endpoints.
+  HOME_WIDGET_KIND_MODULE = 3;
+}
+
+// StatsWidgetConfig: up to four metrics of the tayfa's statistics
+// (TayfaStat.metric_key) and the period, "this_year" or "all_time".
+message StatsWidgetConfig {
+  repeated string metric_keys = 1;
+  string period = 2;
+}
+
+// GoalWidgetConfig: a metric of the tayfa's statistics and its target
+// (above 0, at most 1e9). year 0 is always the current Europe/Istanbul
+// year; otherwise 2000–2999. Progress fills from the statistics only.
+message GoalWidgetConfig {
+  string metric_key = 1;
+  double target = 2;
+  int32 year = 3;
+}
+
+// CountdownWidgetConfig: a title (1–60 characters) and the moment it
+// counts to (seconds). Once the moment passed the widget is not shown.
+message CountdownWidgetConfig {
+  string title = 1;
+  google.protobuf.Timestamp target_time = 2;
+}
+
+// ChampionsWidgetConfig: the event types whose winners are listed (at
+// most 10; none: every type) and the period, "last_30_days" or
+// "this_year".
+message ChampionsWidgetConfig {
+  repeated string event_types = 1;
+  string period = 2;
+}
+
+// LogSummaryWidgetConfig: a log statistic ("<type>.<log>.<stat>") and the
+// period, "this_year" or "all_time".
+message LogSummaryWidgetConfig {
+  string metric_key = 1;
+  string period = 2;
+}
+
+// HomeWidgetConfig holds a widget's settings: at most the field of the
+// widget's own key is set. Read, the stats and champions widgets always
+// have theirs (the defaults: the four common metrics of this year; every
+// type of this year).
+message HomeWidgetConfig {
+  StatsWidgetConfig stats = 1;
+  GoalWidgetConfig goal = 2;
+  CountdownWidgetConfig countdown = 3;
+  ChampionsWidgetConfig champions = 4;
+  LogSummaryWidgetConfig log_summary = 5;
+}
+
+// HomeWidget is one widget of a tayfa's layout.
+message HomeWidget {
+  string key = 1;
+  HomeWidgetKind kind = 2;
+  // The tayfa module the widget belongs to; empty when none.
+  string module = 3;
+  // The admin's switch. On the home page (GetTayfaResponse) always true.
+  bool enabled = 4;
+  // The place, from 0, after "Sıradaki".
+  int32 position = 5;
+  HomeWidgetConfig config = 6;
+}
+
+// HomeWidgetInput is one widget of a new layout.
+message HomeWidgetInput {
+  string key = 1;
+  bool enabled = 2;
+  HomeWidgetConfig config = 3;
+}
+
+message GetHomeWidgetsRequest {
+  string tayfa_id = 1;
+}
+
+message GetHomeWidgetsResponse {
+  repeated HomeWidget widgets = 1;
+}
+
+message SetHomeWidgetsRequest {
+  string tayfa_id = 1;
+  // The whole list, in the new order.
+  repeated HomeWidgetInput widgets = 2;
+}
+
+message SetHomeWidgetsResponse {
+  repeated HomeWidget widgets = 1;
+}
+
+message GetHomeWidgetDataRequest {
+  string tayfa_id = 1;
+  string key = 2;
+}
+
+// HomeMetricValue is one metric of the tayfa's statistics; a metric
+// nothing counted yet is 0.
+message HomeMetricValue {
+  string metric_key = 1;
+  double value = 2;
+  // How many events made the value.
+  int32 event_count = 3;
+}
+
+message StatsWidgetData {
+  string period = 1;
+  // The Europe/Istanbul year; 0 for all time.
+  int32 year = 2;
+  // The metrics of the settings, in their order.
+  repeated HomeMetricValue values = 3;
+  // When the statistics were computed; unset when nothing was computed yet.
+  google.protobuf.Timestamp compute_time = 4;
+}
+
+message GoalWidgetData {
+  string metric_key = 1;
+  double target = 2;
+  int32 year = 3;
+  double value = 4;
+  int32 event_count = 5;
+  bool reached = 6;
+}
+
+message CountdownWidgetData {
+  string title = 1;
+  google.protobuf.Timestamp target_time = 2;
+}
+
+// ChampionWinner is one winner: a person (user_id), a team (team_id, with
+// its name, empty when unnamed, and its place from 1) or a guest player
+// (guest_id, with the nickname; empty once cleared).
+message ChampionWinner {
+  string user_id = 1;
+  string team_id = 2;
+  string team_name = 3;
+  int32 team_position = 4;
+  string guest_id = 5;
+  string guest_nickname = 6;
+}
+
+// HomeChampion is one announced celebration with its winners.
+message HomeChampion {
+  string event_id = 1;
+  string event_title = 2;
+  string event_type = 3;
+  google.protobuf.Timestamp start_time = 4;
+  // The celebration component of the event.
+  string component_key = 5;
+  google.protobuf.Timestamp announce_time = 6;
+  repeated ChampionWinner winners = 7;
+}
+
+message ChampionsWidgetData {
+  string period = 1;
+  // At most 10, latest announcement first.
+  repeated HomeChampion champions = 2;
+}
+
+message LogSummaryWidgetData {
+  string metric_key = 1;
+  string period = 2;
+  int32 year = 3;
+  double value = 4;
+  int32 event_count = 5;
+}
+
+// GetHomeWidgetDataResponse: the field of the widget's key is set.
+message GetHomeWidgetDataResponse {
+  string key = 1;
+  StatsWidgetData stats = 2;
+  GoalWidgetData goal = 3;
+  CountdownWidgetData countdown = 4;
+  ChampionsWidgetData champions = 5;
+  LogSummaryWidgetData log_summary = 6;
+}

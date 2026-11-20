@@ -837,6 +837,15 @@ type TayfaDiscover struct {
 	UpdatedAt       pgtype.Timestamptz
 }
 
+type TayfaHomeWidget struct {
+	TayfaID   pgtype.UUID
+	WidgetKey string
+	Enabled   bool
+	Position  int32
+	Config    []byte
+	UpdatedAt pgtype.Timestamptz
+}
+
 type TayfaInterest struct {
 	TayfaID     pgtype.UUID
 	CreatedAt   pgtype.Timestamptz

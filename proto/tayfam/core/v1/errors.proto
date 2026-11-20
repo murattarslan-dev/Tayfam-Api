@@ -514,4 +514,12 @@ enum ErrorReason {
   // day). Nothing is created; without now_recipient_ids the event can be
   // started.
   ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED = 2650;
+
+  // Ana sayfa (ADR-0027 §3–§4; issue #268: 2680–2689).
+
+  // NOT_FOUND. GetHomeWidgetData for a widget the tayfa's home page does
+  // not show (unknown key, switched off, its module off, a countdown past
+  // its date) or whose data is not read through this method (sections and
+  // module widgets read their own endpoints).
+  ERROR_REASON_HOME_WIDGET_NOT_FOUND = 2680;
 }

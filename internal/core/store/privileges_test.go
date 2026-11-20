@@ -81,6 +81,10 @@ var wantAppPrivileges = map[string]string{
 	"user_stats":       "DELETE,INSERT,SELECT",
 	"event_stat_runs":  "INSERT,SELECT,UPDATE(changed_at,counted)",
 	"tayfa_stat_queue": "DELETE,INSERT,SELECT,UPDATE(queued_at)",
+	// Issue #268: the home page layout is written as a whole list; a row
+	// never moves to another tayfa or widget and is never deleted (it goes
+	// with the tayfa).
+	"tayfa_home_widgets": "INSERT,SELECT,UPDATE(config,enabled,position,updated_at)",
 	// Issue #237: a value never moves to another event or field.
 	"event_field_values": "DELETE,INSERT,SELECT,UPDATE(updated_at,value)",
 	// Issue #238: a selection never moves to another event or component

@@ -25,6 +25,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/badge"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/home"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
@@ -131,6 +132,9 @@ type View struct {
 	// Badges are the tayfa's badges in the order earned (issue #258;
 	// ADR-0039 §3); filled by Get only, for the members it serves.
 	Badges []badge.Earned
+	// HomeWidgets are the widgets the home page shows, in order, after
+	// "Sıradaki" (issue #268; ADR-0027 §3); filled by Get only.
+	HomeWidgets []home.Item
 }
 
 // CreateInput is a create request.
@@ -222,7 +226,7 @@ func (s *Service) Create(ctx context.Context, user id.ID, in CreateInput) (View,
 				return fmt.Errorf("modül: %w", err)
 			}
 		}
-		if err := setInterests(ctx, q, tayfaID, interests); err != nil {
+		if err := setInterests(ctx, q, tayfaID, interests, true, now); err != nil {
 			return err
 		}
 		return record(ctx, q, tayfaID, user, EventCreated, EventCreated, nil)
@@ -254,6 +258,9 @@ func (s *Service) Get(ctx context.Context, user, tayfa id.ID) (View, authz.Role,
 		return View{}, 0, err
 	}
 	if v.Badges, err = badge.ForTayfa(ctx, s.q, tayfa); err != nil {
+		return View{}, 0, err
+	}
+	if v.HomeWidgets, err = home.Shown(ctx, s.q, tayfa, s.now()); err != nil {
 		return View{}, 0, err
 	}
 	return v, role, nil
@@ -381,7 +388,7 @@ func (s *Service) Update(ctx context.Context, user, tayfa id.ID, in UpdateInput)
 			}
 		}
 		if set[FieldInterests] {
-			if err := setInterests(ctx, q, tayfa, interests); err != nil {
+			if err := setInterests(ctx, q, tayfa, interests, false, s.now()); err != nil {
 				return err
 			}
 		}
@@ -596,7 +603,7 @@ func (s *Service) Convert(ctx context.Context, user, tayfa id.ID, in ConvertInpu
 		} else if n != 1 {
 			return apperr.ErrTayfaNotFound
 		}
-		if err := setInterests(ctx, q, tayfa, interests); err != nil {
+		if err := setInterests(ctx, q, tayfa, interests, true, now); err != nil {
 			return err
 		}
 		for _, mod := range Modules {

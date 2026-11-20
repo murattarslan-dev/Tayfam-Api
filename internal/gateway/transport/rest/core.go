@@ -364,6 +364,8 @@ type tayfaViewJSON struct {
 	CallerRole string    `json:"caller_role"`
 	// Issue #258: the tayfa's badges, for its members.
 	Badges []earnedBadgeJSON `json:"badges"`
+	// Issue #268: the widgets the home page shows after "Sıradaki".
+	HomeWidgets []homeWidgetJSON `json:"home_widgets"`
 }
 
 func (h coreHandlers) getTayfa(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -376,7 +378,10 @@ func (h coreHandlers) getTayfa(ctx context.Context, w http.ResponseWriter, r *ht
 		h.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, tayfaViewJSON{tayfaFrom(resp.GetTayfa()), roles.name(resp.GetCallerRole()), earnedBadgesFrom(resp.GetBadges())})
+	writeJSON(w, http.StatusOK, tayfaViewJSON{
+		tayfaFrom(resp.GetTayfa()), roles.name(resp.GetCallerRole()), earnedBadgesFrom(resp.GetBadges()),
+		homeWidgetsFrom(resp.GetHomeWidgets()),
+	})
 }
 
 type myTayfaJSON struct {

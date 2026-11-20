@@ -23,6 +23,9 @@ type Querier interface {
 	AddDrawEntry(ctx context.Context, arg AddDrawEntryParams) error
 	AddEventCelebrationWinner(ctx context.Context, arg AddEventCelebrationWinnerParams) error
 	AddGuestPlayer(ctx context.Context, arg AddGuestPlayerParams) error
+	// Varsayılan bileşen: satır yoksa açık olarak, en sona eklenir; var olan
+	// satıra (yöneticinin kapattığı bileşene) dokunulmaz.
+	AddHomeWidgetDefault(ctx context.Context, arg AddHomeWidgetDefaultParams) error
 	// Sınır doluysa satır değişmez (0 döner).
 	AddJoinQRCount(ctx context.Context, arg AddJoinQRCountParams) (int64, error)
 	AddQuestionTag(ctx context.Context, arg AddQuestionTagParams) error
@@ -1118,8 +1121,18 @@ type Querier interface {
 	// yöneticiler ve moderatörler; dönmeyen kişinin kendisi hariç. Organizatör
 	// önce, sonra yönetici, sonra moderatör.
 	ListHikeAlertRecipients(ctx context.Context, arg ListHikeAlertRecipientsParams) ([]pgtype.UUID, error)
+	// Şampiyonlar kartı (ADR-0027 §4): tayfanın ilan edilmiş kutlamaları,
+	// başlamış, iptal edilmemiş ve silinmemiş etkinliklerde; en yeni ilan
+	// önce. year 0 ise yıl süzgeci yoktur; event_types boşsa her tür.
+	ListHomeChampionCelebrations(ctx context.Context, arg ListHomeChampionCelebrationsParams) ([]ListHomeChampionCelebrationsRow, error)
+	// Tayfa ana sayfa bileşenleri (issue #268; ADR-0027 §2–§4). Bileşen
+	// listesi koddadır (internal/core/app/home); kodun tanımadığı satır
+	// okunurken atlanır.
+	ListHomeWidgets(ctx context.Context, tayfaID pgtype.UUID) ([]ListHomeWidgetsRow, error)
 	// Anlık tayfanın tek etkinliği (silinmişler dahil en fazla bir satır).
 	ListInstantEventIDs(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListInstantEventIDsRow, error)
+	// İlgi alanlarının varsayılan bileşenleri, katalog sırasıyla.
+	ListInterestDefaultWidgets(ctx context.Context, keys []string) ([]ListInterestDefaultWidgetsRow, error)
 	// Her tayfanın ilgi alanları katalog sırasıyla.
 	ListInterestsForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListInterestsForTayfasRow, error)
 	// Hesap silme: kişinin gönderdiği, henüz cevaplanmamış davetler. Tayfalar
@@ -1535,6 +1548,8 @@ type Querier interface {
 	// İstek ve davet sonuçları (issue #192). Okuma yalnızca alıcının
 	// (doğrulanmış çağıran) kendi kayıtları üzerinedir.
 	SetFriendRequestOutcome(ctx context.Context, arg SetFriendRequestOutcomeParams) error
+	// Yöneticinin düzeni: bütün liste, bileşen başına bir çağrı.
+	SetHomeWidget(ctx context.Context, arg SetHomeWidgetParams) error
 	// Etkinlik başlığı değişince anlık tayfanın adı da değişir.
 	SetInstantTayfaName(ctx context.Context, arg SetInstantTayfaNameParams) (int64, error)
 	SetInvitationOutcome(ctx context.Context, arg SetInvitationOutcomeParams) error

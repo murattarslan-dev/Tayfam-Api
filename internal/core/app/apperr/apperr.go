@@ -270,6 +270,15 @@ var (
 	ErrJoinQRLimit = errors.New("QR katılım sınırı")
 )
 
+// Home page errors (issue #268; ADR-0027 §3–§4).
+var (
+	// ErrHomeWidgetNotFound: a home widget's data was asked for a widget
+	// the tayfa's home page does not show (unknown, switched off, its
+	// module off, a countdown past its date) or one whose data is not read
+	// here.
+	ErrHomeWidgetNotFound = errors.New("ana sayfa bileşeni yok")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (

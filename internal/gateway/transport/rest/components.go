@@ -114,6 +114,9 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 
 		// tayfa statistics (#266)
 		registerTayfaStats,
+
+		// tayfa home widgets (#268)
+		registerTayfaHome,
 	}
 }
 

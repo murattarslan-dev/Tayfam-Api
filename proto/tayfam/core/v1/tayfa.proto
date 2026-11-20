@@ -5,6 +5,7 @@ package tayfam.core.v1;
 import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
 import "tayfam/core/v1/badge.proto";
+import "tayfam/core/v1/home.proto";
 import "tayfam/core/v1/membership.proto";
 
 // TayfaService creates tayfas and manages their settings, modules, join
@@ -243,6 +244,10 @@ message GetTayfaResponse {
   // The tayfa's badges in the order earned, for its members (issue #258;
   // ADR-0039 §3).
   repeated EarnedBadge badges = 3;
+  // The widgets the home page shows after "Sıradaki", in order (issue
+  // #268; ADR-0027 §3): only those on, their module on, a countdown not
+  // past its moment. A client skips a key it does not know.
+  repeated HomeWidget home_widgets = 4;
 }
 
 message ListMyTayfasRequest {
