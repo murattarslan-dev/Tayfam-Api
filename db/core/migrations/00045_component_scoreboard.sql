@@ -107,7 +107,7 @@ CREATE TABLE event_score_tables (
     char_length(label) BETWEEN 1 AND 30 AND label = btrim(label) AND label !~ '[[:cntrl:]]'),
   CONSTRAINT event_score_tables_side CHECK (
     (side = 'player' AND team_key IS NULL)
-    OR (side = 'team' AND team_key ~ '^[a-z][a-z0-9_]{1,39}$')),
+    OR (side = 'team' AND COALESCE(team_key ~ '^[a-z][a-z0-9_]{1,39}$', false))),
   CONSTRAINT event_score_tables_rounds CHECK (rounds IN ('round', 'single', 'first_to')),
   CONSTRAINT event_score_tables_winner CHECK (winner IN ('high', 'low', 'first')),
   CONSTRAINT event_score_tables_result CHECK (result IN ('points', 'wdl')),
