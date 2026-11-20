@@ -64,6 +64,7 @@ var exportSections = map[string]corev1.CoreExportSection{
 	export.SectionCelebrationWins:     corev1.CoreExportSection_CORE_EXPORT_SECTION_CELEBRATION_WINS,
 	export.SectionEventQuestions:      corev1.CoreExportSection_CORE_EXPORT_SECTION_EVENT_QUESTIONS,
 	export.SectionBadges:              corev1.CoreExportSection_CORE_EXPORT_SECTION_BADGES,
+	export.SectionUserStats:           corev1.CoreExportSection_CORE_EXPORT_SECTION_USER_STATS,
 }
 
 // ExportMyData implements corev1.ExportServiceServer.

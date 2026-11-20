@@ -4548,6 +4548,41 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Tayfa istatistikleri (core TayfaStatsService, #266, ADR-0026) ---
+  # Donmuş etkinliklerden (bitişinden 7 gün geçmiş, iptal edilmemiş,
+  # silinmemiş) hesaplanan toplamlar; arka plan işi en geç 15 dakikada bir
+  # günceller. Yıl Europe/Istanbul takvim yılıdır. Hassas veri yoktur:
+  # `sensitive` ölçüm hiçbir yerde sayılmaz; katılımı hassas türdeki
+  # etkinlik yalnızca `events` ve `attended` toplamına girer. Etkin üye
+  # olmayan `tayfa-not-found` alır.
+
+  /v1/tayfas/{tayfa_id}/stats:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: getTayfaStats
+      summary: Tayfanın istatistikleri ve kişisel katkılar
+      description: |
+        Her etkin üyeye açıktır (susturulmuş üye de okur). `year` yoksa tüm
+        zamanlar. Kişisel katkılar yalnızca ölçüm ve günlük metrikleridir,
+        yalnızca tayfanın etkin üyelerininki.
+      parameters:
+        - name: year
+          in: query
+          required: false
+          description: Europe/Istanbul takvim yılı (2000–2999); yoksa tüm zamanlar.
+          schema: { type: integer, minimum: 2000, maximum: 2999 }
+      responses:
+        "200":
+          description: İstatistikler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TayfaStats" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /v1/tayfas/{tayfa_id}/event-series/{series_id}:
     parameters:
       - $ref: "#/components/parameters/TayfaID"
@@ -10224,6 +10259,51 @@ components:
       additionalProperties: false
       properties:
         target_id: { type: string, format: uuid, description: Birleştirilmemiş hedef değer. }
+    TayfaStatMetricKey:
+      type: string
+      description: |
+        Ortak metrik (`events`, `attended`, `participants`, `duration`
+        dakika), türün ortak metriği (`<tür>.<metrik>`), ölçüm
+        (`<tür>.<ölçüm>`, birimi tür tanımında) ya da günlük istatistiği
+        (`<tür>.<günlük>.<stat>`; stat `count`, `distinct_<alan>`,
+        `sum_<alan>`).
+      maxLength: 132
+    TayfaStat:
+      type: object
+      required: [metric_key, source, value, event_count]
+      properties:
+        metric_key: { $ref: "#/components/schemas/TayfaStatMetricKey" }
+        source: { type: string, enum: [common, measure, log] }
+        value: { type: number }
+        event_count: { type: integer, minimum: 0, description: Değere katkı veren etkinlik sayısı. }
+    TayfaStatContribution:
+      type: object
+      required: [user_id, metric_key, value, event_count]
+      description: Etkin bir üyenin ölçüm ya da günlük metriğindeki katkısı.
+      properties:
+        user_id: { type: string, format: uuid }
+        metric_key: { $ref: "#/components/schemas/TayfaStatMetricKey" }
+        value: { type: number }
+        event_count: { type: integer, minimum: 0 }
+    TayfaStats:
+      type: object
+      required: [years, totals, contributions]
+      properties:
+        year: { type: integer, description: "İstenen yıl; tüm zamanlarda yoktur." }
+        years:
+          type: array
+          description: İstatistiği olan yıllar, yeniden eskiye.
+          items: { type: integer }
+        totals:
+          type: array
+          items: { $ref: "#/components/schemas/TayfaStat" }
+        contributions:
+          type: array
+          items: { $ref: "#/components/schemas/TayfaStatContribution" }
+        computed_at:
+          type: string
+          format: date-time
+          description: Son hesaplama; henüz hesaplanmadıysa yoktur.
 
     EventTypeKey:
       type: string

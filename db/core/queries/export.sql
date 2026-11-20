@@ -337,6 +337,18 @@ WHERE b.user_id = @user_id AND b.id > @after
 ORDER BY b.id
 LIMIT @n;
 
+-- Kişinin istatistiği (issue #266): tayfa, yıl (tüm zamanlarda null),
+-- metrik, değer ve katkı veren etkinlik sayısı.
+-- name: ExportUserStats :many
+SELECT s.id AS k, jsonb_build_object(
+  'tayfa_id', s.tayfa_id, 'year', NULLIF(s.year, 0), 'metric_key', s.metric_key, 'value', s.value,
+  'event_count', s.event_count, 'computed_at', s.computed_at
+) AS data
+FROM user_stats AS s
+WHERE s.user_id = @user_id AND s.id > @after
+ORDER BY s.id
+LIMIT @n;
+
 -- Albüm fotoğrafları (issue #206); dosyaların kendisi zip'e girmez
 -- (ADR-0021 §5), uploads bölümü onları listeler.
 -- name: ExportEventPhotos :many

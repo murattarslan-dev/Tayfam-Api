@@ -122,6 +122,10 @@ enum CoreExportSection {
   // key, its period ("all" or the year), when it was earned, and for a
   // champion badge the event and its tayfa. Tayfa badges are the tayfa's.
   CORE_EXPORT_SECTION_BADGES = 34;
+  // The caller's statistics (issue #266, ADR-0026): per tayfa and year (no
+  // year for all time) the metric, its value and how many events made it.
+  // Derived from frozen events; nothing sensitive is in it.
+  CORE_EXPORT_SECTION_USER_STATS = 35;
 }
 
 message ExportMyDataRequest {}

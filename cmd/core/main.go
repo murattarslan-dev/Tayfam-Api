@@ -44,6 +44,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/qa"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/report"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/social"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/stats"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/userevents"
 	grpcapi "github.com/murattarslan-dev/tayfam-api/internal/core/transport/grpc"
@@ -481,6 +482,9 @@ func addRelay(rt *service.Runtime, pool *pgxpool.Pool) error {
 	} else {
 		rt.Log.Warn("identity servis token'ı yok; platform denetim kayıtları outbox'ta bekler (yalnızca yerel ortam)")
 	}
+	// Sözlük birleştirmeleri istatistiği yeniden hesaplatır (issue #266);
+	// core'un kendi veritabanına yazar.
+	consumers = append(consumers, stats.Consumer(pool, time.Now))
 	relay, err := outbox.NewRelay(outbox.RelayConfig{Pool: pool, Log: rt.Log, Consumers: consumers})
 	if err != nil {
 		return err

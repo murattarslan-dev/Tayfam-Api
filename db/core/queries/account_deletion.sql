@@ -205,6 +205,12 @@ WHERE answered_by = @user_id OR deleted_by = @user_id;
 -- name: DeleteUserBadges :exec
 DELETE FROM user_badges WHERE user_id = @user_id;
 
+-- Kişinin istatistiği kişiyle birlikte silinir (issue #266; ADR-0026).
+-- Tayfa toplamları tayfanındır; bir sonraki hesaplamada kişinin silinen
+-- kayıtları düşer.
+-- name: DeleteUserStats :exec
+DELETE FROM user_stats WHERE user_id = @user_id;
+
 -- Tayfa sözlüğüne eklediği değerler tayfanın ortak verisidir; kalır, ekleyen
 -- boşalır (issue #244; ADR-0037 §4).
 -- name: ClearVocabularyCreator :exec

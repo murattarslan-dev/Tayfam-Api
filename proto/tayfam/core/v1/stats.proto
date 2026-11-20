@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// TayfaStatsService is a tayfa's statistics for its members (issue #266;
+// ADR-0026 §2–§3, ADR-0037 §7): the totals computed from its frozen
+// events (ended seven days ago, not cancelled, not deleted) and the
+// personal contributions of its active members.
+//
+// Only gateway calls it with the user's access token; the acting user is
+// always the token's. Anyone but an ACTIVE member of the tayfa gets
+// ERROR_REASON_TAYFA_NOT_FOUND. Values are never logged.
+service TayfaStatsService {
+  // GetTayfaStats returns the tayfa's statistics of a year (0: all time).
+  // Open to every active member, muted ones included. Nothing sensitive is
+  // in it: no sensitive measure, no person of an event whose attendance is
+  // sensitive.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, year).
+  rpc GetTayfaStats(GetTayfaStatsRequest) returns (GetTayfaStatsResponse);
+}
+
+// TayfaStat is one metric's total. metric_key is a common metric (events,
+// attended, participants, duration in minutes), a type's common metric
+// ("<type>.<metric>"), a measure ("<type>.<measure>", in the unit of the
+// type's definition) or a log statistic ("<type>.<log>.<stat>": count,
+// distinct_<field>, sum_<field>).
+message TayfaStat {
+  string metric_key = 1;
+  // "common", "measure" or "log".
+  string source = 2;
+  double value = 3;
+  // How many events made the value.
+  int32 event_count = 4;
+}
+
+// TayfaStatContribution is one active member's value of a measure or log
+// metric in the tayfa.
+message TayfaStatContribution {
+  string user_id = 1;
+  string metric_key = 2;
+  double value = 3;
+  int32 event_count = 4;
+}
+
+message GetTayfaStatsRequest {
+  string tayfa_id = 1;
+  // A Europe/Istanbul calendar year (2000–2999), or 0 for all time.
+  int32 year = 2;
+}
+
+message GetTayfaStatsResponse {
+  // The year asked for; 0 for all time.
+  int32 year = 1;
+  // The years with statistics, newest first.
+  repeated int32 years = 2;
+  repeated TayfaStat totals = 3;
+  repeated TayfaStatContribution contributions = 4;
+  // When the totals were computed; unset when nothing was computed yet.
+  google.protobuf.Timestamp compute_time = 5;
+}

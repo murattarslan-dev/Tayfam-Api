@@ -541,6 +541,13 @@ type EventSeries struct {
 	Dtstart         pgtype.Timestamptz
 }
 
+type EventStatRun struct {
+	EventID   pgtype.UUID
+	TayfaID   pgtype.UUID
+	Counted   bool
+	ChangedAt pgtype.Timestamptz
+}
+
 type EventTeam struct {
 	ID           pgtype.UUID
 	EventID      pgtype.UUID
@@ -843,6 +850,21 @@ type TayfaModule struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type TayfaStat struct {
+	TayfaID    pgtype.UUID
+	Year       int32
+	MetricKey  string
+	Source     string
+	Value      pgtype.Numeric
+	EventCount int32
+	ComputedAt pgtype.Timestamptz
+}
+
+type TayfaStatQueue struct {
+	TayfaID  pgtype.UUID
+	QueuedAt pgtype.Timestamptz
+}
+
 type TayfaVocabulary struct {
 	ID              pgtype.UUID
 	TayfaID         pgtype.UUID
@@ -937,4 +959,16 @@ type UserProfile struct {
 	DeletedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	ActivityVisibility string
+}
+
+type UserStat struct {
+	ID         pgtype.UUID
+	UserID     pgtype.UUID
+	TayfaID    pgtype.UUID
+	Year       int32
+	MetricKey  string
+	Source     string
+	Value      pgtype.Numeric
+	EventCount int32
+	ComputedAt pgtype.Timestamptz
 }

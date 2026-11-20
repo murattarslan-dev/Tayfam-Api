@@ -128,6 +128,47 @@ Rozetler (Faz 3) `tayfa_stats` ve `user_stats`'tan ve `celebration`
 bileşeninden beslenir; kuralları ayrı ADR'de. Bu ADR'deki tablolar rozet
 hesaplaması için yeterli olacak şekilde yıl ve metrik bazındadır.
 
+## Uygulama notları (#266)
+
+Karar değişmedi; issue #266 uygulamasındaki ayrıntılar:
+
+- **Tablolar (core 00057):** `tayfa_stats` ve `user_stats` yıl başına ve
+  **yıl 0 = tüm zamanlar** satırıyla tutulur; tüm zamanlar satırı ayrıca
+  hesaplanır, çünkü farklı değer sayıları (`participants`, günlükte
+  `distinct_<alan>`) yıllar toplanarak bulunamaz. `source` sütunu metriğin
+  türünü verir (`common` / `measure` / `log`). `user_stats` **tayfa
+  başınadır** (tayfa içindeki kişisel katkı); profil toplamı tayfaların
+  toplamıdır. Sözlük tayfanın olduğu için farklı değerler tayfalar arasında
+  birleştirilmez.
+- **Hesaplama birimi tayfadır:** iş, kuyruğa giren tayfanın bütün donmuş
+  etkinliklerini okuyup satırlarını silip yeniden yazar (idempotent).
+  Kuyruğa giren: yeni donan (`event_stat_runs`), istatistikteyken silinen
+  ya da iptal edilen etkinliğin tayfası ve sözlük birleştirme/geri alma
+  olayının (`tayfa.vocabulary_merged` / `_unmerged`) tayfası (outbox
+  tüketicisi `core.stats`). Olay yükündeki yıllar tayfanın bir alt
+  kümesidir. İş 15 dakikada bir çalışır (`stats`).
+- **Metrikler:** ortak metrikler genel ve `<tür>.<metrik>` olarak; ölçümde
+  yalnızca kaydedilmiş değer (öneri sayılmaz), kişisel ölçümün tayfa
+  toplamı kişilerin toplamıdır; günlükte `<tür>.<günlük>.<stat>`
+  (`count`, `distinct_<alan>`, `sum_<alan>`) ve her günlükte kayıt sayısı
+  (`count`) her zaman. Sözlüğe bağlı alanda farklı değer, birleştirme
+  hedefidir. Kapatılmış isteğe bağlı bileşen sayılmaz.
+- **Hassas:** `sensitive` ölçüm hiçbir tabloya yazılmaz (kişinin kendi
+  değeri bileşende kendisine görünür). `sensitive_attendance` türündeki
+  etkinlik yalnızca tayfanın `events` ve `attended` toplamına (ve toplam
+  kapsamlı ölçümüne) girer; `participants`, `duration`, kişisel satır ve
+  günlük katkısı yoktur (ADR-0037 §7).
+- **Rozetler (ADR-0039 §2):** aynı transaction'da; tayfa rozeti hassas
+  katılımlı etkinlikler hariç toplamlardan, kişisel rozet kişinin bütün
+  tayfalardaki toplamından. Rozette günlük metriği `<tür>.<günlük>` kayıt
+  sayısıdır.
+- **Tayfa içi uç:** `GET /v1/tayfas/{tayfa_id}/stats?year=` (her etkin
+  üye): toplamlar ve yalnızca etkin üyelerin ölçüm ve günlük katkıları.
+  Ay/hafta kırılımı henüz yoktur.
+- **KVKK:** kişinin `user_stats` satırları dışa aktarmada
+  (`core/user_stats.json`) gelir ve hesap silinince aynı transaction'da
+  silinir.
+
 ## Gerekçe
 
 - **Donmuş veri:** Vitrindeki sayı geriye dönük oynarsa güven kaybolur;

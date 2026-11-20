@@ -74,6 +74,9 @@ func componentRegistrars() []componentRegistrar {
 		registerQuestionsComponent,
 
 		// pool_link (#271)
+
+		// tayfa statistics (#266)
+		registerTayfaStats,
 	}
 }
 
