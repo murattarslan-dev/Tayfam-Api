@@ -574,7 +574,7 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 		id.New().PG(), id.New().PG(), u.PG(), a.PG())
 	// Statistics (issue #266): u's go, a's stay.
 	e.seed(t, `INSERT INTO user_stats (user_id, tayfa_id, year, metric_key, source, value, event_count, computed_at) VALUES ($1, $3, 0, 'attended', 'common', 2, 2, now()), ($2, $3, 0, 'attended', 'common', 1, 1, now())`,
-		u.PG(), a.PG(), t2.PG())
+		u.PG(), a.PG(), tf.PG())
 	// Event questions (issue #256): u's questions (an anonymous one too)
 	// and votes go; a's question that u marked answered and removed stays,
 	// without them, with a's vote on it.
