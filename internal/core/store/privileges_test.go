@@ -88,6 +88,11 @@ var wantAppPrivileges = map[string]string{
 	// Issue #247: a programme item never moves to another event or
 	// component; its values change and it is deleted.
 	"event_schedule_items": "DELETE,INSERT,SELECT,UPDATE(ends_at,note,starts_at,title,updated_at)",
+	// Issue #248: a team never moves to another event or component; only
+	// its name changes when the teams are formed again. A member row never
+	// changes: it is deleted and written again.
+	"event_teams":        "DELETE,INSERT,SELECT,UPDATE(name,updated_at)",
+	"event_team_members": "DELETE,INSERT,SELECT",
 	// Issue #241: an item never moves to another event or list, and its
 	// name and quantity do not change; only the assignee changes and
 	// account deletion clears the people on it.

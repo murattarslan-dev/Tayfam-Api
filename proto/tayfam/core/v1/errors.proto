@@ -363,4 +363,18 @@ enum ErrorReason {
   // FAILED_PRECONDITION. The measure is of the other scope: a total measure
   // has no per-person values, a personal one no total.
   ERROR_REASON_MEASUREMENT_SCOPE = 2452;
+
+  // Teams component (TeamsComponentService, component_teams.proto; issue
+  // #248: 2480–2489).
+
+  // FAILED_PRECONDITION. The component's mode is manual: teams are formed
+  // by hand (ReplaceTeams), not generated.
+  ERROR_REASON_TEAMS_MANUAL = 2480;
+  // FAILED_PRECONDITION. Too few participants for the teams: at least two,
+  // and at least one per team.
+  ERROR_REASON_TEAMS_TOO_FEW = 2481;
+  // FAILED_PRECONDITION. A person put in a team is not a participant of the
+  // event: an active member who answered "going" or whose attendance was
+  // verified.
+  ERROR_REASON_TEAMS_NOT_PARTICIPANT = 2482;
 }

@@ -128,6 +128,17 @@ var (
 	ErrMeasurementScope = errors.New("ölçümün kapsamı farklı")
 )
 
+// Teams component errors (issue #248; ADR-0025 §4, §5).
+var (
+	// ErrTeamsManual: generating teams when the component's mode is manual.
+	ErrTeamsManual = errors.New("takımlar elle kurulur")
+	// ErrTeamsTooFew: too few participants for the teams.
+	ErrTeamsTooFew = errors.New("takımlar için katılımcı az")
+	// ErrTeamsNotParticipant: a person put in a team is not a participant
+	// of the event.
+	ErrTeamsNotParticipant = errors.New("kişi etkinliğin katılımcısı değil")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (

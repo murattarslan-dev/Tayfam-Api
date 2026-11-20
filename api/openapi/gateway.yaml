@@ -3238,6 +3238,113 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Etkinlik bileşenleri: takım kurma (`teams`; core TeamsComponentService, #248, ADR-0025 §4, §5) ---
+  # Etkinliğin katılımcılarını takımlara böler (takım başına 2 kişi = ikili
+  # eşleştirme, ör. eş dalıcı). Katılımcı, tayfanın etkin üyesi olup
+  # "geliyorum" demiş ya da katılımı doğrulanmış kişidir; katılımcı olmaktan
+  # çıkan kişi takımında görünmez. Bileşenin parametreleri (`mode`,
+  # `team_count`, `team_size`) yanıtta döner. Takımları organizatör,
+  # moderatör ve yönetici kurar; bitişten 7 gün sonrasına kadar
+  # (`component-frozen`). Takımlar sırasıyla tanınır: yeniden kurulduğunda
+  # n'inci takım kimliğini korur. Takımlar katılımdır, seri örneğine
+  # kopyalanmaz. Yazan her uç takımları güncel haliyle döner.
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/teams:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: getEventTeams
+      summary: Etkinliğin takımları
+      description: |
+        Her etkin üyeye açıktır (susturulmuş üye de okur); iptal edilmiş ve
+        donmuş etkinlikte de okunur. Bileşen uçlarının ortak kuralları
+        geçerlidir (`component-not-found`, `component-disabled`).
+      responses:
+        "200":
+          description: Takımlar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventTeams" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: replaceEventTeams
+      summary: Takımları elle kurar (organizatör, moderatör, yönetici)
+      description: |
+        Her modda kullanılır; mevcut takımların yerini alır (boş liste
+        takımları kaldırır). En fazla `team_count` (yoksa 50) takım;
+        `team_count` ile `team_size` birlikte verilmişse takımda en fazla
+        `team_size` kişi; bir kişi en fazla bir takımda; toplam en fazla 500
+        kişi (aksi `invalid-request`). Katılımcı olmayan kişi
+        `teams-not-participant`. Bileşen uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventTeamsRequest" }
+      responses:
+        "200":
+          description: Takımlar, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventTeams" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/teams/generate:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    post:
+      operationId: generateEventTeams
+      summary: Takımları katılımcılardan kurar (organizatör, moderatör, yönetici)
+      description: |
+        Mevcut takımların yerini alır (takım adları sırasıyla korunur).
+        Rastgelelik sunucuda kriptografik üreteçle sağlanır. `random` modda
+        katılımcılar karıştırılıp sırayla dağıtılır; `balanced` modda
+        gönderilen seviyelere göre (güçlüden zayıfa, yılan sırasıyla)
+        dağıtılır, seviyesi gönderilmeyen katılımcı 3 sayılır, eşitler
+        rastgele sıralanır. Seviyeler saklanmaz, loglanmaz, yanıtta dönmez.
+        Takım sayısı `team_count`; yoksa katılımcı sayısı / `team_size`
+        (artanlar takımlara katılır); ikisi de yoksa 2. `team_count` ile
+        `team_size` birlikte verilmişse takımlar en fazla `team_size` kişi
+        alır, kalanlar (rastgele) dışarıda kalır. `manual` modda
+        `teams-manual`; iki katılımcıdan ya da takım sayısından az
+        katılımcıda `teams-too-few`; 500'den çok katılımcıda `event-limit`.
+        Gövde zorunludur (seviyesiz istekte boş nesne). Bileşen uçlarının
+        ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventTeamsGenerateRequest" }
+      responses:
+        "200":
+          description: Takımlar, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventTeams" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   # --- Tayfa sözlüğü (core TayfaVocabularyService, #244, ADR-0037 §4) ---
   # Tayfanın kendi değer listesi: bir ad alanındaki (`fish_species`, `book`
   # …) değerler. Tanımda `vocabulary` olan metin alanı (`CatalogVocabulary`)
@@ -6860,6 +6967,10 @@ components:
         - measurement-not-started
         - measurement-not-participant
         - measurement-scope
+        # core: takım kurma bileşeni (#248, ADR-0025 §4, §5)
+        - teams-manual
+        - teams-too-few
+        - teams-not-participant
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -8254,6 +8365,68 @@ components:
           description: İsteğe bağlı; başlangıçtan sonra, etkinliğin bitişinden en çok bir gün sonra.
         title: { type: string, minLength: 1, maxLength: 120 }
         note: { type: string, maxLength: 500, description: İsteğe bağlı; boş metin notu kaldırır. }
+    EventTeam:
+      type: object
+      required: [id, position, member_ids]
+      properties:
+        id: { type: string, format: uuid }
+        position: { type: integer, minimum: 1, maximum: 50, description: "Takımın sırası; adsız takımı istemci sırasıyla adlandırır." }
+        name: { type: string, description: 1–40 karakter; adsız takımda yoktur. }
+        member_ids:
+          type: array
+          description: Takımdaki ve hâlâ katılımcı olan kişilerin kullanıcı kimlikleri.
+          items: { type: string, format: uuid }
+    EventTeams:
+      type: object
+      required: [teams, mode, caller_can_edit]
+      description: Bir etkinliğin bir takım bileşeni, isteği yapanın gördüğü haliyle (#248).
+      properties:
+        teams:
+          type: array
+          description: Sıraya göre; takım kurulmamışsa boş.
+          items: { $ref: "#/components/schemas/EventTeam" }
+        mode:
+          type: string
+          enum: [random, balanced, manual]
+          description: Bu etkinlikte geçerli mod (organizatörün seçimi ya da tanımdaki değer; tanım vermezse random).
+        team_count: { type: integer, minimum: 1, maximum: 50, description: "Bileşenin `team_count` parametresi; tanım vermezse yoktur." }
+        team_size: { type: integer, minimum: 1, maximum: 50, description: "Bileşenin `team_size` parametresi; tanım vermezse yoktur." }
+        caller_can_edit:
+          type: boolean
+          description: Şu an takımları kurabilirsiniz (organizatör, moderatör, yönetici; susturulmamış; etkinlik iptal değil, donmamış, tayfa salt okunur değil).
+    EventTeamsRequest:
+      type: object
+      required: [teams]
+      additionalProperties: false
+      properties:
+        teams:
+          type: array
+          maxItems: 50
+          description: Sırasıyla; boş liste takımları kaldırır.
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              name: { type: string, maxLength: 40, description: İsteğe bağlı; boş metin adsız takım. }
+              member_ids:
+                type: array
+                description: Katılımcıların kullanıcı kimlikleri; bir kişi en fazla bir takımda.
+                items: { type: string, format: uuid }
+    EventTeamsGenerateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        levels:
+          type: array
+          maxItems: 500
+          description: Yalnızca `balanced` modda kullanılır; kişi başına en fazla bir. Saklanmaz.
+          items:
+            type: object
+            required: [user_id, level]
+            additionalProperties: false
+            properties:
+              user_id: { type: string, format: uuid }
+              level: { type: integer, minimum: 1, maximum: 5, description: "1 (başlangıç) – 5 (en güçlü)." }
     VocabularyIds:
       type: object
       description: Alan anahtarı → tayfa sözlüğündeki değerin kimliği (#244).

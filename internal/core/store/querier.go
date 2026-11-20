@@ -21,6 +21,7 @@ type Querier interface {
 	AddQuestionTag(ctx context.Context, arg AddQuestionTagParams) error
 	// İlgi alanı katalog anahtarıdır (catalog_interests, ADR-0025 §2).
 	AddTayfaInterest(ctx context.Context, arg AddTayfaInterestParams) error
+	AddTeamMember(ctx context.Context, arg AddTeamMemberParams) error
 	AdjustAnswerVoteCount(ctx context.Context, arg AdjustAnswerVoteCountParams) (int64, error)
 	// Panel kararı maskeyi kaldırır.
 	AdminApproveDiscover(ctx context.Context, arg AdminApproveDiscoverParams) (int64, error)
@@ -356,6 +357,8 @@ type Querier interface {
 	// Etiket silinince bağları CASCADE ile gider; sorular kalır.
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
 	DeleteTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) error
+	DeleteTeamMembers(ctx context.Context, arg DeleteTeamMembersParams) error
+	DeleteTeamsFrom(ctx context.Context, arg DeleteTeamsFromParams) error
 	// R2'deki nesneleri silindikten sonra. İçerikteki referans ON DELETE SET
 	// NULL ile düşer.
 	DeleteUploadRow(ctx context.Context, id pgtype.UUID) (int64, error)
@@ -401,6 +404,9 @@ type Querier interface {
 	DeleteUserSafetyContacts(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserSeatRequests(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserSocialSettings(ctx context.Context, userID pgtype.UUID) error
+	// Takımlardaki yeri kişinin katılımıdır; kişiyle birlikte silinir (issue
+	// #248). Takımın kendisi etkinliğindir, kalır.
+	DeleteUserTeamMemberships(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silme (user.deleted): kullanıcının dosyaları silinir; bağlı kapak
 	// görselleri tayfanındır, bağlı şikâyet kanıtı platformundur (rapor
 	// durdukça, ADR-0031); yalnızca sahiplikleri kaldırılır.
@@ -508,6 +514,10 @@ type Querier interface {
 	// tutulan kişi sayısı. Puan değerleri ve kiminle olduğu girmez (ADR-0030
 	// §9). Ayar satırı da puanı da yoksa tutulan bir şey yoktur, kayıt da yok.
 	ExportSocialSettings(ctx context.Context, arg ExportSocialSettingsParams) ([]ExportSocialSettingsRow, error)
+	// Takımlardaki yeriniz (`teams` bileşeni, issue #248): hangi etkinliğin
+	// hangi takımındasınız. Takım arkadaşları ve takım adı (organizatörün
+	// içeriği) dışa aktarılmaz.
+	ExportTeamMemberships(ctx context.Context, arg ExportTeamMembershipsParams) ([]ExportTeamMembershipsRow, error)
 	// Yalnızca liste; dosyalar ve dışa aktarma kayıtları girmez.
 	ExportUploads(ctx context.Context, arg ExportUploadsParams) ([]ExportUploadsRow, error)
 	// Kişinin başkasının aracına yazdığı koltuk istekleri. Aracın sahibi ve
@@ -1000,6 +1010,19 @@ type Querier interface {
 	ListTayfaModules(ctx context.Context, tayfaID pgtype.UUID) ([]ListTayfaModulesRow, error)
 	// Bildirim alıcıları: aktif yöneticiler ve moderatörler, yönetici önce.
 	ListTayfaStaffIDs(ctx context.Context, arg ListTayfaStaffIDsParams) ([]pgtype.UUID, error)
+	// Takıma alınabilecek kişiler: tayfanın etkin üyesi olan ve "geliyorum"
+	// demiş ya da katılımı doğrulanmış katılımcılar, kimlik sırasıyla.
+	ListTeamCandidates(ctx context.Context, eventID pgtype.UUID) ([]pgtype.UUID, error)
+	// Takımlardaki kişiler; yalnızca hâlâ katılımcı olanlar (tayfanın etkin
+	// üyesi ve "geliyorum" demiş ya da katılımı doğrulanmış). Cevabını
+	// değiştiren ya da tayfadan ayrılan kişi takımda görünmez.
+	ListTeamMembers(ctx context.Context, arg ListTeamMembersParams) ([]ListTeamMembersRow, error)
+	// Takım kurma bileşeni (`teams`; issue #248; ADR-0025 §4). Etkinlik her
+	// zaman önce tayfa kapsamında yüklenir ve bileşen etkinliğin tür sürümünde
+	// çözülür (internal/core/app/component: View / Change); buradaki sorgular o
+	// etkinliğin kimliği ve bileşenin anahtarıyla çalışır (IDOR). Yetki app
+	// katmanındadır (internal/core/app/component/teams).
+	ListTeams(ctx context.Context, arg ListTeamsParams) ([]ListTeamsRow, error)
 	// Uzlaştırma işi: onaylanmamış, before'dan eski sohbet bağlamaları.
 	ListUnconfirmedChatAttachments(ctx context.Context, arg ListUnconfirmedChatAttachmentsParams) ([]ListUnconfirmedChatAttachmentsRow, error)
 	// Bitmemiş etkinlikler, başlangıç zamanına göre; (starts_at, id) ile
@@ -1279,6 +1302,9 @@ type Querier interface {
 	// Verilmeyen alan (NULL) olduğu gibi kalır; satır yoksa varsayılanlardan
 	// açılır.
 	UpsertSocialSettings(ctx context.Context, arg UpsertSocialSettingsParams) (UpsertSocialSettingsRow, error)
+	// Takımı sırasında yazar; o sırada takım varsa kimliği korunur, adı
+	// değişir.
+	UpsertTeam(ctx context.Context, arg UpsertTeamParams) (pgtype.UUID, error)
 	// Profil kopyası (ADR-0009). Yalnızca UserEventService yazar.
 	// Daha yeni bir olay uygulanmışsa ya da profil silinmişse değişmez; etkilenen
 	// satır 0 olur.
