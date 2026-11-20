@@ -56,6 +56,7 @@ var exportSections = map[string]corev1.CoreExportSection{
 	export.SectionVehicleSeatRequests: corev1.CoreExportSection_CORE_EXPORT_SECTION_VEHICLE_SEAT_REQUESTS,
 	export.SectionMeasurements:        corev1.CoreExportSection_CORE_EXPORT_SECTION_MEASUREMENTS,
 	export.SectionTeamMemberships:     corev1.CoreExportSection_CORE_EXPORT_SECTION_TEAM_MEMBERSHIPS,
+	export.SectionDrawEntries:         corev1.CoreExportSection_CORE_EXPORT_SECTION_DRAW_ENTRIES,
 }
 
 // ExportMyData implements corev1.ExportServiceServer.

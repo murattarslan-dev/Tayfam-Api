@@ -51,6 +51,7 @@ func componentRegistrars() []componentRegistrar {
 		registerTeamsComponent,
 
 		// draw (#249)
+		registerDrawComponent,
 
 		// scoreboard (#250)
 

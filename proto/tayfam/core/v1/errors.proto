@@ -377,4 +377,14 @@ enum ErrorReason {
   // event: an active member who answered "going" or whose attendance was
   // verified.
   ERROR_REASON_TEAMS_NOT_PARTICIPANT = 2482;
+
+  // Draw component (DrawComponentService, component_draw.proto; issue #249:
+  // 2490–2499).
+
+  // FAILED_PRECONDITION. The component's draw was made; its result is fixed
+  // and cannot be drawn again.
+  ERROR_REASON_DRAW_ALREADY_MADE = 2490;
+  // FAILED_PRECONDITION. Fewer than two to draw: participants, or teams
+  // with people when the type forms teams.
+  ERROR_REASON_DRAW_TOO_FEW = 2491;
 }

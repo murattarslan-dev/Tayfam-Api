@@ -204,6 +204,19 @@ WHERE m.user_id = @user_id AND t.id > @after
 ORDER BY t.id
 LIMIT @n;
 
+-- Kuradaki yeriniz (`draw` bileşeni, issue #249): hangi etkinliğin kurasında
+-- kaçıncı sıradasınız. Kuradaki diğer kişiler dışa aktarılmaz.
+-- name: ExportDrawEntries :many
+SELECT d.id AS k, jsonb_build_object(
+  'event_id', d.event_id, 'component_key', d.component_key, 'position', d.position,
+  'drawn_at', w.drawn_at
+) AS data
+FROM event_draw_entries d
+JOIN event_draws w ON w.event_id = d.event_id AND w.component_key = d.component_key
+WHERE d.user_id = @user_id AND d.id > @after
+ORDER BY d.id
+LIMIT @n;
+
 -- Albüm fotoğrafları (issue #206); dosyaların kendisi zip'e girmez
 -- (ADR-0021 §5), uploads bölümü onları listeler.
 -- name: ExportEventPhotos :many

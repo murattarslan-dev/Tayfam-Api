@@ -161,6 +161,9 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_TEAMS_MANUAL":          {http.StatusConflict, "teams-manual"},
 		"ERROR_REASON_TEAMS_TOO_FEW":         {http.StatusConflict, "teams-too-few"},
 		"ERROR_REASON_TEAMS_NOT_PARTICIPANT": {http.StatusConflict, "teams-not-participant"},
+		// Draw component (issue #249; ADR-0025 §4, §5).
+		"ERROR_REASON_DRAW_ALREADY_MADE": {http.StatusConflict, "draw-already-made"},
+		"ERROR_REASON_DRAW_TOO_FEW":      {http.StatusConflict, "draw-too-few"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

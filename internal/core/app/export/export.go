@@ -61,6 +61,8 @@ const (
 	SectionMeasurements = "measurements"
 	// Issue #248: the teams one is in.
 	SectionTeamMemberships = "team_memberships"
+	// Issue #249: one's places in draws.
+	SectionDrawEntries = "draw_entries"
 )
 
 const (
@@ -201,6 +203,10 @@ var sections = []struct {
 	{SectionTeamMemberships, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportTeamMemberships(ctx, store.ExportTeamMembershipsParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportTeamMembershipsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionDrawEntries, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportDrawEntries(ctx, store.ExportDrawEntriesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportDrawEntriesRow) row { return row{x.K, x.Data} })
 	}},
 }
 

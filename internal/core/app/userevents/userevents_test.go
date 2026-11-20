@@ -198,6 +198,7 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"tayfa_vocabulary.created_by":    `SELECT count(*) FROM tayfa_vocabulary WHERE created_by = $1`,
 		"event_measurements":             `SELECT count(*) FROM event_measurements WHERE $1 IN (user_id, entered_by)`,
 		"event_team_members.user_id":     `SELECT count(*) FROM event_team_members WHERE user_id = $1`,
+		"event_draw_entries.user_id":     `SELECT count(*) FROM event_draw_entries WHERE user_id = $1`,
 		"event_photos":                   `SELECT count(*) FROM event_photos WHERE $1 IN (uploader_id, deleted_by)`,
 		"user_activity_records.user_id":  `SELECT count(*) FROM user_activity_records WHERE user_id = $1`,
 		"questions":                      `SELECT count(*) FROM questions WHERE $1 IN (author_id, deleted_by)`,
@@ -551,6 +552,11 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 	e.seed(t, `INSERT INTO event_teams (id, event_id, component_key, position) VALUES ($1, $2, 'teams', 1)`, team.PG(), hike.PG())
 	e.seed(t, `INSERT INTO event_team_members (event_id, component_key, team_id, user_id) VALUES ($1, 'teams', $2, $3), ($1, 'teams', $2, $4)`,
 		hike.PG(), team.PG(), u.PG(), a.PG())
+	// Draw (issue #249): the draw is fixed; u's place stays empty, a's
+	// place keeps its position.
+	e.seed(t, `INSERT INTO event_draws (event_id, component_key, subject, drawn_at) VALUES ($1, 'draw', 'participants', now())`, hike.PG())
+	e.seed(t, `INSERT INTO event_draw_entries (id, event_id, component_key, position, user_id) VALUES ($1, $3, 'draw', 1, $4), ($2, $3, 'draw', 2, $5)`,
+		id.New().PG(), id.New().PG(), hike.PG(), u.PG(), a.PG())
 	// Album photos (issue #206): u's own go; a's photo that u removed stays
 	// without its remover.
 	e.seed(t, `INSERT INTO event_photos (id, event_id, uploader_id, upload_id, caption, client_request_id) VALUES ($1, $2, $3, $4, 'Zirve', $5)`,
@@ -588,6 +594,9 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 	}
 	if n := e.count(t, `SELECT count(*) FROM event_team_members WHERE team_id = $1 AND user_id = $2`, team.PG(), a.PG()); n != 1 {
 		t.Errorf("başkasının takımdaki yeri silindi: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_draw_entries WHERE event_id = $1 AND ((position = 1 AND user_id IS NULL) OR (position = 2 AND user_id = $2))`, hike.PG(), a.PG()); n != 2 {
+		t.Errorf("kuradaki yer boşalmadı ya da kura değişti: %d", n)
 	}
 	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'rsvp.promoted' AND actor_id IS NULL AND tayfa_id = $1 AND subject_id = $2 AND payload->>'user_id' = $3`,
 		tf.PG(), full.PG(), w1.String()); n != 1 {

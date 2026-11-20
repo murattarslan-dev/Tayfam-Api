@@ -139,6 +139,15 @@ var (
 	ErrTeamsNotParticipant = errors.New("kişi etkinliğin katılımcısı değil")
 )
 
+// Draw component errors (issue #249; ADR-0025 §4, §5).
+var (
+	// ErrDrawAlreadyMade: the component's draw was made; its result is
+	// fixed.
+	ErrDrawAlreadyMade = errors.New("kura çekildi")
+	// ErrDrawTooFew: fewer than two participants (or teams) to draw.
+	ErrDrawTooFew = errors.New("kura için katılımcı az")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (
