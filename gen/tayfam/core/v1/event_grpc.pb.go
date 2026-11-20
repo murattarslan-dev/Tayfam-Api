@@ -23,6 +23,8 @@ const (
 	EventService_CreateInstantEvent_FullMethodName  = "/tayfam.core.v1.EventService/CreateInstantEvent"
 	EventService_UpdateEvent_FullMethodName         = "/tayfam.core.v1.EventService/UpdateEvent"
 	EventService_FinishEvent_FullMethodName         = "/tayfam.core.v1.EventService/FinishEvent"
+	EventService_CreateEventJoinQr_FullMethodName   = "/tayfam.core.v1.EventService/CreateEventJoinQr"
+	EventService_JoinEventByQr_FullMethodName       = "/tayfam.core.v1.EventService/JoinEventByQr"
 	EventService_CancelEvent_FullMethodName         = "/tayfam.core.v1.EventService/CancelEvent"
 	EventService_GetEvent_FullMethodName            = "/tayfam.core.v1.EventService/GetEvent"
 	EventService_ListUpcomingEvents_FullMethodName  = "/tayfam.core.v1.EventService/ListUpcomingEvents"
@@ -75,6 +77,8 @@ const (
 //     create with starts_now: Tayfa.now_create_min_role and above
 //     (every active member by default; ADR-0038 §2)
 //     finish: the organizer, for their own open-ended event
+//     join QR: the organizer for their own event, admins for every
+//     event (ADR-0038 §3)
 //     edit, cancel: the organizer (the event's creator) for their own
 //     event, moderators and admins for every event
 //     RSVP: every active member
@@ -130,6 +134,36 @@ type EventServiceClient interface {
 	// already finished), ERROR_REASON_EVENT_NOT_OPEN_ENDED for an event that
 	// was not started now.
 	FinishEvent(ctx context.Context, in *FinishEventRequest, opts ...grpc.CallOption) (*FinishEventResponse, error)
+	// CreateEventJoinQr returns a new short-lived join token for the event's
+	// QR (ADR-0038 §3; the client shows https://tayfam.app/q#<token>). Only
+	// the organizer for their own event and the tayfa's admins; only an
+	// in-person event that has not ended. The token is 128 random bits,
+	// returned only here; core keeps only its SHA-256 hash, and the token
+	// expires after 2 minutes (expire_time): the client asks for a new one
+	// before that. Earlier tokens stay valid until they expire.
+	//
+	// Errors: common, ERROR_REASON_VALIDATION (online event: field "mode"),
+	// ERROR_REASON_JOIN_QR_LIMIT_REACHED (30 QR joins already).
+	CreateEventJoinQr(ctx context.Context, in *CreateEventJoinQrRequest, opts ...grpc.CallOption) (*CreateEventJoinQrResponse, error)
+	// JoinEventByQr joins the event behind a join QR token (ADR-0038 §3).
+	// Any signed-in user may call it; the token travels only in the body.
+	//   - Instant tayfa: the caller becomes an ACTIVE member at once
+	//     (joined_via qr) and answers GOING (WAITLIST when full).
+	//   - Standard tayfa: the join policy applies: OPEN → ACTIVE member and
+	//     GOING; APPROVAL → a join request (pending true) and nothing else.
+	//   - Already an ACTIVE member: GOING, and the attendance is checked in
+	//     with ATTENDANCE_METHOD_QR while the check-in window is open.
+	//   - A waiting join request: pending true again, nothing changes.
+	// At most 30 QR joins per event (a repeat that changes nothing does not
+	// count); 5 attempts per minute per user.
+	//
+	// Errors: ERROR_REASON_VALIDATION (token missing),
+	// ERROR_REASON_INVALID_JOIN_QR (all refusals, alike on purpose),
+	// ERROR_REASON_JOIN_QR_LIMIT_REACHED, ERROR_REASON_RATE_LIMITED,
+	// ERROR_REASON_ALREADY_PENDING (a direct invitation waiting for an
+	// answer), ERROR_REASON_MUTED and ERROR_REASON_PERMISSION_DENIED (a
+	// member who may not answer).
+	JoinEventByQr(ctx context.Context, in *JoinEventByQrRequest, opts ...grpc.CallOption) (*JoinEventByQrResponse, error)
 	// CancelEvent cancels a scheduled event. The event is not deleted: its
 	// members still see it, with the cancellation time and reason. RSVPs
 	// cannot change afterwards.
@@ -330,6 +364,26 @@ func (c *eventServiceClient) FinishEvent(ctx context.Context, in *FinishEventReq
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(FinishEventResponse)
 	err := c.cc.Invoke(ctx, EventService_FinishEvent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *eventServiceClient) CreateEventJoinQr(ctx context.Context, in *CreateEventJoinQrRequest, opts ...grpc.CallOption) (*CreateEventJoinQrResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateEventJoinQrResponse)
+	err := c.cc.Invoke(ctx, EventService_CreateEventJoinQr_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *eventServiceClient) JoinEventByQr(ctx context.Context, in *JoinEventByQrRequest, opts ...grpc.CallOption) (*JoinEventByQrResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(JoinEventByQrResponse)
+	err := c.cc.Invoke(ctx, EventService_JoinEventByQr_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -593,6 +647,8 @@ func (c *eventServiceClient) ExportEvent(ctx context.Context, in *ExportEventReq
 //     create with starts_now: Tayfa.now_create_min_role and above
 //     (every active member by default; ADR-0038 §2)
 //     finish: the organizer, for their own open-ended event
+//     join QR: the organizer for their own event, admins for every
+//     event (ADR-0038 §3)
 //     edit, cancel: the organizer (the event's creator) for their own
 //     event, moderators and admins for every event
 //     RSVP: every active member
@@ -648,6 +704,36 @@ type EventServiceServer interface {
 	// already finished), ERROR_REASON_EVENT_NOT_OPEN_ENDED for an event that
 	// was not started now.
 	FinishEvent(context.Context, *FinishEventRequest) (*FinishEventResponse, error)
+	// CreateEventJoinQr returns a new short-lived join token for the event's
+	// QR (ADR-0038 §3; the client shows https://tayfam.app/q#<token>). Only
+	// the organizer for their own event and the tayfa's admins; only an
+	// in-person event that has not ended. The token is 128 random bits,
+	// returned only here; core keeps only its SHA-256 hash, and the token
+	// expires after 2 minutes (expire_time): the client asks for a new one
+	// before that. Earlier tokens stay valid until they expire.
+	//
+	// Errors: common, ERROR_REASON_VALIDATION (online event: field "mode"),
+	// ERROR_REASON_JOIN_QR_LIMIT_REACHED (30 QR joins already).
+	CreateEventJoinQr(context.Context, *CreateEventJoinQrRequest) (*CreateEventJoinQrResponse, error)
+	// JoinEventByQr joins the event behind a join QR token (ADR-0038 §3).
+	// Any signed-in user may call it; the token travels only in the body.
+	//   - Instant tayfa: the caller becomes an ACTIVE member at once
+	//     (joined_via qr) and answers GOING (WAITLIST when full).
+	//   - Standard tayfa: the join policy applies: OPEN → ACTIVE member and
+	//     GOING; APPROVAL → a join request (pending true) and nothing else.
+	//   - Already an ACTIVE member: GOING, and the attendance is checked in
+	//     with ATTENDANCE_METHOD_QR while the check-in window is open.
+	//   - A waiting join request: pending true again, nothing changes.
+	// At most 30 QR joins per event (a repeat that changes nothing does not
+	// count); 5 attempts per minute per user.
+	//
+	// Errors: ERROR_REASON_VALIDATION (token missing),
+	// ERROR_REASON_INVALID_JOIN_QR (all refusals, alike on purpose),
+	// ERROR_REASON_JOIN_QR_LIMIT_REACHED, ERROR_REASON_RATE_LIMITED,
+	// ERROR_REASON_ALREADY_PENDING (a direct invitation waiting for an
+	// answer), ERROR_REASON_MUTED and ERROR_REASON_PERMISSION_DENIED (a
+	// member who may not answer).
+	JoinEventByQr(context.Context, *JoinEventByQrRequest) (*JoinEventByQrResponse, error)
 	// CancelEvent cancels a scheduled event. The event is not deleted: its
 	// members still see it, with the cancellation time and reason. RSVPs
 	// cannot change afterwards.
@@ -826,6 +912,12 @@ func (UnimplementedEventServiceServer) UpdateEvent(context.Context, *UpdateEvent
 func (UnimplementedEventServiceServer) FinishEvent(context.Context, *FinishEventRequest) (*FinishEventResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method FinishEvent not implemented")
 }
+func (UnimplementedEventServiceServer) CreateEventJoinQr(context.Context, *CreateEventJoinQrRequest) (*CreateEventJoinQrResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateEventJoinQr not implemented")
+}
+func (UnimplementedEventServiceServer) JoinEventByQr(context.Context, *JoinEventByQrRequest) (*JoinEventByQrResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method JoinEventByQr not implemented")
+}
 func (UnimplementedEventServiceServer) CancelEvent(context.Context, *CancelEventRequest) (*CancelEventResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CancelEvent not implemented")
 }
@@ -984,6 +1076,42 @@ func _EventService_FinishEvent_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(EventServiceServer).FinishEvent(ctx, req.(*FinishEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EventService_CreateEventJoinQr_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateEventJoinQrRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).CreateEventJoinQr(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_CreateEventJoinQr_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).CreateEventJoinQr(ctx, req.(*CreateEventJoinQrRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EventService_JoinEventByQr_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(JoinEventByQrRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).JoinEventByQr(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_JoinEventByQr_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).JoinEventByQr(ctx, req.(*JoinEventByQrRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1424,6 +1552,14 @@ var EventService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "FinishEvent",
 			Handler:    _EventService_FinishEvent_Handler,
+		},
+		{
+			MethodName: "CreateEventJoinQr",
+			Handler:    _EventService_CreateEventJoinQr_Handler,
+		},
+		{
+			MethodName: "JoinEventByQr",
+			Handler:    _EventService_JoinEventByQr_Handler,
 		},
 		{
 			MethodName: "CancelEvent",

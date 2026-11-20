@@ -145,6 +145,8 @@ const (
 	JoinSource_JOIN_SOURCE_DIRECT_INVITE JoinSource = 3
 	JoinSource_JOIN_SOURCE_CODE          JoinSource = 4
 	JoinSource_JOIN_SOURCE_DISCOVER      JoinSource = 5
+	// A join QR shown by the event's organizer (ADR-0038 §3).
+	JoinSource_JOIN_SOURCE_QR JoinSource = 6
 )
 
 // Enum value maps for JoinSource.
@@ -156,6 +158,7 @@ var (
 		3: "JOIN_SOURCE_DIRECT_INVITE",
 		4: "JOIN_SOURCE_CODE",
 		5: "JOIN_SOURCE_DISCOVER",
+		6: "JOIN_SOURCE_QR",
 	}
 	JoinSource_value = map[string]int32{
 		"JOIN_SOURCE_UNSPECIFIED":   0,
@@ -164,6 +167,7 @@ var (
 		"JOIN_SOURCE_DIRECT_INVITE": 3,
 		"JOIN_SOURCE_CODE":          4,
 		"JOIN_SOURCE_DISCOVER":      5,
+		"JOIN_SOURCE_QR":            6,
 	}
 )
 
@@ -3129,7 +3133,7 @@ const file_tayfam_core_v1_membership_proto_rawDesc = "" +
 	"\x19MEMBERSHIP_STATUS_INVITED\x10\x01\x12\x1d\n" +
 	"\x19MEMBERSHIP_STATUS_PENDING\x10\x02\x12\x1c\n" +
 	"\x18MEMBERSHIP_STATUS_ACTIVE\x10\x03\x12\x1c\n" +
-	"\x18MEMBERSHIP_STATUS_BANNED\x10\x04*\xae\x01\n" +
+	"\x18MEMBERSHIP_STATUS_BANNED\x10\x04*\xc2\x01\n" +
 	"\n" +
 	"JoinSource\x12\x1b\n" +
 	"\x17JOIN_SOURCE_UNSPECIFIED\x10\x00\x12\x17\n" +
@@ -3137,7 +3141,8 @@ const file_tayfam_core_v1_membership_proto_rawDesc = "" +
 	"\x17JOIN_SOURCE_INVITE_LINK\x10\x02\x12\x1d\n" +
 	"\x19JOIN_SOURCE_DIRECT_INVITE\x10\x03\x12\x14\n" +
 	"\x10JOIN_SOURCE_CODE\x10\x04\x12\x18\n" +
-	"\x14JOIN_SOURCE_DISCOVER\x10\x052\xd4\x11\n" +
+	"\x14JOIN_SOURCE_DISCOVER\x10\x05\x12\x12\n" +
+	"\x0eJOIN_SOURCE_QR\x10\x062\xd4\x11\n" +
 	"\x11MembershipService\x12S\n" +
 	"\n" +
 	"JoinByCode\x12!.tayfam.core.v1.JoinByCodeRequest\x1a\".tayfam.core.v1.JoinByCodeResponse\x12e\n" +
