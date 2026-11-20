@@ -951,6 +951,52 @@ func (q *Queries) ExportSocialSettings(ctx context.Context, arg ExportSocialSett
 	return items, nil
 }
 
+const exportTeamMemberships = `-- name: ExportTeamMemberships :many
+SELECT t.id AS k, jsonb_build_object(
+  'event_id', m.event_id, 'component_key', m.component_key, 'team_id', m.team_id,
+  'team_position', t.position, 'created_at', m.created_at
+) AS data
+FROM event_team_members m
+JOIN event_teams t ON t.id = m.team_id
+WHERE m.user_id = $1 AND t.id > $2
+ORDER BY t.id
+LIMIT $3
+`
+
+type ExportTeamMembershipsParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportTeamMembershipsRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Takımlardaki yeriniz (`teams` bileşeni, issue #248): hangi etkinliğin
+// hangi takımındasınız. Takım arkadaşları ve takım adı (organizatörün
+// içeriği) dışa aktarılmaz.
+func (q *Queries) ExportTeamMemberships(ctx context.Context, arg ExportTeamMembershipsParams) ([]ExportTeamMembershipsRow, error) {
+	rows, err := q.db.Query(ctx, exportTeamMemberships, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportTeamMembershipsRow{}
+	for rows.Next() {
+		var i ExportTeamMembershipsRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportUploads = `-- name: ExportUploads :many
 SELECT u.id AS k, jsonb_build_object(
   'id', u.id, 'purpose', u.purpose, 'status', u.status, 'tayfa_id', u.tayfa_id,

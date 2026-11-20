@@ -334,6 +334,17 @@ func (q *Queries) DeleteUserSeatRequests(ctx context.Context, userID pgtype.UUID
 	return err
 }
 
+const deleteUserTeamMemberships = `-- name: DeleteUserTeamMemberships :exec
+DELETE FROM event_team_members WHERE user_id = $1
+`
+
+// Takımlardaki yeri kişinin katılımıdır; kişiyle birlikte silinir (issue
+// #248). Takımın kendisi etkinliğindir, kalır.
+func (q *Queries) DeleteUserTeamMemberships(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserTeamMemberships, userID)
+	return err
+}
+
 const deleteUserVehicles = `-- name: DeleteUserVehicles :exec
 DELETE FROM event_vehicles WHERE user_id = $1
 `

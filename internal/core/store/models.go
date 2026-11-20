@@ -332,6 +332,24 @@ type EventSeries struct {
 	Dtstart         pgtype.Timestamptz
 }
 
+type EventTeam struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	Position     int16
+	Name         pgtype.Text
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type EventTeamMember struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	TeamID       pgtype.UUID
+	UserID       pgtype.UUID
+	CreatedAt    pgtype.Timestamptz
+}
+
 type EventVehicle struct {
 	ID           pgtype.UUID
 	EventID      pgtype.UUID
