@@ -15,6 +15,12 @@
 //
 // Nothing here stores, logs or returns a device location. The friendship
 // score orders the feed inside the query and never leaves it.
+//
+// The showcase (issue #267; ADR-0026 §3, ADR-0039 §3): a feed item's tayfa
+// carries its all-time statistics and badges only when its admins left
+// stats_showcase on and it has at least stats.ShowcaseMinEvents frozen
+// events. It goes nowhere but the feed, so only a tayfa listed in Keşfet
+// and visible to the viewer ever shows one; a closed tayfa never does.
 package discover
 
 import (
@@ -31,6 +37,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/access"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/stats"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -156,6 +163,9 @@ type Item struct {
 	TayfaCreatedAt   time.Time
 	EventCount       int32
 	AttendanceCount  int32
+	// Showcase is the tayfa's statistics card; nil when its admins hid it
+	// or it has too few frozen events (no field, not "none yet").
+	Showcase *stats.Showcase
 
 	Friends     []Person // at most three
 	FriendCount int32
@@ -175,6 +185,8 @@ func (s *Service) Feed(ctx context.Context, viewer id.ID) ([]Item, error) {
 		return nil, fmt.Errorf("keşfet akışı: %w", err)
 	}
 	out := make([]Item, 0, len(rows))
+	showcases := map[id.ID]*stats.Showcase{}
+	reader := stats.NewShowcaseReader(s.q)
 	for _, r := range rows {
 		var fr []struct {
 			UserID      string  `json:"user_id"`
@@ -190,6 +202,20 @@ func (s *Service) Feed(ctx context.Context, viewer id.ID) ([]Item, error) {
 			TayfaID: idOf(r.TayfaID), TayfaName: r.TayfaName, TayfaDescription: r.TayfaDescription.String,
 			TayfaCity: r.TayfaCity.String, TayfaCreatedAt: r.TayfaCreatedAt.Time,
 			EventCount: r.EventCount, AttendanceCount: r.AttendanceCount, FriendCount: r.FriendCount,
+		}
+		if r.TayfaStatsShowcase {
+			sc, seen := showcases[it.TayfaID]
+			if !seen {
+				v, ok, err := reader.Tayfa(ctx, it.TayfaID)
+				if err != nil {
+					return nil, err
+				}
+				if ok {
+					sc = &v
+				}
+				showcases[it.TayfaID] = sc
+			}
+			it.Showcase = sc
 		}
 		for _, f := range fr {
 			u, ok := id.Parse(f.UserID)
@@ -214,6 +240,9 @@ func (s *Service) Feed(ctx context.Context, viewer id.ID) ([]Item, error) {
 type TayfaState struct {
 	State   string // State*
 	Enabled bool
+	// StatsShowcase is tayfas.stats_showcase: show the statistics and
+	// badges in the Keşfet card (ADR-0026 §3; on by default).
+	StatsShowcase bool
 }
 
 // stateOf maps the admins' wish and the platform's decision. The reason a
@@ -241,7 +270,7 @@ func stateOf(r store.GetTayfaDiscoverStateRow, now time.Time) TayfaState {
 	default:
 		st = StatePending
 	}
-	return TayfaState{State: st, Enabled: enabled}
+	return TayfaState{State: st, Enabled: enabled, StatsShowcase: r.StatsShowcase}
 }
 
 // KindStandard is tayfas.kind of a tayfa that may be in Keşfet; an
@@ -328,6 +357,58 @@ func (s *Service) SetTayfa(ctx context.Context, caller, tayfa id.ID, enabled boo
 	})
 	return out, err
 }
+
+// SetStatsShowcase shows or hides the tayfa's statistics and badges in its
+// Keşfet card (tayfas.stats_showcase; ADR-0026 §3). It works whether or
+// not the tayfa is in Keşfet, like the setting itself. Admins only
+// (authz.TayfaStatsShowcaseUpdate); a change and its audit record are one
+// transaction, and setting the current value records nothing. An instant
+// tayfa has no Keşfet state: apperr.ErrTayfaNotFound.
+func (s *Service) SetStatsShowcase(ctx context.Context, caller, tayfa id.ID, enabled bool) (TayfaState, error) {
+	var out TayfaState
+	err := txn.WithActor(ctx, s.pool, caller, func(_ pgx.Tx, q *store.Queries) error {
+		t, m, err := access.Load(ctx, q, tayfa, caller, true)
+		if err != nil {
+			return err
+		}
+		if t.Kind != KindStandard {
+			return apperr.ErrTayfaNotFound
+		}
+		now := s.now()
+		if err := access.Authorize(m, authz.TayfaStatsShowcaseUpdate, now); err != nil {
+			return err
+		}
+		if access.ReadOnly(t) {
+			return apperr.ErrTayfaReadOnly
+		}
+		changed, err := q.SetTayfaStatsShowcase(ctx, store.SetTayfaStatsShowcaseParams{ID: tayfa.PG(), StatsShowcase: enabled})
+		if err != nil {
+			return fmt.Errorf("vitrin ayarı: %w", err)
+		}
+		if changed == 1 {
+			action := AuditStatsShowcaseHidden
+			if enabled {
+				action = AuditStatsShowcaseShown
+			}
+			if err := txn.Audit(ctx, q, tayfa, caller, action, txn.Target{Type: "tayfa", ID: tayfa}, nil); err != nil {
+				return err
+			}
+		}
+		r, err := q.GetTayfaDiscoverState(ctx, tayfa.PG())
+		if err != nil {
+			return fmt.Errorf("keşfet durumu: %w", err)
+		}
+		out = stateOf(r, now)
+		return nil
+	})
+	return out, err
+}
+
+// Audit actions of SetStatsShowcase.
+const (
+	AuditStatsShowcaseShown  = "tayfa.stats_showcase_shown"
+	AuditStatsShowcaseHidden = "tayfa.stats_showcase_hidden"
+)
 
 // ---------------------------------------------------------------------------
 // "Was everything all right?"

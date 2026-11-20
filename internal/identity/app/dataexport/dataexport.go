@@ -678,6 +678,7 @@ func (s *Service) identitySections(ctx context.Context, a *archive, user id.ID) 
 		BirthDateVisibility       string         `json:"birth_date_visibility"`
 		BirthDateAudience         string         `json:"birth_date_audience"`
 		ActivityVisibility        string         `json:"activity_visibility"`
+		StatsVisibility           string         `json:"stats_visibility"`
 		RefCode                   *string        `json:"ref_code"`
 		ReferredByUserID          *string        `json:"referred_by_user_id"`
 		ReferredAt                *time.Time     `json:"referred_at"`
@@ -695,7 +696,7 @@ func (s *Service) identitySections(ctx context.Context, a *archive, user id.ID) 
 	}{
 		UserID: user.String(), DisplayName: textPtr(u.DisplayName), AvatarUploadID: uuidPtr(u.AvatarUploadID),
 		Locale: u.Locale, BirthDate: birth, BirthDateVisibility: u.BirthDateVisibility, BirthDateAudience: u.BirthDateAudience,
-		ActivityVisibility: u.ActivityVisibility, RefCode: textPtr(u.RefCode), ReferredByUserID: uuidPtr(u.ReferredByUserID),
+		ActivityVisibility: u.ActivityVisibility, StatsVisibility: u.StatsVisibility, RefCode: textPtr(u.RefCode), ReferredByUserID: uuidPtr(u.ReferredByUserID),
 		ReferredAt: tsPtr(u.ReferredAt), RegisteredAt: tsPtr(u.RegisteredAt), CreatedAt: u.CreatedAt.Time.UTC(),
 		Interests: nonNilStrings(pf.Values.Interests), About: pf.Values.About, Occupation: pf.Values.Occupation,
 		Team: pf.Values.Team, Languages: nonNilStrings(pf.Values.Languages), SocialAccounts: social,

@@ -307,6 +307,10 @@ const (
 	// is theirs); EventJoinQRCreateAny for every event of the tayfa.
 	EventJoinQRCreate
 	EventJoinQRCreateAny
+	// Keşfet vitrini (issue #267, ADR-0026 §3). TayfaStatsShowcaseUpdate
+	// shows or hides the tayfa's statistics and badges in its Keşfet
+	// card (tayfas.stats_showcase).
+	TayfaStatsShowcaseUpdate
 
 	actionEnd // sentinel; keep last
 )
@@ -411,6 +415,7 @@ var actionNames = [...]string{
 	EventFinish:               "event.finish",
 	EventJoinQRCreate:         "event.join_qr_create",
 	EventJoinQRCreateAny:      "event.join_qr_create_any",
+	TayfaStatsShowcaseUpdate:  "tayfa.stats_showcase.update",
 	actionEnd:                 "",
 }
 
@@ -572,6 +577,8 @@ var permissions = map[Action]Role{
 	InviteRevokeAny:      Admin,
 	// Keşfet: the admins apply (ADR-0033 §14).
 	TayfaDiscoverManage: Admin,
+	// Keşfet vitrini: only the admins (ADR-0026 §3).
+	TayfaStatsShowcaseUpdate: Admin,
 	// "Yönetici her daveti ve davet linkini iptal edebilir" (v14).
 	InviteDirectCancel: Admin,
 	MemberChangeRole:   Admin,

@@ -45,7 +45,7 @@ WITH me AS (
 )
 SELECT e.id AS event_id, e.type, e.title, e.starts_at, e.ends_at, e.city AS event_city, e.district AS event_district,
        t.id AS tayfa_id, t.name AS tayfa_name, t.description AS tayfa_description, t.city AS tayfa_city,
-       t.created_at AS tayfa_created_at,
+       t.created_at AS tayfa_created_at, t.stats_showcase AS tayfa_stats_showcase,
        ranked.n::integer AS friend_count,
        (SELECT count(*) FROM events x
         WHERE x.tayfa_id = t.id AND x.deleted_at IS NULL AND x.status <> 'cancelled'
@@ -81,11 +81,18 @@ SELECT EXISTS (
 -- Tayfa yöneticisinin ayarı
 
 -- masked_*: yöneticilerin göreceği önceki durum (ADR-0033 §7).
+-- stats_showcase: vitrinde istatistik göster (issue #267, ADR-0026 §3).
 -- name: GetTayfaDiscoverState :one
-SELECT t.visibility, d.status AS review_status, d.masked_status, d.masked_until
+SELECT t.visibility, d.status AS review_status, d.masked_status, d.masked_until, t.stats_showcase
 FROM tayfas t
 LEFT JOIN tayfa_discover d ON d.tayfa_id = t.id
 WHERE t.id = @tayfa_id;
+
+-- Vitrin bayrağı (issue #267, ADR-0026 §3). Aynı değer satırı değiştirmez;
+-- etkilenen satır 0 olur ve denetim kaydı yazılmaz.
+-- name: SetTayfaStatsShowcase :execrows
+UPDATE tayfas SET stats_showcase = @stats_showcase
+WHERE id = @id AND deleted_at IS NULL AND stats_showcase <> @stats_showcase;
 
 -- name: SetTayfaVisibility :execrows
 UPDATE tayfas SET visibility = @visibility

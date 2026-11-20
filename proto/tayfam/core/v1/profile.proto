@@ -6,6 +6,7 @@ import "google/protobuf/timestamp.proto";
 import "tayfam/core/v1/badge.proto";
 import "tayfam/core/v1/event.proto";
 import "tayfam/core/v1/social.proto";
+import "tayfam/core/v1/stats.proto";
 import "tayfam/core/v1/tayfa.proto";
 import "tayfam/core/v1/user_events.proto";
 
@@ -68,6 +69,15 @@ message UserProfile {
   bool badges_visible = 9;
   // The user's personal badges in the order earned (issue #258).
   repeated EarnedBadge badges = 10;
+  // Whether stats is the user's personal statistics (issue #267): always
+  // on one's own profile; otherwise as the user's stats visibility allows
+  // (NONE by default; FRIENDS; FRIENDS_AND_MUTUAL: friends and members of
+  // a shared tayfa). Same rule as badges_visible. When false stats is
+  // empty and the client shows nothing.
+  bool stats_visible = 11;
+  // The user's all-time totals over their tayfas, by metric_key. No year,
+  // date, place or tayfa.
+  repeated UserStat stats = 12;
 }
 
 message GetUserProfileResponse {

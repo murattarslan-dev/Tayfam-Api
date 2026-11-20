@@ -49,6 +49,15 @@ var coreVisibility = map[string]corev1.ActivityVisibility{
 	"public":  corev1.ActivityVisibility_ACTIVITY_VISIBILITY_PUBLIC,
 }
 
+// coreStatsVisibility maps users.stats_visibility to core's enum. Events
+// written before the field existed carry none.
+var coreStatsVisibility = map[string]corev1.StatsVisibility{
+	"":                   corev1.StatsVisibility_STATS_VISIBILITY_UNSPECIFIED,
+	"none":               corev1.StatsVisibility_STATS_VISIBILITY_NONE,
+	"friends":            corev1.StatsVisibility_STATS_VISIBILITY_FRIENDS,
+	"friends_and_mutual": corev1.StatsVisibility_STATS_VISIBILITY_FRIENDS_AND_MUTUAL,
+}
+
 // coreRequest converts a stored event to core's request.
 func coreRequest(e outbox.Event) (*corev1.ApplyUserEventRequest, error) {
 	if e.SubjectType != subjectUser {
@@ -69,8 +78,13 @@ func coreRequest(e outbox.Event) (*corev1.ApplyUserEventRequest, error) {
 		if !ok {
 			return nil, fmt.Errorf("bilinmeyen görünürlük %q", p.ActivityVisibility)
 		}
+		stats, ok := coreStatsVisibility[p.StatsVisibility]
+		if !ok {
+			return nil, fmt.Errorf("bilinmeyen istatistik görünürlüğü %q", p.StatsVisibility)
+		}
 		req.Event = &corev1.ApplyUserEventRequest_ProfileUpdated{ProfileUpdated: &corev1.UserProfileUpdated{
 			DisplayName: p.DisplayName, AvatarUploadId: p.AvatarUploadID, ActivityVisibility: vis,
+			StatsVisibility: stats,
 		}}
 	case TypeDeleted:
 		req.Event = &corev1.ApplyUserEventRequest_Deleted{Deleted: &corev1.UserDeleted{}}

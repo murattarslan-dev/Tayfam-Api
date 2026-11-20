@@ -6871,6 +6871,37 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  /v1/tayfas/{tayfa_id}/discover/stats-showcase:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    put:
+      operationId: setTayfaStatsShowcase
+      summary: Tayfanın istatistik kartını Keşfet vitrininde gösterir ya da gizler (yönetici)
+      description: |
+        Varsayılan açıktır (#267, ADR-0026 §3). Kart yalnızca tayfa
+        Keşfet'te listelendiğinde ve en az 3 donmuş etkinliği olduğunda
+        görünür; ayar bundan bağımsız değiştirilebilir. Değişiklik denetim
+        kaydına yazılır. Cevap tayfanın Keşfet durumudur.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TayfaStatsShowcaseInput" }
+      responses:
+        "200":
+          description: Yeni durum
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TayfaDiscover" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /v1/tayfas/{tayfa_id}/events/{event_id}/feedback:
     parameters:
       - $ref: "#/components/parameters/TayfaID"
@@ -11855,6 +11886,15 @@ components:
         üyeleri. `friends`: yalnızca arkadaşlar. `none`: kimse. Sosyal
         medya hesapları her durumda en fazla arkadaşlara görünür.
       enum: [friends_and_mutual, friends, none]
+    StatsVisibility:
+      type: string
+      description: |
+        Kişisel istatistiklerinizi ve kişisel rozetlerinizi profilinizde
+        kimin göreceği (issue #267, ADR-0026 §4). `none` (varsayılan):
+        yalnızca siz. `friends`: arkadaşlarınız. `friends_and_mutual`:
+        arkadaşlarınız ve ortak tayfa üyeleri. Kendi profilinizde her zaman
+        görürsünüz.
+      enum: [none, friends, friends_and_mutual]
     ProfileField:
       type: string
       description: Profil tamamlama formunun bir alanı.
@@ -11893,6 +11933,7 @@ components:
         - declined_profile_fields
         - about_visibility
         - profile_completion_pending
+        - stats_visibility
       properties:
         user_id: { type: string, format: uuid, description: Kendi kullanıcı kimliğiniz. }
         display_name: { type: string, description: Kendi görünen adınız. }
@@ -11924,6 +11965,8 @@ components:
           description: |
             Profil tamamlama formu gösterilmeli: cevaplanmamış (boş ve
             reddedilmemiş) bir alan var ve geçerli bir erteleme yok.
+        stats_visibility:
+          $ref: "#/components/schemas/StatsVisibility"
     AccountUpdate:
       type: object
       description: En az bir alan bulunur; olmayan alan değişmez.
@@ -11973,6 +12016,8 @@ components:
           uniqueItems: true
           items: { $ref: "#/components/schemas/ProfileField" }
         about_visibility: { $ref: "#/components/schemas/AboutVisibility" }
+        stats_visibility:
+          $ref: "#/components/schemas/StatsVisibility"
     ReferralCode:
       type: object
       required: [referral_code]
@@ -12165,6 +12210,7 @@ components:
             created_at: { type: string, format: date-time }
             event_count: { type: integer, minimum: 0 }
             attendance_count: { type: integer, minimum: 0 }
+            showcase: { $ref: "#/components/schemas/TayfaShowcase" }
         friends:
           type: array
           maxItems: 3
@@ -12178,7 +12224,7 @@ components:
             (ADR-0035; önceden en az 1'di).
     TayfaDiscover:
       type: object
-      required: [state, enabled]
+      required: [state, enabled, stats_showcase]
       properties:
         state:
           type: string
@@ -12188,12 +12234,50 @@ components:
             inceleniyor (neden söylenmez); `rejected` kabul edilmedi.
           enum: [off, pending, listed, under_review, rejected, unknown]
         enabled: { type: boolean, description: Yöneticilerin Keşfet isteği. }
+        stats_showcase:
+          type: boolean
+          description: |
+            İstatistik kartı Keşfet vitrininde gösterilir (#267, ADR-0026 §3;
+            varsayılan açık). `PUT /v1/tayfas/{tayfa_id}/discover/stats-showcase`
+            ile değişir.
     TayfaDiscoverInput:
       type: object
       required: [enabled]
       additionalProperties: false
       properties:
         enabled: { type: boolean }
+    TayfaStatsShowcaseInput:
+      type: object
+      required: [stats_showcase]
+      additionalProperties: false
+      properties:
+        stats_showcase: { type: boolean }
+    TayfaShowcase:
+      type: object
+      required: [stats, badges]
+      description: |
+        Tayfanın Keşfet vitrinindeki istatistik kartı (#267; ADR-0026 §3,
+        ADR-0039 §3). Yalnızca yöneticiler vitrini kapatmamışsa ve tayfanın
+        donmuş (bitişinden 7 gün geçmiş, iptal edilmemiş) en az 3 etkinliği
+        varsa döner; yoksa alan da yoktur ve istemci kart göstermez ("henüz
+        yok" değil). Yalnızca tüm zamanlar toplamı; kişi, tarih, saat, gün,
+        ilçe, koordinat ve yıl kırılımı yoktur. Tayfalar arası sıralama
+        yoktur.
+      properties:
+        stats:
+          type: array
+          description: |
+            Ortak metriklerin tayfa toplamı (`events`, `attended`,
+            `participants`, `duration`; türe göre `<tür>.<metrik>`) ve
+            katalogda vitrine izin verilen ölçümler (`<tür>.<ölçüm>`).
+            Günlük metrikleri ve katılımı hassas türlerin metrikleri hiç
+            gelmez; hassas türler yalnızca genel `events` ve `attended`
+            toplamına girer (ADR-0037 §7).
+          items: { $ref: "#/components/schemas/TayfaStat" }
+        badges:
+          type: array
+          description: Tayfanın rozetleri, kazanılma sırasıyla.
+          items: { $ref: "#/components/schemas/EarnedBadge" }
     EventFeedback:
       type: object
       properties:
@@ -12674,6 +12758,18 @@ components:
             veriyorsa döner (varsayılan kapalı), yoksa alan da yoktur.
             Şampiyonluk rozetleri tayfanın içinde ayrıca görünür.
           items: { $ref: "#/components/schemas/EarnedBadge" }
+        stats:
+          type: array
+          description: |
+            Kişisel istatistikler (#267, ADR-0026 §4): kişinin bütün
+            tayfalarındaki tüm zamanlar toplamı, metrik başına (`attended`,
+            `duration`, kişisel ölçümler ve günlük kayıtları). Yıl, tarih,
+            yer ya da tayfa yoktur; hassas ölçüm ve hassas katılım hiç
+            girmez. `badges` ile aynı kural: kendi profilinizde her zaman
+            (yoksa boş liste); başkasınınkinde yalnızca kişinin
+            `stats_visibility` ayarı size izin veriyorsa, yoksa alan da
+            yoktur (gizlendiği belli edilmez).
+          items: { $ref: "#/components/schemas/TayfaStat" }
         birthday:
           $ref: "#/components/schemas/Birthday"
         interests:

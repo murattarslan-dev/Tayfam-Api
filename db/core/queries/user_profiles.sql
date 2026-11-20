@@ -3,14 +3,17 @@
 -- Daha yeni bir olay uygulanmışsa ya da profil silinmişse değişmez; etkilenen
 -- satır 0 olur.
 -- activity_visibility NULL ise (alanı taşımayan eski olay) mevcut değer
--- kalır; yeni satırda varsayılan 'tayfa' olur.
+-- kalır; yeni satırda varsayılan 'tayfa' olur. stats_visibility de aynı
+-- biçimde (varsayılan 'none'; issue #267).
 -- name: UpsertUserProfile :execrows
-INSERT INTO user_profiles (user_id, display_name, avatar_upload_id, source_event_id, activity_visibility)
-VALUES (@user_id, @display_name, @avatar_upload_id, @source_event_id, COALESCE(sqlc.narg(activity_visibility)::text, 'tayfa'))
+INSERT INTO user_profiles (user_id, display_name, avatar_upload_id, source_event_id, activity_visibility, stats_visibility)
+VALUES (@user_id, @display_name, @avatar_upload_id, @source_event_id, COALESCE(sqlc.narg(activity_visibility)::text, 'tayfa'),
+        COALESCE(sqlc.narg(stats_visibility)::text, 'none'))
 ON CONFLICT (user_id) DO UPDATE
 SET display_name = EXCLUDED.display_name,
     avatar_upload_id = EXCLUDED.avatar_upload_id,
     activity_visibility = COALESCE(sqlc.narg(activity_visibility)::text, user_profiles.activity_visibility),
+    stats_visibility = COALESCE(sqlc.narg(stats_visibility)::text, user_profiles.stats_visibility),
     source_event_id = EXCLUDED.source_event_id,
     updated_at = now()
 WHERE user_profiles.deleted_at IS NULL
@@ -24,6 +27,7 @@ VALUES (@user_id, @source_event_id, now())
 ON CONFLICT (user_id) DO UPDATE
 SET display_name = NULL,
     avatar_upload_id = NULL,
+    stats_visibility = 'none',
     deleted_at = COALESCE(user_profiles.deleted_at, now()),
     source_event_id = GREATEST(user_profiles.source_event_id, EXCLUDED.source_event_id),
     updated_at = now();

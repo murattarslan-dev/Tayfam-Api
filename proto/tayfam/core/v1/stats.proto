@@ -61,3 +61,15 @@ message GetTayfaStatsResponse {
   // When the totals were computed; unset when nothing was computed yet.
   google.protobuf.Timestamp compute_time = 5;
 }
+
+// UserStat is one metric of a person's all-time totals over their tayfas
+// (issue #267, ADR-0026 §4): attended, duration, their personal measures
+// and log entries. Nothing sensitive is in it.
+message UserStat {
+  string metric_key = 1;
+  // "common", "measure" or "log".
+  string source = 2;
+  double value = 3;
+  // How many events made the value.
+  int32 event_count = 4;
+}

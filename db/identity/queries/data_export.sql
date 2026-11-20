@@ -97,7 +97,8 @@ WHERE id IN (
 -- tarihi şifreli okunur ve uygulamada çözülür.
 -- name: ExportUserProfile :one
 SELECT id, display_name, avatar_upload_id, locale, birth_date_enc, birth_date_visibility, birth_date_audience,
-       activity_visibility, ref_code, referred_by_user_id, referred_at, registered_at, created_at
+       activity_visibility, ref_code, referred_by_user_id, referred_at, registered_at, created_at,
+       stats_visibility
 FROM users
 WHERE id = @id AND deleted_at IS NULL;
 

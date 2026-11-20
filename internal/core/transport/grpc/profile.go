@@ -48,6 +48,11 @@ func (s *ProfileServer) GetUserProfile(ctx context.Context, req *corev1.GetUserP
 		MutualTayfas:       make([]*corev1.MutualTayfa, 0, len(p.MutualTayfas)),
 		BadgesVisible:      p.BadgesVisible,
 		Badges:             earnedBadgesPB(p.Badges),
+		StatsVisible:       p.StatsVisible,
+		Stats:              make([]*corev1.UserStat, 0, len(p.Stats)),
+	}
+	for _, st := range p.Stats {
+		out.Stats = append(out.Stats, &corev1.UserStat{MetricKey: st.Metric, Source: st.Source, Value: st.Value, EventCount: st.Events})
 	}
 	for _, t := range p.MutualTayfas {
 		out.MutualTayfas = append(out.MutualTayfas, &corev1.MutualTayfa{TayfaId: t.ID.String(), Name: t.Name})

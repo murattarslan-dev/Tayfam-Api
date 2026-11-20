@@ -60,6 +60,23 @@ message UserProfileUpdated {
   // UNSPECIFIED in events written before the field existed: core keeps the
   // copy's current setting (default TAYFA).
   ActivityVisibility activity_visibility = 3;
+  // Who sees the personal statistics and badges on the profile (issue
+  // #267, ADR-0026 §4). UNSPECIFIED in events written before the field
+  // existed: core keeps the copy's current setting (default NONE).
+  StatsVisibility stats_visibility = 4;
+}
+
+// StatsVisibility is who sees a user's personal statistics and personal
+// badges on their profile (identity's users.stats_visibility). The user
+// always sees their own.
+enum StatsVisibility {
+  STATS_VISIBILITY_UNSPECIFIED = 0;
+  // Nobody but the user. The default.
+  STATS_VISIBILITY_NONE = 1;
+  // Friends.
+  STATS_VISIBILITY_FRIENDS = 2;
+  // Friends, and members of a tayfa the viewer shares with the user.
+  STATS_VISIBILITY_FRIENDS_AND_MUTUAL = 3;
 }
 
 // ActivityVisibility is who sees a user's attendance history (identity's
