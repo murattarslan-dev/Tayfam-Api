@@ -203,6 +203,7 @@ type EventCelebrationWinner struct {
 	EventID      pgtype.UUID
 	ComponentKey string
 	UserID       pgtype.UUID
+	Position     int16
 	CreatedAt    pgtype.Timestamptz
 }
 

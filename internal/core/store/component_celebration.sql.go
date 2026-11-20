@@ -12,8 +12,8 @@ import (
 )
 
 const addEventCelebrationWinner = `-- name: AddEventCelebrationWinner :exec
-INSERT INTO event_celebration_winners (id, event_id, component_key, user_id, created_at)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO event_celebration_winners (id, event_id, component_key, user_id, position, created_at)
+VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 type AddEventCelebrationWinnerParams struct {
@@ -21,6 +21,7 @@ type AddEventCelebrationWinnerParams struct {
 	EventID      pgtype.UUID
 	ComponentKey string
 	UserID       pgtype.UUID
+	Position     int16
 	Now          pgtype.Timestamptz
 }
 
@@ -30,6 +31,7 @@ func (q *Queries) AddEventCelebrationWinner(ctx context.Context, arg AddEventCel
 		arg.EventID,
 		arg.ComponentKey,
 		arg.UserID,
+		arg.Position,
 		arg.Now,
 	)
 	return err
@@ -104,7 +106,7 @@ func (q *Queries) GetEventCelebration(ctx context.Context, arg GetEventCelebrati
 const listEventCelebrationWinners = `-- name: ListEventCelebrationWinners :many
 SELECT user_id FROM event_celebration_winners
 WHERE event_id = $1 AND component_key = $2
-ORDER BY created_at, id
+ORDER BY position
 `
 
 type ListEventCelebrationWinnersParams struct {
@@ -112,7 +114,7 @@ type ListEventCelebrationWinnersParams struct {
 	ComponentKey string
 }
 
-// Elle seçilen kazananlar, eklendikleri sırayla; en fazla birkaç kişi.
+// Elle seçilen kazananlar, organizatörün verdiği sırayla; en fazla on kişi.
 func (q *Queries) ListEventCelebrationWinners(ctx context.Context, arg ListEventCelebrationWinnersParams) ([]pgtype.UUID, error) {
 	rows, err := q.db.Query(ctx, listEventCelebrationWinners, arg.EventID, arg.ComponentKey)
 	if err != nil {

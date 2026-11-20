@@ -930,7 +930,7 @@ type Querier interface {
 	// Etkinlik kanalının kitlesi (gidecekler ve organizatör; kanalı açan Go'da
 	// eklenir), kullanıcı kimliğine göre sıralı, imleçten sonrası.
 	ListEventAudience(ctx context.Context, arg ListEventAudienceParams) ([]pgtype.UUID, error)
-	// Elle seçilen kazananlar, eklendikleri sırayla; en fazla birkaç kişi.
+	// Elle seçilen kazananlar, organizatörün verdiği sırayla; en fazla on kişi.
 	ListEventCelebrationWinners(ctx context.Context, arg ListEventCelebrationWinnersParams) ([]pgtype.UUID, error)
 	// Bileşen çerçevesi (issue #238; ADR-0025 §4–§6, ADR-0037 §2): etkinliğin
 	// bileşen seçimleri ve hakemleri. Etkinlik her zaman önce tayfa kapsamında
