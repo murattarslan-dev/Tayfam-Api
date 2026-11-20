@@ -67,6 +67,8 @@ const (
 	SectionScores = "scoreboard_scores"
 	// Issue #251: one's matches in brackets and one's own scores.
 	SectionBracketMatches = "bracket_matches"
+	// Issue #252: the guest players one added and their nicknames.
+	SectionGuestPlayers = "guest_players"
 )
 
 const (
@@ -219,6 +221,10 @@ var sections = []struct {
 	{SectionBracketMatches, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportBracketMatches(ctx, store.ExportBracketMatchesParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportBracketMatchesRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionGuestPlayers, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportGuestPlayers(ctx, store.ExportGuestPlayersParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportGuestPlayersRow) row { return row{x.K, x.Data} })
 	}},
 }
 

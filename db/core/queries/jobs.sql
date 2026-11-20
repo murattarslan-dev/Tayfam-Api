@@ -235,6 +235,24 @@ WHERE id IN (
   )
   AND plate IS NOT NULL;
 
+-- ---------------------------------------------------------------------------
+-- Misafir takma adı temizliği (issue #252; ADR-0037 §6)
+-- ---------------------------------------------------------------------------
+
+-- Bitişi @ended_before'dan önce olan etkinliklerin misafir takma adları
+-- silinir; misafir satırı kalır (skor ve kura yeri "Misafir" olur).
+-- name: ClearOldGuestNicknames :execrows
+UPDATE event_guest_players SET nickname = NULL
+WHERE id IN (
+    SELECT g.id FROM event_guest_players g
+    JOIN events e ON e.id = g.event_id
+    WHERE g.nickname IS NOT NULL AND e.ends_at <= @ended_before
+    ORDER BY g.id
+    LIMIT @n
+    FOR UPDATE OF g SKIP LOCKED
+  )
+  AND nickname IS NOT NULL;
+
 -- Alarmın alıcıları: organizatör (tayfada hâlâ aktif üyeyse) ve aktif
 -- yöneticiler ve moderatörler; dönmeyen kişinin kendisi hariç. Organizatör
 -- önce, sonra yönetici, sonra moderatör.

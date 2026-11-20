@@ -182,6 +182,10 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_BRACKET_ROUND_OPEN":      {http.StatusConflict, "bracket-round-open"},
 		"ERROR_REASON_BRACKET_ROUND_CLOSED":    {http.StatusConflict, "bracket-round-closed"},
 		"ERROR_REASON_BRACKET_FINISHED":        {http.StatusConflict, "bracket-finished"},
+		// Guest players (issue #252; ADR-0037 §6).
+		"ERROR_REASON_GUEST_PLAYERS_DISABLED": {http.StatusConflict, "guest-players-disabled"},
+		"ERROR_REASON_GUEST_PLAYER_NOT_FOUND": {http.StatusNotFound, "guest-player-not-found"},
+		"ERROR_REASON_GUEST_PLAYER_IN_USE":    {http.StatusConflict, "guest-player-in-use"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

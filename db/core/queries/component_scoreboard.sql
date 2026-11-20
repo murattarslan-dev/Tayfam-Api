@@ -43,7 +43,7 @@ WHERE id = @id AND event_id = @event_id AND component_key = @component_key;
 
 -- Bileşenin bütün masalarındaki yerler.
 -- name: ListScorePlayers :many
-SELECT id, table_id, position, user_id, team_id FROM event_score_players
+SELECT id, table_id, position, user_id, team_id, guest_id FROM event_score_players
 WHERE event_id = @event_id AND component_key = @component_key
 ORDER BY table_id, position;
 
@@ -53,9 +53,9 @@ WHERE table_id = @table_id AND event_id = @event_id AND component_key = @compone
 
 -- name: AddScorePlayer :exec
 INSERT INTO event_score_players (id, table_id, event_id, component_key, position, user_id,
-  team_key, team_id, created_at)
+  team_key, team_id, guest_id, created_at)
 VALUES (@id, @table_id, @event_id, @component_key, @position, sqlc.narg(user_id),
-  sqlc.narg(team_key), sqlc.narg(team_id), @created_at);
+  sqlc.narg(team_key), sqlc.narg(team_id), sqlc.narg(guest_id), @created_at);
 
 -- Bileşenin bütün masalarındaki skorlar.
 -- name: ListScores :many

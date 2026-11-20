@@ -3,9 +3,10 @@
 // scored round by round, live.
 //
 // A component holds up to MaxTables tables (one when its `tables`
-// parameter is off). A table seats players (participants of the event) or,
-// in a team scoreboard, the teams of a teams component of the event
-// (teams.Load). Its rules are resolved when it is created and kept on the
+// parameter is off). A table seats players (participants of the event, and
+// the event's guest players when the `guests` parameter is on; package
+// guest, issue #252) or, in a team scoreboard, the teams of a teams
+// component of the event (teams.Load). Its rules are resolved when it is created and kept on the
 // table, so that a later change of the catalog does not change a game that
 // was played:
 //
@@ -62,6 +63,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalog/definition"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component/guest"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component/teams"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -157,13 +159,15 @@ type Preset struct {
 	Retired    bool
 }
 
-// Player is a seat at a table: a person or a team. Both are zero for a
-// seat whose person deleted their account or whose team was removed.
+// Player is a seat at a table: a person, a team or a guest player. All are
+// zero for a seat whose person deleted their account or whose team was
+// removed. A guest's seat keeps Guest when its nickname is cleared.
 type Player struct {
 	ID       id.ID
 	Position int32
 	User     id.ID
 	Team     id.ID
+	Guest    id.ID
 }
 
 // Score is a seat's score in a round: Points, or Outcome in wdl mode.
@@ -217,10 +221,12 @@ type Scoreboard struct {
 	CallerCanManage bool
 }
 
-// PlayerInput is a seat to set: a person (User) or a team (Team).
+// PlayerInput is a seat to set: a person (User), a team (Team) or a guest
+// player (Guest).
 type PlayerInput struct {
-	User id.ID
-	Team id.ID
+	User  id.ID
+	Team  id.ID
+	Guest id.ID
 }
 
 // TableInput is a new table.
@@ -457,6 +463,7 @@ func Load(ctx context.Context, q *store.Queries, event id.ID, key string) ([]Tab
 		if i, ok := at[id.ID(p.TableID.Bytes)]; ok {
 			out[i].Players = append(out[i].Players, Player{
 				ID: id.ID(p.ID.Bytes), Position: int32(p.Position), User: optID(p.UserID), Team: optID(p.TeamID),
+				Guest: optID(p.GuestID),
 			})
 		}
 	}
@@ -569,20 +576,29 @@ func cleanLabel(s string) (string, error) {
 	return t, nil
 }
 
-// cleanPlayers checks the form of seats: each a person or a team, none
-// twice, at most MaxPlayers.
+// who returns the one person, team or guest a seat names; ok is false
+// unless exactly one is set.
+func (p PlayerInput) who() (w id.ID, ok bool) {
+	n := 0
+	for _, v := range []id.ID{p.User, p.Team, p.Guest} {
+		if v != (id.ID{}) {
+			w, n = v, n+1
+		}
+	}
+	return w, n == 1
+}
+
+// cleanPlayers checks the form of seats: each a person, a team or a guest,
+// none twice, at most MaxPlayers.
 func cleanPlayers(in []PlayerInput) error {
 	if len(in) > MaxPlayers {
 		return apperr.Validation("players")
 	}
 	seen := make(map[id.ID]bool, len(in))
 	for _, p := range in {
-		who := p.User
-		if (p.User == (id.ID{})) == (p.Team == (id.ID{})) {
+		who, ok := p.who()
+		if !ok {
 			return apperr.Validation("players")
-		}
-		if who == (id.ID{}) {
-			who = p.Team
 		}
 		if seen[who] {
 			return apperr.Validation("players")
@@ -594,7 +610,8 @@ func cleanPlayers(in []PlayerInput) error {
 
 // seatable checks seats against a table's side, the preset's bounds and
 // the event: people must be participants, teams must be teams of the
-// table's teams component.
+// table's teams component, guests must be the event's guest players and
+// the component must take guests (`guests`).
 func seatable(ctx context.Context, sc *component.Scope, side, teamsKey string, bounds Preset, in []PlayerInput) error {
 	if len(in) == 0 {
 		return nil
@@ -603,6 +620,7 @@ func seatable(ctx context.Context, sc *component.Scope, side, teamsKey string, b
 		return apperr.Validation("players")
 	}
 	ok := map[id.ID]bool{}
+	var guests map[id.ID]bool
 	if side == SideTeam {
 		list, err := teams.Load(ctx, sc.Q(), sc.Event, teamsKey)
 		if err != nil {
@@ -622,12 +640,27 @@ func seatable(ctx context.Context, sc *component.Scope, side, teamsKey string, b
 	}
 	for _, p := range in {
 		who := p.User
-		if side == SideTeam {
+		switch {
+		case side == SideTeam:
 			if p.Team == (id.ID{}) {
 				return apperr.Validation("players")
 			}
 			who = p.Team
-		} else if p.User == (id.ID{}) {
+		case p.Guest != (id.ID{}):
+			if !sc.ParamBool(guest.Param) {
+				return apperr.ErrGuestPlayersDisabled
+			}
+			if guests == nil {
+				var err error
+				if guests, err = guest.IDs(ctx, sc.Q(), sc.Event); err != nil {
+					return err
+				}
+			}
+			if !guests[p.Guest] {
+				return apperr.ErrGuestPlayerNotFound
+			}
+			continue
+		case p.User == (id.ID{}):
 			return apperr.Validation("players")
 		}
 		if !ok[who] {
@@ -653,9 +686,12 @@ func seat(ctx context.Context, sc *component.Scope, table id.ID, teamsKey string
 			ID: id.New().PG(), TableID: table.PG(), EventID: sc.Event.PG(), ComponentKey: sc.Key,
 			Position: int16(i + 1), CreatedAt: ts(sc.Now), //nolint:gosec // 1..MaxPlayers
 		}
-		if p.Team != (id.ID{}) {
+		switch {
+		case p.Team != (id.ID{}):
 			row.TeamKey, row.TeamID = optText(teamsKey), p.Team.PG()
-		} else {
+		case p.Guest != (id.ID{}):
+			row.GuestID = p.Guest.PG()
+		default:
 			row.UserID = p.User.PG()
 		}
 		if err := sc.Q().AddScorePlayer(ctx, row); err != nil {
@@ -694,7 +730,9 @@ func presetFor(ctx context.Context, sc *component.Scope, key string) (Preset, er
 // (validation errors), a full component (apperr.ErrEventLimit), a preset
 // the component does not offer (apperr.ErrScorePresetUnavailable), a
 // person who is not a participant or a team that is not one
-// (apperr.ErrScorePlayerNotParticipant) and the refusals of
+// (apperr.ErrScorePlayerNotParticipant), a guest in a component without
+// guests (apperr.ErrGuestPlayersDisabled) or not of the event
+// (apperr.ErrGuestPlayerNotFound) and the refusals of
 // component.Service.Change.
 func (s *Service) CreateTable(ctx context.Context, ref component.Ref, in TableInput) (Scoreboard, error) {
 	label, err := cleanLabel(in.Label)
@@ -900,8 +938,8 @@ func (s *Service) DeleteTable(ctx context.Context, ref component.Ref, table id.I
 // than the preset allows (validation error on players), a table with
 // scores (apperr.ErrScoreTableStarted), a table the component does not
 // have (apperr.ErrScoreTableNotFound), a person who is not a participant
-// or a team that is not one (apperr.ErrScorePlayerNotParticipant) and the
-// refusals of component.Service.Change.
+// or a team that is not one (apperr.ErrScorePlayerNotParticipant), a guest
+// as in CreateTable and the refusals of component.Service.Change.
 func (s *Service) SetPlayers(ctx context.Context, ref component.Ref, table id.ID, in []PlayerInput) (Scoreboard, error) {
 	if err := cleanPlayers(in); err != nil {
 		return Scoreboard{}, err

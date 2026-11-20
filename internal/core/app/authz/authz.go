@@ -282,6 +282,11 @@ const (
 	// undoes a merge (issue #244, ADR-0037 §4). Reading the vocabulary is
 	// TayfaView.
 	TayfaVocabularyMerge
+	// EventGuestAdd adds a guest player to an event's scoreboard as its
+	// organizer or an assigned referee (issue #252, ADR-0037 §6; the caller
+	// checks the role, event_referees). Removing a guest is
+	// EventComponentManageOwn / EventComponentManageAny.
+	EventGuestAdd
 
 	actionEnd // sentinel; keep last
 )
@@ -379,6 +384,7 @@ var actionNames = [...]string{
 	EventRefereeAssignAny:     "event.referee_assign_any",
 	EventComponentReferee:     "event.component_referee",
 	TayfaVocabularyMerge:      "tayfa.vocabulary.merge",
+	EventGuestAdd:             "event.guest_add",
 	actionEnd:                 "",
 }
 
@@ -461,6 +467,8 @@ var permissions = map[Action]Role{
 	EventComponentManageOwn:   Member,
 	EventRefereeAssignOwn:     Member,
 	EventComponentReferee:     Member,
+	// Guest players (issue #252): the organizer or an assigned referee.
+	EventGuestAdd: Member,
 
 	// Moderation: moderator and above.
 	// Lowering one's own role; members have nothing to step down to.

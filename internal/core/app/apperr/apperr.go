@@ -199,6 +199,19 @@ var (
 	ErrBracketFinished = errors.New("eşleşme ağacı bitti")
 )
 
+// Guest player errors (issue #252; ADR-0037 §6). None of them carries a
+// nickname.
+var (
+	// ErrGuestPlayersDisabled: the scoreboard component does not take
+	// guest players (its `guests` parameter is off).
+	ErrGuestPlayersDisabled = errors.New("bileşen misafir oyuncu almıyor")
+	// ErrGuestPlayerNotFound: no such guest player in the event.
+	ErrGuestPlayerNotFound = errors.New("misafir oyuncu bulunamadı")
+	// ErrGuestPlayerInUse: the guest has a seat at a table or a place in a
+	// draw; it is not removed.
+	ErrGuestPlayerInUse = errors.New("misafir oyuncu masada ya da kurada")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (

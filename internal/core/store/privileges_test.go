@@ -110,6 +110,9 @@ var wantAppPrivileges = map[string]string{
 	"event_brackets":        "DELETE,INSERT,SELECT",
 	"event_bracket_matches": "DELETE,INSERT,SELECT",
 	"event_bracket_games":   "DELETE,INSERT,SELECT",
+	// Issue #252: a guest never moves to another event; only its nickname
+	// and who added it are cleared (expiry, account deletion).
+	"event_guest_players": "DELETE,INSERT,SELECT,UPDATE(created_by,nickname)",
 	// Issue #241: an item never moves to another event or list, and its
 	// name and quantity do not change; only the assignee changes and
 	// account deletion clears the people on it.

@@ -66,6 +66,7 @@ type scorePlayerJSON struct {
 	Position int32  `json:"position"`
 	UserID   string `json:"user_id,omitempty"`
 	TeamID   string `json:"team_id,omitempty"`
+	GuestID  string `json:"guest_id,omitempty"`
 }
 
 type scoreEntryJSON struct {
@@ -129,7 +130,9 @@ func scoreTableFrom(t *corev1.ScoreTable) scoreTableJSON {
 	}
 	wdl := t.GetRules().GetResult() == "wdl"
 	for _, p := range t.GetPlayers() {
-		out.Players = append(out.Players, scorePlayerJSON{ID: p.GetId(), Position: p.GetPosition(), UserID: p.GetUserId(), TeamID: p.GetTeamId()})
+		out.Players = append(out.Players, scorePlayerJSON{
+			ID: p.GetId(), Position: p.GetPosition(), UserID: p.GetUserId(), TeamID: p.GetTeamId(), GuestID: p.GetGuestId(),
+		})
 	}
 	for _, rd := range t.GetRounds() {
 		r := scoreRoundJSON{Number: rd.GetNumber(), Scores: make([]scoreEntryJSON, 0, len(rd.GetScores()))}
@@ -174,8 +177,9 @@ func scoreboardFrom(b *corev1.Scoreboard) scoreboardJSON {
 }
 
 type scorePlayerBody struct {
-	UserID string `json:"user_id"`
-	TeamID string `json:"team_id"`
+	UserID  string `json:"user_id"`
+	TeamID  string `json:"team_id"`
+	GuestID string `json:"guest_id"`
 }
 
 type scoreTableCreateBody struct {
@@ -213,8 +217,8 @@ func scoreLabelOK(s string) bool {
 	return n >= 1 && n <= scoreLabelMax
 }
 
-// scorePlayersIn checks seats: exactly one of user_id and team_id each,
-// none twice, at most 50.
+// scorePlayersIn checks seats: exactly one of user_id, team_id and
+// guest_id each, none twice, at most 50.
 func scorePlayersIn(in []scorePlayerBody) ([]*corev1.ScorePlayerInput, bool) {
 	if len(in) > scorePlayersMax {
 		return nil, false
@@ -222,15 +226,17 @@ func scorePlayersIn(in []scorePlayerBody) ([]*corev1.ScorePlayerInput, bool) {
 	seen := make(map[string]bool, len(in))
 	out := make([]*corev1.ScorePlayerInput, 0, len(in))
 	for _, p := range in {
-		who := p.UserID
-		if who == "" {
-			who = p.TeamID
+		who, n := "", 0
+		for _, v := range []string{p.UserID, p.TeamID, p.GuestID} {
+			if v != "" {
+				who, n = v, n+1
+			}
 		}
-		if (p.UserID == "") == (p.TeamID == "") || !validUUID(who) || seen[who] {
+		if n != 1 || !validUUID(who) || seen[who] {
 			return nil, false
 		}
 		seen[who] = true
-		out = append(out, &corev1.ScorePlayerInput{UserId: p.UserID, TeamId: p.TeamID})
+		out = append(out, &corev1.ScorePlayerInput{UserId: p.UserID, TeamId: p.TeamID, GuestId: p.GuestID})
 	}
 	return out, true
 }

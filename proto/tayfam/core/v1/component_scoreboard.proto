@@ -163,6 +163,8 @@ message ScorePlayer {
   // A team's ID (of the table's teams component); empty when the seat is a
   // person's or the team was removed.
   string team_id = 4;
+  // A guest player's ID (issue #252; GuestPlayerComponentService).
+  string guest_id = 5;
 }
 
 // ScoreEntry is a seat's score in a round.
@@ -239,10 +241,13 @@ message Scoreboard {
   bool caller_can_manage = 5;
 }
 
-// ScorePlayerInput is a seat to set: exactly one of user_id and team_id.
+// ScorePlayerInput is a seat to set: exactly one of user_id, team_id and
+// guest_id. A guest sits at a player table of a component whose `guests`
+// parameter is on (issue #252).
 message ScorePlayerInput {
   string user_id = 1;
   string team_id = 2;
+  string guest_id = 3;
 }
 
 message GetScoreboardRequest {

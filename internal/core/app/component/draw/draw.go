@@ -6,7 +6,9 @@
 // What is drawn (Subject): the teams of the type's first teams component
 // that is on for the event, if the type has one, the teams with people in
 // them; otherwise the event's participants, active members of the tayfa
-// who answered "going" or whose attendance was verified.
+// who answered "going" or whose attendance was verified, together with the
+// event's guest players (package guest, issue #252). A guest's place never
+// empties: when its nickname is cleared it is still the guest's.
 //
 // The order comes from crypto/rand only. The result is fixed and auditable:
 // core_app may only write the rows, a trigger refuses any change but a
@@ -41,6 +43,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalog/definition"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component/guest"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component/teams"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -63,7 +66,8 @@ const MaxEntries = 500
 // and the number of places only, never a person or a team.
 const AuditDrawn = "event.draw_made"
 
-// Entry is one place of a draw. An empty place has a zero User and Team.
+// Entry is one place of a draw. An empty place has a zero User, Team and
+// Guest (Empty).
 type Entry struct {
 	// Position is 1-based.
 	Position int32
@@ -71,6 +75,13 @@ type Entry struct {
 	User id.ID
 	// Team is the team in a team draw.
 	Team id.ID
+	// Guest is the guest player in a participant draw (issue #252).
+	Guest id.ID
+}
+
+// Empty reports whether nobody holds the place.
+func (e Entry) Empty() bool {
+	return e.User == (id.ID{}) && e.Team == (id.ID{}) && e.Guest == (id.ID{})
 }
 
 // Result is a made draw, as Load reads it.
@@ -127,6 +138,9 @@ func Load(ctx context.Context, q *store.Queries, event id.ID, key string) (r Res
 		}
 		if row.TeamID.Valid {
 			e.Team = id.ID(row.TeamID.Bytes)
+		}
+		if row.GuestID.Valid {
+			e.Guest = id.ID(row.GuestID.Bytes)
 		}
 		r.Entries = append(r.Entries, e)
 	}
@@ -195,17 +209,18 @@ func (s *Service) Get(ctx context.Context, ref component.Ref) (Draw, error) {
 }
 
 // entrants are what a draw orders now: the teams with people of the
-// teams component key, or the participants when key is "".
-func entrants(ctx context.Context, sc *component.Scope, key string) ([]id.ID, error) {
+// teams component key, or the participants and the guest players when key
+// is "". Their positions are not set.
+func entrants(ctx context.Context, sc *component.Scope, key string) ([]Entry, error) {
 	if key != "" {
 		list, err := teams.Load(ctx, sc.Q(), sc.Event, key)
 		if err != nil {
 			return nil, err
 		}
-		out := make([]id.ID, 0, len(list))
+		out := make([]Entry, 0, len(list))
 		for _, t := range list {
 			if len(t.Members) > 0 {
-				out = append(out, t.ID)
+				out = append(out, Entry{Team: t.ID})
 			}
 		}
 		return out, nil
@@ -214,9 +229,16 @@ func entrants(ctx context.Context, sc *component.Scope, key string) ([]id.ID, er
 	if err != nil {
 		return nil, fmt.Errorf("katılımcılar: %w", err)
 	}
-	out := make([]id.ID, 0, len(rows))
+	guests, err := guest.List(ctx, sc.Q(), sc.Event)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Entry, 0, len(rows)+len(guests))
 	for _, r := range rows {
-		out = append(out, id.ID(r.Bytes))
+		out = append(out, Entry{User: id.ID(r.Bytes)})
+	}
+	for _, g := range guests {
+		out = append(out, Entry{Guest: g.ID})
 	}
 	return out, nil
 }
@@ -290,10 +312,13 @@ func (s *Service) Make(ctx context.Context, ref component.Ref) (Draw, error) {
 				ID: id.New().PG(), EventID: sc.Event.PG(), ComponentKey: sc.Key,
 				Position: int16(i + 1), CreatedAt: now, //nolint:gosec // 1..500
 			}
-			if key != "" {
-				p.TeamKey, p.TeamID = optText(key), e.PG()
-			} else {
-				p.UserID = e.PG()
+			switch {
+			case e.Team != (id.ID{}):
+				p.TeamKey, p.TeamID = optText(key), e.Team.PG()
+			case e.Guest != (id.ID{}):
+				p.GuestID = e.Guest.PG()
+			default:
+				p.UserID = e.User.PG()
 			}
 			if err := q.AddDrawEntry(ctx, p); err != nil {
 				return fmt.Errorf("kura yeri: %w", err)

@@ -665,6 +665,45 @@ func TestClearPlates(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Misafir takma adı temizliği (issue #252)
+
+func (e *env) guestPlayer(t *testing.T, tf id.ID, ended time.Duration) id.ID {
+	t.Helper()
+	ev, g := id.New(), id.New()
+	e.exec(t, `INSERT INTO events (id, tayfa_id, type, mode, title, starts_at, ends_at, meeting_point_name, meeting_lat, meeting_lng, city, district)
+	    VALUES ($1, $2, 'convoy', 'in_person', 'Oyun', $3, $4, 'Meydan', 38.4, 27.1, 'İzmir', 'Konak')`,
+		ev.PG(), tf.PG(), e.base.Add(ended-3*time.Hour), e.base.Add(ended))
+	e.exec(t, `INSERT INTO event_guest_players (id, event_id, nickname, created_by) VALUES ($1, $2, 'Misafir Ali', $3)`, g.PG(), ev.PG(), id.New().PG())
+	return g
+}
+
+func (e *env) guestNickname(t *testing.T, g id.ID) bool {
+	t.Helper()
+	var n pgtype.Text
+	must(t, e.pool.QueryRow(ctx, `SELECT nickname FROM event_guest_players WHERE id = $1`, g.PG()).Scan(&n))
+	return n.Valid
+}
+
+func TestClearGuestNicknames(t *testing.T) {
+	e := setup(t)
+	tf, _ := e.newTayfa(t)
+	old := e.guestPlayer(t, tf, -GuestNicknameRetention)
+	recent := e.guestPlayer(t, tf, -GuestNicknameRetention+time.Minute)
+	run(t, "takma ad", e.at(t, 0).ClearGuestNicknames, 1)
+	if e.guestNickname(t, old) || !e.guestNickname(t, recent) {
+		t.Errorf("takma ad: eski %v, yeni %v", e.guestNickname(t, old), e.guestNickname(t, recent))
+	}
+	run(t, "tekrar", e.at(t, 0).ClearGuestNicknames, 0)
+	run(t, "dakika sonra", e.at(t, time.Minute).ClearGuestNicknames, 1)
+	// The guest stays: only its nickname goes.
+	var n int
+	must(t, e.pool.QueryRow(ctx, `SELECT count(*) FROM event_guest_players WHERE id IN ($1, $2)`, old.PG(), recent.PG()).Scan(&n))
+	if n != 2 {
+		t.Errorf("misafir satırı %d", n)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Eşzamanlılık ve kilit
 
 // TestConcurrentWorkers runs every job from two Services at once (two pods)
@@ -764,11 +803,11 @@ func TestWorkersStop(t *testing.T) {
 	now := e.base
 	s, err := New(Config{Pool: e.pool, Log: e.log, Now: func() time.Time { return now },
 		Intervals: Intervals{TayfaCleanup: time.Millisecond, InstantArchive: time.Millisecond, TayfaDeletion: time.Millisecond, Purge: time.Millisecond, HikeAlert: time.Millisecond, Plates: time.Millisecond,
-			ReportEscalation: time.Millisecond, Retention: time.Millisecond, FriendSuggestions: time.Millisecond, SafetyAlert: time.Millisecond}})
+			ReportEscalation: time.Millisecond, Retention: time.Millisecond, FriendSuggestions: time.Millisecond, SafetyAlert: time.Millisecond, GuestNicknames: time.Millisecond}})
 	must(t, err)
 	wctx, cancel := context.WithCancel(ctx)
 	workers := s.Workers()
-	if len(workers) != 10 {
+	if len(workers) != 11 {
 		t.Fatalf("worker sayısı %d", len(workers))
 	}
 	errs := make(chan error, len(workers))

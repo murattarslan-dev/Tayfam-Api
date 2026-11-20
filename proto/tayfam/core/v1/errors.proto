@@ -436,4 +436,16 @@ enum ErrorReason {
   ERROR_REASON_BRACKET_ROUND_CLOSED = 2518;
   // FAILED_PRECONDITION. The bracket has no next round.
   ERROR_REASON_BRACKET_FINISHED = 2519;
+
+  // Guest players (GuestPlayerComponentService, component_guest.proto;
+  // issue #252: 2520–2529).
+
+  // FAILED_PRECONDITION. The scoreboard component does not take guest
+  // players (its `guests` parameter is off).
+  ERROR_REASON_GUEST_PLAYERS_DISABLED = 2520;
+  // NOT_FOUND. No such guest player in the event.
+  ERROR_REASON_GUEST_PLAYER_NOT_FOUND = 2521;
+  // FAILED_PRECONDITION. The guest has a seat at a table or a place in a
+  // draw; it is not removed.
+  ERROR_REASON_GUEST_PLAYER_IN_USE = 2522;
 }

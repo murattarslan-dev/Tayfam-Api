@@ -180,6 +180,8 @@ type Intervals struct {
 	FriendSuggestions time.Duration
 	// Issue #210.
 	SafetyAlert time.Duration
+	// Issue #252.
+	GuestNicknames time.Duration
 }
 
 func (i Intervals) withDefaults() Intervals {
@@ -198,6 +200,7 @@ func (i Intervals) withDefaults() Intervals {
 	def(&i.Retention, DefaultRetentionInterval)
 	def(&i.FriendSuggestions, DefaultFriendSuggestionsInterval)
 	def(&i.SafetyAlert, DefaultSafetyAlertInterval)
+	def(&i.GuestNicknames, DefaultGuestNicknamesInterval)
 	return i
 }
 
@@ -254,6 +257,7 @@ func (s *Service) Workers() []Worker {
 		{JobRetention, s.every(JobRetention, iv.Retention, s.ExpireRecords)},
 		{JobFriendSuggestions, s.every(JobFriendSuggestions, iv.FriendSuggestions, s.SuggestFriends)},
 		{JobSafetyAlert, s.every(JobSafetyAlert, iv.SafetyAlert, s.AlertMissedReturns)},
+		{JobGuestNicknames, s.every(JobGuestNicknames, iv.GuestNicknames, s.ClearGuestNicknames)},
 	}
 }
 
