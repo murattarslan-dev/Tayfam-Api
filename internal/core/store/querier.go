@@ -128,6 +128,10 @@ type Querier interface {
 	// Etkinlikler, çağıranın cevabıyla. Başka tayfanın ya da silinmiş etkinlik
 	// satırı dönmez.
 	ChannelEvents(ctx context.Context, arg ChannelEventsParams) ([]ChannelEventsRow, error)
+	// Kuyruktan sıradaki tayfaları kilitleyerek alır; satır hesaplamayla aynı
+	// transaction'da silinir. Kilitliyken gelen yeni istek silinmeden sonra
+	// yeniden eklenir, böylece hiçbir değişiklik kaybolmaz.
+	ClaimTayfaStats(ctx context.Context, n int32) ([]pgtype.UUID, error)
 	// Duyurular kalır, yazar "Silinmiş kullanıcı" olur (v14 "İlişkiler ve
 	// Silme Davranışı").
 	ClearAnnouncementUserFields(ctx context.Context, userID pgtype.UUID) error
@@ -423,6 +427,9 @@ type Querier interface {
 	// Etiket silinince bağları CASCADE ile gider; sorular kalır.
 	DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, error)
 	DeleteTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) error
+	DeleteTayfaStatQueue(ctx context.Context, tayfaID pgtype.UUID) error
+	DeleteTayfaStats(ctx context.Context, tayfaID pgtype.UUID) error
+	DeleteTayfaUserStats(ctx context.Context, tayfaID pgtype.UUID) error
 	DeleteTeamMembers(ctx context.Context, arg DeleteTeamMembersParams) error
 	DeleteTeamsFrom(ctx context.Context, arg DeleteTeamsFromParams) error
 	// R2'deki nesneleri silindikten sonra. İçerikteki referans ON DELETE SET
@@ -488,6 +495,10 @@ type Querier interface {
 	DeleteUserSafetyContacts(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserSeatRequests(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserSocialSettings(ctx context.Context, userID pgtype.UUID) error
+	// Kişinin istatistiği kişiyle birlikte silinir (issue #266; ADR-0026).
+	// Tayfa toplamları tayfanındır; bir sonraki hesaplamada kişinin silinen
+	// kayıtları düşer.
+	DeleteUserStats(ctx context.Context, userID pgtype.UUID) error
 	// Takımlardaki yeri kişinin katılımıdır; kişiyle birlikte silinir (issue
 	// #248). Takımın kendisi etkinliğindir, kalır.
 	DeleteUserTeamMemberships(ctx context.Context, userID pgtype.UUID) error
@@ -638,6 +649,9 @@ type Querier interface {
 	// dönemi ve kazanma zamanı; şampiyonlukta etkinlik ve tayfası. Rozetin
 	// adı katalogdadır.
 	ExportUserBadges(ctx context.Context, arg ExportUserBadgesParams) ([]ExportUserBadgesRow, error)
+	// Kişinin istatistiği (issue #266): tayfa, yıl (tüm zamanlarda null),
+	// metrik, değer ve katkı veren etkinlik sayısı.
+	ExportUserStats(ctx context.Context, arg ExportUserStatsParams) ([]ExportUserStatsRow, error)
 	// Kişinin başkasının aracına yazdığı koltuk istekleri. Aracın sahibi ve
 	// plakası başkasının verisidir, dışa aktarılmaz.
 	ExportVehicleSeatRequests(ctx context.Context, arg ExportVehicleSeatRequestsParams) ([]ExportVehicleSeatRequestsRow, error)
@@ -931,6 +945,8 @@ type Querier interface {
 	// kullanıcı ve aralarında engel olan çift girmez. Hassas katılımlı türün
 	// etkinliği (sensitive_attendance, ADR-0037 §1) sayılmaz.
 	InsertFriendScores(ctx context.Context, arg InsertFriendScoresParams) (int64, error)
+	InsertTayfaStats(ctx context.Context, arg InsertTayfaStatsParams) error
+	InsertUserStats(ctx context.Context, arg InsertUserStatsParams) error
 	// Davet edilenin bir sayfadaki davet bildirimleri için: o tayfadaki
 	// üyeliği ve kayıtlı sonuç.
 	InvitationStates(ctx context.Context, arg InvitationStatesParams) ([]InvitationStatesRow, error)
@@ -1245,6 +1261,18 @@ type Querier interface {
 	// Serinin henüz başlamamış, iptal edilmemiş ve tek başına düzenlenmemiş
 	// örnekleri; seri güncellemesi bunları değiştirir.
 	ListSeriesUpcomingEvents(ctx context.Context, arg ListSeriesUpcomingEventsParams) ([]pgtype.UUID, error)
+	// Doğrulanmış katılımlar.
+	ListStatAttendance(ctx context.Context, arg ListStatAttendanceParams) ([]ListStatAttendanceRow, error)
+	// Organizatörün açıp kapattığı bileşenlerin seçimleri.
+	ListStatComponentChoices(ctx context.Context, arg ListStatComponentChoicesParams) ([]ListStatComponentChoicesRow, error)
+	// Tayfanın donmuş etkinlikleri: tür sürümü, yıl (Europe/Istanbul), süre
+	// (dakika) ve katılımın hassas olup olmadığı.
+	ListStatEvents(ctx context.Context, arg ListStatEventsParams) ([]ListStatEventsRow, error)
+	// Silinmemiş günlük kayıtları; sözlüğe bağlı alanlar birleştirme hedefine
+	// çözülmüş değer kimliğiyle (alan → kimlik). Konum okunmaz.
+	ListStatLogEntries(ctx context.Context, arg ListStatLogEntriesParams) ([]ListStatLogEntriesRow, error)
+	// Kaydedilmiş ölçümler (öneri tabloda yoktur, sayılmaz).
+	ListStatMeasurements(ctx context.Context, arg ListStatMeasurementsParams) ([]ListStatMeasurementsRow, error)
 	// ---------------------------------------------------------------------------
 	// Öneri adayları (friend-suggestions işi)
 	// after_user'dan sonraki alıcılar için, alıcı başına puana göre en çok
@@ -1261,6 +1289,12 @@ type Querier interface {
 	ListTayfaModules(ctx context.Context, tayfaID pgtype.UUID) ([]ListTayfaModulesRow, error)
 	// Bildirim alıcıları: aktif yöneticiler ve moderatörler, yönetici önce.
 	ListTayfaStaffIDs(ctx context.Context, arg ListTayfaStaffIDsParams) ([]pgtype.UUID, error)
+	// Kişisel katkılar: ölçüm ve günlük metrikleri, yalnızca tayfanın etkin
+	// üyelerininki (ayrılanın ve hesabı silinenin katkısı listede yoktur).
+	ListTayfaStatContributions(ctx context.Context, arg ListTayfaStatContributionsParams) ([]ListTayfaStatContributionsRow, error)
+	// Okuma (tayfa içi uç; #267 vitrin ve profil, #268 ana sayfa kartları).
+	ListTayfaStatYears(ctx context.Context, tayfaID pgtype.UUID) ([]int32, error)
+	ListTayfaStats(ctx context.Context, arg ListTayfaStatsParams) ([]ListTayfaStatsRow, error)
 	// Takıma alınabilecek kişiler: tayfanın etkin üyesi olan ve "geliyorum"
 	// demiş ya da katılımı doğrulanmış katılımcılar, kimlik sırasıyla.
 	ListTeamCandidates(ctx context.Context, eventID pgtype.UUID) ([]pgtype.UUID, error)
@@ -1284,6 +1318,10 @@ type Querier interface {
 	// Kişinin rozetleri, kazanma sırasıyla.
 	ListUserBadges(ctx context.Context, userID pgtype.UUID) ([]ListUserBadgesRow, error)
 	ListUserRsvpsForEvents(ctx context.Context, arg ListUserRsvpsForEventsParams) ([]ListUserRsvpsForEventsRow, error)
+	// Kişinin bütün tayfalardaki toplamları, yıl ve metrik başına (rozetler).
+	ListUserStatSums(ctx context.Context, userID pgtype.UUID) ([]ListUserStatSumsRow, error)
+	// Kişinin bütün tayfalardaki toplamları bir yıl (0: tüm zamanlar) için.
+	ListUserStats(ctx context.Context, arg ListUserStatsParams) ([]ListUserStatsRow, error)
 	// ---------------------------------------------------------------------------
 	// safety-alerts işi
 	// Alarmı gelmiş satırlar: döndüm yok, alarm gitmemiş, bitiş + tolerans
@@ -1349,6 +1387,16 @@ type Querier interface {
 	// araya giremez. Transaction bitince bırakılır.
 	LockUserUploads(ctx context.Context, userID string) error
 	MarkAttended(ctx context.Context, arg MarkAttendedParams) error
+	// Tayfa ve kişisel istatistik (issue #266; ADR-0026 §1–§2, ADR-0037 §7).
+	// Kaynak yalnızca donmuş etkinliklerdir: bitişinden 7 gün geçmiş
+	// (frozen_before = şimdi - component.FreezeAfter), silinmemiş, iptal
+	// edilmemiş. Hesaplama app katmanındadır (internal/core/app/stats).
+	// Yeni donan (ya da geri gelen) etkinlikleri istatistiğe alınmış işaretler
+	// ve tayfalarını döndürür; yeniden hesaplanacaklar kuyruğa girer.
+	MarkCountedStatEvents(ctx context.Context, arg MarkCountedStatEventsParams) ([]pgtype.UUID, error)
+	// İstatistikteyken silinen ya da iptal edilen etkinlikleri düşmüş
+	// işaretler ve tayfalarını döndürür.
+	MarkDroppedStatEvents(ctx context.Context, arg MarkDroppedStatEventsParams) ([]pgtype.UUID, error)
 	MarkEventBadgeRun(ctx context.Context, arg MarkEventBadgeRunParams) error
 	// İlk işaret kalır; yeniden işaretleme değiştirmez.
 	MarkEventQuestionAnswered(ctx context.Context, arg MarkEventQuestionAnsweredParams) (int64, error)
@@ -1395,6 +1443,9 @@ type Querier interface {
 	// Cevapları, oyları ve etiket bağları cascade ile gider.
 	PurgeQuestions(ctx context.Context, arg PurgeQuestionsParams) (int64, error)
 	PurgeTayfa(ctx context.Context, arg PurgeTayfaParams) (int64, error)
+	// Tayfayı yeniden hesaplanacaklar kuyruğuna ekler; artık olmayan tayfayı
+	// sessizce atlar (sözlük olayı tayfa silindikten sonra da gelebilir).
+	QueueTayfaStats(ctx context.Context, arg QueueTayfaStatsParams) error
 	// ---------------------------------------------------------------------------
 	// Pasif tayfa temizliği (v14 "Tayfa yönetimi", Proje Planı §7)
 	// ---------------------------------------------------------------------------

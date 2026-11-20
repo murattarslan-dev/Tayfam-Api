@@ -75,6 +75,12 @@ var wantAppPrivileges = map[string]string{
 	"user_badges":      "DELETE,INSERT,SELECT",
 	"tayfa_badges":     "INSERT,SELECT",
 	"event_badge_runs": "INSERT,SELECT",
+	// Issue #266: statistics are derived; a tayfa's rows are deleted and
+	// written again, never updated. A run mark only changes its state.
+	"tayfa_stats":      "DELETE,INSERT,SELECT",
+	"user_stats":       "DELETE,INSERT,SELECT",
+	"event_stat_runs":  "INSERT,SELECT,UPDATE(changed_at,counted)",
+	"tayfa_stat_queue": "DELETE,INSERT,SELECT",
 	// Issue #237: a value never moves to another event or field.
 	"event_field_values": "DELETE,INSERT,SELECT,UPDATE(updated_at,value)",
 	// Issue #238: a selection never moves to another event or component

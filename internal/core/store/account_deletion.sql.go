@@ -452,6 +452,18 @@ func (q *Queries) DeleteUserSeatRequests(ctx context.Context, userID pgtype.UUID
 	return err
 }
 
+const deleteUserStats = `-- name: DeleteUserStats :exec
+DELETE FROM user_stats WHERE user_id = $1
+`
+
+// Kişinin istatistiği kişiyle birlikte silinir (issue #266; ADR-0026).
+// Tayfa toplamları tayfanındır; bir sonraki hesaplamada kişinin silinen
+// kayıtları düşer.
+func (q *Queries) DeleteUserStats(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserStats, userID)
+	return err
+}
+
 const deleteUserTeamMemberships = `-- name: DeleteUserTeamMemberships :exec
 DELETE FROM event_team_members WHERE user_id = $1
 `

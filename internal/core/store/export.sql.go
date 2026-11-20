@@ -1431,6 +1431,50 @@ func (q *Queries) ExportUserBadges(ctx context.Context, arg ExportUserBadgesPara
 	return items, nil
 }
 
+const exportUserStats = `-- name: ExportUserStats :many
+SELECT s.id AS k, jsonb_build_object(
+  'tayfa_id', s.tayfa_id, 'year', NULLIF(s.year, 0), 'metric_key', s.metric_key, 'value', s.value,
+  'event_count', s.event_count, 'computed_at', s.computed_at
+) AS data
+FROM user_stats AS s
+WHERE s.user_id = $1 AND s.id > $2
+ORDER BY s.id
+LIMIT $3
+`
+
+type ExportUserStatsParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportUserStatsRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Kişinin istatistiği (issue #266): tayfa, yıl (tüm zamanlarda null),
+// metrik, değer ve katkı veren etkinlik sayısı.
+func (q *Queries) ExportUserStats(ctx context.Context, arg ExportUserStatsParams) ([]ExportUserStatsRow, error) {
+	rows, err := q.db.Query(ctx, exportUserStats, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportUserStatsRow{}
+	for rows.Next() {
+		var i ExportUserStatsRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportVehicleSeatRequests = `-- name: ExportVehicleSeatRequests :many
 SELECT r.id AS k, jsonb_build_object(
   'event_id', r.event_id, 'component_key', r.component_key, 'vehicle_id', r.event_vehicle_id,
