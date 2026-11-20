@@ -9363,7 +9363,7 @@ components:
           items: { $ref: "#/components/schemas/EventGuestPlayer" }
         max_guests: { type: integer, format: int32, description: Etkinlik başına en fazla misafir (30). }
         caller_can_add: { type: boolean, description: "Çağıran şimdi masa vermeden misafir ekleyebilir (organizatör, moderatör, yönetici ya da etkinliğin veya bileşenin hakemi). Masanın hakemi `table_id` ile ekler." }
-        caller_can_remove: { type: boolean, description: Çağıran şimdi misafir silebilir (organizatör, moderatör, yönetici). }
+        caller_can_remove: { type: boolean, description: "Çağıran şimdi misafir silebilir (organizatör, moderatör, yönetici)." }
     EventGuestPlayerRequest:
       type: object
       required: [nickname]

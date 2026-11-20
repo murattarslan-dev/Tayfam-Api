@@ -213,20 +213,20 @@ func ref(user, tf, ev id.ID) component.Ref {
 func lastGuest(g guest.Guests) guest.Guest { return g.Guests[len(g.Guests)-1] }
 
 func TestCleanNickname(t *testing.T) {
-	for in, want := range map[string]string{
-		"Ali":                         "Ali",
-		"  Ayşe   Teyze ":             "Ayşe Teyze",
-		strings.Repeat("ğ", 24):       strings.Repeat("ğ", 24),
-		"Kuzen Mehmet":                "Kuzen Mehmet",
-		"İpek":                        "İpek",
-		strings.Repeat("a", 23) + " ": strings.Repeat("a", 23),
+	for _, tc := range []struct{ in, want string }{
+		{"Ali", "Ali"},
+		{"  Ayşe   Teyze ", "Ayşe Teyze"},
+		{strings.Repeat("ğ", 24), strings.Repeat("ğ", 24)},
+		{"Kuzen\u00a0Mehmet", "Kuzen Mehmet"},
+		{"İpek", "İpek"},
+		{strings.Repeat("a", 23) + " ", strings.Repeat("a", 23)},
 	} {
-		if got, ok := guest.CleanNickname(in); !ok || got != want {
-			t.Errorf("%q: %q %v, %q bekleniyordu", in, got, ok, want)
+		if got, ok := guest.CleanNickname(tc.in); !ok || got != tc.want {
+			t.Errorf("%q: %q %v, %q bekleniyordu", tc.in, got, ok, tc.want)
 		}
 	}
 	for _, in := range []string{
-		"", "   ", strings.Repeat("a", 25), "Ali\nVeli", "Ali\tVeli", "Ali​Veli", "Ali‮Veli",
+		"", "   ", strings.Repeat("a", 25), "Ali\nVeli", "Ali\tVeli", "Ali\u200bVeli", "Ali\u202eVeli",
 		"\xff", strings.Repeat(" ", 1000) + "a",
 	} {
 		if got, ok := guest.CleanNickname(in); ok {
@@ -255,7 +255,7 @@ func TestGuests(t *testing.T) {
 	if len(got.Guests) != 1 || ali.Nickname != "Kuzen Ali" || ali.CreatedAt.IsZero() {
 		t.Fatalf("eklenen: %+v", got)
 	}
-	for _, bad := range []string{"", strings.Repeat("x", 25), "Ali​"} {
+	for _, bad := range []string{"", strings.Repeat("x", 25), "Ali\u200b"} {
 		_, err = e.guests.Add(ctx, r, guest.Input{Nickname: bad})
 		wantField(t, "takma ad "+bad, err, "nickname")
 	}
