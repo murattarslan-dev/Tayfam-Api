@@ -46,6 +46,15 @@ func (q *Queries) ClearAuditActor(ctx context.Context, userID pgtype.UUID) error
 	return err
 }
 
+const clearCelebrationAnnouncer = `-- name: ClearCelebrationAnnouncer :exec
+UPDATE event_celebrations SET announced_by = NULL WHERE announced_by = $1
+`
+
+func (q *Queries) ClearCelebrationAnnouncer(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearCelebrationAnnouncer, userID)
+	return err
+}
+
 const clearChecklistItemUserFields = `-- name: ClearChecklistItemUserFields :exec
 UPDATE event_checklist_items
 SET assigned_user_id = NULLIF(assigned_user_id, $1),
@@ -304,6 +313,17 @@ WHERE a.id = gone.answer_id
 // bir oyu olduğu için her cevap en fazla bir azalır.
 func (q *Queries) DeleteUserAnswerVotes(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserAnswerVotes, userID)
+	return err
+}
+
+const deleteUserCelebrationWins = `-- name: DeleteUserCelebrationWins :exec
+DELETE FROM event_celebration_winners WHERE user_id = $1
+`
+
+// Elle seçildiği kutlama kazananlığı kişiye aittir; kişiyle birlikte silinir.
+// İlan ettiği kutlama kalır, ilan eden boşalır (issue #255).
+func (q *Queries) DeleteUserCelebrationWins(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserCelebrationWins, userID)
 	return err
 }
 

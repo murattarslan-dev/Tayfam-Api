@@ -107,6 +107,13 @@ const (
 	// no location; the client reads the shared event from core's
 	// DiscoverService.ListSafetyShares. Muting does not apply; push is sent.
 	NotificationType_NOTIFICATION_TYPE_SAFETY_ALERT NotificationType = 23
+	// The organizer announced the winner of a celebration component of the
+	// event (target: EVENT; issue #255, ADR-0025 §4). Goes to the tayfa's
+	// active members but the announcer, once per celebration. Never names the
+	// winner (a guest winner has no name to give); the client reads the
+	// celebration from core's CelebrationComponentService. In-app only: no
+	// push is sent for it.
+	NotificationType_NOTIFICATION_TYPE_CELEBRATION NotificationType = 24
 )
 
 // Enum value maps for NotificationType.
@@ -136,6 +143,7 @@ var (
 		21: "NOTIFICATION_TYPE_DATA_EXPORT_READY",
 		22: "NOTIFICATION_TYPE_FRIEND_SUGGESTION",
 		23: "NOTIFICATION_TYPE_SAFETY_ALERT",
+		24: "NOTIFICATION_TYPE_CELEBRATION",
 	}
 	NotificationType_value = map[string]int32{
 		"NOTIFICATION_TYPE_UNSPECIFIED":              0,
@@ -162,6 +170,7 @@ var (
 		"NOTIFICATION_TYPE_DATA_EXPORT_READY":        21,
 		"NOTIFICATION_TYPE_FRIEND_SUGGESTION":        22,
 		"NOTIFICATION_TYPE_SAFETY_ALERT":             23,
+		"NOTIFICATION_TYPE_CELEBRATION":              24,
 	}
 )
 
@@ -325,7 +334,7 @@ var File_tayfam_chat_v1_notification_types_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\n" +
-	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xa3\a\n" +
+	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xc6\a\n" +
 	"\x10NotificationType\x12!\n" +
 	"\x1dNOTIFICATION_TYPE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fNOTIFICATION_TYPE_EVENT_CREATED\x10\x01\x12#\n" +
@@ -351,7 +360,8 @@ const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"#NOTIFICATION_TYPE_TAYFA_UNSUSPENDED\x10\x14\x12'\n" +
 	"#NOTIFICATION_TYPE_DATA_EXPORT_READY\x10\x15\x12'\n" +
 	"#NOTIFICATION_TYPE_FRIEND_SUGGESTION\x10\x16\x12\"\n" +
-	"\x1eNOTIFICATION_TYPE_SAFETY_ALERT\x10\x17*\xa3\x03\n" +
+	"\x1eNOTIFICATION_TYPE_SAFETY_ALERT\x10\x17\x12!\n" +
+	"\x1dNOTIFICATION_TYPE_CELEBRATION\x10\x18*\xa3\x03\n" +
 	"\x16NotificationTargetType\x12(\n" +
 	"$NOTIFICATION_TARGET_TYPE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eNOTIFICATION_TARGET_TYPE_TAYFA\x10\x01\x12'\n" +
