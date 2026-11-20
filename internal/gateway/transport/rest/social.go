@@ -232,6 +232,9 @@ type profileJSON struct {
 	// Issue #258: absent unless the caller may see the user's badges;
 	// [] when there are none.
 	Badges *[]earnedBadgeJSON `json:"badges,omitempty"`
+	// Issue #267: absent unless the caller may see the user's personal
+	// statistics (the same rule as badges); [] when there are none.
+	Stats *[]tayfaStatJSON `json:"stats,omitempty"`
 	// From identity (issue #185, #186); absent unless the caller may see
 	// them.
 	Birthday *birthdayJSON `json:"birthday,omitempty"`
@@ -625,6 +628,13 @@ func (h coreHandlers) getProfile(ctx context.Context, w http.ResponseWriter, r *
 		b := earnedBadgesFrom(p.GetBadges())
 		out.Badges = &b
 	}
+	if p.GetStatsVisible() {
+		st := make([]tayfaStatJSON, 0, len(p.GetStats()))
+		for _, s := range p.GetStats() {
+			st = append(st, tayfaStatJSON{MetricKey: s.GetMetricKey(), Source: s.GetSource(), Value: s.GetValue(), EventCount: s.GetEventCount()})
+		}
+		out.Stats = &st
+	}
 	h.addProfileDetails(ctx, r, u, &out)
 	writeJSON(w, http.StatusOK, out)
 }
@@ -685,6 +695,9 @@ type accountJSON struct {
 	ActivityVisibility string `json:"activity_visibility"`
 	BirthdayVisibility string `json:"birthday_visibility"`
 	AvatarUploadID     string `json:"avatar_upload_id,omitempty"`
+	// StatsVisibility: who sees the personal statistics and badges
+	// (issue #267); the about_visibility values.
+	StatsVisibility string `json:"stats_visibility"`
 	accountProfileJSON
 }
 
@@ -700,6 +713,7 @@ type accountPatchBody struct {
 	DisplayName        *string `json:"display_name"`
 	ActivityVisibility *string `json:"activity_visibility"`
 	BirthdayVisibility *string `json:"birthday_visibility"`
+	StatsVisibility    *string `json:"stats_visibility"`
 	profilePatch
 }
 
@@ -740,6 +754,7 @@ func accountFrom(a *identityv1.GetAccountResponse) accountJSON {
 		ReferralCode: a.GetReferralCode(), ActivityVisibility: identityVisibilities.name(a.GetActivityVisibility()),
 		BirthdayVisibility: birthdayVisibilities.name(a.GetBirthdayVisibility()),
 		AvatarUploadID:     a.GetAvatarUploadId(),
+		StatsVisibility:    aboutVisibilities.name(a.GetStatsVisibility()),
 		accountProfileJSON: accountProfileFrom(a),
 	}
 }
@@ -751,7 +766,7 @@ func (h coreHandlers) updateAccount(ctx context.Context, w http.ResponseWriter, 
 	if !decode(w, r, &b) {
 		return
 	}
-	if b.DisplayName == nil && b.ActivityVisibility == nil && b.BirthdayVisibility == nil && b.empty() {
+	if b.DisplayName == nil && b.ActivityVisibility == nil && b.BirthdayVisibility == nil && b.StatsVisibility == nil && b.empty() {
 		badRequest(w, r)
 		return
 	}
@@ -778,6 +793,14 @@ func (h coreHandlers) updateAccount(ctx context.Context, w http.ResponseWriter, 
 			return
 		}
 		req.BirthdayVisibility = v
+	}
+	if b.StatsVisibility != nil {
+		v, ok := aboutVisibilities.value(*b.StatsVisibility)
+		if !ok {
+			badRequest(w, r)
+			return
+		}
+		req.StatsVisibility = v
 	}
 	if !b.apply(req) {
 		badRequest(w, r)

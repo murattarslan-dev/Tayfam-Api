@@ -16,6 +16,13 @@
 // tayfa; everyone else sees the type, mode, date and city/district, so a
 // private tayfa does not leak through a profile.
 //
+// Personal statistics and personal badges (issue #267; ADR-0026 §4,
+// ADR-0039 §3) follow the user's stats_visibility (StatsAccess): none by
+// default, friends, or friends and members of a shared tayfa. The user
+// always sees their own. When the viewer may not see them the profile has
+// no statistics and no badges at all: it does not tell that they are
+// hidden.
+//
 // A block in either direction hides the whole profile: the user looks
 // unknown (apperr.ErrUserNotFound), exactly as a user who does not exist.
 package profile
@@ -35,6 +42,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/badge"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/social"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/stats"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -97,6 +105,32 @@ func Access(v Visibility, a Audience) (visible, delayed bool) {
 	return false, false
 }
 
+// StatsVisibility is user_profiles.stats_visibility, the copy of identity's
+// users.stats_visibility (ADR-0026 §4).
+type StatsVisibility string
+
+// StatsVisibility values.
+const (
+	StatsNone             StatsVisibility = "none"
+	StatsFriends          StatsVisibility = "friends"
+	StatsFriendsAndMutual StatsVisibility = "friends_and_mutual"
+)
+
+// StatsAccess reports whether a viewer of audience a sees the personal
+// statistics and badges of a user with setting v. An unknown setting shows
+// nothing to anyone but the user.
+func StatsAccess(v StatsVisibility, a Audience) bool {
+	switch a {
+	case AudienceSelf:
+		return true
+	case AudienceFriend:
+		return v == StatsFriends || v == StatsFriendsAndMutual
+	case AudienceMutualTayfa:
+		return v == StatsFriendsAndMutual
+	}
+	return false
+}
+
 // Config wires a Service.
 type Config struct {
 	Pool *pgxpool.Pool
@@ -143,11 +177,14 @@ type Profile struct {
 	ActivityVisibility Visibility
 	// BadgesVisible tells whether Badges holds the user's personal badges
 	// (ADR-0039 §3): always on one's own profile, otherwise only when the
-	// personal statistics are visible to the viewer (ADR-0026 §4; the
-	// setting comes with issue #267 and is off by default, so until then
-	// never).
+	// personal statistics are visible to the viewer (StatsAccess).
 	BadgesVisible bool
 	Badges        []badge.Earned
+	// StatsVisible tells whether Stats holds the user's personal
+	// statistics: their all-time totals over their tayfas (ADR-0026 §4).
+	// Same rule as BadgesVisible.
+	StatsVisible bool
+	Stats        []stats.Stat
 }
 
 // Activity is one attendance record as the viewer may see it. Fields after
@@ -185,9 +222,14 @@ func (s *Service) GetProfile(ctx context.Context, caller, subject id.ID) (Profil
 		out.AvatarUploadID = id.ID(v.p.AvatarUploadID.Bytes)
 	}
 	out.ActivityVisible, _ = Access(Visibility(v.p.ActivityVisibility), v.audience)
-	// Issue #267 replaces false with the personal statistics setting.
-	if out.BadgesVisible = badge.ProfileVisible(out.Self, false); out.BadgesVisible {
+	statsVisible := StatsAccess(StatsVisibility(v.p.StatsVisibility), v.audience)
+	if out.BadgesVisible = badge.ProfileVisible(out.Self, statsVisible); out.BadgesVisible {
 		if out.Badges, err = badge.ForUser(ctx, s.q, subject); err != nil {
+			return Profile{}, err
+		}
+	}
+	if out.StatsVisible = statsVisible; out.StatsVisible {
+		if out.Stats, err = stats.UserTotals(ctx, s.q, subject, stats.AllTime); err != nil {
 			return Profile{}, err
 		}
 	}

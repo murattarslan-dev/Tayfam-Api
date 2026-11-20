@@ -169,6 +169,41 @@ Karar değişmedi; issue #266 uygulamasındaki ayrıntılar:
   (`core/user_stats.json`) gelir ve hesap silinince aynı transaction'da
   silinir.
 
+## Uygulama notları (#267)
+
+Karar değişmedi; issue #267 uygulamasındaki ayrıntılar:
+
+- **Vitrin yeri:** ayrı vitrin ucu yoktur. Kart Keşfet akışındaki tayfa
+  özetine (`DiscoverTayfa.showcase`) eklenir; böylece akışın bütün kuralları
+  (Keşfet'e açık ve incelenmiş tayfa, üye olmama, iki yönlü engel, önce
+  arkadaş ağı sırası, güvenlik ağı) aynen geçerlidir ve kapalı tayfa hiçbir
+  zaman görünmez.
+- **Bayrak:** `tayfas.stats_showcase` (core 00058, varsayılan `true`);
+  `PUT /v1/tayfas/{tayfa_id}/discover/stats-showcase`, izin
+  `TayfaStatsShowcaseUpdate` (`tayfa.stats_showcase.update`, yalnızca
+  yönetici), denetim kaydı `tayfa.stats_showcase_shown` / `_hidden`.
+  Keşfet bayrağından ve tayfanın Keşfet durumundan bağımsız değiştirilir;
+  `GET/PUT …/discover` yanıtında da döner.
+- **Eşik:** tüm zamanlar `events` toplamı (`tayfa_stats`, yıl 0)
+  `stats.ShowcaseMinEvents` = 3'ün altındaysa alan yoktur (rozetler de).
+- **Kapsam:** yalnızca tüm zamanlar toplamı (yıl kırılımı vitrinde yok).
+  Genel ortak metrikler; `<tür>.<ortak metrik>`; `<tür>.<ölçüm>` yalnızca
+  türün **her sürümünde** `showcase: true` ve hassas değilse. Günlük
+  metrikleri vitrine çıkmaz (§3: "ölçüm metrikleri ve ortak metrikler").
+  Herhangi bir sürümünde `sensitive_attendance` olan türün hiçbir metriği
+  çıkmaz; bu etkinlikler yalnızca genel `events` ve `attended` içinde kalır
+  (ADR-0037 §7). Katalogda olmayan türün metriği çıkmaz.
+- **Rozetler (ADR-0039 §3):** vitrin kartında tayfanın rozetleri; aynı
+  bayrak ve eşik.
+- **Kişisel görünürlük:** identity `users.stats_visibility` (identity
+  00015; `none` varsayılan / `friends` / `friends_and_mutual`), `Account` ve
+  `AccountUpdate`'te; `user.profile_updated` ile core kopyası
+  `user_profiles.stats_visibility`. Profil (`UserProfile.stats`) kişinin
+  bütün tayfalarındaki tüm zamanlar toplamıdır; `badges` aynı kurala
+  bağlıdır. İzin yoksa iki alan da yoktur.
+- **KVKK:** ayar `identity/profile.json` dışa aktarmasında gelir; hesap
+  silinince identity'de ve core'un mezar taşında `none`'a döner.
+
 ## Gerekçe
 
 - **Donmuş veri:** Vitrindeki sayı geriye dönük oynarsa güven kaybolur;

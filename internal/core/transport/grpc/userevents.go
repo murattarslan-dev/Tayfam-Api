@@ -69,6 +69,17 @@ func (s *UserEventServer) ApplyUserEvent(ctx context.Context, req *corev1.ApplyU
 		default:
 			return nil, validation("profile_updated.activity_visibility")
 		}
+		switch ev.ProfileUpdated.GetStatsVisibility() {
+		case corev1.StatsVisibility_STATS_VISIBILITY_UNSPECIFIED:
+		case corev1.StatsVisibility_STATS_VISIBILITY_NONE:
+			p.StatsVisibility = userevents.StatsNone
+		case corev1.StatsVisibility_STATS_VISIBILITY_FRIENDS:
+			p.StatsVisibility = userevents.StatsFriends
+		case corev1.StatsVisibility_STATS_VISIBILITY_FRIENDS_AND_MUTUAL:
+			p.StatsVisibility = userevents.StatsFriendsAndMutual
+		default:
+			return nil, validation("profile_updated.stats_visibility")
+		}
 		e.Profile = p
 	case *corev1.ApplyUserEventRequest_Deleted:
 		e.Deleted = true

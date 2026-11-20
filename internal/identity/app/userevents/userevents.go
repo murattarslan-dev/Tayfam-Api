@@ -48,6 +48,10 @@ type Profile struct {
 	// public. Empty in events written before it was added; core then keeps
 	// its default (tayfa).
 	ActivityVisibility string `json:"activity_visibility,omitempty"`
+	// StatsVisibility is users.stats_visibility: none, friends or
+	// friends_and_mutual (issue #267). Empty in events written before it
+	// was added; core then keeps its copy's value (default none).
+	StatsVisibility string `json:"stats_visibility,omitempty"`
 }
 
 // ProfileUpdated records that user's public profile is now p.

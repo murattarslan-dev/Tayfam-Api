@@ -72,7 +72,18 @@ type Profile struct {
 	// ActivityVisibility is who sees the user's attendance history on their
 	// profile; empty in older events, which keep the copy's current value.
 	ActivityVisibility string
+	// StatsVisibility is who sees the personal statistics and badges on
+	// the profile (issue #267); empty in older events, which keep the
+	// copy's current value.
+	StatsVisibility string
 }
+
+// StatsVisibility values (user_profiles_stats_visibility).
+const (
+	StatsNone             = "none"
+	StatsFriends          = "friends"
+	StatsFriendsAndMutual = "friends_and_mutual"
+)
 
 // ActivityVisibility values (user_profiles_activity_visibility).
 const (
@@ -154,6 +165,14 @@ func (s *Service) applyProfile(ctx context.Context, e Event) error {
 	default:
 		return apperr.Validation("profile_updated.activity_visibility")
 	}
+	stats := pgtype.Text{}
+	switch v := e.Profile.StatsVisibility; v {
+	case "":
+	case StatsNone, StatsFriends, StatsFriendsAndMutual:
+		stats = pgtype.Text{String: v, Valid: true}
+	default:
+		return apperr.Validation("profile_updated.stats_visibility")
+	}
 	avatar := pgtype.UUID{}
 	if e.Profile.AvatarUploadID != (id.ID{}) {
 		avatar = e.Profile.AvatarUploadID.PG()
@@ -165,6 +184,7 @@ func (s *Service) applyProfile(ctx context.Context, e Event) error {
 		n, err := q.UpsertUserProfile(ctx, store.UpsertUserProfileParams{
 			UserID: e.User.PG(), DisplayName: pgtype.Text{String: name, Valid: true},
 			AvatarUploadID: avatar, SourceEventID: e.ID.PG(), ActivityVisibility: vis,
+			StatsVisibility: stats,
 		})
 		if err != nil {
 			return fmt.Errorf("profil kopyası: %w", err)

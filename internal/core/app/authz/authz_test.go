@@ -463,6 +463,16 @@ var expected = []struct {
 	{invited, EventPhotoDeleteOwnEvent, false},
 	{banned, EventPhotoDeleteOwnEvent, false},
 	{nonMember, EventPhotoDeleteOwnEvent, false},
+	// TayfaStatsShowcaseUpdate (issue #267): admins only.
+	{admin, TayfaStatsShowcaseUpdate, true},
+	{moderator, TayfaStatsShowcaseUpdate, false},
+	{member, TayfaStatsShowcaseUpdate, false},
+	{mutedMember, TayfaStatsShowcaseUpdate, false},
+	{mutedModerator, TayfaStatsShowcaseUpdate, false},
+	{pending, TayfaStatsShowcaseUpdate, false},
+	{invited, TayfaStatsShowcaseUpdate, false},
+	{banned, TayfaStatsShowcaseUpdate, false},
+	{nonMember, TayfaStatsShowcaseUpdate, false},
 	// TayfaDiscoverManage (issue #210): admins only.
 	{admin, TayfaDiscoverManage, true},
 	{moderator, TayfaDiscoverManage, false},

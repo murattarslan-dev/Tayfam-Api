@@ -24,6 +24,7 @@ type DiscoverClient interface {
 	JoinFromDiscover(ctx context.Context, in *corev1.JoinFromDiscoverRequest, opts ...grpc.CallOption) (*corev1.JoinFromDiscoverResponse, error)
 	GetTayfaDiscover(ctx context.Context, in *corev1.GetTayfaDiscoverRequest, opts ...grpc.CallOption) (*corev1.GetTayfaDiscoverResponse, error)
 	SetTayfaDiscover(ctx context.Context, in *corev1.SetTayfaDiscoverRequest, opts ...grpc.CallOption) (*corev1.SetTayfaDiscoverResponse, error)
+	SetTayfaStatsShowcase(ctx context.Context, in *corev1.SetTayfaStatsShowcaseRequest, opts ...grpc.CallOption) (*corev1.SetTayfaStatsShowcaseResponse, error)
 	GetEventFeedback(ctx context.Context, in *corev1.GetEventFeedbackRequest, opts ...grpc.CallOption) (*corev1.GetEventFeedbackResponse, error)
 	SetEventFeedback(ctx context.Context, in *corev1.SetEventFeedbackRequest, opts ...grpc.CallOption) (*corev1.SetEventFeedbackResponse, error)
 	GetSafetyContact(ctx context.Context, in *corev1.GetSafetyContactRequest, opts ...grpc.CallOption) (*corev1.GetSafetyContactResponse, error)
@@ -39,6 +40,7 @@ func registerDiscover(mux *http.ServeMux, h coreHandlers) {
 	mux.HandleFunc("POST /v1/discover/tayfas/{tayfa_id}/join", a(h.joinFromDiscover))
 	mux.HandleFunc("GET /v1/tayfas/{tayfa_id}/discover", a(h.getTayfaDiscover))
 	mux.HandleFunc("PUT /v1/tayfas/{tayfa_id}/discover", a(h.setTayfaDiscover))
+	mux.HandleFunc("PUT /v1/tayfas/{tayfa_id}/discover/stats-showcase", a(h.setTayfaStatsShowcase))
 	mux.HandleFunc("GET /v1/tayfas/{tayfa_id}/events/{event_id}/feedback", a(h.getEventFeedback))
 	mux.HandleFunc("PUT /v1/tayfas/{tayfa_id}/events/{event_id}/feedback", a(h.setEventFeedback))
 	mux.HandleFunc("GET /v1/tayfas/{tayfa_id}/events/{event_id}/safety-contact", a(h.getSafetyContact))
@@ -91,6 +93,25 @@ type discoverTayfaJSON struct {
 	CreatedAt       time.Time `json:"created_at"`
 	EventCount      int32     `json:"event_count"`
 	AttendanceCount int32     `json:"attendance_count"`
+	// Issue #267: absent unless the tayfa shows its statistics card.
+	Showcase *tayfaShowcaseJSON `json:"showcase,omitempty"`
+}
+
+// tayfaShowcaseJSON is a tayfa's statistics card in Keşfet (ADR-0026 §3).
+type tayfaShowcaseJSON struct {
+	Stats  []tayfaStatJSON   `json:"stats"`
+	Badges []earnedBadgeJSON `json:"badges"`
+}
+
+func showcaseFrom(sc *corev1.TayfaShowcase) *tayfaShowcaseJSON {
+	if sc == nil {
+		return nil
+	}
+	out := &tayfaShowcaseJSON{Stats: make([]tayfaStatJSON, 0, len(sc.GetStats())), Badges: earnedBadgesFrom(sc.GetBadges())}
+	for _, s := range sc.GetStats() {
+		out.Stats = append(out.Stats, tayfaStatJSON{MetricKey: s.GetMetricKey(), Source: s.GetSource(), Value: s.GetValue(), EventCount: s.GetEventCount()})
+	}
+	return out
 }
 
 // discoverItemJSON is one feed entry; it has no score or position field.
@@ -122,6 +143,7 @@ func (h coreHandlers) listDiscoverFeed(ctx context.Context, w http.ResponseWrite
 			Tayfa: discoverTayfaJSON{
 				ID: t.GetTayfaId(), Name: t.GetName(), Description: t.GetDescription(), City: t.GetCity(),
 				CreatedAt: t.GetCreateTime().AsTime(), EventCount: t.GetEventCount(), AttendanceCount: t.GetAttendanceCount(),
+				Showcase: showcaseFrom(t.GetShowcase()),
 			},
 			Friends: make([]discoverPersonJSON, 0, len(it.GetFriends())), FriendCount: it.GetFriendCount(),
 		}
@@ -155,6 +177,12 @@ func (h coreHandlers) joinFromDiscover(ctx context.Context, w http.ResponseWrite
 type tayfaDiscoverJSON struct {
 	State   string `json:"state"`
 	Enabled bool   `json:"enabled"`
+	// StatsShowcase: show the statistics card in Keşfet (issue #267).
+	StatsShowcase bool `json:"stats_showcase"`
+}
+
+type statsShowcaseBody struct {
+	StatsShowcase *bool `json:"stats_showcase"`
 }
 
 type tayfaDiscoverBody struct {
@@ -171,7 +199,7 @@ func (h coreHandlers) getTayfaDiscover(ctx context.Context, w http.ResponseWrite
 		h.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, tayfaDiscoverJSON{State: tayfaDiscoverStates.name(resp.GetState()), Enabled: resp.GetEnabled()})
+	writeJSON(w, http.StatusOK, tayfaDiscoverJSON{State: tayfaDiscoverStates.name(resp.GetState()), Enabled: resp.GetEnabled(), StatsShowcase: resp.GetStatsShowcase()})
 }
 
 func (h coreHandlers) setTayfaDiscover(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -192,7 +220,28 @@ func (h coreHandlers) setTayfaDiscover(ctx context.Context, w http.ResponseWrite
 		h.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, tayfaDiscoverJSON{State: tayfaDiscoverStates.name(resp.GetState()), Enabled: resp.GetEnabled()})
+	writeJSON(w, http.StatusOK, tayfaDiscoverJSON{State: tayfaDiscoverStates.name(resp.GetState()), Enabled: resp.GetEnabled(), StatsShowcase: resp.GetStatsShowcase()})
+}
+
+func (h coreHandlers) setTayfaStatsShowcase(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	t, ok := pathUUID(w, r, "tayfa_id")
+	if !ok {
+		return
+	}
+	var b statsShowcaseBody
+	if !decode(w, r, &b) {
+		return
+	}
+	if b.StatsShowcase == nil {
+		badRequest(w, r)
+		return
+	}
+	resp, err := h.d.Discover.SetTayfaStatsShowcase(ctx, &corev1.SetTayfaStatsShowcaseRequest{TayfaId: t, StatsShowcase: *b.StatsShowcase})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, tayfaDiscoverJSON{State: tayfaDiscoverStates.name(resp.GetState()), Enabled: resp.GetEnabled(), StatsShowcase: resp.GetStatsShowcase()})
 }
 
 type eventFeedbackJSON struct {

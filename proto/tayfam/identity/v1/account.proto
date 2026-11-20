@@ -130,6 +130,10 @@ message GetAccountResponse {
   AboutVisibility about_visibility = 9;
   // A field is unanswered and no snooze holds the form back.
   bool profile_completion_pending = 10;
+  // Who sees the personal statistics and badges on the profile (issue
+  // #267, ADR-0026 §4): the values and audiences of about_visibility;
+  // NONE (only the user) by default.
+  AboutVisibility stats_visibility = 11;
 }
 
 message SnoozeProfilePromptRequest {}
@@ -186,6 +190,8 @@ message UpdateAccountRequest {
   ProfileUpdate profile = 4;
   // UNSPECIFIED: unchanged.
   AboutVisibility about_visibility = 5;
+  // UNSPECIFIED: unchanged (issue #267). Goes to core's profile copy.
+  AboutVisibility stats_visibility = 6;
 }
 
 message UpdateAccountResponse {

@@ -64,6 +64,8 @@ type fakeCore struct {
 	catalogDefinition string
 	// event replaces GetEvent's answer when set.
 	event *corev1.Event
+	// profile replaces GetUserProfile's answer when set.
+	profile *corev1.UserProfile
 }
 
 func (f *fakeCore) record(ctx context.Context, in proto.Message) error {

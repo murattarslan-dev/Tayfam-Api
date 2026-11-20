@@ -205,7 +205,7 @@ func (q *Queries) GetProfileDetails(ctx context.Context, id pgtype.UUID) (GetPro
 const getUser = `-- name: GetUser :one
 SELECT id, display_name, avatar_upload_id, locale, birth_date_enc,
        birth_date_visibility, birth_date_audience, activity_visibility,
-       ref_code, registered_at, age_blocked_at, created_at
+       ref_code, registered_at, age_blocked_at, created_at, stats_visibility
 FROM users
 WHERE id = $1 AND deleted_at IS NULL
 `
@@ -223,6 +223,7 @@ type GetUserRow struct {
 	RegisteredAt        pgtype.Timestamptz
 	AgeBlockedAt        pgtype.Timestamptz
 	CreatedAt           pgtype.Timestamptz
+	StatsVisibility     string
 }
 
 func (q *Queries) GetUser(ctx context.Context, id pgtype.UUID) (GetUserRow, error) {
@@ -241,6 +242,7 @@ func (q *Queries) GetUser(ctx context.Context, id pgtype.UUID) (GetUserRow, erro
 		&i.RegisteredAt,
 		&i.AgeBlockedAt,
 		&i.CreatedAt,
+		&i.StatsVisibility,
 	)
 	return i, err
 }
@@ -423,6 +425,26 @@ func (q *Queries) SetReferrer(ctx context.Context, arg SetReferrerParams) (int64
 	return result.RowsAffected(), nil
 }
 
+const setStatsVisibility = `-- name: SetStatsVisibility :execrows
+UPDATE users SET stats_visibility = $1
+WHERE id = $2 AND registered_at IS NOT NULL AND deleted_at IS NULL
+`
+
+type SetStatsVisibilityParams struct {
+	StatsVisibility string
+	ID              pgtype.UUID
+}
+
+// Kişisel istatistik görünürlüğü (issue #267; ADR-0026 §4): none /
+// friends / friends_and_mutual.
+func (q *Queries) SetStatsVisibility(ctx context.Context, arg SetStatsVisibilityParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setStatsVisibility, arg.StatsVisibility, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setUserAvatar = `-- name: SetUserAvatar :execrows
 UPDATE users SET avatar_upload_id = $1
 WHERE id = $2 AND registered_at IS NOT NULL AND deleted_at IS NULL
@@ -452,7 +474,8 @@ SET deleted_at = now(),
     birth_date_enc = NULL,
     ref_code = NULL,
     ref_code_rotated_at = NULL,
-    referred_by_user_id = NULL
+    referred_by_user_id = NULL,
+    stats_visibility = 'none'
 WHERE id = $1 AND deleted_at IS NULL
 `
 

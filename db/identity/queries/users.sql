@@ -5,7 +5,7 @@ VALUES (@id, @display_name, @locale);
 -- name: GetUser :one
 SELECT id, display_name, avatar_upload_id, locale, birth_date_enc,
        birth_date_visibility, birth_date_audience, activity_visibility,
-       ref_code, registered_at, age_blocked_at, created_at
+       ref_code, registered_at, age_blocked_at, created_at, stats_visibility
 FROM users
 WHERE id = @id AND deleted_at IS NULL;
 
@@ -91,6 +91,12 @@ WHERE id = @id AND registered_at IS NOT NULL AND deleted_at IS NULL;
 UPDATE users SET activity_visibility = @activity_visibility
 WHERE id = @id AND registered_at IS NOT NULL AND deleted_at IS NULL;
 
+-- Kişisel istatistik görünürlüğü (issue #267; ADR-0026 §4): none /
+-- friends / friends_and_mutual.
+-- name: SetStatsVisibility :execrows
+UPDATE users SET stats_visibility = @stats_visibility
+WHERE id = @id AND registered_at IS NOT NULL AND deleted_at IS NULL;
+
 -- Hesap silme (issue #75; v14 "Hesap silme", "İlişkiler ve Silme
 -- Davranışı"). Kilit, aynı hesabın eşzamanlı silme isteklerini sıraya koyar.
 -- name: LockLiveUser :one
@@ -109,7 +115,8 @@ SET deleted_at = now(),
     birth_date_enc = NULL,
     ref_code = NULL,
     ref_code_rotated_at = NULL,
-    referred_by_user_id = NULL
+    referred_by_user_id = NULL,
+    stats_visibility = 'none'
 WHERE id = @id AND deleted_at IS NULL;
 
 -- name: DeleteUserRefCodeLookups :exec
