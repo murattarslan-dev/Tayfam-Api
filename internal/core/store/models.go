@@ -314,6 +314,20 @@ type EventGuestPlayer struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type EventJoinQrCount struct {
+	EventID pgtype.UUID
+	Joins   int32
+}
+
+type EventJoinQrToken struct {
+	ID        pgtype.UUID
+	EventID   pgtype.UUID
+	CreatedBy pgtype.UUID
+	TokenHash []byte
+	CreatedAt pgtype.Timestamptz
+	ExpiresAt pgtype.Timestamptz
+}
+
 type EventLogEntry struct {
 	ID                 pgtype.UUID
 	EventID            pgtype.UUID

@@ -94,8 +94,17 @@ func (s *Service) ExpireRecords(ctx context.Context) (int, error) {
 	if err != nil {
 		return reports + audits + int(nf) + int(ni) + int(na) + nd, err //nolint:gosec // row counts
 	}
-	return reports + audits + int(nf) + int(ni) + int(na) + nd, nil //nolint:gosec // row counts
+	// Join QR tokens live two minutes; their hashes go after a day
+	// (issue #264, ADR-0038 §5).
+	nq, err := q.DeleteOldJoinQRTokens(ctx, ts(s.now().Add(-JoinQRRetention)))
+	if err != nil {
+		return reports + audits + int(nf) + int(ni) + int(na) + nd, fmt.Errorf("QR token saklama: %w", err) //nolint:gosec // row counts
+	}
+	return reports + audits + int(nf) + int(ni) + int(na) + nd + int(nq), nil //nolint:gosec // row counts
 }
+
+// JoinQRRetention is how long the hash of a join QR token is kept.
+const JoinQRRetention = 24 * time.Hour
 
 // OutcomeRetention is how long the outcome of a friend request or an
 // invitation is kept: as long as chat keeps notifications.

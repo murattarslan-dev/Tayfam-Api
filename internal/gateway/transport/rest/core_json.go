@@ -101,7 +101,7 @@ var (
 	joinSources = newEnum(map[string]corev1.JoinSource{
 		"creator": corev1.JoinSource_JOIN_SOURCE_CREATOR, "invite_link": corev1.JoinSource_JOIN_SOURCE_INVITE_LINK,
 		"direct_invite": corev1.JoinSource_JOIN_SOURCE_DIRECT_INVITE, "code": corev1.JoinSource_JOIN_SOURCE_CODE,
-		"discover": corev1.JoinSource_JOIN_SOURCE_DISCOVER,
+		"discover": corev1.JoinSource_JOIN_SOURCE_DISCOVER, "qr": corev1.JoinSource_JOIN_SOURCE_QR,
 	})
 )
 

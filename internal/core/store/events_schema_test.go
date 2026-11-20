@@ -174,7 +174,7 @@ func TestEventConstraints(t *testing.T) {
 	}{
 		"bilinmeyen katılım":  {`INSERT INTO event_rsvps (event_id, user_id, status) VALUES ($1, gen_random_uuid(), 'interested')`, "event_rsvps_status"},
 		"bilinmeyen yoklama":  {`INSERT INTO event_rsvps (event_id, user_id, status, attendance) VALUES ($1, gen_random_uuid(), 'going', 'late')`, "event_rsvps_attendance"},
-		"bilinmeyen yöntem":   {`INSERT INTO event_rsvps (event_id, user_id, status, attendance_method) VALUES ($1, gen_random_uuid(), 'going', 'qr')`, "event_rsvps_attendance_method"},
+		"bilinmeyen yöntem":   {`INSERT INTO event_rsvps (event_id, user_id, status, attendance_method) VALUES ($1, gen_random_uuid(), 'going', 'nfc')`, "event_rsvps_attendance_method"},
 		"zamansız işaretleme": {`INSERT INTO event_rsvps (event_id, user_id, status, attendance_marked_by) VALUES ($1, gen_random_uuid(), 'going', gen_random_uuid())`, "event_rsvps_attendance_marked"},
 	} {
 		_, err := pool.Exec(ctx, tc.sql, eid.PG())

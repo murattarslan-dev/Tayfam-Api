@@ -986,6 +986,26 @@ var expected = []struct {
 	{invited, EventFinish, false},
 	{banned, EventFinish, false},
 	{nonMember, EventFinish, false},
+	// EventJoinQRCreate
+	{admin, EventJoinQRCreate, true},
+	{moderator, EventJoinQRCreate, true},
+	{member, EventJoinQRCreate, true},
+	{mutedMember, EventJoinQRCreate, false},
+	{mutedModerator, EventJoinQRCreate, false},
+	{pending, EventJoinQRCreate, false},
+	{invited, EventJoinQRCreate, false},
+	{banned, EventJoinQRCreate, false},
+	{nonMember, EventJoinQRCreate, false},
+	// EventJoinQRCreateAny
+	{admin, EventJoinQRCreateAny, true},
+	{moderator, EventJoinQRCreateAny, false},
+	{member, EventJoinQRCreateAny, false},
+	{mutedMember, EventJoinQRCreateAny, false},
+	{mutedModerator, EventJoinQRCreateAny, false},
+	{pending, EventJoinQRCreateAny, false},
+	{invited, EventJoinQRCreateAny, false},
+	{banned, EventJoinQRCreateAny, false},
+	{nonMember, EventJoinQRCreateAny, false},
 }
 
 func TestAllowedMatrix(t *testing.T) {

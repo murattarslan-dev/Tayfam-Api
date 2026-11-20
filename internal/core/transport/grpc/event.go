@@ -16,6 +16,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event/ical"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/instant"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/joinqr"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
@@ -44,6 +45,12 @@ type Instants interface {
 	Create(ctx context.Context, user id.ID, in instant.Input) (instant.Result, error)
 }
 
+// JoinQRs is what EventServer needs for joining by QR (ADR-0038 §3).
+type JoinQRs interface {
+	Create(ctx context.Context, user, t, e id.ID) (event.JoinQR, error)
+	Join(ctx context.Context, user id.ID, token string) (joinqr.Result, error)
+}
+
 // EventServer implements corev1.EventServiceServer. The acting user always
 // comes from the verified token (auth.Guard), never from the request.
 // Locations and URLs are converted here and never logged.
@@ -51,7 +58,15 @@ type EventServer struct {
 	corev1.UnimplementedEventServiceServer
 	app     Events
 	instant Instants
+	joinQR  JoinQRs
 	log     *slog.Logger
+}
+
+// WithJoinQR enables CreateEventJoinQr and JoinEventByQr; without it they
+// are unimplemented.
+func (s *EventServer) WithJoinQR(j JoinQRs) *EventServer {
+	s.joinQR = j
+	return s
 }
 
 // WithInstant enables CreateInstantEvent; without it the method is
@@ -246,6 +261,48 @@ func (s *EventServer) FinishEvent(ctx context.Context, req *corev1.FinishEventRe
 		return nil, errorStatus(ctx, s.log, err)
 	}
 	return &corev1.FinishEventResponse{Event: eventToProto(v)}, nil
+}
+
+// CreateEventJoinQr implements corev1.EventServiceServer (ADR-0038 §3).
+// The token goes only into the response.
+func (s *EventServer) CreateEventJoinQr(ctx context.Context, req *corev1.CreateEventJoinQrRequest) (*corev1.CreateEventJoinQrResponse, error) {
+	user, t, e, err := scope(ctx, req.GetTayfaId(), ptr(req.GetEventId()))
+	if err != nil {
+		return nil, err
+	}
+	if s.joinQR == nil {
+		return nil, status.Error(codes.Unimplemented, msgRejected)
+	}
+	v, err := s.joinQR.Create(ctx, user, t, e)
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.CreateEventJoinQrResponse{Token: v.Token, ExpireTime: timestamppb.New(v.ExpiresAt)}, nil
+}
+
+// JoinEventByQr implements corev1.EventServiceServer (ADR-0038 §3). The
+// token is never logged.
+func (s *EventServer) JoinEventByQr(ctx context.Context, req *corev1.JoinEventByQrRequest) (*corev1.JoinEventByQrResponse, error) {
+	user, err := callerID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if s.joinQR == nil {
+		return nil, status.Error(codes.Unimplemented, msgRejected)
+	}
+	if req.GetToken() == "" {
+		return nil, validation("token")
+	}
+	r, err := s.joinQR.Join(ctx, user, req.GetToken())
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	out := &corev1.JoinEventByQrResponse{TayfaId: r.TayfaID.String(), EventId: r.EventID.String(), Pending: r.Pending}
+	if !r.Pending {
+		out.Rsvp = rsvpToProto(r.RSVP)
+		out.Attendance = attendanceToProto(r.Attendance.Status)
+	}
+	return out, nil
 }
 
 // GetEvent implements corev1.EventServiceServer.

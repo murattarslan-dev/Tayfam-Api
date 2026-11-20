@@ -284,6 +284,10 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_NOW_LIMIT_REACHED, true
 	case errors.Is(err, apperr.ErrEventNotOpenEnded):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_NOT_OPEN_ENDED, true
+	case errors.Is(err, apperr.ErrInvalidJoinQR):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_INVALID_JOIN_QR, true
+	case errors.Is(err, apperr.ErrJoinQRLimit):
+		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_JOIN_QR_LIMIT_REACHED, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

@@ -36,6 +36,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/identityminor"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/instant"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/jobs"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/joinqr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/poll"
@@ -58,6 +59,10 @@ import (
 // joinCodeAttemptsPerHour limits JoinByCode per user against code guessing
 // (issue #32). In memory; core runs one replica.
 const joinCodeAttemptsPerHour = 10
+
+// joinQRAttemptsPerMinute limits JoinEventByQr per user against token
+// guessing (ADR-0038 §3).
+const joinQRAttemptsPerMinute = 5
 
 func main() {
 	service.MainWithMigrations("core", coredb.Migrations(), setup)
@@ -114,6 +119,14 @@ func setup(rt *service.Runtime) error {
 	}
 	rt.Log.Info("keşfet bayrağı", slog.Bool("açık", discoverEnabled), slog.Bool("güvenlik_kişisi", safetyContactEnabled))
 	instants, err := instant.New(instant.Config{Pool: pool, Log: rt.Log, Tayfas: tayfas, Events: events, Memberships: memberships})
+	if err != nil {
+		return err
+	}
+	// QR ile katılım (issue #264, ADR-0038 §3).
+	joinQRs, err := joinqr.New(joinqr.Config{
+		Pool: pool, Events: events, Memberships: memberships,
+		JoinLimiter: ratelimit.NewPer(joinQRAttemptsPerMinute, time.Minute),
+	})
 	if err != nil {
 		return err
 	}
@@ -256,7 +269,7 @@ func setup(rt *service.Runtime) error {
 	corev1.RegisterUserEventServiceServer(srv, grpcapi.NewUserEventServer(userEvents, rt.Log))
 	corev1.RegisterChatEventServiceServer(srv, grpcapi.NewChatEventServer(chatEvents, rt.Log))
 	corev1.RegisterAnnouncementServiceServer(srv, grpcapi.NewAnnouncementServer(announcements, rt.Log))
-	corev1.RegisterEventServiceServer(srv, grpcapi.NewEventServer(events, rt.Log).WithInstant(instants))
+	corev1.RegisterEventServiceServer(srv, grpcapi.NewEventServer(events, rt.Log).WithInstant(instants).WithJoinQR(joinQRs))
 	corev1.RegisterQAServiceServer(srv, grpcapi.NewQAServer(questions, rt.Log))
 	corev1.RegisterPollServiceServer(srv, grpcapi.NewPollServer(polls, rt.Log))
 	corev1.RegisterSocialServiceServer(srv, grpcapi.NewSocialServer(socials, rt.Log))

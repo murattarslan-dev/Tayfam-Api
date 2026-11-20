@@ -312,6 +312,8 @@ enum JoinSource {
   JOIN_SOURCE_DIRECT_INVITE = 3;
   JOIN_SOURCE_CODE = 4;
   JOIN_SOURCE_DISCOVER = 5;
+  // A join QR shown by the event's organizer (ADR-0038 §3).
+  JOIN_SOURCE_QR = 6;
 }
 
 // InviteLink describes an invite link. It never holds the token or its hash.

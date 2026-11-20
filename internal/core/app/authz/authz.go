@@ -302,6 +302,11 @@ const (
 	// open-ended event (the caller checks that the event is theirs).
 	EventCreateNow
 	EventFinish
+	// QR ile katılım (issue #264, ADR-0038 §3). EventJoinQRCreate opens a
+	// join QR for the caller's own event (the caller checks that the event
+	// is theirs); EventJoinQRCreateAny for every event of the tayfa.
+	EventJoinQRCreate
+	EventJoinQRCreateAny
 
 	actionEnd // sentinel; keep last
 )
@@ -404,6 +409,8 @@ var actionNames = [...]string{
 	EventQuestionDeleteAny:    "event.question_delete_any",
 	EventCreateNow:            "event.create_now",
 	EventFinish:               "event.finish",
+	EventJoinQRCreate:         "event.join_qr_create",
+	EventJoinQRCreateAny:      "event.join_qr_create_any",
 	actionEnd:                 "",
 }
 
@@ -495,6 +502,8 @@ var permissions = map[Action]Role{
 	// finishes their own open-ended event.
 	EventCreateNow: Member,
 	EventFinish:    Member,
+	// QR ile katılım (ADR-0038 §3): the organizer for their own event.
+	EventJoinQRCreate: Member,
 
 	// Moderation: moderator and above.
 	// Lowering one's own role; members have nothing to step down to.
@@ -576,6 +585,9 @@ var permissions = map[Action]Role{
 	// "Bu ekiple tayfa kur" is the organizer's (ADR-0032); minRole refuses
 	// it outside instant tayfas.
 	TayfaConvert: Admin,
+	// A join QR for any event of the tayfa (ADR-0038 §3: "ve tayfa
+	// etkinliğinde yöneticiler").
+	EventJoinQRCreateAny: Admin,
 }
 
 // nobody is the minimum role of an action no role may perform.

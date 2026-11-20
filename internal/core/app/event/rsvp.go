@@ -41,67 +41,76 @@ func (s *Service) SetRSVP(ctx context.Context, user, tayfa, event id.ID, want st
 		if err := changeable(ev, c.now); err != nil {
 			return err
 		}
-		cur := ""
-		r, err := q.GetRsvp(ctx, store.GetRsvpParams{EventID: event.PG(), UserID: user.PG()})
-		switch {
-		case err == nil:
-			cur = r.Status
-		case !errors.Is(err, pgx.ErrNoRows):
-			return fmt.Errorf("katılım: %w", err)
-		}
-
-		next := want
-		if want == RSVPGoing {
-			// Already going, or waiting in line: nothing changes and the
-			// place in line is kept.
-			if cur == RSVPGoing || cur == RSVPWaitlist {
-				stored = cur
-				return nil
-			}
-			if ev.Capacity.Valid {
-				n, err := q.CountGoing(ctx, event.PG())
-				if err != nil {
-					return fmt.Errorf("katılımcı sayısı: %w", err)
-				}
-				if n >= int64(ev.Capacity.Int32) {
-					next = RSVPWaitlist
-				}
-			}
-		}
-		stored = next
-		if cur == next {
-			return nil
-		}
-		if err := q.SetRsvp(ctx, store.SetRsvpParams{EventID: event.PG(), UserID: user.PG(), Status: next}); err != nil {
-			return fmt.Errorf("katılım: %w", err)
-		}
-		// Someone who is no longer going leaves no vehicle (and no plate)
-		// and no seat request behind in the event's vehicles components
-		// (issue #240); the requests to their vehicle go with it.
-		if next != RSVPGoing {
-			if _, err := q.DeleteUserEventVehicles(ctx, store.DeleteUserEventVehiclesParams{EventID: event.PG(), UserID: user.PG()}); err != nil {
-				return fmt.Errorf("araç: %w", err)
-			}
-			if _, err := q.DeleteUserEventSeatRequests(ctx, store.DeleteUserEventSeatRequestsParams{EventID: event.PG(), UserID: user.PG()}); err != nil {
-				return fmt.Errorf("koltuk isteği: %w", err)
-			}
-		}
-		if err := audit(ctx, q, c, RSVPChanged, event, map[string]any{"status": next}); err != nil {
-			return err
-		}
-		b.add(RSVPChanged, event, map[string]any{"event_id": event.String(), "user_id": user.String(), "status": next})
-		if err := txn.TouchTayfa(ctx, q, tayfa, c.now); err != nil {
-			return err
-		}
-		if cur == RSVPGoing {
-			return promote(ctx, q, c, b, event, ev.Capacity)
-		}
-		return nil
+		stored, _, err = setRSVPIn(ctx, q, c, b, ev, want)
+		return err
 	})
 	if err != nil {
 		return "", err
 	}
 	return stored, nil
+}
+
+// setRSVPIn stores the caller's answer want to the locked, changeable event
+// ev and returns the stored answer (waitlist when going did not fit) and
+// whether it changed.
+func setRSVPIn(ctx context.Context, q *store.Queries, c caller, b *batch, ev store.GetEventRow, want string) (string, bool, error) {
+	user, tayfa, event := c.user, id.ID(ev.TayfaID.Bytes), id.ID(ev.ID.Bytes)
+	cur := ""
+	r, err := q.GetRsvp(ctx, store.GetRsvpParams{EventID: event.PG(), UserID: user.PG()})
+	switch {
+	case err == nil:
+		cur = r.Status
+	case !errors.Is(err, pgx.ErrNoRows):
+		return "", false, fmt.Errorf("katılım: %w", err)
+	}
+
+	next := want
+	if want == RSVPGoing {
+		// Already going, or waiting in line: nothing changes and the
+		// place in line is kept.
+		if cur == RSVPGoing || cur == RSVPWaitlist {
+			return cur, false, nil
+		}
+		if ev.Capacity.Valid {
+			n, err := q.CountGoing(ctx, event.PG())
+			if err != nil {
+				return "", false, fmt.Errorf("katılımcı sayısı: %w", err)
+			}
+			if n >= int64(ev.Capacity.Int32) {
+				next = RSVPWaitlist
+			}
+		}
+	}
+	if cur == next {
+		return next, false, nil
+	}
+	if err := q.SetRsvp(ctx, store.SetRsvpParams{EventID: event.PG(), UserID: user.PG(), Status: next}); err != nil {
+		return "", false, fmt.Errorf("katılım: %w", err)
+	}
+	// Someone who is no longer going leaves no vehicle (and no plate)
+	// and no seat request behind in the event's vehicles components
+	// (issue #240); the requests to their vehicle go with it.
+	if next != RSVPGoing {
+		if _, err := q.DeleteUserEventVehicles(ctx, store.DeleteUserEventVehiclesParams{EventID: event.PG(), UserID: user.PG()}); err != nil {
+			return "", false, fmt.Errorf("araç: %w", err)
+		}
+		if _, err := q.DeleteUserEventSeatRequests(ctx, store.DeleteUserEventSeatRequestsParams{EventID: event.PG(), UserID: user.PG()}); err != nil {
+			return "", false, fmt.Errorf("koltuk isteği: %w", err)
+		}
+	}
+	if err := audit(ctx, q, c, RSVPChanged, event, map[string]any{"status": next}); err != nil {
+		return "", false, err
+	}
+	b.add(RSVPChanged, event, map[string]any{"event_id": event.String(), "user_id": user.String(), "status": next})
+	if err := txn.TouchTayfa(ctx, q, tayfa, c.now); err != nil {
+		return "", false, err
+	}
+	if cur == RSVPGoing {
+		if err := promote(ctx, q, c, b, event, ev.Capacity); err != nil {
+			return "", false, err
+		}
+	}
+	return next, true, nil
 }
 
 // promote moves the oldest waitlisted answers to going while there is room.

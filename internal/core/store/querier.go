@@ -23,6 +23,8 @@ type Querier interface {
 	AddDrawEntry(ctx context.Context, arg AddDrawEntryParams) error
 	AddEventCelebrationWinner(ctx context.Context, arg AddEventCelebrationWinnerParams) error
 	AddGuestPlayer(ctx context.Context, arg AddGuestPlayerParams) error
+	// Sınır doluysa satır değişmez (0 döner).
+	AddJoinQRCount(ctx context.Context, arg AddJoinQRCountParams) (int64, error)
 	AddQuestionTag(ctx context.Context, arg AddQuestionTagParams) error
 	AddScore(ctx context.Context, arg AddScoreParams) error
 	AddScorePlayer(ctx context.Context, arg AddScorePlayerParams) error
@@ -305,6 +307,9 @@ type Querier interface {
 	// Anlık tayfa: gizli, onaylı katılım; adı etkinlik başlığıdır.
 	CreateInstantTayfa(ctx context.Context, arg CreateInstantTayfaParams) error
 	CreateInvite(ctx context.Context, arg CreateInviteParams) error
+	// QR ile katılım (issue #264, ADR-0038 §3). Token yalnızca SHA-256 özeti
+	// olarak saklanır; hiçbir sorgu token'ın kendisini görmez.
+	CreateJoinQRToken(ctx context.Context, arg CreateJoinQRTokenParams) error
 	CreateLogEntry(ctx context.Context, arg CreateLogEntryParams) error
 	CreateLogEntryVocabulary(ctx context.Context, arg CreateLogEntryVocabularyParams) error
 	// Üyelik değişiklikleri transaction içinde SetActor ya da SetSystemJob'dan
@@ -393,6 +398,8 @@ type Querier interface {
 	DeleteOldEventFeedback(ctx context.Context, before pgtype.Timestamptz) (int64, error)
 	DeleteOldFriendRequestOutcomes(ctx context.Context, before pgtype.Timestamptz) (int64, error)
 	DeleteOldInvitationOutcomes(ctx context.Context, before pgtype.Timestamptz) (int64, error)
+	// 1 günden eski token'lar (ADR-0038 §5; retention işi).
+	DeleteOldJoinQRTokens(ctx context.Context, createdBefore pgtype.Timestamptz) (int64, error)
 	// Saklama: 365 günden eski kapatılmamış satırlar (kapatılmışlar kalır).
 	DeleteOldOpenFriendSuggestions(ctx context.Context, before pgtype.Timestamptz) (int64, error)
 	// ---------------------------------------------------------------------------
@@ -460,6 +467,8 @@ type Querier interface {
 	// Hesap silme (user.deleted): kişinin arkadaşlıkları, istekleri ve iki
 	// yöndeki engellemeleri.
 	DeleteUserFriendships(ctx context.Context, userID pgtype.UUID) error
+	// Hesap silme (user.deleted): kişinin açtığı token'lar.
+	DeleteUserJoinQRTokens(ctx context.Context, userID pgtype.UUID) error
 	// Günlük kayıtları (av kayıtları dahil) konum içerebilir; kişiyle birlikte
 	// silinir, fotoğrafları silme kuyruğuna girer (issue #243).
 	DeleteUserLogEntries(ctx context.Context, userID pgtype.UUID) error
@@ -760,6 +769,9 @@ type Querier interface {
 	// Davet önizlemesi: kilitlemeden okur, link kullanılmaz. Silinmiş tayfanın
 	// daveti bulunmaz.
 	GetInviteByHash(ctx context.Context, tokenHash []byte) (GetInviteByHashRow, error)
+	GetJoinQRCount(ctx context.Context, eventID pgtype.UUID) (int32, error)
+	// Token özetinden etkinlik ve tayfa. Silinmiş etkinliğin token'ı bulunmaz.
+	GetJoinQRToken(ctx context.Context, tokenHash []byte) (GetJoinQRTokenRow, error)
 	// Profil kopyası olan, silinmemiş ve platform banı olmayan kullanıcı
 	// (banlı kullanıcının profili gizlenir, silinmez; issue #104).
 	GetLiveUserProfile(ctx context.Context, userID pgtype.UUID) (GetLiveUserProfileRow, error)
@@ -922,6 +934,8 @@ type Querier interface {
 	IsEventReferee(ctx context.Context, arg IsEventRefereeParams) (bool, error)
 	// Kapalı ya da kaydı olmayan modül kapalı sayılır (varsayılan "hayır").
 	IsTayfaModuleEnabled(ctx context.Context, arg IsTayfaModuleEnabledParams) (bool, error)
+	// Katılımcının silinmiş ya da platform banlı olması (ADR-0038 §3).
+	JoinQRUserGone(ctx context.Context, userID pgtype.UUID) (bool, error)
 	LastScoreRound(ctx context.Context, arg LastScoreRoundParams) (int32, error)
 	// Aktif türlerin güncel tanımları.
 	ListActiveCatalogEventTypes(ctx context.Context) ([]ListActiveCatalogEventTypesRow, error)
@@ -1460,6 +1474,9 @@ type Querier interface {
 	// Etkinlik başlığı değişince anlık tayfanın adı da değişir.
 	SetInstantTayfaName(ctx context.Context, arg SetInstantTayfaNameParams) (int64, error)
 	SetInvitationOutcome(ctx context.Context, arg SetInvitationOutcomeParams) error
+	// Bu transaction'daki üyelik eklemesine QR token'ını bildirir;
+	// memberships_guard anlık tayfada onaysız katılımı buna göre doğrular.
+	SetJoinQRToken(ctx context.Context, tokenID string) error
 	SetMembershipRole(ctx context.Context, arg SetMembershipRoleParams) (int64, error)
 	SetRollCallPlan(ctx context.Context, arg SetRollCallPlanParams) error
 	SetRsvp(ctx context.Context, arg SetRsvpParams) error

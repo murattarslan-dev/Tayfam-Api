@@ -155,6 +155,11 @@ var wantAppPrivileges = map[string]string{
 	// link never changes; it goes with the entry (cascade).
 	"tayfa_vocabulary":           "INSERT,SELECT,UPDATE(created_by,merged_into)",
 	"event_log_entry_vocabulary": "INSERT,SELECT",
+	// Issue #264, ADR-0038 §3: a join QR token is written once and deleted
+	// (a day later, or with its creator's account); the per-event QR join
+	// counter only grows.
+	"event_join_qr_tokens": "DELETE,INSERT,SELECT",
+	"event_join_qr_counts": "INSERT,SELECT,UPDATE(joins)",
 }
 
 func TestAppRolePrivileges(t *testing.T) {

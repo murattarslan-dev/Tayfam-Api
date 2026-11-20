@@ -441,6 +441,8 @@ func joinSourcePB(via string) corev1.JoinSource {
 		return corev1.JoinSource_JOIN_SOURCE_CODE
 	case "discover":
 		return corev1.JoinSource_JOIN_SOURCE_DISCOVER
+	case "qr":
+		return corev1.JoinSource_JOIN_SOURCE_QR
 	}
 	return corev1.JoinSource_JOIN_SOURCE_UNSPECIFIED
 }

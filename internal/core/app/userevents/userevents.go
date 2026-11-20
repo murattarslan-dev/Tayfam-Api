@@ -281,6 +281,8 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			q.DeleteUserDiscoverJoins,
 			// Event components (issue #238): the user's referee assignments.
 			q.DeleteUserEventReferees,
+			// Join QR tokens the user opened (issue #264).
+			q.DeleteUserJoinQRTokens,
 			q.ClearAuditActor, q.ClearEventActor, q.ClearReportUserFields,
 		} {
 			if err := clear(ctx, e.User.PG()); err != nil {

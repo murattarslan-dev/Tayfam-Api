@@ -102,6 +102,8 @@ func TestErrorStatus(t *testing.T) {
 		{apperr.ErrAlbumConsentRequired, codes.InvalidArgument, corev1.ErrorReason_ERROR_REASON_ALBUM_CONSENT_REQUIRED},
 		{apperr.ErrNowLimitReached, codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_NOW_LIMIT_REACHED},
 		{apperr.ErrEventNotOpenEnded, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_NOT_OPEN_ENDED},
+		{apperr.ErrInvalidJoinQR, codes.NotFound, corev1.ErrorReason_ERROR_REASON_INVALID_JOIN_QR},
+		{apperr.ErrJoinQRLimit, codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_JOIN_QR_LIMIT_REACHED},
 		{apperr.ErrSeatRequestDriver, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SEAT_REQUEST_DRIVER},
 		{apperr.ErrPermissionDenied, codes.PermissionDenied, corev1.ErrorReason_ERROR_REASON_PERMISSION_DENIED},
 		{apperr.ErrMuted, codes.PermissionDenied, corev1.ErrorReason_ERROR_REASON_MUTED},
