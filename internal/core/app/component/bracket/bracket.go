@@ -495,7 +495,7 @@ func (s *Service) Start(ctx context.Context, ref component.Ref) (Bracket, error)
 		entrants := make([]int32, 0, len(d.Entries))
 		for _, e := range d.Entries {
 			p := e.Position
-			if e.User == (id.ID{}) && e.Team == (id.ID{}) {
+			if e.Empty() {
 				p = 0
 			} else {
 				entrants = append(entrants, p)

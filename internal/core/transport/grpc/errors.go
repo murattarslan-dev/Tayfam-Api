@@ -258,6 +258,12 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_BRACKET_ROUND_CLOSED, true
 	case errors.Is(err, apperr.ErrBracketFinished):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_BRACKET_FINISHED, true
+	case errors.Is(err, apperr.ErrGuestPlayersDisabled):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_GUEST_PLAYERS_DISABLED, true
+	case errors.Is(err, apperr.ErrGuestPlayerNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_GUEST_PLAYER_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrGuestPlayerInUse):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_GUEST_PLAYER_IN_USE, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

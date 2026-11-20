@@ -97,6 +97,7 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 		registerBracketComponent,
 
 		// guest players (#252)
+		registerGuestPlayers,
 
 		// ranking (#253)
 

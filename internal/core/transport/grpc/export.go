@@ -59,6 +59,7 @@ var exportSections = map[string]corev1.CoreExportSection{
 	export.SectionDrawEntries:         corev1.CoreExportSection_CORE_EXPORT_SECTION_DRAW_ENTRIES,
 	export.SectionScores:              corev1.CoreExportSection_CORE_EXPORT_SECTION_SCORES,
 	export.SectionBracketMatches:      corev1.CoreExportSection_CORE_EXPORT_SECTION_BRACKET_MATCHES,
+	export.SectionGuestPlayers:        corev1.CoreExportSection_CORE_EXPORT_SECTION_GUEST_PLAYERS,
 }
 
 // ExportMyData implements corev1.ExportServiceServer.

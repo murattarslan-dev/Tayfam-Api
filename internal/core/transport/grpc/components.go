@@ -60,6 +60,7 @@ func componentRegistrars() []componentRegistrar {
 		registerBracketComponent,
 
 		// guest players (#252)
+		registerGuestPlayers,
 
 		// ranking (#253)
 

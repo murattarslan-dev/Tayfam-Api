@@ -51,7 +51,9 @@ func drawPB(d draw.Draw) *corev1.Draw {
 		out.DrawnTime = timestamppb.New(d.DrawnAt)
 	}
 	for _, e := range d.Entries {
-		out.Entries = append(out.Entries, &corev1.DrawEntry{Position: e.Position, UserId: idString(e.User), TeamId: idString(e.Team)})
+		out.Entries = append(out.Entries, &corev1.DrawEntry{
+			Position: e.Position, UserId: idString(e.User), TeamId: idString(e.Team), GuestId: idString(e.Guest),
+		})
 	}
 	return out
 }

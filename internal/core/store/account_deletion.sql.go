@@ -103,6 +103,18 @@ func (q *Queries) ClearEventUserFields(ctx context.Context, userID pgtype.UUID) 
 	return err
 }
 
+const clearGuestPlayerCreator = `-- name: ClearGuestPlayerCreator :exec
+UPDATE event_guest_players SET nickname = NULL, created_by = NULL WHERE created_by = $1
+`
+
+// Eklediği misafirlerin takma adı onun içeriğidir; takma ad ve ekleyen
+// boşalır, misafir satırı kalır: skor ve kura yeri "Misafir" olarak görünür
+// (issue #252; ADR-0037 §6).
+func (q *Queries) ClearGuestPlayerCreator(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearGuestPlayerCreator, userID)
+	return err
+}
+
 const clearInviteCreator = `-- name: ClearInviteCreator :exec
 UPDATE invites SET created_by = NULL WHERE created_by = $1
 `

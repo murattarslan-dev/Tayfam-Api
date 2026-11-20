@@ -262,6 +262,18 @@ WHERE d.user_id = @user_id AND m.id > @after
 ORDER BY m.id
 LIMIT @n;
 
+-- Eklediğiniz misafir oyuncular (issue #252): hangi etkinliğe hangi takma
+-- adla. Takma adı silinmiş misafir NULL takma adla gelir; misafirin masa ve
+-- kura yerleri dışa aktarılmaz.
+-- name: ExportGuestPlayers :many
+SELECT g.id AS k, jsonb_build_object(
+  'id', g.id, 'event_id', g.event_id, 'nickname', g.nickname, 'created_at', g.created_at
+) AS data
+FROM event_guest_players AS g
+WHERE g.created_by = @user_id AND g.id > @after
+ORDER BY g.id
+LIMIT @n;
+
 -- Albüm fotoğrafları (issue #206); dosyaların kendisi zip'e girmez
 -- (ADR-0021 §5), uploads bölümü onları listeler.
 -- name: ExportEventPhotos :many

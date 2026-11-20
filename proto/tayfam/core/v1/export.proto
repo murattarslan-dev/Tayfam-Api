@@ -99,6 +99,10 @@ enum CoreExportSection {
   // the place and the caller's own score in every game. The opponent and
   // their score are not exported.
   CORE_EXPORT_SECTION_BRACKET_MATCHES = 29;
+  // The guest players the caller added (issue #252): the guest, the event,
+  // the nickname (empty once cleared) and when. The guest's seats, places
+  // and scores are not exported.
+  CORE_EXPORT_SECTION_GUEST_PLAYERS = 30;
 }
 
 message ExportMyDataRequest {}

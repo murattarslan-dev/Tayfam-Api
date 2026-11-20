@@ -214,7 +214,9 @@ type ScorePlayer struct {
 	UserId string `protobuf:"bytes,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	// A team's ID (of the table's teams component); empty when the seat is a
 	// person's or the team was removed.
-	TeamId        string `protobuf:"bytes,4,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	TeamId string `protobuf:"bytes,4,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	// A guest player's ID (issue #252; GuestPlayerComponentService).
+	GuestId       string `protobuf:"bytes,5,opt,name=guest_id,json=guestId,proto3" json:"guest_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -273,6 +275,13 @@ func (x *ScorePlayer) GetUserId() string {
 func (x *ScorePlayer) GetTeamId() string {
 	if x != nil {
 		return x.TeamId
+	}
+	return ""
+}
+
+func (x *ScorePlayer) GetGuestId() string {
+	if x != nil {
+		return x.GuestId
 	}
 	return ""
 }
@@ -705,11 +714,14 @@ func (x *Scoreboard) GetCallerCanManage() bool {
 	return false
 }
 
-// ScorePlayerInput is a seat to set: exactly one of user_id and team_id.
+// ScorePlayerInput is a seat to set: exactly one of user_id, team_id and
+// guest_id. A guest sits at a player table of a component whose `guests`
+// parameter is on (issue #252).
 type ScorePlayerInput struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	TeamId        string                 `protobuf:"bytes,2,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	GuestId       string                 `protobuf:"bytes,3,opt,name=guest_id,json=guestId,proto3" json:"guest_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -754,6 +766,13 @@ func (x *ScorePlayerInput) GetUserId() string {
 func (x *ScorePlayerInput) GetTeamId() string {
 	if x != nil {
 		return x.TeamId
+	}
+	return ""
+}
+
+func (x *ScorePlayerInput) GetGuestId() string {
+	if x != nil {
+		return x.GuestId
 	}
 	return ""
 }
@@ -1734,12 +1753,13 @@ const file_tayfam_core_v1_component_scoreboard_proto_rawDesc = "" +
 	"\aretired\x18\x06 \x01(\bR\aretired\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"k\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x86\x01\n" +
 	"\vScorePlayer\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\bposition\x18\x02 \x01(\x05R\bposition\x12\x17\n" +
 	"\auser_id\x18\x03 \x01(\tR\x06userId\x12\x17\n" +
-	"\ateam_id\x18\x04 \x01(\tR\x06teamId\"[\n" +
+	"\ateam_id\x18\x04 \x01(\tR\x06teamId\x12\x19\n" +
+	"\bguest_id\x18\x05 \x01(\tR\aguestId\"[\n" +
 	"\n" +
 	"ScoreEntry\x12\x1b\n" +
 	"\tplayer_id\x18\x01 \x01(\tR\bplayerId\x12\x16\n" +
@@ -1781,10 +1801,11 @@ const file_tayfam_core_v1_component_scoreboard_proto_rawDesc = "" +
 	"\x05rules\x18\x03 \x01(\v2\x1a.tayfam.core.v1.ScoreRulesR\x05rules\x12\x1d\n" +
 	"\n" +
 	"max_tables\x18\x04 \x01(\x05R\tmaxTables\x12*\n" +
-	"\x11caller_can_manage\x18\x05 \x01(\bR\x0fcallerCanManage\"D\n" +
+	"\x11caller_can_manage\x18\x05 \x01(\bR\x0fcallerCanManage\"_\n" +
 	"\x10ScorePlayerInput\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x17\n" +
-	"\ateam_id\x18\x02 \x01(\tR\x06teamId\"F\n" +
+	"\ateam_id\x18\x02 \x01(\tR\x06teamId\x12\x19\n" +
+	"\bguest_id\x18\x03 \x01(\tR\aguestId\"F\n" +
 	"\x14GetScoreboardRequest\x12.\n" +
 	"\x03ref\x18\x01 \x01(\v2\x1c.tayfam.core.v1.ComponentRefR\x03ref\"S\n" +
 	"\x15GetScoreboardResponse\x12:\n" +

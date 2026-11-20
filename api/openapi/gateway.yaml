@@ -3355,6 +3355,8 @@ paths:
   # tayfadan ayrıldı ya da hesabını sildi, takım kaldırıldı). Kurayı
   # organizatör, moderatör ve yönetici çeker; bitişten 7 gün sonrasına kadar
   # (`component-frozen`). Kura katılımdır, seri örneğine kopyalanmaz.
+  # Katılımcı kurasına etkinliğin misafir oyuncuları da girer (#252,
+  # `guest_id`); misafirin yeri boşalmaz.
 
   /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/draw:
     parameters:
@@ -3425,7 +3427,8 @@ paths:
   # bitişten 7 gün sonra kapanır (`component-frozen`). Hesabını silen
   # kişinin yeri ve skorları "Silinmiş kullanıcı" olarak kalır. Masalar
   # katılımdır, seri örneğine kopyalanmaz. Yazan her uç bileşeni güncel
-  # haliyle döner.
+  # haliyle döner. `guests` parametresi açık bileşende kişi masasına
+  # misafir oyuncu da oturur (#252, `…/guests`).
 
   /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/scoreboard:
     parameters:
@@ -3694,6 +3697,100 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/EventScoreboard" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  # --- Etkinlik bileşenleri: misafir oyuncu (core GuestPlayerComponentService, #252, ADR-0037 §6) ---
+  # Uygulamada hesabı olmayan oyuncu, yalnızca takma adla (1–24 karakter).
+  # Misafir etkinliğindir (en fazla 30) ve misafir alan (`guests: true`)
+  # bir yazboz bileşeni üzerinden eklenir; `component_key` o bileşendir.
+  # Misafir kişi masasına oturur (`EventScorePlayerInput.guest_id`) ve
+  # etkinliğin katılımcı kurasına girer (`EventDrawEntry.guest_id`), böylece
+  # eşleşme ağacında da oynar. Profili, iletişim alanı, istatistiği,
+  # kutlama bildirimi ve arkadaşlık puanı yoktur. Takma ad etkinliğin
+  # bitiminden 30 gün sonra, ekleyen hesabını silince hemen silinir; misafir
+  # adsız kalır. Takma ad log'a, denetim kaydına ve olaya yazılmaz.
+  # Değişiklikler canlıdır (`event.component_changed`) ve bitişten 7 gün
+  # sonrasına kadar yapılır (`component-frozen`). Bileşen misafir almıyorsa
+  # bütün uçlar `guest-players-disabled`.
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/guests:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: listEventGuestPlayers
+      summary: Etkinliğin misafir oyuncuları
+      description: |
+        Her etkin üyeye açıktır (susturulmuş üye de okur); iptal edilmiş ve
+        donmuş etkinlikte de okunur. Bileşen uçlarının ortak kuralları
+        geçerlidir.
+      responses:
+        "200":
+          description: Misafirler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventGuestPlayers" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: addEventGuestPlayer
+      summary: Misafir oyuncu ekler (organizatör, moderatör, yönetici, hakem)
+      description: |
+        Etkinliğin, bileşenin ya da `table_id` masasının hakemi de ekler;
+        diğerleri `permission-denied`. Bileşende olmayan masa
+        `score-table-not-found`; 30 misafirde `event-limit`. Bileşen
+        uçlarının ortak kuralları geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventGuestPlayerRequest" }
+      responses:
+        "201":
+          description: Misafirler, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventGuestPlayers" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/guests/{guest_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/GuestPlayerID"
+    delete:
+      operationId: removeEventGuestPlayer
+      summary: Misafir oyuncuyu siler (organizatör, moderatör, yönetici)
+      description: |
+        Masada yeri ya da kurada yeri olan misafir silinmez
+        (`guest-player-in-use`); etkinliğin misafiri değilse
+        `guest-player-not-found`. Bileşen uçlarının ortak kuralları
+        geçerlidir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Misafirler, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventGuestPlayers" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -7348,6 +7445,12 @@ components:
       required: true
       description: Elin numarası (1–200).
       schema: { type: integer, format: int32, minimum: 1, maximum: 200 }
+    GuestPlayerID:
+      name: guest_id
+      in: path
+      required: true
+      description: Misafir oyuncunun kimliği (`EventGuestPlayer.id`).
+      schema: { type: string, format: uuid }
     BracketMatchID:
       name: match_id
       in: path
@@ -7589,6 +7692,10 @@ components:
         - bracket-round-open
         - bracket-round-closed
         - bracket-finished
+        # core: misafir oyuncu (#252, ADR-0037 §6)
+        - guest-players-disabled
+        - guest-player-not-found
+        - guest-player-in-use
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -9053,6 +9160,7 @@ components:
         position: { type: integer, minimum: 1, maximum: 500 }
         user_id: { type: string, format: uuid, description: "Katılımcı kurasında kişinin kullanıcı kimliği." }
         team_id: { type: string, format: uuid, description: "Takım kurasında `teams_key` bileşenindeki takımın kimliği." }
+        guest_id: { type: string, format: uuid, description: "Katılımcı kurasında misafir oyuncunun kimliği (`EventGuestPlayer.id`); misafirin yeri boşalmaz." }
     EventDraw:
       type: object
       required: [drawn, subject, entries, caller_can_draw]
@@ -9106,6 +9214,7 @@ components:
         position: { type: integer, format: int32, minimum: 1, maximum: 50 }
         user_id: { type: string, format: uuid }
         team_id: { type: string, format: uuid, description: Takım masasında takım bileşeninin takımı. }
+        guest_id: { type: string, format: uuid, description: "Misafir oyuncunun kimliği (`EventGuestPlayer.id`)." }
     EventScoreEntry:
       type: object
       required: [player_id]
@@ -9185,10 +9294,15 @@ components:
           description: Şu an masaları yönetebilir ve skor düzeltebilirsiniz (organizatör, moderatör, yönetici; susturulmamış; etkinlik iptal değil, donmamış; tayfa salt okunur değil).
     EventScorePlayerInput:
       type: object
-      description: Bir yer; `user_id` ve `team_id`'den tam olarak biri.
+      description: |
+        Bir yer; `user_id`, `team_id` ve `guest_id`'den tam olarak biri.
+        Misafir yalnızca kişi masasına ve misafir alan (`guests`) bileşene
+        oturur (`guest-players-disabled`); etkinliğin misafiri değilse
+        `guest-player-not-found`.
       properties:
         user_id: { type: string, format: uuid }
         team_id: { type: string, format: uuid }
+        guest_id: { type: string, format: uuid }
     EventScoreTableRequest:
       type: object
       required: [label]
@@ -9225,6 +9339,37 @@ components:
           minItems: 1
           maxItems: 50
           items: { $ref: "#/components/schemas/EventScoreEntry" }
+    EventGuestPlayer:
+      type: object
+      required: [id, created_at]
+      description: |
+        Misafir oyuncu: uygulamada hesabı olmayan, yalnızca takma adla
+        oynayan kişi. Profili, kişisel kaydı ve iletişim alanı yoktur;
+        istatistiğe girmez.
+      properties:
+        id: { type: string, format: uuid }
+        nickname:
+          type: string
+          maxLength: 24
+          description: "Takma ad. Etkinliğin bitiminden 30 gün sonra (ya da ekleyen hesabını silince) silinir ve alan yer almaz; istemci adsız misafir gösterir."
+        created_at: { type: string, format: date-time }
+    EventGuestPlayers:
+      type: object
+      required: [guests, max_guests, caller_can_add, caller_can_remove]
+      properties:
+        guests:
+          type: array
+          description: Eklenme sırasıyla.
+          items: { $ref: "#/components/schemas/EventGuestPlayer" }
+        max_guests: { type: integer, format: int32, description: Etkinlik başına en fazla misafir (30). }
+        caller_can_add: { type: boolean, description: "Çağıran şimdi masa vermeden misafir ekleyebilir (organizatör, moderatör, yönetici ya da etkinliğin veya bileşenin hakemi). Masanın hakemi `table_id` ile ekler." }
+        caller_can_remove: { type: boolean, description: "Çağıran şimdi misafir silebilir (organizatör, moderatör, yönetici)." }
+    EventGuestPlayerRequest:
+      type: object
+      required: [nickname]
+      properties:
+        nickname: { type: string, minLength: 1, maxLength: 24, description: Baştaki ve sondaki boşluk atılır; denetim ve biçim karakterleri reddedilir. }
+        table_id: { type: string, format: uuid, description: "Ekleyen masanın hakemiyse o masa (`EventScoreTable.id`); organizatör ve etkinliğin ya da bileşenin hakemi vermez." }
     EventBracketEntrant:
       type: object
       required: [position]
@@ -9233,6 +9378,7 @@ components:
         position: { type: integer, format: int32, minimum: 1, maximum: 500 }
         user_id: { type: string, format: uuid, description: "Katılımcı kurasında kişinin kullanıcı kimliği." }
         team_id: { type: string, format: uuid, description: "Takım kurasında takımın kimliği." }
+        guest_id: { type: string, format: uuid, description: "Katılımcı kurasında misafir oyuncunun kimliği (`EventGuestPlayer.id`)." }
     EventBracketGame:
       type: object
       required: [number]

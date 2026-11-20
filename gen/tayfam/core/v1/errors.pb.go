@@ -375,6 +375,14 @@ const (
 	ErrorReason_ERROR_REASON_BRACKET_ROUND_CLOSED ErrorReason = 2518
 	// FAILED_PRECONDITION. The bracket has no next round.
 	ErrorReason_ERROR_REASON_BRACKET_FINISHED ErrorReason = 2519
+	// FAILED_PRECONDITION. The scoreboard component does not take guest
+	// players (its `guests` parameter is off).
+	ErrorReason_ERROR_REASON_GUEST_PLAYERS_DISABLED ErrorReason = 2520
+	// NOT_FOUND. No such guest player in the event.
+	ErrorReason_ERROR_REASON_GUEST_PLAYER_NOT_FOUND ErrorReason = 2521
+	// FAILED_PRECONDITION. The guest has a seat at a table or a place in a
+	// draw; it is not removed.
+	ErrorReason_ERROR_REASON_GUEST_PLAYER_IN_USE ErrorReason = 2522
 )
 
 // Enum value maps for ErrorReason.
@@ -495,6 +503,9 @@ var (
 		2517: "ERROR_REASON_BRACKET_ROUND_OPEN",
 		2518: "ERROR_REASON_BRACKET_ROUND_CLOSED",
 		2519: "ERROR_REASON_BRACKET_FINISHED",
+		2520: "ERROR_REASON_GUEST_PLAYERS_DISABLED",
+		2521: "ERROR_REASON_GUEST_PLAYER_NOT_FOUND",
+		2522: "ERROR_REASON_GUEST_PLAYER_IN_USE",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                  0,
@@ -612,6 +623,9 @@ var (
 		"ERROR_REASON_BRACKET_ROUND_OPEN":           2517,
 		"ERROR_REASON_BRACKET_ROUND_CLOSED":         2518,
 		"ERROR_REASON_BRACKET_FINISHED":             2519,
+		"ERROR_REASON_GUEST_PLAYERS_DISABLED":       2520,
+		"ERROR_REASON_GUEST_PLAYER_NOT_FOUND":       2521,
+		"ERROR_REASON_GUEST_PLAYER_IN_USE":          2522,
 	}
 )
 
@@ -646,7 +660,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xf9 \n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xf4!\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -763,7 +777,10 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\"ERROR_REASON_BRACKET_MATCH_DECIDED\x10\xd4\x13\x12$\n" +
 	"\x1fERROR_REASON_BRACKET_ROUND_OPEN\x10\xd5\x13\x12&\n" +
 	"!ERROR_REASON_BRACKET_ROUND_CLOSED\x10\xd6\x13\x12\"\n" +
-	"\x1dERROR_REASON_BRACKET_FINISHED\x10\xd7\x13B\xbd\x01\n" +
+	"\x1dERROR_REASON_BRACKET_FINISHED\x10\xd7\x13\x12(\n" +
+	"#ERROR_REASON_GUEST_PLAYERS_DISABLED\x10\xd8\x13\x12(\n" +
+	"#ERROR_REASON_GUEST_PLAYER_NOT_FOUND\x10\xd9\x13\x12%\n" +
+	" ERROR_REASON_GUEST_PLAYER_IN_USE\x10\xda\x13B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

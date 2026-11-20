@@ -41,6 +41,7 @@ type bracketEntrantJSON struct {
 	Position int32  `json:"position"`
 	UserID   string `json:"user_id,omitempty"`
 	TeamID   string `json:"team_id,omitempty"`
+	GuestID  string `json:"guest_id,omitempty"`
 }
 
 type bracketGameJSON struct {
@@ -114,7 +115,9 @@ func bracketFrom(b *corev1.Bracket) bracketJSON {
 	}
 	wdl := b.GetResult() == "wdl"
 	for _, e := range b.GetEntrants() {
-		out.Entrants = append(out.Entrants, bracketEntrantJSON{Position: e.GetPosition(), UserID: e.GetUserId(), TeamID: e.GetTeamId()})
+		out.Entrants = append(out.Entrants, bracketEntrantJSON{
+			Position: e.GetPosition(), UserID: e.GetUserId(), TeamID: e.GetTeamId(), GuestID: e.GetGuestId(),
+		})
 	}
 	for _, m := range b.GetMatches() {
 		jm := bracketMatchJSON{

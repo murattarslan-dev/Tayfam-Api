@@ -48,6 +48,9 @@ message DrawEntry {
   // A team draw: the team's ID (of the teams component teams_key); empty
   // when the place is empty.
   string team_id = 3;
+  // A participant draw: the guest player's ID (issue #252;
+  // GuestPlayerComponentService). A guest's place never becomes empty.
+  string guest_id = 4;
 }
 
 // Draw is one draw component of an event, as the caller sees it.

@@ -112,6 +112,8 @@ message BracketEntrant {
   string user_id = 2;
   // A team draw: the team's ID; empty when the team was removed.
   string team_id = 3;
+  // A participant draw: the guest player's ID (issue #252).
+  string guest_id = 4;
 }
 
 // BracketGame is one game of a match.

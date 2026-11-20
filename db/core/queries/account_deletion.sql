@@ -163,6 +163,12 @@ UPDATE event_draw_entries SET user_id = NULL WHERE user_id = @user_id;
 -- name: ClearUserScorePlayers :exec
 UPDATE event_score_players SET user_id = NULL WHERE user_id = @user_id;
 
+-- Eklediği misafirlerin takma adı onun içeriğidir; takma ad ve ekleyen
+-- boşalır, misafir satırı kalır: skor ve kura yeri "Misafir" olarak görünür
+-- (issue #252; ADR-0037 §6).
+-- name: ClearGuestPlayerCreator :exec
+UPDATE event_guest_players SET nickname = NULL, created_by = NULL WHERE created_by = @user_id;
+
 -- Tayfa sözlüğüne eklediği değerler tayfanın ortak verisidir; kalır, ekleyen
 -- boşalır (issue #244; ADR-0037 §4).
 -- name: ClearVocabularyCreator :exec

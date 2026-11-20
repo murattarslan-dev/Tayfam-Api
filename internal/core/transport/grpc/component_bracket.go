@@ -63,7 +63,9 @@ func bracketPB(b bracket.Bracket) *corev1.Bracket {
 		out.StartTime = timestamppb.New(b.StartedAt)
 	}
 	for _, e := range b.Entrants {
-		out.Entrants = append(out.Entrants, &corev1.BracketEntrant{Position: e.Position, UserId: idString(e.User), TeamId: idString(e.Team)})
+		out.Entrants = append(out.Entrants, &corev1.BracketEntrant{
+			Position: e.Position, UserId: idString(e.User), TeamId: idString(e.Team), GuestId: idString(e.Guest),
+		})
 	}
 	for _, m := range b.Matches {
 		pm := &corev1.BracketMatch{

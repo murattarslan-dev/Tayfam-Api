@@ -27,6 +27,7 @@ type drawEntryJSON struct {
 	Position int32  `json:"position"`
 	UserID   string `json:"user_id,omitempty"`
 	TeamID   string `json:"team_id,omitempty"`
+	GuestID  string `json:"guest_id,omitempty"`
 }
 
 type drawJSON struct {
@@ -44,7 +45,9 @@ func drawFrom(d *corev1.Draw) drawJSON {
 		Entries: make([]drawEntryJSON, 0, len(d.GetEntries())), CallerCanDraw: d.GetCallerCanDraw(),
 	}
 	for _, e := range d.GetEntries() {
-		out.Entries = append(out.Entries, drawEntryJSON{Position: e.GetPosition(), UserID: e.GetUserId(), TeamID: e.GetTeamId()})
+		out.Entries = append(out.Entries, drawEntryJSON{
+			Position: e.GetPosition(), UserID: e.GetUserId(), TeamID: e.GetTeamId(), GuestID: e.GetGuestId(),
+		})
 	}
 	return out
 }

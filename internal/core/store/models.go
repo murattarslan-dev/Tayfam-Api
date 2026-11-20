@@ -234,6 +234,7 @@ type EventDrawEntry struct {
 	TeamKey      pgtype.Text
 	TeamID       pgtype.UUID
 	CreatedAt    pgtype.Timestamptz
+	GuestID      pgtype.UUID
 }
 
 type EventFeedback struct {
@@ -258,6 +259,14 @@ type EventGoal struct {
 	Target       pgtype.Numeric
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
+}
+
+type EventGuestPlayer struct {
+	ID        pgtype.UUID
+	EventID   pgtype.UUID
+	Nickname  pgtype.Text
+	CreatedBy pgtype.UUID
+	CreatedAt pgtype.Timestamptz
 }
 
 type EventLogEntry struct {
@@ -403,6 +412,7 @@ type EventScorePlayer struct {
 	TeamKey      pgtype.Text
 	TeamID       pgtype.UUID
 	CreatedAt    pgtype.Timestamptz
+	GuestID      pgtype.UUID
 }
 
 type EventScoreTable struct {

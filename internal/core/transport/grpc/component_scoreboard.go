@@ -66,7 +66,9 @@ func scoreTablePB(t scoreboard.Table) *corev1.ScoreTable {
 		out.FinishedTime = timestamppb.New(t.FinishedAt)
 	}
 	for _, p := range t.Players {
-		out.Players = append(out.Players, &corev1.ScorePlayer{Id: p.ID.String(), Position: p.Position, UserId: idString(p.User), TeamId: idString(p.Team)})
+		out.Players = append(out.Players, &corev1.ScorePlayer{
+			Id: p.ID.String(), Position: p.Position, UserId: idString(p.User), TeamId: idString(p.Team), GuestId: idString(p.Guest),
+		})
 	}
 	for _, r := range t.Rounds {
 		rd := &corev1.ScoreRound{Number: r.Number, Scores: make([]*corev1.ScoreEntry, 0, len(r.Scores))}
@@ -114,7 +116,7 @@ func scoreTableRef(ctx context.Context, ref *corev1.ComponentRef, table string) 
 	return r, t, nil
 }
 
-// scorePlayers reads seats: exactly one of user and team each.
+// scorePlayers reads seats: exactly one of user, team and guest each.
 func scorePlayers(in []*corev1.ScorePlayerInput) ([]scoreboard.PlayerInput, error) {
 	if len(in) > scoreboard.MaxPlayers {
 		return nil, validation("players")
@@ -123,11 +125,14 @@ func scorePlayers(in []*corev1.ScorePlayerInput) ([]scoreboard.PlayerInput, erro
 	for _, p := range in {
 		var v scoreboard.PlayerInput
 		var ok bool
+		user, team, guest := p.GetUserId(), p.GetTeamId(), p.GetGuestId()
 		switch {
-		case p.GetUserId() != "" && p.GetTeamId() == "":
-			v.User, ok = id.Parse(p.GetUserId())
-		case p.GetTeamId() != "" && p.GetUserId() == "":
-			v.Team, ok = id.Parse(p.GetTeamId())
+		case user != "" && team == "" && guest == "":
+			v.User, ok = id.Parse(user)
+		case team != "" && user == "" && guest == "":
+			v.Team, ok = id.Parse(team)
+		case guest != "" && user == "" && team == "":
+			v.Guest, ok = id.Parse(guest)
 		}
 		if !ok {
 			return nil, validation("players")
