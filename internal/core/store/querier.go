@@ -904,6 +904,7 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// Tayfa yöneticisinin ayarı
 	// masked_*: yöneticilerin göreceği önceki durum (ADR-0033 §7).
+	// stats_showcase: vitrinde istatistik göster (issue #267, ADR-0026 §3).
 	GetTayfaDiscoverState(ctx context.Context, tayfaID pgtype.UUID) (GetTayfaDiscoverStateRow, error)
 	// Yazan işlemler tayfa satırını kilitleyerek okur; memberships trigger'ı da
 	// aynı satırı kilitlediği için üyelik değişiklikleriyle sırayla çalışır.
@@ -1552,6 +1553,9 @@ type Querier interface {
 	SetTayfaCover(ctx context.Context, arg SetTayfaCoverParams) error
 	SetTayfaJoinCode(ctx context.Context, arg SetTayfaJoinCodeParams) (int64, error)
 	SetTayfaModule(ctx context.Context, arg SetTayfaModuleParams) error
+	// Vitrin bayrağı (issue #267, ADR-0026 §3). Aynı değer satırı değiştirmez;
+	// etkilenen satır 0 olur ve denetim kaydı yazılmaz.
+	SetTayfaStatsShowcase(ctx context.Context, arg SetTayfaStatsShowcaseParams) (int64, error)
 	SetTayfaVisibility(ctx context.Context, arg SetTayfaVisibilityParams) (int64, error)
 	SetVocabularyMergedInto(ctx context.Context, arg SetVocabularyMergedIntoParams) (int64, error)
 	// Birebir mesaj kuralının girdileri (issue #95, veri modeli v14 "Mesaj
@@ -1631,7 +1635,8 @@ type Querier interface {
 	// Daha yeni bir olay uygulanmışsa ya da profil silinmişse değişmez; etkilenen
 	// satır 0 olur.
 	// activity_visibility NULL ise (alanı taşımayan eski olay) mevcut değer
-	// kalır; yeni satırda varsayılan 'tayfa' olur.
+	// kalır; yeni satırda varsayılan 'tayfa' olur. stats_visibility de aynı
+	// biçimde (varsayılan 'none'; issue #267).
 	UpsertUserProfile(ctx context.Context, arg UpsertUserProfileParams) (int64, error)
 	// Kota: iki varyantın (birebir ekte tek nesnenin) bildirilen (ve imzayla
 	// zorlanan) boyutları.

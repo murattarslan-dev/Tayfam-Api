@@ -44,6 +44,7 @@ VALUES ($1, $2, now())
 ON CONFLICT (user_id) DO UPDATE
 SET display_name = NULL,
     avatar_upload_id = NULL,
+    stats_visibility = 'none',
     deleted_at = COALESCE(user_profiles.deleted_at, now()),
     source_event_id = GREATEST(user_profiles.source_event_id, EXCLUDED.source_event_id),
     updated_at = now()
@@ -63,12 +64,14 @@ func (q *Queries) TombstoneUserProfile(ctx context.Context, arg TombstoneUserPro
 
 const upsertUserProfile = `-- name: UpsertUserProfile :execrows
 
-INSERT INTO user_profiles (user_id, display_name, avatar_upload_id, source_event_id, activity_visibility)
-VALUES ($1, $2, $3, $4, COALESCE($5::text, 'tayfa'))
+INSERT INTO user_profiles (user_id, display_name, avatar_upload_id, source_event_id, activity_visibility, stats_visibility)
+VALUES ($1, $2, $3, $4, COALESCE($5::text, 'tayfa'),
+        COALESCE($6::text, 'none'))
 ON CONFLICT (user_id) DO UPDATE
 SET display_name = EXCLUDED.display_name,
     avatar_upload_id = EXCLUDED.avatar_upload_id,
     activity_visibility = COALESCE($5::text, user_profiles.activity_visibility),
+    stats_visibility = COALESCE($6::text, user_profiles.stats_visibility),
     source_event_id = EXCLUDED.source_event_id,
     updated_at = now()
 WHERE user_profiles.deleted_at IS NULL
@@ -81,13 +84,15 @@ type UpsertUserProfileParams struct {
 	AvatarUploadID     pgtype.UUID
 	SourceEventID      pgtype.UUID
 	ActivityVisibility pgtype.Text
+	StatsVisibility    pgtype.Text
 }
 
 // Profil kopyası (ADR-0009). Yalnızca UserEventService yazar.
 // Daha yeni bir olay uygulanmışsa ya da profil silinmişse değişmez; etkilenen
 // satır 0 olur.
 // activity_visibility NULL ise (alanı taşımayan eski olay) mevcut değer
-// kalır; yeni satırda varsayılan 'tayfa' olur.
+// kalır; yeni satırda varsayılan 'tayfa' olur. stats_visibility de aynı
+// biçimde (varsayılan 'none'; issue #267).
 func (q *Queries) UpsertUserProfile(ctx context.Context, arg UpsertUserProfileParams) (int64, error) {
 	result, err := q.db.Exec(ctx, upsertUserProfile,
 		arg.UserID,
@@ -95,6 +100,7 @@ func (q *Queries) UpsertUserProfile(ctx context.Context, arg UpsertUserProfilePa
 		arg.AvatarUploadID,
 		arg.SourceEventID,
 		arg.ActivityVisibility,
+		arg.StatsVisibility,
 	)
 	if err != nil {
 		return 0, err

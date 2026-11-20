@@ -223,6 +223,9 @@ type Querier interface {
 	SetReferrer(ctx context.Context, arg SetReferrerParams) (int64, error)
 	// Oturumun bütünlük özeti (ADR-0022, issue #163).
 	SetSessionIntegrity(ctx context.Context, arg SetSessionIntegrityParams) error
+	// Kişisel istatistik görünürlüğü (issue #267; ADR-0026 §4): none /
+	// friends / friends_and_mutual.
+	SetStatsVisibility(ctx context.Context, arg SetStatsVisibilityParams) (int64, error)
 	// Katılım geçmişinin kime görüneceği (v14 "Profil görünürlüğü").
 	// Avatar (issue #135): core'un, çağıranın kendi token'ıyla doğruladığı
 	// yükleme kimliği; NULL avatarı kaldırır.

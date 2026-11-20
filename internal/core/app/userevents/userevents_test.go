@@ -806,6 +806,42 @@ func TestProfileCarriesActivityVisibility(t *testing.T) {
 	}
 }
 
+// TestProfileCarriesStatsVisibility (issue #267): the copy of the
+// personal statistics setting starts as none, follows the events, stays
+// when an older event lacks the field, refuses an unknown value and goes
+// back to none on the tombstone.
+func TestProfileCarriesStatsVisibility(t *testing.T) {
+	e := setup(t)
+	u := id.New()
+	ev := eventIDs(4)
+	vis := func() string {
+		t.Helper()
+		var v string
+		must(t, e.pool.QueryRow(ctx, `SELECT stats_visibility FROM user_profiles WHERE user_id = $1`, u.PG()).Scan(&v))
+		return v
+	}
+	must(t, e.svc.Apply(ctx, profile(ev[0], u, "Ece")))
+	if v := vis(); v != StatsNone {
+		t.Fatalf("varsayılan = %s", v)
+	}
+	must(t, e.svc.Apply(ctx, Event{ID: ev[1], User: u, Profile: &Profile{DisplayName: "Ece", StatsVisibility: StatsFriendsAndMutual}}))
+	if v := vis(); v != StatsFriendsAndMutual {
+		t.Fatalf("görünürlük = %s", v)
+	}
+	must(t, e.svc.Apply(ctx, profile(ev[2], u, "Ece Y")))
+	if v := vis(); v != StatsFriendsAndMutual {
+		t.Fatalf("alansız olay ayarı değiştirdi: %s", v)
+	}
+	var verr *apperr.ValidationError
+	if err := e.svc.Apply(ctx, Event{ID: id.New(), User: u, Profile: &Profile{DisplayName: "Ece", StatsVisibility: "public"}}); !errors.As(err, &verr) {
+		t.Fatalf("geçersiz görünürlük: %v", err)
+	}
+	must(t, e.svc.Apply(ctx, Event{ID: ev[3], User: u, Deleted: true}))
+	if v := vis(); v != StatsNone {
+		t.Fatalf("mezar taşında görünürlük = %s", v)
+	}
+}
+
 // TestDeletedClearsReports: reports stay after the account's deletion, but
 // the user's ID in them (reporter, reported, handler) goes (v14
 // "Kullanıcı → yazdığı içerik: SET NULL").

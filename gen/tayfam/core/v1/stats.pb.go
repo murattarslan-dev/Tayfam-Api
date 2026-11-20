@@ -299,6 +299,79 @@ func (x *GetTayfaStatsResponse) GetComputeTime() *timestamppb.Timestamp {
 	return nil
 }
 
+// UserStat is one metric of a person's all-time totals over their tayfas
+// (issue #267, ADR-0026 §4): attended, duration, their personal measures
+// and log entries. Nothing sensitive is in it.
+type UserStat struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	MetricKey string                 `protobuf:"bytes,1,opt,name=metric_key,json=metricKey,proto3" json:"metric_key,omitempty"`
+	// "common", "measure" or "log".
+	Source string  `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
+	Value  float64 `protobuf:"fixed64,3,opt,name=value,proto3" json:"value,omitempty"`
+	// How many events made the value.
+	EventCount    int32 `protobuf:"varint,4,opt,name=event_count,json=eventCount,proto3" json:"event_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UserStat) Reset() {
+	*x = UserStat{}
+	mi := &file_tayfam_core_v1_stats_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UserStat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UserStat) ProtoMessage() {}
+
+func (x *UserStat) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_stats_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UserStat.ProtoReflect.Descriptor instead.
+func (*UserStat) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_stats_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *UserStat) GetMetricKey() string {
+	if x != nil {
+		return x.MetricKey
+	}
+	return ""
+}
+
+func (x *UserStat) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *UserStat) GetValue() float64 {
+	if x != nil {
+		return x.Value
+	}
+	return 0
+}
+
+func (x *UserStat) GetEventCount() int32 {
+	if x != nil {
+		return x.EventCount
+	}
+	return 0
+}
+
 var File_tayfam_core_v1_stats_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_stats_proto_rawDesc = "" +
@@ -326,7 +399,14 @@ const file_tayfam_core_v1_stats_proto_rawDesc = "" +
 	"\x05years\x18\x02 \x03(\x05R\x05years\x121\n" +
 	"\x06totals\x18\x03 \x03(\v2\x19.tayfam.core.v1.TayfaStatR\x06totals\x12K\n" +
 	"\rcontributions\x18\x04 \x03(\v2%.tayfam.core.v1.TayfaStatContributionR\rcontributions\x12=\n" +
-	"\fcompute_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vcomputeTime2q\n" +
+	"\fcompute_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vcomputeTime\"x\n" +
+	"\bUserStat\x12\x1d\n" +
+	"\n" +
+	"metric_key\x18\x01 \x01(\tR\tmetricKey\x12\x16\n" +
+	"\x06source\x18\x02 \x01(\tR\x06source\x12\x14\n" +
+	"\x05value\x18\x03 \x01(\x01R\x05value\x12\x1f\n" +
+	"\vevent_count\x18\x04 \x01(\x05R\n" +
+	"eventCount2q\n" +
 	"\x11TayfaStatsService\x12\\\n" +
 	"\rGetTayfaStats\x12$.tayfam.core.v1.GetTayfaStatsRequest\x1a%.tayfam.core.v1.GetTayfaStatsResponseB\xbc\x01\n" +
 	"\x12com.tayfam.core.v1B\n" +
@@ -344,18 +424,19 @@ func file_tayfam_core_v1_stats_proto_rawDescGZIP() []byte {
 	return file_tayfam_core_v1_stats_proto_rawDescData
 }
 
-var file_tayfam_core_v1_stats_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_tayfam_core_v1_stats_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_tayfam_core_v1_stats_proto_goTypes = []any{
 	(*TayfaStat)(nil),             // 0: tayfam.core.v1.TayfaStat
 	(*TayfaStatContribution)(nil), // 1: tayfam.core.v1.TayfaStatContribution
 	(*GetTayfaStatsRequest)(nil),  // 2: tayfam.core.v1.GetTayfaStatsRequest
 	(*GetTayfaStatsResponse)(nil), // 3: tayfam.core.v1.GetTayfaStatsResponse
-	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
+	(*UserStat)(nil),              // 4: tayfam.core.v1.UserStat
+	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
 }
 var file_tayfam_core_v1_stats_proto_depIdxs = []int32{
 	0, // 0: tayfam.core.v1.GetTayfaStatsResponse.totals:type_name -> tayfam.core.v1.TayfaStat
 	1, // 1: tayfam.core.v1.GetTayfaStatsResponse.contributions:type_name -> tayfam.core.v1.TayfaStatContribution
-	4, // 2: tayfam.core.v1.GetTayfaStatsResponse.compute_time:type_name -> google.protobuf.Timestamp
+	5, // 2: tayfam.core.v1.GetTayfaStatsResponse.compute_time:type_name -> google.protobuf.Timestamp
 	2, // 3: tayfam.core.v1.TayfaStatsService.GetTayfaStats:input_type -> tayfam.core.v1.GetTayfaStatsRequest
 	3, // 4: tayfam.core.v1.TayfaStatsService.GetTayfaStats:output_type -> tayfam.core.v1.GetTayfaStatsResponse
 	4, // [4:5] is the sub-list for method output_type
@@ -376,7 +457,7 @@ func file_tayfam_core_v1_stats_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_stats_proto_rawDesc), len(file_tayfam_core_v1_stats_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

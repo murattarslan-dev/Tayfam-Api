@@ -76,6 +76,9 @@ func (f *fakeCore) CancelInvitation(ctx context.Context, in *corev1.CancelInvita
 }
 
 func (f *fakeCore) GetUserProfile(ctx context.Context, in *corev1.GetUserProfileRequest, _ ...grpc.CallOption) (*corev1.GetUserProfileResponse, error) {
+	if f.profile != nil {
+		return &corev1.GetUserProfileResponse{Profile: f.profile}, f.record(ctx, in)
+	}
 	return &corev1.GetUserProfileResponse{Profile: &corev1.UserProfile{
 		UserId: userID, DisplayName: "Ece", ActivityVisible: true,
 		MutualTayfas: []*corev1.MutualTayfa{{TayfaId: tayfaID, Name: "Klasikçiler"}},
@@ -376,6 +379,53 @@ func TestProfileFieldRoutes(t *testing.T) {
 	got, tok, _ := f.last()
 	if _, ok := got.(*identityv1.SnoozeProfilePromptRequest); w.Code != http.StatusNoContent || !ok || tok != "USERTOKEN" {
 		t.Fatalf("erteleme: %d %v", w.Code, got)
+	}
+}
+
+// TestStatsVisibilityRoutes (issue #267): stats_visibility goes to
+// identity by name, an unknown name never leaves gateway; Account carries
+// the setting.
+func TestStatsVisibilityRoutes(t *testing.T) {
+	f := &fakeCore{}
+	h := coreRouter(f)
+	w := as(h, "PATCH", "/v1/me/account", `{"stats_visibility":"friends"}`)
+	got, _, _ := f.last()
+	req := got.(*identityv1.UpdateAccountRequest)
+	if w.Code != 200 || req.GetStatsVisibility() != identityv1.AboutVisibility_ABOUT_VISIBILITY_FRIENDS || req.Profile != nil ||
+		req.GetAboutVisibility() != identityv1.AboutVisibility_ABOUT_VISIBILITY_UNSPECIFIED {
+		t.Fatalf("istatistik görünürlüğü: %d %v", w.Code, req)
+	}
+	_, _, n0 := f.last()
+	for _, body := range []string{`{"stats_visibility":"public"}`, `{"stats_visibility":""}`, `{"stats_visibility":1}`} {
+		if w := as(h, "PATCH", "/v1/me/account", body); w.Code != http.StatusBadRequest {
+			t.Errorf("%s: %d", body, w.Code)
+		}
+	}
+	if _, _, n := f.last(); n != n0 {
+		t.Fatal("geçersiz istek identity'ye ulaştı")
+	}
+	a := accountFrom(&identityv1.GetAccountResponse{StatsVisibility: identityv1.AboutVisibility_ABOUT_VISIBILITY_NONE})
+	if a.StatsVisibility != "none" {
+		t.Fatalf("hesap: %+v", a)
+	}
+}
+
+// TestProfileStatsJSON (issue #267): stats and badges come only when core
+// says the caller may see them; otherwise neither field exists.
+func TestProfileStatsJSON(t *testing.T) {
+	f := &fakeCore{profile: &corev1.UserProfile{
+		UserId: userID, DisplayName: "Ece", StatsVisible: true, BadgesVisible: true,
+		Stats: []*corev1.UserStat{{MetricKey: "attended", Source: "common", Value: 5, EventCount: 5}},
+	}}
+	w := as(coreRouter(f), "GET", "/v1/users/"+userID+"/profile", "")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"stats":[{"metric_key":"attended","source":"common","value":5,"event_count":5}]`) ||
+		!strings.Contains(w.Body.String(), `"badges":[]`) {
+		t.Fatalf("görünür istatistik: %d %s", w.Code, w.Body)
+	}
+	f.profile = &corev1.UserProfile{UserId: userID, DisplayName: "Ece"}
+	w = as(coreRouter(f), "GET", "/v1/users/"+userID+"/profile", "")
+	if w.Code != 200 || strings.Contains(w.Body.String(), `"stats"`) || strings.Contains(w.Body.String(), `"badges"`) {
+		t.Fatalf("gizli istatistik: %d %s", w.Code, w.Body)
 	}
 }
 

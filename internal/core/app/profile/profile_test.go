@@ -340,3 +340,111 @@ func TestProfileBadges(t *testing.T) {
 		t.Fatalf("başkasına rozet göründü: %+v", other.Badges)
 	}
 }
+
+// TestStatsAccessTable (issue #267; ADR-0026 §4): the personal statistics
+// setting has the about_visibility values and audiences; one always sees
+// one's own; an unknown value shows nothing.
+func TestStatsAccessTable(t *testing.T) {
+	for _, tc := range []struct {
+		v    StatsVisibility
+		a    Audience
+		want bool
+	}{
+		{StatsNone, AudienceSelf, true},
+		{StatsNone, AudienceFriend, false},
+		{StatsNone, AudienceMutualTayfa, false},
+		{StatsNone, AudienceOther, false},
+		{StatsFriends, AudienceSelf, true},
+		{StatsFriends, AudienceFriend, true},
+		{StatsFriends, AudienceMutualTayfa, false},
+		{StatsFriends, AudienceOther, false},
+		{StatsFriendsAndMutual, AudienceSelf, true},
+		{StatsFriendsAndMutual, AudienceFriend, true},
+		{StatsFriendsAndMutual, AudienceMutualTayfa, true},
+		{StatsFriendsAndMutual, AudienceOther, false},
+		{"bilinmeyen", AudienceFriend, false},
+		{"", AudienceMutualTayfa, false},
+	} {
+		if got := StatsAccess(tc.v, tc.a); got != tc.want {
+			t.Errorf("StatsAccess(%q, %d) = %v, %v bekleniyordu", tc.v, tc.a, got, tc.want)
+		}
+	}
+}
+
+// TestProfileStats (issue #267; ADR-0026 §4, ADR-0039 §3): the personal
+// statistics (all-time, summed over tayfas) and badges follow the user's
+// stats_visibility; a viewer it does not allow gets neither, not even an
+// empty list. The default is none.
+func TestProfileStats(t *testing.T) {
+	e := setup(t)
+	subject := e.user(t, VisibilityPublic)
+	friend, mate, stranger := e.user(t, VisibilityPublic), e.user(t, VisibilityPublic), e.user(t, VisibilityPublic)
+	e.friends(t, subject, friend)
+	tf1 := e.tayfa(t, "Birinci", subject, mate)
+	tf2 := e.tayfa(t, "İkinci", subject)
+	for _, s := range []struct {
+		tf     id.ID
+		year   int32
+		metric string
+		value  float64
+	}{
+		{tf1, 0, "attended", 3},
+		{tf2, 0, "attended", 2},
+		{tf1, 2025, "attended", 3},
+		{tf1, 0, "test_hike.distance", 12.5},
+	} {
+		e.seed(t, `INSERT INTO user_stats (user_id, tayfa_id, year, metric_key, source, value, event_count, computed_at)
+			VALUES ($1, $2, $3, $4, CASE WHEN $4 LIKE '%.%' THEN 'measure' ELSE 'common' END, $5, 1, now())`,
+			subject.PG(), s.tf.PG(), s.year, s.metric, s.value)
+	}
+	e.seed(t, `INSERT INTO user_badges (id, user_id, badge_key, period_key, earned_at) VALUES ($1, $2, 'first_event', 'all', now())`,
+		id.New().PG(), subject.PG())
+
+	check := func(setting StatsVisibility, viewer id.ID, want bool) {
+		t.Helper()
+		e.seed(t, `UPDATE user_profiles SET stats_visibility = $2 WHERE user_id = $1`, subject.PG(), string(setting))
+		p, err := e.svc.GetProfile(ctx, viewer, subject)
+		must(t, err)
+		if p.StatsVisible != want || p.BadgesVisible != want {
+			t.Fatalf("%s / %s: istatistik %v, rozet %v; %v bekleniyordu", setting, viewer, p.StatsVisible, p.BadgesVisible, want)
+		}
+		if !want {
+			if p.Stats != nil || p.Badges != nil {
+				t.Fatalf("%s: gizli istatistik döndü: %+v %+v", setting, p.Stats, p.Badges)
+			}
+			return
+		}
+		got := map[string]float64{}
+		for _, s := range p.Stats {
+			got[s.Metric] = s.Value
+		}
+		if len(got) != 2 || got["attended"] != 5 || got["test_hike.distance"] != 12.5 || len(p.Badges) != 1 {
+			t.Fatalf("%s: istatistik %v, rozet %+v", setting, got, p.Badges)
+		}
+	}
+	// Default none: only the user.
+	if v := func() string {
+		var s string
+		must(t, e.admin.QueryRow(ctx, `SELECT stats_visibility FROM user_profiles WHERE user_id = $1`, subject.PG()).Scan(&s))
+		return s
+	}(); v != "none" {
+		t.Fatalf("varsayılan: %s", v)
+	}
+	for _, tc := range []struct {
+		setting StatsVisibility
+		viewer  id.ID
+		want    bool
+	}{
+		{StatsNone, subject, true},
+		{StatsNone, friend, false},
+		{StatsNone, mate, false},
+		{StatsFriends, friend, true},
+		{StatsFriends, mate, false},
+		{StatsFriends, stranger, false},
+		{StatsFriendsAndMutual, friend, true},
+		{StatsFriendsAndMutual, mate, true},
+		{StatsFriendsAndMutual, stranger, false},
+	} {
+		check(tc.setting, tc.viewer, tc.want)
+	}
+}

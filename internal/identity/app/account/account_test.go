@@ -216,7 +216,7 @@ func TestSetActivityVisibility(t *testing.T) {
 		t.Fatalf("görünürlük = %s", a.ActivityVisibility)
 	}
 	// core gets the whole public profile with the new setting.
-	if got := events(); len(got) != 1 || got[0] != `{"display_name": "Deniz", "activity_visibility": "private"}` {
+	if got := events(); len(got) != 1 || got[0] != `{"display_name": "Deniz", "stats_visibility": "none", "activity_visibility": "private"}` {
 		t.Fatalf("olaylar = %q", got)
 	}
 	if _, err := e.svc.SetActivityVisibility(ctx, id.New(), VisibilityPublic); !errors.Is(err, ErrUnknownUser) {
@@ -280,7 +280,7 @@ func TestAvatar(t *testing.T) {
 	if a, _ := svc.Get(ctx, u); a.AvatarUploadID != avatar || media.got[len(media.got)-1] != avatar {
 		t.Fatalf("avatar = %v", a.AvatarUploadID)
 	}
-	if got := events(); len(got) != 1 || got[0] != `{"display_name": "Deniz", "avatar_upload_id": "`+avatar.String()+`", "activity_visibility": "tayfa"}` {
+	if got := events(); len(got) != 1 || got[0] != `{"display_name": "Deniz", "avatar_upload_id": "`+avatar.String()+`", "stats_visibility": "none", "activity_visibility": "tayfa"}` {
 		t.Fatalf("olaylar = %q", got)
 	}
 	// The same avatar again writes nothing.
@@ -293,7 +293,7 @@ func TestAvatar(t *testing.T) {
 	if a, _ := svc.Get(ctx, u); a.AvatarUploadID != (id.ID{}) {
 		t.Fatal("avatar kaldırılmalı")
 	}
-	if got := events(); len(got) != 2 || got[1] != `{"display_name": "Deniz", "activity_visibility": "tayfa"}` {
+	if got := events(); len(got) != 2 || got[1] != `{"display_name": "Deniz", "stats_visibility": "none", "activity_visibility": "tayfa"}` {
 		t.Fatalf("olaylar = %q", got)
 	}
 	if err := svc.SetAvatar(ctx, id.New(), avatar); !errors.Is(err, ErrUnknownUser) {
@@ -361,7 +361,7 @@ func TestUpdateDisplayName(t *testing.T) {
 		t.Fatalf("hesap = %+v", a)
 	}
 	// One event carries both changes; the old name is nowhere.
-	if got := e.profileEvents(t, u); len(got) != 1 || got[0] != `{"display_name": "Deniz Su", "activity_visibility": "private"}` {
+	if got := e.profileEvents(t, u); len(got) != 1 || got[0] != `{"display_name": "Deniz Su", "stats_visibility": "none", "activity_visibility": "private"}` {
 		t.Fatalf("olaylar = %q", got)
 	}
 	var n int
@@ -461,6 +461,37 @@ func TestUpdateBirthdayVisibility(t *testing.T) {
 	}
 	if got := e.profileEvents(t, u); len(got) != 0 {
 		t.Fatalf("profil olayı yazıldı: %q", got)
+	}
+}
+
+// TestUpdateStatsVisibility (issue #267; ADR-0026 §4): none by default;
+// an unknown value changes nothing; a change reaches core with the whole
+// public profile, the same value writes no event.
+func TestUpdateStatsVisibility(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	u, _ := e.registered(t, "Deniz")
+	if a, err := e.svc.Get(ctx, u); err != nil || a.StatsVisibility != profilefields.VisibleNone {
+		t.Fatalf("varsayılan = %+v %v", a, err)
+	}
+	bad := profilefields.AboutVisibility("public")
+	if err := e.svc.Update(ctx, u, Changes{StatsVisibility: &bad}); !errors.Is(err, ErrInvalidVisibility) {
+		t.Fatalf("geçersiz: %v", err)
+	}
+	same := profilefields.VisibleNone
+	if err := e.svc.Update(ctx, u, Changes{StatsVisibility: &same}); err != nil || len(e.profileEvents(t, u)) != 0 {
+		t.Fatalf("aynı değer: %v %q", err, e.profileEvents(t, u))
+	}
+	v := profilefields.VisibleFriendsAndMutual
+	if err := e.svc.Update(ctx, u, Changes{StatsVisibility: &v}); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := e.svc.Get(ctx, u); a.StatsVisibility != v {
+		t.Fatalf("görünürlük = %s", a.StatsVisibility)
+	}
+	if got := e.profileEvents(t, u); len(got) != 1 ||
+		got[0] != `{"display_name": "Deniz", "stats_visibility": "friends_and_mutual", "activity_visibility": "tayfa"}` {
+		t.Fatalf("olaylar = %q", got)
 	}
 }
 

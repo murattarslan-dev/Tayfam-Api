@@ -551,22 +551,24 @@ func (q *Queries) GetSafetyContactForUpdate(ctx context.Context, arg GetSafetyCo
 
 const getTayfaDiscoverState = `-- name: GetTayfaDiscoverState :one
 
-SELECT t.visibility, d.status AS review_status, d.masked_status, d.masked_until
+SELECT t.visibility, d.status AS review_status, d.masked_status, d.masked_until, t.stats_showcase
 FROM tayfas t
 LEFT JOIN tayfa_discover d ON d.tayfa_id = t.id
 WHERE t.id = $1
 `
 
 type GetTayfaDiscoverStateRow struct {
-	Visibility   string
-	ReviewStatus pgtype.Text
-	MaskedStatus pgtype.Text
-	MaskedUntil  pgtype.Timestamptz
+	Visibility    string
+	ReviewStatus  pgtype.Text
+	MaskedStatus  pgtype.Text
+	MaskedUntil   pgtype.Timestamptz
+	StatsShowcase bool
 }
 
 // ---------------------------------------------------------------------------
 // Tayfa yöneticisinin ayarı
 // masked_*: yöneticilerin göreceği önceki durum (ADR-0033 §7).
+// stats_showcase: vitrinde istatistik göster (issue #267, ADR-0026 §3).
 func (q *Queries) GetTayfaDiscoverState(ctx context.Context, tayfaID pgtype.UUID) (GetTayfaDiscoverStateRow, error) {
 	row := q.db.QueryRow(ctx, getTayfaDiscoverState, tayfaID)
 	var i GetTayfaDiscoverStateRow
@@ -575,6 +577,7 @@ func (q *Queries) GetTayfaDiscoverState(ctx context.Context, tayfaID pgtype.UUID
 		&i.ReviewStatus,
 		&i.MaskedStatus,
 		&i.MaskedUntil,
+		&i.StatsShowcase,
 	)
 	return i, err
 }
@@ -612,7 +615,7 @@ WITH me AS (
 )
 SELECT e.id AS event_id, e.type, e.title, e.starts_at, e.ends_at, e.city AS event_city, e.district AS event_district,
        t.id AS tayfa_id, t.name AS tayfa_name, t.description AS tayfa_description, t.city AS tayfa_city,
-       t.created_at AS tayfa_created_at,
+       t.created_at AS tayfa_created_at, t.stats_showcase AS tayfa_stats_showcase,
        ranked.n::integer AS friend_count,
        (SELECT count(*) FROM events x
         WHERE x.tayfa_id = t.id AND x.deleted_at IS NULL AND x.status <> 'cancelled'
@@ -644,22 +647,23 @@ type ListDiscoverFeedParams struct {
 }
 
 type ListDiscoverFeedRow struct {
-	EventID          pgtype.UUID
-	Type             string
-	Title            string
-	StartsAt         pgtype.Timestamptz
-	EndsAt           pgtype.Timestamptz
-	EventCity        pgtype.Text
-	EventDistrict    pgtype.Text
-	TayfaID          pgtype.UUID
-	TayfaName        string
-	TayfaDescription pgtype.Text
-	TayfaCity        pgtype.Text
-	TayfaCreatedAt   pgtype.Timestamptz
-	FriendCount      int32
-	EventCount       int32
-	AttendanceCount  int32
-	Friends          []byte
+	EventID            pgtype.UUID
+	Type               string
+	Title              string
+	StartsAt           pgtype.Timestamptz
+	EndsAt             pgtype.Timestamptz
+	EventCity          pgtype.Text
+	EventDistrict      pgtype.Text
+	TayfaID            pgtype.UUID
+	TayfaName          string
+	TayfaDescription   pgtype.Text
+	TayfaCity          pgtype.Text
+	TayfaCreatedAt     pgtype.Timestamptz
+	TayfaStatsShowcase bool
+	FriendCount        int32
+	EventCount         int32
+	AttendanceCount    int32
+	Friends            []byte
 }
 
 // Keşfet (issue #210, ADR-0033; herkese açık: issue #227, ADR-0035).
@@ -704,6 +708,7 @@ func (q *Queries) ListDiscoverFeed(ctx context.Context, arg ListDiscoverFeedPara
 			&i.TayfaDescription,
 			&i.TayfaCity,
 			&i.TayfaCreatedAt,
+			&i.TayfaStatsShowcase,
 			&i.FriendCount,
 			&i.EventCount,
 			&i.AttendanceCount,
@@ -951,6 +956,26 @@ func (q *Queries) SafetyContactAllowed(ctx context.Context, arg SafetyContactAll
 	var column_1 pgtype.Bool
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const setTayfaStatsShowcase = `-- name: SetTayfaStatsShowcase :execrows
+UPDATE tayfas SET stats_showcase = $1
+WHERE id = $2 AND deleted_at IS NULL AND stats_showcase <> $1
+`
+
+type SetTayfaStatsShowcaseParams struct {
+	StatsShowcase bool
+	ID            pgtype.UUID
+}
+
+// Vitrin bayrağı (issue #267, ADR-0026 §3). Aynı değer satırı değiştirmez;
+// etkilenen satır 0 olur ve denetim kaydı yazılmaz.
+func (q *Queries) SetTayfaStatsShowcase(ctx context.Context, arg SetTayfaStatsShowcaseParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setTayfaStatsShowcase, arg.StatsShowcase, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setTayfaVisibility = `-- name: SetTayfaVisibility :execrows

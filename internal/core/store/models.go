@@ -811,6 +811,7 @@ type Tayfa struct {
 	Kind                   string
 	ConvertedAt            pgtype.Timestamptz
 	NowCreateMinRole       string
+	StatsShowcase          bool
 }
 
 type TayfaBadge struct {
@@ -959,6 +960,7 @@ type UserProfile struct {
 	DeletedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	ActivityVisibility string
+	StatsVisibility    string
 }
 
 type UserStat struct {

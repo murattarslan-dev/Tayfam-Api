@@ -19,17 +19,18 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	DiscoverService_ListDiscoverFeed_FullMethodName   = "/tayfam.core.v1.DiscoverService/ListDiscoverFeed"
-	DiscoverService_JoinFromDiscover_FullMethodName   = "/tayfam.core.v1.DiscoverService/JoinFromDiscover"
-	DiscoverService_GetTayfaDiscover_FullMethodName   = "/tayfam.core.v1.DiscoverService/GetTayfaDiscover"
-	DiscoverService_SetTayfaDiscover_FullMethodName   = "/tayfam.core.v1.DiscoverService/SetTayfaDiscover"
-	DiscoverService_GetEventFeedback_FullMethodName   = "/tayfam.core.v1.DiscoverService/GetEventFeedback"
-	DiscoverService_SetEventFeedback_FullMethodName   = "/tayfam.core.v1.DiscoverService/SetEventFeedback"
-	DiscoverService_GetSafetyContact_FullMethodName   = "/tayfam.core.v1.DiscoverService/GetSafetyContact"
-	DiscoverService_SetSafetyContact_FullMethodName   = "/tayfam.core.v1.DiscoverService/SetSafetyContact"
-	DiscoverService_ClearSafetyContact_FullMethodName = "/tayfam.core.v1.DiscoverService/ClearSafetyContact"
-	DiscoverService_MarkReturned_FullMethodName       = "/tayfam.core.v1.DiscoverService/MarkReturned"
-	DiscoverService_ListSafetyShares_FullMethodName   = "/tayfam.core.v1.DiscoverService/ListSafetyShares"
+	DiscoverService_ListDiscoverFeed_FullMethodName      = "/tayfam.core.v1.DiscoverService/ListDiscoverFeed"
+	DiscoverService_JoinFromDiscover_FullMethodName      = "/tayfam.core.v1.DiscoverService/JoinFromDiscover"
+	DiscoverService_GetTayfaDiscover_FullMethodName      = "/tayfam.core.v1.DiscoverService/GetTayfaDiscover"
+	DiscoverService_SetTayfaDiscover_FullMethodName      = "/tayfam.core.v1.DiscoverService/SetTayfaDiscover"
+	DiscoverService_SetTayfaStatsShowcase_FullMethodName = "/tayfam.core.v1.DiscoverService/SetTayfaStatsShowcase"
+	DiscoverService_GetEventFeedback_FullMethodName      = "/tayfam.core.v1.DiscoverService/GetEventFeedback"
+	DiscoverService_SetEventFeedback_FullMethodName      = "/tayfam.core.v1.DiscoverService/SetEventFeedback"
+	DiscoverService_GetSafetyContact_FullMethodName      = "/tayfam.core.v1.DiscoverService/GetSafetyContact"
+	DiscoverService_SetSafetyContact_FullMethodName      = "/tayfam.core.v1.DiscoverService/SetSafetyContact"
+	DiscoverService_ClearSafetyContact_FullMethodName    = "/tayfam.core.v1.DiscoverService/ClearSafetyContact"
+	DiscoverService_MarkReturned_FullMethodName          = "/tayfam.core.v1.DiscoverService/MarkReturned"
+	DiscoverService_ListSafetyShares_FullMethodName      = "/tayfam.core.v1.DiscoverService/ListSafetyShares"
 )
 
 // DiscoverServiceClient is the client API for DiscoverService service.
@@ -98,6 +99,15 @@ type DiscoverServiceClient interface {
 	// ERROR_REASON_TAYFA_READ_ONLY, ERROR_REASON_DISCOVER_TOO_FEW_MEMBERS
 	// (turning on with fewer than five active members).
 	SetTayfaDiscover(ctx context.Context, in *SetTayfaDiscoverRequest, opts ...grpc.CallOption) (*SetTayfaDiscoverResponse, error)
+	// SetTayfaStatsShowcase shows or hides the tayfa's statistics and badges
+	// in its Keşfet card (issue #267, ADR-0026 §3; on by default). It works
+	// whether or not the tayfa is in Keşfet and under any flag. Admin of the
+	// tayfa (permission tayfa.stats_showcase.update); a change is written to
+	// the audit log. Returns the tayfa's Keşfet state.
+	//
+	// Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+	// ERROR_REASON_TAYFA_READ_ONLY.
+	SetTayfaStatsShowcase(ctx context.Context, in *SetTayfaStatsShowcaseRequest, opts ...grpc.CallOption) (*SetTayfaStatsShowcaseResponse, error)
 	// GetEventFeedback returns the caller's own "Was everything all right?"
 	// answer; UNSPECIFIED when there is none. The feedback methods also
 	// accept a member who came from Keşfet within 30 days of their
@@ -203,6 +213,16 @@ func (c *discoverServiceClient) SetTayfaDiscover(ctx context.Context, in *SetTay
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SetTayfaDiscoverResponse)
 	err := c.cc.Invoke(ctx, DiscoverService_SetTayfaDiscover_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *discoverServiceClient) SetTayfaStatsShowcase(ctx context.Context, in *SetTayfaStatsShowcaseRequest, opts ...grpc.CallOption) (*SetTayfaStatsShowcaseResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetTayfaStatsShowcaseResponse)
+	err := c.cc.Invoke(ctx, DiscoverService_SetTayfaStatsShowcase_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -345,6 +365,15 @@ type DiscoverServiceServer interface {
 	// ERROR_REASON_TAYFA_READ_ONLY, ERROR_REASON_DISCOVER_TOO_FEW_MEMBERS
 	// (turning on with fewer than five active members).
 	SetTayfaDiscover(context.Context, *SetTayfaDiscoverRequest) (*SetTayfaDiscoverResponse, error)
+	// SetTayfaStatsShowcase shows or hides the tayfa's statistics and badges
+	// in its Keşfet card (issue #267, ADR-0026 §3; on by default). It works
+	// whether or not the tayfa is in Keşfet and under any flag. Admin of the
+	// tayfa (permission tayfa.stats_showcase.update); a change is written to
+	// the audit log. Returns the tayfa's Keşfet state.
+	//
+	// Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+	// ERROR_REASON_TAYFA_READ_ONLY.
+	SetTayfaStatsShowcase(context.Context, *SetTayfaStatsShowcaseRequest) (*SetTayfaStatsShowcaseResponse, error)
 	// GetEventFeedback returns the caller's own "Was everything all right?"
 	// answer; UNSPECIFIED when there is none. The feedback methods also
 	// accept a member who came from Keşfet within 30 days of their
@@ -427,6 +456,9 @@ func (UnimplementedDiscoverServiceServer) GetTayfaDiscover(context.Context, *Get
 }
 func (UnimplementedDiscoverServiceServer) SetTayfaDiscover(context.Context, *SetTayfaDiscoverRequest) (*SetTayfaDiscoverResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetTayfaDiscover not implemented")
+}
+func (UnimplementedDiscoverServiceServer) SetTayfaStatsShowcase(context.Context, *SetTayfaStatsShowcaseRequest) (*SetTayfaStatsShowcaseResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetTayfaStatsShowcase not implemented")
 }
 func (UnimplementedDiscoverServiceServer) GetEventFeedback(context.Context, *GetEventFeedbackRequest) (*GetEventFeedbackResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetEventFeedback not implemented")
@@ -538,6 +570,24 @@ func _DiscoverService_SetTayfaDiscover_Handler(srv interface{}, ctx context.Cont
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DiscoverServiceServer).SetTayfaDiscover(ctx, req.(*SetTayfaDiscoverRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DiscoverService_SetTayfaStatsShowcase_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetTayfaStatsShowcaseRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DiscoverServiceServer).SetTayfaStatsShowcase(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DiscoverService_SetTayfaStatsShowcase_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DiscoverServiceServer).SetTayfaStatsShowcase(ctx, req.(*SetTayfaStatsShowcaseRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -690,6 +740,10 @@ var DiscoverService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetTayfaDiscover",
 			Handler:    _DiscoverService_SetTayfaDiscover_Handler,
+		},
+		{
+			MethodName: "SetTayfaStatsShowcase",
+			Handler:    _DiscoverService_SetTayfaStatsShowcase_Handler,
 		},
 		{
 			MethodName: "GetEventFeedback",
