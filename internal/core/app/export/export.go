@@ -77,6 +77,8 @@ const (
 	// Issue #256: the questions one asked (anonymous ones included) and
 	// voted for.
 	SectionEventQuestions = "event_questions"
+	// Issue #258: one's badges (ADR-0039 §5).
+	SectionBadges = "badges"
 )
 
 const (
@@ -245,6 +247,10 @@ var sections = []struct {
 	{SectionEventQuestions, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportEventQuestions(ctx, store.ExportEventQuestionsParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportEventQuestionsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionBadges, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportUserBadges(ctx, store.ExportUserBadgesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportUserBadgesRow) row { return row{x.K, x.Data} })
 	}},
 }
 

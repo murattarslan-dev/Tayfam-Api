@@ -324,6 +324,19 @@ WHERE (q.author_id = @user_id
 ORDER BY q.id
 LIMIT @n;
 
+-- Kazandığınız rozetler (issue #258; ADR-0039 §5): rozetin anahtarı,
+-- dönemi ve kazanma zamanı; şampiyonlukta etkinlik ve tayfası. Rozetin
+-- adı katalogdadır.
+-- name: ExportUserBadges :many
+SELECT b.id AS k, jsonb_build_object(
+  'badge_key', b.badge_key, 'period', b.period_key, 'tayfa_id', b.tayfa_id, 'event_id', b.event_id,
+  'earned_at', b.earned_at
+) AS data
+FROM user_badges AS b
+WHERE b.user_id = @user_id AND b.id > @after
+ORDER BY b.id
+LIMIT @n;
+
 -- Albüm fotoğrafları (issue #206); dosyaların kendisi zip'e girmez
 -- (ADR-0021 §5), uploads bölümü onları listeler.
 -- name: ExportEventPhotos :many

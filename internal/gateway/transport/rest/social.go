@@ -229,6 +229,9 @@ type profileJSON struct {
 	ActivityVisible bool              `json:"activity_visible"`
 	// Only on one's own profile.
 	ActivityVisibility string `json:"activity_visibility,omitempty"`
+	// Issue #258: absent unless the caller may see the user's badges;
+	// [] when there are none.
+	Badges *[]earnedBadgeJSON `json:"badges,omitempty"`
 	// From identity (issue #185, #186); absent unless the caller may see
 	// them.
 	Birthday *birthdayJSON `json:"birthday,omitempty"`
@@ -595,6 +598,10 @@ func (h coreHandlers) getProfile(ctx context.Context, w http.ResponseWriter, r *
 	}
 	for _, t := range p.GetMutualTayfas() {
 		out.MutualTayfas = append(out.MutualTayfas, mutualTayfaJSON{ID: t.GetTayfaId(), Name: t.GetName()})
+	}
+	if p.GetBadgesVisible() {
+		b := earnedBadgesFrom(p.GetBadges())
+		out.Badges = &b
 	}
 	h.addProfileDetails(ctx, r, u, &out)
 	writeJSON(w, http.StatusOK, out)

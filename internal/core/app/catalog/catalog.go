@@ -5,7 +5,8 @@
 // Event types are data in core's database: catalog_interests,
 // catalog_event_types (the current version of each type),
 // catalog_event_type_versions (every version, immutable), catalog_study_tags
-// (the study tag list, study_tags.go) and catalog_meta (the version of the
+// (the study tag list, study_tags.go), catalog_badges (badge definitions,
+// badges.go) and catalog_meta (the version of the
 // catalog as a whole). The service's database user can
 // only read them.
 //
@@ -99,6 +100,9 @@ type Catalog struct {
 	// StudyTags holds the study tag list, retired tags included, by
 	// position (study_tags.go).
 	StudyTags []StudyTag
+	// Badges holds every badge definition, retired ones included, by
+	// position (badges.go): an earned badge keeps its name and icon.
+	Badges []Badge
 }
 
 // Get returns the catalog. When known is the catalog's current version the
@@ -146,6 +150,9 @@ func (s *Service) Get(ctx context.Context, known int64) (c Catalog, notModified 
 			c.Types = append(c.Types, t)
 		}
 		if c.StudyTags, err = studyTags(ctx, q); err != nil {
+			return err
+		}
+		if c.Badges, err = Badges(ctx, q); err != nil {
 			return err
 		}
 		return nil

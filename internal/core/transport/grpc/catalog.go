@@ -59,7 +59,36 @@ func (s *CatalogServer) GetCatalog(ctx context.Context, req *corev1.GetCatalogRe
 			Key: t.Key, ParentKey: t.ParentKey, Position: t.Position, Labels: t.Labels, Status: catalogStatusPB(t.Status),
 		})
 	}
+	out.Badges = make([]*corev1.CatalogBadge, 0, len(c.Badges))
+	for _, b := range c.Badges {
+		out.Badges = append(out.Badges, catalogBadgePB(b))
+	}
 	return out, nil
+}
+
+var (
+	badgeScopesPB = map[string]corev1.BadgeScope{
+		catalog.BadgeScopeUser: corev1.BadgeScope_BADGE_SCOPE_USER, catalog.BadgeScopeTayfa: corev1.BadgeScope_BADGE_SCOPE_TAYFA,
+	}
+	badgeKindsPB = map[string]corev1.BadgeRuleKind{
+		catalog.RuleThreshold: corev1.BadgeRuleKind_BADGE_RULE_KIND_THRESHOLD,
+		catalog.RuleFirst:     corev1.BadgeRuleKind_BADGE_RULE_KIND_FIRST,
+		catalog.RuleChampion:  corev1.BadgeRuleKind_BADGE_RULE_KIND_CHAMPION,
+	}
+	badgePeriodsPB = map[string]corev1.BadgePeriod{
+		catalog.PeriodAllTime: corev1.BadgePeriod_BADGE_PERIOD_ALL_TIME, catalog.PeriodYear: corev1.BadgePeriod_BADGE_PERIOD_YEAR,
+	}
+)
+
+func catalogBadgePB(b catalog.Badge) *corev1.CatalogBadge {
+	return &corev1.CatalogBadge{
+		Key: b.Key, Scope: badgeScopesPB[b.Scope], Position: b.Position, Labels: b.Labels, Icon: b.Icon,
+		Status: catalogStatusPB(b.Status),
+		Rule: &corev1.CatalogBadgeRule{
+			Kind: badgeKindsPB[b.Rule.Kind], Metric: b.Rule.Metric, Value: b.Rule.Value,
+			Period: badgePeriodsPB[b.Rule.Period], EventType: b.Rule.EventType,
+		},
+	}
 }
 
 // GetEventTypeVersion implements corev1.CatalogServiceServer.

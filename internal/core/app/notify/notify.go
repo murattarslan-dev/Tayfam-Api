@@ -76,6 +76,12 @@ const (
 	// winner: a guest winner has no name to give, and the client reads the
 	// celebration from core.
 	TypeCelebration = "celebration"
+	// TypeBadgeEarned: a badge was earned (issue #258; ADR-0039 §4). No
+	// actor, never the badge itself; in-app only (no push). A personal
+	// badge goes to its earner with the earner as target and no tayfa; a
+	// tayfa badge goes to the tayfa's admins and moderators with the tayfa
+	// as target.
+	TypeBadgeEarned = "badge_earned"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -101,6 +107,15 @@ func WithoutTayfa(typ string) bool {
 	return typ == TypeFriendRequest || typ == TypeFriendAccepted || typ == TypeFriendSuggestion || typ == TypeSafetyAlert
 }
 
+// hasTayfa reports whether r must name a tayfa: badge_earned names one
+// only for a tayfa badge (target tayfa).
+func hasTayfa(r Request) bool {
+	if r.Type == TypeBadgeEarned {
+		return r.TargetType == TargetTayfa
+	}
+	return !WithoutTayfa(r.Type)
+}
+
 // Request is one notification for many recipients.
 type Request struct {
 	Type       string
@@ -115,7 +130,7 @@ type Request struct {
 // most MaxRecipients each. No recipients, no event. q must run in the
 // change's transaction.
 func Write(ctx context.Context, q *store.Queries, r Request, recipients []id.ID) error {
-	if r.Type == "" || r.TargetType == "" || r.Target == (id.ID{}) || (r.Tayfa == id.ID{}) != WithoutTayfa(r.Type) {
+	if r.Type == "" || r.TargetType == "" || r.Target == (id.ID{}) || (r.Tayfa != id.ID{}) != hasTayfa(r) {
 		return errors.New("bildirim isteği eksik")
 	}
 	for k := range r.Extra {

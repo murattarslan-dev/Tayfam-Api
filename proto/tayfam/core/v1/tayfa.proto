@@ -4,6 +4,7 @@ package tayfam.core.v1;
 
 import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/badge.proto";
 import "tayfam/core/v1/membership.proto";
 
 // TayfaService creates tayfas and manages their settings, modules, join
@@ -234,6 +235,9 @@ message GetTayfaResponse {
   // The caller's role in this tayfa, so the client can show the right
   // actions. The server checks permissions again on every call.
   Role caller_role = 2;
+  // The tayfa's badges in the order earned, for its members (issue #258;
+  // ADR-0039 §3).
+  repeated EarnedBadge badges = 3;
 }
 
 message ListMyTayfasRequest {

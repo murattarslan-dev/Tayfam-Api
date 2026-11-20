@@ -46,6 +46,8 @@ func (s *ProfileServer) GetUserProfile(ctx context.Context, req *corev1.GetUserP
 		Self: p.Self, FriendState: friendStates[p.Friend], ActivityVisible: p.ActivityVisible,
 		ActivityVisibility: visibilityToProto(p.ActivityVisibility),
 		MutualTayfas:       make([]*corev1.MutualTayfa, 0, len(p.MutualTayfas)),
+		BadgesVisible:      p.BadgesVisible,
+		Badges:             earnedBadgesPB(p.Badges),
 	}
 	for _, t := range p.MutualTayfas {
 		out.MutualTayfas = append(out.MutualTayfas, &corev1.MutualTayfa{TayfaId: t.ID.String(), Name: t.Name})

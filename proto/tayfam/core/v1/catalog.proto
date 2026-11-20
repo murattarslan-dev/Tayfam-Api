@@ -92,6 +92,65 @@ message CatalogStudyTag {
   CatalogStatus status = 5;
 }
 
+// Who earns a badge.
+enum BadgeScope {
+  BADGE_SCOPE_UNSPECIFIED = 0;
+  BADGE_SCOPE_USER = 1;
+  BADGE_SCOPE_TAYFA = 2;
+}
+
+// How a badge is earned (ADR-0039 §1).
+enum BadgeRuleKind {
+  BADGE_RULE_KIND_UNSPECIFIED = 0;
+  // A metric's total reached value within period.
+  BADGE_RULE_KIND_THRESHOLD = 1;
+  // The first attendance, of event_type or of any type. Personal only.
+  BADGE_RULE_KIND_FIRST = 2;
+  // A celebration of an event (of event_type, or of any type) named the
+  // person, or their team, the winner. Personal only.
+  BADGE_RULE_KIND_CHAMPION = 3;
+}
+
+// The period a threshold counts.
+enum BadgePeriod {
+  BADGE_PERIOD_UNSPECIFIED = 0;
+  BADGE_PERIOD_ALL_TIME = 1;
+  // Per calendar year: the badge can be earned once a year.
+  BADGE_PERIOD_YEAR = 2;
+}
+
+// CatalogBadgeRule is a badge's rule, for the client to explain it.
+message CatalogBadgeRule {
+  BadgeRuleKind kind = 1;
+  // Threshold only: a common metric (events, attended, participants,
+  // duration) or "<type key>.<key>", where key is a common metric of the
+  // type or one of its measure or log components.
+  string metric = 2;
+  // Threshold only: in the metric's unit (a duration in minutes).
+  double value = 3;
+  // Threshold only.
+  BadgePeriod period = 4;
+  // First and champion: the event type it is about; empty for any.
+  string event_type = 5;
+}
+
+// CatalogBadge is a badge definition (issue #258; ADR-0039 §1). Nothing
+// sensitive earns a badge: no sensitive measure, no type whose attendance
+// is sensitive.
+message CatalogBadge {
+  // Immutable; ^[a-z][a-z0-9_]{1,39}$.
+  string key = 1;
+  BadgeScope scope = 2;
+  // Listing order, ascending.
+  int32 position = 3;
+  // Language to name.
+  map<string, string> labels = 4;
+  string icon = 5;
+  // A retired badge is no longer earned; earned ones keep showing it.
+  CatalogStatus status = 6;
+  CatalogBadgeRule rule = 7;
+}
+
 message GetCatalogRequest {
   // The catalog version the caller already holds; 0 when none.
   int64 known_version = 1;
@@ -110,6 +169,8 @@ message GetCatalogResponse {
   // The study tag list, retired tags included, by position; the client
   // groups it by parent_key.
   repeated CatalogStudyTag study_tags = 5;
+  // Every badge definition, retired ones included, by position.
+  repeated CatalogBadge badges = 6;
 }
 
 message GetEventTypeVersionRequest {

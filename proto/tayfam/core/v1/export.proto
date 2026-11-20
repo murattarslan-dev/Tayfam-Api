@@ -118,6 +118,10 @@ enum CoreExportSection {
   // voted for (without their text). Other people's questions, votes and
   // who marked a question answered are not exported.
   CORE_EXPORT_SECTION_EVENT_QUESTIONS = 33;
+  // The badges the caller earned (issue #258, ADR-0039 §5): the badge's
+  // key, its period ("all" or the year), when it was earned, and for a
+  // champion badge the event and its tayfa. Tayfa badges are the tayfa's.
+  CORE_EXPORT_SECTION_BADGES = 34;
 }
 
 message ExportMyDataRequest {}

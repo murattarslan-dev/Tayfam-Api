@@ -33,6 +33,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/badge"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/social"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -140,6 +141,13 @@ type Profile struct {
 	ActivityVisible bool
 	// ActivityVisibility is filled only on one's own profile.
 	ActivityVisibility Visibility
+	// BadgesVisible tells whether Badges holds the user's personal badges
+	// (ADR-0039 §3): always on one's own profile, otherwise only when the
+	// personal statistics are visible to the viewer (ADR-0026 §4; the
+	// setting comes with issue #267 and is off by default, so until then
+	// never).
+	BadgesVisible bool
+	Badges        []badge.Earned
 }
 
 // Activity is one attendance record as the viewer may see it. Fields after
@@ -177,6 +185,12 @@ func (s *Service) GetProfile(ctx context.Context, caller, subject id.ID) (Profil
 		out.AvatarUploadID = id.ID(v.p.AvatarUploadID.Bytes)
 	}
 	out.ActivityVisible, _ = Access(Visibility(v.p.ActivityVisibility), v.audience)
+	// Issue #267 replaces false with the personal statistics setting.
+	if out.BadgesVisible = badge.ProfileVisible(out.Self, false); out.BadgesVisible {
+		if out.Badges, err = badge.ForUser(ctx, s.q, subject); err != nil {
+			return Profile{}, err
+		}
+	}
 	if out.Self {
 		out.ActivityVisibility = Visibility(v.p.ActivityVisibility)
 		return out, nil

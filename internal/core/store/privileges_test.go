@@ -68,6 +68,13 @@ var wantAppPrivileges = map[string]string{
 	"catalog_event_type_versions": "SELECT",
 	// Issue #259: the study tag list is catalog data too.
 	"catalog_study_tags": "SELECT",
+	// Issue #258: badge definitions are catalog data; an earned badge is
+	// never changed or taken back (ADR-0039 §2), only one's own go with
+	// one's account. Each frozen event is looked at once.
+	"catalog_badges":   "SELECT",
+	"user_badges":      "DELETE,INSERT,SELECT",
+	"tayfa_badges":     "INSERT,SELECT",
+	"event_badge_runs": "INSERT,SELECT",
 	// Issue #237: a value never moves to another event or field.
 	"event_field_values": "DELETE,INSERT,SELECT,UPDATE(updated_at,value)",
 	// Issue #238: a selection never moves to another event or component

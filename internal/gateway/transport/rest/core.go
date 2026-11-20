@@ -362,6 +362,8 @@ func (h coreHandlers) convertInstantTayfa(ctx context.Context, w http.ResponseWr
 type tayfaViewJSON struct {
 	Tayfa      tayfaJSON `json:"tayfa"`
 	CallerRole string    `json:"caller_role"`
+	// Issue #258: the tayfa's badges, for its members.
+	Badges []earnedBadgeJSON `json:"badges"`
 }
 
 func (h coreHandlers) getTayfa(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -374,7 +376,7 @@ func (h coreHandlers) getTayfa(ctx context.Context, w http.ResponseWriter, r *ht
 		h.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, tayfaViewJSON{tayfaFrom(resp.GetTayfa()), roles.name(resp.GetCallerRole())})
+	writeJSON(w, http.StatusOK, tayfaViewJSON{tayfaFrom(resp.GetTayfa()), roles.name(resp.GetCallerRole()), earnedBadgesFrom(resp.GetBadges())})
 }
 
 type myTayfaJSON struct {
