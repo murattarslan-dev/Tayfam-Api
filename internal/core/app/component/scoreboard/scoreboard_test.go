@@ -567,6 +567,45 @@ func TestScoreboardTablesAndRounds(t *testing.T) {
 	wantErr(t, "dolu bileşen", err, apperr.ErrEventLimit)
 }
 
+// TestScoreboardScoresInSeatOrder pins issue #297: seat IDs made in the
+// same millisecond are not ordered, so a round's scores follow the seats'
+// positions, not their IDs. The seats are renumbered against their IDs to
+// make the case every run.
+func TestScoreboardScoresInSeatOrder(t *testing.T) {
+	e := setup(t)
+	tf, admin := e.newTayfa(t)
+	ev := e.newEvent(t, tf, admin, gameType)
+	p := e.going(t, tf, ev.ID, 2)
+	const key = "scoreboard"
+	r := ref(admin, tf, ev.ID, key)
+
+	got, err := e.sb.CreateTable(ctx, r, scoreboard.TableInput{Label: "Tavla", Preset: "backgammon", Players: players(p...)})
+	must(t, err)
+	table := last(got).ID
+	e.exec(t, `UPDATE event_score_players AS sp SET position = o.n
+		FROM (SELECT id, 10 + row_number() OVER (ORDER BY id DESC) AS n FROM event_score_players WHERE table_id = $1) AS o
+		WHERE sp.id = o.id`, table.PG())
+	got, err = e.sb.Get(ctx, r)
+	must(t, err)
+	tb := tableOf(t, got, table)
+	if len(tb.Players) != 2 || string(tb.Players[0].ID[:]) < string(tb.Players[1].ID[:]) {
+		t.Fatalf("kimliğe ters yerler: %+v", tb.Players)
+	}
+
+	e.start(ev)
+	got, err = e.sb.AddRound(ctx, r, table, pts(tb, 3, 1))
+	must(t, err)
+	tb = tableOf(t, got, table)
+	if len(tb.Rounds) != 1 || len(tb.Rounds[0].Scores) != 2 {
+		t.Fatalf("el: %+v", tb.Rounds)
+	}
+	for i, sc := range tb.Rounds[0].Scores {
+		if sc.Player != tb.Players[i].ID || sc.Points != []int32{3, 1}[i] {
+			t.Fatalf("eldeki skorlar yer sırasında değil: %+v, yerler %+v", tb.Rounds[0].Scores, tb.Players)
+		}
+	}
+}
+
 func ptr(s string) *string { return &s }
 
 // A team sport: one table of two teams of a teams component, a single

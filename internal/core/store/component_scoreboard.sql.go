@@ -418,9 +418,10 @@ func (q *Queries) ListScoreTables(ctx context.Context, arg ListScoreTablesParams
 }
 
 const listScores = `-- name: ListScores :many
-SELECT table_id, player_id, round, points, outcome FROM event_scores
-WHERE event_id = $1 AND component_key = $2
-ORDER BY table_id, round, player_id
+SELECT s.table_id, s.player_id, s.round, s.points, s.outcome FROM event_scores AS s
+JOIN event_score_players AS p ON p.id = s.player_id
+WHERE s.event_id = $1 AND s.component_key = $2
+ORDER BY s.table_id, s.round, p.position
 `
 
 type ListScoresParams struct {
@@ -436,7 +437,8 @@ type ListScoresRow struct {
 	Outcome  pgtype.Text
 }
 
-// Bileşenin bütün masalarındaki skorlar.
+// Bileşenin bütün masalarındaki skorlar; bir eldeki skorlar masadaki yer
+// sırasıyla (yerin kimliği aynı milisaniyede sıra vermez, issue #297).
 func (q *Queries) ListScores(ctx context.Context, arg ListScoresParams) ([]ListScoresRow, error) {
 	rows, err := q.db.Query(ctx, listScores, arg.EventID, arg.ComponentKey)
 	if err != nil {
