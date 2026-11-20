@@ -155,6 +155,13 @@ enum ReportTargetType {
   // like other content; content_removed means the message is no longer
   // visible (deleted or hidden by moderation).
   REPORT_TARGET_TYPE_CHANNEL_MESSAGE = 11;
+  // target_id is a question of an event's questions component (issue #256;
+  // QuestionsComponentService). The author of an anonymous question is
+  // kept on the report for the platform only: in the tayfa's queue such a
+  // report has no subject_user_id, and member_sanctioned cannot close it
+  // (ADR-0025 §5). The reporter's own question is ERROR_REASON_VALIDATION
+  // (field target_id).
+  REPORT_TARGET_TYPE_EVENT_QUESTION = 12;
 }
 
 // ReportReason follows the community rules (Notion "Topluluk Kuralları").

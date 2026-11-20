@@ -113,6 +113,11 @@ enum CoreExportSection {
   // exported; wins read from a scoreboard, bracket or ranking are in those
   // sections.
   CORE_EXPORT_SECTION_CELEBRATION_WINS = 32;
+  // The questions the caller asked in events (the questions component,
+  // issue #256), anonymous ones included, and the questions the caller
+  // voted for (without their text). Other people's questions, votes and
+  // who marked a question answered are not exported.
+  CORE_EXPORT_SECTION_EVENT_QUESTIONS = 33;
 }
 
 message ExportMyDataRequest {}

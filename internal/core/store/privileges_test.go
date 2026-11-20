@@ -123,6 +123,11 @@ var wantAppPrivileges = map[string]string{
 	// replaced, never changed.
 	"event_celebrations":        "INSERT,SELECT,UPDATE(announced_by,updated_at)",
 	"event_celebration_winners": "DELETE,INSERT,SELECT",
+	// Issue #256: a question never moves to another event, component or
+	// author, and its text and anonymity do not change; only the answered
+	// mark and the soft delete are written. A vote is added or deleted.
+	"event_questions":      "DELETE,INSERT,SELECT,UPDATE(answered_at,answered_by,deleted_at,deleted_by)",
+	"event_question_votes": "DELETE,INSERT,SELECT",
 	// Issue #241: an item never moves to another event or list, and its
 	// name and quantity do not change; only the assignee changes and
 	// account deletion clears the people on it.

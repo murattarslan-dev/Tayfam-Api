@@ -140,6 +140,13 @@ SELECT l.user_id, l.component_key, l.field_values, l.created_at, l.deleted_at
 FROM event_log_entries l JOIN events e ON e.id = l.event_id
 WHERE l.id = @id AND e.tayfa_id = @tayfa_id;
 
+-- Etkinlik sorusu (issue #256): anonim sorunun yazarı yalnızca burada,
+-- platform panelinde görünür (ADR-0025 §5).
+-- name: AdminGetEventQuestion :one
+SELECT q.author_id, q.component_key, q.body, q.created_at, q.deleted_at
+FROM event_questions q JOIN events e ON e.id = q.event_id
+WHERE q.id = @id AND e.tayfa_id = @tayfa_id;
+
 -- name: AdminGetEventPhoto :one
 SELECT p.uploader_id, p.caption, p.created_at, p.deleted_at, p.upload_id
 FROM event_photos p JOIN events e ON e.id = p.event_id
@@ -169,6 +176,11 @@ UPDATE polls SET deleted_at = @at, deleted_by = @by WHERE id = @id AND tayfa_id 
 UPDATE event_log_entries l SET deleted_at = @at, deleted_by = @by
 FROM events e
 WHERE l.id = @id AND e.id = l.event_id AND e.tayfa_id = @tayfa_id AND l.deleted_at IS NULL;
+
+-- name: AdminDeleteEventQuestion :execrows
+UPDATE event_questions q SET deleted_at = @at, deleted_by = @by
+FROM events e
+WHERE q.id = @id AND e.id = q.event_id AND e.tayfa_id = @tayfa_id AND q.deleted_at IS NULL;
 
 -- name: AdminDeleteEventPhoto :execrows
 UPDATE event_photos p SET deleted_at = @at, deleted_by = @by

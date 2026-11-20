@@ -500,6 +500,60 @@ func (q *Queries) ExportEventPhotos(ctx context.Context, arg ExportEventPhotosPa
 	return items, nil
 }
 
+const exportEventQuestions = `-- name: ExportEventQuestions :many
+SELECT q.id AS k, jsonb_build_object(
+  'id', q.id, 'event_id', q.event_id, 'component_key', q.component_key,
+  'asked', q.author_id = $1,
+  'body', CASE WHEN q.author_id = $1 THEN q.body END,
+  'anonymous', CASE WHEN q.author_id = $1 THEN q.anonymous END,
+  'answered_at', CASE WHEN q.author_id = $1 THEN q.answered_at END,
+  'created_at', CASE WHEN q.author_id = $1 THEN q.created_at END,
+  'deleted_at', CASE WHEN q.author_id = $1 THEN q.deleted_at END,
+  'voted_at', (SELECT v.created_at FROM event_question_votes v WHERE v.question_id = q.id AND v.user_id = $1)
+) AS data
+FROM event_questions AS q
+WHERE (q.author_id = $1
+       OR EXISTS (SELECT 1 FROM event_question_votes v WHERE v.question_id = q.id AND v.user_id = $1))
+  AND q.id > $2
+ORDER BY q.id
+LIMIT $3
+`
+
+type ExportEventQuestionsParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportEventQuestionsRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Etkinlik soruları (`questions` bileşeni, issue #256): sorduğunuz sorular
+// (anonim olanlar dahil; ADR-0025 §11) ve oy verdiğiniz sorular. Başkasının
+// sorusunun metni, yazarı ve diğer oylar yer almaz; kimin cevaplandı
+// işaretlediği de.
+func (q *Queries) ExportEventQuestions(ctx context.Context, arg ExportEventQuestionsParams) ([]ExportEventQuestionsRow, error) {
+	rows, err := q.db.Query(ctx, exportEventQuestions, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportEventQuestionsRow{}
+	for rows.Next() {
+		var i ExportEventQuestionsRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportEventRSVPs = `-- name: ExportEventRSVPs :many
 SELECT r.event_id AS k, jsonb_build_object(
   'event_id', r.event_id, 'tayfa_id', e.tayfa_id, 'event_title', e.title, 'status', r.status,

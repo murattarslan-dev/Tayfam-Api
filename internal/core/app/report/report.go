@@ -108,6 +108,11 @@ const (
 	TargetLogEntry TargetType = "log_entry"
 	// TargetEventPhoto: an event album photo (issue #206, ADR-0028).
 	TargetEventPhoto TargetType = "event_photo"
+	// TargetEventQuestion: a question of an event's questions component
+	// (issue #256). The author of an anonymous question is kept for the
+	// platform only: the tayfa's queue reads such a report without its
+	// subject (reports.subject_hidden; ADR-0025 §5).
+	TargetEventQuestion TargetType = "event_question"
 	// TargetDMMessage: a direct message (issue #95). Not about a tayfa; see
 	// createDirect.
 	TargetDMMessage TargetType = "dm_message"
@@ -121,7 +126,7 @@ const (
 func (t TargetType) content() bool {
 	switch t {
 	case TargetAnnouncement, TargetEvent, TargetQuestion, TargetAnswer, TargetPoll, TargetLogEntry, TargetEventPhoto,
-		TargetChannelMessage:
+		TargetChannelMessage, TargetEventQuestion:
 		return true
 	}
 	return false
@@ -414,6 +419,9 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in CreateInput)
 		if subject != (id.ID{}) {
 			p.SubjectUserID = subject.PG()
 		}
+		if p.SubjectHidden, err = subjectHidden(ctx, q, tayfa, in.TargetType, target); err != nil {
+			return err
+		}
 		if desc != "" {
 			p.Description = pgtype.Text{String: desc, Valid: true}
 		}
@@ -588,7 +596,7 @@ func moduleOf(t TargetType) string {
 	case TargetPoll:
 		return access.ModulePolls
 	}
-	return access.ModuleEvents // events, log entries and album photos
+	return access.ModuleEvents // events, log entries, album photos and event questions
 }
 
 // content is a reported piece of content as the report needs it.
@@ -642,6 +650,10 @@ func lookup(ctx context.Context, q *store.Queries, tayfa id.ID, t TargetType, ta
 		var r store.GetReportTargetEventPhotoRow
 		r, err = q.GetReportTargetEventPhoto(ctx, store.GetReportTargetEventPhotoParams{TayfaID: p.t, ID: p.i})
 		author, visible = r.AuthorID, r.Visible
+	case TargetEventQuestion:
+		var r store.GetReportTargetEventQuestionRow
+		r, err = q.GetReportTargetEventQuestion(ctx, store.GetReportTargetEventQuestionParams{TayfaID: p.t, ID: p.i})
+		author, visible = r.AuthorID, r.Visible
 	default:
 		return content{}, errors.New("içerik olmayan hedef")
 	}
@@ -658,6 +670,24 @@ func lookup(ctx context.Context, q *store.Queries, tayfa id.ID, t TargetType, ta
 		c.author = id.ID(author.Bytes)
 	}
 	return c, nil
+}
+
+// subjectHidden reports whether the report's subject must stay hidden from
+// the tayfa's moderators: the author of an anonymous event question (issue
+// #256; ADR-0025 §5). The author is kept for the platform only. A question
+// that is gone counts as anonymous (the safe side).
+func subjectHidden(ctx context.Context, q *store.Queries, tayfa id.ID, t TargetType, target id.ID) (bool, error) {
+	if t != TargetEventQuestion {
+		return false, nil
+	}
+	r, err := q.GetReportTargetEventQuestion(ctx, store.GetReportTargetEventQuestionParams{TayfaID: tayfa.PG(), ID: target.PG()})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return true, nil
+	case err != nil:
+		return false, fmt.Errorf("şikâyet hedefi: %w", err)
+	}
+	return r.Anonymous, nil
 }
 
 // minorInvolved asks identity whether the reporter or the subject is under

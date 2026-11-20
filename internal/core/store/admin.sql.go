@@ -144,6 +144,32 @@ func (q *Queries) AdminDeleteEventPhoto(ctx context.Context, arg AdminDeleteEven
 	return result.RowsAffected(), nil
 }
 
+const adminDeleteEventQuestion = `-- name: AdminDeleteEventQuestion :execrows
+UPDATE event_questions q SET deleted_at = $1, deleted_by = $2
+FROM events e
+WHERE q.id = $3 AND e.id = q.event_id AND e.tayfa_id = $4 AND q.deleted_at IS NULL
+`
+
+type AdminDeleteEventQuestionParams struct {
+	At      pgtype.Timestamptz
+	By      pgtype.UUID
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+func (q *Queries) AdminDeleteEventQuestion(ctx context.Context, arg AdminDeleteEventQuestionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adminDeleteEventQuestion,
+		arg.At,
+		arg.By,
+		arg.ID,
+		arg.TayfaID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const adminDeleteLogEntry = `-- name: AdminDeleteLogEntry :execrows
 UPDATE event_log_entries l SET deleted_at = $1, deleted_by = $2
 FROM events e
@@ -356,6 +382,40 @@ func (q *Queries) AdminGetEventPhoto(ctx context.Context, arg AdminGetEventPhoto
 		&i.CreatedAt,
 		&i.DeletedAt,
 		&i.UploadID,
+	)
+	return i, err
+}
+
+const adminGetEventQuestion = `-- name: AdminGetEventQuestion :one
+SELECT q.author_id, q.component_key, q.body, q.created_at, q.deleted_at
+FROM event_questions q JOIN events e ON e.id = q.event_id
+WHERE q.id = $1 AND e.tayfa_id = $2
+`
+
+type AdminGetEventQuestionParams struct {
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+type AdminGetEventQuestionRow struct {
+	AuthorID     pgtype.UUID
+	ComponentKey string
+	Body         string
+	CreatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+}
+
+// Etkinlik sorusu (issue #256): anonim sorunun yazarı yalnızca burada,
+// platform panelinde görünür (ADR-0025 §5).
+func (q *Queries) AdminGetEventQuestion(ctx context.Context, arg AdminGetEventQuestionParams) (AdminGetEventQuestionRow, error) {
+	row := q.db.QueryRow(ctx, adminGetEventQuestion, arg.ID, arg.TayfaID)
+	var i AdminGetEventQuestionRow
+	err := row.Scan(
+		&i.AuthorID,
+		&i.ComponentKey,
+		&i.Body,
+		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }

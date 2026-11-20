@@ -203,6 +203,8 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"event_ranking_entries":           `SELECT count(*) FROM event_ranking_entries WHERE $1 IN (user_id, entered_by)`,
 		"event_celebrations.announced_by": `SELECT count(*) FROM event_celebrations WHERE announced_by = $1`,
 		"event_celebration_winners":       `SELECT count(*) FROM event_celebration_winners WHERE user_id = $1`,
+		"event_questions":                 `SELECT count(*) FROM event_questions WHERE $1 IN (author_id, answered_by, deleted_by)`,
+		"event_question_votes.user_id":    `SELECT count(*) FROM event_question_votes WHERE user_id = $1`,
 		"event_photos":                    `SELECT count(*) FROM event_photos WHERE $1 IN (uploader_id, deleted_by)`,
 		"user_activity_records.user_id":   `SELECT count(*) FROM user_activity_records WHERE user_id = $1`,
 		"questions":                       `SELECT count(*) FROM questions WHERE $1 IN (author_id, deleted_by)`,
@@ -565,6 +567,17 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 		id.New().PG(), hike.PG(), u.PG())
 	e.seed(t, `INSERT INTO event_celebration_winners (id, event_id, component_key, user_id, position) VALUES ($1, $2, 'celebration', $3, 2)`,
 		id.New().PG(), hike.PG(), a.PG())
+	// Event questions (issue #256): u's questions (an anonymous one too)
+	// and votes go; a's question that u marked answered and removed stays,
+	// without them, with a's vote on it.
+	uQuestion, aQuestion := id.New(), id.New()
+	e.seed(t, `INSERT INTO event_questions (id, event_id, component_key, author_id, anonymous, body, client_request_id) VALUES ($1, $2, 'questions', $3, true, 'Anonim soru?', $4)`,
+		uQuestion.PG(), hike.PG(), u.PG(), id.New().PG())
+	e.seed(t, `INSERT INTO event_questions (id, event_id, component_key, author_id, anonymous, body, answered_at, answered_by, client_request_id, deleted_at, deleted_by)
+		VALUES ($1, $2, 'questions', $3, false, 'Açık soru?', now(), $4, $5, now(), $4)`,
+		aQuestion.PG(), hike.PG(), a.PG(), u.PG(), id.New().PG())
+	e.seed(t, `INSERT INTO event_question_votes (question_id, event_id, component_key, user_id) VALUES ($1, $3, 'questions', $4), ($2, $3, 'questions', $4), ($2, $3, 'questions', $5)`,
+		uQuestion.PG(), aQuestion.PG(), hike.PG(), u.PG(), a.PG())
 	// Teams (issue #248): u's place goes; the team and a's place stay.
 	team := id.New()
 	e.seed(t, `INSERT INTO event_teams (id, event_id, component_key, position) VALUES ($1, $2, 'teams', 1)`, team.PG(), hike.PG())
@@ -625,6 +638,11 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 	if n := e.count(t, `SELECT count(*) FROM event_celebration_winners AS w JOIN event_celebrations AS c USING (event_id, component_key)
 		WHERE w.event_id = $1 AND w.user_id = $2 AND c.announced_by IS NULL`, hike.PG(), a.PG()); n != 1 {
 		t.Errorf("başkasının kazananlığı ya da ilan silindi ya da ilan eden boşalmadı: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_questions q JOIN event_question_votes v ON v.question_id = q.id
+		WHERE q.id = $1 AND q.answered_at IS NOT NULL AND q.answered_by IS NULL AND q.deleted_at IS NOT NULL AND q.deleted_by IS NULL AND v.user_id = $2`,
+		aQuestion.PG(), a.PG()); n != 1 {
+		t.Errorf("başkasının sorusu ya da oyu silindi ya da işaretleyen/silen boşalmadı: %d", n)
 	}
 	if n := e.count(t, `SELECT count(*) FROM event_team_members WHERE team_id = $1 AND user_id = $2`, team.PG(), a.PG()); n != 1 {
 		t.Errorf("başkasının takımdaki yeri silindi: %d", n)

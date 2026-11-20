@@ -71,6 +71,7 @@ func componentRegistrars() []componentRegistrar {
 		registerCelebrationComponent,
 
 		// questions (#256)
+		registerQuestionsComponent,
 
 		// pool_link (#271)
 	}

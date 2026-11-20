@@ -331,6 +331,29 @@ type EventPhoto struct {
 	DeletedBy       pgtype.UUID
 }
 
+type EventQuestion struct {
+	ID              pgtype.UUID
+	EventID         pgtype.UUID
+	ComponentKey    string
+	AuthorID        pgtype.UUID
+	Anonymous       bool
+	Body            string
+	AnsweredAt      pgtype.Timestamptz
+	AnsweredBy      pgtype.UUID
+	ClientRequestID pgtype.UUID
+	DeletedAt       pgtype.Timestamptz
+	DeletedBy       pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+}
+
+type EventQuestionVote struct {
+	QuestionID   pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	UserID       pgtype.UUID
+	CreatedAt    pgtype.Timestamptz
+}
+
 type EventRankingEntry struct {
 	ID           pgtype.UUID
 	EventID      pgtype.UUID
@@ -681,6 +704,7 @@ type Report struct {
 	PlaceLatitude         pgtype.Float8
 	PlaceLongitude        pgtype.Float8
 	PlaceName             pgtype.Text
+	SubjectHidden         bool
 }
 
 type SocialSetting struct {

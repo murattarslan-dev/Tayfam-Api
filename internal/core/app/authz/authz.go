@@ -287,6 +287,14 @@ const (
 	// checks the role, event_referees). Removing a guest is
 	// EventComponentManageOwn / EventComponentManageAny.
 	EventGuestAdd
+	// EventQuestionAsk asks, votes for and removes one's own questions of a
+	// questions component (issue #256, ADR-0025 §5: "Soru gönder / oyla:
+	// Katılımcı"; the caller also checks going or a verified attendance).
+	// Marking a question answered is EventComponentManageOwn /
+	// EventComponentManageAny. EventQuestionDeleteAny removes anyone's
+	// question, an anonymous one without learning its author.
+	EventQuestionAsk
+	EventQuestionDeleteAny
 
 	actionEnd // sentinel; keep last
 )
@@ -385,6 +393,8 @@ var actionNames = [...]string{
 	EventComponentReferee:     "event.component_referee",
 	TayfaVocabularyMerge:      "tayfa.vocabulary.merge",
 	EventGuestAdd:             "event.guest_add",
+	EventQuestionAsk:          "event.question_ask",
+	EventQuestionDeleteAny:    "event.question_delete_any",
 	actionEnd:                 "",
 }
 
@@ -469,6 +479,8 @@ var permissions = map[Action]Role{
 	EventComponentReferee:     Member,
 	// Guest players (issue #252): the organizer or an assigned referee.
 	EventGuestAdd: Member,
+	// Event questions (issue #256): a participant asks and votes.
+	EventQuestionAsk: Member,
 
 	// Moderation: moderator and above.
 	// Lowering one's own role; members have nothing to step down to.
@@ -503,6 +515,9 @@ var permissions = map[Action]Role{
 	EventRefereeAssignAny:   Moderator,
 	// Merging duplicates of the tayfa vocabulary (ADR-0037 §4).
 	TayfaVocabularyMerge: Moderator,
+	// Removing anyone's event question ("Tayfa yönetimi anonim soruyu
+	// yazarını görmeden silebilir", ADR-0025 §5).
+	EventQuestionDeleteAny: Moderator,
 	// Q&A: someone else's question or answer (with CanActOnContent), and
 	// removing a tag from the tayfa.
 	QuestionEditAny:   Moderator,

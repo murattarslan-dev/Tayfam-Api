@@ -87,6 +87,17 @@ func (q *Queries) ClearEventPhotoDeleter(ctx context.Context, userID pgtype.UUID
 	return err
 }
 
+const clearEventQuestionUserFields = `-- name: ClearEventQuestionUserFields :exec
+UPDATE event_questions
+SET answered_by = NULLIF(answered_by, $1), deleted_by = NULLIF(deleted_by, $1)
+WHERE answered_by = $1 OR deleted_by = $1
+`
+
+func (q *Queries) ClearEventQuestionUserFields(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearEventQuestionUserFields, userID)
+	return err
+}
+
 const clearEventSeriesCreator = `-- name: ClearEventSeriesCreator :exec
 UPDATE event_series SET created_by = NULL WHERE created_by = $1
 `
@@ -335,6 +346,28 @@ DELETE FROM event_photos WHERE uploader_id = $1
 // silme kuyruğuna girer (issue #206).
 func (q *Queries) DeleteUserEventPhotos(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserEventPhotos, userID)
+	return err
+}
+
+const deleteUserEventQuestionVotes = `-- name: DeleteUserEventQuestionVotes :exec
+DELETE FROM event_question_votes WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserEventQuestionVotes(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserEventQuestionVotes, userID)
+	return err
+}
+
+const deleteUserEventQuestions = `-- name: DeleteUserEventQuestions :exec
+DELETE FROM event_questions WHERE author_id = $1
+`
+
+// Etkinlik soruları ve oyları kişiye aittir (anonim olanlar dahil); kişiyle
+// birlikte silinir (sorunun oyları cascade ile). Cevaplandı işaretlediği ya
+// da sildiği başkasının sorusu kalır, işaretleyen ve silen boşalır (issue
+// #256; ADR-0025 §11).
+func (q *Queries) DeleteUserEventQuestions(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserEventQuestions, userID)
 	return err
 }
 
