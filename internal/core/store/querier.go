@@ -26,9 +26,11 @@ type Querier interface {
 	AddQuestionTag(ctx context.Context, arg AddQuestionTagParams) error
 	AddScore(ctx context.Context, arg AddScoreParams) error
 	AddScorePlayer(ctx context.Context, arg AddScorePlayerParams) error
+	AddTayfaBadge(ctx context.Context, arg AddTayfaBadgeParams) (int64, error)
 	// İlgi alanı katalog anahtarıdır (catalog_interests, ADR-0025 §2).
 	AddTayfaInterest(ctx context.Context, arg AddTayfaInterestParams) error
 	AddTeamMember(ctx context.Context, arg AddTeamMemberParams) error
+	AddUserBadge(ctx context.Context, arg AddUserBadgeParams) (int64, error)
 	AdjustAnswerVoteCount(ctx context.Context, arg AdjustAnswerVoteCountParams) (int64, error)
 	// Panel kararı maskeyi kaldırır.
 	AdminApproveDiscover(ctx context.Context, arg AdminApproveDiscoverParams) (int64, error)
@@ -424,6 +426,9 @@ type Querier interface {
 	DeleteUserAnswerVotes(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silme (user.deleted).
 	DeleteUserAvailability(ctx context.Context, userID pgtype.UUID) error
+	// Kişinin rozetleri kişiyle birlikte silinir (ADR-0039 §5). Tayfa
+	// rozetleri tayfanındır, kalır.
+	DeleteUserBadges(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserBan(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserBlocks(ctx context.Context, userID pgtype.UUID) error
 	// Elle seçildiği kutlama kazananlığı kişiye aittir; kişiyle birlikte silinir.
@@ -615,6 +620,10 @@ type Querier interface {
 	ExportTeamMemberships(ctx context.Context, arg ExportTeamMembershipsParams) ([]ExportTeamMembershipsRow, error)
 	// Yalnızca liste; dosyalar ve dışa aktarma kayıtları girmez.
 	ExportUploads(ctx context.Context, arg ExportUploadsParams) ([]ExportUploadsRow, error)
+	// Kazandığınız rozetler (issue #258; ADR-0039 §5): rozetin anahtarı,
+	// dönemi ve kazanma zamanı; şampiyonlukta etkinlik ve tayfası. Rozetin
+	// adı katalogdadır.
+	ExportUserBadges(ctx context.Context, arg ExportUserBadgesParams) ([]ExportUserBadgesRow, error)
 	// Kişinin başkasının aracına yazdığı koltuk istekleri. Aracın sahibi ve
 	// plakası başkasının verisidir, dışa aktarılmaz.
 	ExportVehicleSeatRequests(ctx context.Context, arg ExportVehicleSeatRequestsParams) ([]ExportVehicleSeatRequestsRow, error)
@@ -928,11 +937,20 @@ type Querier interface {
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error)
 	// Kişinin bugünden itibaren günleri (en fazla 31).
 	ListAvailability(ctx context.Context, arg ListAvailabilityParams) ([]ListAvailabilityRow, error)
+	// Kazanan takımın üyeleri.
+	ListBadgeTeamMembers(ctx context.Context, arg ListBadgeTeamMembersParams) ([]pgtype.UUID, error)
 	// Kişinin engelledikleri (yalnızca kendisi görür); engellenen kişinin
 	// profili silinmiş olsa da kayıt listelenir ki kaldırılabilsin.
 	ListBlocksPage(ctx context.Context, arg ListBlocksPageParams) ([]ListBlocksPageRow, error)
 	ListBracketGames(ctx context.Context, arg ListBracketGamesParams) ([]ListBracketGamesRow, error)
 	ListBracketMatches(ctx context.Context, arg ListBracketMatchesParams) ([]ListBracketMatchesRow, error)
+	// Rozetler (issue #258; ADR-0039). Tanımlar katalog verisidir ve
+	// core_app'e salt okunurdur; kazanılmış rozetler eklenir, değişmez.
+	// Kuralların doğrulanması ve kazanma app katmanındadır
+	// (internal/core/app/catalog/badges.go, internal/core/app/badge).
+	// Bütün tanımlar, emekliler dahil: kazanılmış rozetin adı ve ikonu
+	// buradan okunur.
+	ListCatalogBadges(ctx context.Context) ([]ListCatalogBadgesRow, error)
 	// İlgi alanı doğrulaması için: anahtar ve durum (emekliler dahil).
 	ListCatalogInterestStatuses(ctx context.Context) ([]ListCatalogInterestStatusesRow, error)
 	// Emekliye ayrılanlar dahil: eski tayfalar ve profiller onları gösterir.
@@ -940,6 +958,13 @@ type Querier interface {
 	// Ders ve konu etiketleri (issue #259; ADR-0040 §5), emekliler dahil: eski
 	// içerik onları göstermeye devam eder. Düzeylerin parent_key'i ''.
 	ListCatalogStudyTags(ctx context.Context) ([]ListCatalogStudyTagsRow, error)
+	// Bir türün bütün sürümlerinin tanımları: rozet kuralı, türün hiçbir
+	// sürümünde hassas olan bir ölçüme ya da hassas katılıma dayanamaz.
+	ListCatalogTypeDefinitions(ctx context.Context, typeKey string) ([]ListCatalogTypeDefinitionsRow, error)
+	// Kutlaması donmuş ve şampiyonluk rozetlerine henüz bakılmamış
+	// etkinlikler: tür sürümünde kutlama bileşeni olan, iptal edilmemiş,
+	// silinmemiş, bitişinin üzerinden düzeltme penceresi geçmiş.
+	ListChampionBadgeEvents(ctx context.Context, arg ListChampionBadgeEventsParams) ([]ListChampionBadgeEventsRow, error)
 	// Liste bileşeni (`checklist`; issue #241; ADR-0025 §4). Etkinlik her zaman
 	// önce tayfa kapsamında yüklenir ve bileşen etkinliğin tür sürümünde çözülür
 	// (internal/core/app/component: View / Change); buradaki sorgular o
@@ -1195,6 +1220,8 @@ type Querier interface {
 	// daha önce önerilmiş kişi aday olmaz.
 	ListSuggestionCandidates(ctx context.Context, arg ListSuggestionCandidatesParams) ([]ListSuggestionCandidatesRow, error)
 	ListTags(ctx context.Context, tayfaID pgtype.UUID) ([]ListTagsRow, error)
+	// Tayfanın rozetleri, kazanma sırasıyla.
+	ListTayfaBadges(ctx context.Context, tayfaID pgtype.UUID) ([]ListTayfaBadgesRow, error)
 	// Katalog sırasıyla.
 	ListTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) ([]string, error)
 	// Tayfanın bekleyen davetleri (yönetici), yeniden eskiye.
@@ -1222,6 +1249,8 @@ type Querier interface {
 	ListUpcomingEvents(ctx context.Context, arg ListUpcomingEventsParams) ([]ListUpcomingEventsRow, error)
 	// Kullanıcının aktif üye olduğu tayfalar; tayfa ID'sine göre sayfalanır.
 	ListUserActiveTayfas(ctx context.Context, arg ListUserActiveTayfasParams) ([]ListUserActiveTayfasRow, error)
+	// Kişinin rozetleri, kazanma sırasıyla.
+	ListUserBadges(ctx context.Context, userID pgtype.UUID) ([]ListUserBadgesRow, error)
 	ListUserRsvpsForEvents(ctx context.Context, arg ListUserRsvpsForEventsParams) ([]ListUserRsvpsForEventsRow, error)
 	// ---------------------------------------------------------------------------
 	// safety-alerts işi
@@ -1284,6 +1313,7 @@ type Querier interface {
 	// araya giremez. Transaction bitince bırakılır.
 	LockUserUploads(ctx context.Context, userID string) error
 	MarkAttended(ctx context.Context, arg MarkAttendedParams) error
+	MarkEventBadgeRun(ctx context.Context, arg MarkEventBadgeRunParams) error
 	// İlk işaret kalır; yeniden işaretleme değiştirmez.
 	MarkEventQuestionAnswered(ctx context.Context, arg MarkEventQuestionAnsweredParams) (int64, error)
 	MarkExportReady(ctx context.Context, arg MarkExportReadyParams) (int64, error)

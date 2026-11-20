@@ -1385,6 +1385,51 @@ func (q *Queries) ExportUploads(ctx context.Context, arg ExportUploadsParams) ([
 	return items, nil
 }
 
+const exportUserBadges = `-- name: ExportUserBadges :many
+SELECT b.id AS k, jsonb_build_object(
+  'badge_key', b.badge_key, 'period', b.period_key, 'tayfa_id', b.tayfa_id, 'event_id', b.event_id,
+  'earned_at', b.earned_at
+) AS data
+FROM user_badges AS b
+WHERE b.user_id = $1 AND b.id > $2
+ORDER BY b.id
+LIMIT $3
+`
+
+type ExportUserBadgesParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportUserBadgesRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Kazandığınız rozetler (issue #258; ADR-0039 §5): rozetin anahtarı,
+// dönemi ve kazanma zamanı; şampiyonlukta etkinlik ve tayfası. Rozetin
+// adı katalogdadır.
+func (q *Queries) ExportUserBadges(ctx context.Context, arg ExportUserBadgesParams) ([]ExportUserBadgesRow, error) {
+	rows, err := q.db.Query(ctx, exportUserBadges, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportUserBadgesRow{}
+	for rows.Next() {
+		var i ExportUserBadgesRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportVehicleSeatRequests = `-- name: ExportVehicleSeatRequests :many
 SELECT r.id AS k, jsonb_build_object(
   'event_id', r.event_id, 'component_key', r.component_key, 'vehicle_id', r.event_vehicle_id,
