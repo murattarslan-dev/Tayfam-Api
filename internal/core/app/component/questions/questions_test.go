@@ -271,7 +271,7 @@ func TestQuestionsEndToEnd(t *testing.T) {
 		"boş":             {ask("", false), "body"},
 		"yalnızca boşluk": {ask(" \n\t ", false), "body"},
 		"denetim":         {ask("Soru\u0007?", false), "body"},
-		"sıfır genişlik":  {ask("So​ru?", false), "body"},
+		"sıfır genişlik":  {ask("So\u200bru?", false), "body"},
 		"uzun":            {ask(strings.Repeat("a", questions.BodyMax+1), false), "body"},
 		"istek kimliği":   {questions.Input{Body: "Soru?", ClientRequestID: "x"}, "client_request_id"},
 	} {
