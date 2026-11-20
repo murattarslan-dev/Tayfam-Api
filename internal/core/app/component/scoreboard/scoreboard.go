@@ -181,6 +181,7 @@ type Score struct {
 type Round struct {
 	// Number is 1-based.
 	Number int32
+	// Scores are in the table's seat order.
 	Scores []Score
 }
 

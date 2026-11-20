@@ -57,11 +57,13 @@ INSERT INTO event_score_players (id, table_id, event_id, component_key, position
 VALUES (@id, @table_id, @event_id, @component_key, @position, sqlc.narg(user_id),
   sqlc.narg(team_key), sqlc.narg(team_id), sqlc.narg(guest_id), @created_at);
 
--- Bileşenin bütün masalarındaki skorlar.
+-- Bileşenin bütün masalarındaki skorlar; bir eldeki skorlar masadaki yer
+-- sırasıyla (yerin kimliği aynı milisaniyede sıra vermez, issue #297).
 -- name: ListScores :many
-SELECT table_id, player_id, round, points, outcome FROM event_scores
-WHERE event_id = @event_id AND component_key = @component_key
-ORDER BY table_id, round, player_id;
+SELECT s.table_id, s.player_id, s.round, s.points, s.outcome FROM event_scores AS s
+JOIN event_score_players AS p ON p.id = s.player_id
+WHERE s.event_id = @event_id AND s.component_key = @component_key
+ORDER BY s.table_id, s.round, p.position;
 
 -- name: CountTableScores :one
 SELECT count(*) FROM event_scores
