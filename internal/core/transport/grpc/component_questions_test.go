@@ -71,7 +71,7 @@ func TestQuestionsComponentMethods(t *testing.T) {
 	ref := &corev1.ComponentRef{TayfaId: tf.String(), EventId: ev.String(), ComponentKey: "questions"}
 	want := component.Ref{User: user, Tayfa: tf, Event: ev, Key: "questions"}
 
-	got, err := s.ListQuestions(ctx, &corev1.ListQuestionsRequest{Ref: ref})
+	got, err := s.ListEventQuestions(ctx, &corev1.ListEventQuestionsRequest{Ref: ref})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,19 +90,19 @@ func TestQuestionsComponentMethods(t *testing.T) {
 
 	crid := id.New().String()
 	f.out = questions.Question{ID: anon, Body: "Soru?", Anonymous: true, CallerIsAuthor: true, CreatedAt: at}
-	resp, err := s.AskQuestion(ctx, &corev1.AskQuestionRequest{Ref: ref, Body: "Soru?", Anonymous: true, ClientRequestId: crid})
+	resp, err := s.AskEventQuestion(ctx, &corev1.AskEventQuestionRequest{Ref: ref, Body: "Soru?", Anonymous: true, ClientRequestId: crid})
 	if err != nil || f.last != "ask" || f.in != (questions.Input{Body: "Soru?", Anonymous: true, ClientRequestID: crid}) ||
 		resp.GetQuestion().GetId() != anon.String() || resp.GetQuestion().GetAuthorId() != "" {
 		t.Fatalf("sorma: %v %+v %v", err, f.in, resp)
 	}
 	q := id.New()
-	if _, err := s.RemoveQuestion(ctx, &corev1.RemoveQuestionRequest{Ref: ref, QuestionId: q.String()}); err != nil || f.last != "remove" || f.question != q {
+	if _, err := s.RemoveEventQuestion(ctx, &corev1.RemoveEventQuestionRequest{Ref: ref, QuestionId: q.String()}); err != nil || f.last != "remove" || f.question != q {
 		t.Fatalf("kaldırma: %v %+v", err, f)
 	}
-	if _, err := s.SetQuestionVote(ctx, &corev1.SetQuestionVoteRequest{Ref: ref, QuestionId: q.String(), Voted: true}); err != nil || f.last != "vote" || !f.flag {
+	if _, err := s.SetEventQuestionVote(ctx, &corev1.SetEventQuestionVoteRequest{Ref: ref, QuestionId: q.String(), Voted: true}); err != nil || f.last != "vote" || !f.flag {
 		t.Fatalf("oy: %v %+v", err, f)
 	}
-	if _, err := s.SetQuestionAnswered(ctx, &corev1.SetQuestionAnsweredRequest{Ref: ref, QuestionId: q.String()}); err != nil || f.last != "answered" || f.flag {
+	if _, err := s.SetEventQuestionAnswered(ctx, &corev1.SetEventQuestionAnsweredRequest{Ref: ref, QuestionId: q.String()}); err != nil || f.last != "answered" || f.flag {
 		t.Fatalf("işaret: %v %+v", err, f)
 	}
 
@@ -116,7 +116,7 @@ func TestQuestionsComponentMethods(t *testing.T) {
 		apperr.ErrComponentFrozen:   {codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_COMPONENT_FROZEN},
 	} {
 		f.err = err
-		_, got := s.SetQuestionVote(ctx, &corev1.SetQuestionVoteRequest{Ref: ref, QuestionId: q.String(), Voted: true})
+		_, got := s.SetEventQuestionVote(ctx, &corev1.SetEventQuestionVoteRequest{Ref: ref, QuestionId: q.String(), Voted: true})
 		if code, info := infoOf(t, got); code != want.code || info.GetReason() != want.reason.String() {
 			t.Errorf("%v: %v", err, got)
 		}
@@ -132,34 +132,34 @@ func TestQuestionsComponentValidation(t *testing.T) {
 	ref := &corev1.ComponentRef{TayfaId: tf, EventId: ev, ComponentKey: "questions"}
 	crid := id.New().String()
 
-	for name, req := range map[string]*corev1.AskQuestionRequest{
+	for name, req := range map[string]*corev1.AskEventQuestionRequest{
 		"başvurusuz":    {Body: "Soru?", ClientRequestId: crid},
 		"bozuk anahtar": {Ref: &corev1.ComponentRef{TayfaId: tf, EventId: ev, ComponentKey: "Questions"}, Body: "Soru?", ClientRequestId: crid},
 		"boş":           {Ref: ref, ClientRequestId: crid},
 		"çok uzun":      {Ref: ref, Body: strings.Repeat("a", maxQuestionBytes+1), ClientRequestId: crid},
 		"istek kimliği": {Ref: ref, Body: "Soru?", ClientRequestId: "x"},
 	} {
-		if _, err := s.AskQuestion(ctx, req); codeOf(t, err) != codes.InvalidArgument {
+		if _, err := s.AskEventQuestion(ctx, req); codeOf(t, err) != codes.InvalidArgument {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if _, err := s.RemoveQuestion(ctx, &corev1.RemoveQuestionRequest{Ref: ref, QuestionId: "x"}); codeOf(t, err) != codes.InvalidArgument {
+	if _, err := s.RemoveEventQuestion(ctx, &corev1.RemoveEventQuestionRequest{Ref: ref, QuestionId: "x"}); codeOf(t, err) != codes.InvalidArgument {
 		t.Errorf("bozuk soru kaldırma: %v", err)
 	}
-	if _, err := s.SetQuestionVote(ctx, &corev1.SetQuestionVoteRequest{Ref: ref}); codeOf(t, err) != codes.InvalidArgument {
+	if _, err := s.SetEventQuestionVote(ctx, &corev1.SetEventQuestionVoteRequest{Ref: ref}); codeOf(t, err) != codes.InvalidArgument {
 		t.Errorf("sorusuz oy: %v", err)
 	}
-	if _, err := s.SetQuestionAnswered(ctx, &corev1.SetQuestionAnsweredRequest{QuestionId: id.New().String()}); codeOf(t, err) != codes.InvalidArgument {
+	if _, err := s.SetEventQuestionAnswered(ctx, &corev1.SetEventQuestionAnsweredRequest{QuestionId: id.New().String()}); codeOf(t, err) != codes.InvalidArgument {
 		t.Errorf("başvurusuz işaret: %v", err)
 	}
-	if _, err := s.ListQuestions(ctx, &corev1.ListQuestionsRequest{}); codeOf(t, err) != codes.InvalidArgument {
+	if _, err := s.ListEventQuestions(ctx, &corev1.ListEventQuestionsRequest{}); codeOf(t, err) != codes.InvalidArgument {
 		t.Errorf("başvurusuz okuma: %v", err)
 	}
 	if f.calls != 0 {
 		t.Fatalf("bozuk istek app katmanına ulaştı: %d", f.calls)
 	}
 	// No verified caller, no call.
-	if _, err := s.ListQuestions(context.Background(), &corev1.ListQuestionsRequest{Ref: ref}); codeOf(t, err) != codes.Unauthenticated || f.calls != 0 {
+	if _, err := s.ListEventQuestions(context.Background(), &corev1.ListEventQuestionsRequest{Ref: ref}); codeOf(t, err) != codes.Unauthenticated || f.calls != 0 {
 		t.Fatalf("çağıransız: %v", err)
 	}
 }

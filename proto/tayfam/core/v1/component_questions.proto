@@ -22,14 +22,14 @@ import "tayfam/core/v1/component.proto";
 // report about one shows its author to the platform only (report.proto,
 // REPORT_TARGET_TYPE_EVENT_QUESTION). Question texts are never logged.
 service QuestionsComponentService {
-  // ListQuestions returns the component's questions: unanswered first,
+  // ListEventQuestions returns the component's questions: unanswered first,
   // then by votes (most first), then oldest first. Open to every active
   // member, muted ones included.
   //
   // Errors: the errors of every component read.
-  rpc ListQuestions(ListQuestionsRequest) returns (ListQuestionsResponse);
+  rpc ListEventQuestions(ListEventQuestionsRequest) returns (ListEventQuestionsResponse);
 
-  // AskQuestion asks a question. The caller must have answered going or
+  // AskEventQuestion asks a question. The caller must have answered going or
   // have a verified attendance (ERROR_REASON_EVENT_NOT_GOING); one person
   // asks at most 20 live questions in one component and a component holds
   // at most 500 (ERROR_REASON_EVENT_LIMIT). anonymous only where the
@@ -41,31 +41,31 @@ service QuestionsComponentService {
   // Errors: ERROR_REASON_VALIDATION (body: 1–500 characters after trimming,
   // no control or format characters; anonymous; client_request_id) and
   // the errors of every component change.
-  rpc AskQuestion(AskQuestionRequest) returns (AskQuestionResponse);
+  rpc AskEventQuestion(AskEventQuestionRequest) returns (AskEventQuestionResponse);
 
-  // RemoveQuestion removes a question (soft delete; purged after 30 days
+  // RemoveEventQuestion removes a question (soft delete; purged after 30 days
   // with its votes). The author removes their own within the write window;
   // moderators and admins remove anyone's, anonymous ones included, also on
   // a cancelled or frozen event (moderation).
   //
   // Errors: ERROR_REASON_EVENT_ITEM_NOT_FOUND, ERROR_REASON_VALIDATION
   // (question_id) and the errors of every component change.
-  rpc RemoveQuestion(RemoveQuestionRequest) returns (RemoveQuestionResponse);
+  rpc RemoveEventQuestion(RemoveEventQuestionRequest) returns (RemoveEventQuestionResponse);
 
-  // SetQuestionVote adds (voted) or takes back the caller's vote for a
+  // SetEventQuestionVote adds (voted) or takes back the caller's vote for a
   // question; doing what is already done is not an error. The same people
-  // as AskQuestion, within the write window.
+  // as AskEventQuestion, within the write window.
   //
-  // Errors: as AskQuestion, and ERROR_REASON_EVENT_ITEM_NOT_FOUND.
-  rpc SetQuestionVote(SetQuestionVoteRequest) returns (SetQuestionVoteResponse);
+  // Errors: as AskEventQuestion, and ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+  rpc SetEventQuestionVote(SetEventQuestionVoteRequest) returns (SetEventQuestionVoteResponse);
 
-  // SetQuestionAnswered marks a question answered or takes the mark back;
+  // SetEventQuestionAnswered marks a question answered or takes the mark back;
   // doing what is already done is not an error. The organizer, moderators
   // and admins, within the write window.
   //
   // Errors: ERROR_REASON_EVENT_ITEM_NOT_FOUND, ERROR_REASON_VALIDATION
   // (question_id) and the errors of every component change.
-  rpc SetQuestionAnswered(SetQuestionAnsweredRequest) returns (SetQuestionAnsweredResponse);
+  rpc SetEventQuestionAnswered(SetEventQuestionAnsweredRequest) returns (SetEventQuestionAnsweredResponse);
 }
 
 // EventQuestion is a question as the caller sees it.
@@ -87,11 +87,11 @@ message EventQuestion {
   bool caller_can_remove = 10;
 }
 
-message ListQuestionsRequest {
+message ListEventQuestionsRequest {
   ComponentRef ref = 1;
 }
 
-message ListQuestionsResponse {
+message ListEventQuestionsResponse {
   repeated EventQuestion questions = 1;
   // The component's `anonymous` parameter: questions may be anonymous.
   bool anonymous_allowed = 2;
@@ -105,36 +105,36 @@ message ListQuestionsResponse {
   int32 max_questions_per_person = 5;
 }
 
-message AskQuestionRequest {
+message AskEventQuestionRequest {
   ComponentRef ref = 1;
   string body = 2;
   bool anonymous = 3;
   string client_request_id = 4;
 }
 
-message AskQuestionResponse {
+message AskEventQuestionResponse {
   EventQuestion question = 1;
 }
 
-message RemoveQuestionRequest {
+message RemoveEventQuestionRequest {
   ComponentRef ref = 1;
   string question_id = 2;
 }
 
-message RemoveQuestionResponse {}
+message RemoveEventQuestionResponse {}
 
-message SetQuestionVoteRequest {
+message SetEventQuestionVoteRequest {
   ComponentRef ref = 1;
   string question_id = 2;
   bool voted = 3;
 }
 
-message SetQuestionVoteResponse {}
+message SetEventQuestionVoteResponse {}
 
-message SetQuestionAnsweredRequest {
+message SetEventQuestionAnsweredRequest {
   ComponentRef ref = 1;
   string question_id = 2;
   bool answered = 3;
 }
 
-message SetQuestionAnsweredResponse {}
+message SetEventQuestionAnsweredResponse {}

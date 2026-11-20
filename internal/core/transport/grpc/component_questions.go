@@ -81,8 +81,8 @@ func questionRef(ctx context.Context, ref *corev1.ComponentRef, question string)
 	return r, q, nil
 }
 
-// ListQuestions implements corev1.QuestionsComponentServiceServer.
-func (s *QuestionsComponentServer) ListQuestions(ctx context.Context, req *corev1.ListQuestionsRequest) (*corev1.ListQuestionsResponse, error) {
+// ListEventQuestions implements corev1.QuestionsComponentServiceServer.
+func (s *QuestionsComponentServer) ListEventQuestions(ctx context.Context, req *corev1.ListEventQuestionsRequest) (*corev1.ListEventQuestionsResponse, error) {
 	ref, err := componentRef(ctx, req.GetRef())
 	if err != nil {
 		return nil, err
@@ -91,7 +91,7 @@ func (s *QuestionsComponentServer) ListQuestions(ctx context.Context, req *corev
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}
-	out := &corev1.ListQuestionsResponse{
+	out := &corev1.ListEventQuestionsResponse{
 		Questions: make([]*corev1.EventQuestion, 0, len(l.Questions)), AnonymousAllowed: l.AnonymousAllowed,
 		CallerCanAsk: l.CallerCanAsk, CallerCanMarkAnswered: l.CallerCanMarkAnswered, MaxQuestionsPerPerson: l.MaxPerPerson,
 	}
@@ -101,9 +101,9 @@ func (s *QuestionsComponentServer) ListQuestions(ctx context.Context, req *corev
 	return out, nil
 }
 
-// AskQuestion implements corev1.QuestionsComponentServiceServer. The body
+// AskEventQuestion implements corev1.QuestionsComponentServiceServer. The body
 // goes to the app layer only; it is never logged.
-func (s *QuestionsComponentServer) AskQuestion(ctx context.Context, req *corev1.AskQuestionRequest) (*corev1.AskQuestionResponse, error) {
+func (s *QuestionsComponentServer) AskEventQuestion(ctx context.Context, req *corev1.AskEventQuestionRequest) (*corev1.AskEventQuestionResponse, error) {
 	ref, err := componentRef(ctx, req.GetRef())
 	if err != nil {
 		return nil, err
@@ -120,11 +120,11 @@ func (s *QuestionsComponentServer) AskQuestion(ctx context.Context, req *corev1.
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}
-	return &corev1.AskQuestionResponse{Question: eventQuestionPB(q)}, nil
+	return &corev1.AskEventQuestionResponse{Question: eventQuestionPB(q)}, nil
 }
 
-// RemoveQuestion implements corev1.QuestionsComponentServiceServer.
-func (s *QuestionsComponentServer) RemoveQuestion(ctx context.Context, req *corev1.RemoveQuestionRequest) (*corev1.RemoveQuestionResponse, error) {
+// RemoveEventQuestion implements corev1.QuestionsComponentServiceServer.
+func (s *QuestionsComponentServer) RemoveEventQuestion(ctx context.Context, req *corev1.RemoveEventQuestionRequest) (*corev1.RemoveEventQuestionResponse, error) {
 	ref, q, err := questionRef(ctx, req.GetRef(), req.GetQuestionId())
 	if err != nil {
 		return nil, err
@@ -132,11 +132,11 @@ func (s *QuestionsComponentServer) RemoveQuestion(ctx context.Context, req *core
 	if err := s.app.Remove(ctx, ref, q); err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}
-	return &corev1.RemoveQuestionResponse{}, nil
+	return &corev1.RemoveEventQuestionResponse{}, nil
 }
 
-// SetQuestionVote implements corev1.QuestionsComponentServiceServer.
-func (s *QuestionsComponentServer) SetQuestionVote(ctx context.Context, req *corev1.SetQuestionVoteRequest) (*corev1.SetQuestionVoteResponse, error) {
+// SetEventQuestionVote implements corev1.QuestionsComponentServiceServer.
+func (s *QuestionsComponentServer) SetEventQuestionVote(ctx context.Context, req *corev1.SetEventQuestionVoteRequest) (*corev1.SetEventQuestionVoteResponse, error) {
 	ref, q, err := questionRef(ctx, req.GetRef(), req.GetQuestionId())
 	if err != nil {
 		return nil, err
@@ -144,11 +144,11 @@ func (s *QuestionsComponentServer) SetQuestionVote(ctx context.Context, req *cor
 	if err := s.app.SetVote(ctx, ref, q, req.GetVoted()); err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}
-	return &corev1.SetQuestionVoteResponse{}, nil
+	return &corev1.SetEventQuestionVoteResponse{}, nil
 }
 
-// SetQuestionAnswered implements corev1.QuestionsComponentServiceServer.
-func (s *QuestionsComponentServer) SetQuestionAnswered(ctx context.Context, req *corev1.SetQuestionAnsweredRequest) (*corev1.SetQuestionAnsweredResponse, error) {
+// SetEventQuestionAnswered implements corev1.QuestionsComponentServiceServer.
+func (s *QuestionsComponentServer) SetEventQuestionAnswered(ctx context.Context, req *corev1.SetEventQuestionAnsweredRequest) (*corev1.SetEventQuestionAnsweredResponse, error) {
 	ref, q, err := questionRef(ctx, req.GetRef(), req.GetQuestionId())
 	if err != nil {
 		return nil, err
@@ -156,5 +156,5 @@ func (s *QuestionsComponentServer) SetQuestionAnswered(ctx context.Context, req 
 	if err := s.app.SetAnswered(ctx, ref, q, req.GetAnswered()); err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}
-	return &corev1.SetQuestionAnsweredResponse{}, nil
+	return &corev1.SetEventQuestionAnsweredResponse{}, nil
 }

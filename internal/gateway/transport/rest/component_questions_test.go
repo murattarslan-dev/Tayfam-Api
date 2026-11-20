@@ -37,9 +37,9 @@ func testEventQuestion() *corev1.EventQuestion {
 	}
 }
 
-func (f *fakeQuestions) ListQuestions(ctx context.Context, in *corev1.ListQuestionsRequest, _ ...grpc.CallOption) (*corev1.ListQuestionsResponse, error) {
+func (f *fakeQuestions) ListEventQuestions(ctx context.Context, in *corev1.ListEventQuestionsRequest, _ ...grpc.CallOption) (*corev1.ListEventQuestionsResponse, error) {
 	f.rec(ctx, in)
-	return &corev1.ListQuestionsResponse{
+	return &corev1.ListEventQuestionsResponse{
 		Questions: []*corev1.EventQuestion{
 			testEventQuestion(),
 			{Id: answerID, Body: "Mola var mı?", AuthorId: userID, CreateTime: timestamppb.New(t0), AnswerTime: timestamppb.New(t0)},
@@ -48,24 +48,24 @@ func (f *fakeQuestions) ListQuestions(ctx context.Context, in *corev1.ListQuesti
 	}, f.err
 }
 
-func (f *fakeQuestions) AskQuestion(ctx context.Context, in *corev1.AskQuestionRequest, _ ...grpc.CallOption) (*corev1.AskQuestionResponse, error) {
+func (f *fakeQuestions) AskEventQuestion(ctx context.Context, in *corev1.AskEventQuestionRequest, _ ...grpc.CallOption) (*corev1.AskEventQuestionResponse, error) {
 	f.rec(ctx, in)
-	return &corev1.AskQuestionResponse{Question: testEventQuestion()}, f.err
+	return &corev1.AskEventQuestionResponse{Question: testEventQuestion()}, f.err
 }
 
-func (f *fakeQuestions) RemoveQuestion(ctx context.Context, in *corev1.RemoveQuestionRequest, _ ...grpc.CallOption) (*corev1.RemoveQuestionResponse, error) {
+func (f *fakeQuestions) RemoveEventQuestion(ctx context.Context, in *corev1.RemoveEventQuestionRequest, _ ...grpc.CallOption) (*corev1.RemoveEventQuestionResponse, error) {
 	f.rec(ctx, in)
-	return &corev1.RemoveQuestionResponse{}, f.err
+	return &corev1.RemoveEventQuestionResponse{}, f.err
 }
 
-func (f *fakeQuestions) SetQuestionVote(ctx context.Context, in *corev1.SetQuestionVoteRequest, _ ...grpc.CallOption) (*corev1.SetQuestionVoteResponse, error) {
+func (f *fakeQuestions) SetEventQuestionVote(ctx context.Context, in *corev1.SetEventQuestionVoteRequest, _ ...grpc.CallOption) (*corev1.SetEventQuestionVoteResponse, error) {
 	f.rec(ctx, in)
-	return &corev1.SetQuestionVoteResponse{}, f.err
+	return &corev1.SetEventQuestionVoteResponse{}, f.err
 }
 
-func (f *fakeQuestions) SetQuestionAnswered(ctx context.Context, in *corev1.SetQuestionAnsweredRequest, _ ...grpc.CallOption) (*corev1.SetQuestionAnsweredResponse, error) {
+func (f *fakeQuestions) SetEventQuestionAnswered(ctx context.Context, in *corev1.SetEventQuestionAnsweredRequest, _ ...grpc.CallOption) (*corev1.SetEventQuestionAnsweredResponse, error) {
 	f.rec(ctx, in)
-	return &corev1.SetQuestionAnsweredResponse{}, f.err
+	return &corev1.SetEventQuestionAnsweredResponse{}, f.err
 }
 
 const (
@@ -83,16 +83,16 @@ func TestQuestionsComponentRoutes(t *testing.T) {
 		code               int
 		want               proto.Message
 	}{
-		{"GET", questionsPath, "", http.StatusOK, &corev1.ListQuestionsRequest{Ref: ref}},
+		{"GET", questionsPath, "", http.StatusOK, &corev1.ListEventQuestionsRequest{Ref: ref}},
 		{"POST", questionsPath, `{"body":"Neden bu rota?","anonymous":true,"client_request_id":"` + reqID + `"}`, http.StatusCreated,
-			&corev1.AskQuestionRequest{Ref: ref, Body: "Neden bu rota?", Anonymous: true, ClientRequestId: reqID}},
+			&corev1.AskEventQuestionRequest{Ref: ref, Body: "Neden bu rota?", Anonymous: true, ClientRequestId: reqID}},
 		{"POST", questionsPath, `{"body":"Mola var mı?","client_request_id":"` + reqID + `"}`, http.StatusCreated,
-			&corev1.AskQuestionRequest{Ref: ref, Body: "Mola var mı?", ClientRequestId: reqID}},
-		{"DELETE", questionPath1, "", http.StatusNoContent, &corev1.RemoveQuestionRequest{Ref: ref, QuestionId: questionID}},
-		{"PUT", questionPath1 + "/vote", "", http.StatusNoContent, &corev1.SetQuestionVoteRequest{Ref: ref, QuestionId: questionID, Voted: true}},
-		{"DELETE", questionPath1 + "/vote", "", http.StatusNoContent, &corev1.SetQuestionVoteRequest{Ref: ref, QuestionId: questionID}},
-		{"PUT", questionPath1 + "/answered", "", http.StatusNoContent, &corev1.SetQuestionAnsweredRequest{Ref: ref, QuestionId: questionID, Answered: true}},
-		{"DELETE", questionPath1 + "/answered", "", http.StatusNoContent, &corev1.SetQuestionAnsweredRequest{Ref: ref, QuestionId: questionID}},
+			&corev1.AskEventQuestionRequest{Ref: ref, Body: "Mola var mı?", ClientRequestId: reqID}},
+		{"DELETE", questionPath1, "", http.StatusNoContent, &corev1.RemoveEventQuestionRequest{Ref: ref, QuestionId: questionID}},
+		{"PUT", questionPath1 + "/vote", "", http.StatusNoContent, &corev1.SetEventQuestionVoteRequest{Ref: ref, QuestionId: questionID, Voted: true}},
+		{"DELETE", questionPath1 + "/vote", "", http.StatusNoContent, &corev1.SetEventQuestionVoteRequest{Ref: ref, QuestionId: questionID}},
+		{"PUT", questionPath1 + "/answered", "", http.StatusNoContent, &corev1.SetEventQuestionAnsweredRequest{Ref: ref, QuestionId: questionID, Answered: true}},
+		{"DELETE", questionPath1 + "/answered", "", http.StatusNoContent, &corev1.SetEventQuestionAnsweredRequest{Ref: ref, QuestionId: questionID}},
 	} {
 		f.got, f.token = nil, ""
 		w := as(h, tc.method, tc.path, tc.body)

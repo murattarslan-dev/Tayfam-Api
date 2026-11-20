@@ -78,7 +78,7 @@ func (h componentHandlers) listQuestions(ctx context.Context, w http.ResponseWri
 	if !ok {
 		return
 	}
-	resp, err := h.questions().ListQuestions(ctx, &corev1.ListQuestionsRequest{Ref: ref})
+	resp, err := h.questions().ListEventQuestions(ctx, &corev1.ListEventQuestionsRequest{Ref: ref})
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -113,7 +113,7 @@ func (h componentHandlers) askQuestion(ctx context.Context, w http.ResponseWrite
 		badRequest(w, r)
 		return
 	}
-	resp, err := h.questions().AskQuestion(ctx, &corev1.AskQuestionRequest{
+	resp, err := h.questions().AskEventQuestion(ctx, &corev1.AskEventQuestionRequest{
 		Ref: ref, Body: b.Body, Anonymous: b.Anonymous, ClientRequestId: b.ClientRequestID,
 	})
 	if err != nil {
@@ -141,7 +141,7 @@ func (h componentHandlers) removeQuestion(ctx context.Context, w http.ResponseWr
 	if !ok {
 		return
 	}
-	if _, err := h.questions().RemoveQuestion(ctx, &corev1.RemoveQuestionRequest{Ref: ref, QuestionId: q}); err != nil {
+	if _, err := h.questions().RemoveEventQuestion(ctx, &corev1.RemoveEventQuestionRequest{Ref: ref, QuestionId: q}); err != nil {
 		h.fail(w, r, err)
 		return
 	}
@@ -154,7 +154,7 @@ func (h componentHandlers) voteQuestion(voted bool) func(context.Context, http.R
 		if !ok {
 			return
 		}
-		if _, err := h.questions().SetQuestionVote(ctx, &corev1.SetQuestionVoteRequest{Ref: ref, QuestionId: q, Voted: voted}); err != nil {
+		if _, err := h.questions().SetEventQuestionVote(ctx, &corev1.SetEventQuestionVoteRequest{Ref: ref, QuestionId: q, Voted: voted}); err != nil {
 			h.fail(w, r, err)
 			return
 		}
@@ -168,7 +168,7 @@ func (h componentHandlers) answerQuestion(answered bool) func(context.Context, h
 		if !ok {
 			return
 		}
-		if _, err := h.questions().SetQuestionAnswered(ctx, &corev1.SetQuestionAnsweredRequest{Ref: ref, QuestionId: q, Answered: answered}); err != nil {
+		if _, err := h.questions().SetEventQuestionAnswered(ctx, &corev1.SetEventQuestionAnsweredRequest{Ref: ref, QuestionId: q, Answered: answered}); err != nil {
 			h.fail(w, r, err)
 			return
 		}
