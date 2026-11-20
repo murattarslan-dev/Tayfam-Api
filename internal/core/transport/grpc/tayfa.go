@@ -109,7 +109,7 @@ func (s *TayfaServer) GetTayfa(ctx context.Context, req *corev1.GetTayfaRequest)
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}
-	return &corev1.GetTayfaResponse{Tayfa: tayfaToProto(v), CallerRole: roleToProto(role)}, nil
+	return &corev1.GetTayfaResponse{Tayfa: tayfaToProto(v), CallerRole: roleToProto(role), Badges: earnedBadgesPB(v.Badges)}, nil
 }
 
 // ListMyTayfas implements corev1.TayfaServiceServer.

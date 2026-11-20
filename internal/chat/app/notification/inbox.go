@@ -72,6 +72,12 @@ const (
 	// the enqueue_push trigger opens no push job for it. Never names the
 	// winner.
 	TypeCelebration = "celebration"
+	// TypeBadgeEarned: a badge was earned (issue #258; ADR-0039 §4). No
+	// actor, never the badge itself; in-app only (the enqueue_push trigger
+	// opens no push job for it). A personal badge: the earner is the one
+	// recipient and the target (TargetUser), no tayfa. A tayfa badge: the
+	// tayfa's admins and moderators, the tayfa is the target (TargetTayfa).
+	TypeBadgeEarned = "badge_earned"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -115,7 +121,7 @@ func targetOf(typ string) (string, bool) {
 	case TypeJoinApproved, TypeTayfaDeletionRequested, TypeTayfaWarned, TypeTayfaArchived, TypeTayfaInvitation,
 		TypeTayfaSuspended, TypeTayfaUnsuspended:
 		return TargetTayfa, true
-	case TypeFriendRequest, TypeFriendAccepted, TypeFriendSuggestion, TypeSafetyAlert:
+	case TypeFriendRequest, TypeFriendAccepted, TypeFriendSuggestion, TypeSafetyAlert, TypeBadgeEarned:
 		return TargetUser, true
 	case TypeDMRequest, TypeDMMessage:
 		return TargetDMConversation, true
@@ -129,6 +135,15 @@ func targetOf(typ string) (string, bool) {
 func withoutTayfa(typ string) bool {
 	return typ == TypeFriendRequest || typ == TypeFriendAccepted || typ == TypeFriendSuggestion ||
 		typ == TypeSafetyAlert || typ == TypeDataExportReady || IsDirect(typ)
+}
+
+// hasTayfa reports whether r must name a tayfa: badge_earned names one
+// only for a tayfa badge.
+func (r Request) hasTayfa() bool {
+	if r.Type == TypeBadgeEarned {
+		return r.TargetType == TargetTayfa
+	}
+	return !withoutTayfa(r.Type)
 }
 
 // IsDirect reports whether a notification type is about a direct message.
@@ -161,7 +176,7 @@ func (r Request) Validate() error {
 	switch {
 	case r.Event == (id.ID{}):
 		return apperr.Validation("event_id")
-	case (r.Tayfa == id.ID{}) != withoutTayfa(r.Type):
+	case (r.Tayfa != id.ID{}) != r.hasTayfa():
 		return apperr.Validation("tayfa_id")
 	case r.Target == (id.ID{}):
 		return apperr.Validation("notification_requested.target_id")
@@ -171,6 +186,9 @@ func (r Request) Validate() error {
 	target, ok := targetOf(r.Type)
 	if !ok {
 		return apperr.Validation("notification_requested.type")
+	}
+	if r.Type == TypeBadgeEarned && r.TargetType == TargetTayfa {
+		target = TargetTayfa
 	}
 	if r.TargetType != target {
 		return apperr.Validation("notification_requested.target_type")
@@ -184,7 +202,7 @@ func (r Request) Validate() error {
 	// The reporter is never told who handled their report; a direct
 	// message notice does not say who wrote.
 	if (r.Type == TypeReportResolved || r.Type == TypeDataExportReady || r.Type == TypeFriendSuggestion ||
-		r.Type == TypeSafetyAlert || IsDirect(r.Type)) && r.Actor != (id.ID{}) {
+		r.Type == TypeSafetyAlert || r.Type == TypeBadgeEarned || IsDirect(r.Type)) && r.Actor != (id.ID{}) {
 		return apperr.Validation("actor_id")
 	}
 	if IsDirect(r.Type) != (r.Unread > 0) || r.Unread > MaxDirectUnread {

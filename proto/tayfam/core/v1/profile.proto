@@ -3,6 +3,7 @@ syntax = "proto3";
 package tayfam.core.v1;
 
 import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/badge.proto";
 import "tayfam/core/v1/event.proto";
 import "tayfam/core/v1/social.proto";
 import "tayfam/core/v1/tayfa.proto";
@@ -60,6 +61,13 @@ message UserProfile {
   bool activity_visible = 7;
   // The user's setting; filled only on one's own profile.
   ActivityVisibility activity_visibility = 8;
+  // Whether badges is the user's badges: always on one's own profile;
+  // otherwise only when the user's personal statistics are visible to the
+  // caller (ADR-0039 §3, ADR-0026 §4; off by default). When false badges
+  // is empty and the client shows nothing (not "no badges").
+  bool badges_visible = 9;
+  // The user's personal badges in the order earned (issue #258).
+  repeated EarnedBadge badges = 10;
 }
 
 message GetUserProfileResponse {

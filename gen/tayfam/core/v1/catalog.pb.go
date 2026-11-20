@@ -72,6 +72,164 @@ func (CatalogStatus) EnumDescriptor() ([]byte, []int) {
 	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{0}
 }
 
+// Who earns a badge.
+type BadgeScope int32
+
+const (
+	BadgeScope_BADGE_SCOPE_UNSPECIFIED BadgeScope = 0
+	BadgeScope_BADGE_SCOPE_USER        BadgeScope = 1
+	BadgeScope_BADGE_SCOPE_TAYFA       BadgeScope = 2
+)
+
+// Enum value maps for BadgeScope.
+var (
+	BadgeScope_name = map[int32]string{
+		0: "BADGE_SCOPE_UNSPECIFIED",
+		1: "BADGE_SCOPE_USER",
+		2: "BADGE_SCOPE_TAYFA",
+	}
+	BadgeScope_value = map[string]int32{
+		"BADGE_SCOPE_UNSPECIFIED": 0,
+		"BADGE_SCOPE_USER":        1,
+		"BADGE_SCOPE_TAYFA":       2,
+	}
+)
+
+func (x BadgeScope) Enum() *BadgeScope {
+	p := new(BadgeScope)
+	*p = x
+	return p
+}
+
+func (x BadgeScope) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BadgeScope) Descriptor() protoreflect.EnumDescriptor {
+	return file_tayfam_core_v1_catalog_proto_enumTypes[1].Descriptor()
+}
+
+func (BadgeScope) Type() protoreflect.EnumType {
+	return &file_tayfam_core_v1_catalog_proto_enumTypes[1]
+}
+
+func (x BadgeScope) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BadgeScope.Descriptor instead.
+func (BadgeScope) EnumDescriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{1}
+}
+
+// How a badge is earned (ADR-0039 §1).
+type BadgeRuleKind int32
+
+const (
+	BadgeRuleKind_BADGE_RULE_KIND_UNSPECIFIED BadgeRuleKind = 0
+	// A metric's total reached value within period.
+	BadgeRuleKind_BADGE_RULE_KIND_THRESHOLD BadgeRuleKind = 1
+	// The first attendance, of event_type or of any type. Personal only.
+	BadgeRuleKind_BADGE_RULE_KIND_FIRST BadgeRuleKind = 2
+	// A celebration of an event (of event_type, or of any type) named the
+	// person, or their team, the winner. Personal only.
+	BadgeRuleKind_BADGE_RULE_KIND_CHAMPION BadgeRuleKind = 3
+)
+
+// Enum value maps for BadgeRuleKind.
+var (
+	BadgeRuleKind_name = map[int32]string{
+		0: "BADGE_RULE_KIND_UNSPECIFIED",
+		1: "BADGE_RULE_KIND_THRESHOLD",
+		2: "BADGE_RULE_KIND_FIRST",
+		3: "BADGE_RULE_KIND_CHAMPION",
+	}
+	BadgeRuleKind_value = map[string]int32{
+		"BADGE_RULE_KIND_UNSPECIFIED": 0,
+		"BADGE_RULE_KIND_THRESHOLD":   1,
+		"BADGE_RULE_KIND_FIRST":       2,
+		"BADGE_RULE_KIND_CHAMPION":    3,
+	}
+)
+
+func (x BadgeRuleKind) Enum() *BadgeRuleKind {
+	p := new(BadgeRuleKind)
+	*p = x
+	return p
+}
+
+func (x BadgeRuleKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BadgeRuleKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_tayfam_core_v1_catalog_proto_enumTypes[2].Descriptor()
+}
+
+func (BadgeRuleKind) Type() protoreflect.EnumType {
+	return &file_tayfam_core_v1_catalog_proto_enumTypes[2]
+}
+
+func (x BadgeRuleKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BadgeRuleKind.Descriptor instead.
+func (BadgeRuleKind) EnumDescriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{2}
+}
+
+// The period a threshold counts.
+type BadgePeriod int32
+
+const (
+	BadgePeriod_BADGE_PERIOD_UNSPECIFIED BadgePeriod = 0
+	BadgePeriod_BADGE_PERIOD_ALL_TIME    BadgePeriod = 1
+	// Per calendar year: the badge can be earned once a year.
+	BadgePeriod_BADGE_PERIOD_YEAR BadgePeriod = 2
+)
+
+// Enum value maps for BadgePeriod.
+var (
+	BadgePeriod_name = map[int32]string{
+		0: "BADGE_PERIOD_UNSPECIFIED",
+		1: "BADGE_PERIOD_ALL_TIME",
+		2: "BADGE_PERIOD_YEAR",
+	}
+	BadgePeriod_value = map[string]int32{
+		"BADGE_PERIOD_UNSPECIFIED": 0,
+		"BADGE_PERIOD_ALL_TIME":    1,
+		"BADGE_PERIOD_YEAR":        2,
+	}
+)
+
+func (x BadgePeriod) Enum() *BadgePeriod {
+	p := new(BadgePeriod)
+	*p = x
+	return p
+}
+
+func (x BadgePeriod) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BadgePeriod) Descriptor() protoreflect.EnumDescriptor {
+	return file_tayfam_core_v1_catalog_proto_enumTypes[3].Descriptor()
+}
+
+func (BadgePeriod) Type() protoreflect.EnumType {
+	return &file_tayfam_core_v1_catalog_proto_enumTypes[3]
+}
+
+func (x BadgePeriod) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BadgePeriod.Descriptor instead.
+func (BadgePeriod) EnumDescriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{3}
+}
+
 // CatalogInterest groups event types.
 type CatalogInterest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -356,6 +514,188 @@ func (x *CatalogStudyTag) GetStatus() CatalogStatus {
 	return CatalogStatus_CATALOG_STATUS_UNSPECIFIED
 }
 
+// CatalogBadgeRule is a badge's rule, for the client to explain it.
+type CatalogBadgeRule struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Kind  BadgeRuleKind          `protobuf:"varint,1,opt,name=kind,proto3,enum=tayfam.core.v1.BadgeRuleKind" json:"kind,omitempty"`
+	// Threshold only: a common metric (events, attended, participants,
+	// duration) or "<type key>.<key>", where key is a common metric of the
+	// type or one of its measure or log components.
+	Metric string `protobuf:"bytes,2,opt,name=metric,proto3" json:"metric,omitempty"`
+	// Threshold only: in the metric's unit (a duration in minutes).
+	Value float64 `protobuf:"fixed64,3,opt,name=value,proto3" json:"value,omitempty"`
+	// Threshold only.
+	Period BadgePeriod `protobuf:"varint,4,opt,name=period,proto3,enum=tayfam.core.v1.BadgePeriod" json:"period,omitempty"`
+	// First and champion: the event type it is about; empty for any.
+	EventType     string `protobuf:"bytes,5,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CatalogBadgeRule) Reset() {
+	*x = CatalogBadgeRule{}
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CatalogBadgeRule) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CatalogBadgeRule) ProtoMessage() {}
+
+func (x *CatalogBadgeRule) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CatalogBadgeRule.ProtoReflect.Descriptor instead.
+func (*CatalogBadgeRule) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *CatalogBadgeRule) GetKind() BadgeRuleKind {
+	if x != nil {
+		return x.Kind
+	}
+	return BadgeRuleKind_BADGE_RULE_KIND_UNSPECIFIED
+}
+
+func (x *CatalogBadgeRule) GetMetric() string {
+	if x != nil {
+		return x.Metric
+	}
+	return ""
+}
+
+func (x *CatalogBadgeRule) GetValue() float64 {
+	if x != nil {
+		return x.Value
+	}
+	return 0
+}
+
+func (x *CatalogBadgeRule) GetPeriod() BadgePeriod {
+	if x != nil {
+		return x.Period
+	}
+	return BadgePeriod_BADGE_PERIOD_UNSPECIFIED
+}
+
+func (x *CatalogBadgeRule) GetEventType() string {
+	if x != nil {
+		return x.EventType
+	}
+	return ""
+}
+
+// CatalogBadge is a badge definition (issue #258; ADR-0039 §1). Nothing
+// sensitive earns a badge: no sensitive measure, no type whose attendance
+// is sensitive.
+type CatalogBadge struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Immutable; ^[a-z][a-z0-9_]{1,39}$.
+	Key   string     `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Scope BadgeScope `protobuf:"varint,2,opt,name=scope,proto3,enum=tayfam.core.v1.BadgeScope" json:"scope,omitempty"`
+	// Listing order, ascending.
+	Position int32 `protobuf:"varint,3,opt,name=position,proto3" json:"position,omitempty"`
+	// Language to name.
+	Labels map[string]string `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Icon   string            `protobuf:"bytes,5,opt,name=icon,proto3" json:"icon,omitempty"`
+	// A retired badge is no longer earned; earned ones keep showing it.
+	Status        CatalogStatus     `protobuf:"varint,6,opt,name=status,proto3,enum=tayfam.core.v1.CatalogStatus" json:"status,omitempty"`
+	Rule          *CatalogBadgeRule `protobuf:"bytes,7,opt,name=rule,proto3" json:"rule,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CatalogBadge) Reset() {
+	*x = CatalogBadge{}
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CatalogBadge) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CatalogBadge) ProtoMessage() {}
+
+func (x *CatalogBadge) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CatalogBadge.ProtoReflect.Descriptor instead.
+func (*CatalogBadge) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *CatalogBadge) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *CatalogBadge) GetScope() BadgeScope {
+	if x != nil {
+		return x.Scope
+	}
+	return BadgeScope_BADGE_SCOPE_UNSPECIFIED
+}
+
+func (x *CatalogBadge) GetPosition() int32 {
+	if x != nil {
+		return x.Position
+	}
+	return 0
+}
+
+func (x *CatalogBadge) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+func (x *CatalogBadge) GetIcon() string {
+	if x != nil {
+		return x.Icon
+	}
+	return ""
+}
+
+func (x *CatalogBadge) GetStatus() CatalogStatus {
+	if x != nil {
+		return x.Status
+	}
+	return CatalogStatus_CATALOG_STATUS_UNSPECIFIED
+}
+
+func (x *CatalogBadge) GetRule() *CatalogBadgeRule {
+	if x != nil {
+		return x.Rule
+	}
+	return nil
+}
+
 type GetCatalogRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The catalog version the caller already holds; 0 when none.
@@ -366,7 +706,7 @@ type GetCatalogRequest struct {
 
 func (x *GetCatalogRequest) Reset() {
 	*x = GetCatalogRequest{}
-	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[3]
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -378,7 +718,7 @@ func (x *GetCatalogRequest) String() string {
 func (*GetCatalogRequest) ProtoMessage() {}
 
 func (x *GetCatalogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[3]
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -391,7 +731,7 @@ func (x *GetCatalogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCatalogRequest.ProtoReflect.Descriptor instead.
 func (*GetCatalogRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{3}
+	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetCatalogRequest) GetKnownVersion() int64 {
@@ -414,14 +754,16 @@ type GetCatalogResponse struct {
 	EventTypes []*CatalogEventType `protobuf:"bytes,4,rep,name=event_types,json=eventTypes,proto3" json:"event_types,omitempty"`
 	// The study tag list, retired tags included, by position; the client
 	// groups it by parent_key.
-	StudyTags     []*CatalogStudyTag `protobuf:"bytes,5,rep,name=study_tags,json=studyTags,proto3" json:"study_tags,omitempty"`
+	StudyTags []*CatalogStudyTag `protobuf:"bytes,5,rep,name=study_tags,json=studyTags,proto3" json:"study_tags,omitempty"`
+	// Every badge definition, retired ones included, by position.
+	Badges        []*CatalogBadge `protobuf:"bytes,6,rep,name=badges,proto3" json:"badges,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetCatalogResponse) Reset() {
 	*x = GetCatalogResponse{}
-	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[4]
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -433,7 +775,7 @@ func (x *GetCatalogResponse) String() string {
 func (*GetCatalogResponse) ProtoMessage() {}
 
 func (x *GetCatalogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[4]
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -446,7 +788,7 @@ func (x *GetCatalogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCatalogResponse.ProtoReflect.Descriptor instead.
 func (*GetCatalogResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{4}
+	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetCatalogResponse) GetCatalogVersion() int64 {
@@ -484,6 +826,13 @@ func (x *GetCatalogResponse) GetStudyTags() []*CatalogStudyTag {
 	return nil
 }
 
+func (x *GetCatalogResponse) GetBadges() []*CatalogBadge {
+	if x != nil {
+		return x.Badges
+	}
+	return nil
+}
+
 type GetEventTypeVersionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
@@ -495,7 +844,7 @@ type GetEventTypeVersionRequest struct {
 
 func (x *GetEventTypeVersionRequest) Reset() {
 	*x = GetEventTypeVersionRequest{}
-	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[5]
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -507,7 +856,7 @@ func (x *GetEventTypeVersionRequest) String() string {
 func (*GetEventTypeVersionRequest) ProtoMessage() {}
 
 func (x *GetEventTypeVersionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[5]
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -520,7 +869,7 @@ func (x *GetEventTypeVersionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEventTypeVersionRequest.ProtoReflect.Descriptor instead.
 func (*GetEventTypeVersionRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{5}
+	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetEventTypeVersionRequest) GetKey() string {
@@ -546,7 +895,7 @@ type GetEventTypeVersionResponse struct {
 
 func (x *GetEventTypeVersionResponse) Reset() {
 	*x = GetEventTypeVersionResponse{}
-	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[6]
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -558,7 +907,7 @@ func (x *GetEventTypeVersionResponse) String() string {
 func (*GetEventTypeVersionResponse) ProtoMessage() {}
 
 func (x *GetEventTypeVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[6]
+	mi := &file_tayfam_core_v1_catalog_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -571,7 +920,7 @@ func (x *GetEventTypeVersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEventTypeVersionResponse.ProtoReflect.Descriptor instead.
 func (*GetEventTypeVersionResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{6}
+	return file_tayfam_core_v1_catalog_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetEventTypeVersionResponse) GetEventType() *CatalogEventType {
@@ -619,9 +968,27 @@ const file_tayfam_core_v1_catalog_proto_rawDesc = "" +
 	"\x06status\x18\x05 \x01(\x0e2\x1d.tayfam.core.v1.CatalogStatusR\x06status\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc7\x01\n" +
+	"\x10CatalogBadgeRule\x121\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x1d.tayfam.core.v1.BadgeRuleKindR\x04kind\x12\x16\n" +
+	"\x06metric\x18\x02 \x01(\tR\x06metric\x12\x14\n" +
+	"\x05value\x18\x03 \x01(\x01R\x05value\x123\n" +
+	"\x06period\x18\x04 \x01(\x0e2\x1b.tayfam.core.v1.BadgePeriodR\x06period\x12\x1d\n" +
+	"\n" +
+	"event_type\x18\x05 \x01(\tR\teventType\"\xec\x02\n" +
+	"\fCatalogBadge\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
+	"\x05scope\x18\x02 \x01(\x0e2\x1a.tayfam.core.v1.BadgeScopeR\x05scope\x12\x1a\n" +
+	"\bposition\x18\x03 \x01(\x05R\bposition\x12@\n" +
+	"\x06labels\x18\x04 \x03(\v2(.tayfam.core.v1.CatalogBadge.LabelsEntryR\x06labels\x12\x12\n" +
+	"\x04icon\x18\x05 \x01(\tR\x04icon\x125\n" +
+	"\x06status\x18\x06 \x01(\x0e2\x1d.tayfam.core.v1.CatalogStatusR\x06status\x124\n" +
+	"\x04rule\x18\a \x01(\v2 .tayfam.core.v1.CatalogBadgeRuleR\x04rule\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"8\n" +
 	"\x11GetCatalogRequest\x12#\n" +
-	"\rknown_version\x18\x01 \x01(\x03R\fknownVersion\"\xa2\x02\n" +
+	"\rknown_version\x18\x01 \x01(\x03R\fknownVersion\"\xd8\x02\n" +
 	"\x12GetCatalogResponse\x12'\n" +
 	"\x0fcatalog_version\x18\x01 \x01(\x03R\x0ecatalogVersion\x12!\n" +
 	"\fnot_modified\x18\x02 \x01(\bR\vnotModified\x12=\n" +
@@ -629,7 +996,8 @@ const file_tayfam_core_v1_catalog_proto_rawDesc = "" +
 	"\vevent_types\x18\x04 \x03(\v2 .tayfam.core.v1.CatalogEventTypeR\n" +
 	"eventTypes\x12>\n" +
 	"\n" +
-	"study_tags\x18\x05 \x03(\v2\x1f.tayfam.core.v1.CatalogStudyTagR\tstudyTags\"H\n" +
+	"study_tags\x18\x05 \x03(\v2\x1f.tayfam.core.v1.CatalogStudyTagR\tstudyTags\x124\n" +
+	"\x06badges\x18\x06 \x03(\v2\x1c.tayfam.core.v1.CatalogBadgeR\x06badges\"H\n" +
 	"\x1aGetEventTypeVersionRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x05R\aversion\"^\n" +
@@ -639,7 +1007,21 @@ const file_tayfam_core_v1_catalog_proto_rawDesc = "" +
 	"\rCatalogStatus\x12\x1e\n" +
 	"\x1aCATALOG_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15CATALOG_STATUS_ACTIVE\x10\x01\x12\x1a\n" +
-	"\x16CATALOG_STATUS_RETIRED\x10\x022\xd5\x01\n" +
+	"\x16CATALOG_STATUS_RETIRED\x10\x02*V\n" +
+	"\n" +
+	"BadgeScope\x12\x1b\n" +
+	"\x17BADGE_SCOPE_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x10BADGE_SCOPE_USER\x10\x01\x12\x15\n" +
+	"\x11BADGE_SCOPE_TAYFA\x10\x02*\x88\x01\n" +
+	"\rBadgeRuleKind\x12\x1f\n" +
+	"\x1bBADGE_RULE_KIND_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19BADGE_RULE_KIND_THRESHOLD\x10\x01\x12\x19\n" +
+	"\x15BADGE_RULE_KIND_FIRST\x10\x02\x12\x1c\n" +
+	"\x18BADGE_RULE_KIND_CHAMPION\x10\x03*]\n" +
+	"\vBadgePeriod\x12\x1c\n" +
+	"\x18BADGE_PERIOD_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15BADGE_PERIOD_ALL_TIME\x10\x01\x12\x15\n" +
+	"\x11BADGE_PERIOD_YEAR\x10\x022\xd5\x01\n" +
 	"\x0eCatalogService\x12S\n" +
 	"\n" +
 	"GetCatalog\x12!.tayfam.core.v1.GetCatalogRequest\x1a\".tayfam.core.v1.GetCatalogResponse\x12n\n" +
@@ -658,43 +1040,56 @@ func file_tayfam_core_v1_catalog_proto_rawDescGZIP() []byte {
 	return file_tayfam_core_v1_catalog_proto_rawDescData
 }
 
-var file_tayfam_core_v1_catalog_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_tayfam_core_v1_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_tayfam_core_v1_catalog_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_tayfam_core_v1_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_tayfam_core_v1_catalog_proto_goTypes = []any{
 	(CatalogStatus)(0),                  // 0: tayfam.core.v1.CatalogStatus
-	(*CatalogInterest)(nil),             // 1: tayfam.core.v1.CatalogInterest
-	(*CatalogEventType)(nil),            // 2: tayfam.core.v1.CatalogEventType
-	(*CatalogStudyTag)(nil),             // 3: tayfam.core.v1.CatalogStudyTag
-	(*GetCatalogRequest)(nil),           // 4: tayfam.core.v1.GetCatalogRequest
-	(*GetCatalogResponse)(nil),          // 5: tayfam.core.v1.GetCatalogResponse
-	(*GetEventTypeVersionRequest)(nil),  // 6: tayfam.core.v1.GetEventTypeVersionRequest
-	(*GetEventTypeVersionResponse)(nil), // 7: tayfam.core.v1.GetEventTypeVersionResponse
-	nil,                                 // 8: tayfam.core.v1.CatalogInterest.LabelsEntry
-	nil,                                 // 9: tayfam.core.v1.CatalogEventType.LabelsEntry
-	nil,                                 // 10: tayfam.core.v1.CatalogStudyTag.LabelsEntry
-	(EventMode)(0),                      // 11: tayfam.core.v1.EventMode
+	(BadgeScope)(0),                     // 1: tayfam.core.v1.BadgeScope
+	(BadgeRuleKind)(0),                  // 2: tayfam.core.v1.BadgeRuleKind
+	(BadgePeriod)(0),                    // 3: tayfam.core.v1.BadgePeriod
+	(*CatalogInterest)(nil),             // 4: tayfam.core.v1.CatalogInterest
+	(*CatalogEventType)(nil),            // 5: tayfam.core.v1.CatalogEventType
+	(*CatalogStudyTag)(nil),             // 6: tayfam.core.v1.CatalogStudyTag
+	(*CatalogBadgeRule)(nil),            // 7: tayfam.core.v1.CatalogBadgeRule
+	(*CatalogBadge)(nil),                // 8: tayfam.core.v1.CatalogBadge
+	(*GetCatalogRequest)(nil),           // 9: tayfam.core.v1.GetCatalogRequest
+	(*GetCatalogResponse)(nil),          // 10: tayfam.core.v1.GetCatalogResponse
+	(*GetEventTypeVersionRequest)(nil),  // 11: tayfam.core.v1.GetEventTypeVersionRequest
+	(*GetEventTypeVersionResponse)(nil), // 12: tayfam.core.v1.GetEventTypeVersionResponse
+	nil,                                 // 13: tayfam.core.v1.CatalogInterest.LabelsEntry
+	nil,                                 // 14: tayfam.core.v1.CatalogEventType.LabelsEntry
+	nil,                                 // 15: tayfam.core.v1.CatalogStudyTag.LabelsEntry
+	nil,                                 // 16: tayfam.core.v1.CatalogBadge.LabelsEntry
+	(EventMode)(0),                      // 17: tayfam.core.v1.EventMode
 }
 var file_tayfam_core_v1_catalog_proto_depIdxs = []int32{
-	8,  // 0: tayfam.core.v1.CatalogInterest.labels:type_name -> tayfam.core.v1.CatalogInterest.LabelsEntry
+	13, // 0: tayfam.core.v1.CatalogInterest.labels:type_name -> tayfam.core.v1.CatalogInterest.LabelsEntry
 	0,  // 1: tayfam.core.v1.CatalogInterest.status:type_name -> tayfam.core.v1.CatalogStatus
-	9,  // 2: tayfam.core.v1.CatalogEventType.labels:type_name -> tayfam.core.v1.CatalogEventType.LabelsEntry
-	11, // 3: tayfam.core.v1.CatalogEventType.modes:type_name -> tayfam.core.v1.EventMode
+	14, // 2: tayfam.core.v1.CatalogEventType.labels:type_name -> tayfam.core.v1.CatalogEventType.LabelsEntry
+	17, // 3: tayfam.core.v1.CatalogEventType.modes:type_name -> tayfam.core.v1.EventMode
 	0,  // 4: tayfam.core.v1.CatalogEventType.status:type_name -> tayfam.core.v1.CatalogStatus
-	10, // 5: tayfam.core.v1.CatalogStudyTag.labels:type_name -> tayfam.core.v1.CatalogStudyTag.LabelsEntry
+	15, // 5: tayfam.core.v1.CatalogStudyTag.labels:type_name -> tayfam.core.v1.CatalogStudyTag.LabelsEntry
 	0,  // 6: tayfam.core.v1.CatalogStudyTag.status:type_name -> tayfam.core.v1.CatalogStatus
-	1,  // 7: tayfam.core.v1.GetCatalogResponse.interests:type_name -> tayfam.core.v1.CatalogInterest
-	2,  // 8: tayfam.core.v1.GetCatalogResponse.event_types:type_name -> tayfam.core.v1.CatalogEventType
-	3,  // 9: tayfam.core.v1.GetCatalogResponse.study_tags:type_name -> tayfam.core.v1.CatalogStudyTag
-	2,  // 10: tayfam.core.v1.GetEventTypeVersionResponse.event_type:type_name -> tayfam.core.v1.CatalogEventType
-	4,  // 11: tayfam.core.v1.CatalogService.GetCatalog:input_type -> tayfam.core.v1.GetCatalogRequest
-	6,  // 12: tayfam.core.v1.CatalogService.GetEventTypeVersion:input_type -> tayfam.core.v1.GetEventTypeVersionRequest
-	5,  // 13: tayfam.core.v1.CatalogService.GetCatalog:output_type -> tayfam.core.v1.GetCatalogResponse
-	7,  // 14: tayfam.core.v1.CatalogService.GetEventTypeVersion:output_type -> tayfam.core.v1.GetEventTypeVersionResponse
-	13, // [13:15] is the sub-list for method output_type
-	11, // [11:13] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	2,  // 7: tayfam.core.v1.CatalogBadgeRule.kind:type_name -> tayfam.core.v1.BadgeRuleKind
+	3,  // 8: tayfam.core.v1.CatalogBadgeRule.period:type_name -> tayfam.core.v1.BadgePeriod
+	1,  // 9: tayfam.core.v1.CatalogBadge.scope:type_name -> tayfam.core.v1.BadgeScope
+	16, // 10: tayfam.core.v1.CatalogBadge.labels:type_name -> tayfam.core.v1.CatalogBadge.LabelsEntry
+	0,  // 11: tayfam.core.v1.CatalogBadge.status:type_name -> tayfam.core.v1.CatalogStatus
+	7,  // 12: tayfam.core.v1.CatalogBadge.rule:type_name -> tayfam.core.v1.CatalogBadgeRule
+	4,  // 13: tayfam.core.v1.GetCatalogResponse.interests:type_name -> tayfam.core.v1.CatalogInterest
+	5,  // 14: tayfam.core.v1.GetCatalogResponse.event_types:type_name -> tayfam.core.v1.CatalogEventType
+	6,  // 15: tayfam.core.v1.GetCatalogResponse.study_tags:type_name -> tayfam.core.v1.CatalogStudyTag
+	8,  // 16: tayfam.core.v1.GetCatalogResponse.badges:type_name -> tayfam.core.v1.CatalogBadge
+	5,  // 17: tayfam.core.v1.GetEventTypeVersionResponse.event_type:type_name -> tayfam.core.v1.CatalogEventType
+	9,  // 18: tayfam.core.v1.CatalogService.GetCatalog:input_type -> tayfam.core.v1.GetCatalogRequest
+	11, // 19: tayfam.core.v1.CatalogService.GetEventTypeVersion:input_type -> tayfam.core.v1.GetEventTypeVersionRequest
+	10, // 20: tayfam.core.v1.CatalogService.GetCatalog:output_type -> tayfam.core.v1.GetCatalogResponse
+	12, // 21: tayfam.core.v1.CatalogService.GetEventTypeVersion:output_type -> tayfam.core.v1.GetEventTypeVersionResponse
+	20, // [20:22] is the sub-list for method output_type
+	18, // [18:20] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_catalog_proto_init() }
@@ -708,8 +1103,8 @@ func file_tayfam_core_v1_catalog_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_catalog_proto_rawDesc), len(file_tayfam_core_v1_catalog_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   10,
+			NumEnums:      4,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

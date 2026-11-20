@@ -6484,6 +6484,10 @@ paths:
 
         `study_tags` Eğitim modüllerinin ders ve konu etiket listesidir
         (`CatalogStudyTag`); emekliye ayrılanlar dahil hepsi döner.
+
+        `badges` rozet tanımlarıdır (`CatalogBadge`, #258, ADR-0039);
+        kazanılmış rozetin adı ve ikonu buradan okunduğu için emekliye
+        ayrılanlar dahil hepsi döner.
       parameters:
         - name: If-None-Match
           in: header
@@ -8508,10 +8512,14 @@ components:
 
     TayfaView:
       type: object
-      required: [tayfa, caller_role]
+      required: [tayfa, caller_role, badges]
       properties:
         tayfa: { $ref: "#/components/schemas/Tayfa" }
         caller_role: { $ref: "#/components/schemas/Role" }
+        badges:
+          type: array
+          description: Tayfanın rozetleri, kazanılma sırasıyla (#258, ADR-0039 §3).
+          items: { $ref: "#/components/schemas/EarnedBadge" }
 
     MyTayfa:
       type: object
@@ -10445,8 +10453,14 @@ components:
             kez, tayfanın ilan eden dışındaki etkin üyelerine. Kazananı
             adlandırmaz; kutlamayı bileşenin ucu verir. Yalnızca uygulama
             içi, push gitmez.
+            `badge_earned` (#258, ADR-0039 §4): bir rozet kazanıldı; rozeti
+            adlandırmaz, `actor_id` yoktur. Kişisel rozette alıcı rozeti
+            kazanan kişidir, hedef `user` kendisidir (kendi profilinizi
+            açın) ve `tayfa_id` yoktur; tayfa rozetinde alıcılar tayfanın
+            yönetici ve moderatörleridir, hedef `tayfa`'dır. Yalnızca
+            uygulama içi, push gitmez.
             Tanınmayan değer `unknown`.
-          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, tayfa_suspended, tayfa_unsuspended, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, data_export_ready, friend_suggestion, safety_alert, celebration, unknown]
+          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, tayfa_suspended, tayfa_unsuspended, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, data_export_ready, friend_suggestion, safety_alert, celebration, badge_earned, unknown]
         tayfa_id:
           type: string
           format: uuid
@@ -11900,7 +11914,7 @@ components:
           maxLength: 60
     Catalog:
       type: object
-      required: [catalog_version, interests, event_types, study_tags]
+      required: [catalog_version, interests, event_types, study_tags, badges]
       properties:
         catalog_version:
           type: integer
@@ -11918,6 +11932,10 @@ components:
           type: array
           description: Ders ve konu etiketleri (emekliler dahil), `position` sırasıyla; istemci `parent_key` ile gruplar.
           items: { $ref: "#/components/schemas/CatalogStudyTag" }
+        badges:
+          type: array
+          description: Rozet tanımları (emekliler dahil), `position` sırasıyla.
+          items: { $ref: "#/components/schemas/CatalogBadge" }
     CatalogStatus:
       type: string
       description: |
@@ -11960,6 +11978,78 @@ components:
         position: { type: integer, format: int32, description: "Aynı üst kaydın altındaki sıra (küçükten büyüğe)." }
         labels: { $ref: "#/components/schemas/CatalogLabels" }
         status: { $ref: "#/components/schemas/CatalogStatus" }
+    CatalogBadge:
+      type: object
+      description: |
+        Bir rozet tanımı (#258, ADR-0039 §1). Rozet katalog gibi veridir;
+        adlar platform sahibinin içeriğidir ve düz metin gösterilir. `retired`
+        rozet artık kazanılmaz, kazanılmışlar göstermeye devam eder. Hassas
+        ölçümlerden ve katılımı hassas türlerden rozet çıkmaz. Sıralama ya da
+        "en çok rozet" listesi yoktur.
+      required: [key, scope, position, labels, icon, status, rule]
+      properties:
+        key: { type: string, description: "Değişmez anahtar: `^[a-z][a-z0-9_]{1,39}$`." }
+        scope:
+          type: string
+          description: |
+            `user` kişisel rozet (kilometre taşı ya da şampiyonluk), `tayfa`
+            tayfa rozeti. Tanınmayan değer `unknown`.
+          enum: [user, tayfa, unknown]
+        position: { type: integer, format: int32, description: "Listeleme sırası (küçükten büyüğe)." }
+        labels: { $ref: "#/components/schemas/CatalogLabels" }
+        icon: { type: string, description: "İstemcinin sabit ikon setinden bir anahtar." }
+        status: { $ref: "#/components/schemas/CatalogStatus" }
+        rule: { $ref: "#/components/schemas/CatalogBadgeRule" }
+    CatalogBadgeRule:
+      type: object
+      description: |
+        Rozetin kazanılma kuralı; istemci rozeti açıklamak için kullanır.
+        `threshold` bir metriğin toplamı `value` değerine ulaştı (`metric`,
+        `value`, `period` yalnızca bunda vardır); `first` bir türde
+        (`event_type`) ya da genel ilk katılım; `champion` bir etkinliğin
+        kutlamasında kişi ya da takımı kazanan ilan edildi (`event_type`
+        varsa yalnızca o türde). `first` ve `champion` yalnızca kişiseldir.
+        Tanınmayan `kind` için istemci rozeti açıklamasız gösterir.
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [threshold, first, champion, unknown] }
+        metric:
+          type: string
+          description: |
+            Ortak metrik (`events`, `attended`, `participants`, `duration`)
+            ya da `<tür anahtarı>.<anahtar>` (türün ortak metriği ya da bir
+            ölçüm veya günlük bileşeni).
+        value:
+          type: number
+          format: double
+          description: Eşik, metriğin biriminde (süre dakika).
+        period:
+          type: string
+          description: "`year` rozet her takvim yılı ayrı kazanılır."
+          enum: [all_time, year, unknown]
+        event_type: { type: string, description: "Kuralın türü; yoksa her tür." }
+    EarnedBadge:
+      type: object
+      description: |
+        Kazanılmış bir rozet (#258, ADR-0039 §2). Adı ve ikonu katalogdaki
+        aynı anahtarlı `CatalogBadge`'dedir. Rozet geri alınmaz: etkinlik ya
+        da tayfa sonradan silinse de kalır.
+      required: [badge_key, earned_at]
+      properties:
+        badge_key: { type: string }
+        year:
+          type: integer
+          format: int32
+          description: Yalnızca yıllık rozette, kazanıldığı takvim yılı.
+        tayfa_id:
+          type: string
+          format: uuid
+          description: Yalnızca şampiyonluk rozetinde, etkinliğin tayfası (silinmiş olabilir).
+        event_id:
+          type: string
+          format: uuid
+          description: Yalnızca şampiyonluk rozetinde, etkinlik (silinmiş olabilir).
+        earned_at: { type: string, format: date-time }
     CatalogEventType:
       type: object
       description: Bir etkinlik türünün bir sürümü.
@@ -12203,6 +12293,15 @@ components:
           description: Katılım geçmişinden size bir şey gösterilip gösterilemeyeceği.
         activity_visibility:
           $ref: "#/components/schemas/ActivityVisibility"
+        badges:
+          type: array
+          description: |
+            Kişisel rozetler, kazanılma sırasıyla (#258, ADR-0039 §3). Kendi
+            profilinizde her zaman (yoksa boş liste); başkasınınkinde
+            yalnızca kişinin kişisel istatistik görünürlüğü size izin
+            veriyorsa döner (varsayılan kapalı), yoksa alan da yoktur.
+            Şampiyonluk rozetleri tayfanın içinde ayrıca görünür.
+          items: { $ref: "#/components/schemas/EarnedBadge" }
         birthday:
           $ref: "#/components/schemas/Birthday"
         interests:

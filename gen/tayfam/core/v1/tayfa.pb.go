@@ -767,7 +767,10 @@ type GetTayfaResponse struct {
 	Tayfa *Tayfa                 `protobuf:"bytes,1,opt,name=tayfa,proto3" json:"tayfa,omitempty"`
 	// The caller's role in this tayfa, so the client can show the right
 	// actions. The server checks permissions again on every call.
-	CallerRole    Role `protobuf:"varint,2,opt,name=caller_role,json=callerRole,proto3,enum=tayfam.core.v1.Role" json:"caller_role,omitempty"`
+	CallerRole Role `protobuf:"varint,2,opt,name=caller_role,json=callerRole,proto3,enum=tayfam.core.v1.Role" json:"caller_role,omitempty"`
+	// The tayfa's badges in the order earned, for its members (issue #258;
+	// ADR-0039 §3).
+	Badges        []*EarnedBadge `protobuf:"bytes,3,rep,name=badges,proto3" json:"badges,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -814,6 +817,13 @@ func (x *GetTayfaResponse) GetCallerRole() Role {
 		return x.CallerRole
 	}
 	return Role_ROLE_UNSPECIFIED
+}
+
+func (x *GetTayfaResponse) GetBadges() []*EarnedBadge {
+	if x != nil {
+		return x.Badges
+	}
+	return nil
 }
 
 type ListMyTayfasRequest struct {
@@ -1668,7 +1678,7 @@ var File_tayfam_core_v1_tayfa_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\n" +
-	"\x1atayfam/core/v1/tayfa.proto\x12\x0etayfam.core.v1\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1ftayfam/core/v1/membership.proto\"W\n" +
+	"\x1atayfam/core/v1/tayfa.proto\x12\x0etayfam.core.v1\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1atayfam/core/v1/badge.proto\x1a\x1ftayfam/core/v1/membership.proto\"W\n" +
 	"\vModuleState\x12.\n" +
 	"\x06module\x18\x01 \x01(\x0e2\x16.tayfam.core.v1.ModuleR\x06module\x12\x18\n" +
 	"\aenabled\x18\x02 \x01(\bR\aenabled\"\xea\a\n" +
@@ -1709,11 +1719,12 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\x13CreateTayfaResponse\x12+\n" +
 	"\x05tayfa\x18\x01 \x01(\v2\x15.tayfam.core.v1.TayfaR\x05tayfa\",\n" +
 	"\x0fGetTayfaRequest\x12\x19\n" +
-	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\"v\n" +
+	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\"\xab\x01\n" +
 	"\x10GetTayfaResponse\x12+\n" +
 	"\x05tayfa\x18\x01 \x01(\v2\x15.tayfam.core.v1.TayfaR\x05tayfa\x125\n" +
 	"\vcaller_role\x18\x02 \x01(\x0e2\x14.tayfam.core.v1.RoleR\n" +
-	"callerRole\"Q\n" +
+	"callerRole\x123\n" +
+	"\x06badges\x18\x03 \x03(\v2\x1b.tayfam.core.v1.EarnedBadgeR\x06badges\"Q\n" +
 	"\x13ListMyTayfasRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
@@ -1853,8 +1864,9 @@ var file_tayfam_core_v1_tayfa_proto_goTypes = []any{
 	(*ConvertInstantTayfaResponse)(nil), // 25: tayfam.core.v1.ConvertInstantTayfaResponse
 	(*timestamppb.Timestamp)(nil),       // 26: google.protobuf.Timestamp
 	(Role)(0),                           // 27: tayfam.core.v1.Role
-	(MembershipStatus)(0),               // 28: tayfam.core.v1.MembershipStatus
-	(*fieldmaskpb.FieldMask)(nil),       // 29: google.protobuf.FieldMask
+	(*EarnedBadge)(nil),                 // 28: tayfam.core.v1.EarnedBadge
+	(MembershipStatus)(0),               // 29: tayfam.core.v1.MembershipStatus
+	(*fieldmaskpb.FieldMask)(nil),       // 30: google.protobuf.FieldMask
 }
 var file_tayfam_core_v1_tayfa_proto_depIdxs = []int32{
 	2,  // 0: tayfam.core.v1.ModuleState.module:type_name -> tayfam.core.v1.Module
@@ -1873,43 +1885,44 @@ var file_tayfam_core_v1_tayfa_proto_depIdxs = []int32{
 	6,  // 13: tayfam.core.v1.CreateTayfaResponse.tayfa:type_name -> tayfam.core.v1.Tayfa
 	6,  // 14: tayfam.core.v1.GetTayfaResponse.tayfa:type_name -> tayfam.core.v1.Tayfa
 	27, // 15: tayfam.core.v1.GetTayfaResponse.caller_role:type_name -> tayfam.core.v1.Role
-	13, // 16: tayfam.core.v1.ListMyTayfasResponse.tayfas:type_name -> tayfam.core.v1.MyTayfa
-	27, // 17: tayfam.core.v1.MyTayfa.role:type_name -> tayfam.core.v1.Role
-	28, // 18: tayfam.core.v1.MyTayfa.status:type_name -> tayfam.core.v1.MembershipStatus
-	6,  // 19: tayfam.core.v1.MyTayfa.tayfa:type_name -> tayfam.core.v1.Tayfa
-	4,  // 20: tayfam.core.v1.MyTayfa.kind:type_name -> tayfam.core.v1.TayfaKind
-	1,  // 21: tayfam.core.v1.UpdateTayfaRequest.interests:type_name -> tayfam.core.v1.EventType
-	0,  // 22: tayfam.core.v1.UpdateTayfaRequest.join_policy:type_name -> tayfam.core.v1.JoinPolicy
-	29, // 23: tayfam.core.v1.UpdateTayfaRequest.update_mask:type_name -> google.protobuf.FieldMask
-	6,  // 24: tayfam.core.v1.UpdateTayfaResponse.tayfa:type_name -> tayfam.core.v1.Tayfa
-	2,  // 25: tayfam.core.v1.SetModuleRequest.module:type_name -> tayfam.core.v1.Module
-	26, // 26: tayfam.core.v1.RequestDeletionResponse.deletion_time:type_name -> google.protobuf.Timestamp
-	1,  // 27: tayfam.core.v1.ConvertInstantTayfaRequest.interests:type_name -> tayfam.core.v1.EventType
-	0,  // 28: tayfam.core.v1.ConvertInstantTayfaRequest.join_policy:type_name -> tayfam.core.v1.JoinPolicy
-	6,  // 29: tayfam.core.v1.ConvertInstantTayfaResponse.tayfa:type_name -> tayfam.core.v1.Tayfa
-	7,  // 30: tayfam.core.v1.TayfaService.CreateTayfa:input_type -> tayfam.core.v1.CreateTayfaRequest
-	9,  // 31: tayfam.core.v1.TayfaService.GetTayfa:input_type -> tayfam.core.v1.GetTayfaRequest
-	11, // 32: tayfam.core.v1.TayfaService.ListMyTayfas:input_type -> tayfam.core.v1.ListMyTayfasRequest
-	14, // 33: tayfam.core.v1.TayfaService.UpdateTayfa:input_type -> tayfam.core.v1.UpdateTayfaRequest
-	16, // 34: tayfam.core.v1.TayfaService.SetModule:input_type -> tayfam.core.v1.SetModuleRequest
-	18, // 35: tayfam.core.v1.TayfaService.RotateJoinCode:input_type -> tayfam.core.v1.RotateJoinCodeRequest
-	20, // 36: tayfam.core.v1.TayfaService.RequestDeletion:input_type -> tayfam.core.v1.RequestDeletionRequest
-	22, // 37: tayfam.core.v1.TayfaService.CancelDeletion:input_type -> tayfam.core.v1.CancelDeletionRequest
-	24, // 38: tayfam.core.v1.TayfaService.ConvertInstantTayfa:input_type -> tayfam.core.v1.ConvertInstantTayfaRequest
-	8,  // 39: tayfam.core.v1.TayfaService.CreateTayfa:output_type -> tayfam.core.v1.CreateTayfaResponse
-	10, // 40: tayfam.core.v1.TayfaService.GetTayfa:output_type -> tayfam.core.v1.GetTayfaResponse
-	12, // 41: tayfam.core.v1.TayfaService.ListMyTayfas:output_type -> tayfam.core.v1.ListMyTayfasResponse
-	15, // 42: tayfam.core.v1.TayfaService.UpdateTayfa:output_type -> tayfam.core.v1.UpdateTayfaResponse
-	17, // 43: tayfam.core.v1.TayfaService.SetModule:output_type -> tayfam.core.v1.SetModuleResponse
-	19, // 44: tayfam.core.v1.TayfaService.RotateJoinCode:output_type -> tayfam.core.v1.RotateJoinCodeResponse
-	21, // 45: tayfam.core.v1.TayfaService.RequestDeletion:output_type -> tayfam.core.v1.RequestDeletionResponse
-	23, // 46: tayfam.core.v1.TayfaService.CancelDeletion:output_type -> tayfam.core.v1.CancelDeletionResponse
-	25, // 47: tayfam.core.v1.TayfaService.ConvertInstantTayfa:output_type -> tayfam.core.v1.ConvertInstantTayfaResponse
-	39, // [39:48] is the sub-list for method output_type
-	30, // [30:39] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	28, // 16: tayfam.core.v1.GetTayfaResponse.badges:type_name -> tayfam.core.v1.EarnedBadge
+	13, // 17: tayfam.core.v1.ListMyTayfasResponse.tayfas:type_name -> tayfam.core.v1.MyTayfa
+	27, // 18: tayfam.core.v1.MyTayfa.role:type_name -> tayfam.core.v1.Role
+	29, // 19: tayfam.core.v1.MyTayfa.status:type_name -> tayfam.core.v1.MembershipStatus
+	6,  // 20: tayfam.core.v1.MyTayfa.tayfa:type_name -> tayfam.core.v1.Tayfa
+	4,  // 21: tayfam.core.v1.MyTayfa.kind:type_name -> tayfam.core.v1.TayfaKind
+	1,  // 22: tayfam.core.v1.UpdateTayfaRequest.interests:type_name -> tayfam.core.v1.EventType
+	0,  // 23: tayfam.core.v1.UpdateTayfaRequest.join_policy:type_name -> tayfam.core.v1.JoinPolicy
+	30, // 24: tayfam.core.v1.UpdateTayfaRequest.update_mask:type_name -> google.protobuf.FieldMask
+	6,  // 25: tayfam.core.v1.UpdateTayfaResponse.tayfa:type_name -> tayfam.core.v1.Tayfa
+	2,  // 26: tayfam.core.v1.SetModuleRequest.module:type_name -> tayfam.core.v1.Module
+	26, // 27: tayfam.core.v1.RequestDeletionResponse.deletion_time:type_name -> google.protobuf.Timestamp
+	1,  // 28: tayfam.core.v1.ConvertInstantTayfaRequest.interests:type_name -> tayfam.core.v1.EventType
+	0,  // 29: tayfam.core.v1.ConvertInstantTayfaRequest.join_policy:type_name -> tayfam.core.v1.JoinPolicy
+	6,  // 30: tayfam.core.v1.ConvertInstantTayfaResponse.tayfa:type_name -> tayfam.core.v1.Tayfa
+	7,  // 31: tayfam.core.v1.TayfaService.CreateTayfa:input_type -> tayfam.core.v1.CreateTayfaRequest
+	9,  // 32: tayfam.core.v1.TayfaService.GetTayfa:input_type -> tayfam.core.v1.GetTayfaRequest
+	11, // 33: tayfam.core.v1.TayfaService.ListMyTayfas:input_type -> tayfam.core.v1.ListMyTayfasRequest
+	14, // 34: tayfam.core.v1.TayfaService.UpdateTayfa:input_type -> tayfam.core.v1.UpdateTayfaRequest
+	16, // 35: tayfam.core.v1.TayfaService.SetModule:input_type -> tayfam.core.v1.SetModuleRequest
+	18, // 36: tayfam.core.v1.TayfaService.RotateJoinCode:input_type -> tayfam.core.v1.RotateJoinCodeRequest
+	20, // 37: tayfam.core.v1.TayfaService.RequestDeletion:input_type -> tayfam.core.v1.RequestDeletionRequest
+	22, // 38: tayfam.core.v1.TayfaService.CancelDeletion:input_type -> tayfam.core.v1.CancelDeletionRequest
+	24, // 39: tayfam.core.v1.TayfaService.ConvertInstantTayfa:input_type -> tayfam.core.v1.ConvertInstantTayfaRequest
+	8,  // 40: tayfam.core.v1.TayfaService.CreateTayfa:output_type -> tayfam.core.v1.CreateTayfaResponse
+	10, // 41: tayfam.core.v1.TayfaService.GetTayfa:output_type -> tayfam.core.v1.GetTayfaResponse
+	12, // 42: tayfam.core.v1.TayfaService.ListMyTayfas:output_type -> tayfam.core.v1.ListMyTayfasResponse
+	15, // 43: tayfam.core.v1.TayfaService.UpdateTayfa:output_type -> tayfam.core.v1.UpdateTayfaResponse
+	17, // 44: tayfam.core.v1.TayfaService.SetModule:output_type -> tayfam.core.v1.SetModuleResponse
+	19, // 45: tayfam.core.v1.TayfaService.RotateJoinCode:output_type -> tayfam.core.v1.RotateJoinCodeResponse
+	21, // 46: tayfam.core.v1.TayfaService.RequestDeletion:output_type -> tayfam.core.v1.RequestDeletionResponse
+	23, // 47: tayfam.core.v1.TayfaService.CancelDeletion:output_type -> tayfam.core.v1.CancelDeletionResponse
+	25, // 48: tayfam.core.v1.TayfaService.ConvertInstantTayfa:output_type -> tayfam.core.v1.ConvertInstantTayfaResponse
+	40, // [40:49] is the sub-list for method output_type
+	31, // [31:40] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_tayfa_proto_init() }
@@ -1917,6 +1930,7 @@ func file_tayfam_core_v1_tayfa_proto_init() {
 	if File_tayfam_core_v1_tayfa_proto != nil {
 		return
 	}
+	file_tayfam_core_v1_badge_proto_init()
 	file_tayfam_core_v1_membership_proto_init()
 	file_tayfam_core_v1_tayfa_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}

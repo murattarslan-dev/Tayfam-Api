@@ -48,6 +48,21 @@ func (f *fakeCore) GetCatalog(ctx context.Context, in *corev1.GetCatalogRequest,
 			{Key: "level_a", Position: 1, Labels: map[string]string{"tr": "Düzey A"}, Status: corev1.CatalogStatus_CATALOG_STATUS_ACTIVE},
 			{Key: "subject_a", ParentKey: "level_a", Position: 2, Labels: map[string]string{"tr": "Ders A"}, Status: corev1.CatalogStatus_CATALOG_STATUS_RETIRED},
 		},
+		Badges: []*corev1.CatalogBadge{
+			{
+				Key: "first_event", Scope: corev1.BadgeScope_BADGE_SCOPE_USER, Position: 1, Labels: map[string]string{"tr": "İlk etkinlik"}, Icon: "flag",
+				Status: corev1.CatalogStatus_CATALOG_STATUS_ACTIVE,
+				Rule:   &corev1.CatalogBadgeRule{Kind: corev1.BadgeRuleKind_BADGE_RULE_KIND_FIRST, EventType: "hike"},
+			},
+			{
+				Key: "yearly_km", Scope: corev1.BadgeScope_BADGE_SCOPE_TAYFA, Position: 2, Labels: map[string]string{"tr": "Yılın yürüyüşçüleri"}, Icon: "trophy",
+				Status: corev1.CatalogStatus_CATALOG_STATUS_RETIRED,
+				Rule: &corev1.CatalogBadgeRule{
+					Kind: corev1.BadgeRuleKind_BADGE_RULE_KIND_THRESHOLD, Metric: "hike.distance", Value: 100,
+					Period: corev1.BadgePeriod_BADGE_PERIOD_YEAR,
+				},
+			},
+		},
 	}, nil
 }
 
@@ -102,6 +117,17 @@ func TestCatalogRoute(t *testing.T) {
 	if len(tags) != 2 || tags[0].Key != "level_a" || tags[0].ParentKey != "" || tags[0].Position != 1 || tags[0].Labels["tr"] != "Düzey A" ||
 		tags[0].Status != "active" || tags[1].Key != "subject_a" || tags[1].ParentKey != "level_a" || tags[1].Status != "retired" {
 		t.Fatalf("ders/konu etiketleri: %+v", tags)
+	}
+	// Badges (issue #258): a threshold carries metric, value and period,
+	// the others only their event type.
+	if bs := v.Badges; len(bs) != 2 || bs[0].Key != "first_event" || bs[0].Scope != "user" || bs[0].Icon != "flag" || bs[0].Status != "active" ||
+		bs[0].Rule.Kind != "first" || bs[0].Rule.EventType != "hike" || bs[0].Rule.Value != nil ||
+		bs[1].Scope != "tayfa" || bs[1].Status != "retired" || bs[1].Rule.Kind != "threshold" || bs[1].Rule.Metric != "hike.distance" ||
+		bs[1].Rule.Value == nil || *bs[1].Rule.Value != 100 || bs[1].Rule.Period != "year" {
+		t.Fatalf("rozetler: %+v", bs)
+	}
+	if !strings.Contains(w.Body.String(), `"rule":{"kind":"first","event_type":"hike"}`) {
+		t.Fatalf("ilk katılım kuralı: %s", w.Body)
 	}
 	// A level has no parent_key in the body.
 	if !strings.Contains(w.Body.String(), `{"key":"level_a","position":1,`) {

@@ -249,6 +249,10 @@ func TestProfileRoutes(t *testing.T) {
 	if w.Code != 200 || v.FriendState != "" || v.ActivityVisibility != "" || len(v.MutualTayfas) != 1 || !v.ActivityVisible {
 		t.Fatalf("profil: %d %+v", w.Code, v)
 	}
+	// Badges the caller may not see are absent, not empty (issue #258).
+	if v.Badges != nil || strings.Contains(w.Body.String(), `"badges"`) {
+		t.Fatalf("görünmeyen rozetler: %s", w.Body)
+	}
 	w = as(h, "GET", "/v1/users/"+userID+"/activity?page_size=10", "")
 	a := decodeBody[activityListJSON](t, w)
 	if w.Code != 200 || len(a.Records) != 1 || a.Records[0].EventType != "hike" || a.Records[0].Mode != "in_person" || a.Records[0].TayfaMember || strings.Contains(w.Body.String(), "tayfa_name") {

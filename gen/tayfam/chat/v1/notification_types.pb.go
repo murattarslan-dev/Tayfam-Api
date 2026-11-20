@@ -114,6 +114,12 @@ const (
 	// celebration from core's CelebrationComponentService. In-app only: no
 	// push is sent for it.
 	NotificationType_NOTIFICATION_TYPE_CELEBRATION NotificationType = 24
+	// A badge was earned (issue #258, ADR-0039 §4). No actor; never names
+	// the badge: the client reads badges from the profile or the tayfa. A
+	// personal badge goes to its earner (target: USER, the earner; no
+	// tayfa); a tayfa badge goes to the tayfa's admins and moderators
+	// (target: TAYFA). In-app only: no push is sent for it.
+	NotificationType_NOTIFICATION_TYPE_BADGE_EARNED NotificationType = 25
 )
 
 // Enum value maps for NotificationType.
@@ -144,6 +150,7 @@ var (
 		22: "NOTIFICATION_TYPE_FRIEND_SUGGESTION",
 		23: "NOTIFICATION_TYPE_SAFETY_ALERT",
 		24: "NOTIFICATION_TYPE_CELEBRATION",
+		25: "NOTIFICATION_TYPE_BADGE_EARNED",
 	}
 	NotificationType_value = map[string]int32{
 		"NOTIFICATION_TYPE_UNSPECIFIED":              0,
@@ -171,6 +178,7 @@ var (
 		"NOTIFICATION_TYPE_FRIEND_SUGGESTION":        22,
 		"NOTIFICATION_TYPE_SAFETY_ALERT":             23,
 		"NOTIFICATION_TYPE_CELEBRATION":              24,
+		"NOTIFICATION_TYPE_BADGE_EARNED":             25,
 	}
 )
 
@@ -334,7 +342,7 @@ var File_tayfam_chat_v1_notification_types_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\n" +
-	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xc6\a\n" +
+	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xea\a\n" +
 	"\x10NotificationType\x12!\n" +
 	"\x1dNOTIFICATION_TYPE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fNOTIFICATION_TYPE_EVENT_CREATED\x10\x01\x12#\n" +
@@ -361,7 +369,8 @@ const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"#NOTIFICATION_TYPE_DATA_EXPORT_READY\x10\x15\x12'\n" +
 	"#NOTIFICATION_TYPE_FRIEND_SUGGESTION\x10\x16\x12\"\n" +
 	"\x1eNOTIFICATION_TYPE_SAFETY_ALERT\x10\x17\x12!\n" +
-	"\x1dNOTIFICATION_TYPE_CELEBRATION\x10\x18*\xa3\x03\n" +
+	"\x1dNOTIFICATION_TYPE_CELEBRATION\x10\x18\x12\"\n" +
+	"\x1eNOTIFICATION_TYPE_BADGE_EARNED\x10\x19*\xa3\x03\n" +
 	"\x16NotificationTargetType\x12(\n" +
 	"$NOTIFICATION_TARGET_TYPE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eNOTIFICATION_TARGET_TYPE_TAYFA\x10\x01\x12'\n" +

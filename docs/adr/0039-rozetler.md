@@ -78,6 +78,27 @@ rozetinde bildirim yöneticilere gider.
 Kişisel rozetler dışa aktarmada (ADR-0021) kişinin istatistikleriyle gelir.
 Hesap silinince `user_badges` aynı transaction'da silinir.
 
+## Uygulama notları (#258)
+
+Karar değişmedi; issue #258 uygulamasındaki ayrıntılar:
+
+- **Ortak metrik anahtarları:** `events` (tayfa), `attended`, `participants`
+  (tayfa), `duration` (dakika). Türe özel metrik `<tür>.<anahtar>`: türün
+  ortak metriği ya da ölçüm/günlük bileşeni. Kişisel rozet yalnızca
+  `attended`, `duration` ve `scope: personal` ölçümü sayar. İstatistik işi
+  (#266) bu anahtarlarla hesaplar.
+- **Hassas kontrol** türün bütün sürümlerine bakar (`catalog.CheckBadge`);
+  kazanma öncesinde tekrar edilir, geçmeyen tanım atlanır.
+- **Şampiyonluk:** kutlama ilan edilmiş olmalıdır; takım kazandıysa
+  takımın üyeleri rozet alır, misafir almaz. Her etkinliğe kutlama
+  donunca bir kez bakılır (`event_badge_runs`, `champion-badges` işi);
+  rozet etkinliğe bağlıdır, aynı rozet başka finalde yeniden kazanılır.
+- **Bildirim `badge_earned`:** aktör ve rozet adı yok. Kişisel rozette hedef
+  `user` (kazanan kendisi), `tayfa_id` yok; tayfa rozetinde hedef `tayfa`.
+- **Görünürlük:** `stats_visibility` gelene kadar (#267) başkasının
+  profilinde rozet alanı yoktur; vitrinde tayfa rozetleri #267 ile gelir.
+  Tayfa rozetleri `GET /v1/tayfas/{id}` yanıtındadır.
+
 ## Gerekçe
 
 - **Veri olarak rozet:** katalogla aynı model; platform sahibi sürüm

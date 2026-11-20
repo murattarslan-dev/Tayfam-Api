@@ -318,3 +318,25 @@ func TestProfileNameWithoutRelation(t *testing.T) {
 		t.Fatalf("profil = %+v %v", p, err)
 	}
 }
+
+// TestProfileBadges (issue #258; ADR-0039 §3): one always sees one's own
+// badges; nobody else does while the personal statistics setting (#267)
+// is off, a friend included.
+func TestProfileBadges(t *testing.T) {
+	e := setup(t)
+	subject, friend := e.user(t, VisibilityPublic), e.user(t, VisibilityPublic)
+	e.friends(t, subject, friend)
+	e.seed(t, `INSERT INTO user_badges (id, user_id, badge_key, period_key, earned_at) VALUES ($1, $2, 'first_event', 'all', now())`,
+		id.New().PG(), subject.PG())
+
+	self, err := e.svc.GetProfile(ctx, subject, subject)
+	must(t, err)
+	if !self.BadgesVisible || len(self.Badges) != 1 || self.Badges[0].Key != "first_event" || self.Badges[0].Year != 0 || self.Badges[0].EarnedAt.IsZero() {
+		t.Fatalf("kendi rozetleri: %v %+v", self.BadgesVisible, self.Badges)
+	}
+	other, err := e.svc.GetProfile(ctx, friend, subject)
+	must(t, err)
+	if other.BadgesVisible || other.Badges != nil {
+		t.Fatalf("başkasına rozet göründü: %+v", other.Badges)
+	}
+}

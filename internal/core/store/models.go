@@ -54,6 +54,18 @@ type AuditLog struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type CatalogBadge struct {
+	Key       string
+	Scope     string
+	Position  int32
+	Labels    []byte
+	Icon      string
+	Rule      []byte
+	Status    string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
 type CatalogEventType struct {
 	Key          string
 	InterestKeys []string
@@ -163,6 +175,11 @@ type Event struct {
 	UpdatedAt        pgtype.Timestamptz
 	CoverUploadID    pgtype.UUID
 	TypeVersion      int32
+}
+
+type EventBadgeRun struct {
+	EventID pgtype.UUID
+	DoneAt  pgtype.Timestamptz
 }
 
 type EventBracket struct {
@@ -765,6 +782,14 @@ type Tayfa struct {
 	ConvertedAt            pgtype.Timestamptz
 }
 
+type TayfaBadge struct {
+	ID        pgtype.UUID
+	TayfaID   pgtype.UUID
+	BadgeKey  string
+	PeriodKey string
+	EarnedAt  pgtype.Timestamptz
+}
+
 type TayfaDiscover struct {
 	TayfaID         pgtype.UUID
 	Status          string
@@ -856,6 +881,16 @@ type UserAvailability struct {
 	Note      pgtype.Text
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
+}
+
+type UserBadge struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	BadgeKey  string
+	PeriodKey string
+	TayfaID   pgtype.UUID
+	EventID   pgtype.UUID
+	EarnedAt  pgtype.Timestamptz
 }
 
 type UserBlock struct {

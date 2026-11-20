@@ -327,6 +327,17 @@ func (q *Queries) DeleteUserAnswerVotes(ctx context.Context, userID pgtype.UUID)
 	return err
 }
 
+const deleteUserBadges = `-- name: DeleteUserBadges :exec
+DELETE FROM user_badges WHERE user_id = $1
+`
+
+// Kişinin rozetleri kişiyle birlikte silinir (ADR-0039 §5). Tayfa
+// rozetleri tayfanındır, kalır.
+func (q *Queries) DeleteUserBadges(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserBadges, userID)
+	return err
+}
+
 const deleteUserCelebrationWins = `-- name: DeleteUserCelebrationWins :exec
 DELETE FROM event_celebration_winners WHERE user_id = $1
 `

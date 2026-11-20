@@ -135,8 +135,15 @@ type UserProfile struct {
 	ActivityVisible bool `protobuf:"varint,7,opt,name=activity_visible,json=activityVisible,proto3" json:"activity_visible,omitempty"`
 	// The user's setting; filled only on one's own profile.
 	ActivityVisibility ActivityVisibility `protobuf:"varint,8,opt,name=activity_visibility,json=activityVisibility,proto3,enum=tayfam.core.v1.ActivityVisibility" json:"activity_visibility,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Whether badges is the user's badges: always on one's own profile;
+	// otherwise only when the user's personal statistics are visible to the
+	// caller (ADR-0039 §3, ADR-0026 §4; off by default). When false badges
+	// is empty and the client shows nothing (not "no badges").
+	BadgesVisible bool `protobuf:"varint,9,opt,name=badges_visible,json=badgesVisible,proto3" json:"badges_visible,omitempty"`
+	// The user's personal badges in the order earned (issue #258).
+	Badges        []*EarnedBadge `protobuf:"bytes,10,rep,name=badges,proto3" json:"badges,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UserProfile) Reset() {
@@ -223,6 +230,20 @@ func (x *UserProfile) GetActivityVisibility() ActivityVisibility {
 		return x.ActivityVisibility
 	}
 	return ActivityVisibility_ACTIVITY_VISIBILITY_UNSPECIFIED
+}
+
+func (x *UserProfile) GetBadgesVisible() bool {
+	if x != nil {
+		return x.BadgesVisible
+	}
+	return false
+}
+
+func (x *UserProfile) GetBadges() []*EarnedBadge {
+	if x != nil {
+		return x.Badges
+	}
+	return nil
 }
 
 type GetUserProfileResponse struct {
@@ -525,12 +546,12 @@ var File_tayfam_core_v1_profile_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_profile_proto_rawDesc = "" +
 	"\n" +
-	"\x1ctayfam/core/v1/profile.proto\x12\x0etayfam.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1atayfam/core/v1/event.proto\x1a\x1btayfam/core/v1/social.proto\x1a\x1atayfam/core/v1/tayfa.proto\x1a tayfam/core/v1/user_events.proto\"0\n" +
+	"\x1ctayfam/core/v1/profile.proto\x12\x0etayfam.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1atayfam/core/v1/badge.proto\x1a\x1atayfam/core/v1/event.proto\x1a\x1btayfam/core/v1/social.proto\x1a\x1atayfam/core/v1/tayfa.proto\x1a tayfam/core/v1/user_events.proto\"0\n" +
 	"\x15GetUserProfileRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\"<\n" +
 	"\vMutualTayfa\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"\x89\x03\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"\xe5\x03\n" +
 	"\vUserProfile\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12(\n" +
@@ -539,7 +560,10 @@ const file_tayfam_core_v1_profile_proto_rawDesc = "" +
 	"\ffriend_state\x18\x05 \x01(\x0e2\x1b.tayfam.core.v1.FriendStateR\vfriendState\x12@\n" +
 	"\rmutual_tayfas\x18\x06 \x03(\v2\x1b.tayfam.core.v1.MutualTayfaR\fmutualTayfas\x12)\n" +
 	"\x10activity_visible\x18\a \x01(\bR\x0factivityVisible\x12S\n" +
-	"\x13activity_visibility\x18\b \x01(\x0e2\".tayfam.core.v1.ActivityVisibilityR\x12activityVisibility\"O\n" +
+	"\x13activity_visibility\x18\b \x01(\x0e2\".tayfam.core.v1.ActivityVisibilityR\x12activityVisibility\x12%\n" +
+	"\x0ebadges_visible\x18\t \x01(\bR\rbadgesVisible\x123\n" +
+	"\x06badges\x18\n" +
+	" \x03(\v2\x1b.tayfam.core.v1.EarnedBadgeR\x06badges\"O\n" +
 	"\x16GetUserProfileResponse\x125\n" +
 	"\aprofile\x18\x01 \x01(\v2\x1b.tayfam.core.v1.UserProfileR\aprofile\"n\n" +
 	"\x17ListUserActivityRequest\x12\x17\n" +
@@ -596,28 +620,30 @@ var file_tayfam_core_v1_profile_proto_goTypes = []any{
 	(*ListUserActivityResponse)(nil), // 6: tayfam.core.v1.ListUserActivityResponse
 	(FriendState)(0),                 // 7: tayfam.core.v1.FriendState
 	(ActivityVisibility)(0),          // 8: tayfam.core.v1.ActivityVisibility
-	(EventType)(0),                   // 9: tayfam.core.v1.EventType
-	(EventMode)(0),                   // 10: tayfam.core.v1.EventMode
-	(*timestamppb.Timestamp)(nil),    // 11: google.protobuf.Timestamp
+	(*EarnedBadge)(nil),              // 9: tayfam.core.v1.EarnedBadge
+	(EventType)(0),                   // 10: tayfam.core.v1.EventType
+	(EventMode)(0),                   // 11: tayfam.core.v1.EventMode
+	(*timestamppb.Timestamp)(nil),    // 12: google.protobuf.Timestamp
 }
 var file_tayfam_core_v1_profile_proto_depIdxs = []int32{
 	7,  // 0: tayfam.core.v1.UserProfile.friend_state:type_name -> tayfam.core.v1.FriendState
 	1,  // 1: tayfam.core.v1.UserProfile.mutual_tayfas:type_name -> tayfam.core.v1.MutualTayfa
 	8,  // 2: tayfam.core.v1.UserProfile.activity_visibility:type_name -> tayfam.core.v1.ActivityVisibility
-	2,  // 3: tayfam.core.v1.GetUserProfileResponse.profile:type_name -> tayfam.core.v1.UserProfile
-	9,  // 4: tayfam.core.v1.ActivityRecord.event_type:type_name -> tayfam.core.v1.EventType
-	10, // 5: tayfam.core.v1.ActivityRecord.mode:type_name -> tayfam.core.v1.EventMode
-	11, // 6: tayfam.core.v1.ActivityRecord.start_time:type_name -> google.protobuf.Timestamp
-	5,  // 7: tayfam.core.v1.ListUserActivityResponse.records:type_name -> tayfam.core.v1.ActivityRecord
-	0,  // 8: tayfam.core.v1.ProfileService.GetUserProfile:input_type -> tayfam.core.v1.GetUserProfileRequest
-	4,  // 9: tayfam.core.v1.ProfileService.ListUserActivity:input_type -> tayfam.core.v1.ListUserActivityRequest
-	3,  // 10: tayfam.core.v1.ProfileService.GetUserProfile:output_type -> tayfam.core.v1.GetUserProfileResponse
-	6,  // 11: tayfam.core.v1.ProfileService.ListUserActivity:output_type -> tayfam.core.v1.ListUserActivityResponse
-	10, // [10:12] is the sub-list for method output_type
-	8,  // [8:10] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	9,  // 3: tayfam.core.v1.UserProfile.badges:type_name -> tayfam.core.v1.EarnedBadge
+	2,  // 4: tayfam.core.v1.GetUserProfileResponse.profile:type_name -> tayfam.core.v1.UserProfile
+	10, // 5: tayfam.core.v1.ActivityRecord.event_type:type_name -> tayfam.core.v1.EventType
+	11, // 6: tayfam.core.v1.ActivityRecord.mode:type_name -> tayfam.core.v1.EventMode
+	12, // 7: tayfam.core.v1.ActivityRecord.start_time:type_name -> google.protobuf.Timestamp
+	5,  // 8: tayfam.core.v1.ListUserActivityResponse.records:type_name -> tayfam.core.v1.ActivityRecord
+	0,  // 9: tayfam.core.v1.ProfileService.GetUserProfile:input_type -> tayfam.core.v1.GetUserProfileRequest
+	4,  // 10: tayfam.core.v1.ProfileService.ListUserActivity:input_type -> tayfam.core.v1.ListUserActivityRequest
+	3,  // 11: tayfam.core.v1.ProfileService.GetUserProfile:output_type -> tayfam.core.v1.GetUserProfileResponse
+	6,  // 12: tayfam.core.v1.ProfileService.ListUserActivity:output_type -> tayfam.core.v1.ListUserActivityResponse
+	11, // [11:13] is the sub-list for method output_type
+	9,  // [9:11] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_profile_proto_init() }
@@ -625,6 +651,7 @@ func file_tayfam_core_v1_profile_proto_init() {
 	if File_tayfam_core_v1_profile_proto != nil {
 		return
 	}
+	file_tayfam_core_v1_badge_proto_init()
 	file_tayfam_core_v1_event_proto_init()
 	file_tayfam_core_v1_social_proto_init()
 	file_tayfam_core_v1_tayfa_proto_init()

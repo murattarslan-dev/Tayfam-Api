@@ -24,6 +24,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/access"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/badge"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
@@ -124,6 +125,9 @@ type View struct {
 	// ConvertedAt is when an instant tayfa became standard ("Bu ekiple
 	// tayfa kur"); zero for every other tayfa (ADR-0032 §7).
 	ConvertedAt time.Time
+	// Badges are the tayfa's badges in the order earned (issue #258;
+	// ADR-0039 §3); filled by Get only, for the members it serves.
+	Badges []badge.Earned
 }
 
 // CreateInput is a create request.
@@ -242,7 +246,14 @@ func (s *Service) Create(ctx context.Context, user id.ID, in CreateInput) (View,
 
 // Get returns the tayfa and the caller's role.
 func (s *Service) Get(ctx context.Context, user, tayfa id.ID) (View, authz.Role, error) {
-	return s.get(ctx, user, tayfa)
+	v, role, err := s.get(ctx, user, tayfa)
+	if err != nil {
+		return View{}, 0, err
+	}
+	if v.Badges, err = badge.ForTayfa(ctx, s.q, tayfa); err != nil {
+		return View{}, 0, err
+	}
+	return v, role, nil
 }
 
 func (s *Service) get(ctx context.Context, user, tayfa id.ID) (View, authz.Role, error) {

@@ -200,6 +200,11 @@ UPDATE event_questions
 SET answered_by = NULLIF(answered_by, @user_id), deleted_by = NULLIF(deleted_by, @user_id)
 WHERE answered_by = @user_id OR deleted_by = @user_id;
 
+-- Kişinin rozetleri kişiyle birlikte silinir (ADR-0039 §5). Tayfa
+-- rozetleri tayfanındır, kalır.
+-- name: DeleteUserBadges :exec
+DELETE FROM user_badges WHERE user_id = @user_id;
+
 -- Tayfa sözlüğüne eklediği değerler tayfanın ortak verisidir; kalır, ekleyen
 -- boşalır (issue #244; ADR-0037 §4).
 -- name: ClearVocabularyCreator :exec

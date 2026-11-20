@@ -79,6 +79,7 @@ type catalogJSON struct {
 	Interests      []catalogInterestJSON  `json:"interests"`
 	EventTypes     []catalogEventTypeJSON `json:"event_types"`
 	StudyTags      []catalogStudyTagJSON  `json:"study_tags"`
+	Badges         []catalogBadgeJSON     `json:"badges"`
 }
 
 // catalogEventTypeFrom converts a type; ok is false when core's definition
@@ -164,6 +165,7 @@ func (h coreHandlers) getCatalog(ctx context.Context, w http.ResponseWriter, r *
 		Interests:      make([]catalogInterestJSON, 0, len(resp.GetInterests())),
 		EventTypes:     make([]catalogEventTypeJSON, 0, len(resp.GetEventTypes())),
 		StudyTags:      make([]catalogStudyTagJSON, 0, len(resp.GetStudyTags())),
+		Badges:         make([]catalogBadgeJSON, 0, len(resp.GetBadges())),
 	}
 	for _, in := range resp.GetInterests() {
 		out.Interests = append(out.Interests, catalogInterestJSON{
@@ -185,6 +187,9 @@ func (h coreHandlers) getCatalog(ctx context.Context, w http.ResponseWriter, r *
 			Key: t.GetKey(), ParentKey: t.GetParentKey(), Position: t.GetPosition(), Labels: nonNilMap(t.GetLabels()),
 			Status: catalogStatuses.name(t.GetStatus()),
 		})
+	}
+	for _, b := range resp.GetBadges() {
+		out.Badges = append(out.Badges, catalogBadgeFrom(b))
 	}
 	writeCatalogJSON(w, etag, out)
 }

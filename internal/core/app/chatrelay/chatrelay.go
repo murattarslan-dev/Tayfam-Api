@@ -164,6 +164,7 @@ var types = map[string]chatv1.NotificationType{
 	notify.TypeFriendSuggestion:       chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_SUGGESTION,
 	notify.TypeSafetyAlert:            chatv1.NotificationType_NOTIFICATION_TYPE_SAFETY_ALERT,
 	notify.TypeCelebration:            chatv1.NotificationType_NOTIFICATION_TYPE_CELEBRATION,
+	notify.TypeBadgeEarned:            chatv1.NotificationType_NOTIFICATION_TYPE_BADGE_EARNED,
 	notify.TypeTayfaInvitation:        chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_INVITATION,
 	notify.TypeReportResolved:         chatv1.NotificationType_NOTIFICATION_TYPE_REPORT_RESOLVED,
 }

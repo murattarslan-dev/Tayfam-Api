@@ -454,6 +454,30 @@ func TestDirectNoticeRules(t *testing.T) {
 	}
 }
 
+// A badge notice (issue #258; ADR-0039 §4) has no actor and never names
+// the badge: a personal one targets its earner without a tayfa, a tayfa's
+// one targets the tayfa.
+func TestBadgeNoticeRules(t *testing.T) {
+	u, tf := id.New(), id.New()
+	personal := Request{Event: id.New(), Type: TypeBadgeEarned, TargetType: TargetUser, Target: u, Recipients: []id.ID{u}}
+	team := Request{Event: id.New(), Tayfa: tf, Type: TypeBadgeEarned, TargetType: TargetTayfa, Target: tf, Recipients: []id.ID{id.New()}}
+	for name, r := range map[string]Request{"kişisel": personal, "tayfa": team} {
+		if err := r.Validate(); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	for name, r := range map[string]Request{
+		"kişisel tayfalı":  func() Request { r := personal; r.Tayfa = tf; return r }(),
+		"tayfa tayfasız":   func() Request { r := team; r.Tayfa = id.ID{}; return r }(),
+		"aktörlü":          func() Request { r := personal; r.Actor = id.New(); return r }(),
+		"etkinlik hedefli": func() Request { r := personal; r.TargetType = TargetEvent; return r }(),
+	} {
+		if err := r.Validate(); err == nil {
+			t.Errorf("%s kabul edildi", name)
+		}
+	}
+}
+
 // The list carries a direct message notice's unread count; other types
 // have none (issue #101).
 func TestListCarriesDirectUnreadCount(t *testing.T) {

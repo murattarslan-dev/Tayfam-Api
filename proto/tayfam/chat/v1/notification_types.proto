@@ -93,6 +93,12 @@ enum NotificationType {
   // celebration from core's CelebrationComponentService. In-app only: no
   // push is sent for it.
   NOTIFICATION_TYPE_CELEBRATION = 24;
+  // A badge was earned (issue #258, ADR-0039 §4). No actor; never names
+  // the badge: the client reads badges from the profile or the tayfa. A
+  // personal badge goes to its earner (target: USER, the earner; no
+  // tayfa); a tayfa badge goes to the tayfa's admins and moderators
+  // (target: TAYFA). In-app only: no push is sent for it.
+  NOTIFICATION_TYPE_BADGE_EARNED = 25;
 }
 
 enum NotificationTargetType {

@@ -203,6 +203,7 @@ func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 		"event_ranking_entries":           `SELECT count(*) FROM event_ranking_entries WHERE $1 IN (user_id, entered_by)`,
 		"event_celebrations.announced_by": `SELECT count(*) FROM event_celebrations WHERE announced_by = $1`,
 		"event_celebration_winners":       `SELECT count(*) FROM event_celebration_winners WHERE user_id = $1`,
+		"user_badges.user_id":             `SELECT count(*) FROM user_badges WHERE user_id = $1`,
 		"event_questions":                 `SELECT count(*) FROM event_questions WHERE $1 IN (author_id, answered_by, deleted_by)`,
 		"event_question_votes.user_id":    `SELECT count(*) FROM event_question_votes WHERE user_id = $1`,
 		"event_photos":                    `SELECT count(*) FROM event_photos WHERE $1 IN (uploader_id, deleted_by)`,
@@ -567,6 +568,9 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 		id.New().PG(), hike.PG(), u.PG())
 	e.seed(t, `INSERT INTO event_celebration_winners (id, event_id, component_key, user_id, position) VALUES ($1, $2, 'celebration', $3, 2)`,
 		id.New().PG(), hike.PG(), a.PG())
+	// Badges (issue #258; ADR-0039 §5): u's badges go, a's stay.
+	e.seed(t, `INSERT INTO user_badges (id, user_id, badge_key, period_key, tayfa_id, event_id, earned_at) VALUES ($1, $3, 'test_first', 'all', NULL, NULL, now()), ($2, $4, 'test_first', 'all', NULL, NULL, now())`,
+		id.New().PG(), id.New().PG(), u.PG(), a.PG())
 	// Event questions (issue #256): u's questions (an anonymous one too)
 	// and votes go; a's question that u marked answered and removed stays,
 	// without them, with a's vote on it.
@@ -638,6 +642,9 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 	if n := e.count(t, `SELECT count(*) FROM event_celebration_winners AS w JOIN event_celebrations AS c USING (event_id, component_key)
 		WHERE w.event_id = $1 AND w.user_id = $2 AND c.announced_by IS NULL`, hike.PG(), a.PG()); n != 1 {
 		t.Errorf("başkasının kazananlığı ya da ilan silindi ya da ilan eden boşalmadı: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM user_badges WHERE user_id = $1`, a.PG()); n != 1 {
+		t.Errorf("başkasının rozeti silindi: %d", n)
 	}
 	if n := e.count(t, `SELECT count(*) FROM event_questions q JOIN event_question_votes v ON v.question_id = q.id
 		WHERE q.id = $1 AND q.answered_at IS NOT NULL AND q.answered_by IS NULL AND q.deleted_at IS NOT NULL AND q.deleted_by IS NULL AND v.user_id = $2`,
