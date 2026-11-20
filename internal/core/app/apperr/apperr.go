@@ -224,6 +224,18 @@ var (
 	ErrRankingFromMeasure = errors.New("derece ölçümden hesaplanır")
 )
 
+// Celebration component errors (issue #255; ADR-0025 §4).
+var (
+	// ErrCelebrationNotStarted: an announcement before the event's start.
+	ErrCelebrationNotStarted = errors.New("etkinlik başlamadan kazanan ilan edilmez")
+	// ErrCelebrationNoWinner: the source has no winner to announce yet (an
+	// open table, an unfinished bracket, an empty or hidden ranking).
+	ErrCelebrationNoWinner = errors.New("ilan edilecek kazanan yok")
+	// ErrCelebrationNotParticipant: a winner chosen by hand who is not a
+	// participant of the event.
+	ErrCelebrationNotParticipant = errors.New("kazanan etkinliğin katılımcısı değil")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (

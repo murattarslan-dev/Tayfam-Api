@@ -190,6 +190,10 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_RANKING_NOT_STARTED":     {http.StatusConflict, "ranking-not-started"},
 		"ERROR_REASON_RANKING_NOT_PARTICIPANT": {http.StatusConflict, "ranking-not-participant"},
 		"ERROR_REASON_RANKING_FROM_MEASURE":    {http.StatusConflict, "ranking-from-measure"},
+		// Celebration component (issue #255).
+		"ERROR_REASON_CELEBRATION_NOT_STARTED":     {http.StatusConflict, "celebration-not-started"},
+		"ERROR_REASON_CELEBRATION_NO_WINNER":       {http.StatusConflict, "celebration-no-winner"},
+		"ERROR_REASON_CELEBRATION_NOT_PARTICIPANT": {http.StatusConflict, "celebration-not-participant"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

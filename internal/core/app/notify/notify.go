@@ -70,6 +70,12 @@ const (
 	// contact that Target (the participant) did not mark "back" in time
 	// (issue #210, ADR-0033). No tayfa, no actor, no content, no location.
 	TypeSafetyAlert = "safety_alert"
+	// TypeCelebration: the organizer announced the winner of a celebration
+	// component of the target event (issue #255; ADR-0025 §4). The tayfa's
+	// members hear about it once; in-app only (no push). Never names the
+	// winner: a guest winner has no name to give, and the client reads the
+	// celebration from core.
+	TypeCelebration = "celebration"
 )
 
 // Target types: what the client opens (and reads from core).

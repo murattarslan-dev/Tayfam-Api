@@ -460,4 +460,18 @@ enum ErrorReason {
   // FAILED_PRECONDITION. The ranking is computed from a measure (its
   // `source` parameter); the measure's values are entered instead.
   ERROR_REASON_RANKING_FROM_MEASURE = 2532;
+
+  // Celebration component (CelebrationComponentService,
+  // component_celebration.proto; issue #255: 2550–2559).
+
+  // FAILED_PRECONDITION. A winner is announced once the event has started.
+  ERROR_REASON_CELEBRATION_NOT_STARTED = 2550;
+  // FAILED_PRECONDITION. The source component has no winner yet: a table
+  // that is still open, a bracket that has not finished, an empty ranking
+  // or one hidden from everyone (a sensitive measure).
+  ERROR_REASON_CELEBRATION_NO_WINNER = 2551;
+  // FAILED_PRECONDITION. A winner chosen by hand is not a participant of
+  // the event: they did not answer "going" and their attendance was not
+  // verified.
+  ERROR_REASON_CELEBRATION_NOT_PARTICIPANT = 2552;
 }

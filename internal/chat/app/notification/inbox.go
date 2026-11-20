@@ -67,6 +67,11 @@ const (
 	// no actor, no content; the target is the participant. Like
 	// hike_overdue it cannot be muted and is pushed even while online.
 	TypeSafetyAlert = "safety_alert"
+	// TypeCelebration: the organizer (the actor) announced the winner of a
+	// celebration component of the target event (issue #255). In-app only:
+	// the enqueue_push trigger opens no push job for it. Never names the
+	// winner.
+	TypeCelebration = "celebration"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -97,7 +102,7 @@ const MaxRecipients = 200
 // targetOf is the only target type each notification type may have.
 func targetOf(typ string) (string, bool) {
 	switch typ {
-	case TypeEventCreated, TypeEventUpdated, TypeEventCancelled, TypeRSVPPromoted, TypeHikeOverdue:
+	case TypeEventCreated, TypeEventUpdated, TypeEventCancelled, TypeRSVPPromoted, TypeHikeOverdue, TypeCelebration:
 		return TargetEvent, true
 	case TypeAnnouncement:
 		return TargetAnnouncement, true

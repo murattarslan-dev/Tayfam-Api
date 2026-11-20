@@ -68,6 +68,7 @@ func componentRegistrars() []componentRegistrar {
 		// vote (#254)
 
 		// celebration (#255)
+		registerCelebrationComponent,
 
 		// questions (#256)
 

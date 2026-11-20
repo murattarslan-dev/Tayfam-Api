@@ -105,6 +105,7 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 		// vote (#254)
 
 		// celebration (#255)
+		registerCelebrationComponent,
 
 		// questions (#256)
 

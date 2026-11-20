@@ -117,6 +117,12 @@ var wantAppPrivileges = map[string]string{
 	// or person; only its value changes and account deletion clears its
 	// writer.
 	"event_ranking_entries": "DELETE,INSERT,SELECT,UPDATE(entered_by,updated_at,value)",
+	// Issue #255: an announcement never moves to another event or
+	// component and is not deleted; a new announcement touches it and
+	// account deletion clears its announcer. The winners chosen by hand are
+	// replaced, never changed.
+	"event_celebrations":        "INSERT,SELECT,UPDATE(announced_by,updated_at)",
+	"event_celebration_winners": "DELETE,INSERT,SELECT",
 	// Issue #241: an item never moves to another event or list, and its
 	// name and quantity do not change; only the assignee changes and
 	// account deletion clears the people on it.

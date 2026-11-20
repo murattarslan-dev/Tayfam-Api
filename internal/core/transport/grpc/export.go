@@ -61,6 +61,7 @@ var exportSections = map[string]corev1.CoreExportSection{
 	export.SectionBracketMatches:      corev1.CoreExportSection_CORE_EXPORT_SECTION_BRACKET_MATCHES,
 	export.SectionGuestPlayers:        corev1.CoreExportSection_CORE_EXPORT_SECTION_GUEST_PLAYERS,
 	export.SectionRankingEntries:      corev1.CoreExportSection_CORE_EXPORT_SECTION_RANKING_ENTRIES,
+	export.SectionCelebrationWins:     corev1.CoreExportSection_CORE_EXPORT_SECTION_CELEBRATION_WINS,
 }
 
 // ExportMyData implements corev1.ExportServiceServer.

@@ -72,6 +72,8 @@ const (
 	// Issue #253: one's rankings entered by hand; the computed ones are
 	// one's measurements.
 	SectionRankingEntries = "ranking_entries"
+	// Issue #255: the celebrations that named one a winner by hand.
+	SectionCelebrationWins = "celebration_wins"
 )
 
 const (
@@ -232,6 +234,10 @@ var sections = []struct {
 	{SectionRankingEntries, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportRankingEntries(ctx, store.ExportRankingEntriesParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportRankingEntriesRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionCelebrationWins, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportCelebrationWins(ctx, store.ExportCelebrationWinsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportCelebrationWinsRow) row { return row{x.K, x.Data} })
 	}},
 }
 

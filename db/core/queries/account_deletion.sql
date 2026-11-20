@@ -177,6 +177,14 @@ DELETE FROM event_ranking_entries WHERE user_id = @user_id;
 -- name: ClearRankingEntryEnteredBy :exec
 UPDATE event_ranking_entries SET entered_by = NULL WHERE entered_by = @user_id;
 
+-- Elle seçildiği kutlama kazananlığı kişiye aittir; kişiyle birlikte silinir.
+-- İlan ettiği kutlama kalır, ilan eden boşalır (issue #255).
+-- name: DeleteUserCelebrationWins :exec
+DELETE FROM event_celebration_winners WHERE user_id = @user_id;
+
+-- name: ClearCelebrationAnnouncer :exec
+UPDATE event_celebrations SET announced_by = NULL WHERE announced_by = @user_id;
+
 -- Tayfa sözlüğüne eklediği değerler tayfanın ortak verisidir; kalır, ekleyen
 -- boşalır (issue #244; ADR-0037 §4).
 -- name: ClearVocabularyCreator :exec

@@ -107,6 +107,12 @@ enum CoreExportSection {
   // (the ranking component, issue #253): the time or the place. Rankings
   // computed from a measure are the caller's measurements.
   CORE_EXPORT_SECTION_RANKING_ENTRIES = 31;
+  // The celebrations that named the caller a winner by hand (the
+  // celebration component, issue #255): the event, the component and when
+  // it was announced. Who announced it and the other winners are not
+  // exported; wins read from a scoreboard, bracket or ranking are in those
+  // sections.
+  CORE_EXPORT_SECTION_CELEBRATION_WINS = 32;
 }
 
 message ExportMyDataRequest {}

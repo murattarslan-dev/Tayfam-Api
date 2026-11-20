@@ -86,6 +86,13 @@ enum NotificationType {
   // no location; the client reads the shared event from core's
   // DiscoverService.ListSafetyShares. Muting does not apply; push is sent.
   NOTIFICATION_TYPE_SAFETY_ALERT = 23;
+  // The organizer announced the winner of a celebration component of the
+  // event (target: EVENT; issue #255, ADR-0025 §4). Goes to the tayfa's
+  // active members but the announcer, once per celebration. Never names the
+  // winner (a guest winner has no name to give); the client reads the
+  // celebration from core's CelebrationComponentService. In-app only: no
+  // push is sent for it.
+  NOTIFICATION_TYPE_CELEBRATION = 24;
 }
 
 enum NotificationTargetType {
