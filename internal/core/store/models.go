@@ -654,6 +654,48 @@ type JobRun struct {
 	LastSucceededAt pgtype.Timestamptz
 }
 
+type LibraryItem struct {
+	ID                  pgtype.UUID
+	TayfaID             pgtype.UUID
+	OwnerID             pgtype.UUID
+	Kind                string
+	Name                string
+	VocabularyID        pgtype.UUID
+	VocabularyNamespace pgtype.Text
+	Note                pgtype.Text
+	PhotoUploadID       pgtype.UUID
+	Status              string
+	WithdrawnAt         pgtype.Timestamptz
+	WithdrawnBy         pgtype.UUID
+	ClientRequestID     pgtype.UUID
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+}
+
+type LibraryLoan struct {
+	ID           pgtype.UUID
+	ItemID       pgtype.UUID
+	TayfaID      pgtype.UUID
+	BorrowerID   pgtype.UUID
+	State        string
+	RequestedAt  pgtype.Timestamptz
+	ApprovedAt   pgtype.Timestamptz
+	HandedOverAt pgtype.Timestamptz
+	DueAt        pgtype.Timestamptz
+	RemindedAt   pgtype.Timestamptz
+	OrphanedAt   pgtype.Timestamptz
+	EndedAt      pgtype.Timestamptz
+}
+
+type LibraryQueue struct {
+	ID        pgtype.UUID
+	ItemID    pgtype.UUID
+	TayfaID   pgtype.UUID
+	UserID    pgtype.UUID
+	Position  int32
+	CreatedAt pgtype.Timestamptz
+}
+
 type Membership struct {
 	TayfaID         pgtype.UUID
 	UserID          pgtype.UUID

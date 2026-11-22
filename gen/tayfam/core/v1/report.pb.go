@@ -72,6 +72,10 @@ const (
 	// TayfaDailyService). Its subject is the member who added it. Reporting
 	// needs the daily module on.
 	ReportTargetType_REPORT_TARGET_TYPE_DAILY_ITEM ReportTargetType = 13
+	// target_id is an item of the tayfa's library (issue #270;
+	// TayfaLibraryService). Its subject is the item's owner. Reporting needs
+	// the library module on and the item not withdrawn.
+	ReportTargetType_REPORT_TARGET_TYPE_LIBRARY_ITEM ReportTargetType = 14
 )
 
 // Enum value maps for ReportTargetType.
@@ -91,6 +95,7 @@ var (
 		11: "REPORT_TARGET_TYPE_CHANNEL_MESSAGE",
 		12: "REPORT_TARGET_TYPE_EVENT_QUESTION",
 		13: "REPORT_TARGET_TYPE_DAILY_ITEM",
+		14: "REPORT_TARGET_TYPE_LIBRARY_ITEM",
 	}
 	ReportTargetType_value = map[string]int32{
 		"REPORT_TARGET_TYPE_UNSPECIFIED":     0,
@@ -107,6 +112,7 @@ var (
 		"REPORT_TARGET_TYPE_CHANNEL_MESSAGE": 11,
 		"REPORT_TARGET_TYPE_EVENT_QUESTION":  12,
 		"REPORT_TARGET_TYPE_DAILY_ITEM":      13,
+		"REPORT_TARGET_TYPE_LIBRARY_ITEM":    14,
 	}
 )
 
@@ -1375,7 +1381,7 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"resolution\x18\x03 \x01(\x0e2 .tayfam.core.v1.ReportResolutionR\n" +
 	"resolution\"Q\n" +
 	"\x15ResolveReportResponse\x128\n" +
-	"\x06report\x18\x01 \x01(\v2 .tayfam.core.v1.ModerationReportR\x06report*\xf0\x03\n" +
+	"\x06report\x18\x01 \x01(\v2 .tayfam.core.v1.ModerationReportR\x06report*\x95\x04\n" +
 	"\x10ReportTargetType\x12\"\n" +
 	"\x1eREPORT_TARGET_TYPE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17REPORT_TARGET_TYPE_USER\x10\x01\x12\x1c\n" +
@@ -1391,7 +1397,8 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"\x12&\n" +
 	"\"REPORT_TARGET_TYPE_CHANNEL_MESSAGE\x10\v\x12%\n" +
 	"!REPORT_TARGET_TYPE_EVENT_QUESTION\x10\f\x12!\n" +
-	"\x1dREPORT_TARGET_TYPE_DAILY_ITEM\x10\r*\x8d\x04\n" +
+	"\x1dREPORT_TARGET_TYPE_DAILY_ITEM\x10\r\x12#\n" +
+	"\x1fREPORT_TARGET_TYPE_LIBRARY_ITEM\x10\x0e*\x8d\x04\n" +
 	"\fReportReason\x12\x1d\n" +
 	"\x19REPORT_REASON_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18REPORT_REASON_HARASSMENT\x10\x01\x12\x1d\n" +

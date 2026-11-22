@@ -478,6 +478,30 @@ func (q *Queries) GetReportTargetEventQuestion(ctx context.Context, arg GetRepor
 	return i, err
 }
 
+const getReportTargetLibraryItem = `-- name: GetReportTargetLibraryItem :one
+SELECT owner_id AS author_id, (status <> 'withdrawn')::boolean AS visible
+FROM library_items
+WHERE tayfa_id = $1 AND id = $2
+`
+
+type GetReportTargetLibraryItemParams struct {
+	TayfaID pgtype.UUID
+	ID      pgtype.UUID
+}
+
+type GetReportTargetLibraryItemRow struct {
+	AuthorID pgtype.UUID
+	Visible  bool
+}
+
+// Ortak kütüphane kalemi (issue #270): yazarı sahibidir.
+func (q *Queries) GetReportTargetLibraryItem(ctx context.Context, arg GetReportTargetLibraryItemParams) (GetReportTargetLibraryItemRow, error) {
+	row := q.db.QueryRow(ctx, getReportTargetLibraryItem, arg.TayfaID, arg.ID)
+	var i GetReportTargetLibraryItemRow
+	err := row.Scan(&i.AuthorID, &i.Visible)
+	return i, err
+}
+
 const getReportTargetLogEntry = `-- name: GetReportTargetLogEntry :one
 SELECT c.user_id AS author_id, (c.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible
 FROM event_log_entries c

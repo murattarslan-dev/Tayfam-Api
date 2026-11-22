@@ -133,6 +133,15 @@ const (
 	// §5), deleted ones included: text, attribution, pinned day. Their place
 	// in the pool and who deleted them are not exported.
 	CoreExportSection_CORE_EXPORT_SECTION_DAILY_ITEMS CoreExportSection = 36
+	// The library items the caller owns (issue #270, ADR-0040 §1),
+	// withdrawn ones included: kind, name, note, status and times. The photo
+	// is not in it.
+	CoreExportSection_CORE_EXPORT_SECTION_LIBRARY_ITEMS CoreExportSection = 37
+	// The caller's loans, as borrower or as the item's owner (kept for a
+	// year after they end), and the queues the caller waits in: the item,
+	// the caller's role, the state and its times. The other person is not
+	// exported.
+	CoreExportSection_CORE_EXPORT_SECTION_LIBRARY_LOANS CoreExportSection = 38
 )
 
 // Enum value maps for CoreExportSection.
@@ -174,6 +183,8 @@ var (
 		34: "CORE_EXPORT_SECTION_BADGES",
 		35: "CORE_EXPORT_SECTION_USER_STATS",
 		36: "CORE_EXPORT_SECTION_DAILY_ITEMS",
+		37: "CORE_EXPORT_SECTION_LIBRARY_ITEMS",
+		38: "CORE_EXPORT_SECTION_LIBRARY_LOANS",
 	}
 	CoreExportSection_value = map[string]int32{
 		"CORE_EXPORT_SECTION_UNSPECIFIED":           0,
@@ -212,6 +223,8 @@ var (
 		"CORE_EXPORT_SECTION_BADGES":                34,
 		"CORE_EXPORT_SECTION_USER_STATS":            35,
 		"CORE_EXPORT_SECTION_DAILY_ITEMS":           36,
+		"CORE_EXPORT_SECTION_LIBRARY_ITEMS":         37,
+		"CORE_EXPORT_SECTION_LIBRARY_LOANS":         38,
 	}
 )
 
@@ -339,8 +352,7 @@ const file_tayfam_core_v1_export_proto_rawDesc = "" +
 	"\x13ExportMyDataRequest\"m\n" +
 	"\x14ExportMyDataResponse\x12;\n" +
 	"\asection\x18\x01 \x01(\x0e2!.tayfam.core.v1.CoreExportSectionR\asection\x12\x18\n" +
-	"\arecords\x18\x02 \x03(\fR\arecords*\xdd\n" +
-	"\n" +
+	"\arecords\x18\x02 \x03(\fR\arecords*\xab\v\n" +
 	"\x11CoreExportSection\x12#\n" +
 	"\x1fCORE_EXPORT_SECTION_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fCORE_EXPORT_SECTION_MEMBERSHIPS\x10\x01\x12#\n" +
@@ -378,7 +390,9 @@ const file_tayfam_core_v1_export_proto_rawDesc = "" +
 	"#CORE_EXPORT_SECTION_EVENT_QUESTIONS\x10!\x12\x1e\n" +
 	"\x1aCORE_EXPORT_SECTION_BADGES\x10\"\x12\"\n" +
 	"\x1eCORE_EXPORT_SECTION_USER_STATS\x10#\x12#\n" +
-	"\x1fCORE_EXPORT_SECTION_DAILY_ITEMS\x10$2l\n" +
+	"\x1fCORE_EXPORT_SECTION_DAILY_ITEMS\x10$\x12%\n" +
+	"!CORE_EXPORT_SECTION_LIBRARY_ITEMS\x10%\x12%\n" +
+	"!CORE_EXPORT_SECTION_LIBRARY_LOANS\x10&2l\n" +
 	"\rExportService\x12[\n" +
 	"\fExportMyData\x12#.tayfam.core.v1.ExportMyDataRequest\x1a$.tayfam.core.v1.ExportMyDataResponse0\x01B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vExportProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"

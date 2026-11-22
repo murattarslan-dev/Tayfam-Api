@@ -45,6 +45,10 @@ const (
 	UploadPurpose_UPLOAD_PURPOSE_DM_ATTACHMENT UploadPurpose = 6
 	// A photo the reporter of a direct message shares from their device.
 	UploadPurpose_UPLOAD_PURPOSE_REPORT_EVIDENCE UploadPurpose = 7
+	// A library item's photo (issue #270, ADR-0040 §1; at most one per
+	// item). Attached with TayfaLibraryService.CreateLibraryItem or
+	// UpdateLibraryItem.
+	UploadPurpose_UPLOAD_PURPOSE_LIBRARY_ITEM UploadPurpose = 8
 )
 
 // Enum value maps for UploadPurpose.
@@ -58,6 +62,7 @@ var (
 		5: "UPLOAD_PURPOSE_CHAT_PHOTO",
 		6: "UPLOAD_PURPOSE_DM_ATTACHMENT",
 		7: "UPLOAD_PURPOSE_REPORT_EVIDENCE",
+		8: "UPLOAD_PURPOSE_LIBRARY_ITEM",
 	}
 	UploadPurpose_value = map[string]int32{
 		"UPLOAD_PURPOSE_UNSPECIFIED":     0,
@@ -68,6 +73,7 @@ var (
 		"UPLOAD_PURPOSE_CHAT_PHOTO":      5,
 		"UPLOAD_PURPOSE_DM_ATTACHMENT":   6,
 		"UPLOAD_PURPOSE_REPORT_EVIDENCE": 7,
+		"UPLOAD_PURPOSE_LIBRARY_ITEM":    8,
 	}
 )
 
@@ -1820,7 +1826,7 @@ const file_tayfam_core_v1_media_proto_rawDesc = "" +
 	"\x1cGetExportDownloadUrlResponse\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12;\n" +
 	"\vexpire_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTime*\x89\x02\n" +
+	"expireTime*\xaa\x02\n" +
 	"\rUploadPurpose\x12\x1e\n" +
 	"\x1aUPLOAD_PURPOSE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15UPLOAD_PURPOSE_AVATAR\x10\x01\x12\x1e\n" +
@@ -1829,7 +1835,8 @@ const file_tayfam_core_v1_media_proto_rawDesc = "" +
 	"\x1aUPLOAD_PURPOSE_EVENT_PHOTO\x10\x04\x12\x1d\n" +
 	"\x19UPLOAD_PURPOSE_CHAT_PHOTO\x10\x05\x12 \n" +
 	"\x1cUPLOAD_PURPOSE_DM_ATTACHMENT\x10\x06\x12\"\n" +
-	"\x1eUPLOAD_PURPOSE_REPORT_EVIDENCE\x10\a*}\n" +
+	"\x1eUPLOAD_PURPOSE_REPORT_EVIDENCE\x10\a\x12\x1f\n" +
+	"\x1bUPLOAD_PURPOSE_LIBRARY_ITEM\x10\b*}\n" +
 	"\fUploadStatus\x12\x1d\n" +
 	"\x19UPLOAD_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15UPLOAD_STATUS_PENDING\x10\x01\x12\x17\n" +

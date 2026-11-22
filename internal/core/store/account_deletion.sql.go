@@ -157,6 +157,29 @@ func (q *Queries) ClearInviteCreator(ctx context.Context, userID pgtype.UUID) er
 	return err
 }
 
+const clearLibraryItemUserFields = `-- name: ClearLibraryItemUserFields :exec
+UPDATE library_items
+SET owner_id = NULLIF(owner_id, $1), withdrawn_by = NULLIF(withdrawn_by, $1)
+WHERE owner_id = $1 OR withdrawn_by = $1
+`
+
+// Ortak kütüphane (issue #270; ADR-0040 §1): kalemler önce geri çekilir
+// (lending.Departed), sonra sahibi ve geri çekeni boşalır; ödünç
+// kayıtlarında borç alan boşalır; sıradaki yerler silinir.
+func (q *Queries) ClearLibraryItemUserFields(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearLibraryItemUserFields, userID)
+	return err
+}
+
+const clearLibraryLoanBorrower = `-- name: ClearLibraryLoanBorrower :exec
+UPDATE library_loans SET borrower_id = NULL WHERE borrower_id = $1
+`
+
+func (q *Queries) ClearLibraryLoanBorrower(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearLibraryLoanBorrower, userID)
+	return err
+}
+
 const clearLogEntryDeleter = `-- name: ClearLogEntryDeleter :exec
 UPDATE event_log_entries SET deleted_by = NULL WHERE deleted_by = $1
 `
@@ -392,6 +415,15 @@ DELETE FROM event_questions WHERE author_id = $1
 // #256; ADR-0025 §11).
 func (q *Queries) DeleteUserEventQuestions(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserEventQuestions, userID)
+	return err
+}
+
+const deleteUserLibraryQueue = `-- name: DeleteUserLibraryQueue :exec
+DELETE FROM library_queue WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserLibraryQueue(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserLibraryQueue, userID)
 	return err
 }
 

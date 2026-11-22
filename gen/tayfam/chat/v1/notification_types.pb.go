@@ -129,6 +129,16 @@ const (
 	// the push_now_started_title / _body keys only. Muted with the tayfa's
 	// level NONE or with its NOTIFICATION_SCOPE_TYPE_TAYFA_NOW preference.
 	NotificationType_NOTIFICATION_TYPE_NOW_STARTED NotificationType = 26
+	// A library loan's return date passed (issue #270, ADR-0040 §1): one
+	// reminder to the borrower (target: TAYFA, the loan's tayfa; no actor).
+	// Never names the item, the owner or the date: the client reads the
+	// caller's loans from TayfaLibraryService. In-app only: no push.
+	NotificationType_NOTIFICATION_TYPE_LIBRARY_DUE NotificationType = 27
+	// One side of a handed-over library loan left the tayfa (issue #270,
+	// ADR-0040 §1): a warning to both the owner and the borrower, the one who
+	// left included (target: TAYFA; no actor). The loan stays open for 30
+	// days, then closes. Never names the item or the people. In-app only.
+	NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED NotificationType = 28
 )
 
 // Enum value maps for NotificationType.
@@ -161,6 +171,8 @@ var (
 		24: "NOTIFICATION_TYPE_CELEBRATION",
 		25: "NOTIFICATION_TYPE_BADGE_EARNED",
 		26: "NOTIFICATION_TYPE_NOW_STARTED",
+		27: "NOTIFICATION_TYPE_LIBRARY_DUE",
+		28: "NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED",
 	}
 	NotificationType_value = map[string]int32{
 		"NOTIFICATION_TYPE_UNSPECIFIED":              0,
@@ -190,6 +202,8 @@ var (
 		"NOTIFICATION_TYPE_CELEBRATION":              24,
 		"NOTIFICATION_TYPE_BADGE_EARNED":             25,
 		"NOTIFICATION_TYPE_NOW_STARTED":              26,
+		"NOTIFICATION_TYPE_LIBRARY_DUE":              27,
+		"NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED":    28,
 	}
 )
 
@@ -353,7 +367,7 @@ var File_tayfam_chat_v1_notification_types_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\n" +
-	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\x8d\b\n" +
+	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xdd\b\n" +
 	"\x10NotificationType\x12!\n" +
 	"\x1dNOTIFICATION_TYPE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fNOTIFICATION_TYPE_EVENT_CREATED\x10\x01\x12#\n" +
@@ -382,7 +396,9 @@ const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\x1eNOTIFICATION_TYPE_SAFETY_ALERT\x10\x17\x12!\n" +
 	"\x1dNOTIFICATION_TYPE_CELEBRATION\x10\x18\x12\"\n" +
 	"\x1eNOTIFICATION_TYPE_BADGE_EARNED\x10\x19\x12!\n" +
-	"\x1dNOTIFICATION_TYPE_NOW_STARTED\x10\x1a*\xa3\x03\n" +
+	"\x1dNOTIFICATION_TYPE_NOW_STARTED\x10\x1a\x12!\n" +
+	"\x1dNOTIFICATION_TYPE_LIBRARY_DUE\x10\x1b\x12+\n" +
+	"'NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED\x10\x1c*\xa3\x03\n" +
 	"\x16NotificationTargetType\x12(\n" +
 	"$NOTIFICATION_TARGET_TYPE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eNOTIFICATION_TARGET_TYPE_TAYFA\x10\x01\x12'\n" +
