@@ -172,6 +172,54 @@ Ortak kurallar (dördü için):
 - `blocked_domains` (core): platform panelinden yönetilir, denetim kaydına
   yazılır; eklenen alan adı mevcut materyalleri de gizler (silmez).
 
+**Uygulama notları (#261):**
+
+- **Tablo:** `materials` (`kind` `link` / `note_photo`, `title` 1–80 tek
+  satır, `url` ≤ 500 ve `domain` yalnızca bağlantıda, `photo1..3_upload_id`
+  yalnızca not fotoğrafında, `subject_key` zorunlu / `topic_key` isteğe
+  bağlı `catalog_study_tags`'e foreign key, soft delete). Yeni etiket
+  seçimini `catalog.CheckStudySelection` doğrular; değişmeyen emekli etiket
+  kalır. Üye başına tayfada en fazla 200 materyal (`material-limit`).
+  Liste sayfalıdır (`page_size` ≤ 50, opak `page_token`), ders/konu/tür/
+  `mine` ile süzülür.
+- **Bağlantı kuralları** (`internal/core/app/material/link`, yalnızca metin
+  ayrıştırır): `https`, kullanıcı bilgisi yok, IP adresi (her yazımıyla;
+  son etiketi rakamla başlayan ad dahil) ve köşeli IPv6 yok, 443 dışında
+  port yok, boşluk/denetim/biçim karakteri (bidi, sıfır genişlik) ve ters
+  bölü yok, alan adı LDH ve ASCII (IDN punycode olarak gelir; benzer harf
+  oyunu kapanır), özel kullanım ve iç adlar (`localhost`, `.local`,
+  `.internal`, `.onion`, `.test` …) yok. Normalleştirme: şema ve alan adı
+  küçük harf, varsayılan port ve sondaki nokta atılır, yol/sorgu/parça
+  `net/url` ile kaçışlanır; sınır normalleştirilmiş adrese uygulanır.
+  Paketin bağımlılıklarında ağ paketi olmadığını test denetler
+  (`TestNoNetwork`); materyal paketi de ağ paketi içe aktarmaz.
+- **Engelli alan adı:** tek kaynak SQL `material_domain_blocked(domain)`
+  (alan adı ve bütün üst alan adları, birincil anahtar üzerinden). Liste,
+  okuma, düzenleme ve şikâyet bu fonksiyonla gizler; materyal silinmez.
+  Servis listeyi yalnızca okur; yönetimi #262 (platform paneli).
+  Notion bir başlangıç listesi tanımlamadığı için migration en dar güvenli
+  yorumla iki grup ekler (platform sahibi panelden değiştirir): bağlantı
+  kısaltıcılar (sunucu bağlantıyı açmadığı için engelli alan adını
+  gizleyebilirler) ve birebir sohbet/grup davet adresleri (WhatsApp,
+  Telegram, Discord, Signal; 16–17 yaş kullanıcılara tayfa dışı iletişim
+  yolu açmamak için, §2'deki "yeni bir iletişim yolu açılmaz" ilkesi).
+- **Fotoğraflar:** yükleme amacı `material_note`, bağlama türü `material`;
+  görünürlük tayfanın etkin üyesi ve `materials` modülü açık. Sıra
+  değişebildiği için bırakılan fotoğrafı tek tetikleyici
+  (`materials_release_photos`) silme kuyruğuna alır.
+- **Silme:** yazarın kendi silmesi fotoğrafları hemen bırakır;
+  moderatörün ya da platformun kaldırması yalnızca gizler. Geri alma yok;
+  30 gün sonra kalıcı silme. Hesap silinince materyal kalır, yazar boşalır,
+  kişinin fotoğraf dosyaları silinir.
+- **Yetki:** `material.add`, `material.edit_own`, `material.delete_own`
+  (üye; susturulmuşken yalnızca kendi silmesi), `material.remove_any`
+  (moderatör). Şikâyet hedefi `material` (konusu yazarı); panel bağlantıyı
+  açmaz, metin olarak gösterir. Kötüye kullanım filtresinin takılma
+  noktası `material.checkTerms` (başlık ve bağlantı).
+- Dışa aktarma bölümü `materials` (39); ana sayfa bileşeni `materials`
+  (modül bileşeni). Hatalar 2720–2722: `material-not-found`,
+  `blocked-link`, `material-limit`.
+
 ### 4. Üye garajı (`garage`)
 
 - Garaj **kişiye aittir** ve tektir: `garage_vehicles` (core): `id`,

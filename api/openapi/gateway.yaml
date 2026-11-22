@@ -5268,6 +5268,166 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Materyal kütüphanesi (core TayfaMaterialService, #261, ADR-0040 §3) ---
+  # Eğitim tayfalarının ders materyali: yalnızca https bağlantı ya da
+  # kişinin kendi not fotoğrafları (en fazla 3). Dosya/PDF yüklenmez. Ders
+  # zorunlu, konu isteğe bağlı (`GET /v1/catalog` → `study_tags`; yalnızca
+  # anahtar). Üye kendi materyalini ekler; yazarı düzenler ve siler,
+  # moderatör herkesinkini kaldırır. Sunucu bağlantıyı hiçbir zaman açmaz:
+  # önizleme, başlık ya da favicon çekilmez; yanıt yalnızca adresi ve
+  # sunucunun ayrıştırdığı alan adını (`domain`) döner. İstemci alan adını
+  # gösterir ve "Tayfam dışına çıkıyorsun" uyarısıyla açar. Engelli alan
+  # adı listesindeki alan adları ve alt alan adları reddedilir
+  # (`blocked-link`); listeye sonradan eklenen alan adı var olan
+  # materyalleri gizler. `materials` modülüdür (kapalıysa her uç
+  # `module-disabled`); ana sayfa bileşeni `materials` bu modülün
+  # vitrinidir. Etkin üye olmayan `tayfa-not-found`. Başlık ve bağlantı
+  # içeriktir, loglanmaz.
+
+  /v1/tayfas/{tayfa_id}/materials:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listMaterials
+      summary: Materyal kütüphanesi
+      description: |
+        Görünen materyaller, en yeni önce. `kind`, `subject_key`,
+        `topic_key` ve `mine=true` (yalnızca çağıranınkiler) süzer;
+        emekliye ayrılmış etiketle de süzülür. `next_page_token` yalnızca
+        aynı süzgeçlerle geçerlidir.
+      parameters:
+        - name: kind
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/MaterialKind" }
+        - name: subject_key
+          in: query
+          required: false
+          description: Ders anahtarı (`GET /v1/catalog` → `study_tags`).
+          schema: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+        - name: topic_key
+          in: query
+          required: false
+          description: Konu anahtarı.
+          schema: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+        - name: mine
+          in: query
+          required: false
+          schema: { type: boolean }
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Materyaller
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MaterialList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createMaterial
+      summary: Materyal ekler
+      description: |
+        `link`: `url` zorunlu, fotoğraf yok. Bağlantı yalnızca `https`,
+        kullanıcı bilgisi yok, IP adresi değil alan adı (Türkçe karakterli
+        alan adı punycode olarak), 443 dışında port yok, boşluk ve görünmez
+        karakter yok; sunucu normalleştirir (en fazla 500 karakter).
+        Engelli alan adı `blocked-link`. `note_photo`: 1–3 fotoğraf
+        (çağıranın bu tayfa için hazır `material_note` yüklemeleri), `url`
+        yok. Ders zorunlu, konu isteğe bağlı ve o dersin altında; emekli
+        etiket seçilemez. Aynı `client_request_id` ile tekrar gönderim aynı
+        materyali döndürür. Üye başına en fazla 200 materyal
+        (`material-limit`). Susturulmuş üye ekleyemez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MaterialCreateRequest" }
+      responses:
+        "201":
+          description: Eklenen materyal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Material" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/materials/{material_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/MaterialID"
+    get:
+      operationId: getMaterial
+      summary: Materyal
+      description: |
+        Silinmiş, engelli alan adına bağlanan ya da bilinmeyen materyal
+        `material-not-found`.
+      responses:
+        "200":
+          description: Materyal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Material" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: updateMaterial
+      summary: Kendi materyalini düzenler (yazarı)
+      description: |
+        Başlık, bağlantı ya da fotoğraflar ve etiketler birlikte yazılır
+        (kısmi güncelleme yok); türü değişmez. Listede olmayan fotoğraf
+        silinir. Değişmeyen etiket emekliye ayrılmış olsa da kalır.
+        Çağıranın olmayan materyal `material-not-found`. Susturulmuş üye
+        düzenleyemez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MaterialUpdateRequest" }
+      responses:
+        "200":
+          description: Düzenlenen materyal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Material" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteMaterial
+      summary: Materyali siler (yazarı) ya da kaldırır (moderatör)
+      description: |
+        Yazarın silmesinde fotoğraflar hemen silinir; moderatörün
+        kaldırması materyali gizler. İkisi de geri alınamaz; materyal 30
+        gün sonra kalıcı silinir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Silindi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /v1/tayfas/{tayfa_id}/event-series/{series_id}:
     parameters:
       - $ref: "#/components/parameters/TayfaID"
@@ -8858,6 +9018,12 @@ components:
       required: true
       description: Ödüncün kimliği (`LibraryLoan.id`).
       schema: { type: string, format: uuid }
+    MaterialID:
+      name: material_id
+      in: path
+      required: true
+      description: Materyal kütüphanesindeki materyalin kimliği (`Material.id`).
+      schema: { type: string, format: uuid }
     CatalogTypeVersion:
       name: version
       in: path
@@ -9036,6 +9202,10 @@ components:
         - library-item-on-loan
         - library-item-limit
         - library-queue-full
+        # core: materyal kütüphanesi (#261, ADR-0040 §3)
+        - material-not-found
+        - blocked-link
+        - material-limit
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -9317,8 +9487,8 @@ components:
       enum: [approval, open]
     Module:
       type: string
-      description: "`daily` günün içeriğidir (#269). `library` ortak kütüphanedir (#270). `question_pool` Eğitim soru havuzudur (#271): soruları `pool: question_pool` ile Soru-Cevap uçlarından, ana sayfa bileşeni ve `pool_link` etkinlik bileşeni."
-      enum: [announcements, events, qa, polls, daily, library, question_pool]
+      description: "`daily` günün içeriğidir (#269). `library` ortak kütüphanedir (#270). `question_pool` Eğitim soru havuzudur (#271): soruları `pool: question_pool` ile Soru-Cevap uçlarından, ana sayfa bileşeni ve `pool_link` etkinlik bileşeni. `materials` Eğitim materyal kütüphanesidir (#261)."
+      enum: [announcements, events, qa, polls, daily, library, question_pool, materials]
     Role:
       type: string
       enum: [member, moderator, admin]
@@ -9471,6 +9641,7 @@ components:
             daily: { type: boolean }
             library: { type: boolean }
             question_pool: { type: boolean }
+            materials: { type: boolean }
         status:
           type: string
           description: "`warned`: hareketsiz, 7 gün sonra arşivlenir. `archived`: salt okunur."
@@ -11269,7 +11440,7 @@ components:
         listesi sunucunundur ve büyüyebilir (bugün `upcoming`,
         `announcements`, `polls`, `questions`, `stats`, `goal`,
         `countdown`, `champions`, `log_summary`, `daily`, `library`,
-        `question_pool`).
+        `question_pool`, `materials`).
       properties:
         key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
         kind:
@@ -11608,6 +11779,92 @@ components:
         name: { type: string, minLength: 1, maxLength: 1024 }
         note: { type: string, maxLength: 4096, description: "Boş: yok." }
         photo_upload_id: { type: string, format: uuid, description: "Yoksa fotoğraf kalkar." }
+    MaterialKind:
+      type: string
+      description: "`link` https bağlantı, `note_photo` kişinin kendi not fotoğrafları. Tanınmayan değer `unknown`."
+      enum: [link, note_photo, unknown]
+    Material:
+      type: object
+      required: [id, kind, title, subject_key, created_at, updated_at, caller_can_edit, caller_can_delete]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { $ref: "#/components/schemas/MaterialKind" }
+        title: { type: string, description: "1–80 karakter, tek satır." }
+        url:
+          type: string
+          description: |
+            Yalnızca `link`; sunucunun normalleştirdiği https adresi (en
+            fazla 500 karakter). Sunucu bu adresi hiç açmadı; istemci
+            önizleme çekmez, açmadan önce uyarır.
+        domain:
+          type: string
+          description: |
+            Yalnızca `link`; sunucunun adresten ayrıştırdığı alan adı (küçük
+            harf; Türkçe karakterli alan adı punycode). Bağlantıyla birlikte
+            gösterilir.
+        photo_upload_ids:
+          type: array
+          maxItems: 3
+          description: |
+            Yalnızca `note_photo`; yazarın fotoğrafları (`material_note`
+            yüklemesi), sırasıyla; adreslerini `POST /v1/media/urls` verir.
+            Yazarın hesabı silinince boşalabilir.
+          items: { type: string, format: uuid }
+        subject_key:
+          type: string
+          description: Ders anahtarı (her zaman var); etiket sonradan emekliye ayrılmış olabilir.
+        topic_key:
+          type: string
+          description: Konu anahtarı; yoksa alan yoktur.
+        author_user_id:
+          type: string
+          format: uuid
+          description: Yazar; hesabı silindiyse alan yoktur.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        caller_can_edit: { type: boolean, description: "Çağıran şimdi düzenleyebilir mi (yazarı)." }
+        caller_can_delete: { type: boolean, description: "Çağıran şimdi silebilir mi (yazarı, moderatör)." }
+    MaterialList:
+      type: object
+      required: [materials, caller_can_add]
+      properties:
+        materials:
+          type: array
+          items: { $ref: "#/components/schemas/Material" }
+        next_page_token: { type: string, description: "Yoksa son sayfa." }
+        caller_can_add: { type: boolean, description: "Çağıran şimdi materyal ekleyebilir mi." }
+    MaterialCreateRequest:
+      type: object
+      required: [kind, title, subject_key, client_request_id]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: [link, note_photo]
+        title: { type: string, minLength: 1, maxLength: 1024 }
+        url: { type: string, maxLength: 2048, description: "Yalnızca `link`; zorunlu." }
+        photo_upload_ids:
+          type: array
+          maxItems: 3
+          description: "Yalnızca `note_photo`; 1–3 fotoğraf."
+          items: { type: string, format: uuid }
+        subject_key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+        topic_key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$", description: "İsteğe bağlı; dersin altında bir konu." }
+        client_request_id: { type: string, format: uuid }
+    MaterialUpdateRequest:
+      type: object
+      required: [title, subject_key]
+      additionalProperties: false
+      properties:
+        title: { type: string, minLength: 1, maxLength: 1024 }
+        url: { type: string, maxLength: 2048, description: "`link` için zorunlu; `note_photo` için verilmez." }
+        photo_upload_ids:
+          type: array
+          maxItems: 3
+          description: "`note_photo` için 1–3 fotoğraf (kalanlar ve yeniler); listede olmayan silinir."
+          items: { type: string, format: uuid }
+        subject_key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+        topic_key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
     LibraryLoanList:
       type: object
       required: [loans]
@@ -12657,8 +12914,10 @@ components:
         low: { type: boolean, description: Bir türden 10'dan az kaldı; yükleyin. }
     UploadPurpose:
       type: string
-      enum: [avatar, log_photo, cover, event_photo, chat_photo, dm_attachment, report_evidence, library_item, question_pool]
+      enum: [avatar, log_photo, cover, event_photo, chat_photo, dm_attachment, report_evidence, library_item, question_pool, material_note]
       description: |
+        `material_note` materyal kütüphanesindeki kişinin kendi not
+        fotoğrafıdır (#261; materyal başına en fazla üç).
         `library_item` ortak kütüphane kaleminin fotoğrafıdır (#270; kalem
         başına bir). `question_pool` soru havuzundaki bir sorunun ya da
         cevabın fotoğrafıdır (#271; her birine en fazla iki; kişinin kendi
@@ -12714,7 +12973,7 @@ components:
         tayfa_id:
           type: string
           format: uuid
-          description: "`cover`, `log_photo`, `event_photo`, `chat_photo`, `library_item` ve `question_pool` için zorunlu; `avatar`, `dm_attachment` ve `report_evidence`'ta verilmez."
+          description: "`cover`, `log_photo`, `event_photo`, `chat_photo`, `library_item`, `question_pool` ve `material_note` için zorunlu; `avatar`, `dm_attachment` ve `report_evidence`'ta verilmez."
         client_request_id:
           type: string
           format: uuid
@@ -14139,8 +14398,10 @@ components:
         platform yönetimine görünür. `daily_item` günün içeriği havuzundaki
         bir içeriktir (#269); `daily` modülü açık olmalıdır. `library_item`
         ortak kütüphanedeki bir kalemdir (#270; konusu sahibidir); `library`
-        modülü açık, kalem geri çekilmemiş olmalıdır.
-      enum: [user, tayfa, announcement, event, question, answer, poll, log_entry, dm_message, event_photo, channel_message, event_question, daily_item, library_item]
+        modülü açık, kalem geri çekilmemiş olmalıdır. `material` materyal
+        kütüphanesindeki bir materyaldir (#261; konusu yazarıdır);
+        `materials` modülü açık, materyal görünür olmalıdır.
+      enum: [user, tayfa, announcement, event, question, answer, poll, log_entry, dm_message, event_photo, channel_message, event_question, daily_item, library_item, material]
 
     BanRequest:
       type: object
