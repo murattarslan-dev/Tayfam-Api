@@ -62,6 +62,47 @@ Ortak kurallar (dördü için):
 - KVKK: kişinin kalemleri ve ödünç geçmişi dışa aktarmaya girer; ödünç
   geçmişi 1 yıl tutulur.
 
+**Uygulama notları (#270):**
+
+- Uçlar `/v1/tayfas/{tayfa_id}/library/…` (core `TayfaLibraryService`);
+  tablolar core 00061, bildirimler chat 00023. Hata kodları 2700–2706.
+- **Görünürlük:** ödüncü yalnızca iki tarafı görür. Üyeler kalemin
+  durumunu (`available` / `on_loan`) ve sırada kaç kişi beklediğini görür;
+  sahibi etkin ödüncü ve sırayı (kimlerin beklediği), borç alan kendi
+  ödüncünü ve sıradaki yerini görür. "Ödünçlerim" listesi kişinin bu
+  tayfadaki ödünçleridir.
+- **Durum makinesi:** `requested` → `approved` → `handed_over` →
+  `returned`; sahibi teslimden önce reddeder (`declined`), borç alan
+  teslimden önce geri alır (`cancelled`). Ek durum `closed`: teslimdeyken
+  taraflardan biri ayrıldı, kayıt 30 gün içinde iade alınmadı. Kalem
+  `closed` ile yeniden `available` olur (sahibi tayfadaysa); sahibi
+  isterse geri çeker. Biten her ödünçte sıradaki kişiye otomatik
+  `requested` ödünç açılır.
+- **İade tarihi** teslimde verilir (isteğe bağlı, teslimden en fazla 90
+  gün). Geçince borç alana tek hatırlatma: `library_due`. Ayrılmada iki
+  tarafa `library_loan_orphaned`. İkisi de uygulama içidir (push yok),
+  aktörsüzdür, hedefi ödüncün tayfasıdır, eşyayı ve kişiyi adlandırmaz.
+  ADR'nin istemediği diğer adımlar (yeni istek, onay, teslim) bildirim
+  üretmez.
+- **Yetki:** ekleme ve istek üye (susturulmuş üye yapamaz); düzenleme
+  sahibi; geri çekme sahibi, kaldırma moderatör (izin
+  `library.item_remove_any`); onay, ret, teslim, iade sahibi. Geri çekme,
+  isteği geri alma ve sahibin ödünç adımları susturulmuşken de açıktır
+  (yalnızca daraltır ya da eşyanın sahibine dönmesini sağlar). Sahibi
+  teslimdeki kalemi geri çekemez (`library-item-on-loan`); moderatörün
+  kaldırması teslimdeki ödüncü açık bırakır.
+- **Geri çekme** soft delete'tir; geri alma yoktur. Geri çekilen kalemin
+  notu ve fotoğrafı hemen silinir (dosya silme kuyruğuna girer), adı ödünç
+  geçmişi için kalır; ödünç kaydı kalmayınca 30 gün sonra kalıcı silinir.
+  Biten ödünç 1 yıl sonra silinir.
+- **Sınırlar:** üye başına tayfada 100 canlı kalem, kalem başına sırada 20
+  kişi. Kitap adı tayfa sözlüğünün sınırıyla 60 karakterdir (diğerleri
+  80). Kötüye kullanım filtresinin takılma noktası `library.checkTerms`.
+- **Hesap silme:** kalemler geri çekilir ve sahibi boşalır, ödünçlerde
+  borç alan boşalır, sıradaki yerler silinir; karşı tarafa uyarı gider.
+- Dışa aktarma bölümleri 37 (`library_items`) ve 38 (`library_loans`,
+  sıradaki yerler `queued` durumuyla); karşı taraf dışa aktarılmaz.
+
 ### 2. Soru havuzu (`question_pool`)
 
 - Mevcut Soru-Cevap tablolarını (`questions`, `answers`, `answer_votes`)

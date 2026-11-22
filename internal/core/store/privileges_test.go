@@ -153,6 +153,13 @@ var wantAppPrivileges = map[string]string{
 	// and deleted it. The rotation state only moves.
 	"tayfa_daily_items": "DELETE,INSERT,SELECT,UPDATE(attribution,body,created_by,deleted_at,deleted_by,pin_day,pin_month,pin_year,position,updated_at)",
 	"tayfa_daily_state": "INSERT,SELECT,UPDATE(next_position,shown_item_id,shown_on,updated_at)",
+	// Issue #270: a library item never moves to another tayfa and its
+	// kind and request ID never change; a loan never moves to another
+	// item or tayfa (only its state, times and, on account deletion, the
+	// borrower change); a queue place is added and deleted.
+	"library_items": "DELETE,INSERT,SELECT,UPDATE(name,note,owner_id,photo_upload_id,status,updated_at,vocabulary_id,vocabulary_namespace,withdrawn_at,withdrawn_by)",
+	"library_loans": "DELETE,INSERT,SELECT,UPDATE(approved_at,borrower_id,due_at,ended_at,handed_over_at,orphaned_at,reminded_at,state)",
+	"library_queue": "DELETE,INSERT,SELECT",
 	// Issue #241: an item never moves to another event or list, and its
 	// name and quantity do not change; only the assignee changes and
 	// account deletion clears the people on it.
