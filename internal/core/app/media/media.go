@@ -55,6 +55,9 @@ const (
 	// PurposeReportEvidence is the photo a direct message's reporter
 	// shares from their device; only the platform panel sees it.
 	PurposeReportEvidence = "report_evidence"
+	// PurposeLibraryItem is a library item's photo (issue #270, ADR-0040
+	// §1): one per item, seen by the tayfa's active members.
+	PurposeLibraryItem = "library_item"
 )
 
 // Statuses (uploads.status). statusDeleting is never returned.
@@ -72,6 +75,8 @@ const (
 	TargetEvent      = "event"
 	TargetLogEntry   = "log_entry"
 	TargetEventPhoto = "event_photo"
+	// TargetLibraryItem is a library item (issue #270).
+	TargetLibraryItem = "library_item"
 	// Chat's message IDs (ADR-0031); chat decides who sees them.
 	TargetChannelMessage = "channel_message"
 	TargetDMMessage      = "dm_message"

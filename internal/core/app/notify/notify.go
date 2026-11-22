@@ -88,6 +88,14 @@ const (
 	// organizer chose (NowFriends), who are invited. Never a title, type,
 	// place or name.
 	TypeNowStarted = "now_started"
+	// TypeLibraryDue: a library loan's return date passed (issue #270;
+	// ADR-0040 §1): one reminder to the borrower, the loan's tayfa as
+	// target, no actor. Never the item, the owner or the date; in-app only.
+	TypeLibraryDue = "library_due"
+	// TypeLibraryLoanOrphaned: one side of a handed-over library loan left
+	// the tayfa (ADR-0040 §1): a warning to both sides, the one who left
+	// included, the loan's tayfa as target, no actor; in-app only.
+	TypeLibraryLoanOrphaned = "library_loan_orphaned"
 )
 
 // Target types: what the client opens (and reads from core).

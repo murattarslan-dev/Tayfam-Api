@@ -532,4 +532,27 @@ enum ErrorReason {
   // FAILED_PRECONDITION. The pool already has 1000 items; nothing is
   // added or restored.
   ERROR_REASON_DAILY_ITEM_LIMIT = 2691;
+
+  // Ortak kütüphane (ADR-0040 §1; issue #270: 2700–2709).
+
+  // NOT_FOUND. A library item that is not in the tayfa's library (never
+  // there or withdrawn), or, for an owner's step, not the caller's.
+  ERROR_REASON_LIBRARY_ITEM_NOT_FOUND = 2700;
+  // NOT_FOUND. A loan that is not the caller's to act on: the owner's steps
+  // need the caller to own the item.
+  ERROR_REASON_LIBRARY_LOAN_NOT_FOUND = 2701;
+  // FAILED_PRECONDITION. The caller asked for their own item.
+  ERROR_REASON_LIBRARY_OWN_ITEM = 2702;
+  // FAILED_PRECONDITION. The loan is not in a state the step follows
+  // (approve: requested; hand over: approved; take back: handed over;
+  // decline: requested or approved).
+  ERROR_REASON_LIBRARY_LOAN_STATE = 2703;
+  // FAILED_PRECONDITION. The item is handed over; the owner takes it back
+  // before withdrawing it.
+  ERROR_REASON_LIBRARY_ITEM_ON_LOAN = 2704;
+  // FAILED_PRECONDITION. The caller already has 100 items in the tayfa's
+  // library.
+  ERROR_REASON_LIBRARY_ITEM_LIMIT = 2705;
+  // FAILED_PRECONDITION. 20 members already wait for the item.
+  ERROR_REASON_LIBRARY_QUEUE_FULL = 2706;
 }

@@ -168,6 +168,42 @@ func (q *Queries) ClearOldPlates(ctx context.Context, arg ClearOldPlatesParams) 
 	return result.RowsAffected(), nil
 }
 
+const closeOrphanedLibraryLoans = `-- name: CloseOrphanedLibraryLoans :many
+UPDATE library_loans SET state = 'closed', ended_at = $1
+WHERE id IN (
+  SELECT x.id FROM library_loans x
+  WHERE x.state = 'handed_over' AND x.orphaned_at IS NOT NULL AND x.orphaned_at <= $2
+  ORDER BY x.orphaned_at, x.id LIMIT $3 FOR UPDATE SKIP LOCKED)
+RETURNING item_id
+`
+
+type CloseOrphanedLibraryLoansParams struct {
+	Now            pgtype.Timestamptz
+	OrphanedBefore pgtype.Timestamptz
+	N              int32
+}
+
+// Taraflardan biri ayrıldıktan 30 gün sonra kapanmamış ödünç kapanır.
+func (q *Queries) CloseOrphanedLibraryLoans(ctx context.Context, arg CloseOrphanedLibraryLoansParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, closeOrphanedLibraryLoans, arg.Now, arg.OrphanedBefore, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var item_id pgtype.UUID
+		if err := rows.Scan(&item_id); err != nil {
+			return nil, err
+		}
+		items = append(items, item_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listHikeAlertRecipients = `-- name: ListHikeAlertRecipients :many
 SELECT user_id FROM memberships
 WHERE tayfa_id = $1 AND status = 'active' AND user_id <> $2
@@ -348,6 +384,48 @@ func (q *Queries) LockOverdueHikers(ctx context.Context, arg LockOverdueHikersPa
 	return items, nil
 }
 
+const markDueLibraryLoans = `-- name: MarkDueLibraryLoans :many
+UPDATE library_loans SET reminded_at = $1
+WHERE id IN (
+  SELECT x.id FROM library_loans x
+  WHERE x.state = 'handed_over' AND x.due_at IS NOT NULL AND x.due_at <= $1 AND x.reminded_at IS NULL
+  ORDER BY x.due_at, x.id LIMIT $2 FOR UPDATE SKIP LOCKED)
+RETURNING id, tayfa_id, borrower_id
+`
+
+type MarkDueLibraryLoansParams struct {
+	Now pgtype.Timestamptz
+	N   int32
+}
+
+type MarkDueLibraryLoansRow struct {
+	ID         pgtype.UUID
+	TayfaID    pgtype.UUID
+	BorrowerID pgtype.UUID
+}
+
+// Ortak kütüphane (issue #270; ADR-0040 §1): iade tarihi geçen teslim
+// edilmiş ödünçte borç alana tek hatırlatma.
+func (q *Queries) MarkDueLibraryLoans(ctx context.Context, arg MarkDueLibraryLoansParams) ([]MarkDueLibraryLoansRow, error) {
+	rows, err := q.db.Query(ctx, markDueLibraryLoans, arg.Now, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MarkDueLibraryLoansRow{}
+	for rows.Next() {
+		var i MarkDueLibraryLoansRow
+		if err := rows.Scan(&i.ID, &i.TayfaID, &i.BorrowerID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markHikeAlertSent = `-- name: MarkHikeAlertSent :execrows
 UPDATE event_roll_call_checkins SET alert_sent_at = $1
 WHERE event_id = $2 AND component_key = $3 AND user_id = $4
@@ -488,6 +566,49 @@ type PurgeEventsParams struct {
 // SET NULL ile.
 func (q *Queries) PurgeEvents(ctx context.Context, arg PurgeEventsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, purgeEvents, arg.DeletedBefore, arg.N)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const purgeLibraryItems = `-- name: PurgeLibraryItems :execrows
+DELETE FROM library_items WHERE id IN (
+  SELECT x.id FROM library_items x
+  WHERE x.status = 'withdrawn' AND x.withdrawn_at <= $1
+    AND NOT EXISTS (SELECT 1 FROM library_loans l WHERE l.item_id = x.id)
+  ORDER BY x.withdrawn_at, x.id LIMIT $2 FOR UPDATE SKIP LOCKED)
+`
+
+type PurgeLibraryItemsParams struct {
+	WithdrawnBefore pgtype.Timestamptz
+	N               int32
+}
+
+// Geri çekilmiş kalem 30 gün sonra, ödünç kaydı kalmadıysa kalıcı silinir
+// (sıra yerleri cascade ile; fotoğrafı geri çekilirken bırakılmıştır).
+func (q *Queries) PurgeLibraryItems(ctx context.Context, arg PurgeLibraryItemsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeLibraryItems, arg.WithdrawnBefore, arg.N)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const purgeLibraryLoans = `-- name: PurgeLibraryLoans :execrows
+DELETE FROM library_loans WHERE id IN (
+  SELECT x.id FROM library_loans x WHERE x.ended_at <= $1
+  ORDER BY x.ended_at, x.id LIMIT $2 FOR UPDATE SKIP LOCKED)
+`
+
+type PurgeLibraryLoansParams struct {
+	EndedBefore pgtype.Timestamptz
+	N           int32
+}
+
+// Ödünç geçmişi 1 yıl tutulur.
+func (q *Queries) PurgeLibraryLoans(ctx context.Context, arg PurgeLibraryLoansParams) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeLibraryLoans, arg.EndedBefore, arg.N)
 	if err != nil {
 		return 0, err
 	}

@@ -478,6 +478,41 @@ func (q *Queries) AdminGetEventQuestion(ctx context.Context, arg AdminGetEventQu
 	return i, err
 }
 
+const adminGetLibraryItem = `-- name: AdminGetLibraryItem :one
+SELECT owner_id, kind, name, note, created_at, withdrawn_at
+FROM library_items
+WHERE id = $1 AND tayfa_id = $2
+`
+
+type AdminGetLibraryItemParams struct {
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+type AdminGetLibraryItemRow struct {
+	OwnerID     pgtype.UUID
+	Kind        string
+	Name        string
+	Note        pgtype.Text
+	CreatedAt   pgtype.Timestamptz
+	WithdrawnAt pgtype.Timestamptz
+}
+
+// Ortak kütüphane (issue #270).
+func (q *Queries) AdminGetLibraryItem(ctx context.Context, arg AdminGetLibraryItemParams) (AdminGetLibraryItemRow, error) {
+	row := q.db.QueryRow(ctx, adminGetLibraryItem, arg.ID, arg.TayfaID)
+	var i AdminGetLibraryItemRow
+	err := row.Scan(
+		&i.OwnerID,
+		&i.Kind,
+		&i.Name,
+		&i.Note,
+		&i.CreatedAt,
+		&i.WithdrawnAt,
+	)
+	return i, err
+}
+
 const adminGetLogEntry = `-- name: AdminGetLogEntry :one
 SELECT l.user_id, l.component_key, l.field_values, l.created_at, l.deleted_at
 FROM event_log_entries l JOIN events e ON e.id = l.event_id

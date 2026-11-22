@@ -288,6 +288,31 @@ var (
 	ErrDailyItemLimit = errors.New("günün içeriği sınırı")
 )
 
+// Library errors (issue #270; ADR-0040 §1).
+var (
+	// ErrLibraryItemNotFound: an item that is not in the tayfa's library
+	// (never there or withdrawn), or one the caller may not act on as its
+	// owner.
+	ErrLibraryItemNotFound = errors.New("kütüphane kalemi yok")
+	// ErrLibraryLoanNotFound: a loan of the tayfa's library that is not
+	// the caller's to act on (or not there).
+	ErrLibraryLoanNotFound = errors.New("ödünç kaydı yok")
+	// ErrLibraryOwnItem: the caller asked for their own item.
+	ErrLibraryOwnItem = errors.New("kendi kalemi")
+	// ErrLibraryLoanState: the loan is not in a state the step can follow
+	// (approving a handed-over loan, taking back one never handed over…).
+	ErrLibraryLoanState = errors.New("ödünç durumu uygun değil")
+	// ErrLibraryItemOnLoan: the owner cannot withdraw an item that is
+	// handed over; it must be taken back first.
+	ErrLibraryItemOnLoan = errors.New("kalem ödünçte")
+	// ErrLibraryItemLimit: the owner already has library.MaxItemsPerOwner
+	// items in the tayfa.
+	ErrLibraryItemLimit = errors.New("kütüphane kalem sınırı")
+	// ErrLibraryQueueFull: library.MaxQueue members already wait for the
+	// item.
+	ErrLibraryQueueFull = errors.New("bekleme sırası dolu")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (

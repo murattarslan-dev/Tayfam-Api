@@ -82,6 +82,8 @@ func componentRegistrars() []componentRegistrar {
 		registerTayfaHome,
 		// daily content (#269)
 		registerTayfaDaily,
+		// shared library (#270)
+		registerTayfaLibrary,
 	}
 }
 

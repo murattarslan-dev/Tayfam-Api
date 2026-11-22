@@ -462,3 +462,36 @@ FROM tayfa_daily_items d
 WHERE d.created_by = @user_id AND d.id > @after
 ORDER BY d.id
 LIMIT @n;
+
+-- Ortak kütüphane (issue #270; ADR-0040 §1): sahibi olduğunuz kalemler
+-- (geri çekilenler dahil). Fotoğraf yer almaz.
+-- name: ExportLibraryItems :many
+SELECT i.id AS k, jsonb_build_object(
+  'id', i.id, 'tayfa_id', i.tayfa_id, 'kind', i.kind, 'name', i.name, 'note', i.note, 'status', i.status,
+  'created_at', i.created_at, 'updated_at', i.updated_at, 'withdrawn_at', i.withdrawn_at
+) AS data
+FROM library_items i
+WHERE i.owner_id = @user_id AND i.id > @after
+ORDER BY i.id
+LIMIT @n;
+
+-- Ödünçleriniz (borç alan ya da sahip olarak) ve beklediğiniz sıralar.
+-- Karşı taraf yer almaz.
+-- name: ExportLibraryLoans :many
+SELECT l.id AS k, jsonb_build_object(
+  'id', l.id, 'item_id', l.item_id, 'tayfa_id', l.tayfa_id, 'item_name', i.name,
+  'role', CASE WHEN l.borrower_id = @user_id THEN 'borrower' ELSE 'owner' END,
+  'state', l.state, 'requested_at', l.requested_at, 'approved_at', l.approved_at,
+  'handed_over_at', l.handed_over_at, 'due_at', l.due_at, 'ended_at', l.ended_at
+) AS data
+FROM library_loans l JOIN library_items i ON i.id = l.item_id
+WHERE (l.borrower_id = @user_id OR i.owner_id = @user_id) AND l.id > @after
+UNION ALL
+SELECT lq.id AS k, jsonb_build_object(
+  'id', lq.id, 'item_id', lq.item_id, 'tayfa_id', lq.tayfa_id, 'item_name', qi.name,
+  'role', 'borrower', 'state', 'queued', 'requested_at', lq.created_at
+) AS data
+FROM library_queue lq JOIN library_items qi ON qi.id = lq.item_id
+WHERE lq.user_id = @user_id AND lq.id > @after
+ORDER BY k
+LIMIT @n;

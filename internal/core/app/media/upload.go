@@ -85,7 +85,7 @@ func validate(in CreateInput) (id.ID, VariantInput, VariantInput, error) {
 		if in.Tayfa != (id.ID{}) {
 			return id.ID{}, VariantInput{}, VariantInput{}, apperr.Validation("tayfa_id")
 		}
-	case PurposeCover, PurposeLogPhoto, PurposeEventPhoto, PurposeChatPhoto:
+	case PurposeCover, PurposeLogPhoto, PurposeEventPhoto, PurposeChatPhoto, PurposeLibraryItem:
 		if in.Tayfa == (id.ID{}) {
 			return id.ID{}, VariantInput{}, VariantInput{}, apperr.Validation("tayfa_id")
 		}

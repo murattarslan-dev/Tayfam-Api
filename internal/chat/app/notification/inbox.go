@@ -85,6 +85,14 @@ const (
 	// push_now_started keys only; muted with the tayfa's level none or its
 	// ScopeTayfaNow preference.
 	TypeNowStarted = "now_started"
+	// TypeLibraryDue: a library loan's return date passed (issue #270;
+	// ADR-0040 §1): one reminder to the borrower. TypeLibraryLoanOrphaned:
+	// one side of a handed-over loan left the tayfa, a warning to both
+	// sides (the one who left is no longer a member). Both name the loan's
+	// tayfa as target, have no actor and are in-app only (the enqueue_push
+	// trigger opens no push job for them).
+	TypeLibraryDue          = "library_due"
+	TypeLibraryLoanOrphaned = "library_loan_orphaned"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -126,7 +134,7 @@ func targetOf(typ string) (string, bool) {
 	case TypeReportResolved:
 		return TargetReport, true
 	case TypeJoinApproved, TypeTayfaDeletionRequested, TypeTayfaWarned, TypeTayfaArchived, TypeTayfaInvitation,
-		TypeTayfaSuspended, TypeTayfaUnsuspended:
+		TypeTayfaSuspended, TypeTayfaUnsuspended, TypeLibraryDue, TypeLibraryLoanOrphaned:
 		return TargetTayfa, true
 	case TypeFriendRequest, TypeFriendAccepted, TypeFriendSuggestion, TypeSafetyAlert, TypeBadgeEarned:
 		return TargetUser, true
@@ -209,7 +217,8 @@ func (r Request) Validate() error {
 	// The reporter is never told who handled their report; a direct
 	// message notice does not say who wrote.
 	if (r.Type == TypeReportResolved || r.Type == TypeDataExportReady || r.Type == TypeFriendSuggestion ||
-		r.Type == TypeSafetyAlert || r.Type == TypeBadgeEarned || IsDirect(r.Type)) && r.Actor != (id.ID{}) {
+		r.Type == TypeSafetyAlert || r.Type == TypeBadgeEarned || r.Type == TypeLibraryDue ||
+		r.Type == TypeLibraryLoanOrphaned || IsDirect(r.Type)) && r.Actor != (id.ID{}) {
 		return apperr.Validation("actor_id")
 	}
 	if IsDirect(r.Type) != (r.Unread > 0) || r.Unread > MaxDirectUnread {

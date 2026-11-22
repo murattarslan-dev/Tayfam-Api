@@ -155,6 +155,9 @@ const (
 	// Günün içeriği (issue #269; ADR-0027 §5): the tayfa's daily content
 	// pool (TayfaDailyService) and its home widget.
 	Module_MODULE_DAILY Module = 5
+	// Ortak kütüphane (issue #270; ADR-0040 §1): the tayfa's shared items
+	// and their loans (TayfaLibraryService) and its home widget.
+	Module_MODULE_LIBRARY Module = 6
 )
 
 // Enum value maps for Module.
@@ -166,6 +169,7 @@ var (
 		3: "MODULE_QA",
 		4: "MODULE_POLLS",
 		5: "MODULE_DAILY",
+		6: "MODULE_LIBRARY",
 	}
 	Module_value = map[string]int32{
 		"MODULE_UNSPECIFIED":   0,
@@ -174,6 +178,7 @@ var (
 		"MODULE_QA":            3,
 		"MODULE_POLLS":         4,
 		"MODULE_DAILY":         5,
+		"MODULE_LIBRARY":       6,
 	}
 )
 
@@ -1834,14 +1839,15 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\x12EVENT_TYPE_FISHING\x10\x04\x12\x15\n" +
 	"\x11EVENT_TYPE_GAMING\x10\x05\x12\x15\n" +
 	"\x11EVENT_TYPE_SPORTS\x10\x06\x12\x16\n" +
-	"\x12EVENT_TYPE_GENERAL\x10\a*\x80\x01\n" +
+	"\x12EVENT_TYPE_GENERAL\x10\a*\x94\x01\n" +
 	"\x06Module\x12\x16\n" +
 	"\x12MODULE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14MODULE_ANNOUNCEMENTS\x10\x01\x12\x11\n" +
 	"\rMODULE_EVENTS\x10\x02\x12\r\n" +
 	"\tMODULE_QA\x10\x03\x12\x10\n" +
 	"\fMODULE_POLLS\x10\x04\x12\x10\n" +
-	"\fMODULE_DAILY\x10\x05*x\n" +
+	"\fMODULE_DAILY\x10\x05\x12\x12\n" +
+	"\x0eMODULE_LIBRARY\x10\x06*x\n" +
 	"\vTayfaStatus\x12\x1c\n" +
 	"\x18TAYFA_STATUS_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13TAYFA_STATUS_ACTIVE\x10\x01\x12\x17\n" +

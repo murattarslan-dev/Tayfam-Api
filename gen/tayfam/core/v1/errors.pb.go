@@ -441,6 +441,26 @@ const (
 	// FAILED_PRECONDITION. The pool already has 1000 items; nothing is
 	// added or restored.
 	ErrorReason_ERROR_REASON_DAILY_ITEM_LIMIT ErrorReason = 2691
+	// NOT_FOUND. A library item that is not in the tayfa's library (never
+	// there or withdrawn), or, for an owner's step, not the caller's.
+	ErrorReason_ERROR_REASON_LIBRARY_ITEM_NOT_FOUND ErrorReason = 2700
+	// NOT_FOUND. A loan that is not the caller's to act on: the owner's steps
+	// need the caller to own the item.
+	ErrorReason_ERROR_REASON_LIBRARY_LOAN_NOT_FOUND ErrorReason = 2701
+	// FAILED_PRECONDITION. The caller asked for their own item.
+	ErrorReason_ERROR_REASON_LIBRARY_OWN_ITEM ErrorReason = 2702
+	// FAILED_PRECONDITION. The loan is not in a state the step follows
+	// (approve: requested; hand over: approved; take back: handed over;
+	// decline: requested or approved).
+	ErrorReason_ERROR_REASON_LIBRARY_LOAN_STATE ErrorReason = 2703
+	// FAILED_PRECONDITION. The item is handed over; the owner takes it back
+	// before withdrawing it.
+	ErrorReason_ERROR_REASON_LIBRARY_ITEM_ON_LOAN ErrorReason = 2704
+	// FAILED_PRECONDITION. The caller already has 100 items in the tayfa's
+	// library.
+	ErrorReason_ERROR_REASON_LIBRARY_ITEM_LIMIT ErrorReason = 2705
+	// FAILED_PRECONDITION. 20 members already wait for the item.
+	ErrorReason_ERROR_REASON_LIBRARY_QUEUE_FULL ErrorReason = 2706
 )
 
 // Enum value maps for ErrorReason.
@@ -580,6 +600,13 @@ var (
 		2680: "ERROR_REASON_HOME_WIDGET_NOT_FOUND",
 		2690: "ERROR_REASON_DAILY_ITEM_NOT_FOUND",
 		2691: "ERROR_REASON_DAILY_ITEM_LIMIT",
+		2700: "ERROR_REASON_LIBRARY_ITEM_NOT_FOUND",
+		2701: "ERROR_REASON_LIBRARY_LOAN_NOT_FOUND",
+		2702: "ERROR_REASON_LIBRARY_OWN_ITEM",
+		2703: "ERROR_REASON_LIBRARY_LOAN_STATE",
+		2704: "ERROR_REASON_LIBRARY_ITEM_ON_LOAN",
+		2705: "ERROR_REASON_LIBRARY_ITEM_LIMIT",
+		2706: "ERROR_REASON_LIBRARY_QUEUE_FULL",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                  0,
@@ -716,6 +743,13 @@ var (
 		"ERROR_REASON_HOME_WIDGET_NOT_FOUND":        2680,
 		"ERROR_REASON_DAILY_ITEM_NOT_FOUND":         2690,
 		"ERROR_REASON_DAILY_ITEM_LIMIT":             2691,
+		"ERROR_REASON_LIBRARY_ITEM_NOT_FOUND":       2700,
+		"ERROR_REASON_LIBRARY_LOAN_NOT_FOUND":       2701,
+		"ERROR_REASON_LIBRARY_OWN_ITEM":             2702,
+		"ERROR_REASON_LIBRARY_LOAN_STATE":           2703,
+		"ERROR_REASON_LIBRARY_ITEM_ON_LOAN":         2704,
+		"ERROR_REASON_LIBRARY_ITEM_LIMIT":           2705,
+		"ERROR_REASON_LIBRARY_QUEUE_FULL":           2706,
 	}
 )
 
@@ -750,7 +784,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xfc&\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\x8e)\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -886,7 +920,14 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"(ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED\x10\xda\x14\x12'\n" +
 	"\"ERROR_REASON_HOME_WIDGET_NOT_FOUND\x10\xf8\x14\x12&\n" +
 	"!ERROR_REASON_DAILY_ITEM_NOT_FOUND\x10\x82\x15\x12\"\n" +
-	"\x1dERROR_REASON_DAILY_ITEM_LIMIT\x10\x83\x15B\xbd\x01\n" +
+	"\x1dERROR_REASON_DAILY_ITEM_LIMIT\x10\x83\x15\x12(\n" +
+	"#ERROR_REASON_LIBRARY_ITEM_NOT_FOUND\x10\x8c\x15\x12(\n" +
+	"#ERROR_REASON_LIBRARY_LOAN_NOT_FOUND\x10\x8d\x15\x12\"\n" +
+	"\x1dERROR_REASON_LIBRARY_OWN_ITEM\x10\x8e\x15\x12$\n" +
+	"\x1fERROR_REASON_LIBRARY_LOAN_STATE\x10\x8f\x15\x12&\n" +
+	"!ERROR_REASON_LIBRARY_ITEM_ON_LOAN\x10\x90\x15\x12$\n" +
+	"\x1fERROR_REASON_LIBRARY_ITEM_LIMIT\x10\x91\x15\x12$\n" +
+	"\x1fERROR_REASON_LIBRARY_QUEUE_FULL\x10\x92\x15B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

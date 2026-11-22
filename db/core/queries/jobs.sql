@@ -287,3 +287,37 @@ SET finished_at = EXCLUDED.finished_at,
     changed = EXCLUDED.changed,
     last_succeeded_at = COALESCE(EXCLUDED.last_succeeded_at, job_runs.last_succeeded_at)
 WHERE job_runs.finished_at < EXCLUDED.finished_at;
+
+-- Ortak kütüphane (issue #270; ADR-0040 §1): iade tarihi geçen teslim
+-- edilmiş ödünçte borç alana tek hatırlatma.
+-- name: MarkDueLibraryLoans :many
+UPDATE library_loans SET reminded_at = @now
+WHERE id IN (
+  SELECT x.id FROM library_loans x
+  WHERE x.state = 'handed_over' AND x.due_at IS NOT NULL AND x.due_at <= @now AND x.reminded_at IS NULL
+  ORDER BY x.due_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED)
+RETURNING id, tayfa_id, borrower_id;
+
+-- Taraflardan biri ayrıldıktan 30 gün sonra kapanmamış ödünç kapanır.
+-- name: CloseOrphanedLibraryLoans :many
+UPDATE library_loans SET state = 'closed', ended_at = @now
+WHERE id IN (
+  SELECT x.id FROM library_loans x
+  WHERE x.state = 'handed_over' AND x.orphaned_at IS NOT NULL AND x.orphaned_at <= @orphaned_before
+  ORDER BY x.orphaned_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED)
+RETURNING item_id;
+
+-- Ödünç geçmişi 1 yıl tutulur.
+-- name: PurgeLibraryLoans :execrows
+DELETE FROM library_loans WHERE id IN (
+  SELECT x.id FROM library_loans x WHERE x.ended_at <= @ended_before
+  ORDER BY x.ended_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
+
+-- Geri çekilmiş kalem 30 gün sonra, ödünç kaydı kalmadıysa kalıcı silinir
+-- (sıra yerleri cascade ile; fotoğrafı geri çekilirken bırakılmıştır).
+-- name: PurgeLibraryItems :execrows
+DELETE FROM library_items WHERE id IN (
+  SELECT x.id FROM library_items x
+  WHERE x.status = 'withdrawn' AND x.withdrawn_at <= @withdrawn_before
+    AND NOT EXISTS (SELECT 1 FROM library_loans l WHERE l.item_id = x.id)
+  ORDER BY x.withdrawn_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);

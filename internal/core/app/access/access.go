@@ -116,6 +116,7 @@ const (
 	ModuleQA            = "qa"
 	ModulePolls         = "polls"
 	ModuleDaily         = "daily"
+	ModuleLibrary       = "library"
 )
 
 // RequireModule returns apperr.ErrModuleDisabled unless module is enabled

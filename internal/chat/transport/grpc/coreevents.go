@@ -59,6 +59,8 @@ var notificationTypes = map[chatv1.NotificationType]string{
 	chatv1.NotificationType_NOTIFICATION_TYPE_CELEBRATION:              notification.TypeCelebration,
 	chatv1.NotificationType_NOTIFICATION_TYPE_BADGE_EARNED:             notification.TypeBadgeEarned,
 	chatv1.NotificationType_NOTIFICATION_TYPE_NOW_STARTED:              notification.TypeNowStarted,
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_DUE:              notification.TypeLibraryDue,
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED:    notification.TypeLibraryLoanOrphaned,
 	chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_INVITATION:         notification.TypeTayfaInvitation,
 	chatv1.NotificationType_NOTIFICATION_TYPE_REPORT_RESOLVED:          notification.TypeReportResolved,
 }

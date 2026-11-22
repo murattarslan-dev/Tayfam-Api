@@ -296,6 +296,20 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_DAILY_ITEM_NOT_FOUND, true
 	case errors.Is(err, apperr.ErrDailyItemLimit):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DAILY_ITEM_LIMIT, true
+	case errors.Is(err, apperr.ErrLibraryItemNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_LIBRARY_ITEM_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrLibraryLoanNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_LIBRARY_LOAN_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrLibraryOwnItem):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LIBRARY_OWN_ITEM, true
+	case errors.Is(err, apperr.ErrLibraryLoanState):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LIBRARY_LOAN_STATE, true
+	case errors.Is(err, apperr.ErrLibraryItemOnLoan):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LIBRARY_ITEM_ON_LOAN, true
+	case errors.Is(err, apperr.ErrLibraryItemLimit):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LIBRARY_ITEM_LIMIT, true
+	case errors.Is(err, apperr.ErrLibraryQueueFull):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LIBRARY_QUEUE_FULL, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

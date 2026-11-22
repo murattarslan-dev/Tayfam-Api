@@ -4865,6 +4865,315 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Ortak kütüphane (core TayfaLibraryService, #270, ADR-0040 §1) ---
+  # Tayfanın ortak eşyası: kitap, kamp malzemesi, masa oyunu, alet. Üye
+  # kendi kalemini ekler; sahibi düzenler ve geri çeker, moderatör herkesinkini
+  # kaldırır. Akış: istek → sahibi onaylar → teslim etti → iade aldı; kalem
+  # başına tek etkin ödünç, ödünçteyken istekler sırada bekler. Para,
+  # depozito, ceza yoktur. Ödüncü yalnızca iki tarafı görür; üyeler kalemin
+  # durumunu ve sıradaki kişi sayısını görür. `library` modülüdür (kapalıysa
+  # her uç `module-disabled`); ana sayfa bileşeni `library` bu modülün
+  # vitrinidir. Etkin üye olmayan `tayfa-not-found`. Ad ve not içeriktir,
+  # loglanmaz.
+
+  /v1/tayfas/{tayfa_id}/library/items:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listLibraryItems
+      summary: Kütüphanedeki kalemler
+      description: |
+        Geri çekilmemiş kalemler, en yeni önce. `kind` yalnızca o türü,
+        `mine=true` yalnızca çağıranın kalemlerini döndürür. Etkin ödünç
+        (`active_loan`) yalnızca iki tarafına, sıra (`queue`) yalnızca
+        `GET …/items/{library_item_id}` ile sahibine döner.
+      parameters:
+        - name: kind
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/LibraryItemKind" }
+        - name: mine
+          in: query
+          required: false
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Kalemler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryItemList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createLibraryItem
+      summary: Kütüphaneye kendi kalemini ekler
+      description: |
+        Kitabın adı tayfa sözlüğüne (ad alanı `book`) bağlanır: bilinen ad
+        yeniden kullanılır, yeni ad sözlüğe eklenir; kitapta ad en fazla 60
+        karakterdir. Fotoğraf isteğe bağlıdır: çağıranın bu tayfa için hazır
+        `library_item` yüklemesi. Aynı `client_request_id` ile tekrar
+        gönderim aynı kalemi döndürür. Üye başına en fazla 100 kalem
+        (`library-item-limit`). Susturulmuş üye ekleyemez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LibraryItemCreateRequest" }
+      responses:
+        "201":
+          description: Eklenen kalem
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryItem" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/library/items/{library_item_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/LibraryItemID"
+    get:
+      operationId: getLibraryItem
+      summary: Kütüphane kalemi
+      description: |
+        Sahibi sırayı (`queue`) da görür. Geri çekilmiş ya da bilinmeyen
+        kalem `library-item-not-found`.
+      responses:
+        "200":
+          description: Kalem
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryItem" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: updateLibraryItem
+      summary: Kendi kalemini düzenler (sahibi)
+      description: |
+        Ad, not ve fotoğraf birlikte yazılır (kısmi güncelleme yok;
+        `photo_upload_id` yoksa fotoğraf kalkar). Türü değişmez. Çağıranın
+        olmayan kalem `library-item-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LibraryItemUpdateRequest" }
+      responses:
+        "200":
+          description: Düzenlenen kalem
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryItem" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: withdrawLibraryItem
+      summary: Kalemi geri çeker (sahibi) ya da kaldırır (moderatör)
+      description: |
+        Bekleyen istekler ve sıra biter; notu ve fotoğrafı silinir. Geri
+        alınamaz. Sahibi teslim edilmiş kalemi geri çekemez, önce iade
+        almalıdır (`library-item-on-loan`); moderatörün kaldırması teslim
+        edilmiş ödüncü açık bırakır, sahibi iadeyi yine işaretler.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Geri çekildi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/library/items/{library_item_id}/request:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/LibraryItemID"
+    post:
+      operationId: requestLibraryLoan
+      summary: Kalemi ödünç ister
+      description: |
+        Kalemin etkin ödüncü yoksa ödünç isteği açılır; varsa çağıran
+        sıranın sonuna girer (`caller_queue_rank`). Tekrar istemek bir şey
+        değiştirmez. Kendi kalemi `library-own-item`; sırada 20 kişi varsa
+        `library-queue-full`. Susturulmuş üye isteyemez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Kalem, çağıranın ödüncü ya da sıradaki yeriyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryItem" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: cancelLibraryRequest
+      summary: İsteğini ya da sıradaki yerini geri alır
+      description: |
+        Teslim edilmemiş (istenen ya da onaylanan) ödünç iptal olur ya da
+        sıradaki yer silinir; ikisi de yoksa bir şey değişmez. Teslim
+        edilmiş ödünç `library-loan-state`. Sıradaki kişiye ödünç isteği
+        açılır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Kalem
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryItem" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/library/loans:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listLibraryLoans
+      summary: Ödünçlerim (aldıklarım ve verdiklerim)
+      description: |
+        Çağıranın bu tayfadaki ödünçleri, borç alan ve sahip olarak: önce
+        etkinler, sonra en yeniler; en fazla 200. Biten ödünç 1 yıl tutulur.
+      responses:
+        "200":
+          description: Ödünçler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryLoanList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/library/loans/{library_loan_id}/approve:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/LibraryLoanID"
+    post:
+      operationId: approveLibraryLoan
+      summary: İsteği onaylar (sahibi)
+      description: |
+        Yalnızca istenen (`requested`) ödünç onaylanır; başka durum `library-loan-state`. Çağıranın kalemine ait olmayan ödünç `library-loan-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Ödünç
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryLoan" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/library/loans/{library_loan_id}/decline:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/LibraryLoanID"
+    post:
+      operationId: declineLibraryLoan
+      summary: İsteği reddeder (sahibi)
+      description: |
+        İstenen ya da onaylanan ödünç reddedilir; sıradaki kişiye ödünç isteği açılır. Çağıranın kalemine ait olmayan ödünç `library-loan-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Ödünç
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryLoan" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/library/loans/{library_loan_id}/hand-over:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/LibraryLoanID"
+    post:
+      operationId: handOverLibraryLoan
+      summary: Teslim ettim (sahibi)
+      description: |
+        Onaylanan ödünç teslim edilir; kalem `on_loan` olur. `due_at` isteğe bağlı iade tarihidir: şimdiden sonra, en fazla 90 gün; geçince borç alana tek uygulama içi hatırlatma gider. Çağıranın kalemine ait olmayan ödünç `library-loan-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LibraryHandOverRequest" }
+      responses:
+        "200":
+          description: Ödünç
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryLoan" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/library/loans/{library_loan_id}/return:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/LibraryLoanID"
+    post:
+      operationId: returnLibraryLoan
+      summary: İade aldım (sahibi)
+      description: |
+        Teslim edilen ödünç kapanır (karşı taraf tayfadan ayrılmış olsa da); kalem yeniden `available` olur ve sıradaki kişiye ödünç isteği açılır. Çağıranın kalemine ait olmayan ödünç `library-loan-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Ödünç
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryLoan" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   /v1/tayfas/{tayfa_id}/event-series/{series_id}:
     parameters:
       - $ref: "#/components/parameters/TayfaID"
@@ -8443,6 +8752,18 @@ components:
       required: true
       description: Günün içeriği havuzundaki içeriğin kimliği (`DailyItem.id`).
       schema: { type: string, format: uuid }
+    LibraryItemID:
+      name: library_item_id
+      in: path
+      required: true
+      description: Ortak kütüphanedeki kalemin kimliği (`LibraryItem.id`).
+      schema: { type: string, format: uuid }
+    LibraryLoanID:
+      name: library_loan_id
+      in: path
+      required: true
+      description: Ödüncün kimliği (`LibraryLoan.id`).
+      schema: { type: string, format: uuid }
     CatalogTypeVersion:
       name: version
       in: path
@@ -8613,6 +8934,14 @@ components:
         # core: günün içeriği (#269, ADR-0027 §5)
         - daily-item-not-found
         - daily-item-limit
+        # core: ortak kütüphane (#270, ADR-0040 §1)
+        - library-item-not-found
+        - library-loan-not-found
+        - library-own-item
+        - library-loan-state
+        - library-item-on-loan
+        - library-item-limit
+        - library-queue-full
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -8894,8 +9223,8 @@ components:
       enum: [approval, open]
     Module:
       type: string
-      description: "`daily` günün içeriğidir (#269)."
-      enum: [announcements, events, qa, polls, daily]
+      description: "`daily` günün içeriğidir (#269). `library` ortak kütüphanedir (#270)."
+      enum: [announcements, events, qa, polls, daily, library]
     Role:
       type: string
       enum: [member, moderator, admin]
@@ -9046,6 +9375,7 @@ components:
             qa: { type: boolean }
             polls: { type: boolean }
             daily: { type: boolean }
+            library: { type: boolean }
         status:
           type: string
           description: "`warned`: hareketsiz, 7 gün sonra arşivlenir. `archived`: salt okunur."
@@ -10737,7 +11067,7 @@ components:
         Ana sayfa bileşeni. `kind` istemciye bilgi içindir; anahtar
         listesi sunucunundur ve büyüyebilir (bugün `upcoming`,
         `announcements`, `polls`, `questions`, `stats`, `goal`,
-        `countdown`, `champions`, `log_summary`, `daily`).
+        `countdown`, `champions`, `log_summary`, `daily`, `library`).
       properties:
         key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
         kind:
@@ -10962,6 +11292,135 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/DailyItem" }
+
+    LibraryItemKind:
+      type: string
+      description: "Kalemin türü: kitap, kamp malzemesi, masa oyunu, alet, diğer."
+      enum: [book, camping_gear, board_game, tool, other]
+    LibraryLoan:
+      type: object
+      required: [id, item_id, item_name, item_kind, state, requested_at, caller_is_owner]
+      description: |
+        Bir ödünç; yalnızca iki tarafı görür. `state`: `requested` (istendi),
+        `approved` (sahibi onayladı), `handed_over` (teslim edildi),
+        `returned` (iade alındı), `declined` (reddedildi), `cancelled`
+        (borç alan geri aldı, kalem geri çekildi ya da taraf ayrıldı),
+        `closed` (teslimdeyken taraflardan biri tayfadan ayrıldı, kayıt 30
+        gün sonra iade alınmadan kapandı). Tanınmayan değer `unknown`.
+      properties:
+        id: { type: string, format: uuid }
+        item_id: { type: string, format: uuid }
+        item_name: { type: string, description: "Kalemin adı (kitapta tayfa sözlüğündeki adı)." }
+        item_kind: { $ref: "#/components/schemas/LibraryItemKind" }
+        owner_user_id:
+          type: string
+          format: uuid
+          description: Kalemin sahibi; hesabı silindiyse yoktur.
+        borrower_user_id:
+          type: string
+          format: uuid
+          description: Borç alan; hesabı silindiyse yoktur.
+        state:
+          type: string
+          enum: [requested, approved, handed_over, returned, declined, cancelled, closed, unknown]
+        requested_at: { type: string, format: date-time }
+        approved_at: { type: string, format: date-time }
+        handed_over_at: { type: string, format: date-time }
+        due_at:
+          type: string
+          format: date-time
+          description: İade tarihi; yoksa alan yoktur.
+        orphaned_at:
+          type: string
+          format: date-time
+          description: Teslimdeyken taraflardan biri tayfadan ayrıldı; kayıt 30 gün sonra kapanır.
+        ended_at: { type: string, format: date-time }
+        caller_is_owner: { type: boolean, description: "Çağıran kalemin sahibi mi (değilse borç alandır)." }
+    LibraryQueueEntry:
+      type: object
+      required: [user_id, rank]
+      properties:
+        user_id: { type: string, format: uuid }
+        rank: { type: integer, format: int32, description: "1 sıradaki." }
+    LibraryItem:
+      type: object
+      required: [id, kind, name, status, created_at, updated_at, queue_length]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { $ref: "#/components/schemas/LibraryItemKind" }
+        name:
+          type: string
+          description: 1–80 karakter, tek satır (kitapta 1–60, tayfa sözlüğündeki adı).
+        vocabulary_id:
+          type: string
+          format: uuid
+          description: Yalnızca kitapta, tayfa sözlüğündeki değer (ad alanı `book`).
+        note:
+          type: string
+          description: En fazla 300 karakter; satırlar `\n` ile ayrılır. Yoksa alan yoktur.
+        photo_upload_id:
+          type: string
+          format: uuid
+          description: Sahibinin fotoğrafı (`library_item` yüklemesi); adresini `POST /v1/media/urls` verir.
+        owner_user_id: { type: string, format: uuid }
+        status:
+          type: string
+          description: "`available` ya da `on_loan` (teslim edildi). Tanınmayan değer `unknown`."
+          enum: [available, on_loan, withdrawn, unknown]
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        queue_length: { type: integer, format: int32, description: "Sırada bekleyen kişi sayısı." }
+        caller_queue_rank:
+          type: integer
+          format: int32
+          description: Çağıranın sıradaki yeri (1 sıradaki); beklemiyorsa alan yoktur.
+        active_loan:
+          $ref: "#/components/schemas/LibraryLoan"
+        queue:
+          type: array
+          description: Sıra; yalnızca sahibine ve yalnızca `GET …/items/{library_item_id}` ile.
+          items: { $ref: "#/components/schemas/LibraryQueueEntry" }
+    LibraryItemList:
+      type: object
+      required: [items, caller_can_add]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/LibraryItem" }
+        caller_can_add: { type: boolean, description: "Çağıran şimdi kalem ekleyebilir mi." }
+    LibraryItemCreateRequest:
+      type: object
+      required: [kind, name, client_request_id]
+      additionalProperties: false
+      properties:
+        kind: { $ref: "#/components/schemas/LibraryItemKind" }
+        name: { type: string, minLength: 1, maxLength: 1024 }
+        note: { type: string, maxLength: 4096, description: "Boş: yok." }
+        photo_upload_id: { type: string, format: uuid }
+        client_request_id: { type: string, format: uuid }
+    LibraryItemUpdateRequest:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 1024 }
+        note: { type: string, maxLength: 4096, description: "Boş: yok." }
+        photo_upload_id: { type: string, format: uuid, description: "Yoksa fotoğraf kalkar." }
+    LibraryLoanList:
+      type: object
+      required: [loans]
+      properties:
+        loans:
+          type: array
+          items: { $ref: "#/components/schemas/LibraryLoan" }
+    LibraryHandOverRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        due_at:
+          type: string
+          format: date-time
+          description: İsteğe bağlı iade tarihi; şimdiden sonra, en fazla 90 gün.
 
     EventTypeKey:
       type: string
@@ -11467,8 +11926,15 @@ components:
             `push_now_started_title` / `push_now_started_body` anahtarlarıdır.
             Tayfa seviyesi `none` ya da tayfanın şimdi tercihi (`tayfa_now`)
             `none` ise push gitmez.
+            `library_due` (#270, ADR-0040 §1): ödüncün iade tarihi geçti;
+            borç alana tek hatırlatma. `library_loan_orphaned`: teslim
+            edilmiş bir ödünçte taraflardan biri tayfadan ayrıldı; iki tarafa
+            (ayrılana da) uyarı, kayıt 30 gün sonra kapanır. İkisinde de hedef
+            ödüncün tayfasıdır (`tayfa`), `actor_id` yoktur; eşyayı ve kişileri
+            adlandırmaz, ödünçleri `GET /v1/tayfas/{tayfa_id}/library/loans`
+            verir. Yalnızca uygulama içi, push gitmez.
             Tanınmayan değer `unknown`.
-          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, tayfa_suspended, tayfa_unsuspended, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, data_export_ready, friend_suggestion, safety_alert, celebration, badge_earned, now_started, unknown]
+          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, tayfa_suspended, tayfa_unsuspended, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, data_export_ready, friend_suggestion, safety_alert, celebration, badge_earned, now_started, library_due, library_loan_orphaned, unknown]
         tayfa_id:
           type: string
           format: uuid
@@ -11989,8 +12455,10 @@ components:
         low: { type: boolean, description: Bir türden 10'dan az kaldı; yükleyin. }
     UploadPurpose:
       type: string
-      enum: [avatar, log_photo, cover, event_photo, chat_photo, dm_attachment, report_evidence]
+      enum: [avatar, log_photo, cover, event_photo, chat_photo, dm_attachment, report_evidence, library_item]
       description: |
+        `library_item` ortak kütüphane kaleminin fotoğrafıdır (#270; kalem
+        başına bir).
         `cover` tayfa ya da etkinlik kapağıdır. `event_photo` etkinlik
         albümünün fotoğrafıdır (`POST .../events/{event_id}/photos`); kapak
         olarak kullanılamaz. `chat_photo` kanal mesajı fotoğrafı,
@@ -12042,7 +12510,7 @@ components:
         tayfa_id:
           type: string
           format: uuid
-          description: "`cover`, `log_photo`, `event_photo` ve `chat_photo` için zorunlu; `avatar`, `dm_attachment` ve `report_evidence`'ta verilmez."
+          description: "`cover`, `log_photo`, `event_photo`, `chat_photo` ve `library_item` için zorunlu; `avatar`, `dm_attachment` ve `report_evidence`'ta verilmez."
         client_request_id:
           type: string
           format: uuid
@@ -13465,8 +13933,10 @@ components:
         toplama bileşenindeki bir sorudur (#256); anonim sorunun yazarı
         tayfa kuyruğunda yer almaz (`subject_user_id` yoktur), yalnızca
         platform yönetimine görünür. `daily_item` günün içeriği havuzundaki
-        bir içeriktir (#269); `daily` modülü açık olmalıdır.
-      enum: [user, tayfa, announcement, event, question, answer, poll, log_entry, dm_message, event_photo, channel_message, event_question, daily_item]
+        bir içeriktir (#269); `daily` modülü açık olmalıdır. `library_item`
+        ortak kütüphanedeki bir kalemdir (#270; konusu sahibidir); `library`
+        modülü açık, kalem geri çekilmemiş olmalıdır.
+      enum: [user, tayfa, announcement, event, question, answer, poll, log_entry, dm_message, event_photo, channel_message, event_question, daily_item, library_item]
 
     BanRequest:
       type: object

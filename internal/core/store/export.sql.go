@@ -869,6 +869,103 @@ func (q *Queries) ExportHikeCheckins(ctx context.Context, arg ExportHikeCheckins
 	return items, nil
 }
 
+const exportLibraryItems = `-- name: ExportLibraryItems :many
+SELECT i.id AS k, jsonb_build_object(
+  'id', i.id, 'tayfa_id', i.tayfa_id, 'kind', i.kind, 'name', i.name, 'note', i.note, 'status', i.status,
+  'created_at', i.created_at, 'updated_at', i.updated_at, 'withdrawn_at', i.withdrawn_at
+) AS data
+FROM library_items i
+WHERE i.owner_id = $1 AND i.id > $2
+ORDER BY i.id
+LIMIT $3
+`
+
+type ExportLibraryItemsParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportLibraryItemsRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Ortak kütüphane (issue #270; ADR-0040 §1): sahibi olduğunuz kalemler
+// (geri çekilenler dahil). Fotoğraf yer almaz.
+func (q *Queries) ExportLibraryItems(ctx context.Context, arg ExportLibraryItemsParams) ([]ExportLibraryItemsRow, error) {
+	rows, err := q.db.Query(ctx, exportLibraryItems, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportLibraryItemsRow{}
+	for rows.Next() {
+		var i ExportLibraryItemsRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportLibraryLoans = `-- name: ExportLibraryLoans :many
+SELECT l.id AS k, jsonb_build_object(
+  'id', l.id, 'item_id', l.item_id, 'tayfa_id', l.tayfa_id, 'item_name', i.name,
+  'role', CASE WHEN l.borrower_id = $2 THEN 'borrower' ELSE 'owner' END,
+  'state', l.state, 'requested_at', l.requested_at, 'approved_at', l.approved_at,
+  'handed_over_at', l.handed_over_at, 'due_at', l.due_at, 'ended_at', l.ended_at
+) AS data
+FROM library_loans l JOIN library_items i ON i.id = l.item_id
+WHERE (l.borrower_id = $2 OR i.owner_id = $2) AND l.id > $3
+UNION ALL
+SELECT lq.id AS k, jsonb_build_object(
+  'id', lq.id, 'item_id', lq.item_id, 'tayfa_id', lq.tayfa_id, 'item_name', qi.name,
+  'role', 'borrower', 'state', 'queued', 'requested_at', lq.created_at
+) AS data
+FROM library_queue lq JOIN library_items qi ON qi.id = lq.item_id
+WHERE lq.user_id = $2 AND lq.id > $3
+ORDER BY k
+LIMIT $1
+`
+
+type ExportLibraryLoansParams struct {
+	N      int32
+	UserID pgtype.UUID
+	After  pgtype.UUID
+}
+
+type ExportLibraryLoansRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Ödünçleriniz (borç alan ya da sahip olarak) ve beklediğiniz sıralar.
+// Karşı taraf yer almaz.
+func (q *Queries) ExportLibraryLoans(ctx context.Context, arg ExportLibraryLoansParams) ([]ExportLibraryLoansRow, error) {
+	rows, err := q.db.Query(ctx, exportLibraryLoans, arg.N, arg.UserID, arg.After)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportLibraryLoansRow{}
+	for rows.Next() {
+		var i ExportLibraryLoansRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportLogEntries = `-- name: ExportLogEntries :many
 SELECT f.id AS k, jsonb_build_object(
   'id', f.id, 'event_id', f.event_id, 'component_key', f.component_key, 'values', f.field_values,

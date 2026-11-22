@@ -120,6 +120,9 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 
 		// daily content (#269)
 		registerTayfaDaily,
+
+		// shared library (#270)
+		registerTayfaLibrary,
 	}
 }
 

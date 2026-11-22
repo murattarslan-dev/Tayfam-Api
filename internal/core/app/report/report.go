@@ -116,6 +116,9 @@ const (
 	// TargetDailyItem: an item of the tayfa's daily content pool (issue
 	// #269, ADR-0027 §5); its subject is the member who added it.
 	TargetDailyItem TargetType = "daily_item"
+	// TargetLibraryItem: an item of the tayfa's library (issue #270,
+	// ADR-0040 §1); its subject is the item's owner.
+	TargetLibraryItem TargetType = "library_item"
 	// TargetDMMessage: a direct message (issue #95). Not about a tayfa; see
 	// createDirect.
 	TargetDMMessage TargetType = "dm_message"
@@ -129,7 +132,7 @@ const (
 func (t TargetType) content() bool {
 	switch t {
 	case TargetAnnouncement, TargetEvent, TargetQuestion, TargetAnswer, TargetPoll, TargetLogEntry, TargetEventPhoto,
-		TargetChannelMessage, TargetEventQuestion, TargetDailyItem:
+		TargetChannelMessage, TargetEventQuestion, TargetDailyItem, TargetLibraryItem:
 		return true
 	}
 	return false
@@ -600,6 +603,8 @@ func moduleOf(t TargetType) string {
 		return access.ModulePolls
 	case TargetDailyItem:
 		return access.ModuleDaily
+	case TargetLibraryItem:
+		return access.ModuleLibrary
 	}
 	return access.ModuleEvents // events, log entries, album photos and event questions
 }
@@ -662,6 +667,10 @@ func lookup(ctx context.Context, q *store.Queries, tayfa id.ID, t TargetType, ta
 	case TargetDailyItem:
 		var r store.GetReportTargetDailyItemRow
 		r, err = q.GetReportTargetDailyItem(ctx, store.GetReportTargetDailyItemParams{TayfaID: p.t, ID: p.i})
+		author, visible = r.AuthorID, r.Visible
+	case TargetLibraryItem:
+		var r store.GetReportTargetLibraryItemRow
+		r, err = q.GetReportTargetLibraryItem(ctx, store.GetReportTargetLibraryItemParams{TayfaID: p.t, ID: p.i})
 		author, visible = r.AuthorID, r.Visible
 	default:
 		return content{}, errors.New("içerik olmayan hedef")

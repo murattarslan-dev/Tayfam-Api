@@ -191,6 +191,8 @@ type Intervals struct {
 	ChampionBadges time.Duration
 	// Issue #266.
 	Stats time.Duration
+	// Issue #270.
+	Library time.Duration
 }
 
 func (i Intervals) withDefaults() Intervals {
@@ -212,6 +214,7 @@ func (i Intervals) withDefaults() Intervals {
 	def(&i.GuestNicknames, DefaultGuestNicknamesInterval)
 	def(&i.ChampionBadges, DefaultChampionBadgesInterval)
 	def(&i.Stats, DefaultStatsInterval)
+	def(&i.Library, DefaultLibraryInterval)
 	return i
 }
 
@@ -271,6 +274,7 @@ func (s *Service) Workers() []Worker {
 		{JobGuestNicknames, s.every(JobGuestNicknames, iv.GuestNicknames, s.ClearGuestNicknames)},
 		{JobChampionBadges, s.every(JobChampionBadges, iv.ChampionBadges, s.AwardChampionBadges)},
 		{JobStats, s.every(JobStats, iv.Stats, s.ComputeStats)},
+		{JobLibrary, s.every(JobLibrary, iv.Library, s.RunLibrary)},
 	}
 }
 
