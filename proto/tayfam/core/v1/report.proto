@@ -198,6 +198,9 @@ enum ReportReason {
   // only.
   REPORT_REASON_STAFF_CONDUCT = 15;
   REPORT_REASON_OTHER = 16;
+  // A paid private lesson offer or advertisement (issue #271; ADR-0040 §2,
+  // Topluluk Kuralları).
+  REPORT_REASON_PAID_TUTORING = 17;
 }
 
 enum ReportStatus {

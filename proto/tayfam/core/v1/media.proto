@@ -220,6 +220,11 @@ enum UploadPurpose {
   // item). Attached with TayfaLibraryService.CreateLibraryItem or
   // UpdateLibraryItem.
   UPLOAD_PURPOSE_LIBRARY_ITEM = 8;
+  // A photo of a question pool question or answer (issue #271, ADR-0040
+  // §2; at most two each): the author's own notes or the question they
+  // are stuck on. Attached with QAService.CreateQuestion, UpdateQuestion,
+  // CreateAnswer or UpdateAnswer.
+  UPLOAD_PURPOSE_QUESTION_POOL = 9;
 }
 
 // UploadStatus is where an upload stands (uploads.status).

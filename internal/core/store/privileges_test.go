@@ -160,6 +160,9 @@ var wantAppPrivileges = map[string]string{
 	"library_items": "DELETE,INSERT,SELECT,UPDATE(name,note,owner_id,photo_upload_id,status,updated_at,vocabulary_id,vocabulary_namespace,withdrawn_at,withdrawn_by)",
 	"library_loans": "DELETE,INSERT,SELECT,UPDATE(approved_at,borrower_id,due_at,ended_at,handed_over_at,orphaned_at,reminded_at,state)",
 	"library_queue": "DELETE,INSERT,SELECT",
+	// Issue #271: the pool_link list is replaced as a whole (deleted and
+	// written again); a link never moves.
+	"event_pool_links": "DELETE,INSERT,SELECT",
 	// Issue #241: an item never moves to another event or list, and its
 	// name and quantity do not change; only the assignee changes and
 	// account deletion clears the people on it.

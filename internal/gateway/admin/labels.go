@@ -199,6 +199,8 @@ func reasonLabel(r corev1.ReportReason) string {
 		return "Yönetici/moderatör davranışı"
 	case corev1.ReportReason_REPORT_REASON_OTHER:
 		return "Diğer"
+	case corev1.ReportReason_REPORT_REASON_PAID_TUTORING:
+		return "Ücretli özel ders"
 	}
 	return "—"
 }

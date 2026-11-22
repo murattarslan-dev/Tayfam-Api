@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/component.proto";
+
+// PoolLinkComponentService is the question pool link component (kind
+// "pool_link", issue #271; ADR-0037 §3, ADR-0040 §2): it ties an event (a
+// problem-solving session) to questions of the tayfa's question pool, at
+// most max_links (1–50, default 50) of them, in the organizer's order.
+//
+// Only gateway calls it with the user's access token. Authentication,
+// scope and the errors every component shares are those of
+// EventComponentService (component.proto): anyone but an ACTIVE member
+// gets ERROR_REASON_TAYFA_NOT_FOUND, and so on. While the tayfa has the
+// question_pool module turned off, both methods fail with
+// ERROR_REASON_MODULE_DISABLED: the component is not shown.
+//
+// The questions are the question pool's (QAService,
+// QUESTION_POOL_QUESTION_POOL); answers, votes and edits stay there. A
+// question that is deleted no longer appears here; one that is restored
+// appears again. Question texts never reach a log, an audit record or an
+// outbox event.
+service PoolLinkComponentService {
+  // GetPoolLinks returns the linked visible questions, in order. Open to
+  // every active member, muted ones included.
+  rpc GetPoolLinks(GetPoolLinksRequest) returns (GetPoolLinksResponse);
+
+  // SetPoolLinks replaces the linked questions with question_ids, in that
+  // order; empty removes every link. Managers only (the organizer, and
+  // moderators and admins as for every event), until the component freezes
+  // seven days after the event's end. Setting the current list succeeds
+  // and records nothing.
+  //
+  // Errors: ERROR_REASON_VALIDATION (question_ids: not UUIDs, repeated, or
+  // more than max_links), ERROR_REASON_QUESTION_NOT_FOUND (a question that
+  // is not a visible question of this tayfa's question pool),
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
+  // every component change.
+  rpc SetPoolLinks(SetPoolLinksRequest) returns (SetPoolLinksResponse);
+}
+
+// PoolLinkedQuestion is a linked question as the list shows it; the full
+// question and its answers come from QAService.GetQuestion.
+message PoolLinkedQuestion {
+  string question_id = 1;
+  // Empty when the author's account was deleted.
+  string author_user_id = 2;
+  // The question's text (may be empty when it has a photo).
+  string body = 3;
+  string subject_key = 4;
+  // Empty: no topic.
+  string topic_key = 5;
+  // 0–2 uploads, in order (MediaService.GetMediaUrls).
+  repeated string photo_upload_ids = 6;
+  // Visible answers.
+  int32 answer_count = 7;
+  google.protobuf.Timestamp create_time = 8;
+}
+
+// EventPoolLinks is the list of one component of an event.
+message EventPoolLinks {
+  repeated PoolLinkedQuestion questions = 1;
+  // The component's max_links.
+  int32 max_links = 2;
+  // The caller may change the list now: a manager who is not muted, and
+  // the event, the tayfa and the write window allow changes.
+  bool caller_can_edit = 3;
+}
+
+message GetPoolLinksRequest {
+  ComponentRef ref = 1;
+}
+
+message GetPoolLinksResponse {
+  EventPoolLinks links = 1;
+}
+
+message SetPoolLinksRequest {
+  ComponentRef ref = 1;
+  // The questions after the change, in order; empty removes every link.
+  repeated string question_ids = 2;
+}
+
+message SetPoolLinksResponse {
+  EventPoolLinks links = 1;
+}

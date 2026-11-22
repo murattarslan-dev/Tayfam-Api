@@ -51,6 +51,12 @@ type cursor struct {
 
 // ListQuestionsInput selects questions.
 type ListQuestionsInput struct {
+	// Pool is PoolQA (also when empty) or PoolQuestionPool.
+	Pool string
+	// SubjectKey and TopicKey are optional question pool filters: any
+	// study tag key, retired ones included; TopicKey needs SubjectKey.
+	SubjectKey string
+	TopicKey   string
 	// Query is optional search text (Turkish full-text, İ/ı aware). It is
 	// never logged or recorded.
 	Query string
@@ -60,12 +66,31 @@ type ListQuestionsInput struct {
 	PageToken string
 }
 
-// ListQuestions lists visible questions: newest first, or most relevant
-// first with a query.
+// ListQuestions lists the visible questions of one pool: newest first, or
+// most relevant first with a query.
 func (s *Service) ListQuestions(ctx context.Context, user, tayfa id.ID, in ListQuestionsInput) ([]Question, string, error) {
 	size, err := normalizePageSize(in.PageSize)
 	if err != nil {
 		return nil, "", err
+	}
+	pool, err := cleanPool(in.Pool)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := cleanStudyKey(in.SubjectKey, FieldSubjectKey); err != nil {
+		return nil, "", err
+	}
+	if err := cleanStudyKey(in.TopicKey, FieldTopicKey); err != nil {
+		return nil, "", err
+	}
+	if in.TopicKey != "" && in.SubjectKey == "" {
+		return nil, "", apperr.Validation(FieldTopicKey)
+	}
+	if err := (poolFields{subject: in.SubjectKey, topic: in.TopicKey}).check(pool); err != nil {
+		return nil, "", err
+	}
+	if pool == PoolQuestionPool && in.TagID != "" {
+		return nil, "", apperr.Validation("tag_id")
 	}
 	if len(in.Query) > (QueryMax+64)*maxRuneBytes {
 		return nil, "", apperr.Validation("query")
@@ -86,7 +111,7 @@ func (s *Service) ListQuestions(ctx context.Context, user, tayfa id.ID, in ListQ
 	if query != "" {
 		method = cursorSearch
 	}
-	scope := digest(query, in.TagID)
+	scope := digest(query, in.TagID, pool, in.SubjectKey, in.TopicKey)
 	var c cursor
 	var after id.ID
 	if in.PageToken != "" {
@@ -95,7 +120,7 @@ func (s *Service) ListQuestions(ctx context.Context, user, tayfa id.ID, in ListQ
 			return nil, "", apperr.Validation("page_token")
 		}
 	}
-	if err := s.read(ctx, user, tayfa); err != nil {
+	if err := s.read(ctx, user, tayfa, inPool(pool)); err != nil {
 		return nil, "", err
 	}
 	if hasTag {
@@ -109,7 +134,10 @@ func (s *Service) ListQuestions(ctx context.Context, user, tayfa id.ID, in ListQ
 		next cursor
 	)
 	if query == "" {
-		p := store.ListQuestionsPageParams{TayfaID: tayfa.PG(), HasTag: hasTag, TagID: tag.PG(), PageSize: size}
+		p := store.ListQuestionsPageParams{
+			TayfaID: tayfa.PG(), Pool: pool, SubjectKey: optText(in.SubjectKey), TopicKey: optText(in.TopicKey),
+			HasTag: hasTag, TagID: tag.PG(), PageSize: size,
+		}
 		if in.PageToken != "" {
 			p.HasCursor, p.AfterID = true, after.PG()
 			p.AfterCreatedAt = pgtype.Timestamptz{Time: time.UnixMicro(c.Micros).UTC(), Valid: true}
@@ -126,7 +154,10 @@ func (s *Service) ListQuestions(ctx context.Context, user, tayfa id.ID, in ListQ
 			next = cursor{Micros: last.CreatedAt.Time.UnixMicro(), ID: id.ID(last.ID.Bytes).String()}
 		}
 	} else {
-		p := store.SearchQuestionsPageParams{TayfaID: tayfa.PG(), Query: query, HasTag: hasTag, TagID: tag.PG(), PageSize: size}
+		p := store.SearchQuestionsPageParams{
+			TayfaID: tayfa.PG(), Pool: pool, SubjectKey: optText(in.SubjectKey), TopicKey: optText(in.TopicKey),
+			Query: query, HasTag: hasTag, TagID: tag.PG(), PageSize: size,
+		}
 		if in.PageToken != "" {
 			p.HasCursor, p.AfterID, p.AfterRank = true, after.PG(), math.Float32frombits(c.Rank)
 		}
@@ -141,6 +172,8 @@ func (s *Service) ListQuestions(ctx context.Context, user, tayfa id.ID, in ListQ
 				ID: id.ID(r.ID.Bytes), TayfaID: id.ID(r.TayfaID.Bytes), AuthorID: optional(r.AuthorID),
 				Title: r.Title, Body: r.Body, Tags: []Tag{}, AnswerCount: r.AnswerCount,
 				CreatedAt: r.CreatedAt.Time.UTC(), UpdatedAt: r.UpdatedAt.Time.UTC(),
+				Pool: r.Pool, SubjectKey: text(r.SubjectKey), TopicKey: text(r.TopicKey),
+				Photos: photosOf(r.Photo1UploadID, r.Photo2UploadID),
 			})
 		}
 		if len(rows) == int(size) {
@@ -178,7 +211,7 @@ func (s *Service) ListAnswers(ctx context.Context, user, tayfa, question id.ID, 
 		}
 		p.HasCursor, p.AfterVotes, p.AfterID = true, c.Votes, after.PG()
 	}
-	if err := s.read(ctx, user, tayfa); err != nil {
+	if err := s.read(ctx, user, tayfa, questionPool(tayfa, question)); err != nil {
 		return nil, "", err
 	}
 	switch _, err := s.q.GetQuestion(ctx, store.GetQuestionParams{TayfaID: tayfa.PG(), ID: question.PG()}); {

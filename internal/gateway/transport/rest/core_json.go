@@ -84,6 +84,7 @@ var (
 		"announcements": corev1.Module_MODULE_ANNOUNCEMENTS, "events": corev1.Module_MODULE_EVENTS,
 		"qa": corev1.Module_MODULE_QA, "polls": corev1.Module_MODULE_POLLS,
 		"daily": corev1.Module_MODULE_DAILY, "library": corev1.Module_MODULE_LIBRARY,
+		"question_pool": corev1.Module_MODULE_QUESTION_POOL,
 	})
 	tayfaStatuses = newEnum(map[string]corev1.TayfaStatus{
 		"active": corev1.TayfaStatus_TAYFA_STATUS_ACTIVE, "warned": corev1.TayfaStatus_TAYFA_STATUS_WARNED,

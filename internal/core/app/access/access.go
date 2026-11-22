@@ -117,6 +117,8 @@ const (
 	ModulePolls         = "polls"
 	ModuleDaily         = "daily"
 	ModuleLibrary       = "library"
+	// ModuleQuestionPool is the Eğitim question pool (issue #271).
+	ModuleQuestionPool = "question_pool"
 )
 
 // RequireModule returns apperr.ErrModuleDisabled unless module is enabled
