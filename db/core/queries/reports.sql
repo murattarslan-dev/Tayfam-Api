@@ -17,14 +17,16 @@ SELECT created_by AS author_id, (deleted_at IS NULL)::boolean AS visible, (statu
 FROM events
 WHERE tayfa_id = @tayfa_id AND id = @id;
 
+-- Sorunun havuzu modülünü verir: Soru-Cevap (qa) ya da soru havuzu
+-- (question_pool, issue #271).
 -- name: GetReportTargetQuestion :one
-SELECT author_id, (deleted_at IS NULL)::boolean AS visible
+SELECT author_id, (deleted_at IS NULL)::boolean AS visible, pool
 FROM questions
 WHERE tayfa_id = @tayfa_id AND id = @id;
 
 -- Silinmiş sorunun cevabı da görünmez.
 -- name: GetReportTargetAnswer :one
-SELECT a.author_id, (a.deleted_at IS NULL AND q.deleted_at IS NULL)::boolean AS visible
+SELECT a.author_id, (a.deleted_at IS NULL AND q.deleted_at IS NULL)::boolean AS visible, a.pool
 FROM answers a
 JOIN questions q ON q.id = a.question_id AND q.tayfa_id = a.tayfa_id
 WHERE a.tayfa_id = @tayfa_id AND a.id = @id;

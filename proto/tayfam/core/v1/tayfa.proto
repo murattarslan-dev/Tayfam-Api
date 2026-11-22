@@ -135,6 +135,10 @@ enum Module {
   // Ortak kütüphane (issue #270; ADR-0040 §1): the tayfa's shared items
   // and their loans (TayfaLibraryService) and its home widget.
   MODULE_LIBRARY = 6;
+  // Soru havuzu (issue #271; ADR-0040 §2): the Eğitim question pool
+  // (QAService with QUESTION_POOL_QUESTION_POOL), its home widget and the
+  // pool_link event component.
+  MODULE_QUESTION_POOL = 7;
 }
 
 // Lifecycle of an inactive tayfa (tayfas.status).

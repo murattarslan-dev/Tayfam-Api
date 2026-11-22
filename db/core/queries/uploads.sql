@@ -172,8 +172,9 @@ DELETE FROM uploads WHERE id = @id AND status = 'deleting';
 -- göremeyeceğine karar vermek için bağlam. Karar uygulama katmanında, core'un
 -- izin tablosuyla verilir (authz); burada yalnızca veri toplanır. İçeriğin
 -- tayfası: tayfa kapağında tayfanın kendisi, etkinlik kapağında ve av
--- fotoğrafında ve albüm fotoğrafında etkinliğin tayfası (silinmiş içerik ve
--- tayfa bağlam vermez).
+-- fotoğrafında ve albüm fotoğrafında etkinliğin tayfası, soru havuzunun
+-- sorusunda ve cevabında sorunun tayfası (silinmiş içerik ve tayfa bağlam
+-- vermez).
 -- name: ListMediaForViewer :many
 SELECT u.id, u.user_id, u.purpose, u.r2_key, COALESCE(u.preview_type, '')::text AS preview_type, u.full_type::text AS full_type, u.width, u.height,
        u.attached_type, u.attached_id,
@@ -181,6 +182,7 @@ SELECT u.id, u.user_id, u.purpose, u.r2_key, COALESCE(u.preview_type, '')::text 
        m.role AS member_role, m.status AS member_status, m.muted_until AS member_muted_until,
        COALESCE(tm.enabled, false)::boolean AS events_module_on,
        COALESCE(lm.enabled, false)::boolean AS library_module_on,
+       COALESCE(qm.enabled, false)::boolean AS question_pool_module_on,
        (u.attached_type = 'user' AND EXISTS (
          SELECT 1 FROM user_blocks b
          WHERE (b.blocker_id = @viewer_id AND b.blocked_id = u.attached_id)
@@ -210,10 +212,20 @@ LEFT JOIN LATERAL (
   SELECT li.tayfa_id FROM library_items li
   JOIN tayfas t ON t.id = li.tayfa_id AND t.deleted_at IS NULL
   WHERE u.attached_type = 'library_item' AND li.id = u.attached_id AND li.status <> 'withdrawn'
+  UNION ALL
+  SELECT qq.tayfa_id FROM questions qq
+  JOIN tayfas t ON t.id = qq.tayfa_id AND t.deleted_at IS NULL
+  WHERE u.attached_type = 'question' AND qq.id = u.attached_id AND qq.deleted_at IS NULL
+  UNION ALL
+  SELECT aa.tayfa_id FROM answers aa
+  JOIN questions qq ON qq.id = aa.question_id AND qq.deleted_at IS NULL
+  JOIN tayfas t ON t.id = aa.tayfa_id AND t.deleted_at IS NULL
+  WHERE u.attached_type = 'answer' AND aa.id = u.attached_id AND aa.deleted_at IS NULL
 ) c ON true
 LEFT JOIN memberships m ON m.tayfa_id = c.tayfa_id AND m.user_id = @viewer_id
 LEFT JOIN tayfa_modules tm ON tm.tayfa_id = c.tayfa_id AND tm.module = 'events'
 LEFT JOIN tayfa_modules lm ON lm.tayfa_id = c.tayfa_id AND lm.module = 'library'
+LEFT JOIN tayfa_modules qm ON qm.tayfa_id = c.tayfa_id AND qm.module = 'question_pool'
 WHERE u.id = ANY(@ids::uuid[]) AND u.status = 'ready' AND u.purpose <> 'data_export';
 
 -- Platform panelinde şikâyet edilen albüm fotoğrafı (ADR-0028 §5): yalnızca

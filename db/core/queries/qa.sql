@@ -1,9 +1,14 @@
 -- Soru-cevap (issue #59). Her sorgu tayfa_id ile sınırlıdır (IDOR); üyelik
 -- ve izin kontrolü app katmanındadır (access, authz).
 
+-- Havuz verilmezse Soru-Cevap ('qa'). Havuz sorusunun fotoğrafları önce
+-- dosyaya bağlanır (media.Attach), sonra kolona yazılır.
 -- name: CreateQuestion :exec
-INSERT INTO questions (id, tayfa_id, author_id, title, body, client_request_id)
-VALUES (@id, @tayfa_id, @author_id, @title, @body, @client_request_id);
+INSERT INTO questions (id, tayfa_id, author_id, title, body, client_request_id,
+                       pool, subject_key, topic_key, photo1_upload_id, photo2_upload_id)
+VALUES (@id, @tayfa_id, @author_id, @title, @body, @client_request_id,
+        COALESCE(sqlc.narg(pool)::text, 'qa'), sqlc.narg(subject_key), sqlc.narg(topic_key),
+        sqlc.narg(photo1_upload_id), sqlc.narg(photo2_upload_id));
 
 -- Tekrar gönderilen soru isteği aynı soruyu döndürür.
 -- name: GetQuestionByClientRequest :one
@@ -13,25 +18,40 @@ WHERE author_id = @author_id AND client_request_id = @client_request_id;
 
 -- name: GetQuestion :one
 SELECT q.id, q.tayfa_id, q.author_id, q.title, q.body, q.created_at, q.updated_at,
+       q.pool, q.subject_key, q.topic_key, q.photo1_upload_id, q.photo2_upload_id,
        (SELECT count(*) FROM answers a WHERE a.question_id = q.id AND a.deleted_at IS NULL)::integer AS answer_count
 FROM questions q
 WHERE q.tayfa_id = @tayfa_id AND q.id = @id AND q.deleted_at IS NULL;
 
 -- Yazma işlemleri satırı kilitleyerek okur; silinmiş satır da döner.
 -- name: GetQuestionForUpdate :one
-SELECT id, tayfa_id, author_id, title, body, deleted_at, deleted_by
+SELECT id, tayfa_id, author_id, title, body, deleted_at, deleted_by,
+       pool, subject_key, topic_key, photo1_upload_id, photo2_upload_id
 FROM questions
 WHERE tayfa_id = @tayfa_id AND id = @id
 FOR UPDATE;
 
--- Yeniden eskiye. İsteğe bağlı etiket filtresi. Sayfa, önceki sayfanın son
--- satırından sonra başlar (created_at, id azalan).
+-- Sorunun havuzu (modül kontrolü için); silinmiş satır da döner.
+-- name: GetQuestionPool :one
+SELECT pool FROM questions WHERE tayfa_id = @tayfa_id AND id = @id;
+
+-- Cevabın havuzu (modül kontrolü için); silinmiş satır da döner.
+-- name: GetAnswerPool :one
+SELECT pool FROM answers WHERE tayfa_id = @tayfa_id AND id = @id;
+
+-- Yeniden eskiye, bir havuzda. İsteğe bağlı etiket, ders ve konu filtresi.
+-- Sayfa, önceki sayfanın son satırından sonra başlar (created_at, id
+-- azalan).
 -- name: ListQuestionsPage :many
 SELECT q.id, q.tayfa_id, q.author_id, q.title, q.body, q.created_at, q.updated_at,
+       q.pool, q.subject_key, q.topic_key, q.photo1_upload_id, q.photo2_upload_id,
        (SELECT count(*) FROM answers a WHERE a.question_id = q.id AND a.deleted_at IS NULL)::integer AS answer_count
 FROM questions q
 WHERE q.tayfa_id = @tayfa_id
+  AND q.pool = @pool
   AND q.deleted_at IS NULL
+  AND (sqlc.narg(subject_key)::text IS NULL OR q.subject_key = sqlc.narg(subject_key)::text)
+  AND (sqlc.narg(topic_key)::text IS NULL OR q.topic_key = sqlc.narg(topic_key)::text)
   AND (NOT @has_tag::boolean
        OR EXISTS (SELECT 1 FROM question_tags qt WHERE qt.question_id = q.id AND qt.tayfa_id = @tayfa_id AND qt.tag_id = @tag_id::uuid))
   AND (NOT @has_cursor::boolean
@@ -45,15 +65,20 @@ LIMIT @page_size;
 -- name: SearchQuestionsPage :many
 WITH s AS (
   SELECT q.id, q.tayfa_id, q.author_id, q.title, q.body, q.created_at, q.updated_at,
+         q.pool, q.subject_key, q.topic_key, q.photo1_upload_id, q.photo2_upload_id,
          ts_rank(q.search_vector, websearch_to_tsquery('turkish'::regconfig, tr_lower(@query::text)))::real AS rank
   FROM questions q
   WHERE q.tayfa_id = @tayfa_id
+    AND q.pool = @pool
     AND q.deleted_at IS NULL
+    AND (sqlc.narg(subject_key)::text IS NULL OR q.subject_key = sqlc.narg(subject_key)::text)
+    AND (sqlc.narg(topic_key)::text IS NULL OR q.topic_key = sqlc.narg(topic_key)::text)
     AND q.search_vector @@ websearch_to_tsquery('turkish'::regconfig, tr_lower(@query::text))
     AND (NOT @has_tag::boolean
          OR EXISTS (SELECT 1 FROM question_tags qt WHERE qt.question_id = q.id AND qt.tayfa_id = @tayfa_id AND qt.tag_id = @tag_id::uuid))
 )
-SELECT s.id, s.tayfa_id, s.author_id, s.title, s.body, s.created_at, s.updated_at, s.rank,
+SELECT s.id, s.tayfa_id, s.author_id, s.title, s.body, s.created_at, s.updated_at,
+       s.pool, s.subject_key, s.topic_key, s.photo1_upload_id, s.photo2_upload_id, s.rank,
        (SELECT count(*) FROM answers a WHERE a.question_id = s.id AND a.deleted_at IS NULL)::integer AS answer_count
 FROM s
 WHERE NOT @has_cursor::boolean
@@ -61,9 +86,13 @@ WHERE NOT @has_cursor::boolean
 ORDER BY s.rank DESC, s.id DESC
 LIMIT @page_size;
 
+-- Havuz sorusunda ders, konu ve fotoğraflar da (Soru-Cevap sorusunda
+-- hep NULL). Yeni fotoğraf önce dosyaya bağlanır; bırakılan fotoğrafın
+-- dosyası tetikleyiciyle silme kuyruğuna girer.
 -- name: UpdateQuestionContent :execrows
 UPDATE questions
-SET title = @title, body = @body
+SET title = @title, body = @body, subject_key = @subject_key, topic_key = @topic_key,
+    photo1_upload_id = @photo1_upload_id, photo2_upload_id = @photo2_upload_id
 WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL;
 
 -- Moderatör/yönetici silmesi: içerik gizlenir, geri alınabilir.
@@ -72,17 +101,23 @@ UPDATE questions
 SET deleted_at = @deleted_at, deleted_by = @deleted_by
 WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL;
 
--- Yazarın kendi silmesi: başlık ve gövde hemen boşaltılır, geri alınamaz
--- (v14 "Silinen içeriği geri alma"). Etiket bağları ayrıca silinir.
+-- Yazarın kendi silmesi: başlık, gövde ve fotoğraflar hemen boşaltılır
+-- (dosyalar silme kuyruğuna girer), geri alınamaz (v14 "Silinen içeriği
+-- geri alma"). Etiket bağları ayrıca silinir.
 -- name: EraseQuestion :execrows
 UPDATE questions
-SET deleted_at = @deleted_at, deleted_by = @deleted_by, title = '', body = ''
+SET deleted_at = @deleted_at, deleted_by = @deleted_by, title = '', body = '',
+    photo1_upload_id = NULL, photo2_upload_id = NULL
 WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL;
 
+-- Yazarın boşalttığı soru geri alınmaz: Soru-Cevap'ta başlığı, havuzda
+-- metni ve fotoğrafı yoktur.
 -- name: RestoreQuestion :execrows
 UPDATE questions
 SET deleted_at = NULL, deleted_by = NULL
-WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NOT NULL AND char_length(title) > 0;
+WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NOT NULL
+  AND (char_length(title) > 0
+       OR (pool = 'question_pool' AND (char_length(body) > 0 OR photo1_upload_id IS NOT NULL OR photo2_upload_id IS NOT NULL)));
 
 -- Etiketler.
 
@@ -132,9 +167,13 @@ DELETE FROM question_tags WHERE tayfa_id = @tayfa_id AND question_id = @question
 
 -- Cevaplar.
 
+-- Cevabın havuzu sorunun havuzudur; soru yoksa 'qa' ile foreign key'e
+-- takılır.
 -- name: CreateAnswer :exec
-INSERT INTO answers (id, question_id, tayfa_id, author_id, body, client_request_id)
-VALUES (@id, @question_id, @tayfa_id, @author_id, @body, @client_request_id);
+INSERT INTO answers (id, question_id, tayfa_id, pool, author_id, body, client_request_id, photo1_upload_id, photo2_upload_id)
+VALUES (@id, @question_id, @tayfa_id,
+        COALESCE((SELECT x.pool FROM questions x WHERE x.id = @question_id AND x.tayfa_id = @tayfa_id), 'qa'),
+        @author_id, @body, @client_request_id, sqlc.narg(photo1_upload_id), sqlc.narg(photo2_upload_id));
 
 -- name: GetAnswerByClientRequest :one
 SELECT id, tayfa_id, question_id, deleted_at
@@ -144,6 +183,7 @@ WHERE author_id = @author_id AND client_request_id = @client_request_id;
 -- Görünen sorunun görünen cevabı; voted, çağıranın oyu.
 -- name: GetAnswer :one
 SELECT a.id, a.question_id, a.tayfa_id, a.author_id, a.body, a.vote_count, a.created_at, a.updated_at,
+       a.pool, a.photo1_upload_id, a.photo2_upload_id,
        EXISTS (SELECT 1 FROM answer_votes v WHERE v.answer_id = a.id AND v.user_id = @user_id) AS voted
 FROM answers a
 JOIN questions q ON q.id = a.question_id AND q.tayfa_id = a.tayfa_id
@@ -151,6 +191,7 @@ WHERE a.tayfa_id = @tayfa_id AND a.id = @id AND a.deleted_at IS NULL AND q.delet
 
 -- name: GetAnswerForUpdate :one
 SELECT a.id, a.question_id, a.author_id, a.body, a.deleted_at, a.deleted_by,
+       a.pool, a.photo1_upload_id, a.photo2_upload_id,
        q.deleted_at AS question_deleted_at, q.author_id AS question_author_id
 FROM answers a
 JOIN questions q ON q.id = a.question_id AND q.tayfa_id = a.tayfa_id
@@ -160,6 +201,7 @@ FOR UPDATE OF a;
 -- Faydalı oyu çoktan aza, eşitlikte eskiden yeniye (id artan, UUIDv7).
 -- name: ListAnswersPage :many
 SELECT a.id, a.question_id, a.tayfa_id, a.author_id, a.body, a.vote_count, a.created_at, a.updated_at,
+       a.pool, a.photo1_upload_id, a.photo2_upload_id,
        EXISTS (SELECT 1 FROM answer_votes v WHERE v.answer_id = a.id AND v.user_id = @user_id) AS voted
 FROM answers a
 WHERE a.tayfa_id = @tayfa_id AND a.question_id = @question_id AND a.deleted_at IS NULL
@@ -169,9 +211,10 @@ WHERE a.tayfa_id = @tayfa_id AND a.question_id = @question_id AND a.deleted_at I
 ORDER BY a.vote_count DESC, a.id
 LIMIT @page_size;
 
+-- Havuz cevabında fotoğraflar da (Soru-Cevap cevabında hep NULL).
 -- name: UpdateAnswerBody :execrows
 UPDATE answers
-SET body = @body
+SET body = @body, photo1_upload_id = @photo1_upload_id, photo2_upload_id = @photo2_upload_id
 WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL;
 
 -- name: HideAnswer :execrows
@@ -179,10 +222,12 @@ UPDATE answers
 SET deleted_at = @deleted_at, deleted_by = @deleted_by
 WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL;
 
--- Yazarın kendi silmesi: metin boşaltılır, oyları silinir (ayrı sorgu).
+-- Yazarın kendi silmesi: metin ve fotoğraflar boşaltılır, oyları silinir
+-- (ayrı sorgu).
 -- name: EraseAnswer :execrows
 UPDATE answers
-SET deleted_at = @deleted_at, deleted_by = @deleted_by, body = '', vote_count = 0
+SET deleted_at = @deleted_at, deleted_by = @deleted_by, body = '', vote_count = 0,
+    photo1_upload_id = NULL, photo2_upload_id = NULL
 WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL;
 
 -- name: DeleteAnswerVotes :exec
@@ -191,7 +236,8 @@ DELETE FROM answer_votes WHERE answer_id = @answer_id;
 -- name: RestoreAnswer :execrows
 UPDATE answers
 SET deleted_at = NULL, deleted_by = NULL
-WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NOT NULL AND char_length(body) > 0;
+WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NOT NULL
+  AND (char_length(body) > 0 OR photo1_upload_id IS NOT NULL OR photo2_upload_id IS NOT NULL);
 
 -- Oy ve sayaç aynı transaction'da: oy eklendiyse sayaç artar. Aynı kişinin
 -- ikinci oyu PK'ye takılır, sayaç değişmez.
