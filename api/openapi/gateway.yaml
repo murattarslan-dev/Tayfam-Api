@@ -9470,6 +9470,7 @@ components:
             polls: { type: boolean }
             daily: { type: boolean }
             library: { type: boolean }
+            question_pool: { type: boolean }
         status:
           type: string
           description: "`warned`: hareketsiz, 7 gün sonra arşivlenir. `archived`: salt okunur."
