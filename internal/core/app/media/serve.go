@@ -160,7 +160,8 @@ func (s *Service) ReportEvidenceURL(ctx context.Context, report, upload id.ID) (
 // canView is the visibility rule of ADR-0020 item 4. Tayfa content is
 // decided by core's permission table (authz): TayfaView for a tayfa cover,
 // EventView (with the events module on) for an event cover, a log entry photo
-// or an album photo (ADR-0028). The default is no.
+// or an album photo (ADR-0028), TayfaView with the library module on for a
+// library item's photo (ADR-0040 §1). The default is no.
 func canView(viewer id.ID, r store.ListMediaForViewerRow, now time.Time) (bool, error) {
 	if r.UserID.Valid && id.ID(r.UserID.Bytes) == viewer {
 		return true, nil
@@ -171,7 +172,7 @@ func canView(viewer id.ID, r store.ListMediaForViewerRow, now time.Time) (bool, 
 	switch r.AttachedType.String {
 	case TargetUser:
 		return !r.Blocked && !r.OwnerDeleted, nil
-	case TargetTayfa, TargetEvent, TargetLogEntry, TargetEventPhoto:
+	case TargetTayfa, TargetEvent, TargetLogEntry, TargetEventPhoto, TargetLibraryItem:
 		if !r.ContentTayfaID.Valid || !r.MemberStatus.Valid {
 			return false, nil
 		}
@@ -184,6 +185,10 @@ func canView(viewer id.ID, r store.ListMediaForViewerRow, now time.Time) (bool, 
 		}
 		if r.AttachedType.String == TargetTayfa {
 			return authz.Allowed(m, authz.TayfaView, now), nil
+		}
+		if r.AttachedType.String == TargetLibraryItem {
+			// A library item's photo (issue #270): the library module on.
+			return r.LibraryModuleOn && authz.Allowed(m, authz.TayfaView, now), nil
 		}
 		return r.EventsModuleOn && authz.Allowed(m, authz.EventView, now), nil
 	}

@@ -478,23 +478,20 @@ LIMIT @n;
 -- Ödünçleriniz (borç alan ya da sahip olarak) ve beklediğiniz sıralar.
 -- Karşı taraf yer almaz.
 -- name: ExportLibraryLoans :many
-SELECT x.k, x.data FROM (
-  SELECT l.id AS k, jsonb_build_object(
-    'id', l.id, 'item_id', l.item_id, 'tayfa_id', l.tayfa_id, 'item_name', i.name,
-    'role', CASE WHEN l.borrower_id = @user_id THEN 'borrower' ELSE 'owner' END,
-    'state', l.state, 'requested_at', l.requested_at, 'approved_at', l.approved_at,
-    'handed_over_at', l.handed_over_at, 'due_at', l.due_at, 'ended_at', l.ended_at
-  ) AS data
-  FROM library_loans l JOIN library_items i ON i.id = l.item_id
-  WHERE l.borrower_id = @user_id OR i.owner_id = @user_id
-  UNION ALL
-  SELECT q.id AS k, jsonb_build_object(
-    'id', q.id, 'item_id', q.item_id, 'tayfa_id', q.tayfa_id, 'item_name', i.name,
-    'role', 'borrower', 'state', 'queued', 'requested_at', q.created_at
-  ) AS data
-  FROM library_queue q JOIN library_items i ON i.id = q.item_id
-  WHERE q.user_id = @user_id
-) x
-WHERE x.k > @after
-ORDER BY x.k
+SELECT l.id AS k, jsonb_build_object(
+  'id', l.id, 'item_id', l.item_id, 'tayfa_id', l.tayfa_id, 'item_name', i.name,
+  'role', CASE WHEN l.borrower_id = @user_id THEN 'borrower' ELSE 'owner' END,
+  'state', l.state, 'requested_at', l.requested_at, 'approved_at', l.approved_at,
+  'handed_over_at', l.handed_over_at, 'due_at', l.due_at, 'ended_at', l.ended_at
+) AS data
+FROM library_loans l JOIN library_items i ON i.id = l.item_id
+WHERE (l.borrower_id = @user_id OR i.owner_id = @user_id) AND l.id > @after
+UNION ALL
+SELECT lq.id AS k, jsonb_build_object(
+  'id', lq.id, 'item_id', lq.item_id, 'tayfa_id', lq.tayfa_id, 'item_name', qi.name,
+  'role', 'borrower', 'state', 'queued', 'requested_at', lq.created_at
+) AS data
+FROM library_queue lq JOIN library_items qi ON qi.id = lq.item_id
+WHERE lq.user_id = @user_id AND lq.id > @after
+ORDER BY k
 LIMIT @n;

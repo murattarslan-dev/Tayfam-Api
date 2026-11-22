@@ -51,6 +51,8 @@ var (
 		// Issue #205 (ADR-0031).
 		"chat_photo": corev1.UploadPurpose_UPLOAD_PURPOSE_CHAT_PHOTO, "dm_attachment": corev1.UploadPurpose_UPLOAD_PURPOSE_DM_ATTACHMENT,
 		"report_evidence": corev1.UploadPurpose_UPLOAD_PURPOSE_REPORT_EVIDENCE,
+		// Issue #270 (ADR-0040 §1).
+		"library_item": corev1.UploadPurpose_UPLOAD_PURPOSE_LIBRARY_ITEM,
 	})
 	uploadStatuses = newEnum(map[string]corev1.UploadStatus{
 		"pending": corev1.UploadStatus_UPLOAD_STATUS_PENDING, "ready": corev1.UploadStatus_UPLOAD_STATUS_READY,

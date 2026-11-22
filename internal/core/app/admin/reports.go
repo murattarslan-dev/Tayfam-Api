@@ -12,6 +12,7 @@ import (
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatrelay"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/library/lending"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
@@ -360,6 +361,11 @@ func reportedItem(ctx context.Context, q *store.Queries, r Report) (*Item, error
 		x, err = q.AdminGetDailyItem(ctx, store.AdminGetDailyItemParams{ID: r.Target.PG(), TayfaID: tf})
 		it.Author, it.Title, it.Body = idOf(x.CreatedBy), x.Attribution.String, x.Body
 		it.CreatedAt, it.DeletedAt = timeOf(x.CreatedAt), timeOf(x.DeletedAt)
+	case "library_item":
+		var x store.AdminGetLibraryItemRow
+		x, err = q.AdminGetLibraryItem(ctx, store.AdminGetLibraryItemParams{ID: r.Target.PG(), TayfaID: tf})
+		it.Author, it.Title, it.Body = idOf(x.OwnerID), x.Name, x.Note.String
+		it.CreatedAt, it.DeletedAt = timeOf(x.CreatedAt), timeOf(x.WithdrawnAt)
 	case "event_photo":
 		var x store.AdminGetEventPhotoRow
 		x, err = q.AdminGetEventPhoto(ctx, store.AdminGetEventPhotoParams{ID: r.Target.PG(), TayfaID: tf})
@@ -399,6 +405,10 @@ func removeContent(ctx context.Context, q *store.Queries, r Report, by id.ID, no
 		_, err = q.AdminDeleteEventQuestion(ctx, store.AdminDeleteEventQuestionParams{ID: tid, TayfaID: tf, At: at, By: b})
 	case "daily_item":
 		_, err = q.AdminDeleteDailyItem(ctx, store.AdminDeleteDailyItemParams{ID: tid, TayfaID: tf, At: at, By: b})
+	case "library_item":
+		// Withdrawn like a moderator's removal: waiting requests end, a
+		// handed-over loan stays open for its owner (ADR-0040 §1).
+		_, err = lending.Withdraw(ctx, q, r.Tayfa, r.Target, by, now)
 	case "event_photo":
 		_, err = q.AdminDeleteEventPhoto(ctx, store.AdminDeleteEventPhotoParams{ID: tid, TayfaID: tf, At: at, By: b})
 	case "channel_message":

@@ -83,6 +83,10 @@ const (
 	SectionUserStats = "user_stats"
 	// Issue #269: the daily content items one added (ADR-0027 §5).
 	SectionDailyItems = "daily_items"
+	// Issue #270: the library items one owns and one's loans and queue
+	// places (ADR-0040 §1).
+	SectionLibraryItems = "library_items"
+	SectionLibraryLoans = "library_loans"
 )
 
 const (
@@ -263,6 +267,14 @@ var sections = []struct {
 	{SectionDailyItems, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportDailyItems(ctx, store.ExportDailyItemsParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportDailyItemsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionLibraryItems, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportLibraryItems(ctx, store.ExportLibraryItemsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportLibraryItemsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionLibraryLoans, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportLibraryLoans(ctx, store.ExportLibraryLoansParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportLibraryLoansRow) row { return row{x.K, x.Data} })
 	}},
 }
 

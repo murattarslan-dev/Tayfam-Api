@@ -174,6 +174,7 @@ var reportTargets = map[corev1.ReportTargetType]report.TargetType{
 	corev1.ReportTargetType_REPORT_TARGET_TYPE_CHANNEL_MESSAGE: report.TargetChannelMessage,
 	corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT_QUESTION:  report.TargetEventQuestion,
 	corev1.ReportTargetType_REPORT_TARGET_TYPE_DAILY_ITEM:      report.TargetDailyItem,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_LIBRARY_ITEM:    report.TargetLibraryItem,
 }
 
 var reportReasons = map[corev1.ReportReason]report.Reason{

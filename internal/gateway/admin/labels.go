@@ -159,6 +159,8 @@ func targetLabel(t corev1.ReportTargetType) string {
 		return "Etkinlik sorusu"
 	case corev1.ReportTargetType_REPORT_TARGET_TYPE_DAILY_ITEM:
 		return "Günün içeriği"
+	case corev1.ReportTargetType_REPORT_TARGET_TYPE_LIBRARY_ITEM:
+		return "Kütüphane kalemi"
 	}
 	return "—"
 }

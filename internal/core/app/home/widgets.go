@@ -106,6 +106,7 @@ func Widgets() []Widget {
 		{Key: "daily", Kind: KindModule, Module: "daily"},
 
 		// library (#270)
+		{Key: "library", Kind: KindModule, Module: "library"},
 
 		// question_pool (#271)
 

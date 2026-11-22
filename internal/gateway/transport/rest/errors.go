@@ -210,6 +210,14 @@ var problemsByDomain = map[string]map[string]problem{
 		// Günün içeriği (issue #269; ADR-0027 §5).
 		"ERROR_REASON_DAILY_ITEM_NOT_FOUND": {http.StatusNotFound, "daily-item-not-found"},
 		"ERROR_REASON_DAILY_ITEM_LIMIT":     {http.StatusConflict, "daily-item-limit"},
+		// Ortak kütüphane (issue #270; ADR-0040 §1).
+		"ERROR_REASON_LIBRARY_ITEM_NOT_FOUND": {http.StatusNotFound, "library-item-not-found"},
+		"ERROR_REASON_LIBRARY_LOAN_NOT_FOUND": {http.StatusNotFound, "library-loan-not-found"},
+		"ERROR_REASON_LIBRARY_OWN_ITEM":       {http.StatusConflict, "library-own-item"},
+		"ERROR_REASON_LIBRARY_LOAN_STATE":     {http.StatusConflict, "library-loan-state"},
+		"ERROR_REASON_LIBRARY_ITEM_ON_LOAN":   {http.StatusConflict, "library-item-on-loan"},
+		"ERROR_REASON_LIBRARY_ITEM_LIMIT":     {http.StatusConflict, "library-item-limit"},
+		"ERROR_REASON_LIBRARY_QUEUE_FULL":     {http.StatusConflict, "library-queue-full"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {
