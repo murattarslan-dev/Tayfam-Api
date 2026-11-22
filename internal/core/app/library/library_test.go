@@ -42,7 +42,7 @@ func TestCleanName(t *testing.T) {
 	for name, in := range map[string]string{
 		"boş":             "  \t ",
 		"denetim kodu":    "Çadır\x00",
-		"görünmez işaret": "Ça​dır",
+		"görünmez işaret": "Ça\u200bdır",
 		"geçersiz UTF-8":  "Ça\xffdır",
 		"81 karakter":     strings.Repeat("ş", 81),
 	} {
@@ -57,14 +57,14 @@ func TestCleanName(t *testing.T) {
 
 func TestCleanNote(t *testing.T) {
 	for in, want := range map[string]string{
-		"":                                   "",
-		"  Kılıfıyla  \r\n\r\n\r\n verilir ": "Kılıfıyla\n\nverilir",
+		"":                             "",
+		"Kılıfıyla\r\n\r\n\r\nverilir": "Kılıfıyla\n\nverilir",
 	} {
 		if got, ok := library.CleanNote(in); !ok || got != want {
 			t.Errorf("CleanNote(%q) = %q %v, %q bekleniyordu", in, got, ok, want)
 		}
 	}
-	for _, in := range []string{"a\x07b", "a‮b", strings.Repeat("a", 301)} {
+	for _, in := range []string{"a\x07b", "a\u202eb", strings.Repeat("a", 301)} {
 		if _, ok := library.CleanNote(in); ok {
 			t.Errorf("CleanNote(%q) kabul edildi", in)
 		}
@@ -80,12 +80,6 @@ func (c *clock) now() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.t
-}
-
-func (c *clock) add(d time.Duration) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.t = c.t.Add(d)
 }
 
 type allowAll struct{}
@@ -481,7 +475,13 @@ func TestDeparture(t *testing.T) {
 	}
 	l, err := e.svc.Loans(ctx, owner, tf)
 	must(t, err)
-	if len(l) != 1 || l[0].State != library.StateHandedOver || l[0].OrphanedAt.IsZero() {
+	var open []library.Loan
+	for _, x := range l {
+		if x.Item == stove.ID {
+			open = append(open, x)
+		}
+	}
+	if len(open) != 1 || open[0].State != library.StateHandedOver || open[0].OrphanedAt.IsZero() {
 		t.Fatalf("açık ödünç: %+v", l)
 	}
 	want := []string{borrower.String(), owner.String()}

@@ -98,9 +98,7 @@ CREATE TABLE library_items (
   CONSTRAINT library_items_owner CHECK (owner_id IS NOT NULL OR status = 'withdrawn'),
   CONSTRAINT library_items_client_request_key UNIQUE (tayfa_id, client_request_id),
   -- Ödünç ve sıra kayıtları kalemin tayfasıyla birlikte bağlanır.
-  CONSTRAINT library_items_tayfa_key UNIQUE (id, tayfa_id),
-  CONSTRAINT library_items_vocabulary_fkey FOREIGN KEY (vocabulary_id, tayfa_id, vocabulary_namespace)
-    REFERENCES tayfa_vocabulary (id, tayfa_id, namespace)
+  CONSTRAINT library_items_tayfa_key UNIQUE (id, tayfa_id)
 );
 CREATE INDEX library_items_tayfa_idx ON library_items (tayfa_id, created_at DESC, id)
   WHERE status <> 'withdrawn';
@@ -176,6 +174,26 @@ CREATE TABLE library_queue (
 );
 CREATE INDEX library_queue_user_idx ON library_queue (user_id, tayfa_id);
 
+-- Kitabın sözlük değeri aynı tayfanın `book` ad alanında olmalıdır.
+-- Yabancı anahtar yerine tetikleyici: sözlük değerleri yalnızca tayfayla
+-- birlikte silinir, ve tayfa_vocabulary'nin (00039) geri alınması bu tabloya
+-- bağlanmaz.
+-- +goose StatementBegin
+CREATE FUNCTION library_items_vocabulary_check() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.vocabulary_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM tayfa_vocabulary v
+    WHERE v.id = NEW.vocabulary_id AND v.tayfa_id = NEW.tayfa_id AND v.namespace = NEW.vocabulary_namespace
+  ) THEN
+    RAISE EXCEPTION 'sözlük değeri bu tayfanın kitap ad alanında değil' USING ERRCODE = '23503';
+  END IF;
+  RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER library_items_vocabulary_check BEFORE INSERT OR UPDATE OF vocabulary_id, vocabulary_namespace ON library_items
+  FOR EACH ROW EXECUTE FUNCTION library_items_vocabulary_check();
+
 -- Kalemin fotoğrafı kaleme bağlı, hazır ve doğru amaçlı olmalıdır; kalem
 -- fotoğrafı bıraktığında ya da kalıcı silindiğinde dosya silme kuyruğuna
 -- girer (00017).
@@ -245,6 +263,7 @@ ALTER TABLE reports ADD CONSTRAINT reports_target_type CHECK (target_type IN
 DROP TABLE library_queue;
 DROP TABLE library_loans;
 DROP TABLE library_items;
+DROP FUNCTION library_items_vocabulary_check();
 
 DELETE FROM uploads WHERE purpose = 'library_item';
 ALTER TABLE uploads DROP CONSTRAINT uploads_attached;
