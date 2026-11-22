@@ -269,7 +269,7 @@ func TestQAServerConverts(t *testing.T) {
 		t.Fatalf("oy: %v %v", a, err)
 	}
 	if _, err := srv.CreateAnswer(ctx, &corev1.CreateAnswerRequest{TayfaId: tid.String(), QuestionId: qid.String(), Body: "B", ClientRequestId: crid}); err != nil ||
-		f.createA != (qa.CreateAnswerInput{Body: "B", ClientRequestID: crid}) || f.x != qid {
+		f.createA.Body != "B" || f.createA.ClientRequestID != crid || len(f.createA.Photos) != 0 || f.x != qid {
 		t.Fatalf("cevap: %+v %v", f.createA, err)
 	}
 	tags, err := srv.ListTags(ctx, &corev1.ListTagsRequest{TayfaId: tid.String()})
