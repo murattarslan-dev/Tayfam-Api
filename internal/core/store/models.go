@@ -57,6 +57,12 @@ type AuditLog struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type BlockedDomain struct {
+	Domain    string
+	CreatedAt pgtype.Timestamptz
+	CreatedBy pgtype.UUID
+}
+
 type CatalogBadge struct {
 	Key       string
 	Scope     string
@@ -705,6 +711,26 @@ type LibraryQueue struct {
 	UserID    pgtype.UUID
 	Position  int32
 	CreatedAt pgtype.Timestamptz
+}
+
+type Material struct {
+	ID              pgtype.UUID
+	TayfaID         pgtype.UUID
+	AuthorID        pgtype.UUID
+	Kind            string
+	Title           string
+	Url             pgtype.Text
+	Domain          pgtype.Text
+	Photo1UploadID  pgtype.UUID
+	Photo2UploadID  pgtype.UUID
+	Photo3UploadID  pgtype.UUID
+	SubjectKey      string
+	TopicKey        pgtype.Text
+	ClientRequestID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	DeletedBy       pgtype.UUID
 }
 
 type Membership struct {

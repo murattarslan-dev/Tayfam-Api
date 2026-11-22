@@ -53,6 +53,7 @@ type Querier interface {
 	AdminDeleteEventPhoto(ctx context.Context, arg AdminDeleteEventPhotoParams) (int64, error)
 	AdminDeleteEventQuestion(ctx context.Context, arg AdminDeleteEventQuestionParams) (int64, error)
 	AdminDeleteLogEntry(ctx context.Context, arg AdminDeleteLogEntryParams) (int64, error)
+	AdminDeleteMaterial(ctx context.Context, arg AdminDeleteMaterialParams) (int64, error)
 	AdminDeletePoll(ctx context.Context, arg AdminDeletePollParams) (int64, error)
 	AdminDeleteQuestion(ctx context.Context, arg AdminDeleteQuestionParams) (int64, error)
 	// 72 saat beklemeden soft delete; 30 gün sonra mevcut iş kalıcı siler.
@@ -72,6 +73,9 @@ type Querier interface {
 	// Günlük kaydı (issue #243): panel kaydın değerlerini gösterir; konumu
 	// göstermez.
 	AdminGetLogEntry(ctx context.Context, arg AdminGetLogEntryParams) (AdminGetLogEntryRow, error)
+	// Materyal kütüphanesi (issue #261): panel bağlantıyı açmaz, adresi metin
+	// olarak gösterir.
+	AdminGetMaterial(ctx context.Context, arg AdminGetMaterialParams) (AdminGetMaterialRow, error)
 	AdminGetPlatformReport(ctx context.Context, id pgtype.UUID) (AdminGetPlatformReportRow, error)
 	AdminGetPoll(ctx context.Context, arg AdminGetPollParams) (AdminGetPollRow, error)
 	AdminGetPollOptions(ctx context.Context, pollID pgtype.UUID) ([]string, error)
@@ -187,6 +191,9 @@ type Querier interface {
 	ClearLibraryItemUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearLibraryLoanBorrower(ctx context.Context, userID pgtype.UUID) error
 	ClearLogEntryDeleter(ctx context.Context, userID pgtype.UUID) error
+	// Materyal kütüphanesi (issue #261; ADR-0040 §3): materyal kalır, yazar ve
+	// silen boşalır; fotoğraf dosyaları media.UserDeleted ile silinir.
+	ClearMaterialUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearMeasurementEnteredBy(ctx context.Context, userID pgtype.UUID) error
 	ClearMembershipUserFields(ctx context.Context, userID pgtype.UUID) error
 	// ---------------------------------------------------------------------------
@@ -255,6 +262,8 @@ type Querier interface {
 	CountActiveMembers(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
 	CountActiveMembersForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]CountActiveMembersForTayfasRow, error)
 	CountApprovedSeats(ctx context.Context, arg CountApprovedSeatsParams) (int64, error)
+	// Yazarın tayfadaki silinmemiş materyalleri.
+	CountAuthorMaterials(ctx context.Context, arg CountAuthorMaterialsParams) (int32, error)
 	// Deneme yalnızca sınırın altındayken sayılır; 0 satır: sınır dolmuş.
 	CountCheckInAttempt(ctx context.Context, arg CountCheckInAttemptParams) (int64, error)
 	CountChecklistItems(ctx context.Context, arg CountChecklistItemsParams) (int64, error)
@@ -359,6 +368,7 @@ type Querier interface {
 	CreateLibraryLoan(ctx context.Context, arg CreateLibraryLoanParams) error
 	CreateLogEntry(ctx context.Context, arg CreateLogEntryParams) error
 	CreateLogEntryVocabulary(ctx context.Context, arg CreateLogEntryVocabularyParams) error
+	CreateMaterial(ctx context.Context, arg CreateMaterialParams) error
 	// Üyelik değişiklikleri transaction içinde SetActor ya da SetSystemJob'dan
 	// sonra yapılır; aksi halde trigger reddeder.
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) error
@@ -444,6 +454,9 @@ type Querier interface {
 	DeleteLibraryItemsQueue(ctx context.Context, itemIds []pgtype.UUID) error
 	DeleteLibraryQueuePlace(ctx context.Context, arg DeleteLibraryQueuePlaceParams) (int64, error)
 	DeleteLogEntry(ctx context.Context, arg DeleteLogEntryParams) (int64, error)
+	// Soft delete. Yazarın kendi silmesinde (`release_photos`) fotoğraflar
+	// hemen bırakılır; dosyalar silme kuyruğuna girer (uploads_release_ref).
+	DeleteMaterial(ctx context.Context, arg DeleteMaterialParams) (int64, error)
 	// Ayrılma, çıkarma, başvuru reddi, ban kaldırma.
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (int64, error)
 	// İşaret ayrılıştan 30 gün sonra gerekmez.
@@ -674,6 +687,9 @@ type Querier interface {
 	// Sözlüğe bağlı alanlar (issue #244) `vocabulary`'de: alan anahtarı →
 	// seçilen ya da eklenen sözlük değeri (ADR-0037 §4).
 	ExportLogEntries(ctx context.Context, arg ExportLogEntriesParams) ([]ExportLogEntriesRow, error)
+	// Materyal kütüphanesi (issue #261; ADR-0040 §3): eklediğiniz materyaller
+	// (silinenler dahil). Fotoğraf ve silen yer almaz.
+	ExportMaterials(ctx context.Context, arg ExportMaterialsParams) ([]ExportMaterialsRow, error)
 	// Kişisel ölçüm değerleri (`measure` bileşeni, issue #245): kendi
 	// girdikleriniz ve organizatörün ya da hakemin sizin adınıza girdikleri. Kimin
 	// girdiği yalnızca "kendim mi" olarak yer alır; toplam ölçümler etkinliğindir.
@@ -881,6 +897,10 @@ type Querier interface {
 	// etkinliğin kimliği ve bileşenin anahtarıyla çalışır (IDOR). Yetki ve konum
 	// görünürlüğü app katmanındadır (internal/core/app/component/logbook).
 	GetLogEntryByClientRequest(ctx context.Context, arg GetLogEntryByClientRequestParams) (GetLogEntryByClientRequestRow, error)
+	GetMaterialByClientRequest(ctx context.Context, arg GetMaterialByClientRequestParams) (pgtype.UUID, error)
+	// Değiştirilecek materyal, kilitli. `blocked`: bağlantının alan adı engelli
+	// (materyal gizlidir).
+	GetMaterialForUpdate(ctx context.Context, arg GetMaterialForUpdateParams) (GetMaterialForUpdateRow, error)
 	// Önerilen değerin kaynağı (`prefill_from`): etkinliğin bir alanının değeri.
 	GetMeasurementPrefill(ctx context.Context, arg GetMeasurementPrefillParams) ([]byte, error)
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
@@ -942,6 +962,9 @@ type Querier interface {
 	// Günlük kaydı (issue #243): etkinliği de görünür olmalı. Kaydın kendisi
 	// (değerleri) etkinliği gören her üyeye açıktır; konum şikâyete girmez.
 	GetReportTargetLogEntry(ctx context.Context, arg GetReportTargetLogEntryParams) (GetReportTargetLogEntryRow, error)
+	// Materyal (issue #261): yazarı konusudur; engelli alan adındaki bağlantı
+	// gizlidir.
+	GetReportTargetMaterial(ctx context.Context, arg GetReportTargetMaterialParams) (GetReportTargetMaterialRow, error)
 	GetReportTargetPoll(ctx context.Context, arg GetReportTargetPollParams) (GetReportTargetPollRow, error)
 	// Sorunun havuzu modülünü verir: Soru-Cevap (qa) ya da soru havuzu
 	// (question_pool, issue #271).
@@ -1263,6 +1286,11 @@ type Querier interface {
 	// Kayıtların sözlüğe bağlı alanları, birleştirme hedefine çözülmüş olarak.
 	// Kayıtlar çağıranın etkinlik ve bileşen kapsamında okunmuştur.
 	ListLogEntryVocabulary(ctx context.Context, entryIds []pgtype.UUID) ([]ListLogEntryVocabularyRow, error)
+	// Materyal kütüphanesi (issue #261; ADR-0040 §3). Her sorgu tayfa_id ile
+	// çalışır. Silinmiş materyal ve engelli alan adındaki bağlantı
+	// (material_domain_blocked) okunmaz.
+	// Tayfanın görünür materyalleri, en yeni önce; süzgeçler isteğe bağlı.
+	ListMaterialsPage(ctx context.Context, arg ListMaterialsPageParams) ([]ListMaterialsPageRow, error)
 	// Görüntüleme: istenen hazır dosyalar ve izleyicinin her birini görüp
 	// göremeyeceğine karar vermek için bağlam. Karar uygulama katmanında, core'un
 	// izin tablosuyla verilir (authz); burada yalnızca veri toplanır. İçeriğin
@@ -1546,6 +1574,8 @@ type Querier interface {
 	// Denetimden geçti (ADR-0020). Yalnızca bekleyen kayıt; eşzamanlı ikinci
 	// tamamlama bir şey değiştirmez.
 	MarkUploadReady(ctx context.Context, arg MarkUploadReadyParams) (int64, error)
+	// Bağlantının alan adı ya da üst alan adlarından biri engelli mi.
+	MaterialDomainBlocked(ctx context.Context, domain string) (bool, error)
 	// Onaylanmamış sohbet bağlaması (ADR-0031): chat'in henüz onaylamadığı,
 	// belki hiç yazılmamış bir mesaja bağlı dosya, aynı sahibin yeni mesajına
 	// taşınır. Çağıran satırı önce GetOwnUploadForUpdate ile kilitler.
@@ -1593,6 +1623,8 @@ type Querier interface {
 	// Günlük kaydı (issue #243); fotoğrafı uploads_release_ref ile silme
 	// kuyruğuna girer.
 	PurgeLogEntries(ctx context.Context, arg PurgeLogEntriesParams) (int64, error)
+	// Materyal kütüphanesi (issue #261).
+	PurgeMaterials(ctx context.Context, arg PurgeMaterialsParams) (int64, error)
 	// Seçenekleri cascade ile gider (oyları soft delete'te silinmiştir).
 	PurgePolls(ctx context.Context, arg PurgePollsParams) (int64, error)
 	// Cevapları, oyları ve etiket bağları cascade ile gider.
@@ -1774,6 +1806,7 @@ type Querier interface {
 	// Seri örneği elle düzenlenince seri güncellemeleri ona dokunmaz.
 	UpdateEvent(ctx context.Context, arg UpdateEventParams) (int64, error)
 	UpdateLibraryItem(ctx context.Context, arg UpdateLibraryItemParams) (int64, error)
+	UpdateMaterial(ctx context.Context, arg UpdateMaterialParams) (int64, error)
 	// Havuz sorusunda ders, konu ve fotoğraflar da (Soru-Cevap sorusunda
 	// hep NULL). Yeni fotoğraf önce dosyaya bağlanır; bırakılan fotoğrafın
 	// dosyası tetikleyiciyle silme kuyruğuna girer.
