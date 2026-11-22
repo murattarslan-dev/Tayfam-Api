@@ -153,6 +153,12 @@ SELECT created_by, body, attribution, created_at, deleted_at
 FROM tayfa_daily_items
 WHERE id = @id AND tayfa_id = @tayfa_id;
 
+-- Ortak kütüphane (issue #270).
+-- name: AdminGetLibraryItem :one
+SELECT owner_id, kind, name, note, created_at, withdrawn_at
+FROM library_items
+WHERE id = @id AND tayfa_id = @tayfa_id;
+
 -- name: AdminGetEventPhoto :one
 SELECT p.uploader_id, p.caption, p.created_at, p.deleted_at, p.upload_id
 FROM event_photos p JOIN events e ON e.id = p.event_id

@@ -318,6 +318,21 @@ const (
 	// edits, deletes, restores, orders and pins the items of the tayfa's
 	// daily content pool. Reading the pool and today's item is TayfaView.
 	TayfaDailyManage
+	// Ortak kütüphane (issue #270, ADR-0040 §1). LibraryItemAdd adds an
+	// item of one's own; LibraryItemEditOwn edits it and
+	// LibraryItemWithdrawOwn withdraws it (the caller checks that it is
+	// theirs). LibraryItemRemoveAny removes anyone's item (moderation).
+	// LibraryBorrow asks for an item (or waits in its queue) and
+	// LibraryBorrowCancel takes the request back. LibraryLendOwn approves,
+	// declines, hands over and takes back the caller's own items (the
+	// caller checks that the item is theirs). Reading is TayfaView.
+	LibraryItemAdd
+	LibraryItemEditOwn
+	LibraryItemWithdrawOwn
+	LibraryItemRemoveAny
+	LibraryBorrow
+	LibraryBorrowCancel
+	LibraryLendOwn
 
 	actionEnd // sentinel; keep last
 )
@@ -425,6 +440,13 @@ var actionNames = [...]string{
 	TayfaStatsShowcaseUpdate:  "tayfa.stats_showcase.update",
 	TayfaHomeUpdate:           "tayfa.home.update",
 	TayfaDailyManage:          "tayfa.daily.manage",
+	LibraryItemAdd:            "library.item_add",
+	LibraryItemEditOwn:        "library.item_edit_own",
+	LibraryItemWithdrawOwn:    "library.item_withdraw_own",
+	LibraryItemRemoveAny:      "library.item_remove_any",
+	LibraryBorrow:             "library.borrow",
+	LibraryBorrowCancel:       "library.borrow_cancel",
+	LibraryLendOwn:            "library.lend_own",
 	actionEnd:                 "",
 }
 
@@ -448,6 +470,14 @@ var permissions = map[Action]Role{
 	MemberList:      Member,
 	// Members see their own links; callers allowed InviteRevokeAny see all.
 	InviteList: Member,
+	// Ortak kütüphane (ADR-0040 §1): "kalem ekleme üye"; the owner's and
+	// the borrower's own steps.
+	LibraryItemAdd:         Member,
+	LibraryItemEditOwn:     Member,
+	LibraryItemWithdrawOwn: Member,
+	LibraryBorrow:          Member,
+	LibraryBorrowCancel:    Member,
+	LibraryLendOwn:         Member,
 	// Events: reading, answering and the organizer's own event. An organizer
 	// keeps managing their event even if the tayfa later stops letting
 	// members create events (2026-11-09).
@@ -554,6 +584,9 @@ var permissions = map[Action]Role{
 	TayfaVocabularyMerge: Moderator,
 	// The daily content pool: "yönetici ve moderatör ekler" (ADR-0027 §5).
 	TayfaDailyManage: Moderator,
+	// Ortak kütüphane: removing anyone's item is content moderation
+	// (ADR-0040 §1).
+	LibraryItemRemoveAny: Moderator,
 	// Removing anyone's event question ("Tayfa yönetimi anonim soruyu
 	// yazarını görmeden silebilir", ADR-0025 §5).
 	EventQuestionDeleteAny: Moderator,
@@ -686,6 +719,14 @@ var allowedWhileMuted = map[Action]bool{
 	// Reading components is a read. Taking part, managing and refereeing
 	// publish into the event and are refused while muted.
 	EventComponentView: true,
+	// Ortak kütüphane (ADR-0040 §1): withdrawing one's own item and taking
+	// back one's own request only narrow; the lending steps of one's own
+	// items (approve, decline, hand over, take back) publish nothing and
+	// a mute must never keep an item from going home. Adding, editing and
+	// asking for an item are refused while muted.
+	LibraryItemWithdrawOwn: true,
+	LibraryBorrowCancel:    true,
+	LibraryLendOwn:         true,
 }
 
 // Settings are the tayfa settings that change the permission table. The zero

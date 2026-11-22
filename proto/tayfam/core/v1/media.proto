@@ -216,6 +216,10 @@ enum UploadPurpose {
   UPLOAD_PURPOSE_DM_ATTACHMENT = 6;
   // A photo the reporter of a direct message shares from their device.
   UPLOAD_PURPOSE_REPORT_EVIDENCE = 7;
+  // A library item's photo (issue #270, ADR-0040 §1; at most one per
+  // item). Attached with TayfaLibraryService.CreateLibraryItem or
+  // UpdateLibraryItem.
+  UPLOAD_PURPOSE_LIBRARY_ITEM = 8;
 }
 
 // UploadStatus is where an upload stands (uploads.status).

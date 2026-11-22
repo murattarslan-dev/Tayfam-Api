@@ -166,6 +166,10 @@ enum ReportTargetType {
   // TayfaDailyService). Its subject is the member who added it. Reporting
   // needs the daily module on.
   REPORT_TARGET_TYPE_DAILY_ITEM = 13;
+  // target_id is an item of the tayfa's library (issue #270;
+  // TayfaLibraryService). Its subject is the item's owner. Reporting needs
+  // the library module on and the item not withdrawn.
+  REPORT_TARGET_TYPE_LIBRARY_ITEM = 14;
 }
 
 // ReportReason follows the community rules (Notion "Topluluk Kuralları").

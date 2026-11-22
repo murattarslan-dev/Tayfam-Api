@@ -108,6 +108,16 @@ enum NotificationType {
   // the push_now_started_title / _body keys only. Muted with the tayfa's
   // level NONE or with its NOTIFICATION_SCOPE_TYPE_TAYFA_NOW preference.
   NOTIFICATION_TYPE_NOW_STARTED = 26;
+  // A library loan's return date passed (issue #270, ADR-0040 §1): one
+  // reminder to the borrower (target: TAYFA, the loan's tayfa; no actor).
+  // Never names the item, the owner or the date: the client reads the
+  // caller's loans from TayfaLibraryService. In-app only: no push.
+  NOTIFICATION_TYPE_LIBRARY_DUE = 27;
+  // One side of a handed-over library loan left the tayfa (issue #270,
+  // ADR-0040 §1): a warning to both the owner and the borrower, the one who
+  // left included (target: TAYFA; no actor). The loan stays open for 30
+  // days, then closes. Never names the item or the people. In-app only.
+  NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED = 28;
 }
 
 enum NotificationTargetType {

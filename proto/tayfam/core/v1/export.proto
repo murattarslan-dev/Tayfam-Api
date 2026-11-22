@@ -130,6 +130,15 @@ enum CoreExportSection {
   // §5), deleted ones included: text, attribution, pinned day. Their place
   // in the pool and who deleted them are not exported.
   CORE_EXPORT_SECTION_DAILY_ITEMS = 36;
+  // The library items the caller owns (issue #270, ADR-0040 §1),
+  // withdrawn ones included: kind, name, note, status and times. The photo
+  // is not in it.
+  CORE_EXPORT_SECTION_LIBRARY_ITEMS = 37;
+  // The caller's loans, as borrower or as the item's owner (kept for a
+  // year after they end), and the queues the caller waits in: the item,
+  // the caller's role, the state and its times. The other person is not
+  // exported.
+  CORE_EXPORT_SECTION_LIBRARY_LOANS = 38;
 }
 
 message ExportMyDataRequest {}

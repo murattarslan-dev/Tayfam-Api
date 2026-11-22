@@ -223,6 +223,20 @@ UPDATE tayfa_daily_items
 SET created_by = NULLIF(created_by, @user_id), deleted_by = NULLIF(deleted_by, @user_id)
 WHERE created_by = @user_id OR deleted_by = @user_id;
 
+-- Ortak kütüphane (issue #270; ADR-0040 §1): kalemler önce geri çekilir
+-- (lending.Departed), sonra sahibi ve geri çekeni boşalır; ödünç
+-- kayıtlarında borç alan boşalır; sıradaki yerler silinir.
+-- name: ClearLibraryItemUserFields :exec
+UPDATE library_items
+SET owner_id = NULLIF(owner_id, @user_id), withdrawn_by = NULLIF(withdrawn_by, @user_id)
+WHERE owner_id = @user_id OR withdrawn_by = @user_id;
+
+-- name: ClearLibraryLoanBorrower :exec
+UPDATE library_loans SET borrower_id = NULL WHERE borrower_id = @user_id;
+
+-- name: DeleteUserLibraryQueue :exec
+DELETE FROM library_queue WHERE user_id = @user_id;
+
 -- Albüm fotoğrafları kişiseldir; kişiyle birlikte silinir, dosyaları
 -- silme kuyruğuna girer (issue #206).
 -- name: DeleteUserEventPhotos :exec
