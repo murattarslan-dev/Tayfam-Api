@@ -143,6 +143,9 @@ enum Module {
   // material — links and note photos (TayfaMaterialService) — and its home
   // widget.
   MODULE_MATERIALS = 8;
+  // Üye garajı (issue #272; ADR-0040 §4): the members' garages that show
+  // in the tayfa (MemberGarageService) and its home widget.
+  MODULE_GARAGE = 9;
 }
 
 // Lifecycle of an inactive tayfa (tayfas.status).

@@ -568,4 +568,13 @@ enum ErrorReason {
   // FAILED_PRECONDITION. The caller already has 200 materials in the
   // tayfa's material library.
   ERROR_REASON_MATERIAL_LIMIT = 2722;
+
+  // Üye garajı (ADR-0040 §4; issue #272: 2730–2739).
+
+  // NOT_FOUND. A vehicle that is not in the caller's garage (for the
+  // owner's steps and the vehicles component), or that does not show in
+  // the tayfa (a moderator's removal).
+  ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND = 2730;
+  // FAILED_PRECONDITION. The caller already has 10 vehicles in the garage.
+  ERROR_REASON_GARAGE_LIMIT = 2731;
 }

@@ -72,6 +72,16 @@ SELECT author_id, (deleted_at IS NULL AND NOT material_domain_blocked(domain))::
 FROM materials
 WHERE tayfa_id = @tayfa_id AND id = @id;
 
+-- Üye garajı aracı (issue #272): sahibi konusudur; sahibi tayfanın üyesi
+-- değilse hedef yoktur. Görünür: silinmemiş, sahibi etkin üye ve garajı bu
+-- tayfada görünür.
+-- name: GetReportTargetGarageVehicle :one
+SELECT g.owner_id AS author_id,
+       (g.deleted_at IS NULL AND m.status = 'active' AND garage_visible_in(g.owner_id, @tayfa_id::uuid))::boolean AS visible
+FROM garage_vehicles g
+JOIN memberships m ON m.tayfa_id = @tayfa_id::uuid AND m.user_id = g.owner_id
+WHERE g.id = @id;
+
 -- Albüm fotoğrafı (issue #206): etkinliği de görünür olmalı.
 -- name: GetReportTargetEventPhoto :one
 SELECT p.uploader_id AS author_id, (p.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible
