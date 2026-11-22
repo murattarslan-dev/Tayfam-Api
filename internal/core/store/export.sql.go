@@ -137,7 +137,7 @@ func (q *Queries) ExportAnswerVotes(ctx context.Context, arg ExportAnswerVotesPa
 
 const exportAnswers = `-- name: ExportAnswers :many
 SELECT a.id AS k, jsonb_build_object(
-  'id', a.id, 'question_id', a.question_id, 'tayfa_id', a.tayfa_id, 'body', a.body, 'vote_count', a.vote_count,
+  'id', a.id, 'question_id', a.question_id, 'tayfa_id', a.tayfa_id, 'pool', a.pool, 'body', a.body, 'vote_count', a.vote_count,
   'created_at', a.created_at, 'updated_at', a.updated_at, 'deleted_at', a.deleted_at
 ) AS data
 FROM answers a
@@ -1205,7 +1205,8 @@ func (q *Queries) ExportPolls(ctx context.Context, arg ExportPollsParams) ([]Exp
 
 const exportQuestions = `-- name: ExportQuestions :many
 SELECT q.id AS k, jsonb_build_object(
-  'id', q.id, 'tayfa_id', q.tayfa_id, 'title', q.title, 'body', q.body,
+  'id', q.id, 'tayfa_id', q.tayfa_id, 'pool', q.pool, 'subject_key', q.subject_key, 'topic_key', q.topic_key,
+  'title', q.title, 'body', q.body,
   'created_at', q.created_at, 'updated_at', q.updated_at, 'deleted_at', q.deleted_at
 ) AS data
 FROM questions q

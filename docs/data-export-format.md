@@ -75,8 +75,8 @@ adları içeriktir ve yer alır.
 | `core/activity_records.json` | `id`, `event_id`, `tayfa_id`, `event_type`, `mode`, `event_title`, `city`, `district`, `started_at`, `duration_minutes`, `attendance_method` |
 | `core/announcements.json` | `id`, `tayfa_id`, `title`, `body`, `pinned`, `created_at`, `updated_at`, `deleted_at` |
 | `core/events.json` | `id`, `tayfa_id`, `type`, `mode`, `title`, `description`, `starts_at`, `ends_at`, `meeting_point_name`, `meeting_lat`, `meeting_lng`, `city`, `district`, `online_url`, `capacity`, `status`, `cancelled_at`, `cancel_reason`, `created_at`, `updated_at`, `deleted_at` |
-| `core/questions.json` | `id`, `tayfa_id`, `title`, `body`, `created_at`, `updated_at`, `deleted_at` |
-| `core/answers.json` | `id`, `question_id`, `tayfa_id`, `body`, `vote_count`, `created_at`, `updated_at`, `deleted_at` |
+| `core/questions.json` | Soru-Cevap ve soru havuzu soruları: `id`, `tayfa_id`, `pool` (`qa` / `question_pool`), `subject_key`, `topic_key` (soru havuzunda ders ve konu anahtarı, yoksa `null`), `title` (soru havuzunda boş), `body`, `created_at`, `updated_at`, `deleted_at`. Fotoğraf dışa aktarılmaz |
+| `core/answers.json` | `id`, `question_id`, `tayfa_id`, `pool`, `body`, `vote_count`, `created_at`, `updated_at`, `deleted_at`. Fotoğraf dışa aktarılmaz |
 | `core/answer_votes.json` | `answer_id`, `created_at` |
 | `core/polls.json` | `id`, `tayfa_id`, `event_id`, `question`, `anonymous`, `multiple_choice`, `options` (`[{id, text, position}]`), `closes_at`, `closed_at`, `created_at`, `deleted_at` |
 | `core/poll_votes.json` | `poll_id`, `option_id`, `option_text`, `poll_question`, `anonymous`, `created_at` (gizli anket dahil yalnızca kullanıcının kendi oyu) |

@@ -19,6 +19,12 @@
 // removal) is written to audit_logs; every change ends with an outbox event.
 // Neither ever holds a title, a body, a tag name or a search query; only IDs
 // and the kind of change.
+//
+// The same tables also hold the Eğitim question pool (issue #271; ADR-0040
+// §2): questions.pool is PoolQA or PoolQuestionPool, and every method works
+// in one pool, whose module (qa or question_pool) must be on. Methods on an
+// existing question or answer take the pool from the row (poolOf). The
+// pool's own rules are in pool.go.
 package qa
 
 import (
@@ -64,11 +70,15 @@ const (
 	maxRuneBytes = 4
 )
 
-// Update mask paths (UpdateQuestionRequest.update_mask).
+// Update mask paths (UpdateQuestionRequest.update_mask). FieldSubject
+// (subject_key and topic_key together) and FieldPhotos are the question
+// pool's.
 const (
-	FieldTitle = "title"
-	FieldBody  = "body"
-	FieldTags  = "tags"
+	FieldTitle   = "title"
+	FieldBody    = "body"
+	FieldTags    = "tags"
+	FieldSubject = "subject"
+	FieldPhotos  = "photos"
 )
 
 // Event types. Payloads hold IDs and the kind of change only.
@@ -146,6 +156,12 @@ type Question struct {
 	AnswerCount int32
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+	// Pool is PoolQA or PoolQuestionPool. SubjectKey, TopicKey (may be
+	// empty) and Photos (0–2, in order) are the question pool's.
+	Pool       string
+	SubjectKey string
+	TopicKey   string
+	Photos     []id.ID
 }
 
 // Answer is an answer as the tayfa's active members see it.
@@ -161,15 +177,23 @@ type Answer struct {
 	Voted     bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	// Pool is the question's pool; Photos (0–2, in order) are the
+	// question pool's.
+	Pool   string
+	Photos []id.ID
 }
 
-// read checks a reader: active member, module on, TayfaView.
-func (s *Service) read(ctx context.Context, user, tayfa id.ID) error {
+// read checks a reader: active member, the pool's module on, TayfaView.
+func (s *Service) read(ctx context.Context, user, tayfa id.ID, of poolOf) error {
 	_, m, err := access.Load(ctx, s.q, tayfa, user, false)
 	if err != nil {
 		return err
 	}
-	if err := access.RequireModule(ctx, s.q, tayfa, access.ModuleQA); err != nil {
+	pool, err := of(ctx, s.q)
+	if err != nil {
+		return err
+	}
+	if err := access.RequireModule(ctx, s.q, tayfa, moduleOf(pool)); err != nil {
 		return err
 	}
 	return access.Authorize(m, authz.TayfaView, s.now())
@@ -182,6 +206,8 @@ type writer struct {
 	m   authz.Membership
 	t   access.Tayfa
 	now time.Time
+	// pool is the pool the write works in.
+	pool string
 }
 
 // authorize checks the permission table and that the tayfa is not
@@ -196,20 +222,24 @@ func (w writer) authorize(a authz.Action) error {
 	return nil
 }
 
-// write locks the tayfa, checks membership and module, then runs fn in the
-// same transaction. fn authorizes with w.authorize before it changes
-// anything. With a, the action is checked before fn runs.
-func (s *Service) write(ctx context.Context, user, tayfa id.ID, a authz.Action, fn func(w writer) error) error {
+// write locks the tayfa, checks membership and the pool's module, then runs
+// fn in the same transaction. fn authorizes with w.authorize before it
+// changes anything. With a, the action is checked before fn runs.
+func (s *Service) write(ctx context.Context, user, tayfa id.ID, of poolOf, a authz.Action, fn func(w writer) error) error {
 	now := s.now()
 	return txn.WithActor(ctx, s.cfg.Pool, user, func(_ pgx.Tx, q *store.Queries) error {
 		t, m, err := access.Load(ctx, q, tayfa, user, true)
 		if err != nil {
 			return err
 		}
-		if err := access.RequireModule(ctx, q, tayfa, access.ModuleQA); err != nil {
+		pool, err := of(ctx, q)
+		if err != nil {
 			return err
 		}
-		w := writer{q: q, m: m, t: t, now: now}
+		if err := access.RequireModule(ctx, q, tayfa, moduleOf(pool)); err != nil {
+			return err
+		}
+		w := writer{q: q, m: m, t: t, now: now, pool: pool}
 		if a != 0 {
 			if err := w.authorize(a); err != nil {
 				return err
@@ -354,6 +384,13 @@ func optional(u pgtype.UUID) id.ID {
 		return id.ID{}
 	}
 	return id.ID(u.Bytes)
+}
+
+func text(t pgtype.Text) string {
+	if !t.Valid {
+		return ""
+	}
+	return t.String
 }
 
 func ts(t time.Time) pgtype.Timestamptz { return pgtype.Timestamptz{Time: t, Valid: true} }

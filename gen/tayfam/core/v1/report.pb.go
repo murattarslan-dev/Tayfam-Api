@@ -171,6 +171,9 @@ const (
 	// only.
 	ReportReason_REPORT_REASON_STAFF_CONDUCT ReportReason = 15
 	ReportReason_REPORT_REASON_OTHER         ReportReason = 16
+	// A paid private lesson offer or advertisement (issue #271; ADR-0040 §2,
+	// Topluluk Kuralları).
+	ReportReason_REPORT_REASON_PAID_TUTORING ReportReason = 17
 )
 
 // Enum value maps for ReportReason.
@@ -193,6 +196,7 @@ var (
 		14: "REPORT_REASON_COPYRIGHT",
 		15: "REPORT_REASON_STAFF_CONDUCT",
 		16: "REPORT_REASON_OTHER",
+		17: "REPORT_REASON_PAID_TUTORING",
 	}
 	ReportReason_value = map[string]int32{
 		"REPORT_REASON_UNSPECIFIED":        0,
@@ -212,6 +216,7 @@ var (
 		"REPORT_REASON_COPYRIGHT":          14,
 		"REPORT_REASON_STAFF_CONDUCT":      15,
 		"REPORT_REASON_OTHER":              16,
+		"REPORT_REASON_PAID_TUTORING":      17,
 	}
 )
 
@@ -1398,7 +1403,7 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"\"REPORT_TARGET_TYPE_CHANNEL_MESSAGE\x10\v\x12%\n" +
 	"!REPORT_TARGET_TYPE_EVENT_QUESTION\x10\f\x12!\n" +
 	"\x1dREPORT_TARGET_TYPE_DAILY_ITEM\x10\r\x12#\n" +
-	"\x1fREPORT_TARGET_TYPE_LIBRARY_ITEM\x10\x0e*\x8d\x04\n" +
+	"\x1fREPORT_TARGET_TYPE_LIBRARY_ITEM\x10\x0e*\xae\x04\n" +
 	"\fReportReason\x12\x1d\n" +
 	"\x19REPORT_REASON_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18REPORT_REASON_HARASSMENT\x10\x01\x12\x1d\n" +
@@ -1417,7 +1422,8 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"\x12REPORT_REASON_SPAM\x10\r\x12\x1b\n" +
 	"\x17REPORT_REASON_COPYRIGHT\x10\x0e\x12\x1f\n" +
 	"\x1bREPORT_REASON_STAFF_CONDUCT\x10\x0f\x12\x17\n" +
-	"\x13REPORT_REASON_OTHER\x10\x10*a\n" +
+	"\x13REPORT_REASON_OTHER\x10\x10\x12\x1f\n" +
+	"\x1bREPORT_REASON_PAID_TUTORING\x10\x11*a\n" +
 	"\fReportStatus\x12\x1d\n" +
 	"\x19REPORT_STATUS_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12REPORT_STATUS_OPEN\x10\x01\x12\x1a\n" +

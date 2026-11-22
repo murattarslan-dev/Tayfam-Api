@@ -118,6 +118,44 @@ Ortak kurallar (dördü için):
   teklifi/reklamı** eklenir (`paid_tutoring`). Kopya için teknik önlem
   yoktur; kural ve şikâyetle yönetilir.
 
+**Uygulama notları (#271):**
+
+- **Aynı uçlar, iki havuz:** soru havuzu ayrı servis değildir; core
+  `QAService` ve `/v1/tayfas/{tayfa_id}/questions…` uçları `pool`
+  (`qa` / `question_pool`) ile çalışır. Liste ve oluşturma havuzu adlandırır
+  (verilmezse `qa`); kimlikle çalışan her uç havuzu satırdan okur ve o
+  havuzun modülünü ister (`module-disabled`). Etiket uçları `qa`'nındır.
+  Sorunun havuzu değişmez; cevabın havuzu sorununkidir (bileşik foreign
+  key `(question_id, tayfa_id, pool)`).
+- **Havuz sorusu:** başlık ve serbest etiket yoktur; metin `body`'dedir
+  (≤ 10000). Ders zorunlu, konu isteğe bağlı; yalnızca anahtar saklanır
+  (`subject_key`, `topic_key`, `catalog_study_tags`'e foreign key) ve
+  yeni seçim `catalog.CheckStudySelection` ile doğrulanır; emekliye
+  ayrılan etiket soruda kalır. Soru ve cevap metin ve/veya en fazla 2
+  fotoğraftır (`photo1_upload_id`, `photo2_upload_id`; yükleme amacı
+  `question_pool`, bağlama türleri `question` / `answer`; görünürlük:
+  tayfanın etkin üyesi ve modül açık). Dosya/PDF ve bağlantı alanı yoktur.
+  Metin denetim karakteri içeremez; kötüye kullanım filtresinin takılma
+  noktası `qa.checkTerms`.
+- **Silme:** yazarın kendi silmesi metni ve fotoğrafları hemen boşaltır
+  (dosyalar silinir, geri alınamaz); moderatörün silmesi gizler, yönetici
+  30 gün içinde geri alır (Soru-Cevap'la aynı). Hesap silinince içerik
+  kalır, yazar boşalır; kişinin fotoğraf dosyaları silinir.
+- **Şikâyet:** hedefler bugünkü `question` / `answer`'dır; modül kontrolü
+  sorunun havuzundandır. Yeni neden `paid_tutoring` (her hedefte
+  seçilebilir). 18 yaş altı önceliği bugünkü kuraldır; yeni bir iletişim
+  yolu (DM, iletişim alanı, bağlantı önizlemesi) açılmaz.
+- **`pool_link`:** `event_pool_links` (`event_id`, `component_key`,
+  `question_id`, `position`); en fazla `max_links` (1–50, varsayılan 50).
+  Liste bütünüyle yazılır (organizatör, moderatör, yönetici); bağlanan
+  soru o tayfanın görünür havuz sorusudur (tetikleyici ikinci savunma).
+  Silinen soru listede görünmez. Modül kapalıyken bileşen
+  `module-disabled` döner.
+- Dışa aktarma yeni bölüm almaz: `questions` ve `answers` bölümlerine
+  `pool` (sorularda ayrıca `subject_key`, `topic_key`) eklendi. Ana sayfa
+  bileşeni `question_pool` (modül bileşeni). "Çözülen soru" istatistiği
+  (ADR-0026) bu PR'da değil.
+
 ### 3. Materyal kütüphanesi (`materials`)
 
 - `materials` (core): `id`, `tayfa_id`, `author_id`, `kind` (`link` /

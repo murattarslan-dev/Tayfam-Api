@@ -1120,8 +1120,14 @@ paths:
 
   # --- Soru-cevap (core QAService) ---
   #
-  # Ortak kurallar: tayfanın soru-cevap modülü (`qa`) kapalıysa okumalar
-  # dahil her uç `module-disabled` alır. Bu tayfada olmayan ya da silinmiş
+  # Aynı uçlar iki havuza hizmet eder (#271, ADR-0040 §2): Soru-Cevap
+  # (`pool: qa`) ve Eğitim soru havuzu (`pool: question_pool`; başlık ve
+  # etiket yok, ders/konu anahtarı ve en fazla 2 fotoğraf; "çözüldü"
+  # işareti yok, cevaplar faydalı oyuyla sıralanır).
+  #
+  # Ortak kurallar: sorunun havuzunun modülü (`qa` ya da `question_pool`)
+  # kapalıysa okumalar dahil her uç `module-disabled` alır; etiket uçları
+  # `qa`'nındır. Bu tayfada olmayan ya da silinmiş
   # soru `question-not-found`, cevap `answer-not-found`, etiket
   # `tag-not-found` alır; silinen sorunun cevapları da bulunmaz. Soru ve
   # cevabı her etkin üye yazar; susturulmuş üye yazamaz (`muted`), yalnızca
@@ -1138,12 +1144,21 @@ paths:
       operationId: listQuestions
       summary: Soruları listeler ve arar
       description: |
-        `q` yoksa yeniden eskiye; `q` varsa başlıkta ve gövdede Türkçe tam
-        metin arama yapar (İ/ı doğru: "IŞIK" "ışık"ı, "izmir" "İzmir"i
-        bulur) ve en ilgiliden başlar. `tag_id` ikisiyle de süzer. Arama
-        metni gateway'de ve core'da log'a yazılmaz; `next_page_token`
-        metni taşımaz ve yalnızca aynı `q` ve `tag_id` ile geçerlidir.
+        Bir havuzun (`pool`) soruları: `qa` Soru-Cevap'tır (varsayılan),
+        `question_pool` Eğitim soru havuzudur (#271, ADR-0040 §2; modülü
+        `question_pool`, kapalıysa `module-disabled`). `q` yoksa yeniden
+        eskiye; `q` varsa başlıkta ve gövdede Türkçe tam metin arama yapar
+        (İ/ı doğru: "IŞIK" "ışık"ı, "izmir" "İzmir"i bulur) ve en ilgiliden
+        başlar. `tag_id` (yalnızca `qa`) ve `subject_key` / `topic_key`
+        (yalnızca `question_pool`; emekliye ayrılmış etiket de olur) ikisiyle
+        de süzer. Arama metni gateway'de ve core'da log'a yazılmaz;
+        `next_page_token` metni taşımaz ve yalnızca aynı havuz ve süzgeçlerle
+        geçerlidir.
       parameters:
+        - name: pool
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/QuestionPool" }
         - name: q
           in: query
           required: false
@@ -1153,6 +1168,16 @@ paths:
           in: query
           required: false
           schema: { type: string, format: uuid }
+        - name: subject_key
+          in: query
+          required: false
+          description: Ders anahtarı (`GET /v1/catalog` → `study_tags`).
+          schema: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+        - name: topic_key
+          in: query
+          required: false
+          description: Konu anahtarı; `subject_key` ile birlikte verilir.
+          schema: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
         - $ref: "#/components/parameters/PageSize"
         - $ref: "#/components/parameters/PageToken"
       responses:
@@ -1175,6 +1200,15 @@ paths:
         Tayfada en fazla 200 etiket olabilir (`tag-limit`). Aynı
         `client_request_id` ile tekrar gönderilen istek yeni soru açmaz,
         ilk soruyu döndürür.
+
+        Soru havuzunda (`pool: question_pool`, #271) başlık ve etiket
+        yoktur; ders (`subject_key`) zorunlu, konu (`topic_key`) isteğe
+        bağlıdır ve seçilebilir (etkin) olmalıdır (yoksa `invalid-request`,
+        alan adıyla). Metin ve/veya en fazla 2 fotoğraf (`question_pool`
+        yüklemesi; çağıranın, bu tayfanın, hazır ve başka içeriğe bağlı
+        olmayan) gerekir. Dosya/PDF ve bağlantı alanı yoktur; "çözüldü"
+        işareti yoktur. Yükleme hataları: `upload-not-found`,
+        `upload-not-ready`, `upload-in-use`.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -4440,6 +4474,66 @@ paths:
         - $ref: "#/components/parameters/ClientHeader"
       responses:
         "204": { description: İşaret kaldırıldı }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  # --- Etkinlik bileşenleri: soru havuzu bağlantısı (`pool_link`; core PoolLinkComponentService, #271, ADR-0037 §3, ADR-0040 §2) ---
+  # Etkinliği (soru çözüm oturumu) tayfanın soru havuzundaki sorulara
+  # bağlar; sorular, cevaplar ve oylar soru havuzunda kalır. Tayfanın
+  # `question_pool` modülü kapalıyken iki uç da `module-disabled` döner.
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/pool-links:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: getEventPoolLinks
+      summary: Etkinliğe bağlı havuz soruları
+      description: |
+        Bağlı ve görünen sorular, organizatörün sırasıyla. Silinen soru
+        listede görünmez (geri alınırsa yeniden görünür). Sorunun tamamı ve
+        cevapları `GET /v1/tayfas/{tayfa_id}/questions/{question_id}`
+        uçlarından okunur. Her etkin üyeye açıktır (susturulmuş üye de
+        okur). Bileşen uçlarının ortak kuralları geçerlidir.
+      responses:
+        "200":
+          description: Bağlı sorular
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventPoolLinks" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: setEventPoolLinks
+      summary: Bağlı soruları yazar (organizatör, moderatör, yönetici)
+      description: |
+        Listenin tamamı değişir, verilen sırayla; boş `question_ids` bütün
+        bağları kaldırır. En fazla bileşenin `max_links` değeri (1–50)
+        kadar, tekrarsız (`invalid-request`, alan `question_ids`). Her soru
+        bu tayfanın soru havuzunda görünen bir soru olmalıdır
+        (`question-not-found`). Aynı liste hiçbir şeyi değiştirmez. Yazma
+        penceresi içinde (bitişten 7 gün sonra `component-frozen`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventPoolLinksRequest" }
+      responses:
+        "200":
+          description: Bağlı sorular, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventPoolLinks" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -9223,8 +9317,8 @@ components:
       enum: [approval, open]
     Module:
       type: string
-      description: "`daily` günün içeriğidir (#269). `library` ortak kütüphanedir (#270)."
-      enum: [announcements, events, qa, polls, daily, library]
+      description: "`daily` günün içeriğidir (#269). `library` ortak kütüphanedir (#270). `question_pool` Eğitim soru havuzudur (#271): soruları `pool: question_pool` ile Soru-Cevap uçlarından, ana sayfa bileşeni ve `pool_link` etkinlik bileşeni."
+      enum: [announcements, events, qa, polls, daily, library, question_pool]
     Role:
       type: string
       enum: [member, moderator, admin]
@@ -9737,9 +9831,18 @@ components:
           type: array
           items: { $ref: "#/components/schemas/Tag" }
 
+    QuestionPool:
+      type: string
+      description: |
+        Sorunun havuzu (#271, ADR-0040 §2): `qa` tayfanın Soru-Cevap'ı
+        (`qa` modülü), `question_pool` Eğitim soru havuzu (`question_pool`
+        modülü). Sorunun havuzu değişmez; soru ve cevap uçları havuzun
+        modülü kapalıyken `module-disabled` döner.
+      enum: [qa, question_pool]
+
     Question:
       type: object
-      required: [id, tayfa_id, title, body, tags, answer_count, created_at, updated_at]
+      required: [id, tayfa_id, title, body, tags, answer_count, created_at, updated_at, pool, photo_upload_ids]
       properties:
         id: { type: string, format: uuid }
         tayfa_id: { type: string, format: uuid }
@@ -9747,10 +9850,11 @@ components:
           type: string
           format: uuid
           description: Yazarın hesabı silindiyse yoktur ("Silinmiş kullanıcı").
-        title: { type: string }
+        title: { type: string, description: Soru havuzunda boştur. }
         body: { type: string }
         tags:
           type: array
+          description: Soru havuzunda boştur.
           items: { $ref: "#/components/schemas/Tag" }
         answer_count: { type: integer, description: Görünen cevap sayısı. }
         created_at: { type: string, format: date-time }
@@ -9758,6 +9862,18 @@ components:
           type: string
           format: date-time
           description: Her düzenleme ve geri almada değişir.
+        pool: { $ref: "#/components/schemas/QuestionPool" }
+        subject_key:
+          type: string
+          description: Soru havuzunda ders anahtarı (her zaman var); etiket sonradan emekliye ayrılmış olabilir.
+        topic_key:
+          type: string
+          description: Soru havuzunda konu anahtarı; yoksa alan yoktur.
+        photo_upload_ids:
+          type: array
+          maxItems: 2
+          description: Soru havuzunda 0–2 fotoğraf (`question_pool` yüklemesi), sırasıyla; adreslerini `POST /v1/media/urls` verir. Soru-Cevap'ta boştur.
+          items: { type: string, format: uuid }
 
     QuestionList:
       type: object
@@ -9770,30 +9886,51 @@ components:
 
     QuestionCreateRequest:
       type: object
-      required: [title, client_request_id]
+      required: [client_request_id]
       additionalProperties: false
       properties:
+        pool:
+          allOf: [{ $ref: "#/components/schemas/QuestionPool" }]
+          description: Yoksa `qa`.
         title:
           type: string
-          minLength: 10
           maxLength: 150
-          description: Baştaki ve sondaki boşluklar atıldıktan sonra 10–150 karakter, tek satır.
+          description: "`qa`'da zorunlu: baştaki ve sondaki boşluklar atıldıktan sonra 10–150 karakter, tek satır. Soru havuzunda verilmez."
         body:
           type: string
           maxLength: 10000
-          description: En fazla 10000 karakter; satır sonu olabilir.
+          description: En fazla 10000 karakter; satır sonu olabilir. Soru havuzunda metin ya da fotoğraftan biri zorunludur.
         tags:
           type: array
           maxItems: 5
-          description: Etiket adları; her biri 1–30 karakter, tek satır, iç boşluklar teke iner.
+          description: Etiket adları; her biri 1–30 karakter, tek satır, iç boşluklar teke iner. Soru havuzunda verilmez.
           items: { type: string, minLength: 1, maxLength: 30 }
         client_request_id:
           type: string
           format: uuid
           description: İstemcinin her deneme için bir kez ürettiği, tekrar gönderimde aynen kullandığı UUID.
+        subject_key:
+          type: string
+          pattern: "^[a-z][a-z0-9_]{1,39}$"
+          description: Soru havuzunda zorunlu; seçilebilir (etkin) bir ders.
+        topic_key:
+          type: string
+          pattern: "^[a-z][a-z0-9_]{1,39}$"
+          description: Soru havuzunda isteğe bağlı; dersin altındaki seçilebilir bir konu.
+        photo_upload_ids:
+          type: array
+          maxItems: 2
+          description: Soru havuzunda 0–2 fotoğraf (`question_pool` yüklemesi).
+          items: { type: string, format: uuid }
 
     QuestionUpdateRequest:
       type: object
+      description: |
+        Verilen alanlar değişir. `title` ve `tags` yalnızca Soru-Cevap'ta;
+        `subject_key` (`topic_key` ile birlikte; `topic_key` yoksa konu
+        kalkar) ve `photo_upload_ids` (fotoğrafların yeni hali; `[]` hepsini
+        kaldırır, kaldırılan dosya silinir) yalnızca soru havuzunda
+        geçerlidir; öbür havuzun alanı `invalid-request` döner.
       additionalProperties: false
       minProperties: 1
       properties:
@@ -9803,10 +9940,16 @@ components:
           type: array
           maxItems: 5
           items: { type: string, minLength: 1, maxLength: 30 }
+        subject_key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+        topic_key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+        photo_upload_ids:
+          type: array
+          maxItems: 2
+          items: { type: string, format: uuid }
 
     Answer:
       type: object
-      required: [id, question_id, tayfa_id, body, vote_count, voted, created_at, updated_at]
+      required: [id, question_id, tayfa_id, body, vote_count, voted, created_at, updated_at, photo_upload_ids]
       properties:
         id: { type: string, format: uuid }
         question_id: { type: string, format: uuid }
@@ -9823,6 +9966,11 @@ components:
           type: string
           format: date-time
           description: Her düzenleme ve geri almada değişir; oylar değiştirmez.
+        photo_upload_ids:
+          type: array
+          maxItems: 2
+          description: Soru havuzunda 0–2 fotoğraf (`question_pool` yüklemesi), sırasıyla. Soru-Cevap'ta boştur.
+          items: { type: string, format: uuid }
 
     AnswerList:
       type: object
@@ -9840,17 +9988,26 @@ components:
       properties:
         body:
           type: string
-          minLength: 1
           maxLength: 10000
-          description: Boşluklar atıldıktan sonra 1–10000 karakter; satır sonu olabilir.
+          description: Boşluklar atıldıktan sonra 1–10000 karakter; satır sonu olabilir. Soru havuzunda fotoğraf varsa boş olabilir.
         client_request_id: { type: string, format: uuid }
+        photo_upload_ids:
+          type: array
+          maxItems: 2
+          description: Yalnızca soru havuzunda; 0–2 fotoğraf (`question_pool` yüklemesi).
+          items: { type: string, format: uuid }
 
     AnswerUpdateRequest:
       type: object
+      description: Cevabın içeriğinin yeni hali; soru havuzunda `photo_upload_ids` yoksa ya da `[]` ise fotoğraflar kalkar (dosyaları silinir).
       required: [body]
       additionalProperties: false
       properties:
-        body: { type: string, minLength: 1, maxLength: 10000 }
+        body: { type: string, maxLength: 10000, description: "Boşluklar atıldıktan sonra 1–10000 karakter; soru havuzunda fotoğraf varsa boş olabilir." }
+        photo_upload_ids:
+          type: array
+          maxItems: 2
+          items: { type: string, format: uuid }
 
     # --- Anketler ---
 
@@ -10897,6 +11054,49 @@ components:
         body: { type: string, minLength: 1, maxLength: 2256, description: "Soru; kırpıldıktan ve iç boşluklar teke indirildikten sonra 1–500 karakter." }
         anonymous: { type: boolean, default: false, description: "Yalnızca `anonymous_allowed` bileşende." }
         client_request_id: { type: string, format: uuid }
+    PoolLinkedQuestion:
+      type: object
+      required: [question_id, body, subject_key, photo_upload_ids, answer_count, created_at]
+      description: Etkinliğe bağlı bir soru havuzu sorusu (#271).
+      properties:
+        question_id: { type: string, format: uuid }
+        author_user_id:
+          type: string
+          format: uuid
+          description: Yazarın hesabı silindiyse yoktur ("Silinmiş kullanıcı").
+        body: { type: string, description: Sorunun metni; fotoğrafı varsa boş olabilir. }
+        subject_key: { type: string }
+        topic_key: { type: string, description: Konu yoksa alan yoktur. }
+        photo_upload_ids:
+          type: array
+          maxItems: 2
+          items: { type: string, format: uuid }
+        answer_count: { type: integer, description: Görünen cevap sayısı. }
+        created_at: { type: string, format: date-time }
+    EventPoolLinks:
+      type: object
+      required: [questions, max_links, caller_can_edit]
+      description: Bir etkinliğin soru havuzu bağlantısı bileşeni (#271).
+      properties:
+        questions:
+          type: array
+          maxItems: 50
+          items: { $ref: "#/components/schemas/PoolLinkedQuestion" }
+        max_links: { type: integer, minimum: 1, maximum: 50, description: Bileşenin bağlayabileceği en fazla soru. }
+        caller_can_edit:
+          type: boolean
+          description: Listeyi şu an değiştirebilirsiniz (organizatör yetkisi; etkinlik iptal değil, donmamış, tayfa salt okunur değil).
+    EventPoolLinksRequest:
+      type: object
+      required: [question_ids]
+      additionalProperties: false
+      properties:
+        question_ids:
+          type: array
+          maxItems: 50
+          uniqueItems: true
+          description: Bağlı soruların yeni hali, sırasıyla; boş dizi bütün bağları kaldırır.
+          items: { type: string, format: uuid }
     VocabularyIds:
       type: object
       description: Alan anahtarı → tayfa sözlüğündeki değerin kimliği (#244).
@@ -11067,7 +11267,8 @@ components:
         Ana sayfa bileşeni. `kind` istemciye bilgi içindir; anahtar
         listesi sunucunundur ve büyüyebilir (bugün `upcoming`,
         `announcements`, `polls`, `questions`, `stats`, `goal`,
-        `countdown`, `champions`, `log_summary`, `daily`, `library`).
+        `countdown`, `champions`, `log_summary`, `daily`, `library`,
+        `question_pool`).
       properties:
         key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
         kind:
@@ -12455,10 +12656,12 @@ components:
         low: { type: boolean, description: Bir türden 10'dan az kaldı; yükleyin. }
     UploadPurpose:
       type: string
-      enum: [avatar, log_photo, cover, event_photo, chat_photo, dm_attachment, report_evidence, library_item]
+      enum: [avatar, log_photo, cover, event_photo, chat_photo, dm_attachment, report_evidence, library_item, question_pool]
       description: |
         `library_item` ortak kütüphane kaleminin fotoğrafıdır (#270; kalem
-        başına bir).
+        başına bir). `question_pool` soru havuzundaki bir sorunun ya da
+        cevabın fotoğrafıdır (#271; her birine en fazla iki; kişinin kendi
+        notu ya da takıldığı soru).
         `cover` tayfa ya da etkinlik kapağıdır. `event_photo` etkinlik
         albümünün fotoğrafıdır (`POST .../events/{event_id}/photos`); kapak
         olarak kullanılamaz. `chat_photo` kanal mesajı fotoğrafı,
@@ -12510,7 +12713,7 @@ components:
         tayfa_id:
           type: string
           format: uuid
-          description: "`cover`, `log_photo`, `event_photo`, `chat_photo` ve `library_item` için zorunlu; `avatar`, `dm_attachment` ve `report_evidence`'ta verilmez."
+          description: "`cover`, `log_photo`, `event_photo`, `chat_photo`, `library_item` ve `question_pool` için zorunlu; `avatar`, `dm_attachment` ve `report_evidence`'ta verilmez."
         client_request_id:
           type: string
           format: uuid
@@ -13953,7 +14156,9 @@ components:
         Topluluk Kuralları'na göre. `child_safety` (çocuk/genç güvenliği)
         kuyrukta öne geçer ve hemen platforma da gider; `staff_conduct`
         (yönetici/moderatörün yetkisini kullanımı) yalnızca platforma gider.
-      enum: [harassment, hate_speech, violence, privacy, impersonation, illegal_trade, drugs, gambling, dangerous_activity, fake_event, sexual_content, child_safety, spam, copyright, staff_conduct, other]
+        `paid_tutoring` ücretli özel ders teklifi ya da reklamıdır (#271,
+        ADR-0040 §2).
+      enum: [harassment, hate_speech, violence, privacy, impersonation, illegal_trade, drugs, gambling, dangerous_activity, fake_event, sexual_content, child_safety, spam, copyright, staff_conduct, other, paid_tutoring]
 
     ReportCreateRequest:
       type: object

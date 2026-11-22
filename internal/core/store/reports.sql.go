@@ -352,7 +352,7 @@ func (q *Queries) GetReportTargetAnnouncement(ctx context.Context, arg GetReport
 }
 
 const getReportTargetAnswer = `-- name: GetReportTargetAnswer :one
-SELECT a.author_id, (a.deleted_at IS NULL AND q.deleted_at IS NULL)::boolean AS visible
+SELECT a.author_id, (a.deleted_at IS NULL AND q.deleted_at IS NULL)::boolean AS visible, a.pool
 FROM answers a
 JOIN questions q ON q.id = a.question_id AND q.tayfa_id = a.tayfa_id
 WHERE a.tayfa_id = $1 AND a.id = $2
@@ -366,13 +366,14 @@ type GetReportTargetAnswerParams struct {
 type GetReportTargetAnswerRow struct {
 	AuthorID pgtype.UUID
 	Visible  bool
+	Pool     string
 }
 
 // Silinmiş sorunun cevabı da görünmez.
 func (q *Queries) GetReportTargetAnswer(ctx context.Context, arg GetReportTargetAnswerParams) (GetReportTargetAnswerRow, error) {
 	row := q.db.QueryRow(ctx, getReportTargetAnswer, arg.TayfaID, arg.ID)
 	var i GetReportTargetAnswerRow
-	err := row.Scan(&i.AuthorID, &i.Visible)
+	err := row.Scan(&i.AuthorID, &i.Visible, &i.Pool)
 	return i, err
 }
 
@@ -552,7 +553,7 @@ func (q *Queries) GetReportTargetPoll(ctx context.Context, arg GetReportTargetPo
 }
 
 const getReportTargetQuestion = `-- name: GetReportTargetQuestion :one
-SELECT author_id, (deleted_at IS NULL)::boolean AS visible
+SELECT author_id, (deleted_at IS NULL)::boolean AS visible, pool
 FROM questions
 WHERE tayfa_id = $1 AND id = $2
 `
@@ -565,12 +566,15 @@ type GetReportTargetQuestionParams struct {
 type GetReportTargetQuestionRow struct {
 	AuthorID pgtype.UUID
 	Visible  bool
+	Pool     string
 }
 
+// Sorunun havuzu modülünü verir: Soru-Cevap (qa) ya da soru havuzu
+// (question_pool, issue #271).
 func (q *Queries) GetReportTargetQuestion(ctx context.Context, arg GetReportTargetQuestionParams) (GetReportTargetQuestionRow, error) {
 	row := q.db.QueryRow(ctx, getReportTargetQuestion, arg.TayfaID, arg.ID)
 	var i GetReportTargetQuestionRow
-	err := row.Scan(&i.AuthorID, &i.Visible)
+	err := row.Scan(&i.AuthorID, &i.Visible, &i.Pool)
 	return i, err
 }
 

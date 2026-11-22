@@ -79,7 +79,7 @@ func (f *fakeQA) ListAnswers(_ context.Context, u, t, q id.ID, _ int32, _ string
 	f.hit(u, t, q)
 	return []qa.Answer{f.answer, f.answer}, "", f.err
 }
-func (f *fakeQA) UpdateAnswer(_ context.Context, u, t, a id.ID, body string) (qa.Answer, error) {
+func (f *fakeQA) UpdateAnswer(_ context.Context, u, t, a id.ID, body string, _ []string) (qa.Answer, error) {
 	f.hit(u, t, a)
 	f.body = body
 	return f.answer, f.err

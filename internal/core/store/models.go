@@ -35,6 +35,9 @@ type Answer struct {
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
 	DeletedBy       pgtype.UUID
+	Pool            string
+	Photo1UploadID  pgtype.UUID
+	Photo2UploadID  pgtype.UUID
 }
 
 type AnswerVote struct {
@@ -371,6 +374,14 @@ type EventPhoto struct {
 	CreatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
 	DeletedBy       pgtype.UUID
+}
+
+type EventPoolLink struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	QuestionID   pgtype.UUID
+	Position     int16
+	CreatedAt    pgtype.Timestamptz
 }
 
 type EventQuestion struct {
@@ -761,6 +772,11 @@ type Question struct {
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
 	DeletedBy       pgtype.UUID
+	Pool            string
+	SubjectKey      pgtype.Text
+	TopicKey        pgtype.Text
+	Photo1UploadID  pgtype.UUID
+	Photo2UploadID  pgtype.UUID
 }
 
 type QuestionTag struct {

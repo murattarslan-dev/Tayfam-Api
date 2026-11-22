@@ -23,6 +23,58 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// The module a question belongs to (questions.pool).
+type QuestionPool int32
+
+const (
+	QuestionPool_QUESTION_POOL_UNSPECIFIED QuestionPool = 0
+	// Soru-Cevap (the qa module).
+	QuestionPool_QUESTION_POOL_QA QuestionPool = 1
+	// Eğitim question pool (the question_pool module; issue #271).
+	QuestionPool_QUESTION_POOL_QUESTION_POOL QuestionPool = 2
+)
+
+// Enum value maps for QuestionPool.
+var (
+	QuestionPool_name = map[int32]string{
+		0: "QUESTION_POOL_UNSPECIFIED",
+		1: "QUESTION_POOL_QA",
+		2: "QUESTION_POOL_QUESTION_POOL",
+	}
+	QuestionPool_value = map[string]int32{
+		"QUESTION_POOL_UNSPECIFIED":   0,
+		"QUESTION_POOL_QA":            1,
+		"QUESTION_POOL_QUESTION_POOL": 2,
+	}
+)
+
+func (x QuestionPool) Enum() *QuestionPool {
+	p := new(QuestionPool)
+	*p = x
+	return p
+}
+
+func (x QuestionPool) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (QuestionPool) Descriptor() protoreflect.EnumDescriptor {
+	return file_tayfam_core_v1_qa_proto_enumTypes[0].Descriptor()
+}
+
+func (QuestionPool) Type() protoreflect.EnumType {
+	return &file_tayfam_core_v1_qa_proto_enumTypes[0]
+}
+
+func (x QuestionPool) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use QuestionPool.Descriptor instead.
+func (QuestionPool) EnumDescriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_qa_proto_rawDescGZIP(), []int{0}
+}
+
 type Tag struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -91,19 +143,27 @@ type Question struct {
 	TayfaId string                 `protobuf:"bytes,2,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
 	// Empty when the author's account was deleted.
 	AuthorUserId string `protobuf:"bytes,3,opt,name=author_user_id,json=authorUserId,proto3" json:"author_user_id,omitempty"`
-	// 10–150 characters, one line.
+	// 10–150 characters, one line; empty in the question pool.
 	Title string `protobuf:"bytes,4,opt,name=title,proto3" json:"title,omitempty"`
-	// Up to 10000 characters; may be empty.
+	// Up to 10000 characters; may be empty (in the question pool only when
+	// the question has a photo).
 	Body string `protobuf:"bytes,5,opt,name=body,proto3" json:"body,omitempty"`
-	// By name.
+	// By name; always empty in the question pool.
 	Tags []*Tag `protobuf:"bytes,6,rep,name=tags,proto3" json:"tags,omitempty"`
 	// Visible answers.
 	AnswerCount int32                  `protobuf:"varint,7,opt,name=answer_count,json=answerCount,proto3" json:"answer_count,omitempty"`
 	CreateTime  *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	// Changes on every edit and restore.
-	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	UpdateTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	Pool       QuestionPool           `protobuf:"varint,10,opt,name=pool,proto3,enum=tayfam.core.v1.QuestionPool" json:"pool,omitempty"`
+	// Question pool only: the subject's study tag key (always set) and the
+	// topic's (empty: none). The tag may have been retired since.
+	SubjectKey string `protobuf:"bytes,11,opt,name=subject_key,json=subjectKey,proto3" json:"subject_key,omitempty"`
+	TopicKey   string `protobuf:"bytes,12,opt,name=topic_key,json=topicKey,proto3" json:"topic_key,omitempty"`
+	// Question pool only: 0–2 uploads, in order.
+	PhotoUploadIds []string `protobuf:"bytes,13,rep,name=photo_upload_ids,json=photoUploadIds,proto3" json:"photo_upload_ids,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Question) Reset() {
@@ -199,6 +259,34 @@ func (x *Question) GetUpdateTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Question) GetPool() QuestionPool {
+	if x != nil {
+		return x.Pool
+	}
+	return QuestionPool_QUESTION_POOL_UNSPECIFIED
+}
+
+func (x *Question) GetSubjectKey() string {
+	if x != nil {
+		return x.SubjectKey
+	}
+	return ""
+}
+
+func (x *Question) GetTopicKey() string {
+	if x != nil {
+		return x.TopicKey
+	}
+	return ""
+}
+
+func (x *Question) GetPhotoUploadIds() []string {
+	if x != nil {
+		return x.PhotoUploadIds
+	}
+	return nil
+}
+
 type Answer struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -206,7 +294,8 @@ type Answer struct {
 	TayfaId    string                 `protobuf:"bytes,3,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
 	// Empty when the author's account was deleted.
 	AuthorUserId string `protobuf:"bytes,4,opt,name=author_user_id,json=authorUserId,proto3" json:"author_user_id,omitempty"`
-	// 1–10000 characters.
+	// 1–10000 characters; in the question pool 0–10000 (empty only with a
+	// photo).
 	Body string `protobuf:"bytes,5,opt,name=body,proto3" json:"body,omitempty"`
 	// Helpful votes.
 	VoteCount int32 `protobuf:"varint,6,opt,name=vote_count,json=voteCount,proto3" json:"vote_count,omitempty"`
@@ -214,9 +303,11 @@ type Answer struct {
 	Voted      bool                   `protobuf:"varint,7,opt,name=voted,proto3" json:"voted,omitempty"`
 	CreateTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	// Changes on every edit and restore; votes do not change it.
-	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	UpdateTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	// Question pool only: 0–2 uploads, in order.
+	PhotoUploadIds []string `protobuf:"bytes,10,rep,name=photo_upload_ids,json=photoUploadIds,proto3" json:"photo_upload_ids,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Answer) Reset() {
@@ -312,22 +403,43 @@ func (x *Answer) GetUpdateTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Answer) GetPhotoUploadIds() []string {
+	if x != nil {
+		return x.PhotoUploadIds
+	}
+	return nil
+}
+
 type CreateQuestionRequest struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	TayfaId string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
-	// 10–150 characters after trimming surrounding spaces; no line breaks or
-	// control characters.
+	// qa pool: 10–150 characters after trimming surrounding spaces; no line
+	// breaks or control characters. Question pool: empty.
 	Title string `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
 	// Up to 10000 characters after trimming; line breaks and tabs allowed.
+	// Question pool: the text and/or a photo is required.
 	Body string `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
-	// Up to 5 tag names, each 1–30 characters after trimming and joining
-	// inner spaces, one line. Names that fold to the same tag count once.
+	// qa pool: up to 5 tag names, each 1–30 characters after trimming and
+	// joining inner spaces, one line. Names that fold to the same tag count
+	// once. Question pool: empty.
 	Tags []string `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
 	// Required. A UUID the client generates once per attempt and reuses on
 	// retry (offline write protection).
 	ClientRequestId string `protobuf:"bytes,5,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Unspecified means QUESTION_POOL_QA.
+	Pool QuestionPool `protobuf:"varint,6,opt,name=pool,proto3,enum=tayfam.core.v1.QuestionPool" json:"pool,omitempty"`
+	// Question pool: a selectable (active) subject of the study tag list;
+	// required. qa pool: empty.
+	SubjectKey string `protobuf:"bytes,7,opt,name=subject_key,json=subjectKey,proto3" json:"subject_key,omitempty"`
+	// Question pool: optional, a selectable topic under subject_key. qa
+	// pool: empty.
+	TopicKey string `protobuf:"bytes,8,opt,name=topic_key,json=topicKey,proto3" json:"topic_key,omitempty"`
+	// Question pool: 0–2 of the caller's READY uploads of purpose
+	// UPLOAD_PURPOSE_QUESTION_POOL for this tayfa, not attached elsewhere.
+	// qa pool: empty.
+	PhotoUploadIds []string `protobuf:"bytes,9,rep,name=photo_upload_ids,json=photoUploadIds,proto3" json:"photo_upload_ids,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *CreateQuestionRequest) Reset() {
@@ -393,6 +505,34 @@ func (x *CreateQuestionRequest) GetClientRequestId() string {
 		return x.ClientRequestId
 	}
 	return ""
+}
+
+func (x *CreateQuestionRequest) GetPool() QuestionPool {
+	if x != nil {
+		return x.Pool
+	}
+	return QuestionPool_QUESTION_POOL_UNSPECIFIED
+}
+
+func (x *CreateQuestionRequest) GetSubjectKey() string {
+	if x != nil {
+		return x.SubjectKey
+	}
+	return ""
+}
+
+func (x *CreateQuestionRequest) GetTopicKey() string {
+	if x != nil {
+		return x.TopicKey
+	}
+	return ""
+}
+
+func (x *CreateQuestionRequest) GetPhotoUploadIds() []string {
+	if x != nil {
+		return x.PhotoUploadIds
+	}
+	return nil
 }
 
 type CreateQuestionResponse struct {
@@ -540,10 +680,16 @@ type ListQuestionsRequest struct {
 	TayfaId string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
 	// Optional search text, up to 100 characters. Empty lists all.
 	Query string `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"`
-	// Optional tag filter.
-	TagId         string `protobuf:"bytes,3,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"`
-	PageSize      int32  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string `protobuf:"bytes,5,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// Optional tag filter (qa pool only).
+	TagId     string `protobuf:"bytes,3,opt,name=tag_id,json=tagId,proto3" json:"tag_id,omitempty"`
+	PageSize  int32  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken string `protobuf:"bytes,5,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// Unspecified means QUESTION_POOL_QA.
+	Pool QuestionPool `protobuf:"varint,6,opt,name=pool,proto3,enum=tayfam.core.v1.QuestionPool" json:"pool,omitempty"`
+	// Optional subject and topic filters (question pool only): any study tag
+	// key, retired ones included. topic_key needs subject_key.
+	SubjectKey    string `protobuf:"bytes,7,opt,name=subject_key,json=subjectKey,proto3" json:"subject_key,omitempty"`
+	TopicKey      string `protobuf:"bytes,8,opt,name=topic_key,json=topicKey,proto3" json:"topic_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -613,6 +759,27 @@ func (x *ListQuestionsRequest) GetPageToken() string {
 	return ""
 }
 
+func (x *ListQuestionsRequest) GetPool() QuestionPool {
+	if x != nil {
+		return x.Pool
+	}
+	return QuestionPool_QUESTION_POOL_UNSPECIFIED
+}
+
+func (x *ListQuestionsRequest) GetSubjectKey() string {
+	if x != nil {
+		return x.SubjectKey
+	}
+	return ""
+}
+
+func (x *ListQuestionsRequest) GetTopicKey() string {
+	if x != nil {
+		return x.TopicKey
+	}
+	return ""
+}
+
 type ListQuestionsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Questions     []*Question            `protobuf:"bytes,1,rep,name=questions,proto3" json:"questions,omitempty"`
@@ -669,14 +836,20 @@ type UpdateQuestionRequest struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	TayfaId    string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
 	QuestionId string                 `protobuf:"bytes,2,opt,name=question_id,json=questionId,proto3" json:"question_id,omitempty"`
-	// Same rules as CreateQuestionRequest.
+	// Same rules as CreateQuestionRequest, for the question's pool.
 	Title string   `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
 	Body  string   `protobuf:"bytes,4,opt,name=body,proto3" json:"body,omitempty"`
 	Tags  []string `protobuf:"bytes,5,rep,name=tags,proto3" json:"tags,omitempty"`
-	// Required, non-empty. Allowed paths: "title", "body", "tags".
-	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,6,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Required, non-empty. Allowed paths: "title", "body", "tags" (qa pool);
+	// "body", "subject" (subject_key and topic_key), "photos"
+	// (photo_upload_ids) (question pool).
+	UpdateMask *fieldmaskpb.FieldMask `protobuf:"bytes,6,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
+	SubjectKey string                 `protobuf:"bytes,7,opt,name=subject_key,json=subjectKey,proto3" json:"subject_key,omitempty"`
+	TopicKey   string                 `protobuf:"bytes,8,opt,name=topic_key,json=topicKey,proto3" json:"topic_key,omitempty"`
+	// The new photos, in order; already attached ones are kept.
+	PhotoUploadIds []string `protobuf:"bytes,9,rep,name=photo_upload_ids,json=photoUploadIds,proto3" json:"photo_upload_ids,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *UpdateQuestionRequest) Reset() {
@@ -747,6 +920,27 @@ func (x *UpdateQuestionRequest) GetTags() []string {
 func (x *UpdateQuestionRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
 	if x != nil {
 		return x.UpdateMask
+	}
+	return nil
+}
+
+func (x *UpdateQuestionRequest) GetSubjectKey() string {
+	if x != nil {
+		return x.SubjectKey
+	}
+	return ""
+}
+
+func (x *UpdateQuestionRequest) GetTopicKey() string {
+	if x != nil {
+		return x.TopicKey
+	}
+	return ""
+}
+
+func (x *UpdateQuestionRequest) GetPhotoUploadIds() []string {
+	if x != nil {
+		return x.PhotoUploadIds
 	}
 	return nil
 }
@@ -983,12 +1177,15 @@ type CreateAnswerRequest struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	TayfaId    string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
 	QuestionId string                 `protobuf:"bytes,2,opt,name=question_id,json=questionId,proto3" json:"question_id,omitempty"`
-	// 1–10000 characters after trimming; line breaks and tabs allowed.
+	// 1–10000 characters after trimming; line breaks and tabs allowed. In
+	// the question pool 0–10000: the text and/or a photo is required.
 	Body string `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
 	// Required; as CreateQuestionRequest.client_request_id.
 	ClientRequestId string `protobuf:"bytes,4,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Question pool only: as CreateQuestionRequest.photo_upload_ids.
+	PhotoUploadIds []string `protobuf:"bytes,5,rep,name=photo_upload_ids,json=photoUploadIds,proto3" json:"photo_upload_ids,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *CreateAnswerRequest) Reset() {
@@ -1047,6 +1244,13 @@ func (x *CreateAnswerRequest) GetClientRequestId() string {
 		return x.ClientRequestId
 	}
 	return ""
+}
+
+func (x *CreateAnswerRequest) GetPhotoUploadIds() []string {
+	if x != nil {
+		return x.PhotoUploadIds
+	}
+	return nil
 }
 
 type CreateAnswerResponse struct {
@@ -1218,9 +1422,12 @@ type UpdateAnswerRequest struct {
 	TayfaId  string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
 	AnswerId string                 `protobuf:"bytes,2,opt,name=answer_id,json=answerId,proto3" json:"answer_id,omitempty"`
 	// Same rules as CreateAnswerRequest.body.
-	Body          string `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Body string `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
+	// Question pool only: the photos after the change, in order (empty
+	// removes them); already attached ones are kept.
+	PhotoUploadIds []string `protobuf:"bytes,4,rep,name=photo_upload_ids,json=photoUploadIds,proto3" json:"photo_upload_ids,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *UpdateAnswerRequest) Reset() {
@@ -1272,6 +1479,13 @@ func (x *UpdateAnswerRequest) GetBody() string {
 		return x.Body
 	}
 	return ""
+}
+
+func (x *UpdateAnswerRequest) GetPhotoUploadIds() []string {
+	if x != nil {
+		return x.PhotoUploadIds
+	}
+	return nil
 }
 
 type UpdateAnswerResponse struct {
@@ -1790,7 +2004,7 @@ const file_tayfam_core_v1_qa_proto_rawDesc = "" +
 	"\x03Tag\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12%\n" +
-	"\x0equestion_count\x18\x03 \x01(\x05R\rquestionCount\"\xcb\x02\n" +
+	"\x0equestion_count\x18\x03 \x01(\x05R\rquestionCount\"\xe5\x03\n" +
 	"\bQuestion\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\btayfa_id\x18\x02 \x01(\tR\atayfaId\x12$\n" +
@@ -1802,7 +2016,13 @@ const file_tayfam_core_v1_qa_proto_rawDesc = "" +
 	"\vcreate_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12;\n" +
 	"\vupdate_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"updateTime\"\xbd\x02\n" +
+	"updateTime\x120\n" +
+	"\x04pool\x18\n" +
+	" \x01(\x0e2\x1c.tayfam.core.v1.QuestionPoolR\x04pool\x12\x1f\n" +
+	"\vsubject_key\x18\v \x01(\tR\n" +
+	"subjectKey\x12\x1b\n" +
+	"\ttopic_key\x18\f \x01(\tR\btopicKey\x12(\n" +
+	"\x10photo_upload_ids\x18\r \x03(\tR\x0ephotoUploadIds\"\xe7\x02\n" +
 	"\x06Answer\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
 	"\vquestion_id\x18\x02 \x01(\tR\n" +
@@ -1816,13 +2036,20 @@ const file_tayfam_core_v1_qa_proto_rawDesc = "" +
 	"\vcreate_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12;\n" +
 	"\vupdate_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"updateTime\"\x9c\x01\n" +
+	"updateTime\x12(\n" +
+	"\x10photo_upload_ids\x18\n" +
+	" \x03(\tR\x0ephotoUploadIds\"\xb6\x02\n" +
 	"\x15CreateQuestionRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
 	"\x04body\x18\x03 \x01(\tR\x04body\x12\x12\n" +
 	"\x04tags\x18\x04 \x03(\tR\x04tags\x12*\n" +
-	"\x11client_request_id\x18\x05 \x01(\tR\x0fclientRequestId\"N\n" +
+	"\x11client_request_id\x18\x05 \x01(\tR\x0fclientRequestId\x120\n" +
+	"\x04pool\x18\x06 \x01(\x0e2\x1c.tayfam.core.v1.QuestionPoolR\x04pool\x12\x1f\n" +
+	"\vsubject_key\x18\a \x01(\tR\n" +
+	"subjectKey\x12\x1b\n" +
+	"\ttopic_key\x18\b \x01(\tR\btopicKey\x12(\n" +
+	"\x10photo_upload_ids\x18\t \x03(\tR\x0ephotoUploadIds\"N\n" +
 	"\x16CreateQuestionResponse\x124\n" +
 	"\bquestion\x18\x01 \x01(\v2\x18.tayfam.core.v1.QuestionR\bquestion\"P\n" +
 	"\x12GetQuestionRequest\x12\x19\n" +
@@ -1830,17 +2057,21 @@ const file_tayfam_core_v1_qa_proto_rawDesc = "" +
 	"\vquestion_id\x18\x02 \x01(\tR\n" +
 	"questionId\"K\n" +
 	"\x13GetQuestionResponse\x124\n" +
-	"\bquestion\x18\x01 \x01(\v2\x18.tayfam.core.v1.QuestionR\bquestion\"\x9a\x01\n" +
+	"\bquestion\x18\x01 \x01(\v2\x18.tayfam.core.v1.QuestionR\bquestion\"\x8a\x02\n" +
 	"\x14ListQuestionsRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x14\n" +
 	"\x05query\x18\x02 \x01(\tR\x05query\x12\x15\n" +
 	"\x06tag_id\x18\x03 \x01(\tR\x05tagId\x12\x1b\n" +
 	"\tpage_size\x18\x04 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x05 \x01(\tR\tpageToken\"w\n" +
+	"page_token\x18\x05 \x01(\tR\tpageToken\x120\n" +
+	"\x04pool\x18\x06 \x01(\x0e2\x1c.tayfam.core.v1.QuestionPoolR\x04pool\x12\x1f\n" +
+	"\vsubject_key\x18\a \x01(\tR\n" +
+	"subjectKey\x12\x1b\n" +
+	"\ttopic_key\x18\b \x01(\tR\btopicKey\"w\n" +
 	"\x15ListQuestionsResponse\x126\n" +
 	"\tquestions\x18\x01 \x03(\v2\x18.tayfam.core.v1.QuestionR\tquestions\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xce\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xb6\x02\n" +
 	"\x15UpdateQuestionRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x1f\n" +
 	"\vquestion_id\x18\x02 \x01(\tR\n" +
@@ -1849,7 +2080,11 @@ const file_tayfam_core_v1_qa_proto_rawDesc = "" +
 	"\x04body\x18\x04 \x01(\tR\x04body\x12\x12\n" +
 	"\x04tags\x18\x05 \x03(\tR\x04tags\x12;\n" +
 	"\vupdate_mask\x18\x06 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
-	"updateMask\"N\n" +
+	"updateMask\x12\x1f\n" +
+	"\vsubject_key\x18\a \x01(\tR\n" +
+	"subjectKey\x12\x1b\n" +
+	"\ttopic_key\x18\b \x01(\tR\btopicKey\x12(\n" +
+	"\x10photo_upload_ids\x18\t \x03(\tR\x0ephotoUploadIds\"N\n" +
 	"\x16UpdateQuestionResponse\x124\n" +
 	"\bquestion\x18\x01 \x01(\v2\x18.tayfam.core.v1.QuestionR\bquestion\"S\n" +
 	"\x15DeleteQuestionRequest\x12\x19\n" +
@@ -1862,13 +2097,14 @@ const file_tayfam_core_v1_qa_proto_rawDesc = "" +
 	"\vquestion_id\x18\x02 \x01(\tR\n" +
 	"questionId\"O\n" +
 	"\x17RestoreQuestionResponse\x124\n" +
-	"\bquestion\x18\x01 \x01(\v2\x18.tayfam.core.v1.QuestionR\bquestion\"\x91\x01\n" +
+	"\bquestion\x18\x01 \x01(\v2\x18.tayfam.core.v1.QuestionR\bquestion\"\xbb\x01\n" +
 	"\x13CreateAnswerRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x1f\n" +
 	"\vquestion_id\x18\x02 \x01(\tR\n" +
 	"questionId\x12\x12\n" +
 	"\x04body\x18\x03 \x01(\tR\x04body\x12*\n" +
-	"\x11client_request_id\x18\x04 \x01(\tR\x0fclientRequestId\"F\n" +
+	"\x11client_request_id\x18\x04 \x01(\tR\x0fclientRequestId\x12(\n" +
+	"\x10photo_upload_ids\x18\x05 \x03(\tR\x0ephotoUploadIds\"F\n" +
 	"\x14CreateAnswerResponse\x12.\n" +
 	"\x06answer\x18\x01 \x01(\v2\x16.tayfam.core.v1.AnswerR\x06answer\"\x8c\x01\n" +
 	"\x12ListAnswersRequest\x12\x19\n" +
@@ -1880,11 +2116,12 @@ const file_tayfam_core_v1_qa_proto_rawDesc = "" +
 	"page_token\x18\x04 \x01(\tR\tpageToken\"o\n" +
 	"\x13ListAnswersResponse\x120\n" +
 	"\aanswers\x18\x01 \x03(\v2\x16.tayfam.core.v1.AnswerR\aanswers\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"a\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x8b\x01\n" +
 	"\x13UpdateAnswerRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x1b\n" +
 	"\tanswer_id\x18\x02 \x01(\tR\banswerId\x12\x12\n" +
-	"\x04body\x18\x03 \x01(\tR\x04body\"F\n" +
+	"\x04body\x18\x03 \x01(\tR\x04body\x12(\n" +
+	"\x10photo_upload_ids\x18\x04 \x03(\tR\x0ephotoUploadIds\"F\n" +
 	"\x14UpdateAnswerResponse\x12.\n" +
 	"\x06answer\x18\x01 \x01(\v2\x16.tayfam.core.v1.AnswerR\x06answer\"M\n" +
 	"\x13DeleteAnswerRequest\x12\x19\n" +
@@ -1909,7 +2146,11 @@ const file_tayfam_core_v1_qa_proto_rawDesc = "" +
 	"\x10DeleteTagRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x15\n" +
 	"\x06tag_id\x18\x02 \x01(\tR\x05tagId\"\x13\n" +
-	"\x11DeleteTagResponse2\x8e\n" +
+	"\x11DeleteTagResponse*d\n" +
+	"\fQuestionPool\x12\x1d\n" +
+	"\x19QUESTION_POOL_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x10QUESTION_POOL_QA\x10\x01\x12\x1f\n" +
+	"\x1bQUESTION_POOL_QUESTION_POOL\x10\x022\x8e\n" +
 	"\n" +
 	"\tQAService\x12_\n" +
 	"\x0eCreateQuestion\x12%.tayfam.core.v1.CreateQuestionRequest\x1a&.tayfam.core.v1.CreateQuestionResponse\x12V\n" +
@@ -1940,93 +2181,98 @@ func file_tayfam_core_v1_qa_proto_rawDescGZIP() []byte {
 	return file_tayfam_core_v1_qa_proto_rawDescData
 }
 
+var file_tayfam_core_v1_qa_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_tayfam_core_v1_qa_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_tayfam_core_v1_qa_proto_goTypes = []any{
-	(*Tag)(nil),                     // 0: tayfam.core.v1.Tag
-	(*Question)(nil),                // 1: tayfam.core.v1.Question
-	(*Answer)(nil),                  // 2: tayfam.core.v1.Answer
-	(*CreateQuestionRequest)(nil),   // 3: tayfam.core.v1.CreateQuestionRequest
-	(*CreateQuestionResponse)(nil),  // 4: tayfam.core.v1.CreateQuestionResponse
-	(*GetQuestionRequest)(nil),      // 5: tayfam.core.v1.GetQuestionRequest
-	(*GetQuestionResponse)(nil),     // 6: tayfam.core.v1.GetQuestionResponse
-	(*ListQuestionsRequest)(nil),    // 7: tayfam.core.v1.ListQuestionsRequest
-	(*ListQuestionsResponse)(nil),   // 8: tayfam.core.v1.ListQuestionsResponse
-	(*UpdateQuestionRequest)(nil),   // 9: tayfam.core.v1.UpdateQuestionRequest
-	(*UpdateQuestionResponse)(nil),  // 10: tayfam.core.v1.UpdateQuestionResponse
-	(*DeleteQuestionRequest)(nil),   // 11: tayfam.core.v1.DeleteQuestionRequest
-	(*DeleteQuestionResponse)(nil),  // 12: tayfam.core.v1.DeleteQuestionResponse
-	(*RestoreQuestionRequest)(nil),  // 13: tayfam.core.v1.RestoreQuestionRequest
-	(*RestoreQuestionResponse)(nil), // 14: tayfam.core.v1.RestoreQuestionResponse
-	(*CreateAnswerRequest)(nil),     // 15: tayfam.core.v1.CreateAnswerRequest
-	(*CreateAnswerResponse)(nil),    // 16: tayfam.core.v1.CreateAnswerResponse
-	(*ListAnswersRequest)(nil),      // 17: tayfam.core.v1.ListAnswersRequest
-	(*ListAnswersResponse)(nil),     // 18: tayfam.core.v1.ListAnswersResponse
-	(*UpdateAnswerRequest)(nil),     // 19: tayfam.core.v1.UpdateAnswerRequest
-	(*UpdateAnswerResponse)(nil),    // 20: tayfam.core.v1.UpdateAnswerResponse
-	(*DeleteAnswerRequest)(nil),     // 21: tayfam.core.v1.DeleteAnswerRequest
-	(*DeleteAnswerResponse)(nil),    // 22: tayfam.core.v1.DeleteAnswerResponse
-	(*RestoreAnswerRequest)(nil),    // 23: tayfam.core.v1.RestoreAnswerRequest
-	(*RestoreAnswerResponse)(nil),   // 24: tayfam.core.v1.RestoreAnswerResponse
-	(*SetAnswerVoteRequest)(nil),    // 25: tayfam.core.v1.SetAnswerVoteRequest
-	(*SetAnswerVoteResponse)(nil),   // 26: tayfam.core.v1.SetAnswerVoteResponse
-	(*ListTagsRequest)(nil),         // 27: tayfam.core.v1.ListTagsRequest
-	(*ListTagsResponse)(nil),        // 28: tayfam.core.v1.ListTagsResponse
-	(*DeleteTagRequest)(nil),        // 29: tayfam.core.v1.DeleteTagRequest
-	(*DeleteTagResponse)(nil),       // 30: tayfam.core.v1.DeleteTagResponse
-	(*timestamppb.Timestamp)(nil),   // 31: google.protobuf.Timestamp
-	(*fieldmaskpb.FieldMask)(nil),   // 32: google.protobuf.FieldMask
+	(QuestionPool)(0),               // 0: tayfam.core.v1.QuestionPool
+	(*Tag)(nil),                     // 1: tayfam.core.v1.Tag
+	(*Question)(nil),                // 2: tayfam.core.v1.Question
+	(*Answer)(nil),                  // 3: tayfam.core.v1.Answer
+	(*CreateQuestionRequest)(nil),   // 4: tayfam.core.v1.CreateQuestionRequest
+	(*CreateQuestionResponse)(nil),  // 5: tayfam.core.v1.CreateQuestionResponse
+	(*GetQuestionRequest)(nil),      // 6: tayfam.core.v1.GetQuestionRequest
+	(*GetQuestionResponse)(nil),     // 7: tayfam.core.v1.GetQuestionResponse
+	(*ListQuestionsRequest)(nil),    // 8: tayfam.core.v1.ListQuestionsRequest
+	(*ListQuestionsResponse)(nil),   // 9: tayfam.core.v1.ListQuestionsResponse
+	(*UpdateQuestionRequest)(nil),   // 10: tayfam.core.v1.UpdateQuestionRequest
+	(*UpdateQuestionResponse)(nil),  // 11: tayfam.core.v1.UpdateQuestionResponse
+	(*DeleteQuestionRequest)(nil),   // 12: tayfam.core.v1.DeleteQuestionRequest
+	(*DeleteQuestionResponse)(nil),  // 13: tayfam.core.v1.DeleteQuestionResponse
+	(*RestoreQuestionRequest)(nil),  // 14: tayfam.core.v1.RestoreQuestionRequest
+	(*RestoreQuestionResponse)(nil), // 15: tayfam.core.v1.RestoreQuestionResponse
+	(*CreateAnswerRequest)(nil),     // 16: tayfam.core.v1.CreateAnswerRequest
+	(*CreateAnswerResponse)(nil),    // 17: tayfam.core.v1.CreateAnswerResponse
+	(*ListAnswersRequest)(nil),      // 18: tayfam.core.v1.ListAnswersRequest
+	(*ListAnswersResponse)(nil),     // 19: tayfam.core.v1.ListAnswersResponse
+	(*UpdateAnswerRequest)(nil),     // 20: tayfam.core.v1.UpdateAnswerRequest
+	(*UpdateAnswerResponse)(nil),    // 21: tayfam.core.v1.UpdateAnswerResponse
+	(*DeleteAnswerRequest)(nil),     // 22: tayfam.core.v1.DeleteAnswerRequest
+	(*DeleteAnswerResponse)(nil),    // 23: tayfam.core.v1.DeleteAnswerResponse
+	(*RestoreAnswerRequest)(nil),    // 24: tayfam.core.v1.RestoreAnswerRequest
+	(*RestoreAnswerResponse)(nil),   // 25: tayfam.core.v1.RestoreAnswerResponse
+	(*SetAnswerVoteRequest)(nil),    // 26: tayfam.core.v1.SetAnswerVoteRequest
+	(*SetAnswerVoteResponse)(nil),   // 27: tayfam.core.v1.SetAnswerVoteResponse
+	(*ListTagsRequest)(nil),         // 28: tayfam.core.v1.ListTagsRequest
+	(*ListTagsResponse)(nil),        // 29: tayfam.core.v1.ListTagsResponse
+	(*DeleteTagRequest)(nil),        // 30: tayfam.core.v1.DeleteTagRequest
+	(*DeleteTagResponse)(nil),       // 31: tayfam.core.v1.DeleteTagResponse
+	(*timestamppb.Timestamp)(nil),   // 32: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil),   // 33: google.protobuf.FieldMask
 }
 var file_tayfam_core_v1_qa_proto_depIdxs = []int32{
-	0,  // 0: tayfam.core.v1.Question.tags:type_name -> tayfam.core.v1.Tag
-	31, // 1: tayfam.core.v1.Question.create_time:type_name -> google.protobuf.Timestamp
-	31, // 2: tayfam.core.v1.Question.update_time:type_name -> google.protobuf.Timestamp
-	31, // 3: tayfam.core.v1.Answer.create_time:type_name -> google.protobuf.Timestamp
-	31, // 4: tayfam.core.v1.Answer.update_time:type_name -> google.protobuf.Timestamp
-	1,  // 5: tayfam.core.v1.CreateQuestionResponse.question:type_name -> tayfam.core.v1.Question
-	1,  // 6: tayfam.core.v1.GetQuestionResponse.question:type_name -> tayfam.core.v1.Question
-	1,  // 7: tayfam.core.v1.ListQuestionsResponse.questions:type_name -> tayfam.core.v1.Question
-	32, // 8: tayfam.core.v1.UpdateQuestionRequest.update_mask:type_name -> google.protobuf.FieldMask
-	1,  // 9: tayfam.core.v1.UpdateQuestionResponse.question:type_name -> tayfam.core.v1.Question
-	1,  // 10: tayfam.core.v1.RestoreQuestionResponse.question:type_name -> tayfam.core.v1.Question
-	2,  // 11: tayfam.core.v1.CreateAnswerResponse.answer:type_name -> tayfam.core.v1.Answer
-	2,  // 12: tayfam.core.v1.ListAnswersResponse.answers:type_name -> tayfam.core.v1.Answer
-	2,  // 13: tayfam.core.v1.UpdateAnswerResponse.answer:type_name -> tayfam.core.v1.Answer
-	2,  // 14: tayfam.core.v1.RestoreAnswerResponse.answer:type_name -> tayfam.core.v1.Answer
-	2,  // 15: tayfam.core.v1.SetAnswerVoteResponse.answer:type_name -> tayfam.core.v1.Answer
-	0,  // 16: tayfam.core.v1.ListTagsResponse.tags:type_name -> tayfam.core.v1.Tag
-	3,  // 17: tayfam.core.v1.QAService.CreateQuestion:input_type -> tayfam.core.v1.CreateQuestionRequest
-	5,  // 18: tayfam.core.v1.QAService.GetQuestion:input_type -> tayfam.core.v1.GetQuestionRequest
-	7,  // 19: tayfam.core.v1.QAService.ListQuestions:input_type -> tayfam.core.v1.ListQuestionsRequest
-	9,  // 20: tayfam.core.v1.QAService.UpdateQuestion:input_type -> tayfam.core.v1.UpdateQuestionRequest
-	11, // 21: tayfam.core.v1.QAService.DeleteQuestion:input_type -> tayfam.core.v1.DeleteQuestionRequest
-	13, // 22: tayfam.core.v1.QAService.RestoreQuestion:input_type -> tayfam.core.v1.RestoreQuestionRequest
-	15, // 23: tayfam.core.v1.QAService.CreateAnswer:input_type -> tayfam.core.v1.CreateAnswerRequest
-	17, // 24: tayfam.core.v1.QAService.ListAnswers:input_type -> tayfam.core.v1.ListAnswersRequest
-	19, // 25: tayfam.core.v1.QAService.UpdateAnswer:input_type -> tayfam.core.v1.UpdateAnswerRequest
-	21, // 26: tayfam.core.v1.QAService.DeleteAnswer:input_type -> tayfam.core.v1.DeleteAnswerRequest
-	23, // 27: tayfam.core.v1.QAService.RestoreAnswer:input_type -> tayfam.core.v1.RestoreAnswerRequest
-	25, // 28: tayfam.core.v1.QAService.SetAnswerVote:input_type -> tayfam.core.v1.SetAnswerVoteRequest
-	27, // 29: tayfam.core.v1.QAService.ListTags:input_type -> tayfam.core.v1.ListTagsRequest
-	29, // 30: tayfam.core.v1.QAService.DeleteTag:input_type -> tayfam.core.v1.DeleteTagRequest
-	4,  // 31: tayfam.core.v1.QAService.CreateQuestion:output_type -> tayfam.core.v1.CreateQuestionResponse
-	6,  // 32: tayfam.core.v1.QAService.GetQuestion:output_type -> tayfam.core.v1.GetQuestionResponse
-	8,  // 33: tayfam.core.v1.QAService.ListQuestions:output_type -> tayfam.core.v1.ListQuestionsResponse
-	10, // 34: tayfam.core.v1.QAService.UpdateQuestion:output_type -> tayfam.core.v1.UpdateQuestionResponse
-	12, // 35: tayfam.core.v1.QAService.DeleteQuestion:output_type -> tayfam.core.v1.DeleteQuestionResponse
-	14, // 36: tayfam.core.v1.QAService.RestoreQuestion:output_type -> tayfam.core.v1.RestoreQuestionResponse
-	16, // 37: tayfam.core.v1.QAService.CreateAnswer:output_type -> tayfam.core.v1.CreateAnswerResponse
-	18, // 38: tayfam.core.v1.QAService.ListAnswers:output_type -> tayfam.core.v1.ListAnswersResponse
-	20, // 39: tayfam.core.v1.QAService.UpdateAnswer:output_type -> tayfam.core.v1.UpdateAnswerResponse
-	22, // 40: tayfam.core.v1.QAService.DeleteAnswer:output_type -> tayfam.core.v1.DeleteAnswerResponse
-	24, // 41: tayfam.core.v1.QAService.RestoreAnswer:output_type -> tayfam.core.v1.RestoreAnswerResponse
-	26, // 42: tayfam.core.v1.QAService.SetAnswerVote:output_type -> tayfam.core.v1.SetAnswerVoteResponse
-	28, // 43: tayfam.core.v1.QAService.ListTags:output_type -> tayfam.core.v1.ListTagsResponse
-	30, // 44: tayfam.core.v1.QAService.DeleteTag:output_type -> tayfam.core.v1.DeleteTagResponse
-	31, // [31:45] is the sub-list for method output_type
-	17, // [17:31] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	1,  // 0: tayfam.core.v1.Question.tags:type_name -> tayfam.core.v1.Tag
+	32, // 1: tayfam.core.v1.Question.create_time:type_name -> google.protobuf.Timestamp
+	32, // 2: tayfam.core.v1.Question.update_time:type_name -> google.protobuf.Timestamp
+	0,  // 3: tayfam.core.v1.Question.pool:type_name -> tayfam.core.v1.QuestionPool
+	32, // 4: tayfam.core.v1.Answer.create_time:type_name -> google.protobuf.Timestamp
+	32, // 5: tayfam.core.v1.Answer.update_time:type_name -> google.protobuf.Timestamp
+	0,  // 6: tayfam.core.v1.CreateQuestionRequest.pool:type_name -> tayfam.core.v1.QuestionPool
+	2,  // 7: tayfam.core.v1.CreateQuestionResponse.question:type_name -> tayfam.core.v1.Question
+	2,  // 8: tayfam.core.v1.GetQuestionResponse.question:type_name -> tayfam.core.v1.Question
+	0,  // 9: tayfam.core.v1.ListQuestionsRequest.pool:type_name -> tayfam.core.v1.QuestionPool
+	2,  // 10: tayfam.core.v1.ListQuestionsResponse.questions:type_name -> tayfam.core.v1.Question
+	33, // 11: tayfam.core.v1.UpdateQuestionRequest.update_mask:type_name -> google.protobuf.FieldMask
+	2,  // 12: tayfam.core.v1.UpdateQuestionResponse.question:type_name -> tayfam.core.v1.Question
+	2,  // 13: tayfam.core.v1.RestoreQuestionResponse.question:type_name -> tayfam.core.v1.Question
+	3,  // 14: tayfam.core.v1.CreateAnswerResponse.answer:type_name -> tayfam.core.v1.Answer
+	3,  // 15: tayfam.core.v1.ListAnswersResponse.answers:type_name -> tayfam.core.v1.Answer
+	3,  // 16: tayfam.core.v1.UpdateAnswerResponse.answer:type_name -> tayfam.core.v1.Answer
+	3,  // 17: tayfam.core.v1.RestoreAnswerResponse.answer:type_name -> tayfam.core.v1.Answer
+	3,  // 18: tayfam.core.v1.SetAnswerVoteResponse.answer:type_name -> tayfam.core.v1.Answer
+	1,  // 19: tayfam.core.v1.ListTagsResponse.tags:type_name -> tayfam.core.v1.Tag
+	4,  // 20: tayfam.core.v1.QAService.CreateQuestion:input_type -> tayfam.core.v1.CreateQuestionRequest
+	6,  // 21: tayfam.core.v1.QAService.GetQuestion:input_type -> tayfam.core.v1.GetQuestionRequest
+	8,  // 22: tayfam.core.v1.QAService.ListQuestions:input_type -> tayfam.core.v1.ListQuestionsRequest
+	10, // 23: tayfam.core.v1.QAService.UpdateQuestion:input_type -> tayfam.core.v1.UpdateQuestionRequest
+	12, // 24: tayfam.core.v1.QAService.DeleteQuestion:input_type -> tayfam.core.v1.DeleteQuestionRequest
+	14, // 25: tayfam.core.v1.QAService.RestoreQuestion:input_type -> tayfam.core.v1.RestoreQuestionRequest
+	16, // 26: tayfam.core.v1.QAService.CreateAnswer:input_type -> tayfam.core.v1.CreateAnswerRequest
+	18, // 27: tayfam.core.v1.QAService.ListAnswers:input_type -> tayfam.core.v1.ListAnswersRequest
+	20, // 28: tayfam.core.v1.QAService.UpdateAnswer:input_type -> tayfam.core.v1.UpdateAnswerRequest
+	22, // 29: tayfam.core.v1.QAService.DeleteAnswer:input_type -> tayfam.core.v1.DeleteAnswerRequest
+	24, // 30: tayfam.core.v1.QAService.RestoreAnswer:input_type -> tayfam.core.v1.RestoreAnswerRequest
+	26, // 31: tayfam.core.v1.QAService.SetAnswerVote:input_type -> tayfam.core.v1.SetAnswerVoteRequest
+	28, // 32: tayfam.core.v1.QAService.ListTags:input_type -> tayfam.core.v1.ListTagsRequest
+	30, // 33: tayfam.core.v1.QAService.DeleteTag:input_type -> tayfam.core.v1.DeleteTagRequest
+	5,  // 34: tayfam.core.v1.QAService.CreateQuestion:output_type -> tayfam.core.v1.CreateQuestionResponse
+	7,  // 35: tayfam.core.v1.QAService.GetQuestion:output_type -> tayfam.core.v1.GetQuestionResponse
+	9,  // 36: tayfam.core.v1.QAService.ListQuestions:output_type -> tayfam.core.v1.ListQuestionsResponse
+	11, // 37: tayfam.core.v1.QAService.UpdateQuestion:output_type -> tayfam.core.v1.UpdateQuestionResponse
+	13, // 38: tayfam.core.v1.QAService.DeleteQuestion:output_type -> tayfam.core.v1.DeleteQuestionResponse
+	15, // 39: tayfam.core.v1.QAService.RestoreQuestion:output_type -> tayfam.core.v1.RestoreQuestionResponse
+	17, // 40: tayfam.core.v1.QAService.CreateAnswer:output_type -> tayfam.core.v1.CreateAnswerResponse
+	19, // 41: tayfam.core.v1.QAService.ListAnswers:output_type -> tayfam.core.v1.ListAnswersResponse
+	21, // 42: tayfam.core.v1.QAService.UpdateAnswer:output_type -> tayfam.core.v1.UpdateAnswerResponse
+	23, // 43: tayfam.core.v1.QAService.DeleteAnswer:output_type -> tayfam.core.v1.DeleteAnswerResponse
+	25, // 44: tayfam.core.v1.QAService.RestoreAnswer:output_type -> tayfam.core.v1.RestoreAnswerResponse
+	27, // 45: tayfam.core.v1.QAService.SetAnswerVote:output_type -> tayfam.core.v1.SetAnswerVoteResponse
+	29, // 46: tayfam.core.v1.QAService.ListTags:output_type -> tayfam.core.v1.ListTagsResponse
+	31, // 47: tayfam.core.v1.QAService.DeleteTag:output_type -> tayfam.core.v1.DeleteTagResponse
+	34, // [34:48] is the sub-list for method output_type
+	20, // [20:34] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_qa_proto_init() }
@@ -2039,13 +2285,14 @@ func file_tayfam_core_v1_qa_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_qa_proto_rawDesc), len(file_tayfam_core_v1_qa_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_tayfam_core_v1_qa_proto_goTypes,
 		DependencyIndexes: file_tayfam_core_v1_qa_proto_depIdxs,
+		EnumInfos:         file_tayfam_core_v1_qa_proto_enumTypes,
 		MessageInfos:      file_tayfam_core_v1_qa_proto_msgTypes,
 	}.Build()
 	File_tayfam_core_v1_qa_proto = out.File

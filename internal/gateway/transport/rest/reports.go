@@ -73,6 +73,7 @@ var (
 		"copyright":          corev1.ReportReason_REPORT_REASON_COPYRIGHT,
 		"staff_conduct":      corev1.ReportReason_REPORT_REASON_STAFF_CONDUCT,
 		"other":              corev1.ReportReason_REPORT_REASON_OTHER,
+		"paid_tutoring":      corev1.ReportReason_REPORT_REASON_PAID_TUTORING,
 	})
 	reportStatuses = newEnum(map[string]corev1.ReportStatus{
 		"open": corev1.ReportStatus_REPORT_STATUS_OPEN, "resolved": corev1.ReportStatus_REPORT_STATUS_RESOLVED,

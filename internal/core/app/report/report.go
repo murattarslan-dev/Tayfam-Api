@@ -167,6 +167,9 @@ const (
 	// platform only.
 	ReasonStaffConduct Reason = "staff_conduct"
 	ReasonOther        Reason = "other"
+	// ReasonPaidTutoring: a paid private lesson offer or advertisement
+	// (issue #271; ADR-0040 §2, Topluluk Kuralları).
+	ReasonPaidTutoring Reason = "paid_tutoring"
 )
 
 // Reasons lists every reason, in the proto's order.
@@ -175,6 +178,7 @@ func Reasons() []Reason {
 		ReasonHarassment, ReasonHateSpeech, ReasonViolence, ReasonPrivacy, ReasonImpersonation,
 		ReasonIllegalTrade, ReasonDrugs, ReasonGambling, ReasonDangerousActivity, ReasonFakeEvent,
 		ReasonSexualContent, ReasonChildSafety, ReasonSpam, ReasonCopyright, ReasonStaffConduct, ReasonOther,
+		ReasonPaidTutoring,
 	}
 }
 
@@ -575,13 +579,18 @@ func (s *Service) subjectOf(ctx context.Context, q *store.Queries, tayfa, user i
 		}
 		return target, nil
 	}
-	if err := access.RequireModule(ctx, q, tayfa, moduleOf(t)); errors.Is(err, apperr.ErrModuleDisabled) {
-		return id.ID{}, apperr.ErrReportTargetNotFound
-	} else if err != nil {
-		return id.ID{}, err
-	}
 	c, err := lookup(ctx, q, tayfa, t, target)
 	if err != nil {
+		return id.ID{}, err
+	}
+	// A question's or answer's module is its pool's (issue #271).
+	module := moduleOf(t)
+	if c.module != "" {
+		module = c.module
+	}
+	if err := access.RequireModule(ctx, q, tayfa, module); errors.Is(err, apperr.ErrModuleDisabled) {
+		return id.ID{}, apperr.ErrReportTargetNotFound
+	} else if err != nil {
 		return id.ID{}, err
 	}
 	if !c.found || !c.visible {
@@ -609,6 +618,15 @@ func moduleOf(t TargetType) string {
 	return access.ModuleEvents // events, log entries, album photos and event questions
 }
 
+// poolModule is the module of a question pool (questions.pool): the pool
+// names its module.
+func poolModule(pool string) string {
+	if pool == access.ModuleQuestionPool {
+		return access.ModuleQuestionPool
+	}
+	return access.ModuleQA
+}
+
 // content is a reported piece of content as the report needs it.
 type content struct {
 	found   bool
@@ -617,6 +635,9 @@ type content struct {
 	// event), or gone for good.
 	removed bool
 	author  id.ID // zero when the account was deleted
+	// module is set for content whose module depends on the row: a
+	// question's or answer's pool (qa or question_pool, issue #271).
+	module string
 }
 
 // lookup reads content of tayfa; a missing row is found = false.
@@ -641,11 +662,11 @@ func lookup(ctx context.Context, q *store.Queries, tayfa id.ID, t TargetType, ta
 	case TargetQuestion:
 		var r store.GetReportTargetQuestionRow
 		r, err = q.GetReportTargetQuestion(ctx, store.GetReportTargetQuestionParams{TayfaID: p.t, ID: p.i})
-		author, visible = r.AuthorID, r.Visible
+		author, visible, c.module = r.AuthorID, r.Visible, poolModule(r.Pool)
 	case TargetAnswer:
 		var r store.GetReportTargetAnswerRow
 		r, err = q.GetReportTargetAnswer(ctx, store.GetReportTargetAnswerParams{TayfaID: p.t, ID: p.i})
-		author, visible = r.AuthorID, r.Visible
+		author, visible, c.module = r.AuthorID, r.Visible, poolModule(r.Pool)
 	case TargetPoll:
 		var r store.GetReportTargetPollRow
 		r, err = q.GetReportTargetPoll(ctx, store.GetReportTargetPollParams{TayfaID: p.t, ID: p.i})

@@ -22,6 +22,7 @@ type Querier interface {
 	AddBracketMatch(ctx context.Context, arg AddBracketMatchParams) error
 	AddDrawEntry(ctx context.Context, arg AddDrawEntryParams) error
 	AddEventCelebrationWinner(ctx context.Context, arg AddEventCelebrationWinnerParams) error
+	AddEventPoolLink(ctx context.Context, arg AddEventPoolLinkParams) error
 	AddGuestPlayer(ctx context.Context, arg AddGuestPlayerParams) error
 	// Varsayılan bileşen: satır yoksa açık olarak, en sona eklenir; var olan
 	// satıra (yöneticinin kapattığı bileşene) dokunulmaz.
@@ -307,10 +308,14 @@ type Querier interface {
 	CountUploadsSince(ctx context.Context, arg CountUploadsSinceParams) (int64, error)
 	CountUserEventQuestions(ctx context.Context, arg CountUserEventQuestionsParams) (int64, error)
 	CountUserLogEntries(ctx context.Context, arg CountUserLogEntriesParams) (int64, error)
+	// Bağlanabilecek sorular: tayfanın havuzundaki görünür sorular.
+	CountVisiblePoolQuestions(ctx context.Context, arg CountVisiblePoolQuestionsParams) (int32, error)
 	// Duyurular (issue #48). Her sorgu tayfa_id ile sınırlıdır (IDOR); üyelik
 	// ve izin kontrolü app katmanındadır (access, authz).
 	CreateAnnouncement(ctx context.Context, arg CreateAnnouncementParams) error
 	// Cevaplar.
+	// Cevabın havuzu sorunun havuzudur; soru yoksa 'qa' ile foreign key'e
+	// takılır.
 	CreateAnswer(ctx context.Context, arg CreateAnswerParams) error
 	// Denetim kaydı yalnızca eklenir. metadata'ya kişisel veri ya da token
 	// yazılmaz.
@@ -370,6 +375,8 @@ type Querier interface {
 	CreatePollVote(ctx context.Context, arg CreatePollVoteParams) error
 	// Soru-cevap (issue #59). Her sorgu tayfa_id ile sınırlıdır (IDOR); üyelik
 	// ve izin kontrolü app katmanındadır (access, authz).
+	// Havuz verilmezse Soru-Cevap ('qa'). Havuz sorusunun fotoğrafları önce
+	// dosyaya bağlanır (media.Attach), sonra kolona yazılır.
 	CreateQuestion(ctx context.Context, arg CreateQuestionParams) error
 	// Aynı hedefe ikinci şikâyet mevcut kaydı döndürür. tayfa_id ve
 	// evidence_text yalnızca birebir mesaj şikâyetinde boş/dolu değişir
@@ -409,6 +416,7 @@ type Querier interface {
 	DeleteEventMeasurement(ctx context.Context, arg DeleteEventMeasurementParams) (int64, error)
 	DeleteEventMeasurementTotal(ctx context.Context, arg DeleteEventMeasurementTotalParams) (int64, error)
 	DeleteEventPhoto(ctx context.Context, arg DeleteEventPhotoParams) (int64, error)
+	DeleteEventPoolLinks(ctx context.Context, arg DeleteEventPoolLinksParams) (int64, error)
 	DeleteEventQuestion(ctx context.Context, arg DeleteEventQuestionParams) (int64, error)
 	DeleteEventQuestionVote(ctx context.Context, arg DeleteEventQuestionVoteParams) (int64, error)
 	DeleteEventRankingEntry(ctx context.Context, arg DeleteEventRankingEntryParams) (int64, error)
@@ -585,10 +593,12 @@ type Querier interface {
 	// Yazarın kendi silmesi: başlık ve gövde hemen boşaltılır, geri alınamaz
 	// (v14 "Silinen içeriği geri alma").
 	EraseAnnouncement(ctx context.Context, arg EraseAnnouncementParams) (int64, error)
-	// Yazarın kendi silmesi: metin boşaltılır, oyları silinir (ayrı sorgu).
+	// Yazarın kendi silmesi: metin ve fotoğraflar boşaltılır, oyları silinir
+	// (ayrı sorgu).
 	EraseAnswer(ctx context.Context, arg EraseAnswerParams) (int64, error)
-	// Yazarın kendi silmesi: başlık ve gövde hemen boşaltılır, geri alınamaz
-	// (v14 "Silinen içeriği geri alma"). Etiket bağları ayrıca silinir.
+	// Yazarın kendi silmesi: başlık, gövde ve fotoğraflar hemen boşaltılır
+	// (dosyalar silme kuyruğuna girer), geri alınamaz (v14 "Silinen içeriği
+	// geri alma"). Etiket bağları ayrıca silinir.
 	EraseQuestion(ctx context.Context, arg EraseQuestionParams) (int64, error)
 	// ---------------------------------------------------------------------------
 	// Arka plan işleri
@@ -745,6 +755,8 @@ type Querier interface {
 	GetAnswer(ctx context.Context, arg GetAnswerParams) (GetAnswerRow, error)
 	GetAnswerByClientRequest(ctx context.Context, arg GetAnswerByClientRequestParams) (GetAnswerByClientRequestRow, error)
 	GetAnswerForUpdate(ctx context.Context, arg GetAnswerForUpdateParams) (GetAnswerForUpdateRow, error)
+	// Cevabın havuzu (modül kontrolü için); silinmiş satır da döner.
+	GetAnswerPool(ctx context.Context, arg GetAnswerPoolParams) (string, error)
 	// Eşleşme ağacı bileşeni (`bracket`; issue #251; ADR-0025 §4). Etkinlik
 	// her zaman önce tayfa kapsamında yüklenir ve bileşen etkinliğin tür
 	// sürümünde çözülür (internal/core/app/component: View / Change); buradaki
@@ -898,6 +910,8 @@ type Querier interface {
 	GetQuestionByClientRequest(ctx context.Context, arg GetQuestionByClientRequestParams) (GetQuestionByClientRequestRow, error)
 	// Yazma işlemleri satırı kilitleyerek okur; silinmiş satır da döner.
 	GetQuestionForUpdate(ctx context.Context, arg GetQuestionForUpdateParams) (GetQuestionForUpdateRow, error)
+	// Sorunun havuzu (modül kontrolü için); silinmiş satır da döner.
+	GetQuestionPool(ctx context.Context, arg GetQuestionPoolParams) (string, error)
 	// Platform panelinde şikâyetin kanıt fotoğrafı (issue #205): yalnızca o
 	// rapora bağlı, hazır dosya.
 	GetReportEvidenceUpload(ctx context.Context, arg GetReportEvidenceUploadParams) (GetReportEvidenceUploadRow, error)
@@ -929,6 +943,8 @@ type Querier interface {
 	// (değerleri) etkinliği gören her üyeye açıktır; konum şikâyete girmez.
 	GetReportTargetLogEntry(ctx context.Context, arg GetReportTargetLogEntryParams) (GetReportTargetLogEntryRow, error)
 	GetReportTargetPoll(ctx context.Context, arg GetReportTargetPollParams) (GetReportTargetPollRow, error)
+	// Sorunun havuzu modülünü verir: Soru-Cevap (qa) ya da soru havuzu
+	// (question_pool, issue #271).
 	GetReportTargetQuestion(ctx context.Context, arg GetReportTargetQuestionParams) (GetReportTargetQuestionRow, error)
 	// Platform panelinde şikâyet edilen kanal mesajının fotoğrafı (ADR-0031):
 	// şikâyetin kaydettiği upload_id, hâlâ o mesaja bağlı, hazır chat_photo.
@@ -1144,6 +1160,17 @@ type Querier interface {
 	ListEventMeasurements(ctx context.Context, arg ListEventMeasurementsParams) ([]ListEventMeasurementsRow, error)
 	// (created_at, id) ile sayfalanır, eskiden yeniye.
 	ListEventPhotos(ctx context.Context, arg ListEventPhotosParams) ([]ListEventPhotosRow, error)
+	// Bütün bağlar (silinmiş sorular dahil), sırasıyla: aynı listenin tekrar
+	// yazılması bir şey değiştirmez.
+	ListEventPoolLinkIDs(ctx context.Context, arg ListEventPoolLinkIDsParams) ([]pgtype.UUID, error)
+	// Soru havuzu bağlantısı bileşeni (`pool_link`; issue #271; ADR-0037 §3,
+	// ADR-0040 §2). Etkinlik her zaman önce tayfa kapsamında yüklenir ve
+	// bileşen etkinliğin tür sürümünde çözülür (internal/core/app/component:
+	// View / Change); sorular etkinliğin tayfasıyla sınırlıdır (IDOR). Yetki app
+	// katmanındadır (internal/core/app/component/poollink).
+	// Bağlı sorular, organizatörün sırasıyla. Silinmiş (gizlenmiş) soru
+	// listede görünmez; bağı kalır, geri alınırsa yeniden görünür.
+	ListEventPoolLinks(ctx context.Context, arg ListEventPoolLinksParams) ([]ListEventPoolLinksRow, error)
 	// Cevaplanmamışlar önce, sonra çok oy alan, sonra eski. Bileşen başına
 	// canlı soru sayısı uygulamada sınırlıdır (questions.MaxQuestions).
 	ListEventQuestions(ctx context.Context, arg ListEventQuestionsParams) ([]ListEventQuestionsRow, error)
@@ -1240,8 +1267,9 @@ type Querier interface {
 	// göremeyeceğine karar vermek için bağlam. Karar uygulama katmanında, core'un
 	// izin tablosuyla verilir (authz); burada yalnızca veri toplanır. İçeriğin
 	// tayfası: tayfa kapağında tayfanın kendisi, etkinlik kapağında ve av
-	// fotoğrafında ve albüm fotoğrafında etkinliğin tayfası (silinmiş içerik ve
-	// tayfa bağlam vermez).
+	// fotoğrafında ve albüm fotoğrafında etkinliğin tayfası, soru havuzunun
+	// sorusunda ve cevabında sorunun tayfası (silinmiş içerik ve tayfa bağlam
+	// vermez).
 	ListMediaForViewer(ctx context.Context, arg ListMediaForViewerParams) ([]ListMediaForViewerRow, error)
 	// Üye listesi: önce rol (yönetici başta), sonra katılım zamanı, sonra
 	// kullanıcı ID'si. Katılmadan banlanan kişinin katılım zamanı yoktur; onun
@@ -1322,8 +1350,9 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	ListPurgeableTayfas(ctx context.Context, arg ListPurgeableTayfasParams) ([]pgtype.UUID, error)
 	ListQuestionTags(ctx context.Context, arg ListQuestionTagsParams) ([]ListQuestionTagsRow, error)
-	// Yeniden eskiye. İsteğe bağlı etiket filtresi. Sayfa, önceki sayfanın son
-	// satırından sonra başlar (created_at, id azalan).
+	// Yeniden eskiye, bir havuzda. İsteğe bağlı etiket, ders ve konu filtresi.
+	// Sayfa, önceki sayfanın son satırından sonra başlar (created_at, id
+	// azalan).
 	ListQuestionsPage(ctx context.Context, arg ListQuestionsPageParams) ([]ListQuestionsPageRow, error)
 	// Şikâyet edenin şikâyetleri, yeniden eskiye.
 	ListReportsOfReporter(ctx context.Context, arg ListReportsOfReporterParams) ([]ListReportsOfReporterRow, error)
@@ -1607,6 +1636,8 @@ type Querier interface {
 	RestoreAnnouncement(ctx context.Context, arg RestoreAnnouncementParams) (int64, error)
 	RestoreAnswer(ctx context.Context, arg RestoreAnswerParams) (int64, error)
 	RestoreDailyItem(ctx context.Context, arg RestoreDailyItemParams) (int64, error)
+	// Yazarın boşalttığı soru geri alınmaz: Soru-Cevap'ta başlığı, havuzda
+	// metni ve fotoğrafı yoktur.
 	RestoreQuestion(ctx context.Context, arg RestoreQuestionParams) (int64, error)
 	// Tekrar gönderim ilk dönüşü korur (0 satır).
 	ReturnRollCallCheckin(ctx context.Context, arg ReturnRollCallCheckinParams) (int64, error)
@@ -1737,11 +1768,15 @@ type Querier interface {
 	// Yalnızca başlık ya da gövde değiştiğinde; edited_at bununla yazılır
 	// (issue #191). Sabitleme edited_at'e dokunmaz.
 	UpdateAnnouncementContent(ctx context.Context, arg UpdateAnnouncementContentParams) (int64, error)
+	// Havuz cevabında fotoğraflar da (Soru-Cevap cevabında hep NULL).
 	UpdateAnswerBody(ctx context.Context, arg UpdateAnswerBodyParams) (int64, error)
 	UpdateDailyItem(ctx context.Context, arg UpdateDailyItemParams) (int64, error)
 	// Seri örneği elle düzenlenince seri güncellemeleri ona dokunmaz.
 	UpdateEvent(ctx context.Context, arg UpdateEventParams) (int64, error)
 	UpdateLibraryItem(ctx context.Context, arg UpdateLibraryItemParams) (int64, error)
+	// Havuz sorusunda ders, konu ve fotoğraflar da (Soru-Cevap sorusunda
+	// hep NULL). Yeni fotoğraf önce dosyaya bağlanır; bırakılan fotoğrafın
+	// dosyası tetikleyiciyle silme kuyruğuna girer.
 	UpdateQuestionContent(ctx context.Context, arg UpdateQuestionContentParams) (int64, error)
 	UpdateScheduleItem(ctx context.Context, arg UpdateScheduleItemParams) (int64, error)
 	UpdateScoreTable(ctx context.Context, arg UpdateScoreTableParams) error

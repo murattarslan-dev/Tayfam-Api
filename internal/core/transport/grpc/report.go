@@ -194,6 +194,7 @@ var reportReasons = map[corev1.ReportReason]report.Reason{
 	corev1.ReportReason_REPORT_REASON_COPYRIGHT:          report.ReasonCopyright,
 	corev1.ReportReason_REPORT_REASON_STAFF_CONDUCT:      report.ReasonStaffConduct,
 	corev1.ReportReason_REPORT_REASON_OTHER:              report.ReasonOther,
+	corev1.ReportReason_REPORT_REASON_PAID_TUTORING:      report.ReasonPaidTutoring,
 }
 
 var reportResolutions = map[corev1.ReportResolution]report.Resolution{

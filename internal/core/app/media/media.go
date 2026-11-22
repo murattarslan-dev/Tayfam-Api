@@ -58,6 +58,10 @@ const (
 	// PurposeLibraryItem is a library item's photo (issue #270, ADR-0040
 	// §1): one per item, seen by the tayfa's active members.
 	PurposeLibraryItem = "library_item"
+	// PurposeQuestionPool is a question pool question's or answer's photo
+	// (issue #271, ADR-0040 §2): at most two each, seen by the tayfa's
+	// active members while the question_pool module is on.
+	PurposeQuestionPool = "question_pool"
 )
 
 // Statuses (uploads.status). statusDeleting is never returned.
@@ -77,6 +81,10 @@ const (
 	TargetEventPhoto = "event_photo"
 	// TargetLibraryItem is a library item (issue #270).
 	TargetLibraryItem = "library_item"
+	// TargetQuestion and TargetAnswer are a question pool question and
+	// answer (issue #271).
+	TargetQuestion = "question"
+	TargetAnswer   = "answer"
 	// Chat's message IDs (ADR-0031); chat decides who sees them.
 	TargetChannelMessage = "channel_message"
 	TargetDMMessage      = "dm_message"
