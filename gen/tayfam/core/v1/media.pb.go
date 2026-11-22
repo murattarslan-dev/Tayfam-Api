@@ -54,21 +54,26 @@ const (
 	// are stuck on. Attached with QAService.CreateQuestion, UpdateQuestion,
 	// CreateAnswer or UpdateAnswer.
 	UploadPurpose_UPLOAD_PURPOSE_QUESTION_POOL UploadPurpose = 9
+	// A photo of the member's own notes in the tayfa's material library
+	// (issue #261, ADR-0040 §3; at most three per material). Attached with
+	// TayfaMaterialService.CreateMaterial or UpdateMaterial.
+	UploadPurpose_UPLOAD_PURPOSE_MATERIAL_NOTE UploadPurpose = 10
 )
 
 // Enum value maps for UploadPurpose.
 var (
 	UploadPurpose_name = map[int32]string{
-		0: "UPLOAD_PURPOSE_UNSPECIFIED",
-		1: "UPLOAD_PURPOSE_AVATAR",
-		2: "UPLOAD_PURPOSE_CATCH_PHOTO",
-		3: "UPLOAD_PURPOSE_COVER",
-		4: "UPLOAD_PURPOSE_EVENT_PHOTO",
-		5: "UPLOAD_PURPOSE_CHAT_PHOTO",
-		6: "UPLOAD_PURPOSE_DM_ATTACHMENT",
-		7: "UPLOAD_PURPOSE_REPORT_EVIDENCE",
-		8: "UPLOAD_PURPOSE_LIBRARY_ITEM",
-		9: "UPLOAD_PURPOSE_QUESTION_POOL",
+		0:  "UPLOAD_PURPOSE_UNSPECIFIED",
+		1:  "UPLOAD_PURPOSE_AVATAR",
+		2:  "UPLOAD_PURPOSE_CATCH_PHOTO",
+		3:  "UPLOAD_PURPOSE_COVER",
+		4:  "UPLOAD_PURPOSE_EVENT_PHOTO",
+		5:  "UPLOAD_PURPOSE_CHAT_PHOTO",
+		6:  "UPLOAD_PURPOSE_DM_ATTACHMENT",
+		7:  "UPLOAD_PURPOSE_REPORT_EVIDENCE",
+		8:  "UPLOAD_PURPOSE_LIBRARY_ITEM",
+		9:  "UPLOAD_PURPOSE_QUESTION_POOL",
+		10: "UPLOAD_PURPOSE_MATERIAL_NOTE",
 	}
 	UploadPurpose_value = map[string]int32{
 		"UPLOAD_PURPOSE_UNSPECIFIED":     0,
@@ -81,6 +86,7 @@ var (
 		"UPLOAD_PURPOSE_REPORT_EVIDENCE": 7,
 		"UPLOAD_PURPOSE_LIBRARY_ITEM":    8,
 		"UPLOAD_PURPOSE_QUESTION_POOL":   9,
+		"UPLOAD_PURPOSE_MATERIAL_NOTE":   10,
 	}
 )
 
@@ -1833,7 +1839,7 @@ const file_tayfam_core_v1_media_proto_rawDesc = "" +
 	"\x1cGetExportDownloadUrlResponse\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12;\n" +
 	"\vexpire_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTime*\xcc\x02\n" +
+	"expireTime*\xee\x02\n" +
 	"\rUploadPurpose\x12\x1e\n" +
 	"\x1aUPLOAD_PURPOSE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15UPLOAD_PURPOSE_AVATAR\x10\x01\x12\x1e\n" +
@@ -1844,7 +1850,9 @@ const file_tayfam_core_v1_media_proto_rawDesc = "" +
 	"\x1cUPLOAD_PURPOSE_DM_ATTACHMENT\x10\x06\x12\"\n" +
 	"\x1eUPLOAD_PURPOSE_REPORT_EVIDENCE\x10\a\x12\x1f\n" +
 	"\x1bUPLOAD_PURPOSE_LIBRARY_ITEM\x10\b\x12 \n" +
-	"\x1cUPLOAD_PURPOSE_QUESTION_POOL\x10\t*}\n" +
+	"\x1cUPLOAD_PURPOSE_QUESTION_POOL\x10\t\x12 \n" +
+	"\x1cUPLOAD_PURPOSE_MATERIAL_NOTE\x10\n" +
+	"*}\n" +
 	"\fUploadStatus\x12\x1d\n" +
 	"\x19UPLOAD_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15UPLOAD_STATUS_PENDING\x10\x01\x12\x17\n" +

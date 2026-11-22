@@ -62,6 +62,11 @@ const (
 	// (issue #271, ADR-0040 §2): at most two each, seen by the tayfa's
 	// active members while the question_pool module is on.
 	PurposeQuestionPool = "question_pool"
+	// PurposeMaterialNote is a photo of the member's own notes in the
+	// tayfa's material library (issue #261, ADR-0040 §3): at most three per
+	// material, seen by the tayfa's active members while the materials
+	// module is on.
+	PurposeMaterialNote = "material_note"
 )
 
 // Statuses (uploads.status). statusDeleting is never returned.
@@ -85,6 +90,8 @@ const (
 	// answer (issue #271).
 	TargetQuestion = "question"
 	TargetAnswer   = "answer"
+	// TargetMaterial is a material of the material library (issue #261).
+	TargetMaterial = "material"
 	// Chat's message IDs (ADR-0031); chat decides who sees them.
 	TargetChannelMessage = "channel_message"
 	TargetDMMessage      = "dm_message"

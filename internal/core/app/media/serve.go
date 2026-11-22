@@ -162,7 +162,8 @@ func (s *Service) ReportEvidenceURL(ctx context.Context, report, upload id.ID) (
 // EventView (with the events module on) for an event cover, a log entry photo
 // or an album photo (ADR-0028), TayfaView with the library module on for a
 // library item's photo (ADR-0040 §1) and with the question_pool module on
-// for a question pool question's or answer's photo (ADR-0040 §2). The
+// for a question pool question's or answer's photo (ADR-0040 §2), and with
+// the materials module on for a material's note photo (ADR-0040 §3). The
 // default is no.
 func canView(viewer id.ID, r store.ListMediaForViewerRow, now time.Time) (bool, error) {
 	if r.UserID.Valid && id.ID(r.UserID.Bytes) == viewer {
@@ -174,7 +175,7 @@ func canView(viewer id.ID, r store.ListMediaForViewerRow, now time.Time) (bool, 
 	switch r.AttachedType.String {
 	case TargetUser:
 		return !r.Blocked && !r.OwnerDeleted, nil
-	case TargetTayfa, TargetEvent, TargetLogEntry, TargetEventPhoto, TargetLibraryItem, TargetQuestion, TargetAnswer:
+	case TargetTayfa, TargetEvent, TargetLogEntry, TargetEventPhoto, TargetLibraryItem, TargetQuestion, TargetAnswer, TargetMaterial:
 		if !r.ContentTayfaID.Valid || !r.MemberStatus.Valid {
 			return false, nil
 		}
@@ -195,6 +196,10 @@ func canView(viewer id.ID, r store.ListMediaForViewerRow, now time.Time) (bool, 
 		if r.AttachedType.String == TargetQuestion || r.AttachedType.String == TargetAnswer {
 			// A question pool photo (issue #271): the module on.
 			return r.QuestionPoolModuleOn && authz.Allowed(m, authz.TayfaView, now), nil
+		}
+		if r.AttachedType.String == TargetMaterial {
+			// A material's note photo (issue #261): the materials module on.
+			return r.MaterialsModuleOn && authz.Allowed(m, authz.TayfaView, now), nil
 		}
 		return r.EventsModuleOn && authz.Allowed(m, authz.EventView, now), nil
 	}

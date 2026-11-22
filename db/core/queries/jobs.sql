@@ -188,6 +188,12 @@ DELETE FROM tayfa_daily_items WHERE id IN (
   SELECT x.id FROM tayfa_daily_items x WHERE x.deleted_at <= @deleted_before
   ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
 
+-- Materyal kütüphanesi (issue #261).
+-- name: PurgeMaterials :execrows
+DELETE FROM materials WHERE id IN (
+  SELECT x.id FROM materials x WHERE x.deleted_at <= @deleted_before
+  ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
+
 -- Albüm fotoğrafı; dosyası uploads_release_ref ile silme kuyruğuna girer.
 -- name: PurgeEventPhotos :execrows
 DELETE FROM event_photos WHERE id IN (

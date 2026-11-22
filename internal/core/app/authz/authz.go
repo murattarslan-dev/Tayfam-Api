@@ -333,6 +333,14 @@ const (
 	LibraryBorrow
 	LibraryBorrowCancel
 	LibraryLendOwn
+	// Materyal kütüphanesi (issue #261, ADR-0040 §3). MaterialAdd adds a
+	// material of one's own; MaterialEditOwn edits it and MaterialDeleteOwn
+	// deletes it (the caller checks that it is theirs). MaterialRemoveAny
+	// removes anyone's material (moderation). Reading is TayfaView.
+	MaterialAdd
+	MaterialEditOwn
+	MaterialDeleteOwn
+	MaterialRemoveAny
 
 	actionEnd // sentinel; keep last
 )
@@ -447,6 +455,10 @@ var actionNames = [...]string{
 	LibraryBorrow:             "library.borrow",
 	LibraryBorrowCancel:       "library.borrow_cancel",
 	LibraryLendOwn:            "library.lend_own",
+	MaterialAdd:               "material.add",
+	MaterialEditOwn:           "material.edit_own",
+	MaterialDeleteOwn:         "material.delete_own",
+	MaterialRemoveAny:         "material.remove_any",
 	actionEnd:                 "",
 }
 
@@ -478,6 +490,11 @@ var permissions = map[Action]Role{
 	LibraryBorrow:          Member,
 	LibraryBorrowCancel:    Member,
 	LibraryLendOwn:         Member,
+	// Materyal kütüphanesi (ADR-0040 §3): every member adds; the author's
+	// own steps.
+	MaterialAdd:       Member,
+	MaterialEditOwn:   Member,
+	MaterialDeleteOwn: Member,
 	// Events: reading, answering and the organizer's own event. An organizer
 	// keeps managing their event even if the tayfa later stops letting
 	// members create events (2026-11-09).
@@ -587,6 +604,9 @@ var permissions = map[Action]Role{
 	// Ortak kütüphane: removing anyone's item is content moderation
 	// (ADR-0040 §1).
 	LibraryItemRemoveAny: Moderator,
+	// Materyal kütüphanesi: removing anyone's material is content
+	// moderation (ADR-0040 §3).
+	MaterialRemoveAny: Moderator,
 	// Removing anyone's event question ("Tayfa yönetimi anonim soruyu
 	// yazarını görmeden silebilir", ADR-0025 §5).
 	EventQuestionDeleteAny: Moderator,
@@ -727,6 +747,9 @@ var allowedWhileMuted = map[Action]bool{
 	LibraryItemWithdrawOwn: true,
 	LibraryBorrowCancel:    true,
 	LibraryLendOwn:         true,
+	// Materyal kütüphanesi (ADR-0040 §3): deleting one's own material only
+	// narrows. Adding and editing publish and are refused while muted.
+	MaterialDeleteOwn: true,
 }
 
 // Settings are the tayfa settings that change the permission table. The zero

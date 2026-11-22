@@ -622,6 +622,7 @@ SELECT u.id, u.user_id, u.purpose, u.r2_key, COALESCE(u.preview_type, '')::text 
        COALESCE(tm.enabled, false)::boolean AS events_module_on,
        COALESCE(lm.enabled, false)::boolean AS library_module_on,
        COALESCE(qm.enabled, false)::boolean AS question_pool_module_on,
+       COALESCE(mm.enabled, false)::boolean AS materials_module_on,
        (u.attached_type = 'user' AND EXISTS (
          SELECT 1 FROM user_blocks b
          WHERE (b.blocker_id = $1 AND b.blocked_id = u.attached_id)
@@ -660,11 +661,16 @@ LEFT JOIN LATERAL (
   JOIN questions qq ON qq.id = aa.question_id AND qq.deleted_at IS NULL
   JOIN tayfas t ON t.id = aa.tayfa_id AND t.deleted_at IS NULL
   WHERE u.attached_type = 'answer' AND aa.id = u.attached_id AND aa.deleted_at IS NULL
+  UNION ALL
+  SELECT mt.tayfa_id FROM materials mt
+  JOIN tayfas t ON t.id = mt.tayfa_id AND t.deleted_at IS NULL
+  WHERE u.attached_type = 'material' AND mt.id = u.attached_id AND mt.deleted_at IS NULL
 ) c ON true
 LEFT JOIN memberships m ON m.tayfa_id = c.tayfa_id AND m.user_id = $1
 LEFT JOIN tayfa_modules tm ON tm.tayfa_id = c.tayfa_id AND tm.module = 'events'
 LEFT JOIN tayfa_modules lm ON lm.tayfa_id = c.tayfa_id AND lm.module = 'library'
 LEFT JOIN tayfa_modules qm ON qm.tayfa_id = c.tayfa_id AND qm.module = 'question_pool'
+LEFT JOIN tayfa_modules mm ON mm.tayfa_id = c.tayfa_id AND mm.module = 'materials'
 WHERE u.id = ANY($2::uuid[]) AND u.status = 'ready' AND u.purpose <> 'data_export'
 `
 
@@ -691,6 +697,7 @@ type ListMediaForViewerRow struct {
 	EventsModuleOn       bool
 	LibraryModuleOn      bool
 	QuestionPoolModuleOn bool
+	MaterialsModuleOn    bool
 	Blocked              bool
 	OwnerDeleted         bool
 }
@@ -729,6 +736,7 @@ func (q *Queries) ListMediaForViewer(ctx context.Context, arg ListMediaForViewer
 			&i.EventsModuleOn,
 			&i.LibraryModuleOn,
 			&i.QuestionPoolModuleOn,
+			&i.MaterialsModuleOn,
 			&i.Blocked,
 			&i.OwnerDeleted,
 		); err != nil {

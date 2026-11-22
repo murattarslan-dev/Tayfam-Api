@@ -119,6 +119,9 @@ const (
 	// TargetLibraryItem: an item of the tayfa's library (issue #270,
 	// ADR-0040 §1); its subject is the item's owner.
 	TargetLibraryItem TargetType = "library_item"
+	// TargetMaterial: a material of the tayfa's material library (issue
+	// #261, ADR-0040 §3); its subject is the author.
+	TargetMaterial TargetType = "material"
 	// TargetDMMessage: a direct message (issue #95). Not about a tayfa; see
 	// createDirect.
 	TargetDMMessage TargetType = "dm_message"
@@ -132,7 +135,7 @@ const (
 func (t TargetType) content() bool {
 	switch t {
 	case TargetAnnouncement, TargetEvent, TargetQuestion, TargetAnswer, TargetPoll, TargetLogEntry, TargetEventPhoto,
-		TargetChannelMessage, TargetEventQuestion, TargetDailyItem, TargetLibraryItem:
+		TargetChannelMessage, TargetEventQuestion, TargetDailyItem, TargetLibraryItem, TargetMaterial:
 		return true
 	}
 	return false
@@ -614,6 +617,8 @@ func moduleOf(t TargetType) string {
 		return access.ModuleDaily
 	case TargetLibraryItem:
 		return access.ModuleLibrary
+	case TargetMaterial:
+		return access.ModuleMaterials
 	}
 	return access.ModuleEvents // events, log entries, album photos and event questions
 }
@@ -692,6 +697,10 @@ func lookup(ctx context.Context, q *store.Queries, tayfa id.ID, t TargetType, ta
 	case TargetLibraryItem:
 		var r store.GetReportTargetLibraryItemRow
 		r, err = q.GetReportTargetLibraryItem(ctx, store.GetReportTargetLibraryItemParams{TayfaID: p.t, ID: p.i})
+		author, visible = r.AuthorID, r.Visible
+	case TargetMaterial:
+		var r store.GetReportTargetMaterialRow
+		r, err = q.GetReportTargetMaterial(ctx, store.GetReportTargetMaterialParams{TayfaID: p.t, ID: p.i})
 		author, visible = r.AuthorID, r.Visible
 	default:
 		return content{}, errors.New("içerik olmayan hedef")

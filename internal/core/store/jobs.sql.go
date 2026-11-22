@@ -636,6 +636,26 @@ func (q *Queries) PurgeLogEntries(ctx context.Context, arg PurgeLogEntriesParams
 	return result.RowsAffected(), nil
 }
 
+const purgeMaterials = `-- name: PurgeMaterials :execrows
+DELETE FROM materials WHERE id IN (
+  SELECT x.id FROM materials x WHERE x.deleted_at <= $1
+  ORDER BY x.deleted_at, x.id LIMIT $2 FOR UPDATE SKIP LOCKED)
+`
+
+type PurgeMaterialsParams struct {
+	DeletedBefore pgtype.Timestamptz
+	N             int32
+}
+
+// Materyal kütüphanesi (issue #261).
+func (q *Queries) PurgeMaterials(ctx context.Context, arg PurgeMaterialsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeMaterials, arg.DeletedBefore, arg.N)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const purgePolls = `-- name: PurgePolls :execrows
 DELETE FROM polls WHERE id IN (
   SELECT x.id FROM polls x WHERE x.deleted_at <= $1

@@ -218,6 +218,10 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_LIBRARY_ITEM_ON_LOAN":   {http.StatusConflict, "library-item-on-loan"},
 		"ERROR_REASON_LIBRARY_ITEM_LIMIT":     {http.StatusConflict, "library-item-limit"},
 		"ERROR_REASON_LIBRARY_QUEUE_FULL":     {http.StatusConflict, "library-queue-full"},
+		// Materyal kütüphanesi (issue #261; ADR-0040 §3).
+		"ERROR_REASON_MATERIAL_NOT_FOUND": {http.StatusNotFound, "material-not-found"},
+		"ERROR_REASON_BLOCKED_LINK":       {http.StatusBadRequest, "blocked-link"},
+		"ERROR_REASON_MATERIAL_LIMIT":     {http.StatusConflict, "material-limit"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

@@ -160,6 +160,11 @@ var wantAppPrivileges = map[string]string{
 	"library_items": "DELETE,INSERT,SELECT,UPDATE(name,note,owner_id,photo_upload_id,status,updated_at,vocabulary_id,vocabulary_namespace,withdrawn_at,withdrawn_by)",
 	"library_loans": "DELETE,INSERT,SELECT,UPDATE(approved_at,borrower_id,due_at,ended_at,handed_over_at,orphaned_at,reminded_at,state)",
 	"library_queue": "DELETE,INSERT,SELECT",
+	// Issue #261: a material never moves to another tayfa and its kind
+	// and request ID never change; the blocked domain list is read only
+	// (the platform panel manages it, #262).
+	"materials":       "DELETE,INSERT,SELECT,UPDATE(author_id,deleted_at,deleted_by,domain,photo1_upload_id,photo2_upload_id,photo3_upload_id,subject_key,title,topic_key,updated_at,url)",
+	"blocked_domains": "SELECT",
 	// Issue #271: the pool_link list is replaced as a whole (deleted and
 	// written again); a link never moves.
 	"event_pool_links": "DELETE,INSERT,SELECT",

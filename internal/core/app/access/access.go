@@ -117,6 +117,7 @@ const (
 	ModulePolls         = "polls"
 	ModuleDaily         = "daily"
 	ModuleLibrary       = "library"
+	ModuleMaterials     = "materials"
 	// ModuleQuestionPool is the Eğitim question pool (issue #271).
 	ModuleQuestionPool = "question_pool"
 )

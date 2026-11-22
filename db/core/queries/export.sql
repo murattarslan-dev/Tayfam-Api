@@ -496,3 +496,16 @@ FROM library_queue lq JOIN library_items qi ON qi.id = lq.item_id
 WHERE lq.user_id = @user_id AND lq.id > @after
 ORDER BY k
 LIMIT @n;
+
+-- Materyal kütüphanesi (issue #261; ADR-0040 §3): eklediğiniz materyaller
+-- (silinenler dahil). Fotoğraf ve silen yer almaz.
+-- name: ExportMaterials :many
+SELECT m.id AS k, jsonb_build_object(
+  'id', m.id, 'tayfa_id', m.tayfa_id, 'kind', m.kind, 'title', m.title, 'url', m.url, 'domain', m.domain,
+  'subject_key', m.subject_key, 'topic_key', m.topic_key,
+  'created_at', m.created_at, 'updated_at', m.updated_at, 'deleted_at', m.deleted_at
+) AS data
+FROM materials m
+WHERE m.author_id = @user_id AND m.id > @after
+ORDER BY m.id
+LIMIT @n;

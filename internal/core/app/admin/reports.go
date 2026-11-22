@@ -366,6 +366,13 @@ func reportedItem(ctx context.Context, q *store.Queries, r Report) (*Item, error
 		x, err = q.AdminGetLibraryItem(ctx, store.AdminGetLibraryItemParams{ID: r.Target.PG(), TayfaID: tf})
 		it.Author, it.Title, it.Body = idOf(x.OwnerID), x.Name, x.Note.String
 		it.CreatedAt, it.DeletedAt = timeOf(x.CreatedAt), timeOf(x.WithdrawnAt)
+	case "material":
+		// The link is shown as text; the panel never opens it (ADR-0040
+		// §3). Note photos are not shown here.
+		var x store.AdminGetMaterialRow
+		x, err = q.AdminGetMaterial(ctx, store.AdminGetMaterialParams{ID: r.Target.PG(), TayfaID: tf})
+		it.Author, it.Title, it.Body = idOf(x.AuthorID), x.Title, x.Link
+		it.CreatedAt, it.DeletedAt = timeOf(x.CreatedAt), timeOf(x.DeletedAt)
 	case "event_photo":
 		var x store.AdminGetEventPhotoRow
 		x, err = q.AdminGetEventPhoto(ctx, store.AdminGetEventPhotoParams{ID: r.Target.PG(), TayfaID: tf})
@@ -405,6 +412,8 @@ func removeContent(ctx context.Context, q *store.Queries, r Report, by id.ID, no
 		_, err = q.AdminDeleteEventQuestion(ctx, store.AdminDeleteEventQuestionParams{ID: tid, TayfaID: tf, At: at, By: b})
 	case "daily_item":
 		_, err = q.AdminDeleteDailyItem(ctx, store.AdminDeleteDailyItemParams{ID: tid, TayfaID: tf, At: at, By: b})
+	case "material":
+		_, err = q.AdminDeleteMaterial(ctx, store.AdminDeleteMaterialParams{ID: tid, TayfaID: tf, At: at, By: b})
 	case "library_item":
 		// Withdrawn like a moderator's removal: waiting requests end, a
 		// handed-over loan stays open for its owner (ADR-0040 §1).

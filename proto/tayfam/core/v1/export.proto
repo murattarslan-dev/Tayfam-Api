@@ -139,6 +139,10 @@ enum CoreExportSection {
   // the caller's role, the state and its times. The other person is not
   // exported.
   CORE_EXPORT_SECTION_LIBRARY_LOANS = 38;
+  // The materials the caller added to a tayfa's material library (issue
+  // #261, ADR-0040 §3), deleted ones included: kind, title, link and its
+  // domain, study tags and times. The photos are not in it.
+  CORE_EXPORT_SECTION_MATERIALS = 39;
 }
 
 message ExportMyDataRequest {}

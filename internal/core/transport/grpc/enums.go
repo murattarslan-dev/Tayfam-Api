@@ -67,12 +67,14 @@ func moduleFromProto(m corev1.Module) (string, bool) {
 		return "library", true
 	case corev1.Module_MODULE_QUESTION_POOL:
 		return "question_pool", true
+	case corev1.Module_MODULE_MATERIALS:
+		return "materials", true
 	}
 	return "", false
 }
 
 func moduleToProto(s string) corev1.Module {
-	for m := corev1.Module_MODULE_ANNOUNCEMENTS; m <= corev1.Module_MODULE_QUESTION_POOL; m++ {
+	for m := corev1.Module_MODULE_ANNOUNCEMENTS; m <= corev1.Module_MODULE_MATERIALS; m++ {
 		if v, _ := moduleFromProto(m); v == s {
 			return m
 		}

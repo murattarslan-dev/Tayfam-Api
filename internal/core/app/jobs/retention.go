@@ -41,6 +41,9 @@ func purgeSteps() []purgeStep {
 		{"günün içerikleri", func(ctx context.Context, q *store.Queries, p store.PurgeAnnouncementsParams) (int64, error) {
 			return q.PurgeDailyItems(ctx, store.PurgeDailyItemsParams(p))
 		}},
+		{"materyaller", func(ctx context.Context, q *store.Queries, p store.PurgeAnnouncementsParams) (int64, error) {
+			return q.PurgeMaterials(ctx, store.PurgeMaterialsParams(p))
+		}},
 		{"albüm fotoğrafları", func(ctx context.Context, q *store.Queries, p store.PurgeAnnouncementsParams) (int64, error) {
 			return q.PurgeEventPhotos(ctx, store.PurgeEventPhotosParams(p))
 		}},
@@ -61,7 +64,7 @@ func purgeSteps() []purgeStep {
 // (ADR-0009) while its channel photos are queued for deletion (ADR-0031).
 // Then announcements, questions (with their answers), answers,
 // polls, log entries (fishing catches among them), event questions (with
-// their votes), daily content items, album photos and events go in batches of
+// their votes), daily content items, materials, album photos and events go in batches of
 // contentBatch.
 // Activity records stay (SET NULL).
 func (s *Service) Purge(ctx context.Context) (int, error) {

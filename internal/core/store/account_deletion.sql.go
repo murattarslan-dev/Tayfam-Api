@@ -189,6 +189,19 @@ func (q *Queries) ClearLogEntryDeleter(ctx context.Context, userID pgtype.UUID) 
 	return err
 }
 
+const clearMaterialUserFields = `-- name: ClearMaterialUserFields :exec
+UPDATE materials
+SET author_id = NULLIF(author_id, $1), deleted_by = NULLIF(deleted_by, $1)
+WHERE $1 IN (author_id, deleted_by)
+`
+
+// Materyal kütüphanesi (issue #261; ADR-0040 §3): materyal kalır, yazar ve
+// silen boşalır; fotoğraf dosyaları media.UserDeleted ile silinir.
+func (q *Queries) ClearMaterialUserFields(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearMaterialUserFields, userID)
+	return err
+}
+
 const clearMeasurementEnteredBy = `-- name: ClearMeasurementEnteredBy :exec
 UPDATE event_measurements SET entered_by = NULL WHERE entered_by = $1
 `

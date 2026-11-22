@@ -162,6 +162,10 @@ const (
 	// (QAService with QUESTION_POOL_QUESTION_POOL), its home widget and the
 	// pool_link event component.
 	Module_MODULE_QUESTION_POOL Module = 7
+	// Materyal kütüphanesi (issue #261; ADR-0040 §3): the Eğitim study
+	// material — links and note photos (TayfaMaterialService) — and its home
+	// widget.
+	Module_MODULE_MATERIALS Module = 8
 )
 
 // Enum value maps for Module.
@@ -175,6 +179,7 @@ var (
 		5: "MODULE_DAILY",
 		6: "MODULE_LIBRARY",
 		7: "MODULE_QUESTION_POOL",
+		8: "MODULE_MATERIALS",
 	}
 	Module_value = map[string]int32{
 		"MODULE_UNSPECIFIED":   0,
@@ -185,6 +190,7 @@ var (
 		"MODULE_DAILY":         5,
 		"MODULE_LIBRARY":       6,
 		"MODULE_QUESTION_POOL": 7,
+		"MODULE_MATERIALS":     8,
 	}
 )
 
@@ -1845,7 +1851,7 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\x12EVENT_TYPE_FISHING\x10\x04\x12\x15\n" +
 	"\x11EVENT_TYPE_GAMING\x10\x05\x12\x15\n" +
 	"\x11EVENT_TYPE_SPORTS\x10\x06\x12\x16\n" +
-	"\x12EVENT_TYPE_GENERAL\x10\a*\xae\x01\n" +
+	"\x12EVENT_TYPE_GENERAL\x10\a*\xc4\x01\n" +
 	"\x06Module\x12\x16\n" +
 	"\x12MODULE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14MODULE_ANNOUNCEMENTS\x10\x01\x12\x11\n" +
@@ -1854,7 +1860,8 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\fMODULE_POLLS\x10\x04\x12\x10\n" +
 	"\fMODULE_DAILY\x10\x05\x12\x12\n" +
 	"\x0eMODULE_LIBRARY\x10\x06\x12\x18\n" +
-	"\x14MODULE_QUESTION_POOL\x10\a*x\n" +
+	"\x14MODULE_QUESTION_POOL\x10\a\x12\x14\n" +
+	"\x10MODULE_MATERIALS\x10\b*x\n" +
 	"\vTayfaStatus\x12\x1c\n" +
 	"\x18TAYFA_STATUS_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13TAYFA_STATUS_ACTIVE\x10\x01\x12\x17\n" +

@@ -555,4 +555,17 @@ enum ErrorReason {
   ERROR_REASON_LIBRARY_ITEM_LIMIT = 2705;
   // FAILED_PRECONDITION. 20 members already wait for the item.
   ERROR_REASON_LIBRARY_QUEUE_FULL = 2706;
+
+  // Materyal kütüphanesi (ADR-0040 §3; issue #261: 2720–2729).
+
+  // NOT_FOUND. A material that is not visible in the tayfa's material
+  // library (never there, deleted, or linking to a blocked domain), or,
+  // for an author's step, not the caller's.
+  ERROR_REASON_MATERIAL_NOT_FOUND = 2720;
+  // INVALID_ARGUMENT. The link's domain, or a domain above it, is on the
+  // platform's blocked domain list.
+  ERROR_REASON_BLOCKED_LINK = 2721;
+  // FAILED_PRECONDITION. The caller already has 200 materials in the
+  // tayfa's material library.
+  ERROR_REASON_MATERIAL_LIMIT = 2722;
 }

@@ -237,6 +237,13 @@ UPDATE library_loans SET borrower_id = NULL WHERE borrower_id = @user_id;
 -- name: DeleteUserLibraryQueue :exec
 DELETE FROM library_queue WHERE user_id = @user_id;
 
+-- Materyal kütüphanesi (issue #261; ADR-0040 §3): materyal kalır, yazar ve
+-- silen boşalır; fotoğraf dosyaları media.UserDeleted ile silinir.
+-- name: ClearMaterialUserFields :exec
+UPDATE materials
+SET author_id = NULLIF(author_id, @user_id), deleted_by = NULLIF(deleted_by, @user_id)
+WHERE @user_id IN (author_id, deleted_by);
+
 -- Albüm fotoğrafları kişiseldir; kişiyle birlikte silinir, dosyaları
 -- silme kuyruğuna girer (issue #206).
 -- name: DeleteUserEventPhotos :exec

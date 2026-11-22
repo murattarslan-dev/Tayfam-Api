@@ -529,6 +529,31 @@ func (q *Queries) GetReportTargetLogEntry(ctx context.Context, arg GetReportTarg
 	return i, err
 }
 
+const getReportTargetMaterial = `-- name: GetReportTargetMaterial :one
+SELECT author_id, (deleted_at IS NULL AND NOT material_domain_blocked(domain))::boolean AS visible
+FROM materials
+WHERE tayfa_id = $1 AND id = $2
+`
+
+type GetReportTargetMaterialParams struct {
+	TayfaID pgtype.UUID
+	ID      pgtype.UUID
+}
+
+type GetReportTargetMaterialRow struct {
+	AuthorID pgtype.UUID
+	Visible  bool
+}
+
+// Materyal (issue #261): yazarı konusudur; engelli alan adındaki bağlantı
+// gizlidir.
+func (q *Queries) GetReportTargetMaterial(ctx context.Context, arg GetReportTargetMaterialParams) (GetReportTargetMaterialRow, error) {
+	row := q.db.QueryRow(ctx, getReportTargetMaterial, arg.TayfaID, arg.ID)
+	var i GetReportTargetMaterialRow
+	err := row.Scan(&i.AuthorID, &i.Visible)
+	return i, err
+}
+
 const getReportTargetPoll = `-- name: GetReportTargetPoll :one
 SELECT created_by AS author_id, (deleted_at IS NULL)::boolean AS visible
 FROM polls

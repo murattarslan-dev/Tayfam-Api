@@ -65,6 +65,13 @@ SELECT owner_id AS author_id, (status <> 'withdrawn')::boolean AS visible
 FROM library_items
 WHERE tayfa_id = @tayfa_id AND id = @id;
 
+-- Materyal (issue #261): yazarı konusudur; engelli alan adındaki bağlantı
+-- gizlidir.
+-- name: GetReportTargetMaterial :one
+SELECT author_id, (deleted_at IS NULL AND NOT material_domain_blocked(domain))::boolean AS visible
+FROM materials
+WHERE tayfa_id = @tayfa_id AND id = @id;
+
 -- Albüm fotoğrafı (issue #206): etkinliği de görünür olmalı.
 -- name: GetReportTargetEventPhoto :one
 SELECT p.uploader_id AS author_id, (p.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible

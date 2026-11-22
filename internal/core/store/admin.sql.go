@@ -221,6 +221,31 @@ func (q *Queries) AdminDeleteLogEntry(ctx context.Context, arg AdminDeleteLogEnt
 	return result.RowsAffected(), nil
 }
 
+const adminDeleteMaterial = `-- name: AdminDeleteMaterial :execrows
+UPDATE materials SET deleted_at = $1, deleted_by = $2
+WHERE id = $3 AND tayfa_id = $4 AND deleted_at IS NULL
+`
+
+type AdminDeleteMaterialParams struct {
+	At      pgtype.Timestamptz
+	By      pgtype.UUID
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+func (q *Queries) AdminDeleteMaterial(ctx context.Context, arg AdminDeleteMaterialParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adminDeleteMaterial,
+		arg.At,
+		arg.By,
+		arg.ID,
+		arg.TayfaID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const adminDeletePoll = `-- name: AdminDeletePoll :execrows
 UPDATE polls SET deleted_at = $1, deleted_by = $2 WHERE id = $3 AND tayfa_id = $4 AND deleted_at IS NULL
 `
@@ -541,6 +566,40 @@ func (q *Queries) AdminGetLogEntry(ctx context.Context, arg AdminGetLogEntryPara
 		&i.UserID,
 		&i.ComponentKey,
 		&i.FieldValues,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const adminGetMaterial = `-- name: AdminGetMaterial :one
+SELECT author_id, title, COALESCE(url, '')::text AS link, created_at, deleted_at
+FROM materials
+WHERE id = $1 AND tayfa_id = $2
+`
+
+type AdminGetMaterialParams struct {
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+type AdminGetMaterialRow struct {
+	AuthorID  pgtype.UUID
+	Title     string
+	Link      string
+	CreatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
+}
+
+// Materyal kütüphanesi (issue #261): panel bağlantıyı açmaz, adresi metin
+// olarak gösterir.
+func (q *Queries) AdminGetMaterial(ctx context.Context, arg AdminGetMaterialParams) (AdminGetMaterialRow, error) {
+	row := q.db.QueryRow(ctx, adminGetMaterial, arg.ID, arg.TayfaID)
+	var i AdminGetMaterialRow
+	err := row.Scan(
+		&i.AuthorID,
+		&i.Title,
+		&i.Link,
 		&i.CreatedAt,
 		&i.DeletedAt,
 	)

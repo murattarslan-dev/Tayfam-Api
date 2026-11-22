@@ -1016,6 +1016,51 @@ func (q *Queries) ExportLogEntries(ctx context.Context, arg ExportLogEntriesPara
 	return items, nil
 }
 
+const exportMaterials = `-- name: ExportMaterials :many
+SELECT m.id AS k, jsonb_build_object(
+  'id', m.id, 'tayfa_id', m.tayfa_id, 'kind', m.kind, 'title', m.title, 'url', m.url, 'domain', m.domain,
+  'subject_key', m.subject_key, 'topic_key', m.topic_key,
+  'created_at', m.created_at, 'updated_at', m.updated_at, 'deleted_at', m.deleted_at
+) AS data
+FROM materials m
+WHERE m.author_id = $1 AND m.id > $2
+ORDER BY m.id
+LIMIT $3
+`
+
+type ExportMaterialsParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportMaterialsRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Materyal kütüphanesi (issue #261; ADR-0040 §3): eklediğiniz materyaller
+// (silinenler dahil). Fotoğraf ve silen yer almaz.
+func (q *Queries) ExportMaterials(ctx context.Context, arg ExportMaterialsParams) ([]ExportMaterialsRow, error) {
+	rows, err := q.db.Query(ctx, exportMaterials, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportMaterialsRow{}
+	for rows.Next() {
+		var i ExportMaterialsRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportMeasurements = `-- name: ExportMeasurements :many
 SELECT m.id AS k, jsonb_build_object(
   'event_id', m.event_id, 'component_key', m.component_key, 'value', m.value,
