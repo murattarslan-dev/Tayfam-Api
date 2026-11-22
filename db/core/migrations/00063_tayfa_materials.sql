@@ -67,6 +67,7 @@ CREATE TABLE blocked_domains (
 
 -- Alan adı ya da üst alan adlarından biri engelliyse doğru (birincil anahtar
 -- üzerinden; NULL alan adı engelli değildir).
+-- +goose StatementBegin
 CREATE FUNCTION material_domain_blocked(d text) RETURNS boolean LANGUAGE sql STABLE AS $$
   SELECT EXISTS (
     SELECT 1 FROM blocked_domains b
@@ -75,6 +76,7 @@ CREATE FUNCTION material_domain_blocked(d text) RETURNS boolean LANGUAGE sql STA
       FROM (SELECT string_to_array(d, '.') AS labels) p,
            generate_series(1, cardinality(p.labels)) AS i))
 $$;
+-- +goose StatementEnd
 
 INSERT INTO blocked_domains (domain) VALUES
   -- Bağlantı kısaltıcılar.
