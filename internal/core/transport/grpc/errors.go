@@ -310,6 +310,12 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LIBRARY_ITEM_LIMIT, true
 	case errors.Is(err, apperr.ErrLibraryQueueFull):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LIBRARY_QUEUE_FULL, true
+	case errors.Is(err, apperr.ErrMaterialNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_MATERIAL_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrBlockedLink):
+		return codes.InvalidArgument, corev1.ErrorReason_ERROR_REASON_BLOCKED_LINK, true
+	case errors.Is(err, apperr.ErrMaterialLimit):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_MATERIAL_LIMIT, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

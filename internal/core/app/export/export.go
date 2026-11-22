@@ -87,6 +87,8 @@ const (
 	// places (ADR-0040 §1).
 	SectionLibraryItems = "library_items"
 	SectionLibraryLoans = "library_loans"
+	// Issue #261: the materials one added (ADR-0040 §3).
+	SectionMaterials = "materials"
 )
 
 const (
@@ -275,6 +277,10 @@ var sections = []struct {
 	{SectionLibraryLoans, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportLibraryLoans(ctx, store.ExportLibraryLoansParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportLibraryLoansRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionMaterials, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportMaterials(ctx, store.ExportMaterialsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportMaterialsRow) row { return row{x.K, x.Data} })
 	}},
 }
 

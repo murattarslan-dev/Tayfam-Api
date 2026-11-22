@@ -225,6 +225,10 @@ enum UploadPurpose {
   // are stuck on. Attached with QAService.CreateQuestion, UpdateQuestion,
   // CreateAnswer or UpdateAnswer.
   UPLOAD_PURPOSE_QUESTION_POOL = 9;
+  // A photo of the member's own notes in the tayfa's material library
+  // (issue #261, ADR-0040 §3; at most three per material). Attached with
+  // TayfaMaterialService.CreateMaterial or UpdateMaterial.
+  UPLOAD_PURPOSE_MATERIAL_NOTE = 10;
 }
 
 // UploadStatus is where an upload stands (uploads.status).

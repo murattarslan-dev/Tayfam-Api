@@ -170,6 +170,10 @@ enum ReportTargetType {
   // TayfaLibraryService). Its subject is the item's owner. Reporting needs
   // the library module on and the item not withdrawn.
   REPORT_TARGET_TYPE_LIBRARY_ITEM = 14;
+  // target_id is a material of the tayfa's material library (issue #261;
+  // TayfaMaterialService). Its subject is the author. Reporting needs the
+  // materials module on and the material visible.
+  REPORT_TARGET_TYPE_MATERIAL = 15;
 }
 
 // ReportReason follows the community rules (Notion "Topluluk Kuralları").

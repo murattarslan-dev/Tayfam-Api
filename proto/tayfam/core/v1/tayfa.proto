@@ -139,6 +139,10 @@ enum Module {
   // (QAService with QUESTION_POOL_QUESTION_POOL), its home widget and the
   // pool_link event component.
   MODULE_QUESTION_POOL = 7;
+  // Materyal kütüphanesi (issue #261; ADR-0040 §3): the Eğitim study
+  // material — links and note photos (TayfaMaterialService) — and its home
+  // widget.
+  MODULE_MATERIALS = 8;
 }
 
 // Lifecycle of an inactive tayfa (tayfas.status).

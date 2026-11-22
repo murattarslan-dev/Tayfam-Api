@@ -313,6 +313,20 @@ var (
 	ErrLibraryQueueFull = errors.New("bekleme sırası dolu")
 )
 
+// Material library errors (issue #261; ADR-0040 §3).
+var (
+	// ErrMaterialNotFound: a material that is not visible in the tayfa's
+	// material library (never there, deleted, or linking to a blocked
+	// domain), or one the caller may not act on as its author.
+	ErrMaterialNotFound = errors.New("materyal yok")
+	// ErrBlockedLink: the link's domain, or a domain above it, is on the
+	// platform's blocked domain list.
+	ErrBlockedLink = errors.New("engelli bağlantı")
+	// ErrMaterialLimit: the author already has material.MaxPerAuthor
+	// materials in the tayfa.
+	ErrMaterialLimit = errors.New("materyal sınırı")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (

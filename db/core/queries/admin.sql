@@ -159,6 +159,13 @@ SELECT owner_id, kind, name, note, created_at, withdrawn_at
 FROM library_items
 WHERE id = @id AND tayfa_id = @tayfa_id;
 
+-- Materyal kütüphanesi (issue #261): panel bağlantıyı açmaz, adresi metin
+-- olarak gösterir.
+-- name: AdminGetMaterial :one
+SELECT author_id, title, COALESCE(url, '')::text AS link, created_at, deleted_at
+FROM materials
+WHERE id = @id AND tayfa_id = @tayfa_id;
+
 -- name: AdminGetEventPhoto :one
 SELECT p.uploader_id, p.caption, p.created_at, p.deleted_at, p.upload_id
 FROM event_photos p JOIN events e ON e.id = p.event_id
@@ -196,6 +203,10 @@ WHERE q.id = @id AND e.id = q.event_id AND e.tayfa_id = @tayfa_id AND q.deleted_
 
 -- name: AdminDeleteDailyItem :execrows
 UPDATE tayfa_daily_items SET deleted_at = @at, deleted_by = @by
+WHERE id = @id AND tayfa_id = @tayfa_id AND deleted_at IS NULL;
+
+-- name: AdminDeleteMaterial :execrows
+UPDATE materials SET deleted_at = @at, deleted_by = @by
 WHERE id = @id AND tayfa_id = @tayfa_id AND deleted_at IS NULL;
 
 -- name: AdminDeleteEventPhoto :execrows

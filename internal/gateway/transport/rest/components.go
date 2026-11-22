@@ -124,6 +124,9 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 
 		// shared library (#270)
 		registerTayfaLibrary,
+
+		// material library (#261)
+		registerTayfaMaterials,
 	}
 }
 

@@ -55,6 +55,7 @@ var (
 		"event_question":  corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT_QUESTION,
 		"daily_item":      corev1.ReportTargetType_REPORT_TARGET_TYPE_DAILY_ITEM,
 		"library_item":    corev1.ReportTargetType_REPORT_TARGET_TYPE_LIBRARY_ITEM,
+		"material":        corev1.ReportTargetType_REPORT_TARGET_TYPE_MATERIAL,
 	})
 	reportReasons = newEnum(map[string]corev1.ReportReason{
 		"harassment":         corev1.ReportReason_REPORT_REASON_HARASSMENT,

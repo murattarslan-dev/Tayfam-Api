@@ -56,6 +56,8 @@ var uploadPurposes = map[corev1.UploadPurpose]string{
 	corev1.UploadPurpose_UPLOAD_PURPOSE_LIBRARY_ITEM: media.PurposeLibraryItem,
 	// Issue #271 (ADR-0040 §2).
 	corev1.UploadPurpose_UPLOAD_PURPOSE_QUESTION_POOL: media.PurposeQuestionPool,
+	// Issue #261 (ADR-0040 §3).
+	corev1.UploadPurpose_UPLOAD_PURPOSE_MATERIAL_NOTE: media.PurposeMaterialNote,
 }
 
 var uploadStatuses = map[string]corev1.UploadStatus{
