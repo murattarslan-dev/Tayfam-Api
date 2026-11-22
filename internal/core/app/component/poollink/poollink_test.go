@@ -100,12 +100,23 @@ func setup(t *testing.T) *env {
 // for the service).
 func (e *env) addType(t *testing.T, key, def string) {
 	t.Helper()
-	_, err := e.admin.Exec(ctx, `INSERT INTO catalog_event_types (key, interest_keys, position, labels, icon, modes, version, definition)
+	e.exec(t, `INSERT INTO catalog_event_types (key, interest_keys, position, labels, icon, modes, version, definition)
 		VALUES ($1, ARRAY['general'], 9000, '{"tr": "Test türü"}', 'event', ARRAY['in_person', 'online'], 1, $2::jsonb)`, key, def)
-	must(t, err)
-	_, err = e.admin.Exec(ctx, `INSERT INTO catalog_event_type_versions (type_key, version, labels, icon, modes, definition)
+	e.exec(t, `INSERT INTO catalog_event_type_versions (type_key, version, labels, icon, modes, definition)
 		SELECT key, version, labels, icon, modes, definition FROM catalog_event_types WHERE key = $1`, key)
+}
+
+// exec runs a fixture statement as a superuser with triggers off.
+func (e *env) exec(t *testing.T, sql string, args ...any) {
+	t.Helper()
+	tx, err := e.admin.Begin(ctx)
 	must(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	_, err = tx.Exec(ctx, "SET LOCAL session_replication_role = replica")
+	must(t, err)
+	_, err = tx.Exec(ctx, sql, args...)
+	must(t, err)
+	must(t, tx.Commit(ctx))
 }
 
 func (e *env) count(t *testing.T, sql string, args ...any) int {

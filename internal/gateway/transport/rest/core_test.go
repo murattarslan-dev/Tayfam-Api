@@ -799,7 +799,7 @@ func TestUnknownEnumValuesFromNewerCore(t *testing.T) {
 	tf.Status = corev1.TayfaStatus(99)
 	// An interest key that is not of the contract's form is left out.
 	tf.InterestKeys = append(tf.InterestKeys, "Bozuk Anahtar")
-	tf.Modules = append(tf.Modules, &corev1.ModuleState{Module: corev1.Module(7), Enabled: true})
+	tf.Modules = append(tf.Modules, &corev1.ModuleState{Module: corev1.Module(99), Enabled: true})
 	w := as(coreRouter(&fakeCore{tayfa: tf}), "GET", "/v1/tayfas/"+tayfaID, "")
 	v := decodeBody[tayfaViewJSON](t, w)
 	if v.Tayfa.Status != "unknown" || !slices.Equal(v.Tayfa.Interests, []string{"automotive", "nature"}) || len(v.Tayfa.Modules) != 4 {

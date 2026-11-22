@@ -260,7 +260,7 @@ func TestQAServerConverts(t *testing.T) {
 	}
 	tagID := id.New().String()
 	list, err := srv.ListQuestions(ctx, &corev1.ListQuestionsRequest{TayfaId: tid.String(), Query: "İzmir", TagId: tagID, PageSize: 5, PageToken: "t"})
-	if err != nil || f.list != (qa.ListQuestionsInput{Query: "İzmir", TagID: tagID, PageSize: 5, PageToken: "t"}) || len(list.GetQuestions()) != 1 || list.GetNextPageToken() != "sonraki" {
+	if err != nil || f.list != (qa.ListQuestionsInput{Pool: qa.PoolQA, Query: "İzmir", TagID: tagID, PageSize: 5, PageToken: "t"}) || len(list.GetQuestions()) != 1 || list.GetNextPageToken() != "sonraki" {
 		t.Fatalf("liste: %+v %v", f.list, err)
 	}
 	a, err := srv.SetAnswerVote(ctx, &corev1.SetAnswerVoteRequest{TayfaId: tid.String(), AnswerId: aid.String(), Voted: true})
