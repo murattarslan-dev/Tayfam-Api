@@ -8,13 +8,17 @@ import (
 )
 
 func TestParse(t *testing.T) {
-	for in, want := range map[string]Link{
-		"https://tr.wikipedia.org/wiki/T%C3%BCrev":     {"https://tr.wikipedia.org/wiki/T%C3%BCrev", "tr.wikipedia.org"},
-		"  HTTPS://Www.Example-Okul.com.tr/ders?id=3 ": {"https://www.example-okul.com.tr/ders?id=3", "www.example-okul.com.tr"},
-		"https://okul.org.:443/a#b":                    {"https://okul.org/a#b", "okul.org"},
-		"https://xn--kitap-9ua.com/":                   {"https://xn--kitap-9ua.com/", "xn--kitap-9ua.com"},
-		"https://tr.wikipedia.org/wiki/Türev":          {"https://tr.wikipedia.org/wiki/T%C3%BCrev", "tr.wikipedia.org"},
+	for _, tc := range []struct {
+		in   string
+		want Link
+	}{
+		{"https://tr.wikipedia.org/wiki/T%C3%BCrev", Link{"https://tr.wikipedia.org/wiki/T%C3%BCrev", "tr.wikipedia.org"}},
+		{"  HTTPS://Www.Example-Okul.com.tr/ders?id=3 ", Link{"https://www.example-okul.com.tr/ders?id=3", "www.example-okul.com.tr"}},
+		{"https://okul.org.:443/a#b", Link{"https://okul.org/a#b", "okul.org"}},
+		{"https://xn--kitap-9ua.com/", Link{"https://xn--kitap-9ua.com/", "xn--kitap-9ua.com"}},
+		{"https://tr.wikipedia.org/wiki/Türev", Link{"https://tr.wikipedia.org/wiki/T%C3%BCrev", "tr.wikipedia.org"}},
 	} {
+		in, want := tc.in, tc.want
 		got, ok := Parse(in)
 		if !ok || got != want {
 			t.Errorf("Parse(%q) = %+v %v, %+v bekleniyordu", in, got, ok, want)
@@ -52,8 +56,8 @@ func TestParseRefuses(t *testing.T) {
 		"satır sonu":               "https://example.com/\nx",
 		"ters bölü":                "https://example.com\\@evil.com/",
 		"ters bölü yolda":          "https://example.com/a\\b",
-		"yön işareti":              "https://example.com/‮gpj.exe",
-		"sıfır genişlik":           "https://exa​mple.com/",
+		"yön işareti":              "https://example.com/\u202egpj.exe",
+		"sıfır genişlik":           "https://exa\u200bmple.com/",
 		"ASCII olmayan alan adı":   "https://kitapçı.com/",
 		"alt çizgi":                "https://a_b.example.com/",
 		"tire ile başlayan etiket": "https://-a.example.com/",

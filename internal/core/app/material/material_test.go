@@ -33,11 +33,12 @@ import (
 var ctx = context.Background()
 
 func TestCleanTitle(t *testing.T) {
-	for in, want := range map[string]string{
-		"  Türev   özeti ":      "Türev özeti",
-		"Limit\n(çözümlü)\t":    "Limit (çözümlü)",
-		strings.Repeat("ş", 80): strings.Repeat("ş", 80),
+	for _, tc := range [][2]string{
+		{"  Türev   özeti ", "Türev özeti"},
+		{"Limit\n(çözümlü)\t", "Limit (çözümlü)"},
+		{strings.Repeat("ş", 80), strings.Repeat("ş", 80)},
 	} {
+		in, want := tc[0], tc[1]
 		if got, ok := material.CleanTitle(in); !ok || got != want {
 			t.Errorf("CleanTitle(%q) = %q %v, %q bekleniyordu", in, got, ok, want)
 		}
@@ -45,8 +46,8 @@ func TestCleanTitle(t *testing.T) {
 	for name, in := range map[string]string{
 		"boş":             "  \t ",
 		"denetim kodu":    "Türev\x00",
-		"görünmez işaret": "Tü​rev",
-		"yön işareti":     "Türev‮",
+		"görünmez işaret": "Tü\u200brev",
+		"yön işareti":     "Türev\u202e",
 		"geçersiz UTF-8":  "Tü\xffrev",
 		"81 karakter":     strings.Repeat("ş", 81),
 	} {
