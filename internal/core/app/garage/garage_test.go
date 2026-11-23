@@ -42,8 +42,8 @@ func TestCleanText(t *testing.T) {
 	}
 	for name, in := range map[string]string{
 		"denetim kodu":    "Anadol\x00",
-		"görünmez işaret": "Ana​dol",
-		"yön işareti":     "Anadol‮",
+		"görünmez işaret": "Ana\u200bdol",
+		"yön işareti":     "Anadol\u202e",
 		"geçersiz UTF-8":  "Ana\xffdol",
 		"uzun":            strings.Repeat("ş", garage.NoteMax+1),
 	} {
@@ -253,7 +253,7 @@ func TestOwnGarage(t *testing.T) {
 		{"uzun model", garage.Input{Make: "Ford", Model: strings.Repeat("m", garage.ModelMax+1)}, garage.FieldModel},
 		{"uzun renk", garage.Input{Make: "Ford", Color: strings.Repeat("r", garage.ColorMax+1)}, garage.FieldColor},
 		{"uzun not", garage.Input{Make: "Ford", Note: strings.Repeat("n", garage.NoteMax+1)}, garage.FieldNote},
-		{"görünmez işaretli not", garage.Input{Make: "Ford", Note: "a​b"}, garage.FieldNote},
+		{"görünmez işaretli not", garage.Input{Make: "Ford", Note: "a\u200bb"}, garage.FieldNote},
 		{"1899 model", garage.Input{Make: "Ford", ModelYear: 1899}, garage.FieldModelYear},
 		{"iki yıl sonrası", garage.Input{Make: "Ford", ModelYear: year + 2}, garage.FieldModelYear},
 		{"dört fotoğraf", garage.Input{Make: "Ford", Photos: []id.ID{id.New(), id.New(), id.New(), id.New()}}, garage.FieldPhotoIDs},
