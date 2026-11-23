@@ -552,8 +552,8 @@ message AdminBlockedDomain {
 // CatalogPreviewField is a field of the checked definition.
 message CatalogPreviewField {
   string key = 1;
-  // text, long_text, integer, decimal, choice, multi_choice, boolean, date
-  // or duration.
+  // text, long_text, integer, decimal, choice, multi_choice, boolean, date,
+  // duration or study_tags (ADR-0043).
   string kind = 2;
   bool required = 3;
   map<string, string> labels = 4;
