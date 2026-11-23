@@ -162,6 +162,11 @@ const (
 	// The values the caller first added to a tayfa's vocabulary (issue #244;
 	// exported since #275).
 	CoreExportSection_CORE_EXPORT_SECTION_VOCABULARY CoreExportSection = 44
+	// The caller's votes (the vote component, issue #254): event, component,
+	// the kind of target, a free option's label and times. Who, which vehicle
+	// or which photo the caller voted for (other people's data), other
+	// people's votes and the options the caller wrote are not exported.
+	CoreExportSection_CORE_EXPORT_SECTION_EVENT_VOTES CoreExportSection = 45
 )
 
 // Enum value maps for CoreExportSection.
@@ -211,6 +216,7 @@ var (
 		42: "CORE_EXPORT_SECTION_EVENT_REFEREES",
 		43: "CORE_EXPORT_SECTION_CHECKLIST_ITEMS",
 		44: "CORE_EXPORT_SECTION_VOCABULARY",
+		45: "CORE_EXPORT_SECTION_EVENT_VOTES",
 	}
 	CoreExportSection_value = map[string]int32{
 		"CORE_EXPORT_SECTION_UNSPECIFIED":           0,
@@ -257,6 +263,7 @@ var (
 		"CORE_EXPORT_SECTION_EVENT_REFEREES":        42,
 		"CORE_EXPORT_SECTION_CHECKLIST_ITEMS":       43,
 		"CORE_EXPORT_SECTION_VOCABULARY":            44,
+		"CORE_EXPORT_SECTION_EVENT_VOTES":           45,
 	}
 )
 
@@ -384,7 +391,7 @@ const file_tayfam_core_v1_export_proto_rawDesc = "" +
 	"\x13ExportMyDataRequest\"m\n" +
 	"\x14ExportMyDataResponse\x12;\n" +
 	"\asection\x18\x01 \x01(\x0e2!.tayfam.core.v1.CoreExportSectionR\asection\x12\x18\n" +
-	"\arecords\x18\x02 \x03(\fR\arecords*\x97\r\n" +
+	"\arecords\x18\x02 \x03(\fR\arecords*\xbc\r\n" +
 	"\x11CoreExportSection\x12#\n" +
 	"\x1fCORE_EXPORT_SECTION_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fCORE_EXPORT_SECTION_MEMBERSHIPS\x10\x01\x12#\n" +
@@ -430,7 +437,8 @@ const file_tayfam_core_v1_export_proto_rawDesc = "" +
 	"%CORE_EXPORT_SECTION_GARAGE_VISIBILITY\x10)\x12&\n" +
 	"\"CORE_EXPORT_SECTION_EVENT_REFEREES\x10*\x12'\n" +
 	"#CORE_EXPORT_SECTION_CHECKLIST_ITEMS\x10+\x12\"\n" +
-	"\x1eCORE_EXPORT_SECTION_VOCABULARY\x10,2l\n" +
+	"\x1eCORE_EXPORT_SECTION_VOCABULARY\x10,\x12#\n" +
+	"\x1fCORE_EXPORT_SECTION_EVENT_VOTES\x10-2l\n" +
 	"\rExportService\x12[\n" +
 	"\fExportMyData\x12#.tayfam.core.v1.ExportMyDataRequest\x1a$.tayfam.core.v1.ExportMyDataResponse0\x01B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vExportProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"

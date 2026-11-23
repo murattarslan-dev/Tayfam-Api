@@ -736,6 +736,59 @@ func (q *Queries) ExportEventReferees(ctx context.Context, arg ExportEventRefere
 	return items, nil
 }
 
+const exportEventVotes = `-- name: ExportEventVotes :many
+SELECT v.id AS k, jsonb_build_object(
+  'event_id', v.event_id, 'component_key', v.component_key,
+  'target', CASE
+    WHEN v.option_id IS NOT NULL THEN 'option'
+    WHEN v.candidate_user_id IS NOT NULL THEN 'participant'
+    WHEN v.event_vehicle_id IS NOT NULL THEN 'vehicle'
+    ELSE 'photo' END,
+  'option_label', o.label,
+  'created_at', v.created_at, 'updated_at', v.updated_at
+) AS data
+FROM event_votes AS v
+LEFT JOIN event_vote_options AS o ON o.id = v.option_id
+WHERE v.user_id = $1 AND v.id > $2
+ORDER BY v.id
+LIMIT $3
+`
+
+type ExportEventVotesParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportEventVotesRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Oylarınız (`vote` bileşeni, issue #254): etkinlik, bileşen, hedefin türü,
+// serbest seçenekte seçeneğin etiketi ve zamanlar. Oy verdiğiniz kişinin,
+// aracın ya da fotoğrafın kimliği (başkasının verisi), başkalarının oyları ve
+// yazdığınız seçenekler (etkinliğin planı) dışa aktarılmaz.
+func (q *Queries) ExportEventVotes(ctx context.Context, arg ExportEventVotesParams) ([]ExportEventVotesRow, error) {
+	rows, err := q.db.Query(ctx, exportEventVotes, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportEventVotesRow{}
+	for rows.Next() {
+		var i ExportEventVotesRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportEvents = `-- name: ExportEvents :many
 SELECT e.id AS k, jsonb_build_object(
   'id', e.id, 'tayfa_id', e.tayfa_id, 'type', e.type, 'mode', e.mode, 'title', e.title,

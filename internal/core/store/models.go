@@ -610,6 +610,37 @@ type EventVehicleSeatRequest struct {
 	DecidedAt      pgtype.Timestamptz
 }
 
+type EventVote struct {
+	ID              pgtype.UUID
+	EventID         pgtype.UUID
+	ComponentKey    string
+	UserID          pgtype.UUID
+	OptionID        pgtype.UUID
+	CandidateUserID pgtype.UUID
+	EventVehicleID  pgtype.UUID
+	PhotoID         pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+type EventVoteClosure struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	ClosedBy     pgtype.UUID
+	ClosedAt     pgtype.Timestamptz
+}
+
+type EventVoteOption struct {
+	ID              pgtype.UUID
+	EventID         pgtype.UUID
+	ComponentKey    string
+	Label           string
+	LabelNormalized string
+	Position        int16
+	CreatedBy       pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+}
+
 type FriendRequestOutcome struct {
 	RequesterID pgtype.UUID
 	RecipientID pgtype.UUID
