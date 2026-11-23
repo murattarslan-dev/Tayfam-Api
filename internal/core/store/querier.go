@@ -989,6 +989,9 @@ type Querier interface {
 	GetLastPublishedCatalogVersion(ctx context.Context) (int64, error)
 	GetLibraryItemByClientRequest(ctx context.Context, arg GetLibraryItemByClientRequestParams) (pgtype.UUID, error)
 	GetLibraryItemForUpdate(ctx context.Context, arg GetLibraryItemForUpdateParams) (LibraryItem, error)
+	// Sıra sende bildirimi (lending.Promote, issue #332): kalemin tayfası ve
+	// sahibi (engel kontrolü için).
+	GetLibraryItemParties(ctx context.Context, id pgtype.UUID) (GetLibraryItemPartiesRow, error)
 	GetLibraryLoanForUpdate(ctx context.Context, arg GetLibraryLoanForUpdateParams) (LibraryLoan, error)
 	// Kişinin sıradaki yeri ve numarası (1 sıradaki).
 	GetLibraryQueueRank(ctx context.Context, arg GetLibraryQueueRankParams) (int32, error)

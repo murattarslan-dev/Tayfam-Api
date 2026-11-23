@@ -342,6 +342,24 @@ func (q *Queries) GetLibraryItemForUpdate(ctx context.Context, arg GetLibraryIte
 	return i, err
 }
 
+const getLibraryItemParties = `-- name: GetLibraryItemParties :one
+SELECT tayfa_id, owner_id FROM library_items WHERE id = $1
+`
+
+type GetLibraryItemPartiesRow struct {
+	TayfaID pgtype.UUID
+	OwnerID pgtype.UUID
+}
+
+// Sıra sende bildirimi (lending.Promote, issue #332): kalemin tayfası ve
+// sahibi (engel kontrolü için).
+func (q *Queries) GetLibraryItemParties(ctx context.Context, id pgtype.UUID) (GetLibraryItemPartiesRow, error) {
+	row := q.db.QueryRow(ctx, getLibraryItemParties, id)
+	var i GetLibraryItemPartiesRow
+	err := row.Scan(&i.TayfaID, &i.OwnerID)
+	return i, err
+}
+
 const getLibraryLoanForUpdate = `-- name: GetLibraryLoanForUpdate :one
 SELECT id, item_id, tayfa_id, borrower_id, state, requested_at, approved_at, handed_over_at, due_at, reminded_at, orphaned_at, ended_at FROM library_loans
 WHERE tayfa_id = $1 AND id = $2
