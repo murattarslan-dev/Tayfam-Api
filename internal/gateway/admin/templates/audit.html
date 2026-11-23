@@ -48,6 +48,7 @@
     {{if and .TayfaId (ne .TayfaId .TargetId)}}<div class="ids">Tayfa: <a href="/tayfalar/{{.TayfaId}}">{{.TayfaId}}</a></div>{{end}}
     {{if and .UserId (ne .UserId .TargetId)}}<div class="ids">Kullanıcı: <a href="/kullanicilar/{{.UserId}}">{{.UserId}}</a></div>{{end}}
     {{if and .ReportId (ne .ReportId .TargetId)}}<div class="ids">Şikâyet: <a href="/sikayetler/{{.ReportId}}">{{.ReportId}}</a></div>{{end}}
+    {{if .CatalogKey}}<div class="ids">Katalog: {{.CatalogKey}}</div>{{end}}
   </td>
   <td class="reason">{{.Reason}}</td>
 </tr>

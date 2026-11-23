@@ -36,6 +36,14 @@ const (
 	AdminService_ListDiscoverQueue_FullMethodName          = "/tayfam.core.v1.AdminService/ListDiscoverQueue"
 	AdminService_ApproveDiscover_FullMethodName            = "/tayfam.core.v1.AdminService/ApproveDiscover"
 	AdminService_RejectDiscover_FullMethodName             = "/tayfam.core.v1.AdminService/RejectDiscover"
+	AdminService_GetCatalogAdmin_FullMethodName            = "/tayfam.core.v1.AdminService/GetCatalogAdmin"
+	AdminService_SaveCatalogInterest_FullMethodName        = "/tayfam.core.v1.AdminService/SaveCatalogInterest"
+	AdminService_SaveCatalogEventType_FullMethodName       = "/tayfam.core.v1.AdminService/SaveCatalogEventType"
+	AdminService_SaveCatalogBadge_FullMethodName           = "/tayfam.core.v1.AdminService/SaveCatalogBadge"
+	AdminService_SaveCatalogStudyTag_FullMethodName        = "/tayfam.core.v1.AdminService/SaveCatalogStudyTag"
+	AdminService_SaveCatalogScorePreset_FullMethodName     = "/tayfam.core.v1.AdminService/SaveCatalogScorePreset"
+	AdminService_BlockDomain_FullMethodName                = "/tayfam.core.v1.AdminService/BlockDomain"
+	AdminService_UnblockDomain_FullMethodName              = "/tayfam.core.v1.AdminService/UnblockDomain"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -132,6 +140,44 @@ type AdminServiceClient interface {
 	// Errors: as ApproveDiscover (STATE_CONFLICT: no application, or already
 	// rejected).
 	RejectDiscover(ctx context.Context, in *RejectDiscoverRequest, opts ...grpc.CallOption) (*RejectDiscoverResponse, error)
+	// GetCatalogAdmin returns the whole catalog as the panel manages it:
+	// retired entries too, with the definitions, presets' rules and the
+	// blocked domain list.
+	GetCatalogAdmin(ctx context.Context, in *GetCatalogAdminRequest, opts ...grpc.CallOption) (*GetCatalogAdminResponse, error)
+	// SaveCatalogInterest creates or changes an interest. default_widgets
+	// must be home page widgets that need no settings.
+	SaveCatalogInterest(ctx context.Context, in *SaveCatalogInterestRequest, opts ...grpc.CallOption) (*SaveCatalogInterestResponse, error)
+	// SaveCatalogEventType creates (type.version 0) or changes (type.version
+	// = the version the change was made on) an event type. A change of the
+	// name, icon, modes or definition makes a new version; old events keep
+	// theirs (ADR-0025 §2). The interests, position and status are not part
+	// of a version. A new interest of a type must be active.
+	SaveCatalogEventType(ctx context.Context, in *SaveCatalogEventTypeRequest, opts ...grpc.CallOption) (*SaveCatalogEventTypeResponse, error)
+	// SaveCatalogBadge creates or changes a badge definition
+	// (catalog.CheckBadge). Its scope, rule kind and period never change.
+	SaveCatalogBadge(ctx context.Context, in *SaveCatalogBadgeRequest, opts ...grpc.CallOption) (*SaveCatalogBadgeResponse, error)
+	// SaveCatalogStudyTag creates or changes a study tag. Its parent never
+	// changes. A new level or subject gets its "Diğer" child
+	// (<key>_other) in the same save; the list must pass
+	// catalog.CheckStudyTags afterwards.
+	SaveCatalogStudyTag(ctx context.Context, in *SaveCatalogStudyTagRequest, opts ...grpc.CallOption) (*SaveCatalogStudyTagResponse, error)
+	// SaveCatalogScorePreset creates or changes a score preset. Tables
+	// already set up keep the rules they were set up with.
+	SaveCatalogScorePreset(ctx context.Context, in *SaveCatalogScorePresetRequest, opts ...grpc.CallOption) (*SaveCatalogScorePresetResponse, error)
+	// BlockDomain adds a domain (and so its subdomains) to the blocked
+	// domain list (ADR-0040 §3): new links to it are refused and existing
+	// materials with it are hidden, not deleted.
+	//
+	// Errors: ERROR_REASON_VALIDATION (domain: not a host name, or already
+	// on the list), ERROR_REASON_REASON_REQUIRED,
+	// ERROR_REASON_REAUTHENTICATION_REQUIRED.
+	BlockDomain(ctx context.Context, in *BlockDomainRequest, opts ...grpc.CallOption) (*BlockDomainResponse, error)
+	// UnblockDomain removes a domain from the list; its materials show
+	// again.
+	//
+	// Errors: ERROR_REASON_VALIDATION (domain: not on the list), and as
+	// BlockDomain.
+	UnblockDomain(ctx context.Context, in *UnblockDomainRequest, opts ...grpc.CallOption) (*UnblockDomainResponse, error)
 }
 
 type adminServiceClient struct {
@@ -312,6 +358,86 @@ func (c *adminServiceClient) RejectDiscover(ctx context.Context, in *RejectDisco
 	return out, nil
 }
 
+func (c *adminServiceClient) GetCatalogAdmin(ctx context.Context, in *GetCatalogAdminRequest, opts ...grpc.CallOption) (*GetCatalogAdminResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetCatalogAdminResponse)
+	err := c.cc.Invoke(ctx, AdminService_GetCatalogAdmin_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) SaveCatalogInterest(ctx context.Context, in *SaveCatalogInterestRequest, opts ...grpc.CallOption) (*SaveCatalogInterestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SaveCatalogInterestResponse)
+	err := c.cc.Invoke(ctx, AdminService_SaveCatalogInterest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) SaveCatalogEventType(ctx context.Context, in *SaveCatalogEventTypeRequest, opts ...grpc.CallOption) (*SaveCatalogEventTypeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SaveCatalogEventTypeResponse)
+	err := c.cc.Invoke(ctx, AdminService_SaveCatalogEventType_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) SaveCatalogBadge(ctx context.Context, in *SaveCatalogBadgeRequest, opts ...grpc.CallOption) (*SaveCatalogBadgeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SaveCatalogBadgeResponse)
+	err := c.cc.Invoke(ctx, AdminService_SaveCatalogBadge_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) SaveCatalogStudyTag(ctx context.Context, in *SaveCatalogStudyTagRequest, opts ...grpc.CallOption) (*SaveCatalogStudyTagResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SaveCatalogStudyTagResponse)
+	err := c.cc.Invoke(ctx, AdminService_SaveCatalogStudyTag_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) SaveCatalogScorePreset(ctx context.Context, in *SaveCatalogScorePresetRequest, opts ...grpc.CallOption) (*SaveCatalogScorePresetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SaveCatalogScorePresetResponse)
+	err := c.cc.Invoke(ctx, AdminService_SaveCatalogScorePreset_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) BlockDomain(ctx context.Context, in *BlockDomainRequest, opts ...grpc.CallOption) (*BlockDomainResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BlockDomainResponse)
+	err := c.cc.Invoke(ctx, AdminService_BlockDomain_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) UnblockDomain(ctx context.Context, in *UnblockDomainRequest, opts ...grpc.CallOption) (*UnblockDomainResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UnblockDomainResponse)
+	err := c.cc.Invoke(ctx, AdminService_UnblockDomain_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations must embed UnimplementedAdminServiceServer
 // for forward compatibility.
@@ -406,6 +532,44 @@ type AdminServiceServer interface {
 	// Errors: as ApproveDiscover (STATE_CONFLICT: no application, or already
 	// rejected).
 	RejectDiscover(context.Context, *RejectDiscoverRequest) (*RejectDiscoverResponse, error)
+	// GetCatalogAdmin returns the whole catalog as the panel manages it:
+	// retired entries too, with the definitions, presets' rules and the
+	// blocked domain list.
+	GetCatalogAdmin(context.Context, *GetCatalogAdminRequest) (*GetCatalogAdminResponse, error)
+	// SaveCatalogInterest creates or changes an interest. default_widgets
+	// must be home page widgets that need no settings.
+	SaveCatalogInterest(context.Context, *SaveCatalogInterestRequest) (*SaveCatalogInterestResponse, error)
+	// SaveCatalogEventType creates (type.version 0) or changes (type.version
+	// = the version the change was made on) an event type. A change of the
+	// name, icon, modes or definition makes a new version; old events keep
+	// theirs (ADR-0025 §2). The interests, position and status are not part
+	// of a version. A new interest of a type must be active.
+	SaveCatalogEventType(context.Context, *SaveCatalogEventTypeRequest) (*SaveCatalogEventTypeResponse, error)
+	// SaveCatalogBadge creates or changes a badge definition
+	// (catalog.CheckBadge). Its scope, rule kind and period never change.
+	SaveCatalogBadge(context.Context, *SaveCatalogBadgeRequest) (*SaveCatalogBadgeResponse, error)
+	// SaveCatalogStudyTag creates or changes a study tag. Its parent never
+	// changes. A new level or subject gets its "Diğer" child
+	// (<key>_other) in the same save; the list must pass
+	// catalog.CheckStudyTags afterwards.
+	SaveCatalogStudyTag(context.Context, *SaveCatalogStudyTagRequest) (*SaveCatalogStudyTagResponse, error)
+	// SaveCatalogScorePreset creates or changes a score preset. Tables
+	// already set up keep the rules they were set up with.
+	SaveCatalogScorePreset(context.Context, *SaveCatalogScorePresetRequest) (*SaveCatalogScorePresetResponse, error)
+	// BlockDomain adds a domain (and so its subdomains) to the blocked
+	// domain list (ADR-0040 §3): new links to it are refused and existing
+	// materials with it are hidden, not deleted.
+	//
+	// Errors: ERROR_REASON_VALIDATION (domain: not a host name, or already
+	// on the list), ERROR_REASON_REASON_REQUIRED,
+	// ERROR_REASON_REAUTHENTICATION_REQUIRED.
+	BlockDomain(context.Context, *BlockDomainRequest) (*BlockDomainResponse, error)
+	// UnblockDomain removes a domain from the list; its materials show
+	// again.
+	//
+	// Errors: ERROR_REASON_VALIDATION (domain: not on the list), and as
+	// BlockDomain.
+	UnblockDomain(context.Context, *UnblockDomainRequest) (*UnblockDomainResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -466,6 +630,30 @@ func (UnimplementedAdminServiceServer) ApproveDiscover(context.Context, *Approve
 }
 func (UnimplementedAdminServiceServer) RejectDiscover(context.Context, *RejectDiscoverRequest) (*RejectDiscoverResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RejectDiscover not implemented")
+}
+func (UnimplementedAdminServiceServer) GetCatalogAdmin(context.Context, *GetCatalogAdminRequest) (*GetCatalogAdminResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetCatalogAdmin not implemented")
+}
+func (UnimplementedAdminServiceServer) SaveCatalogInterest(context.Context, *SaveCatalogInterestRequest) (*SaveCatalogInterestResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SaveCatalogInterest not implemented")
+}
+func (UnimplementedAdminServiceServer) SaveCatalogEventType(context.Context, *SaveCatalogEventTypeRequest) (*SaveCatalogEventTypeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SaveCatalogEventType not implemented")
+}
+func (UnimplementedAdminServiceServer) SaveCatalogBadge(context.Context, *SaveCatalogBadgeRequest) (*SaveCatalogBadgeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SaveCatalogBadge not implemented")
+}
+func (UnimplementedAdminServiceServer) SaveCatalogStudyTag(context.Context, *SaveCatalogStudyTagRequest) (*SaveCatalogStudyTagResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SaveCatalogStudyTag not implemented")
+}
+func (UnimplementedAdminServiceServer) SaveCatalogScorePreset(context.Context, *SaveCatalogScorePresetRequest) (*SaveCatalogScorePresetResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SaveCatalogScorePreset not implemented")
+}
+func (UnimplementedAdminServiceServer) BlockDomain(context.Context, *BlockDomainRequest) (*BlockDomainResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BlockDomain not implemented")
+}
+func (UnimplementedAdminServiceServer) UnblockDomain(context.Context, *UnblockDomainRequest) (*UnblockDomainResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UnblockDomain not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 func (UnimplementedAdminServiceServer) testEmbeddedByValue()                      {}
@@ -794,6 +982,150 @@ func _AdminService_RejectDiscover_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_GetCatalogAdmin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCatalogAdminRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).GetCatalogAdmin(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_GetCatalogAdmin_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).GetCatalogAdmin(ctx, req.(*GetCatalogAdminRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_SaveCatalogInterest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SaveCatalogInterestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).SaveCatalogInterest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_SaveCatalogInterest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).SaveCatalogInterest(ctx, req.(*SaveCatalogInterestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_SaveCatalogEventType_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SaveCatalogEventTypeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).SaveCatalogEventType(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_SaveCatalogEventType_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).SaveCatalogEventType(ctx, req.(*SaveCatalogEventTypeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_SaveCatalogBadge_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SaveCatalogBadgeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).SaveCatalogBadge(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_SaveCatalogBadge_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).SaveCatalogBadge(ctx, req.(*SaveCatalogBadgeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_SaveCatalogStudyTag_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SaveCatalogStudyTagRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).SaveCatalogStudyTag(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_SaveCatalogStudyTag_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).SaveCatalogStudyTag(ctx, req.(*SaveCatalogStudyTagRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_SaveCatalogScorePreset_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SaveCatalogScorePresetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).SaveCatalogScorePreset(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_SaveCatalogScorePreset_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).SaveCatalogScorePreset(ctx, req.(*SaveCatalogScorePresetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_BlockDomain_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BlockDomainRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).BlockDomain(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_BlockDomain_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).BlockDomain(ctx, req.(*BlockDomainRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_UnblockDomain_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnblockDomainRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).UnblockDomain(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_UnblockDomain_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).UnblockDomain(ctx, req.(*UnblockDomainRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -868,6 +1200,38 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RejectDiscover",
 			Handler:    _AdminService_RejectDiscover_Handler,
+		},
+		{
+			MethodName: "GetCatalogAdmin",
+			Handler:    _AdminService_GetCatalogAdmin_Handler,
+		},
+		{
+			MethodName: "SaveCatalogInterest",
+			Handler:    _AdminService_SaveCatalogInterest_Handler,
+		},
+		{
+			MethodName: "SaveCatalogEventType",
+			Handler:    _AdminService_SaveCatalogEventType_Handler,
+		},
+		{
+			MethodName: "SaveCatalogBadge",
+			Handler:    _AdminService_SaveCatalogBadge_Handler,
+		},
+		{
+			MethodName: "SaveCatalogStudyTag",
+			Handler:    _AdminService_SaveCatalogStudyTag_Handler,
+		},
+		{
+			MethodName: "SaveCatalogScorePreset",
+			Handler:    _AdminService_SaveCatalogScorePreset_Handler,
+		},
+		{
+			MethodName: "BlockDomain",
+			Handler:    _AdminService_BlockDomain_Handler,
+		},
+		{
+			MethodName: "UnblockDomain",
+			Handler:    _AdminService_UnblockDomain_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

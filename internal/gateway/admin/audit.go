@@ -49,6 +49,18 @@ func auditActions() []option {
 		{"user.suspend", "Kullanıcı askısı"},
 		{"user.ban", "Kullanıcı banı"},
 		{"user.lift_sanction", "Yaptırımı kaldırma"},
+		{"catalog.interest_create", "Katalog: ilgi alanı ekleme"},
+		{"catalog.interest_update", "Katalog: ilgi alanı değişikliği"},
+		{"catalog.type_create", "Katalog: tür ekleme"},
+		{"catalog.type_update", "Katalog: tür değişikliği"},
+		{"catalog.badge_create", "Katalog: rozet ekleme"},
+		{"catalog.badge_update", "Katalog: rozet değişikliği"},
+		{"catalog.study_tag_create", "Katalog: ders/konu etiketi ekleme"},
+		{"catalog.study_tag_update", "Katalog: ders/konu etiketi değişikliği"},
+		{"catalog.preset_create", "Katalog: yazboz ön ayarı ekleme"},
+		{"catalog.preset_update", "Katalog: yazboz ön ayarı değişikliği"},
+		{"catalog.domain_block", "Alan adı engelleme"},
+		{"catalog.domain_unblock", "Alan adı engelini kaldırma"},
 	}
 }
 

@@ -191,7 +191,7 @@ func setup(rt *service.Runtime) error {
 		deps.Core.ProfileDetails = identityv1.NewProfileServiceClient(conn)
 	}
 	adminHost := rt.Config.String("ADMIN_HOST", "admin.tayfam.app")
-	panel, err := adminRouter(rt, adminHost, conns["identity"], conns["core"], trustCF)
+	panel, err := adminRouter(rt, adminHost, conns["identity"], conns["core"], trustCF, versions)
 	if err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func setup(rt *service.Runtime) error {
 // nil and the admin host answers 404, so the panel never runs without
 // Cloudflare Access in front of it. One without the other stops the
 // service.
-func adminRouter(rt *service.Runtime, host string, identity, core *grpc.ClientConn, trustCF bool) (http.Handler, error) {
+func adminRouter(rt *service.Runtime, host string, identity, core *grpc.ClientConn, trustCF bool, versions clientversion.Policy) (http.Handler, error) {
 	team := rt.Config.String("CF_ACCESS_TEAM_DOMAIN", "")
 	aud := rt.Config.String("CF_ACCESS_AUD", "")
 	if team == "" && aud == "" {
@@ -255,6 +255,9 @@ func adminRouter(rt *service.Runtime, host string, identity, core *grpc.ClientCo
 		TrustCFConnectingIP: trustCF,
 		// One person signs in a few times a day.
 		SignInLimit: ratelimit.New(5, 5),
+		// The catalog preview warns when a supported build does not know a
+		// component (issue #262, ADR-0025 §7).
+		ClientVersions: versions,
 	})
 }
 

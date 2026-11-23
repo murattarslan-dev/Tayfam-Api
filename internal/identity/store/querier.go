@@ -143,7 +143,8 @@ type Querier interface {
 	ListOwnDataExports(ctx context.Context, arg ListOwnDataExportsParams) ([]DataExportRequest, error)
 	// Panelde denetim kaydı (issue #110). En yeni önce, imleçli. related_id
 	// kaydın hedefi ya da metadata'daki tayfa, kullanıcı veya şikâyet
-	// kimliğidir. Metadata'dan yalnızca bu üç kimlik okunur.
+	// kimliğidir. Metadata'dan yalnızca bu üç kimlik ve katalog işlemlerinin
+	// anahtarı (catalog_key, issue #262) okunur.
 	ListPlatformAuditLogs(ctx context.Context, arg ListPlatformAuditLogsParams) ([]ListPlatformAuditLogsRow, error)
 	ListSocialAccounts(ctx context.Context, userID pgtype.UUID) ([]ListSocialAccountsRow, error)
 	// Hesap yönetimi (issue #75).
