@@ -919,6 +919,10 @@ type Querier interface {
 	GetJoinQRCount(ctx context.Context, eventID pgtype.UUID) (int32, error)
 	// Token özetinden etkinlik ve tayfa. Silinmiş etkinliğin token'ı bulunmaz.
 	GetJoinQRToken(ctx context.Context, tokenHash []byte) (GetJoinQRTokenRow, error)
+	// Son yayınlanan catalog.changed olayının katalog sürümü; hiç yoksa 0
+	// (issue #280, ADR-0042; catalog-publish işi). domain_events_type_id_idx
+	// ile tek satır okunur.
+	GetLastPublishedCatalogVersion(ctx context.Context) (int64, error)
 	GetLibraryItemByClientRequest(ctx context.Context, arg GetLibraryItemByClientRequestParams) (pgtype.UUID, error)
 	GetLibraryItemForUpdate(ctx context.Context, arg GetLibraryItemForUpdateParams) (LibraryItem, error)
 	GetLibraryLoanForUpdate(ctx context.Context, arg GetLibraryLoanForUpdateParams) (LibraryLoan, error)

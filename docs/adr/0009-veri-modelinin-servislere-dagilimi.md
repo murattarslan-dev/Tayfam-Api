@@ -20,6 +20,9 @@
   identity → core `MediaService` dışa aktarma metodları; identity → chat
   `user.data_export_ready` (bildirim); `data_export_requests` ek
   kolonları; `uploads.purpose = data_export`.
+- **Revizyon:** 2026-11-23 (issue #280,
+  [ADR-0042](0042-katalog-degisikligi-olayi.md)): core → identity
+  `catalog.changed` (identity'deki katalog kopyası; "Katalog kopyası").
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0005](0005-gercek-zamanli-iletisim-ve-chat.md), [ADR-0008](0008-kvkk-ve-platform-yonetimi.md)
 - **Kaynak:** Notion: Veri Modeli (taslak v13) ve ER diyagramı
 
@@ -109,6 +112,15 @@ identity'ye sormaz. Bunun yerine kendi veritabanlarında salt okunur bir
 tutar. Kopya identity'nin `user.profile_updated` ve `user.deleted` olaylarıyla
 güncellenir. Kopyanın kısa süre eski kalması kabul edilir.
 
+### Katalog kopyası (2026-11-23)
+
+identity profil ilgi alanlarını core'daki etkinlik türü kataloğunun salt
+okunur kopyasına (`catalog_copy`, `catalog_interests`: yalnızca sürüm,
+anahtar ve durum) karşı denetler (ADR-0025 §10). Kopya core'un
+`catalog.changed` olayıyla güncellenir; olay katalog sürümünü ve ilgi
+alanlarının tam listesini (anahtar + `active`/`retired`) taşır, identity
+yalnızca daha yeni sürümü uygular (ADR-0042).
+
 ### Servisler arası foreign key'lerin karşılıkları
 
 | v13'teki ilişki | Yeni karşılığı |
@@ -122,6 +134,7 @@ güncellenir. Kopyanın kısa süre eski kalması kabul edilir.
 | Tayfa uyarı, arşiv, silme bekleme | core `tayfa.warned`, `tayfa.archived`, `tayfa.reactivated`, `tayfa.deletion_requested`, `tayfa.deletion_cancelled` yayınlar (2026-11-09; önceki taslaktaki `tayfa.status_changed` yerine). chat bunları yalnızca önbelleğini temizlemek için kullanır; salt okunurluğu her işlemde core'a sorar (`AuthorizeChannelAction`) |
 | Oturum iptali, platform yaptırımı | identity `session.revoked`, `user.sanctioned` yayınlar; chat WebSocket bağlantılarını kapatır |
 | Veri dışa aktarma hazır | identity `user.data_export_ready` yayınlar (yalnızca chat); chat kullanıcıya `data_export_ready` bildirimini yazar (ADR-0021, 2026-11-11) |
+| Etkinlik türü kataloğu → profil ilgi alanları | core `catalog.changed` yayınlar (sürüm + ilgi alanı anahtarları ve durumları); identity kopyasını tek adımda günceller, eski sürümü yok sayar (ADR-0042, 2026-11-23) |
 | Bildirim oluşturma | core ve identity `notification.requested` yayınlar; alıcıları yayınlayan servis kendi verisiyle hesaplar (core: aktif üyeler; bekleyen, banlı, ayrılmış ve aktör hariç), olay başına en fazla 150 alıcı. chat kaydı yazar ve push gönderir; chat'te üyelik kopyası tutulmaz (platform sahibi kararı, 2026-11-09) |
 
 Tüm tüketici metodları idempotenttir (ADR-0002).

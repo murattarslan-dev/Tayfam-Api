@@ -23,6 +23,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/announcement"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/availability"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalog"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalogrelay"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/channelaccess"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatdm"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatevents"
@@ -478,9 +479,12 @@ func addRelay(rt *service.Runtime, pool *pgxpool.Pool) error {
 		if err != nil {
 			return err
 		}
-		consumers = append(consumers, identityadmin.AuditConsumer(identityv1.NewPlatformAuditServiceClient(idConn)))
+		consumers = append(consumers, identityadmin.AuditConsumer(identityv1.NewPlatformAuditServiceClient(idConn)),
+			// Katalog değişince identity'deki katalog kopyası (issue #280,
+			// ADR-0042); denetim kayıtlarından ayrı tüketici.
+			catalogrelay.Consumer(identityv1.NewCatalogCopyServiceClient(idConn)))
 	} else {
-		rt.Log.Warn("identity servis token'ı yok; platform denetim kayıtları outbox'ta bekler (yalnızca yerel ortam)")
+		rt.Log.Warn("identity servis token'ı yok; platform denetim kayıtları ve katalog olayları outbox'ta bekler (yalnızca yerel ortam)")
 	}
 	// Sözlük birleştirmeleri istatistiği yeniden hesaplatır (issue #266);
 	// core'un kendi veritabanına yazar.
