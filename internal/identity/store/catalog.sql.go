@@ -9,6 +9,21 @@ import (
 	"context"
 )
 
+const advanceCatalogCopyVersion = `-- name: AdvanceCatalogCopyVersion :execrows
+UPDATE catalog_copy SET catalog_version = $1, updated_at = now()
+WHERE catalog_version < $1
+`
+
+// Kopyanın sürümünü yalnızca daha yeni bir sürüme taşır; eşit ya da eski
+// sürümde satır dönmez (olay zaten uygulanmış ya da geç gelmiş).
+func (q *Queries) AdvanceCatalogCopyVersion(ctx context.Context, catalogVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, advanceCatalogCopyVersion, catalogVersion)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getCatalogCopyVersion = `-- name: GetCatalogCopyVersion :one
 SELECT catalog_version FROM catalog_copy
 `
@@ -26,9 +41,10 @@ const listCatalogInterests = `-- name: ListCatalogInterests :many
 SELECT key, status FROM catalog_interests
 `
 
-// core'daki etkinlik türü kataloğunun identity'deki salt okunur kopyası
-// (issue #237; ADR-0025 §10, ADR-0009 kopya modeli). identity_app yalnızca
-// okur; kopya migration'la gelir.
+// core'daki etkinlik türü kataloğunun identity'deki kopyası (issue #237;
+// ADR-0025 §10, ADR-0009 kopya modeli). Kopya yalnızca core'un
+// catalog.changed olayıyla değişir (issue #280, ADR-0042; catalogcopy
+// paketi): sürüm yalnızca ileri gider, ilgi alanı silinmez.
 // Profil ilgi alanlarının doğrulaması için: anahtar ve durum (emekliler
 // dahil).
 func (q *Queries) ListCatalogInterests(ctx context.Context) ([]CatalogInterest, error) {
@@ -49,4 +65,35 @@ func (q *Queries) ListCatalogInterests(ctx context.Context) ([]CatalogInterest, 
 		return nil, err
 	}
 	return items, nil
+}
+
+const retireMissingCatalogInterests = `-- name: RetireMissingCatalogInterests :execrows
+UPDATE catalog_interests SET status = 'retired'
+WHERE status <> 'retired' AND NOT (key = ANY($1::text[]))
+`
+
+// Kataloğun listesinde olmayan ilgi alanlarını emekliye alır (silmez).
+func (q *Queries) RetireMissingCatalogInterests(ctx context.Context, keys []string) (int64, error) {
+	result, err := q.db.Exec(ctx, retireMissingCatalogInterests, keys)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const upsertCatalogInterest = `-- name: UpsertCatalogInterest :exec
+INSERT INTO catalog_interests (key, status) VALUES ($1, $2)
+ON CONFLICT (key) DO UPDATE SET status = EXCLUDED.status
+WHERE catalog_interests.status <> EXCLUDED.status
+`
+
+type UpsertCatalogInterestParams struct {
+	Key    string
+	Status string
+}
+
+// Bir ilgi alanını ekler ya da durumunu günceller.
+func (q *Queries) UpsertCatalogInterest(ctx context.Context, arg UpsertCatalogInterestParams) error {
+	_, err := q.db.Exec(ctx, upsertCatalogInterest, arg.Key, arg.Status)
+	return err
 }
