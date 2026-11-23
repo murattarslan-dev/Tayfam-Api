@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -125,5 +126,30 @@ func TestRecordPlatformAudit(t *testing.T) {
 	req.UserId = "x"
 	if _, err := srv.RecordPlatformAudit(ctx, req); status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("bozuk kimlik: %v", err)
+	}
+}
+
+// TestRecordCatalogAudit: a catalog action has no target; its key (or a
+// blocked domain) goes to the metadata, and nothing else does (issue #262).
+func TestRecordCatalogAudit(t *testing.T) {
+	f := &fakeAudits{}
+	srv := NewPlatformAuditServer(f, discard())
+	ctx := auth.WithServiceCallerForTest(context.Background(), auth.ServiceClaims{})
+	for _, key := range []string{"board_game_night", "example.com", "chat.whatsapp.com"} {
+		req := &identityv1.RecordPlatformAuditRequest{EventId: id.New().String(), ActorId: id.New().String(), OccurTime: timestamppb.Now(),
+			Action: "catalog.type_update", Reason: "Yeni bileşen eklendi", CatalogKey: key}
+		if _, err := srv.RecordPlatformAudit(ctx, req); err != nil {
+			t.Fatalf("%s: %v", key, err)
+		}
+		if f.got.Metadata["catalog_key"] != key || f.got.TargetType != "" {
+			t.Fatalf("%s: kayıt = %+v", key, f.got)
+		}
+	}
+	for _, bad := range []string{"Büyük Harf", "a b", "<script>", "-x", strings.Repeat("a", 254), "ali@ornek.test"} {
+		req := &identityv1.RecordPlatformAuditRequest{EventId: id.New().String(), ActorId: id.New().String(), OccurTime: timestamppb.Now(),
+			Action: "catalog.type_update", Reason: "Yeni bileşen eklendi", CatalogKey: bad}
+		if _, err := srv.RecordPlatformAudit(ctx, req); status.Code(err) != codes.InvalidArgument {
+			t.Fatalf("%q: %v", bad, err)
+		}
 	}
 }

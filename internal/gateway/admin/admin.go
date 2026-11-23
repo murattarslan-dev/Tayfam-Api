@@ -48,6 +48,7 @@ import (
 
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/gateway/app/clientversion"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/httpx"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/ratelimit"
@@ -113,7 +114,11 @@ type Config struct {
 	SignInLimit *ratelimit.Limiter
 	// TrustCFConnectingIP: see rest.AuthDeps.
 	TrustCFConnectingIP bool
-	Now                 func() time.Time
+	// ClientVersions are the supported app builds; the catalog preview
+	// warns when one does not know a component of a type (issue #262,
+	// ADR-0025 §7). Optional: the zero Policy warns for every platform.
+	ClientVersions clientversion.Policy
+	Now            func() time.Time
 }
 
 // NewHandler returns the admin router. Every field of cfg is required.
@@ -168,6 +173,11 @@ func NewHandler(cfg Config) (http.Handler, error) {
 	page("GET /sikayetler/{id}/mesaj-fotografi", h.reportMessagePhoto)
 	change("POST /sikayetler/{id}/karar", h.decideReport)
 	page("GET /denetim", h.auditLog)
+	page("GET /katalog", h.catalogPage)
+	page("GET /katalog/{kind}", h.catalogFormPage)
+	change("POST /katalog/{kind}", h.catalogSubmit)
+	change("POST /katalog/alan-adi-ekle", h.blockDomain)
+	change("POST /katalog/alan-adi-kaldir", h.unblockDomain)
 	mux.HandleFunc("/", httpx.NotFound)
 	return httpx.Chain(mux, securityHeaders, h.requireAccess, h.sameOrigin, withCSRFSlot), nil
 }

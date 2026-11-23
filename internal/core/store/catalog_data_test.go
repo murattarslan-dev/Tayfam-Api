@@ -70,6 +70,10 @@ func TestCatalogDataMigration(t *testing.T) {
 		t.Fatal("katalog sürümü artmadı")
 	}
 
+	// 00067's Down first, as on the real way back: its trigger keeps a
+	// type's version and the catalog's version from going back (#262).
+	_, panelDown := migrationParts(t, coredb.Migrations(), "00067_catalog_panel.sql")
+	exec(panelDown)
 	exec(down)
 	if got := counts(); got != "6/7/7/0/0/0/0" {
 		t.Fatalf("geri alınan katalog = %s", got)

@@ -60,6 +60,9 @@ type AuditEntry struct {
 	Tayfa      id.ID
 	User       id.ID
 	Report     id.ID
+	// CatalogKey is the catalog entry a catalog.* action changed (issue
+	// #262); "" otherwise.
+	CatalogKey string
 }
 
 // AuditPage is a page of entries and the token of the next one ("" on the
@@ -165,6 +168,9 @@ func (s *Service) ListAuditLogs(ctx context.Context, c auth.AdminClaims, f Audit
 		e.Tayfa, _ = id.Parse(r.TayfaID)
 		e.User, _ = id.Parse(r.UserID)
 		e.Report, _ = id.Parse(r.ReportID)
+		if ValidCatalogKey(r.CatalogKey) {
+			e.CatalogKey = r.CatalogKey
+		}
 		out.Entries = append(out.Entries, e)
 	}
 	return out, nil

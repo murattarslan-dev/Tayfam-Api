@@ -176,15 +176,15 @@ func TestTamperedStudyTagsAreNotServed(t *testing.T) {
 	}
 }
 
-// The service's database user only reads the list (ADR-0015).
+// The service's database user never deletes a tag and never changes its
+// key or parent; the platform panel writes the rest (#262; ADR-0015).
 func TestAppRoleCannotChangeStudyTags(t *testing.T) {
 	_, pool, admin := setup(t)
 	exec(t, admin, testStudyTags)
 	for name, sql := range map[string]string{
-		"ekleme":          `INSERT INTO catalog_study_tags (key, position, labels) VALUES ('level_x', 1, '{"tr": "x"}')`,
-		"ad değiştirme":   `UPDATE catalog_study_tags SET labels = '{"tr": "x"}' WHERE key = 'subject_a'`,
-		"emekliye ayırma": `UPDATE catalog_study_tags SET status = 'retired' WHERE key = 'subject_a'`,
-		"silme":           `DELETE FROM catalog_study_tags WHERE key = 'topic_a'`,
+		"anahtar değiştirme": `UPDATE catalog_study_tags SET key = 'subject_x' WHERE key = 'subject_a'`,
+		"üst değiştirme":     `UPDATE catalog_study_tags SET parent_key = NULL WHERE key = 'subject_a'`,
+		"silme":              `DELETE FROM catalog_study_tags WHERE key = 'topic_a'`,
 	} {
 		t.Run(name, func(t *testing.T) { dbtest.WantDenied(t, pool, sql) })
 	}

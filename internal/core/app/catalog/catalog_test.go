@@ -275,18 +275,25 @@ func TestTamperedCatalogIsNotServed(t *testing.T) {
 	}
 }
 
-// The service's database user only reads the catalog (ADR-0015).
-func TestAppRoleCannotChangeCatalog(t *testing.T) {
+// The service's database user writes the catalog only as the platform
+// panel needs (issue #262, 00067; ADR-0015): no key changes, no deletes,
+// and a type version row never changes.
+func TestAppRoleCatalogPrivileges(t *testing.T) {
 	_, pool, _ := setup(t)
 	for name, sql := range map[string]string{
-		"sürümü artırma":     `UPDATE catalog_meta SET catalog_version = catalog_version + 1`,
-		"ilgi alanı ekleme":  `INSERT INTO catalog_interests (key, position, labels, icon) VALUES ('money', 1, '{"tr": "Para"}', 'event')`,
-		"tür ekleme":         `INSERT INTO catalog_event_types (key, interest_keys, position, labels, icon, modes, version, definition) VALUES ('bet', ARRAY['general'], 1, '{"tr": "Bahis"}', 'event', ARRAY['online'], 1, '{}')`,
-		"tanımı değiştirme":  `UPDATE catalog_event_types SET definition = '{}' WHERE key = 'hike'`,
-		"sürümü değiştirme":  `UPDATE catalog_event_type_versions SET definition = '{}' WHERE type_key = 'hike'`,
-		"sürüm ekleme":       `INSERT INTO catalog_event_type_versions (type_key, version, labels, icon, modes, definition) VALUES ('hike', 2, '{"tr": "x"}', 'event', ARRAY['online'], '{}')`,
-		"türü silme":         `DELETE FROM catalog_event_types WHERE key = 'hike'`,
-		"ilgi alanını silme": `DELETE FROM catalog_interests WHERE key = 'nature'`,
+		"sürüm satırını değiştirme":     `UPDATE catalog_event_type_versions SET definition = '{}' WHERE type_key = 'hike'`,
+		"sürüm satırını silme":          `DELETE FROM catalog_event_type_versions WHERE type_key = 'hike'`,
+		"türü silme":                    `DELETE FROM catalog_event_types WHERE key = 'hike'`,
+		"tür anahtarını değiştirme":     `UPDATE catalog_event_types SET key = 'walk' WHERE key = 'hike'`,
+		"ilgi alanını silme":            `DELETE FROM catalog_interests WHERE key = 'nature'`,
+		"ilgi alanı anahtarı":           `UPDATE catalog_interests SET key = 'outdoors' WHERE key = 'nature'`,
+		"rozeti silme":                  `DELETE FROM catalog_badges`,
+		"rozet kapsamı":                 `UPDATE catalog_badges SET scope = 'tayfa'`,
+		"etiketi silme":                 `DELETE FROM catalog_study_tags`,
+		"etiketin üstü":                 `UPDATE catalog_study_tags SET parent_key = NULL`,
+		"ön ayarı silme":                `DELETE FROM catalog_score_presets WHERE key = 'batak'`,
+		"engelli alan adını değiştirme": `UPDATE blocked_domains SET domain = 'example.com' WHERE domain = 'bit.ly'`,
+		"meta satırı ekleme":            `INSERT INTO catalog_meta (id, catalog_version) VALUES (false, 1)`,
 	} {
 		t.Run(name, func(t *testing.T) { dbtest.WantDenied(t, pool, sql) })
 	}

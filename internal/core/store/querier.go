@@ -42,12 +42,14 @@ type Querier interface {
 	AdjustAnswerVoteCount(ctx context.Context, arg AdjustAnswerVoteCountParams) (int64, error)
 	// Panel kararı maskeyi kaldırır.
 	AdminApproveDiscover(ctx context.Context, arg AdminApproveDiscoverParams) (int64, error)
+	AdminBumpCatalogVersion(ctx context.Context) (int64, error)
 	// Platform kararı. Tayfada henüz açıksa şikâyet de çözülür (çözen tayfa
 	// yetkilisi değil: handled_by boş kalır).
 	AdminDecideReport(ctx context.Context, arg AdminDecideReportParams) (int64, error)
 	// İçeriği kaldırma: soft delete, silen platform yöneticisi.
 	AdminDeleteAnnouncement(ctx context.Context, arg AdminDeleteAnnouncementParams) (int64, error)
 	AdminDeleteAnswer(ctx context.Context, arg AdminDeleteAnswerParams) (int64, error)
+	AdminDeleteBlockedDomain(ctx context.Context, domain string) (int64, error)
 	AdminDeleteDailyItem(ctx context.Context, arg AdminDeleteDailyItemParams) (int64, error)
 	AdminDeleteEvent(ctx context.Context, arg AdminDeleteEventParams) (int64, error)
 	AdminDeleteEventPhoto(ctx context.Context, arg AdminDeleteEventPhotoParams) (int64, error)
@@ -62,6 +64,15 @@ type Querier interface {
 	// Şikâyet edilen öğe, yalnızca o öğe. Konum ve oy alanları seçilmez.
 	AdminGetAnnouncement(ctx context.Context, arg AdminGetAnnouncementParams) (AdminGetAnnouncementRow, error)
 	AdminGetAnswer(ctx context.Context, arg AdminGetAnswerParams) (AdminGetAnswerRow, error)
+	// Rozetler.
+	AdminGetCatalogBadgeForUpdate(ctx context.Context, key string) (AdminGetCatalogBadgeForUpdateRow, error)
+	// Türler. Sürüm satırı yalnızca eklenir.
+	AdminGetCatalogEventTypeForUpdate(ctx context.Context, key string) (AdminGetCatalogEventTypeForUpdateRow, error)
+	// İlgi alanları.
+	AdminGetCatalogInterestForUpdate(ctx context.Context, key string) (AdminGetCatalogInterestForUpdateRow, error)
+	// Ders ve konu etiketleri. Üst etiket değişmez (00052'deki tetikleyici de
+	// korur).
+	AdminGetCatalogStudyTagForUpdate(ctx context.Context, key string) (AdminGetCatalogStudyTagForUpdateRow, error)
 	// Günün içeriği (issue #269).
 	AdminGetDailyItem(ctx context.Context, arg AdminGetDailyItemParams) (AdminGetDailyItemRow, error)
 	AdminGetEvent(ctx context.Context, arg AdminGetEventParams) (AdminGetEventRow, error)
@@ -84,7 +95,22 @@ type Querier interface {
 	AdminGetPollOptions(ctx context.Context, pollID pgtype.UUID) ([]string, error)
 	AdminGetProfileName(ctx context.Context, userID pgtype.UUID) (pgtype.Text, error)
 	AdminGetQuestion(ctx context.Context, arg AdminGetQuestionParams) (AdminGetQuestionRow, error)
+	// Yazboz ön ayarları.
+	AdminGetScorePresetForUpdate(ctx context.Context, key string) (AdminGetScorePresetForUpdateRow, error)
 	AdminGetTayfa(ctx context.Context, id pgtype.UUID) (AdminGetTayfaRow, error)
+	// Engelli alan adları: ekleyen platform yöneticisi created_by'da.
+	AdminInsertBlockedDomain(ctx context.Context, arg AdminInsertBlockedDomainParams) (int64, error)
+	AdminInsertCatalogBadge(ctx context.Context, arg AdminInsertCatalogBadgeParams) error
+	AdminInsertCatalogEventType(ctx context.Context, arg AdminInsertCatalogEventTypeParams) error
+	AdminInsertCatalogEventTypeVersion(ctx context.Context, arg AdminInsertCatalogEventTypeVersionParams) error
+	AdminInsertCatalogInterest(ctx context.Context, arg AdminInsertCatalogInterestParams) error
+	AdminInsertCatalogStudyTag(ctx context.Context, arg AdminInsertCatalogStudyTagParams) error
+	AdminInsertScorePreset(ctx context.Context, arg AdminInsertScorePresetParams) error
+	AdminListBlockedDomains(ctx context.Context) ([]AdminListBlockedDomainsRow, error)
+	// Emekliler dahil bütün türlerin güncel hali.
+	AdminListCatalogEventTypes(ctx context.Context) ([]AdminListCatalogEventTypesRow, error)
+	// Bir türün ilgi alanlarının durumu (yeni eklenen ilgi alanı aktif olmalı).
+	AdminListCatalogInterestStatuses(ctx context.Context, keys []string) ([]AdminListCatalogInterestStatusesRow, error)
 	// ---------------------------------------------------------------------------
 	// Platform paneli
 	AdminListDiscoverQueue(ctx context.Context, since pgtype.Timestamptz) ([]AdminListDiscoverQueueRow, error)
@@ -92,10 +118,21 @@ type Querier interface {
 	// Platform kuyruğu: açıklar önce, içlerinde minor_involved ve child_safety
 	// önce, sonra yükselme sırasıyla.
 	AdminListPlatformReports(ctx context.Context, includeResolved bool) ([]AdminListPlatformReportsRow, error)
+	// Yazboz bileşeninin sunduğu ön ayarlar katalogda olmalı.
+	AdminListScorePresetKeys(ctx context.Context, keys []string) ([]string, error)
+	AdminListScorePresets(ctx context.Context) ([]AdminListScorePresetsRow, error)
 	// Banlı üyede son banın gerekçesi denetim kaydından (issue #150; yalnızca
 	// sınıflandırma, serbest metin değil). 365 günlük saklamadan sonra boştur.
 	AdminListTayfaMembers(ctx context.Context, arg AdminListTayfaMembersParams) ([]AdminListTayfaMembersRow, error)
 	AdminListUserTayfas(ctx context.Context, userID pgtype.UUID) ([]AdminListUserTayfasRow, error)
+	// Platform panelinde katalog yönetimi (issue #262; ADR-0025 §7, ADR-0039
+	// §1, ADR-0040 §3 ve §5). Yalnızca internal/core/app/admin çağırır; her
+	// yazma, katalog satırı kilitlenmiş bir transaction'da, doğrulamadan sonra
+	// yapılır. Anahtar değişmez, satır silinmez (engelli alan adı listesi
+	// hariç); yetkiler 00067'de.
+	// Panel kayıtları sırayla yazılır: ders/konu listesinin "Diğer" kuralı ve
+	// rozetlerin tür denetimi kataloğun bütününe bakar.
+	AdminLockCatalog(ctx context.Context) (int64, error)
 	AdminLockPlatformReport(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
 	AdminLockTayfa(ctx context.Context, id pgtype.UUID) (AdminLockTayfaRow, error)
 	AdminLockTayfaDiscover(ctx context.Context, tayfaID pgtype.UUID) (string, error)
@@ -115,6 +152,11 @@ type Querier interface {
 	// dönmez.
 	AdminTayfaStats(ctx context.Context) (AdminTayfaStatsRow, error)
 	AdminUnsuspendTayfa(ctx context.Context, id pgtype.UUID) (int64, error)
+	AdminUpdateCatalogBadge(ctx context.Context, arg AdminUpdateCatalogBadgeParams) error
+	AdminUpdateCatalogEventType(ctx context.Context, arg AdminUpdateCatalogEventTypeParams) error
+	AdminUpdateCatalogInterest(ctx context.Context, arg AdminUpdateCatalogInterestParams) error
+	AdminUpdateCatalogStudyTag(ctx context.Context, arg AdminUpdateCatalogStudyTagParams) error
+	AdminUpdateScorePreset(ctx context.Context, arg AdminUpdateScorePresetParams) error
 	// Okunan durum hâlâ aynıysa ilerletir (karşılaştır-yaz): aynı anda gelen
 	// iki ilk istekten yalnızca biri yazar, diğeri yeniden okur.
 	AdvanceDailyState(ctx context.Context, arg AdvanceDailyStateParams) (int64, error)

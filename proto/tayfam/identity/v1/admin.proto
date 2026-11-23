@@ -242,6 +242,9 @@ message PlatformAuditEntry {
   string tayfa_id = 9;
   string user_id = 10;
   string report_id = 11;
+  // The catalog entry a catalog.* action changed (issue #262): its key,
+  // or the domain of a blocked domain action. Empty otherwise.
+  string catalog_key = 12;
 }
 
 // PlatformAuditService receives core's platform panel actions for the
@@ -274,6 +277,10 @@ message RecordPlatformAuditRequest {
   string user_id = 10;
   // The platform report the action decided, if any.
   string report_id = 11;
+  // The catalog entry a catalog.* action changed (issue #262): a catalog
+  // key (^[a-z][a-z0-9_]{1,39}$) or, for a blocked domain action, a lower
+  // case host name. A short value, never personal data.
+  string catalog_key = 12;
 }
 
 message RecordPlatformAuditResponse {}

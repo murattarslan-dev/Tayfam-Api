@@ -365,9 +365,13 @@ func TestSeededPresets(t *testing.T) {
 			t.Errorf("%s kabul edildi", name)
 		}
 	}
-	// core_app only reads the presets.
-	if _, err := e.pool.Exec(ctx, `UPDATE catalog_score_presets SET params = '{}'`); err == nil {
-		t.Fatal("core_app ön ayarı değiştirdi")
+	// core_app never changes a preset's key or deletes one (the platform
+	// panel writes the rest, #262).
+	if _, err := e.pool.Exec(ctx, `UPDATE catalog_score_presets SET key = 'x' WHERE key = 'batak'`); err == nil {
+		t.Fatal("core_app ön ayarın anahtarını değiştirdi")
+	}
+	if _, err := e.pool.Exec(ctx, `DELETE FROM catalog_score_presets WHERE key = 'free'`); err == nil {
+		t.Fatal("core_app ön ayar sildi")
 	}
 }
 

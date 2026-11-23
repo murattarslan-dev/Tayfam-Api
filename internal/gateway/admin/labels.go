@@ -49,6 +49,36 @@ func ts(t *timestamppb.Timestamp) string {
 // label is the Turkish name of an enum value shown on the panel.
 func label(v any) string {
 	switch x := v.(type) {
+	case corev1.CatalogStatus:
+		switch x {
+		case corev1.CatalogStatus_CATALOG_STATUS_ACTIVE:
+			return "Aktif"
+		case corev1.CatalogStatus_CATALOG_STATUS_RETIRED:
+			return "Emekli"
+		}
+	case corev1.BadgeScope:
+		switch x {
+		case corev1.BadgeScope_BADGE_SCOPE_USER:
+			return "Kişi"
+		case corev1.BadgeScope_BADGE_SCOPE_TAYFA:
+			return "Tayfa"
+		}
+	case corev1.BadgeRuleKind:
+		switch x {
+		case corev1.BadgeRuleKind_BADGE_RULE_KIND_THRESHOLD:
+			return "Eşik"
+		case corev1.BadgeRuleKind_BADGE_RULE_KIND_FIRST:
+			return "İlk katılım"
+		case corev1.BadgeRuleKind_BADGE_RULE_KIND_CHAMPION:
+			return "Şampiyonluk"
+		}
+	case corev1.EventMode:
+		switch x {
+		case corev1.EventMode_EVENT_MODE_IN_PERSON:
+			return "Yüz yüze"
+		case corev1.EventMode_EVENT_MODE_ONLINE:
+			return "Online"
+		}
 	case corev1.TayfaStatus:
 		switch x {
 		case corev1.TayfaStatus_TAYFA_STATUS_ACTIVE:

@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Tayfam Platform Yönetim Paneli
-  version: 0.4.0
+  version: 0.5.0
   description: |
     1. aşama: erişim katmanı (`/auth/*` JSON uçları). 3. aşama: sunucuda
     render edilen panel sayfaları (`text/html`, aşağıda "Sayfalar"). Sayfalar
@@ -435,8 +435,89 @@ paths:
       requestBody: { $ref: "#/components/requestBodies/Change" }
       responses: { "303": { $ref: "#/components/responses/Changed" }, "403": { $ref: "#/components/responses/Page" } }
 
+  /katalog:
+    get:
+      operationId: adminCatalog
+      summary: Katalog (ilgi alanları, türler, rozetler, ders/konu, yazboz ön ayarları, engelli alan adları)
+      description: |
+        Emekliler dahil bütün katalog (issue #262; ADR-0025 §7, ADR-0039
+        §1, ADR-0040 §3 ve §5). Anahtar değişmez, kayıt silinmez; kaldırmak
+        emekliye ayırmaktır. Yalnızca engelli alan adı listesinden kayıt
+        çıkarılır.
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+        "303": { description: /giris }
+
+  /katalog/{kind}:
+    get:
+      operationId: adminCatalogForm
+      summary: Bir katalog kaydının formu (`?anahtar=<anahtar>`; anahtarsız yeni kayıt)
+      parameters:
+        - { $ref: "#/components/parameters/CatalogKind" }
+        - name: anahtar
+          in: query
+          required: false
+          schema: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+        "303": { description: /giris }
+        "404": { $ref: "#/components/responses/Page" }
+    post:
+      operationId: adminCatalogSave
+      summary: Katalog kaydını önizler (`islem=onizle`) ya da kaydeder (`islem=kaydet`)
+      description: |
+        Önizleme core'da bütün denetimleri çalıştırır, hiçbir şey yazmaz;
+        gerekçe ve yeniden giriş istemez. Türde bileşenleri, alanları, en
+        düşük istemci sürümünü ve desteklenen bir sürüm bileşeni
+        tanımıyorsa uyarıyı gösterir. Kaydetmek gerekçe ve son 5 dakikada
+        Google girişi ister; denetimden geçmeyen kayıt formda sorunuyla
+        (422) yeniden gösterilir, değerler korunur. Başarılı kayıt
+        `303 → /katalog/{kind}?anahtar=<anahtar>&sonuc=katalog-kaydedildi`.
+        Form alanları: `anahtar`, `yeni` (1: yeni kayıt), `adlar` (JSON: dil
+        → ad), `sira`, `durum` (active / retired), `ikon`; ilgi alanı
+        `bilesenler`; tür `ilgi_alanlari`, `yuz_yuze`, `online`, `tanim`
+        (JSON), `surum`; rozet `kapsam`, `kural`, `metrik`, `deger`,
+        `donem`, `etkinlik_turu`; ders/konu `ust`; ön ayar `kurallar`
+        (JSON).
+      parameters: [{ $ref: "#/components/parameters/CatalogKind" }]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [csrf, islem]
+              properties:
+                csrf: { type: string }
+                islem: { type: string, enum: [onizle, kaydet] }
+                gerekce: { type: string, maxLength: 1000 }
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+        "303": { $ref: "#/components/responses/Changed" }
+        "403": { $ref: "#/components/responses/Page" }
+        "422": { $ref: "#/components/responses/Page" }
+
+  /katalog/alan-adi-ekle:
+    post:
+      operationId: adminBlockDomain
+      summary: Alan adını (ve alt alan adlarını) engelli listesine ekler; var olan materyaller gizlenir
+      requestBody: { $ref: "#/components/requestBodies/Change" }
+      responses: { "303": { $ref: "#/components/responses/Changed" }, "403": { $ref: "#/components/responses/Page" } }
+
+  /katalog/alan-adi-kaldir:
+    post:
+      operationId: adminUnblockDomain
+      summary: Alan adını engelli listesinden çıkarır; materyalleri yeniden görünür
+      requestBody: { $ref: "#/components/requestBodies/Change" }
+      responses: { "303": { $ref: "#/components/responses/Changed" }, "403": { $ref: "#/components/responses/Page" } }
+
 components:
   parameters:
+    CatalogKind:
+      name: kind
+      in: path
+      required: true
+      schema: { type: string, enum: [ilgi-alani, tur, rozet, ders-konu, on-ayar] }
     ID:
       name: id
       in: path

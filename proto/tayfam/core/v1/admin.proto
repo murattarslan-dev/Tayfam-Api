@@ -3,6 +3,7 @@ syntax = "proto3";
 package tayfam.core.v1;
 
 import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/catalog.proto";
 import "tayfam/core/v1/membership.proto";
 import "tayfam/core/v1/report.proto";
 import "tayfam/core/v1/tayfa.proto";
@@ -104,6 +105,76 @@ service AdminService {
   // Errors: as ApproveDiscover (STATE_CONFLICT: no application, or already
   // rejected).
   rpc RejectDiscover(RejectDiscoverRequest) returns (RejectDiscoverResponse);
+
+  // Catalog management (issue #262; ADR-0025 §7, ADR-0039 §1, ADR-0040
+  // §3 and §5): interests, event types, badges, study tags, score presets
+  // and blocked domains, without changing code.
+  //
+  // Keys never change and nothing is deleted: an entry that should go is
+  // retired (status CATALOG_STATUS_RETIRED). The only exception is the
+  // blocked domain list, whose entries are added and removed.
+  //
+  // Every Save method checks the entry as a whole before it writes it, in
+  // the same transaction, against the catalog as it would be after the
+  // write: the closed definition schema (package definition), the interests
+  // a type names, the score presets a scoreboard offers, the badges that
+  // count a changed type, the study tag list's "Diğer" rule. With
+  // validate_only the same checks run, the result comes back in check and
+  // nothing is written: no reason and no recent sign-in are needed for it.
+  // Without validate_only a failing check is ERROR_REASON_VALIDATION with
+  // the field and, in the ErrorInfo metadata, "problem": a Turkish sentence
+  // that names the place and never repeats a value.
+  //
+  // A save that changes interests, event types, badges or study tags
+  // raises catalog_meta.catalog_version and publishes catalog.changed in
+  // the same transaction (ADR-0042); score presets and blocked domains are
+  // not part of GET /v1/catalog and leave the version as it is. Every
+  // change writes a platform audit entry (action catalog.*) with the key it
+  // changed (catalog_key) in the same transaction.
+  //
+  // Errors of every Save method: ERROR_REASON_VALIDATION (field "key" when
+  // create is set and the key exists, or is not set and the key does not;
+  // field "version" when the event type changed since it was read),
+  // ERROR_REASON_REASON_REQUIRED, ERROR_REASON_REAUTHENTICATION_REQUIRED.
+
+  // GetCatalogAdmin returns the whole catalog as the panel manages it:
+  // retired entries too, with the definitions, presets' rules and the
+  // blocked domain list.
+  rpc GetCatalogAdmin(GetCatalogAdminRequest) returns (GetCatalogAdminResponse);
+  // SaveCatalogInterest creates or changes an interest. default_widgets
+  // must be home page widgets that need no settings.
+  rpc SaveCatalogInterest(SaveCatalogInterestRequest) returns (SaveCatalogInterestResponse);
+  // SaveCatalogEventType creates (type.version 0) or changes (type.version
+  // = the version the change was made on) an event type. A change of the
+  // name, icon, modes or definition makes a new version; old events keep
+  // theirs (ADR-0025 §2). The interests, position and status are not part
+  // of a version. A new interest of a type must be active.
+  rpc SaveCatalogEventType(SaveCatalogEventTypeRequest) returns (SaveCatalogEventTypeResponse);
+  // SaveCatalogBadge creates or changes a badge definition
+  // (catalog.CheckBadge). Its scope, rule kind and period never change.
+  rpc SaveCatalogBadge(SaveCatalogBadgeRequest) returns (SaveCatalogBadgeResponse);
+  // SaveCatalogStudyTag creates or changes a study tag. Its parent never
+  // changes. A new level or subject gets its "Diğer" child
+  // (<key>_other) in the same save; the list must pass
+  // catalog.CheckStudyTags afterwards.
+  rpc SaveCatalogStudyTag(SaveCatalogStudyTagRequest) returns (SaveCatalogStudyTagResponse);
+  // SaveCatalogScorePreset creates or changes a score preset. Tables
+  // already set up keep the rules they were set up with.
+  rpc SaveCatalogScorePreset(SaveCatalogScorePresetRequest) returns (SaveCatalogScorePresetResponse);
+  // BlockDomain adds a domain (and so its subdomains) to the blocked
+  // domain list (ADR-0040 §3): new links to it are refused and existing
+  // materials with it are hidden, not deleted.
+  //
+  // Errors: ERROR_REASON_VALIDATION (domain: not a host name, or already
+  // on the list), ERROR_REASON_REASON_REQUIRED,
+  // ERROR_REASON_REAUTHENTICATION_REQUIRED.
+  rpc BlockDomain(BlockDomainRequest) returns (BlockDomainResponse);
+  // UnblockDomain removes a domain from the list; its materials show
+  // again.
+  //
+  // Errors: ERROR_REASON_VALIDATION (domain: not on the list), and as
+  // BlockDomain.
+  rpc UnblockDomain(UnblockDomainRequest) returns (UnblockDomainResponse);
 }
 
 message AdminTayfaSummary {
@@ -438,3 +509,182 @@ message RejectDiscoverRequest {
 }
 
 message RejectDiscoverResponse {}
+
+// Catalog management (issue #262).
+
+// AdminCatalogEventType is the current version of an event type, with what
+// only the panel needs.
+message AdminCatalogEventType {
+  // The definition is the full current definition (compact JSON).
+  CatalogEventType type = 1;
+  // Listing order, ascending.
+  int32 position = 2;
+  // The lowest client version that knows every component of the current
+  // version (ADR-0025 §7).
+  string min_client_version = 3;
+}
+
+// AdminCatalogScorePreset is a scoreboard's game rule preset (ADR-0037 §5).
+message AdminCatalogScorePreset {
+  // Immutable; ^[a-z][a-z0-9_]{1,39}$.
+  string key = 1;
+  // Listing order, ascending; 0–9999.
+  int32 position = 2;
+  // Language to name; "tr" is required. No brand names.
+  map<string, string> labels = 3;
+  // The rules as a JSON object: players_min, players_max, side, rounds,
+  // target, winner, result, best_of; a rule left out comes from the
+  // component's parameters.
+  string params = 4;
+  CatalogStatus status = 5;
+}
+
+// AdminBlockedDomain is an entry of the blocked domain list.
+message AdminBlockedDomain {
+  // Lower case, without a trailing dot.
+  string domain = 1;
+  google.protobuf.Timestamp create_time = 2;
+  // True for the entries the list started with (migration), false for
+  // those added on the panel.
+  bool initial = 3;
+}
+
+// CatalogPreviewField is a field of the checked definition.
+message CatalogPreviewField {
+  string key = 1;
+  // text, long_text, integer, decimal, choice, multi_choice, boolean, date
+  // or duration.
+  string kind = 2;
+  bool required = 3;
+  map<string, string> labels = 4;
+}
+
+// CatalogPreviewComponent is a component of the checked definition.
+message CatalogPreviewComponent {
+  string kind = 1;
+  // The component's key within the type (its kind when none is given).
+  string key = 2;
+  map<string, string> labels = 3;
+  // An optional component the organizer switches on or off; default_on is
+  // its default.
+  bool optional = 4;
+  bool default_on = 5;
+  // The lowest client version that knows the kind.
+  string min_client_version = 6;
+}
+
+// CatalogCheck is the result of checking an entry before it is saved.
+message CatalogCheck {
+  // Empty when the entry passed every check; otherwise the first problem
+  // found: a Turkish sentence that names the place, never a value.
+  string problem = 1;
+  // The field the problem is about (key, labels, definition, rule …);
+  // empty when there is no problem.
+  string field = 2;
+  // Event types only, when the definition parses.
+  repeated CatalogPreviewField fields = 3;
+  repeated CatalogPreviewComponent components = 4;
+  // Event types only: the lowest client version that knows every
+  // component. The panel compares it with the supported versions.
+  string min_client_version = 5;
+  // Event types only: the version the save makes (or made) current; the
+  // version it was made on when nothing versioned changes.
+  int32 version = 6;
+  // Event types only: whether the save makes a new version.
+  bool new_version = 7;
+}
+
+message GetCatalogAdminRequest {}
+
+message GetCatalogAdminResponse {
+  int64 catalog_version = 1;
+  // Every interest, retired ones included, by position.
+  repeated CatalogInterest interests = 2;
+  // Every event type, retired ones included, by position.
+  repeated AdminCatalogEventType event_types = 3;
+  repeated CatalogBadge badges = 4;
+  repeated CatalogStudyTag study_tags = 5;
+  repeated AdminCatalogScorePreset score_presets = 6;
+  // By domain.
+  repeated AdminBlockedDomain blocked_domains = 7;
+}
+
+message SaveCatalogInterestRequest {
+  CatalogInterest interest = 1;
+  // True to create a new interest, false to change an existing one.
+  bool create = 2;
+  bool validate_only = 3;
+  // 10–1000 characters; not needed with validate_only.
+  string reason = 4;
+}
+
+message SaveCatalogInterestResponse {
+  CatalogCheck check = 1;
+  // The catalog's version after the save (unchanged with validate_only).
+  int64 catalog_version = 2;
+}
+
+message SaveCatalogEventTypeRequest {
+  // version is the version the change was made on; 0 creates the type.
+  // definition is the definition as JSON (at most 16 KiB).
+  CatalogEventType type = 1;
+  int32 position = 2;
+  bool validate_only = 3;
+  string reason = 4;
+}
+
+message SaveCatalogEventTypeResponse {
+  CatalogCheck check = 1;
+  int64 catalog_version = 2;
+}
+
+message SaveCatalogBadgeRequest {
+  CatalogBadge badge = 1;
+  bool create = 2;
+  bool validate_only = 3;
+  string reason = 4;
+}
+
+message SaveCatalogBadgeResponse {
+  CatalogCheck check = 1;
+  int64 catalog_version = 2;
+}
+
+message SaveCatalogStudyTagRequest {
+  CatalogStudyTag tag = 1;
+  bool create = 2;
+  bool validate_only = 3;
+  string reason = 4;
+}
+
+message SaveCatalogStudyTagResponse {
+  CatalogCheck check = 1;
+  int64 catalog_version = 2;
+}
+
+message SaveCatalogScorePresetRequest {
+  AdminCatalogScorePreset preset = 1;
+  bool create = 2;
+  bool validate_only = 3;
+  string reason = 4;
+}
+
+message SaveCatalogScorePresetResponse {
+  CatalogCheck check = 1;
+  int64 catalog_version = 2;
+}
+
+message BlockDomainRequest {
+  // A host name; it is stored lower case without a trailing dot.
+  string domain = 1;
+  string reason = 2;
+}
+
+message BlockDomainResponse {}
+
+message UnblockDomainRequest {
+  string domain = 1;
+  string reason = 2;
+}
+
+message UnblockDomainResponse {}
