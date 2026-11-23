@@ -206,6 +206,10 @@ type Querier interface {
 	ClearAnnouncementUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearAnswerUserFields(ctx context.Context, userID pgtype.UUID) error
 	ClearAuditActor(ctx context.Context, userID pgtype.UUID) error
+	// Engelli alan adını panelden ekleyen platform yöneticisi boşalır; alan adı
+	// listede kalır (issue #334; ADR-0040 §3). Başlangıç listesinden olup
+	// olmadığı ayrı kolonda (initial, 00069).
+	ClearBlockedDomainCreator(ctx context.Context, userID pgtype.UUID) error
 	ClearCelebrationAnnouncer(ctx context.Context, userID pgtype.UUID) error
 	// Liste maddesi listede kalır; üstlenen ve ekleyen boşalır (`checklist`
 	// bileşeni, issue #241).

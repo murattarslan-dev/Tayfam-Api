@@ -61,6 +61,7 @@ type BlockedDomain struct {
 	Domain    string
 	CreatedAt pgtype.Timestamptz
 	CreatedBy pgtype.UUID
+	Initial   bool
 }
 
 type CatalogBadge struct {

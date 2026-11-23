@@ -46,6 +46,18 @@ func (q *Queries) ClearAuditActor(ctx context.Context, userID pgtype.UUID) error
 	return err
 }
 
+const clearBlockedDomainCreator = `-- name: ClearBlockedDomainCreator :exec
+UPDATE blocked_domains SET created_by = NULL WHERE created_by = $1
+`
+
+// Engelli alan adını panelden ekleyen platform yöneticisi boşalır; alan adı
+// listede kalır (issue #334; ADR-0040 §3). Başlangıç listesinden olup
+// olmadığı ayrı kolonda (initial, 00069).
+func (q *Queries) ClearBlockedDomainCreator(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearBlockedDomainCreator, userID)
+	return err
+}
+
 const clearCelebrationAnnouncer = `-- name: ClearCelebrationAnnouncer :exec
 UPDATE event_celebrations SET announced_by = NULL WHERE announced_by = $1
 `
