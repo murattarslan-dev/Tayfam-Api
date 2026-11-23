@@ -834,6 +834,10 @@ type Querier interface {
 	// Verilen kullanıcılardan hâlâ etkin üye olanlar (tek alıcılı bildirimler
 	// ve arka plan işlerinin seçtiği alıcılar).
 	FilterNotifyActive(ctx context.Context, arg FilterNotifyActiveParams) ([]pgtype.UUID, error)
+	// Ortak kütüphane ödünç adımları (issue #321; ADR-0040 §1): verilen
+	// kullanıcılardan etkin üye olanlar; işlemi yapan (actor_id) ve onunla
+	// arasında iki yönden herhangi birinde engel olan hariç.
+	FilterNotifyUnblocked(ctx context.Context, arg FilterNotifyUnblockedParams) ([]pgtype.UUID, error)
 	// Anlık şimdi etkinliğinde organizatörün seçtiği alıcılardan bildirim
 	// alabilecek olanlar: gönderenin kabul edilmiş arkadaşı, iki yönden engel
 	// yok, hesabı silinmemiş ve platform banlı değil, alıcının
