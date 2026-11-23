@@ -473,6 +473,10 @@ func TestDeparture(t *testing.T) {
 	if v := e.item(t, waiter, tf, mine.ID); v.ActiveLoan == nil || v.ActiveLoan.Borrower != waiter {
 		t.Fatalf("testere sıradakine geçmedi: %+v", v)
 	}
+	// The waiter hears that their turn came (issue #332).
+	if got := e.notices(t, "library_queue_turn"); !slices.Equal(got, []string{waiter.String()}) {
+		t.Fatalf("sıra sende alıcıları: %v", got)
+	}
 	l, err := e.svc.Loans(ctx, owner, tf)
 	must(t, err)
 	var open []library.Loan
@@ -646,7 +650,8 @@ func (e *env) stepNotices(t *testing.T) []notice {
 		FROM domain_events d
 		WHERE d.type = 'notification.requested' AND d.payload ->> 'type' = ANY($1::text[])
 		ORDER BY d.occurred_at, d.id`,
-		[]string{"library_loan_requested", "library_queue_joined", "library_loan_approved", "library_loan_declined", "library_loan_handed_over"})
+		[]string{"library_loan_requested", "library_queue_joined", "library_loan_approved", "library_loan_declined", "library_loan_handed_over",
+			"library_queue_turn"})
 	must(t, err)
 	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (notice, error) {
 		var n notice
@@ -682,8 +687,8 @@ func TestLoanStepNotifications(t *testing.T) {
 	must(t, err)
 	_, err = e.svc.HandOver(ctx, owner, tf, loan, time.Time{})
 	must(t, err)
-	// Taking back tells nobody; B's request opened from the queue tells
-	// nobody either.
+	// Taking back tells nobody; B's request opened from the queue tells B
+	// that their turn came, without an actor (issue #332).
 	_, err = e.svc.Return(ctx, owner, tf, loan)
 	must(t, err)
 	next := e.item(t, owner, tf, tent.ID).ActiveLoan.ID
@@ -696,6 +701,7 @@ func TestLoanStepNotifications(t *testing.T) {
 		{"library_queue_joined", b.String(), "library_item", it, tf.String(), []string{owner.String()}},
 		{"library_loan_approved", owner.String(), "library_item", it, tf.String(), []string{a.String()}},
 		{"library_loan_handed_over", owner.String(), "library_item", it, tf.String(), []string{a.String()}},
+		{"library_queue_turn", "", "library_item", it, tf.String(), []string{b.String()}},
 		{"library_loan_declined", owner.String(), "library_item", it, tf.String(), []string{b.String()}},
 	}
 	got := e.stepNotices(t)
@@ -742,5 +748,65 @@ func TestLoanStepNotificationsBlocked(t *testing.T) {
 		if len(got) != 1 || got[0].Type != "library_queue_joined" || got[0].Actor != b.String() || !slices.Equal(got[0].To, []string{owner.String()}) {
 			t.Fatalf("engel (sahip engelledi %v): %+v", ownerBlocks, got)
 		}
+	}
+}
+
+// TestQueueTurnNotification (issue #332; ADR-0040 §1, revised
+// 2026-11-23): whichever way the active loan ends, the member whose
+// request opens from the queue hears that their turn came; a block either
+// way between them and the item's owner silences it, the request still
+// opens.
+func TestQueueTurnNotification(t *testing.T) {
+	for name, block := range map[string]string{"engelsiz": "", "sahip engelledi": "owner", "sıradaki engelledi": "waiter"} {
+		t.Run(name, func(t *testing.T) {
+			e := setup(t)
+			tf, owner := e.newTayfa(t)
+			a := e.member(t, tf, authz.Member)
+			b := e.member(t, tf, authz.Member)
+			c := e.member(t, tf, authz.Member)
+			switch block {
+			case "owner":
+				e.exec(t, `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)`, owner.PG(), b.PG())
+			case "waiter":
+				e.exec(t, `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)`, b.PG(), owner.PG())
+			}
+			tent := e.add(t, owner, tf, library.KindCampingGear, "Çadır")
+			for _, u := range []id.ID{a, b, c} {
+				_, err := e.svc.Request(ctx, u, tf, tent.ID)
+				must(t, err)
+			}
+			// A takes back their request: B's turn comes.
+			_, err := e.svc.Cancel(ctx, a, tf, tent.ID)
+			must(t, err)
+			if v := e.item(t, owner, tf, tent.ID); v.ActiveLoan == nil || v.ActiveLoan.Borrower != b {
+				t.Fatalf("sıradakine geçmedi: %+v", v)
+			}
+			// The owner declines B: C's turn comes.
+			_, err = e.svc.Decline(ctx, owner, tf, e.item(t, owner, tf, tent.ID).ActiveLoan.ID)
+			must(t, err)
+
+			var turns []notice
+			for _, n := range e.stepNotices(t) {
+				if n.Type == "library_queue_turn" {
+					turns = append(turns, n)
+				}
+			}
+			want := []string{b.String(), c.String()}
+			if block != "" {
+				want = []string{c.String()}
+			}
+			if len(turns) != len(want) {
+				t.Fatalf("sıra sende = %+v, alıcılar %v bekleniyordu", turns, want)
+			}
+			for i, n := range turns {
+				if n.Actor != "" || n.TargetType != "library_item" || n.Target != tent.ID.String() || n.Tayfa != tf.String() ||
+					!slices.Equal(n.To, []string{want[i]}) {
+					t.Errorf("%d. sıra sende = %+v, alıcı %s bekleniyordu", i, n, want[i])
+				}
+			}
+			if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'notification.requested' AND payload::text LIKE '%Çadır%'`); n != 0 {
+				t.Fatalf("bildirimde kalem adı var: %d", n)
+			}
+		})
 	}
 }

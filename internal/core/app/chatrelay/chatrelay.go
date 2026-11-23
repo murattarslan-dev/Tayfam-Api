@@ -173,6 +173,7 @@ var types = map[string]chatv1.NotificationType{
 	notify.TypeLibraryLoanApproved:    chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED,
 	notify.TypeLibraryLoanDeclined:    chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED,
 	notify.TypeLibraryLoanHandedOver:  chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER,
+	notify.TypeLibraryQueueTurn:       chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_QUEUE_TURN,
 	notify.TypeTayfaInvitation:        chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_INVITATION,
 	notify.TypeReportResolved:         chatv1.NotificationType_NOTIFICATION_TYPE_REPORT_RESOLVED,
 }

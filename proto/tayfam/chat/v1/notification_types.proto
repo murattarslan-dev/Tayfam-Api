@@ -138,6 +138,15 @@ enum NotificationType {
   NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED = 32;
   // The owner (actor) recorded handing the item over to the recipient.
   NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER = 33;
+  // The recipient's place in the queue of an item came: the loan before
+  // ended and their loan request is now open, waiting for the owner
+  // (issue #332; ADR-0040 §1, revised 2026-11-23). About the item (target:
+  // LIBRARY_ITEM), without an actor: nobody took this step for them. Not
+  // sent while the recipient and the item's owner have blocked each other
+  // either way. Never names the item or the people; pushed with the
+  // push_<type>_title / _body keys and IDs only, personal like the steps
+  // above.
+  NOTIFICATION_TYPE_LIBRARY_QUEUE_TURN = 34;
 }
 
 enum NotificationTargetType {

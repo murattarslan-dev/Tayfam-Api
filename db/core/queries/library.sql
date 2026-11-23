@@ -156,6 +156,11 @@ FROM head h
 JOIN library_items i ON i.id = h.item_id AND i.status <> 'withdrawn'
 RETURNING borrower_id;
 
+-- Sıra sende bildirimi (lending.Promote, issue #332): kalemin tayfası ve
+-- sahibi (engel kontrolü için).
+-- name: GetLibraryItemParties :one
+SELECT tayfa_id, owner_id FROM library_items WHERE id = @id;
+
 -- Ayrılma (lending.Departed): kişinin kalemleri geri çekilir. tayfa_id
 -- NULL: bütün tayfalar (hesap silme).
 -- name: WithdrawUserLibraryItems :many

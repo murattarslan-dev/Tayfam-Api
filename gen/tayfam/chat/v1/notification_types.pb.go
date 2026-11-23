@@ -159,6 +159,15 @@ const (
 	NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED NotificationType = 32
 	// The owner (actor) recorded handing the item over to the recipient.
 	NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER NotificationType = 33
+	// The recipient's place in the queue of an item came: the loan before
+	// ended and their loan request is now open, waiting for the owner
+	// (issue #332; ADR-0040 §1, revised 2026-11-23). About the item (target:
+	// LIBRARY_ITEM), without an actor: nobody took this step for them. Not
+	// sent while the recipient and the item's owner have blocked each other
+	// either way. Never names the item or the people; pushed with the
+	// push_<type>_title / _body keys and IDs only, personal like the steps
+	// above.
+	NotificationType_NOTIFICATION_TYPE_LIBRARY_QUEUE_TURN NotificationType = 34
 )
 
 // Enum value maps for NotificationType.
@@ -198,6 +207,7 @@ var (
 		31: "NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED",
 		32: "NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED",
 		33: "NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER",
+		34: "NOTIFICATION_TYPE_LIBRARY_QUEUE_TURN",
 	}
 	NotificationType_value = map[string]int32{
 		"NOTIFICATION_TYPE_UNSPECIFIED":              0,
@@ -234,6 +244,7 @@ var (
 		"NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED":    31,
 		"NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED":    32,
 		"NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER": 33,
+		"NOTIFICATION_TYPE_LIBRARY_QUEUE_TURN":       34,
 	}
 )
 
@@ -402,7 +413,7 @@ var File_tayfam_chat_v1_notification_types_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\n" +
-	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xc1\n" +
+	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xeb\n" +
 	"\n" +
 	"\x10NotificationType\x12!\n" +
 	"\x1dNOTIFICATION_TYPE_UNSPECIFIED\x10\x00\x12#\n" +
@@ -439,7 +450,8 @@ const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"&NOTIFICATION_TYPE_LIBRARY_QUEUE_JOINED\x10\x1e\x12+\n" +
 	"'NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED\x10\x1f\x12+\n" +
 	"'NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED\x10 \x12.\n" +
-	"*NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER\x10!*\xce\x03\n" +
+	"*NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER\x10!\x12(\n" +
+	"$NOTIFICATION_TYPE_LIBRARY_QUEUE_TURN\x10\"*\xce\x03\n" +
 	"\x16NotificationTargetType\x12(\n" +
 	"$NOTIFICATION_TARGET_TYPE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eNOTIFICATION_TARGET_TYPE_TAYFA\x10\x01\x12'\n" +

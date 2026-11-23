@@ -7,6 +7,10 @@
   (içeriksiz). Yeni istek ve sıraya girme kalemin sahibine; onay, ret ve
   teslim isteyene. `library_due` ve `library_loan_orphaned` uygulama içi
   kalır. Ayrıntı §1 "Uygulama notları (#321)".
+- **Revizyon:** 2026-11-23 (platform sahibi, sohbette; issue #332): sıra
+  gelip ödünç isteği kendiliğinden açılınca (`lending.Promote`) sırası
+  gelen kişiye "sıra sende" bildirimi gider (uygulama içi ve push,
+  içeriksiz). Ayrıntı §1 "Uygulama notları (#332)".
 - **Uygulama notları onayı:** 2026-11-23 (platform sahibi, sohbette, issue
   #323): #270, #271, #261 ve #272 uygulama notlarındaki ayrıntı kararları
   ve engelli alan adı başlangıç listesi onaylandı.
@@ -131,10 +135,30 @@ Ortak kurallar (dördü için):
   kimlikler (ADR-0019 madde 4). Kapsam tayfanın tercihidir; beşi de
   kişisel sayılır (ADR-0019 madde 3 listesi): `mentions` seviyesinde gider,
   `none` durdurur.
-- Bildirim üretmeyen yan etkiler: ödüncün bitmesiyle sıradakine otomatik
-  açılan istek (`lending.Promote`), kalemin geri çekilmesi ya da üyenin
+- Bildirim üretmeyen yan etkiler: ~~ödüncün bitmesiyle sıradakine otomatik
+  açılan istek (`lending.Promote`),~~ (2026-11-23'te değişti: aşağıda
+  "Uygulama notları (#332)") kalemin geri çekilmesi ya da üyenin
   ayrılmasıyla iptal olan istekler ve borç alanın kendi isteğini geri
   alması. Bunlar sonraki bir kararın konusudur.
+
+**Uygulama notları (#332, platform sahibinin 2026-11-23 kararı):**
+
+- Yeni bildirim türü `library_queue_turn` (chat enum 34, chat 00025):
+  kalemin etkin ödüncü hangi yolla biterse bitsin (iade, ret, borç alanın
+  isteğini geri alması, borç alanın ayrılması, 30 günde kapanan yetim
+  ödünç) sıradaki üyenin ödünç isteği açılır ve ona "sıra sende" gider.
+  Tek noktadan yazılır: `lending.Promote`.
+- Hedef kalemdir (`library_item`, #321 ile aynı); gruplama kalem başına.
+  **Aktörü yoktur:** adımı kimse onun için atmadı; ayrılma ya da geri alma
+  yüzünden sıra geldiğinde öbür üyenin adımı da sızmaz. Eşya adı, kişi
+  adı, tarih taşınmaz.
+- Alıcı etkin üye olmalıdır; kalemin sahibiyle arasında iki yönden engel
+  varsa bildirim hiç yazılmaz (`notify.Unblocked`, aktör yerine sahip).
+  İstek yine açılır (sahibi görür, #321'deki gibi).
+- Push gider: yalnızca `push_library_queue_turn_title` / `_body` ve
+  kimlikler; kişisel sayılır (ADR-0019 madde 3): `mentions` seviyesinde
+  gider, `none` durdurur.
+- `library_due` ve `library_loan_orphaned` uygulama içi kalır.
 
 ### 2. Soru havuzu (`question_pool`)
 
