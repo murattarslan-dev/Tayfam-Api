@@ -139,6 +139,26 @@ const (
 	// left included (target: TAYFA; no actor). The loan stays open for 30
 	// days, then closes. Never names the item or the people. In-app only.
 	NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED NotificationType = 28
+	// The library's loan steps (issue #321; ADR-0040 §1, revised 2026-11-23).
+	// Each is about one item (target: LIBRARY_ITEM, the item's ID), names the
+	// member who took the step as actor and goes to the other side only:
+	// never to anyone blocked with the actor either way. Never names the
+	// item or the people; the push holds the push_<type>_title / _body keys
+	// and IDs only. Pushed, muted with the tayfa's preference; personal, so
+	// level MENTIONS still pushes them.
+	//
+	// A member asked for the recipient's item and has the loan request
+	// (actor: the borrower).
+	NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_REQUESTED NotificationType = 29
+	// A member took a place in the queue of the recipient's item, which is
+	// on loan or asked for (actor: the member waiting).
+	NotificationType_NOTIFICATION_TYPE_LIBRARY_QUEUE_JOINED NotificationType = 30
+	// The owner (actor) approved the recipient's loan request.
+	NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED NotificationType = 31
+	// The owner (actor) declined the recipient's loan request.
+	NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED NotificationType = 32
+	// The owner (actor) recorded handing the item over to the recipient.
+	NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER NotificationType = 33
 )
 
 // Enum value maps for NotificationType.
@@ -173,6 +193,11 @@ var (
 		26: "NOTIFICATION_TYPE_NOW_STARTED",
 		27: "NOTIFICATION_TYPE_LIBRARY_DUE",
 		28: "NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED",
+		29: "NOTIFICATION_TYPE_LIBRARY_LOAN_REQUESTED",
+		30: "NOTIFICATION_TYPE_LIBRARY_QUEUE_JOINED",
+		31: "NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED",
+		32: "NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED",
+		33: "NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER",
 	}
 	NotificationType_value = map[string]int32{
 		"NOTIFICATION_TYPE_UNSPECIFIED":              0,
@@ -204,6 +229,11 @@ var (
 		"NOTIFICATION_TYPE_NOW_STARTED":              26,
 		"NOTIFICATION_TYPE_LIBRARY_DUE":              27,
 		"NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED":    28,
+		"NOTIFICATION_TYPE_LIBRARY_LOAN_REQUESTED":   29,
+		"NOTIFICATION_TYPE_LIBRARY_QUEUE_JOINED":     30,
+		"NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED":    31,
+		"NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED":    32,
+		"NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER": 33,
 	}
 )
 
@@ -254,21 +284,25 @@ const (
 	// target_id is a data export request of the recipient (identity's
 	// DataExportService.GetDataExport).
 	NotificationTargetType_NOTIFICATION_TARGET_TYPE_DATA_EXPORT NotificationTargetType = 9
+	// target_id is a library item of the notification's tayfa
+	// (TayfaLibraryService.GetLibraryItem; issue #321).
+	NotificationTargetType_NOTIFICATION_TARGET_TYPE_LIBRARY_ITEM NotificationTargetType = 10
 )
 
 // Enum value maps for NotificationTargetType.
 var (
 	NotificationTargetType_name = map[int32]string{
-		0: "NOTIFICATION_TARGET_TYPE_UNSPECIFIED",
-		1: "NOTIFICATION_TARGET_TYPE_TAYFA",
-		2: "NOTIFICATION_TARGET_TYPE_MEMBERSHIP",
-		3: "NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT",
-		4: "NOTIFICATION_TARGET_TYPE_EVENT",
-		5: "NOTIFICATION_TARGET_TYPE_ANSWER",
-		6: "NOTIFICATION_TARGET_TYPE_USER",
-		7: "NOTIFICATION_TARGET_TYPE_REPORT",
-		8: "NOTIFICATION_TARGET_TYPE_DM_CONVERSATION",
-		9: "NOTIFICATION_TARGET_TYPE_DATA_EXPORT",
+		0:  "NOTIFICATION_TARGET_TYPE_UNSPECIFIED",
+		1:  "NOTIFICATION_TARGET_TYPE_TAYFA",
+		2:  "NOTIFICATION_TARGET_TYPE_MEMBERSHIP",
+		3:  "NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT",
+		4:  "NOTIFICATION_TARGET_TYPE_EVENT",
+		5:  "NOTIFICATION_TARGET_TYPE_ANSWER",
+		6:  "NOTIFICATION_TARGET_TYPE_USER",
+		7:  "NOTIFICATION_TARGET_TYPE_REPORT",
+		8:  "NOTIFICATION_TARGET_TYPE_DM_CONVERSATION",
+		9:  "NOTIFICATION_TARGET_TYPE_DATA_EXPORT",
+		10: "NOTIFICATION_TARGET_TYPE_LIBRARY_ITEM",
 	}
 	NotificationTargetType_value = map[string]int32{
 		"NOTIFICATION_TARGET_TYPE_UNSPECIFIED":     0,
@@ -281,6 +315,7 @@ var (
 		"NOTIFICATION_TARGET_TYPE_REPORT":          7,
 		"NOTIFICATION_TARGET_TYPE_DM_CONVERSATION": 8,
 		"NOTIFICATION_TARGET_TYPE_DATA_EXPORT":     9,
+		"NOTIFICATION_TARGET_TYPE_LIBRARY_ITEM":    10,
 	}
 )
 
@@ -367,7 +402,8 @@ var File_tayfam_chat_v1_notification_types_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\n" +
-	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xdd\b\n" +
+	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xc1\n" +
+	"\n" +
 	"\x10NotificationType\x12!\n" +
 	"\x1dNOTIFICATION_TYPE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fNOTIFICATION_TYPE_EVENT_CREATED\x10\x01\x12#\n" +
@@ -398,7 +434,12 @@ const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\x1eNOTIFICATION_TYPE_BADGE_EARNED\x10\x19\x12!\n" +
 	"\x1dNOTIFICATION_TYPE_NOW_STARTED\x10\x1a\x12!\n" +
 	"\x1dNOTIFICATION_TYPE_LIBRARY_DUE\x10\x1b\x12+\n" +
-	"'NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED\x10\x1c*\xa3\x03\n" +
+	"'NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED\x10\x1c\x12,\n" +
+	"(NOTIFICATION_TYPE_LIBRARY_LOAN_REQUESTED\x10\x1d\x12*\n" +
+	"&NOTIFICATION_TYPE_LIBRARY_QUEUE_JOINED\x10\x1e\x12+\n" +
+	"'NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED\x10\x1f\x12+\n" +
+	"'NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED\x10 \x12.\n" +
+	"*NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER\x10!*\xce\x03\n" +
 	"\x16NotificationTargetType\x12(\n" +
 	"$NOTIFICATION_TARGET_TYPE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eNOTIFICATION_TARGET_TYPE_TAYFA\x10\x01\x12'\n" +
@@ -409,7 +450,9 @@ const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\x1dNOTIFICATION_TARGET_TYPE_USER\x10\x06\x12#\n" +
 	"\x1fNOTIFICATION_TARGET_TYPE_REPORT\x10\a\x12,\n" +
 	"(NOTIFICATION_TARGET_TYPE_DM_CONVERSATION\x10\b\x12(\n" +
-	"$NOTIFICATION_TARGET_TYPE_DATA_EXPORT\x10\t*\x83\x01\n" +
+	"$NOTIFICATION_TARGET_TYPE_DATA_EXPORT\x10\t\x12)\n" +
+	"%NOTIFICATION_TARGET_TYPE_LIBRARY_ITEM\x10\n" +
+	"*\x83\x01\n" +
 	"\x12TayfaWarningReason\x12$\n" +
 	" TAYFA_WARNING_REASON_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dTAYFA_WARNING_REASON_INACTIVE\x10\x01\x12$\n" +

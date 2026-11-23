@@ -96,6 +96,19 @@ const (
 	// the tayfa (ADR-0040 §1): a warning to both sides, the one who left
 	// included, the loan's tayfa as target, no actor; in-app only.
 	TypeLibraryLoanOrphaned = "library_loan_orphaned"
+	// The library's loan steps (issue #321; ADR-0040 §1, revised
+	// 2026-11-23): about one item (TargetLibraryItem), the member who took
+	// the step as actor, to the other side only and never across a block
+	// (Unblocked). Pushed; never the item or the people. To the owner:
+	// TypeLibraryLoanRequested (a member asked and has the loan request),
+	// TypeLibraryQueueJoined (a member waits in the queue). To the
+	// borrower: TypeLibraryLoanApproved, TypeLibraryLoanDeclined,
+	// TypeLibraryLoanHandedOver.
+	TypeLibraryLoanRequested  = "library_loan_requested"
+	TypeLibraryQueueJoined    = "library_queue_joined"
+	TypeLibraryLoanApproved   = "library_loan_approved"
+	TypeLibraryLoanDeclined   = "library_loan_declined"
+	TypeLibraryLoanHandedOver = "library_loan_handed_over"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -107,6 +120,8 @@ const (
 	TargetAnswer       = "answer"
 	TargetUser         = "user"   // target ID: a user, whose profile the client opens
 	TargetReport       = "report" // target ID: the reporter's own report
+	// TargetLibraryItem: target ID is a library item of the tayfa.
+	TargetLibraryItem = "library_item"
 )
 
 // Extra keys: further IDs or a classification, never text.
@@ -203,6 +218,22 @@ func Only(ctx context.Context, q *store.Queries, tayfa id.ID, users []id.ID, exc
 		}
 	}
 	return ids(q.FilterNotifyActive(ctx, store.FilterNotifyActiveParams{TayfaID: tayfa.PG(), UserIds: in, ExcludeUserID: exclude.PG()}))
+}
+
+// Unblocked returns those of users who are active members, except actor
+// and anyone blocked with actor either way (ADR-0011: a block holds in
+// notifications too). The others are left out without a trace.
+func Unblocked(ctx context.Context, q *store.Queries, tayfa id.ID, users []id.ID, actor id.ID) ([]id.ID, error) {
+	in := make([]pgtype.UUID, 0, len(users))
+	for _, u := range users {
+		if u != (id.ID{}) {
+			in = append(in, u.PG())
+		}
+	}
+	if len(in) == 0 {
+		return nil, nil
+	}
+	return ids(q.FilterNotifyUnblocked(ctx, store.FilterNotifyUnblockedParams{TayfaID: tayfa.PG(), UserIds: in, ActorID: actor.PG()}))
 }
 
 func ids(rows []pgtype.UUID, err error) ([]id.ID, error) {

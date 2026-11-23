@@ -630,3 +630,117 @@ func TestChecks(t *testing.T) {
 		t.Error("ikinci etkin ödünç kabul edildi")
 	}
 }
+
+// notice is one library loan step notification as core requested it.
+type notice struct {
+	Type, Actor, TargetType, Target, Tayfa string
+	To                                     []string
+}
+
+// stepNotices returns the loan step notifications (issue #321), oldest
+// first.
+func (e *env) stepNotices(t *testing.T) []notice {
+	t.Helper()
+	rows, err := e.admin.Query(ctx, `SELECT d.payload ->> 'type', COALESCE(d.actor_id::text, ''), d.payload ->> 'target_type',
+		    d.payload ->> 'target_id', d.payload ->> 'tayfa_id', ARRAY(SELECT jsonb_array_elements_text(d.payload -> 'recipient_ids'))
+		FROM domain_events d
+		WHERE d.type = 'notification.requested' AND d.payload ->> 'type' = ANY($1::text[])
+		ORDER BY d.occurred_at, d.id`,
+		[]string{"library_loan_requested", "library_queue_joined", "library_loan_approved", "library_loan_declined", "library_loan_handed_over"})
+	must(t, err)
+	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (notice, error) {
+		var n notice
+		err := r.Scan(&n.Type, &n.Actor, &n.TargetType, &n.Target, &n.Tayfa, &n.To)
+		return n, err
+	})
+	must(t, err)
+	return out
+}
+
+// TestLoanStepNotifications (issue #321; ADR-0040 §1, revised
+// 2026-11-23): a new request and a queue place tell the owner; approving,
+// declining and handing over tell the borrower. Each is about the item,
+// names the one who took the step as actor and goes to the other side
+// only; nothing names the item or the people.
+func TestLoanStepNotifications(t *testing.T) {
+	e := setup(t)
+	tf, owner := e.newTayfa(t)
+	a := e.member(t, tf, authz.Member)
+	b := e.member(t, tf, authz.Member)
+	tent := e.add(t, owner, tf, library.KindCampingGear, "Çadır")
+
+	_, err := e.svc.Request(ctx, a, tf, tent.ID)
+	must(t, err)
+	_, err = e.svc.Request(ctx, a, tf, tent.ID) // again: nothing new
+	must(t, err)
+	_, err = e.svc.Request(ctx, b, tf, tent.ID)
+	must(t, err)
+	_, err = e.svc.Request(ctx, b, tf, tent.ID) // already waiting
+	must(t, err)
+	loan := e.item(t, owner, tf, tent.ID).ActiveLoan.ID
+	_, err = e.svc.Approve(ctx, owner, tf, loan)
+	must(t, err)
+	_, err = e.svc.HandOver(ctx, owner, tf, loan, time.Time{})
+	must(t, err)
+	// Taking back tells nobody; B's request opened from the queue tells
+	// nobody either.
+	_, err = e.svc.Return(ctx, owner, tf, loan)
+	must(t, err)
+	next := e.item(t, owner, tf, tent.ID).ActiveLoan.ID
+	_, err = e.svc.Decline(ctx, owner, tf, next)
+	must(t, err)
+
+	it := tent.ID.String()
+	want := []notice{
+		{"library_loan_requested", a.String(), "library_item", it, tf.String(), []string{owner.String()}},
+		{"library_queue_joined", b.String(), "library_item", it, tf.String(), []string{owner.String()}},
+		{"library_loan_approved", owner.String(), "library_item", it, tf.String(), []string{a.String()}},
+		{"library_loan_handed_over", owner.String(), "library_item", it, tf.String(), []string{a.String()}},
+		{"library_loan_declined", owner.String(), "library_item", it, tf.String(), []string{b.String()}},
+	}
+	got := e.stepNotices(t)
+	if len(got) != len(want) {
+		t.Fatalf("bildirimler = %+v", got)
+	}
+	for i := range want {
+		if got[i].Type != want[i].Type || got[i].Actor != want[i].Actor || got[i].TargetType != want[i].TargetType ||
+			got[i].Target != want[i].Target || got[i].Tayfa != want[i].Tayfa || !slices.Equal(got[i].To, want[i].To) {
+			t.Errorf("%d. bildirim = %+v, %+v bekleniyordu", i, got[i], want[i])
+		}
+	}
+	// IDs only: never the item's name.
+	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'notification.requested' AND payload::text LIKE '%Çadır%'`); n != 0 {
+		t.Fatalf("bildirimde kalem adı var: %d", n)
+	}
+}
+
+// TestLoanStepNotificationsBlocked: a block either way silences the loan
+// step notifications both ways; the steps themselves still work.
+func TestLoanStepNotificationsBlocked(t *testing.T) {
+	for _, ownerBlocks := range []bool{true, false} {
+		e := setup(t)
+		tf, owner := e.newTayfa(t)
+		a := e.member(t, tf, authz.Member)
+		b := e.member(t, tf, authz.Member)
+		if ownerBlocks {
+			e.exec(t, `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)`, owner.PG(), a.PG())
+		} else {
+			e.exec(t, `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)`, a.PG(), owner.PG())
+		}
+		tent := e.add(t, owner, tf, library.KindCampingGear, "Çadır")
+		_, err := e.svc.Request(ctx, a, tf, tent.ID)
+		must(t, err)
+		loan := e.item(t, owner, tf, tent.ID).ActiveLoan.ID
+		_, err = e.svc.Approve(ctx, owner, tf, loan)
+		must(t, err)
+		_, err = e.svc.HandOver(ctx, owner, tf, loan, time.Time{})
+		must(t, err)
+		// B is not blocked: B's queue place still tells the owner.
+		_, err = e.svc.Request(ctx, b, tf, tent.ID)
+		must(t, err)
+		got := e.stepNotices(t)
+		if len(got) != 1 || got[0].Type != "library_queue_joined" || got[0].Actor != b.String() || !slices.Equal(got[0].To, []string{owner.String()}) {
+			t.Fatalf("engel (sahip engelledi %v): %+v", ownerBlocks, got)
+		}
+	}
+}
