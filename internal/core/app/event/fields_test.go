@@ -48,7 +48,8 @@ func TestCreateWithFields(t *testing.T) {
 	member := e.seed(t, tf, authz.Member)
 
 	v := e.create(t, tf, admin, gaming())
-	if v.Type != TypeGaming || v.TypeVersion != 1 {
+	// Video oyunu is at its second version since issue #260.
+	if v.Type != TypeGaming || v.TypeVersion != 2 {
 		t.Fatalf("etkinlik = %+v", v)
 	}
 	// Stored in their clean form: the text is trimmed.
@@ -153,15 +154,15 @@ func TestEventKeepsItsTypeVersion(t *testing.T) {
 	tf, admin := e.newTayfa(t)
 	old := e.create(t, tf, admin, gaming())
 
-	// The catalog gets a second version of the type: the platform field is
-	// gone and a new required field came.
+	// The catalog gets a new version of the type (the seed's is 2, issue
+	// #260): the platform field is gone and a new required field came.
 	const v2 = `{"fields": [
 	  {"key": "game", "kind": "text", "required": true, "max_length": 60, "labels": {"tr": "Oyun"}},
 	  {"key": "players", "kind": "integer", "required": true, "min": 2, "max": 64, "labels": {"tr": "Oyuncu"}}
 	]}`
 	e.exec(t, `INSERT INTO catalog_event_type_versions (type_key, version, labels, icon, modes, definition)
-		VALUES ('gaming', 2, '{"tr": "Video oyunu"}', 'sports_esports', ARRAY['online'], $1::jsonb)`, v2)
-	e.exec(t, `UPDATE catalog_event_types SET version = 2, modes = ARRAY['online'], definition = $1::jsonb WHERE key = 'gaming'`, v2)
+		VALUES ('gaming', 3, '{"tr": "Video oyunu"}', 'sports_esports', ARRAY['online'], $1::jsonb)`, v2)
+	e.exec(t, `UPDATE catalog_event_types SET version = 3, modes = ARRAY['online'], definition = $1::jsonb WHERE key = 'gaming'`, v2)
 
 	// A new event is created with, and checked against, the new version.
 	in := gaming()
@@ -171,7 +172,7 @@ func TestEventKeepsItsTypeVersion(t *testing.T) {
 	in.Fields = values("game", `"Okey"`, "players", `4`)
 	in.ClientRequestID = id.New().String()
 	fresh := e.create(t, tf, admin, in)
-	if fresh.TypeVersion != 2 {
+	if fresh.TypeVersion != 3 {
 		t.Fatalf("yeni etkinliğin sürümü = %d", fresh.TypeVersion)
 	}
 	wantValues(t, "yeni sürüm", fresh.Fields, "game", `"Okey"`, "players", `4`)
@@ -185,10 +186,10 @@ func TestEventKeepsItsTypeVersion(t *testing.T) {
 	_, err = e.svc.Update(ctx, admin, tf, fresh.ID, []string{FieldLocation}, Input{Location: inPerson()})
 	wantField(t, "türün izin vermediği biçime geçiş", err, "mode")
 
-	// The old event stays at version 1 and is edited against version 1.
+	// The old event stays at version 2 and is edited against version 2.
 	got, err := e.svc.Get(ctx, admin, tf, old.ID)
 	must(t, err)
-	if got.TypeVersion != 1 {
+	if got.TypeVersion != 2 {
 		t.Fatalf("eski etkinliğin sürümü = %d", got.TypeVersion)
 	}
 	wantValues(t, "eski etkinlik", got.Fields, "game", `"Tavla"`, "platform", `"mobile"`)
@@ -222,7 +223,7 @@ func TestSeriesCopiesFields(t *testing.T) {
 	for _, r := range evs {
 		got, err := e.svc.Get(ctx, admin, tf, id.ID(r.ID.Bytes))
 		must(t, err)
-		if got.TypeVersion != 1 {
+		if got.TypeVersion != 2 {
 			t.Errorf("örneğin sürümü = %d", got.TypeVersion)
 		}
 		wantValues(t, "seri örneği", got.Fields, "game", `"Tavla"`, "platform", `"mobile"`)

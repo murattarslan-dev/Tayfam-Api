@@ -135,6 +135,9 @@ func TestRollCallMigrationMovesRows(t *testing.T) {
 	admin := adminOf(t, pool)
 	ctx := context.Background()
 	up, down := migrationParts(t, coredb.Migrations(), "00037_component_roll_call.sql")
+	// 00066 moved the type to its second version (issue #260): its Down
+	// comes first, as it would on the real way back.
+	_, catalogDown := migrationParts(t, coredb.Migrations(), "00066_catalog_data.sql")
 	tayfa := newTayfa(t, pool, id.New(), tayfaOpts{})
 	exec := func(sql string, args ...any) {
 		t.Helper()
@@ -142,6 +145,7 @@ func TestRollCallMigrationMovesRows(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	exec(catalogDown)
 	scalar := func(sql string, args ...any) string {
 		t.Helper()
 		var s *string

@@ -43,53 +43,33 @@ func TestNewNeedsPool(t *testing.T) {
 // seed (00030), raised by every migration that changes a type in place
 // (00036: the camp's fields, issue #241; 00037: the hike's fields, issue
 // #242; 00038: the fishing log's fields, issue #243; 00040: the hike's
-// measures, issue #245).
-const seedVersion = 5
+// measures, issue #245; 00066: the full catalog, issue #260).
+const seedVersion = 6
 
-// The seed is the seven Faz 1 types with today's behaviour (ADR-0025 §10
-// step 1): every definition passes the validator, the keys did not change.
+// faz1Types are the seven Faz 1 types; their version 1 is today's
+// behaviour of Faz 1 (ADR-0025 §10 step 1).
+var faz1Types = []string{"convoy", "hike", "camp", "fishing", "sports", "gaming", "general"}
+
+// The Faz 1 types' version 1 keeps today's behaviour (ADR-0025 §10 step
+// 1): every definition passes the validator, the keys did not change. The
+// full catalog of #260 is TestSeedCatalogData's.
 func TestSeedCatalog(t *testing.T) {
 	svc, _, _ := setup(t)
-	c, notModified, err := svc.Get(ctx, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if notModified || c.Version != seedVersion {
-		t.Fatalf("sürüm = %d, değişmedi = %v", c.Version, notModified)
-	}
-	var interests []string
-	for _, in := range c.Interests {
-		interests = append(interests, in.Key)
-		if in.Status != StatusActive || in.Labels["tr"] == "" || in.Icon == "" {
-			t.Errorf("ilgi alanı = %+v", in)
-		}
-	}
-	if want := []string{"automotive", "nature", "water", "sports", "games", "general"}; !slices.Equal(interests, want) {
-		t.Fatalf("ilgi alanları = %v", interests)
-	}
-
 	wantInterest := map[string]string{
 		"convoy": "automotive", "hike": "nature", "camp": "nature", "fishing": "water",
 		"sports": "sports", "gaming": "games", "general": "general",
 	}
-	var types []string
-	for _, et := range c.Types {
-		types = append(types, et.Key)
+	byKey := map[string]EventType{}
+	for _, key := range faz1Types {
+		et, err := svc.TypeVersion(ctx, key, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if et.Version != 1 || et.Status != StatusActive || !slices.Equal(et.InterestKeys, []string{wantInterest[et.Key]}) ||
 			!slices.Equal(et.Modes, []string{ModeInPerson, ModeOnline}) || et.Parsed == nil || len(et.Definition) == 0 {
 			t.Errorf("tür = %+v", et)
 		}
-		if !slices.ContainsFunc(c.Interests, func(in Interest) bool { return in.Key == et.InterestKeys[0] }) {
-			t.Errorf("%s: ilgi alanı katalogda yok", et.Key)
-		}
-	}
-	if want := []string{"convoy", "hike", "camp", "fishing", "sports", "gaming", "general"}; !slices.Equal(types, want) {
-		t.Fatalf("türler = %v", types)
-	}
-
-	byKey := map[string]EventType{}
-	for _, et := range c.Types {
-		byKey[et.Key] = et
+		byKey[key] = et
 	}
 	if byKey["sports"].Labels["tr"] != "Spor (diğer)" || byKey["gaming"].Labels["tr"] != "Video oyunu" {
 		t.Fatalf("adlar: %q, %q", byKey["sports"].Labels["tr"], byKey["gaming"].Labels["tr"])
@@ -186,7 +166,7 @@ func TestGetNotModified(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if notModified || c.Version != seedVersion+1 || len(c.Types) != 7 {
+	if notModified || c.Version != seedVersion+1 || len(c.Types) != seedTypes {
 		t.Fatalf("sürüm = %d, değişmedi = %v, tür = %d", c.Version, notModified, len(c.Types))
 	}
 	// A version from the future is not "current" either.
@@ -210,7 +190,7 @@ func TestTypeVersion(t *testing.T) {
 		version int32
 	}{
 		"bilinmeyen tür":   {"paragliding", 1},
-		"bilinmeyen sürüm": {"hike", 2},
+		"bilinmeyen sürüm": {"hike", 9},
 	} {
 		if _, err := svc.TypeVersion(ctx, c.key, c.version); !errors.Is(err, apperr.ErrCatalogTypeNotFound) {
 			t.Errorf("%s: %v", name, err)
@@ -233,11 +213,11 @@ func TestTypeVersion(t *testing.T) {
 		}
 	}
 
-	// A new version of the type: the old one stays as it was, the catalog
-	// serves the new one.
+	// A new version of the type (the seed's is 2): the old ones stay as
+	// they were, the catalog serves the new one.
 	exec(t, admin, `INSERT INTO catalog_event_type_versions (type_key, version, labels, icon, modes, definition)
-		VALUES ('hike', 2, '{"tr": "Yürüyüş"}', 'hiking', ARRAY['in_person'], '{"components": [{"kind": "route"}]}')`)
-	exec(t, admin, `UPDATE catalog_event_types SET version = 2, labels = '{"tr": "Yürüyüş"}', modes = ARRAY['in_person'],
+		VALUES ('hike', 3, '{"tr": "Yürüyüş"}', 'hiking', ARRAY['in_person'], '{"components": [{"kind": "route"}]}')`)
+	exec(t, admin, `UPDATE catalog_event_types SET version = 3, labels = '{"tr": "Yürüyüş"}', modes = ARRAY['in_person'],
 		definition = '{"components": [{"kind": "route"}]}' WHERE key = 'hike'`)
 	exec(t, admin, `UPDATE catalog_meta SET catalog_version = catalog_version + 1`)
 	old, err := svc.TypeVersion(ctx, "hike", 1)
@@ -252,7 +232,7 @@ func TestTypeVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	i := slices.IndexFunc(c.Types, func(et EventType) bool { return et.Key == "hike" })
-	if i < 0 || c.Types[i].Version != 2 || c.Types[i].Labels["tr"] != "Yürüyüş" || string(c.Types[i].Definition) != `{"components":[{"kind":"route"}]}` {
+	if i < 0 || c.Types[i].Version != 3 || c.Types[i].Labels["tr"] != "Yürüyüş" || string(c.Types[i].Definition) != `{"components":[{"kind":"route"}]}` {
 		t.Fatalf("güncel sürüm: %+v", c.Types)
 	}
 
@@ -262,7 +242,7 @@ func TestTypeVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if slices.ContainsFunc(c.Types, func(et EventType) bool { return et.Key == "fishing" }) || len(c.Types) != 6 {
+	if slices.ContainsFunc(c.Types, func(et EventType) bool { return et.Key == "fishing" }) || len(c.Types) != seedTypes-1 {
 		t.Fatalf("emekli tür katalogda: %d tür", len(c.Types))
 	}
 	if et, err := svc.TypeVersion(ctx, "fishing", 1); err != nil || et.Status != StatusRetired {

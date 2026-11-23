@@ -11,8 +11,9 @@ import (
 )
 
 // testStudyTags is the smallest list that exercises every rule. It is test
-// data only: the real list comes from the platform owner's approved draft
-// (issue #260).
+// data only: the real list is the seed's (issue #260; TestSeedCatalogData).
+// Its keys are not the seed's; a test that reads the whole list removes the
+// seed first (clearStudyTags).
 const testStudyTags = `INSERT INTO catalog_study_tags (key, parent_key, position, labels, status) VALUES
 	('level_a', NULL, 1, '{"tr": "Düzey A"}', 'active'),
 	('level_a_other', 'level_a', 99, '{"tr": "Diğer"}', 'active'),
@@ -26,10 +27,14 @@ const testStudyTags = `INSERT INTO catalog_study_tags (key, parent_key, position
 	('subject_c', 'level_b', 1, '{"tr": "Ders C"}', 'active'),
 	('subject_c_other', 'subject_c', 99, '{"tr": "Diğer"}', 'active')`
 
-// The migrations leave the list empty (its content is issue #260's); the
-// catalog serves it as an empty list.
-func TestSeedStudyTagsEmpty(t *testing.T) {
-	svc, _, _ := setup(t)
+// clearStudyTags removes the seed's list (00066), for a test that reads the
+// whole list.
+const clearStudyTags = `DELETE FROM catalog_study_tags`
+
+// An empty list is served as an empty list.
+func TestEmptyStudyTags(t *testing.T) {
+	svc, _, admin := setup(t)
+	exec(t, admin, clearStudyTags)
 	c, _, err := svc.Get(ctx, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -44,6 +49,7 @@ func TestSeedStudyTagsEmpty(t *testing.T) {
 
 func TestStudyTagsInCatalog(t *testing.T) {
 	svc, _, admin := setup(t)
+	exec(t, admin, clearStudyTags)
 	exec(t, admin, testStudyTags)
 	c, _, err := svc.Get(ctx, 0)
 	if err != nil {

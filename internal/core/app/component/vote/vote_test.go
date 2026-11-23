@@ -680,7 +680,10 @@ func TestVoteFrozenAndCancelled(t *testing.T) {
 func TestVoteOutsideTypeVersion(t *testing.T) {
 	e := setup(t)
 	tf, admin := e.newTayfa(t)
-	general := e.newEvent(t, tf, admin, event.TypeGeneral)
+	// "Genel" has an optional toolbox (issue #260): a type without any
+	// component stands in for it.
+	e.addType(t, "test_bare", `{}`)
+	general := e.newEvent(t, tf, admin, "test_bare")
 	free := e.newEvent(t, tf, admin, freeType)
 	off := e.newEvent(t, tf, admin, optType)
 	onEv := e.newEvent(t, tf, admin, optType, component.Selection{Key: "vote", Enabled: on(true)})

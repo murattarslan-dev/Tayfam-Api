@@ -492,9 +492,14 @@ func TestComponentResolution(t *testing.T) {
 		wantField(t, "bozuk anahtar okuma "+key, err, "component_key")
 		wantField(t, "bozuk anahtar yazma "+key, e.gear.Add(ctx, ref(goer, tf, ev.ID, key), "x"), "component_key")
 	}
-	// A type without components has none to reach.
+	// A type without components has none to reach ("Genel" has an optional
+	// toolbox since issue #260).
+	e.exec(t, `INSERT INTO catalog_event_types (key, interest_keys, position, labels, icon, modes, version, definition)
+		VALUES ('test_bare', ARRAY['general'], 9000, '{"tr": "Bileşensiz"}', 'event', ARRAY['in_person', 'online'], 1, '{}')`)
+	e.exec(t, `INSERT INTO catalog_event_type_versions (type_key, version, labels, icon, modes, definition)
+		SELECT key, version, labels, icon, modes, definition FROM catalog_event_types WHERE key = 'test_bare'`)
 	plain, err := e.events.Create(ctx, admin, tf, event.Input{
-		Type: event.TypeGeneral, Title: "Buluşma", StartsAt: e.clock.now().Add(time.Hour), EndsAt: e.clock.now().Add(2 * time.Hour),
+		Type: "test_bare", Title: "Buluşma", StartsAt: e.clock.now().Add(time.Hour), EndsAt: e.clock.now().Add(2 * time.Hour),
 		Location: event.Location{Mode: event.ModeOnline, OnlineURL: "https://example.com/oda"}, ClientRequestID: id.New().String(),
 	})
 	must(t, err)
