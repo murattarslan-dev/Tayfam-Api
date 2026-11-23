@@ -28,13 +28,12 @@ func (f *fakeStats) Tayfa(_ context.Context, user, tayfa id.ID, year int32) (sta
 }
 
 func TestTayfaStatsMethods(t *testing.T) {
-	u := id.New()
 	at := time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC)
 	f := &fakeStats{view: stats.View{
 		Year: 2025, Years: []int32{2026, 2025},
-		Totals:        []stats.Stat{{Metric: "events", Source: stats.SourceCommon, Value: 4, Events: 4}},
-		Contributions: []stats.Contribution{{User: u, Metric: "hike.distance", Value: 12.5, Events: 2}},
-		ComputedAt:    at,
+		Totals:     []stats.Stat{{Metric: "events", Source: stats.SourceCommon, Value: 4, Events: 4}},
+		Own:        []stats.Stat{{Metric: "hike.distance", Source: stats.SourceMeasure, Value: 12.5, Events: 2}},
+		ComputedAt: at,
 	}}
 	s := NewTayfaStatsServer(f, discard)
 	user, tf := id.New(), id.New()
@@ -50,14 +49,18 @@ func TestTayfaStatsMethods(t *testing.T) {
 	if st := got.GetTotals(); len(st) != 1 || st[0].GetMetricKey() != "events" || st[0].GetSource() != "common" || st[0].GetValue() != 4 || st[0].GetEventCount() != 4 {
 		t.Fatalf("toplamlar: %v", st)
 	}
-	if c := got.GetContributions(); len(c) != 1 || c[0].GetUserId() != u.String() || c[0].GetMetricKey() != "hike.distance" || c[0].GetValue() != 12.5 {
-		t.Fatalf("katkılar: %v", c)
+	if c := got.GetOwnContributions(); len(c) != 1 || c[0].GetMetricKey() != "hike.distance" || c[0].GetSource() != "measure" || c[0].GetValue() != 12.5 || c[0].GetEventCount() != 2 {
+		t.Fatalf("kendi katkıları: %v", c)
+	}
+	// Nobody's contribution goes in the deprecated list (issue #322).
+	if c := got.GetContributions(); len(c) != 0 { //nolint:staticcheck // the deprecated field must stay empty
+		t.Fatalf("eski katkı listesi dolu: %v", c)
 	}
 
 	// Nothing computed yet: no time, empty lists.
 	f.view = stats.View{}
 	got, err = s.GetTayfaStats(ctx, &corev1.GetTayfaStatsRequest{TayfaId: tf.String()})
-	if err != nil || got.GetComputeTime() != nil || got.GetYears() == nil || len(got.GetTotals()) != 0 {
+	if err != nil || got.GetComputeTime() != nil || got.GetYears() == nil || len(got.GetTotals()) != 0 || len(got.GetOwnContributions()) != 0 {
 		t.Fatalf("boş: %v %v", got, err)
 	}
 

@@ -29,7 +29,9 @@ const (
 // TayfaStatsService is a tayfa's statistics for its members (issue #266;
 // ADR-0026 §2–§3, ADR-0037 §7): the totals computed from its frozen
 // events (ended seven days ago, not cancelled, not deleted) and the
-// personal contributions of its active members.
+// caller's own contributions. Nobody else's contribution is ever returned
+// (platform owner, 2026-11-23; issue #322), not to an admin or a moderator
+// either.
 //
 // Only gateway calls it with the user's access token; the acting user is
 // always the token's. Anyone but an ACTIVE member of the tayfa gets
@@ -38,7 +40,7 @@ type TayfaStatsServiceClient interface {
 	// GetTayfaStats returns the tayfa's statistics of a year (0: all time).
 	// Open to every active member, muted ones included. Nothing sensitive is
 	// in it: no sensitive measure, no person of an event whose attendance is
-	// sensitive.
+	// sensitive, no other member's contribution.
 	//
 	// Errors: ERROR_REASON_VALIDATION (tayfa_id, year).
 	GetTayfaStats(ctx context.Context, in *GetTayfaStatsRequest, opts ...grpc.CallOption) (*GetTayfaStatsResponse, error)
@@ -69,7 +71,9 @@ func (c *tayfaStatsServiceClient) GetTayfaStats(ctx context.Context, in *GetTayf
 // TayfaStatsService is a tayfa's statistics for its members (issue #266;
 // ADR-0026 §2–§3, ADR-0037 §7): the totals computed from its frozen
 // events (ended seven days ago, not cancelled, not deleted) and the
-// personal contributions of its active members.
+// caller's own contributions. Nobody else's contribution is ever returned
+// (platform owner, 2026-11-23; issue #322), not to an admin or a moderator
+// either.
 //
 // Only gateway calls it with the user's access token; the acting user is
 // always the token's. Anyone but an ACTIVE member of the tayfa gets
@@ -78,7 +82,7 @@ type TayfaStatsServiceServer interface {
 	// GetTayfaStats returns the tayfa's statistics of a year (0: all time).
 	// Open to every active member, muted ones included. Nothing sensitive is
 	// in it: no sensitive measure, no person of an event whose attendance is
-	// sensitive.
+	// sensitive, no other member's contribution.
 	//
 	// Errors: ERROR_REASON_VALIDATION (tayfa_id, year).
 	GetTayfaStats(context.Context, *GetTayfaStatsRequest) (*GetTayfaStatsResponse, error)

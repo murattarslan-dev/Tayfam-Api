@@ -1475,6 +1475,10 @@ type Querier interface {
 	ListOwnGarageVehicles(ctx context.Context, arg ListOwnGarageVehiclesParams) ([]ListOwnGarageVehiclesRow, error)
 	// Yalnızca çağıranın kendi oyları.
 	ListOwnPollVotes(ctx context.Context, arg ListOwnPollVotesParams) ([]ListOwnPollVotesRow, error)
+	// Çağıranın kendi katkıları: ölçüm ve günlük metrikleri, yalnızca kişinin
+	// tayfanın etkin üyesiyken. Başkasının katkısı hiçbir zaman okunmaz
+	// (platform sahibi, 2026-11-23; issue #322, ADR-0026 §3).
+	ListOwnTayfaStatContributions(ctx context.Context, arg ListOwnTayfaStatContributionsParams) ([]ListOwnTayfaStatContributionsRow, error)
 	// Bekleyen başvurular, eskiden yeniye; kimin davetiyle geldiği: doğrudan
 	// davet eden ya da davet linkini açan.
 	ListPendingPage(ctx context.Context, arg ListPendingPageParams) ([]ListPendingPageRow, error)
@@ -1571,9 +1575,6 @@ type Querier interface {
 	ListTayfaModules(ctx context.Context, tayfaID pgtype.UUID) ([]ListTayfaModulesRow, error)
 	// Bildirim alıcıları: aktif yöneticiler ve moderatörler, yönetici önce.
 	ListTayfaStaffIDs(ctx context.Context, arg ListTayfaStaffIDsParams) ([]pgtype.UUID, error)
-	// Kişisel katkılar: ölçüm ve günlük metrikleri, yalnızca tayfanın etkin
-	// üyelerininki (ayrılanın ve hesabı silinenin katkısı listede yoktur).
-	ListTayfaStatContributions(ctx context.Context, arg ListTayfaStatContributionsParams) ([]ListTayfaStatContributionsRow, error)
 	// Okuma (tayfa içi uç; #267 vitrin ve profil, #268 ana sayfa kartları).
 	ListTayfaStatYears(ctx context.Context, tayfaID pgtype.UUID) ([]int32, error)
 	ListTayfaStats(ctx context.Context, arg ListTayfaStatsParams) ([]ListTayfaStatsRow, error)
