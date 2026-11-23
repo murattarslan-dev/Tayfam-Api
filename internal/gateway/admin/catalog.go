@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
 	"net/http"
 	"net/url"
@@ -478,11 +479,7 @@ func (h *handlers) catalogSubmit(w http.ResponseWriter, r *http.Request) {
 }
 
 func asFormProblem(err error, fp *formProblem) bool {
-	p, ok := err.(formProblem)
-	if ok {
-		*fp = p
-	}
-	return ok
+	return errors.As(err, fp)
 }
 
 // checkProblem reads a failed check from core's ERROR_REASON_VALIDATION:

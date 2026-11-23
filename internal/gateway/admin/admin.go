@@ -176,8 +176,8 @@ func NewHandler(cfg Config) (http.Handler, error) {
 	page("GET /katalog", h.catalogPage)
 	page("GET /katalog/{kind}", h.catalogFormPage)
 	change("POST /katalog/{kind}", h.catalogSubmit)
-	change("POST /katalog-alan-adi/ekle", h.blockDomain)
-	change("POST /katalog-alan-adi/kaldir", h.unblockDomain)
+	change("POST /katalog/alan-adi-ekle", h.blockDomain)
+	change("POST /katalog/alan-adi-kaldir", h.unblockDomain)
 	mux.HandleFunc("/", httpx.NotFound)
 	return httpx.Chain(mux, securityHeaders, h.requireAccess, h.sameOrigin, withCSRFSlot), nil
 }

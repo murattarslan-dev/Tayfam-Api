@@ -108,7 +108,7 @@
 {{template "reauth" .}}
 <div class="card">
 <h3>Ekle</h3>
-<form class="stack" method="post" action="/katalog-alan-adi/ekle">
+<form class="stack" method="post" action="/katalog/alan-adi-ekle">
   <input type="hidden" name="csrf" value="{{$csrf}}">
   <label for="alan-adi-ekle">Alan adı</label>
   <input type="text" id="alan-adi-ekle" name="alan_adi" required maxlength="253" placeholder="ornek.com">
@@ -118,7 +118,7 @@
 </div>
 <div class="card">
 <h3>Çıkar</h3>
-<form class="stack" method="post" action="/katalog-alan-adi/kaldir">
+<form class="stack" method="post" action="/katalog/alan-adi-kaldir">
   <input type="hidden" name="csrf" value="{{$csrf}}">
   <label for="alan-adi-kaldir">Alan adı</label>
   <select id="alan-adi-kaldir" name="alan_adi" required>

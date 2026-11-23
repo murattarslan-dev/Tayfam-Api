@@ -812,7 +812,7 @@ func (s *Service) insertStudyTag(ctx context.Context, q *store.Queries, t catalo
 		Key: t.Key + catalog.OtherSuffix, ParentKey: pgtype.Text{String: t.Key, Valid: true}, Position: otherPosition,
 		Labels: labelsJSON(otherLabels), Status: catalog.StatusActive,
 	}); err != nil {
-		return dbProblem(fmt.Errorf("Diğer etiketi yazılamadı: %w", err), "key")
+		return dbProblem(fmt.Errorf("diğer etiketi yazılamadı: %w", err), "key")
 	}
 	return nil
 }
