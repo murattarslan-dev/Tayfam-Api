@@ -382,7 +382,7 @@ func (q *Queries) AdminInsertScorePreset(ctx context.Context, arg AdminInsertSco
 }
 
 const adminListBlockedDomains = `-- name: AdminListBlockedDomains :many
-SELECT domain, created_at, (created_by IS NULL)::boolean AS initial
+SELECT domain, created_at, initial
 FROM blocked_domains
 ORDER BY domain
 `

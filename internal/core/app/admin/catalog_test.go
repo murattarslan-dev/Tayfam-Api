@@ -447,6 +447,21 @@ func TestBlockDomain(t *testing.T) {
 	if e.count(t, `SELECT count(*) FROM blocked_domains WHERE domain = 'example.com' AND created_by = $1`, e.admin.PG()) != 1 {
 		t.Fatal("alan adı eklenmedi")
 	}
+	// The panel tells the starting list from the panel's entries by the
+	// initial column (00069), not by created_by (cleared on account
+	// deletion, #334).
+	got, err := e.svc.GetCatalog(ctx, e.claims)
+	must(t, err)
+	initial := map[string]bool{}
+	for _, d := range got.Domains {
+		initial[d.Domain] = d.Initial
+	}
+	if v, ok := initial["example.com"]; !ok || v {
+		t.Fatalf("panelden eklenen: %v", got.Domains)
+	}
+	if v, ok := initial["bit.ly"]; !ok || !v {
+		t.Fatalf("başlangıç listesi: %v", got.Domains)
+	}
 	wantProblem(t, "tekrar", e.svc.BlockDomain(ctx, e.claims, "example.com", reason), "domain")
 	wantProblem(t, "IP", e.svc.BlockDomain(ctx, e.claims, "192.168.1.1", reason), "domain")
 	wantProblem(t, "tek etiket", e.svc.BlockDomain(ctx, e.claims, "localhost", reason), "domain")

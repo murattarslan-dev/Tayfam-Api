@@ -260,6 +260,12 @@ UPDATE materials
 SET author_id = NULLIF(author_id, @user_id), deleted_by = NULLIF(deleted_by, @user_id)
 WHERE @user_id IN (author_id, deleted_by);
 
+-- Engelli alan adını panelden ekleyen platform yöneticisi boşalır; alan adı
+-- listede kalır (issue #334; ADR-0040 §3). Başlangıç listesinden olup
+-- olmadığı ayrı kolonda (initial, 00069).
+-- name: ClearBlockedDomainCreator :exec
+UPDATE blocked_domains SET created_by = NULL WHERE created_by = @user_id;
+
 -- Üye garajı (issue #272; ADR-0040 §4, KVKK): kişinin araçları ve
 -- görünürlük ayarları silinir (fotoğraflar silme kuyruğuna girer;
 -- etkinlik kayıtlarındaki garaj bağı boşalır); başkasının aracını kaldıran

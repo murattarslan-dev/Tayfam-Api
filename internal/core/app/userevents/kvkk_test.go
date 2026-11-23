@@ -56,7 +56,7 @@ var personColumns = map[string]personColumn{
 	"answers.author_id":                      {cleared, export.SectionAnswers, ""},
 	"answers.deleted_by":                     {cleared, "", noteModeration},
 	"audit_logs.actor_id":                    {cleared, "", "denetim kaydı (Girmeyenler)"},
-	"blocked_domains.created_by":             {kept, "", "ekleyen platform yöneticisi; yazma yolu yok (#262), hesap silmede boşaltılması #262'de eklenmeli"},
+	"blocked_domains.created_by":             {cleared, "", "engelli alan adını panelden ekleyen platform yöneticisi; alan adı platformun kuralıdır, dışa aktarılmaz (#334)"},
 	"discover_joins.user_id":                 {removed, export.SectionDiscover, ""},
 	"domain_events.actor_id":                 {cleared, "", noteInternal + " (olay kuyruğu)"},
 	"domain_events.subject_id":               {kept, "", "olay kuyruğu; silmenin kendi olayları kişiyi konu olarak taşır (chat silmeyi bununla uygular)"},
@@ -292,6 +292,7 @@ INSERT INTO materials (id, tayfa_id, kind, title, url, domain, subject_key, clie
 INSERT INTO garage_vehicles (id, owner_id, make, client_request_id, created_at, updated_at) VALUES
   (gen_random_uuid(), '%[1]s', 'Ford', gen_random_uuid(), now(), now()), (gen_random_uuid(), '%[2]s', 'Fiat', gen_random_uuid(), now(), now());
 INSERT INTO garage_tayfa_visibility (user_id, tayfa_id, visible, updated_at) VALUES ('%[1]s', '%[3]s', true, now());
+INSERT INTO blocked_domains (domain, created_by) VALUES ('example.net', '%[1]s'), ('example.org', '%[2]s');
 COMMIT;
 `
 
@@ -407,6 +408,9 @@ func TestV3PersonalDataExportAndDeletion(t *testing.T) {
 		"materyal kalır":                 `SELECT count(*) FROM materials WHERE title = 'Ders notu' AND author_id IS NULL`,
 		"başkasının garajı kalır":        `SELECT count(*) FROM garage_vehicles WHERE owner_id = $3`,
 		"tayfanın sayacı kalır":          `SELECT count(*) FROM now_notification_counters WHERE scope = 'tayfa'`,
+		"engelli alan adı kalır":         `SELECT count(*) FROM blocked_domains WHERE domain = 'example.net' AND created_by IS NULL AND NOT initial`,
+		"başkasının alan adı kalır":      `SELECT count(*) FROM blocked_domains WHERE domain = 'example.org' AND created_by = $3`,
+		"başlangıç listesi kalır":        `SELECT (count(*) = 30)::int FROM blocked_domains WHERE initial AND created_by IS NULL`,
 		"oylama seçeneği kalır":          `SELECT count(*) FROM event_vote_options WHERE event_id = $1 AND created_by IS NULL`,
 		"oylama kapanışı kalır":          `SELECT count(*) FROM event_vote_closures WHERE event_id = $1 AND closed_by IS NULL`,
 		"kişiye verilen oy gider":        `SELECT (count(*) = 0)::int FROM event_votes WHERE event_id = $1`,

@@ -170,9 +170,10 @@ var wantAppPrivileges = map[string]string{
 	"library_queue": "DELETE,INSERT,SELECT",
 	// Issue #261: a material never moves to another tayfa and its kind
 	// and request ID never change; the blocked domain list is managed on
-	// the platform panel (#262): entries are added and removed.
+	// the platform panel (#262): entries are added and removed; account
+	// deletion clears who added one (#334).
 	"materials":       "DELETE,INSERT,SELECT,UPDATE(author_id,deleted_at,deleted_by,domain,photo1_upload_id,photo2_upload_id,photo3_upload_id,subject_key,title,topic_key,updated_at,url)",
-	"blocked_domains": "DELETE,INSERT,SELECT",
+	"blocked_domains": "DELETE,INSERT,SELECT,UPDATE(created_by)",
 	// Issue #272: a garage vehicle never moves to another person and its
 	// request ID never changes; a visibility row never moves.
 	"garage_vehicles":         "DELETE,INSERT,SELECT,UPDATE(color,deleted_at,deleted_by,make,model,model_year,note,photo1_upload_id,photo2_upload_id,photo3_upload_id,updated_at)",
