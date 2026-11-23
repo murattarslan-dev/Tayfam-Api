@@ -73,10 +73,10 @@ configMapGenerator:
       # İstemci sürümü (ADR-0016): platform başına desteklenen en düşük ve en
       # son sürüm. Değişiklik yalnızca bu dosyayla ve yeni bir sürüm etiketiyle
       # dağıtılır; geçersiz değer gateway'in başlamasını engeller.
-      - CLIENT_MIN_VERSION_ANDROID=0.1.0
-      - CLIENT_LATEST_VERSION_ANDROID=0.1.0
-      - CLIENT_MIN_VERSION_IOS=0.1.0
-      - CLIENT_LATEST_VERSION_IOS=0.1.0
+      - CLIENT_MIN_VERSION_ANDROID=0.3.0
+      - CLIENT_LATEST_VERSION_ANDROID=0.3.0
+      - CLIENT_MIN_VERSION_IOS=0.3.0
+      - CLIENT_LATEST_VERSION_IOS=0.3.0
       # CLIENT_*_WEB prod'da yok (ADR-0017): web platformu hizmet almaz;
       # verilirse gateway başlamaz.
       # core: Keşfet (ADR-0033). Platform sahibi 2026-11-17'de pilot öncesi
