@@ -104,38 +104,6 @@ func (q *Queries) ArchiveWarnedTayfas(ctx context.Context, arg ArchiveWarnedTayf
 	return items, nil
 }
 
-const clearOldGuestNicknames = `-- name: ClearOldGuestNicknames :execrows
-
-UPDATE event_guest_players SET nickname = NULL
-WHERE id IN (
-    SELECT g.id FROM event_guest_players g
-    JOIN events e ON e.id = g.event_id
-    WHERE g.nickname IS NOT NULL AND e.ends_at <= $1
-    ORDER BY g.id
-    LIMIT $2
-    FOR UPDATE OF g SKIP LOCKED
-  )
-  AND nickname IS NOT NULL
-`
-
-type ClearOldGuestNicknamesParams struct {
-	EndedBefore pgtype.Timestamptz
-	N           int32
-}
-
-// ---------------------------------------------------------------------------
-// Misafir takma adı temizliği (issue #252; ADR-0037 §6)
-// ---------------------------------------------------------------------------
-// Bitişi @ended_before'dan önce olan etkinliklerin misafir takma adları
-// silinir; misafir satırı kalır (skor ve kura yeri "Misafir" olur).
-func (q *Queries) ClearOldGuestNicknames(ctx context.Context, arg ClearOldGuestNicknamesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, clearOldGuestNicknames, arg.EndedBefore, arg.N)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const clearOldPlates = `-- name: ClearOldPlates :execrows
 
 UPDATE event_vehicles SET plate = NULL

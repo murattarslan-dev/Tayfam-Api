@@ -247,12 +247,6 @@ type Querier interface {
 	ClearMeasurementEnteredBy(ctx context.Context, userID pgtype.UUID) error
 	ClearMembershipUserFields(ctx context.Context, userID pgtype.UUID) error
 	// ---------------------------------------------------------------------------
-	// Misafir takma adı temizliği (issue #252; ADR-0037 §6)
-	// ---------------------------------------------------------------------------
-	// Bitişi @ended_before'dan önce olan etkinliklerin misafir takma adları
-	// silinir; misafir satırı kalır (skor ve kura yeri "Misafir" olur).
-	ClearOldGuestNicknames(ctx context.Context, arg ClearOldGuestNicknamesParams) (int64, error)
-	// ---------------------------------------------------------------------------
 	// Plaka temizliği (v14 "Konvoy aracı", "Saklama süreleri"; `vehicles`
 	// bileşeni, issue #240, ADR-0025 "Plaka kuralı")
 	// ---------------------------------------------------------------------------

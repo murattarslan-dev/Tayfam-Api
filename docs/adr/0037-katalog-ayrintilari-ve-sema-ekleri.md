@@ -3,7 +3,8 @@
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-18, sohbette)
 - **Tarih:** 2026-11-18 (revizyon 2026-11-23: §3 `vote` kaynakları, §1
   sohbet kanalı istisnası; uygulama notları 2026-11-23, #323: §1
-  katılımcı listesi, §6 misafir, §7 kişisel katkı)
+  katılımcı listesi, §6 misafir, §7 kişisel katkı; revizyon 2026-11-23
+  akşam: §6 misafir takma adı etkinlikle silinir)
 - **Karar veren:** Murat Arslan (2026-11-18 katalog oturumu). Ürün kararları
   Notion "Faz 3 — Katalog ayrıntıları ve şema ekleri (2026-11-18)"
   sayfasındadır; bu ADR onların mimariye taşınmasıdır.
@@ -191,8 +192,13 @@ ise "dış içerik yok" ilkesine aykırıdır. Çözüm tayfanın kendi sözlü�
   fazla 30.
 - Misafir hiçbir istatistiğe, kutlama bildirimine ve arkadaşlık puanına
   girmez; profil, kişisel kayıt ve iletişim alanı yoktur.
-- Etkinlik bitiminden **30 gün** sonra takma ad silinir; skor satırı
-  "Misafir" olarak kalır (şampiyonlar bileşeni misafiri adsız gösterir).
+- ~~Etkinlik bitiminden **30 gün** sonra takma ad silinir; skor satırı
+  "Misafir" olarak kalır (şampiyonlar bileşeni misafiri adsız gösterir).~~
+  **Revizyon (2026-11-23, platform sahibinin sohbetteki kararı):** takma ad
+  etkinlik var olduğu sürece kalır ve etkinlikle birlikte silinir
+  (`event_guest_players` → `events` `ON DELETE CASCADE`); bitişten sonra
+  çalışan temizlik işi (`guest-nicknames`) kaldırıldı. Ekleyen hesabını
+  silince takma ad yine hemen boşalır.
 - **Uygulama notu (#252, onay 2026-11-23, #323):** misafiri organizatör,
   moderatör, yönetici ve etkinliğin, bileşenin ya da masanın hakemi ekler
   (`event.guest_add`); silme yalnızca yönetenlerde, masada ya da kurada yeri

@@ -14,10 +14,9 @@
 // ever reads one. Its nickname is content of the person who added it
 // (ADR-0037 §6, the narrowest reading of "Misafir bir kişi verisi değildir"):
 //
-//   - a background job clears the nickname 30 days after the event's end
-//     (jobs.ClearGuestNicknames); the guest stays as "Guest" (empty
-//     nickname), so that its seat and scores and its place in a draw keep
-//     their meaning;
+//   - the nickname stays as long as the event exists and goes with it
+//     (ON DELETE CASCADE; ADR-0037 §6, decision of 2026-11-23); no job
+//     clears it after the event's end;
 //   - account deletion of the one who added it clears the nickname and the
 //     adder at once;
 //   - the export of the one who added it lists the nicknames they gave;
