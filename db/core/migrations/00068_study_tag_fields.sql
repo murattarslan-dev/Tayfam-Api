@@ -65,6 +65,10 @@ FROM catalog_event_type_versions AS v
 WHERE v.type_key = t.key AND v.version = 1 AND t.version = 2
   AND t.key IN ('study_group', 'problem_session', 'peer_teaching', 'mock_exam');
 
+-- Türün güncel sürümüne bağlı ertelenmiş kontrol (00030) şimdi çalışır:
+-- bekleyen tetikleyici olayı varken tablo değiştirilemez (ALTER TABLE).
+SET CONSTRAINTS catalog_event_types_current_version_fkey IMMEDIATE;
+
 ALTER TABLE catalog_event_types ENABLE TRIGGER catalog_event_types_version_forward;
 
 DELETE FROM catalog_event_type_versions

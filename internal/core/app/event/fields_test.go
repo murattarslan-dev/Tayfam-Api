@@ -304,7 +304,8 @@ func TestStudyTagFields(t *testing.T) {
 	wantValues(t, "konu", teach.Fields, "subject", `["ayt_phy_vectors"]`)
 	// A study group: up to five, in the order given.
 	group := e.create(t, tf, admin, typed("study_group", values("subjects", `["tyt_math","ayt_physics_other","hs_math"]`)))
-	wantValues(t, "dersler", group.Fields, "subjects", `["tyt_math","ayt_physics_other","hs_math"]`)
+	// Read back as jsonb writes it.
+	wantValues(t, "dersler", group.Fields, "subjects", `["tyt_math", "ayt_physics_other", "hs_math"]`)
 	// Optional: a problem session without subjects.
 	if ps := e.create(t, tf, admin, typed("problem_session", nil)); len(ps.Fields) != 0 {
 		t.Fatalf("soru çözüm oturumunun alanları = %v", ps.Fields)
