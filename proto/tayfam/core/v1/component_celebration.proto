@@ -9,13 +9,14 @@ import "tayfam/core/v1/component.proto";
 // "celebration", issue #255; ADR-0025 §4, §5): the winner's screen of an
 // event and the tayfa's notice that the winner was announced.
 //
-// With source (the key of a scoreboard, bracket or ranking component of the
-// same type version) the winners are read from the source's stored result
-// whenever the celebration is read: the winning seats of every finished
-// table, the bracket's champions once it finished, the ranking's first
-// place. Without source the organizer names one to ten winners from the
-// event's participants when announcing. A winner is a person, a team or a
-// guest player. A ranking of a sensitive measure, and every celebration of
+// With source (the key of a scoreboard, bracket, ranking or vote component
+// of the same type version) the winners are read from the source's stored
+// result whenever the celebration is read: the winning seats of every
+// finished table, the bracket's champions once it finished, the ranking's
+// first place, the closed vote's most voted options. Without source the
+// organizer names one to ten winners from the event's participants when
+// announcing. A winner is a person, a team, a guest player or a vote's
+// option. A ranking of a sensitive measure, and every celebration of
 // a type whose attendance is sensitive, has no winner for anyone.
 //
 // Only gateway calls it with the user's access token. Authentication,
@@ -42,7 +43,9 @@ service CelebrationComponentService {
 }
 
 // CelebrationWinner is one winner: exactly one of user_id, team_id and
-// guest_id is set.
+// guest_id is set, except for a vote source (vote_option_id), where
+// user_id is the person behind the option (the participant, the vehicle's
+// owner, the photo's uploader) and is empty for a free option.
 message CelebrationWinner {
   string user_id = 1;
   // A team of the teams component the source seats.
@@ -52,6 +55,10 @@ message CelebrationWinner {
   string guest_id = 3;
   // The scoreboard table the winner won at; empty for the other sources.
   string table_id = 4;
+  // For a vote source (issue #254): the winning option's ID in the vote
+  // component (GetVote: a free option, a participant's user ID, an event
+  // vehicle or an album photo). Empty for the other sources.
+  string vote_option_id = 5;
 }
 
 // EventCelebration is one celebration component of an event, as the

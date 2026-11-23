@@ -10,9 +10,11 @@
 //     ranking (the first place). The winners are read from the source's
 //     stored result whenever the celebration is read: there is no second
 //     record, and a correction of the source within its write window shows
-//     at once. A source the organizer switched off has no winner. The vote
-//     (issue #254) is a source the catalog takes, but it has no result to
-//     read yet: its line is added here with the vote component.
+//     at once. A source the organizer switched off has no winner. A vote
+//     (issue #254) has winners once the organizer closed it: its most voted
+//     options (Winner.VoteOption), with the person behind each (the
+//     participant, the vehicle's owner, the photo's uploader; none for a
+//     free option).
 //   - no source: the organizer names the winners by hand when announcing,
 //     from the event's participants (event_celebration_winners), at most
 //     MaxWinners.
@@ -58,6 +60,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component/bracket"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component/ranking"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component/scoreboard"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component/vote"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -80,12 +83,14 @@ const (
 
 // Winner is one winner: a person, a team or a guest player (exactly one of
 // User, Team and Guest). Table is the scoreboard table the winner won at;
-// zero for the other sources.
+// zero for the other sources. VoteOption is a vote source's winning option
+// (issue #254); User is then the person behind it, zero for a free option.
 type Winner struct {
-	User  id.ID
-	Team  id.ID
-	Guest id.ID
-	Table id.ID
+	User       id.ID
+	Team       id.ID
+	Guest      id.ID
+	Table      id.ID
+	VoteOption id.ID
 }
 
 // Result is a celebration as Load reads it.
@@ -213,7 +218,13 @@ func fromSource(ctx context.Context, q *store.Queries, event id.ID, def *definit
 			out = append(out, Winner{User: e.User})
 		}
 	case definition.CompVote:
-		// The vote component (issue #254) adds its result here.
+		r, err := vote.Load(ctx, q, event, def, src)
+		if err != nil {
+			return nil, false, err
+		}
+		for _, o := range r.Winners() {
+			out = append(out, Winner{User: o.User, VoteOption: o.ID})
+		}
 	default:
 		return nil, false, fmt.Errorf("kutlama: %q kazananı olan bir bileşen değil", src.Kind)
 	}
@@ -222,7 +233,7 @@ func fromSource(ctx context.Context, q *store.Queries, event id.ID, def *definit
 
 // empty reports a winner whose person or team is gone (a deleted account).
 func (w Winner) empty() bool {
-	return w.User == (id.ID{}) && w.Team == (id.ID{}) && w.Guest == (id.ID{})
+	return w.User == (id.ID{}) && w.Team == (id.ID{}) && w.Guest == (id.ID{}) && w.VoteOption == (id.ID{})
 }
 
 // Load reads the celebration comp of the definition def for event: for the

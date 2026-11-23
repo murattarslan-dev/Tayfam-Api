@@ -1,0 +1,202 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/component.proto";
+
+// VoteComponentService is the vote component (kind "vote", issue #254;
+// ADR-0025 §4, §5; ADR-0037 §3): a vote tied to an event, one vote per
+// person.
+//
+// The definition's source decides the options (the platform owner dropped
+// route_stops on 2026-11-23):
+//   - free: options the organizer writes (at most 20).
+//   - participants: the event's participants (active members who answered
+//     going or whose attendance was verified); the option's ID is the
+//     person's user ID. Not in a type whose attendance is sensitive (the
+//     catalog refuses it).
+//   - vehicles: the vehicles written to the type's vehicles component; the
+//     option's ID is the event vehicle's ID. No plate.
+//   - album: the photos of the event's album; the option's ID is the
+//     photo's ID.
+//
+// The ballot is secret: no response, to anyone and whatever their role,
+// says who voted for what; the caller sees only their own vote
+// (caller_option_id). Votes are never in an audit record, an event or a
+// log. The per-option counts and the winners show once the vote is closed
+// (by the organizer) or frozen (seven days after the event's end); before
+// that every reader sees only how many voted.
+//
+// Only gateway calls it with the user's access token. Authentication,
+// scope and the errors every component shares are those of
+// EventComponentService (component.proto): anyone but an ACTIVE member
+// gets ERROR_REASON_TAYFA_NOT_FOUND, and so on.
+service VoteComponentService {
+  // GetVote returns the vote. Open to every active member, muted ones
+  // included; it reads on cancelled and frozen events too.
+  rpc GetVote(GetVoteRequest) returns (GetVoteResponse);
+
+  // CastVote sets the caller's vote to option_id, replacing an earlier
+  // vote; setting the same vote again changes nothing. The caller must
+  // have answered going or have a verified attendance
+  // (ERROR_REASON_EVENT_NOT_GOING) and may not vote for themselves, their
+  // own vehicle or their own photo (ERROR_REASON_VOTE_OWN_OPTION). Open
+  // within the write window (until seven days after the end; not on a
+  // cancelled event) while the vote is open; refused while muted.
+  //
+  // Errors: ERROR_REASON_VALIDATION (option_id),
+  // ERROR_REASON_EVENT_ITEM_NOT_FOUND (not an option of the vote now),
+  // ERROR_REASON_VOTE_CLOSED and the errors of every component change.
+  rpc CastVote(CastVoteRequest) returns (CastVoteResponse);
+
+  // WithdrawVote takes back the caller's vote; without a vote it succeeds
+  // and changes nothing. While the vote is open, within the write window.
+  //
+  // Errors: ERROR_REASON_VOTE_CLOSED and the errors of every component
+  // change.
+  rpc WithdrawVote(WithdrawVoteRequest) returns (WithdrawVoteResponse);
+
+  // AddVoteOption adds a free option; managers only (the organizer,
+  // moderators and admins), while the vote is open.
+  //
+  // Errors: ERROR_REASON_VALIDATION (label: 1–100 characters after
+  // trimming and folding whitespace, no control or format characters),
+  // ERROR_REASON_VOTE_OPTIONS_FIXED (not a free vote),
+  // ERROR_REASON_VOTE_OPTION_EXISTS, ERROR_REASON_EVENT_LIMIT (20 options),
+  // ERROR_REASON_VOTE_CLOSED and the errors of every component change.
+  rpc AddVoteOption(AddVoteOptionRequest) returns (AddVoteOptionResponse);
+
+  // RemoveVoteOption removes a free option and the votes for it; managers
+  // only, while the vote is open.
+  //
+  // Errors: ERROR_REASON_VALIDATION (option_id),
+  // ERROR_REASON_EVENT_ITEM_NOT_FOUND, ERROR_REASON_VOTE_OPTIONS_FIXED,
+  // ERROR_REASON_VOTE_CLOSED and the errors of every component change.
+  rpc RemoveVoteOption(RemoveVoteOptionRequest) returns (RemoveVoteOptionResponse);
+
+  // CloseVote closes the vote for good: no more votes or option changes,
+  // and the counts and winners show to every reader. Managers only, within
+  // the write window. Closing a closed vote succeeds and changes nothing.
+  //
+  // Errors: the errors of every component change.
+  rpc CloseVote(CloseVoteRequest) returns (CloseVoteResponse);
+}
+
+// VoteVehicle is a vehicles-source option's vehicle. Never the plate.
+message VoteVehicle {
+  string make = 1;
+  // Empty when not given.
+  string model = 2;
+  // 0 when not given.
+  int32 model_year = 3;
+  // Empty when not given.
+  string color = 4;
+}
+
+// VoteOption is one option of a vote.
+message VoteOption {
+  // A free option's ID, the participant's user ID, the event vehicle's ID
+  // or the album photo's ID: the value CastVote takes.
+  string id = 1;
+  // free: the option's text (1–100 characters).
+  string label = 2;
+  // participants: the person; vehicles: the vehicle's owner; album: the
+  // photo's uploader. Empty for a free option.
+  string user_id = 3;
+  // vehicles only.
+  VoteVehicle vehicle = 4;
+  // album only: the photo's upload (its links: POST /v1/media/urls).
+  string upload_id = 5;
+  // Votes for the option; 0 while results_visible is false.
+  int32 vote_count = 6;
+  // One of the most voted options (at least one vote); only once
+  // results_visible.
+  bool winner = 7;
+}
+
+// EventVote is one vote component of an event, as the caller sees it.
+message EventVote {
+  // free, participants, vehicles or album.
+  string source = 1;
+  // free: in the order written; participants: by user ID; vehicles: in the
+  // order written; album: in the album's order. Empty when the source has
+  // none (a vehicles component the organizer switched off included).
+  repeated VoteOption options = 2;
+  // How many people voted for one of the options; always shown.
+  int32 voter_count = 3;
+  // The caller's own vote; empty without one (or when the option is gone).
+  string caller_option_id = 4;
+  // The organizer closed the vote, at close_time.
+  bool closed = 5;
+  google.protobuf.Timestamp close_time = 6;
+  // The counts and winners are shown: closed, or frozen seven days after
+  // the event's end.
+  bool results_visible = 7;
+  // The caller may vote now: going or a verified attendance, not muted,
+  // the vote open, the event not cancelled or frozen, the tayfa not
+  // read-only.
+  bool caller_can_vote = 8;
+  // The caller may add and remove options now (a free vote; a manager; the
+  // vote open, the event not cancelled or frozen, the tayfa not
+  // read-only).
+  bool caller_can_edit_options = 9;
+  // The caller may close the vote now (a manager; open; the event not
+  // cancelled or frozen, the tayfa not read-only).
+  bool caller_can_close = 10;
+  // The most free options a vote takes (20).
+  int32 max_options = 11;
+}
+
+message GetVoteRequest {
+  ComponentRef ref = 1;
+}
+
+message GetVoteResponse {
+  EventVote vote = 1;
+}
+
+message CastVoteRequest {
+  ComponentRef ref = 1;
+  // A VoteOption.id of the vote.
+  string option_id = 2;
+}
+
+message CastVoteResponse {
+  EventVote vote = 1;
+}
+
+message WithdrawVoteRequest {
+  ComponentRef ref = 1;
+}
+
+message WithdrawVoteResponse {
+  EventVote vote = 1;
+}
+
+message AddVoteOptionRequest {
+  ComponentRef ref = 1;
+  // 1–100 characters after trimming and folding whitespace.
+  string label = 2;
+}
+
+message AddVoteOptionResponse {
+  EventVote vote = 1;
+}
+
+message RemoveVoteOptionRequest {
+  ComponentRef ref = 1;
+  string option_id = 2;
+}
+
+message RemoveVoteOptionResponse {
+  EventVote vote = 1;
+}
+
+message CloseVoteRequest {
+  ComponentRef ref = 1;
+}
+
+message CloseVoteResponse {
+  EventVote vote = 1;
+}

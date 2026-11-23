@@ -461,6 +461,23 @@ enum ErrorReason {
   // `source` parameter); the measure's values are entered instead.
   ERROR_REASON_RANKING_FROM_MEASURE = 2532;
 
+  // Vote component (VoteComponentService, component_vote.proto; issue
+  // #254: 2540–2549).
+
+  // FAILED_PRECONDITION. The organizer closed the vote: no votes and no
+  // option changes.
+  ERROR_REASON_VOTE_CLOSED = 2540;
+  // FAILED_PRECONDITION. The option is the caller: themselves, their own
+  // vehicle or their own photo.
+  ERROR_REASON_VOTE_OWN_OPTION = 2541;
+  // FAILED_PRECONDITION. The vote's options come from its source
+  // (participants, vehicles, album); only a free vote takes options
+  // written by the organizer.
+  ERROR_REASON_VOTE_OPTIONS_FIXED = 2542;
+  // ALREADY_EXISTS. A free option with the same label (Turkish lower case)
+  // is already in the vote.
+  ERROR_REASON_VOTE_OPTION_EXISTS = 2543;
+
   // Celebration component (CelebrationComponentService,
   // component_celebration.proto; issue #255: 2550–2559).
 

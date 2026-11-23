@@ -98,6 +98,8 @@ const (
 	SectionEventReferees  = "event_referees"
 	SectionChecklistItems = "checklist_items"
 	SectionVocabulary     = "vocabulary"
+	// Issue #254: one's votes in the vote component.
+	SectionEventVotes = "event_votes"
 )
 
 const (
@@ -310,6 +312,10 @@ var sections = []struct {
 	{SectionVocabulary, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportVocabulary(ctx, store.ExportVocabularyParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportVocabularyRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionEventVotes, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportEventVotes(ctx, store.ExportEventVotesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportEventVotesRow) row { return row{x.K, x.Data} })
 	}},
 }
 

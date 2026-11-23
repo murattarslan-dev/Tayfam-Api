@@ -304,11 +304,12 @@ func TestParseComponents(t *testing.T) {
 		// vote
 		{"vote", "serbest", comps(`{"kind":"vote","params":{"source":"free"}}`), true},
 		{"vote", "araçlar", comps(`{"kind":"vehicles"},{"kind":"vote","params":{"source":"vehicles"}}`), true},
-		{"vote", "duraklar", comps(`{"kind":"route"},{"kind":"vote","params":{"source":"route_stops"}}`), true},
+		{"vote", "duraklar kaldırıldı", comps(`{"kind":"route"},{"kind":"vote","params":{"source":"route_stops"}}`), false},
 		{"vote", "albüm ve katılımcı", comps(`{"kind":"vote","key":"photo","params":{"source":"album"}},{"kind":"vote","key":"mvp","params":{"source":"participants"}}`), true},
 		{"vote", "kaynaksız", comps(`{"kind":"vote"}`), false},
 		{"vote", "araçsız araç oyu", comps(`{"kind":"vote","params":{"source":"vehicles"}}`), false},
-		{"vote", "rotasız durak oyu", comps(`{"kind":"vote","params":{"source":"route_stops"}}`), false},
+		{"vote", "hassas katılımda katılımcı oyu", `{"components":[{"kind":"vote","params":{"source":"participants"}}],"flags":{"sensitive_attendance":true}}`, false},
+		{"vote", "hassas katılımda serbest oy", `{"components":[{"kind":"vote","params":{"source":"free"}}],"flags":{"sensitive_attendance":true}}`, true},
 		{"vote", "bilinmeyen kaynak", comps(`{"kind":"vote","params":{"source":"url"}}`), false},
 		// celebration
 		{"celebration", "yalın", comps(`{"kind":"celebration"}`), true},

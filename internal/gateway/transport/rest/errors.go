@@ -190,6 +190,11 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_RANKING_NOT_STARTED":     {http.StatusConflict, "ranking-not-started"},
 		"ERROR_REASON_RANKING_NOT_PARTICIPANT": {http.StatusConflict, "ranking-not-participant"},
 		"ERROR_REASON_RANKING_FROM_MEASURE":    {http.StatusConflict, "ranking-from-measure"},
+		// Vote component (issue #254).
+		"ERROR_REASON_VOTE_CLOSED":        {http.StatusConflict, "vote-closed"},
+		"ERROR_REASON_VOTE_OWN_OPTION":    {http.StatusConflict, "vote-own-option"},
+		"ERROR_REASON_VOTE_OPTIONS_FIXED": {http.StatusConflict, "vote-options-fixed"},
+		"ERROR_REASON_VOTE_OPTION_EXISTS": {http.StatusConflict, "vote-option-exists"},
 		// Celebration component (issue #255).
 		"ERROR_REASON_CELEBRATION_NOT_STARTED":     {http.StatusConflict, "celebration-not-started"},
 		"ERROR_REASON_CELEBRATION_NO_WINNER":       {http.StatusConflict, "celebration-no-winner"},
