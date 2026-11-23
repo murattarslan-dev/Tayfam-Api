@@ -58,6 +58,11 @@ const (
 	// (issue #261, ADR-0040 §3; at most three per material). Attached with
 	// TayfaMaterialService.CreateMaterial or UpdateMaterial.
 	UploadPurpose_UPLOAD_PURPOSE_MATERIAL_NOTE UploadPurpose = 10
+	// A photo of a vehicle in the member's garage (issue #272, ADR-0040 §4;
+	// at most three per vehicle). Not a tayfa's: tayfa_id is left empty.
+	// Attached with MemberGarageService.CreateGarageVehicle or
+	// UpdateGarageVehicle.
+	UploadPurpose_UPLOAD_PURPOSE_GARAGE_VEHICLE UploadPurpose = 11
 )
 
 // Enum value maps for UploadPurpose.
@@ -74,6 +79,7 @@ var (
 		8:  "UPLOAD_PURPOSE_LIBRARY_ITEM",
 		9:  "UPLOAD_PURPOSE_QUESTION_POOL",
 		10: "UPLOAD_PURPOSE_MATERIAL_NOTE",
+		11: "UPLOAD_PURPOSE_GARAGE_VEHICLE",
 	}
 	UploadPurpose_value = map[string]int32{
 		"UPLOAD_PURPOSE_UNSPECIFIED":     0,
@@ -87,6 +93,7 @@ var (
 		"UPLOAD_PURPOSE_LIBRARY_ITEM":    8,
 		"UPLOAD_PURPOSE_QUESTION_POOL":   9,
 		"UPLOAD_PURPOSE_MATERIAL_NOTE":   10,
+		"UPLOAD_PURPOSE_GARAGE_VEHICLE":  11,
 	}
 )
 
@@ -1839,7 +1846,7 @@ const file_tayfam_core_v1_media_proto_rawDesc = "" +
 	"\x1cGetExportDownloadUrlResponse\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12;\n" +
 	"\vexpire_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTime*\xee\x02\n" +
+	"expireTime*\x91\x03\n" +
 	"\rUploadPurpose\x12\x1e\n" +
 	"\x1aUPLOAD_PURPOSE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15UPLOAD_PURPOSE_AVATAR\x10\x01\x12\x1e\n" +
@@ -1852,7 +1859,8 @@ const file_tayfam_core_v1_media_proto_rawDesc = "" +
 	"\x1bUPLOAD_PURPOSE_LIBRARY_ITEM\x10\b\x12 \n" +
 	"\x1cUPLOAD_PURPOSE_QUESTION_POOL\x10\t\x12 \n" +
 	"\x1cUPLOAD_PURPOSE_MATERIAL_NOTE\x10\n" +
-	"*}\n" +
+	"\x12!\n" +
+	"\x1dUPLOAD_PURPOSE_GARAGE_VEHICLE\x10\v*}\n" +
 	"\fUploadStatus\x12\x1d\n" +
 	"\x19UPLOAD_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15UPLOAD_STATUS_PENDING\x10\x01\x12\x17\n" +

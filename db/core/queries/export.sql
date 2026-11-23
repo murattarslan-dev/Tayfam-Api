@@ -50,7 +50,7 @@ LIMIT @n;
 SELECT v.id AS k, jsonb_build_object(
   'event_id', v.event_id, 'component_key', v.component_key, 'make', v.make, 'model', v.model,
   'model_year', v.model_year, 'color', v.color, 'plate', v.plate, 'seats', v.seats,
-  'created_at', v.created_at, 'updated_at', v.updated_at
+  'garage_vehicle_id', v.vehicle_id, 'created_at', v.created_at, 'updated_at', v.updated_at
 ) AS data
 FROM event_vehicles v
 WHERE v.user_id = @user_id AND v.id > @after
@@ -508,4 +508,26 @@ SELECT m.id AS k, jsonb_build_object(
 FROM materials m
 WHERE m.author_id = @user_id AND m.id > @after
 ORDER BY m.id
+LIMIT @n;
+
+-- Üye garajı (issue #272; ADR-0040 §4): garajınızdaki araçlar (silinenler
+-- dahil) ve tayfa başına görünürlük seçimleriniz. Fotoğraf ve silen yer
+-- almaz.
+-- name: ExportGarageVehicles :many
+SELECT g.id AS k, jsonb_build_object(
+  'id', g.id, 'make', g.make, 'model', g.model, 'model_year', g.model_year, 'color', g.color, 'note', g.note,
+  'created_at', g.created_at, 'updated_at', g.updated_at, 'deleted_at', g.deleted_at
+) AS data
+FROM garage_vehicles g
+WHERE g.owner_id = @user_id AND g.id > @after
+ORDER BY g.id
+LIMIT @n;
+
+-- name: ExportGarageVisibility :many
+SELECT v.tayfa_id AS k, jsonb_build_object(
+  'tayfa_id', v.tayfa_id, 'visible', v.visible, 'updated_at', v.updated_at
+) AS data
+FROM garage_tayfa_visibility v
+WHERE v.user_id = @user_id AND v.tayfa_id > @after
+ORDER BY v.tayfa_id
 LIMIT @n;

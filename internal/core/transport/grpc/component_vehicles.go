@@ -61,7 +61,7 @@ func eventVehiclesPB(v vehicles.Vehicles) *corev1.EventVehicles {
 	for _, it := range v.Items {
 		out.Vehicles = append(out.Vehicles, &corev1.EventVehicle{
 			Id: it.ID.String(), UserId: it.UserID.String(), Make: it.Make, Model: it.Model, ModelYear: it.ModelYear,
-			Color: it.Color, Plate: it.Plate, Seats: it.Seats,
+			Color: it.Color, Plate: it.Plate, Seats: it.Seats, GarageVehicleId: idString(it.GarageVehicle),
 			RiderUserIds: userIDs(it.Riders), PendingUserIds: userIDs(it.Pending),
 		})
 	}
@@ -116,9 +116,15 @@ func (s *VehiclesComponentServer) SetVehicle(ctx context.Context, req *corev1.Se
 	if req.GetSeats() < 0 || req.GetSeats() > vehicles.MaxSeats {
 		return nil, validation("seats")
 	}
+	var fromGarage id.ID
+	if g := req.GetGarageVehicleId(); g != "" {
+		if fromGarage, err = parseID(g, "garage_vehicle_id"); err != nil {
+			return nil, err
+		}
+	}
 	out, err := s.app.Set(ctx, ref, vehicles.Input{
 		Make: req.GetMake(), Model: req.GetModel(), ModelYear: req.GetModelYear(), Color: req.GetColor(),
-		Plate: req.GetPlate(), Seats: req.GetSeats(),
+		Plate: req.GetPlate(), Seats: req.GetSeats(), GarageVehicle: fromGarage,
 	})
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)

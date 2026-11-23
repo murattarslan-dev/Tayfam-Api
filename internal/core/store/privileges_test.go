@@ -96,7 +96,7 @@ var wantAppPrivileges = map[string]string{
 	"event_routes": "DELETE,INSERT,SELECT,UPDATE(points,updated_at)",
 	// Issue #240: a vehicle never moves to another event, component or
 	// person; a seat request is only approved or removed.
-	"event_vehicles":              "DELETE,INSERT,SELECT,UPDATE(color,make,model,model_year,plate,seats,updated_at)",
+	"event_vehicles":              "DELETE,INSERT,SELECT,UPDATE(color,make,model,model_year,plate,seats,updated_at,vehicle_id)",
 	"event_vehicle_seat_requests": "DELETE,INSERT,SELECT,UPDATE(decided_at,status)",
 	// Issue #245: a measurement never moves to another event, component or
 	// person; only its value changes and account deletion clears its writer.
@@ -165,6 +165,10 @@ var wantAppPrivileges = map[string]string{
 	// (the platform panel manages it, #262).
 	"materials":       "DELETE,INSERT,SELECT,UPDATE(author_id,deleted_at,deleted_by,domain,photo1_upload_id,photo2_upload_id,photo3_upload_id,subject_key,title,topic_key,updated_at,url)",
 	"blocked_domains": "SELECT",
+	// Issue #272: a garage vehicle never moves to another person and its
+	// request ID never changes; a visibility row never moves.
+	"garage_vehicles":         "DELETE,INSERT,SELECT,UPDATE(color,deleted_at,deleted_by,make,model,model_year,note,photo1_upload_id,photo2_upload_id,photo3_upload_id,updated_at)",
+	"garage_tayfa_visibility": "DELETE,INSERT,SELECT,UPDATE(updated_at,visible)",
 	// Issue #271: the pool_link list is replaced as a whole (deleted and
 	// written again); a link never moves.
 	"event_pool_links": "DELETE,INSERT,SELECT",

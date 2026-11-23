@@ -21,6 +21,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component/vehicles"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/garage"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
@@ -879,4 +880,67 @@ func TestVehiclesOnlyWhereTheTypeVersionHasIt(t *testing.T) {
 	// The events module off: nothing is reachable, reads included.
 	must(t, e.tayfas.SetModule(ctx, admin, tf, "events", false))
 	all("modül kapalı", ref(admin, tf, pool.ID, "cars"), apperr.ErrModuleDisabled)
+}
+
+// A vehicle of the caller's own garage (issue #272; ADR-0040 §4): its
+// make, model, year and colour are copied, the event's record keeps the
+// garage vehicle's ID and the plate stays on the event; another person's
+// or a deleted garage vehicle is refused; the garage vehicle gone for good
+// leaves the event's copy without the link.
+func TestVehicleFromGarage(t *testing.T) {
+	e := setup(t)
+	tf, admin := e.newTayfa(t)
+	e.letMembersCreate(t, tf, admin)
+	org, driver, other := e.member(t, tf, authz.Member), e.member(t, tf, authz.Member), e.member(t, tf, authz.Member)
+	ev := e.newEvent(t, tf, org, event.TypeConvoy)
+	e.going(t, tf, ev.ID, driver, other)
+	const key = "vehicles"
+	g := garage.New(e.fw)
+	mine, err := g.Create(ctx, driver, garage.Input{Make: "Anadol", Model: "A1", ModelYear: 1968, Color: "Kırmızı"}, id.New().String())
+	must(t, err)
+	theirs, err := g.Create(ctx, other, garage.Input{Make: "Murat", Model: "124"}, id.New().String())
+	must(t, err)
+
+	_, err = e.cars.Set(ctx, ref(driver, tf, ev.ID, key), vehicles.Input{GarageVehicle: theirs.ID})
+	wantErr(t, "başkasının garajı", err, apperr.ErrGarageVehicleNotFound)
+	_, err = e.cars.Set(ctx, ref(driver, tf, ev.ID, key), vehicles.Input{GarageVehicle: mine.ID, Make: "Ford"})
+	wantField(t, "garajla birlikte marka", err, "make")
+	_, err = e.cars.Set(ctx, ref(driver, tf, ev.ID, key), vehicles.Input{GarageVehicle: mine.ID, ModelYear: 1970})
+	wantField(t, "garajla birlikte yıl", err, "model_year")
+
+	got, err := e.cars.Set(ctx, ref(driver, tf, ev.ID, key), vehicles.Input{GarageVehicle: mine.ID, Plate: "06 an 1968"})
+	must(t, err)
+	v := of(t, got, driver)
+	if v.Make != "Anadol" || v.Model != "A1" || v.ModelYear != 1968 || v.Color != "Kırmızı" || v.Plate != "06 AN 1968" || v.GarageVehicle != mine.ID {
+		t.Fatalf("garajdan araç: %+v", v)
+	}
+	// The garage's later edit does not change the event's copy.
+	_, err = g.Update(ctx, driver, mine.ID, garage.Input{Make: "Anadol", Model: "A2"})
+	must(t, err)
+	got, err = e.cars.List(ctx, ref(other, tf, ev.ID, key))
+	must(t, err)
+	if v := of(t, got, driver); v.Model != "A1" || v.GarageVehicle != mine.ID {
+		t.Fatalf("garaj düzenlemesinden sonra: %+v", v)
+	}
+	// Written by hand, the link goes.
+	got, err = e.cars.Set(ctx, ref(driver, tf, ev.ID, key), vehicles.Input{Make: "Ford"})
+	must(t, err)
+	if v := of(t, got, driver); v.GarageVehicle != (id.ID{}) || v.Make != "Ford" {
+		t.Fatalf("elle yazılan araç: %+v", v)
+	}
+
+	// Brought again, then deleted from the garage and purged.
+	_, err = e.cars.Set(ctx, ref(driver, tf, ev.ID, key), vehicles.Input{GarageVehicle: mine.ID})
+	must(t, err)
+	must(t, g.Delete(ctx, driver, mine.ID))
+	_, err = e.cars.Set(ctx, ref(driver, tf, ev.ID, key), vehicles.Input{GarageVehicle: mine.ID})
+	wantErr(t, "silinmiş garaj aracı", err, apperr.ErrGarageVehicleNotFound)
+	if _, err := e.admin.Exec(ctx, "DELETE FROM garage_vehicles WHERE id = $1", mine.ID.PG()); err != nil {
+		t.Fatal(err)
+	}
+	got, err = e.cars.List(ctx, ref(driver, tf, ev.ID, key))
+	must(t, err)
+	if v := of(t, got, driver); v.GarageVehicle != (id.ID{}) || v.Make != "Anadol" || v.Model != "A2" {
+		t.Fatalf("garaj aracı kalıcı silinince: %+v", v)
+	}
 }

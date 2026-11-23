@@ -57,6 +57,8 @@ var (
 		"question_pool": corev1.UploadPurpose_UPLOAD_PURPOSE_QUESTION_POOL,
 		// Issue #261 (ADR-0040 §3).
 		"material_note": corev1.UploadPurpose_UPLOAD_PURPOSE_MATERIAL_NOTE,
+		// Issue #272 (ADR-0040 §4).
+		"garage_vehicle": corev1.UploadPurpose_UPLOAD_PURPOSE_GARAGE_VEHICLE,
 	})
 	uploadStatuses = newEnum(map[string]corev1.UploadStatus{
 		"pending": corev1.UploadStatus_UPLOAD_STATUS_PENDING, "ready": corev1.UploadStatus_UPLOAD_STATUS_READY,

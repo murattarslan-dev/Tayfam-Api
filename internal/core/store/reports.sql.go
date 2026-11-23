@@ -479,6 +479,34 @@ func (q *Queries) GetReportTargetEventQuestion(ctx context.Context, arg GetRepor
 	return i, err
 }
 
+const getReportTargetGarageVehicle = `-- name: GetReportTargetGarageVehicle :one
+SELECT g.owner_id AS author_id,
+       (g.deleted_at IS NULL AND m.status = 'active' AND garage_visible_in(g.owner_id, $1::uuid))::boolean AS visible
+FROM garage_vehicles g
+JOIN memberships m ON m.tayfa_id = $1::uuid AND m.user_id = g.owner_id
+WHERE g.id = $2
+`
+
+type GetReportTargetGarageVehicleParams struct {
+	TayfaID pgtype.UUID
+	ID      pgtype.UUID
+}
+
+type GetReportTargetGarageVehicleRow struct {
+	AuthorID pgtype.UUID
+	Visible  bool
+}
+
+// Üye garajı aracı (issue #272): sahibi konusudur; sahibi tayfanın üyesi
+// değilse hedef yoktur. Görünür: silinmemiş, sahibi etkin üye ve garajı bu
+// tayfada görünür.
+func (q *Queries) GetReportTargetGarageVehicle(ctx context.Context, arg GetReportTargetGarageVehicleParams) (GetReportTargetGarageVehicleRow, error) {
+	row := q.db.QueryRow(ctx, getReportTargetGarageVehicle, arg.TayfaID, arg.ID)
+	var i GetReportTargetGarageVehicleRow
+	err := row.Scan(&i.AuthorID, &i.Visible)
+	return i, err
+}
+
 const getReportTargetLibraryItem = `-- name: GetReportTargetLibraryItem :one
 SELECT owner_id AS author_id, (status <> 'withdrawn')::boolean AS visible
 FROM library_items

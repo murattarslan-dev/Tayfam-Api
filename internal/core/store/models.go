@@ -644,6 +644,31 @@ type Friendship struct {
 	AcceptedAt  pgtype.Timestamptz
 }
 
+type GarageTayfaVisibility struct {
+	UserID    pgtype.UUID
+	TayfaID   pgtype.UUID
+	Visible   bool
+	UpdatedAt pgtype.Timestamptz
+}
+
+type GarageVehicle struct {
+	ID              pgtype.UUID
+	OwnerID         pgtype.UUID
+	Make            string
+	Model           pgtype.Text
+	ModelYear       pgtype.Int4
+	Color           pgtype.Text
+	Note            pgtype.Text
+	Photo1UploadID  pgtype.UUID
+	Photo2UploadID  pgtype.UUID
+	Photo3UploadID  pgtype.UUID
+	ClientRequestID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	DeletedBy       pgtype.UUID
+}
+
 type InvitationOutcome struct {
 	TayfaID    pgtype.UUID
 	UserID     pgtype.UUID

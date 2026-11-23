@@ -2474,7 +2474,9 @@ paths:
         bileşenin `plate` parametresi açıksa, sıfırdan büyük `seats`
         yalnızca `seats` parametresi açıksa kabul edilir (`plate_enabled`,
         `seats_enabled`). Koltuk sayısı onaylanmış yolcu sayısının altına
-        inemez (`vehicle-seats-taken`). Araç yazan kişinin başka bir araca
+        inemez (`vehicle-seats-taken`). `garage_vehicle_id` ile çağıranın
+        garajındaki araç seçilir (#272): marka, model, yıl ve renk
+        kopyalanır; plaka yalnızca bu kayda yazılır. Araç yazan kişinin başka bir araca
         yazdığı koltuk isteği silinir. Bileşen uçlarının ortak kuralları
         geçerlidir.
       parameters:
@@ -5421,6 +5423,179 @@ paths:
         - $ref: "#/components/parameters/ClientHeader"
       responses:
         "204": { description: Silindi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  # --- Üye garajı (core MemberGarageService, #272, ADR-0040 §4) ---
+  # Garaj kişiye aittir ve tektir (profil): en fazla 10 araç; marka, model,
+  # yıl, renk, kısa not ve en fazla 3 fotoğraf. Plaka garajda hiç tutulmaz
+  # (etkinliğin araçlar bileşeninde, yalnızca o kayıtta yazılır). Satılık
+  # ilanı yoktur. Garaj, sahibinin seçtiği tayfalarda görünür
+  # (`PUT /v1/tayfas/{tayfa_id}/garage/visibility`); seçim yoksa ilgi
+  # alanlarında `automotive` olan tayfalarda görünür, diğerlerinde
+  # görünmez. Tayfa garajı `garage` modülüdür (kapalıysa tayfa uçları
+  # `module-disabled`; ana sayfa bileşeni `garage`); yalnızca etkin üyeler
+  # ve yalnızca etkin üyelerin araçları. Fotoğraflar aynı kişilere görünür.
+  # Metinler içeriktir, loglanmaz.
+
+  /v1/me/garage:
+    get:
+      operationId: listMyGarage
+      summary: Kendi garajınız
+      description: Silinmemiş araçlarınız, eklenme sırasıyla.
+      responses:
+        "200":
+          description: Garajınız
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberGarage" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createGarageVehicle
+      summary: Garajınıza araç ekler
+      description: |
+        En fazla 10 araç (`garage-limit`). Fotoğraflar çağıranın hazır
+        `garage_vehicle` yüklemeleridir (tayfasız). Aynı
+        `client_request_id` ile tekrar gönderim aynı aracı döndürür.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GarageVehicleCreateRequest" }
+      responses:
+        "201":
+          description: Eklenen araç
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GarageVehicle" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/garage/{garage_vehicle_id}:
+    parameters:
+      - $ref: "#/components/parameters/GarageVehicleID"
+    put:
+      operationId: updateGarageVehicle
+      summary: Garajınızdaki aracı düzenler
+      description: |
+        Araç bir bütün olarak yazılır; listede olmayan fotoğraf silinir.
+        Aracın getirildiği etkinliklerdeki kopya değişmez. Sizin olmayan
+        araç `garage-vehicle-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GarageVehicleRequest" }
+      responses:
+        "200":
+          description: Düzenlenen araç
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GarageVehicle" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteGarageVehicle
+      summary: Garajınızdaki aracı siler
+      description: Fotoğrafları hemen silinir; geri alınamaz.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Silindi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/garage:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listTayfaGarage
+      summary: Tayfanın garajı
+      description: |
+        Bu tayfada görünen araçlar, en yeni önce. `owner_user_id` tek bir
+        üyeninkileri süzer; `next_page_token` yalnızca aynı süzgeçle
+        geçerlidir.
+      parameters:
+        - name: owner_user_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Garaj araçları
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TayfaGarage" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/garage/visibility:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    put:
+      operationId: setGarageVisibility
+      summary: Garajınızı bu tayfada gösterir ya da gizler
+      description: |
+        Göstermek susturulmuş üyeye kapalıdır (`muted`); gizlemek her etkin
+        üyeye açıktır. Seçim yapılmamışsa varsayılan ilgi alanına göredir
+        (`automotive`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GarageVisibility" }
+      responses:
+        "200":
+          description: Seçiminiz
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GarageVisibility" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/garage/{garage_vehicle_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/GarageVehicleID"
+    delete:
+      operationId: removeTayfaGarageVehicle
+      summary: Aracı kaldırır (moderatör)
+      description: |
+        İçerik moderasyonu: bu tayfada görünen araç her yerde gizlenir ve
+        30 gün sonra kalıcı silinir; geri alınamaz. Bu tayfada görünmeyen
+        araç `garage-vehicle-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Kaldırıldı }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -9018,6 +9193,12 @@ components:
       required: true
       description: Ödüncün kimliği (`LibraryLoan.id`).
       schema: { type: string, format: uuid }
+    GarageVehicleID:
+      name: garage_vehicle_id
+      in: path
+      required: true
+      description: Üye garajındaki aracın kimliği (`GarageVehicle.id`).
+      schema: { type: string, format: uuid }
     MaterialID:
       name: material_id
       in: path
@@ -9206,6 +9387,9 @@ components:
         - material-not-found
         - blocked-link
         - material-limit
+        # core: üye garajı (#272, ADR-0040 §4)
+        - garage-vehicle-not-found
+        - garage-limit
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -9487,8 +9671,8 @@ components:
       enum: [approval, open]
     Module:
       type: string
-      description: "`daily` günün içeriğidir (#269). `library` ortak kütüphanedir (#270). `question_pool` Eğitim soru havuzudur (#271): soruları `pool: question_pool` ile Soru-Cevap uçlarından, ana sayfa bileşeni ve `pool_link` etkinlik bileşeni. `materials` Eğitim materyal kütüphanesidir (#261)."
-      enum: [announcements, events, qa, polls, daily, library, question_pool, materials]
+      description: "`daily` günün içeriğidir (#269). `library` ortak kütüphanedir (#270). `question_pool` Eğitim soru havuzudur (#271): soruları `pool: question_pool` ile Soru-Cevap uçlarından, ana sayfa bileşeni ve `pool_link` etkinlik bileşeni. `materials` Eğitim materyal kütüphanesidir (#261). `garage` üye garajıdır (#272): üyelerin bu tayfada gösterdiği garajlar ve ana sayfa bileşeni."
+      enum: [announcements, events, qa, polls, daily, library, question_pool, materials, garage]
     Role:
       type: string
       enum: [member, moderator, admin]
@@ -9642,6 +9826,7 @@ components:
             library: { type: boolean }
             question_pool: { type: boolean }
             materials: { type: boolean }
+            garage: { type: boolean }
         status:
           type: string
           description: "`warned`: hareketsiz, 7 gün sonra arşivlenir. `archived`: salt okunur."
@@ -10395,6 +10580,10 @@ components:
           type: array
           description: Onay bekleyen kişiler. Aracın sahibi hepsini, başkası yalnızca kendisini görür.
           items: { type: string, format: uuid }
+        garage_vehicle_id:
+          type: string
+          format: uuid
+          description: Aracın kopyalandığı üye garajı aracı (#272); elle yazıldıysa ya da garajdaki araç kalıcı silindiyse yoktur.
     EventVehicles:
       type: object
       required: [vehicles, plate_enabled, seats_enabled, caller_can_participate, caller_can_manage]
@@ -10414,10 +10603,18 @@ components:
           description: Şu an başkasının aracını ve koltuk isteğini kaldırabilirsiniz (organizatör yetkisi; etkinlik iptal değil, donmamış, tayfa salt okunur değil).
     EventVehicleRequest:
       type: object
-      required: [make]
       additionalProperties: false
+      description: |
+        Araç ya elle yazılır (`make` zorunlu) ya da çağıranın garajından
+        seçilir (`garage_vehicle_id`; #272): o zaman `make`, `model`,
+        `model_year` ve `color` verilmez, garajdaki araçtan kopyalanır.
+        Plaka garajda yoktur; yalnızca bu etkinlik kaydına yazılır.
       properties:
-        make: { type: string, minLength: 1, maxLength: 40 }
+        garage_vehicle_id:
+          type: string
+          format: uuid
+          description: Çağıranın garajındaki bir araç (`GarageVehicle.id`). Başkasının ya da silinmiş araç `garage-vehicle-not-found`.
+        make: { type: string, maxLength: 40, description: "`garage_vehicle_id` yoksa zorunlu (1–40 karakter)." }
         model: { type: string, maxLength: 40 }
         model_year: { type: integer, minimum: 0, description: "0 ya da 1900 – gelecek yıl." }
         color: { type: string, maxLength: 30 }
@@ -11440,7 +11637,7 @@ components:
         listesi sunucunundur ve büyüyebilir (bugün `upcoming`,
         `announcements`, `polls`, `questions`, `stats`, `goal`,
         `countdown`, `champions`, `log_summary`, `daily`, `library`,
-        `question_pool`, `materials`).
+        `question_pool`, `materials`, `garage`).
       properties:
         key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
         kind:
@@ -11865,6 +12062,88 @@ components:
           items: { type: string, format: uuid }
         subject_key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
         topic_key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+    GarageVehicle:
+      type: object
+      required: [id, owner_user_id, make, photo_upload_ids, created_at, updated_at, caller_can_edit, caller_can_remove]
+      description: Üye garajındaki bir araç (#272). Plaka alanı yoktur.
+      properties:
+        id: { type: string, format: uuid }
+        owner_user_id: { type: string, format: uuid, description: Aracın sahibi. }
+        make: { type: string, description: "1–40 karakter, tek satır." }
+        model: { type: string, description: "En fazla 40 karakter; yoksa alan yoktur." }
+        model_year: { type: integer, description: Verilmemişse yoktur. }
+        color: { type: string, description: "En fazla 30 karakter; yoksa alan yoktur." }
+        note: { type: string, description: "En fazla 200 karakter, tek satır; yoksa alan yoktur." }
+        photo_upload_ids:
+          type: array
+          maxItems: 3
+          description: Sahibinin fotoğrafları (`garage_vehicle` yüklemesi), sırasıyla; adreslerini `POST /v1/media/urls` verir.
+          items: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        caller_can_edit: { type: boolean, description: "Çağıran aracın sahibi mi (düzenler ve siler; `/v1/me/garage`)." }
+        caller_can_remove:
+          type: boolean
+          description: Çağıran aracı tayfanın garajından şimdi kaldırabilir mi (moderatör; yalnızca tayfa garajı listesinde).
+    MemberGarage:
+      type: object
+      required: [vehicles, caller_can_add]
+      description: Çağıranın kendi garajı (#272).
+      properties:
+        vehicles:
+          type: array
+          description: Eklenme sırasıyla; en fazla 10.
+          items: { $ref: "#/components/schemas/GarageVehicle" }
+        caller_can_add: { type: boolean, description: "10'dan az araç var mı." }
+    TayfaGarage:
+      type: object
+      required: [vehicles, caller_visible]
+      description: Tayfada görünen garaj araçları (#272).
+      properties:
+        vehicles:
+          type: array
+          description: En yeni önce.
+          items: { $ref: "#/components/schemas/GarageVehicle" }
+        next_page_token: { type: string, description: "Yoksa son sayfa." }
+        caller_visible: { type: boolean, description: Çağıranın kendi garajı bu tayfada görünüyor mu. }
+    GarageVehicleRequest:
+      type: object
+      required: [make]
+      additionalProperties: false
+      description: Araç bir bütün olarak yazılır (kısmi güncelleme yok).
+      properties:
+        make: { type: string, minLength: 1, maxLength: 1024, description: "1–40 karakter; boşluklar tekleştirilir." }
+        model: { type: string, maxLength: 1024, description: "En fazla 40 karakter." }
+        model_year: { type: integer, minimum: 0, description: "0 ya da 1900 – gelecek yıl." }
+        color: { type: string, maxLength: 1024, description: "En fazla 30 karakter." }
+        note: { type: string, maxLength: 1024, description: "En fazla 200 karakter, tek satır." }
+        photo_upload_ids:
+          type: array
+          maxItems: 3
+          description: "0–3 fotoğraf (çağıranın hazır `garage_vehicle` yüklemeleri), sırasıyla; düzenlemede listede olmayan silinir."
+          items: { type: string, format: uuid }
+    GarageVehicleCreateRequest:
+      type: object
+      required: [make, client_request_id]
+      additionalProperties: false
+      properties:
+        make: { type: string, minLength: 1, maxLength: 1024, description: "1–40 karakter; boşluklar tekleştirilir." }
+        model: { type: string, maxLength: 1024, description: "En fazla 40 karakter." }
+        model_year: { type: integer, minimum: 0, description: "0 ya da 1900 – gelecek yıl." }
+        color: { type: string, maxLength: 1024, description: "En fazla 30 karakter." }
+        note: { type: string, maxLength: 1024, description: "En fazla 200 karakter, tek satır." }
+        photo_upload_ids:
+          type: array
+          maxItems: 3
+          description: "0–3 fotoğraf (çağıranın hazır `garage_vehicle` yüklemeleri), sırasıyla."
+          items: { type: string, format: uuid }
+        client_request_id: { type: string, format: uuid }
+    GarageVisibility:
+      type: object
+      required: [visible]
+      additionalProperties: false
+      properties:
+        visible: { type: boolean, description: Garajınız bu tayfada görünsün mü. }
     LibraryLoanList:
       type: object
       required: [loans]
@@ -12914,8 +13193,10 @@ components:
         low: { type: boolean, description: Bir türden 10'dan az kaldı; yükleyin. }
     UploadPurpose:
       type: string
-      enum: [avatar, log_photo, cover, event_photo, chat_photo, dm_attachment, report_evidence, library_item, question_pool, material_note]
+      enum: [avatar, log_photo, cover, event_photo, chat_photo, dm_attachment, report_evidence, library_item, question_pool, material_note, garage_vehicle]
       description: |
+        `garage_vehicle` üye garajındaki bir aracın fotoğrafıdır (#272;
+        araç başına en fazla üç). Garaj kişiye aittir: `tayfa_id` verilmez.
         `material_note` materyal kütüphanesindeki kişinin kendi not
         fotoğrafıdır (#261; materyal başına en fazla üç).
         `library_item` ortak kütüphane kaleminin fotoğrafıdır (#270; kalem
@@ -12973,7 +13254,7 @@ components:
         tayfa_id:
           type: string
           format: uuid
-          description: "`cover`, `log_photo`, `event_photo`, `chat_photo`, `library_item`, `question_pool` ve `material_note` için zorunlu; `avatar`, `dm_attachment` ve `report_evidence`'ta verilmez."
+          description: "`cover`, `log_photo`, `event_photo`, `chat_photo`, `library_item`, `question_pool` ve `material_note` için zorunlu; `avatar`, `dm_attachment`, `report_evidence` ve `garage_vehicle`'da verilmez."
         client_request_id:
           type: string
           format: uuid
@@ -14401,7 +14682,9 @@ components:
         modülü açık, kalem geri çekilmemiş olmalıdır. `material` materyal
         kütüphanesindeki bir materyaldir (#261; konusu yazarıdır);
         `materials` modülü açık, materyal görünür olmalıdır.
-      enum: [user, tayfa, announcement, event, question, answer, poll, log_entry, dm_message, event_photo, channel_message, event_question, daily_item, library_item, material]
+        `garage_vehicle` üye garajındaki bir araçtır (#272; konusu
+        sahibidir); `garage` modülü açık, araç bu tayfada görünür olmalıdır.
+      enum: [user, tayfa, announcement, event, question, answer, poll, log_entry, dm_message, event_photo, channel_message, event_question, daily_item, library_item, material, garage_vehicle]
 
     BanRequest:
       type: object

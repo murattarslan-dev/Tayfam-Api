@@ -52,6 +52,7 @@ type Querier interface {
 	AdminDeleteEvent(ctx context.Context, arg AdminDeleteEventParams) (int64, error)
 	AdminDeleteEventPhoto(ctx context.Context, arg AdminDeleteEventPhotoParams) (int64, error)
 	AdminDeleteEventQuestion(ctx context.Context, arg AdminDeleteEventQuestionParams) (int64, error)
+	AdminDeleteGarageVehicle(ctx context.Context, arg AdminDeleteGarageVehicleParams) (int64, error)
 	AdminDeleteLogEntry(ctx context.Context, arg AdminDeleteLogEntryParams) (int64, error)
 	AdminDeleteMaterial(ctx context.Context, arg AdminDeleteMaterialParams) (int64, error)
 	AdminDeletePoll(ctx context.Context, arg AdminDeletePollParams) (int64, error)
@@ -68,6 +69,8 @@ type Querier interface {
 	// Etkinlik sorusu (issue #256): anonim sorunun yazarı yalnızca burada,
 	// platform panelinde görünür (ADR-0025 §5).
 	AdminGetEventQuestion(ctx context.Context, arg AdminGetEventQuestionParams) (AdminGetEventQuestionRow, error)
+	// Üye garajı (issue #272): aracın sahibi o tayfanın üyesi olmalı.
+	AdminGetGarageVehicle(ctx context.Context, arg AdminGetGarageVehicleParams) (AdminGetGarageVehicleRow, error)
 	// Ortak kütüphane (issue #270).
 	AdminGetLibraryItem(ctx context.Context, arg AdminGetLibraryItemParams) (AdminGetLibraryItemRow, error)
 	// Günlük kaydı (issue #243): panel kaydın değerlerini gösterir; konumu
@@ -178,6 +181,7 @@ type Querier interface {
 	ClearEventUserFields(ctx context.Context, userID pgtype.UUID) error
 	// Yeni istek: eski sonuç geçersiz.
 	ClearFriendRequestOutcome(ctx context.Context, arg ClearFriendRequestOutcomeParams) error
+	ClearGarageVehicleDeleter(ctx context.Context, userID pgtype.UUID) error
 	// Eklediği misafirlerin takma adı onun içeriğidir; takma ad ve ekleyen
 	// boşalır, misafir satırı kalır: skor ve kura yeri "Misafir" olarak görünür
 	// (issue #252; ADR-0037 §6).
@@ -290,6 +294,7 @@ type Querier interface {
 	CountOpenNowEvents(ctx context.Context, arg CountOpenNowEventsParams) (int64, error)
 	// Son yönetici kontrolü; çağıran tayfa satırını kilitlemiş olmalıdır.
 	CountOtherActiveAdmins(ctx context.Context, arg CountOtherActiveAdminsParams) (int64, error)
+	CountOwnGarageVehicles(ctx context.Context, ownerID pgtype.UUID) (int32, error)
 	CountOwnerLibraryItems(ctx context.Context, arg CountOwnerLibraryItemsParams) (int64, error)
 	// Onay bekleyen katılım istekleri (issue #150); memberships_pending_idx.
 	CountPendingMembersForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]CountPendingMembersForTayfasRow, error)
@@ -355,6 +360,7 @@ type Querier interface {
 	// (haftalık sınır, daha önce önerilmiş, friend_suggestion_allowed) yeniden
 	// denetler. Yazılmadıysa 0 döner.
 	CreateFriendSuggestion(ctx context.Context, arg CreateFriendSuggestionParams) (int64, error)
+	CreateGarageVehicle(ctx context.Context, arg CreateGarageVehicleParams) error
 	// ---------------------------------------------------------------------------
 	// Anlık etkinlik (ADR-0032)
 	// ---------------------------------------------------------------------------
@@ -472,6 +478,9 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// Saklama ve hesap silme
 	DeleteOldSafetyContacts(ctx context.Context, before pgtype.Timestamptz) (int64, error)
+	// Sahibinin kendi silmesi: soft delete, fotoğraflar hemen bırakılır
+	// (dosyalar silme kuyruğuna girer; garage_vehicles_release_photos).
+	DeleteOwnGarageVehicle(ctx context.Context, arg DeleteOwnGarageVehicleParams) (int64, error)
 	// Oy değiştirmek eski oyu siler (v14).
 	DeleteOwnPollVotes(ctx context.Context, arg DeleteOwnPollVotesParams) (int64, error)
 	// Saklama işi: geçmiş günler (bugün hariç) kalıcı silinir.
@@ -537,6 +546,12 @@ type Querier interface {
 	// Hesap silme (user.deleted): kişinin arkadaşlıkları, istekleri ve iki
 	// yöndeki engellemeleri.
 	DeleteUserFriendships(ctx context.Context, userID pgtype.UUID) error
+	// Üye garajı (issue #272; ADR-0040 §4, KVKK): kişinin araçları ve
+	// görünürlük ayarları silinir (fotoğraflar silme kuyruğuna girer;
+	// etkinlik kayıtlarındaki garaj bağı boşalır); başkasının aracını kaldıran
+	// olarak kişi boşalır.
+	DeleteUserGarageVehicles(ctx context.Context, userID pgtype.UUID) error
+	DeleteUserGarageVisibility(ctx context.Context, userID pgtype.UUID) error
 	// Hesap silme (user.deleted): kişinin açtığı token'lar.
 	DeleteUserJoinQRTokens(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserLibraryQueue(ctx context.Context, userID pgtype.UUID) error
@@ -669,6 +684,11 @@ type Querier interface {
 	// (source = blocked) bir öneri değildir; engel zaten blocks bölümündedir.
 	ExportFriendSuggestions(ctx context.Context, arg ExportFriendSuggestionsParams) ([]ExportFriendSuggestionsRow, error)
 	ExportFriendships(ctx context.Context, arg ExportFriendshipsParams) ([]ExportFriendshipsRow, error)
+	// Üye garajı (issue #272; ADR-0040 §4): garajınızdaki araçlar (silinenler
+	// dahil) ve tayfa başına görünürlük seçimleriniz. Fotoğraf ve silen yer
+	// almaz.
+	ExportGarageVehicles(ctx context.Context, arg ExportGarageVehiclesParams) ([]ExportGarageVehiclesRow, error)
+	ExportGarageVisibility(ctx context.Context, arg ExportGarageVisibilityParams) ([]ExportGarageVisibilityRow, error)
 	// Eklediğiniz misafir oyuncular (issue #252): hangi etkinliğe hangi takma
 	// adla. Takma adı silinmiş misafir NULL takma adla gelir; misafirin masa ve
 	// kura yerleri dışa aktarılmaz.
@@ -761,6 +781,8 @@ type Querier interface {
 	// GetRequestResolutions ile sorar): alıcının o kişiyle önerisi, gösterilip
 	// gösterilemeyeceği ve aralarındaki arkadaşlık satırı.
 	FriendSuggestionStates(ctx context.Context, arg FriendSuggestionStatesParams) ([]FriendSuggestionStatesRow, error)
+	// Kişinin garajı tayfada görünür mü (satır ya da varsayılan).
+	GarageVisibleIn(ctx context.Context, arg GarageVisibleInParams) (bool, error)
 	GetActiveLibraryLoanForUpdate(ctx context.Context, itemID pgtype.UUID) (LibraryLoan, error)
 	GetAnnouncement(ctx context.Context, arg GetAnnouncementParams) (GetAnnouncementRow, error)
 	// Tekrar gönderilen yayınlama isteği aynı duyuruyu döndürür.
@@ -875,6 +897,7 @@ type Querier interface {
 	// Davet (v11)"). friendships satırı iki kişi için tektir: user_low_id <
 	// user_high_id. Uygulama her sorguya düşük ve yüksek kimliği sıralı verir.
 	GetFriendship(ctx context.Context, arg GetFriendshipParams) (Friendship, error)
+	GetGarageVehicleByClientRequest(ctx context.Context, arg GetGarageVehicleByClientRequestParams) (pgtype.UUID, error)
 	GetInvite(ctx context.Context, arg GetInviteParams) (GetInviteRow, error)
 	// Davet önizlemesi: kilitlemeden okur, link kullanılmaz. Silinmiş tayfanın
 	// daveti bulunmaz.
@@ -905,6 +928,10 @@ type Querier interface {
 	GetMeasurementPrefill(ctx context.Context, arg GetMeasurementPrefillParams) ([]byte, error)
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
 	GetOwnExport(ctx context.Context, arg GetOwnExportParams) (Upload, error)
+	// Araçlar bileşeni: sahibinin garajdan seçtiği araç (kopyalanacak alanlar).
+	GetOwnGarageVehicleForEvent(ctx context.Context, arg GetOwnGarageVehicleForEventParams) (GetOwnGarageVehicleForEventRow, error)
+	// Sahibinin değiştireceği araç, kilitli.
+	GetOwnGarageVehicleForUpdate(ctx context.Context, arg GetOwnGarageVehicleForUpdateParams) (GetOwnGarageVehicleForUpdateRow, error)
 	// Kişinin kendi satırını okuma, etkinlik bu tayfanınsa. Kurulmuş bir
 	// güvenlik ağı her zaman görülebilmeli ki "döndüm" denebilsin: üyelik,
 	// modül ve bayrak aranmaz; yalnızca çağıranın satırı döner (ADR-0033 §10).
@@ -957,6 +984,10 @@ type Querier interface {
 	// olmalı. anonymous, şikâyette yazarın tayfa yönetiminden gizlenmesi
 	// (subject_hidden) içindir.
 	GetReportTargetEventQuestion(ctx context.Context, arg GetReportTargetEventQuestionParams) (GetReportTargetEventQuestionRow, error)
+	// Üye garajı aracı (issue #272): sahibi konusudur; sahibi tayfanın üyesi
+	// değilse hedef yoktur. Görünür: silinmemiş, sahibi etkin üye ve garajı bu
+	// tayfada görünür.
+	GetReportTargetGarageVehicle(ctx context.Context, arg GetReportTargetGarageVehicleParams) (GetReportTargetGarageVehicleRow, error)
 	// Ortak kütüphane kalemi (issue #270): yazarı sahibidir.
 	GetReportTargetLibraryItem(ctx context.Context, arg GetReportTargetLibraryItemParams) (GetReportTargetLibraryItemRow, error)
 	// Günlük kaydı (issue #243): etkinliği de görünür olmalı. Kaydın kendisi
@@ -1353,6 +1384,9 @@ type Querier interface {
 	// 2026-11-09 kararı; Notion v14). reporter_id
 	// ve yükselme bilgisi seçilmez; yaş ve doğum tarihi core'da hiç yoktur.
 	ListOpenTayfaReports(ctx context.Context, arg ListOpenTayfaReportsParams) ([]ListOpenTayfaReportsRow, error)
+	// Sahibinin silinmemiş araçları, eklenme sırasıyla; vehicle_id verilirse
+	// yalnızca o araç.
+	ListOwnGarageVehicles(ctx context.Context, arg ListOwnGarageVehiclesParams) ([]ListOwnGarageVehiclesRow, error)
 	// Yalnızca çağıranın kendi oyları.
 	ListOwnPollVotes(ctx context.Context, arg ListOwnPollVotesParams) ([]ListOwnPollVotesRow, error)
 	// Bekleyen başvurular, eskiden yeniye; kimin davetiyle geldiği: doğrudan
@@ -1441,6 +1475,9 @@ type Querier interface {
 	ListTags(ctx context.Context, tayfaID pgtype.UUID) ([]ListTagsRow, error)
 	// Tayfanın rozetleri, kazanma sırasıyla.
 	ListTayfaBadges(ctx context.Context, tayfaID pgtype.UUID) ([]ListTayfaBadgesRow, error)
+	// Tayfada görünen araçlar, en yeni önce: sahibi tayfanın etkin üyesi ve
+	// garajı bu tayfada görünür. owner_id verilirse yalnızca o kişinin.
+	ListTayfaGarageVehicles(ctx context.Context, arg ListTayfaGarageVehiclesParams) ([]ListTayfaGarageVehiclesRow, error)
 	// Katalog sırasıyla.
 	ListTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) ([]string, error)
 	// Tayfanın bekleyen davetleri (yönetici), yeniden eskiye.
@@ -1508,6 +1545,11 @@ type Querier interface {
 	LockFriendScoresShared(ctx context.Context) error
 	// Aynı iki kişinin eşzamanlı istekleri sırayla işlenir.
 	LockFriendship(ctx context.Context, arg LockFriendshipParams) (Friendship, error)
+	// Üye garajı (issue #272; ADR-0040 §4). Garaj kişiye aittir: sahibinin
+	// sorguları owner_id ile, tayfadaki görünüm tayfa_id + sahibinin etkin
+	// üyeliği + garage_visible_in ile çalışır. Silinmiş araç okunmaz.
+	// Sahibinin aynı anda gelen yazımları sınırı birlikte aşamaz.
+	LockGarage(ctx context.Context, ownerID pgtype.UUID) error
 	// Kullanımda davet kilitlenir; süre, iptal ve kullanım sınırı aynı
 	// transaction'da kontrol edilir, eşzamanlı son kullanımdan yalnızca biri
 	// ilerler.
@@ -1615,6 +1657,9 @@ type Querier interface {
 	// türe özel tablolar ve av kayıtları cascade ile, bağlı anket ve seri şablonu
 	// SET NULL ile.
 	PurgeEvents(ctx context.Context, arg PurgeEventsParams) (int64, error)
+	// Üye garajı (issue #272): fotoğraflar silme kuyruğuna girer, etkinlik
+	// kayıtlarındaki garaj bağı boşalır.
+	PurgeGarageVehicles(ctx context.Context, arg PurgeGarageVehiclesParams) (int64, error)
 	// Geri çekilmiş kalem 30 gün sonra, ödünç kaydı kalmadıysa kalıcı silinir
 	// (sıra yerleri cascade ile; fotoğrafı geri çekilirken bırakılmıştır).
 	PurgeLibraryItems(ctx context.Context, arg PurgeLibraryItemsParams) (int64, error)
@@ -1658,6 +1703,9 @@ type Querier interface {
 	// tayfa.purged ile silinir; dosyanın tayfası core'da bellidir).
 	ReleaseTayfaChatPhotos(ctx context.Context, tayfaID pgtype.UUID) (int64, error)
 	RemoveAnswerVote(ctx context.Context, arg RemoveAnswerVoteParams) (int64, error)
+	// Moderatörün kaldırması: yalnızca gizler (fotoğraflar kalıcı silmeye kadar
+	// kalır). Araç bu tayfada görünür olmalıdır.
+	RemoveTayfaGarageVehicle(ctx context.Context, arg RemoveTayfaGarageVehicleParams) (int64, error)
 	// Sıra bütün liste olarak yazılır: ids'teki n'inci içerik n-1'inci yere.
 	ReorderDailyItems(ctx context.Context, arg ReorderDailyItemsParams) (int64, error)
 	RequestTayfaDeletion(ctx context.Context, arg RequestTayfaDeletionParams) (int64, error)
@@ -1718,7 +1766,8 @@ type Querier interface {
 	SetEventSeriesID(ctx context.Context, arg SetEventSeriesIDParams) (int64, error)
 	SetEventSeriesTemplate(ctx context.Context, arg SetEventSeriesTemplateParams) error
 	// Kişi başına bir araç; yeniden yazmak öncekinin yerine geçer (kimliği
-	// değişmez). Değerler app katmanında doğrulanmış haliyle yazılır.
+	// değişmez). Değerler app katmanında doğrulanmış haliyle yazılır;
+	// vehicle_id garajdan seçilen araçtır (issue #272; yoksa NULL).
 	SetEventVehicle(ctx context.Context, arg SetEventVehicleParams) (pgtype.UUID, error)
 	// Boyut bir kez yazılır (trigger uploads_export_bytes_once); aynı boyut
 	// tekrar yazılabilir.
@@ -1726,6 +1775,7 @@ type Querier interface {
 	// İstek ve davet sonuçları (issue #192). Okuma yalnızca alıcının
 	// (doğrulanmış çağıran) kendi kayıtları üzerinedir.
 	SetFriendRequestOutcome(ctx context.Context, arg SetFriendRequestOutcomeParams) error
+	SetGarageVisibility(ctx context.Context, arg SetGarageVisibilityParams) error
 	// Yöneticinin düzeni: bütün liste, bileşen başına bir çağrı.
 	SetHomeWidget(ctx context.Context, arg SetHomeWidgetParams) error
 	// Etkinlik başlığı değişince anlık tayfanın adı da değişir.
@@ -1805,6 +1855,7 @@ type Querier interface {
 	UpdateDailyItem(ctx context.Context, arg UpdateDailyItemParams) (int64, error)
 	// Seri örneği elle düzenlenince seri güncellemeleri ona dokunmaz.
 	UpdateEvent(ctx context.Context, arg UpdateEventParams) (int64, error)
+	UpdateGarageVehicle(ctx context.Context, arg UpdateGarageVehicleParams) (int64, error)
 	UpdateLibraryItem(ctx context.Context, arg UpdateLibraryItemParams) (int64, error)
 	UpdateMaterial(ctx context.Context, arg UpdateMaterialParams) (int64, error)
 	// Havuz sorusunda ders, konu ve fotoğraflar da (Soru-Cevap sorusunda

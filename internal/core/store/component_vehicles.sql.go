@@ -261,7 +261,7 @@ func (q *Queries) ListEventSeatRequests(ctx context.Context, arg ListEventSeatRe
 
 const listEventVehicles = `-- name: ListEventVehicles :many
 
-SELECT id, user_id, make, model, model_year, color, plate, seats FROM event_vehicles
+SELECT id, user_id, vehicle_id, make, model, model_year, color, plate, seats FROM event_vehicles
 WHERE event_id = $1 AND component_key = $2
 ORDER BY created_at, id
 `
@@ -274,6 +274,7 @@ type ListEventVehiclesParams struct {
 type ListEventVehiclesRow struct {
 	ID        pgtype.UUID
 	UserID    pgtype.UUID
+	VehicleID pgtype.UUID
 	Make      string
 	Model     pgtype.Text
 	ModelYear pgtype.Int4
@@ -300,6 +301,7 @@ func (q *Queries) ListEventVehicles(ctx context.Context, arg ListEventVehiclesPa
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
+			&i.VehicleID,
 			&i.Make,
 			&i.Model,
 			&i.ModelYear,
@@ -318,10 +320,10 @@ func (q *Queries) ListEventVehicles(ctx context.Context, arg ListEventVehiclesPa
 }
 
 const setEventVehicle = `-- name: SetEventVehicle :one
-INSERT INTO event_vehicles (id, event_id, component_key, user_id, make, model, model_year, color, plate, seats, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
+INSERT INTO event_vehicles (id, event_id, component_key, user_id, vehicle_id, make, model, model_year, color, plate, seats, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
 ON CONFLICT (event_id, component_key, user_id) DO UPDATE
-SET make = EXCLUDED.make, model = EXCLUDED.model, model_year = EXCLUDED.model_year,
+SET vehicle_id = EXCLUDED.vehicle_id, make = EXCLUDED.make, model = EXCLUDED.model, model_year = EXCLUDED.model_year,
     color = EXCLUDED.color, plate = EXCLUDED.plate, seats = EXCLUDED.seats, updated_at = EXCLUDED.updated_at
 RETURNING id
 `
@@ -331,6 +333,7 @@ type SetEventVehicleParams struct {
 	EventID      pgtype.UUID
 	ComponentKey string
 	UserID       pgtype.UUID
+	VehicleID    pgtype.UUID
 	Make         string
 	Model        pgtype.Text
 	ModelYear    pgtype.Int4
@@ -341,13 +344,15 @@ type SetEventVehicleParams struct {
 }
 
 // Kişi başına bir araç; yeniden yazmak öncekinin yerine geçer (kimliği
-// değişmez). Değerler app katmanında doğrulanmış haliyle yazılır.
+// değişmez). Değerler app katmanında doğrulanmış haliyle yazılır;
+// vehicle_id garajdan seçilen araçtır (issue #272; yoksa NULL).
 func (q *Queries) SetEventVehicle(ctx context.Context, arg SetEventVehicleParams) (pgtype.UUID, error) {
 	row := q.db.QueryRow(ctx, setEventVehicle,
 		arg.ID,
 		arg.EventID,
 		arg.ComponentKey,
 		arg.UserID,
+		arg.VehicleID,
 		arg.Make,
 		arg.Model,
 		arg.ModelYear,

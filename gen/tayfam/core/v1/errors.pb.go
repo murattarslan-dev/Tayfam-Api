@@ -471,6 +471,12 @@ const (
 	// FAILED_PRECONDITION. The caller already has 200 materials in the
 	// tayfa's material library.
 	ErrorReason_ERROR_REASON_MATERIAL_LIMIT ErrorReason = 2722
+	// NOT_FOUND. A vehicle that is not in the caller's garage (for the
+	// owner's steps and the vehicles component), or that does not show in
+	// the tayfa (a moderator's removal).
+	ErrorReason_ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND ErrorReason = 2730
+	// FAILED_PRECONDITION. The caller already has 10 vehicles in the garage.
+	ErrorReason_ERROR_REASON_GARAGE_LIMIT ErrorReason = 2731
 )
 
 // Enum value maps for ErrorReason.
@@ -620,6 +626,8 @@ var (
 		2720: "ERROR_REASON_MATERIAL_NOT_FOUND",
 		2721: "ERROR_REASON_BLOCKED_LINK",
 		2722: "ERROR_REASON_MATERIAL_LIMIT",
+		2730: "ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND",
+		2731: "ERROR_REASON_GARAGE_LIMIT",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                  0,
@@ -766,6 +774,8 @@ var (
 		"ERROR_REASON_MATERIAL_NOT_FOUND":           2720,
 		"ERROR_REASON_BLOCKED_LINK":                 2721,
 		"ERROR_REASON_MATERIAL_LIMIT":               2722,
+		"ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND":     2730,
+		"ERROR_REASON_GARAGE_LIMIT":                 2731,
 	}
 )
 
@@ -800,7 +810,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xf6)\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xc2*\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -946,7 +956,9 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\x1fERROR_REASON_LIBRARY_QUEUE_FULL\x10\x92\x15\x12$\n" +
 	"\x1fERROR_REASON_MATERIAL_NOT_FOUND\x10\xa0\x15\x12\x1e\n" +
 	"\x19ERROR_REASON_BLOCKED_LINK\x10\xa1\x15\x12 \n" +
-	"\x1bERROR_REASON_MATERIAL_LIMIT\x10\xa2\x15B\xbd\x01\n" +
+	"\x1bERROR_REASON_MATERIAL_LIMIT\x10\xa2\x15\x12*\n" +
+	"%ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND\x10\xaa\x15\x12\x1e\n" +
+	"\x19ERROR_REASON_GARAGE_LIMIT\x10\xab\x15B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

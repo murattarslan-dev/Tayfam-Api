@@ -195,6 +195,32 @@ func (q *Queries) AdminDeleteEventQuestion(ctx context.Context, arg AdminDeleteE
 	return result.RowsAffected(), nil
 }
 
+const adminDeleteGarageVehicle = `-- name: AdminDeleteGarageVehicle :execrows
+UPDATE garage_vehicles g SET deleted_at = $1::timestamptz, deleted_by = $2::uuid
+WHERE g.id = $3::uuid AND g.deleted_at IS NULL
+  AND EXISTS (SELECT 1 FROM memberships m WHERE m.tayfa_id = $4::uuid AND m.user_id = g.owner_id)
+`
+
+type AdminDeleteGarageVehicleParams struct {
+	At      pgtype.Timestamptz
+	By      pgtype.UUID
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+func (q *Queries) AdminDeleteGarageVehicle(ctx context.Context, arg AdminDeleteGarageVehicleParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adminDeleteGarageVehicle,
+		arg.At,
+		arg.By,
+		arg.ID,
+		arg.TayfaID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const adminDeleteLogEntry = `-- name: AdminDeleteLogEntry :execrows
 UPDATE event_log_entries l SET deleted_at = $1, deleted_by = $2
 FROM events e
@@ -497,6 +523,42 @@ func (q *Queries) AdminGetEventQuestion(ctx context.Context, arg AdminGetEventQu
 		&i.AuthorID,
 		&i.ComponentKey,
 		&i.Body,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const adminGetGarageVehicle = `-- name: AdminGetGarageVehicle :one
+SELECT g.owner_id, g.make, COALESCE(g.model, '')::text AS model, COALESCE(g.note, '')::text AS note,
+       g.created_at, g.deleted_at
+FROM garage_vehicles g
+WHERE g.id = $1 AND EXISTS (SELECT 1 FROM memberships m WHERE m.tayfa_id = $2::uuid AND m.user_id = g.owner_id)
+`
+
+type AdminGetGarageVehicleParams struct {
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+type AdminGetGarageVehicleRow struct {
+	OwnerID   pgtype.UUID
+	Make      string
+	Model     string
+	Note      string
+	CreatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
+}
+
+// Üye garajı (issue #272): aracın sahibi o tayfanın üyesi olmalı.
+func (q *Queries) AdminGetGarageVehicle(ctx context.Context, arg AdminGetGarageVehicleParams) (AdminGetGarageVehicleRow, error) {
+	row := q.db.QueryRow(ctx, adminGetGarageVehicle, arg.ID, arg.TayfaID)
+	var i AdminGetGarageVehicleRow
+	err := row.Scan(
+		&i.OwnerID,
+		&i.Make,
+		&i.Model,
+		&i.Note,
 		&i.CreatedAt,
 		&i.DeletedAt,
 	)

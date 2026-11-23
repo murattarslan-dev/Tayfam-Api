@@ -33,7 +33,7 @@ const MaxInterests = 20
 
 // Modules are the modules a tayfa can turn on or off, in Module order
 // (tayfa_modules.module).
-var Modules = []string{"announcements", "events", "qa", "polls", "daily", "library", "question_pool", "materials"}
+var Modules = []string{"announcements", "events", "qa", "polls", "daily", "library", "question_pool", "materials", "garage"}
 
 // Join policies (tayfas.join_policy).
 const (

@@ -341,6 +341,12 @@ const (
 	MaterialEditOwn
 	MaterialDeleteOwn
 	MaterialRemoveAny
+	// Üye garajı (issue #272, ADR-0040 §4). GarageShow shows one's own
+	// garage in the tayfa (hiding is TayfaView); GarageRemoveAny removes a
+	// vehicle showing in the tayfa (moderation). The garage itself is the
+	// person's and needs no tayfa permission.
+	GarageShow
+	GarageRemoveAny
 
 	actionEnd // sentinel; keep last
 )
@@ -459,6 +465,8 @@ var actionNames = [...]string{
 	MaterialEditOwn:           "material.edit_own",
 	MaterialDeleteOwn:         "material.delete_own",
 	MaterialRemoveAny:         "material.remove_any",
+	GarageShow:                "garage.show",
+	GarageRemoveAny:           "garage.remove_any",
 	actionEnd:                 "",
 }
 
@@ -495,6 +503,8 @@ var permissions = map[Action]Role{
 	MaterialAdd:       Member,
 	MaterialEditOwn:   Member,
 	MaterialDeleteOwn: Member,
+	// Üye garajı (ADR-0040 §4): showing one's garage publishes it.
+	GarageShow: Member,
 	// Events: reading, answering and the organizer's own event. An organizer
 	// keeps managing their event even if the tayfa later stops letting
 	// members create events (2026-11-09).
@@ -607,6 +617,9 @@ var permissions = map[Action]Role{
 	// Materyal kütüphanesi: removing anyone's material is content
 	// moderation (ADR-0040 §3).
 	MaterialRemoveAny: Moderator,
+	// Üye garajı: removing a vehicle showing in the tayfa is content
+	// moderation (ADR-0040 §4).
+	GarageRemoveAny: Moderator,
 	// Removing anyone's event question ("Tayfa yönetimi anonim soruyu
 	// yazarını görmeden silebilir", ADR-0025 §5).
 	EventQuestionDeleteAny: Moderator,

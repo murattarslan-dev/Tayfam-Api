@@ -146,6 +146,12 @@ const (
 	// #261, ADR-0040 §3), deleted ones included: kind, title, link and its
 	// domain, study tags and times. The photos are not in it.
 	CoreExportSection_CORE_EXPORT_SECTION_MATERIALS CoreExportSection = 39
+	// The vehicles of the caller's garage (issue #272, ADR-0040 §4), deleted
+	// ones included: make, model, model year, colour, note and times. The
+	// photos are not in it.
+	CoreExportSection_CORE_EXPORT_SECTION_GARAGE_VEHICLES CoreExportSection = 40
+	// The caller's choices of showing the garage in a tayfa (issue #272).
+	CoreExportSection_CORE_EXPORT_SECTION_GARAGE_VISIBILITY CoreExportSection = 41
 )
 
 // Enum value maps for CoreExportSection.
@@ -190,6 +196,8 @@ var (
 		37: "CORE_EXPORT_SECTION_LIBRARY_ITEMS",
 		38: "CORE_EXPORT_SECTION_LIBRARY_LOANS",
 		39: "CORE_EXPORT_SECTION_MATERIALS",
+		40: "CORE_EXPORT_SECTION_GARAGE_VEHICLES",
+		41: "CORE_EXPORT_SECTION_GARAGE_VISIBILITY",
 	}
 	CoreExportSection_value = map[string]int32{
 		"CORE_EXPORT_SECTION_UNSPECIFIED":           0,
@@ -231,6 +239,8 @@ var (
 		"CORE_EXPORT_SECTION_LIBRARY_ITEMS":         37,
 		"CORE_EXPORT_SECTION_LIBRARY_LOANS":         38,
 		"CORE_EXPORT_SECTION_MATERIALS":             39,
+		"CORE_EXPORT_SECTION_GARAGE_VEHICLES":       40,
+		"CORE_EXPORT_SECTION_GARAGE_VISIBILITY":     41,
 	}
 )
 
@@ -358,7 +368,7 @@ const file_tayfam_core_v1_export_proto_rawDesc = "" +
 	"\x13ExportMyDataRequest\"m\n" +
 	"\x14ExportMyDataResponse\x12;\n" +
 	"\asection\x18\x01 \x01(\x0e2!.tayfam.core.v1.CoreExportSectionR\asection\x12\x18\n" +
-	"\arecords\x18\x02 \x03(\fR\arecords*\xce\v\n" +
+	"\arecords\x18\x02 \x03(\fR\arecords*\xa2\f\n" +
 	"\x11CoreExportSection\x12#\n" +
 	"\x1fCORE_EXPORT_SECTION_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fCORE_EXPORT_SECTION_MEMBERSHIPS\x10\x01\x12#\n" +
@@ -399,7 +409,9 @@ const file_tayfam_core_v1_export_proto_rawDesc = "" +
 	"\x1fCORE_EXPORT_SECTION_DAILY_ITEMS\x10$\x12%\n" +
 	"!CORE_EXPORT_SECTION_LIBRARY_ITEMS\x10%\x12%\n" +
 	"!CORE_EXPORT_SECTION_LIBRARY_LOANS\x10&\x12!\n" +
-	"\x1dCORE_EXPORT_SECTION_MATERIALS\x10'2l\n" +
+	"\x1dCORE_EXPORT_SECTION_MATERIALS\x10'\x12'\n" +
+	"#CORE_EXPORT_SECTION_GARAGE_VEHICLES\x10(\x12)\n" +
+	"%CORE_EXPORT_SECTION_GARAGE_VISIBILITY\x10)2l\n" +
 	"\rExportService\x12[\n" +
 	"\fExportMyData\x12#.tayfam.core.v1.ExportMyDataRequest\x1a$.tayfam.core.v1.ExportMyDataResponse0\x01B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vExportProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"

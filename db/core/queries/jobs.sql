@@ -194,6 +194,13 @@ DELETE FROM materials WHERE id IN (
   SELECT x.id FROM materials x WHERE x.deleted_at <= @deleted_before
   ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
 
+-- Üye garajı (issue #272): fotoğraflar silme kuyruğuna girer, etkinlik
+-- kayıtlarındaki garaj bağı boşalır.
+-- name: PurgeGarageVehicles :execrows
+DELETE FROM garage_vehicles WHERE id IN (
+  SELECT x.id FROM garage_vehicles x WHERE x.deleted_at <= @deleted_before
+  ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
+
 -- Albüm fotoğrafı; dosyası uploads_release_ref ile silme kuyruğuna girer.
 -- name: PurgeEventPhotos :execrows
 DELETE FROM event_photos WHERE id IN (

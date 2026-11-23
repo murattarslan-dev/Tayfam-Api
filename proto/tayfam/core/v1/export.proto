@@ -143,6 +143,12 @@ enum CoreExportSection {
   // #261, ADR-0040 §3), deleted ones included: kind, title, link and its
   // domain, study tags and times. The photos are not in it.
   CORE_EXPORT_SECTION_MATERIALS = 39;
+  // The vehicles of the caller's garage (issue #272, ADR-0040 §4), deleted
+  // ones included: make, model, model year, colour, note and times. The
+  // photos are not in it.
+  CORE_EXPORT_SECTION_GARAGE_VEHICLES = 40;
+  // The caller's choices of showing the garage in a tayfa (issue #272).
+  CORE_EXPORT_SECTION_GARAGE_VISIBILITY = 41;
 }
 
 message ExportMyDataRequest {}

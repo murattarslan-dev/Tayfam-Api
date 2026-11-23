@@ -163,6 +163,8 @@ func targetLabel(t corev1.ReportTargetType) string {
 		return "Kütüphane kalemi"
 	case corev1.ReportTargetType_REPORT_TARGET_TYPE_MATERIAL:
 		return "Materyal"
+	case corev1.ReportTargetType_REPORT_TARGET_TYPE_GARAGE_VEHICLE:
+		return "Garaj aracı"
 	}
 	return "—"
 }

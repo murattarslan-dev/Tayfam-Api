@@ -623,6 +623,7 @@ SELECT u.id, u.user_id, u.purpose, u.r2_key, COALESCE(u.preview_type, '')::text 
        COALESCE(lm.enabled, false)::boolean AS library_module_on,
        COALESCE(qm.enabled, false)::boolean AS question_pool_module_on,
        COALESCE(mm.enabled, false)::boolean AS materials_module_on,
+       (u.attached_type = 'garage_vehicle' AND garage_vehicle_seen_by(u.attached_id, $1::uuid))::boolean AS garage_visible,
        (u.attached_type = 'user' AND EXISTS (
          SELECT 1 FROM user_blocks b
          WHERE (b.blocker_id = $1 AND b.blocked_id = u.attached_id)
@@ -698,6 +699,7 @@ type ListMediaForViewerRow struct {
 	LibraryModuleOn      bool
 	QuestionPoolModuleOn bool
 	MaterialsModuleOn    bool
+	GarageVisible        bool
 	Blocked              bool
 	OwnerDeleted         bool
 }
@@ -737,6 +739,7 @@ func (q *Queries) ListMediaForViewer(ctx context.Context, arg ListMediaForViewer
 			&i.LibraryModuleOn,
 			&i.QuestionPoolModuleOn,
 			&i.MaterialsModuleOn,
+			&i.GarageVisible,
 			&i.Blocked,
 			&i.OwnerDeleted,
 		); err != nil {

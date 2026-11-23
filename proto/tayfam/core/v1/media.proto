@@ -229,6 +229,11 @@ enum UploadPurpose {
   // (issue #261, ADR-0040 §3; at most three per material). Attached with
   // TayfaMaterialService.CreateMaterial or UpdateMaterial.
   UPLOAD_PURPOSE_MATERIAL_NOTE = 10;
+  // A photo of a vehicle in the member's garage (issue #272, ADR-0040 §4;
+  // at most three per vehicle). Not a tayfa's: tayfa_id is left empty.
+  // Attached with MemberGarageService.CreateGarageVehicle or
+  // UpdateGarageVehicle.
+  UPLOAD_PURPOSE_GARAGE_VEHICLE = 11;
 }
 
 // UploadStatus is where an upload stands (uploads.status).

@@ -244,6 +244,19 @@ UPDATE materials
 SET author_id = NULLIF(author_id, @user_id), deleted_by = NULLIF(deleted_by, @user_id)
 WHERE @user_id IN (author_id, deleted_by);
 
+-- Üye garajı (issue #272; ADR-0040 §4, KVKK): kişinin araçları ve
+-- görünürlük ayarları silinir (fotoğraflar silme kuyruğuna girer;
+-- etkinlik kayıtlarındaki garaj bağı boşalır); başkasının aracını kaldıran
+-- olarak kişi boşalır.
+-- name: DeleteUserGarageVehicles :exec
+DELETE FROM garage_vehicles WHERE owner_id = @user_id;
+
+-- name: ClearGarageVehicleDeleter :exec
+UPDATE garage_vehicles SET deleted_by = NULL WHERE deleted_by = @user_id;
+
+-- name: DeleteUserGarageVisibility :exec
+DELETE FROM garage_tayfa_visibility WHERE user_id = @user_id;
+
 -- Albüm fotoğrafları kişiseldir; kişiyle birlikte silinir, dosyaları
 -- silme kuyruğuna girer (issue #206).
 -- name: DeleteUserEventPhotos :exec

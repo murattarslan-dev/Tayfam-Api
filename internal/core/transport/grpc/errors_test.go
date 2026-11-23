@@ -117,6 +117,8 @@ func TestErrorStatus(t *testing.T) {
 		{apperr.ErrMaterialNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_MATERIAL_NOT_FOUND},
 		{apperr.ErrBlockedLink, codes.InvalidArgument, corev1.ErrorReason_ERROR_REASON_BLOCKED_LINK},
 		{apperr.ErrMaterialLimit, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_MATERIAL_LIMIT},
+		{apperr.ErrGarageVehicleNotFound, codes.NotFound, corev1.ErrorReason_ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND},
+		{apperr.ErrGarageLimit, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_GARAGE_LIMIT},
 		{apperr.ErrNowBroadcastLimit, codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED},
 		{apperr.ErrSeatRequestDriver, codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SEAT_REQUEST_DRIVER},
 		{apperr.ErrPermissionDenied, codes.PermissionDenied, corev1.ErrorReason_ERROR_REASON_PERMISSION_DENIED},

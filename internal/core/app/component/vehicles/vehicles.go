@@ -5,6 +5,13 @@
 // along. It replaces the Faz 1 convoy vehicles for every type that has the
 // component. There is no cost or money field.
 //
+// A participant may bring a vehicle of their own garage (issue #272;
+// ADR-0040 §4): Input.GarageVehicle names it, its make, model, model year
+// and colour are copied, and the event's record keeps the garage vehicle's
+// ID (event_vehicles.vehicle_id; NULL once the garage vehicle is gone for
+// good). The plate is never in the garage: it is written on the event's
+// record only.
+//
 // A plate is personal data: it is written only when the component's
 // `plate` parameter is on, shown only to the event's participants, the
 // organizer and the owner, cleared 30 days after the event's end (package
@@ -38,6 +45,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalog/definition"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/garage"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
@@ -94,6 +102,10 @@ type Input struct {
 	// Seats is the free seats offered, 0 to MaxSeats; not 0 only with the
 	// component's seats parameter.
 	Seats int32
+	// GarageVehicle is optional (issue #272): a vehicle of the caller's own
+	// garage. Make, Model, ModelYear and Color are then copied from it and
+	// must be left empty.
+	GarageVehicle id.ID
 }
 
 // Vehicle is one participant's vehicle, as the caller sees it.
@@ -107,6 +119,9 @@ type Vehicle struct {
 	// Plate is empty for callers who are not participants.
 	Plate string
 	Seats int32
+	// GarageVehicle is the garage vehicle it was copied from; zero when
+	// written by hand or once the garage vehicle is gone.
+	GarageVehicle id.ID
 	// Riders are the users whose request the owner approved, in request
 	// order.
 	Riders []id.ID
@@ -147,19 +162,34 @@ func clean(in Input) (Input, error) {
 		out Input
 		err error
 	)
-	if out.Make, err = cleanText(in.Make, "make", 1, MakeMax); err != nil {
-		return Input{}, err
+	if in.GarageVehicle != (id.ID{}) {
+		// The garage vehicle's values are copied in Set.
+		switch {
+		case in.Make != "":
+			return Input{}, apperr.Validation("make")
+		case in.Model != "":
+			return Input{}, apperr.Validation("model")
+		case in.Color != "":
+			return Input{}, apperr.Validation("color")
+		case in.ModelYear != 0:
+			return Input{}, apperr.Validation("model_year")
+		}
+		out.GarageVehicle = in.GarageVehicle
+	} else {
+		if out.Make, err = cleanText(in.Make, "make", 1, MakeMax); err != nil {
+			return Input{}, err
+		}
+		if out.Model, err = cleanText(in.Model, "model", 0, ModelMax); err != nil {
+			return Input{}, err
+		}
+		if out.Color, err = cleanText(in.Color, "color", 0, ColorMax); err != nil {
+			return Input{}, err
+		}
+		if in.ModelYear != 0 && in.ModelYear < ModelYearMin {
+			return Input{}, apperr.Validation("model_year")
+		}
+		out.ModelYear = in.ModelYear
 	}
-	if out.Model, err = cleanText(in.Model, "model", 0, ModelMax); err != nil {
-		return Input{}, err
-	}
-	if out.Color, err = cleanText(in.Color, "color", 0, ColorMax); err != nil {
-		return Input{}, err
-	}
-	if in.ModelYear != 0 && in.ModelYear < ModelYearMin {
-		return Input{}, apperr.Validation("model_year")
-	}
-	out.ModelYear = in.ModelYear
 	if out.Plate, err = cleanPlate(in.Plate); err != nil {
 		return Input{}, err
 	}
@@ -206,6 +236,13 @@ func text(s string) pgtype.Text { return pgtype.Text{String: s, Valid: s != ""} 
 
 func int4(n int32) pgtype.Int4 { return pgtype.Int4{Int32: n, Valid: n != 0} }
 
+func optionalID(v id.ID) pgtype.UUID {
+	if v == (id.ID{}) {
+		return pgtype.UUID{}
+	}
+	return v.PG()
+}
+
 // open reports whether the event, the tayfa and the write window allow
 // changes: the checks component.Service.Change makes.
 func open(sc *component.Scope) bool {
@@ -240,6 +277,9 @@ func load(ctx context.Context, sc *component.Scope) (Vehicles, error) {
 			ID: id.ID(r.ID.Bytes), UserID: id.ID(r.UserID.Bytes), Make: r.Make, Model: r.Model.String,
 			ModelYear: r.ModelYear.Int32, Color: r.Color.String, Seats: r.Seats,
 			Riders: []id.ID{}, Pending: []id.ID{},
+		}
+		if r.VehicleID.Valid {
+			v.GarageVehicle = id.ID(r.VehicleID.Bytes)
 		}
 		if seesPlates || v.UserID == sc.User {
 			v.Plate = r.Plate.String
@@ -365,8 +405,9 @@ func done(ctx context.Context, sc *component.Scope, action string, v id.ID) (Veh
 	return load(ctx, sc)
 }
 
-// Set sets the caller's vehicle, replacing a previous one (its ID stays).
-// The caller
+// Set sets the caller's vehicle, replacing a previous one (its ID stays);
+// with in.GarageVehicle, a vehicle of the caller's garage
+// (apperr.ErrGarageVehicleNotFound otherwise) is copied. The caller
 // must have answered going, and the event must not have ended. Refused: a
 // bad value (validation error on its field; a plate or seats the
 // component's parameters do not allow), fewer seats than the riders
@@ -382,6 +423,14 @@ func (s *Service) Set(ctx context.Context, ref component.Ref, in Input) (Vehicle
 	err = s.fw.Change(ctx, ref, Kind, component.ByParticipant(), func(sc *component.Scope) error {
 		if err := participant(ctx, sc); err != nil {
 			return err
+		}
+		if in.GarageVehicle != (id.ID{}) {
+			// Only the caller's own garage; the plate stays on the event.
+			c, err := garage.ForEvent(ctx, sc.Q(), sc.User, in.GarageVehicle)
+			if err != nil {
+				return err
+			}
+			in.Make, in.Model, in.ModelYear, in.Color = c.Make, c.Model, c.ModelYear, c.Color
 		}
 		if int(in.ModelYear) > sc.Now.Year()+1 {
 			return apperr.Validation("model_year")
@@ -412,7 +461,7 @@ func (s *Service) Set(ctx context.Context, ref component.Ref, in Input) (Vehicle
 		}
 		r, err := sc.Q().SetEventVehicle(ctx, store.SetEventVehicleParams{
 			ID: id.New().PG(), EventID: sc.Event.PG(), ComponentKey: sc.Key, UserID: sc.User.PG(),
-			Make: in.Make, Model: text(in.Model), ModelYear: int4(in.ModelYear), Color: text(in.Color),
+			VehicleID: optionalID(in.GarageVehicle), Make: in.Make, Model: text(in.Model), ModelYear: int4(in.ModelYear), Color: text(in.Color),
 			Plate: text(in.Plate), Seats: in.Seats, UpdatedAt: pgtype.Timestamptz{Time: sc.Now, Valid: true},
 		})
 		if err != nil {

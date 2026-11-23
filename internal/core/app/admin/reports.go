@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -373,6 +374,13 @@ func reportedItem(ctx context.Context, q *store.Queries, r Report) (*Item, error
 		x, err = q.AdminGetMaterial(ctx, store.AdminGetMaterialParams{ID: r.Target.PG(), TayfaID: tf})
 		it.Author, it.Title, it.Body = idOf(x.AuthorID), x.Title, x.Link
 		it.CreatedAt, it.DeletedAt = timeOf(x.CreatedAt), timeOf(x.DeletedAt)
+	case "garage_vehicle":
+		// A member's garage vehicle (issue #272): no plate exists to show.
+		// Photos are not shown here.
+		var x store.AdminGetGarageVehicleRow
+		x, err = q.AdminGetGarageVehicle(ctx, store.AdminGetGarageVehicleParams{ID: r.Target.PG(), TayfaID: tf})
+		it.Author, it.Title, it.Body = idOf(x.OwnerID), strings.TrimSpace(x.Make+" "+x.Model), x.Note
+		it.CreatedAt, it.DeletedAt = timeOf(x.CreatedAt), timeOf(x.DeletedAt)
 	case "event_photo":
 		var x store.AdminGetEventPhotoRow
 		x, err = q.AdminGetEventPhoto(ctx, store.AdminGetEventPhotoParams{ID: r.Target.PG(), TayfaID: tf})
@@ -414,6 +422,8 @@ func removeContent(ctx context.Context, q *store.Queries, r Report, by id.ID, no
 		_, err = q.AdminDeleteDailyItem(ctx, store.AdminDeleteDailyItemParams{ID: tid, TayfaID: tf, At: at, By: b})
 	case "material":
 		_, err = q.AdminDeleteMaterial(ctx, store.AdminDeleteMaterialParams{ID: tid, TayfaID: tf, At: at, By: b})
+	case "garage_vehicle":
+		_, err = q.AdminDeleteGarageVehicle(ctx, store.AdminDeleteGarageVehicleParams{ID: tid, TayfaID: tf, At: at, By: b})
 	case "library_item":
 		// Withdrawn like a moderator's removal: waiting requests end, a
 		// handed-over loan stays open for its owner (ADR-0040 §1).

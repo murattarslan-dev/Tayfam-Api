@@ -299,6 +299,9 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			q.ClearDailyItemUserFields,
 			q.ClearLibraryItemUserFields, q.ClearLibraryLoanBorrower, q.DeleteUserLibraryQueue,
 			q.ClearMaterialUserFields,
+			// Üye garajı (issue #272; ADR-0040 §4): the vehicles and the
+			// visibility choices go with the account.
+			q.DeleteUserGarageVehicles, q.ClearGarageVehicleDeleter, q.DeleteUserGarageVisibility,
 			q.DeleteUserEventPhotos, q.ClearEventPhotoDeleter, q.DeleteUserActivityRecords,
 			q.ClearQuestionUserFields, q.ClearAnswerUserFields, q.DeleteUserAnswerVotes,
 			q.ClearPollUserFields, q.DeleteUserPollVotes,
