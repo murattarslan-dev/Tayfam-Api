@@ -43,11 +43,13 @@ const (
 	MaxTimerPresets = 6
 	// MaxScorePresets bounds the presets a scoreboard offers.
 	MaxScorePresets = 20
-	MaxOptions      = 50
-	MaxLanguages    = 5
-	labelMax        = 60
-	textMax         = 120
-	longTextMax     = 1000
+	// MaxStudySelected bounds a study_tags value (ADR-0043).
+	MaxStudySelected = 10
+	MaxOptions       = 50
+	MaxLanguages     = 5
+	labelMax         = 60
+	textMax          = 120
+	longTextMax      = 1000
 	// numberMax bounds every numeric limit and value.
 	numberMax = 1_000_000_000
 	// durationMax is 30 days in minutes, an event's longest duration.
@@ -55,8 +57,8 @@ const (
 	decimalsMax = 3
 )
 
-// Field kinds (ADR-0025 §3). The list is closed: there is no money, URL,
-// file, location or person field.
+// Field kinds (ADR-0025 §3, ADR-0043). The list is closed: there is no
+// money, URL, file, location or person field.
 const (
 	KindText        = "text"
 	KindLongText    = "long_text"
@@ -67,13 +69,29 @@ const (
 	KindBoolean     = "boolean"
 	KindDate        = "date"
 	KindDuration    = "duration"
+	// KindStudyTags is a choice from Tayfam's study tag list
+	// (catalog_study_tags, ADR-0040 §5; ADR-0043). Its value is a list of
+	// tag keys; the list itself is not in the definition, so the value is
+	// checked against it by catalog.CheckStudyValues.
+	KindStudyTags = "study_tags"
 )
 
 // FieldKinds are the field kinds, in the order of ADR-0025 §3.
 var FieldKinds = []string{
 	KindText, KindLongText, KindInteger, KindDecimal, KindChoice,
-	KindMultiChoice, KindBoolean, KindDate, KindDuration,
+	KindMultiChoice, KindBoolean, KindDate, KindDuration, KindStudyTags,
 }
+
+// Depths of the study tag list (ADR-0040 §5): level → subject → topic.
+// They match catalog.StudyLevel, StudySubject and StudyTopic.
+const (
+	StudyDepthLevel   = 1
+	StudyDepthSubject = 2
+	StudyDepthTopic   = 3
+)
+
+// studyDepths names the depths in a definition, by depth − 1.
+var studyDepths = []string{"level", "subject", "topic"}
 
 // Component kinds (ADR-0025 §4, ADR-0037 §3).
 const (
@@ -187,8 +205,11 @@ type Field struct {
 	// OptionLabels maps an option to its names by language; options
 	// without an entry are shown as they are ("1" … "5").
 	OptionLabels map[string]map[string]string
-	// MaxSelected bounds a multi_choice value.
+	// MaxSelected bounds a multi_choice or study_tags value.
 	MaxSelected int
+	// MinDepth and MaxDepth bound the depth of a study_tags field's tags
+	// (StudyDepthLevel … StudyDepthTopic).
+	MinDepth, MaxDepth int
 	// Vocabulary is the tayfa vocabulary namespace of a text field, or ""
 	// (ADR-0037 §4).
 	Vocabulary string
@@ -740,6 +761,7 @@ var fieldKeys = map[string][]string{
 	KindBoolean:     {},
 	KindDate:        {},
 	KindDuration:    {"min", "max"},
+	KindStudyTags:   {"min_depth", "max_depth", "max_selected"},
 }
 
 func (p *parser) field(v any, path string) Field {
@@ -857,6 +879,20 @@ func (p *parser) field(v any, path string) Field {
 			if sv, ok := m["max_selected"]; ok {
 				f.MaxSelected = p.small(sv, join(path, "max_selected"), 1, len(f.Options))
 			}
+		}
+	case KindStudyTags:
+		f.MinDepth, f.MaxDepth, f.MaxSelected = StudyDepthSubject, StudyDepthTopic, 1
+		if dv, ok := m["min_depth"]; ok {
+			f.MinDepth = slices.Index(studyDepths, p.enum(dv, join(path, "min_depth"), studyDepths[:StudyDepthSubject])) + 1
+		}
+		if dv, ok := m["max_depth"]; ok && !p.failed() {
+			f.MaxDepth = slices.Index(studyDepths, p.enum(dv, join(path, "max_depth"), studyDepths)) + 1
+		}
+		if !p.failed() && f.MinDepth > f.MaxDepth {
+			p.fail(join(path, "max_depth"), "min_depth değerinden sığ")
+		}
+		if sv, ok := m["max_selected"]; ok && !p.failed() {
+			f.MaxSelected = p.small(sv, join(path, "max_selected"), 1, MaxStudySelected)
 		}
 	}
 	if p.failed() {
@@ -1168,6 +1204,14 @@ func (p *parser) checkLog(d *Definition, c Component, pp string) {
 	if d.Flags.PersonalScopeForbidden {
 		p.fail(pp, "bu türde kişi bazında kayıt tutulamaz")
 		return
+	}
+	// A record's fields are checked without the database (logbook), so a
+	// record has no study tag field (ADR-0043 §1).
+	for j, f := range c.LogFields {
+		if f.Kind == KindStudyTags {
+			p.fail(join(index(join(pp, "fields"), j), "kind"), "kayıt alanı ders/konu seçimi olamaz")
+			return
+		}
 	}
 	if _, ok := c.Params["location_default"]; ok && !c.Params["location"].Bool() {
 		p.fail(join(pp, "location_default"), "konum kapalıyken verilemez")
