@@ -128,6 +128,55 @@ func (q *Queries) InsertUserStats(ctx context.Context, arg InsertUserStatsParams
 	return err
 }
 
+const listOwnTayfaStatContributions = `-- name: ListOwnTayfaStatContributions :many
+SELECT s.metric_key, s.source, s.value::float8 AS value, s.event_count
+FROM user_stats AS s
+JOIN memberships AS m ON m.tayfa_id = s.tayfa_id AND m.user_id = s.user_id AND m.status = 'active'
+WHERE s.tayfa_id = $1 AND s.user_id = $2 AND s.year = $3 AND s.source IN ('measure', 'log')
+ORDER BY s.metric_key
+`
+
+type ListOwnTayfaStatContributionsParams struct {
+	TayfaID pgtype.UUID
+	UserID  pgtype.UUID
+	Year    int32
+}
+
+type ListOwnTayfaStatContributionsRow struct {
+	MetricKey  string
+	Source     string
+	Value      float64
+	EventCount int32
+}
+
+// Çağıranın kendi katkıları: ölçüm ve günlük metrikleri, yalnızca kişinin
+// tayfanın etkin üyesiyken. Başkasının katkısı hiçbir zaman okunmaz
+// (platform sahibi, 2026-11-23; issue #322, ADR-0026 §3).
+func (q *Queries) ListOwnTayfaStatContributions(ctx context.Context, arg ListOwnTayfaStatContributionsParams) ([]ListOwnTayfaStatContributionsRow, error) {
+	rows, err := q.db.Query(ctx, listOwnTayfaStatContributions, arg.TayfaID, arg.UserID, arg.Year)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListOwnTayfaStatContributionsRow{}
+	for rows.Next() {
+		var i ListOwnTayfaStatContributionsRow
+		if err := rows.Scan(
+			&i.MetricKey,
+			&i.Source,
+			&i.Value,
+			&i.EventCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStatAttendance = `-- name: ListStatAttendance :many
 SELECT r.event_id, r.user_id
 FROM event_rsvps AS r
@@ -356,53 +405,6 @@ func (q *Queries) ListStatMeasurements(ctx context.Context, arg ListStatMeasurem
 			&i.ComponentKey,
 			&i.UserID,
 			&i.Value,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listTayfaStatContributions = `-- name: ListTayfaStatContributions :many
-SELECT s.user_id, s.metric_key, s.value::float8 AS value, s.event_count
-FROM user_stats AS s
-JOIN memberships AS m ON m.tayfa_id = s.tayfa_id AND m.user_id = s.user_id AND m.status = 'active'
-WHERE s.tayfa_id = $1 AND s.year = $2 AND s.source IN ('measure', 'log')
-ORDER BY s.metric_key, s.value DESC, s.user_id
-`
-
-type ListTayfaStatContributionsParams struct {
-	TayfaID pgtype.UUID
-	Year    int32
-}
-
-type ListTayfaStatContributionsRow struct {
-	UserID     pgtype.UUID
-	MetricKey  string
-	Value      float64
-	EventCount int32
-}
-
-// Kişisel katkılar: ölçüm ve günlük metrikleri, yalnızca tayfanın etkin
-// üyelerininki (ayrılanın ve hesabı silinenin katkısı listede yoktur).
-func (q *Queries) ListTayfaStatContributions(ctx context.Context, arg ListTayfaStatContributionsParams) ([]ListTayfaStatContributionsRow, error) {
-	rows, err := q.db.Query(ctx, listTayfaStatContributions, arg.TayfaID, arg.Year)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListTayfaStatContributionsRow{}
-	for rows.Next() {
-		var i ListTayfaStatContributionsRow
-		if err := rows.Scan(
-			&i.UserID,
-			&i.MetricKey,
-			&i.Value,
-			&i.EventCount,
 		); err != nil {
 			return nil, err
 		}
