@@ -5,6 +5,11 @@
 - **Revizyon:** 2026-11-18 ([ADR-0040](0040-tayfa-modulleri-v3.md)): dört
   modül bileşeninin (ortak kütüphane, soru havuzu, materyal kütüphanesi,
   üye garajı) veri modeli ve ders-konu listesi.
+- **Revizyon:** 2026-11-23 (platform sahibi, sohbette, issue #323):
+  günün içeriği (`daily`) **modül** olarak kalır (§1'deki gösterim bileşeni
+  sınıflamasından sapma onaylandı; "Uygulama notları (#269)"). Varsayılan
+  ana sayfa bileşenleri her ilgi alanında yalnızca temel bölümlerdir
+  (#260).
 - **Karar veren:** Ürün kararları platform sahibinindir (2026-11-15, Notion
   "Faz 3 (v3)" §5a ve §4.15). Bu ADR onların mimariye taşınmasıdır.
 - **İlgili:** [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md),
@@ -56,6 +61,11 @@ kararları (2026-11-15):
 Her modül bileşeni kendi ADR'siyle gelir (veri modeli, yetki, KVKK). Bu ADR
 yalnızca çerçeveyi ve günün içeriğini tanımlar.
 
+> **Güncelleme (2026-11-23, platform sahibi, #323):** Günün içeriği
+> uygulamada kendi verisi ve uçları olan bir **modül bileşenidir**
+> (`tayfa_modules` anahtarı `daily`); öyle kalır. Yukarıdaki gösterim
+> bileşeni listesinde geçmesi tarihçedir. §5'in kuralları değişmez.
+
 ### 2. Bileşen listesi koddadır
 
 Bileşenler (gösterim ve modül) kapalı bir listedir ve core'da sabittir:
@@ -97,7 +107,7 @@ varsayılan bileşen eşlemesi **katalogdadır** (`catalog_interests`'e
 | `stats` | gösterilecek metrikler (en fazla 4), yıl | ADR-0026; tayfa içinde eşik yok |
 | `goal` | metrik, hedef değer, yıl | Ölçümden dolar; manuel artırma yok |
 | `countdown` | başlık (en fazla 60), hedef tarih | Tarih geçince kart kendiliğinden gizlenir |
-| `daily` | — | Havuz ayrı tabloda (§5) |
+| `daily` | — | Havuz ayrı tabloda (§5); modül bileşeni (§1 güncellemesi) |
 | `champions` | kaynak türler, dönem (son 30 gün / bu yıl) | `celebration` ve `scoreboard`'dan |
 | `log_summary` | kaynak `log` bileşeni, dönem | Örn. "Bu yıl görülen 84 kuş türü" |
 
@@ -135,7 +145,9 @@ Serbest metin (`countdown` başlığı) kötüye kullanım filtresinden geçer
 ### 6. Eğitim etiket listesi
 
 Ders ve konu etiketleri (Matematik → Türev…) katalogdadır
-(`catalog_subjects`, `catalog_topics`; ADR-0025 §2 kuralları: anahtar
+(uygulamada tek tablo `catalog_study_tags`, ≤ 3 seviye; ADR-0040 §5
+uygulama notu. Burada adı geçen `catalog_subjects` / `catalog_topics`
+tasarım taslağıdır. ADR-0025 §2 kuralları: anahtar
 değişmez, silinmez, `retired` olur, metinler `labels`'ta). Soru havuzu ve
 materyal kütüphanesi ADR'leri bu etiketlere bağlanır. Etiket listesi platform
 panelinden yönetilir.
@@ -201,7 +213,11 @@ Karar değişmedi; §2–§4'ün uygulanışı:
   dışındadır (ADR-0011, tutmadığın veri).
 - **Varsayılanlar:** oluşturma ve anlık tayfa dönüştürmede bölümler +
   ilgi alanlarının `default_widgets`'ı; ilgi alanı eklenince yalnızca
-  onunkiler. Ayar isteyen bileşen (`goal`, `countdown`, `log_summary`) ve
+  onunkiler. Platform sahibinin 2026-11-23 kararıyla (#260) her ilgi
+  alanının `default_widgets`'ı yalnızca temel bölümlerdir (`upcoming`,
+  `announcements`, `polls`, `questions`); Notion §5a'daki ilgi alanına
+  özel varsayılanlar (Kitap → kütüphane, İnanç → günün içeriği …)
+  uygulanmaz, bileşenleri yönetici açar. Ayar isteyen bileşen (`goal`, `countdown`, `log_summary`) ve
   kodun tanımadığı anahtar varsayılan olamaz, atlanır. Mevcut standart
   tayfalara migration bölümleri bugünkü sırayla açık ekler. İlgi alanı →
   bileşen eşlemesinin içeriği katalog verisidir (#260); bu iş kaydı boş
@@ -230,7 +246,8 @@ Karar değişmedi; §2–§4'ün uygulanışı:
 
 ## Uygulama notları (#269)
 
-§5'in uygulanışı; bir noktada §1'den sapma (platform sahibinin kararıyla):
+§5'in uygulanışı; bir noktada §1'den sapma (platform sahibinin kararıyla;
+2026-11-23'te sohbette onaylandı, #323):
 
 - **Modül:** Günün içeriği kendi verisi ve uçları olan bir **modüldür**
   (`tayfa_modules` anahtarı `daily`, `tayfa.Modules`); §1'de gösterim

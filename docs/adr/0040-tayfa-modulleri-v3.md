@@ -7,6 +7,9 @@
   (içeriksiz). Yeni istek ve sıraya girme kalemin sahibine; onay, ret ve
   teslim isteyene. `library_due` ve `library_loan_orphaned` uygulama içi
   kalır. Ayrıntı §1 "Uygulama notları (#321)".
+- **Uygulama notları onayı:** 2026-11-23 (platform sahibi, sohbette, issue
+  #323): #270, #271, #261 ve #272 uygulama notlarındaki ayrıntı kararları
+  ve engelli alan adı başlangıç listesi onaylandı.
 - **Karar veren:** Murat Arslan (2026-11-18). Ürün kararları Notion "Faz 3 —
   Katalog ayrıntıları ve şema ekleri (2026-11-18)" §E.3–E.4 ve "Eğitim —
   Ders ve konu etiket listesi".
@@ -67,7 +70,7 @@ Ortak kurallar (dördü için):
 - KVKK: kişinin kalemleri ve ödünç geçmişi dışa aktarmaya girer; ödünç
   geçmişi 1 yıl tutulur.
 
-**Uygulama notları (#270):**
+**Uygulama notları (#270):** (ayrıntı kararları 2026-11-23'te sohbette onaylandı (#323))
 
 - Uçlar `/v1/tayfas/{tayfa_id}/library/…` (core `TayfaLibraryService`);
   tablolar core 00061, bildirimler chat 00023. Hata kodları 2700–2706.
@@ -148,7 +151,7 @@ Ortak kurallar (dördü için):
   teklifi/reklamı** eklenir (`paid_tutoring`). Kopya için teknik önlem
   yoktur; kural ve şikâyetle yönetilir.
 
-**Uygulama notları (#271):**
+**Uygulama notları (#271):** (2026-11-23'te sohbette onaylandı (#323))
 
 - **Aynı uçlar, iki havuz:** soru havuzu ayrı servis değildir; core
   `QAService` ve `/v1/tayfas/{tayfa_id}/questions…` uçları `pool`
@@ -202,7 +205,7 @@ Ortak kurallar (dördü için):
 - `blocked_domains` (core): platform panelinden yönetilir, denetim kaydına
   yazılır; eklenen alan adı mevcut materyalleri de gizler (silmez).
 
-**Uygulama notları (#261):**
+**Uygulama notları (#261):** (2026-11-23'te sohbette onaylandı (#323))
 
 - **Tablo:** `materials` (`kind` `link` / `note_photo`, `title` 1–80 tek
   satır, `url` ≤ 500 ve `domain` yalnızca bağlantıda, `photo1..3_upload_id`
@@ -233,6 +236,10 @@ Ortak kurallar (dördü için):
   gizleyebilirler) ve birebir sohbet/grup davet adresleri (WhatsApp,
   Telegram, Discord, Signal; 16–17 yaş kullanıcılara tayfa dışı iletişim
   yolu açmamak için, §2'deki "yeni bir iletişim yolu açılmaz" ilkesi).
+  **Başlangıç listesi platform sahibinin 2026-11-23 kararıyla onaylı**
+  (#323) ve Notion "Kötüye Kullanım ve Genç Kullanıcı Güvenliği" sayfasına
+  işlendi. Panelden yönetim #262 ile geldi (ADR-0025 §7 uygulama notları);
+  ön ayarlar gibi engelli alan adları da `catalog_version`'ı artırmaz.
 - **Fotoğraflar:** yükleme amacı `material_note`, bağlama türü `material`;
   görünürlük tayfanın etkin üyesi ve `materials` modülü açık. Sıra
   değişebildiği için bırakılan fotoğrafı tek tetikleyici
@@ -268,7 +275,7 @@ Ortak kurallar (dördü için):
 - Satılık/ilan alanı yoktur.
 - KVKK: araçlar dışa aktarmaya girer; hesap silinince silinir.
 
-**Uygulama notları (#272):**
+**Uygulama notları (#272):** (2026-11-23'te sohbette onaylandı (#323))
 
 - **Tablolar:** `garage_vehicles` (`owner_id`, `make` 1–40, `model` ≤ 40,
   `model_year` 1900–gelecek yıl, `color` ≤ 30, `note` ≤ 200; metinler tek
