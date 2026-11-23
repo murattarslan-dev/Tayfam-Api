@@ -90,6 +90,8 @@ WHERE a.author_id = @user_id AND a.id > @after
 ORDER BY a.id
 LIMIT @n;
 
+-- Açtığınız etkinlikler; katalog türünün alan değerleri (`fields`, issue
+-- #237) ve "Şimdi başlat"ın açık uçlu işareti (issue #263) dahil (#275).
 -- name: ExportEvents :many
 SELECT e.id AS k, jsonb_build_object(
   'id', e.id, 'tayfa_id', e.tayfa_id, 'type', e.type, 'mode', e.mode, 'title', e.title,
@@ -97,6 +99,10 @@ SELECT e.id AS k, jsonb_build_object(
   'meeting_point_name', e.meeting_point_name, 'meeting_lat', e.meeting_lat, 'meeting_lng', e.meeting_lng,
   'city', e.city, 'district', e.district, 'online_url', e.online_url, 'capacity', e.capacity,
   'status', e.status, 'cancelled_at', e.cancelled_at, 'cancel_reason', e.cancel_reason,
+  'type_version', e.type_version, 'open_ended', e.open_ended,
+  'fields', COALESCE((
+    SELECT jsonb_object_agg(f.field_key, f.value ORDER BY f.field_key)
+    FROM event_field_values f WHERE f.event_id = e.id), '{}'::jsonb),
   'created_at', e.created_at, 'updated_at', e.updated_at, 'deleted_at', e.deleted_at
 ) AS data
 FROM events e
@@ -530,4 +536,47 @@ SELECT v.tayfa_id AS k, jsonb_build_object(
 FROM garage_tayfa_visibility v
 WHERE v.user_id = @user_id AND v.tayfa_id > @after
 ORDER BY v.tayfa_id
+LIMIT @n;
+
+-- Hakem atamalarınız (issue #238; dışa aktarma #275): hangi etkinlikte,
+-- hangi bileşende ve kapsamda (masa, maç) hakemsiniz. Atayan ve diğer
+-- hakemler dışa aktarılmaz.
+-- name: ExportEventReferees :many
+SELECT r.id AS k, jsonb_build_object(
+  'event_id', r.event_id, 'tayfa_id', e.tayfa_id, 'component_key', r.component_key,
+  'scope_id', r.scope_id, 'created_at', r.created_at
+) AS data
+FROM event_referees r
+JOIN events e ON e.id = r.event_id
+WHERE r.user_id = @user_id AND r.id > @after
+ORDER BY r.id
+LIMIT @n;
+
+-- Liste maddeleri (`checklist` bileşeni, issue #241; dışa aktarma #275):
+-- eklediğiniz ya da üstlendiğiniz maddeler. Maddeyi kimin eklediği ya da
+-- üstlendiği yalnızca "ben mi" olarak yer alır.
+-- name: ExportChecklistItems :many
+SELECT c.id AS k, jsonb_build_object(
+  'id', c.id, 'event_id', c.event_id, 'component_key', c.component_key,
+  'name', c.name, 'quantity', c.quantity,
+  'assigned_to_me', COALESCE(c.assigned_user_id = @user_id, false),
+  'added_by_me', COALESCE(c.created_by = @user_id, false),
+  'created_at', c.created_at, 'updated_at', c.updated_at
+) AS data
+FROM event_checklist_items c
+WHERE (c.assigned_user_id = @user_id OR c.created_by = @user_id) AND c.id > @after
+ORDER BY c.id
+LIMIT @n;
+
+-- Tayfa sözlüğüne ilk eklediğiniz değerler (issue #244; dışa aktarma #275).
+-- Değer tayfanın ortak verisidir: hesap silinince kalır, ekleyen boşalır.
+-- Birleştirildiyse hedef değerin kimliği yer alır.
+-- name: ExportVocabulary :many
+SELECT v.id AS k, jsonb_build_object(
+  'id', v.id, 'tayfa_id', v.tayfa_id, 'namespace', v.namespace, 'value', v.value,
+  'merged_into', v.merged_into, 'created_at', v.created_at
+) AS data
+FROM tayfa_vocabulary v
+WHERE v.created_by = @user_id AND v.id > @after
+ORDER BY v.id
 LIMIT @n;

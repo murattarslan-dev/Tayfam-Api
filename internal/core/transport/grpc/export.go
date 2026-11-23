@@ -71,6 +71,9 @@ var exportSections = map[string]corev1.CoreExportSection{
 	export.SectionMaterials:           corev1.CoreExportSection_CORE_EXPORT_SECTION_MATERIALS,
 	export.SectionGarageVehicles:      corev1.CoreExportSection_CORE_EXPORT_SECTION_GARAGE_VEHICLES,
 	export.SectionGarageVisibility:    corev1.CoreExportSection_CORE_EXPORT_SECTION_GARAGE_VISIBILITY,
+	export.SectionEventReferees:       corev1.CoreExportSection_CORE_EXPORT_SECTION_EVENT_REFEREES,
+	export.SectionChecklistItems:      corev1.CoreExportSection_CORE_EXPORT_SECTION_CHECKLIST_ITEMS,
+	export.SectionVocabulary:          corev1.CoreExportSection_CORE_EXPORT_SECTION_VOCABULARY,
 }
 
 // ExportMyData implements corev1.ExportServiceServer.

@@ -93,6 +93,11 @@ const (
 	// §4).
 	SectionGarageVehicles   = "garage_vehicles"
 	SectionGarageVisibility = "garage_visibility"
+	// Issue #275 (the KVKK audit of v3): referee assignments (#238), list
+	// items added or taken on (#241) and vocabulary values added (#244).
+	SectionEventReferees  = "event_referees"
+	SectionChecklistItems = "checklist_items"
+	SectionVocabulary     = "vocabulary"
 )
 
 const (
@@ -293,6 +298,18 @@ var sections = []struct {
 	{SectionGarageVisibility, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportGarageVisibility(ctx, store.ExportGarageVisibilityParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportGarageVisibilityRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionEventReferees, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportEventReferees(ctx, store.ExportEventRefereesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportEventRefereesRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionChecklistItems, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportChecklistItems(ctx, store.ExportChecklistItemsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportChecklistItemsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionVocabulary, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportVocabulary(ctx, store.ExportVocabularyParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportVocabularyRow) row { return row{x.K, x.Data} })
 	}},
 }
 

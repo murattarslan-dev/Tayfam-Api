@@ -149,6 +149,16 @@ enum CoreExportSection {
   CORE_EXPORT_SECTION_GARAGE_VEHICLES = 40;
   // The caller's choices of showing the garage in a tayfa (issue #272).
   CORE_EXPORT_SECTION_GARAGE_VISIBILITY = 41;
+  // The caller's referee assignments (issue #238; exported since #275):
+  // event, component and scope. Who assigned and the other referees are not
+  // in it.
+  CORE_EXPORT_SECTION_EVENT_REFEREES = 42;
+  // The list items (checklist component, issue #241; exported since #275)
+  // the caller added or took on, with "added by me" / "assigned to me".
+  CORE_EXPORT_SECTION_CHECKLIST_ITEMS = 43;
+  // The values the caller first added to a tayfa's vocabulary (issue #244;
+  // exported since #275).
+  CORE_EXPORT_SECTION_VOCABULARY = 44;
 }
 
 message ExportMyDataRequest {}
