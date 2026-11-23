@@ -158,7 +158,8 @@ func TestAuditEntryHasNoPersonalData(t *testing.T) {
 	for f := range reflect.TypeFor[AuditEntry]().Fields() {
 		fields = append(fields, f.Name)
 	}
-	want := []string{"ID", "CreatedAt", "Actor", "ActorName", "Action", "TargetType", "TargetID", "Reason", "Tayfa", "User", "Report"}
+	// CatalogKey is a catalog key or a blocked domain (issue #262).
+	want := []string{"ID", "CreatedAt", "Actor", "ActorName", "Action", "TargetType", "TargetID", "Reason", "Tayfa", "User", "Report", "CatalogKey"}
 	if !slices.Equal(fields, want) {
 		t.Fatalf("denetim kaydı alanları değişti: %v", fields)
 	}

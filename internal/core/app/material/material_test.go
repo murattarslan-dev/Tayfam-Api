@@ -528,7 +528,9 @@ func TestChecks(t *testing.T) {
 	if _, err := e.admin.Exec(ctx, `INSERT INTO blocked_domains (domain) VALUES ('Bit.LY')`); err == nil {
 		t.Error("büyük harfli engelli alan adı kabul edildi")
 	}
-	if _, err := e.pool.Exec(ctx, `INSERT INTO blocked_domains (domain) VALUES ('example.net')`); err == nil {
-		t.Error("servis engelli alan adı ekleyebildi")
+	// The platform panel adds and removes entries (#262); an entry never
+	// changes.
+	if _, err := e.pool.Exec(ctx, `UPDATE blocked_domains SET domain = 'example.net' WHERE domain = 'bit.ly'`); err == nil {
+		t.Error("servis engelli alan adını değiştirebildi")
 	}
 }

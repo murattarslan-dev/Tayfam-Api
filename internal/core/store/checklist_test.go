@@ -81,7 +81,9 @@ func TestChecklistMigrationMovesRows(t *testing.T) {
 	ctx := context.Background()
 	up, down := migrationParts(t, coredb.Migrations(), "00036_component_checklist.sql")
 	// 00066 moved the type to its second version (issue #260): its Down
-	// comes first, as it would on the real way back.
+	// comes first, as it would on the real way back, after 00067's (whose
+	// trigger keeps a type's version from going back, issue #262).
+	_, panelDown := migrationParts(t, coredb.Migrations(), "00067_catalog_panel.sql")
 	_, catalogDown := migrationParts(t, coredb.Migrations(), "00066_catalog_data.sql")
 	tayfa := newTayfa(t, pool, id.New(), tayfaOpts{})
 	exec := func(sql string, args ...any) {
@@ -90,6 +92,7 @@ func TestChecklistMigrationMovesRows(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	exec(panelDown)
 	exec(catalogDown)
 	scalar := func(sql string, args ...any) string {
 		t.Helper()
